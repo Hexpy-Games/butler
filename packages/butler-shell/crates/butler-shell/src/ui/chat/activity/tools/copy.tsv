@@ -1,0 +1,259 @@
+tool.generate_image	Create image	이미지 만들기
+tool.edit_image	Edit image	이미지 편집
+tool.browser_history_search	Search browsing history	방문 기록 검색
+tool.forget_explicit_memory	Remove an instruction	지침 삭제
+tool.project_artifacts	Find project artifacts	프로젝트 결과물 찾기
+tool.search	Search	검색
+tool.transform_public_data_table	Transform public data	공개 데이터 변환
+tool.bind_session_git_worktree	Bind Git workspace	Git 작업공간 연결
+tool.switch_folder	Move working folder	작업 폴더 이동
+tool.project_ledger_index	Index project	프로젝트 색인
+tool.project_ledger_status	Check project status	프로젝트 상태 확인
+tool.project_ledger_list	List project records	프로젝트 기록 목록
+tool.project_ledger_show	Read project record	프로젝트 기록 읽기
+tool.project_ledger_create	Create project record	프로젝트 기록 생성
+tool.project_ledger_update	Update project record	프로젝트 기록 수정
+tool.project_ledger_work_update	Update project work	프로젝트 작업 수정
+tool.project_ledger_work_complete	Complete project work	프로젝트 작업 완료
+tool.project_ledger_task_update	Update project task	프로젝트 태스크 수정
+tool.project_ledger_task_complete	Complete project task	프로젝트 태스크 완료
+tool.project_ledger_attempt_start	Start attempt	시도 시작
+tool.project_ledger_attempt_succeed	Record attempt success	시도 성공 기록
+tool.project_ledger_attempt_fail	Record attempt failure	시도 실패 기록
+tool.project_ledger_render	Render project document	프로젝트 문서 출력
+tool.project_ledger_check	Check project records	프로젝트 기록 검사
+tool.get_work_dashboard	Check work dashboard	작업 현황 확인
+tool.inspect_project_status	Inspect project status	프로젝트 상태 점검
+tool.query_project_work	Query project work	프로젝트 작업 조회
+tool.render_project_dashboard	Project dashboard	프로젝트 대시보드
+tool.complete_project_work	Complete project work	프로젝트 작업 완료
+tool.get_context_monitor	Check context	컨텍스트 확인
+tool.read_operation_results	Read operation results	작업 결과 읽기
+tool.list_operation_results	List operation results	작업 결과 목록
+tool.read_tool_evidence_artifact	Read tool evidence	도구 근거 읽기
+tool.read_tool_output_artifact	Read tool output	도구 출력 읽기
+tool.get_usage_monitor	Check usage	사용량 확인
+tool.list_tool_capabilities	List tools	도구 목록
+tool.list_mcp_capabilities	List MCP tools	MCP 도구 목록
+tool.call_mcp_tool	Call MCP tool	MCP 도구 실행
+tool.read_mcp_resource	Read MCP resource	MCP 자료 읽기
+tool.analyze_attached_image	Analyze attached image	첨부 이미지 분석
+tool.create_automation	Create schedule	예약 작업 생성
+tool.start_topic_conversation	Start topic conversation	주제 대화 시작
+tool.list_wallpapers	List wallpapers	배경 목록
+tool.set_wallpaper	Set wallpaper	배경 변경
+tool.save_wallpaper_module	Save wallpaper module	배경 모듈 저장
+tool.list_automations	List schedules	예약 작업 목록
+tool.delete_automation	Delete schedule	예약 작업 삭제
+tool.run_due_automations	Run schedules	예약 작업 실행
+tool.update_todo_list	Update to-do list	할 일 변경
+tool.list_todo_list	List to-do items	할 일 목록
+tool.list_work_streams	List work streams	작업 흐름 목록
+tool.update_work_stream_state	Update work stream	작업 흐름 변경
+tool.control_work	Control work	작업 제어
+tool.get_memory_health	Check memory status	기억 상태 확인
+tool.ingest_task_memory	Remember this conversation	대화 기억 저장
+tool.recall_memory	Find a saved memory	대화 기억 찾기
+tool.query_memory	Search saved memories	대화 기억 검색
+tool.summarize_user_profile	Get to know you	알아가기
+tool.update_onboarding_profile	Update your profile	알아가기
+tool.read_conversation_context	Review conversation context	대화 기억 확인
+tool.list_conversation_sessions	Find a conversation	대화 기억 찾기
+tool.read_conversation_session	Review a conversation	대화 기억 읽기
+tool.update_explicit_memory	Save an instruction	지침 저장
+tool.list_skills	List skills	스킬 목록
+tool.delegate_to_steward	Delegate work	작업 위임
+tool.delegate_to_worker	Call worker	Worker 호출
+tool.steer_steward	Steer delegated work	위임 작업 지시
+tool.steer_worker	Steer worker	Worker 지시
+tool.wait_for_worker	Wait for worker	Worker 대기
+tool.cancel_steward	Cancel delegated work	위임 작업 취소
+tool.request_service_restart	Request service restart	서비스 재시작 요청
+tool.load_skill	Load skill	스킬 읽기
+tool.read_skill_file	Read skill file	스킬 파일 읽기
+tool.update_automation	Update schedule	예약 작업 변경
+tool.ask_user	Question	질문
+tool.read_operation_result	Read operation result	작업 결과 읽기
+tool.promote_reviewed_candidate	Apply reviewed changes	검토된 변경 반영
+tool.answer_blocks	Build answer cards	답변 카드 만들기
+tool.output_publish	Publish output	결과물 게시
+tool.output_check	Check output	결과물 확인
+tool.browser_selection	Read selection	선택한 요소 읽기
+tool.browser_read	Read page text	페이지 본문 읽기
+tool.browser_devtools	Read DevTools	개발자 도구 읽기
+tool.image_collect	Collect image	이미지 수집
+tool.browser_screenshot	Capture screen	화면 캡처
+tool.preview_start	Start preview	미리보기 시작
+tool.preview_stop	Stop preview	미리보기 중지
+tool.library_search	Search Library	서랍 검색
+tool.document_create	Create document	문서 만들기
+tool.document_read	Read document	문서 읽기
+tool.document_edit	Edit document	문서 수정
+tool.library_organize	Organize Library	서랍 정리
+tool.deliver_files	Deliver files	파일 전달
+tool.browser_open	Open tab	탭 열기
+tool.browser_observe	Read page	페이지 읽기
+tool.browser_act	Browser action	브라우저 조작
+tool.browser_tabs	Check tabs	탭 확인
+tool.browser_close	Close tab	탭 닫기
+tool.browser_sign_in	Sign in	로그인
+tool.browser_site_access	Use signed-in site	로그인 사이트 사용
+tool.browser_sign_in_wait	Sign-in needs you	로그인 확인 필요
+tool.browser_pay_fill	Fill payment card	결제 정보 입력
+tool.browser_autofill_fill	Fill my info	내 정보 입력
+tool.browser_pay_wait	Payment needs you	결제 확인 필요
+tool.browser_wait_for_user	Wait for you	직접 조작 대기
+tool.read_project_source	Read project source	프로젝트 원문 읽기
+tool.web_search	Web search	웹 검색
+tool.web_read	Read web page	웹 문서 읽기
+tool.read_file	Read file	파일 읽기
+tool.list_files	Find workspace files	작업공간 파일 찾기
+tool.grep_files	Search workspace	작업공간 검색
+tool.write_file	Write file	작성
+tool.edit_file	Edit file	수정
+tool.tool_search	Find available tools	사용 가능한 도구 찾기
+tool.tool_describe	Check tool instructions	도구 사용법 확인
+tool.tool_call	Run tool	도구 실행
+tool.run_command	Run command	명령 실행
+tool.project_ledger_change	Update project records	프로젝트 기록 변경
+tool.project_ledger_read	Read project records	프로젝트 기록 확인
+tool.start_work	Check request	요청 내용 확인
+tool.continue_work	Check progress	진행 내용 확인
+tool.replace_work_plan	Plan execution	실행 계획 수립
+tool.record_work_checkpoint	Check work progress	작업 진행 확인
+tool.record_work_review	Review results	결과 검토
+tool.plan_review	Review plan	계획 검토
+tool.completion_review	Review completion	완료 검토
+tool.record_work_disposition	Record completion	완료 상태 기록
+tool.work_tool	Update work status	작업 상태 변경
+tool.tool_work	Tool work	도구 작업
+tool.fallback	Working	작업 중
+arg.command	Command	명령
+arg.cmd	Command	명령
+arg.command_intent	Command	명령
+arg.output_count	Outputs	출력
+arg.path	Path	경로
+arg.file_path	Path	경로
+arg.target	Target	대상
+arg.objective	Objective	목표
+arg.query	Query	검색어
+arg.pattern	Pattern	패턴
+ws.waiting	Waiting	대기
+ws.orienting	Thinking	구상 중
+ws.planning	Planning	계획 중
+ws.verifying	Reviewing	검토 중
+ws.reporting	Reporting	보고 중
+ws.complete	Complete	완료
+ws.blocked	Blocked	진행이 막힘
+ws.failed	Failed	실패
+ws.cancelled	Cancelled	취소됨
+ws.recoverable	Ready to resume	이어서 진행 가능
+ws.executing	Working	작업 중
+ws.approval	Awaiting approval	허용 대기 중
+ws.waiting_for_form	Waiting for your approval.	허용 여부를 기다리고 있습니다.
+ws.delivered	Work completed.	작업을 완료했습니다.
+ws.interrupted	Work was interrupted. You can resume it.	작업이 중단되었습니다. 이어서 진행할 수 있습니다.
+ws.waitingForChildren	Waiting for worker results.	작업자 결과를 기다리는 중입니다.
+op.ask_user	Question	질문
+op.read_project_source	Read: checking the attached project source	조회: 첨부한 프로젝트 원문을 확인 중
+op.delegate_to_worker	Call worker	작업자 호출
+op.edit_file	Editing: applying planned file changes	수정: 계획한 파일 변경을 적용 중
+op.grep_files	Searching: locating relevant implementation	검색: 관련 구현을 찾는 중
+op.list_files	Reading: checking relevant files	조회: 관련 파일 목록을 확인 중
+op.project_ledger_read	Reading: checking project records	조회: 프로젝트 기록을 확인 중
+op.promote_reviewed_candidate	Applying: promoting reviewed changes	적용: 검토된 변경을 반영 중
+op.read_file	Reading: checking relevant file contents	조회: 관련 파일 내용을 확인 중
+op.read_operation_result	Checking: reviewing stored operation results	확인: 저장된 작업 결과를 검토 중
+op.run_command	Running command	명령 실행
+op.update_onboarding_profile	Settings: applying onboarding answers	설정: 처음 알려주신 내용을 반영 중
+op.web_read	Reading: checking public sources	조회: 공개 자료를 확인 중
+op.web_search	Searching: finding public sources	검색: 공개 자료를 찾는 중
+op.write_file	Writing: applying planned file changes	작성: 계획한 파일 변경을 적용 중
+g.checkingPrevious	Checking previous work and its current state.	이전에 진행하던 내용과 현재 상태를 확인하고 있습니다.
+g.checkingRequest	Clarifying the request and required outcome.	요청하신 내용과 필요한 결과를 정리하고 있습니다.
+g.toolWorking	Working with tools.	도구 작업을 진행하고 있습니다
+g.checkingInformation	Checking information needed for the work.	작업에 필요한 정보를 확인하고 있습니다.
+g.commandExecuting	Running the required workspace commands.	작업 공간에서 필요한 명령을 실행하고 있습니다.
+g.conceptionTitle	Confirm request intent	요청 의도 확인
+g.planningNext	Define the work order and validation criteria for the request.	요청에 맞는 작업 순서와 검증 기준을 정합니다.
+g.reportTitle	Report results	결과 보고
+st.thinking	Thinking	생각
+st.inputFields	Input fields	입력 항목
+st.working	Working	작업 중
+st.completed	Completed	완료
+st.planning	Planning	계획
+st.execution	Execution	실행
+st.cancelled	Stopped	중단됨
+st.progress	Work in progress	작업 진행 중
+st.generating	Generating response	응답 생성 중
+st.workerCall	Delegated work	작업 위임
+st.work	Work	작업
+st.search	Search	검색
+st.lookup	Read	조회
+st.edit	Edit	편집
+st.command	Command	명령
+st.read	Read	읽기
+st.review	Review	검토
+st.phase	Phase	단계
+st.partialOutput	Partial results loaded. Select Show more output to view the full result.	결과 일부를 불러왔습니다. 전체 결과를 보려면 출력 더 보기를 선택하세요.
+st.noDetailSupport	Tool completed; detailed result display is not supported.	도구 실행은 완료됐지만 상세 결과 표시를 지원하지 않습니다.
+st.operationFailed	Could not complete the operation.	작업을 완료하지 못했습니다.
+st.resultChecked	Tool result received.	도구 결과를 확인했습니다.
+st.commandTimeout	Command timed out.	명령 실행 시간이 초과되었습니다.
+st.commandDone	Command completed	명령 완료
+st.commandFailed	Command failed	명령 실패
+st.fileFailed	File operation failed.	파일 작업을 완료하지 못했습니다.
+st.fileDone	File operation completed.	파일 작업을 완료했습니다.
+st.editDone	Edit completed	수정 완료
+st.writeDone	Write completed	작성 완료
+st.documentRead	Document	문서 조회
+st.pendingRead	Not read yet. More results are available.	아직 읽지 않았습니다. 이어 읽을 결과가 있습니다.
+st.skippedRead	File was read in an earlier output.	이전 출력에서 읽은 파일입니다.
+st.truncatedRead	Partially read. More results are available.	일부만 읽었습니다. 이어 읽을 결과가 있습니다.
+st.emptyText	No text returned.	반환된 텍스트가 없습니다.
+st.fileNotFound	File not found.	파일을 찾을 수 없습니다.
+st.notFile	Not a regular file.	일반 파일이 아닙니다.
+st.sensitiveFile	Reading this sensitive file is restricted.	민감한 파일로 분류되어 읽기가 제한되었습니다.
+st.protectedFile	Use the dedicated tool to read this file.	전용 조회 도구로 읽어야 하는 파일입니다.
+st.binaryFile	This file cannot be read as text.	텍스트 읽기를 지원하지 않는 파일입니다.
+st.invalidUtf8	Cannot read as UTF-8 text.	UTF-8 텍스트로 읽을 수 없습니다.
+st.ioError	An I/O error occurred while reading the file.	파일을 읽는 중 입출력 오류가 발생했습니다.
+st.maxBytes	Output size limit prevented reading this file.	출력 용량 제한으로 이 파일을 읽지 못했습니다.
+st.maxBytesUtf8	Output size limit is too small for one character.	출력 용량이 한 글자를 읽기에도 부족합니다.
+st.readFailed	Could not read the file.	파일을 읽지 못했습니다.
+st.spec	Spec	스펙
+st.task	Task	하위 작업
+st.reviewNoun	Review	리뷰
+st.report	Report	보고서
+st.result	Result	결과
+st.draft	Draft	초안
+st.inProgress	In progress	진행 중
+st.blocked	Blocked	진행 중단
+st.specified	Specified	작성됨
+st.accepted	Accepted	수락됨
+st.planned	Planned	계획됨
+st.document	Document	문서
+st.file	File	파일
+st.notExecuted	Not executed yet. Waiting for approval.	아직 실행하지 않았습니다. 허용 여부를 기다리고 있습니다.
+st.toolFailed	Tool execution failed	도구 실행 실패
+st.failureReason	Failure reason	실패 원인
+d.outputLoadFailed	Could not load tool output.	도구 출력을 불러오지 못했습니다.
+d.loading	Loading	불러오는 중
+d.moreOutput	Show more output	출력 더 보기
+d.workerActivity	Working	작업 중
+d.tool	Tool	도구
+fb.thinking	Thinking	생각 중
+fb.planning	Planning	계획 중
+fb.inspecting	Inspecting	확인 중
+fb.executing	Executing	실행 중
+fb.verifying	Verifying	검증 중
+fb.committing	Committing	커밋 중
+fb.consolidating	Consolidating	정리 중
+fb.reporting	Reporting	보고 중
+fb.complete	Complete	완료
+fb.recoverable	Recoverable	재개 가능
+pg.fallback	Working: using the planned tool	작업: 계획한 도구를 사용 중
+pg.storageRecovery	Coordinating storage writes	저장소 쓰기 순서를 조정하고 있습니다
+pg.reconnecting	Reconnecting	재연결 중
+pg.stopping	Stopping the request	요청을 중지하고 있습니다
+pg.accepted	Request accepted.	요청을 접수했습니다.
