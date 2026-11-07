@@ -1,27 +1,25 @@
 //! Answer blocks: table, gallery, chart (`AnswerDataBlocks.tsx`).
-use std::hash::{DefaultHasher, Hash as _, Hasher as _};
-use std::sync::Arc;
-
 use butler_ds::ui::blocks::markdown_content::MarkdownContent;
 use butler_ds::ui::button::{self, Button, Variant};
 use butler_ds::ui::chart::{
     Chart, ChartColor, ChartLegend, Kind, LegendItem, Series, Size as ChartSize, TooltipTitle,
 };
 use butler_ds::ui::collapsible::Collapsible;
-use butler_ds::ui::context::{Ds, Lang};
+use butler_ds::ui::context::Ds;
 use butler_ds::ui::copy_button::CopyButton;
 use butler_ds::ui::layout::{Basis, Space, Stack, WithItem as _};
 use butler_ds::ui::media_frame::{Aspect, Fit, MediaFrame};
 use butler_ds::ui::scroll::{Axis, ScrollArea};
-use butler_ds::ui::typo::{Tone, Typo};
-use butler_shell_client::ShellClient;
-use futures::channel::oneshot;
+use butler_ds::ui::typo::Typo;
 use gpui::{
-    AnyElement, App, Image, ImageFormat, ImageSource, IntoElement as _, ParentElement as _,
-    SharedString, Window, div,
+    AnyElement, App, ImageSource, InteractiveElement as _, IntoElement as _, ParentElement as _,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
 };
 
-use crate::ui::chat::TranscriptCtx;
+use super::frame::source_line;
+use crate::ui::i18n::media::Media;
+use crate::ui::shell::image_viewer::loader::{PictureId, picture};
+use crate::ui::shell::image_viewer::{self, ViewerEntry};
 use crate::ui::source::wire::{
     AnswerBlock, AnswerBlockChartKind, AnswerBlockChartSeriesItem, AnswerBlockGalleryItemsItem,
     AnswerCell, AnswerCellValue, AnswerMedia,
@@ -30,50 +28,17 @@ use crate::ui::source::wire::{
 /// Rows shown before "show more" (`block.rows.slice(0, 10)`).
 const PREVIEW_ROWS: usize = 10;
 
-/// `appCopy.conversation.answerBlocks` strings the data blocks use.
-struct Words {
-    show_less: &'static str,
-    copy: &'static str,
-    copied: &'static str,
-}
-
-const KO: Words = Words {
-    show_less: "접기",
-    copy: "복사",
-    copied: "복사했어요",
-};
-
-const EN: Words = Words {
-    show_less: "Show less",
-    copy: "Copy",
-    copied: "Copied",
-};
-
-/// `answerBlocks.showMoreItems`
-fn show_more_items(lang: Lang, count: usize) -> String {
-    match lang {
-        Lang::Ko => format!("{count}개 더 보기"),
-        Lang::En => format!("Show {count} more"),
-    }
-}
-
 /// Renders one block of this family (table, gallery, chart).
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 pub(super) fn render(
     block: &AnswerBlock,
-    t: &TranscriptCtx,
+    path: &str,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let key = block_key(block);
+    let key = format!("answer-data-{path}");
     match block {
         AnswerBlock::Table { columns, rows, .. } => table(&key, columns, rows, window, cx),
-        AnswerBlock::Gallery { media, items, .. } => {
-            gallery(&key, media.as_ref(), items, t, window, cx)
-        }
+        AnswerBlock::Gallery { media, items, .. } => gallery(&key, media.as_ref(), items, cx),
         AnswerBlock::Chart {
             kind,
             x,
@@ -93,13 +58,6 @@ pub(super) fn render(
         ),
         _ => div().into_any_element(),
     }
-}
-
-/// A stable element key for the block: its id, else a hash of its content.
-fn block_key(block: &AnswerBlock) -> String {
-    let mut hasher = DefaultHasher::new();
-    format!("{block:?}").hash(&mut hasher);
-    format!("answer-data-{:x}", hasher.finish())
 }
 
 /// A cell as text (`{cell}`): empty for null.
@@ -148,7 +106,6 @@ fn table(
     cx: &mut App,
 ) -> AnyElement {
     let lang = Ds::get(cx).lang();
-    let words = if lang == Lang::Ko { &KO } else { &EN };
     let expanded =
         window.use_keyed_state(SharedString::from(format!("{key}-expanded")), cx, |_, _| {
             false
@@ -161,9 +118,9 @@ fn table(
             .child(markdown_table(format!("{key}-head"), columns, head));
     if !tail.is_empty() {
         let label = if open {
-            words.show_less.to_owned()
+            Media::of(lang).show_less.to_owned()
         } else {
-            show_more_items(lang, tail.len())
+            Media::show_more_items(lang, tail.len())
         };
         stack = stack
             .child(
@@ -195,102 +152,20 @@ fn aspect(media: Option<&AnswerMedia>) -> Aspect {
     }
 }
 
-/// The picture format a response's content type names.
-fn image_format(content_type: &str) -> Option<ImageFormat> {
-    match content_type.split(';').next()?.trim() {
-        "image/png" => Some(ImageFormat::Png),
-        "image/jpeg" | "image/jpg" => Some(ImageFormat::Jpeg),
-        "image/webp" => Some(ImageFormat::Webp),
-        "image/gif" => Some(ImageFormat::Gif),
-        "image/svg+xml" => Some(ImageFormat::Svg),
-        "image/bmp" => Some(ImageFormat::Bmp),
-        "image/tiff" => Some(ImageFormat::Tiff),
-        _ => None,
-    }
-}
-
-/// Downloads `/message-assets/{id}` on its own runtime (the client needs tokio's reactor,
-/// gpui's executor has none).
-async fn fetch_asset(client: ShellClient, id: String) -> Option<Arc<Image>> {
-    let (send, receive) = oneshot::channel();
-    std::thread::spawn(move || {
-        let download = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .ok()
-            .and_then(|runtime| {
-                runtime
-                    .block_on(client.download_message_asset(&id, false))
-                    .ok()
-            });
-        let _ = send.send(download);
-    });
-    let download = receive.await.ok().flatten()?;
-    let format = image_format(download.content_type.as_deref()?)?;
-    Some(Arc::new(Image::from_bytes(format, download.bytes)))
-}
-
-/// Where a gallery picture is.
-#[derive(Default)]
-enum Asset {
-    #[default]
-    Idle,
-    Loading,
-    Ready(Arc<Image>),
-    Failed,
-}
-
-/// The picture of the collected image `img`: fetched once, then kept.
-fn asset_image(
-    img: &str,
-    client: Option<&ShellClient>,
-    window: &mut Window,
-    cx: &mut App,
-) -> Option<Arc<Image>> {
-    let state = window.use_keyed_state(
-        SharedString::from(format!("answer-asset-{img}")),
-        cx,
-        |_, _| Asset::Idle,
-    );
-    match state.read(cx) {
-        Asset::Ready(image) => return Some(image.clone()),
-        Asset::Loading | Asset::Failed => return None,
-        Asset::Idle => {}
-    }
-    let client = client?.clone();
-    state.update(cx, |asset, _| *asset = Asset::Loading);
-    let id = img.to_owned();
-    cx.spawn(async move |cx| {
-        let image = fetch_asset(client, id).await;
-        let _ = state.update(cx, |asset, cx| {
-            *asset = image.map_or(Asset::Failed, Asset::Ready);
-            cx.notify();
-        });
-    })
-    .detach();
-    None
-}
-
-/// One gallery picture: its frame, caption and copy button.
+/// One gallery picture: its frame, caption and copy button; a click opens the viewer.
 fn gallery_item(
     key: &str,
     item: &AnswerBlockGalleryItemsItem,
     frame: Aspect,
-    t: &TranscriptCtx,
-    window: &mut Window,
+    viewer: (&[ViewerEntry], usize),
     cx: &mut App,
 ) -> AnyElement {
-    let words = if Ds::get(cx).lang() == Lang::Ko {
-        &KO
-    } else {
-        &EN
-    };
-    let picture = asset_image(&item.img, t.client.as_ref(), window, cx);
+    let copy = Media::get(cx);
     let mut media = MediaFrame::new(SharedString::from(format!("{key}-frame")))
         .aspect(frame)
         .fit(Fit::Cover)
         .placeholder();
-    if let Some(image) = picture {
+    if let Some(image) = picture(&PictureId::Asset(item.img.clone()), cx) {
         media = media.src(ImageSource::Image(image));
     }
     let copied = item
@@ -298,11 +173,17 @@ fn gallery_item(
         .clone()
         .or_else(|| item.source.clone())
         .unwrap_or_else(|| item.img.clone());
+    let (entries, at) = (viewer.0.to_vec(), viewer.1);
+    let opened = div()
+        .id(SharedString::from(format!("{key}-open")))
+        .cursor_pointer()
+        .on_click(move |_, _, cx| image_viewer::open(entries.clone(), at, cx))
+        .child(media);
     let mut stack = Stack::new()
         .gap(Space::Xs)
         .basis(Basis::Sm)
         .shrink(false)
-        .child(media);
+        .child(opened);
     if let Some(caption) = &item.caption {
         stack = stack.child(Typo::caption(caption.clone()));
     }
@@ -311,8 +192,8 @@ fn gallery_item(
             button::container(button::Size::IconSm).child(
                 CopyButton::new(
                     SharedString::from(format!("{key}-copy")),
-                    words.copy,
-                    words.copied,
+                    copy.copy,
+                    copy.answer_copied,
                 )
                 .text(copied),
             ),
@@ -325,19 +206,26 @@ fn gallery(
     key: &str,
     media: Option<&AnswerMedia>,
     items: &[AnswerBlockGalleryItemsItem],
-    t: &TranscriptCtx,
-    window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let frame = aspect(media);
+    let entries: Vec<ViewerEntry> = items
+        .iter()
+        .map(|item| {
+            let name = item.caption.clone().unwrap_or_default();
+            let mut entry = ViewerEntry::new(PictureId::Asset(item.img.clone()), name);
+            entry.caption = item.caption.clone();
+            entry.source = item.source.clone();
+            entry
+        })
+        .collect();
     let mut row = Stack::row().gap(Space::Sm);
     for (index, item) in items.iter().enumerate() {
         row = row.child(gallery_item(
             &format!("{key}-{index}"),
             item,
             frame,
-            t,
-            window,
+            (entries.as_slice(), index),
             cx,
         ));
     }
@@ -345,38 +233,6 @@ fn gallery(
         .orientation(Axis::X)
         .child(row)
         .into_any_element()
-}
-
-/// The source line's text: the site and when it was read (`AnswerSourceLine`).
-fn source_text(source: &str, checked: Option<&str>) -> Option<String> {
-    let url = url::Url::parse(source).ok()?;
-    let site = url.host_str()?.trim_start_matches("www.").to_owned();
-    let when = checked.and_then(checked_label);
-    Some(
-        [Some(site), when]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join(" · "),
-    )
-}
-
-/// `checkedLabel`: today's time, else a short date (UTC; the shell has no local zone).
-fn checked_label(checked: &str) -> Option<String> {
-    let date = chrono::DateTime::parse_from_rfc3339(checked)
-        .ok()?
-        .with_timezone(&chrono::Utc);
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_secs();
-    let now = chrono::DateTime::from_timestamp(i64::try_from(seconds).ok()?, 0)?;
-    let format = if date.date_naive() == now.date_naive() {
-        "%H:%M"
-    } else {
-        "%Y-%m-%d"
-    };
-    Some(date.format(format).to_string())
 }
 
 /// `AnswerChart`: the legend, the plot and the source line.
@@ -422,8 +278,10 @@ fn chart(
     .tooltip_title(TooltipTitle::FirstSeries)
     .size(ChartSize::Panel);
     let mut stack = Stack::new().gap(Space::Sm).child(legend).child(plot);
-    if let Some(text) = source.and_then(|source| source_text(source, checked)) {
-        stack = stack.child(Typo::caption(text).tone(Tone::Tertiary));
-    }
+    stack = stack.children(source_line(
+        SharedString::from(format!("{key}-source")),
+        source,
+        checked,
+    ));
     stack.into_any_element()
 }

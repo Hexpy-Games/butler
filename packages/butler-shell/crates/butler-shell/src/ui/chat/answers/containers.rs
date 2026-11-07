@@ -15,26 +15,27 @@ use crate::ui::source::wire::{
 /// Renders one block of this family (columns, tabs, group).
 pub(super) fn render(
     block: &AnswerBlock,
+    path: &str,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     match block {
         AnswerBlock::Columns { blocks, .. } => {
-            let mut columns = BlockColumns::new("answer-columns");
-            for column in children(blocks, t, window, cx) {
+            let mut columns = BlockColumns::new(SharedString::from(format!("answer-columns-{path}")));
+            for column in children(blocks, path, t, window, cx) {
                 columns = columns.child(column);
             }
             columns.into_any_element()
         }
         AnswerBlock::Tabs { title, tabs, .. } => {
             let label = SharedString::from(title.clone().unwrap_or_default());
-            let mut list = BlockTabs::new("answer-tabs", label);
-            for tab in tabs {
-                let content =
-                    Stack::new()
-                        .gap(Space::Md)
-                        .children(children(&tab.blocks, t, window, cx));
+            let mut list = BlockTabs::new(SharedString::from(format!("answer-tabs-{path}")), label);
+            for (index, tab) in tabs.iter().enumerate() {
+                let tab_path = format!("{path}/{index}");
+                let content = Stack::new()
+                    .gap(Space::Md)
+                    .children(children(&tab.blocks, &tab_path, t, window, cx));
                 list = list.tab(BlockTab::new(
                     SharedString::from(tab.label.clone()),
                     content,
@@ -44,7 +45,7 @@ pub(super) fn render(
         }
         AnswerBlock::Group { blocks, .. } => Stack::new()
             .gap(Space::Md)
-            .children(children(blocks, t, window, cx))
+            .children(children(blocks, path, t, window, cx))
             .into_any_element(),
         _ => div().into_any_element(),
     }
@@ -53,6 +54,7 @@ pub(super) fn render(
 /// `children`: each leaf in its own `Stack gap="sm"`, rendered through `render` (framed, child level).
 fn children(
     leaves: &[AnswerLeafBlock],
+    path: &str,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
@@ -62,11 +64,12 @@ fn children(
         .enumerate()
         .filter_map(|(index, leaf)| {
             let block = leaf_block(leaf.clone()).ok()?;
-            let rendered = super::child_block(&block, t, window, cx);
+            let leaf_path = format!("{path}/{index}");
+            let rendered = super::child_block(&block, &leaf_path, t, window, cx);
             let cell = Stack::new().gap(Space::Sm).child(rendered);
             Some(
                 div()
-                    .id(("answer-leaf", index))
+                    .id(SharedString::from(format!("answer-leaf-{leaf_path}")))
                     .child(cell)
                     .into_any_element(),
             )

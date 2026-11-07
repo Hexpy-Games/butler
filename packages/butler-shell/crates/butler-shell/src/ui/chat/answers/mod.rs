@@ -7,60 +7,71 @@ mod leaf;
 
 use butler_ds::ui::layout::{Space, Stack};
 use gpui::{
-    AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, Window, div,
+    AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
+    Window, div,
 };
 
 use super::TranscriptCtx;
 use crate::ui::source::wire::{AnswerBlock, AnswerBlockSet};
 
-/// `AnswerBlocks`: a message's answer-block sets.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
+/// `AnswerBlocks`: a message's answer-block sets; nothing when they hold no block. A block's
+/// path is its set's call id and its place, so its element ids and card state are its own.
 pub(crate) fn answer_blocks(
     sets: &[AnswerBlockSet],
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
-) -> AnyElement {
+) -> Option<AnyElement> {
     let mut stack = Stack::new().gap(Space::Md);
-    let blocks = sets.iter().flat_map(|set| set.spec.blocks.iter());
-    for (index, entry) in blocks.enumerate() {
-        let rendered = block(entry, t, window, cx);
-        stack = stack.child(div().id(("answer-block", index)).child(rendered));
+    let mut shown = false;
+    for set in sets {
+        for (index, entry) in set.spec.blocks.iter().enumerate() {
+            let path = format!("{}/{index}", set.call_id);
+            let rendered = block(entry, &path, t, window, cx);
+            let id = SharedString::from(format!("answer-block-{path}"));
+            stack = stack.child(div().id(id).child(rendered));
+            shown = true;
+        }
     }
-    stack.into_any_element()
+    shown.then(|| stack.into_any_element())
 }
 
 /// One block: dispatches to its family and wraps it in the frame. Containers call it for
 /// their children.
 pub(super) fn block(
     block: &AnswerBlock,
+    path: &str,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let body = body(block, t, window, cx);
-    frame::frame(body, block, t, window, cx)
+    let body = body(block, path, t, window, cx);
+    frame::frame(body, block, path)
 }
 
 /// A block inside a container: the same family render in the frame's child level.
 pub(super) fn child_block(
     block: &AnswerBlock,
+    path: &str,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let body = body(block, t, window, cx);
-    frame::child_frame(body, block, t, window, cx)
+    let body = body(block, path, t, window, cx);
+    frame::child_frame(body, block, path)
 }
 
 /// The family render of one block (the `Block` switch of `AnswerBlocks.tsx`).
-fn body(block: &AnswerBlock, t: &TranscriptCtx, window: &mut Window, cx: &mut App) -> AnyElement {
+fn body(
+    block: &AnswerBlock,
+    path: &str,
+    t: &TranscriptCtx,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     match block {
         AnswerBlock::Columns { .. } | AnswerBlock::Tabs { .. } | AnswerBlock::Group { .. } => {
-            containers::render(block, t, window, cx)
+            containers::render(block, path, t, window, cx)
         }
         AnswerBlock::Timeline { .. }
         | AnswerBlock::Checklist { .. }
@@ -71,12 +82,10 @@ fn body(block: &AnswerBlock, t: &TranscriptCtx, window: &mut Window, cx: &mut Ap
         | AnswerBlock::Facts { .. }
         | AnswerBlock::Metrics { .. }
         | AnswerBlock::Callout { .. }
-        | AnswerBlock::Actions { .. } => leaf::render(block, t, window, cx),
-        AnswerBlock::Cards { .. } | AnswerBlock::Epics { .. } => {
-            cards::render(block, t, window, cx)
-        }
+        | AnswerBlock::Actions { .. } => leaf::render(block, path, cx),
+        AnswerBlock::Cards { .. } | AnswerBlock::Epics { .. } => cards::render(block, path),
         AnswerBlock::Table { .. } | AnswerBlock::Gallery { .. } | AnswerBlock::Chart { .. } => {
-            data::render(block, t, window, cx)
+            data::render(block, path, window, cx)
         }
     }
 }

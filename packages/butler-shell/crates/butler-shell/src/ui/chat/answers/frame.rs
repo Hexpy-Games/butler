@@ -1,43 +1,26 @@
-//! `AnswerBlockFrame`, `answerBlockActions`, `AnswerItem`, `AnswerSourceLine`.
+//! `AnswerBlockFrame`, `answerBlockActions` and `AnswerSourceLine`, the one source line every
+//! answer family shares.
 use butler_ds::ui::blocks::block_action_frame::{BlockActionFrame, Level};
 use butler_ds::ui::clickable::{Clickable, Variant};
 use butler_ds::ui::typo::{Tone, Typo};
-use chrono::DateTime;
-use gpui::{
-    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Styled as _,
-    Window, div,
-};
+use gpui::{AnyElement, ElementId, IntoElement as _, ParentElement as _, SharedString};
 
-use crate::ui::chat::TranscriptCtx;
+use crate::ui::shell::image_viewer::source::{checked_label, site_of};
 use crate::ui::source::wire::AnswerBlock;
 
-/// `AnswerItem`'s superseded opacity (`animateMotion` hold at 0.45).
-const SUPERSEDED_OPACITY: f32 = 0.45;
-
-/// Wraps a rendered block in its action frame (save to library, superseded dimming).
-pub(super) fn frame(
-    child: AnyElement,
-    block: &AnswerBlock,
-    _t: &TranscriptCtx,
-    _window: &mut Window,
-    _cx: &mut App,
-) -> AnyElement {
-    framed(child, block, Level::Block)
+/// Wraps a rendered block in its action frame; `path` makes its element id unique.
+pub(super) fn frame(child: AnyElement, block: &AnswerBlock, path: &str) -> AnyElement {
+    framed(child, block, path, Level::Block)
 }
 
 /// `AnswerBlockFrame` with `child`: a block inside a container (a smaller title).
-pub(super) fn child_frame(
-    child: AnyElement,
-    block: &AnswerBlock,
-    _t: &TranscriptCtx,
-    _window: &mut Window,
-    _cx: &mut App,
-) -> AnyElement {
-    framed(child, block, Level::Child)
+pub(super) fn child_frame(child: AnyElement, block: &AnswerBlock, path: &str) -> AnyElement {
+    framed(child, block, path, Level::Child)
 }
 
-fn framed(child: AnyElement, block: &AnswerBlock, level: Level) -> AnyElement {
-    let mut frame = BlockActionFrame::new("answer-frame").level(level);
+fn framed(child: AnyElement, block: &AnswerBlock, path: &str, level: Level) -> AnyElement {
+    let mut frame = BlockActionFrame::new(SharedString::from(format!("answer-frame-{path}")))
+        .level(level);
     if let Some(title) = title(block) {
         frame = frame.title(SharedString::from(title.to_owned()));
     }
@@ -68,26 +51,8 @@ fn title(block: &AnswerBlock) -> Option<&str> {
     }
 }
 
-/// `AnswerItem`: one item of a block; an item the retry has not replaced yet is dimmed.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave: called by the family units (leaf, cards, data)"
-)]
-pub(super) fn item(child: AnyElement, superseded: bool) -> AnyElement {
-    let item = div().child(child);
-    if superseded {
-        item.opacity(SUPERSEDED_OPACITY).into_any_element()
-    } else {
-        item.into_any_element()
-    }
-}
-
 /// `AnswerSourceLine`: the source's site and read date, a text button that opens the page.
 /// `source` and `checked` are the item's fields; no source gives no line.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave: called by the family units (leaf, cards, data)"
-)]
 pub(super) fn source_line(
     id: impl Into<ElementId>,
     source: Option<&str>,
@@ -95,7 +60,7 @@ pub(super) fn source_line(
 ) -> Option<AnyElement> {
     let url = source?;
     let site = site_of(url)?;
-    let caption = match checked_label(checked) {
+    let caption = match checked.and_then(checked_label) {
         Some(checked) => format!("{site} · {checked}"),
         None => site,
     };
@@ -105,17 +70,4 @@ pub(super) fn source_line(
         .on_click(move |_, _, cx| cx.open_url(&open))
         .child(Typo::caption(caption).tone(Tone::Tertiary));
     Some(line.into_any_element())
-}
-
-/// `new URL(url).hostname` without a leading `www.`.
-fn site_of(url: &str) -> Option<String> {
-    let parsed = url::Url::parse(url).ok()?;
-    let host = parsed.host_str()?;
-    Some(host.strip_prefix("www.").unwrap_or(host).to_owned())
-}
-
-/// `checkedLabel`: the read date of the source line.
-fn checked_label(checked: Option<&str>) -> Option<String> {
-    let date = DateTime::parse_from_rfc3339(checked?).ok()?;
-    Some(date.format("%Y-%m-%d").to_string())
 }

@@ -24,6 +24,7 @@ pub(crate) struct Media {
     pub(crate) save_to_library: &'static str,
     pub(crate) saved_to_library: &'static str,
     pub(crate) copy: &'static str,
+    pub(crate) answer_copied: &'static str,
     pub(crate) action_failed: &'static str,
     /// conversation.imageViewer
     pub(crate) close: &'static str,
@@ -67,6 +68,7 @@ const KO: Media = Media {
     save_to_library: "서랍에 저장",
     saved_to_library: "서랍에 저장했어요",
     copy: "복사",
+    answer_copied: "복사했어요",
     action_failed: "실행하지 못했어요",
     close: "닫기",
     previous_image: "이전 이미지",
@@ -76,7 +78,7 @@ const KO: Media = Media {
     zoom_out: "축소",
     copy_image: "이미지 복사",
     image_copied: "이미지를 복사했어요",
-    open_source: "원본 열기",
+    open_source: "원본 페이지 열기",
     queued_message: "대기 중인 메시지",
     sending_status: "보내는 중…",
     failed_message_status: "전송 실패",
@@ -107,6 +109,7 @@ const EN: Media = Media {
     save_to_library: "Save to library",
     saved_to_library: "Saved to library",
     copy: "Copy",
+    answer_copied: "Copied",
     action_failed: "Action failed",
     close: "Close",
     previous_image: "Previous image",
@@ -116,7 +119,7 @@ const EN: Media = Media {
     zoom_out: "Zoom out",
     copy_image: "Copy image",
     image_copied: "Image copied",
-    open_source: "Open source",
+    open_source: "Open source page",
     queued_message: "Queued message",
     sending_status: "Sending…",
     failed_message_status: "Send failed",
@@ -176,6 +179,14 @@ impl Media {
         match lang {
             Lang::Ko => format!("{count}개 더 보기"),
             Lang::En => format!("Show {count} more"),
+        }
+    }
+
+    /// conversation.imageViewer.checked
+    pub(crate) fn checked(lang: Lang, time: &str) -> String {
+        match lang {
+            Lang::Ko => format!("{time} 확인"),
+            Lang::En => format!("Checked {time}"),
         }
     }
 

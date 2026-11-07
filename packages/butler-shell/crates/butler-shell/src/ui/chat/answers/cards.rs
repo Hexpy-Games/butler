@@ -2,7 +2,7 @@
 mod bridge;
 mod value;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -18,14 +18,16 @@ use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Columns, Grid, Space, Stack};
 use butler_ds::ui::media_frame::{Aspect, Fit, MediaFrame};
 use butler_ds::ui::toast::{self, Toast};
-use butler_shell_client::ShellClient;
 use gpui::{
     AnyElement, App, ElementId, ImageSource, IntoElement, ParentElement as _, RenderOnce,
     SharedString, Styled as _, Window, div,
 };
 use serde_json::{Map, Value, json};
 
-use crate::ui::chat::TranscriptCtx;
+use crate::ui::i18n::media::Media;
+use crate::ui::shell::image_viewer::loader::{PictureId, picture};
+use crate::ui::shell::image_viewer::source::site_of;
+use crate::ui::shell::image_viewer::{self, ViewerEntry};
 use crate::ui::source::wire::{AnswerBlock, AnswerMedia, CardItem};
 
 /// Cards shown before "Show N more".
@@ -34,27 +36,35 @@ const COLLAPSED: usize = 6;
 const MIN_CARD: f32 = 168.;
 const STACK_BELOW: f32 = 560.;
 
-/// Renders one block of this family (cards, epics).
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
-pub(super) fn render(
-    block: &AnswerBlock,
-    t: &TranscriptCtx,
-    _window: &mut Window,
-    _cx: &mut App,
-) -> AnyElement {
+/// Renders one block of this family (cards). Epics have no DS pieces yet and show nothing.
+pub(super) fn render(block: &AnswerBlock, path: &str) -> AnyElement {
     match block {
         AnswerBlock::Cards { media, items, .. } => AnswerCards {
-            id: ("answer-cards", std::ptr::from_ref(block).addr()).into(),
+            id: ElementId::Name(format!("answer-cards-{path}").into()),
             media: aspect(media.as_ref()),
             items: items.clone(),
-            client: t.client.clone(),
+            viewer: viewer_entries(items),
         }
         .into_any_element(),
         _ => div().into_any_element(),
     }
+}
+
+/// `answerImages`: the pictures of the items that have one, in item order, for the viewer.
+fn viewer_entries(items: &[CardItem]) -> Vec<ViewerEntry> {
+    items
+        .iter()
+        .filter_map(|item| {
+            let mut entry = ViewerEntry::new(
+                PictureId::Asset(item.img.clone()?),
+                item.title.clone(),
+            );
+            entry.caption = Some(item.title.clone());
+            entry.source = item.source.clone();
+            entry.checked = item.checked.clone();
+            Some(entry)
+        })
+        .collect()
 }
 
 /// `media ?? "1:1"`.
@@ -64,48 +74,6 @@ fn aspect(media: Option<&AnswerMedia>) -> Aspect {
         Some(AnswerMedia::V34) => Aspect::ThreeFour,
         Some(AnswerMedia::V169) => Aspect::SixteenNine,
         Some(AnswerMedia::V11 | AnswerMedia::Unknown) | None => Aspect::Square,
-    }
-}
-
-/// `appCopy.conversation.answerBlocks`.
-struct Words {
-    show_more: &'static str,
-    show_less: &'static str,
-    save: &'static str,
-    saved: &'static str,
-    copy: &'static str,
-    copied: &'static str,
-    failed: &'static str,
-}
-
-fn words(lang: Lang) -> Words {
-    match lang {
-        Lang::En => Words {
-            show_more: "Show more",
-            show_less: "Show less",
-            save: "Save to library",
-            saved: "Saved to library",
-            copy: "Copy",
-            copied: "Copied",
-            failed: "Action failed",
-        },
-        Lang::Ko => Words {
-            show_more: "더 보기",
-            show_less: "접기",
-            save: "서랍에 저장",
-            saved: "서랍에 저장했어요",
-            copy: "복사",
-            copied: "복사했어요",
-            failed: "실행하지 못했어요",
-        },
-    }
-}
-
-/// `showMoreItems(count)`.
-fn more_items(lang: Lang, count: usize) -> String {
-    match lang {
-        Lang::En => format!("Show {count} more"),
-        Lang::Ko => format!("{count}개 더 보기"),
     }
 }
 
@@ -124,12 +92,6 @@ fn card_columns(width: f32, gap: f32, count: usize) -> u8 {
         columns -= 1;
     }
     columns.max(1)
-}
-
-/// The host of a source URL without `www.`.
-fn site_of(url: &str) -> Option<String> {
-    let url = url::Url::parse(url).ok()?;
-    Some(url.host_str()?.trim_start_matches("www.").to_owned())
 }
 
 /// `answerCardCopy`.
@@ -196,49 +158,25 @@ fn scrap(item: &CardItem, lang: Lang) -> Value {
     body
 }
 
-/// The pictures fetched so far, by asset id.
-#[derive(Default)]
-struct Pictures {
-    requested: HashSet<String>,
-    images: HashMap<String, Arc<gpui::Image>>,
-}
-
 #[derive(IntoElement)]
 struct AnswerCards {
     id: ElementId,
     media: Aspect,
     items: Vec<CardItem>,
-    client: Option<ShellClient>,
+    /// The viewer's set: the pictures of the items that have one.
+    viewer: Vec<ViewerEntry>,
 }
 
 impl AnswerCards {
     /// Starts the fetch of every picture not asked for yet and returns those that have arrived.
-    fn pictures(&self, window: &mut Window, cx: &mut App) -> HashMap<String, Arc<gpui::Image>> {
-        let state = window.use_keyed_state((self.id.clone(), "pictures"), cx, |_, _| {
-            Pictures::default()
-        });
-        if let Some(client) = &self.client {
-            for asset in self.items.iter().filter_map(|item| item.img.as_ref()) {
-                if !state.update(cx, |s, _| s.requested.insert(asset.clone())) {
-                    continue;
-                }
-                let receive = bridge::picture(client.clone(), asset.clone());
-                let (state, asset) = (state.clone(), asset.clone());
-                window
-                    .spawn(cx, async move |cx| {
-                        if let Ok(Ok(image)) = receive.await {
-                            let _ = cx.update(|_, cx| {
-                                state.update(cx, |s, cx| {
-                                    s.images.insert(asset, image);
-                                    cx.notify();
-                                });
-                            });
-                        }
-                    })
-                    .detach();
+    fn pictures(&self, cx: &mut App) -> HashMap<String, Arc<gpui::Image>> {
+        let mut loaded = HashMap::new();
+        for asset in self.items.iter().filter_map(|item| item.img.as_ref()) {
+            if let Some(image) = picture(&PictureId::Asset(asset.clone()), cx) {
+                loaded.insert(asset.clone(), image);
             }
         }
-        state.read(cx).images.clone()
+        loaded
     }
 
     /// `AnswerCard`: one item on an ItemCard.
@@ -250,7 +188,7 @@ impl AnswerCards {
         cx: &App,
     ) -> Option<ItemCard> {
         let item = self.items.get(index)?;
-        let copy = words(lang);
+        let copy = Media::of(lang);
         let id: ElementId = (
             self.id.clone(),
             item.key.clone().unwrap_or_else(|| index.to_string()),
@@ -260,12 +198,13 @@ impl AnswerCards {
             .aspect(self.media)
             .fit(Fit::Cover)
             .placeholder();
+        let opens = picture.is_some();
         if let Some(picture) = picture {
             media = media.src(picture);
         }
         let mut card = ItemCard::new(id.clone(), item.title.clone())
             .media(media)
-            .toggle_labels(copy.show_more, copy.show_less);
+            .toggle_labels(copy.answer_show_more, copy.show_less);
         if let Some(label) = &item.label {
             card = card.eyebrow(label.clone());
         }
@@ -300,25 +239,33 @@ impl AnswerCards {
                 }))
                 .on_open(move |_, _, cx| cx.open_url(&open));
         }
+        if opens && let Some(at) = self.viewer_index(index) {
+            let entries = self.viewer.clone();
+            card = card.on_media_open(move |_, _, cx| image_viewer::open(entries.clone(), at, cx));
+        }
         Some(card.action(self.save_action(&id, item, lang, cx)).action(
-            CopyButton::new((id, "copy"), copy.copy, copy.copied).text(card_copy(item, lang)),
+            CopyButton::new((id, "copy"), copy.copy, copy.answer_copied).text(card_copy(item, lang)),
         ))
+    }
+
+    /// The place of item `index` among the viewer's pictures.
+    fn viewer_index(&self, index: usize) -> Option<usize> {
+        self.items.get(index)?.img.as_ref()?;
+        Some(self.items[..index].iter().filter(|item| item.img.is_some()).count())
     }
 
     /// The footer's "save to library" button.
     fn save_action(&self, id: &ElementId, item: &CardItem, lang: Lang, cx: &App) -> DoneIconButton {
-        let copy = words(lang);
-        let (client, item) = (self.client.clone(), item.clone());
-        DoneIconButton::new((id.clone(), "save"), copy.save, copy.saved)
+        let copy = Media::of(lang);
+        let item = item.clone();
+        DoneIconButton::new(
+            (id.clone(), "save"),
+            copy.save_to_library,
+            copy.saved_to_library,
+        )
             .icon(icon(Icon::Library, IconSize::Sm, Ds::get(cx)))
             .on_action(move |window, cx| {
-                bridge::save(
-                    client.clone(),
-                    scrap(&item, lang),
-                    copy.failed.into(),
-                    window,
-                    cx,
-                )
+                bridge::save(scrap(&item, lang), copy.action_failed.into(), window, cx)
             })
             .on_error(|message: &SharedString, cx| {
                 toast::show(cx, Toast::error(message.clone()));
@@ -356,7 +303,7 @@ impl RenderOnce for AnswerCards {
         let lang = Ds::get(cx).lang();
         let expanded = window.use_keyed_state((self.id.clone(), "expanded"), cx, |_, _| false);
         let open = *expanded.read(cx);
-        let pictures = self.pictures(window, cx);
+        let pictures = self.pictures(cx);
         let (size, recorder) = measure::track((self.id.clone(), "width"), window, cx);
         let gap = f32::from(Space::Sm.px(Ds::get(cx)));
         let total = self.items.len();
@@ -373,9 +320,9 @@ impl RenderOnce for AnswerCards {
         );
         if total > COLLAPSED {
             let label = if open {
-                words(lang).show_less.to_owned()
+                Media::of(lang).show_less.to_owned()
             } else {
-                more_items(lang, total - COLLAPSED)
+                Media::show_more_items(lang, total - COLLAPSED)
             };
             stack = stack.child(
                 Button::new((self.id.clone(), "toggle"))

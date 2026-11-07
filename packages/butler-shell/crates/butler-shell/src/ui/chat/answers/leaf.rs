@@ -9,7 +9,6 @@ use butler_ds::ui::blocks::notice::{Notice, NoticeTone};
 use butler_ds::ui::blocks::progress_meter::ProgressMeter;
 use butler_ds::ui::blocks::status_checklist::{ChecklistItem, StatusChecklist};
 use butler_ds::ui::button::{Button, Variant as ButtonVariant};
-use butler_ds::ui::clickable::{Clickable, Variant as ClickableVariant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Columns, Grid, Inline, Space, Stack};
@@ -17,10 +16,13 @@ use butler_ds::ui::media_frame::{Aspect, MediaFrame};
 use butler_ds::ui::pill_button::{PillButton, Surface};
 use butler_ds::ui::typo::{Tone, Typo, Weight};
 use gpui::{
-    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Window, div,
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
+    ImageSource, SharedString, StatefulInteractiveElement as _, Styled as _, div,
 };
 
-use crate::ui::chat::TranscriptCtx;
+use super::frame::source_line;
+use crate::ui::shell::image_viewer::loader::{PictureId, picture};
+use crate::ui::shell::image_viewer::{self, ViewerEntry};
 use crate::ui::source::wire::{
     AnswerBlock, AnswerBlockActionsItemsItem, AnswerBlockCalloutTone, AnswerBlockMetricsItemsItem,
     AnswerBlockMetricsItemsItemDirection, AnswerBlockMetricsItemsItemValue,
@@ -28,65 +30,56 @@ use crate::ui::source::wire::{
 
 /// Renders one block of this family (timeline, checklist, progress, text, image, quote, facts,
 /// metrics, callout, actions).
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
-pub(super) fn render(
-    block: &AnswerBlock,
-    _t: &TranscriptCtx,
-    _window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
+pub(super) fn render(block: &AnswerBlock, path: &str, cx: &mut App) -> AnyElement {
     match block {
-        AnswerBlock::Timeline { id, items, .. } => timeline(&base(id, "timeline"), items, cx),
+        AnswerBlock::Timeline { items, .. } => timeline(&base(path, "timeline"), items, cx),
         AnswerBlock::Checklist { items, .. } => StatusChecklist::new(
             items
                 .iter()
                 .map(|item| ChecklistItem::new(item.text.clone(), item.done)),
         )
         .into_any_element(),
-        AnswerBlock::Progress { id, items, .. } => progress(&base(id, "progress"), items, cx),
-        AnswerBlock::Text { id, text, .. } => MarkdownContent::new(base(id, "text"), text.clone())
+        AnswerBlock::Progress { items, .. } => progress(&base(path, "progress"), items, cx),
+        AnswerBlock::Text { text, .. } => MarkdownContent::new(base(path, "text"), text.clone())
             .density(Density::Compact)
             .into_any_element(),
         AnswerBlock::Quote {
-            id,
             text,
             cite,
             source,
             ..
         } => quote(
-            &base(id, "quote"),
+            &base(path, "quote"),
             text,
             cite.as_deref(),
             source.as_deref(),
             cx,
         ),
         AnswerBlock::Image {
-            id,
+            img,
             caption,
             source,
             ..
         } => image(
-            &base(id, "image"),
+            &base(path, "image"),
+            img,
             caption.as_deref(),
             source.as_deref(),
             cx,
         ),
-        AnswerBlock::Facts { id, items, .. } => facts(&base(id, "facts"), items, cx),
-        AnswerBlock::Metrics { id, items, .. } => metrics(&base(id, "metrics"), items, cx),
+        AnswerBlock::Facts { items, .. } => facts(&base(path, "facts"), items, cx),
+        AnswerBlock::Metrics { items, .. } => metrics(&base(path, "metrics"), items, cx),
         AnswerBlock::Callout { tone, text, .. } => {
             Notice::new(callout_tone(tone.as_ref()), text.clone()).into_any_element()
         }
-        AnswerBlock::Actions { id, items, .. } => actions(&base(id, "actions"), items, cx),
+        AnswerBlock::Actions { items, .. } => actions(&base(path, "actions"), items, cx),
         _ => div().into_any_element(),
     }
 }
 
-/// The block's element id: its own id, else its type.
-fn base(id: &Option<String>, kind: &str) -> SharedString {
-    format!("answer-{kind}-{}", id.as_deref().unwrap_or_default()).into()
+/// The block's element id: its type and its path.
+fn base(path: &str, kind: &str) -> SharedString {
+    format!("answer-{kind}-{path}").into()
 }
 
 fn child_id(base: &SharedString, part: &str, index: usize) -> ElementId {
@@ -169,17 +162,30 @@ fn quote(
         .into_any_element()
 }
 
+/// `AnswerImage`: the collected picture over its caption; a click opens the viewer.
 fn image(
     base: &SharedString,
+    img: &str,
     caption: Option<&str>,
     source: Option<&str>,
-    _cx: &mut App,
+    cx: &mut App,
 ) -> AnyElement {
-    let mut frame = Stack::new().gap(Space::Xs).child(
-        MediaFrame::new(ElementId::Name(format!("{base}-frame").into()))
-            .aspect(Aspect::Square)
-            .placeholder(),
-    );
+    let asset = PictureId::Asset(img.to_owned());
+    let mut media = MediaFrame::new(ElementId::Name(format!("{base}-frame").into()))
+        .aspect(Aspect::Square)
+        .placeholder();
+    if let Some(loaded) = picture(&asset, cx) {
+        media = media.src(ImageSource::Image(loaded));
+    }
+    let mut entry = ViewerEntry::new(asset, caption.unwrap_or_default().to_owned());
+    entry.caption = caption.map(str::to_owned);
+    entry.source = source.map(str::to_owned);
+    let opened = div()
+        .id(ElementId::Name(format!("{base}-open").into()))
+        .cursor_pointer()
+        .on_click(move |_, _, cx| image_viewer::open(vec![entry.clone()], 0, cx))
+        .child(media);
+    let mut frame = Stack::new().gap(Space::Xs).child(opened);
     if let Some(caption) = caption.filter(|caption| !caption.is_empty()) {
         frame = frame.child(Typo::caption(caption.to_string()));
     }
@@ -303,29 +309,4 @@ fn actions(base: &SharedString, items: &[AnswerBlockActionsItemsItem], cx: &mut 
         };
     }
     row.into_any_element()
-}
-
-/// `AnswerSourceLine`: the source's site and check time as a text link; nothing without a source.
-fn source_line(id: ElementId, source: Option<&str>, checked: Option<&str>) -> Option<AnyElement> {
-    let source = source.filter(|source| !source.is_empty())?;
-    let site = url::Url::parse(source).ok().and_then(|url| {
-        url.host_str()
-            .map(|host| host.trim_start_matches("www.").to_string())
-    })?;
-    let checked = checked
-        .and_then(|raw| chrono::DateTime::parse_from_rfc3339(raw).ok())
-        .map(|date| date.format("%Y-%m-%d").to_string());
-    let text = [Some(site), checked]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>()
-        .join(" · ");
-    let url = source.to_string();
-    Some(
-        Clickable::new(id)
-            .variant(ClickableVariant::Text)
-            .on_click(move |_, _, cx| cx.open_url(&url))
-            .child(Typo::caption(text).tone(Tone::Tertiary))
-            .into_any_element(),
-    )
 }
