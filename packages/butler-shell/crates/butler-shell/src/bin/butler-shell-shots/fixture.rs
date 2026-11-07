@@ -108,7 +108,12 @@ fn long_chat() -> Vec<serde_json::Value> {
     let mut out = Vec::new();
     for i in 0..12 {
         out.push(message(&format!("m{i}u"), "user", USER_LINES[i % 3], 2 * i));
-        out.push(message(&format!("m{i}a"), "assistant", REPLIES[i % 3], 2 * i + 1));
+        out.push(message(
+            &format!("m{i}a"),
+            "assistant",
+            REPLIES[i % 3],
+            2 * i + 1,
+        ));
     }
     out
 }

@@ -31,3 +31,4 @@ const KO: Copy = Copy {
 
 pub(crate) fn copy(lang: Lang) -> &'static Copy {
     if lang == Lang::Ko { &KO } else { &EN }
+}

@@ -26,11 +26,9 @@ pub(super) fn message_content(
     }
     let mut parts = vec![match msg.role {
         MessageRecordRole::User => user_body(msg, t, window, cx),
-        _ => {
-            div()
-                .child(SharedString::from(visible_system_message_text(msg, cx)))
-                .into_any_element()
-        }
+        _ => div()
+            .child(SharedString::from(visible_system_message_text(msg, cx)))
+            .into_any_element(),
     }];
     parts.extend(message_files(msg, t, window, cx));
     if msg.status.as_deref() == Some("failed")

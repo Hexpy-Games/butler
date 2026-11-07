@@ -6,7 +6,9 @@ use std::rc::Rc;
 
 use butler_ds::ui::popover::{Density, Popover, PopoverContent};
 use butler_ds::ui::tooltip::{Align, Side};
-use gpui::{AnyElement, Bounds, Context, Focusable as _, Pixels, SharedString, Window, div, prelude::*, px};
+use gpui::{
+    AnyElement, Bounds, Context, Focusable as _, Pixels, SharedString, Window, div, prelude::*, px,
+};
 
 use super::Composer;
 use super::editor::atoms::atom_chip;

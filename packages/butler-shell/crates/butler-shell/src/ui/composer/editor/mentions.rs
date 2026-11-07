@@ -5,8 +5,8 @@ use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use gpui::{App, ParentElement as _, SharedString, Window};
 
-use super::atoms::session_display_title;
 use super::Atom;
+use super::atoms::session_display_title;
 use crate::ui::i18n::Locale;
 use crate::ui::source::wire::{NavigationView, SessionSummary};
 
@@ -287,14 +287,7 @@ impl MentionMenu {
     }
 }
 
-/// composer.mentionList, composer.mentionProject.
-pub(crate) fn mention_list_label(locale: Locale) -> &'static str {
-    match locale {
-        Locale::Ko => "대화·프로젝트 참조",
-        Locale::En => "Reference a chat or project",
-    }
-}
-
+/// composer.mentionProject.
 fn mention_project_label(locale: Locale) -> &'static str {
     match locale {
         Locale::Ko => "프로젝트",

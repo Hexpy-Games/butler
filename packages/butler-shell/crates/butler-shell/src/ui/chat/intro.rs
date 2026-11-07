@@ -30,8 +30,7 @@ pub(crate) fn set_seen(cx: &mut App, seen: bool) {
 /// `useChatsIntroVisible`.
 pub(super) fn visible(session: &str, cx: &App) -> bool {
     let intro = cx.try_global::<Intro>();
-    session == "general"
-        && intro.is_some_and(|intro| intro.shown || intro.seen == Some(false))
+    session == "general" && intro.is_some_and(|intro| intro.shown || intro.seen == Some(false))
 }
 
 /// The first showing marks the intro seen (`ChatsIntro`'s effect).

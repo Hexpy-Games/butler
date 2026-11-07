@@ -8,8 +8,8 @@ use serde_json::{Value, json};
 
 use super::editor::serialize::content_text;
 use super::queue::{access_wire, controls_body, effort_wire, queue_message};
-use super::state::{ComposerState, QueuePolicy, Submission, SubmitInput};
 use super::references::MentionKey;
+use super::state::{ComposerState, QueuePolicy, Submission, SubmitInput};
 use super::{Composer, ComposerEvent, Submit, SubmitWithModifier};
 use crate::ui::i18n::composer::words;
 use crate::ui::source::agent::Jobs;

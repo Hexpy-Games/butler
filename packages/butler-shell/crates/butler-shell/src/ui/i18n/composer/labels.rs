@@ -19,6 +19,7 @@ pub(crate) fn image_refusal_label(refusal: ImageRefusal, lang: Lang) -> &'static
         ImageRefusal::Size if ko => "이미지 용량 초과",
         ImageRefusal::Size => "Image too large",
     }
+}
 
 /// `reasoningEffortLabel` (butler-i18n/src/reasoning-effort.ts).
 pub(crate) fn reasoning_label(value: &ReasoningEffort, lang: Lang) -> &'static str {
@@ -37,3 +38,4 @@ pub(crate) fn reasoning_label(value: &ReasoningEffort, lang: Lang) -> &'static s
         ReasoningEffort::Max if ko => "최대",
         ReasoningEffort::Max => "Max",
     }
+}

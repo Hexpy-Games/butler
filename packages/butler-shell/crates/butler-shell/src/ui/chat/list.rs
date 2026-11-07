@@ -263,7 +263,9 @@ impl State {
         self.turn = turn;
         let info = turn_info(&view);
         let live = self.live.message(&self.messages, info.as_ref());
-        self.live_id = live.and_then(|ix| self.messages.get(ix)).map(|m| m.id.clone());
+        self.live_id = live
+            .and_then(|ix| self.messages.get(ix))
+            .map(|m| m.id.clone());
         let window = &view.message_window;
         self.older = window
             .previous_cursor

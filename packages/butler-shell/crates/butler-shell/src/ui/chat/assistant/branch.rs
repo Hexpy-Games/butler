@@ -14,9 +14,9 @@ use gpui::{
 };
 use serde_json::{Value, json};
 
-use super::text as copy_text;
 use super::hooks::hooks;
 use super::remote;
+use super::text as copy_text;
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::source::wire::MessageRecord;
 

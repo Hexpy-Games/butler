@@ -9,9 +9,8 @@ mod watch;
 
 use super::wire;
 use super::{
-    AuthorityCard, ChatPage, ChatRef, Decision, EventCursor, Fetch, LiveEvent,
-    PageCursor, RequestRef, SentTurn, SessionId, Source,
-    SourceError, TurnId, model::AllowScope,
+    AuthorityCard, ChatPage, ChatRef, Decision, EventCursor, Fetch, LiveEvent, PageCursor,
+    RequestRef, SentTurn, SessionId, Source, SourceError, TurnId, model::AllowScope,
 };
 use butler_shell_client::{AuthorityDecision, PageRequest, ShellClient};
 use futures::{
@@ -215,8 +214,8 @@ impl Source for Agent {
 
 /// The turn a `POST /messages` response started.
 pub(crate) fn sent_turn(raw: &serde_json::Value) -> Result<SentTurn, SourceError> {
-    let raw = convert::decode::<wire::SentTurnProjection>(raw)
-        .map_err(|error| convert::error(&error))?;
+    let raw =
+        convert::decode::<wire::SentTurnProjection>(raw).map_err(|error| convert::error(&error))?;
     let id = raw
         .turn_id
         .or_else(|| raw.turn.as_ref().and_then(|t| t.turn_id.clone()))

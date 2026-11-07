@@ -21,7 +21,11 @@ impl MessageCache {
     /// Merges the latest window into the shown view: the view's own fields come from `latest`,
     /// its messages merge into the current ones, and older windows already paged in stay.
     pub(crate) fn refresh(&mut self, mut latest: SessionView) {
-        let Some(view) = self.view.as_mut().filter(|v| v.session_id == latest.session_id) else {
+        let Some(view) = self
+            .view
+            .as_mut()
+            .filter(|v| v.session_id == latest.session_id)
+        else {
             self.view = Some(latest);
             return;
         };
@@ -40,7 +44,9 @@ impl MessageCache {
             let known = &view.message_window;
             let window = &mut latest.message_window;
             window.previous_cursor = known.previous_cursor;
-            window.previous_cursor_token.clone_from(&known.previous_cursor_token);
+            window
+                .previous_cursor_token
+                .clone_from(&known.previous_cursor_token);
             window.has_more = known.has_more;
             window.complete = known.complete;
         }

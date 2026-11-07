@@ -13,7 +13,7 @@ pub(crate) mod queue;
 mod references;
 mod send;
 mod slots;
-mod state;
+pub(crate) mod state;
 mod sync;
 mod toolbar;
 mod wire;
@@ -323,7 +323,9 @@ impl Composer {
             .iter()
             .any(|id| Popover::new(*id, window, cx).is_open(cx));
         // A session dragged over the composer keeps it open (`referenceDragging`).
-        popover || cx.has_active_drag() || ComposerState::read(cx, |draft| draft.context_popover_open)
+        popover
+            || cx.has_active_drag()
+            || ComposerState::read(cx, |draft| draft.context_popover_open)
     }
 }
 

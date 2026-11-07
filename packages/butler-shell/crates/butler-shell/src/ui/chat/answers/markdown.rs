@@ -62,9 +62,7 @@ fn provenance(source: Option<&str>, checked: Option<&str>) -> String {
         source
             .filter(|source| !source.is_empty())
             .map(|source| link(source, Some(source))),
-        checked
-            .filter(|checked| !checked.is_empty())
-            .map(text),
+        checked.filter(|checked| !checked.is_empty()).map(text),
     ]
     .into_iter()
     .flatten()
@@ -254,7 +252,12 @@ fn data(block: &AnswerBlock) -> String {
             checked,
             source,
             ..
-        } => chart(x, series, unit.as_deref(), (source.as_deref(), checked.as_deref())),
+        } => chart(
+            x,
+            series,
+            unit.as_deref(),
+            (source.as_deref(), checked.as_deref()),
+        ),
         _ => String::new(),
     }
 }
@@ -282,10 +285,16 @@ fn leaf(block: &AnswerBlock) -> String {
                 .map(|unit| format!(" {}", text(unit)))
                 .unwrap_or_default();
             let max = number(item.max.unwrap_or(100.));
-            format!("{}: {} / {max}{unit}", text(&item.label), number(item.value))
+            format!(
+                "{}: {} / {max}{unit}",
+                text(&item.label),
+                number(item.value)
+            )
         })),
         AnswerBlock::Text { text, .. } => text.clone(),
-        AnswerBlock::Quote { text: body, cite, .. } => {
+        AnswerBlock::Quote {
+            text: body, cite, ..
+        } => {
             let cite = cite
                 .as_deref()
                 .filter(|cite| !cite.is_empty())
@@ -298,7 +307,9 @@ fn leaf(block: &AnswerBlock) -> String {
         }
         AnswerBlock::Callout { text: body, .. } => format!("> {}", text(body)),
         AnswerBlock::Actions { items, .. } => joined(items.iter().map(|item| match item {
-            AnswerBlockActionsItemsItem::Variant1(ask) => format!("> 질문 제안: {}", text(&ask.ask)),
+            AnswerBlockActionsItemsItem::Variant1(ask) => {
+                format!("> 질문 제안: {}", text(&ask.ask))
+            }
             AnswerBlockActionsItemsItem::Variant2(open) => {
                 format!("- {}", link(&open.label, Some(&open.open)))
             }

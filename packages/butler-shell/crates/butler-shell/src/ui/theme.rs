@@ -1,8 +1,8 @@
 //! Butler DS tokens (packages/butler-app/client/ui/src/libs/design-system/tokens.css), light
 //! (`:root`/.theme-light) and dark (.theme-dark), over the native window material.
-use butler_ds::tokens::{Color, FontStack, Length, TokenContext};
+use butler_ds::tokens::{Color, FontStack, Length, Shadow, TokenContext};
 use butler_ds::ui::convert;
-use gpui::{Hsla, Rgba};
+use gpui::{BoxShadow, Hsla, Rgba};
 
 use crate::ui::i18n::Strings;
 
@@ -136,6 +136,18 @@ pub(crate) struct Theme {
     pub(crate) secondary_bg: Hsla,
     /// --secondary-border.
     pub(crate) secondary_border: Hsla,
+    /// --composer-glass-divider.
+    pub(crate) glass_divider: Hsla,
+    /// --composer-glass-shadow.
+    pub(crate) glass_shadow: BoxShadow,
+    /// --send-bg.
+    pub(crate) send_bg: Hsla,
+    /// --send-fg.
+    pub(crate) send_fg: Hsla,
+}
+
+fn shadow(context: &TokenContext) -> BoxShadow {
+    convert::box_shadows(context.shadow(Shadow::ComposerGlassShadow), context).remove(0)
 }
 
 fn color(context: &TokenContext, token: Color) -> Hsla {
@@ -191,6 +203,10 @@ impl Theme {
             accent: c(Color::Accent),
             secondary_bg: c(Color::Secondary),
             secondary_border: c(Color::SecondaryBorder),
+            glass_divider: c(Color::ComposerGlassDivider),
+            glass_shadow: shadow(&context),
+            send_bg: c(Color::SendBg),
+            send_fg: c(Color::SendFg),
         }
     }
 }

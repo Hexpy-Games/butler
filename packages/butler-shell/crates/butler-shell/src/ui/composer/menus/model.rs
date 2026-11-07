@@ -64,10 +64,6 @@ pub(crate) fn model_options_filter(
     window.use_keyed_state(key, cx, |_, _| ModelOptionsFilter::default())
 }
 
-}
-
-}
-
 /// `modelDisplayName`.
 pub(crate) fn model_display_name(model: &ModelChoice) -> SharedString {
     model

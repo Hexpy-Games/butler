@@ -14,7 +14,7 @@ use butler_ds::ui::blocks::usage_summary_rows::{format_tokens, format_usd};
 use butler_ds::ui::button::{Button, Size as ButtonSize, Variant as ButtonVariant};
 use butler_ds::ui::collapsible::Collapsible;
 use butler_ds::ui::context::{Ds, Lang};
-use butler_ds::ui::layout::{Basis, Cross, Justify, MinWidth, Space, Stack};
+use butler_ds::ui::layout::{Basis, Cross, Justify, MinWidth, Space, Stack, WithItem as _};
 use butler_ds::ui::separator::Separator;
 use butler_ds::ui::skeleton::{Height, Skeleton, Width};
 use butler_ds::ui::typo::{Role, Tone, Typo};
@@ -23,7 +23,6 @@ use gpui::{
     Window,
 };
 
-use crate::ui::i18n::composer::usage::copy;
 use super::account::account_section;
 use super::timeline::{
     Readout, Timeline, usage_parts, usage_readout, usage_series, usage_timeline, usage_tokens,
@@ -32,6 +31,7 @@ use super::usage::{
     ConversationUsage, UsageAuthMode, UsageMonitorView, UsageStatus, clock,
     conversation_usage_summary, now_ms, parse_ms,
 };
+use crate::ui::i18n::composer::usage::copy;
 use crate::ui::source::wire::ContextDetailsView;
 
 pub(super) type SelectHandler = Rc<dyn Fn(Option<usize>, &mut Window, &mut App)>;

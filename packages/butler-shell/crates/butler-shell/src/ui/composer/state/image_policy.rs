@@ -2,7 +2,6 @@
 pub(crate) use crate::ui::i18n::composer::labels::image_refusal_label;
 use std::collections::HashMap;
 
-
 use super::ComposerAttachment;
 use crate::ui::composer::menus::ModelChoice;
 use crate::ui::source::wire::MessageFileKind;
@@ -195,5 +194,4 @@ pub(crate) fn blocked_image_attachment_ids(
         }
     }
     blocked
-}
 }
