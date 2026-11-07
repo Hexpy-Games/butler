@@ -6,7 +6,7 @@ mod policy;
 use super::{HttpError, HttpState, query};
 use axum::{
     body::Body,
-    http::{HeaderValue, StatusCode, Uri, header},
+    http::{HeaderMap, HeaderValue, StatusCode, Uri, header},
     response::Response,
 };
 use indexmap::IndexMap;
@@ -57,7 +57,11 @@ impl Favicons {
         }
     }
 
-    async fn lookup(self: &Arc<Self>, host: &str) -> Option<watch::Receiver<Option<Option<Icon>>>> {
+    async fn lookup(
+        self: &Arc<Self>,
+        host: &str,
+        user_agent: Option<HeaderValue>,
+    ) -> Option<watch::Receiver<Option<Option<Icon>>>> {
         let mut cache = self.cache.lock().await;
         if let Some(entry) = cache.shift_remove(host) {
             match entry {
@@ -85,15 +89,15 @@ impl Favicons {
         cache.insert(host.to_owned(), Entry::Pending(receiver.clone()));
         let service = Arc::clone(self);
         let host = host.to_owned();
-        tokio::spawn(async move { service.populate(host, sender).await });
+        tokio::spawn(async move { service.populate(host, user_agent, sender).await });
         Some(receiver)
     }
 
-    async fn icon(self: &Arc<Self>, host: &str) -> Option<Icon> {
+    async fn icon(self: &Arc<Self>, host: &str, user_agent: Option<HeaderValue>) -> Option<Icon> {
         if !policy::valid_host(host) {
             return None;
         }
-        let mut receiver = self.lookup(host).await?;
+        let mut receiver = self.lookup(host, user_agent).await?;
         tokio::time::timeout(Duration::from_millis(3500), async {
             loop {
                 if let Some(icon) = receiver.borrow_and_update().clone() {
@@ -109,8 +113,13 @@ impl Favicons {
         .flatten()
     }
 
-    async fn populate(self: Arc<Self>, host: String, sender: watch::Sender<Option<Option<Icon>>>) {
-        let icon = tokio::time::timeout(Duration::from_millis(3500), self.load(&host))
+    async fn populate(
+        self: Arc<Self>,
+        host: String,
+        user_agent: Option<HeaderValue>,
+        sender: watch::Sender<Option<Option<Icon>>>,
+    ) {
+        let icon = tokio::time::timeout(Duration::from_millis(3500), self.load(&host, user_agent))
             .await
             .ok()
             .flatten();
@@ -126,37 +135,47 @@ impl Favicons {
         let _ = sender.send(Some(icon));
     }
 
-    async fn load(&self, host: &str) -> Option<Icon> {
+    async fn load(&self, host: &str, user_agent: Option<HeaderValue>) -> Option<Icon> {
         if let Some(root) = self.root.clone() {
             let host = host.to_owned();
-            if let Some(icon) = tokio::task::spawn_blocking(move || disk::load(&root, &host))
+            if let Some(remembered) = tokio::task::spawn_blocking(move || disk::load(&root, &host))
                 .await
                 .ok()
                 .flatten()
             {
-                return Some(icon);
+                return remembered;
             }
         }
         let _permit = self.outbound.acquire().await.ok()?;
-        let icon = fetch::fetch(host).await?;
+        let icon = match fetch::fetch(host, user_agent.as_ref()).await {
+            fetch::Fetched::Icon(icon) => Some(icon),
+            fetch::Fetched::Missing => None,
+            fetch::Fetched::Unreachable => return None,
+        };
         if let Some(root) = self.root.clone() {
             let write = Arc::clone(&self.writes).lock_owned().await;
             let host = host.to_owned();
             let copy = icon.clone();
             let _ = tokio::task::spawn_blocking(move || {
                 let _write = write;
-                disk::store(&root, &host, &copy)
+                disk::store(&root, &host, copy.as_ref())
             })
             .await;
         }
-        Some(icon)
+        icon
     }
 }
 
-pub(super) async fn get(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
+/// The site sees the viewer's browser User-Agent, as when the browser itself asks.
+pub(super) async fn get(
+    state: Arc<HttpState>,
+    uri: &Uri,
+    headers: &HeaderMap,
+) -> Result<Response, HttpError> {
     let params = query(uri);
     let host = params.get("host").map_or("", String::as_str);
-    let icon = state.favicons.icon(host).await;
+    let user_agent = headers.get(header::USER_AGENT).cloned();
+    let icon = state.favicons.icon(host, user_agent).await;
     let mut response = Response::new(
         icon.as_ref()
             .map_or_else(Body::empty, |icon| Body::from(icon.bytes.clone())),
