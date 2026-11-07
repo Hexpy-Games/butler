@@ -1,187 +1,124 @@
-//! The composer's toolbar: attach, the permission and model labels, the send/stop button,
-//! and the folded one-line preview. Controls this build cannot use yet are disabled with a
-//! tooltip; while no agent is attached the whole composer is.
-use gpui::{AnyElement, Context, FontWeight, Hsla, SharedString, div, prelude::*, px};
+//! `ComposerToolbar` and `ComposerCompactPreview`: the attach, mode and model controls, the
+//! send/stop button and the folded one-line preview.
+use butler_ds::ui::blocks::composer_card::{
+    CompactPreview, ExpandedControls, SendButton, SendMode, Toolbar, ToolbarSpacer,
+};
+use butler_ds::ui::context::{Ds, Lang};
+use butler_ds::ui::tooltip::Tooltip;
+use gpui::{
+    AnyElement, ClickEvent, Context, IntoElement, ParentElement as _, SharedString, Window,
+};
+use gpui::{Styled as _, div};
 
+use super::state::{ComposerState, image_refusal_label};
 use super::{Composer, ComposerEvent, Submit};
-use crate::ui::Icon;
-use crate::ui::theme::{alpha, rgba, typo};
-use crate::ui::widgets::{IconButtonSpec, hover_listener, icon, icon_button, text, tooltip};
+use crate::ui::i18n::composer::words;
 
-/// A label pill: text, an optional secondary detail and an optional leading glyph.
-struct Pill {
-    id: &'static str,
-    unavailable: bool,
-    glyph: Option<(Icon, Hsla)>,
-    label: SharedString,
-    detail: Option<SharedString>,
+/// The controls the menus, the context donut and the attachments own.
+pub(super) struct ToolbarSlots {
+    /// `ComposerAttachmentMenu`.
+    pub(super) attach: AnyElement,
+    /// `AccessModeMenu`.
+    pub(super) access: AnyElement,
+    /// `ComposerWorkspaceSelect`; none unless a new chat can use a worktree.
+    pub(super) workspace: Option<AnyElement>,
+    /// `ComposerPlanModeBadge`; none unless plan mode is on.
+    pub(super) plan: Option<AnyElement>,
+    /// `ComposerContextControl`.
+    pub(super) context: AnyElement,
+    /// `ModelMenu`.
+    pub(super) model: AnyElement,
 }
 
 impl Composer {
-    /// The permission and model labels. Changing them comes later: they say so on hover.
-    fn pill(&self, pill: Pill) -> impl IntoElement {
-        let t = &self.theme;
-        let unavailable = pill.unavailable;
-        let mut row = div().flex().items_center().gap(px(4.)).child(text(
-            pill.label,
-            typo::CAPTION,
-            FontWeight::NORMAL,
-            t.text,
-        ));
-        if let Some(d) = pill.detail {
-            row = row.child(text(d, typo::CAPTION, FontWeight::NORMAL, t.text3));
-        }
-        let pad_right = if pill.glyph.is_some() { 14. } else { 10. };
-        div()
-            .id(pill.id)
-            .h(px(30.))
-            .flex()
-            .flex_none()
-            .items_center()
-            .gap(px(5.))
-            .pl(px(10.))
-            .pr(px(pad_right))
-            .rounded_full()
-            .tooltip(tooltip(
-                if unavailable {
-                    t.strings.load_failed
-                } else {
-                    t.strings.not_yet
-                },
-                t,
-            ))
-            .children(pill.glyph.map(|(name, color)| icon(name, 16., color)))
-            .child(row)
-    }
-
-    fn send_button(&self, cx: &mut Context<Self>) -> AnyElement {
-        let t = &self.theme;
-        let empty = self.input.read(cx).as_str().trim().is_empty();
-        let (bg, glyph, size) = if self.streaming {
-            let stop = if t.dark {
-                rgba(232, 233, 235, 1.)
-            } else {
-                rgba(31, 32, 35, 1.)
-            };
-            (stop, Icon::Square, 14.)
-        } else if empty || self.disabled.is_some() {
-            (alpha(t.send_disabled, 0.56), Icon::SendHorizontal, 16.)
-        } else {
-            (t.send_bg, Icon::SendHorizontal, 16.)
-        };
-        let button = crate::ui::widgets::anchor(div(), "send-button")
-            .id("send")
-            .size(px(30.))
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded_full()
-            .bg(bg)
-            .child(icon(glyph, size, t.send_fg));
-        if let Some(reason) = self.disabled.clone() {
-            return button.tooltip(tooltip(reason, t)).into_any_element();
-        }
-        button
-            .when(!empty || self.streaming, gpui::Styled::cursor_pointer)
-            .on_click(cx.listener(|this, _, window, cx| {
-                if this.streaming {
-                    cx.emit(ComposerEvent::Stop);
-                } else {
-                    this.submit(&Submit, window, cx);
-                }
-            }))
-            .into_any_element()
-    }
-
-    fn context_pills(&self) -> Vec<AnyElement> {
-        let Some(context) = self.context.clone() else {
-            return Vec::new();
-        };
-        let unavailable = context.state == crate::ui::source::model::Controls::Unavailable;
-        let access = Pill {
-            unavailable,
-            id: "access",
-            glyph: Some((Icon::ShieldQuestion, self.theme.accent_text)),
-            label: self.theme.strings.control_label(&context.permission),
-            detail: None,
-        };
-        let model = Pill {
-            unavailable,
-            id: "model",
-            glyph: None,
-            label: if unavailable {
-                "—".into()
-            } else {
-                context.model
-            },
-            detail: (!unavailable).then(|| self.theme.strings.control_label(&context.effort)),
-        };
-        vec![
-            self.pill(access).into_any_element(),
-            div().flex_1().min_w(px(8.)).into_any_element(),
-            self.pill(model).into_any_element(),
-        ]
-    }
-
-    /// The folded composer's one line: the draft or the placeholder. Disabled, it takes the
-    /// disabled text colour and no text cursor, and says why on hover.
-    fn preview(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &self.theme;
-        let draft = SharedString::from(self.input.read(cx).as_str().to_owned());
-        let color = match (self.disabled.is_some(), draft.is_empty()) {
-            (true, _) => t.text_disabled,
-            (false, true) => t.placeholder,
-            (false, false) => t.text,
-        };
-        let line = if draft.is_empty() {
+    /// `ComposerCompactPreview`: the folded composer's one line, the draft or the placeholder.
+    fn compact_preview(&self, cx: &mut Context<Self>) -> AnyElement {
+        let draft = ComposerState::read(cx, |draft| draft.text.trim().to_owned());
+        let empty = draft.is_empty();
+        let line: SharedString = if empty {
             self.placeholder.into()
         } else {
-            draft
+            draft.into()
         };
-        let preview = div()
-            .id("compact-preview")
-            .flex_1()
-            .min_w_0()
-            .px(px(8.))
-            .child(text(line, typo::BODY, FontWeight::NORMAL, color).truncate());
+        let mut preview = CompactPreview::new("compact-preview", line);
+        if empty {
+            preview = preview.empty();
+        }
         match self.disabled.clone() {
-            Some(reason) => preview.tooltip(tooltip(reason, t)),
+            // Disabled, it says why on hover and does not engage.
+            Some(reason) => Tooltip::new("compact-preview-reason")
+                .label(reason)
+                .child(preview)
+                .into_any_element(),
             None => preview
-                .cursor_text()
-                .on_click(cx.listener(|this, _, window, cx| this.engage(window, cx))),
+                .on_click(cx.listener(|this, _: &ClickEvent, window, cx| this.engage(window, cx)))
+                .into_any_element(),
         }
     }
 
-    pub(super) fn toolbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = self.theme.clone();
-        let attach_off = self
-            .disabled
-            .clone()
-            .unwrap_or_else(|| t.strings.not_yet.into());
-        let plus = IconButtonSpec::new("plus", Icon::Plus, false).disabled(Some(attach_off));
-        let plus = icon_button(&t, plus, hover_listener(&"plus".into(), cx), |_, _, _| {});
-        let divider = if self.engaged {
-            t.glass_divider
+    /// The send, stop or busy button, by the same order as `ComposerToolbar`.
+    fn send_slot(&self, lang: Lang, cx: &mut Context<Self>) -> AnyElement {
+        let (send, blocked) = ComposerState::read(cx, |draft| {
+            (
+                draft.send.clone(),
+                draft.blocked_attachments.values().next().copied(),
+            )
+        });
+        let sendable = send.can_send && self.disabled.is_none();
+        let id = "send-button";
+        let button = if let Some(reason) = self.disabled.clone() {
+            SendButton::new(id).disabled().disabled_reason(reason)
+        } else if self.inputs.reconnecting {
+            SendButton::new(id)
+                .busy()
+                .disabled_reason(words(lang).reconnecting)
+        } else if send.active_turn && send.can_stop && !send.can_send {
+            SendButton::new(id)
+                .mode(SendMode::Stop)
+                .on_click(cx.listener(|_, _: &ClickEvent, _, cx| cx.emit(ComposerEvent::Stop)))
         } else {
-            gpui::transparent_black()
+            let mut button = SendButton::new(id).on_click(
+                cx.listener(|this, _: &ClickEvent, window, cx| this.submit(&Submit, window, cx)),
+            );
+            if !sendable {
+                button = button.disabled();
+            }
+            match blocked {
+                Some(refusal) => button.disabled_reason(image_refusal_label(refusal, lang)),
+                None => button,
+            }
         };
-        let bar = div()
-            .flex()
-            .items_center()
-            .gap(px(4.))
-            .min_h(px(if self.engaged { 42. } else { 38. }))
-            .p(px(8.))
-            .border_t_1()
-            .border_color(divider)
-            .child(plus);
-        if self.engaged {
-            return bar
-                .children(self.context_pills())
-                .child(self.send_button(cx));
+        let button = crate::ui::widgets::anchor(div().flex_none(), "send-button").child(button);
+        let expanded_only = self.disabled.is_none()
+            && !self.inputs.reconnecting
+            && !(send.active_turn && send.can_stop && !send.can_send);
+        if expanded_only {
+            // The send button shows with the expanded controls only.
+            return ExpandedControls::new().child(button).into_any_element();
         }
-        let streaming = self.streaming;
-        bar.child(self.preview(cx))
-            .when(streaming, |b| b.child(self.send_button(cx)))
+        button.into_any_element()
+    }
+
+    /// `ComposerToolbar`.
+    pub(super) fn toolbar(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let lang = Ds::get(cx).lang();
+        let slots = self.control_slots(window, cx);
+        let mut controls = ExpandedControls::new().child(slots.access);
+        for control in [slots.workspace, slots.plan].into_iter().flatten() {
+            controls = controls.child(control);
+        }
+        controls = controls
+            .child(ToolbarSpacer)
+            .child(slots.context)
+            .child(slots.model);
+        Toolbar::new()
+            .child(slots.attach)
+            .child(self.compact_preview(cx))
+            .child(controls)
+            .child(self.send_slot(lang, cx))
     }
 }

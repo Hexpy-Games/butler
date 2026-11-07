@@ -44,18 +44,6 @@ fn object_list<'de, D: Deserializer<'de>, T: DeserializeOwned>(d: D) -> Result<V
         })
         .collect()
 }
-fn optional_object_list<'de, D: Deserializer<'de>, T: DeserializeOwned>(
-    d: D,
-) -> Result<Vec<T>, D::Error> {
-    let value = Value::deserialize(d)?;
-    Ok(value
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|v| v.is_object())
-        .filter_map(|v| serde_json::from_value(v.clone()).ok())
-        .collect())
-}
 /// JSON field presence, retaining explicit null or malformed values separately from omission.
 #[derive(Debug, Clone, Default)]
 pub(crate) enum Field<T> {
@@ -101,56 +89,11 @@ pub(crate) struct ProjectProjection {
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct MessageProjection {
     #[serde(default, deserialize_with = "optional")]
-    pub(crate) id: Option<String>,
-    #[serde(default, deserialize_with = "optional")]
     pub(crate) role: Option<String>,
-    #[serde(default, deserialize_with = "optional")]
-    pub(crate) text: Option<String>,
     #[serde(default, deserialize_with = "optional")]
     pub(crate) status: Option<String>,
     #[serde(default, deserialize_with = "optional")]
     pub(crate) chat_id: Option<String>,
-    #[serde(default, deserialize_with = "optional_object_list")]
-    pub(crate) work_blocks: Vec<WorkProjection>,
-}
-/// TS: packages/butler-app/client/ui/src/app/types.ts:1340 WorkBlockView (consumed fields).
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct WorkProjection {
-    #[serde(default, deserialize_with = "optional")]
-    pub(crate) label: Option<String>,
-    #[serde(default, deserialize_with = "optional_object_list")]
-    pub(crate) rows: Vec<ToolProjection>,
-}
-/// TS: packages/butler-app/client/ui/src/app/types.ts:1023 ProgressRow (consumed fields).
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct ToolProjection {
-    #[serde(default, deserialize_with = "optional")]
-    pub(crate) safe_tool_name: Option<String>,
-    #[serde(default, deserialize_with = "optional")]
-    pub(crate) safe_input_label: Option<String>,
-}
-/// TS: packages/butler-app/client/ui/src/app/types.ts:1263 SessionView (consumed fields).
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct WindowProjection {
-    #[serde(deserialize_with = "object_list")]
-    pub(crate) messages: Vec<MessageProjection>,
-    #[serde(default, deserialize_with = "optional_object")]
-    pub(crate) message_window: Option<WindowCursorProjection>,
-    #[serde(default, deserialize_with = "optional_object")]
-    pub(crate) active_turn: Option<TurnProjection>,
-    #[serde(deserialize_with = "object")]
-    pub(crate) cursors: CursorsProjection,
-}
-/// TS: packages/butler-app/client/ui/src/app/types.ts:1141 SessionViewMessageWindow (consumed fields).
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct WindowCursorProjection {
-    #[serde(default, deserialize_with = "optional")]
-    pub(crate) previous_cursor_token: Option<String>,
-}
-/// TS: packages/butler-app/client/ui/src/app/types.ts:1160 SessionViewCursors (consumed fields).
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct CursorsProjection {
-    pub(crate) events: u64,
 }
 /// TS: packages/butler-app/client/ui/src/app/types.ts:1787 TimelineEvent.payload.turn (consumed fields).
 #[derive(Debug, Clone, Deserialize)]

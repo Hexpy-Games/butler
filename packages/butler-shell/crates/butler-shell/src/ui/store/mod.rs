@@ -7,11 +7,16 @@
 #[cfg(test)]
 mod tests;
 
+pub(crate) mod drafts;
+pub(crate) mod messages;
+pub(crate) mod progress;
+
 use std::collections::{HashMap, HashSet};
 
+use crate::ui::source::wire::{AppEventEnvelope, SessionView, TurnProgressSnapshot};
 use crate::ui::source::{
     AuthorityCard, ChatId, ChatPage, ChatRef, ChatSummary, EventCursor, LiveEvent, LiveUpdate,
-    Message, MessagePage, PageCursor, RequestRef, SessionId, TurnId,
+    PageCursor, RequestRef, SessionId, TurnId,
 };
 
 /// A chats load in flight: its snapshot generation and the page it asks for.
@@ -26,11 +31,10 @@ pub(crate) enum Applied {
     /// Nothing visible beyond the store (or the event was stale or a duplicate).
     Store,
     Failed(crate::ui::source::SourceError),
-    /// A message of `session` to show if that chat is open.
-    Message(SessionId, Message),
+    /// The open chat's messages or turn progress changed: show its view again.
+    Transcript,
     /// Events were lost: take a new snapshot.
     Resync,
-    MessageDeleted(SessionId, gpui::SharedString),
 }
 
 #[derive(Default)]
@@ -46,6 +50,10 @@ pub(crate) struct Store {
     /// The last durable event applied; live updates resume after it.
     pub(crate) cursor: Option<EventCursor>,
     message_snapshots: HashMap<SessionId, EventCursor>,
+    /// The open session's view (`messageCache`), paged older on demand and patched by events.
+    pub(crate) messages: messages::MessageCache,
+    /// The open session's turn progress (`turnProgress`).
+    pub(crate) progress: progress::TurnProgress,
 }
 
 impl Store {
@@ -114,6 +122,10 @@ impl Store {
     }
 
     pub(crate) fn open(&mut self, chat: Option<ChatRef>) {
+        if self.selected != chat {
+            self.messages = messages::MessageCache::default();
+            self.progress = progress::TurnProgress::default();
+        }
         self.selected = chat;
     }
 
@@ -137,7 +149,7 @@ impl Store {
         if self.selected.as_ref() != Some(chat) {
             return false;
         }
-        self.selected = None;
+        self.open(None);
         true
     }
 
@@ -145,12 +157,73 @@ impl Store {
         self.chats.iter().find(|c| &c.chat == chat)
     }
 
-    /// A message window arrived; true when its chat is still open. Its running turn is taken.
-    pub(crate) fn messages_loaded(&mut self, chat: &ChatRef, page: &MessagePage) -> bool {
+    /// The opened chat's view arrived; true when its chat is still open. Its running turn is
+    /// taken and live events after its cursor patch it.
+    pub(crate) fn view_loaded(&mut self, chat: &ChatRef, view: SessionView) -> bool {
+        self.note_view(chat, &view);
+        if self.selected.as_ref() != Some(chat) {
+            return false;
+        }
+        self.progress.load(&view);
+        self.messages.open(view);
+        true
+    }
+
+    /// The latest window of the open chat arrived again: it merges into the shown view.
+    pub(crate) fn view_refreshed(&mut self, chat: &ChatRef, view: SessionView) -> bool {
+        self.note_view(chat, &view);
+        if self.selected.as_ref() != Some(chat) {
+            return false;
+        }
+        self.progress.load(&view);
+        self.messages.refresh(view);
+        true
+    }
+
+    /// An older window arrived; true when it was merged into the shown view.
+    pub(crate) fn older_loaded(&mut self, chat: &ChatRef, older: SessionView) -> bool {
+        if self.selected.as_ref() != Some(chat) {
+            return false;
+        }
+        self.messages.prepend_older(older);
+        true
+    }
+
+    fn note_view(&mut self, chat: &ChatRef, view: &SessionView) {
+        let events = u64::try_from(view.cursors.events).unwrap_or(0);
         self.message_snapshots
-            .insert(chat.session.clone(), page.events);
-        self.set_running(&chat.chat, page.running.clone());
-        self.selected.as_ref() == Some(chat)
+            .insert(chat.session.clone(), EventCursor(events));
+        let running = view
+            .active_turn
+            .as_ref()
+            .map(|turn| TurnId(turn.id.clone().into()));
+        self.set_running(&chat.chat, running);
+    }
+
+    /// The open chat's view disagrees with its running turn: it is read again.
+    pub(crate) fn view_stale(&self) -> bool {
+        let (Some(chat), Some(view)) = (self.selected.as_ref(), self.messages.view()) else {
+            return false;
+        };
+        let running = self.running.get(&chat.chat).map(|turn| &*turn.0);
+        running != view.active_turn.as_ref().map(|turn| turn.id.as_str())
+    }
+
+    /// The open chat's view with the turns' live progress: what the transcript renders.
+    pub(crate) fn shown_view(&self) -> Option<SessionView> {
+        let mut view = self.messages.view()?.clone();
+        for turn in [&mut view.active_turn, &mut view.latest_turn]
+            .into_iter()
+            .flatten()
+        {
+            if let Some(snapshot) = self.progress.snapshot(&turn.id) {
+                turn.progress = Some(snapshot.clone());
+                if let Some(state) = &snapshot.state {
+                    turn.state.clone_from(state);
+                }
+            }
+        }
+        Some(view)
     }
 
     fn set_running(&mut self, chat: &ChatId, running: Option<TurnId>) {
@@ -219,20 +292,28 @@ impl Store {
         }
         match event.update {
             LiveUpdate::Failed(error) => return Applied::Failed(error),
-            LiveUpdate::Message { session, message } => {
+            LiveUpdate::Event {
+                session,
+                event: raw,
+            } => {
                 if event.cursor.is_some_and(|c| {
                     self.message_snapshots
                         .get(&session)
                         .is_some_and(|snapshot| c <= *snapshot)
-                }) {
+                }) || self.selected.as_ref().map(|chat| &chat.session) != Some(&session)
+                {
                     return Applied::Store;
                 }
-                return Applied::Message(session, message);
+                return self.apply_session_event(&raw);
             }
-            LiveUpdate::MessageDeleted { session, id } => {
-                return Applied::MessageDeleted(session, id);
+            LiveUpdate::Turn { chat, running } => {
+                let ended = running.is_none() && self.running.contains_key(&chat);
+                self.set_running(&chat, running);
+                if ended && self.selected.as_ref().is_some_and(|open| open.chat == chat) {
+                    self.freeze_activity();
+                    return Applied::Transcript;
+                }
             }
-            LiveUpdate::Turn { chat, running } => self.set_running(&chat, running),
             LiveUpdate::Authority { session, cards } => self.authority_loaded(session, cards),
             LiveUpdate::Chat(summary) => {
                 if self
@@ -253,6 +334,24 @@ impl Store {
             LiveUpdate::Resync => return Applied::Resync,
         }
         Applied::Store
+    }
+
+    /// `freezeConversationActivity`: a finished turn's messages keep the activity it showed.
+    fn freeze_activity(&mut self) {
+        let snapshots: HashMap<String, TurnProgressSnapshot> =
+            self.progress.snapshots().iter().cloned().collect();
+        progress::terminal::freeze_conversation_activity(self.messages.messages_mut(), &snapshots);
+    }
+
+    /// A session event of the open chat: the cache and the progress each take it.
+    fn apply_session_event(&mut self, event: &AppEventEnvelope) -> Applied {
+        let messages = self.messages.apply_event(event);
+        let progress = self.progress.apply_event(event);
+        if messages || progress {
+            Applied::Transcript
+        } else {
+            Applied::Store
+        }
     }
 
     /// The agent went away: nothing it owns stays actionable.

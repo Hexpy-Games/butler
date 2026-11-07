@@ -8,10 +8,10 @@ use gpui::SharedString;
 
 use super::{Applied, Store};
 use crate::ui::source::{
-    AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, ClientMessageId,
-    ComposerContext, Decision, EventCursor, Fetch, LiveEvent, LiveUpdate, MessageCursor,
-    MessagePage, PageCursor, RequestRef, SentTurn, SessionId, Source, SourceError, Timestamp,
+    AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, Decision, EventCursor, Fetch,
+    LiveEvent, LiveUpdate, PageCursor, RequestRef, SessionId, Source, SourceError, Timestamp,
     TurnId,
+    wire::{AppEventEnvelope, SessionView},
 };
 
 fn chat(n: u32) -> ChatSummary {
@@ -71,13 +71,11 @@ impl Source for Fake {
         };
         ready(Ok(page))
     }
-    fn messages(&self, _: &SessionId, _: Option<MessageCursor>) -> Fetch<MessagePage> {
-        ready(Ok(MessagePage {
-            messages: Vec::new(),
-            older: None,
-            running: Some(TurnId("t1".into())),
-            events: EventCursor(0),
-        }))
+    fn open_session(&self, session: &SessionId) -> Fetch<SessionView> {
+        ready(Ok(view(session, Some("t1"))))
+    }
+    fn session_view(&self, session: &SessionId, _: Option<String>) -> Fetch<SessionView> {
+        ready(Ok(view(session, None)))
     }
     fn authority(&self, _: &SessionId) -> Fetch<Vec<AuthorityCard>> {
         let card = AuthorityCard {
@@ -101,11 +99,6 @@ impl Source for Fake {
     fn create_chat(&self) -> Fetch<ChatRef> {
         ready(Ok(chat(9).chat))
     }
-    fn send(&self, _: &ChatId, _: ClientMessageId, _: String) -> Fetch<SentTurn> {
-        ready(Ok(SentTurn {
-            turn: TurnId("t".into()),
-        }))
-    }
     fn cancel(&self, _: &TurnId) -> Fetch<()> {
         ready(Ok(()))
     }
@@ -115,14 +108,6 @@ impl Source for Fake {
         } else {
             Err(SourceError::Refused("busy".into()))
         })
-    }
-    fn composer(&self) -> ComposerContext {
-        ComposerContext {
-            state: crate::ui::source::model::Controls::Loaded,
-            permission: "".into(),
-            model: "".into(),
-            effort: "".into(),
-        }
     }
 }
 
@@ -265,59 +250,81 @@ fn live_resumes_after_the_snapshot_cursor() {
     assert!(matches!(store.apply(resync.epoch, gap), Applied::Resync));
 }
 
+/// A session view of `session` with one user message and a running turn `turn`.
+fn view(session: &SessionId, turn: Option<&str>) -> SessionView {
+    let turn = turn.map(|id| {
+        serde_json::json!({"id": id, "state": "thinking", "cancellable": true, "retryable": false,
+            "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z"})
+    });
+    serde_json::from_value(serde_json::json!({
+        "session_id": session.0.as_ref(), "kind": "chat", "status": "active",
+        "active_turn": turn,
+        "messages": [{"id": "m1", "chat_id": session.0.as_ref(), "role": "user", "text": "hi",
+            "cursor": 1}],
+        "message_window": {"next_cursor": 1, "complete": true},
+        "cursors": {"messages": 1, "events": 5},
+        "generated_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z"
+    }))
+    .unwrap()
+}
+
+/// Past the snapshot's event cursor (10) and the session view's (5), so the store applies it.
+fn message_event(session: &SessionId, kind: &str, payload: serde_json::Value) -> LiveEvent {
+    LiveEvent {
+        cursor: Some(EventCursor(11)),
+        update: LiveUpdate::Event {
+            session: session.clone(),
+            event: Box::new(AppEventEnvelope {
+                protocol_version: "1".into(),
+                id: 11,
+                r#type: kind.into(),
+                created_at: "2026-01-01T00:00:01Z".into(),
+                payload,
+            }),
+        },
+    }
+}
+
 // test-category: pure-logic
 #[test]
-fn message_windows_and_live_rows_keep_roles_deletions_and_running_turns() {
+fn session_views_and_live_events_keep_messages_deletions_and_running_turns() {
     let (fake, mut store) = (Fake::new(), Store::default());
     let first = store.begin_snapshot();
     store.chats_loaded(&first, block_on(fake.chats(None)).unwrap());
     let chat = chat(1).chat;
     store.open(Some(chat.clone()));
-    let page = block_on(fake.messages(&chat.session, None)).unwrap();
-    assert!(store.messages_loaded(&chat, &page));
+    let view = block_on(fake.open_session(&chat.session)).unwrap();
+    assert!(store.view_loaded(&chat, view));
     assert_eq!(store.running(), Some(&TurnId("t1".into())));
     assert!(store.chats.iter().any(|c| c.chat == chat && c.running));
-    use crate::ui::source::{Message, Role};
-    let mut store = Store::default();
-    let message = Message {
-        id: "future".into(),
-        role: Role::Other("automation".into()),
-        text: "Scheduled result".into(),
-        activity: Vec::new(),
-        streaming: false,
-    };
+    let added = serde_json::json!({"message": {"id": "future", "chat_id": chat.session.0.as_ref(),
+        "role": "automation", "text": "Scheduled result", "cursor": 2}});
     let applied = store.apply(
         store.epoch(),
-        LiveEvent {
-            cursor: Some(EventCursor(1)),
-            update: LiveUpdate::Message {
-                session: chat.session.clone(),
-                message,
-            },
-        },
+        message_event(&chat.session, "message.created", added),
     );
-    let Applied::Message(_, message) = applied else {
-        panic!("message discarded")
-    };
-    assert_eq!(message.role, Role::Other("automation".into()));
-    assert_eq!(message.text, "Scheduled result");
-    assert_eq!(store.cursor, Some(EventCursor(1)));
-    let mut store = Store::default();
-    let event = || LiveEvent {
-        cursor: Some(EventCursor(1)),
-        update: LiveUpdate::MessageDeleted {
-            session: chat.session.clone(),
-            id: "gone".into(),
-        },
+    assert!(matches!(applied, Applied::Transcript));
+    let shown = store.shown_view().unwrap();
+    assert!(shown.messages.iter().any(|m| m.text == "Scheduled result"));
+    assert_eq!(store.cursor, Some(EventCursor(11)));
+    let deleted = serde_json::json!({"chat_id": chat.session.0.as_ref(), "message_id": "future"});
+    let event = |cursor: u64| {
+        let mut event = message_event(&chat.session, "message.deleted", deleted.clone());
+        event.cursor = Some(EventCursor(cursor));
+        event
     };
     assert!(matches!(
-        store.apply(store.epoch() + 1, event()),
+        store.apply(store.epoch() + 1, event(12)),
         Applied::Store
     ));
-    assert!(matches!(store.apply(store.epoch(), event()),
-        Applied::MessageDeleted(_, id) if id.as_ref() == "gone"));
     assert!(matches!(
-        store.apply(store.epoch(), event()),
+        store.apply(store.epoch(), event(12)),
+        Applied::Transcript
+    ));
+    assert!(matches!(
+        store.apply(store.epoch(), event(12)),
         Applied::Store
     ));
+    let shown = store.shown_view().unwrap();
+    assert!(shown.messages.iter().all(|m| m.id != "future"));
 }

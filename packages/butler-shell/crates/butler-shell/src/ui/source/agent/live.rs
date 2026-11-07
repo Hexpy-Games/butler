@@ -109,8 +109,70 @@ async fn deliver(
     }
     Ok(())
 }
+/// The event types the open session's transcript and turn progress read.
+const SESSION_EVENTS: [&str; 7] = [
+    "message.created",
+    "message.updated",
+    "message.deleted",
+    "turn.state_changed",
+    "progress.summary",
+    "agent.turn_event",
+    "agent.turn_event.progress",
+];
+
 fn updates(dirty: &super::refresh::Dirty, raw: &Value) -> Result<Vec<LiveUpdate>, Error> {
-    let raw = convert::decode::<wire::EventProjection>(raw)?;
+    let projection = convert::decode::<wire::EventProjection>(raw)?;
+    let mut updates = chat_updates(dirty, &projection)?;
+    if SESSION_EVENTS.contains(&projection.r#type.as_str())
+        && let Some(session) = event_session(raw)
+    {
+        // Keep the event last so it retains the envelope cursor for snapshot filtering.
+        updates.push(LiveUpdate::Event {
+            session: SessionId(session.into()),
+            event: Box::new(envelope(raw)),
+        });
+    }
+    Ok(updates)
+}
+
+/// The session an event belongs to.
+fn event_session(raw: &Value) -> Option<String> {
+    let payload = raw.get("payload")?;
+    [
+        payload.pointer("/message/chat_id"),
+        payload.get("chat_id"),
+        payload.get("session_id"),
+        payload.pointer("/turn/chat_id"),
+        payload.pointer("/event/sessionId"),
+    ]
+    .into_iter()
+    .flatten()
+    .find_map(Value::as_str)
+    .map(str::to_owned)
+}
+
+/// The gateway envelope as sent; provisional drafts have no id.
+fn envelope(raw: &Value) -> wire::AppEventEnvelope {
+    let text = |key: &str| {
+        raw.get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    wire::AppEventEnvelope {
+        protocol_version: text("protocol_version"),
+        id: raw.get("id").and_then(Value::as_i64).unwrap_or(0),
+        r#type: text("type"),
+        created_at: text("created_at"),
+        payload: raw.get("payload").cloned().unwrap_or(Value::Null),
+    }
+}
+
+/// The updates the sidebar and the composer read from an event.
+fn chat_updates(
+    dirty: &super::refresh::Dirty,
+    raw: &wire::EventProjection,
+) -> Result<Vec<LiveUpdate>, Error> {
     match raw.r#type.as_str() {
         "message.created" | "message.updated" => {
             let payload = raw.payload.as_ref().ok_or(Error::Protocol)?;
@@ -123,34 +185,29 @@ fn updates(dirty: &super::refresh::Dirty, raw: &Value) -> Result<Vec<LiveUpdate>
                 .ok_or(Error::Protocol)?;
             let delivered = message.role.as_deref() == Some("assistant")
                 && message.status.as_deref() == Some("delivered");
-            let mut updates = Vec::new();
             if delivered {
                 dirty.mark(session);
             }
-            // Keep the message last so it retains the envelope cursor for snapshot filtering.
-            updates.push(LiveUpdate::Message {
-                session: SessionId(session.to_owned().into()),
-                message: convert::message(message)?,
-            });
-            Ok(updates)
+            Ok(Vec::new())
         }
         "message.deleted" => {
-            let payload = raw.payload.ok_or(Error::Protocol)?;
-            Ok(vec![LiveUpdate::MessageDeleted {
-                session: SessionId(
-                    payload
-                        .chat_id
-                        .or(payload.session_id)
-                        .ok_or(Error::Protocol)?
-                        .into(),
-                ),
-                id: payload.message_id.ok_or(Error::Protocol)?.into(),
-            }])
+            let payload = raw.payload.as_ref().ok_or(Error::Protocol)?;
+            payload
+                .chat_id
+                .as_ref()
+                .or(payload.session_id.as_ref())
+                .ok_or(Error::Protocol)?;
+            payload.message_id.as_ref().ok_or(Error::Protocol)?;
+            Ok(Vec::new())
         }
-        "turn.state_changed" => turn(dirty, &raw.payload.ok_or(Error::Protocol)?),
+        "turn.state_changed" => turn(dirty, raw.payload.as_ref().ok_or(Error::Protocol)?),
         "session.created" | "session.updated" => {
-            let session = raw.payload.and_then(|p| p.session).ok_or(Error::Protocol)?;
-            Ok(vec![LiveUpdate::Chat(convert::chat_row(&session)?)])
+            let session = raw
+                .payload
+                .as_ref()
+                .and_then(|p| p.session.as_ref())
+                .ok_or(Error::Protocol)?;
+            Ok(vec![LiveUpdate::Chat(convert::chat_row(session)?)])
         }
         "session.cleared" | "session.permanently_deleted" => Ok(vec![LiveUpdate::Resync]),
         _ => Ok(Vec::new()),

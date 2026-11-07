@@ -36,14 +36,6 @@ pub(crate) fn code_font(installed: &[String]) -> gpui::Font {
 pub(crate) mod typo {
     use super::{Length, TokenContext};
     const T: TokenContext = TokenContext::DEFAULT;
-    pub(crate) const BODY: (f32, f32) = (
-        T.len(Length::TypoBodySize),
-        T.len(Length::TypoBodyLineHeight),
-    );
-    pub(crate) const DOC: (f32, f32) = (
-        T.len(Length::TypoBodySize),
-        T.len(Length::TypoBodyLineHeightDocument),
-    );
     pub(crate) const LABEL: (f32, f32) = (
         T.len(Length::TypoLabelSize),
         T.len(Length::TypoLabelLineHeight),
@@ -138,8 +130,12 @@ pub(crate) struct Theme {
     pub(crate) surface: Hsla,
     /// --surface-raised.
     pub(crate) surface_raised: Hsla,
-    /// --user-message-bg.
-    pub(crate) user_bubble: Hsla,
+    /// --accent.
+    pub(crate) accent: Hsla,
+    /// --secondary.
+    pub(crate) secondary_bg: Hsla,
+    /// --secondary-border.
+    pub(crate) secondary_border: Hsla,
     /// --composer-glass-divider.
     pub(crate) glass_divider: Hsla,
     /// --composer-glass-shadow.
@@ -148,42 +144,14 @@ pub(crate) struct Theme {
     pub(crate) send_bg: Hsla,
     /// --send-fg.
     pub(crate) send_fg: Hsla,
-    /// --send-disabled-bg.
-    pub(crate) send_disabled: Hsla,
-    /// --accent.
-    pub(crate) accent: Hsla,
-    /// --accent-text.
-    pub(crate) accent_text: Hsla,
-    /// --secondary.
-    pub(crate) secondary_bg: Hsla,
-    /// --secondary-border.
-    pub(crate) secondary_border: Hsla,
-    /// --surface (74% opacity).
-    pub(crate) tool_chip: Hsla,
-    pub(crate) syntax: Syntax,
-}
-
-/// Code block highlight colours.
-#[derive(Clone, Copy)]
-pub(crate) struct Syntax {
-    /// --syntax-keyword.
-    pub(crate) keyword: Hsla,
-    /// --syntax-string.
-    pub(crate) string: Hsla,
-    /// --syntax-comment.
-    pub(crate) comment: Hsla,
-    /// --syntax-number.
-    pub(crate) number: Hsla,
-    /// --syntax-title.
-    pub(crate) title: Hsla,
-}
-
-fn color(context: &TokenContext, token: Color) -> Hsla {
-    convert::hsla(context.color(token))
 }
 
 fn shadow(context: &TokenContext) -> BoxShadow {
     convert::box_shadows(context.shadow(Shadow::ComposerGlassShadow), context).remove(0)
+}
+
+fn color(context: &TokenContext, token: Color) -> Hsla {
+    convert::hsla(context.color(token))
 }
 
 impl Theme {
@@ -232,30 +200,13 @@ impl Theme {
             line_strong: c(Color::LineStrong),
             surface: c(Color::Surface),
             surface_raised: c(Color::SurfaceRaised),
-            user_bubble: c(Color::UserMessageBg),
+            accent: c(Color::Accent),
+            secondary_bg: c(Color::Secondary),
+            secondary_border: c(Color::SecondaryBorder),
             glass_divider: c(Color::ComposerGlassDivider),
             glass_shadow: shadow(&context),
             send_bg: c(Color::SendBg),
             send_fg: c(Color::SendFg),
-            send_disabled: c(Color::SendDisabledBg),
-            accent: c(Color::Accent),
-            accent_text: c(Color::AccentText),
-            secondary_bg: c(Color::Secondary),
-            secondary_border: c(Color::SecondaryBorder),
-            tool_chip: alpha(c(Color::Surface), 0.74),
-            syntax: Syntax::new(&context),
-        }
-    }
-}
-
-impl Syntax {
-    fn new(context: &TokenContext) -> Self {
-        Self {
-            keyword: color(context, Color::SyntaxKeyword),
-            string: color(context, Color::SyntaxString),
-            comment: color(context, Color::SyntaxComment),
-            number: color(context, Color::SyntaxNumber),
-            title: color(context, Color::SyntaxTitle),
         }
     }
 }

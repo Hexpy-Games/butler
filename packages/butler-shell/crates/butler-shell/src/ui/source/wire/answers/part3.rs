@@ -98,7 +98,7 @@ pub(crate) struct QuoteBlock {
 }
 
 /// TS: packages/butler-app/client/shared/app-contracts.ts:169 CalloutBlock (inline AnswerLeafBlockCalloutTone).
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum AnswerLeafBlockCalloutTone {
     #[serde(rename = "neutral")]
