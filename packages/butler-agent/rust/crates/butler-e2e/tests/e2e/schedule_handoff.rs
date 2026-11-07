@@ -118,6 +118,9 @@ async fn assert_results(
         "recovery must execute once in the same result Turn"
     );
     let requests = script.requests.lock().unwrap();
+    assert!(requests[0].to_string().contains(
+        "Delegate everything else with one delegate_to_steward call, even a single step"
+    ));
     let child: Vec<_> = requests
         .iter()
         .filter(|b| {

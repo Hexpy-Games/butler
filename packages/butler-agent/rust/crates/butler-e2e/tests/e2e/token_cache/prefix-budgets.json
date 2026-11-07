@@ -31,5 +31,11 @@
   "delegated|worker|auto": 171,
   "legacy|butler|auto|ledger": 2712,
   "legacy|butler|auto|local": 2649,
-  "legacy|butler|auto|none": 2649
+  "legacy|butler|auto|none": 2649,
+  "legacy|butler|chat|ask_except_reads|local": 2448,
+  "legacy|butler|chat|ask_first|local": 2447,
+  "legacy|butler|chat|auto|local": 2446,
+  "legacy|butler|chat|full_access|local": 2447,
+  "legacy|butler|chat|read_only|local": 2447,
+  "phase_minimal|butler|chat|execution": 811
 }
