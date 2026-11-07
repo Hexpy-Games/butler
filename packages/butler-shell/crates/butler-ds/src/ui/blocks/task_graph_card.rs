@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use gpui::{
     App, ElementId, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Window,
-    div,
+    div, px,
 };
 
 use crate::tokens::{Color, Length};
@@ -25,7 +25,7 @@ use crate::ui::rolling_swap::RollingSwap;
 use crate::ui::spinner::Spinner;
 use crate::ui::success_check::SuccessCheck;
 use crate::ui::tag::{Size as TagSize, Tag, Tone as TagTone};
-use crate::ui::typo::{Tone, Typo, Wrap};
+use crate::ui::typo::{Role, Tone, Typo, Wrap};
 
 /// A task's state (`TaskGraphStatus` of `lib/taskGraphLayout.ts`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -85,6 +85,20 @@ impl TaskGraphStatusIcon {
     }
 }
 
+/// The height of `<Typo.Text tone>` around an icon (`TaskGraphStatusIcon`): the span is a block
+/// of its own, its line box the taller of the glyph sitting on the baseline and the body strut,
+/// so a 16px glyph in a 20px body line makes a box about 21px tall.
+fn toned_height(side: f32, ds: &Ds, cx: &App) -> f32 {
+    let Some(body) = Role::Body.tokens() else {
+        return side;
+    };
+    let size = f32::from(ds.len(body.size));
+    let line = f32::from(ds.len(body.line_height));
+    let (ascent, descent) = Typo::extent(ds.body_font(), size, ds.number(body.weight), cx);
+    let above = (line - (ascent + descent)) / 2. + ascent;
+    above.max(side) + (line - above)
+}
+
 impl RenderOnce for TaskGraphStatusIcon {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let id = self.id;
@@ -99,6 +113,7 @@ impl RenderOnce for TaskGraphStatusIcon {
         let glyph = |icon| icon_px(icon, side).into_any_element();
         let toned = |color: Color, icon| {
             div()
+                .h(px(toned_height(f32::from(side), ds, cx)))
                 .text_color(ds.color(color))
                 .child(icon_px(icon, side))
                 .into_any_element()

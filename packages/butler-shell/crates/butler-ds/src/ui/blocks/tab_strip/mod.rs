@@ -188,6 +188,12 @@ impl Scope {
             || self.focus_lit.contains(key)
     }
 
+    /// The close button shows on hover or keyboard focus only, the selected tab included
+    /// (`.slot:hover .close`, `.slot > .tab:focus-visible .close`; TabStrip.module.css:217-236).
+    fn reveals_close(&self, key: &SharedString) -> bool {
+        self.hovered.as_ref() == Some(key) || self.focus_lit.contains(key)
+    }
+
     fn width(&self, key: &SharedString) -> f32 {
         self.widths.get(key).copied().unwrap_or(0.)
     }
