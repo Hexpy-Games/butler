@@ -1957,7 +1957,14 @@ const browserHost = legacyDataBlocked ? null : createBrowserHost({
 });
 
 let userBrowser;
-async function createWindow() {
+let mainWindowOpening = null;
+// Single flight: startup, Dock activate, a second launch, the tray and notifications all await one window.
+function createWindow() {
+  mainWindowOpening ??= openMainWindow().finally(() => { mainWindowOpening = null; });
+  return mainWindowOpening;
+}
+
+async function openMainWindow() {
   if (
     !legacyDataBlocked &&
     (rendererUrl === serverUrl || usesAppForegroundLifecycle) &&
