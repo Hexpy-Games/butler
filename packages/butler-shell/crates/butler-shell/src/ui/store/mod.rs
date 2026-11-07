@@ -7,6 +7,10 @@
 #[cfg(test)]
 mod tests;
 
+pub(crate) mod drafts;
+pub(crate) mod messages;
+pub(crate) mod progress;
+
 use std::collections::{HashMap, HashSet};
 
 use crate::ui::source::{

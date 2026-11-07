@@ -1,9 +1,27 @@
 //! The conversation: a virtualized message list (ConversationShell, MessageRow). It shows what
 //! the shell hands it; when the top row comes into view and older messages exist, it asks for
 //! them (never the whole chat at once).
+mod answers;
+mod assistant;
+mod intro;
+mod list;
 mod markdown;
 mod markdown_view;
 mod message;
+mod message_markdown;
+mod queue;
+mod row;
+mod user;
+
+/// What every transcript unit reads while one session renders (P2 shell-wave contract).
+#[allow(
+    dead_code,
+    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
+)]
+pub(crate) struct TranscriptCtx<'a> {
+    pub(crate) view: &'a crate::ui::source::wire::SessionView,
+    pub(crate) client: Option<butler_shell_client::ShellClient>,
+}
 
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;

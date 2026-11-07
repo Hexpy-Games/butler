@@ -1,5 +1,13 @@
 //! The floating composer (blocks/ComposerCard, ComposerControl, ComposerDecisionPanel).
+mod adjunct;
 mod approval;
+mod attachments;
+mod context;
+pub(crate) mod editor;
+mod menus;
+mod notice;
+mod queue;
+mod state;
 mod toolbar;
 
 use std::cell::Cell;

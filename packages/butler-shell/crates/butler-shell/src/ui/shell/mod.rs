@@ -3,6 +3,7 @@
 //! suggest-a-change dialog when one is open.
 mod data;
 mod frame;
+pub(crate) mod image_viewer;
 mod modify;
 pub(crate) mod navigation;
 mod notifications;
