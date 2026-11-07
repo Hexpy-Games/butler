@@ -85,11 +85,16 @@ async function capture(app: App, scene: Scene, anchors: Scene["anchors"], size: 
 
 async function runScene(scene: Scene) {
   let offered = false;
+  let releaseReply: (() => void) | undefined;
+  const pendingReply = new Promise<void>(done => { releaseReply = done; });
   const app = await browserAgentApp(join(out, "logs", scene.name), request => {
     if (scene.name !== "approval" || offered || !request.stream || !Array.isArray(request.body.tools) || !request.body.tools.length) return null;
     offered = true;
     return { name: "run_command", arguments: { command: "printf '검토 자료를 저장합니다\\n'", state_effect: "mutation", summary: "검토 자료 저장" } };
-  }, process.env.BUTLER_SMOKE_RENDERER_DIST, { stubReply: request => request.stream ? answer : "{}" });
+  }, process.env.BUTLER_SMOKE_RENDERER_DIST, { stubReply: async request => {
+    if (request.stream && scene.pendingReply && JSON.stringify(request.messages).includes(scene.pendingReply)) await pendingReply;
+    return request.stream ? answer : "{}";
+  } });
   try {
     writeFileSync(join(out, "logs", `${scene.name}-agent.pid`), String(app.gateway.pid));
     writeFileSync(join(out, "logs", `${scene.name}-electron.pid`), String(await app.main<number>("process.pid")));
@@ -103,9 +108,10 @@ async function runScene(scene: Scene) {
     await app.main(`${app.win}.webContents.debugger.attach('1.3')`);
     for (const theme of themes) for (const size of sizes) {
       const name = await capture(app, scene, anchors, size, theme);
-      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "chat" in scene.open ? seeded.chat : undefined);
+      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "chat" in scene.open ? seeded.chat : undefined, anchors.map(item => item.anchor));
     }
   } finally {
+    releaseReply?.();
     await app.stop();
   }
 }

@@ -5,6 +5,7 @@
 //! over the scope resolves a row and zone, and a drop commits it if the product's `can_drop`
 //! allows. The product turns the committed hit into its own move.
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -46,6 +47,11 @@ pub struct DragRules<T> {
 #[derive(Default)]
 struct Shared {
     boxes: Boxes,
+    /// Each row's header inside its item, in px from the item's top and its height
+    /// (`NavDropTarget::indicator`): the box the drop zones are tested on, as React measures
+    /// the `tree-row` header and not the whole item, which an open folder stretches over its
+    /// children.
+    headers: RefCell<HashMap<SharedString, (f32, f32)>>,
     tracker: RefCell<DropZoneTracker<SharedString>>,
     /// A drag of the scope's payload type has moved over it.
     engaged: Cell<bool>,
@@ -159,12 +165,10 @@ fn drive<T: 'static>(
             .iter()
             .filter_map(|(key, bounds)| {
                 let rules = zones(payload, key)?;
+                let header = moving.headers.borrow().get(key).copied();
                 Some(DropZoneCandidate {
                     key: key.clone(),
-                    bounds: DropZoneBox {
-                        top: bounds.top().as_f32(),
-                        height: bounds.size.height.as_f32(),
-                    },
+                    bounds: header_box(*bounds, header),
                     rules,
                 })
             })
@@ -187,10 +191,31 @@ fn drive<T: 'static>(
     })
 }
 
+/// The box the zones are tested on: the row header (`measureDropBox(header, scope)`), or the
+/// whole item when the row gave no header.
+fn header_box(item: gpui::Bounds<gpui::Pixels>, header: Option<(f32, f32)>) -> DropZoneBox {
+    match header.filter(|(_, height)| *height > 0.) {
+        Some((top, height)) => DropZoneBox {
+            top: item.top().as_f32() + top,
+            height,
+        },
+        None => DropZoneBox {
+            top: item.top().as_f32(),
+            height: item.size.height.as_f32(),
+        },
+    }
+}
+
+/// One nav row's height at the scope's density.
+fn row_height(cx: &App) -> f32 {
+    let ds = Ds::get(cx);
+    metrics(ds, density_of(ds, None::<Density>, cx)).height
+}
+
 /// The slot (`--nav-drop-gap`, `--nav-drop-spacing`) at the scope's density.
 fn slot(payload: Payload, cx: &App) -> Slot {
     let ds = Ds::get(cx);
-    let height = metrics(ds, density_of(ds, None::<Density>, cx)).height;
+    let height = row_height(cx);
     let spacing = f32::from(ds.len(Length::SpaceXs));
     let gap = if payload == Payload::Outside || ds.reduced_motion() {
         0.
@@ -265,9 +290,16 @@ impl RenderOnce for NavDropScope {
         };
         let mut moved = false;
         let mut children = Vec::new();
+        let mut headers = HashMap::new();
         for entry in std::mem::take(&mut self.entries) {
             match entry {
                 Entry::Row(mut target) => {
+                    if target.row_header && target.indicator.is_none() {
+                        target.indicator = Some((0., row_height(cx)));
+                    }
+                    if let Some(header) = target.indicator {
+                        headers.insert(target.key.clone(), header);
+                    }
                     if target.drop.is_none() {
                         target.drop = hit
                             .as_ref()
@@ -290,6 +322,7 @@ impl RenderOnce for NavDropScope {
                 }
             }
         }
+        *shared.headers.borrow_mut() = headers;
         let ds = Ds::get(cx);
         let list = shared
             .boxes

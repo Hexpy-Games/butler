@@ -27,10 +27,6 @@ pub(crate) struct TurnId(pub(crate) SharedString);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct RequestRef(pub(crate) SharedString);
 
-/// An opaque keyset cursor into the chat list.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct PageCursor(pub(crate) String);
-
 /// A durable event cursor: live updates resume after it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct EventCursor(pub(crate) u64);
@@ -69,7 +65,6 @@ pub(crate) struct ChatSummary {
 /// One page of chats, newest activity first.
 pub(crate) struct ChatPage {
     pub(crate) chats: Vec<ChatSummary>,
-    pub(crate) next: Option<PageCursor>,
     /// The event cursor of this snapshot.
     pub(crate) events: EventCursor,
 }
@@ -211,6 +206,7 @@ pub(crate) struct SentTurn {
 
 /// One live change.
 pub(crate) enum LiveUpdate {
+    NavigationEvent(Box<super::wire::AppEventEnvelope>),
     /// An individual live projection failed.
     Failed(super::SourceError),
     /// A live event the open session's transcript and turn progress read: message created,

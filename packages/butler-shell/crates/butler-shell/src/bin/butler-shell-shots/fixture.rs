@@ -10,8 +10,8 @@ use crate::ui::source::model::{Access, Operation};
 use crate::ui::source::wire::SessionView;
 use crate::ui::source::{
     Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, Decision,
-    EventCursor, Fetch, LiveEvent, PageCursor, RequestRef, Risk, SessionId, Source, SourceError,
-    Space, Timestamp, TurnId,
+    EventCursor, Fetch, LiveEvent, RequestRef, Risk, SessionId, Source, SourceError, Space,
+    Timestamp, TurnId,
 };
 
 pub(super) const LONG: &str = "c-long";
@@ -201,10 +201,9 @@ fn ready<T: 'static>(value: T) -> Fetch<T> {
 }
 
 impl Source for Fixture {
-    fn chats(&self, _: Option<PageCursor>) -> Fetch<ChatPage> {
+    fn chats(&self) -> Fetch<ChatPage> {
         ready(ChatPage {
             chats: chats(),
-            next: None,
             events: EventCursor(1),
         })
     }

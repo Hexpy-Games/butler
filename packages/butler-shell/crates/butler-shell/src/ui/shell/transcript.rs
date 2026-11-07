@@ -95,7 +95,7 @@ impl Shell {
     }
 
     /// Shows the open chat's view (with the turns' live progress) in the transcript.
-    pub(super) fn show_view(&mut self, live: bool, cx: &mut Context<Self>) {
+    pub(crate) fn show_view(&mut self, live: bool, cx: &mut Context<Self>) {
         let view = self.store.shown_view().map(Rc::new);
         self.chat.update(cx, |c, cx| {
             c.set_view(view, live, cx);

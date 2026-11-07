@@ -35,7 +35,10 @@ impl Shell {
             return Self::send_to(chat, &outgoing, false, cx);
         }
         Self::run(
-            source.create_chat(),
+            self.sidebar.new_chat_parent.as_ref().map_or_else(
+                || source.create_chat(),
+                |target| source.create_sidebar_chat(target.body()),
+            ),
             cx,
             move |this, result, cx| match result {
                 Ok(chat) => {

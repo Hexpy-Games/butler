@@ -9,8 +9,7 @@ use gpui::SharedString;
 use super::{Applied, Store};
 use crate::ui::source::{
     AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, Decision, EventCursor, Fetch,
-    LiveEvent, LiveUpdate, PageCursor, RequestRef, SessionId, Source, SourceError, Timestamp,
-    TurnId,
+    LiveEvent, LiveUpdate, RequestRef, SessionId, Source, SourceError, Timestamp, TurnId,
     wire::{AppEventEnvelope, SessionView},
 };
 
@@ -31,7 +30,7 @@ fn chat(n: u32) -> ChatSummary {
     }
 }
 
-/// Two pages of chats per snapshot (snapshot `n` has event cursor `10 * n`), live events
+/// A page of chats per snapshot (snapshot `n` has event cursor `10 * n`), live events
 /// after a cursor, and an answer that fails until told otherwise.
 struct Fake {
     snapshot: RefCell<u64>,
@@ -52,22 +51,12 @@ fn ready<T: 'static>(value: Result<T, SourceError>) -> Fetch<T> {
 }
 
 impl Source for Fake {
-    fn chats(&self, cursor: Option<PageCursor>) -> Fetch<ChatPage> {
-        if cursor.is_none() {
-            *self.snapshot.borrow_mut() += 1;
-        }
+    fn chats(&self) -> Fetch<ChatPage> {
+        *self.snapshot.borrow_mut() += 1;
         let snapshot = *self.snapshot.borrow();
-        let page = match cursor {
-            None => ChatPage {
-                chats: vec![chat(1), chat(2)],
-                next: Some(PageCursor("p2".into())),
-                events: EventCursor(10 * snapshot),
-            },
-            Some(_) => ChatPage {
-                chats: vec![chat(3)],
-                next: None,
-                events: EventCursor(10 * snapshot),
-            },
+        let page = ChatPage {
+            chats: vec![chat(1), chat(2)],
+            events: EventCursor(10 * snapshot),
         };
         ready(Ok(page))
     }
@@ -117,21 +106,7 @@ fn titles(store: &Store) -> Vec<String> {
 
 // test-category: pure-logic
 #[test]
-fn paging_and_live_chat_updates_preserve_visible_order() {
-    let (fake, mut store) = (Fake::new(), Store::default());
-    let first = store.begin_snapshot();
-    assert!(
-        store.begin_more().is_none(),
-        "no second load while one is in flight"
-    );
-    store.chats_loaded(&first, block_on(fake.chats(first.cursor.clone())).unwrap());
-    let more = store.begin_more().expect("a next page");
-    store.chats_loaded(&more, block_on(fake.chats(more.cursor.clone())).unwrap());
-    assert_eq!(titles(&store), ["chat 1", "chat 2", "chat 3"]);
-    assert!(
-        store.begin_more().is_none(),
-        "the last page has no next cursor"
-    );
+fn live_chat_updates_preserve_visible_order() {
     let mut store = Store::default();
     let mut pinned = chat(1);
     pinned.pinned = true;
@@ -162,9 +137,9 @@ fn paging_and_live_chat_updates_preserve_visible_order() {
 fn resync_supersedes_a_load_in_flight_and_keeps_the_list() {
     let (fake, mut store) = (Fake::new(), Store::default());
     let first = store.begin_snapshot();
-    store.chats_loaded(&first, block_on(fake.chats(None)).unwrap());
-    let more = store.begin_more().expect("a next page");
-    let stale = block_on(fake.chats(more.cursor.clone())).unwrap();
+    store.chats_loaded(&first, block_on(fake.chats()).unwrap());
+    let more = store.begin_snapshot();
+    let stale = block_on(fake.chats()).unwrap();
     let resync = store.begin_snapshot();
     assert_eq!(
         store.chats_loaded(&more, stale),
@@ -176,10 +151,10 @@ fn resync_supersedes_a_load_in_flight_and_keeps_the_list() {
         ["chat 1", "chat 2"],
         "the list stays while the new snapshot loads"
     );
-    let cursor = store.chats_loaded(&resync, block_on(fake.chats(None)).unwrap());
+    let cursor = store.chats_loaded(&resync, block_on(fake.chats()).unwrap());
     assert_eq!(
         cursor,
-        Some(EventCursor(20)),
+        Some(EventCursor(30)),
         "the new snapshot hands its cursor to live"
     );
     assert_eq!(titles(&store), ["chat 1", "chat 2"]);
@@ -221,7 +196,7 @@ fn live_resumes_after_the_snapshot_cursor() {
     let (fake, mut store) = (Fake::new(), Store::default());
     let first = store.begin_snapshot();
     let after = store
-        .chats_loaded(&first, block_on(fake.chats(None)).unwrap())
+        .chats_loaded(&first, block_on(fake.chats()).unwrap())
         .expect("cursor");
     store.open(Some(chat(1).chat));
     let epoch = store.epoch();
@@ -290,7 +265,7 @@ fn message_event(session: &SessionId, kind: &str, payload: serde_json::Value) ->
 fn session_views_and_live_events_keep_messages_deletions_and_running_turns() {
     let (fake, mut store) = (Fake::new(), Store::default());
     let first = store.begin_snapshot();
-    store.chats_loaded(&first, block_on(fake.chats(None)).unwrap());
+    store.chats_loaded(&first, block_on(fake.chats()).unwrap());
     let chat = chat(1).chat;
     store.open(Some(chat.clone()));
     let view = block_on(fake.open_session(&chat.session)).unwrap();

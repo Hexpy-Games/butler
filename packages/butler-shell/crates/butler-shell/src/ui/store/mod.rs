@@ -4,6 +4,8 @@
 //!
 //! A snapshot (connect or resync) bumps the generation: results and live events of an older
 //! one are dropped, and the shown list stays until the new snapshot's first page replaces it.
+pub(crate) mod navigation;
+
 #[cfg(test)]
 mod tests;
 
@@ -16,14 +18,13 @@ use std::collections::{HashMap, HashSet};
 use crate::ui::source::wire::{AppEventEnvelope, SessionView, TurnProgressSnapshot};
 use crate::ui::source::{
     AuthorityCard, ChatId, ChatPage, ChatRef, ChatSummary, EventCursor, LiveEvent, LiveUpdate,
-    PageCursor, RequestRef, SessionId, TurnId,
+    RequestRef, SessionId, TurnId,
 };
 
-/// A chats load in flight: its snapshot generation and the page it asks for.
+/// The chat snapshot generation in flight.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ChatsLoad {
     pub(crate) epoch: u64,
-    pub(crate) cursor: Option<PageCursor>,
 }
 
 /// What a live event asks of the shell.
@@ -40,7 +41,7 @@ pub(crate) enum Applied {
 #[derive(Default)]
 pub(crate) struct Store {
     pub(crate) chats: Vec<ChatSummary>,
-    pub(crate) chats_next: Option<PageCursor>,
+    pub(crate) navigation: navigation::NavigationModel,
     epoch: u64,
     loading: Option<ChatsLoad>,
     selected: Option<ChatRef>,
@@ -64,25 +65,9 @@ impl Store {
     /// A new snapshot (connect, resync): supersedes any load in flight.
     pub(crate) fn begin_snapshot(&mut self) -> ChatsLoad {
         self.epoch += 1;
-        let load = ChatsLoad {
-            epoch: self.epoch,
-            cursor: None,
-        };
+        let load = ChatsLoad { epoch: self.epoch };
         self.loading = Some(load.clone());
         load
-    }
-
-    /// The next page of the current snapshot, unless one is loading or none is left.
-    pub(crate) fn begin_more(&mut self) -> Option<ChatsLoad> {
-        if self.loading.is_some() {
-            return None;
-        }
-        let load = ChatsLoad {
-            epoch: self.epoch,
-            cursor: Some(self.chats_next.clone()?),
-        };
-        self.loading = Some(load.clone());
-        Some(load)
     }
 
     /// A chats page arrived. A snapshot's first page replaces the list and returns the event
@@ -92,12 +77,6 @@ impl Store {
             return None;
         }
         self.loading = None;
-        self.chats_next = page.next;
-        if load.cursor.is_some() {
-            self.chats
-                .extend(page.chats.into_iter().filter(|c| !c.archived));
-            return None;
-        }
         self.chats = page.chats.into_iter().filter(|c| !c.archived).collect();
         self.running = (self.chats.iter())
             .filter(|c| c.running)
@@ -284,6 +263,7 @@ impl Store {
         if epoch != self.epoch {
             return Applied::Store;
         }
+        let previous_cursor = self.cursor;
         if let Some(cursor) = event.cursor {
             if self.cursor.is_some_and(|last| cursor <= last) {
                 return Applied::Store;
@@ -291,6 +271,14 @@ impl Store {
             self.cursor = Some(cursor);
         }
         match event.update {
+            LiveUpdate::NavigationEvent(event) => {
+                if u64::try_from(event.id)
+                    .is_ok_and(|id| previous_cursor.is_some_and(|last| id <= last.0))
+                {
+                    return Applied::Store;
+                }
+                self.navigation.apply_live_event(&event);
+            }
             LiveUpdate::Failed(error) => return Applied::Failed(error),
             LiveUpdate::Event {
                 session,

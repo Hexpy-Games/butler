@@ -43,6 +43,7 @@ gpui_wgpu = { workspace = true, features = ["test-support"], optional = true }
 sys-locale.workspace = true
 url = "2"
 percent-encoding = "2"
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 futures = { workspace = true, features = ["executor"] }

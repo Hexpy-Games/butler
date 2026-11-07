@@ -1,17 +1,8 @@
 //! Butler motion tokens (tokens.css "Linear-crisp" scale) on gpui animations.
 use butler_ds::tokens::{Duration as DsDuration, TokenContext};
 use butler_ds::ui::convert;
-use std::time::Duration;
 
 use gpui::{Hsla, Rgba, SharedString, SpringAnimation, SpringConfig};
-
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "generated CSS durations are nonnegative milliseconds"
-)]
-pub(crate) const BASE: Duration =
-    Duration::from_millis(TokenContext::DEFAULT.duration(DsDuration::MotionBase) as u64);
 
 /// CSS cubic-bezier(x1, y1, x2, y2) solved for y at progress x.
 pub(crate) fn cubic_bezier(x1: f32, y1: f32, x2: f32, y2: f32) -> impl Fn(f32) -> f32 + Clone {

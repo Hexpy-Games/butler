@@ -2,9 +2,12 @@
 //! sidebar's column. A title row, a fixed header, a scroller with edge fades whose sticky header
 //! pins under the top fade while the rows under it clip at its bottom edge, and a footer. Its
 //! density sets the tokens of every row inside (touch at 640px and below).
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    RenderOnce, Styled as _, Window, div, px,
+    RenderOnce, ScrollHandle, Styled as _, Window, div, px,
 };
 
 use super::anim::ramp;
@@ -25,6 +28,10 @@ const COLLAPSED_SHIFT: f32 = 18.; // DS: SidebarShell.module.css:127
 /// The footer's top padding.
 const FOOTER_TOP: f32 = 10.; // DS: SidebarShell.module.css:334
 
+/// Where the shell publishes its scroller's handle each frame, for the caller to drive the
+/// scroll: drag auto-scroll and scroll-to-reveal. Empty until the scroller has rendered.
+pub type ScrollSlot = Rc<RefCell<Option<ScrollHandle>>>;
+
 #[derive(IntoElement)]
 pub struct SidebarShell {
     id: ElementId,
@@ -36,6 +43,7 @@ pub struct SidebarShell {
     footer: Option<AnyElement>,
     collapsed: bool,
     scroll_fade: bool,
+    scroll_slot: Option<ScrollSlot>,
     children: Vec<AnyElement>,
 }
 
@@ -51,6 +59,7 @@ impl SidebarShell {
             footer: None,
             collapsed: false,
             scroll_fade: true,
+            scroll_slot: None,
             children: Vec::new(),
         }
     }
@@ -95,6 +104,12 @@ impl SidebarShell {
 
     pub fn scroll_fade(mut self, on: bool) -> Self {
         self.scroll_fade = on;
+        self
+    }
+
+    /// Publishes the scroller's [`ScrollHandle`] into `slot`.
+    pub fn scroll_slot(mut self, slot: ScrollSlot) -> Self {
+        self.scroll_slot = Some(slot);
         self
     }
 }
@@ -212,6 +227,9 @@ impl SidebarShell {
             .children(parts.sticky)
             .children(parts.rows);
         let built = engine::scroller(&config, content.flex_none(), window, cx);
+        if let Some(slot) = &self.scroll_slot {
+            *slot.borrow_mut() = Some(built.handle.clone());
+        }
         let thumb = convert::with_alpha(Ds::get(cx).color(Color::LineStrong), 0.7);
         let overlay = crate::ui::scroll::overlay(
             &(self.id.clone(), "scroll-bar").into(),

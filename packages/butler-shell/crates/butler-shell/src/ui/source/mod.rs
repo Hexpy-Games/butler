@@ -4,6 +4,7 @@
 //! `cancel_turn`, `answer_authority`) and is adapted by `agent`. Without a source the shell shows its disconnected state.
 pub(crate) mod agent;
 pub(crate) mod model;
+pub(crate) mod sidebar;
 pub(crate) mod wire;
 
 use futures::future::LocalBoxFuture;
@@ -11,8 +12,8 @@ use futures::stream::LocalBoxStream;
 
 pub(crate) use model::{
     Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, Decision,
-    EventCursor, LiveEvent, LiveUpdate, PageCursor, RequestRef, Risk, SentTurn, SessionId, Space,
-    Timestamp, TurnId,
+    EventCursor, LiveEvent, LiveUpdate, RequestRef, Risk, SentTurn, SessionId, Space, Timestamp,
+    TurnId,
 };
 
 /// Why a request failed, in the UI's terms (no credential or wire detail).
@@ -38,6 +39,31 @@ pub(crate) enum SessionAction {
 }
 
 pub(crate) trait Source {
+    fn sidebar_updates(&self) -> Fetch<wire::SidebarUpdateStatus> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn canon_overview(&self, _: &str) -> Fetch<wire::CanonOverview> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn canon_plan(&self, _: &str) -> Fetch<wire::CanonPlan> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn canon_sidebar(&self, _: &str) -> Fetch<wire::CanonSidebar> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn create_sidebar_chat(&self, _: serde_json::Value) -> Fetch<ChatRef> {
+        self.create_chat()
+    }
+    fn navigation(&self) -> Fetch<wire::NavigationView> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn work_status(&self) -> Fetch<wire::WorkStatusView> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn sidebar_mutation(&self, _: sidebar::Mutation) -> Fetch<wire::SidebarMutationResult> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+
     fn summary(&self, _: &SessionId) -> Fetch<wire::SessionSummaryView> {
         Box::pin(async { Err(SourceError::Missing) })
     }
@@ -48,7 +74,7 @@ pub(crate) trait Source {
         Box::pin(async { Err(SourceError::Missing) })
     }
     /// One page of chats, newest activity first; `None` starts a fresh snapshot.
-    fn chats(&self, cursor: Option<PageCursor>) -> Fetch<ChatPage>;
+    fn chats(&self) -> Fetch<ChatPage>;
     /// Opens a session: its latest view, and the composer's controls for it.
     fn open_session(&self, session: &SessionId) -> Fetch<wire::SessionView>;
     /// A session's latest view again (`before` `None`), or the message window before `before`

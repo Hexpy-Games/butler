@@ -57,7 +57,7 @@ pub(crate) struct Strings {
     pub(crate) general: &'static str,
     /// sidebar.settings
     pub(crate) settings: &'static str,
-    /// conversation.messageActions.showMore
+    /// common.more
     pub(crate) show_more: &'static str,
     /// composer.placeholder, composer.placeholderFollowUp
     pub(crate) placeholder: &'static str,
@@ -147,7 +147,7 @@ static EN: Strings = Strings {
     space: "Space",
     general: "Chats",
     settings: "Settings",
-    show_more: "Show more",
+    show_more: "More",
     placeholder: "Ask Butler anything",
     placeholder_follow_up: "Ask for follow-up changes",
     message_composer: "Message composer",

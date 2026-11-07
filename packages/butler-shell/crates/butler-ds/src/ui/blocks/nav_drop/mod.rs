@@ -56,6 +56,7 @@ pub struct NavDropTarget {
     pub(crate) drop: Option<NavDropPosition>,
     pub(crate) dragging: bool,
     pub(crate) indicator: Option<(f32, f32)>,
+    pub(crate) row_header: bool,
     pub(crate) hint: Option<SharedString>,
     pub(crate) invalid: bool,
     pub(crate) on_dwell: Option<Dwelled>,
@@ -75,6 +76,7 @@ impl NavDropTarget {
             drop: None,
             dragging: false,
             indicator: None,
+            row_header: false,
             hint: None,
             invalid: false,
             on_dwell: None,
@@ -102,6 +104,13 @@ impl NavDropTarget {
     /// the whole item.
     pub fn indicator(mut self, top: f32, height: f32) -> Self {
         self.indicator = Some((top, height));
+        self
+    }
+
+    /// The header is one nav row at the scope's density, at the item's top (a folder's
+    /// children sit below it): the box of [`Self::indicator`] without measuring it.
+    pub fn row_header(mut self) -> Self {
+        self.row_header = true;
         self
     }
 

@@ -6,7 +6,6 @@
 //! (`atoms.rs`). The characters survive typing, selection, undo and redo like any other text.
 pub(crate) mod atoms;
 pub(crate) mod clipboard;
-pub(crate) mod drop;
 pub(crate) mod mentions;
 pub(crate) mod serialize;
 
