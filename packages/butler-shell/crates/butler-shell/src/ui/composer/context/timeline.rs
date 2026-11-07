@@ -6,7 +6,7 @@ use butler_ds::ui::blocks::usage_bars::{
 };
 use butler_ds::ui::context::Lang;
 
-use super::copy::{UsageCopy, copy};
+use crate::ui::i18n::composer::usage::{UsageCopy, copy};
 use super::usage::{UsageMonitorView, clock, local_offset_ms, month_day, parse_ms};
 
 /// Values after the start of a slot that carries its subtask requests, cached and output;

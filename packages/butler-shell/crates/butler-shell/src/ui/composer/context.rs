@@ -7,7 +7,8 @@
 //! [`ComposerContextEvent::LoadUsage`] and [`ComposerContextEvent::LoadQuota`], and the owner
 //! runs [`load_usage`] / [`load_quota`] and hands the results to `usage_loaded` /
 //! `quota_loaded`.
-mod copy;
+
+mod account;
 mod popover;
 mod timeline;
 mod usage;
@@ -123,11 +124,6 @@ impl ComposerContextControl {
         self.active_chat_id = active_chat_id;
         self.sync_loads(cx);
         cx.notify();
-    }
-
-    /// `contextPopoverOpen`.
-    pub(crate) fn is_open(&self) -> bool {
-        self.open
     }
 
     pub(crate) fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {

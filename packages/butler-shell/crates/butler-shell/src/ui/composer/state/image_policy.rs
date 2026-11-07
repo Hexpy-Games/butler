@@ -1,7 +1,7 @@
 //! `composerImagePolicy.ts`: which attached images the selected model takes.
+pub(crate) use crate::ui::i18n::composer::labels::image_refusal_label;
 use std::collections::HashMap;
 
-use butler_ds::ui::context::Lang;
 
 use super::ComposerAttachment;
 use crate::ui::composer::menus::ModelChoice;
@@ -144,10 +144,6 @@ fn image_mime(file: &FileLike) -> Option<String> {
         .map(|(_, mime)| (*mime).to_owned())
 }
 
-pub(crate) fn is_image_file(file: &FileLike) -> bool {
-    image_mime(file).is_some()
-}
-
 pub(crate) fn image_refusal(file: &FileLike, policy: &ComposerImagePolicy) -> Option<ImageRefusal> {
     let mime = image_mime(file)?;
     if !policy.accepts {
@@ -200,20 +196,4 @@ pub(crate) fn blocked_image_attachment_ids(
     }
     blocked
 }
-
-/// `imageRefusalLabel`: few-word reason for tooltips and the refusal toast.
-pub(crate) fn image_refusal_label(refusal: ImageRefusal, lang: Lang) -> &'static str {
-    let ko = lang == Lang::Ko;
-    match refusal {
-        ImageRefusal::Model if ko => "이미지 미지원 모델",
-        ImageRefusal::Model => "Model doesn't accept images",
-        ImageRefusal::Unknown if ko => "이미지 지원 여부를 확인할 수 없는 모델",
-        ImageRefusal::Unknown => "Image support unknown for this model",
-        ImageRefusal::Undeclared if ko => "설정 → 모델에서 이미지 입력을 켜세요",
-        ImageRefusal::Undeclared => "Turn on image input in Settings",
-        ImageRefusal::Type if ko => "지원하지 않는 이미지 형식",
-        ImageRefusal::Type => "Image type not supported",
-        ImageRefusal::Size if ko => "이미지 용량 초과",
-        ImageRefusal::Size => "Image too large",
-    }
 }

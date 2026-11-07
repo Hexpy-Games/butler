@@ -172,29 +172,6 @@ static EN: Strings = Strings {
 };
 
 impl Strings {
-    /// shell.controlLabel: effective controls from the agent, in the current locale.
-    pub(crate) fn control_label(&self, value: &str) -> gpui::SharedString {
-        let pair = match value {
-            "ask_first" => ("모두 확인", "Ask every time"), // permissions.askAlways
-            "ask_except_reads" => ("먼저 확인", "Ask first"), // permissions.askFirst
-            "full_access" => ("전체 권한", "Full access"),  // permissions.fullAccess
-            "auto" => ("알아서 진행", "Auto"),              // permissions.auto
-            "read_only" => ("읽기 전용", "Read only"),      // permissions.readOnly
-            "none" => ("없음", "None"),
-            "low" => ("낮음", "Low"),
-            "medium" => ("보통", "Medium"),
-            "high" => ("높음", "High"),
-            "xhigh" => ("매우 높음", "Extra high"),
-            "max" => ("최대", "Max"),
-            _ => ("—", "—"),
-        };
-        match self.locale {
-            Locale::Ko => pair.0,
-            Locale::En => pair.1,
-        }
-        .into()
-    }
-
     pub(crate) fn risk(&self, risk: Risk) -> &'static str {
         match risk {
             Risk::Low => self.risk[0],

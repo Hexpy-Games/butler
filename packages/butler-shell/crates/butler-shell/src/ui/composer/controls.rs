@@ -76,6 +76,15 @@ impl Controls {
     }
 }
 
+/// `setModelCatalog`: ready when the catalog offers a runtime model, else unavailable.
+fn loaded_state(catalog: &ModelCatalog) -> CatalogState {
+    if runtime_models(catalog).is_empty() {
+        CatalogState::Unavailable
+    } else {
+        CatalogState::Ready
+    }
+}
+
 impl Composer {
     /// The agent attached: reads the catalog, Settings and the open chat's controls.
     pub(super) fn load_controls(&mut self, cx: &mut Context<Self>) {
@@ -93,7 +102,7 @@ impl Composer {
                 match loaded.ok().and_then(|value| decode_catalog(&value)) {
                     Some(catalog) => {
                         this.controls.catalog = catalog;
-                        this.controls.catalog_state = CatalogState::Ready;
+                        this.controls.catalog_state = loaded_state(&this.controls.catalog);
                     }
                     None => this.controls.catalog_state = CatalogState::Error,
                 }
@@ -224,7 +233,7 @@ impl Composer {
                 Ok(value) => match decode_catalog(&value) {
                     Some(catalog) if catalog.generation == generation => {
                         this.controls.catalog = catalog;
-                        this.controls.catalog_state = CatalogState::Ready;
+                        this.controls.catalog_state = loaded_state(&this.controls.catalog);
                         this.resolve(cx);
                     }
                     _ => this.load_session_controls(true, cx),

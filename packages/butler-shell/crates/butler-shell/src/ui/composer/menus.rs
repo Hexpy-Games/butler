@@ -120,7 +120,6 @@ pub(crate) fn access_mode_options(
     let lang = ds.lang();
     let mut menu = OptionMenu::new(permission_title(lang));
     for mode in ACCESS_MODES {
-        let meta = access_meta(&mode);
         let select = on_select.clone();
         let chosen = mode.clone();
         let mut item = OptionMenuItem::new(
@@ -129,8 +128,8 @@ pub(crate) fn access_mode_options(
         )
         .description(access_description(&mode, lang))
         .block_description()
-        .icon(icon(meta.glyph, IconSize::Md, ds))
-        .permission_tone(meta.tone)
+        .icon(access_mode_icon(&mode, IconSize::Md, ds))
+        .permission_tone(access_permission_tone(&mode))
         .on_click(move |_, window, cx| select(&chosen, window, cx));
         if mode == *value {
             item = item.selected();
@@ -151,13 +150,12 @@ pub(crate) fn access_mode_menu(
     let popover = Popover::new("composer-access-menu", window, cx);
     let ds = Ds::get(cx);
     let label = access_label(access_mode, ds.lang());
-    let meta = access_meta(access_mode);
-    let glyph = icon(meta.glyph, IconSize::Md, ds);
+    let glyph = access_mode_icon(access_mode, IconSize::Md, ds);
     let trigger = popover.trigger(|toggle| {
         ComposerControl::new("access-button", label)
             .icon(glyph)
             .compact(Compact::Icon)
-            .permission_tone(meta.tone)
+            .permission_tone(access_permission_tone(access_mode))
             .on_click(toggle.on_click())
             .into_any_element()
     });

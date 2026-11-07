@@ -1,5 +1,7 @@
 //! `ModelOptions`, `useModelOptionsFilter`, `useModelChoice` and the model labels of `app/utils.ts`
 //! (`modelDisplayName`, `tokenWindowLabel`, `reasoningOptionLabel`, `reasoningBudgetSummary`).
+use crate::ui::i18n::composer::labels::reasoning_label;
+use crate::ui::i18n::composer::menus::{Copy, copy};
 use std::rc::Rc;
 
 use butler_ds::ui::blocks::filtered_select_popover::{
@@ -62,58 +64,8 @@ pub(crate) fn model_options_filter(
     window.use_keyed_state(key, cx, |_, _| ModelOptionsFilter::default())
 }
 
-/// `appCopy.composer` strings of the model chooser.
-pub(super) struct Copy {
-    pub(super) model: &'static str,
-    pub(super) search: &'static str,
-    pub(super) all_providers: &'static str,
-    pub(super) no_models: &'static str,
-    pub(super) reasoning: &'static str,
-    pub(super) context_unknown: &'static str,
-    pub(super) model_fallback: &'static str,
 }
 
-const EN: Copy = Copy {
-    model: "Model",
-    search: "Search models...",
-    all_providers: "All",
-    no_models: "No models found",
-    reasoning: "Reasoning",
-    context_unknown: "context unknown",
-    model_fallback: "Model",
-};
-
-const KO: Copy = Copy {
-    model: "모델",
-    search: "모델 검색...",
-    all_providers: "전체",
-    no_models: "모델을 찾을 수 없습니다",
-    reasoning: "추론",
-    context_unknown: "컨텍스트 미확인",
-    model_fallback: "모델",
-};
-
-pub(super) fn copy(lang: Lang) -> &'static Copy {
-    if lang == Lang::Ko { &KO } else { &EN }
-}
-
-/// `reasoningEffortLabel` (butler-i18n/src/reasoning-effort.ts).
-pub(crate) fn reasoning_label(value: &ReasoningEffort, lang: Lang) -> &'static str {
-    let ko = lang == Lang::Ko;
-    match value {
-        ReasoningEffort::None if ko => "없음",
-        ReasoningEffort::None => "None",
-        ReasoningEffort::Low if ko => "낮음",
-        ReasoningEffort::Low => "Low",
-        ReasoningEffort::Medium | ReasoningEffort::Unknown if ko => "보통",
-        ReasoningEffort::Medium | ReasoningEffort::Unknown => "Medium",
-        ReasoningEffort::High if ko => "높음",
-        ReasoningEffort::High => "High",
-        ReasoningEffort::Xhigh if ko => "매우 높음",
-        ReasoningEffort::Xhigh => "Very high",
-        ReasoningEffort::Max if ko => "최대",
-        ReasoningEffort::Max => "Max",
-    }
 }
 
 /// `modelDisplayName`.
