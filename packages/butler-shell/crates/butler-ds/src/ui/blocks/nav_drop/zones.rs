@@ -128,6 +128,7 @@ struct Pending<K> {
 /// (`createDropZoneTracker`). Feed it every drag move with [`Self::update`]; while
 /// [`Self::waiting`] holds, call [`Self::poll`] each frame, as the React timer does.
 pub struct DropZoneTracker<K> {
+    dwell: Duration,
     current: Option<DropZoneHit<K>>,
     pending: Option<Pending<K>>,
     last: Option<(f32, Vec<DropZoneCandidate<K>>)>,
@@ -136,6 +137,7 @@ pub struct DropZoneTracker<K> {
 impl<K> Default for DropZoneTracker<K> {
     fn default() -> Self {
         Self {
+            dwell: COMBINE_DWELL,
             current: None,
             pending: None,
             last: None,
@@ -144,6 +146,14 @@ impl<K> Default for DropZoneTracker<K> {
 }
 
 impl<K: Clone + PartialEq> DropZoneTracker<K> {
+    /// A tracker whose combine zone waits `dwell` (default [`COMBINE_DWELL`]).
+    pub fn with_dwell(dwell: Duration) -> Self {
+        Self {
+            dwell,
+            ..Self::default()
+        }
+    }
+
     pub fn current(&self) -> Option<&DropZoneHit<K>> {
         self.current.as_ref()
     }
@@ -215,7 +225,7 @@ impl<K: Clone + PartialEq> DropZoneTracker<K> {
                 since: now,
             });
         }
-        if now.duration_since(since) >= COMBINE_DWELL {
+        if now.duration_since(since) >= self.dwell {
             self.pending = None;
             return self.commit(row.key.clone(), zone);
         }
