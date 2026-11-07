@@ -1,5 +1,3 @@
-// Skeleton (Opus, P2 shell wave): the unit that owns this file fills it; see
-// /Users/home-dev/p14-jobs/gpui-port-orch/specs/p2-shell-wave.md for the contract.
 //! `ComposerTextArea`, `ComposerEditorPlugin`, `composition.ts`, `draftSync.ts`, `composerFocus.ts`
 //! on gpui-ce EditableText.
 //!
@@ -25,10 +23,6 @@ use self::serialize::append_part;
 use crate::ui::source::wire::ProjectSourceContentPart;
 
 /// An inline atom (Lexical decorator node).
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Atom {
     /// `ProjectReferenceNode`.
@@ -44,10 +38,6 @@ pub(crate) enum Atom {
 }
 
 /// The editor content in order (`serialization.ts`).
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ComposerPart {
     Text(String),
@@ -82,10 +72,6 @@ struct SavedSelection {
 /// `parts` is the latest content: what the field holds, or, while `held` is set, what the field
 /// will hold once the IME is idle. Writes from outside the field (`write`, `insert_atom`, `clear`)
 /// are held while the IME composes, so they never commit its text early.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 #[derive(Default)]
 pub(crate) struct ComposerEditor {
     parts: Vec<ComposerPart>,
@@ -95,10 +81,6 @@ pub(crate) struct ComposerEditor {
     saved: Option<SavedSelection>,
 }
 
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 impl ComposerEditor {
     /// Attaches the EditableText this editor drives.
     pub(crate) fn bind(&mut self, input: Entity<EditableTextState>) {
@@ -437,20 +419,11 @@ impl ComposerEditor {
         })
     }
 
-    /// Each character's laid-out left edge (window x), the input of `drop::drop_offset`.
-    pub(crate) fn char_lefts(
-        &self,
-        field: Bounds<Pixels>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Vec<f32> {
-        let text = self.text(cx);
-        text.char_indices()
-            .filter_map(|(at, c)| {
-                let bounds = self.range_bounds(at..at + c.len_utf8(), field, window, cx)?;
-                Some(bounds.origin.x.as_f32())
-            })
-            .collect()
+    /// Puts the caret at the UTF-8 `offset` of the field.
+    pub(crate) fn place_caret(&mut self, offset: usize, cx: &mut App) {
+        if let Some(input) = self.input.clone() {
+            input.update(cx, |input, cx| input.move_to(offset, cx));
+        }
     }
 
     /// The byte offset of the character under `point` (window coordinates).

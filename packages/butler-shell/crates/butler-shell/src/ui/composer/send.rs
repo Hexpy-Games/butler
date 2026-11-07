@@ -9,7 +9,8 @@ use serde_json::{Value, json};
 use super::editor::serialize::content_text;
 use super::queue::{access_wire, controls_body, effort_wire, queue_message};
 use super::state::{ComposerState, QueuePolicy, Submission, SubmitInput};
-use super::{Composer, ComposerEvent, Submit};
+use super::references::MentionKey;
+use super::{Composer, ComposerEvent, Submit, SubmitWithModifier};
 use crate::ui::i18n::composer::words;
 use crate::ui::source::agent::Jobs;
 
@@ -60,7 +61,25 @@ impl Outgoing {
 }
 
 impl Composer {
+    /// Enter: chooses the open mention menu's row, otherwise sends.
     pub(super) fn submit(&mut self, _: &Submit, window: &mut Window, cx: &mut Context<Self>) {
+        if self.mention_key(MentionKey::Choose, window, cx) {
+            return;
+        }
+        self.send_draft(window, cx);
+    }
+
+    /// Enter with a modifier is never the menu's (`useMentionKeys`).
+    pub(super) fn submit_with_modifier(
+        &mut self,
+        _: &SubmitWithModifier,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.send_draft(window, cx);
+    }
+
+    fn send_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.disabled.is_some() || self.composing(window, cx) {
             return;
         }

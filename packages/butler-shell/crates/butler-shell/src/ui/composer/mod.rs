@@ -10,6 +10,7 @@ mod inputs;
 mod menus;
 mod notice;
 pub(crate) mod queue;
+mod references;
 mod send;
 mod slots;
 mod state;
@@ -25,7 +26,7 @@ use butler_ds::ui::blocks::composer_card::{ComposerCard, ExpandedBody};
 use butler_ds::ui::popover::Popover;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    KeyBinding, SharedString, Window, actions, canvas, div, prelude::*, px,
+    KeyBinding, KeyDownEvent, SharedString, Window, actions, canvas, div, prelude::*, px,
 };
 
 use gpui_elements::editable_text::actions::{self as text_actions, DEFAULT_INPUT_CONTEXT};
@@ -35,7 +36,9 @@ use self::attachments::{Attachments, composer_attachments, file_drag_active, fil
 use self::context::ComposerContextControl;
 use self::controls::Controls;
 use self::editor::clipboard::Paste;
+use self::editor::drop::SessionDrag;
 use self::editor::{ComposerEditor, FocusPlacement};
+use self::references::{MentionKey, References};
 use self::state::{ComposerState, image_refusal_label};
 use crate::ui::field;
 use crate::ui::motion::Hover;
@@ -46,12 +49,16 @@ use crate::ui::widgets::HasHover;
 pub(crate) use inputs::Inputs;
 pub(crate) use send::Outgoing;
 
-actions!(composer, [Submit]);
+actions!(composer, [Submit, SubmitWithModifier]);
 
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     vec![
         KeyBinding::new("enter", Submit, Some(DEFAULT_INPUT_CONTEXT)),
-        KeyBinding::new("secondary-enter", Submit, Some(DEFAULT_INPUT_CONTEXT)),
+        KeyBinding::new(
+            "secondary-enter",
+            SubmitWithModifier,
+            Some(DEFAULT_INPUT_CONTEXT),
+        ),
     ]
 }
 
@@ -82,6 +89,8 @@ pub(crate) struct Composer {
     controls: Controls,
     attachments: Attachments,
     context_control: Entity<ComposerContextControl>,
+    /// The `@` menu and the atom chips.
+    references: References,
     /// What the shell last said about the open chat and the agent.
     inputs: Inputs,
     /// The draft revision the editor shows.
@@ -150,6 +159,7 @@ impl Composer {
             controls: Controls::default(),
             attachments: Attachments::default(),
             context_control,
+            references: References::default(),
             inputs: Inputs::default(),
             synced_revision: 0,
             protected: false,
@@ -238,6 +248,18 @@ impl Composer {
         let input = field::field("composer-input", &self.input, self.placeholder, &self.theme)
             .aria_label(self.theme.strings.message_composer);
         let input = crate::ui::widgets::anchor(input, "composer-field");
+        let field = self.references.field.clone();
+        let probe = canvas(move |b, _, _| field.set(Some(b)), |_, (), _, _| {})
+            .absolute()
+            .size_full();
+        let chips = self.atom_chips(window, cx);
+        let menu = self.mention_menu(window, cx);
+        let input = div()
+            .relative()
+            .child(input)
+            .child(probe)
+            .children(chips)
+            .children(menu);
         // The editor stays mounted while folded so its focus handle and IME state survive.
         let editor = div()
             .px(px(16.))
@@ -264,6 +286,26 @@ impl Composer {
                     Paste::Nothing => {}
                 }
             }))
+            .capture_action(cx.listener(|this, _: &text_actions::NavUp, window, cx| {
+                if this.mention_key(MentionKey::Up, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &text_actions::NavDown, window, cx| {
+                if this.mention_key(MentionKey::Down, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                let key = match event.keystroke.key.as_str() {
+                    "tab" if !event.keystroke.modifiers.modified() => MentionKey::Choose,
+                    "escape" => MentionKey::Escape,
+                    _ => return,
+                };
+                if this.mention_key(key, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
             .child(input);
         let mut body = ExpandedBody::new("composer-body").child(editor);
         if let Some(tiles) = tiles {
@@ -280,7 +322,8 @@ impl Composer {
         let popover = POPOVERS
             .iter()
             .any(|id| Popover::new(*id, window, cx).is_open(cx));
-        popover || ComposerState::read(cx, |draft| draft.context_popover_open)
+        // A session dragged over the composer keeps it open (`referenceDragging`).
+        popover || cx.has_active_drag() || ComposerState::read(cx, |draft| draft.context_popover_open)
     }
 }
 
@@ -294,6 +337,7 @@ impl Render for Composer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.pull_state(window, cx);
         self.take_focus_request(window, cx);
+        self.sync_mentions(window, cx);
         self.protected = Self::popover_open(window, cx);
         let height = self.height.clone();
         let probe = canvas(
@@ -355,6 +399,10 @@ impl Render for Composer {
             let _ = dropped.update(cx, |this, cx| this.add_files(files, cx));
         })
         .on_action(cx.listener(Self::submit))
+        .on_action(cx.listener(Self::submit_with_modifier))
+        .on_drop(cx.listener(|this, drag: &SessionDrag, window, cx| {
+            this.drop_session(drag, window, cx);
+        }))
         .child(probe)
         .child(card)
         .on_click(cx.listener(|this, _, window, cx| {

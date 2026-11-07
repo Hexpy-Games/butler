@@ -1,6 +1,7 @@
 //! `serialization.ts`: parts ↔ the send body's text and content parts.
 use serde_json::{Value, json};
 
+use super::atoms::atom_text;
 use super::{Atom, ComposerPart};
 use crate::ui::source::wire::{
     MessageContent, MessageContentPart, ProjectSourceContentPart, ProjectSourceReferenceKind,
@@ -122,11 +123,7 @@ pub(crate) fn content_text(parts: &[ComposerPart]) -> String {
         .iter()
         .map(|part| match part {
             ComposerPart::Text(text) => text.clone(),
-            ComposerPart::Atom(
-                Atom::Project { label, .. }
-                | Atom::Session { label, .. }
-                | Atom::ProjectSource { label, .. },
-            ) => format!("@{label}"),
+            ComposerPart::Atom(atom) => atom_text(atom),
         })
         .collect()
 }

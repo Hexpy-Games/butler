@@ -30,13 +30,13 @@ pub(crate) fn session_display_title(id: &str, title: &str, general: &str) -> Sha
 /// Opens a project's dashboard (`openProjectDashboard`).
 pub(crate) type OpenProject = Rc<dyn Fn(&str, &mut Window, &mut App)>;
 
-/// The chip for `atom`. A deleted or archived project, or a session the space no longer lists
+/// The chip for `atom`; without the navigation yet, every reference reads as available. A deleted or archived project, or a session the space no longer lists
 /// (except `general`), reads as unavailable. In a sent message (`open` given) a known project
 /// chip opens the project.
 pub(crate) fn atom_chip(
     id: impl Into<ElementId>,
     atom: &Atom,
-    navigation: &NavigationView,
+    navigation: Option<&NavigationView>,
     general: &str,
     open: Option<OpenProject>,
 ) -> InlineReference {
@@ -45,10 +45,12 @@ pub(crate) fn atom_chip(
             id: project_id,
             label,
         } => {
-            let known = navigation
-                .projects
-                .iter()
-                .any(|project| project.id == *project_id && !project.archived);
+            let known = navigation.is_none_or(|navigation| {
+                navigation
+                    .projects
+                    .iter()
+                    .any(|project| project.id == *project_id && !project.archived)
+            });
             let mut chip = InlineReference::mention(id, Icon::Briefcase, label.clone());
             if !known {
                 chip = chip.unavailable();
@@ -65,10 +67,11 @@ pub(crate) fn atom_chip(
             id: session_id,
             label,
         } => {
-            let node =
+            let node = navigation.and_then(|navigation| {
                 navigation.space.nodes.iter().find(|node| {
                     node.kind == SpaceNodeKind::Session && node.entityId == *session_id
-                });
+                })
+            });
             let icon = if node.is_some_and(|node| node.scopeProjectId.is_some()) {
                 Icon::Notebook
             } else {
@@ -79,7 +82,7 @@ pub(crate) fn atom_chip(
                 icon,
                 session_display_title(session_id, label, general),
             );
-            if node.is_none() && session_id != "general" {
+            if navigation.is_some() && node.is_none() && session_id != "general" {
                 chip.unavailable()
             } else {
                 chip
