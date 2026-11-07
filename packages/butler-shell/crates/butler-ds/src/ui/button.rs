@@ -316,6 +316,10 @@ impl Button {
                 .child(element)
                 .into_any_element()
         };
+        // `hasStructuredContent` (button.tsx): only `text` or an icon puts the content in spans
+        // of `line-height: 1`.
+        let structured =
+            self.text.is_some() || self.icon_start.is_some() || self.icon_end.is_some();
         let mut out = Vec::new();
         out.extend(self.icon_start.take().map(slot));
         let line = ds.len(if self.size == Size::Xs {
@@ -338,7 +342,13 @@ impl Button {
         if let Some(text) = self.text.take() {
             out.push(label(text.into_any_element()));
         }
-        out.extend(std::mem::take(&mut self.children).into_iter().map(label));
+        let children = std::mem::take(&mut self.children);
+        if structured {
+            out.extend(children.into_iter().map(label));
+        } else {
+            // Plain children are the button's own content, at the inherited line height.
+            out.extend(children);
+        }
         out.extend(self.icon_end.take().map(slot));
         out
     }

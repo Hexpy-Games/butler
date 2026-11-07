@@ -1,56 +1,123 @@
 //! The floating composer (blocks/ComposerCard, ComposerControl, ComposerDecisionPanel).
+mod adjunct;
 mod approval;
+mod attachments;
+mod context;
+mod controls;
+pub(crate) mod editor;
+mod files;
+mod inputs;
+mod menus;
+mod notice;
+pub(crate) mod queue;
+mod references;
+mod send;
+mod slots;
+pub(crate) mod state;
+mod sync;
 mod toolbar;
+mod wire;
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
+use butler_ds::ui::blocks::composer_card::{ComposerCard, ExpandedBody};
+use butler_ds::ui::popover::Popover;
 use gpui::{
-    AnimationExt as _, App, AppContext as _, Context, Entity, EntityInputHandler as _,
-    EventEmitter, FocusHandle, Focusable, KeyBinding, SharedString, Window, actions, canvas, div,
-    prelude::*, px,
+    AnyElement, App, AppContext as _, Context, Div, Entity, EventEmitter, FocusHandle, Focusable,
+    KeyBinding, KeyDownEvent, SharedString, Window, actions, canvas, div, prelude::*, px,
 };
 
-use gpui_elements::editable_text::actions::DEFAULT_INPUT_CONTEXT;
-use gpui_elements::editable_text::{EditableTextState, StringStorage};
+use gpui_elements::editable_text::actions::{self as text_actions, DEFAULT_INPUT_CONTEXT};
+use gpui_elements::editable_text::{EditableTextState, StringStorage, TextChanged};
 
+use self::attachments::{Attachments, composer_attachments, file_drag_active, file_drop};
+use self::context::ComposerContextControl;
+use self::controls::Controls;
+use self::editor::clipboard::Paste;
+use self::editor::drop::SessionDrag;
+use self::editor::{ComposerEditor, FocusPlacement};
+use self::references::{MentionKey, References};
+use self::state::{ComposerState, image_refusal_label};
+use crate::ui::field;
 use crate::ui::motion::Hover;
-use crate::ui::source::{AuthorityCard, ComposerContext, Decision, RequestRef};
+use crate::ui::source::{AuthorityCard, Decision, RequestRef};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::HasHover;
-use crate::ui::{field, glass};
 
-actions!(composer, [Submit]);
+pub(crate) use inputs::Inputs;
+pub(crate) use send::Outgoing;
+
+actions!(composer, [Submit, SubmitWithModifier]);
 
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     vec![
         KeyBinding::new("enter", Submit, Some(DEFAULT_INPUT_CONTEXT)),
-        KeyBinding::new("secondary-enter", Submit, Some(DEFAULT_INPUT_CONTEXT)),
+        KeyBinding::new(
+            "secondary-enter",
+            SubmitWithModifier,
+            Some(DEFAULT_INPUT_CONTEXT),
+        ),
     ]
 }
 
 #[derive(Clone)]
 pub(crate) enum ComposerEvent {
-    Send(SharedString),
+    /// A draft to send into the open chat, or into a new one.
+    Send(Box<Outgoing>),
     Stop,
     Answer(RequestRef, Decision),
     /// The owner wants to suggest a change to this request.
     Modify(Box<AuthorityCard>),
+    /// The context popover's Details: open Settings > Usage.
+    OpenUsageSettings,
+}
+
+/// The popovers of the toolbar; the composer stays expanded while one is open
+/// (`protectedExpanded`).
+const POPOVERS: [&str; 4] = [
+    "composer-access-menu",
+    "composer-model-menu",
+    "composer-attachment-menu",
+    "composer-documents-menu",
+];
+
+/// What keeps the card unfolded.
+#[derive(Default)]
+struct Fold {
+    /// The field has been engaged and no click outside has folded it.
+    engaged: bool,
+    /// A toolbar popover is open.
+    protected: bool,
 }
 
 pub(crate) struct Composer {
     input: Entity<EditableTextState>,
+    editor: ComposerEditor,
+    /// The catalog, settings and chat controls (the shot harness reads `load_state`).
+    pub(crate) controls: Controls,
+    attachments: Attachments,
+    context_control: Entity<ComposerContextControl>,
+    /// The `@` menu and the atom chips.
+    references: References,
+    /// What the shell last said about the open chat and the agent.
+    inputs: Inputs,
+    /// The draft revision the editor shows.
+    synced_revision: u64,
+    /// Whether the card is unfolded.
+    fold: Fold,
     /// The field's placeholder (new chat or follow-up).
     placeholder: &'static str,
     theme: Theme,
-    engaged: bool,
-    /// The open chat's turn is running (the send button stops it).
+    /// The open chat's turn is running.
     pub(crate) streaming: bool,
     /// The open chat's first outstanding authority request (shown instead of the input), and
     /// whether an answer to it is on its way.
     pub(crate) approval: Option<(AuthorityCard, bool)>,
-    /// Permission and model labels; `None` while no agent is attached.
-    pub(crate) context: Option<ComposerContext>,
+    /// The new-chat composer (`large`).
+    new_chat: bool,
+    git_notice_dismissed: bool,
     /// Why the composer cannot be used (shown as a tooltip), when it cannot.
     pub(crate) disabled: Option<SharedString>,
     /// Where focus goes when a click outside folds the composer.
@@ -58,7 +125,7 @@ pub(crate) struct Composer {
     /// The card's height as last drawn.
     height: Rc<Cell<f32>>,
     hover: Hover,
-    _blur: gpui::Subscription,
+    _subscriptions: Vec<gpui::Subscription>,
 }
 
 impl EventEmitter<ComposerEvent> for Composer {}
@@ -74,23 +141,48 @@ impl Composer {
         let placeholder = theme.strings.placeholder;
         let input = cx.new(|cx| EditableTextState::new(StringStorage::default(), cx));
         let handle = input.read(cx).focus_handle(cx);
-        let blur = cx.on_blur(&handle, window, |this: &mut Self, _, cx| {
-            this.engaged = false;
-            cx.notify();
-        });
+        let mut editor = ComposerEditor::default();
+        editor.bind(input.clone());
+        let context_control = cx.new(|_| ComposerContextControl::new());
+        let subscriptions = vec![
+            cx.on_blur(&handle, window, |this: &mut Self, window, cx| {
+                this.editor.save_selection(window, cx);
+                this.fold.engaged = false;
+                cx.notify();
+            }),
+            cx.subscribe_in(&input, window, |this, _, _: &TextChanged, window, cx| {
+                this.on_text_changed(window, cx);
+            }),
+            cx.subscribe(&context_control, |this, control, event, cx| {
+                this.on_context_event(control, event, cx);
+            }),
+            cx.observe_window_activation(window, |this, window, cx| {
+                if window.is_window_active() {
+                    this.editor.on_window_activated(window, cx);
+                }
+            }),
+        ];
         Self {
             input,
+            editor,
+            controls: Controls::default(),
+            attachments: Attachments::default(),
+            context_control,
+            references: References::default(),
+            inputs: Inputs::default(),
+            synced_revision: 0,
+            fold: Fold::default(),
             placeholder,
             theme,
-            engaged: false,
             streaming: false,
             approval: None,
-            context: None,
+            new_chat: true,
+            git_notice_dismissed: false,
             disabled: None,
             shell_focus: None,
             height: Rc::new(Cell::new(48.)),
             hover: Hover::default(),
-            _blur: blur,
+            _subscriptions: subscriptions,
         }
     }
 
@@ -101,6 +193,7 @@ impl Composer {
     /// The placeholder for a new chat or a follow-up.
     pub(crate) fn set_new_chat(&mut self, new_chat: bool, _cx: &mut Context<Self>) {
         let s = self.theme.strings;
+        self.new_chat = new_chat;
         self.placeholder = if new_chat {
             s.placeholder
         } else {
@@ -108,18 +201,18 @@ impl Composer {
         };
     }
 
+    /// `focusComposer`: expands the card and puts the caret back where it was.
     pub(crate) fn engage(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.disabled.is_some() {
             return;
         }
-        self.engaged = true;
-        let handle = self.input.read(cx).focus_handle(cx);
-        window.focus(&handle, cx);
+        self.fold.engaged = true;
+        self.editor.focus(FocusPlacement::Restore, window, cx);
         cx.notify();
     }
 
     pub(crate) fn fold(&mut self) {
-        self.engaged = false;
+        self.fold.engaged = false;
     }
 
     /// The card's measured height, shared with the conversation's composer reserve.
@@ -129,55 +222,122 @@ impl Composer {
 
     /// An IME composition is in progress in the field.
     fn composing(&self, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        self.input
-            .update(cx, |i, cx| i.marked_text_range(window, cx).is_some())
+        self.editor.composing(window, cx)
     }
 
-    fn submit(&mut self, _: &Submit, window: &mut Window, cx: &mut Context<Self>) {
-        let text = SharedString::from(self.input.read(cx).as_str().to_owned());
-        let blocked = self.disabled.is_some() || self.streaming || self.composing(window, cx);
-        if blocked || text.trim().is_empty() {
-            return;
-        }
-        self.input.update(cx, |i, cx| {
-            i.emplace("", cx);
-            i.clear_history();
-        });
-        window.invalidate_character_coordinates();
-        cx.emit(ComposerEvent::Send(text));
-    }
-
-    fn body(&mut self, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
+    fn body(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         if let Some((card, pending)) = self.approval.clone() {
             return vec![approval::panel(self, &card, pending, cx).into_any_element()];
         }
+        let lang = butler_ds::ui::context::Ds::get(cx).lang();
+        let (attached, refused) = ComposerState::read(cx, |draft| {
+            (draft.attachments.clone(), draft.blocked_attachments.clone())
+        });
+        let blocked: HashMap<String, SharedString> = refused
+            .into_iter()
+            .map(|(id, refusal)| (id, image_refusal_label(refusal, lang).into()))
+            .collect();
+        let (open, remove) = (cx.entity().downgrade(), cx.entity().downgrade());
+        let tiles = composer_attachments(
+            &attached,
+            &self.attachments,
+            &blocked,
+            None,
+            move |id, _, cx| {
+                let id = id.to_string();
+                let _ = open.update(cx, |_, cx| Self::open_attached(&id, cx));
+            },
+            move |id, _, cx| {
+                let id = id.to_string();
+                let _ = remove.update(cx, |this, cx| this.remove_attachment(&id, cx));
+            },
+            cx,
+        );
         let input = field::field("composer-input", &self.input, self.placeholder, &self.theme)
             .aria_label(self.theme.strings.message_composer);
         let input = crate::ui::widgets::anchor(input, "composer-field");
-        let input = if self.engaged {
-            div()
-                .px(px(16.))
-                .py(px(12.))
-                .text_size(px(14.))
-                .line_height(px(20.))
-                .capture_action(field::no_empty_cut(&self.input))
-                .child(input)
-                .with_animation(
-                    "body-in",
-                    gpui::Animation::new(crate::ui::motion::FAST),
-                    gpui::Styled::opacity,
-                )
-                .into_any_element()
-        } else {
-            // Keep the input mounted so its focus handle and IME state survive folding.
-            div()
-                .h(px(0.))
-                .overflow_hidden()
-                .capture_action(field::no_empty_cut(&self.input))
-                .child(input)
-                .into_any_element()
-        };
-        vec![input, self.toolbar(cx).into_any_element()]
+        let field = self.references.field.clone();
+        let probe = canvas(move |b, _, _| field.set(Some(b)), |_, (), _, _| {})
+            .absolute()
+            .size_full();
+        let chips = self.atom_chips(window, cx);
+        let menu = self.mention_menu(window, cx);
+        let input = div()
+            .relative()
+            .child(input)
+            .child(probe)
+            .children(chips)
+            .children(menu);
+        let editor = Self::editor_frame(cx).child(input);
+        let mut body = ExpandedBody::new("composer-body").child(editor);
+        if let Some(tiles) = tiles {
+            body = body.child(tiles);
+        }
+        vec![
+            body.into_any_element(),
+            self.toolbar(window, cx).into_any_element(),
+        ]
+    }
+
+    /// The editor's padding and clipboard and mention-key capture; the editor stays mounted
+    /// while folded so its focus handle and IME state survive.
+    fn editor_frame(cx: &mut Context<Self>) -> Div {
+        div()
+            .px(px(16.))
+            .py(px(12.))
+            .text_size(px(14.))
+            .line_height(px(20.))
+            .capture_action(cx.listener(|this, _: &text_actions::Cut, window, cx| {
+                if this.editor.copy(true, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &text_actions::Copy, window, cx| {
+                if this.editor.copy(false, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &text_actions::Paste, window, cx| {
+                match this.editor.paste(&|_| true, window, cx) {
+                    Paste::Inserted => cx.stop_propagation(),
+                    Paste::Files(entries) => {
+                        this.add_pasted(&entries, cx);
+                        cx.stop_propagation();
+                    }
+                    Paste::Nothing => {}
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &text_actions::NavUp, window, cx| {
+                if this.mention_key(MentionKey::Up, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_action(cx.listener(|this, _: &text_actions::NavDown, window, cx| {
+                if this.mention_key(MentionKey::Down, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                let key = match event.keystroke.key.as_str() {
+                    "tab" if !event.keystroke.modifiers.modified() => MentionKey::Choose,
+                    "escape" => MentionKey::Escape,
+                    _ => return,
+                };
+                if this.mention_key(key, window, cx) {
+                    cx.stop_propagation();
+                }
+            }))
+    }
+
+    /// `useComposerPresentation`'s `protectedExpanded`.
+    fn popover_open(window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let popover = POPOVERS
+            .iter()
+            .any(|id| Popover::new(*id, window, cx).is_open(cx));
+        // A session dragged over the composer keeps it open (`referenceDragging`).
+        popover
+            || cx.has_active_drag()
+            || ComposerState::read(cx, |draft| draft.context_popover_open)
     }
 }
 
@@ -187,9 +347,56 @@ impl Focusable for Composer {
     }
 }
 
+impl Composer {
+    /// The card: its notice, adjunct panels and the body rows.
+    fn card(&mut self, window: &mut Window, cx: &mut Context<Self>) -> ComposerCard {
+        let lang = butler_ds::ui::context::Ds::get(cx).lang();
+        let this = cx.entity();
+        let notice = notice::git_dependency_notice(
+            self.inputs.git.missing,
+            self.git_notice_dismissed,
+            lang,
+            move |_, cx| {
+                this.update(cx, |this, cx| {
+                    this.git_notice_dismissed = true;
+                    cx.notify();
+                });
+            },
+            cx,
+        );
+        let task_rows = self.inputs.task_rows();
+        let adjunct = adjunct::adjunct_panels(
+            lang,
+            &self.inputs.workers,
+            &task_rows,
+            self.inputs
+                .active_progress()
+                .and_then(|p| p.state.as_deref()),
+        );
+        let expanded = self.fold.engaged || self.approval.is_some() || self.fold.protected;
+        let mut card = ComposerCard::new("composer-card").expanded(expanded);
+        if self.new_chat {
+            card = card.large();
+        }
+        if file_drag_active(cx) {
+            card = card.drop_active();
+        }
+        if let Some(notice) = notice {
+            card = card.notice(notice);
+        }
+        if let Some(adjunct) = adjunct {
+            card = card.adjunct(adjunct);
+        }
+        card.children(self.body(window, cx))
+    }
+}
+
 impl Render for Composer {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = self.theme.clone();
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.pull_state(window, cx);
+        self.take_focus_request(window, cx);
+        self.sync_mentions(window, cx);
+        self.fold.protected = Self::popover_open(window, cx);
         let height = self.height.clone();
         let probe = canvas(
             move |b, _, _| height.set(b.size.height.as_f32()),
@@ -199,36 +406,41 @@ impl Render for Composer {
         .top_0()
         .left_0()
         .size_full();
-        let card = glass::composer_surface(&t, 30.)
-            .w_full()
-            .flex()
-            .flex_col()
-            .on_action(cx.listener(Self::submit))
-            .child(probe)
-            .children(self.body(cx));
+        let card = self.card(window, cx);
         let column = butler_ds::ui::blocks::scope::conversation(cx).unwrap_or_default();
         let ds = butler_ds::ui::context::Ds::get(cx);
-        crate::ui::widgets::anchor(div(), "composer")
+        let dropped = cx.entity().downgrade();
+        let surface = crate::ui::widgets::anchor(div(), "composer")
             .absolute()
             .bottom(ds.len(butler_ds::tokens::Length::SpaceLg))
             .left(px(column.column_left))
             .w(px(column.column_width.max(0.)))
-            .id("composer")
-            .child(card)
-            .on_click(cx.listener(|this, _, window, cx| {
-                if !this.engaged && this.approval.is_none() {
-                    this.engage(window, cx);
+            .id("composer");
+        file_drop(surface, move |files, _, cx| {
+            let _ = dropped.update(cx, |this, cx| this.add_files(files, cx));
+        })
+        .on_action(cx.listener(Self::submit))
+        .on_action(cx.listener(Self::submit_with_modifier))
+        .on_drop(cx.listener(|this, drag: &SessionDrag, window, cx| {
+            this.drop_session(drag, window, cx);
+        }))
+        .child(probe)
+        .child(card)
+        .on_click(cx.listener(|this, _, window, cx| {
+            if !this.fold.engaged && this.approval.is_none() {
+                this.engage(window, cx);
+            }
+        }))
+        // useComposerPresentation: a pointer-down anywhere else folds the composer, unless a
+        // toolbar popover is open or the IME is composing.
+        .on_mouse_down_out(cx.listener(|this, _, window, cx| {
+            if this.fold.engaged && !this.fold.protected && !this.composing(window, cx) {
+                this.fold.engaged = false;
+                if let Some(f) = &this.shell_focus {
+                    window.focus(f, cx);
                 }
-            }))
-            // useComposerPresentation: a pointer-down anywhere else folds the composer.
-            .on_mouse_down_out(cx.listener(|this, _, window, cx| {
-                if this.engaged && !this.composing(window, cx) {
-                    this.engaged = false;
-                    if let Some(f) = &this.shell_focus {
-                        window.focus(f, cx);
-                    }
-                    cx.notify();
-                }
-            }))
+                cx.notify();
+            }
+        }))
     }
 }

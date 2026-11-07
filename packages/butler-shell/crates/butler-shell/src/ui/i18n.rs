@@ -1,6 +1,12 @@
 //! UI copy in Korean and English. Strings that exist in packages/butler-i18n (TypeScript, so
 //! not readable at build time) use the same key, named on each field with its catalog path
 //! and the same text; `shell.*` fields are new to this app. Product terms follow AGENTS.md.
+pub(crate) mod composer;
+pub(crate) mod media;
+mod messages;
+
+pub(crate) use messages::{AssistantStrings, assistant, transcript, worked_duration};
+
 use crate::ui::source::Risk;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,9 +79,6 @@ pub(crate) struct Strings {
     pub(crate) send_failed: &'static str,
     /// cancel
     pub(crate) cancel: &'static str,
-    /// guided.workerStatus.executing, guided.workerStatus.complete
-    pub(crate) working: &'static str,
-    pub(crate) complete: &'static str,
     /// interfaceTemplates.approvalRequest.risk.{low, medium, high}
     risk: [&'static str; 3],
     /// shell.notRunning: the agent is not attached.
@@ -120,8 +123,6 @@ static KO: Strings = Strings {
     decision_failed: "승인 상태를 확인하지 못했습니다",
     send_failed: "보내지 못했습니다",
     cancel: "취소",
-    working: "작업 중",
-    complete: "완료",
     risk: ["위험 낮음", "위험 보통", "위험 높음"],
     update_required: "버틀러 업데이트 필요",
     not_running: "버틀러가 실행 중이 아닙니다",
@@ -160,8 +161,6 @@ static EN: Strings = Strings {
     decision_failed: "Couldn't confirm approval",
     send_failed: "Couldn't send",
     cancel: "Cancel",
-    working: "Working",
-    complete: "Complete",
     risk: ["Low risk", "Medium risk", "High risk"],
     update_required: "Update Butler",
     not_running: "Butler isn't running",
@@ -173,29 +172,6 @@ static EN: Strings = Strings {
 };
 
 impl Strings {
-    /// shell.controlLabel: effective controls from the agent, in the current locale.
-    pub(crate) fn control_label(&self, value: &str) -> gpui::SharedString {
-        let pair = match value {
-            "ask_first" => ("모두 확인", "Ask every time"), // permissions.askAlways
-            "ask_except_reads" => ("먼저 확인", "Ask first"), // permissions.askFirst
-            "full_access" => ("전체 권한", "Full access"),  // permissions.fullAccess
-            "auto" => ("알아서 진행", "Auto"),              // permissions.auto
-            "read_only" => ("읽기 전용", "Read only"),      // permissions.readOnly
-            "none" => ("없음", "None"),
-            "low" => ("낮음", "Low"),
-            "medium" => ("보통", "Medium"),
-            "high" => ("높음", "High"),
-            "xhigh" => ("매우 높음", "Extra high"),
-            "max" => ("최대", "Max"),
-            _ => ("—", "—"),
-        };
-        match self.locale {
-            Locale::Ko => pair.0,
-            Locale::En => pair.1,
-        }
-        .into()
-    }
-
     pub(crate) fn risk(&self, risk: Risk) -> &'static str {
         match risk {
             Risk::Low => self.risk[0],
@@ -218,6 +194,24 @@ impl Strings {
                     if live { "Current" } else { "Activity" }
                 )
             }
+        }
+    }
+
+    // --- activity (chat/activity) ---
+
+    /// conversation.work.collapse
+    pub(crate) fn activity_collapse(&self) -> &'static str {
+        match self.locale {
+            Locale::Ko => "접기",
+            Locale::En => "Collapse",
+        }
+    }
+
+    /// The labels before a phase's summary, intent and next step (TurnActivityBlock).
+    pub(crate) fn activity_detail_labels(&self) -> [&'static str; 3] {
+        match self.locale {
+            Locale::Ko => ["내용:", "의도:", "다음:"],
+            Locale::En => ["Content:", "Intent:", "Next:"],
         }
     }
 

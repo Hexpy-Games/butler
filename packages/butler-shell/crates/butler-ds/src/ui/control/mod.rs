@@ -19,7 +19,7 @@ use super::convert;
 use super::focus;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Number};
 
-type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+pub(crate) type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 /// A final restyle of the outer element (margins, translate).
 pub(crate) type Outer = Box<dyn FnOnce(gpui::Stateful<Div>) -> gpui::Stateful<Div>>;
 
@@ -46,6 +46,8 @@ pub struct Control {
     pub(crate) padding: [Pixels; 4],
     pub(crate) gap: Pixels,
     pub(crate) radius: Pixels,
+    /// The inline start / end corners are square (the halves of a joined button group).
+    pub(crate) square: [bool; 2],
     pub(crate) fill: Blend,
     pub(crate) fg: Blend,
     /// Border width and colours.
@@ -93,6 +95,7 @@ impl Control {
             padding: [px(0.); 4],
             gap: px(0.),
             radius: px(0.),
+            square: [false; 2],
             fill: Blend::flat(none),
             fg: Blend::flat(ds.color(Color::TextPrimary)),
             border: None,
@@ -351,6 +354,12 @@ impl Control {
             .right_0()
             .rounded(self.radius)
             .bg(self.fill.at(hover, pressed));
+        if self.square[0] {
+            surface = surface.rounded_tl(px(0.)).rounded_bl(px(0.));
+        }
+        if self.square[1] {
+            surface = surface.rounded_tr(px(0.)).rounded_br(px(0.));
+        }
         if let Some((width, colors)) = self.border {
             surface = surface
                 .border(width)

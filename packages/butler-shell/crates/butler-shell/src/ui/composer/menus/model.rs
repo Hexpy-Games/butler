@@ -1,0 +1,300 @@
+//! `ModelOptions`, `useModelOptionsFilter`, `useModelChoice` and the model labels of `app/utils.ts`
+//! (`modelDisplayName`, `tokenWindowLabel`, `reasoningOptionLabel`, `reasoningBudgetSummary`).
+use crate::ui::i18n::composer::labels::reasoning_label;
+use crate::ui::i18n::composer::menus::{Copy, copy};
+use std::rc::Rc;
+
+use butler_ds::ui::blocks::filtered_select_popover::{
+    Filter, FilteredSelectPopover, FooterOption, Group, Item,
+};
+use butler_ds::ui::context::{Ds, Lang};
+use gpui::{AnyElement, App, Entity, IntoElement as _, SharedString, Window};
+
+use crate::ui::source::wire::ReasoningEffort;
+
+/// `AppModelSummary` (app/types.ts:84): the fields the composer menus, the model resolution and
+/// the image policy read.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ModelChoice {
+    pub(crate) provider_id: SharedString,
+    pub(crate) provider_label: SharedString,
+    pub(crate) model_id: SharedString,
+    pub(crate) model_ref: SharedString,
+    pub(crate) display_name: Option<SharedString>,
+    pub(crate) context_window_tokens: Option<f64>,
+    pub(crate) default_reasoning_effort: Option<ReasoningEffort>,
+    pub(crate) reasoning_efforts: Vec<ReasoningEffort>,
+    pub(crate) reasoning_budget_tokens: Vec<(ReasoningEffort, f64)>,
+    pub(crate) local_reasoning_budget_ratio: Option<f64>,
+    /// `availability`: `None` when the catalog does not say; otherwise the wire string.
+    pub(crate) availability: Option<SharedString>,
+    pub(crate) runtime_supported: bool,
+    /// `platform`: set for local runtimes (llama_cpp, ollama, lm_studio, custom).
+    pub(crate) platform: Option<SharedString>,
+    /// `auth_type`: "chatgpt_oauth" or "api_key".
+    pub(crate) auth_type: Option<SharedString>,
+    /// `image_input_support`: "supported", "unsupported" or "unknown"; `None` when absent.
+    pub(crate) image_input_support: Option<SharedString>,
+    pub(crate) image_accepted_mime_types: Option<Vec<String>>,
+    pub(crate) image_max_inline_bytes: Option<i64>,
+}
+
+/// `ModelOptionsFilter`: the search text and provider filter, kept across reopening.
+#[derive(Clone)]
+pub(crate) struct ModelOptionsFilter {
+    pub(crate) search: SharedString,
+    pub(crate) provider: SharedString,
+}
+
+impl Default for ModelOptionsFilter {
+    fn default() -> Self {
+        Self {
+            search: SharedString::default(),
+            provider: "all".into(),
+        }
+    }
+}
+
+/// `useModelOptionsFilter`: the filter state, owned by `key` in the window.
+pub(crate) fn model_options_filter(
+    key: &'static str,
+    window: &mut Window,
+    cx: &mut App,
+) -> Entity<ModelOptionsFilter> {
+    window.use_keyed_state(key, cx, |_, _| ModelOptionsFilter::default())
+}
+
+/// `modelDisplayName`.
+pub(crate) fn model_display_name(model: &ModelChoice) -> SharedString {
+    model
+        .display_name
+        .clone()
+        .unwrap_or_else(|| model.model_id.clone())
+}
+
+/// `tokenWindowLabel`.
+fn token_window_label(tokens: Option<f64>, copy: &Copy) -> String {
+    let Some(tokens) = tokens.filter(|tokens| tokens.is_finite()) else {
+        return copy.context_unknown.to_owned();
+    };
+    if tokens >= 1_000_000. {
+        let millions = format!("{:.2}", tokens / 1_000_000.);
+        let millions = millions.trim_end_matches('0').trim_end_matches('.');
+        return format!("{millions}M API context");
+    }
+    format!("{}k API context", (tokens / 1000.).round())
+}
+
+/// `formatReasoningTokens`.
+fn format_reasoning_tokens(tokens: f64) -> String {
+    if tokens < 1000. {
+        return format!("{}", tokens.round());
+    }
+    let value = tokens / 1000.;
+    if value < 10. && value.fract() != 0. {
+        format!("{value:.1}k")
+    } else {
+        format!("{}k", value.round())
+    }
+}
+
+fn budget_of(model: &ModelChoice, value: &ReasoningEffort) -> Option<f64> {
+    model
+        .reasoning_budget_tokens
+        .iter()
+        .find(|(effort, _)| effort == value)
+        .map(|(_, tokens)| *tokens)
+        .filter(|tokens| tokens.is_finite() && *tokens > 0.)
+}
+
+/// `reasoningOptionLabel`.
+pub(crate) fn reasoning_option_label(
+    model: &ModelChoice,
+    value: &ReasoningEffort,
+    lang: Lang,
+) -> String {
+    if model.provider_id.as_ref() == "local" && *value != ReasoningEffort::None {
+        if let Some(ratio) = model
+            .local_reasoning_budget_ratio
+            .filter(|ratio| ratio.is_finite() && *ratio > 0.)
+        {
+            return format!("{}%", (ratio.clamp(0., 1.) * 100.).round());
+        }
+        if let Some(budget) = budget_of(model, value) {
+            return format_reasoning_tokens(budget);
+        }
+    }
+    reasoning_label(value, lang).to_owned()
+}
+
+/// `reasoningBudgetSummary`.
+pub(crate) fn reasoning_budget_summary(
+    model: &ModelChoice,
+    value: &ReasoningEffort,
+    lang: Lang,
+) -> String {
+    if *value == ReasoningEffort::None {
+        return reasoning_label(value, lang).to_owned();
+    }
+    if model.provider_id.as_ref() == "local" {
+        return reasoning_option_label(model, value, lang);
+    }
+    match budget_of(model, value) {
+        Some(budget) => format_reasoning_tokens(budget),
+        None => reasoning_label(value, lang).to_owned(),
+    }
+}
+
+/// `useModelChoice`: the model and reasoning a pick leads to. The caller sets both, persists
+/// them (`persistControls`) and marks the selection touched.
+pub(crate) fn model_choice(
+    next: &ModelChoice,
+    reasoning: &ReasoningEffort,
+) -> (SharedString, ReasoningEffort) {
+    let kept = next.reasoning_efforts.contains(reasoning)
+        && !(next.provider_id.as_ref() == "local"
+            && next
+                .local_reasoning_budget_ratio
+                .is_some_and(|ratio| ratio != 0.)
+            && *reasoning == ReasoningEffort::None);
+    let reasoning = if kept {
+        reasoning.clone()
+    } else {
+        next.default_reasoning_effort
+            .clone()
+            .unwrap_or(ReasoningEffort::Medium)
+    };
+    (next.model_ref.clone(), reasoning)
+}
+
+/// Called when a footer option is picked.
+pub(crate) type Choice = Rc<dyn Fn(&mut Window, &mut App)>;
+
+/// One reasoning choice below the model list.
+pub(crate) struct ReasoningFooterOption {
+    pub(crate) label: SharedString,
+    pub(crate) selected: bool,
+    pub(crate) on_select: Choice,
+}
+
+/// `ModelOptions`'s `footer`.
+pub(crate) struct ModelFooter {
+    pub(crate) options: Vec<ReasoningFooterOption>,
+}
+
+pub(crate) type Pick = Rc<dyn Fn(&ModelChoice, &mut Window, &mut App)>;
+
+/// `ModelOptions`: the model choices with search and provider filters. `filter` is the state
+/// from [`model_options_filter`], so the search and filter survive reopening.
+pub(crate) fn model_options(
+    id: &'static str,
+    models: &[ModelChoice],
+    value: &str,
+    on_select: &Pick,
+    footer: Option<ModelFooter>,
+    filter: &Entity<ModelOptionsFilter>,
+    cx: &mut App,
+) -> AnyElement {
+    let lang = Ds::get(cx).lang();
+    let text = copy(lang);
+    let current = filter.read(cx).clone();
+    let mut providers: Vec<(SharedString, SharedString)> = Vec::new();
+    for model in models {
+        if !providers
+            .iter()
+            .any(|(provider, _)| *provider == model.provider_id)
+        {
+            providers.push((model.provider_id.clone(), model.provider_label.clone()));
+        }
+    }
+    let groups = model_groups(models, &providers, &current, value, on_select, text);
+    let mut filters = vec![filter_chip(filter, "all", text.all_providers.into())];
+    filters.extend(
+        providers
+            .iter()
+            .map(|(provider, label)| filter_chip(filter, provider.clone(), label.clone())),
+    );
+    let typed = filter.clone();
+    let mut popover = FilteredSelectPopover::new(id, text.model, text.search, text.no_models)
+        .search(current.search.clone(), move |search, window, cx| {
+            typed.update(cx, |state, cx| {
+                state.search = search.to_owned().into();
+                cx.notify();
+            });
+            window.refresh();
+        })
+        .filters(filters, current.provider)
+        .groups(groups);
+    if let Some(footer) = footer {
+        let options = footer
+            .options
+            .into_iter()
+            .map(|option| {
+                let select = option.on_select;
+                FooterOption::new(option.label, option.selected, move |window, cx| {
+                    select(window, cx);
+                })
+            })
+            .collect();
+        popover = popover.footer(Some(text.reasoning.into()), options);
+    }
+    popover.into_any_element()
+}
+
+/// One group per provider, holding the models the search and provider filter let through.
+fn model_groups(
+    models: &[ModelChoice],
+    providers: &[(SharedString, SharedString)],
+    current: &ModelOptionsFilter,
+    value: &str,
+    on_select: &Pick,
+    text: &Copy,
+) -> Vec<Group> {
+    let query = current.search.trim().to_lowercase();
+    providers
+        .iter()
+        .map(|(provider, label)| {
+            let items = models
+                .iter()
+                .filter(|item| current.provider == "all" || item.provider_id == current.provider)
+                .filter(|item| item.provider_id == *provider)
+                .filter(|item| {
+                    query.is_empty()
+                        || [
+                            model_display_name(item).to_string(),
+                            item.model_id.to_string(),
+                            item.provider_label.to_string(),
+                        ]
+                        .iter()
+                        .any(|field| field.to_lowercase().contains(&query))
+                })
+                .map(|item| {
+                    let pick = on_select.clone();
+                    let chosen = item.clone();
+                    Item::new(item.model_ref.clone(), model_display_name(item))
+                        .description(token_window_label(item.context_window_tokens, text))
+                        .selected(item.model_ref.as_ref() == value)
+                        .on_select(move |window, cx| pick(&chosen, window, cx))
+                })
+                .collect();
+            Group::new(provider.clone(), label.clone(), items)
+        })
+        .collect()
+}
+
+fn filter_chip(
+    filter: &Entity<ModelOptionsFilter>,
+    id: impl Into<SharedString>,
+    label: SharedString,
+) -> Filter {
+    let id: SharedString = id.into();
+    let chosen = id.clone();
+    let filter = filter.clone();
+    Filter::new(id, label, move |window, cx| {
+        filter.update(cx, |state, cx| {
+            state.provider = chosen.clone();
+            cx.notify();
+        });
+        window.refresh();
+    })
+}

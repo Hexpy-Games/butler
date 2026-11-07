@@ -125,10 +125,10 @@ impl Harness {
                         .map(|c| format!("sidebar-row-{}", c.chat.chat.0)),
                 );
                 names.extend(
-                    s.chat
-                        .read(app)
-                        .messages
+                    s.store
+                        .shown_view()
                         .iter()
+                        .flat_map(|view| view.messages.iter())
                         .map(|m| format!("message-{}", m.id)),
                 );
                 names

@@ -300,10 +300,7 @@ impl Shell {
             session: SessionId(id.into()),
         };
         self.store.open(Some(chat.clone()));
-        self.chat.update(cx, |c, cx| {
-            c.show(Some(chat.clone()), None);
-            cx.notify();
-        });
+        self.show_view(false, cx);
         self.load_summary(&chat, cx);
         self.reload_open_chat(cx);
         self.composer.update(cx, |c, cx| {

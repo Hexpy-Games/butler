@@ -28,6 +28,8 @@ pub enum Size {
     Lg,
     /// The sidebar's icon size.
     Sidebar,
+    /// The ContextDonutButton's ring: 18px with a heavier stroke.
+    Donut,
 }
 
 impl Size {
@@ -40,6 +42,7 @@ impl Size {
             Self::Md => (Length::IconSizeMd, 2.5, Length::IconSizeMd), // DS: ProgressRing.module.css:4
             Self::Lg => (Length::IconSizeLg, 2.25, Length::IconSizeLg), // DS: ProgressRing.module.css:22
             Self::Sidebar => (Length::SidebarIconSize, 1.875, Length::IconSizeMd), // DS: ProgressRing.module.css:28
+            Self::Donut => return (18., 3.5, 18.), // DS: ContextDonutButton.module.css:33
         };
         (tokens.len(length), stroke, tokens.len(spinner))
     }

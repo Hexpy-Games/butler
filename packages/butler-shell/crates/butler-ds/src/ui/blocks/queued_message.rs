@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ClickEvent, ElementId, FontWeight, IntoElement, OverflowWrap, ParentElement,
-    RenderOnce, SharedString, Styled as _, TextRun, Window, div, font, px,
+    RenderOnce, SharedString, Styled as _, Window, div, px,
 };
 
 use super::message_row::{bubble_cap, enter};
@@ -124,28 +124,7 @@ impl QueuedMessage {
 
 /// How many lines `text` takes wrapped to `width` in the body face.
 fn lines(text: &str, width: f32, window: &mut Window, cx: &App) -> usize {
-    let ds = Ds::get(cx);
-    let mut face = font(ds.body_font().clone());
-    face.weight = FontWeight(ds.number(Number::FontWeightRegular));
-    let run = TextRun {
-        len: text.len(),
-        font: face,
-        color: gpui::black(),
-        background_color: None,
-        underline: None,
-        strikethrough: None,
-        letter_spacing: None,
-    };
-    window
-        .text_system()
-        .shape_text(
-            SharedString::from(text.to_owned()),
-            ds.len(Length::FontSize3),
-            &[run],
-            Some(px(width)),
-            None,
-        )
-        .map_or(0, |shaped| shaped.line_count())
+    measure::wrapped_lines(text, Length::FontSize3, width, window, cx)
 }
 
 impl QueuedMessage {

@@ -3,7 +3,9 @@
 use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
 
 use super::TextSize;
-use super::field::{self, Look, Shape, Spec};
+use std::rc::Rc;
+
+use super::field::{self, ChangeHandler, Look, Shape, Spec};
 
 /// `variant`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -33,6 +35,7 @@ pub struct Input {
     read_only: bool,
     invalid: bool,
     probe: Option<SharedString>,
+    on_change: Option<ChangeHandler>,
 }
 
 impl Input {
@@ -49,6 +52,7 @@ impl Input {
             read_only: false,
             invalid: false,
             probe: None,
+            on_change: None,
         }
     }
 
@@ -103,6 +107,12 @@ impl Input {
         self
     }
 
+    /// `onChange`: the text after each edit the user makes (not after `value` replaces it).
+    pub fn on_change(mut self, handler: impl Fn(&str, &mut Window, &mut App) + 'static) -> Self {
+        self.on_change = Some(Rc::new(handler));
+        self
+    }
+
     /// Names zero-size markers that report the field's text, caret and IME marked range
     /// (`<name>:<text>`, `<name>:caret:<n>`, `<name>:marked:<a>-<b>|none`), for a harness
     /// expectation. Only the test build draws them.
@@ -134,6 +144,7 @@ impl RenderOnce for Input {
                 read_only: self.read_only,
                 invalid: self.invalid,
                 probe: self.probe,
+                on_change: self.on_change,
             },
             window,
             cx,

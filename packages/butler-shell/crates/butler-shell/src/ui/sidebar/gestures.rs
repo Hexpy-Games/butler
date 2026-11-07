@@ -1,6 +1,6 @@
 //! The row's long press and context menu share the same controlled menu state.
 use super::Shell;
-use gpui::{Context, Div, MouseButton, Stateful, prelude::*};
+use gpui::{Context, Div, MouseButton, MouseDownEvent, MouseMoveEvent, Stateful, prelude::*};
 impl Shell {
     pub(super) fn row_gestures(
         element: Stateful<Div>,
@@ -20,14 +20,14 @@ impl Shell {
             )
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |s, event, _, cx| {
+                cx.listener(move |s, event: &MouseDownEvent, _, cx| {
                     s.row_press(press_key.clone(), instance.clone(), event.position, cx);
                 }),
             )
-            .on_mouse_move(cx.listener(|s, event, _, _| {
+            .on_mouse_move(cx.listener(|s, event: &MouseMoveEvent, _, _| {
                 if s.sidebar
                     .long_press_origin
-                    .is_some_and(|origin| (event.position - origin).magnitude() > gpui::px(10.))
+                    .is_some_and(|origin| (event.position - origin).magnitude() > f64::from(gpui::px(10.)))
                 {
                     s.sidebar.cancel_long_press();
                 }

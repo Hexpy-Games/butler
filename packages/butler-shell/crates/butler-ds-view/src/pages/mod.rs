@@ -1,16 +1,33 @@
 //! The showcase pages: one per B1 primitive, each mirroring its React `*.showcase.tsx`.
 mod adaptive_shell;
 mod animated_number;
+mod artifact_list;
+mod artifact_preview;
 mod aspect_frame;
+mod attached_composer;
+mod attachment_list;
 mod avatar;
+mod block_action_frame;
+mod block_columns;
+mod block_tabs;
 mod bottom_sheet;
 mod boxes;
+mod breadcrumb;
 mod butler_thinking_mark;
 mod button;
 mod card;
+mod changed_line_diff;
+mod chart;
 mod clickable;
 mod collapsible;
 mod collapsible_nav_group;
+mod command_panel;
+mod composer_adjunct_panel;
+mod composer_card;
+mod composer_control;
+mod composer_decision_panel;
+mod composer_question_panel;
+mod context_donut_button;
 mod context_menu;
 mod conversation_shell;
 mod copy_button;
@@ -20,19 +37,23 @@ mod disclosure_row;
 mod done_icon_button;
 mod drag_preview;
 mod dropdown_menu;
+mod element_chip;
 mod empty_line;
 mod event_timeline;
 mod expandable_text;
 mod field;
+mod filtered_select_popover;
 mod glyph_toggle;
 mod grid;
 mod icon_button;
 mod icon_slot;
 mod icon_tile;
+mod image_viewer;
 mod inline;
 mod inline_reference;
 mod input;
 mod inspector_panel;
+mod item_card;
 mod kbd;
 mod key_value_row;
 mod label;
@@ -43,17 +64,23 @@ mod media_frame;
 mod message_avatar_block;
 mod message_row;
 mod meta_list;
+mod metric_card;
+mod metric_grid;
 mod native_select;
 mod nav_drop_target;
 mod nav_parts;
 mod nav_row;
 mod nav_section;
+mod notice;
+mod option_menu;
 mod overflow_action_menu;
 mod panel_header;
 mod pill_button;
 mod popover;
 mod presence;
+mod progress_meter;
 mod progress_ring;
+mod prompt_suggestion_list;
 mod question_answer_card;
 mod queued_message;
 mod rolling_status_line;
@@ -66,13 +93,22 @@ mod sidebar_shell;
 mod skeleton;
 mod slider;
 mod spinner;
+mod split_button;
 mod stack;
 mod status_capsule;
+mod status_checklist;
 mod success_check;
+mod suggestion_list;
 mod surface_panel;
 mod switch;
+mod tab_strip;
 mod tabs;
 mod tag;
+mod task_graph_canvas;
+mod task_graph_card;
+mod task_graph_detail;
+mod task_graph_lanes;
+mod task_graph_section;
 mod textarea;
 mod tinted_glass;
 mod titlebar_shell;
@@ -81,6 +117,9 @@ mod todo_progress_panel;
 mod tooltip;
 mod typo;
 mod unread_dot;
+mod usage_bars;
+mod usage_summary_rows;
+mod wallpaper;
 mod wallpaper_stage;
 mod work_activity;
 mod worker_activity_panel;
@@ -253,12 +292,95 @@ fn blocks() -> Vec<Page> {
             question_answer_card
         ),
         page!("event-timeline", "EventTimeline", event_timeline),
+        page!("item-card", "ItemCard", item_card),
+        page!("chart", "Chart", chart),
+        page!("attachment-list", "AttachmentList", attachment_list),
+        page!("element-chip", "ElementChip", element_chip),
+        page!("artifact-list", "ArtifactList", artifact_list),
+        page!("artifact-preview", "ArtifactPreview", artifact_preview),
+        page!("changed-line-diff", "ChangedLineDiff", changed_line_diff),
+        page!("image-viewer", "ImageViewer", image_viewer),
+    ]
+}
+
+/// The answer, attachment and artifact blocks (P2-S5).
+fn answer_blocks() -> Vec<Page> {
+    vec![
+        page!("metric-card", "MetricCard", metric_card),
+        page!("metric-grid", "MetricGrid", metric_grid),
+        page!("progress-meter", "ProgressMeter", progress_meter),
+        page!("status-checklist", "StatusChecklist", status_checklist),
+        page!("block-columns", "BlockColumns", block_columns),
+        page!("block-tabs", "BlockTabs", block_tabs),
+        page!("block-action-frame", "BlockActionFrame", block_action_frame),
+        page!("notice", "Notice", notice),
+    ]
+}
+
+/// The composer blocks (P2-S6).
+fn composer_blocks() -> Vec<Page> {
+    vec![
+        page!("composer-card", "ComposerCard", composer_card),
+        page!("composer-control", "ComposerControl", composer_control),
+        page!(
+            "context-donut-button",
+            "ContextDonutButton",
+            context_donut_button
+        ),
+        page!(
+            "composer-adjunct-panel",
+            "ComposerAdjunctPanel",
+            composer_adjunct_panel
+        ),
+        page!(
+            "composer-decision-panel",
+            "ComposerDecisionPanel",
+            composer_decision_panel
+        ),
+        page!(
+            "composer-question-panel",
+            "ComposerQuestionPanel",
+            composer_question_panel
+        ),
+        page!("option-menu", "OptionMenu", option_menu),
+        page!(
+            "filtered-select-popover",
+            "FilteredSelectPopover",
+            filtered_select_popover
+        ),
+        page!("suggestion-list", "SuggestionList", suggestion_list),
+        page!("split-button", "SplitButton", split_button),
+        page!("usage-bars", "UsageBars", usage_bars),
+        page!("usage-summary-rows", "UsageSummaryRows", usage_summary_rows),
+    ]
+}
+
+/// The palette, inspector, new-chat and viewer blocks (P2-S7).
+fn s7_blocks() -> Vec<Page> {
+    vec![
+        page!("command-panel", "CommandPanel", command_panel),
+        page!("task-graph-card", "TaskGraphCard", task_graph_card),
+        page!("task-graph-detail", "TaskGraphDetail", task_graph_detail),
+        page!("task-graph-canvas", "TaskGraphCanvas", task_graph_canvas),
+        page!("task-graph-lanes", "TaskGraphLanes", task_graph_lanes),
+        page!("task-graph-section", "TaskGraphSection", task_graph_section),
+        page!(
+            "prompt-suggestion-list",
+            "PromptSuggestionList",
+            prompt_suggestion_list
+        ),
+        page!("wallpaper", "Wallpaper", wallpaper),
+        page!("tab-strip", "TabStrip", tab_strip),
+        page!("breadcrumb", "Breadcrumb", breadcrumb),
     ]
 }
 
 pub(crate) fn all() -> Vec<Page> {
     let mut pages = primitives();
     pages.extend(blocks());
+    pages.extend(answer_blocks());
+    pages.extend(composer_blocks());
+    pages.extend(s7_blocks());
     pages
 }
 
@@ -305,6 +427,11 @@ fn frame(name: &str, content: AnyElement, ds: &Ds, forced: Option<f32>) -> AnyEl
         .text_color(ds.color(Color::TextPrimary))
         .child(preview)
         .into_any_element()
+}
+
+/// A child id of a static page id (`(parent, "name")`).
+pub(crate) fn sub(parent: &'static str, name: &'static str) -> gpui::ElementId {
+    (gpui::ElementId::from(parent), name).into()
 }
 
 /// `body` wrapped in a block with a stable geometry selector.

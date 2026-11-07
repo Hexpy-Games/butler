@@ -38,7 +38,7 @@ pub enum Aspect {
 }
 
 impl Aspect {
-    fn ratio(self) -> f32 {
+    pub fn ratio(self) -> f32 {
         match self {
             Self::Square => 1.,
             Self::FourFive => 4. / 5.,

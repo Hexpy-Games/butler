@@ -54,7 +54,7 @@ pub(super) fn stories() -> Vec<Story> {
 }
 
 /// A stand-in for the container's save: it settles after a short round trip.
-fn save(
+pub(super) fn save(
     failing: bool,
 ) -> impl Fn(&mut Window, &mut App) -> gpui::Task<Result<(), gpui::SharedString>> {
     move |window, cx| {

@@ -87,13 +87,9 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "stable" => stable(h),
         "attached" => attached(h),
         "controls" => wait(h, |s, app| {
-            s.composer
-                .read(app)
-                .context
-                .as_ref()
-                .is_some_and(|context| {
-                    (context.state == ui::source::model::Controls::Loaded) == (arg == "loaded")
-                })
+            (s.composer.read(app).controls.load_state
+                == ui::composer::state::ControlsLoadState::Ready)
+                == (arg == "loaded")
         }),
         "cursor" => {
             let cursor: u64 = arg.parse()?;
@@ -107,20 +103,23 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "type" => type_text(h, arg),
         "key" => press(h, Keystroke::parse(arg).map_err(|e| anyhow!("{e:?}"))?),
         "send" => h.update(|s, _, cx| s.send(arg.to_owned(), cx)),
-        "answer" | "streaming" => wait(h, |s, app| {
-            s.chat.read(app).messages.iter().any(|m| {
-                m.role == ui::source::Role::Assistant
-                    && m.text == arg
-                    && m.streaming == (command == "streaming")
+        "answer" | "streaming" => wait(h, |s, _| {
+            s.store.shown_view().is_some_and(|view| {
+                view.messages.iter().any(|m| {
+                    m.role == ui::source::wire::MessageRecordRole::Assistant
+                        && m.text == arg
+                        && (m.status.as_deref() == Some("streaming")) == (command == "streaming")
+                })
             })
         }),
-        "roles" => wait(h, |s, app| {
-            ["automation", "system"].iter().all(|role| {
-                s.chat
-                    .read(app)
-                    .messages
-                    .iter()
-                    .any(|m| m.role == ui::source::Role::Other((*role).into()))
+        "roles" => wait(h, |s, _| {
+            s.store.shown_view().is_some_and(|view| {
+                [
+                    ui::source::wire::MessageRecordRole::Automation,
+                    ui::source::wire::MessageRecordRole::System,
+                ]
+                .iter()
+                .all(|role| view.messages.iter().any(|m| &m.role == role))
             })
         }),
         "approval" => wait(h, |s, _| s.store.approval().is_some()),
@@ -162,7 +161,7 @@ pub(super) fn run(
             let state = h.cx.update(|app| h.window.read(app).map(|shell| {
                 serde_json::json!({"disconnected":shell.disconnected().is_some(),
                     "running":shell.store.running().is_some(), "approval":shell.store.approval().is_some(),
-                    "messages":shell.chat.read(app).messages.iter().map(|m| serde_json::json!({"id":m.id.as_ref(),"text":m.text,"streaming":m.streaming})).collect::<Vec<_>>()})
+                    "messages":shell.store.shown_view().map(|view| view.messages.iter().map(|m| serde_json::json!({"id":m.id,"text":m.text,"status":m.status})).collect::<Vec<_>>())})
             }))?;
             std::fs::write(
                 dir.join("failure-ui.json"),
@@ -207,7 +206,7 @@ fn left(h: &mut Harness, deleted: &str) -> anyhow::Result<()> {
             h.window.read(app).map(|s| {
                 s.disconnected().is_none()
                     && s.store.selected().is_none()
-                    && s.chat.read(app).messages.is_empty()
+                    && s.store.shown_view().is_none()
             })
         })?;
         if !attached {

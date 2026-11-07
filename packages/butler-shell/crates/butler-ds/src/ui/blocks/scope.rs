@@ -171,6 +171,29 @@ pub fn svg_size(cx: &App) -> Option<f32> {
         .and_then(|sizes| sizes.0.last().copied())
 }
 
+/// What a ComposerCard tells the controls and panels in it: its `container-type: inline-size`
+/// facts and the `--composer-inner-padding-*` variables.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ComposerVars {
+    /// `@container composer (width <= 520px)`: the control row tightens.
+    pub narrow: bool,
+    /// The card's inner padding (inline, block).
+    pub padding: (f32, f32),
+    /// `data-expanded`: the editor and its controls show; folded, a one-line preview does.
+    pub expanded: bool,
+}
+
+#[derive(Default)]
+struct Composers(Vec<ComposerVars>);
+
+impl gpui::Global for Composers {}
+
+/// The enclosing composer card's facts, if the caller is inside one.
+pub fn composer(cx: &App) -> Option<ComposerVars> {
+    cx.try_global::<Composers>()
+        .and_then(|vars| vars.0.last().copied())
+}
+
 /// What a [`Scope`] sets for its child.
 #[derive(Clone, Default)]
 pub struct Spec {
@@ -180,6 +203,9 @@ pub struct Spec {
     pub action: Option<ActionScale>,
     pub conversation: Option<ConversationVars>,
     pub vars: Option<ShellVars>,
+    pub composer: Option<ComposerVars>,
+    /// The subtree renders in this theme (`theme-dark` or `theme-light`), whatever the page's.
+    pub dark: Option<bool>,
     pub remap: Vec<(Color, Color)>,
     pub density: Option<Density>,
 }
@@ -229,62 +255,26 @@ impl Element for Scope {
             .take()
             .unwrap_or_else(|| gpui::Empty.into_any_element());
         let spec = &self.spec;
-        let (mark, density) = {
-            let mut saved = (0, Density::default());
+        let (mark, density, dark) = {
+            let mut saved = (0, Density::default(), false);
             Ds::update(cx, |ds| {
-                saved = (ds.begin_remap(&spec.remap), ds.density());
+                saved = (ds.begin_remap(&spec.remap), ds.density(), ds.dark());
                 if let Some(density) = spec.density {
                     ds.set_density(density);
+                }
+                if let Some(dark) = spec.dark {
+                    ds.set_dark(dark);
                 }
             });
             saved
         };
-        if let Some(vars) = spec.vars {
-            cx.default_global::<Scopes>().0.push(vars);
-        }
-        if spec.density.is_some() {
-            cx.default_global::<Densities>().0 += 1;
-        }
-        if let Some(vars) = spec.conversation {
-            cx.default_global::<Conversations>().0.push(vars);
-        }
-        if let Some(scale) = spec.action {
-            cx.default_global::<Scales>().0.push(scale);
-        }
-        if let Some(fills) = spec.nav_fills {
-            cx.default_global::<NavFills>().0.push(fills);
-        }
-        if let Some(side) = spec.svg_size {
-            cx.default_global::<SvgSizes>().0.push(side);
-        }
-        if let Some(reveal) = spec.row_reveal {
-            cx.default_global::<Reveals>().0.push(reveal);
-        }
+        push_globals(spec, cx);
         let layout = child.request_layout(window, cx);
-        if spec.action.is_some() {
-            cx.default_global::<Scales>().0.pop();
-        }
-        if spec.nav_fills.is_some() {
-            cx.default_global::<NavFills>().0.pop();
-        }
-        if spec.svg_size.is_some() {
-            cx.default_global::<SvgSizes>().0.pop();
-        }
-        if spec.row_reveal.is_some() {
-            cx.default_global::<Reveals>().0.pop();
-        }
-        if spec.vars.is_some() {
-            cx.default_global::<Scopes>().0.pop();
-        }
-        if spec.density.is_some() {
-            cx.default_global::<Densities>().0 -= 1;
-        }
-        if spec.conversation.is_some() {
-            cx.default_global::<Conversations>().0.pop();
-        }
+        pop_globals(spec, cx);
         Ds::update(cx, |ds| {
             ds.end_remap(mark);
             ds.set_density(density);
+            ds.set_dark(dark);
         });
         (layout, child)
     }
@@ -312,5 +302,61 @@ impl Element for Scope {
         cx: &mut App,
     ) {
         child.paint(window, cx);
+    }
+}
+
+/// Pushes the scope's overrides onto their globals for the child's layout.
+fn push_globals(spec: &Spec, cx: &mut App) {
+    if let Some(vars) = spec.vars {
+        cx.default_global::<Scopes>().0.push(vars);
+    }
+    if spec.density.is_some() {
+        cx.default_global::<Densities>().0 += 1;
+    }
+    if let Some(vars) = spec.conversation {
+        cx.default_global::<Conversations>().0.push(vars);
+    }
+    if let Some(scale) = spec.action {
+        cx.default_global::<Scales>().0.push(scale);
+    }
+    if let Some(fills) = spec.nav_fills {
+        cx.default_global::<NavFills>().0.push(fills);
+    }
+    if let Some(side) = spec.svg_size {
+        cx.default_global::<SvgSizes>().0.push(side);
+    }
+    if let Some(reveal) = spec.row_reveal {
+        cx.default_global::<Reveals>().0.push(reveal);
+    }
+    if let Some(vars) = spec.composer {
+        cx.default_global::<Composers>().0.push(vars);
+    }
+}
+
+/// Pops what `push_globals` pushed, in the reverse order.
+fn pop_globals(spec: &Spec, cx: &mut App) {
+    if spec.action.is_some() {
+        cx.default_global::<Scales>().0.pop();
+    }
+    if spec.nav_fills.is_some() {
+        cx.default_global::<NavFills>().0.pop();
+    }
+    if spec.svg_size.is_some() {
+        cx.default_global::<SvgSizes>().0.pop();
+    }
+    if spec.composer.is_some() {
+        cx.default_global::<Composers>().0.pop();
+    }
+    if spec.row_reveal.is_some() {
+        cx.default_global::<Reveals>().0.pop();
+    }
+    if spec.vars.is_some() {
+        cx.default_global::<Scopes>().0.pop();
+    }
+    if spec.density.is_some() {
+        cx.default_global::<Densities>().0 -= 1;
+    }
+    if spec.conversation.is_some() {
+        cx.default_global::<Conversations>().0.pop();
     }
 }

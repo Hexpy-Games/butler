@@ -1,10 +1,10 @@
 //! WorkerActivityPanel.showcase.tsx: the panel attached to the composer (its one-line collapsed
-//! summary) and standing alone with a finished worker. The composer card is a P2-S6 block, so the
-//! attached story shows the panel without it.
+//! summary) and standing alone with a finished worker.
 use butler_ds::ui::blocks::worker_activity::{WorkerActivityPanel, WorkerActivityRow};
-use gpui::{AnyElement, IntoElement as _};
+use gpui::{AnyElement, App, IntoElement as _, Window};
 
 use super::Story;
+use super::attached_composer::attached;
 use crate::copy::Lang;
 
 struct Worker {
@@ -80,7 +80,7 @@ fn copy(lang: Lang) -> Copy {
     )
 }
 
-fn panel(lang: Lang, id: &'static str, count: usize) -> AnyElement {
+fn panel(lang: Lang, id: &'static str, count: usize) -> WorkerActivityPanel {
     let c = copy(lang);
     let mut panel = WorkerActivityPanel::new(id)
         .heading(c.heading)
@@ -94,18 +94,28 @@ fn panel(lang: Lang, id: &'static str, count: usize) -> AnyElement {
                 .depth(worker.depth),
         );
     }
-    panel.into_any_element()
+    panel
 }
 
 pub(super) fn stories() -> Vec<Story> {
     vec![
         Story {
             name: "Attached to the composer",
-            render: |lang, _, _| panel(lang, "worker-panel-attached", 2),
+            render: |lang, window, cx| attached_panel(lang, window, cx),
         },
         Story {
             name: "Standalone with a finished worker",
-            render: |lang, _, _| panel(lang, "worker-panel-standalone", 3),
+            render: |lang, _, _| panel(lang, "worker-panel-standalone", 3).into_any_element(),
         },
     ]
+}
+
+fn attached_panel(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
+    attached(
+        lang,
+        "worker-composer",
+        panel(lang, "worker-panel-attached", 2),
+        window,
+        cx,
+    )
 }

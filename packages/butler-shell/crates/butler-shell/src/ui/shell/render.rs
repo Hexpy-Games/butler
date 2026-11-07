@@ -12,7 +12,9 @@ use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::{blocks, context::Ds, focus, icon_button::IconButton, overlay, toast};
 use gpui::{AnyElement, Context, IntoElement, Render, Window, canvas, div, prelude::*};
 
-use super::{Shell, TextSizeDown, TextSizeReset, TextSizeUp, ToggleSidebar, system_dark};
+use super::{
+    Shell, TextSizeDown, TextSizeReset, TextSizeUp, ToggleSidebar, image_viewer, system_dark,
+};
 use crate::ui::Icon;
 use crate::ui::widgets::anchor;
 
@@ -147,6 +149,7 @@ impl Render for Shell {
             self.set_dark(system_dark(window), cx);
         }
         self.frame_inputs(window, cx);
+        self.feed_composer(window, cx);
         if self.source.is_some()
             && let Some(request) = self.pending_navigation.take()
         {
@@ -160,6 +163,7 @@ impl Render for Shell {
             .unwrap_or_default();
         let rename = self.render_rename(window, cx);
         let sidebar_dialog = self.space_dialogs(window, cx);
+        let viewer = image_viewer::overlay(window, cx);
         let ds = Ds::get(cx);
         let root = div()
             .track_focus(&self.focus)
@@ -181,6 +185,7 @@ impl Render for Shell {
             .line_height(ds.len(Length::TypoBodyLineHeight))
             .text_color(ds.color(Color::TextPrimary))
             .child(frame)
+            .children(viewer)
             .children(dialog)
             .child(rename)
             .child(sidebar_dialog)

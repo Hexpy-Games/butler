@@ -1,14 +1,19 @@
 //! QueuedMessage.showcase.tsx (+ QueuedMessageStories.tsx, QueuedMessageMotionStories.tsx): a
 //! queued bubble alone and in a list, long text and a long unbroken token, send now and delivery
-//! (the bubble resolving into the sent one), and a failed send. The composer stories (Editing, Send
-//! flight) need the P2-S6 composer card.
+//! (the bubble resolving into the sent one), editing (the text moves back into the composer) and a
+//! failed send. The Send flight story needs the app's send-flight motion and is not mirrored.
 use std::time::{Duration, Instant};
 
+use butler_ds::ui::blocks::composer_card::{
+    ComposerCard, SendButton, Toolbar, ToolbarSpacer, textarea,
+};
 use butler_ds::ui::blocks::message_row::{Entering, MessageRow, Role};
 use butler_ds::ui::blocks::queued_message::{QueuedMessage, QueuedTone};
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::layout::{Space, Stack};
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window};
+use gpui::{
+    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Window,
+};
 
 use super::Story;
 use crate::copy::Lang;
@@ -112,18 +117,7 @@ pub(super) fn stories() -> Vec<Story> {
     vec![
         Story {
             name: "Single",
-            render: |lang, _, _| {
-                let c = copy(lang);
-                queued(
-                    "qm-single".into(),
-                    &c,
-                    c.messages[0],
-                    c.queued,
-                    true,
-                    QueuedTone::Queued,
-                )
-                .into_any_element()
-            },
+            render: single,
         },
         Story {
             name: "Several with positions",
@@ -131,34 +125,15 @@ pub(super) fn stories() -> Vec<Story> {
         },
         Story {
             name: "Long text",
-            render: |lang, _, _| {
-                let c = copy(lang);
-                let text = format!("{}\n\n{}", c.long, c.long);
-                queued(
-                    "qm-long".into(),
-                    &c,
-                    text,
-                    c.queued,
-                    true,
-                    QueuedTone::Queued,
-                )
-                .into_any_element()
-            },
+            render: long_text,
         },
         Story {
             name: "Long unbroken token",
-            render: |lang, _, _| {
-                let c = copy(lang);
-                queued(
-                    "qm-token".into(),
-                    &c,
-                    c.token,
-                    c.queued,
-                    true,
-                    QueuedTone::Queued,
-                )
-                .into_any_element()
-            },
+            render: long_token,
+        },
+        Story {
+            name: "Editing",
+            render: editing,
         },
         Story {
             name: "Send now",
@@ -170,20 +145,62 @@ pub(super) fn stories() -> Vec<Story> {
         },
         Story {
             name: "Failed",
-            render: |lang, _, _| {
-                let c = copy(lang);
-                queued(
-                    "qm-failed".into(),
-                    &c,
-                    c.messages[1],
-                    c.failed,
-                    true,
-                    QueuedTone::Failed,
-                )
-                .into_any_element()
-            },
+            render: failed,
         },
     ]
+}
+
+fn single(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let c = copy(lang);
+    queued(
+        "qm-single".into(),
+        &c,
+        c.messages[0],
+        c.queued,
+        true,
+        QueuedTone::Queued,
+    )
+    .into_any_element()
+}
+
+fn long_text(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let c = copy(lang);
+    let text = format!("{}\n\n{}", c.long, c.long);
+    queued(
+        "qm-long".into(),
+        &c,
+        text,
+        c.queued,
+        true,
+        QueuedTone::Queued,
+    )
+    .into_any_element()
+}
+
+fn long_token(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let c = copy(lang);
+    queued(
+        "qm-token".into(),
+        &c,
+        c.token,
+        c.queued,
+        true,
+        QueuedTone::Queued,
+    )
+    .into_any_element()
+}
+
+fn failed(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let c = copy(lang);
+    queued(
+        "qm-failed".into(),
+        &c,
+        c.messages[1],
+        c.failed,
+        true,
+        QueuedTone::Failed,
+    )
+    .into_any_element()
 }
 
 fn several(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
@@ -302,4 +319,65 @@ fn transition(lang: Lang, send_now: bool, window: &mut Window, cx: &mut App) -> 
         )
         .child(replay)
         .into_any_element()
+}
+
+/// Edit moves the queued text back into the composer and removes the row; sending queues it again.
+fn editing(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
+    let c = copy(lang);
+    let queued_now = window.use_keyed_state("qm-editing-queued", cx, |_, _| true);
+    let draft = window.use_keyed_state("qm-editing-draft", cx, |_, _| SharedString::default());
+    let revision = window.use_keyed_state("qm-editing-revision", cx, |_, _| 0_usize);
+    let (placeholder, send) = lang.pick(("Ask Butler", "Send"), ("버틀러에게 물어보기", "보내기"));
+    let mut stack = Stack::new().gap(Space::Md);
+    if *queued_now.read(cx) {
+        let (queued_state, draft_state, revision_state) =
+            (queued_now.clone(), draft.clone(), revision.clone());
+        let text = c.messages[0];
+        let row = QueuedMessage::new("qm-editing", text, c.queued)
+            .on_edit(c.edit, move |_, _, cx| {
+                draft_state.update(cx, |draft, cx| {
+                    *draft = text.into();
+                    cx.notify();
+                });
+                revision_state.update(cx, |revision, cx| {
+                    *revision += 1;
+                    cx.notify();
+                });
+                queued_state.update(cx, |queued, cx| {
+                    *queued = false;
+                    cx.notify();
+                });
+            })
+            .on_delete(c.remove, |_, _, _| {})
+            .clamp(c.show_more, c.show_less)
+            .send_now(c.send_now, Some(c.send_now_hint.into()), |_, _, _| {});
+        stack = stack.child(row);
+    }
+    let seeded = draft.read(cx).clone();
+    let key: SharedString = format!("qm-editing-draft-{}", *revision.read(cx)).into();
+    let (queued_send, draft_send) = (queued_now, draft);
+    let mut field = textarea(ElementId::from(key))
+        .placeholder(placeholder)
+        .rows(2);
+    if !seeded.is_empty() {
+        field = field.default_value(seeded);
+    }
+    let composer = ComposerCard::new("qm-editing-card").child(field).child(
+        Toolbar::new()
+            .child(ToolbarSpacer)
+            .child(
+                SendButton::new("qm-editing-send").on_click(move |_, _, cx| {
+                    queued_send.update(cx, |queued, cx| {
+                        *queued = true;
+                        cx.notify();
+                    });
+                    draft_send.update(cx, |draft, cx| {
+                        *draft = SharedString::default();
+                        cx.notify();
+                    });
+                }),
+            ),
+    );
+    let _ = send;
+    stack.child(composer).into_any_element()
 }

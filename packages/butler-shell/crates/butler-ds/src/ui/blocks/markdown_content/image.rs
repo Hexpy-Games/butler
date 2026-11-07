@@ -80,10 +80,14 @@ pub(super) fn inline(src: &str, _alt: &str, env: &Env, cx: &App) -> AnyElement {
         .overflow_hidden()
         .bg(ds.color(Color::SurfaceRaised))
         .child(
-            img(source(src))
-                .object_fit(ObjectFit::Contain)
-                .max_w(relative(1.))
-                .max_h(px(height)),
+            img(env
+                .image
+                .as_ref()
+                .and_then(|resolve| resolve(src))
+                .unwrap_or_else(|| source(src)))
+            .object_fit(ObjectFit::Contain)
+            .max_w(relative(1.))
+            .max_h(px(height)),
         )
         .child(
             div()

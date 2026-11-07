@@ -78,6 +78,12 @@ impl ShellClient {
         )
         .await
     }
+    /// POST /messages with the full composer body (content parts, attachments, controls),
+    /// as the app's `sendMessage` posts it.
+    pub async fn post_message_body(&self, body: &Value) -> Result<Value, Error> {
+        self.json(Method::POST, &["messages"], &[], Some(body))
+            .await
+    }
     /// Start a turn through the same message ingress as the Electron app.
     pub async fn start_turn(
         &self,
