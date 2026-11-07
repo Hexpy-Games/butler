@@ -132,3 +132,17 @@ test("missing, mismatched, and duplicate relation anchors fail closed", () => {
     anchoredStewardProgressByMessageId(HARNESS_MESSAGES, duplicate),
   ).toHaveLength(0);
 });
+
+test("a hidden request anchors only a Butler-initiated parent", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const anchorId = summary.steward_children![0]!.relation.anchor_message_id;
+  const hidden = HARNESS_MESSAGES.filter((message) => message.id !== anchorId);
+  expect(anchoredStewardProgressByMessageId(hidden, summary)).toHaveLength(0);
+
+  const initiated = hidden.map((message) =>
+    message.id === "m4"
+      ? { ...message, initiated: { kind: "schedule_report", quiet: false } }
+      : message,
+  );
+  expect([...anchoredStewardProgressByMessageId(initiated, summary).keys()]).toEqual(["m4"]);
+});
