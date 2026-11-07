@@ -80,8 +80,6 @@ pub(crate) struct Theme {
     pub(crate) placeholder: Hsla,
     /// --color-text-disabled: disabled controls change colour, not opacity.
     pub(crate) text_disabled: Hsla,
-    /// --selection.
-    pub(crate) selection: Hsla,
     /// --selection-strong.
     pub(crate) selection_strong: Hsla,
     /// --line.
@@ -128,7 +126,6 @@ impl Theme {
             ..TokenContext::DEFAULT
         };
         let c = |token| color(&context, token);
-        let selection = c(Color::Selection);
         Self {
             dark,
             platform,
@@ -139,7 +136,6 @@ impl Theme {
             text3: c(Color::TextTertiary),
             placeholder: c(Color::Placeholder),
             text_disabled: c(Color::ColorTextDisabled),
-            selection,
             selection_strong: c(Color::SelectionStrong),
             line: c(Color::Line),
             line_strong: c(Color::LineStrong),

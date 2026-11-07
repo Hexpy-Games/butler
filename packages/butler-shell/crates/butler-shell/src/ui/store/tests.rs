@@ -9,8 +9,7 @@ use gpui::SharedString;
 use super::{Applied, Store};
 use crate::ui::source::{
     AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, Decision, EventCursor, Fetch,
-    LiveEvent, LiveUpdate, RequestRef, SessionId, Source, SourceError, Timestamp,
-    TurnId,
+    LiveEvent, LiveUpdate, RequestRef, SessionId, Source, SourceError, Timestamp, TurnId,
     wire::{AppEventEnvelope, SessionView},
 };
 

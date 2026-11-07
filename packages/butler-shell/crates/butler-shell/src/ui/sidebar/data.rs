@@ -52,10 +52,10 @@ impl Shell {
             if s.store.navigation.dirty {
                 s.refresh_sidebar(cx);
             }
-            if let Some(id) = s.store.selected().map(|c| c.session.0.to_string()) {
-                if s.sidebar.attended {
-                    s.mark_sidebar_read(&id, cx);
-                }
+            if let Some(id) = s.store.selected().map(|c| c.session.0.to_string())
+                && s.sidebar.attended
+            {
+                s.mark_sidebar_read(&id, cx);
             }
             s.ensure_canon(cx);
             s.organization_notice(cx);

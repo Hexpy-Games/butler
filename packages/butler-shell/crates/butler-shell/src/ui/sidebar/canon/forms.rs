@@ -129,7 +129,7 @@ impl Shell {
                 Button::disabled,
             )
             .on_click(move |_, _, cx| {
-                let _ = weak.update(cx, |s, cx| s.submit_canon_form(cx));
+                let _ = weak.update(cx, crate::ui::shell::Shell::submit_canon_form);
             });
         content.footer(self.space_dialog_footer(save, cx))
     }

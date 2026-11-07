@@ -25,13 +25,12 @@ impl Shell {
         if label.is_empty() {
             let working =
                 row.session.as_ref().and_then(|s| space_activity(s, false)) == Some("working");
-            label = self
-                .sidebar_copy(
-                    Catalog::Progress,
-                    if working { "spaceWorking" } else { "attention" },
-                )
-                .unwrap_or_default()
-                .to_owned();
+            self.sidebar_copy(
+                Catalog::Progress,
+                if working { "spaceWorking" } else { "attention" },
+            )
+            .unwrap_or_default()
+            .clone_into(&mut label);
         }
         let progress = row
             .session

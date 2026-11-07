@@ -12,8 +12,8 @@ use futures::stream::LocalBoxStream;
 
 pub(crate) use model::{
     Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, Decision,
-    EventCursor, LiveEvent, LiveUpdate, RequestRef, Risk, SentTurn, SessionId, Space,
-    Timestamp, TurnId,
+    EventCursor, LiveEvent, LiveUpdate, RequestRef, Risk, SentTurn, SessionId, Space, Timestamp,
+    TurnId,
 };
 
 /// Why a request failed, in the UI's terms (no credential or wire detail).

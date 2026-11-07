@@ -25,10 +25,9 @@ impl Shell {
                 }),
             )
             .on_mouse_move(cx.listener(|s, event: &MouseMoveEvent, _, _| {
-                if s.sidebar
-                    .long_press_origin
-                    .is_some_and(|origin| (event.position - origin).magnitude() > f64::from(gpui::px(10.)))
-                {
+                if s.sidebar.long_press_origin.is_some_and(|origin| {
+                    (event.position - origin).magnitude() > f64::from(gpui::px(10.))
+                }) {
                     s.sidebar.cancel_long_press();
                 }
             }))

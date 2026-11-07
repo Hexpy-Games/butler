@@ -69,7 +69,7 @@ impl Shell {
             let weak = cx.entity().downgrade();
             let item = OverflowItem::new(label).icon(icon).on_select(move |w, cx| {
                 let _ = weak.update(cx, |s, cx| {
-                    s.sidebar_action(&row, &action, &instance, w, cx)
+                    s.sidebar_action(&row, &action, &instance, w, cx);
                 });
             });
             menu = menu.item(item);

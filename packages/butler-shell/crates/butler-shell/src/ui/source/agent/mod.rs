@@ -4,13 +4,14 @@ mod frame;
 mod jobs;
 mod live;
 mod refresh;
-mod sidebar;
 mod session_view;
+mod sidebar;
 mod watch;
 
 use super::wire;
 use super::{
-    AuthorityCard, ChatPage, ChatRef, Decision, EventCursor, Fetch, LiveEvent, RequestRef, SentTurn, SessionId, Source, SourceError, TurnId, model::AllowScope,
+    AuthorityCard, ChatPage, ChatRef, Decision, EventCursor, Fetch, LiveEvent, RequestRef,
+    SentTurn, SessionId, Source, SourceError, TurnId, model::AllowScope,
 };
 use butler_shell_client::{AuthorityDecision, PageRequest, ShellClient};
 use futures::{
@@ -174,9 +175,7 @@ impl Source for Agent {
     fn chats(&self) -> Fetch<ChatPage> {
         let client = self.client.clone();
         self.fetch(async move {
-            let page = client
-                .list_sessions(PageRequest::new(100, None)?)
-                .await?;
+            let page = client.list_sessions(PageRequest::new(100, None)?).await?;
             Ok(ChatPage {
                 chats: page
                     .items
