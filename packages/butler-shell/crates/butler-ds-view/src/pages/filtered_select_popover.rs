@@ -140,7 +140,7 @@ fn model_picker(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let filter: Entity<SharedString> =
         window.use_keyed_state("fsp-model-filter", cx, |_, _| "all".into());
     let model: Entity<SharedString> =
-        window.use_keyed_state("fsp-model", cx, |_, _| "gpt-51".into());
+        window.use_keyed_state("fsp-model", cx, |_, _| "model-1".into());
     let reasoning: Entity<usize> = window.use_keyed_state("fsp-model-reasoning", cx, |_, _| 2);
     let (q, active, chosen, level) = (
         query.read(cx).clone(),
@@ -164,15 +164,12 @@ fn model_picker(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     };
     let openai = rows(
         &[
-            ("gpt-51", "GPT-5.1", "1.05M"),
-            ("gpt-5-mini", "GPT-5 mini", "400K"),
+            ("model-1", "Model 5.1", "1.05M"),
+            ("model-2", "Model mini", "400K"),
         ],
         Icon::Bot,
     );
-    let local = rows(
-        &[("qwen-coder", "Qwen2.5 Coder 14B", "32K")],
-        Icon::Sparkles,
-    );
+    let local = rows(&[("model-3", "Coder 14B", "32K")], Icon::Sparkles);
     let groups = vec![
         Group::new(
             "openai",

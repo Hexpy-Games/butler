@@ -14,7 +14,7 @@ fn choice_stories() -> Vec<Story> {
             render: |l, w, c| {
                 run(
                     l,
-                    demo("cq-single", Kind::Single, PanelState::Open, 0),
+                    &demo("cq-single", Kind::Single, PanelState::Open, 0),
                     w,
                     c,
                 )
@@ -22,11 +22,11 @@ fn choice_stories() -> Vec<Story> {
         },
         Story {
             name: "Multiple choice · scroll fades",
-            render: |l, w, c| run(l, demo("cq-multi", Kind::Multi, PanelState::Open, 0), w, c),
+            render: |l, w, c| run(l, &demo("cq-multi", Kind::Multi, PanelState::Open, 0), w, c),
         },
         Story {
             name: "Short text",
-            render: |l, w, c| run(l, demo("cq-text", Kind::Text, PanelState::Open, 0), w, c),
+            render: |l, w, c| run(l, &demo("cq-text", Kind::Text, PanelState::Open, 0), w, c),
         },
     ]
 }
@@ -39,7 +39,7 @@ fn flow_stories() -> Vec<Story> {
             render: |l, w, c| {
                 run(
                     l,
-                    demo("cq-three", Kind::Schedule, PanelState::Open, 1),
+                    &demo("cq-three", Kind::Schedule, PanelState::Open, 1),
                     w,
                     c,
                 )
@@ -50,7 +50,7 @@ fn flow_stories() -> Vec<Story> {
             render: |l, w, c| {
                 run(
                     l,
-                    demo("cq-onboarding", Kind::Onboarding, PanelState::Open, 0),
+                    &demo("cq-onboarding", Kind::Onboarding, PanelState::Open, 0),
                     w,
                     c,
                 )
@@ -58,14 +58,14 @@ fn flow_stories() -> Vec<Story> {
         },
         Story {
             name: "Four questions · partial answers",
-            render: |l, w, c| run(l, demo("cq-four", Kind::Four, PanelState::Open, 0), w, c),
+            render: |l, w, c| run(l, &demo("cq-four", Kind::Four, PanelState::Open, 0), w, c),
         },
         Story {
             name: "Keyboard · focus panel to start",
             render: |l, w, c| {
                 run(
                     l,
-                    demo("cq-keyboard", Kind::Single, PanelState::Open, 0),
+                    &demo("cq-keyboard", Kind::Single, PanelState::Open, 0),
                     w,
                     c,
                 )
@@ -76,7 +76,7 @@ fn flow_stories() -> Vec<Story> {
             render: |l, w, c| {
                 run(
                     l,
-                    demo("cq-review", Kind::Onboarding, PanelState::Open, 3),
+                    &demo("cq-review", Kind::Onboarding, PanelState::Open, 3),
                     w,
                     c,
                 )
@@ -93,7 +93,7 @@ fn state_stories() -> Vec<Story> {
             render: |l, w, c| {
                 run(
                     l,
-                    demo("cq-submitting", Kind::Onboarding, PanelState::Submitting, 3),
+                    &demo("cq-submitting", Kind::Onboarding, PanelState::Submitting, 3),
                     w,
                     c,
                 )
@@ -101,14 +101,14 @@ fn state_stories() -> Vec<Story> {
         },
         Story {
             name: "Error · retry",
-            render: |l, w, c| run(l, demo("cq-error", Kind::Text, PanelState::Error, 0), w, c),
+            render: |l, w, c| run(l, &demo("cq-error", Kind::Text, PanelState::Error, 0), w, c),
         },
         Story {
             name: "Collapsed · answer by message",
             render: |l, w, c| {
                 run(
                     l,
-                    demo("cq-collapsed", Kind::Single, PanelState::Collapsed, 0),
+                    &demo("cq-collapsed", Kind::Single, PanelState::Collapsed, 0),
                     w,
                     c,
                 )
@@ -119,7 +119,7 @@ fn state_stories() -> Vec<Story> {
             render: |l, w, c| {
                 run(
                     l,
-                    demo("cq-working", Kind::Single, PanelState::Working, 0),
+                    &demo("cq-working", Kind::Single, PanelState::Working, 0),
                     w,
                     c,
                 )
@@ -149,5 +149,7 @@ pub(crate) fn stories() -> Vec<Story> {
         state_stories(),
         conversation_stories(),
     ]
-    .concat()
+    .into_iter()
+    .flatten()
+    .collect()
 }

@@ -12,8 +12,9 @@ mod parts;
 use std::rc::Rc;
 
 use gpui::{
-    App, Bounds, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
+    App, Bounds, Div, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, RenderOnce, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 
 pub use buckets::{
@@ -327,6 +328,56 @@ fn focus_ring(ds: &Ds, radius: Pixels) -> gpui::Div {
         .border_color(ds.color(Color::ColorActionPrimary))
 }
 
+/// Width of the y-axis label gutter: the widest label in the caption face.
+fn gutter_width(labels: &[(f32, String)], window: &mut Window, cx: &mut App) -> f32 {
+    labels
+        .iter()
+        .map(|(_, text)| measure::text_width(text, Length::TypoCaptionSize, window, cx))
+        .fold(0., f32::max)
+}
+
+/// Keyboard selection of a ready chart: the selector, the selected column and the column count.
+struct KeyNav {
+    select: Selector,
+    selected: Option<usize>,
+    count: usize,
+}
+
+impl UsageBars {
+    /// The chart's root: a focusable column with arrow-key selection once it is ready.
+    fn root(
+        &self,
+        keys: Option<KeyNav>,
+        handle: &FocusHandle,
+        radius: Pixels,
+        ds: &Ds,
+    ) -> Stateful<Div> {
+        let root = div()
+            .id(self.id.clone())
+            .relative()
+            .flex()
+            .flex_col()
+            .gap(ds.len(Length::SpaceXs))
+            .min_w_0()
+            .rounded(radius);
+        let Some(KeyNav {
+            select,
+            selected,
+            count,
+        }) = keys
+        else {
+            return root;
+        };
+        root.track_focus(&focus::tab_stop(handle, true))
+            .on_key_down(move |event, window, cx| {
+                if let Some(next) = key_target(event.keystroke.key.as_str(), selected, count) {
+                    cx.stop_propagation();
+                    select(next.index(), window, cx);
+                }
+            })
+    }
+}
+
 impl RenderOnce for UsageBars {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ticks = self.size == Size::Panel && self.y_ticks.is_some();
@@ -372,10 +423,7 @@ impl RenderOnce for UsageBars {
             headroom,
         };
         let y_labels = self.y_labels(&frame);
-        let gutter = y_labels
-            .iter()
-            .map(|(_, text)| measure::text_width(text, Length::TypoCaptionSize, window, cx))
-            .fold(0., f32::max);
+        let gutter = gutter_width(&y_labels, window, cx);
         let plot = self.plot(&frame, &plot_bounds, Ds::get(cx), window);
         let axis = self.axis(&frame, window, cx);
         let ds = Ds::get(cx);
@@ -388,25 +436,12 @@ impl RenderOnce for UsageBars {
         let focused = focus::visible(ds, handle.is_focused(window), false);
         let radius = px(if self.size == Size::Panel { 4. } else { 2. });
         let sm = ds.len(Length::SpaceSm);
-        let mut root = div()
-            .id(self.id.clone())
-            .relative()
-            .flex()
-            .flex_col()
-            .gap(ds.len(Length::SpaceXs))
-            .min_w_0()
-            .rounded(radius);
-        if ready {
-            let keys = select.clone();
-            root = root
-                .track_focus(&focus::tab_stop(&handle, true))
-                .on_key_down(move |event, window, cx| {
-                    if let Some(next) = key_target(event.keystroke.key.as_str(), selected, count) {
-                        cx.stop_propagation();
-                        keys(next.index(), window, cx);
-                    }
-                });
-        }
+        let keys = ready.then(|| KeyNav {
+            select: select.clone(),
+            selected,
+            count,
+        });
+        let root = self.root(keys, &handle, radius, ds);
         let ring_box = focused.then(|| focus_ring(ds, radius));
         let body = if ticks {
             div()

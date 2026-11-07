@@ -184,8 +184,8 @@ impl UsageSummaryRows {
                     clippy::cast_possible_truncation,
                     reason = "a finite percentage of a quota window; f32 holds it to display precision"
                 )]
-                let percent = percent as f32;
-                ProgressMeter::new((self.id.clone(), window.id.clone()), percent)
+                let fraction = percent as f32;
+                ProgressMeter::new((self.id.clone(), window.id.clone()), fraction)
                     .label(window.label.clone())
                     .meta_element(
                         AnimatedNumber::new(

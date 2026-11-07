@@ -292,7 +292,7 @@ pub(super) fn review(rows: &Rows, cx: &mut App) -> AnyElement {
         .on_click(move |_, _, cx| {
             mutate(&model, &ctx, cx, |model, ctx, cx| {
                 model.go(index, ctx, cx);
-            })
+            });
         });
         if rows.ctx.busy {
             row = row.disabled();

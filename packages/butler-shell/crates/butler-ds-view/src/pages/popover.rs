@@ -39,9 +39,9 @@ struct Copy {
 
 fn copy(lang: Lang) -> Copy {
     let models = [
-        ("gpt-5.1", "GPT-5.1"),
-        ("claude-opus", "Claude Opus"),
-        ("qwen-coder", "Qwen2.5 Coder 14B"),
+        ("model-1", "Model 5.1"),
+        ("model-2", "Model Opus"),
+        ("model-3", "Coder 14B"),
     ];
     lang.pick(
         Copy {
@@ -138,7 +138,7 @@ fn access(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
 fn searchable(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let open = window.use_keyed_state("popover-select-open", cx, |_, _| false);
-    let value = window.use_keyed_state("popover-select-value", cx, |_, _| "gpt-5.1");
+    let value = window.use_keyed_state("popover-select-value", cx, |_, _| "model-1");
     let query = window.use_keyed_state("popover-select-query", cx, |_, _| SharedString::default());
     let (current, typed) = (*value.read(cx), query.read(cx).clone());
     let set_open = open.clone();
