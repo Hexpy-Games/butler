@@ -17,12 +17,16 @@ export interface FileViewerAction {
   labelIcon?: boolean;
   /** Keep this action an icon button at every header width. */
   iconOnly?: boolean;
+  disabled?: boolean;
+  /** Tooltip of a disabled labelled action: why it is unavailable. */
+  disabledReason?: string;
   run: () => void;
 }
 
 /**
  * The open file's row: its name and "size · time" (both truncate), then its actions and close, which never wrap
- * or shrink. In a narrow pane the actions are icon buttons with tooltips.
+ * or shrink. In a narrow pane the actions are icon buttons with tooltips and the leading control (a version
+ * select) moves to its own line under the row.
  */
 export function FileViewerHeader({ title, meta, leading, actions = [], onClose, onBack }: {
   title: string; meta?: string; leading?: ReactNode; actions?: FileViewerAction[]; onClose: () => void;
@@ -34,22 +38,23 @@ export function FileViewerHeader({ title, meta, leading, actions = [], onClose, 
   return <>
     <div ref={ref}>
       <Box paddingX="2xl" paddingY="md" data-test-class="file-viewer-header" data-compact={compact || undefined}>
-        <Stack align="row" cross="center" gap="md" wrap={false}>
+        <Stack gap="sm"><Stack align="row" cross="center" gap="md" wrap={false}>
           {onBack ? <FileViewerBackButton onBack={onBack} /> : null}
           <Stack gap="none" grow basis="0" minWidth="0">
             <Typo.PanelTitle as="h2" truncate>{title}</Typo.PanelTitle>
             {meta ? <Typo.Caption tone="secondary" truncate>{meta}</Typo.Caption> : null}
           </Stack>
-          {leading}
+          {compact ? null : leading}
           <ButtonContainer size={compact ? "icon-sm" : "sm"} wrap={false} shrink={false}>
             {actions.map((action) => compact || action.iconOnly
               ? <IconButton key={action.id} label={action.label} aria-label={action.ariaLabel ?? action.label} data-test-class={`file-viewer-${action.id}`}
-                onClick={action.run}>{action.icon}</IconButton>
+                disabled={action.disabled} onClick={action.run}>{action.icon}</IconButton>
               : <Button key={action.id} size="sm" variant="outline" iconStart={action.labelIcon ? action.icon : undefined} text={action.label}
-                aria-label={action.ariaLabel} data-test-class={`file-viewer-${action.id}`} onClick={action.run} />)}
+                aria-label={action.ariaLabel} data-test-class={`file-viewer-${action.id}`}
+                disabled={action.disabled} title={action.disabled ? action.disabledReason : undefined} onClick={action.run} />)}
             <FileViewerCloseButton onClose={onClose} />
           </ButtonContainer>
-        </Stack>
+        </Stack>{compact ? leading : null}</Stack>
       </Box>
     </div>
     <Separator space="none" />
@@ -78,12 +83,14 @@ function useCompactHeader(node: HTMLElement | null): boolean {
 }
 
 /**
- * The file in the pane's one scroll: documents fill the pane up to 1400px, centred beyond; other files keep
- * the 760px reading page. Both keep 48px side gutters and page-end spacing (PageContainer gutter plus Box padding).
+ * The file at the pane's full width. A frame (a page Butler made, an HTML file, a PDF) fills the pane edge to
+ * edge and scrolls itself; any other file flows in the pane's one scroll with 48px insets and page-end spacing
+ * (PageContainer gutter plus Box padding).
  */
-export function FileViewerPage({ children, fill = false }: { children: ReactNode; fill?: boolean }) {
+export function FileViewerPage({ children, frame = false }: { children: ReactNode; frame?: boolean }) {
+  if (frame) return <Stack fill gap="none" id={FILE_VIEWER_PAGE_ID} data-test-class="file-viewer-page">{children}</Stack>;
   return <ScrollArea fill dataTestClass="file-viewer-scroll">
-    <PageContainer width={fill ? "document" : "narrow"} gutter="2xl" id={FILE_VIEWER_PAGE_ID} data-test-class="file-viewer-page">
+    <PageContainer width="full" gutter="2xl" id={FILE_VIEWER_PAGE_ID} data-test-class="file-viewer-page">
       <Box paddingY="2xl"><Box padding="2xl">{children}</Box></Box>
     </PageContainer>
   </ScrollArea>;
