@@ -1,4 +1,5 @@
 //! Tokio lives on one owned background thread; gpui only receives channel results.
+mod session_view;
 mod convert;
 mod frame;
 mod live;
