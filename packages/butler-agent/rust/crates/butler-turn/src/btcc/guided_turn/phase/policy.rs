@@ -52,6 +52,10 @@ pub struct GuidedExecutionPolicy {
     pub required_tools: Vec<String>,
     pub workspace_path: String,
     pub project_id: Option<String>,
+    /// The turn is the user's own message in a sidebar chat: the Butler's
+    /// root session of App kind `chat`, outside any project, not a schedule
+    /// run. Its Butler answers instantly or delegates.
+    pub chat_session: bool,
     pub(crate) subsession: Option<SubsessionPolicy>,
 }
 
@@ -183,21 +187,30 @@ impl GuidedExecutionPolicy {
             "accessMode".into(),
             Value::String(access_mode.as_str().into()),
         );
+        let role = PolicyRole::parse(string(policy, "role")?);
+        let project_id = policy
+            .get("projectId")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let subsession = policy
+            .get("subsession")
+            .filter(|value| truthy(value))
+            .map(SubsessionPolicy::read);
+        let chat_session = role == PolicyRole::Butler
+            && subsession.is_none()
+            && project_id.as_deref().is_none_or(str::is_empty)
+            && policy.get("sessionKind").and_then(Value::as_str) == Some("chat")
+            && !context.get("scheduleRun").is_some_and(truthy);
         Ok(Self {
-            role: PolicyRole::parse(string(policy, "role")?),
+            role,
             access_mode,
             tracking_mode: string(policy, "trackingMode")?,
             required_profiles: strings(policy, "requiredNativeToolProfiles"),
             required_tools: strings(policy, "requiredNativeTools"),
             workspace_path: string(policy, "workspacePath")?,
-            project_id: policy
-                .get("projectId")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
-            subsession: policy
-                .get("subsession")
-                .filter(|value| truthy(value))
-                .map(SubsessionPolicy::read),
+            project_id,
+            chat_session,
+            subsession,
         })
     }
 }
@@ -235,6 +248,7 @@ fn default_policy(
         required_tools: Vec::new(),
         workspace_path: workspace.into(),
         project_id: project_ref.map(str::to_owned),
+        chat_session: false,
         subsession: None,
     }
 }

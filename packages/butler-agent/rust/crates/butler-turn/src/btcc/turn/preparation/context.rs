@@ -269,6 +269,9 @@ fn execution_policy(
         .map_err(json_error)?,
     );
     policy.insert("trackingMode".into(), tracking_mode(binding).into());
+    if let Some(kind) = metadata.get("appSessionKind").and_then(Value::as_str) {
+        policy.insert("sessionKind".into(), kind.into());
+    }
     policy.insert(
         "requiredNativeToolProfiles".into(),
         strings(unique(
