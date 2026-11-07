@@ -38,6 +38,7 @@ mod empty_line;
 mod event_timeline;
 mod expandable_text;
 mod field;
+mod filtered_select_popover;
 mod glyph_toggle;
 mod grid;
 mod icon_button;
@@ -67,6 +68,7 @@ mod nav_parts;
 mod nav_row;
 mod nav_section;
 mod notice;
+mod option_menu;
 mod overflow_action_menu;
 mod panel_header;
 mod pill_button;
@@ -86,10 +88,12 @@ mod sidebar_shell;
 mod skeleton;
 mod slider;
 mod spinner;
+mod split_button;
 mod stack;
 mod status_capsule;
 mod status_checklist;
 mod success_check;
+mod suggestion_list;
 mod surface_panel;
 mod switch;
 mod tabs;
@@ -314,6 +318,14 @@ fn composer_blocks() -> Vec<Page> {
             "ComposerAdjunctPanel",
             composer_adjunct_panel
         ),
+        page!("option-menu", "OptionMenu", option_menu),
+        page!(
+            "filtered-select-popover",
+            "FilteredSelectPopover",
+            filtered_select_popover
+        ),
+        page!("suggestion-list", "SuggestionList", suggestion_list),
+        page!("split-button", "SplitButton", split_button),
     ]
 }
 

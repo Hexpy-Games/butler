@@ -28,6 +28,8 @@ pub(super) struct Selectable {
     pub label: SharedString,
     pub icon: Option<Icon>,
     pub shortcut: Option<SharedString>,
+    /// Secondary lines under the label (each wraps anywhere).
+    pub description: Vec<SharedString>,
     pub variant: Variant,
     pub disabled: bool,
     pub kind: Kind,
@@ -64,6 +66,7 @@ impl Level {
             label,
             icon: None,
             shortcut: None,
+            description: Vec::new(),
             variant: Variant::Default,
             disabled,
             kind,
@@ -86,6 +89,7 @@ impl Level {
                     let mut row = self.selectable_row(item.label.clone(), item.disabled, kind);
                     row.icon = item.icon;
                     row.shortcut = item.shortcut;
+                    row.description = item.description;
                     row.variant = item.variant;
                     self.rows.push(Row::Item(row));
                 }

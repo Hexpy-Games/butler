@@ -51,6 +51,7 @@ pub struct Item {
     pub(super) label: SharedString,
     pub(super) icon: Option<Icon>,
     pub(super) shortcut: Option<SharedString>,
+    pub(super) description: Vec<SharedString>,
     pub(super) variant: Variant,
     pub(super) disabled: bool,
     keep_open: bool,
@@ -63,6 +64,7 @@ impl Item {
             label: label.into(),
             icon: None,
             shortcut: None,
+            description: Vec::new(),
             variant: Variant::Default,
             disabled: false,
             keep_open: false,
@@ -79,6 +81,12 @@ impl Item {
     /// `DropdownMenuShortcut`: tertiary text at the end of the row.
     pub fn shortcut(mut self, shortcut: impl Into<SharedString>) -> Self {
         self.shortcut = Some(shortcut.into());
+        self
+    }
+
+    /// Secondary lines under the label, in secondary caption text that wraps anywhere.
+    pub fn description(mut self, lines: impl IntoIterator<Item = SharedString>) -> Self {
+        self.description = lines.into_iter().collect();
         self
     }
 

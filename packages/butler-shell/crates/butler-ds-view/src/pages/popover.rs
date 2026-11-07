@@ -1,10 +1,12 @@
-//! Popover.showcase.tsx. ComposerControl, FilteredSelectPopover and SuggestionList are
-//! stand-ins (`standins_overlay.rs`); the "Bottom sheet on phones" story opens as a BottomSheet
-//! below 768px.
-use std::rc::Rc;
-
+//! Popover.showcase.tsx. The "Bottom sheet on phones" story opens as a BottomSheet below 768px.
 use butler_ds::ui::Icon;
+use butler_ds::ui::blocks::composer_control::ComposerControl;
+use butler_ds::ui::blocks::filtered_select_popover::{
+    Filter, FilteredSelectPopover, Group, Item, Width as SelectWidth,
+};
+use butler_ds::ui::blocks::suggestion_list::{SuggestionList, SuggestionRow};
 use butler_ds::ui::context::Ds;
+use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Space, Stack, WithItem as _};
 use butler_ds::ui::overlay::Presentation;
 use butler_ds::ui::overlay::place::{Align, Side};
@@ -15,11 +17,10 @@ use butler_ds::ui::popover::{
 use butler_ds::ui::select_button::SelectButton;
 use butler_ds::ui::text::Input;
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
+use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window};
 
 use super::Story;
 use crate::copy::Lang;
-use crate::standins_overlay::{Row, composer_control, filtered_select, suggestion_row};
 
 struct Copy {
     access: &'static str,
@@ -27,6 +28,7 @@ struct Copy {
     access_body: &'static str,
     model: &'static str,
     search: &'static str,
+    empty: &'static str,
     models: [(&'static str, &'static str); 3],
     anchor: &'static str,
     open: &'static str,
@@ -37,9 +39,9 @@ struct Copy {
 
 fn copy(lang: Lang) -> Copy {
     let models = [
-        ("model-1", "Model 5.1"),
-        ("model-2", "Model Opus"),
-        ("model-3", "Model Coder 14B"),
+        ("gpt-5.1", "GPT-5.1"),
+        ("claude-opus", "Claude Opus"),
+        ("qwen-coder", "Qwen2.5 Coder 14B"),
     ];
     lang.pick(
         Copy {
@@ -48,6 +50,7 @@ fn copy(lang: Lang) -> Copy {
             access_body: "Butler asks before editing files or running commands.",
             model: "Model",
             search: "Search models",
+            empty: "No models match.",
             models,
             anchor: "The popover anchors to this line, not to the button.",
             open: "Open",
@@ -61,6 +64,7 @@ fn copy(lang: Lang) -> Copy {
             access_body: "버틀러가 파일을 고치거나 명령을 실행하기 전에 묻습니다.",
             model: "모델",
             search: "모델 검색",
+            empty: "일치하는 모델이 없습니다.",
             models,
             anchor: "팝오버는 버튼이 아니라 이 줄에 붙습니다.",
             open: "열기",
@@ -105,13 +109,10 @@ fn access(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let popover = Popover::new("popover-access", window, cx);
     let trigger = popover.trigger(|toggle| {
-        composer_control(
-            "popover-access-trigger",
-            Icon::ShieldCheck,
-            c.access,
-            toggle.on_click(),
-            cx,
-        )
+        ComposerControl::new("popover-access-trigger", c.access)
+            .icon(icon(Icon::ShieldCheck, IconSize::Sm, Ds::get(cx)))
+            .on_click(toggle.on_click())
+            .into_any_element()
     });
     let content = popover.content(
         PopoverContent::new()
@@ -137,8 +138,9 @@ fn access(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
 fn searchable(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let open = window.use_keyed_state("popover-select-open", cx, |_, _| false);
-    let value = window.use_keyed_state("popover-select-value", cx, |_, _| "model-1");
-    let current = *value.read(cx);
+    let value = window.use_keyed_state("popover-select-value", cx, |_, _| "gpt-5.1");
+    let query = window.use_keyed_state("popover-select-query", cx, |_, _| SharedString::default());
+    let (current, typed) = (*value.read(cx), query.read(cx).clone());
     let set_open = open.clone();
     let popover = Popover::new("popover-select", window, cx)
         .open(*open.read(cx))
@@ -159,17 +161,16 @@ fn searchable(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
             .on_click(toggle.on_click())
             .into_any_element()
     });
-    let rows: Vec<Row> = c
+    let items = c
         .models
         .iter()
+        .filter(|(_, label)| label.to_lowercase().contains(&typed.to_lowercase()))
         .map(|(id, label)| {
             let (value, open) = (value.clone(), open.clone());
             let id: &'static str = id;
-            Row {
-                id,
-                label,
-                selected: id == current,
-                on_select: Rc::new(move |_, cx| {
+            Item::new(id, *label)
+                .selected(id == current)
+                .on_select(move |_, cx| {
                     value.update(cx, |value, cx| {
                         *value = id;
                         cx.notify();
@@ -178,11 +179,22 @@ fn searchable(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
                         *open = false;
                         cx.notify();
                     });
-                }),
-            }
+                })
         })
         .collect();
-    let list = filtered_select(c.model, c.search, c.model, c.model, &rows, window, cx);
+    let set_query = query.clone();
+    let list = FilteredSelectPopover::new("popover-select-list", c.model, c.search, c.empty)
+        .search(typed, move |text, _, cx| {
+            let text = SharedString::from(text.to_owned());
+            set_query.update(cx, |query, cx| {
+                *query = text;
+                cx.notify();
+            });
+        })
+        .filters(vec![Filter::new("all", c.model, |_, _| {})], "all")
+        .groups(vec![Group::new("models", c.model, items)])
+        .results_max_rows(6.5)
+        .width(SelectWidth::Fixed);
     let content = popover.content(
         PopoverContent::new()
             .align(Align::End)
@@ -260,18 +272,21 @@ fn anchor_width(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
             .on_click(toggle.on_click())
             .into_any_element()
     });
-    let ds = Ds::get(cx);
     let rows = [
-        ("docs.example.com/", true),
-        ("mail.example.net/inbox", false),
+        ("https://docs.example.com/", true),
+        ("https://mail.example.net/inbox", false),
     ]
-    .map(|(address, active)| suggestion_row(address, active, ds));
+    .into_iter()
+    .enumerate()
+    .map(|(index, (url, active))| {
+        SuggestionRow::new(("popover-width-row", index), url, |_, _| {}).active(active)
+    });
     let content = popover.content(
         PopoverContent::new()
             .align(Align::Start)
             .width(Width::Anchor)
             .density(Density::List)
-            .child(Stack::new().gap(Space::None).children(rows)),
+            .child(SuggestionList::new().children(rows)),
         window,
         cx,
     );
