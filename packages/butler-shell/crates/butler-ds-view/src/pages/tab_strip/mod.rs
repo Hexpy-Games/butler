@@ -38,6 +38,56 @@ const BASE: Spec = Spec {
     cap: None,
 };
 
+const PAIRED: Spec = Spec {
+    id: "ts-paired",
+    groups: |l| paired(l, 2),
+    ..BASE
+};
+
+const MIDDLE: Spec = Spec {
+    id: "ts-middle",
+    groups: |l| paired(l, 4),
+    active: "s2",
+    ..BASE
+};
+
+const FOLDED: Spec = Spec {
+    id: "ts-folded",
+    groups: |l| vec![shoes(l, 2), trip(l)],
+    active: "s1",
+    ..BASE
+};
+
+const STATES: Spec = Spec {
+    id: "ts-states",
+    groups: crashed_groups,
+    active: "x1",
+    ..BASE
+};
+
+const OVERFLOW: Spec = Spec {
+    id: "ts-crowded",
+    groups: crowded,
+    active: "n12",
+    cap: Some(600.),
+    ..BASE
+};
+
+const PANE: Spec = Spec {
+    id: "ts-pane",
+    groups: |l| vec![shoes(l, 2)],
+    active: "s1",
+    hide_chip: true,
+    trailing: true,
+    ..BASE
+};
+
+const MINE: Spec = Spec {
+    id: "ts-mine",
+    groups: |l| demo_groups(l).into_iter().take(1).collect(),
+    ..BASE
+};
+
 pub(super) fn stories() -> Vec<Story> {
     vec![
         Story {
@@ -46,120 +96,35 @@ pub(super) fn stories() -> Vec<Story> {
         },
         Story {
             name: "My tabs beside one conversation",
-            render: |l, w, c| {
-                demo(
-                    Spec {
-                        id: "ts-paired",
-                        groups: |l| paired(l, 2),
-                        ..BASE
-                    },
-                    l,
-                    w,
-                    c,
-                )
-            },
+            render: |l, w, c| demo(PAIRED, l, w, c),
         },
         Story {
             // Dividers sit between tabs and after the title; they step aside next to the selected tab.
             name: "Dividers: the selected tab in the middle of a group",
-            render: |l, w, c| {
-                demo(
-                    Spec {
-                        id: "ts-middle",
-                        groups: |l| paired(l, 4),
-                        active: "s2",
-                        ..BASE
-                    },
-                    l,
-                    w,
-                    c,
-                )
-            },
+            render: |l, w, c| demo(MIDDLE, l, w, c),
         },
         Story {
             // A folded group keeps its title, previews three favicons and counts the rest.
             name: "Folded group: three favicons and +N beside an open group",
-            render: |l, w, c| {
-                demo(
-                    Spec {
-                        id: "ts-folded",
-                        groups: |l| vec![shoes(l, 2), trip(l)],
-                        active: "s1",
-                        ..BASE
-                    },
-                    l,
-                    w,
-                    c,
-                )
-            },
+            render: |l, w, c| demo(FOLDED, l, w, c),
         },
         Story {
             name: "Group states: working, waiting for approval, crashed tab",
-            render: |l, w, c| {
-                demo(
-                    Spec {
-                        id: "ts-states",
-                        groups: crashed_groups,
-                        active: "x1",
-                        ..BASE
-                    },
-                    l,
-                    w,
-                    c,
-                )
-            },
+            render: |l, w, c| demo(STATES, l, w, c),
         },
         Story {
             // Tabs in every pill share one width; past the minimum the row scrolls with edge fades.
             name: "Overflow: tabs shrink, then scroll sideways",
-            render: |l, w, c| {
-                demo(
-                    Spec {
-                        id: "ts-crowded",
-                        groups: crowded,
-                        active: "n12",
-                        cap: Some(600.),
-                        ..BASE
-                    },
-                    l,
-                    w,
-                    c,
-                )
-            },
+            render: |l, w, c| demo(OVERFLOW, l, w, c),
         },
         Story {
             // A conversation's browser pane: only its group, no title or outline, bring-in at the row end.
             name: "Conversation pane: one group without its title, trailing slot",
-            render: |l, w, c| {
-                demo(
-                    Spec {
-                        id: "ts-pane",
-                        groups: |l| vec![shoes(l, 2)],
-                        active: "s1",
-                        hide_chip: true,
-                        trailing: true,
-                        ..BASE
-                    },
-                    l,
-                    w,
-                    c,
-                )
-            },
+            render: |l, w, c| demo(PANE, l, w, c),
         },
         Story {
             name: "Only my tabs: plain pill tabs and the row's +",
-            render: |l, w, c| {
-                demo(
-                    Spec {
-                        id: "ts-mine",
-                        groups: |l| demo_groups(l).into_iter().take(1).collect(),
-                        ..BASE
-                    },
-                    l,
-                    w,
-                    c,
-                )
-            },
+            render: |l, w, c| demo(MINE, l, w, c),
         },
         Story {
             name: "Locked order, no new-tab button",
@@ -227,6 +192,31 @@ fn demo(spec: Spec, lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement
         active: Some(spec.active.into()),
         created: 0,
     });
+    let mut strip = wired_strip(spec, lang, state, cx);
+    if spec.hide_chip {
+        strip = strip.hide_chip();
+    }
+    if spec.trailing {
+        let label = lang.pick("Bring in a tab", "내 탭 가져오기");
+        strip = strip.child(
+            IconButton::new(
+                gpui::ElementId::Name(format!("{}-bring", spec.id).into()),
+                label,
+            )
+            .glyph(Icon::TabIn),
+        );
+    }
+    let row = div().w_full();
+    match spec.cap {
+        Some(cap) => row.max_w(px(cap)),
+        None => row,
+    }
+    .child(strip)
+    .into_any_element()
+}
+
+/// The strip wired to the demo state: every intent the strip reports updates `state`.
+fn wired_strip(spec: Spec, lang: Lang, state: Entity<State>, cx: &App) -> TabStrip {
     let (groups, active) = {
         let current = state.read(cx);
         (current.groups.clone(), current.active.clone())
@@ -239,7 +229,7 @@ fn demo(spec: Spec, lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement
         state.clone(),
         state,
     );
-    let mut strip = TabStrip::new(
+    TabStrip::new(
         gpui::ElementId::Name(format!("{}-strip", spec.id).into()),
         groups,
     )
@@ -282,27 +272,7 @@ fn demo(spec: Spec, lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement
             tabs.new_tab(Some(id));
             cx.notify();
         });
-    });
-    if spec.hide_chip {
-        strip = strip.hide_chip();
-    }
-    if spec.trailing {
-        let label = lang.pick("Bring in a tab", "내 탭 가져오기");
-        strip = strip.child(
-            IconButton::new(
-                gpui::ElementId::Name(format!("{}-bring", spec.id).into()),
-                label,
-            )
-            .glyph(Icon::TabIn),
-        );
-    }
-    let row = div().w_full();
-    match spec.cap {
-        Some(cap) => row.max_w(px(cap)),
-        None => row,
-    }
-    .child(strip)
-    .into_any_element()
+    })
 }
 
 fn static_strip(

@@ -211,12 +211,14 @@ fn folded_preview(group: &Group, scope: &Scope, id: &ElementId, ds: &Ds) -> AnyE
         .into_any_element()
 }
 
-/// The group's title: folds and unfolds the group, shows the group state. Without a toggle
-/// handler it is disabled (the text-tone family).
-pub(super) fn chip(group: &Group, scope: &Scope, ds: &Ds) -> AnyElement {
-    let key = chip_key(&group.id);
-    let id = scope.control_id(&key);
-    let label = scope.labels.group_label(group);
+/// The chip's pill control: look, roving focus and the fold toggle.
+fn chip_control(
+    group: &Group,
+    scope: &Scope,
+    id: &ElementId,
+    key: &SharedString,
+    ds: &Ds,
+) -> Control {
     let active_within = group.collapsed
         && group
             .tabs
@@ -252,8 +254,8 @@ pub(super) fn chip(group: &Group, scope: &Scope, ds: &Ds) -> AnyElement {
             active: Some(strong),
         }
     };
-    control.focus = scope.handles.get(&key).cloned();
-    control.tab_stop = scope.roving.as_ref() == Some(&key);
+    control.focus = scope.handles.get(key).cloned();
+    control.tab_stop = scope.roving.as_ref() == Some(key);
     if scope.on_toggle.is_none() {
         control.disabled = Disabled::Native;
         control.disabled_look = DisabledLook::Text;
@@ -263,6 +265,16 @@ pub(super) fn chip(group: &Group, scope: &Scope, ds: &Ds) -> AnyElement {
     control.on_click(toggle.map(|toggle| -> Handler {
         Rc::new(move |_, window, cx| toggle(&target, !collapsed, window, cx))
     }));
+    control
+}
+
+/// The group's title: folds and unfolds the group, shows the group state. Without a toggle
+/// handler it is disabled (the text-tone family).
+pub(super) fn chip(group: &Group, scope: &Scope, ds: &Ds) -> AnyElement {
+    let key = chip_key(&group.id);
+    let id = scope.control_id(&key);
+    let label = scope.labels.group_label(group);
+    let mut control = chip_control(group, scope, &id, &key, ds);
     let size = ds.len(Length::FontSize2);
     let mut children = Vec::new();
     if let Some(state) = group.state {
