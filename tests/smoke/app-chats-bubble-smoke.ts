@@ -174,13 +174,12 @@ function transcript(sessionId: string): SessionView {
     kind: sessionId === "general" ? "chat" : "project", parent_session_id: undefined, relation: undefined, artifacts: [], authority_requests: [], pending_questions: [], steward_children: [], status: "idle" };
 }
 
-/** A running turn as the gateway projects it after three web searches, waiting on the next model round. */
+/** A running turn as the gateway projects it during its third web search; only a running tool names the status (#1789). */
 function liveTranscript(sessionId: string): SessionView {
   const start = Date.now() - 12_000, at = (second: number) => new Date(start + second * 1000).toISOString();
-  const search = (call: number) => ({ id: `search-${call}`, kind: "used_tool" as const, safe_label: "web_search", state: "delivered",
+  const search = (call: number, state: string) => ({ id: `search-${call}`, kind: "used_tool" as const, safe_label: "web_search", state,
     safe_tool_name: "web_search", tool_call_id: `call-${call}`, bridge_phase: "btcc_operation" as const, semantic_block_id: `tool-call-${call}`, created_at: at(call * 2) });
-  const rows = [search(1), search(2), search(3), { id: "round-3", kind: "message" as const, safe_label: "Generating", state: "running",
-    safe_tool_name: "model_round", tool_call_id: "btcc-model-round-3", bridge_phase: "model_round_waiting" as const, interface_label_key: "generating", created_at: at(8) }];
+  const rows = [search(1, "delivered"), search(2, "delivered"), search(3, "running")];
   const turn = { id: "live", state: "thinking", delivery_state: "running" as const, cancellable: true, retryable: false, limitations: [], limitation_codes: [],
     progress: { turn_id: "live", state: "thinking", delivery_state: "running" as const, updated_at: at(8), safe_progress_rows: rows }, created_at: at(0), updated_at: at(8) };
   const question: MessageRecord = { id: "question", chat_id: sessionId, role: "user", text: "날씨 알려 줘", status: "sent", cursor: 1, turn_id: "live", created_at: at(0) };
