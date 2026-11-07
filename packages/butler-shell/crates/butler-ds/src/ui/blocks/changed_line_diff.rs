@@ -9,6 +9,7 @@ use gpui::{
 
 use crate::tokens::{Color, Length};
 use crate::ui::context::Ds;
+use crate::ui::strut;
 use crate::ui::typo::{Role, Tone, Typo};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -155,12 +156,15 @@ impl RenderOnce for ChangedLineDiff {
             .rounded(ds.len(Length::RadiusControl))
             .bg(ds.color(Color::Surface))
             .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .min_w_full()
-                    .w(px(total))
-                    .children(rows),
+                // `.lines` is a grid: its cells are blockified, with no strut around the code.
+                strut::grid_scope(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .min_w_full()
+                        .w(px(total))
+                        .children(rows),
+                ),
             )
     }
 }
