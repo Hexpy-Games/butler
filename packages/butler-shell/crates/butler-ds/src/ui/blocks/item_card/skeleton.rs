@@ -75,13 +75,17 @@ fn footer(id: &ElementId, row: bool, ds: &Ds) -> gpui::Div {
             ),
         )
         .child(
-            button::container(Size::IconSm)
-                .gap(if row { Space::Sm } else { Space::Xs })
-                .child(
-                    div()
-                        .invisible()
-                        .child(IconButton::new((id.clone(), "action"), "")),
-                ),
+            div().flex_none().child(
+                button::container(Size::IconSm)
+                    .gap(if row { Space::Sm } else { Space::Xs })
+                    .child(
+                        // A flex item, as in the card's actions: a block box would add a line box.
+                        div()
+                            .flex()
+                            .invisible()
+                            .child(IconButton::new((id.clone(), "action"), "")),
+                    ),
+            ),
         )
 }
 
@@ -125,7 +129,9 @@ impl RenderOnce for ItemCardSkeleton {
         let row = f32::from(size.width) >= ROW_FROM;
         let ds = Ds::get(cx);
         let body_line = ds.number(Number::LineHeightBody);
-        let caption_line = f32::from(ds.len(Length::TypoCaptionLineHeight));
+        // `.skeletonLine` computes the subtitle box as `calc(<length> * <length>)`, which is
+        // invalid CSS, so that box is as tall as its bar (`--skeleton-height-line`).
+        let caption_line = f32::from(ds.len(Length::SkeletonHeightLine));
         let title_line = f32::from(ds.len(Length::FontSize3)) * body_line;
         let facts_line = f32::from(ds.len(Length::FontSize1)) * body_line;
         let id = self.id.clone();

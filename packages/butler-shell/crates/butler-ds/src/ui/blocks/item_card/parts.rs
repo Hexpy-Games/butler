@@ -128,6 +128,9 @@ fn title(card: &ItemCard, room: f32, ds: &Ds) -> AnyElement {
         div().w_full().min_w_0().child(
             Clickable::new((card.id.clone(), "open"))
                 .variant(ClickVariant::Text)
+                // `.body .open { display: block }`: a block box, not an inline-level one that
+                // would sit in a line box taller than the title.
+                .stretch()
                 .on_click(move |event, window, cx| open(event, window, cx))
                 .child(heading),
         ),
@@ -256,7 +259,7 @@ fn text_block(
         let label = if open { less.clone() } else { more.clone() };
         let toggle = Button::new((id.clone(), "toggle"))
             .variant(Variant::Inline)
-            .text(label)
+            .child(label)
             .on_click(move |_, _, cx| {
                 expanded.update(cx, |open, cx| {
                     *open = !*open;
@@ -264,7 +267,8 @@ fn text_block(
                 });
             });
         block = block.child(tracked(
-            own_target(div())
+            // A grid item in CSS, so no line box around the button.
+            own_target(div().flex())
                 .id((id.clone(), "toggle-part"))
                 .child(toggle),
             parts,
@@ -344,9 +348,7 @@ pub(super) fn footer(
             .into_iter()
             .fold(actions, gpui::ParentElement::child);
         footer = footer.child(tracked(
-            own_target(div().flex_none())
-                .id((id, "actions"))
-                .child(actions),
+            own_target(div()).id((id, "actions")).child(actions),
             parts,
             ACTIONS,
         ));
