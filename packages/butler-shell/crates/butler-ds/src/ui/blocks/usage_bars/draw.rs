@@ -5,7 +5,7 @@ use gpui::{
     pattern_slash, px, relative,
 };
 
-use super::layout::{Anchor, Column, Placement, TICK_HEADROOM, skeleton_heights};
+use super::layout::{self, Anchor, Column, Placement, TICK_HEADROOM, skeleton_heights};
 use super::{Emphasis, Size};
 use crate::tokens::{Color, Length, Percent};
 use crate::ui::context::Ds;
@@ -72,7 +72,7 @@ pub(super) fn column(
         let px_h = if index + 1 == count {
             height - stack_h
         } else {
-            height * segment.share as f32
+            height * layout::narrow(segment.share)
         };
         stack_h += px_h;
         let hatched = |part: gpui::Div, whole: f32| part.h(px(px_h * whole));
@@ -81,7 +81,7 @@ pub(super) fn column(
         } else if segment.subtask >= 1. {
             hatched(paint_segment(color, true, emphasis, ds), 1.)
         } else {
-            let sub = segment.subtask as f32;
+            let sub = layout::narrow(segment.subtask);
             div()
                 .flex()
                 .flex_col_reverse()

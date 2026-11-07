@@ -7,13 +7,13 @@ mod buckets;
 mod draw;
 mod layout;
 mod motion;
+mod parts;
 
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Bounds, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _, Window, canvas,
-    div, px,
+    App, Bounds, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 
 pub use buckets::{
@@ -104,6 +104,13 @@ pub struct AxisLabel {
     pub text: SharedString,
 }
 
+/// Who owns the selected bucket: the block itself, or the caller.
+#[derive(Clone, Copy, Debug)]
+enum Selection {
+    Own,
+    Controlled(Option<usize>),
+}
+
 type Select = Rc<dyn Fn(Option<usize>, &mut Window, &mut App)>;
 type Format = Rc<dyn Fn(f64) -> String>;
 
@@ -114,7 +121,7 @@ pub struct UsageBars {
     series: Vec<Series>,
     size: Size,
     state: State,
-    selected: Option<Option<usize>>,
+    selected: Selection,
     on_select: Option<Select>,
     axis_labels: Vec<AxisLabel>,
     min_slots: usize,
@@ -132,7 +139,7 @@ impl UsageBars {
             series,
             size: Size::Popover,
             state: State::Ready,
-            selected: None,
+            selected: Selection::Own,
             on_select: None,
             axis_labels: Vec::new(),
             min_slots: 8, // DS: UsageBars.tsx:26
@@ -155,7 +162,7 @@ impl UsageBars {
 
     /// Controlled selection; omit to let the block keep its own.
     pub fn selected(mut self, selected: Option<usize>) -> Self {
-        self.selected = Some(selected);
+        self.selected = Selection::Controlled(selected);
         self
     }
 
@@ -203,171 +210,121 @@ impl UsageBars {
     }
 }
 
-/// The next index for a navigation key, or none when the key is not ours.
-fn key_target(key: &str, current: Option<usize>, count: usize) -> Option<Option<usize>> {
+/// What a navigation key does to the selection.
+enum Nav {
+    To(usize),
+    Clear,
+}
+
+impl Nav {
+    fn index(self) -> Option<usize> {
+        match self {
+            Self::To(index) => Some(index),
+            Self::Clear => None,
+        }
+    }
+}
+
+/// What a navigation key does, or none when the key is not ours.
+fn key_target(key: &str, current: Option<usize>, count: usize) -> Option<Nav> {
     match key {
-        "right" => Some(Some(current.map_or(0, |at| (at + 1).min(count - 1)))),
-        "left" => Some(Some(current.map_or(count - 1, |at| at.saturating_sub(1)))),
-        "home" => Some(Some(0)),
-        "end" => Some(Some(count - 1)),
+        "right" => Some(Nav::To(current.map_or(0, |at| (at + 1).min(count - 1)))),
+        "left" => Some(Nav::To(
+            current.map_or(count - 1, |at| at.saturating_sub(1)),
+        )),
+        "home" => Some(Nav::To(0)),
+        "end" => Some(Nav::To(count - 1)),
         // Esc with nothing selected stays with the surrounding surface (closes a popover).
-        "escape" if current.is_some() => Some(None),
+        "escape" if current.is_some() => Some(Nav::Clear),
         _ => None,
     }
 }
 
-/// What one render draws.
-struct Frame<'a> {
-    geometry: &'a layout::Geometry,
-    /// The height (px) each column is drawn at now.
-    drawn: &'a [f32],
-    selected: Option<usize>,
+type Selector = Rc<dyn Fn(Option<usize>, &mut Window, &mut App)>;
+
+/// The selection setter: keeps the block's own state unless controlled, then tells the caller.
+fn selector(
+    own: gpui::Entity<Option<usize>>,
+    controlled: bool,
+    on_select: Option<Select>,
+) -> Selector {
+    Rc::new(move |next, window, cx| {
+        if !controlled {
+            own.update(cx, |own, cx| {
+                *own = next;
+                cx.notify();
+            });
+        }
+        if let Some(on_select) = &on_select {
+            on_select(next, window, cx);
+        }
+    })
+}
+
+/// The height (px) each column grows to, or none while the chart is not ready.
+fn column_targets(
+    geometry: &layout::Geometry,
     ready: bool,
     plot_h: f32,
     headroom: f32,
+) -> Vec<f32> {
+    if !ready {
+        return Vec::new();
+    }
+    geometry
+        .columns
+        .iter()
+        .map(|column| {
+            if column.total > 0. {
+                (layout::narrow(column.fraction) * (plot_h - headroom)).max(2.)
+            } else {
+                0.
+            }
+        })
+        .collect()
 }
 
-type Selector = Rc<dyn Fn(Option<usize>, &mut Window, &mut App)>;
+/// The plot's pointer handling: hover selects the bucket under the pointer, leaving clears it.
+fn with_pointer(
+    plot: gpui::Stateful<gpui::Div>,
+    bounds: gpui::Entity<Bounds<Pixels>>,
+    select: &Selector,
+    handle: gpui::FocusHandle,
+    (slots, count, selected): (usize, usize, Option<usize>),
+) -> gpui::Stateful<gpui::Div> {
+    let (move_select, leave_select) = (select.clone(), select.clone());
+    plot.on_mouse_move(move |event, window, cx| {
+        let area = *bounds.read(cx);
+        let at = layout::bucket_at(
+            f32::from(event.position.x),
+            f32::from(area.origin.x),
+            f32::from(area.size.width),
+            slots,
+            count,
+        );
+        if at != selected {
+            move_select(at, window, cx);
+        }
+    })
+    .on_hover(move |hovered, window, cx| {
+        if !*hovered && !handle.is_focused(window) {
+            leave_select(None, window, cx);
+        }
+    })
+}
 
-impl UsageBars {
-    /// The y gutter's labels (0, half, top) as a share of the drawing height.
-    fn y_labels(&self, frame: &Frame) -> Vec<(f32, String)> {
-        let Some(format) = &self.y_ticks else {
-            return Vec::new();
-        };
-        let ticks = if frame.ready {
-            frame.geometry.ticks.clone()
-        } else {
-            Vec::new()
-        };
-        std::iter::once(0.)
-            .chain(ticks)
-            .map(|tick| ((tick / frame.geometry.top) as f32, format(tick)))
-            .collect()
-    }
-
-    /// The plot: gridlines, columns (or the loading placeholder), the note, the empty line, the
-    /// baseline, and the recorder of its bounds.
-    fn plot(
-        &self,
-        frame: &Frame,
-        plot_bounds: &gpui::Entity<Bounds<Pixels>>,
-        ds: &Ds,
-        window: &mut Window,
-    ) -> gpui::Stateful<gpui::Div> {
-        let bounds = plot_bounds.clone();
-        let recorder = canvas(
-            |bounds: Bounds<Pixels>, _, _| bounds,
-            move |_, area, _, cx| bounds.update(cx, |bounds, _| *bounds = area),
-        )
+/// The focus ring drawn around the block, outside its box.
+fn focus_ring(ds: &Ds, radius: Pixels) -> gpui::Div {
+    let room = focus::room(ds);
+    div()
         .absolute()
-        .top_0()
-        .left_0()
-        .size_full();
-        let mut plot = div()
-            .id((self.id.clone(), "plot"))
-            .relative()
-            .flex()
-            .items_end()
-            .w_full()
-            .h(px(frame.plot_h))
-            .child(recorder);
-        let slots = frame.geometry.slots;
-        if self.state == State::Loading {
-            plot = plot.children(draw::skeleton(slots, frame.plot_h, self.size, ds, window));
-        }
-        if frame.ready {
-            plot = plot.children(frame.geometry.ticks.iter().map(|tick| {
-                draw::gridline(
-                    (tick / frame.geometry.top) as f32,
-                    frame.plot_h,
-                    frame.headroom,
-                    ds,
-                )
-            }));
-            let emphasis = self.emphasis;
-            plot = plot.children(frame.geometry.columns.iter().enumerate().map(
-                |(index, column)| {
-                    draw::column(
-                        column,
-                        frame.drawn.get(index).copied().unwrap_or(0.),
-                        frame.selected == Some(index),
-                        frame.selected.is_some(),
-                        (self.size, emphasis),
-                        ds,
-                    )
-                },
-            ));
-            // The empty slots keep the grid.
-            for _ in frame.geometry.columns.len()..slots {
-                plot = plot.child(div().flex_1().min_w_0());
-            }
-            plot = plot.children(
-                self.note
-                    .clone()
-                    .map(|note| draw::note(note, frame.geometry.columns.len(), slots, ds)),
-            );
-        }
-        if self.state != State::Loading && !frame.ready {
-            plot = plot.children(
-                self.empty_label
-                    .clone()
-                    .map(|text| draw::empty(text, self.size, ds)),
-            );
-        }
-        // The baseline.
-        plot.child(
-            div()
-                .absolute()
-                .left_0()
-                .right_0()
-                .bottom_0()
-                .h(px(1.))
-                .bg(ds.color(Color::Line)),
-        )
-    }
-
-    /// The x axis with its labels fitted to the width the axis had last frame.
-    fn axis(&self, frame: &Frame, window: &mut Window, cx: &mut App) -> AnyElement {
-        let (size, recorder) = measure::track((self.id.clone(), "axis"), window, cx);
-        let labels: Vec<(usize, &str)> = if self.state == State::Loading {
-            Vec::new()
-        } else {
-            self.axis_labels
-                .iter()
-                .map(|label| (label.index, label.text.as_ref()))
-                .collect()
-        };
-        let placements = layout::place_axis_labels(&labels, frame.geometry.slots, self.size);
-        let widths: Vec<f32> = placements
-            .iter()
-            .map(|placed| measure::text_width(&placed.text, Length::TypoCaptionSize, window, cx))
-            .collect();
-        let ds = Ds::get(cx);
-        let width = f32::from(size.width);
-        let fits = if width > 0. {
-            draw::fit(
-                &placements,
-                &widths,
-                width,
-                f32::from(ds.len(Length::SpaceSm)),
-            )
-        } else {
-            placements
-                .iter()
-                .map(|_| draw::Fit {
-                    hidden: false,
-                    nudge: 0.,
-                })
-                .collect()
-        };
-        div()
-            .relative()
-            .min_w_0()
-            .child(recorder)
-            .child(draw::x_axis(&placements, &fits, width, ds))
-            .into_any_element()
-    }
+        .top(-room)
+        .left(-room)
+        .right(-room)
+        .bottom(-room)
+        .rounded(radius + room)
+        .border(ds.len(Length::FocusRingWidth))
+        .border_color(ds.color(Color::ColorActionPrimary))
 }
 
 impl RenderOnce for UsageBars {
@@ -388,10 +345,11 @@ impl RenderOnce for UsageBars {
         let ready = self.state == State::Ready && !geometry.blank;
         let count = if ready { geometry.columns.len() } else { 0 };
         let own = window.use_keyed_state((self.id.clone(), "selected"), cx, |_, _| None::<usize>);
-        let selected = self
-            .selected
-            .unwrap_or_else(|| *own.read(cx))
-            .filter(|index| *index < count);
+        let selected = match self.selected {
+            Selection::Own => *own.read(cx),
+            Selection::Controlled(selected) => selected,
+        }
+        .filter(|index| *index < count);
         let plot_bounds = window.use_keyed_state((self.id.clone(), "bounds"), cx, |_, _| {
             Bounds::<Pixels>::default()
         });
@@ -399,39 +357,13 @@ impl RenderOnce for UsageBars {
             .use_keyed_state((self.id.clone(), "focus"), cx, |_, cx| cx.focus_handle())
             .read(cx)
             .clone();
-        let select: Selector = {
-            let (controlled, on_select) = (self.selected.is_some(), self.on_select.clone());
-            Rc::new(move |next, window, cx| {
-                if !controlled {
-                    own.update(cx, |own, cx| {
-                        *own = next;
-                        cx.notify();
-                    });
-                }
-                if let Some(on_select) = &on_select {
-                    on_select(next, window, cx);
-                }
-            })
-        };
+        let controlled = matches!(self.selected, Selection::Controlled(_));
+        let select = selector(own, controlled, self.on_select.clone());
         let plot_h = layout::draw_height(self.size);
         let headroom = if ticks { layout::TICK_HEADROOM } else { 0. };
-        let targets: Vec<f32> = if ready {
-            geometry
-                .columns
-                .iter()
-                .map(|column| {
-                    if column.total > 0. {
-                        (column.fraction as f32 * (plot_h - headroom)).max(2.)
-                    } else {
-                        0.
-                    }
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let targets = column_targets(&geometry, ready, plot_h, headroom);
         let drawn = motion::heights(&self.id, &targets, window, cx);
-        let frame = Frame {
+        let frame = parts::Frame {
             geometry: &geometry,
             drawn: &drawn,
             selected,
@@ -448,49 +380,20 @@ impl RenderOnce for UsageBars {
         let axis = self.axis(&frame, window, cx);
         let ds = Ds::get(cx);
         let plot = if ready {
-            let (bounds, move_select, leave_select, leave_handle) = (
-                plot_bounds.clone(),
-                select.clone(),
-                select.clone(),
-                handle.clone(),
-            );
-            let slots = geometry.slots;
-            plot.on_mouse_move(move |event, window, cx| {
-                let area = *bounds.read(cx);
-                let at = layout::bucket_at(
-                    f32::from(event.position.x),
-                    f32::from(area.origin.x),
-                    f32::from(area.size.width),
-                    slots,
-                    count,
-                );
-                if at != selected {
-                    move_select(at, window, cx);
-                }
-            })
-            .on_hover(move |hovered, window, cx| {
-                if !*hovered && !leave_handle.is_focused(window) {
-                    leave_select(None, window, cx);
-                }
-            })
+            let shape = (geometry.slots, count, selected);
+            with_pointer(plot, plot_bounds.clone(), &select, handle.clone(), shape)
         } else {
             plot
         };
         let focused = focus::visible(ds, handle.is_focused(window), false);
-        let (room, ring, ring_w) = (
-            focus::room(ds),
-            ds.color(Color::ColorActionPrimary),
-            ds.len(Length::FocusRingWidth),
-        );
         let radius = px(if self.size == Size::Panel { 4. } else { 2. });
-        let gap = ds.len(Length::SpaceXs);
         let sm = ds.len(Length::SpaceSm);
         let mut root = div()
             .id(self.id.clone())
             .relative()
             .flex()
             .flex_col()
-            .gap(gap)
+            .gap(ds.len(Length::SpaceXs))
             .min_w_0()
             .rounded(radius);
         if ready {
@@ -500,21 +403,11 @@ impl RenderOnce for UsageBars {
                 .on_key_down(move |event, window, cx| {
                     if let Some(next) = key_target(event.keystroke.key.as_str(), selected, count) {
                         cx.stop_propagation();
-                        keys(next, window, cx);
+                        keys(next.index(), window, cx);
                     }
                 });
         }
-        let ring_box = focused.then(|| {
-            div()
-                .absolute()
-                .top(-room)
-                .left(-room)
-                .right(-room)
-                .bottom(-room)
-                .rounded(radius + room)
-                .border(ring_w)
-                .border_color(ring)
-        });
+        let ring_box = focused.then(|| focus_ring(ds, radius));
         let body = if ticks {
             div()
                 .flex()

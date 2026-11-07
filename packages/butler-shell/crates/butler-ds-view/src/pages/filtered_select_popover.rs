@@ -121,6 +121,18 @@ fn matches(label: &str, query: &str) -> bool {
     label.to_lowercase().contains(&query.to_lowercase())
 }
 
+/// The search-change callback: stores the typed text in `query` and repaints.
+fn query_setter(query: &Entity<SharedString>) -> impl Fn(&str, &mut Window, &mut App) + 'static {
+    let query = query.clone();
+    move |text, _, cx| {
+        let text = SharedString::from(text.to_owned());
+        query.update(cx, |query, cx| {
+            *query = text;
+            cx.notify();
+        });
+    }
+}
+
 fn model_picker(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let query: Entity<SharedString> =
@@ -191,15 +203,8 @@ fn model_picker(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
         .enumerate()
         .map(|(index, label)| FooterOption::new(*label, level == index, setter(&reasoning, index)))
         .collect();
-    let set_query = query.clone();
     FilteredSelectPopover::new("fsp-model-popover", c.model, c.placeholder, c.empty)
-        .search(q, move |text, _, cx| {
-            let text = SharedString::from(text.to_owned());
-            set_query.update(cx, |query, cx| {
-                *query = text;
-                cx.notify();
-            });
-        })
+        .search(q, query_setter(&query))
         .filters(filters, active)
         .groups(groups)
         .footer(Some(c.reasoning.into()), footer)

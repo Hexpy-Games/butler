@@ -243,32 +243,106 @@ fn group_title(text: SharedString, ds: &Ds) -> gpui::Div {
         .child(text)
 }
 
+/// The popover's outer column, sized by `width` within the viewport `room`.
+fn root(width: Width, room: f32, ds: &Ds) -> gpui::Div {
+    let root = div()
+        .flex()
+        .flex_col()
+        .gap(ds.len(Length::Space1))
+        .min_w_0()
+        .text_color(ds.color(Color::TextPrimary));
+    match width {
+        Width::Fixed => root.w(px(320_f32.min(room))), // DS: FilteredSelectPopover.module.css:15
+        Width::Default => root
+            .min_w(px(280_f32.min(room)))
+            .max_w(px(520_f32.min(room))),
+    }
+}
+
+/// The popover title.
+fn heading(title: SharedString, ds: &Ds) -> gpui::Div {
+    div()
+        .min_w_0()
+        .pt(px(3.)) // DS: FilteredSelectPopover.module.css:28
+        .px(ds.len(Length::Space2))
+        .pb(ds.len(Length::SpaceXs))
+        .text_size(ds.len(Length::FontSize2))
+        .line_height(ds.len(Length::TypoLabelLineHeight))
+        .font_weight(gpui::FontWeight(ds.number(Number::FontWeightSemibold)))
+        .child(title)
+}
+
+/// The scroller's content: the non-empty groups, or the empty label.
+fn results_content(
+    groups: Vec<Group>,
+    id: &ElementId,
+    empty_label: SharedString,
+    ds: &Ds,
+) -> AnyElement {
+    let visible: Vec<Group> = groups
+        .into_iter()
+        .filter(|group| !group.items.is_empty())
+        .collect();
+    if visible.is_empty() {
+        return div()
+            .p(ds.len(Length::Space2))
+            .text_color(ds.color(Color::TextSecondary))
+            .text_size(ds.len(Length::FontSize3))
+            .line_height(ds.len(Length::TypoBodyLineHeight))
+            .child(empty_label)
+            .into_any_element();
+    }
+    let groups = visible.into_iter().map(|group| {
+        let key = group.id.clone();
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .min_w_0()
+            .child(group_title(group.title, ds))
+            .child(div().flex().flex_col().gap(px(2.)).min_w_0().children(
+                group.items.into_iter().map(|item| {
+                    let row_id: ElementId =
+                        (id.clone(), SharedString::from(format!("{key}-{}", item.id))).into();
+                    parts::row(&row_id, item, ds)
+                }),
+            ))
+    });
+    div()
+        .flex()
+        .flex_col()
+        .gap(ds.len(Length::Space2))
+        .children(groups)
+        .into_any_element()
+}
+
+/// The footer: a title and its option chips, when there is either.
+fn footer(
+    id: &ElementId,
+    title: Option<SharedString>,
+    options: Vec<FooterOption>,
+    ds: &Ds,
+) -> Option<gpui::Div> {
+    (title.is_some() || !options.is_empty()).then(|| {
+        let options = options
+            .into_iter()
+            .map(|option| (option.label, option.selected, option.on_select))
+            .collect();
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .min_w_0()
+            .children(title.map(|title| group_title(title, ds)))
+            .child(parts::chips(&(id.clone(), "footer").into(), options, ds))
+    })
+}
+
 impl RenderOnce for FilteredSelectPopover {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
         let viewport = window.viewport_size();
         let room = f32::from(viewport.width) - 32.;
-        let root = div()
-            .flex()
-            .flex_col()
-            .gap(ds.len(Length::Space1))
-            .min_w_0()
-            .text_color(ds.color(Color::TextPrimary));
-        let root = match self.width {
-            Width::Fixed => root.w(px(320_f32.min(room))), // DS: FilteredSelectPopover.module.css:15
-            Width::Default => root
-                .min_w(px(280_f32.min(room)))
-                .max_w(px(520_f32.min(room))),
-        };
-        let title = div()
-            .min_w_0()
-            .pt(px(3.)) // DS: FilteredSelectPopover.module.css:28
-            .px(ds.len(Length::Space2))
-            .pb(ds.len(Length::SpaceXs))
-            .text_size(ds.len(Length::FontSize2))
-            .line_height(ds.len(Length::TypoLabelLineHeight))
-            .font_weight(gpui::FontWeight(ds.number(Number::FontWeightSemibold)))
-            .child(self.title);
         let search = parts::search(
             &self.id,
             &self.search_placeholder,
@@ -279,45 +353,7 @@ impl RenderOnce for FilteredSelectPopover {
         let filters = parts::filters(&self.id, self.filters, &self.active_filter, ds);
         let rows = self.results_max_rows.unwrap_or(6.65); // DS: FilteredSelectPopover.module.css:158
         let height = (rows * 30.).min(f32::from(viewport.height) * 0.42);
-        let visible: Vec<Group> = self
-            .groups
-            .into_iter()
-            .filter(|group| !group.items.is_empty())
-            .collect();
-        let content = if visible.is_empty() {
-            div()
-                .p(ds.len(Length::Space2))
-                .text_color(ds.color(Color::TextSecondary))
-                .text_size(ds.len(Length::FontSize3))
-                .line_height(ds.len(Length::TypoBodyLineHeight))
-                .child(self.empty_label)
-                .into_any_element()
-        } else {
-            let id = self.id.clone();
-            let groups = visible.into_iter().map(|group| {
-                let key = group.id.clone();
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
-                    .min_w_0()
-                    .child(group_title(group.title, ds))
-                    .child(div().flex().flex_col().gap(px(2.)).min_w_0().children(
-                        group.items.into_iter().map(|item| {
-                            let row_id: ElementId =
-                                (id.clone(), SharedString::from(format!("{key}-{}", item.id)))
-                                    .into();
-                            parts::row(&row_id, item, ds)
-                        }),
-                    ))
-            });
-            div()
-                .flex()
-                .flex_col()
-                .gap(ds.len(Length::Space2))
-                .children(groups)
-                .into_any_element()
-        };
+        let content = results_content(self.groups, &self.id, self.empty_label, ds);
         let results = div()
             .flex()
             .flex_col()
@@ -331,25 +367,9 @@ impl RenderOnce for FilteredSelectPopover {
                     .fill()
                     .child(content),
             );
-        let footer = (self.footer_title.is_some() || !self.footer_options.is_empty()).then(|| {
-            let options = self
-                .footer_options
-                .into_iter()
-                .map(|option| (option.label, option.selected, option.on_select))
-                .collect();
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(2.))
-                .min_w_0()
-                .children(self.footer_title.map(|title| group_title(title, ds)))
-                .child(parts::chips(
-                    &(self.id.clone(), "footer").into(),
-                    options,
-                    ds,
-                ))
-        });
-        root.child(title)
+        let footer = footer(&self.id, self.footer_title, self.footer_options, ds);
+        root(self.width, room, ds)
+            .child(heading(self.title, ds))
             .child(search)
             .child(filters)
             .child(results)

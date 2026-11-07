@@ -400,20 +400,8 @@ fn empty(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         .into_any_element()
 }
 
-/// Live update (same bucket count: columns ease), a range switch (new count: columns grow) and a
-/// replay (remount). `split` adds a subtask response button.
-fn motion(
-    lang: Lang,
-    key: &'static str,
-    split: bool,
-    window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
-    let c = copy(lang);
-    // responses added, the window in hours, the replay round, subtask responses added
-    let state: Entity<(usize, i64, usize, usize)> =
-        window.use_keyed_state(sub(key, "state"), cx, |_, _| (0, 24, 0, 0));
-    let (responses, hours, round, subtasks) = *state.read(cx);
+/// The demo's slots: the sample window plus one slot per response and subtask response added.
+fn motion_slots(split: bool, hours: i64, responses: usize, subtasks: usize) -> Vec<Slot> {
     let mut slots: Vec<Slot> = if split {
         data::sample_split_slots(24, 1)
             .into_iter()
@@ -437,6 +425,24 @@ fn motion(
             values,
         });
     }
+    slots
+}
+
+/// Live update (same bucket count: columns ease), a range switch (new count: columns grow) and a
+/// replay (remount). `split` adds a subtask response button.
+fn motion(
+    lang: Lang,
+    key: &'static str,
+    split: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let c = copy(lang);
+    // responses added, the window in hours, the replay round, subtask responses added
+    let state: Entity<(usize, i64, usize, usize)> =
+        window.use_keyed_state(sub(key, "state"), cx, |_, _| (0, 24, 0, 0));
+    let (responses, hours, round, subtasks) = *state.read(cx);
+    let slots = motion_slots(split, hours, responses, subtasks);
     let chart = data::window_chart(lang, &slots, hours, Some(31));
     let button =
         |id: &'static str, label: &'static str, change: fn(&mut (usize, i64, usize, usize))| {

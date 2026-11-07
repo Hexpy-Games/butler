@@ -154,10 +154,6 @@ impl RenderOnce for OptionMenuSection {
     }
 }
 
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "independent props, as the React OptionMenuItem API"
-)]
 #[derive(IntoElement)]
 pub struct OptionMenuItem {
     id: ElementId,

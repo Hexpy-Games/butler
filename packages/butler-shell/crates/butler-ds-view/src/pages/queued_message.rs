@@ -117,18 +117,7 @@ pub(super) fn stories() -> Vec<Story> {
     vec![
         Story {
             name: "Single",
-            render: |lang, _, _| {
-                let c = copy(lang);
-                queued(
-                    "qm-single".into(),
-                    &c,
-                    c.messages[0],
-                    c.queued,
-                    true,
-                    QueuedTone::Queued,
-                )
-                .into_any_element()
-            },
+            render: single,
         },
         Story {
             name: "Several with positions",
@@ -136,34 +125,11 @@ pub(super) fn stories() -> Vec<Story> {
         },
         Story {
             name: "Long text",
-            render: |lang, _, _| {
-                let c = copy(lang);
-                let text = format!("{}\n\n{}", c.long, c.long);
-                queued(
-                    "qm-long".into(),
-                    &c,
-                    text,
-                    c.queued,
-                    true,
-                    QueuedTone::Queued,
-                )
-                .into_any_element()
-            },
+            render: long_text,
         },
         Story {
             name: "Long unbroken token",
-            render: |lang, _, _| {
-                let c = copy(lang);
-                queued(
-                    "qm-token".into(),
-                    &c,
-                    c.token,
-                    c.queued,
-                    true,
-                    QueuedTone::Queued,
-                )
-                .into_any_element()
-            },
+            render: long_token,
         },
         Story {
             name: "Editing",
@@ -179,20 +145,62 @@ pub(super) fn stories() -> Vec<Story> {
         },
         Story {
             name: "Failed",
-            render: |lang, _, _| {
-                let c = copy(lang);
-                queued(
-                    "qm-failed".into(),
-                    &c,
-                    c.messages[1],
-                    c.failed,
-                    true,
-                    QueuedTone::Failed,
-                )
-                .into_any_element()
-            },
+            render: failed,
         },
     ]
+}
+
+fn single(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let c = copy(lang);
+    queued(
+        "qm-single".into(),
+        &c,
+        c.messages[0],
+        c.queued,
+        true,
+        QueuedTone::Queued,
+    )
+    .into_any_element()
+}
+
+fn long_text(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let c = copy(lang);
+    let text = format!("{}\n\n{}", c.long, c.long);
+    queued(
+        "qm-long".into(),
+        &c,
+        text,
+        c.queued,
+        true,
+        QueuedTone::Queued,
+    )
+    .into_any_element()
+}
+
+fn long_token(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let c = copy(lang);
+    queued(
+        "qm-token".into(),
+        &c,
+        c.token,
+        c.queued,
+        true,
+        QueuedTone::Queued,
+    )
+    .into_any_element()
+}
+
+fn failed(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    let c = copy(lang);
+    queued(
+        "qm-failed".into(),
+        &c,
+        c.messages[1],
+        c.failed,
+        true,
+        QueuedTone::Failed,
+    )
+    .into_any_element()
 }
 
 fn several(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {

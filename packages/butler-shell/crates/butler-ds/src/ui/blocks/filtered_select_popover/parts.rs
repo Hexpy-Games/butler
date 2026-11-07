@@ -19,6 +19,9 @@ use crate::ui::tooltip::Tooltip;
 
 pub(super) type Change = Rc<dyn Fn(&str, &mut Window, &mut App)>;
 
+/// A chip: its label, whether it is the chosen one, and what choosing it does.
+pub(super) type Chip = (SharedString, bool, Rc<dyn Fn(&mut Window, &mut App)>);
+
 /// The search field; a clear button shows while it holds text.
 pub(super) fn search(
     id: &ElementId,
@@ -54,11 +57,7 @@ pub(super) fn search(
 }
 
 /// A row of pill chips (the filters, the footer options): the chosen one is flat selection.
-pub(super) fn chips(
-    id: &ElementId,
-    chips: Vec<(SharedString, bool, Rc<dyn Fn(&mut Window, &mut App)>)>,
-    ds: &Ds,
-) -> AnyElement {
+pub(super) fn chips(id: &ElementId, chips: Vec<Chip>, ds: &Ds) -> AnyElement {
     let room = ds.len(Length::FocusRingRoom);
     let selection = ds.color(Color::Selection);
     let row = chips
@@ -115,23 +114,10 @@ pub(super) fn filters(id: &ElementId, filters: Vec<Filter>, active: &str, ds: &D
     chips(id, list, ds)
 }
 
-/// One result row: the select button, and beside it the actions that show on hover.
-pub(super) fn row(id: &ElementId, item: Item, ds: &Ds) -> AnyElement {
-    let selection = ds.color(Color::Selection);
+/// The row's text: the label with its muted description beside it.
+fn copy(label: AnyElement, description: Option<SharedString>, ds: &Ds) -> gpui::Div {
     let line = ds.len(Length::MenuItemLineHeight);
-    let tooltip = item.tooltip.clone();
-    let selected = item.selected;
-    let on_select = item.on_select.clone();
-    let icon_slot = item.icon.map(|glyph| {
-        div()
-            .flex()
-            .flex_none()
-            .items_center()
-            .justify_center()
-            .size(line)
-            .child(glyph)
-    });
-    let copy = div()
+    div()
         .flex()
         .items_baseline()
         .min_w_0()
@@ -144,26 +130,50 @@ pub(super) fn row(id: &ElementId, item: Item, ds: &Ds) -> AnyElement {
                 .text_ellipsis()
                 .text_size(ds.len(Length::FontSize3))
                 .line_height(line)
-                .child(item.label),
+                .child(label),
         )
-        .children(item.description.map(|text| {
+        .children(description.map(|text| {
             div()
                 .flex_none()
                 .text_color(ds.color(Color::TextSecondary))
                 .text_size(ds.len(Length::FontSize2))
                 .line_height(line)
                 .child(text)
-        }));
-    let check = selected.then(|| {
-        div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .h(line)
-            .text_color(ds.color(Color::TextPrimary))
-            .child(icon(Icon::CheckIcon, IconSize::Sm, ds))
-    });
-    let group: SharedString = format!("{id:?}-row").into();
+        }))
+}
+
+/// The leading glyph slot of a row.
+fn icon_slot(glyph: AnyElement, ds: &Ds) -> gpui::Div {
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .size(ds.len(Length::MenuItemLineHeight))
+        .child(glyph)
+}
+
+/// The check mark of the chosen row.
+fn check(ds: &Ds) -> gpui::Div {
+    div()
+        .flex()
+        .items_center()
+        .justify_center()
+        .h(ds.len(Length::MenuItemLineHeight))
+        .text_color(ds.color(Color::TextPrimary))
+        .child(icon(Icon::CheckIcon, IconSize::Sm, ds))
+}
+
+/// One result row: the select button, and beside it the actions that show on hover.
+pub(super) fn row(id: &ElementId, item: Item, ds: &Ds) -> AnyElement {
+    let selection = ds.color(Color::Selection);
+    let line = ds.len(Length::MenuItemLineHeight);
+    let tooltip = item.tooltip.clone();
+    let selected = item.selected;
+    let on_select = item.on_select.clone();
+    let icon_slot = item.icon.map(|glyph| icon_slot(glyph, ds));
+    let copy = copy(item.label, item.description, ds);
+    let check = selected.then(|| check(ds));
     let has_actions = item.actions.is_some();
     let inner = div()
         .id((id.clone(), "select"))
@@ -205,10 +215,22 @@ pub(super) fn row(id: &ElementId, item: Item, ds: &Ds) -> AnyElement {
             .into_any_element(),
         None => inner.into_any_element(),
     };
-    let Some(actions) = item.actions else {
-        return control;
-    };
-    // The row owns the fill; the actions keep their column and show on hover.
+    match item.actions {
+        Some(actions) => with_actions(id, control, actions, selected, ds),
+        None => control,
+    }
+}
+
+/// The row owns the fill; the actions keep their column and show on hover.
+fn with_actions(
+    id: &ElementId,
+    control: AnyElement,
+    actions: AnyElement,
+    selected: bool,
+    ds: &Ds,
+) -> AnyElement {
+    let selection = ds.color(Color::Selection);
+    let group: SharedString = format!("{id:?}-row").into();
     let mut row = div()
         .id((id.clone(), "row"))
         .group(group.clone())

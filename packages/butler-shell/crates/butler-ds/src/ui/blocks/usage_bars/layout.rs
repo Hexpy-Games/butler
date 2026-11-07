@@ -202,7 +202,7 @@ pub(super) fn place_axis_labels(
             } else if end > 1. - edge {
                 (end, Anchor::End)
             } else {
-                ((start + end) / 2., Anchor::Center)
+                (f32::midpoint(start, end), Anchor::Center)
             };
             Placement {
                 text: (*text).to_owned(),
@@ -234,5 +234,23 @@ pub(super) fn bucket_at(
         return None;
     }
     let index = (((x - left) / width) * slots as f32).floor();
-    (index >= 0. && (index as usize) < count).then_some(index as usize)
+    if index < 0. {
+        return None;
+    }
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "index is a floored, non-negative slot position well below usize::MAX"
+    )]
+    let index = index as usize;
+    (index < count).then_some(index)
+}
+
+/// A DS share (0 to 1 or a pixel scale) narrowed to the `f32` the renderer draws with.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "DS shares and fractions are small ratios; f32 precision is ample for pixels"
+)]
+pub(super) fn narrow(value: f64) -> f32 {
+    value as f32
 }

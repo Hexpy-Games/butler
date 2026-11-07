@@ -74,7 +74,7 @@ fn matches(text: &str, query: &str) -> Vec<std::ops::Range<usize>> {
         }
         match ranges.last_mut() {
             Some(last) if last.end == index => {
-                last.end = index + text[index..].chars().next().map_or(1, char::len_utf8)
+                last.end = index + text[index..].chars().next().map_or(1, char::len_utf8);
             }
             _ => ranges.push(index..index + text[index..].chars().next().map_or(1, char::len_utf8)),
         }
@@ -97,8 +97,8 @@ fn matched(text: &str, query: &str, ds: &Ds) -> StyledText {
     StyledText::new(text.to_owned()).with_highlights(highlights)
 }
 
-/// One row: the glyph column, the text, a badge; clicking chooses.
-fn row(
+/// What one row shows and does.
+struct RowParts {
     id: ElementId,
     glyph: AnyElement,
     title: StyledText,
@@ -106,8 +106,19 @@ fn row(
     badge: Option<AnyElement>,
     active: bool,
     on_select: Select,
-    ds: &Ds,
-) -> AnyElement {
+}
+
+/// One row: the glyph column, the text, a badge; clicking chooses.
+fn row(parts: RowParts, ds: &Ds) -> AnyElement {
+    let RowParts {
+        id,
+        glyph,
+        title,
+        address,
+        badge,
+        active,
+        on_select,
+    } = parts;
     let hover = convert::with_alpha(ds.color(Color::Selection), 0.6); // DS: SuggestionList.module.css:26
     let strong = ds.color(Color::SelectionStrong);
     let text = div()
@@ -265,13 +276,15 @@ impl RenderOnce for SuggestionRow {
                 .into_any_element()
         });
         row(
-            self.id,
-            glyph,
-            title,
-            address,
-            badge,
-            self.active,
-            self.on_select,
+            RowParts {
+                id: self.id,
+                glyph,
+                title,
+                address,
+                badge,
+                active: self.active,
+                on_select: self.on_select,
+            },
             ds,
         )
     }
@@ -347,13 +360,15 @@ impl RenderOnce for SuggestionItemRow {
         };
         let meta = self.meta.as_ref().map(|meta| matched(meta, meta_query, ds));
         row(
-            self.id,
-            glyph,
-            matched(&self.title, &self.query, ds),
-            meta,
-            None,
-            self.active,
-            self.on_select,
+            RowParts {
+                id: self.id,
+                glyph,
+                title: matched(&self.title, &self.query, ds),
+                address: meta,
+                badge: None,
+                active: self.active,
+                on_select: self.on_select,
+            },
             ds,
         )
     }
