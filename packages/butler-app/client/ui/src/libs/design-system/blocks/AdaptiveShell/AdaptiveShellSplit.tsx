@@ -15,7 +15,7 @@ export interface AdaptiveShellSplitProps extends Omit<DsBaseProps<HTMLAttributes
   paneOpen: boolean;
   /** What the split shows (a conversation id). When it changes the pane opens or closes at once, without motion. */
   contextKey?: string;
-  /** Chat column width in px while the pane is open (340–560, default 400). */
+  /** Chat column width in px while the pane is open (at least 340, leaving the pane at least 375; default 400). */
   chatWidth?: number;
   /** Drag or keyboard resize of the chat column; already clamped. Omit to lock the width. */
   onChatWidthChange?: (width: number) => void;
@@ -42,7 +42,7 @@ export function useHeldWhilePaneLeaves<T>(value: T): T {
 
 /**
  * The conversation frame's split slot inside AdaptiveShellWorkspace (below the titlebar): chat | browser
- * pane, the chat column resizable between 340 and 560px. Pass `splitOpen` to AdaptiveShell while the
+ * pane, the chat column resizable from 340px to whatever leaves the pane 375px. Pass `splitOpen` to AdaptiveShell while the
  * pane is open: the inspector then stays closed (the two never show together). The pane opens and closes on one
  * motion (SplitPaneMotion), whatever it holds; a resize is immediate.
  */
@@ -50,7 +50,6 @@ export function AdaptiveShellSplit({
   chat, pane, paneOpen, contextKey, chatWidth = BROWSER_CHAT_WIDTH.default, onChatWidthChange, resizeLabel = "Resize conversation",
   resizeHint, className, style, ...props
 }: AdaptiveShellSplitProps) {
-  const width = clampBrowserChatWidth(chatWidth);
   const drag = useRef<{ x: number; width: number } | null>(null);
   const hintId = useId();
   const [split, setSplit] = useState<HTMLDivElement | null>(null);
@@ -63,10 +62,26 @@ export function AdaptiveShellSplit({
     setShown({ open: paneOpen, contextKey, leaving: shown.open && !paneOpen && shown.contextKey === contextKey && !prefersReducedMotion() });
   }
   const present = paneOpen || shown.leaving;
-  const resize = (next: number) => onChatWidthChange?.(clampBrowserChatWidth(next));
+  // The width the chat column and the pane share: the split less the handle's box (the card gap in the cards frame).
+  const [room, setRoom] = useState(Number.POSITIVE_INFINITY);
+  const handle = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!split || !present) return undefined;
+    const measure = () => {
+      const node = handle.current, box = node && getComputedStyle(node);
+      setRoom(split.clientWidth - (node && box ? node.offsetWidth + parseFloat(box.marginLeft) + parseFloat(box.marginRight) : 0));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(split);
+    return () => observer.disconnect();
+  }, [split, present]);
+  const width = clampBrowserChatWidth(chatWidth, room);
+  useLayoutEffect(() => { if (present && width !== chatWidth) onChatWidthChange?.(width); }, [present, width, chatWidth, onChatWidthChange]);
+  const resize = (next: number) => onChatWidthChange?.(clampBrowserChatWidth(next, room));
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? KEY_STEP * 3 : KEY_STEP;
-    const next = { ArrowLeft: width - step, ArrowRight: width + step, Home: BROWSER_CHAT_WIDTH.min, End: BROWSER_CHAT_WIDTH.max }[event.key];
+    const next = { ArrowLeft: width - step, ArrowRight: width + step, Home: BROWSER_CHAT_WIDTH.min, End: clampBrowserChatWidth(Number.POSITIVE_INFINITY, room) }[event.key];
     if (next === undefined) return;
     event.preventDefault();
     motion.current?.settle();
@@ -93,9 +108,9 @@ export function AdaptiveShellSplit({
       <div className={styles.chat} data-slot="adaptive-shell-split-chat">{chat}</div>
       {present ? (
         <>
-          <div inert={shown.leaving} className={cn(styles.splitHandle, resizeHandleClassName)} role="separator" aria-orientation="vertical" aria-label={resizeLabel}
+          <div ref={handle} inert={shown.leaving} className={cn(styles.splitHandle, resizeHandleClassName)} role="separator" aria-orientation="vertical" aria-label={resizeLabel}
             aria-describedby={resizeHint ? hintId : undefined}
-            aria-valuemin={BROWSER_CHAT_WIDTH.min} aria-valuemax={BROWSER_CHAT_WIDTH.max} aria-valuenow={width}
+            aria-valuemin={BROWSER_CHAT_WIDTH.min} aria-valuemax={clampBrowserChatWidth(Number.POSITIVE_INFINITY, room)} aria-valuenow={width}
             tabIndex={onChatWidthChange ? 0 : -1} data-locked={onChatWidthChange ? undefined : true}
             onKeyDown={onChatWidthChange ? onKeyDown : undefined} onPointerDown={onChatWidthChange ? onPointerDown : undefined}
             onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}>

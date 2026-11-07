@@ -72,8 +72,17 @@ try {
   await app.page.clickSelector('[role="separator"][aria-label="Resize conversation"]');
   await waitBrowser(() => app.page.expression("document.activeElement?.getAttribute('role') === 'separator'"), "chat resize handle focused");
   await app.page.press("End");
-  await waitBrowser(() => app.page.expression("document.querySelector('[data-slot=adaptive-shell-split-chat]').getBoundingClientRect().width === 560"), "chat maximum width");
-  assert.equal(await app.page.expression("document.querySelector('[data-slot=adaptive-shell-split-chat]').getBoundingClientRect().width"), 560);
+  await waitBrowser(() => app.page.expression("document.querySelector('[data-slot=adaptive-shell-split-pane]').getBoundingClientRect().width === 375"), "pane minimum width");
+  assert.equal(await app.page.expression("document.querySelector('[data-slot=adaptive-shell-split-pane]').getBoundingClientRect().width"), 375);
+  assert.equal(await app.page.expression("Number(document.querySelector('[role=separator][aria-label=\"Resize conversation\"]').getAttribute('aria-valuenow')) === document.querySelector('[data-slot=adaptive-shell-split-chat]').getBoundingClientRect().width"), true);
+  assert.equal(await app.page.expression(`(() => {
+    const pane = document.querySelector('[data-slot=adaptive-shell-split-pane]'); const bounds = pane.getBoundingClientRect();
+    return [...pane.querySelectorAll('[data-slot=browser-toolbar] button, [data-slot=browser-toolbar] input')].filter((el) => el.getClientRects().length > 0).every((el) => {
+      const rect = el.getBoundingClientRect(); const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      return rect.left >= bounds.left && rect.right <= bounds.right && rect.top >= bounds.top && rect.bottom <= bounds.bottom && Boolean(hit) && el.contains(hit);
+    });
+  })()`), true);
+  await app.shot("en-1440-pane-minimum");
   await app.page.press("Home");
   await waitBrowser(() => app.page.expression("document.querySelector('[data-slot=adaptive-shell-split-chat]').getBoundingClientRect().width === 340"), "chat minimum width");
   assert.equal(await app.page.expression("document.querySelector('[data-slot=adaptive-shell-split-chat]').getBoundingClientRect().width"), 340);
