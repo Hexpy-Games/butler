@@ -45,6 +45,8 @@ pub(crate) struct ImageViewerHost {
     open: Rc<RefCell<Shown>>,
 }
 
+impl gpui::Global for ImageViewerHost {}
+
 /// Where one picture stands.
 enum Load {
     Pending,
