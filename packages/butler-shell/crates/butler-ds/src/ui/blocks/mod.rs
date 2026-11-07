@@ -56,6 +56,8 @@ pub mod suggestion_list;
 pub mod surface_panel;
 pub mod titlebar_shell;
 pub mod todo_progress_panel;
+pub mod usage_bars;
+pub mod usage_summary_rows;
 pub mod wallpaper_stage;
 pub mod work_activity;
 pub mod worker_activity;

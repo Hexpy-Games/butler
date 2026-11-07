@@ -51,6 +51,7 @@ pub enum Detail {
 pub struct KeyValueRow {
     label: SharedString,
     value: SharedString,
+    value_element: Option<AnyElement>,
     description: Option<SharedString>,
     meta: Option<SharedString>,
     swatch: Option<AnyElement>,
@@ -66,6 +67,7 @@ impl KeyValueRow {
         Self {
             label: label.into(),
             value: value.into(),
+            value_element: None,
             description: None,
             meta: None,
             swatch: None,
@@ -75,6 +77,12 @@ impl KeyValueRow {
             detail: Detail::Row,
             link: None,
         }
+    }
+
+    /// The value as an element (an animated number) in the value's size, colour and alignment.
+    pub fn value_element(mut self, value: impl IntoElement) -> Self {
+        self.value_element = Some(value.into_any_element());
+        self
     }
 
     pub fn description(mut self, description: impl Into<SharedString>) -> Self {
@@ -188,14 +196,30 @@ impl KeyValueRow {
                     .tone(Tone::Tertiary)
                     .wrap(Wrap::Anywhere),
             );
-        let value = match self.value_size {
-            ValueSize::Body => Typo::body(self.value.clone()),
-            ValueSize::Caption => Typo::caption(self.value.clone()),
-        }
-        .tone(Tone::Primary)
-        .weight(Weight::Regular)
-        .align(TextAlign::End)
-        .wrap(Wrap::Anywhere);
+        let value = match self.value_element.take() {
+            Some(element) => {
+                let (size, line) = match self.value_size {
+                    ValueSize::Body => (Length::TypoBodySize, Length::TypoBodyLineHeight),
+                    ValueSize::Caption => (Length::TypoCaptionSize, Length::TypoCaptionLineHeight),
+                };
+                div()
+                    .text_size(ds.len(size))
+                    .line_height(ds.len(line))
+                    .text_color(ds.color(Color::TextPrimary))
+                    .text_right()
+                    .child(element)
+                    .into_any_element()
+            }
+            None => match self.value_size {
+                ValueSize::Body => Typo::body(self.value.clone()),
+                ValueSize::Caption => Typo::caption(self.value.clone()),
+            }
+            .tone(Tone::Primary)
+            .weight(Weight::Regular)
+            .align(TextAlign::End)
+            .wrap(Wrap::Anywhere)
+            .into_any_element(),
+        };
         Stack::row()
             .justify(Justify::Between)
             .cross(Cross::Baseline)

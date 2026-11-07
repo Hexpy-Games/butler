@@ -108,6 +108,8 @@ mod todo_progress_panel;
 mod tooltip;
 mod typo;
 mod unread_dot;
+mod usage_bars;
+mod usage_summary_rows;
 mod wallpaper_stage;
 mod work_activity;
 mod worker_activity_panel;
@@ -338,6 +340,8 @@ fn composer_blocks() -> Vec<Page> {
         ),
         page!("suggestion-list", "SuggestionList", suggestion_list),
         page!("split-button", "SplitButton", split_button),
+        page!("usage-bars", "UsageBars", usage_bars),
+        page!("usage-summary-rows", "UsageSummaryRows", usage_summary_rows),
     ]
 }
 

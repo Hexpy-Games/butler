@@ -111,6 +111,8 @@
     { "page": "option-menu", "entry": "blocks/OptionMenu" },
     { "page": "filtered-select-popover", "entry": "blocks/FilteredSelectPopover" },
     { "page": "suggestion-list", "entry": "blocks/SuggestionList" },
-    { "page": "split-button", "entry": "blocks/SplitButton" }
+    { "page": "split-button", "entry": "blocks/SplitButton" },
+    { "page": "usage-bars", "entry": "blocks/UsageBars" },
+    { "page": "usage-summary-rows", "entry": "blocks/UsageSummaryRows" }
   ]
 }
