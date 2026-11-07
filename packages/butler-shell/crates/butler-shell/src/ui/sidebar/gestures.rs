@@ -52,7 +52,11 @@ pub(super) fn reveal_row(
     )
     .absolute()
     .size_full();
-    div().relative().child(probe).child(content).into_any_element()
+    div()
+        .relative()
+        .child(probe)
+        .child(content)
+        .into_any_element()
 }
 impl Shell {
     pub(super) fn row_gestures(

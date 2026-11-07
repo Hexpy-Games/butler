@@ -177,7 +177,7 @@ impl Shell {
                 )
                 .glyph(Icon::X)
                 .when(pending, IconButton::disabled)
-                .on_click(move |_, _, cx| reset.update(cx, |picker, cx| picker.reset(cx))),
+                .on_click(move |_, _, cx| reset.update(cx, folders::FolderPicker::reset)),
             );
         }
         line.into_any_element()

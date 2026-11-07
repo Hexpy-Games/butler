@@ -12,12 +12,12 @@ use gpui::{
 
 use super::Composer;
 use super::editor::atoms::atom_chip;
-use super::editor::drop::SessionDrag;
 use super::editor::mentions::{
     MentionCandidate, MentionMenu, mention_candidates, mention_list, rank_mentions,
 };
 use super::editor::{Atom, is_atom_char};
 use super::state::ComposerState;
+use crate::ui::sidebar::SpaceDragPayload;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::NavigationView;
 
@@ -260,18 +260,21 @@ impl Composer {
     /// character under the pointer, or at the caret when the pointer is outside the field.
     pub(super) fn drop_session(
         &mut self,
-        drag: &SessionDrag,
+        drag: &SpaceDragPayload,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let (Some(id), Some(title)) = (drag.session_id(), drag.title()) else {
+            return;
+        };
         let pointer = window.mouse_position();
         let inside = (self.references.field.get()).is_some_and(|field| field.contains(&pointer));
         if inside && let Some(offset) = self.editor.offset_at(pointer, window, cx) {
             self.editor.place_caret(offset, cx);
         }
         let atom = Atom::Session {
-            id: drag.id.clone(),
-            label: drag.title.clone(),
+            id: id.to_owned(),
+            label: title.clone(),
         };
         self.editor.insert_atom_at_caret(&atom, window, cx);
         self.engage(window, cx);

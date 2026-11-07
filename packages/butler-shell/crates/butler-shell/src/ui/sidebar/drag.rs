@@ -14,22 +14,25 @@ use butler_ds::ui::blocks::{
 use gpui::{AnyElement, Context, SharedString, Window, div, prelude::*};
 use std::{collections::BTreeMap, rc::Rc};
 
-/// Node: application/x-butler-space-node; SessionReference: application/x-butler-session-reference.
-/// C4 consumes SessionReference when dropped on the composer.
+/// Node: application/x-butler-space-node, with the row's title for the composer's session atom;
+/// SessionReference: application/x-butler-session-reference.
 #[derive(Clone, Debug)]
 pub(crate) enum SpaceDragPayload {
-    Node(String),
+    Node { key: String, title: SharedString },
     SessionReference(String),
 }
 impl SpaceDragPayload {
-    #[expect(
-        dead_code,
-        reason = "C4 consumes the shared sidebar-to-composer payload"
-    )]
     pub(crate) fn session_id(&self) -> Option<&str> {
         match self {
-            Self::Node(key) => key.strip_prefix("s:"),
+            Self::Node { key, .. } => key.strip_prefix("s:"),
             Self::SessionReference(id) => Some(id),
+        }
+    }
+    /// The dragged row's title; a session reference carries none.
+    pub(crate) fn title(&self) -> Option<&SharedString> {
+        match self {
+            Self::Node { title, .. } => Some(title),
+            Self::SessionReference(_) => None,
         }
     }
 }
@@ -125,7 +128,7 @@ impl Shell {
         let children = self.store.navigation.drag_children.clone();
         DragRules {
             rules: Rc::new(move |payload, key| {
-                let SpaceDragPayload::Node(source) = payload else {
+                let SpaceDragPayload::Node { key: source, .. } = payload else {
                     return None;
                 };
                 let row = zones.get(key)?;
@@ -151,7 +154,7 @@ impl Shell {
                 })
             }),
             can_drop: Rc::new(move |payload, hit| match payload {
-                SpaceDragPayload::Node(source) => can_drop(
+                SpaceDragPayload::Node { key: source, .. } => can_drop(
                     &check,
                     source,
                     Some(hit.key.as_ref()),
@@ -160,7 +163,7 @@ impl Shell {
                 SpaceDragPayload::SessionReference(_) => false,
             }),
             on_drop: Rc::new(move |payload, hit, _, cx| {
-                if let SpaceDragPayload::Node(source) = payload {
+                if let SpaceDragPayload::Node { key: source, .. } = payload {
                     cx.stop_propagation();
                     let _ = weak.update(cx, |s, cx| {
                         s.request_space_move(
@@ -197,7 +200,10 @@ impl Shell {
             .row_header()
             .dragging(self.sidebar.drag_instance.as_deref() == Some(instance))
             .draggable(
-                SpaceDragPayload::Node(key.clone()),
+                SpaceDragPayload::Node {
+                    key: key.clone(),
+                    title: row.title.clone().into(),
+                },
                 move |_, _| {
                     DragPreview::tab("space-drag-preview", title.clone()).into_any_element()
                 },
@@ -267,7 +273,7 @@ impl Shell {
                 });
             })
             .on_drop::<SpaceDragPayload>(move |payload, _, cx| {
-                if let SpaceDragPayload::Node(source) = payload {
+                if let SpaceDragPayload::Node { key: source, .. } = payload {
                     let _ = weak.update(cx, |s, cx| {
                         if can_drop(&s.store.navigation.rows, source, None, Position::Inside) {
                             s.request_space_move(source.clone(), None, Position::Inside, cx);

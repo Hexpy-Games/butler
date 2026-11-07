@@ -36,12 +36,12 @@ use self::attachments::{Attachments, composer_attachments, file_drag_active, fil
 use self::context::ComposerContextControl;
 use self::controls::Controls;
 use self::editor::clipboard::Paste;
-use self::editor::drop::SessionDrag;
 use self::editor::{ComposerEditor, FocusPlacement};
 use self::references::{MentionKey, References};
 use self::state::{ComposerState, image_refusal_label};
 use crate::ui::field;
 use crate::ui::motion::Hover;
+use crate::ui::sidebar::SpaceDragPayload;
 use crate::ui::source::{AuthorityCard, Decision, RequestRef};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::HasHover;
@@ -421,7 +421,7 @@ impl Render for Composer {
         })
         .on_action(cx.listener(Self::submit))
         .on_action(cx.listener(Self::submit_with_modifier))
-        .on_drop(cx.listener(|this, drag: &SessionDrag, window, cx| {
+        .on_drop(cx.listener(|this, drag: &SpaceDragPayload, window, cx| {
             this.drop_session(drag, window, cx);
         }))
         .child(probe)
