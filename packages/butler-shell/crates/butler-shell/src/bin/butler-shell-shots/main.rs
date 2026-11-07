@@ -66,6 +66,17 @@ struct Harness {
     handle: AnyWindowHandle,
 }
 
+impl Drop for Harness {
+    /// `window.activate()` makes the headless platform keep the window (its `active_window`)
+    /// past `HeadlessAppContext`'s shutdown, and the window's platform input handler holds a
+    /// strong `Entity<EditableTextState>` while a field is focused. Leak detection would report
+    /// that handle as leaked. A drawn frame without a focused field replaces the handler.
+    fn drop(&mut self) {
+        let _ = self.update(|shell, window, cx| window.focus(&shell.focus_handle(), cx));
+        settle(&mut self.cx, self.handle);
+    }
+}
+
 impl Harness {
     fn open(source: Option<Rc<dyn Source>>, dark: bool, options: &Options) -> anyhow::Result<Self> {
         let mut cx = context(options.scale)?;
