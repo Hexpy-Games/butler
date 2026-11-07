@@ -1,7 +1,7 @@
 //! PromptSuggestionList.showcase.tsx (+ ConversationShell.demo.tsx `SharedBackground`): the new
 //! chat over a wallpaper, over a plain background, and over one wallpaper shared with the
-//! messages. The Wallpaper is a block of a later batch: a still gradient stands in for its gray
-//! silk and receives the rect the list measures, as the real one will. The messages are the
+//! messages. The live Wallpaper engine is a block of a later batch: a flat gray stands in for the
+//! gray silk, and a still gradient for the shared story's aurora. The messages are the
 //! conversation-shell page's stand-in rows.
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::Icon;
@@ -83,7 +83,23 @@ fn copy(lang: Lang) -> Copy {
     )
 }
 
-/// The wallpaper's place: a still gradient stands in for the live silk (a block of a later batch).
+/// `SILK_GRAY`'s base colour. // DS: PromptSuggestionList.showcase.tsx:16
+const SILK_GRAY_BASE: u32 = 0x00b3_b3b3;
+/// How much of the gray silk shows over the canvas (the engine's silk reads about 0.63 of its
+/// base over the light canvas).
+const SILK_GRAY_SHARE: f32 = 0.63;
+
+/// The gray silk of the new-chat stories: a flat gray, as the live silk's base reads at rest.
+fn silk_gray() -> AnyElement {
+    div()
+        .size_full()
+        .opacity(SILK_GRAY_SHARE)
+        .bg(gpui::rgb(SILK_GRAY_BASE))
+        .into_any_element()
+}
+
+/// The shared story's wallpaper: a still gradient stands in for the live aurora bloom (a block of a
+/// later batch).
 fn standin(cx: &App) -> AnyElement {
     let ds = Ds::get(cx);
     let (from, to) = (
@@ -133,7 +149,7 @@ fn suggestions(lang: Lang, wallpaper: bool, _: &mut Window, _: &mut App) -> AnyE
         .moment(copy.moment)
         .title_icon(|side| icon_px(Icon::Sparkles, side).into_any_element());
     if wallpaper {
-        list = list.wallpaper(|_, cx| standin(cx));
+        list = list.wallpaper(|_, _| silk_gray());
     }
     stage(ConversationShell::new(id, RESERVE).child(list))
 }
