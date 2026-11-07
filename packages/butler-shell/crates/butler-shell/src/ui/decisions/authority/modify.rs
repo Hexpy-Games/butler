@@ -60,7 +60,9 @@ pub(super) fn dialog(m: Modify<'_>, window: &mut Window, cx: &mut App) -> AnyEle
                 cx.notify();
             });
         });
-    let input = SharedString::from("authority-modify-input");
+    // One field per request, so a draft never lands on another request.
+    let input = SharedString::from(format!("authority-modify-input-{}", m.handles.key));
+    let input_id = input.clone();
     let (submit_dialog, handles) = (dialog.clone(), m.handles);
     let submit = Button::new("authority-modify-submit")
         .text(m.copy.submit_modify())
@@ -73,15 +75,20 @@ pub(super) fn dialog(m: Modify<'_>, window: &mut Window, cx: &mut App) -> AnyEle
             if instruction.is_empty() || instruction.len() > MAX_INSTRUCTION {
                 return;
             }
-            handles.decide(Verdict::Modify(instruction), cx);
-            submit_dialog.set_open(false, window, cx);
+            // A refused decision (one is pending) keeps the dialog and the text.
+            if handles.decide(Verdict::Modify(instruction), cx) {
+                text::state(input.clone(), window, cx)
+                    .update(cx, |field, cx| field.emplace("", cx));
+                submit_dialog.set_open(false, window, cx);
+            }
         });
     let content = DialogContent::new()
         .size(Size::Md)
         .header(DialogHeader::new().child(DialogTitle::new(m.copy.modify())))
         .child(action(m.title, m.details))
         .child(
-            Textarea::new("authority-modify-input")
+            Textarea::new(input_id)
+                .probe("authority-modify-input")
                 .placeholder(m.copy.modify_placeholder())
                 .rows(3),
         )

@@ -276,6 +276,12 @@ impl Composer {
         cx.notify();
     }
 
+    /// `applyServerPlanMode`: shows the server's plan mode without writing it back.
+    pub(crate) fn apply_server_plan_mode(&mut self, plan_mode: bool, cx: &mut Context<Self>) {
+        self.controls.shown.plan_mode = plan_mode;
+        cx.notify();
+    }
+
     /// `handleReasoningChange`.
     pub(super) fn set_reasoning(&mut self, effort: &ReasoningEffort, cx: &mut Context<Self>) {
         self.controls.shown.reasoning = effort.clone();

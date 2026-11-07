@@ -46,8 +46,9 @@ fn data(ctx: &InspectorCtx<'_>, window: &mut Window, cx: &mut App) -> Data {
     }
 }
 
-/// What the titlebar's session actions read from the model.
+/// What the titlebar's session actions and the sections read from the model.
 pub(crate) struct SessionSectionsModel {
+    data: Data,
     /// `ids.length > 0`
     pub(crate) has_ids: bool,
     /// An ask waits, or a subtask needs approval.
@@ -63,23 +64,23 @@ pub(crate) fn session_sections_model(
 ) -> SessionSectionsModel {
     let data = data(ctx, window, cx);
     let view = ctx.view;
-    SessionSectionsModel {
-        has_ids: data.asks.is_some()
+    let has_ids = data.asks.is_some()
             || view.subtasks.as_ref().is_some_and(|s| !s.is_empty())
             || data.not_done > 0
             || environment_values(view).is_some()
             || view.context.is_some()
             || has_artifacts(view)
-            || !attachments(view).is_empty()
-            || !view.automations.is_empty(),
-        indicator: data.asks.is_some()
-            || view.subtasks.iter().flatten().any(|s| s.state == SubtaskState::NeedsApproval),
-    }
+            || has_attachments(view)
+            || !view.automations.is_empty();
+    let indicator = data.asks.is_some()
+        || view.subtasks.iter().flatten().any(|s| s.state == SubtaskState::NeedsApproval);
+    SessionSectionsModel { data, has_ids, indicator }
 }
 
 /// The session sections of the inspector.
 pub(crate) fn session_sections(
     ctx: &InspectorCtx<'_>,
+    model: &SessionSectionsModel,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -87,9 +88,9 @@ pub(crate) fn session_sections(
     let copy = SessionSections::get(cx);
     let layout = ctx.layout;
     let mut sections: Vec<AnyElement> = Vec::new();
-    let data = data(ctx, window, cx);
+    let data = &model.data;
 
-    if let Some(page) = data.asks {
+    if let Some(page) = data.asks.as_ref() {
         let rows = asks::pending_ask_rows(&page.asks, cx);
         sections.push(section("asks", layout, Some(copy.asks), Some(page.open_count), rows));
     }
@@ -232,7 +233,8 @@ fn context_section(
     cx: &mut App,
 ) -> AnyElement {
     let copy = SessionSections::get(cx);
-    let open = window.use_keyed_state("session-context-open", cx, |_, _| false);
+    let key = SharedString::from(format!("session-context-open-{}", ctx.view.session_id));
+    let open = window.use_keyed_state(key, cx, |_, _| false);
     let is_open = *open.read(cx);
     let compact = super::session_misc::context_compact(ctx, window, cx);
     let row = DisclosureRow::new("session-context", copy.context)
@@ -254,6 +256,14 @@ fn has_artifacts(view: &SessionView) -> bool {
         .iter()
         .chain(from_messages)
         .any(|artifact| artifact.deliverable == Some(true))
+}
+
+/// `attachments.length > 0`, without building the list.
+fn has_attachments(view: &SessionView) -> bool {
+    view.messages
+        .iter()
+        .filter(|message| message.role == MessageRecordRole::User)
+        .any(|message| message.attachments.iter().flatten().next().is_some())
 }
 
 /// The files the user attached, each file once (`attachments` of the sections model).

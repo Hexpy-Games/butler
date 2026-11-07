@@ -85,6 +85,8 @@ pub(crate) struct Shell {
     rediscover: Option<tokio::sync::mpsc::UnboundedSender<crate::ui::source::agent::MonitorSignal>>,
     /// The open chat's latest window is being read again.
     refreshing: bool,
+    /// A refresh was asked for while one was in flight: run it once more when that one ends.
+    refresh_again: bool,
 }
 
 impl HasHover for Shell {
@@ -167,6 +169,7 @@ impl Shell {
             connection_task: None,
             rediscover: None,
             refreshing: false,
+            refresh_again: false,
         };
         Self::transcript_hooks(cx);
         Self::notification_responses(window, cx);

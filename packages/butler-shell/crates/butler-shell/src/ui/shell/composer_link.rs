@@ -2,7 +2,7 @@
 //! does with the composer's events, and the handlers the composer installs once.
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::toast::{self, Toast};
-use gpui::{Context, Entity, Window};
+use gpui::{App, Context, Entity, Window};
 
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -11,6 +11,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::{Shell, image_viewer};
 use crate::ui::composer::queue::on_delete_queued;
 use crate::ui::decisions;
+use crate::ui::inspector;
+use super::navigation::Navigation;
 use crate::ui::composer::{
     Composer, ComposerEvent, Inputs, Outgoing, clear_composer_text, composer_text, focus_composer,
 };
@@ -150,11 +152,17 @@ impl Shell {
                 text: Rc::new(composer_text),
                 clear_text: Rc::new(clear_composer_text),
                 open_instruction: Rc::new(focus_composer),
-                decided: Rc::new(move |_, cx| {
-                    let _ = shell.update(cx, Shell::refresh_open_view);
+                decided: Rc::new(move |result, cx| {
+                    let plan_mode = result.controls.controls.plan_mode;
+                    let _ = shell.update(cx, |this, cx| {
+                        this.composer
+                            .update(cx, |c, cx| c.apply_server_plan_mode(plan_mode, cx));
+                        this.refresh_open_view(cx);
+                    });
                 }),
             },
         );
+        Self::install_navigation_hooks(cx);
         on_delete_queued(cx, |id, cx| {
             let id = id.to_owned();
             let fetch = Jobs::run(cx, move |client| async move {
@@ -172,5 +180,45 @@ impl Shell {
             })
             .detach();
         });
+    }
+
+    /// The navigation and refresh hooks the decision panels and the task graph call
+    /// (`openSession`, `openSessionObserver`, `refreshSessionView`). Opening a session goes
+    /// through the shell's pending navigation (taken on the next frame, which has the window).
+    /// Schedules and memory settings are P3 screens; until then they say so.
+    fn install_navigation_hooks(cx: &mut Context<Self>) {
+        let open = |cx: &mut Context<Self>| -> Rc<dyn Fn(&str, &mut App)> {
+            let shell = cx.entity().downgrade();
+            Rc::new(move |id: &str, cx: &mut App| {
+                let id = id.to_owned();
+                let _ = shell.update(cx, |this, cx| {
+                    this.pending_navigation = Some(Navigation::Session(id));
+                    cx.notify();
+                });
+            })
+        };
+        let not_yet = |cx: &mut Context<Self>| -> Rc<dyn Fn(&mut App)> {
+            let shell = cx.entity().downgrade();
+            Rc::new(move |cx: &mut App| {
+                let _ = shell.update(cx, |this, cx| {
+                    toast::show(cx, Toast::message(this.theme.strings.not_yet));
+                });
+            })
+        };
+        let refresh = cx.entity().downgrade();
+        let schedule = not_yet(cx);
+        let hooks = decisions::InitiatedHooks {
+            open_session: Some(open(cx)),
+            // The observer over the parent is not ported; the subtask's own chat opens.
+            open_observer: Some(open(cx)),
+            open_automation: Some(Rc::new(move |_, cx| schedule(cx))),
+            open_memory_settings: Some(not_yet(cx)),
+            refresh_session: Some(Rc::new(move |_, cx| {
+                let _ = refresh.update(cx, Shell::refresh_open_view);
+            })),
+        };
+        cx.set_global(hooks);
+        let observer = open(cx);
+        inspector::on_open_session_observer(cx, move |id, cx| observer(id, cx));
     }
 }

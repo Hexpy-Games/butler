@@ -114,11 +114,12 @@ impl Shell {
 
     /// Reads the open chat's latest window again and merges it into the shown view.
     pub(super) fn refresh_open_view(&mut self, cx: &mut Context<Self>) {
-        let (Some(chat), Some(source), false) = (
-            self.store.selected().cloned(),
-            self.source.clone(),
-            self.refreshing,
-        ) else {
+        if self.refreshing {
+            self.refresh_again = true;
+            return;
+        }
+        let (Some(chat), Some(source)) = (self.store.selected().cloned(), self.source.clone())
+        else {
             return;
         };
         self.refreshing = true;
@@ -128,6 +129,9 @@ impl Shell {
             cx,
             move |this, result, cx| {
                 this.refreshing = false;
+                if std::mem::take(&mut this.refresh_again) {
+                    this.refresh_open_view(cx);
+                }
                 match result {
                     Ok(view) => {
                         if this.store.view_refreshed(&shown, view) {

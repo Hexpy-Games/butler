@@ -13,8 +13,8 @@ use butler_ds::ui::typo::{Tone, Typo};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Hsla, IntoElement as _, ParentElement as _, SharedString, Styled as _, Window,
-    div, px, relative,
+    AnyElement, App, Hsla, InteractiveElement as _, IntoElement as _, ParentElement as _,
+    SharedString, Styled as _, Window, div, px, relative,
 };
 
 use super::InspectorCtx;
@@ -272,7 +272,13 @@ pub(crate) fn session_info_actions(
     row.child(
         Presence::new("session-info-toggle-presence", props.has_ids)
             .motion(PresenceMotion::Fade)
-            .child(toggle),
+            .child(
+                crate::ui::widgets::anchor(
+                    div().id("session-info-toggle-anchor"),
+                    "session-info-toggle",
+                )
+                .child(toggle),
+            ),
     )
     .into_any_element()
 }

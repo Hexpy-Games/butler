@@ -111,6 +111,12 @@ impl Harness {
                     "approval-card",
                     "question-card",
                     "titlebar",
+                    "session-info-toggle",
+                    "inspector",
+                    "artifact-tile-0",
+                    "file-viewer",
+                    "file-viewer-header",
+                    "file-viewer-page",
                 ]
                 .into_iter()
                 .map(str::to_owned)

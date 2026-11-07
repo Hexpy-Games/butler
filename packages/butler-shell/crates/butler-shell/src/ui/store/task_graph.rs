@@ -4,6 +4,7 @@
 //! generations, and what a live `work_model.changed` event asks for. The routes run in
 //! `inspector/tasks`, which feeds their results in here.
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use chrono::DateTime;
 use serde::Deserialize as _;
@@ -42,7 +43,8 @@ pub(crate) enum TaskGraphAction {
 
 #[derive(Default)]
 pub(crate) struct TaskGraphs {
-    views: HashMap<String, TaskGraphViewState>,
+    /// Shared so a frame reads a state without copying its graphs.
+    views: HashMap<String, Rc<TaskGraphViewState>>,
     /// `viewers`: the sessions whose panel is shown, with their runtime id.
     viewers: HashMap<String, String>,
     /// `loads`: sessions with a load in flight.
@@ -154,12 +156,12 @@ fn patch_task_graph(
 }
 
 impl TaskGraphs {
-    pub(crate) fn view(&self, session: &str) -> Option<&TaskGraphViewState> {
-        self.views.get(session)
+    pub(crate) fn view(&self, session: &str) -> Option<Rc<TaskGraphViewState>> {
+        self.views.get(session).cloned()
     }
 
     fn view_mut(&mut self, session: &str) -> &mut TaskGraphViewState {
-        self.views.entry(session.to_owned()).or_default()
+        Rc::make_mut(self.views.entry(session.to_owned()).or_default())
     }
 
     /// `update(sessionId, { selected, selectionExplicit: true })`
@@ -180,6 +182,10 @@ impl TaskGraphs {
     /// observed yet, so its graphs should load.
     pub(crate) fn observe(&mut self, session: &str, runtime: &str) -> bool {
         self.viewers.retain(|id, _| id == session);
+        // Sessions no longer observed keep nothing.
+        self.views.retain(|id, _| id == session);
+        let prefix = format!("{session}/");
+        self.revisions.retain(|id, _| id.starts_with(&prefix));
         self.viewers
             .insert(session.to_owned(), runtime.to_owned())
             .is_none()

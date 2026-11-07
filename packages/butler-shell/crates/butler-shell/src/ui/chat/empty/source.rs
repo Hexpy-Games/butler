@@ -32,7 +32,10 @@ pub(super) struct Fetched {
 /// Runs the calls on the agent worker.
 pub(super) async fn fetch(client: ShellClient, want: Want) -> Fetched {
     let settings = client.get_settings().await.ok();
-    let navigation = client.list_navigation().await.ok();
+    let navigation = match want.project_id {
+        Some(_) => client.list_navigation().await.ok(),
+        None => None,
+    };
     let briefing = if want.briefing {
         client
             .get_new_chat_briefing(None, want.project_id.as_deref())

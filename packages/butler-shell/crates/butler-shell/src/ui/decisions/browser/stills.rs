@@ -11,7 +11,7 @@ use butler_ds::ui::tooltip::Tooltip;
 use butler_ds::ui::typo::Typo;
 use gpui::{
     AnyElement, App, AsyncApp, ElementId, Entity, ImageSource, IntoElement as _,
-    ParentElement as _, SharedString, Window,
+    ParentElement as _, SharedString, WeakEntity, Window,
 };
 use serde_json::Value;
 
@@ -91,7 +91,7 @@ fn file_id(item: &BrowserStill) -> Option<&str> {
 
 /// Shows `images` if this read is still the current one; false once it is not (or the card left).
 fn apply(
-    state: &Entity<Stills>,
+    state: &WeakEntity<Stills>,
     generation: u64,
     images: Vec<BrowserStill>,
     cx: &mut AsyncApp,
@@ -104,10 +104,11 @@ fn apply(
         cx.notify();
         true
     })
+    .unwrap_or(false)
 }
 
 /// The `read` of the effect: the output's stills, then the bounded wait on the ones saving.
-async fn read(state: &Entity<Stills>, generation: u64, request: &Request, cx: &mut AsyncApp) {
+async fn read(state: &WeakEntity<Stills>, generation: u64, request: &Request, cx: &mut AsyncApp) {
     let content = request
         .content
         .as_deref()
@@ -207,8 +208,8 @@ pub(crate) fn browser_step_still(
             result_id: result_id.to_owned(),
             content: content.map(str::to_owned),
         };
-        let state = state.clone();
-        cx.spawn(async move |cx| read(&state, generation, &request, cx).await)
+        let weak = state.downgrade();
+        cx.spawn(async move |cx| read(&weak, generation, &request, cx).await)
             .detach();
     }
     let images = state.read(cx).images.clone();

@@ -91,14 +91,15 @@ async fn send(client: ShellClient, session: String, request_ref: String, verdict
 
 impl Handles {
     /// `decide`: one in-flight decision per request.
-    pub(super) fn decide(&self, verdict: Verdict, cx: &mut App) {
+    /// Returns false when the request already has one in flight.
+    pub(super) fn decide(&self, verdict: Verdict, cx: &mut App) -> bool {
         let key = self.key.clone();
         let fresh = self.pending.update(cx, |pending, cx| {
             cx.notify();
             pending.insert(key)
         });
         if !fresh {
-            return;
+            return false;
         }
         self.failed.update(cx, |failed, cx| {
             *failed = None;
@@ -123,6 +124,7 @@ impl Handles {
             }
         })
         .detach();
+        true
     }
 }
 
@@ -148,6 +150,11 @@ fn view_is_handoff(view: &SessionView) -> bool {
     view.authority_requests
         .as_deref()
         .is_some_and(|requests| request::cards(requests).first().is_some_and(request::is_handoff))
+}
+
+/// The requests the card accepts (`normalizeAuthorityApprovals`), as the wire records.
+pub(super) fn valid_requests(raw: &[Value]) -> Vec<&Value> {
+    request::valid(raw)
 }
 
 fn state<T: 'static>(
@@ -198,11 +205,11 @@ pub(crate) fn authority_surface(
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
-    let decision = decision(ctx.view, window, cx)?;
-    let handoff = view_is_handoff(ctx.view);
-    if handoff {
-        return super::browser::browser_surface(ctx, window, cx);
+    // The routing asks the browser handoff panel first.
+    if view_is_handoff(ctx.view) {
+        return None;
     }
+    let decision = decision(ctx.view, window, cx)?;
     Some(surface(&decision, window, cx))
 }
 
@@ -254,7 +261,9 @@ fn allow(d: &Decision) -> SplitButton {
     match d.allow_site {
         Some(site) => {
             let label = if site == AllowSite::Payment { copy.allow_payment_site() } else { copy.allow_site() };
-            let mut item = SplitItem::new(label, move |_, cx| handles.decide(Verdict::Allow("site"), cx));
+            let mut item = SplitItem::new(label, move |_, cx| {
+                handles.decide(Verdict::Allow("site"), cx);
+            });
             if site == AllowSite::SignedIn {
                 item = item.description([SharedString::from(copy.allow_site_description())]);
             }
@@ -310,7 +319,9 @@ fn surface(d: &Decision, window: &mut Window, cx: &mut App) -> AnyElement {
         .variant(Variant::Secondary)
         .size(Size::Sm)
         .text(copy.deny())
-        .on_click(move |_, _, cx| handles.decide(Verdict::Deny, cx));
+        .on_click(move |_, _, cx| {
+            handles.decide(Verdict::Deny, cx);
+        });
     if d.progress.pending {
         deny = deny.disabled();
     }

@@ -10,7 +10,7 @@ use futures::future::LocalBoxFuture;
 use futures::stream::LocalBoxStream;
 
 pub(crate) use model::{
-    Approval, AuthorityCard, ChatId, ChatPage, ChatRef, ChatSummary, EventCursor, LiveEvent,
+    AuthorityCard, ChatId, ChatPage, ChatRef, ChatSummary, EventCursor, LiveEvent,
     LiveUpdate, PageCursor, RequestRef, Risk, SentTurn, SessionId, Space,
     Timestamp, TurnId,
 };

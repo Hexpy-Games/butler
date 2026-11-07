@@ -278,6 +278,9 @@ impl Focusable for CommandPalette {
 
 impl Render for CommandPalette {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if !self.open {
+            return gpui::div().into_any_element();
+        }
         let lang = Ds::get(cx).lang();
         let copy = words(lang);
         let developer_mode = cx
@@ -314,6 +317,6 @@ impl Render for CommandPalette {
         if let Some(feedback) = feedback(self.status(), items.is_empty(), lang, &this) {
             panel = panel.feedback(feedback);
         }
-        panel.items(items)
+        panel.items(items).into_any_element()
     }
 }

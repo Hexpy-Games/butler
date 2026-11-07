@@ -78,7 +78,7 @@ impl Source for Fake {
     fn authority(&self, _: &SessionId) -> Fetch<Vec<AuthorityCard>> {
         let card = AuthorityCard {
             request: RequestRef("r1".into()),
-            approval: None,
+            tool: None,
         };
         ready(Ok(vec![card]))
     }

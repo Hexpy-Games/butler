@@ -341,20 +341,3 @@ pub(crate) fn plan_document_card(
         )
         .into_any_element()
 }
-
-/// `PlanDocumentMessage`: the plan document shown in the transcript (the latest message that
-/// carries one); `None` when there is none.
-pub(crate) fn plan_document_message(
-    ctx: DecisionCtx<'_>,
-    window: &mut Window,
-    cx: &mut App,
-) -> Option<AnyElement> {
-    let _ = window;
-    let plan = ctx
-        .view
-        .messages
-        .iter()
-        .rev()
-        .find_map(|message| message.plan_document.as_ref())?;
-    Some(plan_document_card(plan, false, cx))
-}

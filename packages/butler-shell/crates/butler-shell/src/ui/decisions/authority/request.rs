@@ -167,6 +167,11 @@ pub(super) fn cards(raw: &[Value]) -> Vec<Card> {
     raw.iter().filter_map(card).collect()
 }
 
+/// The records `cards` keeps, unparsed.
+pub(super) fn valid(raw: &[Value]) -> Vec<&Value> {
+    raw.iter().filter(|entry| card(entry).is_some()).collect()
+}
+
 fn card(entry: &Value) -> Option<Card> {
     let wire: AuthorityApprovalCardWire = serde_json::from_value(entry.clone()).ok()?;
     if wire.request_ref.trim().is_empty()

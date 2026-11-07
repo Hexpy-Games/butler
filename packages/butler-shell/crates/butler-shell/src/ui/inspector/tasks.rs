@@ -143,11 +143,6 @@ fn task_graph_clock(id: ElementId, running: bool, window: &mut Window, cx: &mut 
     present::now_ms()
 }
 
-/// The tasks panel with the session's task graph.
-pub(crate) fn tasks_panel(ctx: &InspectorCtx<'_>, window: &mut Window, cx: &mut App) -> AnyElement {
-    session_tasks_panel(&ctx.view.session_id, false, window, cx)
-}
-
 /// `TasksPanel hideHeading`: the host (a dialog) already titles the view, so the panel's own
 /// heading is omitted.
 pub(crate) fn tasks_panel_in_dialog(
@@ -176,7 +171,7 @@ fn session_tasks_panel(
     }
     let lang = Ds::get(cx).lang();
     let words = copy::words(lang);
-    let state = store.read(cx).view(session).cloned().unwrap_or_default();
+    let state = store.read(cx).view(session).unwrap_or_default();
     let actions = Rc::new(Actions {
         store: store.clone(),
         document: document.clone(),

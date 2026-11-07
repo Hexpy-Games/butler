@@ -62,14 +62,10 @@ pub(super) async fn run(client: &ShellClient, dirty: &Dirty, send: &mut mpsc::Se
             }
         }
         for session in sessions {
-            let update = match client
-                .authority_requests(&session)
-                .await
-                .and_then(convert::authority)
-            {
-                Ok(cards) => LiveUpdate::Authority {
+            let update = match client.authority_requests(&session).await {
+                Ok(page) => LiveUpdate::Authority {
                     session: SessionId(session.into()),
-                    cards,
+                    cards: convert::authority(page),
                 },
                 Err(error) => LiveUpdate::Failed(convert::error(&error)),
             };

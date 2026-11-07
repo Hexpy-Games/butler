@@ -85,9 +85,7 @@ impl Shell {
                 .as_ref()
                 .ok()
                 .and_then(|c| c.first())
-                .and_then(|c| c.approval.as_ref())
-                .and_then(|a| a.operation.as_ref())
-                .map(|o| o.tool.as_ref());
+                .and_then(|c| c.tool.as_deref());
             let label = match tool {
                 Some("browser_sign_in_wait") => s.copy("Sign-in needs you", "로그인 확인 필요"),
                 Some("browser_pay_wait") => s.copy("Payment needs you", "결제 확인 필요"),

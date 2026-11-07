@@ -1,6 +1,6 @@
 //! `useArtifactText` and the save of `artifactActions`: a text artifact's content, fetched once
 //! per stored file on the agent worker, and the save dialog that writes a file to disk.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use butler_ds::ui::toast::{self, Toast};
@@ -8,6 +8,7 @@ use gpui::{App, SharedString};
 
 use crate::ui::i18n::media::Media;
 use crate::ui::source::agent::Jobs;
+use crate::ui::viewer::state::{FileViewerEntry, FileViewerState};
 
 /// Where one text stands.
 enum Load {
@@ -28,9 +29,26 @@ pub(super) enum TextState {
     Ready(SharedString),
 }
 
+/// The files of the open viewer entries: the only texts worth keeping.
+fn open_file_ids(cx: &App) -> HashSet<String> {
+    cx.try_global::<FileViewerState>()
+        .into_iter()
+        .flat_map(|state| state.sessions.values())
+        .flat_map(|files| &files.entries)
+        .filter_map(|entry| match entry {
+            FileViewerEntry::Artifact { artifact, .. } => artifact.file_id.clone(),
+            FileViewerEntry::Document { .. } => None,
+        })
+        .collect()
+}
+
 /// The text of message file `file_id`; starts the download the first time it is asked for.
 /// The windows refresh when it arrives.
 pub(super) fn artifact_text(file_id: &str, cx: &mut App) -> TextState {
+    let open = open_file_ids(cx);
+    cx.default_global::<Texts>()
+        .0
+        .retain(|id, _| id == file_id || open.contains(id));
     match cx.default_global::<Texts>().0.get(file_id) {
         Some(Load::Ready(text)) => return TextState::Ready(text.clone()),
         Some(Load::Failed) => return TextState::Failed,
@@ -51,8 +69,13 @@ pub(super) fn artifact_text(file_id: &str, cx: &mut App) -> TextState {
     cx.spawn(async move |cx| {
         let loaded = done.await;
         cx.update(|cx| {
+            let open = open_file_ids(cx);
             let texts = cx.default_global::<Texts>();
             match loaded {
+                // The viewer closed the file while it downloaded: keep nothing.
+                Some(_) if !open.contains(&key) => {
+                    texts.0.remove(&key);
+                }
                 Some(text) => {
                     let state = text.map_or(Load::Failed, |text| Load::Ready(text.into()));
                     texts.0.insert(key, state);
@@ -75,14 +98,16 @@ pub(super) fn save_file(file_id: String, name: &str, cx: &mut App) {
         .map_or_else(PathBuf::new, |home| home.join("Downloads"));
     let ask = cx.prompt_for_new_path(&directory, Some(name));
     let copy = Media::get(cx);
-    let download = Jobs::run(cx, move |client| async move {
-        let file = client.download_message_file(&file_id).await.ok()?;
-        Some(file.bytes)
-    });
     cx.spawn(async move |cx| {
         let Ok(Ok(Some(path))) = ask.await else {
             return;
         };
+        let download = cx.update(|cx| {
+            Jobs::run(cx, move |client| async move {
+                let file = client.download_message_file(&file_id).await.ok()?;
+                Some(file.bytes)
+            })
+        });
         let written = match download.await.flatten() {
             Some(bytes) => cx
                 .background_executor()

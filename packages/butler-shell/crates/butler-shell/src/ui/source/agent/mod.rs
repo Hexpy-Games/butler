@@ -163,7 +163,7 @@ impl Source for Agent {
 
     fn authority(&self, session: &SessionId) -> Fetch<Vec<AuthorityCard>> {
         let (client, session) = (self.client.clone(), session.0.to_string());
-        self.fetch(async move { convert::authority(client.authority_requests(&session).await?) })
+        self.fetch(async move { Ok(convert::authority(client.authority_requests(&session).await?)) })
     }
     fn live(&self, after: EventCursor) -> futures::stream::LocalBoxStream<'static, LiveEvent> {
         live::subscribe(self, after)

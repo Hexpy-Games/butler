@@ -42,7 +42,7 @@ use self::state::{ComposerState, image_refusal_label};
 use crate::ui::field;
 use crate::ui::motion::Hover;
 use crate::ui::decisions::{
-    DecisionCtx, decision_surface, plan_instruction, set_plan_gate,
+    DecisionCtx, decision_surface, plan_instruction, question_attachment, set_plan_gate,
 };
 use crate::ui::source::wire::{QueuedMessageRecord, SessionView};
 use crate::ui::theme::Theme;
@@ -371,14 +371,15 @@ impl Composer {
             return (None, None);
         };
         let ctx = DecisionCtx { view: &view };
-        match plan_instruction(ctx, cx) {
-            Some(plan) => (
-                Some(adjunct::plan_instruction_attachment(&plan.title, plan.label, cx)),
-                Some(plan.placeholder),
-            ),
-            None => (None, None),
-        }
+        let plan = plan_instruction(ctx, cx);
+        let placeholder = plan.as_ref().map(|plan| plan.placeholder);
+        let plan = plan.map(|p| adjunct::plan_instruction_attachment(&p.title, p.label, cx));
+        let parts: Vec<AnyElement> = question_attachment(ctx, window, cx).into_iter().chain(plan).collect();
+        let attachment = (!parts.is_empty())
+            .then(|| div().flex().flex_col().children(parts).into_any_element());
+        (attachment, placeholder)
     }
+
 
     /// The open chat's queued follow-ups.
     pub(crate) fn set_queue(&mut self, queue: Vec<QueuedMessageRecord>) {

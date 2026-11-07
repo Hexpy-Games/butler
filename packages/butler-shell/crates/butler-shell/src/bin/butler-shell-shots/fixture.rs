@@ -6,11 +6,10 @@ use futures::FutureExt as _;
 use futures::StreamExt as _;
 use futures::stream::LocalBoxStream;
 
-use crate::ui::source::model::{Access, Operation};
 use crate::ui::source::wire::SessionView;
 use crate::ui::source::{
-    Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, ClientMessageId,
-    ComposerContext, EventCursor, Fetch, LiveEvent, PageCursor, RequestRef, Risk,
+    AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, ClientMessageId,
+    ComposerContext, EventCursor, Fetch, LiveEvent, PageCursor, RequestRef,
     SentTurn, SessionId, Source, SourceError, Space, Timestamp, TurnId,
 };
 
@@ -174,26 +173,11 @@ fn command_request() -> serde_json::Value {
 }
 
 fn command_card() -> AuthorityCard {
-    let command = COMMAND;
     AuthorityCard {
         request: RequestRef("r-1".into()),
         kind: CardKind::Command,
         reason: COMMAND_REASON.into(),
-        approval: Some(Approval {
-            wire: None,
-            action_kind: "command".into(),
-            operation: Some(Operation {
-                tool: "shell".into(),
-                access: Access::Change,
-                targets: Vec::new(),
-                command: Some(command.into()),
-            }),
-            targets: Vec::new(),
-            count: 1,
-            examples: vec![command.into()],
-            examples_truncated: vec![false],
-            risk: Some(Risk::Medium),
-        }),
+        tool: Some("shell".into()),
     }
 }
 
@@ -202,7 +186,7 @@ fn question_card() -> AuthorityCard {
         request: RequestRef("r-2".into()),
         kind: CardKind::Question,
         reason: "릴리스 노트를 어느 브랜치 기준으로 쓸까요?".into(),
-        approval: None,
+        tool: None,
     }
 }
 

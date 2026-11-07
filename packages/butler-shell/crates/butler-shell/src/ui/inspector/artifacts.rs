@@ -76,8 +76,15 @@ fn open_artifact(artifact: &SessionArtifactSummary, session: &str, cx: &mut App)
 }
 
 /// One tile (`DocumentTile` with `artifactCardActions`).
-fn artifact_item(artifact: &SessionArtifactSummary, session: &str, cx: &App) -> ArtifactItem {
-    let mut item = ArtifactItem::new(artifact.title.clone()).icon(Icon::FileText);
+fn artifact_item(
+    artifact: &SessionArtifactSummary,
+    index: usize,
+    session: &str,
+    cx: &App,
+) -> ArtifactItem {
+    let mut item = ArtifactItem::new(artifact.title.clone())
+        .icon(Icon::FileText)
+        .anchor(format!("artifact-tile-{index}"));
     if let Some(bytes) = artifact.size_bytes {
         item = item.description(format_artifact_size(bytes));
     }
@@ -125,8 +132,8 @@ pub(crate) fn artifacts_panel(
             .into_any_element()
     } else {
         let mut list = ArtifactList::new(SharedString::from("inspector-artifacts"));
-        for artifact in &all {
-            list = list.item(artifact_item(artifact, &ctx.view.session_id, cx));
+        for (index, artifact) in all.iter().enumerate() {
+            list = list.item(artifact_item(artifact, index, &ctx.view.session_id, cx));
         }
         list.into_any_element()
     };

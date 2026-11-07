@@ -97,8 +97,8 @@ pub(crate) fn browser_surface(
     _window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
-    let requests = ctx.view.authority_requests.as_deref()?;
-    let request = requests.first()?;
+    let requests = super::authority::valid_requests(ctx.view.authority_requests.as_deref()?);
+    let request = *requests.first()?;
     let copy = BrowserHandoff::get(cx);
     let handoff = handoff_view(request, Ds::get(cx).lang(), copy)?;
     let turn = ctx.view.active_turn.as_ref().map(|turn| turn.id.clone());

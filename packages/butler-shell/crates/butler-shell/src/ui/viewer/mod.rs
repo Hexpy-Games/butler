@@ -10,7 +10,7 @@ use butler_ds::ui::blocks::tab_strip::{Group, GroupKind, Tab, TabStrip, TabStrip
 use butler_ds::ui::icon_button::{IconButton, Pane, Tone};
 use butler_ds::ui::layout::{Box, Space, Stack};
 use butler_ds::ui::presence::{Presence, PresenceMotion};
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
+use gpui::{AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, Styled as _, Window, div};
 
 pub(crate) use state::{
     FileViewerEntry, RightSlotPane, activate, close, open, right_slot_pane, session_files,
@@ -66,11 +66,13 @@ pub(crate) fn file_viewer_pane(
     }
     column = column.child(artifact::artifact_viewer(session, &active, window, cx));
     Some(
-        ShellCard::new()
+        crate::ui::widgets::anchor(div().id("file-viewer-anchor").size_full(), "file-viewer")
             .child(
-                Presence::new("file-viewer", true)
-                    .motion(PresenceMotion::Fade)
-                    .child(column),
+                ShellCard::new().child(
+                    Presence::new("file-viewer", true)
+                        .motion(PresenceMotion::Fade)
+                        .child(column),
+                ),
             )
             .into_any_element(),
     )

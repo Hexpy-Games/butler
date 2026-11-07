@@ -188,7 +188,7 @@ impl Render for Shell {
             .child(frame)
             .children(viewer)
             .child(rename)
-            .child(task_graph)
+            .children(task_graph)
             .child(self.palette())
             .child(toast::Toaster::new().offset(ds.len(Length::TitlebarSafeAreaTop)));
         overlay::track(toast::track(focus::track_modality(div())))

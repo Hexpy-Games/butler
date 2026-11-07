@@ -63,6 +63,7 @@ pub struct ArtifactItem {
     icon: Icon,
     actions: Vec<ArtifactAction>,
     on_open: Option<Handler>,
+    anchor: Option<SharedString>,
 }
 
 impl ArtifactItem {
@@ -73,6 +74,7 @@ impl ArtifactItem {
             icon: Icon::FileText,
             actions: Vec::new(),
             on_open: None,
+            anchor: None,
         }
     }
 
@@ -88,6 +90,12 @@ impl ArtifactItem {
 
     pub fn action(mut self, action: ArtifactAction) -> Self {
         self.actions.push(action);
+        self
+    }
+
+    /// Names the row for the live harness (`debug_selector`).
+    pub fn anchor(mut self, name: impl Into<SharedString>) -> Self {
+        self.anchor = Some(name.into());
         self
     }
 
@@ -244,6 +252,9 @@ fn row(
         .child(text_column(item.title, item.description, ds));
     if !item.actions.is_empty() {
         line = line.child(actions_column(item.actions, &row_id, ds));
+    }
+    if let Some(name) = item.anchor {
+        line = line.debug_selector(move || name.to_string());
     }
     match item.on_open {
         Some(open) => button_row(line, row_id, open, window, cx),

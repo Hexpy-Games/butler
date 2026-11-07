@@ -81,51 +81,11 @@ pub(crate) enum Risk {
     High,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Access {
-    ReadOnly,
-    Change,
-}
-
-/// The exact local decision facts of a request.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Operation {
-    pub(crate) tool: SharedString,
-    pub(crate) access: Access,
-    pub(crate) targets: Vec<SharedString>,
-    /// The command line as sent, for commands.
-    pub(crate) command: Option<SharedString>,
-}
-
-/// One target exactly as the gateway sends it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Target {
-    pub(crate) kind: SharedString,
-    pub(crate) path: SharedString,
-    pub(crate) label: Option<SharedString>,
-}
-
-/// The gateway's `approval`, typed but unchanged: the card shows these strings as sent.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Approval {
-    /// Complete gateway approval, retained without dropping fields.
-    pub(crate) wire: Option<serde_json::Value>,
-    pub(crate) action_kind: SharedString,
-    pub(crate) operation: Option<Operation>,
-    pub(crate) targets: Vec<Target>,
-    pub(crate) count: u32,
-    /// Up to three concrete items (relative paths, or the command line as sent).
-    pub(crate) examples: Vec<SharedString>,
-    /// One flag per example: the gateway cut it at its safety cap.
-    pub(crate) examples_truncated: Vec<bool>,
-    pub(crate) risk: Option<Risk>,
-}
-
-/// An outstanding authority request.
+/// An outstanding authority request: its ref, and the tool of its operation when it names one.
 #[derive(Clone, Debug)]
 pub(crate) struct AuthorityCard {
     pub(crate) request: RequestRef,
-    pub(crate) approval: Option<Approval>,
+    pub(crate) tool: Option<SharedString>,
 }
 
 /// A message was sent and its turn started.

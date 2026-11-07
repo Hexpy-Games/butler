@@ -12,8 +12,8 @@ use butler_ds::ui::scroll::ScrollArea;
 use butler_ds::ui::separator::Separator;
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{
-    AnyElement, App, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _,
-    Window, div, px,
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
+    SharedString, Styled as _, Window, div, px,
 };
 
 use crate::ui::i18n::file_viewer::FileViewerStrings;
@@ -94,8 +94,7 @@ impl RenderOnce for FileViewerHeader {
             .child(text)
             .children(self.leading)
             .child(buttons);
-        div()
-            .relative()
+        crate::ui::widgets::anchor(div().id("file-viewer-header").relative(), "file-viewer-header")
             .child(recorder)
             .child(
                 Box::new()
@@ -156,13 +155,16 @@ impl RenderOnce for FileViewerPage {
         let body = Box::new()
             .padding_y(Space::Xxl)
             .child(Box::new().padding(Space::Xxl).children(self.children));
-        ScrollArea::new("file-viewer-scroll").fill().child(
-            div()
-                .w_full()
-                .max_w(px(max))
-                .mx_auto()
-                .px(Space::Xxl.px(ds))
-                .child(body),
-        )
+        crate::ui::widgets::anchor(div().id("file-viewer-page").size_full(), "file-viewer-page")
+            .child(
+                ScrollArea::new("file-viewer-scroll").fill().child(
+                    div()
+                        .w_full()
+                        .max_w(px(max))
+                        .mx_auto()
+                        .px(Space::Xxl.px(ds))
+                        .child(body),
+                ),
+            )
     }
 }

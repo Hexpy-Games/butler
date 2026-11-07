@@ -111,7 +111,9 @@ impl Shell {
         let layout = self.panes.layout.clone();
         Some(move |next: AsideLayout| {
             layout.set(next);
-            pane.clone().into_any_element()
+            crate::ui::widgets::anchor(gpui::div().id("inspector").size_full(), "inspector")
+                .child(pane.clone())
+                .into_any_element()
         })
     }
 
@@ -128,7 +130,8 @@ impl Shell {
             shared: view.clone(),
             layout: AsideLayout::Docked,
         };
-        let model = session_sections_model(&ctx, window, cx);
+        let model = Rc::new(session_sections_model(&ctx, window, cx));
+        self.panes.inspector.update(cx, |pane, _| pane.set_model(model.clone()));
         if !model.has_ids && !self.panes.task_graph_enabled {
             return None;
         }
@@ -167,7 +170,10 @@ impl Shell {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> AnyElement {
+    ) -> Option<AnyElement> {
+        if !self.panes.graph_open {
+            return None;
+        }
         let weak = cx.entity().downgrade();
         let dialog = Dialog::new("task-graph", window, cx)
             .open(self.panes.graph_open)
@@ -181,7 +187,6 @@ impl Shell {
             .panes
             .view
             .clone()
-            .filter(|_| self.panes.graph_open)
             .map(|view| {
                 let ctx = InspectorCtx {
                     view: &view,
@@ -197,7 +202,7 @@ impl Shell {
             .layout(Layout::ScrollBody)
             .header(DialogHeader::new().child(DialogTitle::new(title)))
             .children(body);
-        dialog.content(content, window, cx)
+        Some(dialog.content(content, window, cx))
     }
 
     /// The conversation with the file viewer beside it while the viewer holds the right slot.
