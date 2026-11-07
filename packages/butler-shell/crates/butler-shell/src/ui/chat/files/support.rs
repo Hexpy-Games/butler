@@ -10,7 +10,7 @@ use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::toast::{self, Toast};
 use butler_shell_client::ShellClient;
 use futures::channel::oneshot;
-use gpui::{App, Image, ImageFormat, ImageSource};
+use gpui::{App, BorrowAppContext as _, Image, ImageFormat, ImageSource};
 
 use crate::ui::shell::image_viewer::{ImageViewerHost, ViewerImage};
 
