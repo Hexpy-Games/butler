@@ -1,11 +1,12 @@
 //! SpaceRow, branch, identity and unfinished subtask lines use DS rows.
 mod status;
+mod subtasks;
 use super::Shell;
 use crate::ui::{Icon, source::wire::SpaceNodeKind, store::navigation::SpaceRowData};
 use butler_ds::ui::{
     blocks::{
-        collapsible_nav_group::CollapsibleNavGroup,
-        nav_row::{NavRow, NavRowChildren, NavRowSwap},
+        collapsible_nav_group::{CollapsibleNavGroup, StickyScroll},
+        nav_row::{NavRow, NavRowSwap},
     },
     collapsible::{CollapsibleList, Row as CollapsibleRow},
     context::Ds,
@@ -17,8 +18,26 @@ use butler_ds::ui::{
     typo::{Tone, Typo, Wrap},
     unread_dot::UnreadDot,
 };
-use gpui::{AnyElement, Context, SharedString, div, prelude::*};
+use gpui::{AnyElement, App, Context, SharedString, Window, div, prelude::*};
+
+/// Where the sidebar's sticky headers hold: the scroller's recorder is the first row of the
+/// SidebarShell (`Shell::sidebar_sticky(..).recorder()`), every branch header reads it.
+const STICKY_ID: &str = "sidebar-sticky";
+
+/// A sticky group: the scroller it holds in and `stickyDepth`, the number of sticky groups
+/// around it.
+#[derive(Clone, Copy)]
+pub(super) struct Pin<'a> {
+    pub(super) scroll: &'a StickyScroll,
+    pub(super) depth: usize,
+}
+
 impl Shell {
+    /// The sticky scroller of the sidebar tree; state is keyed, so every call is the same one.
+    pub(super) fn sidebar_sticky(window: &mut Window, cx: &mut App) -> StickyScroll {
+        StickyScroll::new(STICKY_ID, window, cx)
+    }
+
     pub(super) fn space_row_actions(
         &mut self,
         row: &SpaceRowData,
@@ -103,9 +122,14 @@ impl Shell {
         let instance_scope = self.sidebar.tab.value();
         let rows = rows.into_iter().map(move |row| {
             let weak = weak.clone();
-            CollapsibleRow::new(row.node.key.clone(), move |_, cx| {
+            CollapsibleRow::new(row.node.key.clone(), move |window, cx| {
+                let scroll = Self::sidebar_sticky(window, cx);
                 weak.update(cx, |s, cx| {
-                    s.space_row(&row, flat, false, instance_scope, cx)
+                    let pin = Pin {
+                        scroll: &scroll,
+                        depth: row.ancestors.len(),
+                    };
+                    s.space_row_in(&row, (flat, false), instance_scope, Some(pin), cx)
                 })
                 .unwrap_or_else(|_| div().into_any_element())
             })
@@ -124,6 +148,17 @@ impl Shell {
         scope: &str,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        self.space_row_in(row, (flat, shortcut), scope, None, cx)
+    }
+    /// A row of the tree: `(flat, shortcut)` pick the Recent/Running list and pinned shortcuts.
+    fn space_row_in(
+        &mut self,
+        row: &SpaceRowData,
+        (flat, shortcut): (bool, bool),
+        scope: &str,
+        pin: Option<Pin<'_>>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let key = row.node.key.clone();
         let path = row
             .ancestors
@@ -133,7 +168,7 @@ impl Shell {
             .collect::<Vec<_>>()
             .join("/");
         let instance = format!("{scope}:{path}");
-        let content = self.space_row_content(row, flat, shortcut, &instance, cx);
+        let content = self.space_row_content(row, (flat, shortcut), &instance, pin, cx);
         let kind = if shortcut { "shortcut-row" } else { "row" };
         let content = Self::row_gestures(
             crate::ui::widgets::anchor(div(), &format!("sidebar-{kind}-{}", row.node.entityId))
@@ -162,9 +197,9 @@ impl Shell {
     fn space_row_content(
         &mut self,
         row: &SpaceRowData,
-        flat: bool,
-        shortcut: bool,
+        (flat, shortcut): (bool, bool),
         instance: &str,
+        pin: Option<Pin<'_>>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let key = row.node.key.clone();
@@ -176,7 +211,7 @@ impl Shell {
             cx,
         );
         if row.node.kind != SpaceNodeKind::Session && !shortcut {
-            self.space_row_branch(row, actions, instance, cx)
+            self.space_row_branch(row, actions, instance, pin, cx)
         } else {
             let identity = self.space_identity(row, cx);
             let id = row.node.entityId.clone();
@@ -226,6 +261,7 @@ impl Shell {
         row: &SpaceRowData,
         actions: AnyElement,
         instance: &str,
+        pin: Option<Pin<'_>>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let key = row.node.key.clone();
@@ -247,6 +283,9 @@ impl Shell {
             s.refresh_canon(cx);
             cx.notify();
         }));
+        if let Some(pin) = pin {
+            group = group.sticky(pin.scroll, pin.depth);
+        }
         if let Some(project) = &row.project {
             if expanded {
                 self.sidebar.canon_visible.insert(project.id.clone());
@@ -254,7 +293,11 @@ impl Shell {
                     self.load_canon_sidebar(project.id.clone(), cx);
                 }
             }
-            group = group.child(self.canon_sidebar_groups(&project.id, cx));
+            let canon_pin = pin.map(|pin| Pin {
+                depth: pin.depth + 1,
+                ..pin
+            });
+            group = group.child(self.canon_sidebar_groups(&project.id, canon_pin, cx));
         }
         let children = self.store.navigation.children(Some(&row.node.key));
         let visible = self
@@ -379,68 +422,6 @@ impl Shell {
                 )
             })
             .unwrap_or_default()
-    }
-    pub(super) fn subtask_lines(
-        &self,
-        session: &crate::ui::source::wire::SessionSummary,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let mut children = NavRowChildren::new();
-        for task in &session.subtasks {
-            children = children.child(self.subtask_line(&session.id, task, cx));
-        }
-        children.into_any_element()
-    }
-    fn subtask_line(
-        &self,
-        parent_id: &str,
-        task: &crate::ui::source::wire::SubtaskView,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let id = task.session_id.clone();
-        let parent = parent_id.to_owned();
-        let mark = match task.state {
-            crate::ui::source::wire::SubtaskState::Paused => {
-                let relation = task.relation_id.clone();
-                let weak = cx.entity().downgrade();
-                butler_ds::ui::icon_button::IconButton::new(
-                    gpui::SharedString::from(format!("resume-{id}")),
-                    self.copy("Resume", "계속하기"),
-                )
-                .glyph(Icon::Play)
-                .on_click(move |_, _, cx| {
-                    let _ = weak.update(cx, |s, cx| {
-                        s.mutate(
-                            crate::ui::source::sidebar::Mutation::ResumeSubtask(
-                                relation.clone(),
-                                parent.clone(),
-                            ),
-                            cx,
-                        );
-                    });
-                })
-                .into_any_element()
-            }
-            crate::ui::source::wire::SubtaskState::NeedsApproval => {
-                icon(Icon::CircleAlert, IconSize::Sm, Ds::get(cx)).into_any_element()
-            }
-            _ => Typo::caption(match (task.plan_completed, task.plan_total) {
-                (Some(done), Some(total)) if total > 0 => {
-                    format!("{}/{total}", done.max(0).saturating_add(1).min(total))
-                }
-                _ => String::new(),
-            })
-            .tone(Tone::Secondary)
-            .into_any_element(),
-        };
-        NavRow::new(
-            gpui::SharedString::from(format!("subtask-{id}")),
-            task.title.clone(),
-        )
-        .reserve_icon()
-        .actions(mark)
-        .disabled()
-        .into_any_element()
     }
 }
 pub(super) fn space_glyph(row: &SpaceRowData) -> Icon {

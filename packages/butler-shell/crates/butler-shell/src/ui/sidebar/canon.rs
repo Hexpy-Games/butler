@@ -101,6 +101,7 @@ impl Shell {
     pub(super) fn canon_sidebar_groups(
         &mut self,
         project: &str,
+        pin: Option<super::row::Pin<'_>>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let groups = self
@@ -111,7 +112,7 @@ impl Shell {
             .unwrap_or_default();
         let mut list = div().flex().flex_col();
         for group in groups {
-            list = list.child(self.canon_sidebar_group(project, &group, cx));
+            list = list.child(self.canon_sidebar_group(project, &group, pin, cx));
         }
         list.into_any_element()
     }
@@ -119,6 +120,7 @@ impl Shell {
         &mut self,
         project: &str,
         group: &CanonSidebarGroup,
+        pin: Option<super::row::Pin<'_>>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let key = format!("canon:{project}:{}", group.key);
@@ -148,6 +150,9 @@ impl Shell {
             s.sidebar.toggle(&toggle);
             cx.notify();
         }));
+        if let Some(pin) = pin {
+            branch = branch.sticky(pin.scroll, pin.depth);
+        }
         for epic in &group.rows {
             branch = branch.child(self.canon_epic_row(project, &group.key, epic, cx));
         }
