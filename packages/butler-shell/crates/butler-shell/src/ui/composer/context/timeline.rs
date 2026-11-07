@@ -2,7 +2,7 @@
 //! and the conversation / subtask split of one chat's usage.
 use butler_ds::ui::blocks::usage_bars::{
     AxisLabel, Bucket as BarBucket, BucketOptions, Emphasis, Segment, Series, SeriesColor, Slot,
-    bucket_usage_slots, day_and_hour,
+    TimeBucket, bucket_usage_slots, day_and_hour,
 };
 use butler_ds::ui::context::Lang;
 
@@ -169,13 +169,58 @@ fn at<T: Copy + Default>(values: &[T], index: usize) -> T {
     values.get(index).copied().unwrap_or_default()
 }
 
+/// One grouped bucket with its readout values and its bar.
+fn timeline_bucket(
+    bucket: &TimeBucket,
+    scoped: bool,
+    now: i64,
+    step_hours: u32,
+    lang: Lang,
+) -> TimelineBucket {
+    let c = copy(lang);
+    let v = &bucket.values;
+    let (requests, prompt, cached, output) = (at(v, 0), at(v, 1), at(v, 2), at(v, 3));
+    let (delegated, d_cached, d_output) = (at(v, 4), at(v, 6), at(v, 7));
+    let split = scoped && delegated > 0. && v.len() >= SPLIT_SLOT_VALUES;
+    let segment = |id: &str, value: f64, subtask: f64| Segment {
+        id: id.to_owned().into(),
+        value,
+        subtask: if split { subtask } else { 0. },
+    };
+    let label = bucket_label(bucket.start, bucket.end, now, step_hours, lang);
+    let bar = BarBucket {
+        key: bucket.start.to_string().into(),
+        label: label.clone().into(),
+        value_text: format!("{} {}", usage_tokens(prompt + output, lang), c.tokens).into(),
+        segments: vec![
+            segment(
+                "new",
+                (prompt - cached).max(0.),
+                (delegated - d_output - d_cached).max(0.),
+            ),
+            segment("cache", cached, d_cached),
+            segment("output", output, d_output),
+        ],
+    };
+    TimelineBucket {
+        values: v.clone(),
+        requests,
+        prompt,
+        cached,
+        output,
+        delegated,
+        total: prompt + output,
+        label,
+        bar,
+    }
+}
+
 /// `usageTimeline`.
 pub(super) fn usage_timeline(
     view: Option<&UsageMonitorView>,
     max_bars: usize,
     lang: Lang,
 ) -> Timeline {
-    let c = copy(lang);
     let offset = local_offset_ms();
     let now = view
         .and_then(|v| parse_ms(&v.generated_at))
@@ -213,43 +258,7 @@ pub(super) fn usage_timeline(
     let buckets: Vec<TimelineBucket> = grouped
         .buckets
         .iter()
-        .map(|bucket| {
-            let v = &bucket.values;
-            let (requests, prompt, cached, output) = (at(v, 0), at(v, 1), at(v, 2), at(v, 3));
-            let (delegated, d_cached, d_output) = (at(v, 4), at(v, 6), at(v, 7));
-            let split = scoped && delegated > 0. && v.len() >= SPLIT_SLOT_VALUES;
-            let segment = |id: &str, value: f64, subtask: f64| Segment {
-                id: id.to_owned().into(),
-                value,
-                subtask: if split { subtask } else { 0. },
-            };
-            let label = bucket_label(bucket.start, bucket.end, now, grouped.step_hours, lang);
-            let bar = BarBucket {
-                key: bucket.start.to_string().into(),
-                label: label.clone().into(),
-                value_text: format!("{} {}", usage_tokens(prompt + output, lang), c.tokens).into(),
-                segments: vec![
-                    segment(
-                        "new",
-                        (prompt - cached).max(0.),
-                        (delegated - d_output - d_cached).max(0.),
-                    ),
-                    segment("cache", cached, d_cached),
-                    segment("output", output, d_output),
-                ],
-            };
-            TimelineBucket {
-                values: v.clone(),
-                requests,
-                prompt,
-                cached,
-                output,
-                delegated,
-                total: prompt + output,
-                label,
-                bar,
-            }
-        })
+        .map(|bucket| timeline_bucket(bucket, scoped, now, grouped.step_hours, lang))
         .collect();
     let axis = axis_labels(&buckets, &starts, now, grouped.step_hours, lang);
     Timeline {

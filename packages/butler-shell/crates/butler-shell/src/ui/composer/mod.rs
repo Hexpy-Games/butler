@@ -25,7 +25,7 @@ use std::rc::Rc;
 use butler_ds::ui::blocks::composer_card::{ComposerCard, ExpandedBody};
 use butler_ds::ui::popover::Popover;
 use gpui::{
-    AnyElement, App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    AnyElement, App, AppContext as _, Context, Div, Entity, EventEmitter, FocusHandle, Focusable,
     KeyBinding, KeyDownEvent, SharedString, Window, actions, canvas, div, prelude::*, px,
 };
 
@@ -268,8 +268,21 @@ impl Composer {
             .child(probe)
             .children(chips)
             .children(menu);
-        // The editor stays mounted while folded so its focus handle and IME state survive.
-        let editor = div()
+        let editor = Self::editor_frame(cx).child(input);
+        let mut body = ExpandedBody::new("composer-body").child(editor);
+        if let Some(tiles) = tiles {
+            body = body.child(tiles);
+        }
+        vec![
+            body.into_any_element(),
+            self.toolbar(window, cx).into_any_element(),
+        ]
+    }
+
+    /// The editor's padding and clipboard and mention-key capture; the editor stays mounted
+    /// while folded so its focus handle and IME state survive.
+    fn editor_frame(cx: &mut Context<Self>) -> Div {
+        div()
             .px(px(16.))
             .py(px(12.))
             .text_size(px(14.))
@@ -314,15 +327,6 @@ impl Composer {
                     cx.stop_propagation();
                 }
             }))
-            .child(input);
-        let mut body = ExpandedBody::new("composer-body").child(editor);
-        if let Some(tiles) = tiles {
-            body = body.child(tiles);
-        }
-        vec![
-            body.into_any_element(),
-            self.toolbar(window, cx).into_any_element(),
-        ]
     }
 
     /// `useComposerPresentation`'s `protectedExpanded`.
@@ -343,21 +347,9 @@ impl Focusable for Composer {
     }
 }
 
-impl Render for Composer {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.pull_state(window, cx);
-        self.take_focus_request(window, cx);
-        self.sync_mentions(window, cx);
-        self.fold.protected = Self::popover_open(window, cx);
-        let height = self.height.clone();
-        let probe = canvas(
-            move |b, _, _| height.set(b.size.height.as_f32()),
-            |_, (), _, _| {},
-        )
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full();
+impl Composer {
+    /// The card: its notice, adjunct panels and the body rows.
+    fn card(&mut self, window: &mut Window, cx: &mut Context<Self>) -> ComposerCard {
         let lang = butler_ds::ui::context::Ds::get(cx).lang();
         let this = cx.entity();
         let notice = notice::git_dependency_notice(
@@ -395,7 +387,26 @@ impl Render for Composer {
         if let Some(adjunct) = adjunct {
             card = card.adjunct(adjunct);
         }
-        let card = card.children(self.body(window, cx));
+        card.children(self.body(window, cx))
+    }
+}
+
+impl Render for Composer {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.pull_state(window, cx);
+        self.take_focus_request(window, cx);
+        self.sync_mentions(window, cx);
+        self.fold.protected = Self::popover_open(window, cx);
+        let height = self.height.clone();
+        let probe = canvas(
+            move |b, _, _| height.set(b.size.height.as_f32()),
+            |_, (), _, _| {},
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full();
+        let card = self.card(window, cx);
         let column = butler_ds::ui::blocks::scope::conversation(cx).unwrap_or_default();
         let ds = butler_ds::ui::context::Ds::get(cx);
         let dropped = cx.entity().downgrade();

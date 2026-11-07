@@ -207,36 +207,7 @@ pub(crate) fn model_options(
             providers.push((model.provider_id.clone(), model.provider_label.clone()));
         }
     }
-    let query = current.search.trim().to_lowercase();
-    let groups = providers
-        .iter()
-        .map(|(provider, label)| {
-            let items = models
-                .iter()
-                .filter(|item| current.provider == "all" || item.provider_id == current.provider)
-                .filter(|item| item.provider_id == *provider)
-                .filter(|item| {
-                    query.is_empty()
-                        || [
-                            model_display_name(item).to_string(),
-                            item.model_id.to_string(),
-                            item.provider_label.to_string(),
-                        ]
-                        .iter()
-                        .any(|field| field.to_lowercase().contains(&query))
-                })
-                .map(|item| {
-                    let pick = on_select.clone();
-                    let chosen = item.clone();
-                    Item::new(item.model_ref.clone(), model_display_name(item))
-                        .description(token_window_label(item.context_window_tokens, text))
-                        .selected(item.model_ref.as_ref() == value)
-                        .on_select(move |window, cx| pick(&chosen, window, cx))
-                })
-                .collect();
-            Group::new(provider.clone(), label.clone(), items)
-        })
-        .collect();
+    let groups = model_groups(models, &providers, &current, value, on_select, text);
     let mut filters = vec![filter_chip(filter, "all", text.all_providers.into())];
     filters.extend(
         providers
@@ -268,6 +239,47 @@ pub(crate) fn model_options(
         popover = popover.footer(Some(text.reasoning.into()), options);
     }
     popover.into_any_element()
+}
+
+/// One group per provider, holding the models the search and provider filter let through.
+fn model_groups(
+    models: &[ModelChoice],
+    providers: &[(SharedString, SharedString)],
+    current: &ModelOptionsFilter,
+    value: &str,
+    on_select: &Pick,
+    text: &Copy,
+) -> Vec<Group> {
+    let query = current.search.trim().to_lowercase();
+    providers
+        .iter()
+        .map(|(provider, label)| {
+            let items = models
+                .iter()
+                .filter(|item| current.provider == "all" || item.provider_id == current.provider)
+                .filter(|item| item.provider_id == *provider)
+                .filter(|item| {
+                    query.is_empty()
+                        || [
+                            model_display_name(item).to_string(),
+                            item.model_id.to_string(),
+                            item.provider_label.to_string(),
+                        ]
+                        .iter()
+                        .any(|field| field.to_lowercase().contains(&query))
+                })
+                .map(|item| {
+                    let pick = on_select.clone();
+                    let chosen = item.clone();
+                    Item::new(item.model_ref.clone(), model_display_name(item))
+                        .description(token_window_label(item.context_window_tokens, text))
+                        .selected(item.model_ref.as_ref() == value)
+                        .on_select(move |window, cx| pick(&chosen, window, cx))
+                })
+                .collect();
+            Group::new(provider.clone(), label.clone(), items)
+        })
+        .collect()
 }
 
 fn filter_chip(
