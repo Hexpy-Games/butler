@@ -11,6 +11,20 @@ use butler_ds::ui::{
 };
 use gpui::{AnyElement, Context, Window, prelude::*};
 impl Shell {
+    pub(super) fn project_rename_dialog(
+        &self,
+        form: &super::dialogs::SpaceDialog,
+        cx: &mut Context<Self>,
+    ) -> DialogContent {
+        self.space_edit_form(form, cx)
+    }
+    pub(super) fn session_rename_dialog(
+        &self,
+        form: &super::dialogs::SpaceDialog,
+        cx: &mut Context<Self>,
+    ) -> DialogContent {
+        self.space_edit_form(form, cx)
+    }
     pub(super) fn project_create_dialog(
         &self,
         _window: &mut Window,

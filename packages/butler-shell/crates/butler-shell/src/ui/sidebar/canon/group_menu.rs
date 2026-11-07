@@ -53,7 +53,7 @@ impl RenderOnce for GroupMenu {
             }));
         }
         let content = menu.content(content, window, cx);
-        div().child(trigger).child(content)
+        div().flex().child(trigger).child(content)
     }
 }
 impl Shell {

@@ -123,7 +123,28 @@ impl Shell {
             SpaceDialog::CreateProject => self.project_create_dialog(window, cx),
             SpaceDialog::Canon => self.canon_form_dialog(window, cx),
             SpaceDialog::Clear => self.clear_general_dialog(cx),
-            _ => self.space_group_form(&form, window, cx),
+            SpaceDialog::Relocate { .. } => self.space_relocation_form(&form, cx),
+            SpaceDialog::Rename(key, _)
+                if self
+                    .store
+                    .navigation
+                    .rows
+                    .get(key)
+                    .is_some_and(|row| row.project.is_some()) =>
+            {
+                self.project_rename_dialog(&form, cx)
+            }
+            SpaceDialog::Rename(key, _)
+                if self
+                    .store
+                    .navigation
+                    .rows
+                    .get(key)
+                    .is_some_and(|row| row.session.is_some()) =>
+            {
+                self.session_rename_dialog(&form, cx)
+            }
+            _ => self.space_group_form(&form, cx),
         };
         dialog.content(content, window, cx)
     }
@@ -143,20 +164,39 @@ impl Shell {
             .header(DialogHeader::new().child(DialogTitle::new(self.theme.strings.favorites)))
             .child(ScrollArea::new("favorites-scroll").child(list))
     }
-    pub(super) fn space_group_form(
+    fn space_group_form(&self, form: &SpaceDialog, cx: &mut Context<Self>) -> DialogContent {
+        self.space_edit_form(form, cx)
+    }
+    fn space_relocation_form(&self, form: &SpaceDialog, cx: &mut Context<Self>) -> DialogContent {
+        let SpaceDialog::Relocate { source, target, .. } = form else {
+            return DialogContent::new();
+        };
+        let rows = &self.store.navigation.rows;
+        let source = rows.get(source).map_or("", |row| row.title.as_str());
+        let target = target
+            .as_ref()
+            .and_then(|key| rows.get(key))
+            .map_or(self.copy("Top level", "최상위"), |row| {
+                row.title.as_str()
+            });
+        let description = if self.theme.strings.locale == crate::ui::i18n::Locale::En {
+            format!(
+                "Move {source} to {target}. Conversation history and existing files are preserved. Future work will use the new workspace and project knowledge. Active work must finish before moving."
+            )
+        } else {
+            format!(
+                "{source} 대화를 {target}(으)로 이동합니다. 대화 기록과 기존 파일은 보존되며, 이후 작업은 새 소속의 작업 폴더와 프로젝트 지식을 사용합니다. 진행 중인 작업이 있으면 완료한 뒤 이동할 수 있습니다."
+            )
+        };
+        self.space_edit_form(form, cx)
+            .child(DialogDescription::new(description))
+    }
+    pub(super) fn space_edit_form(
         &self,
         form: &SpaceDialog,
-        _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> DialogContent {
-        let title = match form {
-            SpaceDialog::Rename(_, _) => self.copy("Rename", "이름 변경"),
-            SpaceDialog::Relocate { .. } => self.copy("Move conversation", "대화 이동"),
-            SpaceDialog::Delete(_) => self.copy("Delete", "삭제"),
-            _ => self.copy("New group", "새 그룹"),
-        };
-        let mut content =
-            DialogContent::new().header(DialogHeader::new().child(DialogTitle::new(title)));
+        let mut content = DialogContent::new().header(self.space_form_header(form));
         if matches!(
             form,
             SpaceDialog::Create(_) | SpaceDialog::Group(_, _) | SpaceDialog::Rename(_, _)
@@ -168,17 +208,6 @@ impl Shell {
             content = content.child(self.space_form_input(form, initial, cx));
         }
 
-        if let SpaceDialog::Relocate { source, target, .. } = form {
-            let rows = &self.store.navigation.rows;
-            content = content.child(DialogDescription::new(format!(
-                "{} → {}",
-                rows.get(source).map_or("", |r| r.title.as_str()),
-                target
-                    .as_ref()
-                    .and_then(|k| rows.get(k))
-                    .map_or(self.copy("Top level", "최상위"), |r| r.title.as_str())
-            )));
-        }
         if let SpaceDialog::Delete(key) = form
             && let Some(row) = self.store.navigation.rows.get(key)
         {
@@ -195,6 +224,8 @@ impl Shell {
         let form = form.clone();
         let weak = cx.entity().downgrade();
         let pending = self.sidebar.pending;
+        let can_submit =
+            self.space_form_can_submit(&form, self.sidebar_field_value(&input, cx).trim());
         let destructive = matches!(form, SpaceDialog::Delete(_));
         let label = match form {
             SpaceDialog::Delete(_) => self.copy("Delete", "삭제"),
@@ -204,7 +235,7 @@ impl Shell {
         let save = Button::new("space-save")
             .text(label)
             .when(destructive, |b| b.variant(Variant::Destructive))
-            .when(pending, Button::disabled)
+            .when(pending || !can_submit, Button::disabled)
             .on_click(move |_, _, cx| {
                 let _ = weak.update(cx, |s, cx| {
                     let value = s.sidebar_field_value(&input, cx).trim().to_owned();
@@ -213,6 +244,76 @@ impl Shell {
             });
         content.footer(self.space_dialog_footer(save, cx))
     }
+    fn space_form_labels(&self, form: &SpaceDialog) -> (&'static str, &'static str) {
+        match form {
+            SpaceDialog::Rename(key, _) => {
+                match self.store.navigation.rows.get(key).map(|r| &r.node.kind) {
+                    Some(SpaceNodeKind::Project) => (
+                        self.copy("Rename project", "프로젝트 이름 바꾸기"),
+                        self.copy("Project name", "프로젝트 이름"),
+                    ),
+                    Some(SpaceNodeKind::Session) => (
+                        self.copy("Rename session", "세션 이름 바꾸기"),
+                        self.copy("Session name", "세션 이름"),
+                    ),
+                    _ => (
+                        self.copy("Rename group", "그룹 이름 변경"),
+                        self.copy("Group name", "그룹 이름"),
+                    ),
+                }
+            }
+            SpaceDialog::Relocate { .. } => (
+                self.copy(
+                    "Change this conversation's workspace?",
+                    "대화의 작업 위치를 변경할까요?",
+                ),
+                "",
+            ),
+            SpaceDialog::Delete(_) => (self.copy("Delete", "삭제"), ""),
+            _ => (
+                self.copy("Create group", "그룹 만들기"),
+                self.copy("Group name", "그룹 이름"),
+            ),
+        }
+    }
+    fn space_form_header(&self, form: &SpaceDialog) -> DialogHeader {
+        let title = self.space_form_labels(form).0;
+        let group = match form {
+            SpaceDialog::Create(_) | SpaceDialog::Group(_, _) => true,
+            SpaceDialog::Rename(key, _) => self
+                .store
+                .navigation
+                .rows
+                .get(key)
+                .is_some_and(|r| r.node.kind == SpaceNodeKind::Group),
+            _ => false,
+        };
+        let header = DialogHeader::new().child(DialogTitle::new(title));
+        if group {
+            header.child(DialogDescription::new(self.copy(
+                "Organize conversations and projects under a name you choose.",
+                "대화와 프로젝트를 원하는 이름으로 정리합니다.",
+            )))
+        } else {
+            header
+        }
+    }
+    fn space_form_can_submit(&self, form: &SpaceDialog, value: &str) -> bool {
+        match form {
+            SpaceDialog::Create(_) | SpaceDialog::Group(_, _) => !value.is_empty(),
+            SpaceDialog::Rename(key, original) => {
+                !value.is_empty()
+                    && (value != original
+                        || self
+                            .store
+                            .navigation
+                            .rows
+                            .get(key)
+                            .is_some_and(|r| r.node.kind == SpaceNodeKind::Group))
+            }
+            _ => true,
+        }
+    }
     fn space_form_input(
         &self,
         form: &SpaceDialog,
@@ -220,6 +321,7 @@ impl Shell {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let input = self.sidebar_input();
+        let label = self.space_form_labels(form).1;
         let form = form.clone();
         let wrapper = crate::ui::widgets::anchor(div(), "sidebar-dialog-input")
             .id("space-form-input")
@@ -240,7 +342,7 @@ impl Shell {
                 ),
             );
         Field::new("space-title-field")
-            .child(FieldLabel::new().child(self.copy("Name", "이름")))
+            .child(FieldLabel::new().child(label))
             .child(wrapper)
             .into_any_element()
     }
@@ -269,20 +371,17 @@ impl Shell {
         title: String,
         cx: &mut Context<Self>,
     ) {
+        if !self.space_form_can_submit(&form, &title) {
+            return;
+        }
         let mut body = serde_json::json!({"title":title});
         let command = match form {
             SpaceDialog::Create(parent) => {
-                if title.is_empty() {
-                    return;
-                }
                 body["action"] = "create".into();
                 body["parentKey"] = serde_json::json!(parent);
                 SpaceCommand::Create
             }
             SpaceDialog::Group(source, target) => {
-                if title.is_empty() {
-                    return;
-                }
                 body["action"] = "group".into();
                 body["sourceKey"] = source.into();
                 body["targetKey"] = target.into();
@@ -323,9 +422,6 @@ impl Shell {
         self.space_mutate(command, body, cx);
     }
     fn rename_space_row(&mut self, key: &str, title: String, cx: &mut Context<Self>) {
-        if title.is_empty() {
-            return;
-        }
         let Some(row) = self.store.navigation.rows.get(key) else {
             return;
         };

@@ -8,6 +8,7 @@ use butler_ds::{
         context::Ds,
         dropdown_menu::{DropdownMenu, DropdownMenuContent, Item},
         icon_button::IconButton,
+        layout::{Space, Stack},
         segmented_control::{Choice, SegmentedControl},
     },
 };
@@ -31,6 +32,7 @@ impl Shell {
                 let _ = weak.update(cx, |s, cx| {
                     s.sidebar.set_tab(value);
                     if s.sidebar.tab == Tab::Running {
+                        s.store.navigation.work_status = None;
                         s.load_work_status(cx);
                     }
                     cx.notify();
@@ -52,14 +54,13 @@ impl Shell {
             Tab::Recent => strings.recent,
             Tab::Running => strings.running,
         };
-        div()
-            .flex()
-            .flex_col()
-            .gap(Ds::get(cx).len(if self.sidebar.tab == Tab::All {
-                Length::SpaceSm
+        Stack::new()
+            .gap(if self.sidebar.tab == Tab::All {
+                Space::Sm
             } else {
-                Length::SpaceLg
-            }))
+                Space::Lg
+            })
+            .compact_gap(Space::Lg)
             .child(top)
             .child(NavSectionHeading::new(title).actions(actions))
             .into_any_element()

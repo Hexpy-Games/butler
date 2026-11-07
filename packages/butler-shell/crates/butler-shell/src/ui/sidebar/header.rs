@@ -8,7 +8,7 @@ use butler_ds::{
             nav_row::NavRow,
             nav_section::{NavSectionHeading, sidebar_nav},
         },
-        button::Button,
+        button::{Button, Size, Variant},
         context::Ds,
         tooltip::Tooltip,
         typo::{Tone, Typo},
@@ -59,14 +59,21 @@ impl Shell {
         }
         if favorites.is_empty() {
             shortcuts = shortcuts.child(
-                Typo::caption(self.copy("Pin conversations here", "자주 쓰는 대화를 고정하세요"))
+                div().px(Ds::get(cx).len(Length::SpaceSm)).child(
+                    Typo::caption(self.copy(
+                        "Pin conversations you visit often.",
+                        "자주 찾는 대화를 고정해 보세요.",
+                    ))
                     .tone(Tone::Secondary),
+                ),
             );
         }
         if favorites.len() > 2 {
             shortcuts = shortcuts.child(
                 Button::new("all-favorites")
-                    .text(self.copy("All favourites", "즐겨찾기 모두 보기"))
+                    .variant(Variant::Inline)
+                    .size(Size::Sm)
+                    .text(self.copy("Show all favorites", "즐겨찾기 모두 보기"))
                     .on_click(cx.listener(|s, _, _, cx| {
                         s.sidebar.set_dialog(Some(SpaceDialog::Favorites));
                         cx.notify();

@@ -148,10 +148,8 @@ impl Shell {
             s.sidebar.toggle(&toggle);
             cx.notify();
         }));
-        if expanded {
-            for epic in &group.rows {
-                branch = branch.child(self.canon_epic_row(project, &group.key, epic, cx));
-            }
+        for epic in &group.rows {
+            branch = branch.child(self.canon_epic_row(project, &group.key, epic, cx));
         }
         let content = Self::row_gestures(
             div().id(SharedString::from(format!("canon-group-{key}"))),
@@ -308,7 +306,7 @@ impl Shell {
                 )
                 .into_any_element()
             } else {
-                self.space_activity(&row, cx)
+                self.space_activity(&row, false, cx)
             };
             nav = nav.icon(self.space_identity(&row, cx)).actions(
                 butler_ds::ui::blocks::nav_row::NavRowSwap::new(
@@ -346,7 +344,7 @@ impl Shell {
                     div()
                         .flex_1()
                         .min_w_0()
-                        .child(Typo::body(epic.title.clone()).truncate()),
+                        .child(Typo::text(epic.title.clone()).truncate()),
                 )
                 .child(div().flex_none().child(avatar))
                 .into_any_element(),

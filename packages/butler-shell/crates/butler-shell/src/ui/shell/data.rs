@@ -178,7 +178,6 @@ impl Shell {
         }
         self.store.open(chat);
         if let Some(id) = self.store.selected().map(|c| c.session.0.to_string()) {
-            self.reveal_sidebar(&id);
             self.mark_sidebar_read(&id, cx);
         } else {
             self.sidebar.new_chat_parent = None;

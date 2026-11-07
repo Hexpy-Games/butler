@@ -15,12 +15,13 @@ use butler_ds::ui::{
 };
 use gpui::{AnyElement, Context, div, prelude::*};
 impl Shell {
-    pub(super) fn space_activity(&self, row: &SpaceRowData, cx: &Context<Self>) -> AnyElement {
-        match row
-            .session
-            .as_ref()
-            .and_then(|s| space_activity(s, !s.subtasks.is_empty()))
-        {
+    pub(super) fn space_activity(
+        &self,
+        row: &SpaceRowData,
+        nested: bool,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        match row.session.as_ref().and_then(|s| space_activity(s, nested)) {
             Some("working") => {
                 crate::ui::widgets::anchor(div(), &format!("sidebar-running-{}", row.node.entityId))
                     .child(
@@ -65,9 +66,13 @@ impl Shell {
         let Some(view) = view.filter(|v| !v.items.is_empty()) else {
             return div().into_any_element();
         };
-        let mut list = div().flex().flex_col().child(NavSectionHeading::new(
-            self.copy("Work status", "작업 현황"),
-        ));
+        let mut list = div()
+            .flex()
+            .flex_col()
+            .gap(Ds::get(cx).len(butler_ds::tokens::Length::SpaceXs))
+            .child(NavSectionHeading::new(
+                self.copy("Work status", "작업 현황"),
+            ));
         for item in view.items {
             let id = item.session_id.clone();
             let metadata = self.work_status_meta(&item);
@@ -141,7 +146,7 @@ impl Shell {
     }
     pub(crate) fn sync_minute_clock(&mut self, cx: &mut Context<Self>) {
         let enabled =
-            self.sidebar.tab != super::Tab::All && self.sidebar.attended && self.sidebar_open;
+            self.sidebar.tab == super::Tab::Recent && self.sidebar.attended && self.sidebar_open;
         if !enabled {
             self.sidebar.age_task = None;
             return;
@@ -162,7 +167,7 @@ impl Shell {
     }
     pub(super) fn load_work_status(&mut self, cx: &mut Context<Self>) {
         if self.sidebar.work_in_flight {
-            self.schedule_work_status(cx);
+            self.sidebar.work_dirty = true;
             return;
         }
         let Some(source) = self.source.clone() else {
@@ -170,8 +175,9 @@ impl Shell {
         };
         self.sidebar.work_in_flight = true;
         let epoch = self.store.epoch();
+        let generation = self.sidebar.work_generation;
         Self::run(source.work_status(), cx, move |s, result, cx| {
-            if s.store.epoch() != epoch {
+            if s.store.epoch() != epoch || s.sidebar.work_generation != generation {
                 return;
             }
             s.sidebar.work_in_flight = false;
@@ -179,19 +185,28 @@ impl Shell {
                 s.store.navigation.work_status = Some(view);
                 cx.notify();
             }
+            if s.sidebar.work_dirty {
+                s.schedule_work_status(cx);
+            }
         });
     }
     pub(super) fn schedule_work_status(&mut self, cx: &mut Context<Self>) {
+        self.sidebar.work_dirty = true;
         if self.sidebar.work_scheduled {
             return;
         }
         self.sidebar.work_scheduled = true;
+        let generation = self.sidebar.work_generation;
         cx.spawn(async move |weak, cx| {
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(1500))
                 .await;
             let _ = weak.update(cx, |s, cx| {
+                if s.sidebar.work_generation != generation {
+                    return;
+                }
                 s.sidebar.work_scheduled = false;
+                s.sidebar.work_dirty = false;
                 if s.sidebar.tab == super::Tab::Running {
                     s.load_work_status(cx);
                 }

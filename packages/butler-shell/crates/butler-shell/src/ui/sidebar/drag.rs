@@ -198,7 +198,7 @@ impl Shell {
                 },
                 move |cx| {
                     let _ = weak.update(cx, |s, cx| {
-                        s.sidebar.long_press_key = None;
+                        s.sidebar.cancel_long_press();
                         s.sidebar.drag_source = Some(source.clone());
                         s.sidebar.drag_instance = Some(started_instance.clone());
                         cx.notify();
@@ -238,50 +238,42 @@ impl Shell {
             can_drop(&self.store.navigation.rows, source, None, Position::Inside)
         }) && self.sidebar.tab == super::Tab::All
         {
-            let weak = cx.entity().downgrade();
-            let over = cx.entity().downgrade();
-            scope = scope.other(
-                div()
-                    .id("space-root-drop")
-                    .on_drag_move::<SpaceDragPayload>(move |event, _, cx| {
-                        let active = event.bounds.contains(&event.event.position);
-                        if active {
-                            cx.stop_propagation();
-                        }
-                        let _ = over.update(cx, |s, cx| {
-                            if s.sidebar.root_drop_active != active {
-                                s.sidebar.root_drop_active = active;
-                                cx.notify();
-                            }
-                        });
-                    })
-                    .on_drop::<SpaceDragPayload>(move |payload, _, cx| {
-                        if let SpaceDragPayload::Node(source) = payload {
-                            let _ = weak.update(cx, |s, cx| {
-                                if can_drop(
-                                    &s.store.navigation.rows,
-                                    source,
-                                    None,
-                                    Position::Inside,
-                                ) {
-                                    s.request_space_move(
-                                        source.clone(),
-                                        None,
-                                        Position::Inside,
-                                        cx,
-                                    );
-                                }
-                                s.sidebar.drag_source = None;
-                            });
-                        }
-                    })
-                    .child(
-                        NavRootDropZone::new(self.copy("Move to top level", "최상위로 이동"))
-                            .active(self.sidebar.root_drop_active),
-                    ),
-            );
+            scope = scope.other(self.space_root_drop(cx));
         }
         scope.drag(self.space_drag_rules(cx)).into_any_element()
+    }
+    fn space_root_drop(&self, cx: &Context<Self>) -> AnyElement {
+        let weak = cx.entity().downgrade();
+        let over = cx.entity().downgrade();
+        div()
+            .id("space-root-drop")
+            .on_drag_move::<SpaceDragPayload>(move |event, _, cx| {
+                let active = event.bounds.contains(&event.event.position);
+                if active {
+                    cx.stop_propagation();
+                }
+                let _ = over.update(cx, |s, cx| {
+                    if s.sidebar.root_drop_active != active {
+                        s.sidebar.root_drop_active = active;
+                        cx.notify();
+                    }
+                });
+            })
+            .on_drop::<SpaceDragPayload>(move |payload, _, cx| {
+                if let SpaceDragPayload::Node(source) = payload {
+                    let _ = weak.update(cx, |s, cx| {
+                        if can_drop(&s.store.navigation.rows, source, None, Position::Inside) {
+                            s.request_space_move(source.clone(), None, Position::Inside, cx);
+                        }
+                        s.sidebar.drag_source = None;
+                    });
+                }
+            })
+            .child(
+                NavRootDropZone::new(self.copy("Move to top level", "최상위로 이동"))
+                    .active(self.sidebar.root_drop_active),
+            )
+            .into_any_element()
     }
     pub(super) fn request_space_move(
         &mut self,

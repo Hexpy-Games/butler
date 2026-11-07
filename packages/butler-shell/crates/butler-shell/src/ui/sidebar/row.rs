@@ -1,19 +1,121 @@
 //! SpaceRow, branch, identity and unfinished subtask lines use DS rows.
+mod status;
 use super::Shell;
 use crate::ui::{Icon, source::wire::SpaceNodeKind, store::navigation::SpaceRowData};
 use butler_ds::ui::{
     blocks::{
         collapsible_nav_group::CollapsibleNavGroup,
-        nav_row::{NavRow, NavRowChildren},
+        nav_row::{NavRow, NavRowChildren, NavRowSwap},
     },
+    collapsible::{CollapsibleList, Row as CollapsibleRow},
     context::Ds,
     glyph_toggle::GlyphToggle,
     icon::{IconSize, icon},
+    icon_button::IconButton,
     icon_slot::{IconSlot, SlotSize},
-    typo::{Tone, Typo},
+    layout::Space,
+    typo::{Tone, Typo, Wrap},
+    unread_dot::UnreadDot,
 };
-use gpui::{AnyElement, Context, div, prelude::*};
+use gpui::{AnyElement, Context, SharedString, div, prelude::*};
 impl Shell {
+    pub(super) fn space_row_actions(
+        &mut self,
+        row: &SpaceRowData,
+        collapsible: bool,
+        nested: bool,
+        instance: &str,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let menu = self.space_row_menu(row, instance, cx);
+        let rest = if collapsible {
+            let expanded = !self.sidebar.collapsed.contains(&row.node.key);
+            if !expanded
+                && self
+                    .store
+                    .navigation
+                    .unread_ancestors()
+                    .contains(&row.node.key)
+            {
+                UnreadDot::new(
+                    SharedString::from(format!("ancestor-{}", row.node.key)),
+                    self.copy("Unread", "읽지 않음"),
+                )
+                .into_any_element()
+            } else {
+                let key = row.node.key.clone();
+                IconButton::new(
+                    SharedString::from(format!("toggle-{key}")),
+                    self.copy("Expand or collapse", "펼치기 또는 접기"),
+                )
+                .glyph(if expanded {
+                    Icon::ChevronDown
+                } else {
+                    Icon::ChevronRight
+                })
+                .on_click(cx.listener(move |s, _, _, cx| {
+                    s.sidebar.toggle(&key);
+                    s.refresh_canon(cx);
+                    cx.notify();
+                }))
+                .into_any_element()
+            }
+        } else {
+            self.space_activity(row, nested, cx)
+        };
+        let swap = NavRowSwap::new(SharedString::from(format!("swap-{instance}")), menu)
+            .rest(rest)
+            .open(self.sidebar.menus.contains(instance))
+            .into_any_element();
+        if row.project.is_some() {
+            let dashboard = butler_ds::ui::tooltip::Tooltip::new(SharedString::from(format!(
+                "dashboard-{}",
+                row.node.key
+            )))
+            .label(self.theme.strings.not_yet)
+            .child(
+                IconButton::new(
+                    SharedString::from(format!("dashboard-{}", row.node.key)),
+                    self.copy("Dashboard", "대시보드"),
+                )
+                .glyph(Icon::LayoutDashboard)
+                .disabled(),
+            );
+            gpui::div()
+                .flex()
+                .child(dashboard)
+                .child(swap)
+                .into_any_element()
+        } else {
+            swap
+        }
+    }
+
+    pub(super) fn space_row_list(
+        &self,
+        id: impl Into<gpui::SharedString>,
+        scope: impl Into<gpui::SharedString>,
+        rows: Vec<SpaceRowData>,
+        flat: bool,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let weak = cx.entity().downgrade();
+        let instance_scope = self.sidebar.tab.value();
+        let rows = rows.into_iter().map(move |row| {
+            let weak = weak.clone();
+            CollapsibleRow::new(row.node.key.clone(), move |_, cx| {
+                weak.update(cx, |s, cx| {
+                    s.space_row(&row, flat, false, instance_scope, cx)
+                })
+                .unwrap_or_else(|_| div().into_any_element())
+            })
+        });
+        CollapsibleList::new(id.into())
+            .scope(scope.into())
+            .gap(Space::Xs)
+            .rows(rows)
+            .into_any_element()
+    }
     pub(super) fn space_row(
         &mut self,
         row: &SpaceRowData,
@@ -69,6 +171,7 @@ impl Shell {
         let actions = self.space_row_actions(
             row,
             !shortcut && row.node.kind != SpaceNodeKind::Session,
+            !flat && !shortcut && row.session.as_ref().is_some_and(|s| !s.subtasks.is_empty()),
             instance,
             cx,
         );
@@ -103,7 +206,7 @@ impl Shell {
                 nav = nav
                     .multiline()
                     .label_element(space_row_label(row, true))
-                    .meta(self.space_row_meta(row));
+                    .meta(self.space_row_meta(row, cx));
             }
             if row.project.is_some() {
                 butler_ds::ui::tooltip::Tooltip::new(gpui::SharedString::from(format!(
@@ -144,42 +247,45 @@ impl Shell {
             s.refresh_canon(cx);
             cx.notify();
         }));
-        if expanded {
-            if let Some(project) = &row.project {
+        if let Some(project) = &row.project {
+            if expanded {
                 self.sidebar.canon_visible.insert(project.id.clone());
                 if !self.sidebar.canon_previous.contains(&project.id) {
                     self.load_canon_sidebar(project.id.clone(), cx);
                 }
-                group = group.child(self.canon_sidebar_groups(&project.id, cx));
             }
-            let children = self.store.navigation.children(Some(&row.node.key));
-            let visible = self
-                .sidebar
-                .branch_counts
-                .get(&row.node.key)
-                .copied()
-                .unwrap_or(5);
-            let active = self.store.selected().map(|c| c.session.0.as_ref());
-            let reveal = children
-                .iter()
-                .position(|r| {
-                    self.sidebar.reveal_path.contains(&r.node.key)
-                        || active == Some(r.node.entityId.as_str())
-                })
-                .map_or(0, |i| i + 1);
-            let limit = visible.max(reveal);
-            for child in children.iter().take(limit) {
-                group =
-                    group.child(self.space_row(child, false, false, self.sidebar.tab.value(), cx));
-            }
-            if children.len() > limit {
-                group = group.child(self.sidebar_session_load_more(
-                    Some(row.node.key.clone()),
-                    children.len() - limit,
-                    limit,
-                    cx,
-                ));
-            }
+            group = group.child(self.canon_sidebar_groups(&project.id, cx));
+        }
+        let children = self.store.navigation.children(Some(&row.node.key));
+        let visible = self
+            .sidebar
+            .branch_counts
+            .get(&row.node.key)
+            .copied()
+            .unwrap_or(5);
+        let active = self.store.selected().map(|c| c.session.0.as_ref());
+        let reveal = children
+            .iter()
+            .position(|r| {
+                self.sidebar.reveal_path.contains(&r.node.key)
+                    || active == Some(r.node.entityId.as_str())
+            })
+            .map_or(0, |i| i + 1);
+        let limit = visible.max(reveal);
+        group = group.child(self.space_row_list(
+            format!("space-children-{}", row.node.key),
+            row.node.key.clone(),
+            children.iter().take(limit).cloned().collect(),
+            false,
+            cx,
+        ));
+        if children.len() > limit {
+            group = group.child(self.sidebar_session_load_more(
+                Some(row.node.key.clone()),
+                children.len() - limit,
+                limit,
+                cx,
+            ));
         }
         group.into_any_element()
     }
@@ -218,8 +324,48 @@ impl Shell {
         }))
         .into_any_element()
     }
-    pub(super) fn space_row_meta(&self, row: &SpaceRowData) -> AnyElement {
-        let age = chrono::DateTime::parse_from_rfc3339(&row.updated_at)
+    pub(super) fn space_row_meta(&self, row: &SpaceRowData, cx: &Context<Self>) -> AnyElement {
+        let trailing = if self.sidebar.tab == super::Tab::Recent {
+            Typo::caption(self.recent_age(&row.updated_at))
+                .tabular()
+                .wrap(Wrap::Nowrap)
+                .tone(Tone::Secondary)
+                .into_any_element()
+        } else {
+            let (status, progress) = self.space_row_status(row);
+            let mut label = div()
+                .flex()
+                .min_w_0()
+                .max_w(gpui::relative(0.6))
+                .child(Typo::caption(status).tone(Tone::Secondary).truncate());
+            if !progress.is_empty() {
+                label = label.child(
+                    div().flex_none().child(
+                        Typo::caption(progress)
+                            .tone(Tone::Secondary)
+                            .wrap(Wrap::Pre),
+                    ),
+                );
+            }
+            label.into_any_element()
+        };
+        div()
+            .flex()
+            .items_baseline()
+            .justify_between()
+            .gap(Ds::get(cx).len(butler_ds::tokens::Length::SpaceSm))
+            .child(
+                div().flex_1().min_w_0().child(
+                    Typo::caption(row.location.clone())
+                        .tone(Tone::Secondary)
+                        .truncate(),
+                ),
+            )
+            .child(trailing)
+            .into_any_element()
+    }
+    fn recent_age(&self, updated_at: &str) -> String {
+        chrono::DateTime::parse_from_rfc3339(updated_at)
             .ok()
             .map(|at| {
                 let now = std::time::SystemTime::now()
@@ -232,13 +378,7 @@ impl Shell {
                         .max(0),
                 )
             })
-            .unwrap_or_default();
-        div()
-            .flex()
-            .justify_between()
-            .child(Typo::caption(row.location.clone()).tone(Tone::Secondary))
-            .child(Typo::caption(age).tone(Tone::Secondary))
-            .into_any_element()
+            .unwrap_or_default()
     }
     pub(super) fn subtask_lines(
         &self,
@@ -317,7 +457,7 @@ pub(super) fn space_glyph(row: &SpaceRowData) -> Icon {
 }
 
 fn space_row_label(row: &SpaceRowData, flat: bool) -> Typo {
-    let label = Typo::body(row.title.clone());
+    let label = Typo::text(row.title.clone());
     if flat {
         label.line_clamp(2)
     } else {

@@ -7,7 +7,6 @@ mod data;
 mod dialogs;
 mod drag;
 mod footer;
-mod general;
 mod gestures;
 mod header;
 mod menu;
@@ -69,6 +68,8 @@ pub(crate) struct SidebarState {
     drag_instance: Option<String>,
     root_drop_active: bool,
     long_press_key: Option<String>,
+    long_press_origin: Option<gpui::Point<gpui::Pixels>>,
+    long_press_task: Option<gpui::Task<()>>,
     long_press_fired: Option<String>,
     pub(crate) reference: Option<SpaceDragPayload>,
     pub(crate) new_chat_parent: Option<crate::ui::source::sidebar::DraftTarget>,
@@ -83,6 +84,8 @@ pub(crate) struct SidebarState {
     general_busy: bool,
     work_in_flight: bool,
     work_scheduled: bool,
+    work_dirty: bool,
+    work_generation: u64,
     canon: HashMap<String, crate::ui::source::wire::CanonSidebar>,
     canon_loading: HashSet<String>,
     canon_visible: HashSet<String>,
@@ -104,6 +107,9 @@ impl SidebarState {
         self.canon_visible.clear();
         self.canon_previous.clear();
         self.work_in_flight = false;
+        self.work_scheduled = false;
+        self.work_dirty = false;
+        self.work_generation += 1;
         self.general_loading = false;
         self.general_ready = false;
     }
@@ -124,6 +130,11 @@ impl SidebarState {
             false
         }
     }
+    fn cancel_long_press(&mut self) {
+        self.long_press_key = None;
+        self.long_press_origin = None;
+        self.long_press_task = None;
+    }
     fn toggle(&mut self, key: &str) {
         if !self.collapsed.remove(key) {
             self.collapsed.insert(key.to_owned());
@@ -132,11 +143,18 @@ impl SidebarState {
     fn set_tab(&mut self, value: &str) {
         self.branch_counts.clear();
         self.menus.clear();
-        self.tab = match value {
+        let tab = match value {
             "recent" => Tab::Recent,
             "running" => Tab::Running,
             _ => Tab::All,
         };
+        if self.tab != tab {
+            self.work_generation += 1;
+            self.work_in_flight = false;
+            self.work_scheduled = false;
+            self.work_dirty = false;
+        }
+        self.tab = tab;
     }
     fn set_dialog(&mut self, dialog: Option<dialogs::SpaceDialog>) {
         self.dialog_serial += 1;
@@ -171,18 +189,20 @@ impl Shell {
             .position(|r| self.sidebar.reveal_path.contains(&r.node.key))
             .map_or(0, |i| i + 1);
         let limit = self.sidebar.visible_count.max(reveal_index);
-        let mut body = Vec::new();
-        for row in rows.iter().take(limit) {
-            body.push(self.space_row(
-                row,
-                self.sidebar.tab != Tab::All,
-                false,
-                self.sidebar.tab.value(),
+        let mut body = vec![self.space_row_list(
+            "sidebar-tree-list",
+            self.sidebar.tab.value(),
+            rows.iter().take(limit).cloned().collect(),
+            self.sidebar.tab != Tab::All,
+            cx,
+        )];
+        if rows.len() > self.sidebar.visible_count {
+            body.push(self.sidebar_session_load_more(
+                None,
+                rows.len() - self.sidebar.visible_count,
+                self.sidebar.visible_count,
                 cx,
             ));
-        }
-        if rows.len() > limit {
-            body.push(self.sidebar_session_load_more(None, rows.len() - limit, limit, cx));
         }
         if self.sidebar.tab == Tab::Running {
             body.push(self.space_work_status(cx));
@@ -237,18 +257,42 @@ impl Shell {
             window,
             cx,
         );
-        self.reveal_sidebar(id);
         self.mark_sidebar_read(id, cx);
     }
-    pub(crate) fn reveal_sidebar(&mut self, id: &str) {
-        if let Some(row) = self.store.navigation.rows.get(&format!("s:{id}")) {
-            self.sidebar.reveal_path = std::iter::once(row.node.key.clone())
-                .chain(row.ancestors.iter().cloned())
-                .collect();
-            for key in &self.sidebar.reveal_path {
-                self.sidebar.collapsed.remove(key);
-            }
+    pub(crate) fn reveal_sidebar(&mut self, id: &str, open_sidebar: bool) {
+        let nodes = self
+            .store
+            .navigation
+            .view
+            .as_ref()
+            .map(|view| {
+                view.space
+                    .nodes
+                    .iter()
+                    .map(|node| (node.key.as_str(), node))
+                    .collect::<HashMap<_, _>>()
+            })
+            .unwrap_or_default();
+        let key = format!("s:{id}");
+        let mut current = nodes.get(key.as_str()).copied();
+        let mut path = Vec::new();
+        while let Some(node) = current {
+            path.push(node.key.clone());
+            current = node
+                .parentKey
+                .as_deref()
+                .and_then(|key| nodes.get(key).copied());
         }
+        if open_sidebar {
+            self.sidebar_open = true;
+        }
+        if self.sidebar.tab != Tab::All {
+            self.sidebar.set_tab("all");
+        }
+        for key in &path {
+            self.sidebar.collapsed.remove(key);
+        }
+        self.sidebar.reveal_path = path;
     }
     fn show_sidebar_session(&mut self, id: String, cx: &mut Context<Self>) {
         let chat = ChatRef {

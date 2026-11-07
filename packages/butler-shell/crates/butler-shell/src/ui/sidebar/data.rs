@@ -2,7 +2,7 @@
 use super::{Shell, Tab};
 use crate::ui::source::{
     sidebar::{Mutation, ProjectCommand, SessionCommand, SpaceCommand},
-    wire::{AppEventEnvelope, UpdateProgressView},
+    wire::{AppEventEnvelope, NavigationView, UpdateProgressView},
 };
 use gpui::Context;
 use serde_json::{Value, json};
@@ -29,10 +29,9 @@ impl Shell {
             if epoch != s.store.epoch() {
                 return;
             }
-            let model = &mut s.store.navigation;
-            model.in_flight = false;
+            s.store.navigation.in_flight = false;
             match result {
-                Ok(view) if model.generation == generation => {
+                Ok(view) if s.store.navigation.generation == generation => {
                     if let Some(notice) = view
                         .space
                         .smartNotice
@@ -42,19 +41,18 @@ impl Shell {
                         s.sidebar.undo_token = Some(notice.undoToken.clone());
                         s.sidebar.undo_revision = Some(notice.revision);
                     }
-                    model.replace(view);
-                    model.retry_pending = false;
+                    s.apply_sidebar_navigation(view);
+                    s.store.navigation.retry_pending = false;
                 }
                 Ok(_) => {
-                    model.dirty = true;
+                    s.store.navigation.dirty = true;
                 }
-                Err(_) => model.retry_pending = true,
+                Err(_) => s.store.navigation.retry_pending = true,
             }
-            if model.dirty {
+            if s.store.navigation.dirty {
                 s.refresh_sidebar(cx);
             }
             if let Some(id) = s.store.selected().map(|c| c.session.0.to_string()) {
-                s.reveal_sidebar(&id);
                 if s.sidebar.attended {
                     s.mark_sidebar_read(&id, cx);
                 }
@@ -63,6 +61,17 @@ impl Shell {
             s.organization_notice(cx);
             cx.notify();
         });
+    }
+    fn apply_sidebar_navigation(&mut self, view: NavigationView) {
+        let reveal = self
+            .store
+            .selected()
+            .map(|chat| chat.session.0.to_string())
+            .filter(|id| self.store.navigation.active_parent_changed(&view, id));
+        self.store.navigation.replace(view);
+        if let Some(id) = reveal {
+            self.reveal_sidebar(&id, false);
+        }
     }
     pub(crate) fn sidebar_live_event(&mut self, event: &AppEventEnvelope, cx: &mut Context<Self>) {
         if event.r#type == "updates.progress"
@@ -200,7 +209,7 @@ impl Shell {
             self.sidebar.undo_revision = Some(space.revision);
             if let Some(mut view) = self.store.navigation.view.clone() {
                 view.space = space;
-                self.store.navigation.replace(view);
+                self.apply_sidebar_navigation(view);
             }
         }
         if let Some(project) = result.project {

@@ -9,6 +9,7 @@ use butler_ds::ui::{
     button::Button,
     progress_ring::{ProgressRing, Size},
     tooltip::Tooltip,
+    typo::{Tone, Typo},
 };
 use gpui::{AnyElement, Context, SharedString, div, prelude::*};
 impl Shell {
@@ -133,17 +134,22 @@ impl Shell {
     ) -> AnyElement {
         let label = format!("{} ({remaining})", self.theme.strings.show_more);
         let hover_parent = parent.clone();
-        let row = NavRow::new(SharedString::from(format!("load-more-{parent:?}")), label)
-            .on_click(cx.listener(move |s, _, _, cx| {
-                match &parent {
-                    Some(key) => {
-                        s.sidebar.branch_counts.insert(key.clone(), shown + 5);
-                    }
-                    None => s.sidebar.visible_count += 30,
+        let row = NavRow::new(
+            SharedString::from(format!("load-more-{parent:?}")),
+            label.clone(),
+        )
+        .reserve_icon()
+        .label_element(Typo::text(label).tone(Tone::Secondary))
+        .on_click(cx.listener(move |s, _, _, cx| {
+            match &parent {
+                Some(key) => {
+                    s.sidebar.branch_counts.insert(key.clone(), shown + 5);
                 }
-                cx.notify();
-            }))
-            .into_any_element();
+                None => s.sidebar.visible_count += 30,
+            }
+            cx.notify();
+        }))
+        .into_any_element();
         let Some(parent) = hover_parent else {
             return row;
         };

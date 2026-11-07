@@ -46,6 +46,14 @@ impl NavigationModel {
         self.view = Some(view);
         self.project_space();
     }
+    pub(crate) fn active_parent_changed(&self, next: &NavigationView, id: &str) -> bool {
+        let active = next.space.nodes.iter().find(|node| node.entityId == id);
+        let before = self
+            .view
+            .as_ref()
+            .and_then(|view| view.space.nodes.iter().find(|node| node.entityId == id));
+        active.is_some_and(|node| before.is_none_or(|old| old.parentKey != node.parentKey))
+    }
     pub(crate) fn rows(&self) -> Vec<SpaceRowData> {
         self.row_order
             .iter()
