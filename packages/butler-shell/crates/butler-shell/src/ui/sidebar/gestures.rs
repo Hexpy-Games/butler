@@ -21,7 +21,6 @@ impl Shell {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |s, _, _, cx| {
-                    cx.stop_propagation();
                     s.row_press(press_key.clone(), instance.clone(), cx);
                 }),
             )

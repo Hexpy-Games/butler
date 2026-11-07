@@ -21,7 +21,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
                 window.bounds_changed(cx);
             })
         }
-        "click" | "drag" | "hover" => pointer(h, command, arg),
+        "click" | "drag" => pointer(h, command, arg),
         "expect-anchor" | "expect-no-anchor" => {
             settle(&mut h.cx, h.handle);
             ensure!(
@@ -81,9 +81,6 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
     let start = if command == "drag" { center } else { end };
     move_pointer(h, start, None)?;
     settle(&mut h.cx, h.handle);
-    if command == "hover" {
-        return Ok(());
-    }
     h.cx.update_window(h.handle, |_, w, cx| {
         w.dispatch_event(
             PlatformInput::MouseDown(MouseDownEvent {
