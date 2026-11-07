@@ -30,6 +30,11 @@ session view. `wait: true` waits for delivery before proceeding. Anchor names
 match gpui debug selectors; `electron` supplies the corresponding CSS selector.
 Missing or virtualized anchors are reported, without substituting other elements.
 
+Optional scene fields: `stubToolCalls` (tool calls the stub model emits, one per streaming
+request that offers tools), `ready` (`authority_requests`, `pending_questions` or `artifacts`:
+what `/session-view` must show before capture) and `steps` (`{click: anchor}` / `{expect: anchor}`,
+run in order before each screenshot on both sides; Electron uses the anchor's `electron` selector).
+
 For gpui-to-gpui review, run `parity-diff <dirA> <dirB> <outDir>` directly. Exact
 RGBA differences are counted. Different dimensions and missing pairs are printed;
 matching dimensions produce a PNG overlay on B with magenta differences at 60%

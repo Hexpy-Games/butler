@@ -2,8 +2,9 @@ import { closeSync, mkdtempSync, openSync, readSync, watch, writeFileSync } from
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnTrackedProcess } from "../../../../tests/support/native-app-server.ts";
+import type { Scene } from "./scene.ts";
 
-export async function shots(binary: string, out: string, name: string, data: string, scale: number, size: string, dark: boolean, chat?: string) {
+export async function shots(binary: string, out: string, name: string, data: string, scale: number, size: string, dark: boolean, chat?: string, steps: Scene["steps"] = []) {
   const log = join(out, "logs", `${name}-shots.log`);
   const writer = openSync(log, "w"), reader = openSync(log, "r");
   const lines: string[] = [];
@@ -39,7 +40,9 @@ export async function shots(binary: string, out: string, name: string, data: str
   }
   try {
     await expect("LIVE READY");
-    for (const command of ["connected", chat ? `open ${chat}` : "new", "stable", `shot ${name}`, `layout ${name}`]) {
+    for (const command of ["connected", chat ? `open ${chat}` : "new", "stable",
+      ...steps.map(step => "click" in step ? `click ${step.click}` : `expect-anchor ${step.expect}`),
+      `shot ${name}`, `layout ${name}`]) {
       process.child.stdin!.write(`${command}\n`);
       await expect("LIVE OK");
     }

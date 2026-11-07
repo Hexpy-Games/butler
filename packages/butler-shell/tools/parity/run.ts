@@ -71,6 +71,13 @@ async function capture(app: App, scene: Scene, anchors: Scene["anchors"], size: 
   if (!visible) await app.page.clickRole("button", "사이드바 보기");
   if ("chat" in scene.open) await app.page.clickRole("button", title);
   else await app.click(title);
+  for (const step of scene.steps ?? []) {
+    const anchor = "click" in step ? step.click : step.expect;
+    const selector = anchors.find(item => item.anchor === anchor)?.electron;
+    if (!selector) throw new Error(`Scene ${scene.name} step uses unknown anchor ${anchor}`);
+    await waitBrowser(() => app.page.expression(`Boolean(document.querySelector(${JSON.stringify(selector)}))`), `step anchor ${anchor}`);
+    if ("click" in step) await app.page.clickSelector(selector);
+  }
   await app.page.expression("document.fonts.ready.then(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))))");
   const boxes = await app.page.expression<Box[]>(`(${JSON.stringify(anchors)}).flatMap(({anchor,electron})=>{
     const el=document.querySelector(electron);if(!el)return [];
@@ -84,26 +91,27 @@ async function capture(app: App, scene: Scene, anchors: Scene["anchors"], size: 
 }
 
 async function runScene(scene: Scene) {
-  let offered = false;
+  const calls = [...scene.stubToolCalls ?? []];
   const app = await browserAgentApp(join(out, "logs", scene.name), request => {
-    if (scene.name !== "approval" || offered || !request.stream || !Array.isArray(request.body.tools) || !request.body.tools.length) return null;
-    offered = true;
-    return { name: "run_command", arguments: { command: "printf '검토 자료를 저장합니다\\n'", state_effect: "mutation", summary: "검토 자료 저장" } };
+    if (!calls.length || !request.stream || !Array.isArray(request.body.tools) || !request.body.tools.length) return null;
+    return calls.shift()!;
   }, process.env.BUTLER_SMOKE_RENDERER_DIST, { stubReply: request => request.stream ? answer : "{}" });
   try {
     writeFileSync(join(out, "logs", `${scene.name}-agent.pid`), String(app.gateway.pid));
     writeFileSync(join(out, "logs", `${scene.name}-electron.pid`), String(await app.main<number>("process.pid")));
     writeFileSync(join(out, "logs", `${scene.name}-tracked-pids.json`), JSON.stringify(liveTrackedProcessIds()));
     const seeded = await seed(app.gateway, scene);
-    if (scene.name === "approval") await waitBrowser(async () => {
-      const view = await app.gateway.api<{ authority_requests?: unknown[] }>(`/session-view?session_id=${seeded.chat}`);
-      return Boolean(view.authority_requests?.length);
-    }, "approval request");
+    if (scene.ready) await waitBrowser(async () => {
+      const view = await app.gateway.api<{ authority_requests?: unknown[]; pending_questions?: unknown[]; artifacts?: unknown[]; latest_turn?: { state: string } }>(`/session-view?session_id=${seeded.chat}`);
+      if (scene.ready === "authority_requests") return Boolean(view.authority_requests?.length);
+      if (scene.ready === "pending_questions") return Boolean(view.pending_questions?.length);
+      return view.latest_turn?.state === "delivered" && Boolean(view.artifacts?.length);
+    }, `scene ready: ${scene.ready}`);
     const anchors = await seeded.anchors();
     await app.main(`${app.win}.webContents.debugger.attach('1.3')`);
     for (const theme of themes) for (const size of sizes) {
       const name = await capture(app, scene, anchors, size, theme);
-      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "chat" in scene.open ? seeded.chat : undefined);
+      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "chat" in scene.open ? seeded.chat : undefined, scene.steps);
     }
   } finally {
     await app.stop();

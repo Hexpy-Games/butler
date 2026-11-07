@@ -28,6 +28,17 @@
       "wait": false
     }
   ],
+  "stubToolCalls": [
+    {
+      "name": "run_command",
+      "arguments": {
+        "command": "printf '검토 자료를 저장합니다\\n'",
+        "state_effect": "mutation",
+        "summary": "검토 자료 저장"
+      }
+    }
+  ],
+  "ready": "authority_requests",
   "open": {
     "chat": "검토 자료 저장"
   },

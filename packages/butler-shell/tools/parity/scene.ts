@@ -8,6 +8,12 @@ export type Scene = {
   seed: Array<{ method: string; path: string; body: Record<string, unknown>; wait?: boolean }>;
   open: { chat: string } | { new: true };
   anchors: Anchor[];
+  /** Agent tool calls the stub model emits, one per streaming request that offers tools. */
+  stubToolCalls?: Array<{ name: string; arguments: unknown }>;
+  /** What must exist in `/session-view` before capture. */
+  ready?: "authority_requests" | "pending_questions" | "artifacts";
+  /** Before each screenshot, in order: click an anchor or wait for it to exist. */
+  steps?: Array<{ click: string } | { expect: string }>;
 };
 type View = { latest_turn?: { state: string }; messages: Array<{ id: string }> };
 
