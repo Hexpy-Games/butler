@@ -86,13 +86,32 @@ pub(crate) fn frame(ds: &Ds, pad_right: f32, min_height: gpui::Pixels) -> Div {
         .rounded(ds.len(Length::RadiusControl))
 }
 
+/// The label, and under it the description lines (secondary caption text that wraps anywhere).
+fn label_lines(ds: &Ds, row: &Selectable) -> Div {
+    if row.description.is_empty() {
+        return div().whitespace_nowrap().child(row.label.clone());
+    }
+    div()
+        .flex()
+        .flex_col()
+        .gap(ds.len(Length::SpaceXs))
+        .child(div().whitespace_nowrap().child(row.label.clone()))
+        .children(row.description.iter().map(|line| {
+            div()
+                .text_color(ds.color(Color::TextSecondary))
+                .text_size(ds.len(Length::TypoCaptionSize))
+                .line_height(ds.len(Length::TypoCaptionLineHeight))
+                .child(line.clone())
+        }))
+}
+
 /// The row itself: icon, label, shortcut or submenu chevron, indicator.
 fn body(ds: &Ds, row: &Selectable, stateful: Div) -> Div {
     let tertiary = ds.color(Color::TextTertiary);
     let mut el = stateful
         .text_color(color(ds, row))
         .children(row.icon.map(|glyph| icon(glyph, IconSize::Sm, ds)))
-        .child(div().whitespace_nowrap().child(row.label.clone()));
+        .child(label_lines(ds, row));
     el = el.children(row.shortcut.as_ref().map(|text| {
         div()
             .ml_auto()

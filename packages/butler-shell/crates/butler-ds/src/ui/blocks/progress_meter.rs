@@ -46,6 +46,7 @@ pub struct ProgressMeter {
     mode: Mode,
     label: Option<SharedString>,
     meta: Option<SharedString>,
+    meta_element: Option<AnyElement>,
     tone: MeterTone,
     look: Look,
 }
@@ -67,6 +68,7 @@ impl ProgressMeter {
             mode,
             label: None,
             meta: None,
+            meta_element: None,
             tone: MeterTone::Default,
             look: Look::Labelled,
         }
@@ -79,6 +81,12 @@ impl ProgressMeter {
 
     pub fn meta(mut self, meta: impl Into<SharedString>) -> Self {
         self.meta = Some(meta.into());
+        self
+    }
+
+    /// The meta as an element (an animated number), in the meta's caption voice.
+    pub fn meta_element(mut self, meta: impl IntoElement) -> Self {
+        self.meta_element = Some(meta.into_any_element());
         self
     }
 
@@ -146,6 +154,7 @@ impl RenderOnce for ProgressMeter {
         let ds = Ds::get(cx);
         let gap_xs = ds.len(Length::SpaceXs);
         let gap_sm = ds.len(Length::SpaceSm);
+        let tertiary = ds.color(Color::TextTertiary);
         let (caption_size, caption_line) = (
             ds.len(Length::TypoCaptionSize),
             ds.len(Length::TypoCaptionLineHeight),
@@ -182,10 +191,21 @@ impl RenderOnce for ProgressMeter {
         if self.look != Look::Labelled {
             return div().w_full().child(track).into_any_element();
         }
-        let meta = self
-            .meta
-            .clone()
-            .unwrap_or_else(|| format!("{}%", value.round()).into());
+        let meta = match self.meta_element {
+            Some(element) => div()
+                .text_size(caption_size)
+                .line_height(caption_line)
+                .text_color(tertiary)
+                .child(element)
+                .into_any_element(),
+            None => Typo::caption(
+                self.meta
+                    .clone()
+                    .unwrap_or_else(|| format!("{}%", value.round()).into()),
+            )
+            .tone(Tone::Tertiary)
+            .into_any_element(),
+        };
         let label = self.label.clone().unwrap_or_default();
         div()
             .flex()
@@ -203,7 +223,7 @@ impl RenderOnce for ProgressMeter {
                             .min_w_0()
                             .child(Typo::caption(label).tone(Tone::Tertiary)),
                     )
-                    .child(Typo::caption(meta).tone(Tone::Tertiary)),
+                    .child(meta),
             )
             .child(track)
             .into_any_element()

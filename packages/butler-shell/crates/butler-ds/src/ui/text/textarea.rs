@@ -3,7 +3,9 @@
 use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
 
 use super::TextSize;
-use super::field::{self, Look, Shape, Spec};
+use std::rc::Rc;
+
+use super::field::{self, ChangeHandler, Look, Shape, Spec};
 
 /// `variant`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -13,6 +15,8 @@ pub enum Variant {
     /// Wrapping in-place entry, growing from one line to `--textarea-max-lines`, then scrolling
     /// under the edge fade.
     Underline,
+    /// The editor alone, padded by the ComposerCard around it (`ComposerCardTextarea`).
+    Bare,
 }
 
 #[expect(
@@ -33,6 +37,7 @@ pub struct Textarea {
     read_only: bool,
     invalid: bool,
     probe: Option<SharedString>,
+    on_change: Option<ChangeHandler>,
 }
 
 impl Textarea {
@@ -50,6 +55,7 @@ impl Textarea {
             read_only: false,
             invalid: false,
             probe: None,
+            on_change: None,
         }
     }
 
@@ -111,6 +117,12 @@ impl Textarea {
         self
     }
 
+    /// `onChange`: the text after each edit the user makes (not after `value` replaces it).
+    pub fn on_change(mut self, handler: impl Fn(&str, &mut Window, &mut App) + 'static) -> Self {
+        self.on_change = Some(Rc::new(handler));
+        self
+    }
+
     /// See [`super::Input::probe`].
     pub fn probe(mut self, name: impl Into<SharedString>) -> Self {
         self.probe = Some(name.into());
@@ -124,10 +136,10 @@ impl RenderOnce for Textarea {
         field::render(
             Spec {
                 id: self.id,
-                look: if underline {
-                    Look::Underline
-                } else {
-                    Look::Default
+                look: match self.variant {
+                    Variant::Underline => Look::Underline,
+                    Variant::Bare => Look::Bare,
+                    Variant::Default => Look::Default,
                 },
                 text_size: self.text_size,
                 shape: Shape::Area {
@@ -141,6 +153,7 @@ impl RenderOnce for Textarea {
                 read_only: self.read_only,
                 invalid: self.invalid,
                 probe: self.probe,
+                on_change: self.on_change,
             },
             window,
             cx,

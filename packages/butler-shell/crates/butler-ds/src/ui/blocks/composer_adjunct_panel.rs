@@ -10,7 +10,7 @@ use gpui::{
 
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::Icon;
-use crate::ui::blocks::anim;
+use crate::ui::blocks::{anim, scope};
 use crate::ui::collapsible::{Collapsible, KeepMounted};
 use crate::ui::context::Ds;
 use crate::ui::icon::icon_px;
@@ -97,8 +97,11 @@ impl RenderOnce for ComposerAdjunctPanel {
         );
         let ds = Ds::get(cx);
         // Without a composer card the padding's variables are unset and the whole declaration is void.
-        let (inline, block) = self.padding.unwrap_or((px(0.), px(0.)));
-        let top = if self.padding.is_some() {
+        let padding = self
+            .padding
+            .or_else(|| scope::composer(cx).map(|vars| (px(vars.padding.0), px(vars.padding.1))));
+        let (inline, block) = padding.unwrap_or((px(0.), px(0.)));
+        let top = if padding.is_some() {
             ds.len(Length::Space2)
         } else {
             px(0.)
