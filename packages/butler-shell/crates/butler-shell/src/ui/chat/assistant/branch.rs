@@ -10,7 +10,7 @@ use butler_ds::ui::typo::Typo;
 use butler_shell_client::ShellClient;
 use gpui::{
     AnyElement, App, ClickEvent, ElementId, Entity, IntoElement as _, ParentElement as _,
-    SharedString, Window, div,
+    SharedString, Styled as _, Window, div,
 };
 use serde_json::{Value, json};
 
