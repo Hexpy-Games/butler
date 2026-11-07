@@ -3,15 +3,14 @@ mod convert;
 mod frame;
 mod jobs;
 mod live;
-mod presentation;
 mod refresh;
 mod session_view;
 mod watch;
 
 use super::wire;
 use super::{
-    AuthorityCard, ChatId, ChatPage, ChatRef, ClientMessageId, ComposerContext, Decision,
-    EventCursor, Fetch, LiveEvent, PageCursor, RequestRef, SentTurn, SessionId, Source,
+    AuthorityCard, ChatPage, ChatRef, Decision, EventCursor, Fetch, LiveEvent,
+    PageCursor, RequestRef, SentTurn, SessionId, Source,
     SourceError, TurnId, model::AllowScope,
 };
 use butler_shell_client::{AuthorityDecision, PageRequest, ShellClient};
@@ -41,7 +40,6 @@ impl Drop for Worker {
 pub(crate) struct Agent {
     worker: Arc<Worker>,
     client: ShellClient,
-    presentation: Rc<presentation::Presentation>,
 }
 
 pub(crate) enum MonitorSignal {
@@ -99,7 +97,6 @@ impl Attachment {
                 Rc::new(Agent {
                     worker: self.worker.clone(),
                     client,
-                    presentation: Rc::default(),
                 }) as Rc<dyn Source>
             });
             (source, jobs)
@@ -137,47 +134,24 @@ impl Source for Agent {
     }
     fn chats(&self, cursor: Option<PageCursor>) -> Fetch<ChatPage> {
         let client = self.client.clone();
-        let fallback = self.presentation.get();
-        let first = cursor.is_none();
-        self.presentation.initial(self.fetch(async move {
+        self.fetch(async move {
             let page = client
                 .list_sessions(PageRequest::new(100, cursor.map(|c| c.0))?)
                 .await?;
-            let context = if first && let Some(row) = page.items.first() {
-                let row = convert::decode::<wire::ChatProjection>(row)?;
-                presentation::read(
-                    &client,
-                    row.id
-                        .as_deref()
-                        .ok_or(butler_shell_client::Error::Protocol)?,
-                )
-                .await?
-            } else {
-                fallback
-            };
-            Ok((
-                ChatPage {
-                    chats: page
-                        .items
-                        .iter()
-                        .map(convert::chat)
-                        .collect::<Result<_, _>>()?,
-                    next: page.next_cursor.map(PageCursor),
-                    events: EventCursor(page.event_cursor),
-                },
-                context,
-            ))
-        }))
+            Ok(ChatPage {
+                chats: page
+                    .items
+                    .iter()
+                    .map(convert::chat)
+                    .collect::<Result<_, _>>()?,
+                next: page.next_cursor.map(PageCursor),
+                events: EventCursor(page.event_cursor),
+            })
+        })
     }
     fn open_session(&self, session: &SessionId) -> Fetch<wire::SessionView> {
         let (client, session) = (self.client.clone(), session.0.to_string());
-        self.presentation.remember(self.fetch(async move {
-            let (view, context) = tokio::join!(
-                session_view::fetch(&client, &session, None),
-                presentation::read(&client, &session)
-            );
-            Ok((view?, context?))
-        }))
+        self.fetch(async move { session_view::fetch(&client, &session, None).await })
     }
     fn session_view(
         &self,
@@ -197,27 +171,10 @@ impl Source for Agent {
     }
     fn create_chat(&self) -> Fetch<ChatRef> {
         let client = self.client.clone();
-        self.presentation.remember(self.fetch(async move {
+        self.fetch(async move {
             let raw = client.create_session(None).await?;
             let raw = convert::decode::<wire::CreatedSessionProjection>(&raw)?;
-            let chat = convert::identity(&raw.session)?;
-            Ok((chat, ComposerContext::unavailable()))
-        }))
-    }
-
-    fn send(&self, chat: &ChatId, id: ClientMessageId, text: String) -> Fetch<SentTurn> {
-        let (client, chat) = (self.client.clone(), chat.0.to_string());
-        self.fetch(async move {
-            let raw = client.post_message(&chat, &id.0, &text).await?;
-            let raw = convert::decode::<wire::SentTurnProjection>(&raw)?;
-            let id = raw
-                .turn_id
-                .or_else(|| raw.turn.as_ref().and_then(|t| t.turn_id.clone()))
-                .or_else(|| raw.turn.and_then(|t| t.id))
-                .ok_or(butler_shell_client::Error::Protocol)?;
-            Ok(SentTurn {
-                turn: TurnId(id.into()),
-            })
+            convert::identity(&raw.session)
         })
     }
     fn cancel(&self, turn: &TurnId) -> Fetch<()> {
@@ -254,7 +211,23 @@ impl Source for Agent {
                 .map(|_| ())
         })
     }
-    fn composer(&self) -> ComposerContext {
-        self.presentation.get()
-    }
+}
+
+/// The turn a `POST /messages` response started.
+pub(crate) fn sent_turn(raw: &serde_json::Value) -> Result<SentTurn, SourceError> {
+    let raw = convert::decode::<wire::SentTurnProjection>(raw)
+        .map_err(|error| convert::error(&error))?;
+    let id = raw
+        .turn_id
+        .or_else(|| raw.turn.as_ref().and_then(|t| t.turn_id.clone()))
+        .or_else(|| raw.turn.and_then(|t| t.id))
+        .ok_or_else(|| convert::error(&butler_shell_client::Error::Protocol))?;
+    Ok(SentTurn {
+        turn: TurnId(id.into()),
+    })
+}
+
+/// A client failure in the UI's terms.
+pub(crate) fn source_error(error: &butler_shell_client::Error) -> SourceError {
+    convert::error(error)
 }

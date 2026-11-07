@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use butler_shell_client::{Error, ShellClient};
 use gpui::{App, Global};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use super::state::{ComposerAttachment, ComposerControls, ComposerState};
 use crate::ui::source::wire::{
@@ -90,10 +90,9 @@ fn content_json(content: &MessageContent) -> Value {
     })
 }
 
-/// The `POST /session-queue` body (`queueMessage`).
-fn queue_body(chat_id: &str, text: &str, controls: &ComposerControls) -> Value {
-    json!({
-        "chat_id": chat_id,
+/// The body fields a message carries for its controls, queued or sent.
+pub(super) fn controls_body(text: &str, controls: &ComposerControls) -> Map<String, Value> {
+    let Value::Object(fields) = json!({
         "text": text,
         "model": controls.model,
         "content_parts": controls.content_parts.as_ref().map(content_json),
@@ -105,7 +104,17 @@ fn queue_body(chat_id: &str, text: &str, controls: &ComposerControls) -> Value {
             .iter()
             .map(|attachment| json!({ "file_id": attachment.file_id }))
             .collect::<Vec<_>>(),
-    })
+    }) else {
+        return Map::new();
+    };
+    fields
+}
+
+/// The `POST /session-queue` body (`queueMessage`).
+fn queue_body(chat_id: &str, text: &str, controls: &ComposerControls) -> Value {
+    let mut body = controls_body(text, controls);
+    body.insert("chat_id".into(), json!(chat_id));
+    Value::Object(body)
 }
 
 /// `queueMessage` for a started chat: the queue after the message was added. The caller runs it

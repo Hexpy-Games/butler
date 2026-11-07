@@ -4,13 +4,84 @@ use butler_ds::ui::context::Ds;
 use butler_ds::ui::toast::{self, Toast};
 use gpui::{Context, Entity, Window};
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use super::{Shell, image_viewer};
 use crate::ui::composer::queue::on_delete_queued;
-use crate::ui::composer::{Composer, ComposerEvent, Inputs};
+use crate::ui::composer::{Composer, ComposerEvent, Inputs, Outgoing};
 use crate::ui::i18n::composer::words;
-use crate::ui::source::agent::Jobs;
+use crate::ui::source::agent::{Jobs, sent_turn, source_error};
+use crate::ui::source::{ChatRef, Fetch, SentTurn, SourceError};
+
+/// A message id unique to this process run (time plus a counter); sending twice with the same
+/// id sends once.
+fn client_message_id() -> String {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    format!("shell-{nanos:x}-{}", NEXT.fetch_add(1, Ordering::Relaxed))
+}
 
 impl Shell {
+    /// `sendMessage`: the draft goes into the open chat, or into a new one created first.
+    pub(super) fn send(&mut self, outgoing: impl Into<Outgoing>, cx: &mut Context<Self>) {
+        let outgoing = outgoing.into();
+        let Some(source) = self.source.clone() else {
+            return;
+        };
+        if let Some(chat) = self.store.selected().cloned() {
+            return self.send_to(chat, outgoing, false, cx);
+        }
+        Self::run(
+            source.create_chat(),
+            cx,
+            move |this, result, cx| match result {
+                Ok(chat) => {
+                    this.store.open(Some(chat.clone()));
+                    this.show_view(false, cx);
+                    this.reload_open_chat(cx);
+                    this.send_to(chat, outgoing, true, cx);
+                }
+                Err(e) => this.failed(&e, this.theme.strings.send_failed, cx),
+            },
+        );
+    }
+
+    /// Posts the whole message; a new chat first takes the controls the owner chose.
+    fn send_to(
+        &mut self,
+        chat: ChatRef,
+        outgoing: Outgoing,
+        new_chat: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let body = outgoing.body(&chat.chat.0, &client_message_id());
+        let controls = outgoing.session_controls().filter(|_| new_chat);
+        let session = chat.session.0.to_string();
+        let posted = Jobs::run(cx, move |client| async move {
+            if let Some(controls) = controls {
+                let _ = client.update_session_controls(&session, &controls).await;
+            }
+            client.post_message_body(&body).await
+        });
+        let sent: Fetch<SentTurn> = Box::pin(async move {
+            match posted.await {
+                Some(Ok(raw)) => sent_turn(&raw),
+                Some(Err(error)) => Err(source_error(&error)),
+                None => Err(SourceError::Disconnected),
+            }
+        });
+        Self::run(sent, cx, move |this, result, cx| match result {
+            Ok(sent) => {
+                this.store.turn_started(&chat.chat, sent.turn);
+                this.sync_composer(cx);
+            }
+            Err(e) => this.chat_failed(&chat, &e, this.theme.strings.send_failed, cx),
+        });
+    }
+
     /// What the composer needs of the open chat and the agent.
     fn composer_inputs(&self) -> Inputs {
         let chat = self.store.selected();
@@ -42,7 +113,7 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         match event {
-            ComposerEvent::Send(outgoing) => self.send(outgoing.text.clone(), cx),
+            ComposerEvent::Send(outgoing) => self.send(outgoing.as_ref().clone(), cx),
             ComposerEvent::Stop => self.stop(cx),
             ComposerEvent::Answer(request, decision) => self.answer(request, decision.clone(), cx),
             ComposerEvent::Modify(card) => self.open_modify(card, window, cx),

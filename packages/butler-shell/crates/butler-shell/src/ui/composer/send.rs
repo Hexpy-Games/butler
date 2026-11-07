@@ -4,9 +4,10 @@
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::toast::{self, Toast};
 use gpui::{Context, Window};
+use serde_json::{Value, json};
 
 use super::editor::serialize::content_text;
-use super::queue::queue_message;
+use super::queue::{access_wire, controls_body, effort_wire, queue_message};
 use super::state::{ComposerState, QueuePolicy, Submission, SubmitInput};
 use super::{Composer, ComposerEvent, Submit};
 use crate::ui::i18n::composer::words;
@@ -16,7 +17,46 @@ use crate::ui::source::agent::Jobs;
 #[derive(Clone)]
 pub(crate) struct Outgoing {
     pub(crate) text: String,
-    pub(super) submission: Submission,
+    submission: Submission,
+}
+
+impl From<String> for Outgoing {
+    fn from(text: String) -> Self {
+        Self {
+            submission: Submission::plain(text.clone()),
+            text,
+        }
+    }
+}
+
+impl Outgoing {
+    /// The `POST /messages` body of `sendMessage`: the text, content parts, attachments and
+    /// controls, and the queue policy the submission was made under.
+    pub(crate) fn body(&self, chat_id: &str, client_message_id: &str) -> Value {
+        let mut body = controls_body(&self.text, &self.submission.controls);
+        body.insert("chat_id".into(), json!(chat_id));
+        body.insert("client_message_id".into(), json!(client_message_id));
+        let policy = match self.submission.controls.queue_policy {
+            QueuePolicy::EnqueueIfBusy => "enqueue_if_busy",
+            QueuePolicy::SendNow => "send_now",
+        };
+        body.insert("queue_policy".into(), json!(policy));
+        Value::Object(body)
+    }
+}
+
+impl Outgoing {
+    /// `draftSessionControls`: the controls a new chat starts with, when the owner chose some.
+    pub(crate) fn session_controls(&self) -> Option<Value> {
+        let controls = &self.submission.controls;
+        let model = controls.model.as_ref()?;
+        Some(json!({
+            "model": model,
+            "reasoning_effort": controls.reasoning_effort.as_ref().and_then(effort_wire),
+            "access_mode": controls.access_mode.as_ref().and_then(access_wire),
+            "plan_mode": controls.plan_mode.unwrap_or(false),
+        }))
+    }
 }
 
 impl Composer {

@@ -1,30 +1,13 @@
 //! Runs the [`Source`] requests the shell needs and hands the results to the [`Store`]. Each
 //! snapshot (connect, resync) gets its own live stream, started after the snapshot's event
 //! cursor; a stream or result of an older snapshot is dropped.
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use futures::StreamExt as _;
 use gpui::{Context, Window};
 
 use super::Shell;
 use crate::ui::source::agent::MonitorSignal;
-use crate::ui::source::{
-    ChatRef, ClientMessageId, Decision, EventCursor, Fetch, RequestRef, SourceError,
-};
+use crate::ui::source::{ChatRef, Decision, EventCursor, Fetch, RequestRef, SourceError};
 use crate::ui::store::{Applied, ChatsLoad};
-
-/// A message id unique to this process run (time plus a counter).
-fn client_message_id() -> ClientMessageId {
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos());
-    ClientMessageId(format!(
-        "shell-{nanos:x}-{}",
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ))
-}
 
 impl Shell {
     /// Runs `fetch` and hands its result to `done` on the UI thread.
@@ -131,7 +114,7 @@ impl Shell {
         match self.store.apply(epoch, event) {
             Applied::Store => {}
             Applied::Failed(error) => self.failed(&error, self.theme.strings.load_failed, cx),
-            Applied::Transcript(_) => self.show_view(true, cx),
+            Applied::Transcript => self.show_view(true, cx),
             Applied::Resync => self.connect(cx),
         }
         if self.store.view_stale() {
@@ -186,7 +169,7 @@ impl Shell {
     }
 
     /// Reloads the open chat's latest window and its authority requests.
-    fn reload_open_chat(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn reload_open_chat(&mut self, cx: &mut Context<Self>) {
         let (Some(chat), Some(source)) = (self.store.selected().cloned(), self.source.clone())
         else {
             return;
@@ -265,53 +248,6 @@ impl Shell {
             c.disabled = disabled;
             cx.notify();
         });
-    }
-
-    pub(crate) fn send(&mut self, text: String, cx: &mut Context<Self>) {
-        let Some(source) = self.source.clone() else {
-            return;
-        };
-        let id = client_message_id();
-        if let Some(chat) = self.store.selected().cloned() {
-            return self.send_to(chat, id, text, cx);
-        }
-        // A new chat: create it, open it, then send into it.
-        Self::run(
-            source.create_chat(),
-            cx,
-            move |this, result, cx| match result {
-                Ok(chat) => {
-                    this.store.open(Some(chat.clone()));
-                    this.show_view(false, cx);
-                    this.reload_open_chat(cx);
-                    this.send_to(chat, id, text, cx);
-                }
-                Err(e) => this.failed(&e, this.theme.strings.send_failed, cx),
-            },
-        );
-    }
-
-    fn send_to(
-        &mut self,
-        chat: ChatRef,
-        id: ClientMessageId,
-        text: String,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(source) = self.source.clone() else {
-            return;
-        };
-        Self::run(
-            source.send(&chat.chat, id, text),
-            cx,
-            move |this, result, cx| match result {
-                Ok(sent) => {
-                    this.store.turn_started(&chat.chat, sent.turn);
-                    this.sync_composer(cx);
-                }
-                Err(e) => this.chat_failed(&chat, &e, this.theme.strings.send_failed, cx),
-            },
-        );
     }
 
     pub(crate) fn stop(&mut self, cx: &mut Context<Self>) {

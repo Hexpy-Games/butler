@@ -313,6 +313,30 @@ pub(crate) struct Submission {
     attachments: Vec<ComposerAttachment>,
 }
 
+impl Submission {
+    /// A message sent without the composer (an answer's follow-up question): its text and no
+    /// controls, as `sendMessage(text)` is called without them.
+    pub(crate) fn plain(text: String) -> Self {
+        let controls = ComposerControls {
+            model: None,
+            reasoning_effort: None,
+            access_mode: None,
+            plan_mode: None,
+            queue_policy: QueuePolicy::SendNow,
+            attachments: Vec::new(),
+            content_parts: None,
+            workspace_mode: WorkspaceMode::Local,
+        };
+        Self {
+            text,
+            controls,
+            session_id: String::new(),
+            revision: 0,
+            attachments: Vec::new(),
+        }
+    }
+}
+
 impl ComposerState {
     /// `useComposerSubmit`: the checks, then the submission to send (`onSend`). `None` when the
     /// draft is empty, blocked, or a send is already in flight without a running turn.

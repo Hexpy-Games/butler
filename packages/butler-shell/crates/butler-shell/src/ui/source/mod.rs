@@ -1,8 +1,7 @@
 //! The UI's only data boundary. A [`Source`] reads Butler's chats, message windows and
 //! authority requests and sends what the UI does; it mirrors `butler-shell-client`
 //! (`list_chats`, `message_window`, `authority_requests`, `live_events(cursor)`,
-//! `post_message` with a client message id, `cancel_turn`, `answer_authority`) and is adapted
-//! by `agent`. Without a source the shell shows its disconnected state.
+//! `cancel_turn`, `answer_authority`) and is adapted by `agent`. Without a source the shell shows its disconnected state.
 pub(crate) mod agent;
 pub(crate) mod model;
 pub(crate) mod wire;
@@ -11,9 +10,9 @@ use futures::future::LocalBoxFuture;
 use futures::stream::LocalBoxStream;
 
 pub(crate) use model::{
-    Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, ClientMessageId,
-    ComposerContext, Decision, EventCursor, LiveEvent, LiveUpdate, PageCursor, RequestRef, Risk,
-    SentTurn, SessionId, Space, Timestamp, TurnId,
+    Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, Decision,
+    EventCursor, LiveEvent, LiveUpdate, PageCursor, RequestRef, Risk, SentTurn, SessionId, Space,
+    Timestamp, TurnId,
 };
 
 /// Why a request failed, in the UI's terms (no credential or wire detail).
@@ -62,12 +61,8 @@ pub(crate) trait Source {
     fn live(&self, after: EventCursor) -> LocalBoxStream<'static, LiveEvent>;
     /// Starts a new chat (its session too).
     fn create_chat(&self) -> Fetch<ChatRef>;
-    /// Sends `text` into `chat` and starts its turn; `id` makes a retry send once.
-    fn send(&self, chat: &ChatId, id: ClientMessageId, text: String) -> Fetch<SentTurn>;
     /// Stops a running turn.
     fn cancel(&self, turn: &TurnId) -> Fetch<()>;
     /// Answers one of `session`'s authority requests.
     fn answer(&self, session: &SessionId, request: &RequestRef, decision: Decision) -> Fetch<()>;
-    /// The composer's permission and model labels.
-    fn composer(&self) -> ComposerContext;
 }

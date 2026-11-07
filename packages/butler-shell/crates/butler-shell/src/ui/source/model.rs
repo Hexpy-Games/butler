@@ -27,10 +27,6 @@ pub(crate) struct TurnId(pub(crate) SharedString);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct RequestRef(pub(crate) SharedString);
 
-/// A caller-made message id: sending twice with the same id sends once.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ClientMessageId(pub(crate) String);
-
 /// An opaque keyset cursor into the chat list.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PageCursor(pub(crate) String);
@@ -206,33 +202,6 @@ pub(crate) enum Decision {
     Modify(String),
     #[expect(dead_code, reason = "question UI directs answers to the existing App")]
     Answer(Vec<QuestionAnswer>),
-}
-
-/// Whether controls were loaded, independently of their display labels.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Controls {
-    Loaded,
-    Unavailable,
-}
-
-/// The composer's labels for the open chat.
-#[derive(Clone, Debug)]
-pub(crate) struct ComposerContext {
-    pub(crate) state: Controls,
-    pub(crate) permission: SharedString,
-    pub(crate) model: SharedString,
-    pub(crate) effort: SharedString,
-}
-
-impl ComposerContext {
-    pub(crate) fn unavailable() -> Self {
-        Self {
-            state: Controls::Unavailable,
-            permission: "".into(),
-            model: "".into(),
-            effort: "".into(),
-        }
-    }
 }
 
 /// A message was sent and its turn started.

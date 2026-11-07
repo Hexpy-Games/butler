@@ -8,9 +8,9 @@ use gpui::SharedString;
 
 use super::{Applied, Store};
 use crate::ui::source::{
-    AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, ClientMessageId,
-    ComposerContext, Decision, EventCursor, Fetch, LiveEvent, LiveUpdate, PageCursor, RequestRef,
-    SentTurn, SessionId, Source, SourceError, Timestamp, TurnId,
+    AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, Decision, EventCursor, Fetch,
+    LiveEvent, LiveUpdate, PageCursor, RequestRef, SessionId, Source, SourceError, Timestamp,
+    TurnId,
     wire::{AppEventEnvelope, SessionView},
 };
 
@@ -99,11 +99,6 @@ impl Source for Fake {
     fn create_chat(&self) -> Fetch<ChatRef> {
         ready(Ok(chat(9).chat))
     }
-    fn send(&self, _: &ChatId, _: ClientMessageId, _: String) -> Fetch<SentTurn> {
-        ready(Ok(SentTurn {
-            turn: TurnId("t".into()),
-        }))
-    }
     fn cancel(&self, _: &TurnId) -> Fetch<()> {
         ready(Ok(()))
     }
@@ -113,14 +108,6 @@ impl Source for Fake {
         } else {
             Err(SourceError::Refused("busy".into()))
         })
-    }
-    fn composer(&self) -> ComposerContext {
-        ComposerContext {
-            state: crate::ui::source::model::Controls::Loaded,
-            permission: "".into(),
-            model: "".into(),
-            effort: "".into(),
-        }
     }
 }
 
@@ -315,7 +302,7 @@ fn session_views_and_live_events_keep_messages_deletions_and_running_turns() {
         store.epoch(),
         message_event(&chat.session, "message.created", added),
     );
-    assert!(matches!(applied, Applied::Transcript(_)));
+    assert!(matches!(applied, Applied::Transcript));
     let shown = store.shown_view().unwrap();
     assert!(shown.messages.iter().any(|m| m.text == "Scheduled result"));
     assert_eq!(store.cursor, Some(EventCursor(6)));
@@ -331,7 +318,7 @@ fn session_views_and_live_events_keep_messages_deletions_and_running_turns() {
     ));
     assert!(matches!(
         store.apply(store.epoch(), event(7)),
-        Applied::Transcript(_)
+        Applied::Transcript
     ));
     assert!(matches!(
         store.apply(store.epoch(), event(7)),
