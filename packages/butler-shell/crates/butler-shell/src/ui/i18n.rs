@@ -1,6 +1,8 @@
 //! UI copy in Korean and English. Strings that exist in packages/butler-i18n (TypeScript, so
 //! not readable at build time) use the same key, named on each field with its catalog path
 //! and the same text; `shell.*` fields are new to this app. Product terms follow AGENTS.md.
+pub(crate) mod media;
+
 use crate::ui::source::Risk;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -218,6 +220,24 @@ impl Strings {
                     if live { "Current" } else { "Activity" }
                 )
             }
+        }
+    }
+
+    // --- activity (chat/activity) ---
+
+    /// conversation.work.collapse
+    pub(crate) fn activity_collapse(&self) -> &'static str {
+        match self.locale {
+            Locale::Ko => "접기",
+            Locale::En => "Collapse",
+        }
+    }
+
+    /// The labels before a phase's summary, intent and next step (TurnActivityBlock).
+    pub(crate) fn activity_detail_labels(&self) -> [&'static str; 3] {
+        match self.locale {
+            Locale::Ko => ["내용:", "의도:", "다음:"],
+            Locale::En => ["Content:", "Intent:", "Next:"],
         }
     }
 
