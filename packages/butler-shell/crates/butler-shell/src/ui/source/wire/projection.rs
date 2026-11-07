@@ -7,15 +7,6 @@ use serde_json::Value;
 fn optional<'de, D: Deserializer<'de>, T: DeserializeOwned>(d: D) -> Result<Option<T>, D::Error> {
     Ok(serde_json::from_value(Value::deserialize(d)?).ok())
 }
-fn list<'de, D: Deserializer<'de>, T: DeserializeOwned>(d: D) -> Result<Vec<T>, D::Error> {
-    let value = Value::deserialize(d)?;
-    Ok(value
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|item| serde_json::from_value(item.clone()).ok())
-        .collect())
-}
 fn object<'de, D: Deserializer<'de>, T: DeserializeOwned>(d: D) -> Result<T, D::Error> {
     let value = Value::deserialize(d)?;
     if !value.is_object() {
@@ -31,18 +22,6 @@ fn optional_object<'de, D: Deserializer<'de>, T: DeserializeOwned>(
         .is_object()
         .then(|| serde_json::from_value(value).ok())
         .flatten())
-}
-fn object_list<'de, D: Deserializer<'de>, T: DeserializeOwned>(d: D) -> Result<Vec<T>, D::Error> {
-    let values = Vec::<Value>::deserialize(d)?;
-    values
-        .into_iter()
-        .map(|v| {
-            if !v.is_object() {
-                return Err(serde::de::Error::custom("expected object"));
-            }
-            serde_json::from_value(v).map_err(serde::de::Error::custom)
-        })
-        .collect()
 }
 /// JSON field presence, retaining explicit null or malformed values separately from omission.
 #[derive(Debug, Clone, Default)]
@@ -155,40 +134,6 @@ pub(crate) struct SentTurnProjection {
 pub(crate) struct AuthorityProjection {
     #[serde(default, deserialize_with = "optional")]
     pub(crate) category: Option<String>,
-}
-/// Gateway snake_case approval facts before the renderer's ApprovalSummary normalization.
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct ApprovalProjection {
-    pub(crate) action_kind: String,
-    #[serde(default, deserialize_with = "optional_object")]
-    pub(crate) operation: Option<OperationProjection>,
-    #[serde(deserialize_with = "object_list")]
-    pub(crate) targets: Vec<TargetProjection>,
-    pub(crate) count: u64,
-    #[serde(default, deserialize_with = "list")]
-    pub(crate) examples: Vec<String>,
-    #[serde(default, deserialize_with = "list")]
-    pub(crate) examples_truncated: Vec<Value>,
-    #[serde(default, deserialize_with = "optional")]
-    pub(crate) risk: Option<String>,
-}
-/// Gateway operation facts consumed by the current approval card.
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct OperationProjection {
-    #[serde(default, deserialize_with = "optional")]
-    pub(crate) tool: Option<String>,
-    #[serde(default, deserialize_with = "optional")]
-    pub(crate) access: Option<String>,
-    #[serde(default, deserialize_with = "list")]
-    pub(crate) targets: Vec<String>,
-    #[serde(default, deserialize_with = "optional")]
-    pub(crate) command: Option<String>,
-}
-/// Gateway approval target facts consumed by the current approval card.
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct TargetProjection {
-    pub(crate) kind: String,
-    pub(crate) path: String,
 }
 /// TS: packages/butler-app/client/ui/src/app/types.ts:753 SessionControlsView (consumed fields).
 #[derive(Debug, Clone, Deserialize)]

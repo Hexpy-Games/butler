@@ -1,9 +1,8 @@
-//! Wire projections retain exact approval text; unknown wire kinds remain visible.
+//! Wire projections; authority requests are reduced to what change detection needs.
 use super::super::wire;
 use super::super::{
-    Approval, AuthorityCard, CardKind, ChatId, ChatRef, ChatSummary, RequestRef, Risk, SessionId,
-    SourceError, Space, Timestamp,
-    model::{Access, Operation, Target},
+    AuthorityCard, ChatId, ChatRef, ChatSummary, RequestRef, SessionId, SourceError, Space,
+    Timestamp,
 };
 use butler_shell_client::{AuthorityPage, Error};
 use serde_json::Value;
@@ -62,72 +61,16 @@ pub(super) fn active(state: &str) -> bool {
         "delivered" | "failed" | "cancelled" | "completed" | "runtime_fault"
     )
 }
-pub(super) fn authority(page: AuthorityPage) -> Result<Vec<AuthorityCard>, Error> {
+pub(super) fn authority(page: AuthorityPage) -> Vec<AuthorityCard> {
     page.requests
         .into_iter()
-        .map(|card| {
-            let raw = decode::<wire::AuthorityProjection>(&card.raw)
-                .unwrap_or(wire::AuthorityProjection { category: None });
-            let kind = match raw.category.as_deref().unwrap_or_default() {
-                "command" => CardKind::Command,
-                "reviewed_effect" => CardKind::ReviewedEffect,
-                "ask_user" => CardKind::Question,
-                name => CardKind::Other(name.to_owned().into()),
-            };
-            Ok(AuthorityCard {
-                request: RequestRef(card.request_ref.into()),
-                kind,
-                reason: card.reason.into(),
-                approval: if card.approval.is_null() {
-                    None
-                } else {
-                    Some(approval(&card.approval)?)
-                },
-            })
+        .map(|card| AuthorityCard {
+            request: RequestRef(card.request_ref.into()),
+            tool: card
+                .approval
+                .pointer("/operation/tool")
+                .and_then(Value::as_str)
+                .map(|tool| tool.to_owned().into()),
         })
         .collect()
-}
-fn approval(value: &Value) -> Result<Approval, Error> {
-    let raw = decode::<wire::ApprovalProjection>(value)?;
-    let operation = raw
-        .operation
-        .map(|o| {
-            Ok(Operation {
-                tool: o.tool.ok_or(Error::Protocol)?.into(),
-                access: match o.access.as_deref().ok_or(Error::Protocol)? {
-                    "read_only" => Access::ReadOnly,
-                    _ => Access::Change,
-                },
-                targets: o.targets.into_iter().map(Into::into).collect(),
-                command: o.command.map(Into::into),
-            })
-        })
-        .transpose()?;
-    Ok(Approval {
-        wire: Some(value.clone()),
-        action_kind: raw.action_kind.into(),
-        operation,
-        targets: raw
-            .targets
-            .into_iter()
-            .map(|t| Target {
-                kind: t.kind.into(),
-                path: t.path.into(),
-                label: None,
-            })
-            .collect(),
-        count: u32::try_from(raw.count).map_err(|_| Error::Protocol)?,
-        examples: raw.examples.into_iter().map(Into::into).collect(),
-        examples_truncated: raw
-            .examples_truncated
-            .into_iter()
-            .map(|v| v.as_bool().unwrap_or(false))
-            .collect(),
-        risk: match raw.risk.as_deref() {
-            Some("low") => Some(Risk::Low),
-            Some("medium") => Some(Risk::Medium),
-            Some("high") => Some(Risk::High),
-            _ => None,
-        },
-    })
 }

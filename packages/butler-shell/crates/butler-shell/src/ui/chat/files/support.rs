@@ -17,7 +17,7 @@ pub(super) fn file_picture(file_id: &str, cx: &mut App) -> Option<ImageSource> {
 }
 
 /// The save of a message file: the save dialog, then the download written to the chosen path.
-pub(super) fn save_file(file_id: String, name: &str, cx: &mut App) {
+pub(crate) fn save_file(file_id: String, name: &str, cx: &mut App) {
     let directory = butler_platform::user_dirs::non_empty_home_dir()
         .map_or_else(PathBuf::new, |home| home.join("Downloads"));
     let ask = cx.prompt_for_new_path(&directory, Some(name));

@@ -129,6 +129,12 @@ impl Shell {
         if self.store.selected().is_some() {
             bar = bar.title_actions(self.render_session_menu(window, cx));
         }
+        if let Some(actions) = self.session_actions(window, cx) {
+            bar = bar.chat_trailing(actions);
+        }
+        if let Some(toggle) = self.viewer_toggle(cx) {
+            bar = bar.trailing(toggle);
+        }
         if !matches!(self.theme.platform, crate::ui::theme::Platform::Mac) {
             bar = bar.window_controls(self.window_controls());
         }

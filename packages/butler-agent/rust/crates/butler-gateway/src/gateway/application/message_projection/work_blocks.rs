@@ -295,14 +295,16 @@ fn preserve_minimum(
     right: &Map<String, Value>,
     key: &str,
 ) {
+    // The minimum is one of the two values: keep its JSON number as sent, so an integer stays
+    // an integer.
     let value = [left.get(key), right.get(key)]
         .into_iter()
         .flatten()
-        .filter_map(Value::as_f64)
-        .reduce(f64::min)
-        .and_then(serde_json::Number::from_f64);
+        .filter_map(|value| Some((value.as_f64()?, value)))
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, value)| value.clone());
     if let Some(value) = value {
-        merged.insert(key.into(), Value::Number(value));
+        merged.insert(key.into(), value);
     }
 }
 fn tool_activity(row: &Map<String, Value>) -> bool {

@@ -1,13 +1,12 @@
 //! The window: AdaptiveShell frame="cards" (AdaptiveShellCards.module.css, AdaptiveShellFrame):
-//! the sidebar track, the chat card with the floating composer, the title row, and the
-//! suggest-a-change dialog when one is open.
+//! the sidebar track, the chat card with the floating composer, and the title row.
 mod composer_link;
 mod data;
 mod frame;
 pub(crate) mod image_viewer;
-mod modify;
 pub(crate) mod navigation;
 mod notifications;
+mod panes;
 mod render;
 mod session_menu;
 mod titlebar;
@@ -17,13 +16,12 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    AppContext as _, Bounds, Context, Entity, FocusHandle, KeyBinding, Pixels, SharedString,
-    Subscription, Window, WindowAppearance, actions,
+    AppContext as _, Context, Entity, FocusHandle, KeyBinding, SharedString, Subscription, Window,
+    WindowAppearance, actions,
 };
 
 use crate::ui::chat::Chat;
 use crate::ui::composer::Composer;
-use crate::ui::dialog::Dialog;
 use crate::ui::i18n::Locale;
 use crate::ui::sidebar::SidebarState;
 use crate::ui::source::Source;
@@ -38,6 +36,7 @@ actions!(
         TextSizeUp,
         TextSizeDown,
         TextSizeReset,
+        TogglePalette,
         Quit
     ]
 );
@@ -50,6 +49,7 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
         KeyBinding::new("secondary--", TextSizeDown, None),
         KeyBinding::new("secondary-0", TextSizeReset, None),
         KeyBinding::new("secondary-q", Quit, None),
+        KeyBinding::new("secondary-k", TogglePalette, None),
     ]
 }
 
@@ -57,7 +57,6 @@ pub(crate) struct Shell {
     pub(crate) theme: Theme,
     pub(crate) chat: Entity<Chat>,
     pub(crate) composer: Entity<Composer>,
-    pub(crate) dialog: Option<Entity<Dialog>>,
     pub(crate) sidebar: SidebarState,
     pub(super) sidebar_open: bool,
     frame: frame::FrameState,
@@ -71,14 +70,22 @@ pub(crate) struct Shell {
     theme_override: Option<bool>,
     /// The composer card's measured height (the conversation keeps room for it).
     composer_h: Rc<Cell<f32>>,
-    card_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    panes: panes::Panes,
     focus: FocusHandle,
-    subscriptions: Vec<Subscription>,
+    _subscriptions: Vec<Subscription>,
     live_task: Option<gpui::Task<()>>,
     connection_task: Option<gpui::Task<()>>,
     rediscover: Option<tokio::sync::mpsc::UnboundedSender<crate::ui::source::agent::MonitorSignal>>,
-    /// The open chat's latest window is being read again.
-    refreshing: bool,
+    /// Whether the open chat's latest window is being read again.
+    refresh: Refresh,
+}
+
+/// The open chat's refresh: idle, running, or running with another asked for meanwhile.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Refresh {
+    Idle,
+    Running,
+    Again,
 }
 
 fn appearance(dark: bool) -> WindowAppearance {
@@ -135,13 +142,15 @@ impl Shell {
             }),
             cx.subscribe_in(&composer, window, Self::on_composer),
         ];
+        let (panes, palette_events) = Self::new_panes(window, cx);
+        let mut subscriptions = subscriptions;
+        subscriptions.push(palette_events);
         let composer_h = composer.read(cx).height_cell();
         cx.set_window_appearance(options.dark.map(appearance));
         let mut shell = Self {
             theme,
             chat,
             composer,
-            dialog: None,
             sidebar: SidebarState::new(),
             sidebar_open: true,
             frame: frame::FrameState::default(),
@@ -153,13 +162,13 @@ impl Shell {
             store: Store::default(),
             theme_override: options.dark,
             composer_h,
-            card_bounds: Rc::new(Cell::new(None)),
+            panes,
             focus,
-            subscriptions,
+            _subscriptions: subscriptions,
             live_task: None,
             connection_task: None,
             rediscover: None,
-            refreshing: false,
+            refresh: Refresh::Idle,
         };
         Self::transcript_hooks(cx);
         Self::notification_responses(window, cx);
@@ -198,12 +207,6 @@ impl Shell {
             c.set_theme(t.clone(), cx);
             cx.notify();
         });
-        if let Some(dialog) = &self.dialog {
-            dialog.update(cx, |d, cx| {
-                d.theme = t;
-                cx.notify();
-            });
-        }
         cx.notify();
     }
 

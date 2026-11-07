@@ -10,10 +10,10 @@ mod watch;
 
 use super::wire;
 use super::{
-    AuthorityCard, ChatPage, ChatRef, Decision, EventCursor, Fetch, LiveEvent, RequestRef,
-    SentTurn, SessionId, Source, SourceError, TurnId, model::AllowScope,
+    AuthorityCard, ChatPage, ChatRef, EventCursor, Fetch, LiveEvent, SentTurn, SessionId, Source,
+    SourceError, TurnId,
 };
-use butler_shell_client::{AuthorityDecision, PageRequest, ShellClient};
+use butler_shell_client::{PageRequest, ShellClient};
 use futures::{
     StreamExt as _,
     channel::{mpsc, oneshot},
@@ -201,7 +201,11 @@ impl Source for Agent {
 
     fn authority(&self, session: &SessionId) -> Fetch<Vec<AuthorityCard>> {
         let (client, session) = (self.client.clone(), session.0.to_string());
-        self.fetch(async move { convert::authority(client.authority_requests(&session).await?) })
+        self.fetch(async move {
+            Ok(convert::authority(
+                client.authority_requests(&session).await?,
+            ))
+        })
     }
     fn live(&self, after: EventCursor) -> futures::stream::LocalBoxStream<'static, LiveEvent> {
         live::subscribe(self, after)
@@ -217,36 +221,6 @@ impl Source for Agent {
     fn cancel(&self, turn: &TurnId) -> Fetch<()> {
         let (client, turn) = (self.client.clone(), turn.0.to_string());
         self.fetch(async move { client.cancel_turn(&turn).await.map(|_| ()) })
-    }
-    fn answer(&self, session: &SessionId, request: &RequestRef, decision: Decision) -> Fetch<()> {
-        let (client, session, request) = (
-            self.client.clone(),
-            session.0.to_string(),
-            request.0.to_string(),
-        );
-        let decision = match decision {
-            Decision::AllowOnce => AuthorityDecision::Allow {
-                scope: "once".into(),
-            },
-            Decision::Allow(scope) => AuthorityDecision::Allow {
-                scope: match scope {
-                    AllowScope::Conversation => "conversation",
-                    AllowScope::Site => "site",
-                }
-                .into(),
-            },
-            Decision::Deny => AuthorityDecision::Deny,
-            Decision::Modify(instruction) => AuthorityDecision::Modify { instruction },
-            Decision::Answer(answers) => AuthorityDecision::Answer(
-                serde_json::json!({"answers": answers.iter().map(|a| serde_json::json!({"id":a.id.as_ref(),"selected":a.selected.iter().map(AsRef::<str>::as_ref).collect::<Vec<_>>(),"custom":a.custom,"skipped":a.skipped})).collect::<Vec<_>>()}),
-            ),
-        };
-        self.fetch(async move {
-            client
-                .answer_authority(&session, &request, decision)
-                .await
-                .map(|_| ())
-        })
     }
 }
 

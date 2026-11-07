@@ -1,0 +1,42 @@
+{
+  "name": "question",
+  "seed": [
+    { "method": "PATCH", "path": "/settings", "body": { "language": "ko", "access_mode": "full_access", "reduce_motion": true } },
+    { "method": "POST", "path": "/sessions", "body": { "kind": "chat", "title": "출력 형식 확인" } },
+    { "method": "POST", "path": "/messages", "body": { "chat_id": "${session}", "text": "출력 형식을 먼저 물어보고 진행해 주세요." }, "wait": false }
+  ],
+  "toolCalls": [
+    {
+      "name": "ask_user",
+      "arguments": {
+        "questions": [
+          {
+            "id": "format",
+            "eyebrow": "출력 형식",
+            "title": "어떤 형식으로 정리할까요?",
+            "kind": "single",
+            "allow_custom": false,
+            "options": [
+              { "id": "brief", "label": "요약", "recommended": true },
+              { "id": "full", "label": "전체", "description": "모든 세부 내용" },
+              { "id": "table", "label": "표" }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "ready": "pending_questions",
+  "open": { "chat": "출력 형식 확인" },
+  "anchors": [
+    { "anchor": "sidebar", "electron": "[data-test-class=\"app-sidebar\"]" },
+    { "anchor": "chat-card", "electron": "[data-slot=\"adaptive-shell-split-chat\"]" },
+    { "anchor": "composer", "electron": "[data-test-class=\"composer-card\"]" },
+    { "anchor": "composer-field", "electron": "[contenteditable=\"true\"]" },
+    { "anchor": "send-button", "electron": "[data-test-class=\"composer-send-button\"]" },
+    { "anchor": "question-card", "electron": "[data-slot=\"composer-question-panel\"]" },
+    { "anchor": "titlebar", "electron": "[data-test-class=\"custom-titlebar\"]" },
+    { "anchor": "sidebar-row-${session}", "electron": "[data-test-class=\"tree-row\"][aria-label=\"출력 형식 확인\"]" },
+    { "anchor": "message-${message.0}", "electron": "[data-test-class~=\"message\"][data-index=\"0\"]" }
+  ]
+}

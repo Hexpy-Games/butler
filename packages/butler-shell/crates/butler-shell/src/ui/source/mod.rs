@@ -11,9 +11,8 @@ use futures::future::LocalBoxFuture;
 use futures::stream::LocalBoxStream;
 
 pub(crate) use model::{
-    Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, Decision,
-    EventCursor, LiveEvent, LiveUpdate, RequestRef, Risk, SentTurn, SessionId, Space, Timestamp,
-    TurnId,
+    AuthorityCard, ChatId, ChatPage, ChatRef, ChatSummary, EventCursor, LiveEvent, LiveUpdate,
+    RequestRef, Risk, SentTurn, SessionId, Space, Timestamp, TurnId,
 };
 
 /// Why a request failed, in the UI's terms (no credential or wire detail).
@@ -89,6 +88,4 @@ pub(crate) trait Source {
     fn create_chat(&self) -> Fetch<ChatRef>;
     /// Stops a running turn.
     fn cancel(&self, turn: &TurnId) -> Fetch<()>;
-    /// Answers one of `session`'s authority requests.
-    fn answer(&self, session: &SessionId, request: &RequestRef, decision: Decision) -> Fetch<()>;
 }

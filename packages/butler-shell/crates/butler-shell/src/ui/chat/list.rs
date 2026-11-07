@@ -441,11 +441,9 @@ fn render_row(state: &Entity<State>, ix: usize, window: &mut Window, cx: &mut Ap
     t.live_message = live_id.as_deref();
     let element = match row {
         Row::Top => return top_row(state, cx),
-        Row::Reserve => {
-            let reserve =
-                scope::conversation(cx).map_or(DEFAULT_RESERVE, |vars| vars.composer_reserve);
-            return div().h(px(reserve)).into_any_element();
-        }
+        // The list renders its rows while it prepaints, after the conversation scope has
+        // popped: the reserve is the one `sync` took in during render.
+        Row::Reserve => return div().h(px(state.read(cx).reserve)).into_any_element(),
         Row::Seed => match session_branch_seed(&t, window, cx) {
             Some(seed) => seed,
             None => return div().into_any_element(),

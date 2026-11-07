@@ -1,5 +1,5 @@
 //! The shell's data state, without gpui: the chat list and its snapshot generation, the open
-//! chat, running turns, authority requests and answers in flight, and the live cursor. The
+//! chat, running turns, authority requests, and the live cursor. The
 //! shell runs the [`crate::ui::source::Source`] requests; the results come back here.
 //!
 //! A snapshot (connect or resync) bumps the generation: results and live events of an older
@@ -12,8 +12,9 @@ mod tests;
 pub(crate) mod drafts;
 pub(crate) mod messages;
 pub(crate) mod progress;
+pub(crate) mod task_graph;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::ui::source::wire::{AppEventEnvelope, SessionView, TurnProgressSnapshot};
 use crate::ui::source::{
@@ -36,6 +37,8 @@ pub(crate) enum Applied {
     Transcript,
     /// Events were lost: take a new snapshot.
     Resync,
+    /// The open chat's authority requests changed: read its view again.
+    Refresh,
 }
 
 #[derive(Default)]
@@ -46,8 +49,8 @@ pub(crate) struct Store {
     loading: Option<ChatsLoad>,
     selected: Option<ChatRef>,
     running: HashMap<ChatId, TurnId>,
-    authority: HashMap<SessionId, Vec<AuthorityCard>>,
-    pending: HashSet<RequestRef>,
+    /// Each session's outstanding authority requests, as the live refresh last read them.
+    authority: HashMap<SessionId, Vec<RequestRef>>,
     /// The last durable event applied; live updates resume after it.
     pub(crate) cursor: Option<EventCursor>,
     message_snapshots: HashMap<SessionId, EventCursor>,
@@ -119,11 +122,7 @@ impl Store {
         }
         self.chats.retain(|row| row.chat != *chat);
         self.running.remove(&chat.chat);
-        if let Some(cards) = self.authority.remove(&chat.session) {
-            for card in cards {
-                self.pending.remove(&card.request);
-            }
-        }
+        self.authority.remove(&chat.session);
         self.message_snapshots.remove(&chat.session);
         if self.selected.as_ref() != Some(chat) {
             return false;
@@ -224,37 +223,21 @@ impl Store {
         self.running.get(&self.selected.as_ref()?.chat)
     }
 
-    pub(crate) fn authority_loaded(&mut self, session: SessionId, cards: Vec<AuthorityCard>) {
-        self.authority.insert(session, cards);
-    }
-
-    /// The open chat's first outstanding authority request.
-    pub(crate) fn approval(&self) -> Option<&AuthorityCard> {
-        self.authority
-            .get(&self.selected.as_ref()?.session)?
-            .first()
-    }
-
-    pub(crate) fn is_pending(&self, request: &RequestRef) -> bool {
-        self.pending.contains(request)
-    }
-
-    /// An answer is on its way; false when one already is.
-    pub(crate) fn begin_answer(&mut self, request: &RequestRef) -> bool {
-        self.pending.insert(request.clone())
-    }
-
-    /// The agent took the answer: the card goes.
-    pub(crate) fn answer_done(&mut self, session: &SessionId, request: &RequestRef) {
-        self.pending.remove(request);
-        if let Some(cards) = self.authority.get_mut(session) {
-            cards.retain(|c| &c.request != request);
-        }
-    }
-
-    /// The answer failed: the card stays, ready to answer again.
-    pub(crate) fn answer_failed(&mut self, request: &RequestRef) {
-        self.pending.remove(request);
+    /// Records a session's outstanding requests; true when the open chat's set changed, so its
+    /// view (which carries the requests the decision surfaces show) is read again.
+    pub(crate) fn authority_loaded(
+        &mut self,
+        session: SessionId,
+        cards: Vec<AuthorityCard>,
+    ) -> bool {
+        let requests: Vec<RequestRef> = cards.into_iter().map(|card| card.request).collect();
+        let open = self
+            .selected
+            .as_ref()
+            .is_some_and(|chat| chat.session == session);
+        let changed = self.authority.get(&session) != Some(&requests);
+        self.authority.insert(session, requests);
+        open && changed
     }
 
     /// Applies a live event from the stream of snapshot `epoch`; stale streams and replayed
@@ -302,7 +285,11 @@ impl Store {
                     return Applied::Transcript;
                 }
             }
-            LiveUpdate::Authority { session, cards } => self.authority_loaded(session, cards),
+            LiveUpdate::Authority { session, cards } => {
+                if self.authority_loaded(session, cards) {
+                    return Applied::Refresh;
+                }
+            }
             LiveUpdate::Chat(summary) => {
                 if self
                     .summary(&summary.chat)
@@ -320,6 +307,7 @@ impl Store {
                 }
             }
             LiveUpdate::Resync => return Applied::Resync,
+            LiveUpdate::Inspector(_) => {}
         }
         Applied::Store
     }
@@ -348,7 +336,6 @@ impl Store {
         self.loading = None;
         self.running.clear();
         self.authority.clear();
-        self.pending.clear();
         self.cursor = None;
         self.message_snapshots.clear();
     }

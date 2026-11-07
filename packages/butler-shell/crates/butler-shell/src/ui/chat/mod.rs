@@ -5,6 +5,7 @@ pub(crate) mod activity;
 mod answers;
 mod assistant;
 mod content;
+pub(crate) mod empty;
 pub(crate) mod files;
 mod footer_meta;
 mod intro;
@@ -113,6 +114,8 @@ pub(crate) struct Chat {
     footer_meta: Rc<HashMap<String, FooterMeta>>,
     /// The open transcript's smooth scroll, for wheel events caught over a dialog.
     wheel: Rc<RefCell<Option<SmoothScroll>>>,
+    /// No chat is open: the new-chat screen shows (`showEmptyState`).
+    unsent: bool,
 }
 
 /// The id a queued record's row carries.
@@ -129,7 +132,13 @@ impl Chat {
             queued: HashSet::new(),
             footer_meta: Rc::default(),
             wheel: Rc::default(),
+            unsent: true,
         }
+    }
+
+    /// A new chat (no session yet) shows the new-chat screen while it has no view.
+    pub(crate) fn set_new_chat(&mut self, new_chat: bool) {
+        self.unsent = new_chat;
     }
 
     /// Shows `view` (`None`: a new chat, or nothing open). `live` marks the messages it adds
@@ -181,26 +190,27 @@ impl Chat {
         }
         self.queue = queue;
     }
-
-    /// Scrolls the conversation for a wheel event caught over a dialog (same smooth scroll).
-    pub(crate) fn wheel_from_overlay(
-        &mut self,
-        e: &gpui::ScrollWheelEvent,
-        window: &Window,
-        cx: &mut Context<Self>,
-    ) {
-        let smooth = self.wheel.borrow().clone();
-        if smooth.is_some_and(|smooth| smooth.wheel(e, window)) {
-            cx.notify();
-        }
-    }
 }
 
 impl Render for Chat {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(shared) = self.view.clone() else {
+            if self.unsent {
+                return empty::empty_state(empty::EmptyCtx::default(), window, cx);
+            }
             return div().id("chat-list").size_full().into_any_element();
         };
+        if shared.messages.is_empty() && shared.active_turn.is_none() {
+            let ctx = empty::EmptyCtx {
+                project_id: shared.project_id.as_deref(),
+                epic_id: shared
+                    .epic_ids
+                    .as_ref()
+                    .and_then(|ids| ids.first())
+                    .map(String::as_str),
+            };
+            return empty::empty_state(ctx, window, cx);
+        }
         self.entering.retain(|_, (_, at)| at.elapsed() < ENTERING);
         let entering = self
             .entering

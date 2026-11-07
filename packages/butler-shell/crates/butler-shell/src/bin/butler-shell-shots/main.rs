@@ -125,6 +125,12 @@ impl Harness {
                     "approval-card",
                     "question-card",
                     "titlebar",
+                    "session-info-toggle",
+                    "inspector",
+                    "artifact-tile-0",
+                    "file-viewer",
+                    "file-viewer-header",
+                    "file-viewer-page",
                 ]
                 .into_iter()
                 .map(str::to_owned)
@@ -201,12 +207,6 @@ fn connected(dir: &Path, dark: bool, theme: &str, options: &Options) -> anyhow::
     h.shot(dir, &format!("w2-1x-{theme}-chat"))?;
     h.update(|shell, window, cx| open_chat(shell, fixture::APPROVAL, window, cx))?;
     h.shot(dir, &format!("w2-1x-{theme}-approval"))?;
-    h.update(|shell, window, cx| {
-        if let Some(card) = shell.store.approval().cloned() {
-            shell.open_modify(&card, window, cx);
-        }
-    })?;
-    h.shot(dir, &format!("w2-1x-{theme}-modify-dialog"))?;
     h.update(|shell, window, cx| open_chat(shell, fixture::QUESTION, window, cx))?;
     h.shot(dir, &format!("w2-1x-{theme}-question"))?;
     h.update(|shell, window, cx| shell.open_chat(None, window, cx))?;

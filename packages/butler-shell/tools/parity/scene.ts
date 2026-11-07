@@ -13,6 +13,10 @@ export type Scene = {
   seed: Array<{ method: string; path: string; body: Record<string, unknown>; wait?: boolean; save?: Record<string, string> }>;
   open: { chat: string } | { new: true };
   anchors: Anchor[];
+  /** What must exist in `/session-view` before capture. */
+  ready?: "authority_requests" | "pending_questions" | "artifacts";
+  /** Before each screenshot, in order: click an anchor or wait for it to exist. */
+  steps?: Array<{ click: string } | { expect: string }>;
 };
 type View = { latest_turn?: { state: string }; messages: Array<{ id: string }> };
 

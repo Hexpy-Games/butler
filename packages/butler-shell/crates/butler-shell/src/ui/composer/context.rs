@@ -10,7 +10,7 @@
 
 mod account;
 mod popover;
-mod timeline;
+pub(crate) mod timeline;
 mod usage;
 
 use std::collections::HashMap;

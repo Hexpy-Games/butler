@@ -55,6 +55,7 @@ pub mod sidebar_shell;
 pub mod split_button;
 pub mod status_capsule;
 pub mod status_checklist;
+pub mod step_sortable_list;
 pub mod suggestion_list;
 pub mod surface_panel;
 pub mod tab_strip;

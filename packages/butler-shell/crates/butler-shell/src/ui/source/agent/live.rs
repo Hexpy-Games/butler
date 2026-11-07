@@ -123,6 +123,14 @@ const SESSION_EVENTS: [&str; 7] = [
     "agent.turn_event.progress",
 ];
 
+/// Events the inspector's readers follow (`canonQueueStore`, `taskGraphState`).
+const INSPECTOR_EVENTS: [&str; 4] = [
+    "canon.queue_changed",
+    "canon.progress_changed",
+    "work_model.changed",
+    "stream.reconcile_required",
+];
+
 fn updates(dirty: &super::refresh::Dirty, raw: &Value) -> Result<Vec<LiveUpdate>, Error> {
     let projection = convert::decode::<wire::EventProjection>(raw)?;
     let mut updates = chat_updates(dirty, &projection)?;
@@ -134,6 +142,9 @@ fn updates(dirty: &super::refresh::Dirty, raw: &Value) -> Result<Vec<LiveUpdate>
             session: SessionId(session.into()),
             event: Box::new(envelope(raw)),
         });
+    }
+    if INSPECTOR_EVENTS.contains(&projection.r#type.as_str()) {
+        updates.push(LiveUpdate::Inspector(Box::new(envelope(raw))));
     }
     Ok(updates)
 }

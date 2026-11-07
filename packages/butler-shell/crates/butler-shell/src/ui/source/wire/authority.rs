@@ -151,3 +151,25 @@ pub(crate) enum PendingAskKind {
     #[serde(other)]
     Unknown,
 }
+
+/// TS: packages/butler-app/client/ui/src/app/types.ts:1965 AuthorityApprovalCard, as the transport
+/// sends it (read by app/store.ts:747 normalizeAuthorityApprovalCard). `scope` and `approval` stay
+/// raw: the renderer narrows them field by field.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub(crate) struct AuthorityApprovalCardWire {
+    pub(crate) request_ref: String,
+    pub(crate) category: String,
+    pub(crate) reason: String,
+    pub(crate) executable: String,
+    pub(crate) command_count: i64,
+    #[serde(default)]
+    pub(crate) scope: Option<serde_json::Value>,
+    #[serde(default)]
+    pub(crate) approval: Option<serde_json::Value>,
+    #[serde(default)]
+    pub(crate) source_turn_id: Option<String>,
+    #[serde(default)]
+    pub(crate) source_call_id: Option<String>,
+    #[serde(default)]
+    pub(crate) source_session_id: Option<String>,
+}

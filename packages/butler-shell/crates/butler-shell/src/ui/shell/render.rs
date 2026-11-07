@@ -10,7 +10,7 @@ use blocks::{
 };
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::{blocks, context::Ds, focus, icon_button::IconButton, overlay, toast};
-use gpui::{AnyElement, Context, IntoElement, Render, Window, canvas, div, prelude::*};
+use gpui::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*};
 
 use super::{
     Shell, TextSizeDown, TextSizeReset, TextSizeUp, ToggleSidebar, image_viewer, system_dark,
@@ -20,7 +20,6 @@ use crate::ui::widgets::anchor;
 
 impl Shell {
     fn conversation(&self, cx: &Context<Self>) -> AnyElement {
-        let bounds = self.card_bounds.clone();
         let content = if self.source.is_some() {
             self.chat.clone().into_any_element()
         } else {
@@ -41,18 +40,21 @@ impl Shell {
             .flex()
             .flex_col()
             .child(
-                canvas(move |b, _, _| bounds.set(Some(b)), |_, (), _, _| {})
-                    .absolute()
-                    .size_full(),
-            )
-            .child(
                 ShellCard::new().child(
-                    ConversationShell::new("conversation", reserve)
+                    self.with_aside(ConversationShell::new("conversation", reserve))
                         .child(content)
                         .child(self.composer.clone()),
                 ),
             )
             .into_any_element()
+    }
+
+    /// The conversation's aside: the session sections while session info is open.
+    fn with_aside(&self, shell: ConversationShell) -> ConversationShell {
+        match self.aside() {
+            Some(aside) => shell.aside(aside),
+            None => shell,
+        }
     }
 
     fn resize_handle(&self, cx: &Context<Self>) -> ResizeHandle {
@@ -120,7 +122,10 @@ impl Shell {
             .peek(peek)
             .sidebar(sidebar)
             .title(title)
-            .workspace(self.conversation(cx))
+            .workspace({
+                let conversation = self.conversation(cx);
+                self.workspace(conversation, window, cx)
+            })
             .chrome(ChromeFloatingToggle::new(
                 "chrome",
                 anchor(div(), "sidebar-toggle").child(toggle),
@@ -156,12 +161,8 @@ impl Render for Shell {
             self.navigate(request, window, cx);
         }
         let frame = self.adaptive_frame(window, cx);
-        let dialog = self
-            .card_bounds
-            .get()
-            .map(|b| self.render_dialog(b, window, cx))
-            .unwrap_or_default();
         let rename = self.render_rename(window, cx);
+        let task_graph = self.render_task_graph(window, cx);
         let sidebar_dialog = self.space_dialogs(window, cx);
         let viewer = image_viewer::overlay(window, cx);
         let ds = Ds::get(cx);
@@ -170,6 +171,7 @@ impl Render for Shell {
             .key_context("Shell")
             .on_action(cx.listener(Self::toggle_sidebar))
             .on_action(cx.listener(Self::focus_composer))
+            .on_action(cx.listener(Self::toggle_palette))
             .on_action(|_: &TextSizeUp, _, cx| Self::text_size(1, cx))
             .on_action(|_: &TextSizeDown, _, cx| Self::text_size(-1, cx))
             .on_action(|_: &TextSizeReset, _, cx| Self::text_size(0, cx))
@@ -186,8 +188,9 @@ impl Render for Shell {
             .text_color(ds.color(Color::TextPrimary))
             .child(frame)
             .children(viewer)
-            .children(dialog)
             .child(rename)
+            .children(task_graph)
+            .child(self.palette())
             .child(sidebar_dialog)
             .child(toast::Toaster::new().offset(ds.len(Length::TitlebarSafeAreaTop)));
         overlay::track(toast::track(focus::track_modality(div())))

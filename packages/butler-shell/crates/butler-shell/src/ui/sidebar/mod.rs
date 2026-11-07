@@ -266,6 +266,11 @@ impl Shell {
         self.mark_sidebar_read(id, cx);
     }
     pub(crate) fn reveal_sidebar(&mut self, id: &str, open_sidebar: bool) {
+        self.reveal_node(&format!("s:{id}"), open_sidebar);
+    }
+
+    /// `useOrganization.reveal`: the node's ancestors expand on the All tab and it scrolls into view.
+    pub(crate) fn reveal_node(&mut self, key: &str, open_sidebar: bool) {
         let nodes = self
             .store
             .navigation
@@ -279,8 +284,7 @@ impl Shell {
                     .collect::<HashMap<_, _>>()
             })
             .unwrap_or_default();
-        let key = format!("s:{id}");
-        let mut current = nodes.get(key.as_str()).copied();
+        let mut current = nodes.get(key).copied();
         let mut path = Vec::new();
         while let Some(node) = current {
             path.push(node.key.clone());

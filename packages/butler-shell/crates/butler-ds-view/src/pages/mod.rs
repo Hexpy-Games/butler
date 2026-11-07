@@ -97,6 +97,7 @@ mod split_button;
 mod stack;
 mod status_capsule;
 mod status_checklist;
+mod step_sortable_list;
 mod success_check;
 mod suggestion_list;
 mod surface_panel;
@@ -372,6 +373,7 @@ fn s7_blocks() -> Vec<Page> {
         page!("wallpaper", "Wallpaper", wallpaper),
         page!("tab-strip", "TabStrip", tab_strip),
         page!("breadcrumb", "Breadcrumb", breadcrumb),
+        page!("step-sortable-list", "StepSortableList", step_sortable_list),
     ]
 }
 

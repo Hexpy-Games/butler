@@ -32,6 +32,10 @@ Missing or virtualized anchors are reported, without substituting other elements
 A scene may set `reply` (the stub model's text) and `toolCalls` (stub tool calls, one per streamed round, in order);
 `answers` uses an `answer_blocks` call, `activity` a todo list, a command and a file listing.
 
+A scene may also set `ready` (`authority_requests`, `pending_questions` or `artifacts`:
+what `/session-view` must show before capture) and `steps` (`{click: anchor}` / `{expect: anchor}`,
+run in order before each screenshot on both sides; Electron uses the anchor's `electron` selector).
+
 For gpui-to-gpui review, run `parity-diff <dirA> <dirB> <outDir>` directly. Exact
 RGBA differences are counted. Different dimensions and missing pairs are printed;
 matching dimensions produce a PNG overlay on B with magenta differences at 60%

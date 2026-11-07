@@ -1020,6 +1020,7 @@ dependencies = [
  "gpui_ce_wgpu",
  "notify",
  "percent-encoding",
+ "regex",
  "serde",
  "serde_json",
  "sys-locale",
