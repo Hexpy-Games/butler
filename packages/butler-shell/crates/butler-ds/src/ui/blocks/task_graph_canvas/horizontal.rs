@@ -29,14 +29,14 @@ const LANE_MIN: f32 = 10.;
 /// The thumb's share of `--line-strong` (as ScrollArea).
 const THUMB_SHARE: f32 = 0.7;
 
-pub(super) fn horizontal(view: TaskGraphView, window: &mut Window, cx: &mut App) -> AnyElement {
+pub(super) fn horizontal(view: &TaskGraphView, window: &mut Window, cx: &mut App) -> AnyElement {
     let shape = view.shape(window, cx);
     let measure = rects::state((view.id.clone(), "rects"), window, cx);
     let handles = nav::handles(&view.id, shape.order(), window, cx);
     let first_line = rects::card_first_line(window, cx);
     let palette = EdgePalette::of(Ds::get(cx));
     let statuses = view.statuses();
-    let columns = columns(&view, &shape, (&measure, &handles, first_line), window, cx);
+    let columns = columns(view, &shape, (&measure, &handles, first_line), window, cx);
     let edges = {
         let shape = shape.clone();
         rects::origin(&measure, move |origin, measured, window| {
@@ -63,7 +63,7 @@ pub(super) fn horizontal(view: TaskGraphView, window: &mut Window, cx: &mut App)
         );
     let scroll_id = ElementId::from((view.id.clone(), "scroll"));
     let (frame, handle) = scroll_x(&scroll_id, host, window, cx);
-    reveal_selected(&view, &shape, (&measure, &handle), window, cx);
+    reveal_selected(view, &shape, (&measure, &handle), window, cx);
     frame
 }
 

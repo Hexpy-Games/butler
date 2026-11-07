@@ -4,18 +4,18 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, Entity, InteractiveElement as _, IntoElement as _, MouseButton,
+    AnyElement, App, Entity, InteractiveElement as _, IntoElement as _, MouseButton,
     ParentElement as _, Pixels, ScrollHandle, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Window, canvas, div, px,
+    Styled as _, canvas, div, px,
 };
 
-use super::model::{Group, Tab, tab_key};
-use super::parts::{Ghost, favicon, ghost, ghost_side};
+use super::model::{Tab, tab_key};
+use super::parts::{Click, Ghost, favicon, ghost, ghost_side};
 use super::{Scope, hover_listener};
 use crate::tokens::{Color, Length, Number};
 use crate::ui::Icon;
 use crate::ui::context::Ds;
-use crate::ui::control::{Blend, Control, Width};
+use crate::ui::control::{Blend, Control, Handler, Width};
 use crate::ui::convert;
 use crate::ui::icon::IconSize;
 
@@ -81,7 +81,6 @@ fn reveal_probe(want: &Reveal, tab: SharedString) -> AnyElement {
 
 /// What places a tab in its group.
 pub(super) struct Place<'a> {
-    pub(super) group: &'a Group,
     pub(super) tab: &'a Tab,
     /// The stop before it (its group's title or the tab before it): the divider sits between.
     pub(super) prev: Option<SharedString>,
@@ -135,9 +134,8 @@ fn close_button(place: &Place, scope: &Scope, visible: bool, ds: &Ds) -> AnyElem
             size: IconSize::Sm,
             handle: None,
             tab_stop: false,
-            on_click: close.map(|close| -> Rc<dyn Fn(&mut Window, &mut App)> {
-                Rc::new(move |window, cx| close(&target, window, cx))
-            }),
+            on_click: close
+                .map(|close| -> Click { Rc::new(move |window, cx| close(&target, window, cx)) }),
         },
         ds,
     ))
@@ -196,9 +194,7 @@ fn control(place: &Place, scope: &Scope, narrow: (bool, bool), ds: &Ds) -> Contr
     control.tab_stop = scope.roving.as_ref() == Some(&key);
     let (pick, target) = (scope.on_activate.clone(), tab.id.clone());
     control.on_click(
-        pick.map(|pick| -> Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)> {
-            Rc::new(move |_, window, cx| pick(&target, window, cx))
-        }),
+        pick.map(|pick| -> Handler { Rc::new(move |_, window, cx| pick(&target, window, cx)) }),
     );
     let mut children = vec![favicon(tab, &id, ds)];
     if !narrow.1 {

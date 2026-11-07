@@ -192,7 +192,7 @@ fn fact_row(fact: TaskGraphDetailFact) -> AnyElement {
 fn relation_row(
     id: &ElementId,
     relation: TaskGraphDetailRelation,
-    on_select: Option<SelectHandler>,
+    on_select: Option<&SelectHandler>,
 ) -> AnyElement {
     let value = if relation.tasks.is_empty() {
         Typo::caption(relation.empty_label)
@@ -200,7 +200,7 @@ fn relation_row(
             .into_any_element()
     } else {
         let links = relation.tasks.into_iter().map(|task| {
-            let select = on_select.clone();
+            let select = on_select.cloned();
             let target = task.id.clone();
             Clickable::new((id.clone(), format!("{}-{}", relation.id, task.id)))
                 .variant(ClickableVariant::Text)
@@ -238,7 +238,7 @@ impl RenderOnce for TaskGraphDetail {
         let rows = self.facts.into_iter().map(fact_row).chain(
             self.relations
                 .into_iter()
-                .map(|relation| relation_row(&id, relation, self.on_select_task.clone())),
+                .map(|relation| relation_row(&id, relation, self.on_select_task.as_ref())),
         );
         panel = panel.child(Stack::new().gap(Space::Xs).children(rows));
         if let Some(document) = self.document {

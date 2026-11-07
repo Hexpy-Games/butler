@@ -228,10 +228,10 @@ fn demo(spec: Spec, lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement
         created: 0,
     });
     let (groups, active) = {
-        let s = state.read(cx);
-        (s.groups.clone(), s.active.clone())
+        let current = state.read(cx);
+        (current.groups.clone(), current.active.clone())
     };
-    let (a, c, m, t, n, g) = (
+    let (on_pick, on_close, on_move, on_toggle, on_new, on_new_in) = (
         state.clone(),
         state.clone(),
         state.clone(),
@@ -246,42 +246,42 @@ fn demo(spec: Spec, lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement
     .active(active)
     .labels(labels(lang))
     .on_activate(move |id, _, cx| {
-        a.update(cx, |s, cx| {
-            s.active = Some(id.to_owned().into());
+        on_pick.update(cx, |tabs, cx| {
+            tabs.active = Some(id.to_owned().into());
             cx.notify();
-        })
+        });
     })
     .on_close(move |id, _, cx| {
-        c.update(cx, |s, cx| {
-            s.close(id);
+        on_close.update(cx, |tabs, cx| {
+            tabs.close(id);
             cx.notify();
-        })
+        });
     })
     .on_move(move |mv, _, cx| {
-        m.update(cx, |s, cx| {
-            s.groups = apply_move(&s.groups, mv);
+        on_move.update(cx, |tabs, cx| {
+            tabs.groups = apply_move(&tabs.groups, mv);
             cx.notify();
-        })
+        });
     })
     .on_toggle_group(move |id, collapsed, _, cx| {
-        t.update(cx, |s, cx| {
-            if let Some(group) = s.groups.iter_mut().find(|group| group.id() == id) {
+        on_toggle.update(cx, |tabs, cx| {
+            if let Some(group) = tabs.groups.iter_mut().find(|group| group.id() == id) {
                 group.set_collapsed(collapsed);
             }
             cx.notify();
-        })
+        });
     })
     .on_new_tab(move |_, cx| {
-        n.update(cx, |s, cx| {
-            s.new_tab(None);
+        on_new.update(cx, |tabs, cx| {
+            tabs.new_tab(None);
             cx.notify();
-        })
+        });
     })
     .on_new_tab_in_group(move |id, _, cx| {
-        g.update(cx, |s, cx| {
-            s.new_tab(Some(id));
+        on_new_in.update(cx, |tabs, cx| {
+            tabs.new_tab(Some(id));
             cx.notify();
-        })
+        });
     });
     if spec.hide_chip {
         strip = strip.hide_chip();

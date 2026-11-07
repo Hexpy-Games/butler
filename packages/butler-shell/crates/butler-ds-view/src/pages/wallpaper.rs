@@ -37,7 +37,6 @@ const MODULES: [(&str, &str, &str); 11] = [
 ];
 
 struct Copy {
-    wallpaper: &'static str,
     image: &'static str,
     none: &'static str,
     caption: &'static str,
@@ -50,7 +49,6 @@ struct Copy {
 fn copy(lang: Lang) -> Copy {
     lang.pick(
         Copy {
-            wallpaper: "Wallpaper",
             image: "Image",
             none: "None",
             caption: "Fixed full-screen layer; this stage contains it.",
@@ -60,7 +58,6 @@ fn copy(lang: Lang) -> Copy {
             dim: "Dim",
         },
         Copy {
-            wallpaper: "월페이퍼",
             image: "이미지",
             none: "없음",
             caption: "화면 전체에 고정되는 층이며, 이 무대가 그 범위를 가둡니다.",

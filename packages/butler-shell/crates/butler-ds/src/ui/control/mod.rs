@@ -19,7 +19,7 @@ use super::convert;
 use super::focus;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Number};
 
-type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+pub(crate) type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 /// A final restyle of the outer element (margins, translate).
 pub(crate) type Outer = Box<dyn FnOnce(gpui::Stateful<Div>) -> gpui::Stateful<Div>>;
 

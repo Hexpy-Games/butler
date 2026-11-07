@@ -68,7 +68,7 @@ pub(super) struct Pin {
 }
 
 impl Pin {
-    pub(super) fn span(&self, id: ElementId, window: &mut Window, cx: &mut App) -> Entity<Span> {
+    pub(super) fn span(id: ElementId, window: &mut Window, cx: &mut App) -> Entity<Span> {
         window.use_keyed_state((id, "sticky-span"), cx, |_, _| Span::default())
     }
 

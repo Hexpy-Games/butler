@@ -2,7 +2,7 @@
 //! and a minimal one.
 use butler_ds::ui::blocks::task_graph_card::TaskGraphStatus;
 use butler_ds::ui::blocks::task_graph_detail::{TaskGraphDetail, TaskGraphDetailFact};
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window, div};
+use gpui::{AnyElement, App, IntoElement as _, Window, div};
 
 use super::Story;
 use super::task_graph_card::data::{DemoGraph, GraphId};

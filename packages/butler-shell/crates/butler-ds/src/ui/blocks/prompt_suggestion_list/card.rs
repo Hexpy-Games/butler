@@ -106,7 +106,7 @@ fn button(card: &Card, ds: &Ds, cx: &App) -> Control {
         Disabled::No
     };
     control.disabled_look = DisabledLook::Text;
-    control.outer = Some(Box::new(|el| el.flex_auto()));
+    control.outer = Some(Box::new(gpui::Styled::flex_auto));
     let select = card.item.on_select.clone();
     control.on_click(select.map(|select| {
         Rc::new(move |_: &ClickEvent, window: &mut Window, cx: &mut App| select(window, cx))

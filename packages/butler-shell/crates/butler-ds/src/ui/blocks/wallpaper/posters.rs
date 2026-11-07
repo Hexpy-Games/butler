@@ -53,8 +53,9 @@ const POSTERS: &[(&str, &str, &[u8])] = &[
     poster!("stipple", "dark"),
 ];
 
-static DECODED: OnceLock<Mutex<HashMap<(&'static str, &'static str), Arc<Image>>>> =
-    OnceLock::new();
+type Decoded = Mutex<HashMap<(&'static str, &'static str), Arc<Image>>>;
+
+static DECODED: OnceLock<Decoded> = OnceLock::new();
 
 fn tone_name(tone: WallpaperTone) -> &'static str {
     match tone {

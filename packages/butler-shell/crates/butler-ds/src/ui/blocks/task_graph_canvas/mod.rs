@@ -66,7 +66,7 @@ impl RenderOnce for TaskGraphCanvas {
                 .child(TaskGraphLanes::new(self.view))
                 .into_any_element()
         } else {
-            horizontal::horizontal(self.view, window, cx)
+            horizontal::horizontal(&self.view, window, cx)
         }
     }
 }

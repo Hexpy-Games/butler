@@ -24,7 +24,6 @@ const CARD_NARROW_SHARE: f32 = 0.66; // DS: PromptSuggestionList.module.css:342
 
 pub(super) struct Metrics {
     /// The list's own width (measured on the last frame; zero before).
-    pub root_width: f32,
     /// `@container conversation (width <= 640px)`: the title icon sits in the moment row.
     pub compact: bool,
     pub icon_size: f32,
@@ -99,7 +98,6 @@ impl Metrics {
         let reserve = conversation.map_or(0., |vars| vars.composer_reserve);
         let viewport = len(Length::AdaptiveViewportBlockSize);
         Self {
-            root_width,
             compact,
             icon_size,
             icon_gap,

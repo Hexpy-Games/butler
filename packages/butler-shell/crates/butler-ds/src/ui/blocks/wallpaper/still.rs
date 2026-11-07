@@ -70,12 +70,15 @@ impl StillCache {
         key: String,
         draw: impl FnOnce() -> anyhow::Result<Arc<Image>>,
     ) -> anyhow::Result<Arc<Image>> {
-        if let Some(position) = self.entries.iter().position(|(cached, _)| *cached == key) {
-            if let Some(entry) = self.entries.remove(position) {
-                let image = Arc::clone(&entry.1);
-                self.entries.push_back(entry);
-                return Ok(image);
-            }
+        if let Some(entry) = self
+            .entries
+            .iter()
+            .position(|(cached, _)| *cached == key)
+            .and_then(|position| self.entries.remove(position))
+        {
+            let image = Arc::clone(&entry.1);
+            self.entries.push_back(entry);
+            return Ok(image);
         }
         let image = draw()?;
         self.entries.push_back((key, Arc::clone(&image)));

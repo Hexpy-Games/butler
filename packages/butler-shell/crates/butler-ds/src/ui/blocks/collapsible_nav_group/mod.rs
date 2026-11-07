@@ -118,7 +118,7 @@ impl RenderOnce for CollapsibleNavGroup {
         let span = self
             .pin
             .as_ref()
-            .map(|pin| pin.span(self.id.clone(), window, cx));
+            .map(|_| Pin::span(self.id.clone(), window, cx));
         let ds = Ds::get(cx);
         let gap = ds.len(Length::Space1);
         // `--nav-tree-indent`: `--space-sm` in a SidebarShell, else `--space-lg`.

@@ -28,7 +28,6 @@ pub(super) fn view(
     if !group.collapsed {
         for tab in &group.tabs {
             let place = Place {
-                group,
                 tab,
                 prev: prev.clone(),
                 muted,

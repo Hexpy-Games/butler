@@ -156,7 +156,6 @@ pub fn is_toggle_key(event: &KeyDownEvent, platform: Platform) -> bool {
 pub struct CommandPalettePanel {
     id: ElementId,
     open: bool,
-    label: SharedString,
     query: SharedString,
     placeholder: SharedString,
     close_label: SharedString,
@@ -169,14 +168,13 @@ pub struct CommandPalettePanel {
 impl CommandPalettePanel {
     pub fn new(
         id: impl Into<ElementId>,
-        label: impl Into<SharedString>,
+        _label: impl Into<SharedString>,
         placeholder: impl Into<SharedString>,
         close_label: impl Into<SharedString>,
     ) -> Self {
         Self {
             id: id.into(),
             open: true,
-            label: label.into(),
             query: SharedString::default(),
             placeholder: placeholder.into(),
             close_label: close_label.into(),

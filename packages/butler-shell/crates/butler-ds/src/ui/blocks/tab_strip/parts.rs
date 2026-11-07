@@ -3,9 +3,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, FocusHandle, FontWeight, ImageSource,
-    InteractiveElement as _, IntoElement as _, ObjectFit, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, StyledImage as _, Window, div, img, px,
+    AnyElement, App, ElementId, FocusHandle, FontWeight, ImageSource, InteractiveElement as _,
+    IntoElement as _, ObjectFit, ParentElement as _, SharedString, StatefulInteractiveElement as _,
+    Styled as _, StyledImage as _, Window, div, img, px,
 };
 
 use super::model::{Favicon, Group, GroupState, Tab, TabState, chip_key};
@@ -13,7 +13,7 @@ use super::{Scope, hover_listener};
 use crate::tokens::{Color, Length, Number};
 use crate::ui::button::{Button, Size as ButtonSize, Variant as ButtonVariant};
 use crate::ui::context::Ds;
-use crate::ui::control::{Blend, Control, Disabled, DisabledLook, Width};
+use crate::ui::control::{Blend, Control, Disabled, DisabledLook, Handler, Width};
 use crate::ui::icon::{IconSize, icon, icon_px};
 use crate::ui::spinner::Spinner;
 use crate::ui::thinking_mark::{ButlerThinkingMark, MarkState};
@@ -95,7 +95,7 @@ pub(super) fn favicon(tab: &Tab, id: &ElementId, ds: &Ds) -> AnyElement {
     cell.child(mark).into_any_element()
 }
 
-type Click = Rc<dyn Fn(&mut Window, &mut App)>;
+pub(super) type Click = Rc<dyn Fn(&mut Window, &mut App)>;
 
 /// A ghost icon button named by a tooltip (IconButton, with the roving tab stop and the focus
 /// handle the strip owns).
@@ -135,9 +135,7 @@ pub(super) fn ghost(button: Ghost, ds: &Ds) -> AnyElement {
     control.focus = handle;
     control.tab_stop = tab_stop;
     control.on_click(
-        on_click.map(|click| -> Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)> {
-            Rc::new(move |_, window, cx| click(window, cx))
-        }),
+        on_click.map(|click| -> Handler { Rc::new(move |_, window, cx| click(window, cx)) }),
     );
     control.children = vec![icon(glyph, size, ds).into_any_element()];
     Tooltip::new((id, "tooltip"))
@@ -262,11 +260,9 @@ pub(super) fn chip(group: &Group, scope: &Scope, ds: &Ds) -> AnyElement {
     }
     let toggle = scope.on_toggle.clone();
     let (target, collapsed) = (group.id.clone(), group.collapsed);
-    control.on_click(
-        toggle.map(|toggle| -> Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)> {
-            Rc::new(move |_, window, cx| toggle(&target, !collapsed, window, cx))
-        }),
-    );
+    control.on_click(toggle.map(|toggle| -> Handler {
+        Rc::new(move |_, window, cx| toggle(&target, !collapsed, window, cx))
+    }));
     let size = ds.len(Length::FontSize2);
     let mut children = Vec::new();
     if let Some(state) = group.state {
