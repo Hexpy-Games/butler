@@ -106,6 +106,8 @@
     { "page": "composer-control", "entry": "blocks/ComposerControl" },
     { "page": "context-donut-button", "entry": "blocks/ContextDonutButton" },
     { "page": "composer-adjunct-panel", "entry": "blocks/ComposerAdjunctPanel" },
+    { "page": "composer-decision-panel", "entry": "blocks/ComposerDecisionPanel" },
+    { "page": "composer-question-panel", "entry": "blocks/ComposerQuestionPanel" },
     { "page": "option-menu", "entry": "blocks/OptionMenu" },
     { "page": "filtered-select-popover", "entry": "blocks/FilteredSelectPopover" },
     { "page": "suggestion-list", "entry": "blocks/SuggestionList" },

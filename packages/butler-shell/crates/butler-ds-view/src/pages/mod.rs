@@ -23,6 +23,8 @@ mod collapsible_nav_group;
 mod composer_adjunct_panel;
 mod composer_card;
 mod composer_control;
+mod composer_decision_panel;
+mod composer_question_panel;
 mod context_donut_button;
 mod context_menu;
 mod conversation_shell;
@@ -317,6 +319,16 @@ fn composer_blocks() -> Vec<Page> {
             "composer-adjunct-panel",
             "ComposerAdjunctPanel",
             composer_adjunct_panel
+        ),
+        page!(
+            "composer-decision-panel",
+            "ComposerDecisionPanel",
+            composer_decision_panel
+        ),
+        page!(
+            "composer-question-panel",
+            "ComposerQuestionPanel",
+            composer_question_panel
         ),
         page!("option-menu", "OptionMenu", option_menu),
         page!(
