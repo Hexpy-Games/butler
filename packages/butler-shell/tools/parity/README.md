@@ -29,6 +29,8 @@ created session. `${message.N}` refers to the zero-based message in its final
 session view. `wait: true` waits for delivery before proceeding. Anchor names
 match gpui debug selectors; `electron` supplies the corresponding CSS selector.
 Missing or virtualized anchors are reported, without substituting other elements.
+A scene may set `reply` (the stub model's text) and `toolCalls` (stub tool calls, one per streamed round, in order);
+`answers` uses an `answer_blocks` call, `activity` a todo list, a command and a file listing.
 
 For gpui-to-gpui review, run `parity-diff <dirA> <dirB> <outDir>` directly. Exact
 RGBA differences are counted. Different dimensions and missing pairs are printed;

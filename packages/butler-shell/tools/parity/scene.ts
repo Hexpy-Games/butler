@@ -6,6 +6,10 @@ export type Box = { anchor: string; x: number; y: number; w: number; h: number }
 export type Scene = {
   name: string;
   pendingReply?: string;
+  /** Stub model reply for every streamed turn; defaults to the shared meeting-notes answer. */
+  reply?: string;
+  /** Tool calls the stub model makes, one per streamed round with tools, in order, before it replies. */
+  toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
   seed: Array<{ method: string; path: string; body: Record<string, unknown>; wait?: boolean; save?: Record<string, string> }>;
   open: { chat: string } | { new: true };
   anchors: Anchor[];
