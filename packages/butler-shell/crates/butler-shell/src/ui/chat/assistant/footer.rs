@@ -1,13 +1,13 @@
-//! `AssistantResponseFooter` and `AnswerDraftFooter`.
+//! `AssistantResponseFooter`. (`AnswerDraftFooter` needs the `answer_blocks.*` draft events, which
+//! the shell's event stream does not carry.)
 use butler_ds::ui::blocks::message_row::{MessageFooter, MessageStatusLabel, MessageStatusRow};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::copy_button::CopyButton;
-use butler_ds::ui::layout::{Space, Stack, WithItem as _};
 use butler_ds::ui::thinking_mark::{ButlerThinkingMark, MarkTheme};
 use butler_ds::ui::typo::Typo;
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString};
 
-use super::copy::text;
+use super::text;
 
 const NON_TERMINAL_STATUSES: [&str; 10] = [
     "queued",
@@ -121,43 +121,4 @@ pub(crate) fn assistant_response_footer(footer: ResponseFooter, cx: &App) -> Vec
         ));
     }
     parts
-}
-
-/// The draft's status in the answer-cards line (`draftStatus`).
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DraftStatus {
-    Preparing,
-    Prepared,
-    Rechecking,
-}
-
-/// `AnswerDraftFooter`: reserves the completed response's controls before handoff, with live copy
-/// unavailable. `draft` is the turn's draft status, `None` when it has no answer-card calls.
-pub(crate) fn answer_draft_footer(
-    id: &str,
-    draft: Option<DraftStatus>,
-    cx: &App,
-) -> Option<Vec<AnyElement>> {
-    let copy = text(cx);
-    let label = match draft? {
-        DraftStatus::Preparing => copy.preparing,
-        DraftStatus::Prepared => copy.prepared,
-        DraftStatus::Rechecking => copy.rechecking,
-    };
-    // `Stack invisible inline`: the copy button holds its place and cannot be used.
-    let hidden = Stack::row()
-        .gap(Space::None)
-        .invisible()
-        .child(CopyButton::new(
-            SharedString::from(format!("draft-copy-{id}")),
-            copy.copy_message,
-            copy.copied,
-        ));
-    Some(vec![
-        MessageFooter::new()
-            .flush()
-            .child(hidden)
-            .into_any_element(),
-        status_row(SharedString::from(format!("draft-status-{id}")), label, cx),
-    ])
 }

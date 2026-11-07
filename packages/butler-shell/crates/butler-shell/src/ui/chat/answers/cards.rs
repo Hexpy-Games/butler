@@ -24,6 +24,7 @@ use gpui::{
 };
 use serde_json::{Map, Value, json};
 
+use crate::ui::chat::open_link;
 use crate::ui::i18n::media::Media;
 use crate::ui::shell::image_viewer::loader::{PictureId, picture};
 use crate::ui::shell::image_viewer::source::site_of;
@@ -233,9 +234,9 @@ impl AnswerCards {
             card = card
                 .source(ItemSource::new(site, {
                     let open = open.clone();
-                    move |_, _, cx| cx.open_url(&open)
+                    move |_, _, cx| open_link(&open, cx)
                 }))
-                .on_open(move |_, _, cx| cx.open_url(&open));
+                .on_open(move |_, _, cx| open_link(&open, cx));
         }
         if opens && let Some(at) = self.viewer_index(index) {
             let entries = self.viewer.clone();

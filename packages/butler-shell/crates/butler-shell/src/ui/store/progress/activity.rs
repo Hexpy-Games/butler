@@ -25,7 +25,6 @@ pub(crate) struct PhaseActivity {
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TurnActivityProjection {
-    pub(crate) visible_rows: Vec<ProgressRow>,
     pub(crate) read_models: Vec<ActivityReadModel>,
     pub(crate) work_blocks: Vec<WorkBlockView>,
     pub(crate) phase_activities: Vec<PhaseActivity>,
@@ -74,7 +73,6 @@ pub(crate) fn project_turn_activity(
         semantic_state: current_semantic_state(&activity_rows, &projected),
         model_round_wait: current_model_round_wait(&activity_rows),
         operation: current_operation_activity(&activity_rows),
-        visible_rows,
         read_models,
         work_blocks,
         phase_activities: projected,

@@ -25,9 +25,7 @@ mod tool_titles;
 use serde_json::Value;
 
 use self::event::progress_row_from_turn_event;
-use self::snapshots::{
-    Bucket, Snapshots, active_snapshot, merge_buckets, merge_from_latest, merge_snapshot_map,
-};
+use self::snapshots::{Bucket, Snapshots, merge_buckets, merge_from_latest, merge_snapshot_map};
 use crate::ui::source::wire::{
     AgentTurnEvent, AppEventEnvelope, ProgressRow, SessionView, SessionViewTurn,
     TurnProgressSnapshot,
@@ -40,8 +38,6 @@ pub(crate) struct TurnProgress {
     snapshots: Snapshots,
     /// `latestProgressTurnId`: the turn the last event named, which events without one join.
     latest_turn: Option<String>,
-    /// The session's latest progress (`summary.latest_progress`).
-    latest: Option<TurnProgressSnapshot>,
 }
 
 /// `turnProgressOf`: the turn's progress, or an empty snapshot of its state.
@@ -74,7 +70,6 @@ impl TurnProgress {
             self.snapshots.clear();
             self.latest_turn = None;
         }
-        self.latest = None;
         let Some(turn) = &view.latest_turn else {
             return;
         };
@@ -88,7 +83,6 @@ impl TurnProgress {
         }
         let latest = started(turn_progress_of(turn));
         merge_from_latest(&mut self.snapshots, &latest, Some(turn.state.as_str()));
-        self.latest = Some(latest);
     }
 
     /// Applies a live event; returns whether progress changed.
@@ -115,11 +109,6 @@ impl TurnProgress {
     /// All snapshots, in the order they were first stored.
     pub(crate) fn snapshots(&self) -> &[(String, TurnProgressSnapshot)] {
         &self.snapshots
-    }
-
-    /// `activeTurnProgressSnapshot`: the newest turn still running.
-    pub(crate) fn active(&self) -> Option<TurnProgressSnapshot> {
-        active_snapshot(&self.snapshots, self.latest.as_ref())
     }
 
     /// `collectTimelineEventPatch` for one event: fills `bucket` and names the turn it is for.

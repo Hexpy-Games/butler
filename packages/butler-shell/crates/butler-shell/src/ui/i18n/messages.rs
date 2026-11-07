@@ -1,53 +1,131 @@
-//! The strings of the assistant body. Each field names its `packages/butler-i18n` path and has
-//! its text; `crate::ui::i18n::Strings` is not extended from this unit.
-use butler_ds::ui::context::{Ds, Lang};
-use gpui::App;
+//! The transcript's copy: the message rows, the user footer, the chats intro, the jump button
+//! and the assistant body (answer footer, failure notice, retry, branch, source seed).
+use butler_ds::ui::context::Lang;
 
-pub(super) struct Text {
+/// The transcript's copy, by the DS language the rows render in.
+pub(crate) struct TranscriptStrings {
+    /// common.copy
+    pub(crate) copy: &'static str,
+    /// interfaceDetails.contextCompaction.{started, completed}
+    pub(crate) compacting: &'static str,
+    pub(crate) compacted: &'static str,
+    /// interfaceDetails.questionAnswer.{answered, skipped, message}
+    pub(crate) answered: &'static str,
+    pub(crate) skipped: &'static str,
+    pub(crate) answered_in_message: &'static str,
+    /// conversation.messageActions.{showMore, showLess, copyMessage, copied}
+    pub(crate) show_more: &'static str,
+    pub(crate) show_less: &'static str,
+    pub(crate) copy_message: &'static str,
+    pub(crate) copied: &'static str,
+    /// conversation.chatsIntro
+    pub(crate) chats_intro: &'static str,
+    /// conversation.scrollToBottom.{aria, latest, newMessages}
+    pub(crate) jump_aria: &'static str,
+    pub(crate) jump_latest: &'static str,
+    pub(crate) jump_new: &'static str,
+    /// settings.errors.saveFailed
+    pub(crate) save_failed: &'static str,
+}
+
+static TRANSCRIPT_KO: TranscriptStrings = TranscriptStrings {
+    copy: "복사",
+    compacting: "컨텍스트 자동 압축 중",
+    compacted: "컨텍스트 자동 압축 완료",
+    answered: "답변함",
+    skipped: "건너뜀",
+    answered_in_message: "메시지로 답변함",
+    show_more: "더보기",
+    show_less: "접기",
+    copy_message: "메시지 복사",
+    copied: "복사됨",
+    chats_intro: "이제 여기선 편하게 얘기해요. 길어지는 건 문서로 드릴게요.",
+    jump_aria: "최신 메시지와 입력창으로 이동",
+    jump_latest: "최신으로 이동",
+    jump_new: "새 메시지",
+    save_failed: "저장하지 못했습니다.",
+};
+
+static TRANSCRIPT_EN: TranscriptStrings = TranscriptStrings {
+    copy: "Copy",
+    compacting: "Context automatically compacting",
+    compacted: "Context automatically compacted",
+    answered: "Answered",
+    skipped: "Skipped",
+    answered_in_message: "Answered by message",
+    show_more: "Show more",
+    show_less: "Show less",
+    copy_message: "Copy message",
+    copied: "Copied",
+    chats_intro: "You can talk to me casually here. Anything long, I'll send as a document.",
+    jump_aria: "Scroll to the latest message and composer",
+    jump_latest: "Latest",
+    jump_new: "New messages",
+    save_failed: "Couldn't save.",
+};
+
+/// The transcript's copy in `lang`.
+pub(crate) fn transcript(lang: Lang) -> &'static TranscriptStrings {
+    match lang {
+        Lang::Ko => &TRANSCRIPT_KO,
+        Lang::En => &TRANSCRIPT_EN,
+    }
+}
+
+/// interfaceTemplates.workedDuration
+pub(crate) fn worked_duration(lang: Lang, total_seconds: i64) -> String {
+    let (minutes, seconds) = (total_seconds / 60, total_seconds % 60);
+    match (lang, total_seconds < 60) {
+        (Lang::Ko, true) => format!("{total_seconds}초"),
+        (Lang::Ko, false) => format!("{minutes}분 {seconds:02}초"),
+        (Lang::En, true) => format!("{total_seconds}s"),
+        (Lang::En, false) => format!("{minutes}m {seconds:02}s"),
+    }
+}
+
+// The assistant body (I1): each field names its `packages/butler-i18n` path.
+
+pub(crate) struct AssistantStrings {
     /// conversation.failure.regionLabel is not drawn; conversation.failure.title
-    pub(super) failure_title: &'static str,
+    pub(crate) failure_title: &'static str,
     /// conversation.failure.retry, retryCurrent, retrying, fallbackReason
-    pub(super) retry: &'static str,
-    pub(super) retry_current: &'static str,
-    pub(super) retrying: &'static str,
-    pub(super) fallback_reason: &'static str,
+    pub(crate) retry: &'static str,
+    pub(crate) retry_current: &'static str,
+    pub(crate) retrying: &'static str,
+    pub(crate) fallback_reason: &'static str,
     /// settings.logs.trace.viewLogs
-    pub(super) view_logs: &'static str,
+    pub(crate) view_logs: &'static str,
     /// common.more
-    pub(super) more: &'static str,
+    pub(crate) more: &'static str,
     /// conversation.messageActions.copyMessage, copied
-    pub(super) copy_message: &'static str,
-    pub(super) copied: &'static str,
+    pub(crate) copy_message: &'static str,
+    pub(crate) copied: &'static str,
     /// interfaceDetails.answerFailed, answerStopped, answerDone
-    pub(super) answer_failed: &'static str,
-    pub(super) answer_stopped: &'static str,
-    pub(super) answer_done: &'static str,
-    /// conversation.answerBlocks.preparing, prepared, rechecking
-    pub(super) preparing: &'static str,
-    pub(super) prepared: &'static str,
-    pub(super) rechecking: &'static str,
+    pub(crate) answer_failed: &'static str,
+    pub(crate) answer_stopped: &'static str,
+    pub(crate) answer_done: &'static str,
     /// conversation.incompleteStatus, stoppedStatus, attachmentUnavailable
-    pub(super) incomplete: &'static str,
-    pub(super) stopped: &'static str,
-    pub(super) attachment_unavailable: &'static str,
+    pub(crate) incomplete: &'static str,
+    pub(crate) stopped: &'static str,
+    pub(crate) attachment_unavailable: &'static str,
     /// interfaceStatus.branchChat, branchProject, branchDescription, projectName,
     /// conversationTitle, branchPending, close, retry, create
-    pub(super) branch_chat: &'static str,
-    pub(super) branch_project: &'static str,
-    pub(super) branch_description: &'static str,
-    pub(super) project_name: &'static str,
-    pub(super) conversation_title: &'static str,
-    pub(super) branch_pending: &'static str,
-    pub(super) close: &'static str,
-    pub(super) try_again: &'static str,
-    pub(super) create: &'static str,
+    pub(crate) branch_chat: &'static str,
+    pub(crate) branch_project: &'static str,
+    pub(crate) branch_description: &'static str,
+    pub(crate) project_name: &'static str,
+    pub(crate) conversation_title: &'static str,
+    pub(crate) branch_pending: &'static str,
+    pub(crate) close: &'static str,
+    pub(crate) try_again: &'static str,
+    pub(crate) create: &'static str,
     /// interfaceDetails.branchFailed, branchSourceTitle, branchSourceDescription, branchSource,
     /// branchSourceFailed
-    pub(super) branch_failed: &'static str,
-    pub(super) seed_title: &'static str,
-    pub(super) seed_description: &'static str,
-    pub(super) seed_open: &'static str,
-    pub(super) seed_failed: &'static str,
+    pub(crate) branch_failed: &'static str,
+    pub(crate) seed_title: &'static str,
+    pub(crate) seed_description: &'static str,
+    pub(crate) seed_open: &'static str,
+    pub(crate) seed_failed: &'static str,
     worked_for: fn(&str) -> String,
     step: fn(&str, &str) -> String,
     step_epic: fn(&str) -> String,
@@ -61,7 +139,7 @@ struct WorkFailed {
     reasons: [(&'static str, &'static str); 4],
 }
 
-const EN: Text = Text {
+static ASSISTANT_EN: AssistantStrings = AssistantStrings {
     failure_title: "Butler could not complete the request.",
     retry: "Retry original settings",
     retry_current: "Retry as new with current settings",
@@ -74,9 +152,6 @@ const EN: Text = Text {
     answer_failed: "Response failed",
     answer_stopped: "Response stopped",
     answer_done: "Response completed",
-    preparing: "Preparing answer cards",
-    prepared: "Answer cards ready",
-    rechecking: "Butler is checking again",
     incomplete: "Incomplete",
     stopped: "Stopped",
     attachment_unavailable: "Attachment unavailable",
@@ -112,7 +187,7 @@ const EN: Text = Text {
     },
 };
 
-const KO: Text = Text {
+static ASSISTANT_KO: AssistantStrings = AssistantStrings {
     failure_title: "응답 처리 중 문제가 발생했습니다.",
     retry: "원래 설정으로 다시 시도",
     retry_current: "현재 설정으로 새로 시도",
@@ -125,9 +200,6 @@ const KO: Text = Text {
     answer_failed: "답변 실패",
     answer_stopped: "답변 중지",
     answer_done: "답변 완료",
-    preparing: "답변 카드 준비 중",
-    prepared: "답변 카드 준비",
-    rechecking: "버틀러가 다시 확인하는 중",
     incomplete: "미완료",
     stopped: "중지됨",
     attachment_unavailable: "첨부 파일을 찾을 수 없음",
@@ -163,22 +235,22 @@ const KO: Text = Text {
     },
 };
 
-/// The strings for the app's language.
-pub(super) fn text(cx: &App) -> &'static Text {
-    match Ds::get(cx).lang() {
-        Lang::Ko => &KO,
-        Lang::En => &EN,
+/// The assistant body's copy in `lang`.
+pub(crate) fn assistant(lang: Lang) -> &'static AssistantStrings {
+    match lang {
+        Lang::Ko => &ASSISTANT_KO,
+        Lang::En => &ASSISTANT_EN,
     }
 }
 
-impl Text {
+impl AssistantStrings {
     /// interfaceTemplates.workedFor
-    pub(super) fn worked_for(&self, duration: &str) -> String {
+    pub(crate) fn worked_for(&self, duration: &str) -> String {
         (self.worked_for)(duration)
     }
 
     /// canon.queue.step (with a plan title) and canon.queue.stepEpic
-    pub(super) fn canon_step(&self, plan: Option<&str>, epic: &str) -> String {
+    pub(crate) fn canon_step(&self, plan: Option<&str>, epic: &str) -> String {
         match plan.filter(|plan| !plan.is_empty()) {
             Some(plan) => (self.step)(plan, epic),
             None => (self.step_epic)(epic),
@@ -186,7 +258,7 @@ impl Text {
     }
 
     /// conversation.initiated.workFailed (work-failure.ts `workFailureLine`)
-    pub(super) fn work_failed(&self, retrying: bool, reason: Option<&str>) -> String {
+    pub(crate) fn work_failed(&self, retrying: bool, reason: Option<&str>) -> String {
         let copy = &self.work_failed;
         let code = reason
             .and_then(|code| copy.reasons.iter().find(|(known, _)| *known == code))

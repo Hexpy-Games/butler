@@ -33,7 +33,7 @@ pub(super) fn render(
             let label = SharedString::from(title.clone().unwrap_or_default());
             let mut list = BlockTabs::new(SharedString::from(format!("answer-tabs-{path}")), label);
             for (index, tab) in tabs.iter().enumerate() {
-                let tab_path = format!("{path}/{index}");
+                let tab_path = format!("{path}/tabs/{index}");
                 let content = Stack::new().gap(Space::Md).children(children(
                     &tab.blocks,
                     &tab_path,
@@ -69,7 +69,7 @@ fn children(
         .enumerate()
         .filter_map(|(index, leaf)| {
             let block = leaf_block(leaf.clone()).ok()?;
-            let leaf_path = format!("{path}/{index}");
+            let leaf_path = format!("{path}/blocks/{index}");
             let rendered = super::child_block(&block, &leaf_path, t, window, cx);
             let cell = Stack::new().gap(Space::Sm).child(rendered);
             Some(
@@ -83,7 +83,7 @@ fn children(
 }
 
 /// A leaf block as the block the family renders take (every leaf variant is one of the two groups).
-fn leaf_block(leaf: AnswerLeafBlock) -> Result<AnswerBlock, AnswerLeafBlock> {
+pub(super) fn leaf_block(leaf: AnswerLeafBlock) -> Result<AnswerBlock, AnswerLeafBlock> {
     data_leaf(leaf).or_else(text_leaf)
 }
 

@@ -10,7 +10,7 @@ use gpui::{
     AnyElement, App, ClickEvent, IntoElement as _, ParentElement as _, SharedString, Window,
 };
 
-use super::copy::text;
+use super::text;
 use super::hooks::{hooks, retrying, set_retrying, trace_target};
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::source::wire::{MessageRecord, MessageRecordRetryMode};

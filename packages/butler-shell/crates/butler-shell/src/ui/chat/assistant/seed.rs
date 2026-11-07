@@ -10,7 +10,7 @@ use gpui::{
 };
 use serde_json::json;
 
-use super::copy::text;
+use super::text;
 use super::hooks::hooks;
 use super::remote;
 use crate::ui::chat::TranscriptCtx;

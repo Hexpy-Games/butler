@@ -191,7 +191,7 @@ fn source_action(url: String, index: usize, open: Rc<RefCell<Shown>>, lang: Lang
         .on_click(move |_, window, cx| {
             *open.borrow_mut() = None;
             window.refresh();
-            cx.open_url(&url);
+            crate::ui::chat::open_link(&url, cx);
         })
 }
 

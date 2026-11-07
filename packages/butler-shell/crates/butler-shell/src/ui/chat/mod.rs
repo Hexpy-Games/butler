@@ -30,7 +30,7 @@ use crate::ui::smooth_scroll::SmoothScroll;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{QueuedMessageRecord, SessionQueueView, SessionView};
 
-pub(crate) use assistant::{AssistantHooks, TraceTarget};
+pub(crate) use assistant::AssistantHooks;
 pub(crate) use intro::set_seen as set_chats_intro_seen;
 pub(crate) use list::{OlderRequest, on_load_older};
 pub(crate) use queue::{on_queue_changed, queue_changed};
@@ -54,10 +54,6 @@ pub(crate) struct TranscriptCtx<'a> {
     pub(crate) footer_meta: Rc<HashMap<String, FooterMeta>>,
     /// The message whose body is rendering.
     pub(crate) message_id: Option<&'a str>,
-    /// Sends a message into the open chat (an answer's "ask" pill).
-    pub(crate) send_message: fn(&str, &mut App),
-    /// Opens a link (until the conversation browser lands, the system browser).
-    pub(crate) open_link: fn(&str, &mut App),
 }
 
 #[derive(Default)]
@@ -67,13 +63,16 @@ struct Actions {
 
 impl Global for Actions {}
 
+/// Sends a message into the open chat (an answer's "ask" pill).
 fn send_message(text: &str, cx: &mut App) {
     if let Some(send) = cx.default_global::<Actions>().send.clone() {
         send(text, cx);
     }
 }
 
-fn open_link(url: &str, cx: &mut App) {
+/// Opens a link of an answer or the image viewer: until the conversation browser lands (P5),
+/// the system browser (`openConversationLink`).
+pub(crate) fn open_link(url: &str, cx: &mut App) {
     cx.open_url(url);
 }
 
@@ -97,8 +96,6 @@ impl<'a> TranscriptCtx<'a> {
             entering,
             footer_meta,
             message_id: None,
-            send_message,
-            open_link,
         }
     }
 }

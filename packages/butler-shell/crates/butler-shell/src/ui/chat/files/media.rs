@@ -127,7 +127,6 @@ pub(super) fn format_size(bytes: i64, gigabytes: bool) -> String {
 
 /// One row of the changed-files block: a diff (with its stored copy) or a new file.
 pub(super) struct WorkingRow<'a> {
-    pub(super) key: String,
     pub(super) change: Option<&'a ChangedFileDetail>,
     pub(super) file: Option<&'a MessageFileRef>,
 }
@@ -142,7 +141,6 @@ pub(super) fn working_file_rows<'a>(
     let mut rows: Vec<WorkingRow<'a>> = changes
         .iter()
         .map(|change| WorkingRow {
-            key: format!("change:{}", change.path),
             change: Some(change),
             file: change
                 .file_id
@@ -179,7 +177,6 @@ pub(super) fn working_file_rows<'a>(
             .into_iter()
             .filter(|file| file.kind != MessageFileKind::Image || !shown.contains(&file.url))
             .map(|file| WorkingRow {
-                key: format!("file:{}", file.file_id),
                 change: None,
                 file: Some(file),
             }),

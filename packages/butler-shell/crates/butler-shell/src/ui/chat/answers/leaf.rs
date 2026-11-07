@@ -21,6 +21,7 @@ use gpui::{
 };
 
 use super::frame::source_line;
+use crate::ui::chat::{open_link, send_message};
 use crate::ui::shell::image_viewer::loader::{PictureId, picture};
 use crate::ui::shell::image_viewer::{self, ViewerEntry};
 use crate::ui::source::wire::{
@@ -288,10 +289,14 @@ fn actions(base: &SharedString, items: &[AnswerBlockActionsItemsItem], cx: &mut 
         let id = child_id(base, "action", index);
         row = match item {
             AnswerBlockActionsItemsItem::Variant1(ask) => row.child(
-                PillButton::new(id)
-                    .surface(Surface::Glass)
-                    .icon(icon(Icon::Reply, IconSize::Sm, Ds::get(cx)))
-                    .text(ask.ask.clone()),
+                {
+                    let text = ask.ask.clone();
+                    PillButton::new(id)
+                        .surface(Surface::Glass)
+                        .icon(icon(Icon::Reply, IconSize::Sm, Ds::get(cx)))
+                        .text(ask.ask.clone())
+                        .on_click(move |_, _, cx| send_message(&text, cx))
+                },
             ),
             AnswerBlockActionsItemsItem::Variant2(open) => {
                 let url = open.open.clone();
@@ -300,7 +305,7 @@ fn actions(base: &SharedString, items: &[AnswerBlockActionsItemsItem], cx: &mut 
                         .variant(ButtonVariant::Secondary)
                         .icon_start(icon(Icon::Popup, IconSize::Sm, Ds::get(cx)))
                         .text(open.label.clone())
-                        .on_click(move |_, _, cx| cx.open_url(&url)),
+                        .on_click(move |_, _, cx| open_link(&url, cx)),
                 )
             }
         };

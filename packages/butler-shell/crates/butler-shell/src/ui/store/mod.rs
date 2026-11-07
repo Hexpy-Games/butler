@@ -32,7 +32,7 @@ pub(crate) enum Applied {
     Store,
     Failed(crate::ui::source::SourceError),
     /// The open chat's messages or turn progress changed: show its view again.
-    Transcript(SessionId),
+    Transcript,
     /// Events were lost: take a new snapshot.
     Resync,
 }
@@ -301,14 +301,14 @@ impl Store {
                 {
                     return Applied::Store;
                 }
-                return self.apply_session_event(session, &raw);
+                return self.apply_session_event(&raw);
             }
             LiveUpdate::Turn { chat, running } => {
                 let ended = running.is_none() && self.running.contains_key(&chat);
                 self.set_running(&chat, running);
                 if ended && self.selected.as_ref().is_some_and(|open| open.chat == chat) {
                     self.freeze_activity();
-                    return Applied::Transcript(self.selected_session());
+                    return Applied::Transcript;
                 }
             }
             LiveUpdate::Authority { session, cards } => self.authority_loaded(session, cards),
@@ -333,13 +333,6 @@ impl Store {
         Applied::Store
     }
 
-    fn selected_session(&self) -> SessionId {
-        self.selected
-            .as_ref()
-            .map(|chat| chat.session.clone())
-            .unwrap_or_else(|| SessionId(String::new().into()))
-    }
-
     /// `freezeConversationActivity`: a finished turn's messages keep the activity it showed.
     fn freeze_activity(&mut self) {
         let snapshots: HashMap<String, TurnProgressSnapshot> =
@@ -348,11 +341,11 @@ impl Store {
     }
 
     /// A session event of the open chat: the cache and the progress each take it.
-    fn apply_session_event(&mut self, session: SessionId, event: &AppEventEnvelope) -> Applied {
+    fn apply_session_event(&mut self, event: &AppEventEnvelope) -> Applied {
         let messages = self.messages.apply_event(event);
         let progress = self.progress.apply_event(event);
         if messages || progress {
-            Applied::Transcript(session)
+            Applied::Transcript
         } else {
             Applied::Store
         }

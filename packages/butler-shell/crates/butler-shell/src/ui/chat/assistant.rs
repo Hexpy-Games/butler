@@ -1,6 +1,5 @@
 //! `AssistantMessageBody`, `AssistantReply`, footers, failure notice, retry, branch, trace.
 mod branch;
-mod copy;
 mod failure;
 mod footer;
 pub(crate) mod hooks;
@@ -8,6 +7,7 @@ mod remote;
 mod seed;
 
 use butler_ds::ui::blocks::message_row::{MessageBubble, MessageBubbleAttachments};
+use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::tag::Tag;
 use butler_ds::ui::typo::{Tone, Typo, Wrap};
@@ -21,16 +21,21 @@ use super::activity::{is_general_chat, message_activity};
 use super::answers::answer_blocks;
 use super::files::message_files;
 use super::message_markdown::message_markdown_in;
+use crate::ui::i18n::{AssistantStrings, assistant};
 use crate::ui::source::wire::{InitiatedOriginState, MessageRecord, MessageRecordRole};
-use copy::text;
 
 pub(crate) use branch::assistant_branch_actions;
 pub(crate) use failure::{
     can_retry_with_current_controls, message_retry_actions, message_trace_menu, retryable,
 };
-pub(crate) use footer::{FooterMeta, ResponseFooter, answer_draft_footer, assistant_response_footer};
-pub(crate) use hooks::{AssistantHooks, TraceTarget};
+pub(crate) use footer::{FooterMeta, ResponseFooter, assistant_response_footer};
+pub(crate) use hooks::AssistantHooks;
 pub(crate) use seed::session_branch_seed;
+
+/// The assistant body's copy for the app's language.
+fn text(cx: &App) -> &'static AssistantStrings {
+    assistant(Ds::get(cx).lang())
+}
 
 /// `isAssistantFailureNoticeMessage`
 fn failure_message(message: &MessageRecord) -> bool {
@@ -49,8 +54,8 @@ fn initiated_kind(message: &MessageRecord) -> Option<&str> {
         .map(|origin| origin.kind.as_str())
 }
 
-/// The assistant message: its body, then the draft footer while it runs or the response footer
-/// once it settled (`MessageContent`).
+/// The assistant message: its body, then the response footer once it settled
+/// (`MessageContent`).
 pub(crate) fn assistant_message(
     msg: &MessageRecord,
     t: &TranscriptCtx,
@@ -61,10 +66,7 @@ pub(crate) fn assistant_message(
     let mut parts = vec![body];
     let running = t.live_message == Some(msg.id.as_str())
         || matches!(msg.status.as_deref(), Some("streaming" | "pending"));
-    if running {
-        // No answer-card draft source is wired yet, so no draft status shows.
-        parts.extend(answer_draft_footer(&msg.id, None, cx).into_iter().flatten());
-    } else {
+    if !running {
         parts.extend(response_footer(msg, t, steward, window, cx));
     }
     parts

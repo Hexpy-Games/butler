@@ -11,15 +11,6 @@ use crate::ui::source::wire::{ProgressRow, TurnProgressSnapshot};
 pub(crate) type Snapshots = Vec<(String, TurnProgressSnapshot)>;
 
 const MAX_TURN_PROGRESS_SNAPSHOTS: usize = 80;
-const ACTIVE_TURN_STATES: [&str; 7] = [
-    "accepted",
-    "thinking",
-    "streaming",
-    "waiting_for_form",
-    "waiting_for_tool",
-    "cancelling",
-    "retrying",
-];
 
 /// `TimelineProgressBucket`: what the events of one turn add.
 #[derive(Default)]
@@ -377,42 +368,4 @@ pub(super) fn merge_from_latest(
     put(snapshots, &turn_id, next);
     cap(snapshots);
     true
-}
-
-fn is_active_snapshot(snapshot: &TurnProgressSnapshot) -> bool {
-    match snapshot.state.as_deref() {
-        Some(state) if !state.is_empty() => !is_terminal_state(state),
-        _ => snapshot
-            .safe_progress_rows
-            .iter()
-            .any(|row| !is_terminal_state(&row.state)),
-    }
-}
-
-/// `activeTurnProgressSnapshot`: the newest active snapshot; client-made turns rank first on a tie.
-pub(crate) fn active_snapshot(
-    snapshots: &Snapshots,
-    fallback: Option<&TurnProgressSnapshot>,
-) -> Option<TurnProgressSnapshot> {
-    let mut active: Vec<(usize, &String, &TurnProgressSnapshot)> = snapshots
-        .iter()
-        .enumerate()
-        .filter(|(_, (_, snapshot))| is_active_snapshot(snapshot))
-        .map(|(index, (id, snapshot))| (index, id, snapshot))
-        .collect();
-    let client = |id: &String| u8::from(!id.starts_with("client-turn-"));
-    active.sort_by(|left, right| {
-        activity_ms(left.2)
-            .total_cmp(&activity_ms(right.2))
-            .then(client(left.1).cmp(&client(right.1)))
-            .then(left.0.cmp(&right.0))
-    });
-    if let Some((_, id, snapshot)) = active.last() {
-        let mut snapshot = (*snapshot).clone();
-        snapshot.turn_id.get_or_insert_with(|| (*id).clone());
-        return Some(snapshot);
-    }
-    let latest = fallback?;
-    let state = latest.state.as_deref()?;
-    (latest.turn_id.is_some() && ACTIVE_TURN_STATES.contains(&state)).then(|| latest.clone())
 }
