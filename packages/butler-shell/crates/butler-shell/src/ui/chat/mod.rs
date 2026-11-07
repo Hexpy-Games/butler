@@ -33,7 +33,7 @@ use crate::ui::source::wire::{QueuedMessageRecord, SessionQueueView, SessionView
 pub(crate) use assistant::{AssistantHooks, TraceTarget};
 pub(crate) use intro::set_seen as set_chats_intro_seen;
 pub(crate) use list::{OlderRequest, on_load_older};
-pub(crate) use queue::on_queue_changed;
+pub(crate) use queue::{on_queue_changed, queue_changed};
 
 /// How long a row that just arrived keeps its insert motion.
 const ENTERING: Duration = Duration::from_secs(1);

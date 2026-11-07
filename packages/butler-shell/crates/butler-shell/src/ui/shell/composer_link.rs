@@ -69,7 +69,7 @@ impl Shell {
                         let lang = Ds::get(cx).lang();
                         toast::show(cx, Toast::error(words(lang).queue_failed));
                     }
-                    crate::ui::chat::queue::queue_changed(cx);
+                    crate::ui::chat::queue_changed(cx);
                 });
             })
             .detach();

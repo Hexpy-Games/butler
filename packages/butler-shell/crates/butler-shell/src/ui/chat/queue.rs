@@ -145,7 +145,7 @@ pub(crate) fn on_queue_changed(cx: &mut App, handler: impl Fn(&mut App) + 'stati
     cx.default_global::<QueueChanged>().0 = Some(Rc::new(handler));
 }
 
-fn queue_changed(cx: &mut App) {
+pub(crate) fn queue_changed(cx: &mut App) {
     if let Some(handler) = cx
         .try_global::<QueueChanged>()
         .and_then(|changed| changed.0.clone())
