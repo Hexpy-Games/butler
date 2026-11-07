@@ -80,7 +80,10 @@ pub(crate) fn picture(id: &PictureId, cx: &mut App) -> Option<Arc<Image>> {
 
 /// True while the picture's download runs.
 pub(crate) fn is_pending(id: &PictureId, cx: &mut App) -> bool {
-    matches!(cx.default_global::<Pictures>().0.get(id), Some(Load::Pending))
+    matches!(
+        cx.default_global::<Pictures>().0.get(id),
+        Some(Load::Pending)
+    )
 }
 
 /// The picture a download carries, by its content type.

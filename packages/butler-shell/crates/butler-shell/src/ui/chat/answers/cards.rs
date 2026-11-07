@@ -55,10 +55,8 @@ fn viewer_entries(items: &[CardItem]) -> Vec<ViewerEntry> {
     items
         .iter()
         .filter_map(|item| {
-            let mut entry = ViewerEntry::new(
-                PictureId::Asset(item.img.clone()?),
-                item.title.clone(),
-            );
+            let mut entry =
+                ViewerEntry::new(PictureId::Asset(item.img.clone()?), item.title.clone());
             entry.caption = Some(item.title.clone());
             entry.source = item.source.clone();
             entry.checked = item.checked.clone();
@@ -243,15 +241,23 @@ impl AnswerCards {
             let entries = self.viewer.clone();
             card = card.on_media_open(move |_, _, cx| image_viewer::open(entries.clone(), at, cx));
         }
-        Some(card.action(self.save_action(&id, item, lang, cx)).action(
-            CopyButton::new((id, "copy"), copy.copy, copy.answer_copied).text(card_copy(item, lang)),
-        ))
+        Some(
+            card.action(self.save_action(&id, item, lang, cx)).action(
+                CopyButton::new((id, "copy"), copy.copy, copy.answer_copied)
+                    .text(card_copy(item, lang)),
+            ),
+        )
     }
 
     /// The place of item `index` among the viewer's pictures.
     fn viewer_index(&self, index: usize) -> Option<usize> {
         self.items.get(index)?.img.as_ref()?;
-        Some(self.items[..index].iter().filter(|item| item.img.is_some()).count())
+        Some(
+            self.items[..index]
+                .iter()
+                .filter(|item| item.img.is_some())
+                .count(),
+        )
     }
 
     /// The footer's "save to library" button.
@@ -263,13 +269,13 @@ impl AnswerCards {
             copy.save_to_library,
             copy.saved_to_library,
         )
-            .icon(icon(Icon::Library, IconSize::Sm, Ds::get(cx)))
-            .on_action(move |window, cx| {
-                bridge::save(scrap(&item, lang), copy.action_failed.into(), window, cx)
-            })
-            .on_error(|message: &SharedString, cx| {
-                toast::show(cx, Toast::error(message.clone()));
-            })
+        .icon(icon(Icon::Library, IconSize::Sm, Ds::get(cx)))
+        .on_action(move |window, cx| {
+            bridge::save(scrap(&item, lang), copy.action_failed.into(), window, cx)
+        })
+        .on_error(|message: &SharedString, cx| {
+            toast::show(cx, Toast::error(message.clone()));
+        })
     }
 
     /// `Grid` of the first `count` cards.

@@ -19,8 +19,8 @@ pub(super) fn child_frame(child: AnyElement, block: &AnswerBlock, path: &str) ->
 }
 
 fn framed(child: AnyElement, block: &AnswerBlock, path: &str, level: Level) -> AnyElement {
-    let mut frame = BlockActionFrame::new(SharedString::from(format!("answer-frame-{path}")))
-        .level(level);
+    let mut frame =
+        BlockActionFrame::new(SharedString::from(format!("answer-frame-{path}"))).level(level);
     if let Some(title) = title(block) {
         frame = frame.title(SharedString::from(title.to_owned()));
     }

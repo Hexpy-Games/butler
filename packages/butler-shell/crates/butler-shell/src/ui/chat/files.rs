@@ -194,11 +194,7 @@ fn attachment_extension(name: &str, cx: &App) -> SharedString {
 }
 
 /// `MessageAttachments`: a message's files as tiles; pictures open the image viewer.
-fn attachments(
-    msg: &MessageRecord,
-    set: &Rc<ViewerSet>,
-    cx: &mut App,
-) -> Option<AnyElement> {
+fn attachments(msg: &MessageRecord, set: &Rc<ViewerSet>, cx: &mut App) -> Option<AnyElement> {
     let files = msg.attachments.as_deref().unwrap_or_default();
     if files.is_empty() {
         return None;

@@ -16,8 +16,8 @@ use butler_ds::ui::media_frame::{Aspect, MediaFrame};
 use butler_ds::ui::pill_button::{PillButton, Surface};
 use butler_ds::ui::typo::{Tone, Typo, Weight};
 use gpui::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
-    ImageSource, SharedString, StatefulInteractiveElement as _, Styled as _, div,
+    AnyElement, App, ElementId, ImageSource, InteractiveElement as _, IntoElement as _,
+    ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, div,
 };
 
 use super::frame::source_line;
@@ -44,10 +44,7 @@ pub(super) fn render(block: &AnswerBlock, path: &str, cx: &mut App) -> AnyElemen
             .density(Density::Compact)
             .into_any_element(),
         AnswerBlock::Quote {
-            text,
-            cite,
-            source,
-            ..
+            text, cite, source, ..
         } => quote(
             &base(path, "quote"),
             text,

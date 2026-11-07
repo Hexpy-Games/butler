@@ -22,8 +22,8 @@ use super::media::{ViewerSet, WorkingRow, format_size, working_file_rows};
 use super::support::{add_to_library, save_file};
 use crate::ui::chat::message_markdown::inline_image_files;
 use crate::ui::i18n::media::Media;
-use crate::ui::shell::image_viewer::{self, ViewerEntry};
 use crate::ui::shell::image_viewer::loader::PictureId;
+use crate::ui::shell::image_viewer::{self, ViewerEntry};
 use crate::ui::source::wire::{
     ChangedFileDetail, ChangedFileLine, ChangedFileLineType, MessageFileKind, MessageFileRef,
     MessageRecord,
@@ -245,7 +245,10 @@ fn working_file_menu(
     let mut content = DropdownMenuContent::new().align(Align::End);
     if file.kind == MessageFileKind::Image {
         let (set, url) = (set.clone(), file.url.clone());
-        let alone = ViewerEntry::new(PictureId::File(file.file_id.clone()), file.safe_name.clone());
+        let alone = ViewerEntry::new(
+            PictureId::File(file.file_id.clone()),
+            file.safe_name.clone(),
+        );
         content = content.child(
             Item::new(copy.open)
                 .icon(Icon::Popup)

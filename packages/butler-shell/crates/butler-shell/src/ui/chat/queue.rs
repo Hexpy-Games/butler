@@ -1,76 +1,21 @@
 //! `QueuedMessageItem`, `queuedConversationItems`, the queue hooks.
 use std::collections::HashSet;
 
+use std::rc::Rc;
+
 use butler_ds::ui::blocks::queued_message::{QueuedMessage, QueuedTone};
 use butler_ds::ui::context::{Ds, Lang};
-use butler_shell_client::ShellClient;
-use futures::channel::oneshot;
+use butler_ds::ui::toast::{self, Toast};
 use gpui::{
-    AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Styled as _,
-    Window, div,
+    AnyElement, App, Entity, Global, IntoElement as _, ParentElement as _, SharedString,
+    Styled as _, Window, div,
 };
 
 use super::TranscriptCtx;
+use crate::ui::composer::queue::load_queued_into_composer;
+use crate::ui::i18n::media::Media;
+use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{QueuedMessageRecord, QueuedMessageRecordState, SessionQueueView};
-
-/// The composer strings of `appCopy.composer` and `conversation.messageActions` the rows use.
-struct Strings {
-    queued_message: &'static str,
-    sending_status: &'static str,
-    failed_message_status: &'static str,
-    queued_message_status: &'static str,
-    edit_queued_message: &'static str,
-    delete_queued_message: &'static str,
-    retry_failed_message: &'static str,
-    delete_failed_message: &'static str,
-    send_now: &'static str,
-    show_more: &'static str,
-    show_less: &'static str,
-}
-
-const EN: Strings = Strings {
-    queued_message: "Queued message",
-    sending_status: "Sending…",
-    failed_message_status: "Send failed",
-    queued_message_status: "Queued",
-    edit_queued_message: "Edit queued message",
-    delete_queued_message: "Delete queued message",
-    retry_failed_message: "Retry message",
-    delete_failed_message: "Delete failed message",
-    send_now: "Send now",
-    show_more: "Show more",
-    show_less: "Show less",
-};
-
-const KO: Strings = Strings {
-    queued_message: "대기 중인 메시지",
-    sending_status: "보내는 중…",
-    failed_message_status: "전송 실패",
-    queued_message_status: "대기 중",
-    edit_queued_message: "대기 메시지 수정",
-    delete_queued_message: "대기 메시지 삭제",
-    retry_failed_message: "다시 작성",
-    delete_failed_message: "실패 메시지 삭제",
-    send_now: "지금 보내기",
-    show_more: "더보기",
-    show_less: "접기",
-};
-
-/// `composer.queuedPosition`
-fn queued_position(lang: Lang, position: usize, total: usize) -> String {
-    match lang {
-        Lang::Ko => format!("대기 중 · {total}개 중 {position}번째"),
-        Lang::En => format!("Queued · {position} of {total}"),
-    }
-}
-
-/// `composer.queuedAttachmentCount`
-fn queued_attachment_count(lang: Lang, count: usize) -> String {
-    match lang {
-        Lang::Ko => format!("첨부 {count}개"),
-        Lang::En => format!("{count} attachments"),
-    }
-}
 
 /// One queue record shown after the messages (`QueuedConversationItem`).
 struct Item<'a> {
@@ -187,39 +132,53 @@ enum Op {
     SendNow(String),
 }
 
-/// Runs the route on its own runtime (the client needs tokio's reactor, gpui's executor has
-/// none); true when the agent accepted it.
-async fn request(client: ShellClient, op: Op) -> bool {
-    let (send, receive) = oneshot::channel();
-    std::thread::spawn(move || {
-        let ok = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .is_ok_and(|runtime| {
-                runtime.block_on(async move {
-                    match op {
-                        Op::Delete(id) => client.delete_queued_message(&id).await.is_ok(),
-                        Op::SendNow(id) => client.send_queued_message_now(&id).await.is_ok(),
-                    }
-                })
-            });
-        let _ = send.send(ok);
+type Changed = Rc<dyn Fn(&mut App)>;
+
+#[derive(Default)]
+struct QueueChanged(Option<Changed>);
+
+impl Global for QueueChanged {}
+
+/// Registers what refreshes the session's queue in the Store; it runs after a queue row's
+/// delete or send-now call ended.
+pub(crate) fn on_queue_changed(cx: &mut App, handler: impl Fn(&mut App) + 'static) {
+    cx.default_global::<QueueChanged>().0 = Some(Rc::new(handler));
+}
+
+fn queue_changed(cx: &mut App) {
+    if let Some(handler) = cx
+        .try_global::<QueueChanged>()
+        .and_then(|changed| changed.0.clone())
+    {
+        handler(cx);
+    }
+}
+
+/// Runs the route on the agent worker; true when the agent accepted it.
+fn request(cx: &App, op: Op) -> futures::future::BoxFuture<'static, bool> {
+    let done = Jobs::run(cx, move |client| async move {
+        match op {
+            Op::Delete(id) => client.delete_queued_message(&id).await.is_ok(),
+            Op::SendNow(id) => client.send_queued_message_now(&id).await.is_ok(),
+        }
     });
-    receive.await.unwrap_or(false)
+    Box::pin(async move { done.await.unwrap_or(false) })
 }
 
 /// `queuedStatus`
-fn queued_status(item: &Item, lang: Lang, copy: &Strings) -> String {
+fn queued_status(item: &Item, lang: Lang, copy: &Media) -> String {
     match item.tone {
         QueuedTone::Sending => copy.sending_status.to_owned(),
         QueuedTone::Failed => copy.failed_message_status.to_owned(),
-        QueuedTone::Queued if item.total > 1 => queued_position(lang, item.position, item.total),
+        QueuedTone::Queued if item.total > 1 => {
+            Media::queued_position(lang, item.position, item.total)
+        }
         QueuedTone::Queued => copy.queued_message_status.to_owned(),
     }
 }
 
 /// `queuedText`
-fn queued_text(record: &QueuedMessageRecord, lang: Lang, copy: &Strings) -> String {
+fn queued_text(record: &QueuedMessageRecord, lang: Lang, copy: &Media) -> String {
     let attachments = record.attachments.as_deref().unwrap_or_default();
     let text = if !record.text.is_empty() {
         record.text.clone()
@@ -232,7 +191,7 @@ fn queued_text(record: &QueuedMessageRecord, lang: Lang, copy: &Strings) -> Stri
     if !record.text.is_empty() && !attachments.is_empty() {
         format!(
             "{text}\n{}",
-            queued_attachment_count(lang, attachments.len())
+            Media::queued_attachment_count(lang, attachments.len())
         )
     } else {
         text
@@ -244,97 +203,86 @@ fn queued_message_item(
     item: &Item,
     entering: bool,
     state: &Entity<QueueState>,
-    client: Option<&ShellClient>,
     lang: Lang,
 ) -> QueuedMessage {
-    let copy = if lang == Lang::Ko { &KO } else { &EN };
+    let copy = Media::of(lang);
     let failed = item.tone == QueuedTone::Failed;
     let id = SharedString::from(format!("queued-{}", item.key));
+    let (edit_label, delete_label) = if failed {
+        (copy.retry_failed_message, copy.delete_failed_message)
+    } else {
+        (copy.edit_queued_message, copy.delete_queued_message)
+    };
+    let record = item.record.clone();
+    let record_id = item.record.id.clone();
     let mut row = QueuedMessage::new(
         id,
         queued_text(item.record, lang, copy),
         queued_status(item, lang, copy),
     )
     .tone(item.tone)
-    .clamp(copy.show_more, copy.show_less)
-    // `onEdit` loads the record into the composer (`loadQueuedMessageIntoComposer`); the
-    // composer has no entry for it in the shell yet.
-    .on_edit(
-        if failed {
-            copy.retry_failed_message
-        } else {
-            copy.edit_queued_message
-        },
-        |_, _, _| {},
-    )
-    .on_delete(
-        if failed {
-            copy.delete_failed_message
-        } else {
-            copy.delete_queued_message
-        },
-        {
-            let (client, record_id) = (client.cloned(), item.record.id.clone());
-            move |_, _, cx| {
-                if let Some(client) = client.clone() {
-                    let record_id = record_id.clone();
-                    cx.spawn(async move |_| {
-                        request(client, Op::Delete(record_id)).await;
-                    })
-                    .detach();
-                }
-            }
-        },
-    );
+    .clamp(copy.queue_show_more, copy.queue_show_less)
+    .on_edit(edit_label, move |_, _, cx| {
+        load_queued_into_composer(&record, cx);
+    })
+    .on_delete(delete_label, move |_, _, cx| delete(&record_id, cx));
     if entering {
         row = row.entering();
     }
     if item.can_send_now {
-        let (client, record_id, key, state) = (
-            client.cloned(),
-            item.record.id.clone(),
-            item.key.clone(),
-            state.clone(),
-        );
+        let (record_id, key, state) = (item.record.id.clone(), item.key.clone(), state.clone());
         row = row.send_now(copy.send_now, None, move |_, window, cx| {
-            send_now(client.clone(), &record_id, &key, &state, window, cx);
+            send_now(&record_id, &key, &state, window, cx);
         });
     }
     row
 }
 
+/// `deleteQueuedMessage`: the agent drops the record, then the Store refreshes the queue.
+fn delete(record_id: &str, cx: &mut App) {
+    let done = request(cx, Op::Delete(record_id.to_owned()));
+    cx.spawn(async move |cx| {
+        done.await;
+        cx.update(queue_changed);
+    })
+    .detach();
+}
+
 /// `sendNow`: marks the key pending (the row shows "sending") until the agent drops the
-/// record; a refused request releases it.
+/// record; a refused request releases it and shows the error.
 fn send_now(
-    client: Option<ShellClient>,
     record_id: &str,
     key: &str,
     state: &Entity<QueueState>,
     window: &mut Window,
     cx: &mut App,
 ) {
-    let Some(client) = client else { return };
     if !state.update(cx, |state, _| state.pending.insert(key.to_owned())) {
         return;
     }
     window.refresh();
-    let (record_id, key, state) = (record_id.to_owned(), key.to_owned(), state.clone());
+    let done = request(cx, Op::SendNow(record_id.to_owned()));
+    let failed = Media::get(cx).send_now_failed;
+    let (key, state) = (key.to_owned(), state.clone());
     cx.spawn(async move |cx| {
-        if !request(client, Op::SendNow(record_id)).await {
+        let accepted = done.await;
+        if !accepted {
             let _ = state.update(cx, |state, cx| {
                 state.pending.remove(&key);
                 cx.notify();
             });
         }
+        cx.update(|cx| {
+            if !accepted {
+                toast::show(cx, Toast::error(failed));
+            }
+            queue_changed(cx);
+        });
     })
     .detach();
 }
 
 /// Queued messages in the transcript (edit, delete, send now).
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 pub(crate) fn queued_rows(
     queue: &SessionQueueView,
     t: &TranscriptCtx,
@@ -359,14 +307,10 @@ pub(crate) fn queued_rows(
     div()
         .flex()
         .flex_col()
-        .children(items.iter().map(|item| {
-            queued_message_item(
-                item,
-                entering.contains(&item.key),
-                &state,
-                t.client.as_ref(),
-                lang,
-            )
-        }))
+        .children(
+            items
+                .iter()
+                .map(|item| queued_message_item(item, entering.contains(&item.key), &state, lang)),
+        )
         .into_any_element()
 }

@@ -22,7 +22,8 @@ pub(super) fn render(
 ) -> AnyElement {
     match block {
         AnswerBlock::Columns { blocks, .. } => {
-            let mut columns = BlockColumns::new(SharedString::from(format!("answer-columns-{path}")));
+            let mut columns =
+                BlockColumns::new(SharedString::from(format!("answer-columns-{path}")));
             for column in children(blocks, path, t, window, cx) {
                 columns = columns.child(column);
             }
@@ -33,9 +34,13 @@ pub(super) fn render(
             let mut list = BlockTabs::new(SharedString::from(format!("answer-tabs-{path}")), label);
             for (index, tab) in tabs.iter().enumerate() {
                 let tab_path = format!("{path}/{index}");
-                let content = Stack::new()
-                    .gap(Space::Md)
-                    .children(children(&tab.blocks, &tab_path, t, window, cx));
+                let content = Stack::new().gap(Space::Md).children(children(
+                    &tab.blocks,
+                    &tab_path,
+                    t,
+                    window,
+                    cx,
+                ));
                 list = list.tab(BlockTab::new(
                     SharedString::from(tab.label.clone()),
                     content,

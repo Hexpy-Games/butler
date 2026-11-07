@@ -185,12 +185,7 @@ fn labels(lang: Lang) -> ViewerLabels {
 }
 
 /// The open-source action: closes the viewer and opens the page.
-fn source_action(
-    url: String,
-    index: usize,
-    open: Rc<RefCell<Shown>>,
-    lang: Lang,
-) -> IconButton {
+fn source_action(url: String, index: usize, open: Rc<RefCell<Shown>>, lang: Lang) -> IconButton {
     IconButton::new(("viewer-source", index), Media::of(lang).open_source)
         .glyph(Icon::Popup)
         .on_click(move |_, window, cx| {
