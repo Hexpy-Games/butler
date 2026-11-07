@@ -5,7 +5,8 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement as _, IntoElement as _,
-    MouseButton, ParentElement as _, SharedString, Styled as _, Window, div, px,
+    MouseButton, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
+    Window, div, px,
 };
 
 use super::content_rect::{Recording, Slot};
