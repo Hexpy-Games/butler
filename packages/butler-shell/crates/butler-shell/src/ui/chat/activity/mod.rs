@@ -7,7 +7,7 @@ pub(crate) mod steward;
 pub(crate) mod timeline;
 pub(crate) mod tools;
 
-use gpui::{AnyElement, App, IntoElement as _, Window};
+use gpui::{AnyElement, App, Window};
 
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::source::wire::MessageRecord;
