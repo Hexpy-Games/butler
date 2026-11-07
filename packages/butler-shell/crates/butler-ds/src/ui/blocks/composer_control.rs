@@ -62,10 +62,6 @@ impl PermissionTone {
     }
 }
 
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "independent props, as the React ComposerControl API"
-)]
 #[derive(IntoElement)]
 pub struct ComposerControl {
     id: ElementId,

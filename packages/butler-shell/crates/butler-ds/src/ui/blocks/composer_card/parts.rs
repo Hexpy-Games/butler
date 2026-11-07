@@ -229,6 +229,8 @@ impl RenderOnce for CompactPreview {
     }
 }
 
+type ChangeHandler = Rc<dyn Fn(bool, &mut Window, &mut App)>;
+
 /// `ComposerPlanToggle`: a pill label around a Switch. In a narrow composer only the Switch
 /// shows.
 #[derive(IntoElement)]
@@ -236,7 +238,7 @@ pub struct PlanToggle {
     id: ElementId,
     checked: bool,
     label: SharedString,
-    on_change: Option<Rc<dyn Fn(bool, &mut Window, &mut App)>>,
+    on_change: Option<ChangeHandler>,
 }
 
 impl PlanToggle {

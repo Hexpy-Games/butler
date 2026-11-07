@@ -130,6 +130,49 @@ impl ParentElement for ComposerCard {
     }
 }
 
+impl ComposerCard {
+    /// The glass surface, with the decoration (if any) clipped to the card's radius.
+    fn glass(&mut self, radius: gpui::Pixels) -> TintedGlass {
+        let mut glass = TintedGlass::new()
+            .radius(GlassRadius::Composer)
+            .padding(GlassPadding::None);
+        if let Some(decoration) = self.decoration.take() {
+            glass = glass.child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .overflow_hidden()
+                    .rounded(radius)
+                    .child(decoration),
+            );
+        }
+        glass
+    }
+
+    /// The card's column: the adjunct (when expanded) above the children.
+    fn content(&mut self, ds: &Ds) -> gpui::Div {
+        div()
+            .flex()
+            .flex_col()
+            .min_w_0()
+            .children(
+                self.adjunct
+                    .take()
+                    .filter(|_| self.expanded)
+                    .map(|adjunct| {
+                        div()
+                            .min_w_0()
+                            .border_b(ds.len(Length::BorderHairline))
+                            .border_color(ds.color(Color::ComposerGlassDivider))
+                            .child(adjunct)
+                    }),
+            )
+            .children(std::mem::take(&mut self.children))
+    }
+}
+
 impl RenderOnce for ComposerCard {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let (size, recorder) = measure::track((self.id.clone(), "wrap"), window, cx);
@@ -151,38 +194,8 @@ impl RenderOnce for ComposerCard {
             .notice
             .take()
             .map(|notice| div().mb(ds.len(Length::SpaceSm)).child(notice));
-        let mut glass = TintedGlass::new()
-            .radius(GlassRadius::Composer)
-            .padding(GlassPadding::None);
-        if let Some(decoration) = self.decoration.take() {
-            glass = glass.child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .overflow_hidden()
-                    .rounded(radius)
-                    .child(decoration),
-            );
-        }
-        let content = div()
-            .flex()
-            .flex_col()
-            .min_w_0()
-            .children(
-                self.adjunct
-                    .take()
-                    .filter(|_| self.expanded)
-                    .map(|adjunct| {
-                        div()
-                            .min_w_0()
-                            .border_b(ds.len(Length::BorderHairline))
-                            .border_color(ds.color(Color::ComposerGlassDivider))
-                            .child(adjunct)
-                    }),
-            )
-            .children(self.children);
+        let glass = self.glass(radius);
+        let content = self.content(ds);
         let card = div()
             .relative()
             .w_full()

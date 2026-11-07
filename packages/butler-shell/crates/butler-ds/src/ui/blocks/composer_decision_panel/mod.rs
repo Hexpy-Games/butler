@@ -234,12 +234,61 @@ impl ComposerDecisionPanel {
             });
             let (go, state) = (choice.clone(), pending.clone());
             control.on_click(Some(Rc::new(move |_, window, cx| {
-                begin(&go, &state, window, cx)
+                begin(&go, &state, window, cx);
             })));
             elements.push(control.into_any_element());
             choices.push(choice);
         }
         (elements, choices)
+    }
+}
+
+impl ComposerDecisionPanel {
+    /// The scrolling details body, when there are details.
+    fn details_body(
+        &mut self,
+        placement: Placement,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        (!self.details.is_empty()).then(|| {
+            let labels = self
+                .labels
+                .take()
+                .map(|(more, less)| details::Labels { more, less });
+            let lines = details::details(
+                &self.id,
+                &self.details,
+                self.literal,
+                labels.as_ref(),
+                window,
+                cx,
+            );
+            composer_panel::body(
+                (self.id.clone(), "details-scroll"),
+                true,
+                lines,
+                placement,
+                Ds::get(cx),
+            )
+        })
+    }
+
+    /// The title, a text-variant click target that opens the subject.
+    fn title_link(&self) -> Clickable {
+        Clickable::new((self.id.clone(), "title"))
+            .variant(ClickVariant::Text)
+            .on_click({
+                let open = self.on_open.clone();
+                move |event, window, cx| open(event, window, cx)
+            })
+            .child({
+                let label = Typo::label(self.title.clone())
+                    .weight(Weight::Medium)
+                    .tone(Tone::Primary)
+                    .wrap(Wrap::Anywhere);
+                if self.literal { label.literal() } else { label }
+            })
     }
 }
 
@@ -272,41 +321,9 @@ impl RenderOnce for ComposerDecisionPanel {
         let (seen, recorder) = measure::track((self.id.clone(), "panel"), window, cx);
         let width = f32::from(seen.width);
         let placement = self.placement;
-        let details = (!self.details.is_empty()).then(|| {
-            let labels = self
-                .labels
-                .take()
-                .map(|(more, less)| details::Labels { more, less });
-            let lines = details::details(
-                &self.id,
-                &self.details,
-                self.literal,
-                labels.as_ref(),
-                window,
-                cx,
-            );
-            composer_panel::body(
-                (self.id.clone(), "details-scroll"),
-                true,
-                lines,
-                placement,
-                Ds::get(cx),
-            )
-        });
+        let details = self.details_body(placement, window, cx);
         let ds = Ds::get(cx);
-        let title = Clickable::new((self.id.clone(), "title"))
-            .variant(ClickVariant::Text)
-            .on_click({
-                let open = self.on_open.clone();
-                move |event, window, cx| open(event, window, cx)
-            })
-            .child({
-                let label = Typo::label(self.title.clone())
-                    .weight(Weight::Medium)
-                    .tone(Tone::Primary)
-                    .wrap(Wrap::Anywhere);
-                if self.literal { label.literal() } else { label }
-            });
+        let title = self.title_link();
         let subject = composer_panel::header(
             Subject {
                 icon: icon(self.icon, IconSize::Sm, ds).into_any_element(),
@@ -357,7 +374,7 @@ impl RenderOnce for ComposerDecisionPanel {
         let keys = FrameKeys {
             id: self.id,
             on_key: Rc::new(move |event, own, window, cx| {
-                key_down(event, own, &choices, &pending, window, cx)
+                key_down(event, own, &choices, &pending, window, cx);
             }),
         };
         composer_panel::frame(placement, keys, leaving, content, window, cx)

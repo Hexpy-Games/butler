@@ -145,41 +145,41 @@ fn parts(kind: EdgeKind, edge: EdgePart) -> Vec<Part> {
 /// The numbers and commands of an SVG path, for the subset the characters use (M L C h v Z).
 fn trace(d: &str, at: Point<Pixels>, path: &mut PathBuilder) {
     let tokens: Vec<&str> = d.split_whitespace().collect();
-    let num = |i: usize| tokens[i].parse::<f32>().unwrap_or(0.);
-    let pt = |x: f32, y: f32| point(at.x + px(x), at.y + px(y));
-    let (mut x, mut y, mut i) = (0., 0., 0);
-    while i < tokens.len() {
-        let command = tokens[i];
-        i += 1;
+    let num = |n: usize| tokens[n].parse::<f32>().unwrap_or(0.);
+    let pt = |px_x: f32, px_y: f32| point(at.x + px(px_x), at.y + px(px_y));
+    let (mut cur_x, mut cur_y, mut idx) = (0., 0., 0);
+    while idx < tokens.len() {
+        let command = tokens[idx];
+        idx += 1;
         match command {
             "M" | "L" => {
-                (x, y) = (num(i), num(i + 1));
+                (cur_x, cur_y) = (num(idx), num(idx + 1));
                 if command == "M" {
-                    path.move_to(pt(x, y));
+                    path.move_to(pt(cur_x, cur_y));
                 } else {
-                    path.line_to(pt(x, y));
+                    path.line_to(pt(cur_x, cur_y));
                 }
-                i += 2;
+                idx += 2;
             }
             "C" => {
-                let (a, b, to) = (
-                    (num(i), num(i + 1)),
-                    (num(i + 2), num(i + 3)),
-                    (num(i + 4), num(i + 5)),
+                let (c1, c2, to) = (
+                    (num(idx), num(idx + 1)),
+                    (num(idx + 2), num(idx + 3)),
+                    (num(idx + 4), num(idx + 5)),
                 );
-                path.cubic_bezier_to(pt(to.0, to.1), pt(a.0, a.1), pt(b.0, b.1));
-                (x, y) = to;
-                i += 6;
+                path.cubic_bezier_to(pt(to.0, to.1), pt(c1.0, c1.1), pt(c2.0, c2.1));
+                (cur_x, cur_y) = to;
+                idx += 6;
             }
             "h" | "v" | "l" => {
                 let (dx, dy) = match command {
-                    "h" => (num(i), 0.),
-                    "v" => (0., num(i)),
-                    _ => (num(i), num(i + 1)),
+                    "h" => (num(idx), 0.),
+                    "v" => (0., num(idx)),
+                    _ => (num(idx), num(idx + 1)),
                 };
-                i += if command == "l" { 2 } else { 1 };
-                (x, y) = (x + dx, y + dy);
-                path.line_to(pt(x, y));
+                idx += if command == "l" { 2 } else { 1 };
+                (cur_x, cur_y) = (cur_x + dx, cur_y + dy);
+                path.line_to(pt(cur_x, cur_y));
             }
             _ => path.close(),
         }

@@ -36,16 +36,13 @@ impl Size {
     /// The square, the stroke in view-box units and the Spinner drawn while indeterminate;
     /// `tokens` carry the sidebar density (`data-sidebar-density`) the sidebar size follows.
     fn metrics(self, tokens: &TokenContext) -> (f32, f32, f32) {
-        if self == Self::Donut {
-            return (18., 3.5, 18.); // DS: ContextDonutButton.module.css:33
-        }
         let (length, stroke, spinner) = match self {
             Self::Xs => (Length::IconSizeXs, 3., Length::IconSizeXs), // DS: ProgressRing.module.css:12
             Self::Sm => (Length::IconSizeSm, 2.75, Length::IconSizeSm), // DS: ProgressRing.module.css:17
             Self::Md => (Length::IconSizeMd, 2.5, Length::IconSizeMd), // DS: ProgressRing.module.css:4
             Self::Lg => (Length::IconSizeLg, 2.25, Length::IconSizeLg), // DS: ProgressRing.module.css:22
             Self::Sidebar => (Length::SidebarIconSize, 1.875, Length::IconSizeMd), // DS: ProgressRing.module.css:28
-            Self::Donut => unreachable!(),
+            Self::Donut => return (18., 3.5, 18.), // DS: ContextDonutButton.module.css:33
         };
         (tokens.len(length), stroke, tokens.len(spinner))
     }

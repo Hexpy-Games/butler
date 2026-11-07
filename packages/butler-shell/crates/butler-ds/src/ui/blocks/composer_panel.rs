@@ -87,11 +87,14 @@ pub fn exit_progress(
     )
 }
 
+/// The key handler: the event, whether the frame itself has focus.
+type KeyHandler = Rc<dyn Fn(&KeyDownEvent, bool, &mut Window, &mut App)>;
+
 /// The frame's key handling and focus, as the panel decides them.
 pub struct FrameKeys {
     pub id: ElementId,
     /// The key and whether the frame itself (not a control in it) has focus.
-    pub on_key: Rc<dyn Fn(&KeyDownEvent, bool, &mut Window, &mut App)>,
+    pub on_key: KeyHandler,
 }
 
 /// The surface: the panel's content in its placement. `leaving` is [`exit_progress`].

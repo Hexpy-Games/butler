@@ -180,7 +180,12 @@ impl UsageSummaryRows {
                 .into_any_element(),
             Some(percent) => {
                 let remaining = self.remaining_label.clone();
-                ProgressMeter::new((self.id.clone(), window.id.clone()), percent as f32)
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "a finite percentage of a quota window; f32 holds it to display precision"
+                )]
+                let percent = percent as f32;
+                ProgressMeter::new((self.id.clone(), window.id.clone()), percent)
                     .label(window.label.clone())
                     .meta_element(
                         AnimatedNumber::new(

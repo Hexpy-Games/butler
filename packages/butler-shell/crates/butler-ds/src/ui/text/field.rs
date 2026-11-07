@@ -244,7 +244,7 @@ fn listen(spec: &Spec, state: &Entity<EditableTextState>, window: &mut Window, c
         .use_keyed_state((spec.id.clone(), "on-change"), cx, |_, _| Slot::default())
         .read(cx)
         .clone();
-    *slot.borrow_mut() = spec.on_change.clone();
+    slot.borrow_mut().clone_from(&spec.on_change);
     window.use_keyed_state((spec.id.clone(), "on-change-sub"), cx, {
         let (slot, state) = (slot.clone(), state.clone());
         move |window, cx| {
