@@ -1,13 +1,21 @@
 //! The showcase pages: one per B1 primitive, each mirroring its React `*.showcase.tsx`.
 mod adaptive_shell;
 mod animated_number;
+mod artifact_list;
+mod artifact_preview;
 mod aspect_frame;
+mod attachment_list;
 mod avatar;
+mod block_action_frame;
+mod block_columns;
+mod block_tabs;
 mod bottom_sheet;
 mod boxes;
 mod butler_thinking_mark;
 mod button;
 mod card;
+mod changed_line_diff;
+mod chart;
 mod clickable;
 mod collapsible;
 mod collapsible_nav_group;
@@ -20,6 +28,7 @@ mod disclosure_row;
 mod done_icon_button;
 mod drag_preview;
 mod dropdown_menu;
+mod element_chip;
 mod empty_line;
 mod event_timeline;
 mod expandable_text;
@@ -29,10 +38,12 @@ mod grid;
 mod icon_button;
 mod icon_slot;
 mod icon_tile;
+mod image_viewer;
 mod inline;
 mod inline_reference;
 mod input;
 mod inspector_panel;
+mod item_card;
 mod kbd;
 mod key_value_row;
 mod label;
@@ -43,16 +54,20 @@ mod media_frame;
 mod message_avatar_block;
 mod message_row;
 mod meta_list;
+mod metric_card;
+mod metric_grid;
 mod native_select;
 mod nav_drop_target;
 mod nav_parts;
 mod nav_row;
 mod nav_section;
+mod notice;
 mod overflow_action_menu;
 mod panel_header;
 mod pill_button;
 mod popover;
 mod presence;
+mod progress_meter;
 mod progress_ring;
 mod question_answer_card;
 mod queued_message;
@@ -68,6 +83,7 @@ mod slider;
 mod spinner;
 mod stack;
 mod status_capsule;
+mod status_checklist;
 mod success_check;
 mod surface_panel;
 mod switch;
@@ -253,12 +269,35 @@ fn blocks() -> Vec<Page> {
             question_answer_card
         ),
         page!("event-timeline", "EventTimeline", event_timeline),
+        page!("item-card", "ItemCard", item_card),
+        page!("chart", "Chart", chart),
+        page!("attachment-list", "AttachmentList", attachment_list),
+        page!("element-chip", "ElementChip", element_chip),
+        page!("artifact-list", "ArtifactList", artifact_list),
+        page!("artifact-preview", "ArtifactPreview", artifact_preview),
+        page!("changed-line-diff", "ChangedLineDiff", changed_line_diff),
+        page!("image-viewer", "ImageViewer", image_viewer),
+    ]
+}
+
+/// The answer, attachment and artifact blocks (P2-S5).
+fn answer_blocks() -> Vec<Page> {
+    vec![
+        page!("metric-card", "MetricCard", metric_card),
+        page!("metric-grid", "MetricGrid", metric_grid),
+        page!("progress-meter", "ProgressMeter", progress_meter),
+        page!("status-checklist", "StatusChecklist", status_checklist),
+        page!("block-columns", "BlockColumns", block_columns),
+        page!("block-tabs", "BlockTabs", block_tabs),
+        page!("block-action-frame", "BlockActionFrame", block_action_frame),
+        page!("notice", "Notice", notice),
     ]
 }
 
 pub(crate) fn all() -> Vec<Page> {
     let mut pages = primitives();
     pages.extend(blocks());
+    pages.extend(answer_blocks());
     pages
 }
 

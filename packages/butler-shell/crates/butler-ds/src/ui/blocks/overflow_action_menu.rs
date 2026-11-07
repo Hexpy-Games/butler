@@ -79,6 +79,11 @@ impl OverflowActionMenu {
         self
     }
 
+    pub fn items(mut self, items: impl IntoIterator<Item = OverflowItem>) -> Self {
+        self.items.extend(items);
+        self
+    }
+
     /// Controlled open state for row-context triggers.
     pub fn open(mut self, open: bool) -> Self {
         self.open = Some(open);

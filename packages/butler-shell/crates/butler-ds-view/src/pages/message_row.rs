@@ -1,10 +1,11 @@
 //! MessageRow.showcase.tsx (+ MessageRow.showcaseParts.tsx, ActivityTurn.showcase.tsx): the
 //! activity turns, the default turn, the Chats bubble and the send-and-stream demo. The Chats
-//! bubble's document row is a stand-in for the P2-S5 ArtifactList.
+//! bubble's document row is the ArtifactList.
 use std::time::Duration;
 
-use butler_ds::tokens::{Color, Length};
+use butler_ds::tokens::Length;
 use butler_ds::ui::Icon;
+use butler_ds::ui::blocks::artifact_list::{ArtifactItem, ArtifactList};
 use butler_ds::ui::blocks::markdown_content::MarkdownContent;
 use butler_ds::ui::blocks::message_row::{
     Entering, MessageBubble, MessageBubbleAttachments, MessageFooter, MessageRow,
@@ -157,7 +158,7 @@ pub(super) fn stories() -> Vec<Story> {
         },
         Story {
             name: "Chats bubble",
-            render: |lang, _, cx| bubble_turn(lang, cx),
+            render: |lang, _, _| bubble_turn(lang),
         },
         Story {
             name: "Send and stream",
@@ -273,50 +274,18 @@ fn default_turn(lang: Lang, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// The ArtifactList of one document, until P2-S5 ports the block: a bordered, raised row with an
-/// icon tile, the name and its meta.
-fn document_row(title: &'static str, meta: &'static str, cx: &App) -> AnyElement {
-    let ds = Ds::get(cx);
-    div()
-        .w_full()
-        .overflow_hidden()
-        .border(ds.len(Length::BorderHairline))
-        .border_color(ds.color(Color::Line))
-        .rounded(ds.len(Length::RadiusPopover))
-        .bg(ds.color(Color::SurfaceRaised))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(ds.len(Length::SpaceMd))
-                .min_h(px(68.))
-                .px(ds.len(Length::SpaceMd))
-                .py(ds.len(Length::SpaceSm))
-                .child(
-                    div()
-                        .flex()
-                        .flex_none()
-                        .items_center()
-                        .justify_center()
-                        .size(px(40.))
-                        .rounded(ds.len(Length::RadiusControl))
-                        .bg(ds.color(Color::Surface))
-                        .text_color(ds.color(Color::TextSecondary))
-                        .child(icon(Icon::FileText, IconSize::Lg, ds)),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .min_w_0()
-                        .child(Typo::body(title).tone(Tone::Primary))
-                        .child(Typo::caption(meta).tone(Tone::Tertiary)),
-                ),
+/// The ArtifactList of one document: its icon tile, the name and its meta.
+fn document_row(title: &'static str, meta: &'static str) -> AnyElement {
+    ArtifactList::new("mr-artifacts")
+        .item(
+            ArtifactItem::new(title)
+                .description(meta)
+                .on_open(|_, _, _| {}),
         )
         .into_any_element()
 }
 
-fn bubble_turn(lang: Lang, cx: &App) -> AnyElement {
+fn bubble_turn(lang: Lang) -> AnyElement {
     let l = footer_labels(lang);
     let (question, reply, document, meta) = lang.pick(
         (
@@ -343,7 +312,7 @@ fn bubble_turn(lang: Lang, cx: &App) -> AnyElement {
             MessageRow::new("mr-bubble-assistant", Role::Assistant)
                 .bubble()
                 .child(MessageBubble::new().child(MarkdownContent::new("mr-bubble-md", reply)))
-                .child(MessageBubbleAttachments::new().child(document_row(document, meta, cx)))
+                .child(MessageBubbleAttachments::new().child(document_row(document, meta)))
                 .child(
                     MessageFooter::new()
                         .child(CopyButton::new("mr-bubble-copy", l.copy, l.copied).text(reply))

@@ -141,3 +141,23 @@ harness reaches each state: `wait <ms>` runs the clock, and the pages name what 
 `page work-activity-block`, `expect anchor wa-disclosure-running-expanded-false`, `click 0`,
 `expect anchor wa-disclosure-running-expanded-true`; `page queued-message`, `click <send now>`, `wait 1000`,
 `expect anchor qm-send-now-delivered-true`.
+
+### P2-S5 additions (answer, attachment and artifact blocks)
+
+`scenes/ds-view.json` lists the sixteen new pages (`item-card`, `metric-card`, `metric-grid`, `progress-meter`,
+`status-checklist`, `block-columns`, `block-tabs`, `block-action-frame`, `notice`, `chart`, `attachment-list`,
+`element-chip`, `artifact-list`, `artifact-preview`, `changed-line-diff`, `image-viewer`). The Chart page has a native
+check with no React counterpart (the answer chart: grouped bars and a line), and the ArtifactPreview page draws its
+three page-surface stories without the scaled shell the React stories sit in. Stories that run on a clock (the
+ItemCard stream, the MetricCard and ProgressMeter replays) are reached with `wait <ms>` and these markers for
+`expect anchor`: `metric-round-<n>`, `pm-fill-<value>`, `ic-settle-<live|reduced>-columns-<n>-closed-<bool>`.
+Interactive states, all through the live harness:
+
+- Chart tooltip: `hover @chart-work+dx,dy` (offsets from the chart's centre) shows the cursor and the tooltip of the
+  category under the pointer; the answer charts are `@chart-answer-bar` and `@chart-answer-line`.
+- BlockActionFrame: `hover @baf-menu` shows its menu button, `hover @baf-spend` only the child block's (the container's
+  stays hidden); `right <story> <dx> <dy>` opens the menu.
+- BlockTabs: `click <n>` on a tab switches its blocks. ItemCard: `hover @ic-answer-0-card`.
+- ImageViewer: `click 0` opens the modal; `key right`, `key left`, `key +`, `key -`, `key 0` and `key escape` drive it;
+  `dragto` pans a zoomed picture; the surface names `iv-modal-surface`, `iv-first-stage` and the like as anchors.
+- Attachments: `hover @tile-<id>` shows a tile's remove dot (its id is the item id).

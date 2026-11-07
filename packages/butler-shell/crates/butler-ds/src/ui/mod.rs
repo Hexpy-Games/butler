@@ -10,6 +10,7 @@ pub mod blocks;
 pub mod bottom_sheet;
 pub mod button;
 pub mod card;
+pub mod chart;
 pub mod clickable;
 pub mod collapsible;
 pub mod context;

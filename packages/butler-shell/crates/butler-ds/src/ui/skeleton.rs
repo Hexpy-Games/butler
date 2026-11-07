@@ -70,6 +70,7 @@ pub struct Skeleton {
     height: Option<Height>,
     shape: Shape,
     lines: Option<usize>,
+    aspect: Option<f32>,
     still: bool,
 }
 
@@ -81,8 +82,15 @@ impl Skeleton {
             height: None,
             shape: Shape::Rect,
             lines: None,
+            aspect: None,
             still: false,
         }
+    }
+
+    /// A full-width box of this width-to-height ratio (a picture's place).
+    pub fn aspect(mut self, ratio: f32) -> Self {
+        self.aspect = Some(ratio);
+        self
     }
 
     pub fn width(mut self, width: Width) -> Self {
@@ -147,6 +155,7 @@ impl RenderOnce for Skeleton {
                     Look {
                         width: Fit::Fraction(paragraph_width(index, lines)),
                         height: self.height,
+                        aspect: None,
                         shape: self.shape,
                         still: self.still,
                     },
@@ -170,6 +179,7 @@ impl RenderOnce for Skeleton {
             Look {
                 width,
                 height: self.height,
+                aspect: self.aspect,
                 shape: self.shape,
                 still: self.still,
             },
@@ -190,6 +200,7 @@ enum Fit {
 struct Look {
     width: Fit,
     height: Option<Height>,
+    aspect: Option<f32>,
     shape: Shape,
     still: bool,
 }
@@ -215,11 +226,16 @@ fn block(ds: &Ds, key: &(ElementId, usize), look: Look) -> gpui::Div {
         Fit::Fraction(f) => el.w(relative(f)),
         Fit::Chars(width) => el.w(width).max_w_full(),
     };
+    if let Some(ratio) = look.aspect {
+        // `width: 100%; min-height: 0; aspect-ratio`.
+        el = el.w_full().aspect_ratio(ratio).min_h(px(0.));
+    }
     el = match look.height {
         Some(Height::Line) => el.h(ds.len(Length::SkeletonHeightLine)),
         Some(Height::Title) => el.h(ds.len(Length::SkeletonHeightTitle)).min_h(px(16.)),
         Some(Height::Control) => el.h(ds.len(Length::ControlHeightLg)).min_h(px(16.)),
         Some(Height::Row) => el.h(ds.len(Length::TouchTarget)).min_h(px(16.)),
+        None if look.aspect.is_some() => el,
         None => el.min_h(px(16.)), // DS: Skeleton.module.css:4 (1rem)
     };
     if Loop::Decorative.runs(ds) && !look.still {
@@ -312,6 +328,7 @@ impl RenderOnce for SkeletonRows {
                 let look = Look {
                     width: Fit::Fraction(0.3),
                     height: None,
+                    aspect: None,
                     shape: Shape::Rect,
                     still: false,
                 };
@@ -322,6 +339,7 @@ impl RenderOnce for SkeletonRows {
             let look = Look {
                 width: Fit::Auto,
                 height: None,
+                aspect: None,
                 shape: Shape::Rect,
                 still: false,
             };

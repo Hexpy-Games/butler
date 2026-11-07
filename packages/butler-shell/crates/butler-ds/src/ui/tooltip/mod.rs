@@ -132,6 +132,7 @@ pub struct Tooltip {
     side: Side,
     align: Align,
     open: Option<bool>,
+    fill: bool,
     child: Option<AnyElement>,
 }
 
@@ -144,8 +145,16 @@ impl Tooltip {
             side: Side::Top,
             align: Align::Center,
             open: None,
+            fill: false,
             child: None,
         }
+    }
+
+    /// The trigger takes the room its parent gives it (a truncating label) instead of its
+    /// content's size.
+    pub fn fill(mut self) -> Self {
+        self.fill = true;
+        self
     }
 
     /// Without a label the tooltip never opens.
@@ -220,6 +229,9 @@ impl RenderOnce for Tooltip {
             .on_hover(move |on, window, cx| {
                 on_hover(&hover_state, *on, label, window, cx);
             });
+        if self.fill {
+            wrapper = wrapper.flex_1().min_w_0();
+        }
         if shrink {
             wrapper = wrapper.self_start();
         }
