@@ -1,10 +1,11 @@
 //! Tokio lives on one owned background thread; gpui only receives channel results.
-mod session_view;
 mod convert;
 mod frame;
+mod jobs;
 mod live;
 mod presentation;
 mod refresh;
+mod session_view;
 mod watch;
 
 use super::wire;
@@ -20,6 +21,8 @@ use futures::{
     future::BoxFuture,
 };
 use std::{path::PathBuf, rc::Rc, sync::Arc};
+
+pub(crate) use jobs::Jobs;
 
 type Job = BoxFuture<'static, ()>;
 
@@ -88,15 +91,18 @@ impl Attachment {
             retry,
         }
     }
-    pub(crate) async fn next(&mut self) -> Option<Option<Rc<dyn Source>>> {
+    /// The next attach change: the new source (if any) and the runner for UI-side calls.
+    pub(crate) async fn next(&mut self) -> Option<(Option<Rc<dyn Source>>, Jobs)> {
         self.changes.next().await.map(|client| {
-            client.map(|client| {
+            let jobs = Jobs::new(self.worker.clone(), client.clone());
+            let source = client.map(|client| {
                 Rc::new(Agent {
                     worker: self.worker.clone(),
                     client,
                     presentation: Rc::default(),
                 }) as Rc<dyn Source>
-            })
+            });
+            (source, jobs)
         })
     }
 }

@@ -10,8 +10,8 @@ use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::filtered_select_popover::{Filter, Group, Item};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon::{IconSize, icon};
-use butler_shell_client::ShellClient;
 use butler_ds::ui::toast::Toast;
+use butler_shell_client::ShellClient;
 use gpui::{App, SharedString, Window};
 use serde::Deserialize;
 
@@ -140,10 +140,13 @@ pub(crate) fn picker_groups(
                 .map(|document| {
                     let pick = on_pick.clone();
                     let chosen = (*document).clone();
-                    Item::new(document.id.clone(), SharedString::from(document.title.clone()))
-                        .tooltip(document.title.clone())
-                        .icon(document_icon(document, ds))
-                        .on_select(move |window, cx| pick(&chosen, window, cx))
+                    Item::new(
+                        document.id.clone(),
+                        SharedString::from(document.title.clone()),
+                    )
+                    .tooltip(document.title.clone())
+                    .icon(document_icon(document, ds))
+                    .on_select(move |window, cx| pick(&chosen, window, cx))
                 })
                 .collect();
             Group::new(*group, group_title(group, cx), items)
@@ -203,7 +206,13 @@ pub(crate) async fn load_documents(
     let mut documents = Vec::new();
     loop {
         let value = client
-            .get_project_dashboard_materials(&project_id, cursor.as_deref(), Some(100), Some(true), None)
+            .get_project_dashboard_materials(
+                &project_id,
+                cursor.as_deref(),
+                Some(100),
+                Some(true),
+                None,
+            )
             .await
             .map_err(|_| ())?;
         let page: MaterialsPage = serde_json::from_value(value).map_err(|_| ())?;
@@ -256,14 +265,11 @@ async fn read_page(
 }
 
 /// `completeProjectDocument`: every page of the source in one text; never a partial report.
-async fn complete(
-    client: &ShellClient,
-    document: &ProjectDashboardDocument,
-) -> Result<String, ()> {
+async fn complete(client: &ShellClient, document: &ProjectDashboardDocument) -> Result<String, ()> {
     let mut page = read_page(client, document, None).await?;
     let mut markdown = page.markdown.clone();
     let mut seen = std::collections::HashSet::new();
-    while let Some(cursor) = page.next_cursor.clone() {
+    while let Some(cursor) = page.nextCursor.clone() {
         if !seen.insert(cursor.clone()) {
             return Err(());
         }

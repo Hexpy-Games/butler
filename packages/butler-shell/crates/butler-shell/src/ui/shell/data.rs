@@ -49,9 +49,10 @@ impl Shell {
     ) {
         self.rediscover = Some(attachment.retry.clone());
         self.connection_task = Some(cx.spawn(async move |this, cx| {
-            while let Some(source) = attachment.next().await {
+            while let Some((source, jobs)) = attachment.next().await {
                 if this
                     .update(cx, |this, cx| {
+                        cx.set_global(jobs);
                         this.lost(cx);
                         this.incompatible = false;
                         this.source = source;
