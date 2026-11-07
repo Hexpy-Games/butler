@@ -1,6 +1,5 @@
 //! TaskGraphCanvas.showcaseData.ts: the demo graphs the task graph showcases share. Copy is a
-//! per-language pair. Model names are assembled from parts: showcase copy is not a model id,
-//! and the source check keeps ids in the catalog.
+//! per-language pair. Model names are neutral labels, not catalog ids.
 use butler_ds::ui::blocks::task_graph_card::TaskGraphStatus as S;
 
 use crate::copy::Lang;
@@ -98,11 +97,11 @@ impl DemoTask {
 }
 
 fn luna() -> &'static str {
-    concat!("GPT", "-6", " Luna")
+    "Model 5.1"
 }
 
 fn sol() -> &'static str {
-    concat!("GPT", "-6.1", " Sol")
+    "Model 5.1 mini"
 }
 
 fn fan(from: &'static str, to: &[&'static str]) -> Vec<Edge> {
