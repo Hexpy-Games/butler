@@ -41,7 +41,10 @@ pub(crate) fn atom_chip(
     open: Option<OpenProject>,
 ) -> InlineReference {
     match atom {
-        Atom::Project { id: project_id, label } => {
+        Atom::Project {
+            id: project_id,
+            label,
+        } => {
             let known = navigation
                 .projects
                 .iter()
@@ -58,10 +61,14 @@ pub(crate) fn atom_chip(
                 _ => chip,
             }
         }
-        Atom::Session { id: session_id, label } => {
-            let node = navigation.space.nodes.iter().find(|node| {
-                node.kind == SpaceNodeKind::Session && node.entityId == *session_id
-            });
+        Atom::Session {
+            id: session_id,
+            label,
+        } => {
+            let node =
+                navigation.space.nodes.iter().find(|node| {
+                    node.kind == SpaceNodeKind::Session && node.entityId == *session_id
+                });
             let icon = if node.is_some_and(|node| node.scopeProjectId.is_some()) {
                 Icon::Notebook
             } else {

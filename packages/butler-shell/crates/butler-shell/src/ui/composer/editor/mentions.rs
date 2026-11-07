@@ -1,9 +1,9 @@
 //! `ComposerMentionMenu`, `mentionCandidates.ts`, `mentionToken.ts`.
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::suggestion_list::{SuggestionItemRow, SuggestionList};
-use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::context::Ds;
-use gpui::{App, IntoElement, ParentElement as _, SharedString, Window};
+use butler_ds::ui::icon::{IconSize, icon};
+use gpui::{App, ParentElement as _, SharedString, Window};
 
 use super::atoms::session_display_title;
 use super::{Atom, ComposerPart};
@@ -34,7 +34,11 @@ pub(crate) fn mention_token(text: &str, caret: usize) -> Option<MentionToken> {
     if !head[..query_start].ends_with('@') {
         return None;
     }
-    if !head[..at].chars().next_back().is_none_or(char::is_whitespace) {
+    if !head[..at]
+        .chars()
+        .next_back()
+        .is_none_or(char::is_whitespace)
+    {
         return None;
     }
     Some(MentionToken {
@@ -150,7 +154,11 @@ pub(crate) fn mention_candidates(
     general: &str,
 ) -> Vec<MentionCandidate> {
     let mut all = Vec::new();
-    for project in navigation.projects.iter().filter(|project| !project.archived) {
+    for project in navigation
+        .projects
+        .iter()
+        .filter(|project| !project.archived)
+    {
         all.push(candidate(
             MentionKind::Project,
             &project.id,
@@ -159,7 +167,11 @@ pub(crate) fn mention_candidates(
             None,
         ));
         for session in project.sessions.iter().flatten().filter(|s| !s.archived) {
-            all.push(session_candidate(session, general, Some(&project.display_name)));
+            all.push(session_candidate(
+                session,
+                general,
+                Some(&project.display_name),
+            ));
         }
     }
     for chat in navigation.chats.iter().filter(|chat| !chat.archived) {
@@ -196,7 +208,10 @@ fn match_rank(item: &MentionCandidate, query: &str) -> Option<u8> {
 }
 
 /// A bare `@` lists the most recent items; a typed query lists matches by quality, then recency.
-pub(crate) fn rank_mentions(candidates: &[MentionCandidate], raw_query: &str) -> Vec<MentionCandidate> {
+pub(crate) fn rank_mentions(
+    candidates: &[MentionCandidate],
+    raw_query: &str,
+) -> Vec<MentionCandidate> {
     let query = raw_query.to_lowercase();
     if query.is_empty() {
         let mut all: Vec<_> = candidates.to_vec();
@@ -221,8 +236,14 @@ impl MentionCandidate {
     pub(crate) fn atom(&self) -> Atom {
         let label = SharedString::from(self.title.clone());
         match self.kind {
-            MentionKind::Project => Atom::Project { id: self.id.clone(), label },
-            MentionKind::Session => Atom::Session { id: self.id.clone(), label },
+            MentionKind::Project => Atom::Project {
+                id: self.id.clone(),
+                label,
+            },
+            MentionKind::Session => Atom::Session {
+                id: self.id.clone(),
+                label,
+            },
         }
     }
 }

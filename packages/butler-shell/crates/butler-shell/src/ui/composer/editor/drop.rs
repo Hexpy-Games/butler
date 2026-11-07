@@ -6,12 +6,7 @@
 /// The byte offset in `text` nearest to `x` (`caretRangeFromPoint`), given each character's
 /// laid-out left edge from the editor's text layout. `None` when the pointer is outside the
 /// editor (`!root.contains(range.startContainer)`), so the caller keeps the current selection.
-pub(crate) fn drop_offset(
-    text: &str,
-    char_lefts: &[f32],
-    x: f32,
-    inside: bool,
-) -> Option<usize> {
+pub(crate) fn drop_offset(text: &str, char_lefts: &[f32], x: f32, inside: bool) -> Option<usize> {
     if !inside || char_lefts.is_empty() {
         return None;
     }
