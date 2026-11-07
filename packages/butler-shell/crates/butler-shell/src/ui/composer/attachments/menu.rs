@@ -1,6 +1,5 @@
 //! `ComposerAttachmentMenu` and `ComposerProjectDocumentMenu`: the "+" menu (attach a file or
 //! image, project documents, response mode) and the nested project-document picker.
-#![allow(dead_code, reason = "P2 shell-wave: wired by Opus at wave integration")]
 
 use std::rc::Rc;
 
@@ -14,10 +13,10 @@ use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::overlay::place::{Align, Side};
 use butler_ds::ui::popover::{MenuSize, Popover, PopoverContent};
 use butler_ds::ui::toast::{self, Toast};
-use butler_shell_client::ShellClient;
 use gpui::{AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Window};
 
 use super::documents::{PickDocument, load_documents, picker_filters, picker_groups, tr};
+use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::ProjectDashboardDocument;
 
 type Choose = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -31,7 +30,6 @@ pub(crate) struct AttachmentMenu {
     pub(crate) plan_mode: bool,
     /// Why the model takes no images (`imageRefusalLabel(imagesBlockedBy)`), when it does not.
     pub(crate) images_blocked: Option<SharedString>,
-    pub(crate) client: Option<ShellClient>,
     /// `openAttachmentPicker`: `true` for "Attach image".
     pub(crate) on_pick_file: Rc<dyn Fn(bool, &mut Window, &mut App)>,
     /// `handlePlanModeChange`.
@@ -244,7 +242,7 @@ fn document_picker(
             SharedString::from("all")
         });
     if nested.is_open(cx) {
-        load_when_needed(&state, &project_id, menu.client.clone(), cx);
+        load_when_needed(&state, &project_id, cx);
     } else {
         reset(&state, &search, &filter, cx);
     }
@@ -309,12 +307,7 @@ fn reset(
 }
 
 /// The effect on `projectId`: starts the document load once per opening.
-fn load_when_needed(
-    state: &Entity<DocumentsState>,
-    project_id: &str,
-    client: Option<ShellClient>,
-    cx: &mut App,
-) {
+fn load_when_needed(state: &Entity<DocumentsState>, project_id: &str, cx: &mut App) {
     if state.read(cx).project.as_deref() == Some(project_id) {
         return;
     }
@@ -325,17 +318,17 @@ fn load_when_needed(
             documents: Vec::new(),
         };
     });
-    let Some(client) = client else { return };
     let failed = tr(
         cx,
         "Project documents failed",
         "프로젝트 문서를 불러오지 못했습니다",
     );
     let state = state.clone();
-    // TODO(integration: run on agent worker)
+    let requested = project.clone();
+    let fetch = Jobs::run(cx, move |client| load_documents(client, requested));
     cx.spawn(async move |cx| {
-        let loaded = load_documents(client, project.clone()).await;
-        let _ = cx.update(|cx| {
+        let Some(loaded) = fetch.await else { return };
+        cx.update(|cx| {
             match loaded {
                 Ok(documents) => state.update(cx, |state, cx| {
                     if state.project.as_deref() == Some(project.as_str()) {

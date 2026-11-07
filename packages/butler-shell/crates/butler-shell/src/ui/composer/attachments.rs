@@ -2,18 +2,14 @@
 //! `usePendingProjectDocumentAttachment`, `ComposerElements`; the attachment menu and the
 //! project-document picker are in `menu` and `documents`.
 //!
-//! The composer's state (`composer::state`) holds an [`Attachments`] and calls the upload
-//! futures here; each future runs on the agent worker (`TODO(integration)` at its definition)
-//! and is applied with the epoch it began under, so a chat change drops its result as React's
+//! The composer holds an [`Attachments`] and runs the upload futures here through `Jobs`; each
+//! result is applied with the epoch it began under, so a chat change drops it as React's
 //! `uploadEpochRef` does.
-#![allow(dead_code, reason = "P2 shell-wave: wired by Opus at wave integration")]
 pub(crate) mod documents;
 pub(crate) mod menu;
 
-use std::cell::Cell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -34,7 +30,7 @@ use gpui::{
 use self::documents::tr;
 use super::state::ComposerAttachment;
 use crate::ui::shell::image_viewer::{ImageViewerHost, ViewerImage};
-use crate::ui::source::wire::{MessageFileKind, MessageFileRef, ProjectDashboardDocument};
+use crate::ui::source::wire::{MessageFileKind, MessageFileRef};
 
 /// `ATTACHMENT_MAX_BYTES` (`conversationUtils.ts`).
 pub(crate) const ATTACHMENT_MAX_BYTES: u64 = 10 * 1024 * 1024;
@@ -50,7 +46,7 @@ fn next_serial() -> u64 {
 #[derive(Clone, Default)]
 pub(crate) struct Extra {
     pub(crate) project_document: bool,
-    pub(crate) preview: Option<ImageSource>,
+    pub(crate) preview: Option<Arc<Image>>,
 }
 
 /// An uploaded file with its [`Extra`].
@@ -61,23 +57,23 @@ pub(crate) type Uploaded = (ComposerAttachment, Extra);
 #[derive(Default)]
 pub(crate) struct Attachments {
     extras: HashMap<String, Extra>,
-    epoch: Rc<Cell<u64>>,
+    epoch: Arc<AtomicU64>,
 }
 
 impl Attachments {
     /// The epoch cell the upload futures compare against.
-    pub(crate) fn epoch(&self) -> Rc<Cell<u64>> {
+    pub(crate) fn epoch(&self) -> Arc<AtomicU64> {
         self.epoch.clone()
     }
 
     /// The epoch an upload that starts now runs under.
     pub(crate) fn started(&self) -> u64 {
-        self.epoch.get()
+        self.epoch.load(Ordering::Relaxed)
     }
 
     /// The effect on `activeChatId` (and unmount): drops any upload in flight and the extras.
     pub(crate) fn reset(&mut self) {
-        self.epoch.set(self.epoch.get() + 1);
+        self.epoch.fetch_add(1, Ordering::Relaxed);
         self.extras.clear();
     }
 
@@ -89,7 +85,7 @@ impl Attachments {
     /// Finished uploads: the files to add to the state, or none when the chat changed since
     /// `started`.
     pub(crate) fn accept(&mut self, started: u64, files: Vec<Uploaded>) -> Vec<ComposerAttachment> {
-        if self.epoch.get() != started {
+        if self.started() != started {
             return Vec::new();
         }
         files
@@ -193,19 +189,6 @@ pub(crate) fn file_drag_active(cx: &App) -> bool {
         .is_some_and(|drag| drag.value.is::<ExternalPaths>())
 }
 
-/// `usePendingProjectDocumentAttachment`: the pending document once the open chat is in its
-/// project; it leaves `pending`. The caller then runs `documents::add_project_document`.
-pub(crate) fn take_pending_document(
-    pending: &mut Option<(String, ProjectDashboardDocument)>,
-    active_project_id: Option<&str>,
-) -> Option<ProjectDashboardDocument> {
-    let (project_id, _) = pending.as_ref()?;
-    if active_project_id != Some(project_id.as_str()) {
-        return None;
-    }
-    pending.take().map(|(_, document)| document)
-}
-
 /// What a batch of uploads came to.
 #[derive(Default)]
 pub(crate) struct UploadOutcome {
@@ -222,7 +205,7 @@ pub(super) async fn upload_bytes(
     name: &str,
     mime_type: &str,
     bytes: Vec<u8>,
-) -> Result<(MessageFileRef, Option<ImageSource>), ()> {
+) -> Result<(MessageFileRef, Option<Arc<Image>>), ()> {
     let upload = Upload {
         file_name: name.to_owned(),
         content_type: mime_type.to_owned(),
@@ -237,7 +220,7 @@ pub(super) async fn upload_bytes(
     let preview = (file.kind == MessageFileKind::Image)
         .then(|| ImageFormat::from_mime_type(mime_type))
         .flatten()
-        .map(|format| ImageSource::Image(Arc::new(Image::from_bytes(format, upload.bytes))));
+        .map(|format| Arc::new(Image::from_bytes(format, upload.bytes)));
     Ok((file, preview))
 }
 
@@ -245,17 +228,16 @@ pub(super) async fn upload_bytes(
 /// rest uploaded to the chat's session (`session_id`: `None` unless the chat is server-backed).
 /// The loop stops when `epoch` moves off `started`. The caller has already applied the image
 /// policy (`imageRefusal`) to `files`.
-// TODO(integration: run on agent worker)
 pub(crate) async fn upload_files(
     client: ShellClient,
     session_id: Option<String>,
     files: Vec<PickedFile>,
-    epoch: Rc<Cell<u64>>,
+    epoch: Arc<AtomicU64>,
     started: u64,
 ) -> UploadOutcome {
     let mut outcome = UploadOutcome::default();
     for file in files {
-        if epoch.get() != started {
+        if epoch.load(Ordering::Relaxed) != started {
             break;
         }
         if file.size == 0 {
@@ -266,8 +248,8 @@ pub(crate) async fn upload_files(
             outcome.oversized.push(file.name);
             continue;
         }
-        // Blocking read; it belongs to the agent worker this future runs on.
-        let Ok(bytes) = std::fs::read(&file.path) else {
+        let path = file.path.clone();
+        let Ok(Ok(bytes)) = tokio::task::spawn_blocking(move || std::fs::read(path)).await else {
             outcome.failed.push(file.name);
             continue;
         };
@@ -372,7 +354,7 @@ fn tile(
         .meta(format_size(file.size_bytes))
         .extension(extension(&file.safe_name, cx));
     if let Some(preview) = extra.and_then(|e| e.preview.clone()) {
-        item = item.thumbnail(preview, ThumbnailFit::Cover);
+        item = item.thumbnail(ImageSource::Image(preview), ThumbnailFit::Cover);
     }
     if extra.is_some_and(|e| e.project_document) {
         item = item.icon(Icon::BookOpenText);
@@ -466,53 +448,4 @@ pub(crate) fn open_attachment(
         cx.update_global::<ImageViewerHost, _>(|host, _| host.open(images, index));
         cx.refresh_windows();
     }
-}
-
-/// A picked page element in the draft (`ElementDraft` item).
-pub(crate) struct ElementDraftItem {
-    pub(crate) id: SharedString,
-    pub(crate) title: SharedString,
-    pub(crate) site: SharedString,
-    /// A library item shows as a plain chip.
-    pub(crate) library: bool,
-    /// The element's crop, or its image file, from the file's bytes.
-    pub(crate) thumbnail: Option<ImageSource>,
-    /// The image refusal label that keeps it from being sent.
-    pub(crate) refusal: Option<SharedString>,
-}
-
-/// `ComposerElements`: the draft's picked elements as chips; `None` when there are none.
-pub(crate) fn composer_elements(
-    items: &[ElementDraftItem],
-    on_remove: impl Fn(&SharedString, &mut Window, &mut App) + 'static,
-    cx: &App,
-) -> Option<AnyElement> {
-    if items.is_empty() {
-        return None;
-    }
-    let rows = items
-        .iter()
-        .map(|item| {
-            let mut row =
-                AttachmentItem::new(item.id.clone(), item.title.clone()).meta(item.site.clone());
-            if !item.library && item.refusal.is_none() {
-                row = row.element(item.site.clone());
-            }
-            if let Some(reason) = item.refusal.clone() {
-                row = row.blocked(reason);
-            }
-            if let Some(src) = item.thumbnail.clone() {
-                row = row.thumbnail(src, ThumbnailFit::Contain);
-            }
-            row
-        })
-        .collect();
-    let delete = tr(cx, "Delete", "삭제");
-    Some(
-        AttachmentList::new("composer-elements", rows)
-            .variant(Variant::Chips)
-            .remove_label(move |_| delete.to_owned())
-            .on_remove(on_remove)
-            .into_any_element(),
-    )
 }

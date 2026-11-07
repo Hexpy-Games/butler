@@ -3,7 +3,6 @@
 //! One in-memory layer: the shell has no origin storage and no second durable cache, so the
 //! `newestComposerDraft` merge of the two has nothing to merge. A write count orders drafts
 //! where React orders by `updated_at`.
-#![allow(dead_code, reason = "P2 shell-wave: wired by Opus at wave integration")]
 use std::collections::HashMap;
 
 use crate::ui::source::wire::{MessageContent, MessageContentPart};

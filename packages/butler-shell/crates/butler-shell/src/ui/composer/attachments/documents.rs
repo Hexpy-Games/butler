@@ -1,10 +1,10 @@
 //! `ComposerProjectDocumentGroups`, `projectDocuments` (`projectDocumentFileName`,
 //! `projectDocumentType`, the picker filters), `projectDocumentSource` and the project-document
 //! half of `useFileAttachments` (`addProjectDocument`).
-#![allow(dead_code, reason = "P2 shell-wave: wired by Opus at wave integration")]
 
-use std::cell::Cell;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::filtered_select_popover::{Filter, Group, Item};
@@ -197,7 +197,6 @@ struct MaterialsPage {
 
 /// The project's documents, every page of them; `Err` when a request or a page fails. An
 /// unavailable source ends the list with what was read (`page.status !== "ready"`).
-// TODO(integration: run on agent worker)
 pub(crate) async fn load_documents(
     client: ShellClient,
     project_id: String,
@@ -309,17 +308,16 @@ fn source_kind(document: &ProjectDashboardDocument) -> Option<ProjectSourceRefer
 /// `addProjectDocument`: a document with a project and revision becomes a source reference; any
 /// other is read whole and uploaded as `<title>.md`. `epoch` is the attachments' epoch cell and
 /// `started` its value when the add began.
-// TODO(integration: run on agent worker)
 pub(crate) async fn add_project_document(
     client: ShellClient,
     session_id: Option<String>,
     document: ProjectDashboardDocument,
     topic: Option<String>,
-    epoch: Rc<Cell<u64>>,
+    epoch: Arc<AtomicU64>,
     started: u64,
 ) -> DocumentOutcome {
     let name = document_file_name(&document);
-    let stale = || epoch.get() != started;
+    let stale = || epoch.load(Ordering::Relaxed) != started;
     if let (Some(project), Some(_)) = (&document.project_id, &document.revision) {
         let Ok(source) = read_page(&client, &document, None).await else {
             return failed(&stale, name);

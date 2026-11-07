@@ -1,9 +1,7 @@
 //! Send while running → `/session-queue` (queue/steer): `queueMessage`, `useComposerQueue`.
-#![allow(dead_code, reason = "P2 shell-wave: wired by Opus at wave integration")]
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use butler_ds::ui::context::Lang;
 use butler_shell_client::{Error, ShellClient};
 use gpui::{App, Global};
 use serde_json::{Value, json};
@@ -14,15 +12,7 @@ use crate::ui::source::wire::{
     QueuedMessageRecord, ReasoningEffort, SessionQueueView,
 };
 
-/// `appCopy.interfaceFeedback.queueFailed`
-pub(crate) fn queue_failed_label(lang: Lang) -> &'static str {
-    match lang {
-        Lang::Ko => "메시지 대기열 추가 실패",
-        Lang::En => "Message queue failed",
-    }
-}
-
-fn effort_wire(effort: &ReasoningEffort) -> Option<&'static str> {
+pub(super) fn effort_wire(effort: &ReasoningEffort) -> Option<&'static str> {
     match effort {
         ReasoningEffort::None => Some("none"),
         ReasoningEffort::Low => Some("low"),
@@ -34,7 +24,7 @@ fn effort_wire(effort: &ReasoningEffort) -> Option<&'static str> {
     }
 }
 
-fn access_wire(mode: &AccessMode) -> Option<&'static str> {
+pub(super) fn access_wire(mode: &AccessMode) -> Option<&'static str> {
     match mode {
         AccessMode::ReadOnly => Some("read_only"),
         AccessMode::AskFirst => Some("ask_first"),
@@ -118,16 +108,15 @@ fn queue_body(chat_id: &str, text: &str, controls: &ComposerControls) -> Value {
     })
 }
 
-/// `queueMessage` for a started chat: the queue after the message was added. The caller shows
-/// `queue_failed_label` on an error and runs `onAccepted` / `onRejected` of the submission. A
-/// draft chat sends instead of queueing (the caller's `sendMessage`).
-pub(crate) async fn queue_message(
+/// `queueMessage` for a started chat: the queue after the message was added. The caller runs it
+/// on the agent worker, shows `queue_failed` on an error and runs `onAccepted` / `onRejected` of
+/// the submission. A draft chat sends instead of queueing (the caller's `sendMessage`).
+pub(super) async fn queue_message(
     client: &ShellClient,
     chat_id: &str,
     text: &str,
     controls: &ComposerControls,
 ) -> Result<SessionQueueView, Error> {
-    // TODO(integration: run on agent worker)
     let value = client
         .queue_message(&queue_body(chat_id, text, controls))
         .await?;

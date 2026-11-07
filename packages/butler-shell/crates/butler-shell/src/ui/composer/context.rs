@@ -7,11 +7,6 @@
 //! [`ComposerContextEvent::LoadUsage`] and [`ComposerContextEvent::LoadQuota`], and the owner
 //! runs [`load_usage`] / [`load_quota`] and hands the results to `usage_loaded` /
 //! `quota_loaded`.
-#![allow(
-    dead_code,
-    unused_imports,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 mod copy;
 mod popover;
 mod timeline;
@@ -195,7 +190,6 @@ impl ComposerContextControl {
             .flatten();
         if self.requested_usage.as_ref() != Some(&key) {
             self.requested_usage = Some(key);
-            // TODO(integration: run on agent worker): `load_usage(client, &session_id)`.
             cx.emit(ComposerContextEvent::LoadUsage {
                 session_id,
                 revision: revision.clone(),
@@ -205,7 +199,6 @@ impl ComposerContextControl {
             let quota_key = usage_key(&provider_id, &revision);
             if self.requested_quota.as_ref() != Some(&quota_key) {
                 self.requested_quota = Some(quota_key);
-                // TODO(integration: run on agent worker): `load_quota(client, &provider_id)`.
                 cx.emit(ComposerContextEvent::LoadQuota { provider_id });
             }
         }

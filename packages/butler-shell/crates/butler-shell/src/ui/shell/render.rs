@@ -149,6 +149,7 @@ impl Render for Shell {
             self.set_dark(system_dark(window), cx);
         }
         self.frame_inputs(window, cx);
+        self.feed_composer(window, cx);
         if self.source.is_some()
             && let Some(request) = self.pending_navigation.take()
         {

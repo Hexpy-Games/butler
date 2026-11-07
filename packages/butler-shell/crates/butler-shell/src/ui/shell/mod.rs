@@ -1,6 +1,7 @@
 //! The window: AdaptiveShell frame="cards" (AdaptiveShellCards.module.css, AdaptiveShellFrame):
 //! the sidebar track, the chat card with the floating composer, the title row, and the
 //! suggest-a-change dialog when one is open.
+mod composer_link;
 mod data;
 mod frame;
 pub(crate) mod image_viewer;
@@ -22,7 +23,7 @@ use gpui::{
 };
 
 use crate::ui::chat::Chat;
-use crate::ui::composer::{Composer, ComposerEvent};
+use crate::ui::composer::Composer;
 use crate::ui::dialog::Dialog;
 use crate::ui::i18n::Locale;
 use crate::ui::motion::Hover;
@@ -168,6 +169,7 @@ impl Shell {
         };
         Self::transcript_hooks(cx);
         Self::notification_responses(window, cx);
+        Self::install_composer(cx);
         shell.sync_composer(cx);
         shell.connect(cx);
         Self::tick_ages(cx);
@@ -233,20 +235,5 @@ impl Shell {
     fn toggle_sidebar(&mut self, _: &ToggleSidebar, _: &mut Window, cx: &mut Context<Self>) {
         self.sidebar_open = !self.sidebar_open;
         cx.notify();
-    }
-
-    fn on_composer(
-        &mut self,
-        _: &Entity<Composer>,
-        event: &ComposerEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match event {
-            ComposerEvent::Send(text) => self.send(text.to_string(), cx),
-            ComposerEvent::Stop => self.stop(cx),
-            ComposerEvent::Answer(request, decision) => self.answer(request, decision.clone(), cx),
-            ComposerEvent::Modify(card) => self.open_modify(card, window, cx),
-        }
     }
 }

@@ -174,7 +174,6 @@ pub(super) struct QuotaWindowView {
 }
 
 /// `loadConversationUsage`: this session's `/usage-monitor` view; `None` when the call fails.
-// TODO(integration: run on agent worker)
 pub(crate) async fn load_usage(client: &ShellClient, session_id: &str) -> Option<UsageMonitorView> {
     let value = client
         .get_usage_monitor(Some(session_id), None)
@@ -184,7 +183,6 @@ pub(crate) async fn load_usage(client: &ShellClient, session_id: &str) -> Option
 }
 
 /// `loadProviderQuota`: the stored quota of a provider; `None` when the call fails.
-// TODO(integration: run on agent worker)
 pub(crate) async fn load_quota(client: &ShellClient, provider_id: &str) -> Option<ProviderQuota> {
     let value = client.get_provider_quota(provider_id).await.ok()?;
     serde_json::from_value(value).ok()
@@ -201,7 +199,7 @@ pub(crate) enum UsageStatus {
 /// The wall-clock offset of the local zone, in milliseconds. The DS buckets and `usage_time` read
 /// local calendar time as wall-clock milliseconds.
 pub(super) fn local_offset_ms() -> i64 {
-    0
+    i64::from(chrono::Local::now().offset().local_minus_utc()) * 1000
 }
 
 /// The current time in epoch milliseconds (`Date.now()`).

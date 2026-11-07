@@ -1,11 +1,10 @@
 //! `composerImagePolicy.ts`: which attached images the selected model takes.
-#![allow(dead_code, reason = "P2 shell-wave: wired by Opus at wave integration")]
 use std::collections::HashMap;
 
 use butler_ds::ui::context::Lang;
 
 use super::ComposerAttachment;
-use super::model::ModelSummary;
+use crate::ui::composer::menus::ModelChoice;
 use crate::ui::source::wire::MessageFileKind;
 
 /// The gateway's image kinds (message_file_store `kind`): other image/* files are ordinary files.
@@ -88,7 +87,7 @@ pub(crate) struct FileLike<'a> {
 /// Only an explicit `supported` allows images. `unsupported` blocks them, and unknown or
 /// absent metadata (or no resolved model) blocks them too, matching the gateway, which rejects
 /// images at admission when capability is unknown.
-pub(crate) fn composer_image_policy(model: Option<&ModelSummary>) -> ComposerImagePolicy {
+pub(crate) fn composer_image_policy(model: Option<&ModelChoice>) -> ComposerImagePolicy {
     let Some(model) = model.filter(|m| m.image_input_support.as_deref() == Some("supported"))
     else {
         return ComposerImagePolicy {
@@ -120,12 +119,12 @@ pub(crate) fn composer_image_policy(model: Option<&ModelSummary>) -> ComposerIma
     }
 }
 
-fn model_image_block(model: Option<&ModelSummary>) -> ModelImageBlock {
+fn model_image_block(model: Option<&ModelChoice>) -> ModelImageBlock {
     match model {
         Some(m) if m.image_input_support.as_deref() == Some("unsupported") => {
             ModelImageBlock::Model
         }
-        Some(m) if m.provider_id == "local" => ModelImageBlock::Undeclared,
+        Some(m) if m.provider_id.as_ref() == "local" => ModelImageBlock::Undeclared,
         _ => ModelImageBlock::Unknown,
     }
 }

@@ -6,7 +6,7 @@ use butler_ds::ui::icon::{IconSize, icon};
 use gpui::{App, ParentElement as _, SharedString, Window};
 
 use super::atoms::session_display_title;
-use super::{Atom, ComposerPart};
+use super::Atom;
 use crate::ui::i18n::Locale;
 use crate::ui::source::wire::{NavigationView, SessionSummary};
 
@@ -46,31 +46,6 @@ pub(crate) fn mention_token(text: &str, caret: usize) -> Option<MentionToken> {
         end: caret,
         query: head[query_start..].to_owned(),
     })
-}
-
-/// `replaceMentionToken`: the parts that replace the `@word` under the caret in `text` with
-/// `atom` and a following space (none added when whitespace follows already). The caller
-/// runs it once the IME is idle and applies it as one undo step.
-pub(crate) fn replace_mention_token(
-    text: &str,
-    caret: usize,
-    atom: Atom,
-) -> Option<Vec<ComposerPart>> {
-    let token = mention_token(text, caret)?;
-    let after = &text[token.end..];
-    let spaced = after.chars().next().is_some_and(char::is_whitespace);
-    let tail = if spaced {
-        after.to_owned()
-    } else {
-        format!(" {after}")
-    };
-    let mut parts = Vec::new();
-    if token.start > 0 {
-        parts.push(ComposerPart::Text(text[..token.start].to_owned()));
-    }
-    parts.push(ComposerPart::Atom(atom));
-    parts.push(ComposerPart::Text(tail));
-    Some(parts)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

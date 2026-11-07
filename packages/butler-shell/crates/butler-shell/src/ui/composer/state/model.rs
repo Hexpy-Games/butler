@@ -1,31 +1,17 @@
 //! `composerModelResolution.ts`: the model, reasoning, access and plan mode the composer shows.
 //!
-//! The wire module has no model catalog or settings types yet, so the fields the resolution
-//! reads are declared here (`AppModelSummary`, `ModelCatalogView`, `SettingsView`).
-#![allow(dead_code, reason = "P2 shell-wave: wired by Opus at wave integration")]
+//! The wire module has no model catalog or settings types, so the catalog and settings views the
+//! resolution reads are declared here; a model is the menus' [`ModelChoice`].
+use crate::ui::composer::menus::ModelChoice;
 use crate::ui::source::wire::{AccessMode, ReasoningEffort, SessionControlsView};
-
-/// `AppModelSummary`, the fields the composer reads.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct ModelSummary {
-    pub(crate) provider_id: String,
-    pub(crate) model_ref: String,
-    pub(crate) default_reasoning_effort: ReasoningEffort,
-    pub(crate) reasoning_efforts: Vec<ReasoningEffort>,
-    pub(crate) runtime_supported: bool,
-    pub(crate) availability: Option<String>,
-    pub(crate) image_input_support: Option<String>,
-    pub(crate) image_accepted_mime_types: Option<Vec<String>>,
-    pub(crate) image_max_inline_bytes: Option<i64>,
-}
 
 /// `ModelCatalogView`
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct ModelCatalog {
     pub(crate) generation: String,
     pub(crate) default_model_ref: String,
-    pub(crate) registered_models: Option<Vec<ModelSummary>>,
-    pub(crate) models: Vec<ModelSummary>,
+    pub(crate) registered_models: Option<Vec<ModelChoice>>,
+    pub(crate) models: Vec<ModelChoice>,
 }
 
 /// `SettingsView`, the composer's defaults.
@@ -68,7 +54,7 @@ pub(crate) enum ControlsLoadState {
 pub(crate) struct ComposerModelResolution {
     pub(crate) state: ComposerModelState,
     pub(crate) model: String,
-    pub(crate) metadata: Option<ModelSummary>,
+    pub(crate) metadata: Option<ModelChoice>,
     pub(crate) reasoning: ReasoningEffort,
     pub(crate) access_mode: AccessMode,
     pub(crate) plan_mode: bool,
@@ -85,8 +71,8 @@ pub(crate) struct ModelTruthInput<'a> {
 }
 
 /// `runtimeModels`
-pub(crate) fn runtime_models(catalog: &ModelCatalog) -> Vec<&ModelSummary> {
-    let ready = |model: &&ModelSummary| {
+pub(crate) fn runtime_models(catalog: &ModelCatalog) -> Vec<&ModelChoice> {
+    let ready = |model: &&ModelChoice| {
         model.runtime_supported && model.availability.as_deref() == Some("ready")
     };
     match catalog.registered_models.as_deref() {
@@ -129,7 +115,7 @@ pub(crate) fn resolve_composer_model_truth(input: &ModelTruthInput) -> ComposerM
         view.controls.model.as_str()
     });
     let unavailable = (input.catalog.registered_models.iter().flatten()).find(|model| {
-        model.model_ref == selected
+        model.model_ref.as_ref() == selected
             && model
                 .availability
                 .as_deref()
@@ -167,16 +153,23 @@ pub(crate) fn resolve_composer_model_truth(input: &ModelTruthInput) -> ComposerM
         Some(input.catalog.default_model_ref.as_str()),
     ];
     let metadata = (preferred.into_iter().flatten())
-        .find_map(|model_ref| models.iter().find(|model| model.model_ref == model_ref))
+        .find_map(|model_ref| {
+            models
+                .iter()
+                .find(|model| model.model_ref.as_ref() == model_ref)
+        })
         .unwrap_or(first);
     let reasoning = if metadata.reasoning_efforts.contains(&base.reasoning) {
         base.reasoning.clone()
     } else {
-        metadata.default_reasoning_effort.clone()
+        metadata
+            .default_reasoning_effort
+            .clone()
+            .unwrap_or(ReasoningEffort::Medium)
     };
     ComposerModelResolution {
         state: ComposerModelState::Ready,
-        model: metadata.model_ref.clone(),
+        model: metadata.model_ref.to_string(),
         metadata: Some((*metadata).clone()),
         reasoning,
         ..base

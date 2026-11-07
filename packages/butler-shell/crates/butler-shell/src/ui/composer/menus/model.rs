@@ -10,8 +10,9 @@ use gpui::{AnyElement, App, Entity, IntoElement as _, SharedString, Window};
 
 use crate::ui::source::wire::ReasoningEffort;
 
-/// `AppModelSummary` (app/types.ts:84): the fields the composer menus read.
-#[derive(Clone, PartialEq)]
+/// `AppModelSummary` (app/types.ts:84): the fields the composer menus, the model resolution and
+/// the image policy read.
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ModelChoice {
     pub(crate) provider_id: SharedString,
     pub(crate) provider_label: SharedString,
@@ -25,6 +26,15 @@ pub(crate) struct ModelChoice {
     pub(crate) local_reasoning_budget_ratio: Option<f64>,
     /// `availability`: `None` when the catalog does not say; otherwise the wire string.
     pub(crate) availability: Option<SharedString>,
+    pub(crate) runtime_supported: bool,
+    /// `platform`: set for local runtimes (llama_cpp, ollama, lm_studio, custom).
+    pub(crate) platform: Option<SharedString>,
+    /// `auth_type`: "chatgpt_oauth" or "api_key".
+    pub(crate) auth_type: Option<SharedString>,
+    /// `image_input_support`: "supported", "unsupported" or "unknown"; `None` when absent.
+    pub(crate) image_input_support: Option<SharedString>,
+    pub(crate) image_accepted_mime_types: Option<Vec<String>>,
+    pub(crate) image_max_inline_bytes: Option<i64>,
 }
 
 /// `ModelOptionsFilter`: the search text and provider filter, kept across reopening.

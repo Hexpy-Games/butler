@@ -4,40 +4,31 @@
 //! menus and toolbar read and write it through [`ComposerState::update`]. The fields React's
 //! `useComposerStoreBridge` copies in from hooks (`canSend`, `activeModel`, ...) are plain
 //! fields the composer sets from [`send_state`] and [`resolve_composer_model_truth`].
-#![allow(dead_code, reason = "P2 shell-wave: wired by Opus at wave integration")]
 use std::collections::HashMap;
 
 use gpui::{App, Global};
 
+use crate::ui::composer::menus::ModelChoice;
 use crate::ui::source::wire::{
     AccessMode, MessageContent, MessageContentPart, MessageFileKind, MessageFileRef,
-    NavigationView, ReasoningEffort, WorkerActivitySummary,
+    ReasoningEffort, WorkerActivitySummary,
 };
 use crate::ui::store::drafts::DraftCache;
 
 mod image_policy;
 mod model;
 
-#[allow(
-    unused_imports,
-    reason = "the wave's other composer units import these through `composer::state`"
-)]
 pub(crate) use image_policy::{
-    AttachmentPickerFilter, AttachmentPickerKind, ComposerImagePolicy, FileLike, ImageRefusal,
-    ModelImageBlock, attachment_picker_filter, blocked_image_attachment_ids, composer_image_policy,
-    image_refusal, image_refusal_label, is_image_file,
+    AttachmentPickerFilter, AttachmentPickerKind, FileLike, ImageRefusal, attachment_picker_filter,
+    blocked_image_attachment_ids, composer_image_policy, image_refusal, image_refusal_label,
 };
-#[allow(
-    unused_imports,
-    reason = "the wave's other composer units import these through `composer::state`"
-)]
 pub(crate) use model::{
     CatalogState, ComposerModelResolution, ComposerModelState, ComposerSettings, ControlsLoadState,
-    ModelCatalog, ModelSummary, ModelTruthInput, resolve_composer_model_truth, runtime_models,
+    ModelCatalog, ModelTruthInput, resolve_composer_model_truth, runtime_models,
 };
 
 /// `ComposerStore.draftSessionId`'s initial value.
-const NEW_CHAT_DRAFT: &str = "draft:chat";
+pub(crate) const NEW_CHAT_DRAFT: &str = "draft:chat";
 
 /// `workspaceMode`
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -76,20 +67,14 @@ pub(crate) struct ComposerState {
     pub(crate) workspace_mode: WorkspaceMode,
     pub(crate) draft_revision: u64,
     pub(crate) draft_session_id: String,
-    pub(crate) engaged: bool,
     pub(crate) text: String,
     pub(crate) content_parts: Option<MessageContent>,
     pub(crate) attachments: Vec<ComposerAttachment>,
     /// Attached images the selected model refuses; kept, but they block send.
     pub(crate) blocked_attachments: HashMap<String, ImageRefusal>,
-    pub(crate) picker_kind: AttachmentPickerKind,
-    /// `openAttachmentPicker` asked for the file dialog; the attachments unit takes it.
-    pub(crate) picker_requested: bool,
     pub(crate) uploading_count: usize,
-    pub(crate) model_menu_open: bool,
-    pub(crate) access_menu_open: bool,
+    /// The context donut's popover is open (the composer stays expanded meanwhile).
     pub(crate) context_popover_open: bool,
-    pub(crate) model: Option<ComposerModelResolution>,
     pub(crate) send: SendState,
     /// `focusComposer` was asked for; the editor takes it on its next frame.
     pub(crate) focus_requested: bool,
@@ -102,18 +87,12 @@ impl Default for ComposerState {
             workspace_mode: WorkspaceMode::Local,
             draft_revision: 0,
             draft_session_id: NEW_CHAT_DRAFT.to_owned(),
-            engaged: false,
             text: String::new(),
             content_parts: None,
             attachments: Vec::new(),
             blocked_attachments: HashMap::new(),
-            picker_kind: AttachmentPickerKind::Files,
-            picker_requested: false,
             uploading_count: 0,
-            model_menu_open: false,
-            access_menu_open: false,
             context_popover_open: false,
-            model: None,
             send: SendState::default(),
             focus_requested: false,
             drafts: DraftCache::default(),
@@ -148,22 +127,6 @@ impl ComposerState {
         self.draft_revision
     }
 
-    /// `restoreDraftSession`: false when the draft moved on since `revision`.
-    pub(crate) fn restore_draft_session(
-        &mut self,
-        revision: u64,
-        session_id: &str,
-        text: String,
-        content_parts: Option<MessageContent>,
-    ) -> bool {
-        if self.draft_revision != revision || self.draft_session_id != session_id {
-            return false;
-        }
-        self.text = text;
-        self.content_parts = content_parts;
-        true
-    }
-
     /// `setContentParts`
     pub(crate) fn set_content_parts(&mut self, content: MessageContent) {
         let text = message_content_text(&content);
@@ -186,15 +149,29 @@ impl ComposerState {
         self.content_parts = None;
     }
 
+    /// A content part joins the end of the draft (a project source reference).
+    pub(crate) fn append_content_part(&mut self, part: MessageContentPart) {
+        let mut content = self
+            .content_parts
+            .clone()
+            .unwrap_or_else(|| MessageContent {
+                version: 1,
+                parts: if self.text.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![MessageContentPart::Text {
+                        text: self.text.clone(),
+                    }]
+                },
+                attachment_metadata: None,
+            });
+        content.parts.push(part);
+        self.set_content_parts(content);
+    }
+
     /// `removeAttachment`
     pub(crate) fn remove_attachment(&mut self, id: &str) {
         self.attachments.retain(|attachment| attachment.id != id);
-    }
-
-    /// `openAttachmentPicker`
-    pub(crate) fn open_attachment_picker(&mut self, kind: AttachmentPickerKind) {
-        self.picker_kind = kind;
-        self.picker_requested = true;
     }
 
     /// `focusComposer`: the editor takes the request on its next frame.
@@ -213,26 +190,6 @@ pub(crate) fn use_draft_session(session_id: &str, cx: &mut App) {
     });
 }
 
-/// `composerProjectContext.activeProjectId`
-pub(crate) fn active_project_id(
-    navigation: &NavigationView,
-    active_chat_id: &str,
-) -> Option<String> {
-    if let Some(project) = active_chat_id.strip_prefix("dashboard:") {
-        return Some(project.to_owned());
-    }
-    if let Some(project) = active_chat_id.strip_prefix("draft:project:") {
-        return Some(project.to_owned());
-    }
-    navigation
-        .projects
-        .iter()
-        .find(|project| {
-            (project.sessions.iter().flatten()).any(|session| session.id == active_chat_id)
-        })
-        .map(|project| project.id.clone())
-}
-
 /// What `useComposerState` derives for send and stop.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct SendState {
@@ -247,7 +204,7 @@ pub(crate) struct SendInputs<'a> {
     pub(crate) attachments: &'a [ComposerAttachment],
     pub(crate) is_sending: bool,
     pub(crate) uploading_count: usize,
-    pub(crate) active_model: Option<&'a ModelSummary>,
+    pub(crate) active_model: Option<&'a ModelChoice>,
     /// An active turn progress snapshot exists, or the summary's `turn_state` is active.
     pub(crate) parent_active: bool,
     /// A visible, cancellable worker exists (`firstCancellableWorker`).
@@ -303,7 +260,7 @@ pub(crate) fn send_state(input: &SendInputs) -> (SendState, HashMap<String, Imag
 }
 
 /// The reasoning efforts the model offers (`availableReasoning`).
-pub(crate) fn available_reasoning(active_model: Option<&ModelSummary>) -> Vec<ReasoningEffort> {
+pub(crate) fn available_reasoning(active_model: Option<&ModelChoice>) -> Vec<ReasoningEffort> {
     active_model
         .map(|model| model.reasoning_efforts.clone())
         .filter(|efforts| !efforts.is_empty())
@@ -347,6 +304,7 @@ pub(crate) struct SubmitInput {
 }
 
 /// An accepted-to-send draft: its text, controls and where it came from.
+#[derive(Clone)]
 pub(crate) struct Submission {
     pub(crate) text: String,
     pub(crate) controls: ComposerControls,
@@ -370,8 +328,6 @@ impl ComposerState {
         {
             return None;
         }
-        self.model_menu_open = false;
-        self.access_menu_open = false;
         let controls = ComposerControls {
             model: input.controls_touched.then_some(input.model),
             reasoning_effort: input.controls_touched.then_some(input.reasoning),
@@ -414,23 +370,6 @@ impl ComposerState {
             if unchanged {
                 self.drafts.write(&sent.session_id, "", None);
             }
-        }
-    }
-
-    /// `onRejected`: the draft comes back when the composer still shows the target chat empty.
-    pub(crate) fn submission_rejected(&mut self, sent: &Submission, target_session_id: &str) {
-        if target_session_id == sent.session_id
-            || self.draft_session_id != target_session_id
-            || !self.text.is_empty()
-        {
-            return;
-        }
-        match sent.controls.content_parts.clone() {
-            Some(content) => self.set_content_parts(content),
-            None => self.set_text(&sent.text),
-        }
-        if self.attachments.is_empty() {
-            self.attachments.clone_from(&sent.attachments);
         }
     }
 }

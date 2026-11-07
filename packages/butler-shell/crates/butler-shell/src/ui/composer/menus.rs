@@ -25,6 +25,7 @@ pub(crate) use model::{
     model_options_filter, reasoning_budget_summary, reasoning_option_label,
 };
 
+use super::state::{ComposerModelState, WorkspaceMode};
 use crate::ui::source::wire::{AccessMode, ReasoningEffort};
 
 /// `ACCESS_MODES`: the order the access menus list them, the recommended mode first.
@@ -206,13 +207,6 @@ pub(crate) fn plan_mode_badge(
     )
 }
 
-/// `ComposerWorkspaceSelect`'s `workspaceMode`.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum WorkspaceMode {
-    Local,
-    Worktree,
-}
-
 /// `ComposerWorkspaceSelect`: a worktree needs Git, so the choice exists only for new chats in
 /// a Git project (`git_project`, from `selectIsGitProject(draftProjectId(..))`).
 pub(crate) fn workspace_select(
@@ -268,23 +262,15 @@ pub(crate) fn workspace_select(
     Some(div().child(trigger).child(list).into_any_element())
 }
 
-/// `ComposerModelState` without `error`.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ModelState {
-    Loading,
-    Ready,
-    Unavailable,
-}
-
 /// `ComposerModelStatusButton`: the model control while there is no model to pick: still
 /// loading, or none added (`model` is a registered model that is not ready).
 pub(crate) fn model_status_button(
-    state: ModelState,
+    state: ComposerModelState,
     model: Option<&ModelChoice>,
     cx: &App,
 ) -> AnyElement {
     let lang = Ds::get(cx).lang();
-    if model.is_none() && state != ModelState::Unavailable {
+    if model.is_none() && state != ComposerModelState::Unavailable {
         return ComposerControl::new(
             "model-button",
             pick(lang, ("Checking model", "모델 확인 중")),
@@ -318,7 +304,7 @@ pub(crate) fn model_status_button(
 
 /// What `ModelMenu` reads from the composer store and the catalog.
 pub(crate) struct ModelMenuProps {
-    pub(crate) state: ModelState,
+    pub(crate) state: ComposerModelState,
     /// The chosen model; `None` while there is none.
     pub(crate) active: Option<ModelChoice>,
     /// The registered model of `model` when its availability is not ready.
@@ -349,7 +335,7 @@ pub(crate) fn model_menu(props: ModelMenuProps, window: &mut Window, cx: &mut Ap
         on_reasoning,
     } = props;
     let active = match active {
-        Some(active) if unavailable.is_none() && state == ModelState::Ready => active,
+        Some(active) if unavailable.is_none() && state == ComposerModelState::Ready => active,
         _ => return model_status_button(state, unavailable.as_ref(), cx),
     };
     let popover = Popover::new("composer-model-menu", window, cx);
