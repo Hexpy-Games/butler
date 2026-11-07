@@ -1,7 +1,6 @@
 //! The copy of the authority decision card: `composer.permission`, `interfaceDetails` (allow
-//! and deny), `interfaceTemplates.approvalRequest`, `conversation.imageTools`, `permissions` and
-//! the modify dialog's `composer.approval` strings. Each method names its `packages/butler-i18n`
-//! key.
+//! and deny), `interfaceTemplates.approvalRequest`, `conversation.imageTools` and `permissions`.
+//! Each method names its `packages/butler-i18n` key.
 use butler_ds::ui::context::{Ds, Lang};
 use gpui::App;
 
@@ -33,7 +32,7 @@ impl Authority {
 
     /// interfaceDetails.deny, allowOnce, allowInChat
     pub(crate) fn deny(self) -> &'static str {
-        self.pick("Deny", "거부")
+        self.pick("Deny", "거절")
     }
 
     pub(crate) fn allow_once(self) -> &'static str {
@@ -78,29 +77,6 @@ impl Authority {
             "Could not submit the decision. Try again.",
             "결정을 전달하지 못했습니다.",
         )
-    }
-
-    /// composer.approval.modify, modifyPlaceholder, submitModify; cancel
-    pub(crate) fn modify(self) -> &'static str {
-        self.pick(
-            "Modify or suggest another approach",
-            "수정 또는 다른 방법 제안",
-        )
-    }
-
-    pub(crate) fn modify_placeholder(self) -> &'static str {
-        self.pick(
-            "Describe the approach Butler should take instead",
-            "대신 수행할 방법을 입력하세요",
-        )
-    }
-
-    pub(crate) fn submit_modify(self) -> &'static str {
-        self.pick("Submit suggestion", "제안 제출")
-    }
-
-    pub(crate) fn cancel(self) -> &'static str {
-        self.pick("Cancel", "취소")
     }
 
     /// interfaceTemplates.approvalRequest.risk.{low, medium, high}

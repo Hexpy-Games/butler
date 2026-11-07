@@ -2,7 +2,6 @@
 //! ComposerDecisionAttachment: the authority card in the composer slot, and the pill that
 //! reopens it while the owner composes a message instead.
 mod mask;
-mod modify;
 mod request;
 mod schedule;
 mod visible;
@@ -70,7 +69,6 @@ pub(crate) fn initiated_approval(raw: &Value, cx: &App) -> Option<ApprovalLineTe
 pub(super) enum Verdict {
     Allow(&'static str),
     Deny,
-    Modify(String),
 }
 
 /// The hook's own state (`pending`, `failed`) and what a decision needs.
@@ -92,7 +90,6 @@ async fn send(client: ShellClient, session: String, request_ref: String, verdict
             "allowed",
         ),
         Verdict::Deny => (AuthorityDecision::Deny, "denied"),
-        Verdict::Modify(instruction) => (AuthorityDecision::Modify { instruction }, "modified"),
     };
     let Ok(raw) = client
         .answer_authority(&session, &request_ref, decision)
@@ -158,7 +155,6 @@ struct Decision {
     has_scope: bool,
     allow_site: Option<AllowSite>,
     progress: Progress,
-    modify_open: Entity<bool>,
     pending_count: usize,
 }
 
@@ -201,7 +197,6 @@ fn decision(view: &SessionView, window: &mut Window, cx: &mut App) -> Option<Dec
     let key = format!("{session}:{}", card.request_ref);
     let pending = state("authority-pending", &session, HashSet::new(), window, cx);
     let failed = state("authority-failed", &session, None::<String>, window, cx);
-    let modify_open = state("authority-modify-open", &session, false, window, cx);
     let copy = Authority::get(cx);
     let operation = card.approval.as_ref().and_then(|a| a.operation.as_ref());
     Some(Decision {
@@ -222,7 +217,6 @@ fn decision(view: &SessionView, window: &mut Window, cx: &mut App) -> Option<Dec
             pending,
             failed,
         },
-        modify_open,
     })
 }
 
@@ -237,15 +231,7 @@ pub(crate) fn authority_surface(
         return None;
     }
     let decision = decision(ctx.view, window, cx)?;
-    Some(surface(&decision, window, cx))
-}
-
-fn set_open(open: &Entity<bool>, value: bool, window: &mut Window, cx: &mut App) {
-    open.update(cx, |open, cx| {
-        *open = value;
-        cx.notify();
-    });
-    window.refresh();
+    Some(surface(&decision, cx))
 }
 
 /// A control the live harness drives by id.
@@ -323,7 +309,7 @@ fn allow(d: &Decision) -> SplitButton {
     }
 }
 
-fn surface(d: &Decision, window: &mut Window, cx: &mut App) -> AnyElement {
+fn surface(d: &Decision, cx: &mut App) -> AnyElement {
     let copy = d.copy;
     let details = d.view.details.iter().map(|line| match line {
         Line::Text(text) => Detail::line(approval_line(text)),
@@ -343,12 +329,6 @@ fn surface(d: &Decision, window: &mut Window, cx: &mut App) -> AnyElement {
     if d.progress.failed {
         panel = panel.error(copy.decision_failed());
     }
-    let open = d.modify_open.clone();
-    let modify = Button::new("authority-modify-button")
-        .variant(Variant::Secondary)
-        .size(Size::Sm)
-        .text(copy.modify())
-        .on_click(move |_, window, cx| set_open(&open, true, window, cx));
     let handles = d.handles.clone();
     let mut deny = Button::new("authority-deny-button")
         .variant(Variant::Secondary)
@@ -361,22 +341,9 @@ fn surface(d: &Decision, window: &mut Window, cx: &mut App) -> AnyElement {
         deny = deny.disabled();
     }
     panel = panel
-        .custom_action(handle("authority-modify", modify))
         .custom_action(handle("authority-deny", deny))
         .custom_action(handle("authority-allow-always", allow(d)));
-    let dialog = modify::dialog(
-        modify::Modify {
-            open: d.modify_open.clone(),
-            copy,
-            title: &d.view.title,
-            details: &d.view.details,
-            handles: d.handles.clone(),
-        },
-        window,
-        cx,
-    );
     crate::ui::widgets::anchor(div().id("approval-card"), "approval-card")
         .child(panel)
-        .child(dialog)
         .into_any_element()
 }

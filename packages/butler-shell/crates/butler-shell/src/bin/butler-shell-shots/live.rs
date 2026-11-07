@@ -131,8 +131,6 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "approval" => wait(h, |s, _| has_request(s)),
         "exact" => exact(h, arg),
         "allow" | "deny" => decide(h, command == "allow"),
-        // The card's Suggest a change button, as the owner presses it.
-        "modify" => super::frame::command(h, "click", "authority-modify"),
         "cancel" => {
             h.update(|s, _, cx| s.stop(cx))?;
             wait(h, |s, _| s.store.running().is_none())

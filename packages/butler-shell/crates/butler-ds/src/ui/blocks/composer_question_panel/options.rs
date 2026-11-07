@@ -12,6 +12,7 @@ use crate::ui::clickable::Clickable;
 use crate::ui::context::Ds;
 use crate::ui::icon::{IconSize, icon};
 use crate::ui::icon_slot::{IconSlot, SlotSize, SlotTone};
+use crate::ui::strut;
 use crate::ui::tag::{Tag, Tone as TagTone};
 use crate::ui::text::{Input, InputVariant, TextSize};
 use crate::ui::typo::{Tone, Typo, Wrap};
@@ -186,14 +187,17 @@ fn row_content(
                 .flex_col()
                 .flex_1()
                 .min_w_0()
-                .child(
+                // A flex row, not the panel's stretching grid: the Tag keeps its own width
+                // instead of a full-width `max-content` wrapper that squeezes the label.
+                .child(strut::flex_scope(
+                    false,
                     div()
                         .flex()
                         .items_baseline()
                         .gap(ds.len(Length::SpaceXs))
                         .child(label)
                         .children(tag),
-                )
+                ))
                 .children(description),
         )
         .child(

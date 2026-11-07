@@ -3,8 +3,8 @@
 //! column moves left; narrower it floats on TintedGlass over the conversation while open. Each
 //! layout enters and leaves with a fade; its content has a scroller of its own.
 use gpui::{
-    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Styled as _,
-    Window, div, px,
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
+    SharedString, Styled as _, Window, div, px,
 };
 use std::rc::Rc;
 
@@ -140,12 +140,17 @@ fn scroll(
 
 fn panel(
     slot: &Slot,
-    layout: AsideLayout,
+    (layout, on): (AsideLayout, bool),
     ds: &Ds,
     scroller: AnyElement,
     shell_w: f32,
 ) -> AnyElement {
-    let aside = div().absolute().flex().flex_col().min_h_0();
+    let mut aside = div().absolute().flex().flex_col().min_h_0();
+    // The open aside takes the pointer over the conversation under it, as the topmost DOM box
+    // does; a leaving one is inert (`AsideSlot`), so presses pass through it.
+    if on {
+        aside = aside.occlude();
+    }
     let space = |token| f32::from(ds.len(token));
     match layout {
         AsideLayout::Docked => aside
@@ -220,7 +225,7 @@ fn layer(
     );
     let content = kept.read(cx).clone().filter(|_| alpha > 0.001)?;
     let scroller = scroll(slot, layout, content(layout), window, cx);
-    let panel = panel(slot, layout, Ds::get(cx), scroller, shell_w);
+    let panel = panel(slot, (layout, on), Ds::get(cx), scroller, shell_w);
     Some(
         div()
             .absolute()

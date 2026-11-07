@@ -87,6 +87,11 @@ pub fn selectable(
     let handle = focus.clone();
     div()
         .id(id)
+        // A flex box lays the text out as its own box. In a block the text would join the
+        // block's inline paragraph, which measures and paints it, so the text's own layout, the
+        // one presses and drags map through, would never be measured.
+        .flex()
+        .flex_col()
         .track_focus(&focus)
         .cursor_text()
         .on_mouse_down(

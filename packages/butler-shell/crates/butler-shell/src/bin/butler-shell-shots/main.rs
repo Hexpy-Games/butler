@@ -207,8 +207,6 @@ fn connected(dir: &Path, dark: bool, theme: &str, options: &Options) -> anyhow::
     h.shot(dir, &format!("w2-1x-{theme}-chat"))?;
     h.update(|shell, window, cx| open_chat(shell, fixture::APPROVAL, window, cx))?;
     h.shot(dir, &format!("w2-1x-{theme}-approval"))?;
-    frame::command(&mut h, "click", "authority-modify")?;
-    h.shot(dir, &format!("w2-1x-{theme}-modify-dialog"))?;
     h.update(|shell, window, cx| open_chat(shell, fixture::QUESTION, window, cx))?;
     h.shot(dir, &format!("w2-1x-{theme}-question"))?;
     h.update(|shell, window, cx| shell.open_chat(None, window, cx))?;
