@@ -47,11 +47,16 @@ pub(super) struct Face {
 /// Maps an external href to a favicon (`MarkdownFaviconSource`); `None` shows the globe.
 pub type Favicon = Rc<dyn Fn(&str) -> Option<ImageSource>>;
 
+/// Resolves a Markdown image `src` to what gpui loads (`MessageInlineImage`: a message file
+/// fetched through the app's client); `None` falls back to loading `src` as it is.
+pub type ImageResolver = Rc<dyn Fn(&str) -> Option<ImageSource>>;
+
 /// What the blocks below share while one document renders.
 #[derive(Clone)]
 pub(super) struct Env {
     pub(super) reveal: Option<Reveal>,
     pub(super) favicon: Option<Favicon>,
+    pub(super) image: Option<ImageResolver>,
     /// The copy button's label and its copied label; no button without them.
     pub(super) copy: Option<(SharedString, SharedString)>,
     pub(super) density: Density,
@@ -77,6 +82,7 @@ pub struct MarkdownContent {
     source: SharedString,
     density: Density,
     favicon: Option<Favicon>,
+    image: Option<ImageResolver>,
     streaming: Option<bool>,
     copy: Option<(SharedString, SharedString)>,
 }
@@ -88,6 +94,7 @@ impl MarkdownContent {
             source: source.into(),
             density: Density::Document,
             favicon: None,
+            image: None,
             streaming: None,
             copy: None,
         }
@@ -101,6 +108,12 @@ impl MarkdownContent {
     /// Favicons of external links (`faviconSrc`); omitted, every link shows the globe.
     pub fn favicon(mut self, favicon: impl Fn(&str) -> Option<ImageSource> + 'static) -> Self {
         self.favicon = Some(Rc::new(favicon));
+        self
+    }
+
+    /// Image sources (`MessageInlineImage`): the app resolves message-file `src`s it can load.
+    pub fn image_source(mut self, resolve: impl Fn(&str) -> Option<ImageSource> + 'static) -> Self {
+        self.image = Some(Rc::new(resolve));
         self
     }
 
@@ -148,6 +161,7 @@ impl RenderOnce for MarkdownContent {
         let env = Env {
             reveal,
             favicon: self.favicon,
+            image: self.image,
             copy: self.copy,
             density: self.density,
             viewport_height,
