@@ -101,11 +101,13 @@
   right: calc(var(--right-panel-width) * -1);
 }
 
-/* The content card. Flat: layout only. */
+/* The content card. Flat: layout only. It takes the room its host gives it,
+   so a frame inside (a file viewer's page) can fill the card's height. */
 .card {
   display: flex;
   min-width: 0;
   min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
 }
 

@@ -21,7 +21,7 @@ import {
   type MessageFileSourceState,
   type RefreshFileUrls,
 } from "@/hooks/useMessageFileSource.ts";
-import { artifactPreviewMode } from "./artifactDisplay";
+import { artifactPreviewMode, previewIsFrame } from "./artifactDisplay";
 import { HtmlFileFrame } from "./HtmlFileFrame";
 import { OutputFrame } from "./OutputFrame";
 import { useArtifactText, type ArtifactTextState } from "./useArtifactText";
@@ -31,7 +31,8 @@ const MARKDOWN_COMPONENTS: Components = { a: MarkdownLink };
 
 /**
  * An artifact's content: markdown, a picture, a PDF, code or text in monospace, a page Butler made in its
- * isolated frame, and the user's own uploaded page as source. `surface="page"` flows it in the host's scroll.
+ * isolated frame, and the user's own uploaded page as source. `surface="page"` flows it in the host's scroll;
+ * a frame there fills the host.
  */
 export function ArtifactBody({ artifact, refreshFileUrls, surface = "card" }: {
   artifact: SessionArtifactSummary;
@@ -49,7 +50,7 @@ export function ArtifactBody({ artifact, refreshFileUrls, surface = "card" }: {
   });
   useFreshFrameSource(file, mode === "pdf", refreshFileUrls);
   return (
-    <ArtifactPreview surface={surface} data-test-class="artifact-viewer" data-preview-mode={mode}>
+    <ArtifactPreview surface={surface} fill={surface === "page" && previewIsFrame(mode)} data-test-class="artifact-viewer" data-preview-mode={mode}>
       {mode === "web" ? <OutputFrame key={artifact.id} outputId={artifact.id} title={artifact.title} sessionId={artifact.session_id} preview={artifact.url?.startsWith("/previews/")} /> : mode === "html" ? <HtmlFileFrame key={file.path} path={file.path} title={artifact.title} /> : renderPreview({ mode, state, text, title: artifact.title, file, save: surface === "page" ? <OpenInAppButton artifact={artifact} /> : <ArtifactSaveButton artifact={artifact} /> })}
     </ArtifactPreview>
   );

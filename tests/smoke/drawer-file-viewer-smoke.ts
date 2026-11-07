@@ -44,7 +44,7 @@ try {
     else if (item.title.endsWith(".pdf")) await viewer.locator('[data-preview-mode="pdf"] iframe').waitFor();
     else await viewer.locator("img").evaluate((node: HTMLImageElement) => node.decode());
     await assertDrawer(page);
-    await assertReadingWidth(page, item === drawerDoc);
+    await assertReadingWidth(page);
     if (item === drawerDoc) assert((await viewer.locator('[role="tab"]').count()) > 1, "closing also returns from a multi-file viewer");
     await capture(page, item.id);
     if (item === drawerOutput) {
@@ -71,14 +71,14 @@ try {
     const geometry = await viewer.boundingBox();
     assert(geometry && geometry.x >= -0.5 && geometry.x + geometry.width <= width + 0.5, JSON.stringify({ width, geometry }));
     await assertDrawer(page);
-    await assertReadingWidth(page, true);
+    await assertReadingWidth(page);
     await capture(page, `viewer-over-drawer-${width}`);
     await closeViewer(page);
     if (width >= 1800) {
       await openDrawer(page);
       await page.locator(`[data-library-item="${drawerDoc.id}"]`).getByText(drawerDoc.title, { exact: true }).click();
       await viewer.getByText("세션에서 작성한 본문입니다.", { exact: true }).waitFor();
-      await assertReadingWidth(page, true);
+      await assertReadingWidth(page);
       await capture(page, `editable-document-${width}`);
       await closeViewer(page);
     }
@@ -97,7 +97,7 @@ try {
   const scrollTop = Number(await scroller.getAttribute("data-open-scroll"));
   await viewer.getByText("세션에서 작성한 본문입니다.", { exact: true }).waitFor();
   assert(scrollTop > 0, "exercise a scrolled drawer");
-  await assertReadingWidth(page, true);
+  await assertReadingWidth(page);
   await capture(page, "editable-document-scrolled");
   await closeViewer(page);
   assert.equal(await scroller.getAttribute("data-scroll-probe"), "retained", "same drawer DOM");
@@ -149,15 +149,24 @@ async function closeViewer(page: Page) {
   await viewer.waitFor({ state: "hidden" });
   await page.locator('[data-test-class="library-page"]').waitFor({ state: "visible" });
 }
-async function assertReadingWidth(page: Page, fill: boolean) {
+/** Every file fills the pane's width: a frame (a page, an HTML file, a PDF) edge to edge and down to the pane's bottom, with no toolbar of its own; anything else with 48px insets. */
+async function assertReadingWidth(page: Page) {
   const geometry = await page.locator('[data-test-class="file-viewer"]').evaluate((viewer) => {
     const frame = viewer.querySelector('[data-test-class="file-viewer-page"]')!.getBoundingClientRect();
-    const content = viewer.querySelector('[data-test-class="artifact-viewer"], [data-test-class="editable-document"]')!.getBoundingClientRect();
+    const body = viewer.querySelector('[data-test-class="artifact-viewer"], [data-test-class="editable-document"]')!;
+    const content = body.getBoundingClientRect();
     return { pane: viewer.clientWidth, page: frame.width, content: content.width,
-      center: content.x + content.width / 2 - (frame.x + frame.width / 2) };
+      center: content.x + content.width / 2 - (frame.x + frame.width / 2),
+      fills: ["web", "html", "pdf"].includes(body.getAttribute("data-preview-mode") ?? ""),
+      gapBelow: viewer.getBoundingClientRect().top + viewer.clientTop + viewer.clientHeight - content.bottom,
+      controls: body.querySelectorAll("button, select").length };
   });
-  const expected = Math.min(fill ? 1400 : 760, geometry.pane) - 96;
+  const expected = geometry.fills ? geometry.pane : geometry.pane - 96;
   assert(Math.abs(geometry.content - expected) <= 1, `reading width: ${JSON.stringify(geometry)}, expected ${expected}`);
   assert(Math.abs(geometry.center) <= 1, "reading content stays centered");
-  console.log(JSON.stringify({ theme, width: page.viewportSize()!.width, fill, ...geometry }));
+  if (geometry.fills) {
+    assert(Math.abs(geometry.gapBelow) <= 1, `the frame reaches the pane's bottom: ${JSON.stringify(geometry)}`);
+    assert.equal(geometry.controls, 0, "the frame draws no toolbar of its own");
+  }
+  console.log(JSON.stringify({ theme, width: page.viewportSize()!.width, ...geometry }));
 }
