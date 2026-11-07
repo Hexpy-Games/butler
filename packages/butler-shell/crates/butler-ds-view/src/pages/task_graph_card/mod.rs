@@ -10,7 +10,7 @@ use butler_ds::ui::blocks::task_graph_card::{
 };
 use butler_ds::ui::layout::{Columns, Grid, Space, Stack};
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, App, IntoElement as _, Window};
+use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use self::data::{DemoTask, GraphId};
 use self::demo::{demo_card, status_label};

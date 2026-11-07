@@ -239,7 +239,7 @@ fn demo(spec: Spec, lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement
         state.clone(),
         state,
     );
-    let mut strip = TabStrip::new((spec.id, "strip"), groups)
+    let mut strip = TabStrip::new(gpui::ElementId::Name(format!("{}-strip", spec.id).into()), groups)
         .active(active)
         .labels(labels(lang))
         .on_activate(move |id, _, cx| {
@@ -285,7 +285,7 @@ fn demo(spec: Spec, lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement
     }
     if spec.trailing {
         let label = lang.pick("Bring in a tab", "내 탭 가져오기");
-        strip = strip.child(IconButton::new((spec.id, "bring"), label).glyph(Icon::TabIn));
+        strip = strip.child(IconButton::new(gpui::ElementId::Name(format!("{}-bring", spec.id).into()), label).glyph(Icon::TabIn));
     }
     let row = div().w_full();
     match spec.cap {
