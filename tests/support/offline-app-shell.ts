@@ -10,6 +10,7 @@ import type { CanonGrant } from "../../packages/butler-app/client/ui/src/app/can
 import type { AuthorityRequestsTransportView, ChatGptAccountView, ConversationPermissionView, NewChatBriefingView, PersonalizationView,
   SessionQueueView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import type { CanonOverview, CanonSidebar } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { CanonQueueView } from "../../packages/butler-app/client/shared/canon-queue-contracts.ts";
 import type { SessionPendingAsks } from "../../packages/butler-app/client/shared/pending-asks-contracts.ts";
 
 const at = "2026-10-25T09:00:00Z";
@@ -21,6 +22,9 @@ export function appShellRead(url: URL, method: string): unknown {
   const segment = (pattern: RegExp) => { const match = path.match(pattern); return match ? decodeURIComponent(match[1]!) : undefined; };
   const session = segment(/^\/sessions\/([^/]+)\/pending-asks$/u);
   if (session) return { session_id: session, open_count: 0, asks: [] } satisfies SessionPendingAsks;
+  const queue = segment(/^\/sessions\/([^/]+)\/canon\/queue$/u);
+  if (queue) return { session_id: queue, graph_revision: 0, plan: null, counts: { running: 0, failed: 0, held: 0, waiting: 0 },
+    chains: [] } satisfies CanonQueueView;
   const sidebar = segment(/^\/projects\/([^/]+)\/canon\/sidebar$/u);
   if (sidebar) return { project_id: sidebar, groups: [] } satisfies CanonSidebar;
   const project = segment(/^\/projects\/([^/]+)\/canon$/u);
