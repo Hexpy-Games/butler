@@ -10,8 +10,7 @@ use butler_ds::ui::context_menu::{ContextMenu, ContextMenuContent, Item};
 use butler_ds::ui::copy_button::CopyButton;
 use butler_ds::ui::typo::Typo;
 use gpui::{
-    AnyElement, App, ClipboardItem, IntoElement as _, ParentElement as _, SharedString, Window,
-    div,
+    AnyElement, App, ClipboardItem, IntoElement as _, ParentElement as _, SharedString, Window, div,
 };
 
 use super::TranscriptCtx;
@@ -81,7 +80,11 @@ fn answer_options(question: &UserQuestion) -> Vec<&UserQuestionOptionsItem> {
     question
         .options
         .iter()
-        .filter(|o| o.kind.as_ref().is_none_or(|k| *k == UserQuestionOptionsItemKind::Answer))
+        .filter(|o| {
+            o.kind
+                .as_ref()
+                .is_none_or(|k| *k == UserQuestionOptionsItemKind::Answer)
+        })
         .collect()
 }
 
@@ -169,7 +172,10 @@ fn visible_system_message_text(msg: &MessageRecord, korean: bool) -> String {
 fn is_failure_notice(msg: &MessageRecord) -> bool {
     msg.role == MessageRecordRole::Assistant
         && msg.status.as_deref() == Some("failed")
-        && msg.safe_error_code.as_deref().is_some_and(|c| !c.is_empty())
+        && msg
+            .safe_error_code
+            .as_deref()
+            .is_some_and(|c| !c.is_empty())
 }
 
 fn message_tone(msg: &MessageRecord) -> Tone {
@@ -216,7 +222,11 @@ fn virtual_message_row(
         row = row.avatar(MessageAvatarBlock::new().role(AvatarRole::System));
     }
     let row = row.child(message_content(msg, t, korean, window, cx));
-    let menu = ContextMenu::new(SharedString::from(format!("message-menu-{}", msg.id)), window, cx);
+    let menu = ContextMenu::new(
+        SharedString::from(format!("message-menu-{}", msg.id)),
+        window,
+        cx,
+    );
     let text = visible_system_message_text(msg, korean);
     let label = if korean { "복사" } else { "Copy" };
     let content = menu.content(

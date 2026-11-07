@@ -39,7 +39,10 @@ impl MessageCache {
         if let Some(entries) = older.activity_history {
             let history = view.activity_history.get_or_insert_with(Vec::new);
             for entry in entries {
-                match history.iter_mut().find(|known| known.turn_id == entry.turn_id) {
+                match history
+                    .iter_mut()
+                    .find(|known| known.turn_id == entry.turn_id)
+                {
                     Some(known) => *known = entry,
                     None => history.push(entry),
                 }
@@ -127,7 +130,10 @@ fn replace_record(previous: &mut MessageRecord, incoming: MessageRecord) -> bool
         next.work_blocks = previous.work_blocks.take();
     }
     if next.turn_activity_rows.is_none()
-        && previous.turn_activity_rows.as_ref().is_some_and(|r| !r.is_empty())
+        && previous
+            .turn_activity_rows
+            .as_ref()
+            .is_some_and(|r| !r.is_empty())
     {
         next.turn_activity_rows = previous.turn_activity_rows.take();
     }

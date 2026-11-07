@@ -65,8 +65,13 @@ fn has(value: &Option<String>) -> bool {
 fn is_internal_name(value: &Option<String>) -> bool {
     value.as_deref().is_some_and(|v| {
         let trimmed = v.trim();
-        let normalized = trimmed.to_lowercase().split_whitespace().collect::<Vec<_>>().join("_");
-        INTERNAL_TOOL_NAMES.contains(&trimmed) || INTERNAL_RAW_TOOL_NAMES.contains(&normalized.as_str())
+        let normalized = trimmed
+            .to_lowercase()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join("_");
+        INTERNAL_TOOL_NAMES.contains(&trimmed)
+            || INTERNAL_RAW_TOOL_NAMES.contains(&normalized.as_str())
     })
 }
 
@@ -104,7 +109,10 @@ fn merge_tool_row(current: &mut ProgressRow, incoming: ProgressRow) {
     } else {
         incoming.state.clone()
     };
-    let created_at = current.created_at.clone().or_else(|| incoming.created_at.clone());
+    let created_at = current
+        .created_at
+        .clone()
+        .or_else(|| incoming.created_at.clone());
     let sequence = match (current.turn_event_sequence, incoming.turn_event_sequence) {
         (Some(a), Some(b)) => Some(a.min(b)),
         (a, b) => a.or(b),
@@ -188,10 +196,11 @@ fn phase_activities(rows: &[ProgressRow]) -> Vec<PhaseActivity> {
         if row.bridge_phase.as_deref() != Some("btcc_operation") {
             continue;
         }
-        let target = current
-            .get(&block)
-            .copied()
-            .or_else(|| (!authored.contains(block.as_str())).then(|| activities.len().checked_sub(1)).flatten());
+        let target = current.get(&block).copied().or_else(|| {
+            (!authored.contains(block.as_str()))
+                .then(|| activities.len().checked_sub(1))
+                .flatten()
+        });
         match target {
             Some(index) => activities[index].operations.push(row.clone()),
             None => before.entry(block).or_default().push(row.clone()),
@@ -201,7 +210,11 @@ fn phase_activities(rows: &[ProgressRow]) -> Vec<PhaseActivity> {
 }
 
 /// `fallbackOrdinaryActivity`: orphan ordinary-tool rows grouped as one working activity.
-fn fallback_ordinary(rows: &[ProgressRow], turn_id: Option<&str>, lang: Lang) -> Vec<PhaseActivity> {
+fn fallback_ordinary(
+    rows: &[ProgressRow],
+    turn_id: Option<&str>,
+    lang: Lang,
+) -> Vec<PhaseActivity> {
     let explicit = turn_id.map(str::trim).filter(|t| !t.is_empty());
     let row_turns: HashSet<&str> = rows
         .iter()
@@ -210,7 +223,11 @@ fn fallback_ordinary(rows: &[ProgressRow], turn_id: Option<&str>, lang: Lang) ->
         .collect();
     let resolved = match explicit {
         Some(turn) => turn.to_string(),
-        None if row_turns.len() == 1 => row_turns.iter().next().map(|t| (*t).to_string()).unwrap_or_default(),
+        None if row_turns.len() == 1 => row_turns
+            .iter()
+            .next()
+            .map(|t| (*t).to_string())
+            .unwrap_or_default(),
         None => return Vec::new(),
     };
     let mut seen_calls: HashSet<String> = HashSet::new();
@@ -218,12 +235,23 @@ fn fallback_ordinary(rows: &[ProgressRow], turn_id: Option<&str>, lang: Lang) ->
     let mut operations: Vec<ProgressRow> = Vec::new();
     for row in merge_tool_rows(rows.to_vec()) {
         let operation = row.bridge_phase.as_deref() == Some("btcc_operation")
-            || (row.bridge_phase.as_deref() == Some("model_round_waiting") && has(&row.thinking_title));
+            || (row.bridge_phase.as_deref() == Some("model_round_waiting")
+                && has(&row.thinking_title));
         let other_turn = row.turn_id.as_deref().is_some_and(|t| t.trim() != resolved);
-        if !operation || other_turn || has(&row.work_block_id) || has(&row.work_contract_id) || has(&row.work_stream_id) {
+        if !operation
+            || other_turn
+            || has(&row.work_block_id)
+            || has(&row.work_contract_id)
+            || has(&row.work_stream_id)
+        {
             continue;
         }
-        let call = row.tool_call_id.as_deref().map(str::trim).filter(|c| !c.is_empty()).map(str::to_string);
+        let call = row
+            .tool_call_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+            .map(str::to_string);
         if seen_rows.contains(&row.id) || call.as_ref().is_some_and(|c| seen_calls.contains(c)) {
             continue;
         }
@@ -258,10 +286,16 @@ fn current_semantic_state(rows: &[&ProgressRow], activities: &[PhaseActivity]) -
     let latest = rows.iter().rev().find(|r| {
         r.work_decision_source.as_deref() == Some("model-authored")
             || (r.kind.as_deref() == Some("message")
-                && !matches!(r.bridge_phase.as_deref(), Some("btcc_operation" | "model_round_waiting"))
+                && !matches!(
+                    r.bridge_phase.as_deref(),
+                    Some("btcc_operation" | "model_round_waiting")
+                )
                 && has(&r.semantic_block_id))
     });
-    if let Some(stage) = latest.and_then(|r| r.activity_stage.clone()).filter(|s| !s.is_empty()) {
+    if let Some(stage) = latest
+        .and_then(|r| r.activity_stage.clone())
+        .filter(|s| !s.is_empty())
+    {
         return Some(stage);
     }
     activities.last().and_then(|a| a.phase.clone())

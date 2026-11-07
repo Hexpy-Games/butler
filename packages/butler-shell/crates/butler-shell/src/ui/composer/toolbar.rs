@@ -131,9 +131,9 @@ impl Composer {
         } else {
             // TODO(integration: composer state): send while a turn runs queues the message
             // (`useComposerQueue`); until then a running turn offers only stop.
-            let mut button = SendButton::new(id).on_click(cx.listener(
-                |this, _: &ClickEvent, window, cx| this.submit(&Submit, window, cx),
-            ));
+            let mut button = SendButton::new(id).on_click(
+                cx.listener(|this, _: &ClickEvent, window, cx| this.submit(&Submit, window, cx)),
+            );
             if !sendable {
                 button = button.disabled();
             }
@@ -143,9 +143,8 @@ impl Composer {
             }
         };
         let button = crate::ui::widgets::anchor(div().flex_none(), "send-button").child(button);
-        let expanded_only = self.agent_notice.is_none()
-            && !self.reconnecting
-            && !(self.streaming && !sendable);
+        let expanded_only =
+            self.agent_notice.is_none() && !self.reconnecting && !(self.streaming && !sendable);
         if expanded_only {
             // The send button shows with the expanded controls only.
             return ExpandedControls::new().child(button).into_any_element();

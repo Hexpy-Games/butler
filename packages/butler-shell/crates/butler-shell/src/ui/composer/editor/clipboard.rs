@@ -2,7 +2,9 @@
 //! clipboard string's metadata (`BUTLER_CONTENT_MIME`) next to its plain text.
 use std::ops::Range;
 
-use gpui::{App, ClipboardEntry, ClipboardItem, EntityInputHandler as _, Window, utf16_to_utf8_offset};
+use gpui::{
+    App, ClipboardEntry, ClipboardItem, EntityInputHandler as _, Window, utf16_to_utf8_offset,
+};
 
 use super::serialize::{content_json, content_text, parse_content};
 use super::{ComposerEditor, ComposerPart, is_atom_char};

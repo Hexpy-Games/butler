@@ -122,12 +122,15 @@ pub(crate) fn access_mode_options(
         let meta = access_meta(&mode);
         let select = on_select.clone();
         let chosen = mode.clone();
-        let mut item = OptionMenuItem::new((ElementId::from(id), access_label(&mode, lang)), access_label(&mode, lang))
-            .description(access_description(&mode, lang))
-            .block_description()
-            .icon(icon(meta.glyph, IconSize::Md, ds))
-            .permission_tone(meta.tone)
-            .on_click(move |_, window, cx| select(&chosen, window, cx));
+        let mut item = OptionMenuItem::new(
+            (ElementId::from(id), access_label(&mode, lang)),
+            access_label(&mode, lang),
+        )
+        .description(access_description(&mode, lang))
+        .block_description()
+        .icon(icon(meta.glyph, IconSize::Md, ds))
+        .permission_tone(meta.tone)
+        .on_click(move |_, window, cx| select(&chosen, window, cx));
         if mode == *value {
             item = item.selected();
         }
@@ -248,8 +251,11 @@ pub(crate) fn workspace_select(
         WorkspaceMode::Worktree => (Icon::GitBranch, worktree),
         WorkspaceMode::Local => (Icon::Monitor, local),
     };
-    let mut trigger = ComposerControl::new("composer-workspace-select-control", label)
-        .icon(icon(glyph, IconSize::Sm, ds));
+    let mut trigger = ComposerControl::new("composer-workspace-select-control", label).icon(icon(
+        glyph,
+        IconSize::Sm,
+        ds,
+    ));
     if sending {
         trigger = trigger.disabled();
     }
@@ -279,20 +285,30 @@ pub(crate) fn model_status_button(
 ) -> AnyElement {
     let lang = Ds::get(cx).lang();
     if model.is_none() && state != ModelState::Unavailable {
-        return ComposerControl::new("model-button", pick(lang, ("Checking model", "모델 확인 중")))
-            .disabled()
-            .into_any_element();
+        return ComposerControl::new(
+            "model-button",
+            pick(lang, ("Checking model", "모델 확인 중")),
+        )
+        .disabled()
+        .into_any_element();
     }
     let label: SharedString = match model {
         Some(model) => model_display_name(model),
         None => pick(lang, ("No model", "모델 없음")).into(),
     };
     let hint = match model {
-        Some(model) if model.availability.as_deref() == Some("not_in_plan") => {
-            pick(lang, ("Not in your ChatGPT plan", "ChatGPT 플랜에 없는 모델"))
-        }
-        Some(_) => pick(lang, ("Sign in to ChatGPT again", "ChatGPT에 다시 로그인하세요")),
-        None => pick(lang, ("Add a model in Settings.", "설정에서 모델을 추가해 주세요.")),
+        Some(model) if model.availability.as_deref() == Some("not_in_plan") => pick(
+            lang,
+            ("Not in your ChatGPT plan", "ChatGPT 플랜에 없는 모델"),
+        ),
+        Some(_) => pick(
+            lang,
+            ("Sign in to ChatGPT again", "ChatGPT에 다시 로그인하세요"),
+        ),
+        None => pick(
+            lang,
+            ("Add a model in Settings.", "설정에서 모델을 추가해 주세요."),
+        ),
     };
     Tooltip::new("model-button-hint")
         .label(hint)

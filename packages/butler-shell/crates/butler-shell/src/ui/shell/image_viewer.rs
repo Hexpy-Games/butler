@@ -9,17 +9,15 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use butler_ds::ui::Icon;
-use butler_ds::ui::blocks::image_viewer::{
-    ImageViewer, ViewerImage as DsImage, ViewerLabels,
-};
+use butler_ds::ui::blocks::image_viewer::{ImageViewer, ViewerImage as DsImage, ViewerLabels};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::done_icon_button::DoneIconButton;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_shell_client::ShellClient;
 use futures::channel::oneshot;
 use gpui::{
-    AnyElement, App, ClipboardItem, Image, ImageFormat, ImageSource, IntoElement as _, SharedString,
-    Task, Window,
+    AnyElement, App, ClipboardItem, Image, ImageFormat, ImageSource, IntoElement as _,
+    SharedString, Task, Window,
 };
 
 /// One image the viewer can show.
@@ -211,7 +209,9 @@ fn load(file: String, client: ShellClient, cx: &mut App) {
             let state = loaded
                 .and_then(|(content_type, bytes)| decode(content_type.as_deref(), bytes))
                 .map_or(Load::Failed, Load::Ready);
-            cx.default_global::<ViewerPictures>().files.insert(file, state);
+            cx.default_global::<ViewerPictures>()
+                .files
+                .insert(file, state);
         });
         cx.refresh();
     })

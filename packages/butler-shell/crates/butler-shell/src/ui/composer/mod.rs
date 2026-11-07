@@ -15,20 +15,19 @@ use std::rc::Rc;
 
 use butler_ds::ui::blocks::composer_card::{ComposerCard, ExpandedBody};
 use gpui::{
-    App, AppContext as _, Context, Entity, EntityInputHandler as _,
-    EventEmitter, FocusHandle, Focusable, KeyBinding, SharedString, Window, actions, canvas, div,
-    prelude::*, px,
+    App, AppContext as _, Context, Entity, EntityInputHandler as _, EventEmitter, FocusHandle,
+    Focusable, KeyBinding, SharedString, Window, actions, canvas, div, prelude::*, px,
 };
 
 use gpui_elements::editable_text::actions::DEFAULT_INPUT_CONTEXT;
 use gpui_elements::editable_text::{EditableTextState, StringStorage};
 
+use crate::ui::field;
 use crate::ui::motion::Hover;
 use crate::ui::source::wire::{ProgressRow, WorkerActivitySummary};
 use crate::ui::source::{AuthorityCard, ComposerContext, Decision, RequestRef};
 use crate::ui::theme::Theme;
 use crate::ui::widgets::HasHover;
-use crate::ui::field;
 
 pub(crate) use toolbar::AgentNotice;
 
@@ -246,8 +245,8 @@ impl Render for Composer {
             &self.task_rows,
             self.task_turn_state.as_deref(),
         );
-        let mut card = ComposerCard::new("composer-card")
-            .expanded(self.engaged || self.approval.is_some());
+        let mut card =
+            ComposerCard::new("composer-card").expanded(self.engaged || self.approval.is_some());
         if self.new_chat {
             card = card.large();
         }

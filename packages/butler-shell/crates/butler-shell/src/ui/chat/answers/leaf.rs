@@ -16,7 +16,9 @@ use butler_ds::ui::layout::{Columns, Grid, Inline, Space, Stack};
 use butler_ds::ui::media_frame::{Aspect, MediaFrame};
 use butler_ds::ui::pill_button::{PillButton, Surface};
 use butler_ds::ui::typo::{Tone, Typo, Weight};
-use gpui::{AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Window, div};
+use gpui::{
+    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Window, div,
+};
 
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::source::wire::{
@@ -45,28 +47,38 @@ pub(super) fn render(
         )
         .into_any_element(),
         AnswerBlock::Progress { id, items, .. } => progress(&base(id, "progress"), items, cx),
-        AnswerBlock::Text { id, text, .. } => {
-            MarkdownContent::new(base(id, "text"), text.clone())
-                .density(Density::Compact)
-                .into_any_element()
-        }
+        AnswerBlock::Text { id, text, .. } => MarkdownContent::new(base(id, "text"), text.clone())
+            .density(Density::Compact)
+            .into_any_element(),
         AnswerBlock::Quote {
             id,
             text,
             cite,
             source,
             ..
-        } => quote(&base(id, "quote"), text, cite.as_deref(), source.as_deref(), cx),
+        } => quote(
+            &base(id, "quote"),
+            text,
+            cite.as_deref(),
+            source.as_deref(),
+            cx,
+        ),
         AnswerBlock::Image {
             id,
             caption,
             source,
             ..
-        } => image(&base(id, "image"), caption.as_deref(), source.as_deref(), cx),
+        } => image(
+            &base(id, "image"),
+            caption.as_deref(),
+            source.as_deref(),
+            cx,
+        ),
         AnswerBlock::Facts { id, items, .. } => facts(&base(id, "facts"), items, cx),
         AnswerBlock::Metrics { id, items, .. } => metrics(&base(id, "metrics"), items, cx),
-        AnswerBlock::Callout { tone, text, .. } => Notice::new(callout_tone(tone.as_ref()), text.clone())
-            .into_any_element(),
+        AnswerBlock::Callout { tone, text, .. } => {
+            Notice::new(callout_tone(tone.as_ref()), text.clone()).into_any_element()
+        }
         AnswerBlock::Actions { id, items, .. } => actions(&base(id, "actions"), items, cx),
         _ => div().into_any_element(),
     }
@@ -114,10 +126,16 @@ fn progress(
     let mut rows = Stack::new().gap(Space::Sm);
     for (index, item) in items.iter().enumerate() {
         let max = item.max.unwrap_or(100.);
-        let unit = item.unit.as_deref().map_or(String::new(), |u| format!(" {u}"));
-        let meter = ProgressMeter::new(child_id(base, "meter", index), (item.value / max * 100.) as f32)
-            .label(item.label.clone())
-            .meta(format!("{} / {max}{unit}", item.value));
+        let unit = item
+            .unit
+            .as_deref()
+            .map_or(String::new(), |u| format!(" {u}"));
+        let meter = ProgressMeter::new(
+            child_id(base, "meter", index),
+            (item.value / max * 100.) as f32,
+        )
+        .label(item.label.clone())
+        .meta(format!("{} / {max}{unit}", item.value));
         rows = rows.child(
             Stack::new()
                 .gap(Space::Xs)
@@ -191,7 +209,11 @@ fn facts(
     rows.into_any_element()
 }
 
-fn metrics(base: &SharedString, items: &[AnswerBlockMetricsItemsItem], _cx: &mut App) -> AnyElement {
+fn metrics(
+    base: &SharedString,
+    items: &[AnswerBlockMetricsItemsItem],
+    _cx: &mut App,
+) -> AnyElement {
     let mut grid = Grid::new(ElementId::Name(format!("{base}-grid").into()))
         .gap(Space::Md)
         .columns(Columns::auto_fill_min(150));
@@ -225,7 +247,10 @@ fn metrics(base: &SharedString, items: &[AnswerBlockMetricsItemsItem], _cx: &mut
 }
 
 /// `answerMetricTrend`: the delta's sign against whether up or down is the good direction.
-fn metric_trend(delta: Option<&str>, direction: Option<&AnswerBlockMetricsItemsItemDirection>) -> Trend {
+fn metric_trend(
+    delta: Option<&str>,
+    direction: Option<&AnswerBlockMetricsItemsItemDirection>,
+) -> Trend {
     let sign = match delta {
         Some(delta) if delta.starts_with('+') => 1,
         Some(delta) if delta.starts_with('-') => -1,
@@ -283,13 +308,18 @@ fn actions(base: &SharedString, items: &[AnswerBlockActionsItemsItem], cx: &mut 
 /// `AnswerSourceLine`: the source's site and check time as a text link; nothing without a source.
 fn source_line(id: ElementId, source: Option<&str>, checked: Option<&str>) -> Option<AnyElement> {
     let source = source.filter(|source| !source.is_empty())?;
-    let site = url::Url::parse(source)
-        .ok()
-        .and_then(|url| url.host_str().map(|host| host.trim_start_matches("www.").to_string()))?;
+    let site = url::Url::parse(source).ok().and_then(|url| {
+        url.host_str()
+            .map(|host| host.trim_start_matches("www.").to_string())
+    })?;
     let checked = checked
         .and_then(|raw| chrono::DateTime::parse_from_rfc3339(raw).ok())
         .map(|date| date.format("%Y-%m-%d").to_string());
-    let text = [Some(site), checked].into_iter().flatten().collect::<Vec<_>>().join(" · ");
+    let text = [Some(site), checked]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" · ");
     let url = source.to_string();
     Some(
         Clickable::new(id)

@@ -174,7 +174,9 @@ fn load(file: String, client: ShellClient, cx: &mut App) {
             let state = loaded
                 .and_then(|(content_type, bytes)| picture(content_type.as_deref(), bytes))
                 .map_or(Load::Failed, Load::Ready);
-            cx.default_global::<MessageImages>().files.insert(file, state);
+            cx.default_global::<MessageImages>()
+                .files
+                .insert(file, state);
         });
         cx.refresh();
     })

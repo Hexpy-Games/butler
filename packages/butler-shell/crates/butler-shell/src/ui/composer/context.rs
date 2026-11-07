@@ -43,7 +43,10 @@ use crate::ui::source::wire::ContextDetailsView;
 pub(crate) enum ComposerContextEvent {
     /// The popover opened (or the context changed while open): load this session's usage
     /// monitor view, then call `usage_loaded` with the same `session_id` and `revision`.
-    LoadUsage { session_id: String, revision: String },
+    LoadUsage {
+        session_id: String,
+        revision: String,
+    },
     /// Load the provider's stored quota, then call `quota_loaded`.
     LoadQuota { provider_id: String },
     /// The popover opened or closed (`setContextPopoverOpen`).
@@ -75,9 +78,10 @@ impl EventEmitter<ComposerContextEvent> for ComposerContextControl {}
 
 /// `contextRevision`: the session view's context, which changes when the context does.
 fn context_revision(context: &ContextDetailsView) -> String {
-    context.updated_at.clone().unwrap_or_else(|| {
-        format!("{}/{}", context.used_tokens, context.budget_tokens)
-    })
+    context
+        .updated_at
+        .clone()
+        .unwrap_or_else(|| format!("{}/{}", context.used_tokens, context.budget_tokens))
 }
 
 fn usage_key(session_id: &str, revision: &str) -> String {
@@ -192,7 +196,10 @@ impl ComposerContextControl {
         if self.requested_usage.as_ref() != Some(&key) {
             self.requested_usage = Some(key);
             // TODO(integration: run on agent worker): `load_usage(client, &session_id)`.
-            cx.emit(ComposerContextEvent::LoadUsage { session_id, revision: revision.clone() });
+            cx.emit(ComposerContextEvent::LoadUsage {
+                session_id,
+                revision: revision.clone(),
+            });
         }
         if let Some(provider_id) = provider {
             let quota_key = usage_key(&provider_id, &revision);
@@ -235,7 +242,11 @@ impl ComposerContextControl {
         cx.notify();
     }
 
-    fn conversation_usage(&self, context: &ContextDetailsView, mode: UsageAuthMode) -> ConversationUsage<'_> {
+    fn conversation_usage(
+        &self,
+        context: &ContextDetailsView,
+        mode: UsageAuthMode,
+    ) -> ConversationUsage<'_> {
         let session = context
             .session_id
             .as_ref()
@@ -316,22 +327,30 @@ impl Render for ComposerContextControl {
                 lang,
                 on_select: {
                     let this = this.clone();
-                    Rc::new(move |index: Option<usize>, _: &mut Window, cx: &mut App| this.update(cx, |c, cx| {
-                        c.selected = index;
-                        cx.notify();
-                    }))
+                    Rc::new(move |index: Option<usize>, _: &mut Window, cx: &mut App| {
+                        this.update(cx, |c, cx| {
+                            c.selected = index;
+                            cx.notify();
+                        })
+                    })
                 },
                 on_emphasis: {
                     let this = this.clone();
-                    Rc::new(move |emphasis: Option<Emphasis>, _: &mut Window, cx: &mut App| this.update(cx, |c, cx| {
-                        c.emphasis = emphasis;
-                        cx.notify();
-                    }))
+                    Rc::new(
+                        move |emphasis: Option<Emphasis>, _: &mut Window, cx: &mut App| {
+                            this.update(cx, |c, cx| {
+                                c.emphasis = emphasis;
+                                cx.notify();
+                            })
+                        },
+                    )
                 },
-                on_details: Rc::new(move |_: &ClickEvent, _: &mut Window, cx: &mut App| this.update(cx, |c, cx| {
-                    c.close(cx);
-                    cx.emit(ComposerContextEvent::OpenUsageSettings);
-                })),
+                on_details: Rc::new(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+                    this.update(cx, |c, cx| {
+                        c.close(cx);
+                        cx.emit(ComposerContextEvent::OpenUsageSettings);
+                    })
+                }),
             },
             cx,
         );

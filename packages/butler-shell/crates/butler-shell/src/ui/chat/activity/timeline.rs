@@ -55,7 +55,9 @@ pub(super) fn timeline_with(
     let open = window.use_keyed_state(format!("{key}-expanded"), cx, |_, _| false);
     let expanded = *open.read(cx);
     let current = phase_label(lang, state.as_deref().or(latest.phase.as_deref()));
-    let header_label = locale(cx).strings().activity_history(live, current, activities.len());
+    let header_label = locale(cx)
+        .strings()
+        .activity_history(live, current, activities.len());
     let set = |value: Option<bool>| {
         let open = open.clone();
         move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
@@ -65,7 +67,11 @@ pub(super) fn timeline_with(
             });
         }
     };
-    let chevron = if expanded { Icon::ChevronDown } else { Icon::ChevronRight };
+    let chevron = if expanded {
+        Icon::ChevronDown
+    } else {
+        Icon::ChevronRight
+    };
     let header = Stack::new().cross(Cross::Start).child(
         Button::new(format!("{key}-toggle"))
             .variant(Variant::Inline)
@@ -76,12 +82,18 @@ pub(super) fn timeline_with(
     let mut body = Stack::new().gap(Space::Sm);
     if expanded {
         let last = activities.len() - 1;
-        body = body.child(Stack::new().gap(Space::Sm).children(
-            activities.iter().enumerate().map(|(index, activity)| {
-                activity_block(activity, index < last, false, lang).into_any_element()
-            }),
-        ));
-        let collapse = if lang == Lang::Ko { "접기" } else { "Collapse" };
+        body = body.child(
+            Stack::new()
+                .gap(Space::Sm)
+                .children(activities.iter().enumerate().map(|(index, activity)| {
+                    activity_block(activity, index < last, false, lang).into_any_element()
+                })),
+        );
+        let collapse = if lang == Lang::Ko {
+            "접기"
+        } else {
+            "Collapse"
+        };
         body = body.child(
             Stack::new().cross(Cross::Start).child(
                 Button::new(format!("{key}-collapse"))
@@ -101,11 +113,22 @@ pub(super) fn timeline_with(
         .motion(live);
         body = body.child(Collapsible::new(format!("{key}-step"), live).child(step));
     }
-    Some(Stack::new().gap(Space::Xs).child(header).child(body).into_any_element())
+    Some(
+        Stack::new()
+            .gap(Space::Xs)
+            .child(header)
+            .child(body)
+            .into_any_element(),
+    )
 }
 
 /// `ActivityBlock` of TurnActivityBlock.tsx: a compact work activity with its operations.
-fn activity_block(activity: &PhaseActivity, connected: bool, live: bool, lang: Lang) -> WorkActivityBlock {
+fn activity_block(
+    activity: &PhaseActivity,
+    connected: bool,
+    live: bool,
+    lang: Lang,
+) -> WorkActivityBlock {
     let (content, intent, next) = if lang == Lang::Ko {
         ("내용:", "의도:", "다음:")
     } else {
@@ -127,10 +150,13 @@ fn activity_block(activity: &PhaseActivity, connected: bool, live: bool, lang: L
     if let Some(step) = activity.next_step.as_deref().filter(|s| !s.is_empty()) {
         lines.push(format!("{next} {step}"));
     }
-    let mut block = WorkActivityBlock::new(format!("activity-{}", activity.id), display_title(activity, lang))
-        .compact()
-        .description(lines.join("\n"))
-        .tools(tool_items(&activity.operations, lang));
+    let mut block = WorkActivityBlock::new(
+        format!("activity-{}", activity.id),
+        display_title(activity, lang),
+    )
+    .compact()
+    .description(lines.join("\n"))
+    .tools(tool_items(&activity.operations, lang));
     if connected {
         block = block.connected();
     }
@@ -150,7 +176,11 @@ fn display_title(activity: &PhaseActivity, lang: Lang) -> String {
 }
 
 fn start_work(lang: Lang) -> &'static str {
-    if lang == Lang::Ko { "요청 내용 확인" } else { "Check request" }
+    if lang == Lang::Ko {
+        "요청 내용 확인"
+    } else {
+        "Check request"
+    }
 }
 
 fn has_request_marker(text: &str) -> bool {
@@ -210,12 +240,17 @@ fn quoted(text: &str) -> Option<&str> {
 
 /// `formatActivityTime`: `HH:MM:SS` of the timestamp, the timestamp itself when it is not one.
 fn activity_time(value: &str) -> String {
-    chrono::DateTime::parse_from_rfc3339(value)
-        .map_or_else(|_| value.to_string(), |at| at.format("%H:%M:%S").to_string())
+    chrono::DateTime::parse_from_rfc3339(value).map_or_else(
+        |_| value.to_string(),
+        |at| at.format("%H:%M:%S").to_string(),
+    )
 }
 
 /// `TurnActivityPanel`: the running turn's timeline above its live status line.
-#[allow(dead_code, reason = "wired by Opus at wave integration (live turn row)")]
+#[allow(
+    dead_code,
+    reason = "wired by Opus at wave integration (live turn row)"
+)]
 pub(crate) fn turn_activity_panel(
     rows: &[ProgressRow],
     turn_id: Option<&str>,

@@ -12,7 +12,14 @@ use crate::ui::chat::TranscriptCtx;
 use crate::ui::i18n::Locale;
 use crate::ui::source::wire::{ProgressRow, WorkBlockView};
 
-const TOOL_KINDS: [&str; 6] = ["searched", "read", "ran_command", "edited", "dispatch", "used_tool"];
+const TOOL_KINDS: [&str; 6] = [
+    "searched",
+    "read",
+    "ran_command",
+    "edited",
+    "dispatch",
+    "used_tool",
+];
 
 pub(super) fn locale(cx: &App) -> Locale {
     match Ds::get(cx).lang() {
@@ -37,9 +44,16 @@ pub(super) fn tool_items(rows: &[ProgressRow], lang: Lang) -> Vec<ToolItem> {
         .enumerate()
         .map(|(index, row)| match &row.thinking_title {
             Some(title) => {
-                let summary = if lang == Lang::Ko { "생각" } else { "Thinking" };
+                let summary = if lang == Lang::Ko {
+                    "생각"
+                } else {
+                    "Thinking"
+                };
                 let item = ToolItem::new(
-                    format!("thinking:{}", row.tool_call_id.as_deref().unwrap_or(&row.id)),
+                    format!(
+                        "thinking:{}",
+                        row.tool_call_id.as_deref().unwrap_or(&row.id)
+                    ),
                     title.clone(),
                     summary,
                 );
@@ -50,7 +64,11 @@ pub(super) fn tool_items(rows: &[ProgressRow], lang: Lang) -> Vec<ToolItem> {
             }
             None => {
                 let name = row.safe_tool_name.clone().unwrap_or_default();
-                let title = if row.safe_label.is_empty() { name.clone() } else { row.safe_label.clone() };
+                let title = if row.safe_label.is_empty() {
+                    name.clone()
+                } else {
+                    row.safe_label.clone()
+                };
                 ToolItem::new(format!("{}:{index}", row.id), title, name)
             }
         })
@@ -108,7 +126,11 @@ pub(super) fn collapsed_turn_activity(
             });
         }
     };
-    let chevron = if expanded { Icon::ChevronDown } else { Icon::ChevronRight };
+    let chevron = if expanded {
+        Icon::ChevronDown
+    } else {
+        Icon::ChevronRight
+    };
     let header = Stack::new().cross(Cross::Start).child(
         Button::new(format!("{key}-toggle"))
             .variant(Variant::Inline)
@@ -128,7 +150,11 @@ pub(super) fn collapsed_turn_activity(
                 });
             }
         };
-        let collapse_label = if lang == Lang::Ko { "접기" } else { "Collapse" };
+        let collapse_label = if lang == Lang::Ko {
+            "접기"
+        } else {
+            "Collapse"
+        };
         body = body.child(
             Stack::new().cross(Cross::Start).child(
                 Button::new(format!("{key}-collapse"))
@@ -141,11 +167,19 @@ pub(super) fn collapsed_turn_activity(
         );
     } else if live {
         let item_key: SharedString = latest.id.clone().into();
-        body = body.child(RollingSwap::new(format!("{key}-swap"), item_key, move |_, cx| {
-            block_view(&latest, Ds::get(cx).lang())
-        }));
+        body = body.child(RollingSwap::new(
+            format!("{key}-swap"),
+            item_key,
+            move |_, cx| block_view(&latest, Ds::get(cx).lang()),
+        ));
     }
-    Some(Stack::new().gap(Space::Md).child(header).child(body).into_any_element())
+    Some(
+        Stack::new()
+            .gap(Space::Md)
+            .child(header)
+            .child(body)
+            .into_any_element(),
+    )
 }
 
 /// Completed work blocks (`CompletedWorkBlocks`).

@@ -15,8 +15,8 @@ pub(crate) mod serialize;
 use std::ops::Range;
 
 use gpui::{
-    App, Bounds, Entity, Pixels, Point, EntityInputHandler as _, Focusable as _, SharedString, Window,
-    utf8_to_utf16_offset, utf16_to_utf8_offset,
+    App, Bounds, Entity, EntityInputHandler as _, Focusable as _, Pixels, Point, SharedString,
+    Window, utf8_to_utf16_offset, utf16_to_utf8_offset,
 };
 use gpui_elements::editable_text::EditableTextState;
 
@@ -311,7 +311,13 @@ impl ComposerEditor {
     }
 
     /// Replaces the UTF-8 `range` of the field (the selection when `None`) with `text`.
-    fn replace(&mut self, range: Option<Range<usize>>, text: &str, window: &mut Window, cx: &mut App) {
+    fn replace(
+        &mut self,
+        range: Option<Range<usize>>,
+        text: &str,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
         let Some(input) = self.input.clone() else {
             return;
         };
@@ -367,8 +373,13 @@ impl ComposerEditor {
     fn caret(&self, window: &mut Window, cx: &mut App) -> Option<usize> {
         let input = self.input.clone()?;
         let text = self.text(cx);
-        let selection = input.update(cx, |input, cx| input.selected_text_range(false, window, cx))?;
-        let end = if selection.reversed { selection.range.start } else { selection.range.end };
+        let selection =
+            input.update(cx, |input, cx| input.selected_text_range(false, window, cx))?;
+        let end = if selection.reversed {
+            selection.range.start
+        } else {
+            selection.range.end
+        };
         Some(utf16_to_utf8_offset(&text, end))
     }
 
@@ -386,7 +397,10 @@ impl ComposerEditor {
         let Some(token) = mention_token(&text, caret) else {
             return false;
         };
-        let spaced = text[token.end..].chars().next().is_some_and(char::is_whitespace);
+        let spaced = text[token.end..]
+            .chars()
+            .next()
+            .is_some_and(char::is_whitespace);
         let trailing = if spaced { "" } else { " " };
         self.replace_with_atom(token.start..token.end, atom, trailing, window, cx)
     }
@@ -416,12 +430,20 @@ impl ComposerEditor {
     ) -> Option<Bounds<Pixels>> {
         let input = self.input.clone()?;
         let text = self.text(cx);
-        let range = utf8_to_utf16_offset(&text, range.start)..utf8_to_utf16_offset(&text, range.end);
-        input.update(cx, |input, cx| input.bounds_for_range(range, field, window, cx))
+        let range =
+            utf8_to_utf16_offset(&text, range.start)..utf8_to_utf16_offset(&text, range.end);
+        input.update(cx, |input, cx| {
+            input.bounds_for_range(range, field, window, cx)
+        })
     }
 
     /// Each character's laid-out left edge (window x), the input of `drop::drop_offset`.
-    pub(crate) fn char_lefts(&self, field: Bounds<Pixels>, window: &mut Window, cx: &mut App) -> Vec<f32> {
+    pub(crate) fn char_lefts(
+        &self,
+        field: Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Vec<f32> {
         let text = self.text(cx);
         text.char_indices()
             .filter_map(|(at, c)| {
@@ -432,10 +454,17 @@ impl ComposerEditor {
     }
 
     /// The byte offset of the character under `point` (window coordinates).
-    pub(crate) fn offset_at(&self, point: Point<Pixels>, window: &mut Window, cx: &mut App) -> Option<usize> {
+    pub(crate) fn offset_at(
+        &self,
+        point: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<usize> {
         let input = self.input.clone()?;
         let text = self.text(cx);
-        let index = input.update(cx, |input, cx| input.character_index_for_point(point, window, cx))?;
+        let index = input.update(cx, |input, cx| {
+            input.character_index_for_point(point, window, cx)
+        })?;
         Some(utf16_to_utf8_offset(&text, index))
     }
 }

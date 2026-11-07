@@ -23,9 +23,7 @@ fn kind_name(kind: &ProjectSourceReferenceKind) -> &'static str {
         ProjectSourceReferenceKind::Report => "report",
         ProjectSourceReferenceKind::Message => "message",
         ProjectSourceReferenceKind::Work => "work",
-        ProjectSourceReferenceKind::Reference | ProjectSourceReferenceKind::Unknown => {
-            "reference"
-        }
+        ProjectSourceReferenceKind::Reference | ProjectSourceReferenceKind::Unknown => "reference",
     }
 }
 
@@ -135,7 +133,9 @@ pub(crate) fn content_text(parts: &[ComposerPart]) -> String {
 
 /// Whether `parts` holds anything but text (a draft then keeps its content parts).
 pub(crate) fn has_atoms(parts: &[ComposerPart]) -> bool {
-    parts.iter().any(|part| matches!(part, ComposerPart::Atom(_)))
+    parts
+        .iter()
+        .any(|part| matches!(part, ComposerPart::Atom(_)))
 }
 
 /// `isMessageContent`, then the editor parts: `None` for anything that is not message content.

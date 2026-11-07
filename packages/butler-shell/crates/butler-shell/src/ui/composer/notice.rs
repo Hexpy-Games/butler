@@ -121,9 +121,10 @@ pub(crate) fn crash_fallback(
         .variant(Variant::Outline)
         .text(copy.retry)
         .on_click(move |_: &ClickEvent, window, cx| retry(window, cx));
-    ComposerCard::new("composer-crash")
-        .large()
-        .child(div().relative().child(probe).child(
-            Notice::new(NoticeTone::Error, copy.crashed).action(action),
-        ))
+    ComposerCard::new("composer-crash").large().child(
+        div()
+            .relative()
+            .child(probe)
+            .child(Notice::new(NoticeTone::Error, copy.crashed).action(action)),
+    )
 }

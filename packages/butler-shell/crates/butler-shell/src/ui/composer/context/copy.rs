@@ -111,7 +111,12 @@ static EN: UsageCopy = UsageCopy {
     this_chat: "This chat",
     conversation_part: "Conversation",
     delegated_part: "Subtasks",
-    requests: |count| format!("{count} {}", if count == "1" { "request" } else { "requests" }),
+    requests: |count| {
+        format!(
+            "{count} {}",
+            if count == "1" { "request" } else { "requests" }
+        )
+    },
     tokens: "tokens",
     new_input: "New input",
     cached: "Cached",

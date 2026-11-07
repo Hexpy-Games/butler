@@ -26,13 +26,14 @@ use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::toast::Toast;
 use butler_shell_client::{ShellClient, Upload};
 use gpui::{
-    AnyElement, App, BorrowAppContext as _, ExternalPaths, Image, ImageFormat, ImageSource, InteractiveElement,
-    IntoElement as _, ParentElement as _, SharedString, Styled as _, Task, Window, div,
+    AnyElement, App, BorrowAppContext as _, ExternalPaths, Image, ImageFormat, ImageSource,
+    InteractiveElement, IntoElement as _, ParentElement as _, SharedString, Styled as _, Task,
+    Window, div,
 };
 
 use self::documents::tr;
-use crate::ui::shell::image_viewer::{ImageViewerHost, ViewerImage};
 use super::state::ComposerAttachment;
+use crate::ui::shell::image_viewer::{ImageViewerHost, ViewerImage};
 use crate::ui::source::wire::{MessageFileKind, MessageFileRef, ProjectDashboardDocument};
 
 /// `ATTACHMENT_MAX_BYTES` (`conversationUtils.ts`).
@@ -149,7 +150,10 @@ fn mime_of(name: &str) -> &'static str {
 
 /// The files at `paths` (directories and unreadable paths are left out).
 pub(crate) fn picked_files(paths: &[PathBuf]) -> Vec<PickedFile> {
-    paths.iter().filter_map(|p| PickedFile::from_path(p)).collect()
+    paths
+        .iter()
+        .filter_map(|p| PickedFile::from_path(p))
+        .collect()
 }
 
 /// `openAttachmentPicker`: the file dialog; `images` keeps only pictures.
@@ -267,7 +271,14 @@ pub(crate) async fn upload_files(
             outcome.failed.push(file.name);
             continue;
         };
-        match upload_bytes(&client, session_id.as_deref(), &file.name, &file.mime_type, bytes).await
+        match upload_bytes(
+            &client,
+            session_id.as_deref(),
+            &file.name,
+            &file.mime_type,
+            bytes,
+        )
+        .await
         {
             Ok((stored, preview)) => outcome.accepted.push((
                 ComposerAttachment {
@@ -305,7 +316,9 @@ fn extension(name: &str, cx: &App) -> String {
     name.trim()
         .rsplit_once('.')
         .map(|(_, ext)| ext)
-        .filter(|ext| (1..=5).contains(&ext.chars().count()) && ext.chars().all(char::is_alphanumeric))
+        .filter(|ext| {
+            (1..=5).contains(&ext.chars().count()) && ext.chars().all(char::is_alphanumeric)
+        })
         .map_or_else(|| tr(cx, "File", "파일").to_owned(), str::to_uppercase)
 }
 
@@ -384,7 +397,14 @@ pub(crate) fn composer_attachments(
     let tiles = (!attachments.is_empty()).then(|| {
         let items = attachments
             .iter()
-            .map(|attachment| tile(attachment, extras.extras.get(&attachment.id), blocked.get(&attachment.id), cx))
+            .map(|attachment| {
+                tile(
+                    attachment,
+                    extras.extras.get(&attachment.id),
+                    blocked.get(&attachment.id),
+                    cx,
+                )
+            })
             .collect();
         let lang = Ds::get(cx).lang();
         AttachmentList::new("composer-attachments", items)
@@ -473,8 +493,8 @@ pub(crate) fn composer_elements(
     let rows = items
         .iter()
         .map(|item| {
-            let mut row = AttachmentItem::new(item.id.clone(), item.title.clone())
-                .meta(item.site.clone());
+            let mut row =
+                AttachmentItem::new(item.id.clone(), item.title.clone()).meta(item.site.clone());
             if !item.library && item.refusal.is_none() {
                 row = row.element(item.site.clone());
             }

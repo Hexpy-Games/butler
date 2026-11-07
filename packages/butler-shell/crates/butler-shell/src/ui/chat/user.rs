@@ -188,10 +188,14 @@ impl UserMessageText {
 
 impl RenderOnce for UserMessageText {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = window.use_keyed_state(SharedString::from(format!("{}-state", self.id)), cx, |_, _| State {
-            expanded: false,
-            full: 0.,
-        });
+        let state = window.use_keyed_state(
+            SharedString::from(format!("{}-state", self.id)),
+            cx,
+            |_, _| State {
+                expanded: false,
+                full: 0.,
+            },
+        );
         let line = window.text_style().line_height_in_pixels(window.rem_size());
         let (expanded, full) = {
             let s = state.read(cx);

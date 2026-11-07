@@ -308,7 +308,10 @@ fn description(lang: Lang, worker: &WorkerActivitySummary) -> String {
 
 /// `workerActivityMeta`.
 fn meta(lang: Lang, worker: &WorkerActivitySummary) -> String {
-    let phase = phase_label(lang, worker.semantic_phase.as_deref().unwrap_or(&worker.phase));
+    let phase = phase_label(
+        lang,
+        worker.semantic_phase.as_deref().unwrap_or(&worker.phase),
+    );
     match worker.action_kind.as_deref().map(str::trim) {
         Some(action) if !action.is_empty() => format!("{phase} · {action}"),
         _ => phase,
@@ -317,7 +320,10 @@ fn meta(lang: Lang, worker: &WorkerActivitySummary) -> String {
 
 /// `workerActivityCollapsedSummaryLine`.
 fn collapsed_summary_line(lang: Lang, worker: &WorkerActivitySummary) -> String {
-    let phase = phase_label(lang, worker.semantic_phase.as_deref().unwrap_or(&worker.phase));
+    let phase = phase_label(
+        lang,
+        worker.semantic_phase.as_deref().unwrap_or(&worker.phase),
+    );
     let meta = match worker.action_kind.as_deref().map(str::trim) {
         Some(action) if !action.is_empty() => format!("{phase}/{action}"),
         _ => phase,
@@ -353,7 +359,10 @@ fn text(
     fallback: &str,
 ) -> String {
     reference
-        .map_or_else(|| fallback.to_owned(), |reference| interface_text(lang, reference))
+        .map_or_else(
+            || fallback.to_owned(),
+            |reference| interface_text(lang, reference),
+        )
         .trim()
         .to_owned()
 }

@@ -176,7 +176,10 @@ pub(super) struct QuotaWindowView {
 /// `loadConversationUsage`: this session's `/usage-monitor` view; `None` when the call fails.
 // TODO(integration: run on agent worker)
 pub(crate) async fn load_usage(client: &ShellClient, session_id: &str) -> Option<UsageMonitorView> {
-    let value = client.get_usage_monitor(Some(session_id), None).await.ok()?;
+    let value = client
+        .get_usage_monitor(Some(session_id), None)
+        .await
+        .ok()?;
     serde_json::from_value(value).ok()
 }
 
@@ -225,7 +228,10 @@ const MONTHS: [&str; 12] = [
 pub(super) fn month_day(wall: i64, lang: Lang) -> String {
     let (_, month, day) = civil_from_days(day_and_hour(wall).0);
     match lang {
-        Lang::En => format!("{} {day}", MONTHS[usize::try_from(month - 1).unwrap_or(0) % 12]),
+        Lang::En => format!(
+            "{} {day}",
+            MONTHS[usize::try_from(month - 1).unwrap_or(0) % 12]
+        ),
         Lang::Ko => format!("{month}월 {day}일"),
     }
 }
@@ -289,7 +295,10 @@ pub(super) fn window_label(window: &QuotaWindowView, c: &UsageCopy) -> String {
     }
 }
 
-fn view_quota<'a>(view: &'a UsageMonitorView, context: &ContextDetailsView) -> Option<&'a ProviderQuota> {
+fn view_quota<'a>(
+    view: &'a UsageMonitorView,
+    context: &ContextDetailsView,
+) -> Option<&'a ProviderQuota> {
     let provider_id = context
         .provider_id
         .as_deref()
@@ -302,11 +311,7 @@ fn view_quota<'a>(view: &'a UsageMonitorView, context: &ContextDetailsView) -> O
         .as_ref()
 }
 
-fn quota_windows(
-    quota: &ProviderQuota,
-    now: i64,
-    lang: Lang,
-) -> Option<Vec<QuotaWindow>> {
+fn quota_windows(quota: &ProviderQuota, now: i64, lang: Lang) -> Option<Vec<QuotaWindow>> {
     let c = copy(lang);
     if !quota.available || quota.windows.is_empty() {
         return None;
@@ -371,7 +376,8 @@ pub(super) fn conversation_usage_summary(
     } else {
         usage.quota.or(own)
     };
-    if let Some(source) = source.filter(|q| q.source_kind == "chatgpt_plan" && q.plan_usage.is_some())
+    if let Some(source) =
+        source.filter(|q| q.source_kind == "chatgpt_plan" && q.plan_usage.is_some())
     {
         let butler = view.and_then(|v| {
             v.provider_usage

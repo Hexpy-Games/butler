@@ -48,7 +48,11 @@ struct DocumentsState {
 }
 
 /// `ComposerAttachmentMenu`: the "+" button and its popover.
-pub(crate) fn attachment_menu(menu: AttachmentMenu, window: &mut Window, cx: &mut App) -> AnyElement {
+pub(crate) fn attachment_menu(
+    menu: AttachmentMenu,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     let popover = Popover::new("composer-attachment-menu", window, cx);
     let label = tr(cx, "More options", "추가 기능");
     let uploading = menu.uploading;
@@ -77,7 +81,11 @@ pub(crate) fn attachment_menu(menu: AttachmentMenu, window: &mut Window, cx: &mu
         window,
         cx,
     );
-    Stack::new().gap(Space::None).child(trigger).child(content).into_any_element()
+    Stack::new()
+        .gap(Space::None)
+        .child(trigger)
+        .child(content)
+        .into_any_element()
 }
 
 /// One response-mode row.
@@ -94,7 +102,11 @@ fn mode_row(
             on_plan(plan, window, cx);
             close(window, cx);
         });
-    if plan == menu.plan_mode { item.selected() } else { item }
+    if plan == menu.plan_mode {
+        item.selected()
+    } else {
+        item
+    }
 }
 
 /// One "attach" row; `images` picks pictures only.
@@ -127,19 +139,43 @@ fn menu_body(
     if let Some(project) = menu.project_id.clone() {
         attachments = attachments.child(document_menu(menu, project, close, window, cx));
     }
-    let file = ("composer-attach-file", tr(cx, "Attach file", "파일 첨부"), Icon::Paperclip, false);
-    let image = ("composer-attach-image", tr(cx, "Attach image", "이미지 첨부"), Icon::ImageIcon, true);
+    let file = (
+        "composer-attach-file",
+        tr(cx, "Attach file", "파일 첨부"),
+        Icon::Paperclip,
+        false,
+    );
+    let image = (
+        "composer-attach-image",
+        tr(cx, "Attach image", "이미지 첨부"),
+        Icon::ImageIcon,
+        true,
+    );
     attachments = attachments
         .child(attach_row(menu, close, file, cx))
         .child(attach_row(menu, close, image, cx));
-    let normal = ("composer-mode-normal", tr(cx, "Normal", "일반"), Icon::MessageSquarePlus, false);
+    let normal = (
+        "composer-mode-normal",
+        tr(cx, "Normal", "일반"),
+        Icon::MessageSquarePlus,
+        false,
+    );
     let mut response = OptionMenuSection::new(tr(cx, "Response mode", "응답 방식"))
         .child(mode_row(menu, close, normal, cx));
     if menu.project_id.is_some() {
-        let plan = ("composer-mode-plan", tr(cx, "Plan", "계획"), Icon::ListChecks, true);
+        let plan = (
+            "composer-mode-plan",
+            tr(cx, "Plan", "계획"),
+            Icon::ListChecks,
+            true,
+        );
         response = response.child(mode_row(menu, close, plan, cx));
     }
-    OptionMenu::new(title).fit().child(attachments).child(response).into_any_element()
+    OptionMenu::new(title)
+        .fit()
+        .child(attachments)
+        .child(response)
+        .into_any_element()
 }
 
 /// `ComposerProjectDocumentMenu`: the "Project documents" row; its popover is the picker.
@@ -177,7 +213,11 @@ fn document_menu(
         window,
         cx,
     );
-    Stack::new().gap(Space::None).child(trigger).child(content).into_any_element()
+    Stack::new()
+        .gap(Space::None)
+        .child(trigger)
+        .child(content)
+        .into_any_element()
 }
 
 /// `ComposerProjectDocumentPicker`: loads the project's documents while the popover is open,
@@ -192,11 +232,17 @@ fn document_picker(
     cx: &mut App,
 ) -> AnyElement {
     let state: Entity<DocumentsState> =
-        window.use_keyed_state("composer-documents-state", cx, |_, _| DocumentsState::default());
+        window.use_keyed_state("composer-documents-state", cx, |_, _| {
+            DocumentsState::default()
+        });
     let search: Entity<SharedString> =
-        window.use_keyed_state("composer-documents-search", cx, |_, _| SharedString::default());
+        window.use_keyed_state("composer-documents-search", cx, |_, _| {
+            SharedString::default()
+        });
     let filter: Entity<SharedString> =
-        window.use_keyed_state("composer-documents-filter", cx, |_, _| SharedString::from("all"));
+        window.use_keyed_state("composer-documents-filter", cx, |_, _| {
+            SharedString::from("all")
+        });
     if nested.is_open(cx) {
         load_when_needed(&state, &project_id, menu.client.clone(), cx);
     } else {
@@ -210,7 +256,13 @@ fn document_picker(
         })
     };
     let (search_now, filter_now) = (search.read(cx).clone(), filter.read(cx).clone());
-    let groups = picker_groups(&state.read(cx).documents, &filter_now, &search_now, &on_pick, cx);
+    let groups = picker_groups(
+        &state.read(cx).documents,
+        &filter_now,
+        &search_now,
+        &on_pick,
+        cx,
+    );
     let set_filter = filter.clone();
     let filters = picker_filters(cx, move |id, _, cx| {
         let id = SharedString::from(id.to_owned());
@@ -274,7 +326,11 @@ fn load_when_needed(
         };
     });
     let Some(client) = client else { return };
-    let failed = tr(cx, "Project documents failed", "프로젝트 문서를 불러오지 못했습니다");
+    let failed = tr(
+        cx,
+        "Project documents failed",
+        "프로젝트 문서를 불러오지 못했습니다",
+    );
     let state = state.clone();
     // TODO(integration: run on agent worker)
     cx.spawn(async move |cx| {

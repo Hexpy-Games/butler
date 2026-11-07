@@ -1,7 +1,7 @@
 //! `usage/usageTimeline.ts` and `usage/compactTokens.ts`: the popover's usage bars, readout values
 //! and the conversation / subtask split of one chat's usage.
 use butler_ds::ui::blocks::usage_bars::{
-    AxisLabel, BucketOptions, Bucket as BarBucket, Emphasis, Segment, Series, SeriesColor, Slot,
+    AxisLabel, Bucket as BarBucket, BucketOptions, Emphasis, Segment, Series, SeriesColor, Slot,
     bucket_usage_slots, day_and_hour,
 };
 use butler_ds::ui::context::Lang;
@@ -130,7 +130,13 @@ fn bucket_label(start: i64, end: i64, now: i64, step_hours: u32, lang: Lang) -> 
         .join(" · ")
 }
 
-fn axis_labels(buckets: &[TimelineBucket], starts: &[i64], now: i64, step: u32, lang: Lang) -> Vec<AxisLabel> {
+fn axis_labels(
+    buckets: &[TimelineBucket],
+    starts: &[i64],
+    now: i64,
+    step: u32,
+    lang: Lang,
+) -> Vec<AxisLabel> {
     let Some(last) = buckets.len().checked_sub(1) else {
         return Vec::new();
     };
@@ -164,7 +170,11 @@ fn at<T: Copy + Default>(values: &[T], index: usize) -> T {
 }
 
 /// `usageTimeline`.
-pub(super) fn usage_timeline(view: Option<&UsageMonitorView>, max_bars: usize, lang: Lang) -> Timeline {
+pub(super) fn usage_timeline(
+    view: Option<&UsageMonitorView>,
+    max_bars: usize,
+    lang: Lang,
+) -> Timeline {
     let c = copy(lang);
     let offset = local_offset_ms();
     let now = view
@@ -219,7 +229,11 @@ pub(super) fn usage_timeline(view: Option<&UsageMonitorView>, max_bars: usize, l
                 label: label.clone().into(),
                 value_text: format!("{} {}", usage_tokens(prompt + output, lang), c.tokens).into(),
                 segments: vec![
-                    segment("new", (prompt - cached).max(0.), (delegated - d_output - d_cached).max(0.)),
+                    segment(
+                        "new",
+                        (prompt - cached).max(0.),
+                        (delegated - d_output - d_cached).max(0.),
+                    ),
                     segment("cache", cached, d_cached),
                     segment("output", output, d_output),
                 ],
@@ -254,7 +268,10 @@ pub(super) struct Readout {
     pub(super) total: f64,
 }
 
-pub(super) fn usage_readout(view: Option<&UsageMonitorView>, bucket: Option<&TimelineBucket>) -> Readout {
+pub(super) fn usage_readout(
+    view: Option<&UsageMonitorView>,
+    bucket: Option<&TimelineBucket>,
+) -> Readout {
     if let Some(b) = bucket {
         return Readout {
             requests: b.requests,
@@ -300,7 +317,11 @@ pub(super) fn usage_parts(
     lang: Lang,
 ) -> Option<Vec<Part>> {
     let view = view?;
-    let subtasks = view.model.subtasks.as_ref().filter(|s| s.total_tokens > 0.)?;
+    let subtasks = view
+        .model
+        .subtasks
+        .as_ref()
+        .filter(|s| s.total_tokens > 0.)?;
     if bucket.is_some_and(|b| b.values.len() < SPLIT_SLOT_VALUES) {
         return None;
     }

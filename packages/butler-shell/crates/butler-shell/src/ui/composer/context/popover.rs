@@ -7,7 +7,9 @@ use butler_ds::tokens::Color;
 use butler_ds::ui::animated_number::{AnimatedNumber, grouped};
 use butler_ds::ui::blocks::key_value_row::{KeyValueRow, SwatchPattern, ValueSize};
 use butler_ds::ui::blocks::progress_meter::{MeterTone, ProgressMeter};
-use butler_ds::ui::blocks::usage_bars::{Emphasis, Size as BarsSize, State as BarsState, UsageBars};
+use butler_ds::ui::blocks::usage_bars::{
+    Emphasis, Size as BarsSize, State as BarsState, UsageBars,
+};
 use butler_ds::ui::blocks::usage_summary_rows::{UsageSummaryRows, format_tokens, format_usd};
 use butler_ds::ui::button::{Button, Size as ButtonSize, Variant as ButtonVariant};
 use butler_ds::ui::collapsible::Collapsible;
@@ -71,22 +73,28 @@ pub(super) fn usage_popover(props: &Props, cx: &App) -> AnyElement {
     let timeline = usage_timeline(usage.view, 24, props.lang);
     let bucket = props.selected.and_then(|index| timeline.buckets.get(index));
     let parts = usage_parts(usage.view, bucket, props.lang);
-    let mut body = Stack::new().gap(Space::Lg).child(context_meter(context, props.lang));
+    let mut body = Stack::new()
+        .gap(Space::Lg)
+        .child(context_meter(context, props.lang));
     if props.mode.tracked() {
         body = body.child(Separator::new());
-        body = body.child(if usage.view.is_none() && usage.status == UsageStatus::Failed {
-            Stack::new()
-                .gap(Space::Sm)
-                .child(caption(c.this_chat))
-                .child(caption(c.unavailable))
-                .into_any_element()
-        } else {
-            readout(props, &timeline, parts, cx)
-        });
+        body = body.child(
+            if usage.view.is_none() && usage.status == UsageStatus::Failed {
+                Stack::new()
+                    .gap(Space::Sm)
+                    .child(caption(c.this_chat))
+                    .child(caption(c.unavailable))
+                    .into_any_element()
+            } else {
+                readout(props, &timeline, parts, cx)
+            },
+        );
     }
     let summary = conversation_usage_summary(props.mode, context, usage, now_ms(), props.lang);
     if let (UsageAuthMode::Subscription, Some(summary)) = (props.mode, summary) {
-        body = body.child(Separator::new()).child(account_section(summary, props.lang));
+        body = body
+            .child(Separator::new())
+            .child(account_section(summary, props.lang));
     }
     let on_details = props.on_details.clone();
     body.child(
@@ -117,9 +125,12 @@ fn context_meter(context: &ContextDetailsView, lang: Lang) -> AnyElement {
     Stack::new()
         .gap(Space::Xs)
         .child(
-            ProgressMeter::new(eid("context-meter"), f32::from(u8::try_from(percent).unwrap_or(100)))
-                .label(c.context_window)
-                .meta((c.context_full)(percent)),
+            ProgressMeter::new(
+                eid("context-meter"),
+                f32::from(u8::try_from(percent).unwrap_or(100)),
+            )
+            .label(c.context_window)
+            .meta((c.context_full)(percent)),
         )
         .child(
             caption(format!(
@@ -134,7 +145,12 @@ fn context_meter(context: &ContextDetailsView, lang: Lang) -> AnyElement {
 }
 
 /// `UsageReadout` (popover layout) around the usage bars.
-fn readout(props: &Props, timeline: &Timeline, parts: Option<Vec<super::timeline::Part>>, cx: &App) -> AnyElement {
+fn readout(
+    props: &Props,
+    timeline: &Timeline,
+    parts: Option<Vec<super::timeline::Part>>,
+    cx: &App,
+) -> AnyElement {
     let c = copy(props.lang);
     let lang = props.lang;
     let view = props.usage.view;
@@ -144,7 +160,11 @@ fn readout(props: &Props, timeline: &Timeline, parts: Option<Vec<super::timeline
     let selected = bucket.is_some();
     let bars = bars(props, timeline, parts.is_some());
     if view.is_some() && !selected && values.total == 0. && values.requests == 0. {
-        return Stack::new().gap(Space::Sm).child(caption(label)).child(bars).into_any_element();
+        return Stack::new()
+            .gap(Space::Sm)
+            .child(caption(label))
+            .child(bars)
+            .into_any_element();
     }
     let unit = (timeline.step_hours > 1).then(|| (c.bucket_unit)(timeline.step_hours));
     let show_cost = props.mode == UsageAuthMode::ApiKey && !selected;
@@ -156,7 +176,9 @@ fn readout(props: &Props, timeline: &Timeline, parts: Option<Vec<super::timeline
             (props.usage.status == UsageStatus::Failed)
                 .then(|| {
                     let at = view.and_then(|v| parse_ms(&v.generated_at))?;
-                    Some(caption((c.updated)(&clock(at + super::usage::local_offset_ms()))))
+                    Some(caption((c.updated)(&clock(
+                        at + super::usage::local_offset_ms(),
+                    ))))
                 })
                 .flatten(),
         )
@@ -166,7 +188,13 @@ fn readout(props: &Props, timeline: &Timeline, parts: Option<Vec<super::timeline
         .into_any_element()
 }
 
-fn header_row(view: Option<&UsageMonitorView>, label: &str, values: &Readout, unit: Option<String>, lang: Lang) -> AnyElement {
+fn header_row(
+    view: Option<&UsageMonitorView>,
+    label: &str,
+    values: &Readout,
+    unit: Option<String>,
+    lang: Lang,
+) -> AnyElement {
     let c = copy(lang);
     let left = if view.is_some() {
         caption(label.to_owned())
@@ -185,7 +213,10 @@ fn header_row(view: Option<&UsageMonitorView>, label: &str, values: &Readout, un
     } else {
         "—".to_owned()
     };
-    let right = format!("{requests}{}", unit.map(|u| format!(" · {u}")).unwrap_or_default());
+    let right = format!(
+        "{requests}{}",
+        unit.map(|u| format!(" · {u}")).unwrap_or_default()
+    );
     Stack::row()
         .gap(Space::Sm)
         .cross(Cross::Center)
@@ -195,7 +226,12 @@ fn header_row(view: Option<&UsageMonitorView>, label: &str, values: &Readout, un
         .into_any_element()
 }
 
-fn total_row(view: Option<&UsageMonitorView>, values: &Readout, show_cost: bool, lang: Lang) -> AnyElement {
+fn total_row(
+    view: Option<&UsageMonitorView>,
+    values: &Readout,
+    show_cost: bool,
+    lang: Lang,
+) -> AnyElement {
     let c = copy(lang);
     let total = if view.is_some() {
         AnimatedNumber::new(eid("total"), values.total)
@@ -259,7 +295,12 @@ fn bars(props: &Props, timeline: &Timeline, has_parts: bool) -> AnyElement {
     }
 }
 
-fn series_rows(view: Option<&UsageMonitorView>, values: &Readout, lang: Lang, ds: &Ds) -> AnyElement {
+fn series_rows(
+    view: Option<&UsageMonitorView>,
+    values: &Readout,
+    lang: Lang,
+    ds: &Ds,
+) -> AnyElement {
     let c = copy(lang);
     let ratio = if values.prompt > 0. {
         (values.cached / values.prompt * 100.).round()
@@ -267,34 +308,51 @@ fn series_rows(view: Option<&UsageMonitorView>, values: &Readout, lang: Lang, ds
         0.
     };
     let rows = [
-        (c.new_input, Color::ContextChart1, (values.prompt - values.cached).max(0.), false),
+        (
+            c.new_input,
+            Color::ContextChart1,
+            (values.prompt - values.cached).max(0.),
+            false,
+        ),
         (c.cached, Color::ContextChart5, values.cached, true),
         (c.output, Color::ContextChart2, values.output, false),
     ];
     Stack::new()
         .gap(Space::None)
-        .children(rows.into_iter().enumerate().map(|(index, (label, color, tokens, cache))| {
-            let suffix = if cache { format!(" · {ratio}%") } else { String::new() };
-            let value = view
-                .map(|_| format!("{}{suffix}", usage_tokens(tokens, lang)))
-                .unwrap_or_default();
-            let row = KeyValueRow::new(label, value)
-                .value_size(ValueSize::Caption)
-                .swatch_color(ds.color(color));
-            if view.is_none() {
-                row.value_element(
-                    Skeleton::new((eid("series-skeleton"), index.to_string()))
-                        .width(Width::Ch(8.))
-                        .height(Height::Line),
-                )
-            } else {
-                row
-            }
-        }))
+        .children(
+            rows.into_iter()
+                .enumerate()
+                .map(|(index, (label, color, tokens, cache))| {
+                    let suffix = if cache {
+                        format!(" · {ratio}%")
+                    } else {
+                        String::new()
+                    };
+                    let value = view
+                        .map(|_| format!("{}{suffix}", usage_tokens(tokens, lang)))
+                        .unwrap_or_default();
+                    let row = KeyValueRow::new(label, value)
+                        .value_size(ValueSize::Caption)
+                        .swatch_color(ds.color(color));
+                    if view.is_none() {
+                        row.value_element(
+                            Skeleton::new((eid("series-skeleton"), index.to_string()))
+                                .width(Width::Ch(8.))
+                                .height(Height::Line),
+                        )
+                    } else {
+                        row
+                    }
+                }),
+        )
         .into_any_element()
 }
 
-fn parts_rows(parts: Option<Vec<super::timeline::Part>>, on_emphasis: EmphasisHandler, ds: &Ds) -> AnyElement {
+fn parts_rows(
+    parts: Option<Vec<super::timeline::Part>>,
+    on_emphasis: EmphasisHandler,
+    ds: &Ds,
+) -> AnyElement {
     let open = parts.as_ref().is_some_and(|p| !p.is_empty());
     let rows = parts.unwrap_or_default().into_iter().map(|part| {
         let emphasis = part.emphasis;
@@ -321,7 +379,11 @@ fn account_section(summary: Summary, lang: Lang) -> AnyElement {
     let c = copy(lang);
     match summary {
         Summary::Plan { quota, butler } => plan_usage(&quota, butler.as_ref(), lang),
-        Summary::Rows { state, windows, updated } => {
+        Summary::Rows {
+            state,
+            windows,
+            updated,
+        } => {
             let mut rows = UsageSummaryRows::new(eid("account-rows"), c.unavailable)
                 .state(state)
                 .quota_windows(windows)
@@ -350,7 +412,10 @@ fn manage_button(id: &'static str, c: &UsageCopy) -> Button {
 /// `ChatGptPlanUsage` with `popover`.
 fn plan_usage(quota: &ProviderQuota, butler: Option<&ButlerUsage>, lang: Lang) -> AnyElement {
     let c = copy(lang);
-    let limit = quota.plan_usage.as_ref().is_some_and(|p| p.state == "limit_reached");
+    let limit = quota
+        .plan_usage
+        .as_ref()
+        .is_some_and(|p| p.state == "limit_reached");
     let windows: &[QuotaWindowView] = if limit { &[] } else { &quota.windows };
     let mut body = Stack::new().gap(Space::Sm);
     if limit {
@@ -434,7 +499,10 @@ fn quota_gauge(window: &QuotaWindowView, lang: Lang) -> AnyElement {
             .child(caption(value))
             .into_any_element(),
         Some(v) => {
-            #[expect(clippy::cast_possible_truncation, reason = "a percentage between 0 and 100")]
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "a percentage between 0 and 100"
+            )]
             let fraction = v as f32;
             ProgressMeter::new((eid("gauge"), window.id.clone()), fraction)
                 .label(label)
@@ -450,8 +518,14 @@ fn quota_gauge(window: &QuotaWindowView, lang: Lang) -> AnyElement {
         }
     };
     let details: Vec<String> = [
-        window.resets_at.as_deref().map(|at| (c.resets)(&quota_timestamp(at, c))),
-        window.expires_at.as_deref().map(|at| (c.expires)(&quota_timestamp(at, c))),
+        window
+            .resets_at
+            .as_deref()
+            .map(|at| (c.resets)(&quota_timestamp(at, c))),
+        window
+            .expires_at
+            .as_deref()
+            .map(|at| (c.expires)(&quota_timestamp(at, c))),
     ]
     .into_iter()
     .flatten()

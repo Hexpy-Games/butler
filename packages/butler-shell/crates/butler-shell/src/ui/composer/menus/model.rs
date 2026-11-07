@@ -195,7 +195,9 @@ pub(crate) fn model_choice(
 ) -> (SharedString, ReasoningEffort) {
     let kept = next.reasoning_efforts.contains(reasoning)
         && !(next.provider_id.as_ref() == "local"
-            && next.local_reasoning_budget_ratio.is_some_and(|ratio| ratio != 0.)
+            && next
+                .local_reasoning_budget_ratio
+                .is_some_and(|ratio| ratio != 0.)
             && *reasoning == ReasoningEffort::None);
     let reasoning = if kept {
         reasoning.clone()
@@ -237,7 +239,10 @@ pub(crate) fn model_options(
     let current = filter.read(cx).clone();
     let mut providers: Vec<(SharedString, SharedString)> = Vec::new();
     for model in models {
-        if !providers.iter().any(|(provider, _)| *provider == model.provider_id) {
+        if !providers
+            .iter()
+            .any(|(provider, _)| *provider == model.provider_id)
+        {
             providers.push((model.provider_id.clone(), model.provider_label.clone()));
         }
     }
