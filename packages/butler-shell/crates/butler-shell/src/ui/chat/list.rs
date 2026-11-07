@@ -210,7 +210,7 @@ impl State {
         reserve: Option<f32>,
         intro: bool,
     ) {
-        self.client = t.client.clone();
+        self.client.clone_from(&t.client);
         self.entering = t.entering.clone();
         self.footer_meta = t.footer_meta.clone();
         let view_changed = !self
@@ -318,7 +318,7 @@ impl State {
     }
 
     /// `scrollToBottom`: follow the newest message again.
-    fn to_bottom(&mut self) {
+    fn scroll_to_bottom(&mut self) {
         self.smooth.cancel();
         self.list.set_follow_mode(FollowMode::Tail);
         self.away = false;
@@ -374,7 +374,7 @@ fn jump_button(state: &Entity<State>, unread: bool, cx: &App) -> AnyElement {
         .unread(unread)
         .text(if unread { fresh } else { latest })
         .on_click(move |window, cx| {
-            state.update(cx, |state, _| state.to_bottom());
+            state.update(cx, |state, _| state.scroll_to_bottom());
             window.refresh();
         })
         .into_any_element()

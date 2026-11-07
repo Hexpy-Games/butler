@@ -296,7 +296,7 @@ impl Render for ComposerContextControl {
             popover.trigger(move |_| {
                 let donut = ContextDonutButton::new("context-donut", ratio)
                     .expanded(open)
-                    .on_click(move |_, _, cx| click.update(cx, |c, cx| c.toggle_pin(cx)));
+                    .on_click(move |_, _, cx| click.update(cx, ComposerContextControl::toggle_pin));
                 div()
                     .id("context-donut-hover")
                     .on_hover(move |hovered, _, cx| {
@@ -320,7 +320,7 @@ impl Render for ComposerContextControl {
                         this.update(cx, |c, cx| {
                             c.selected = index;
                             cx.notify();
-                        })
+                        });
                     })
                 },
                 on_emphasis: {
@@ -330,7 +330,7 @@ impl Render for ComposerContextControl {
                             this.update(cx, |c, cx| {
                                 c.emphasis = emphasis;
                                 cx.notify();
-                            })
+                            });
                         },
                     )
                 },
@@ -338,7 +338,7 @@ impl Render for ComposerContextControl {
                     this.update(cx, |c, cx| {
                         c.close(cx);
                         cx.emit(ComposerContextEvent::OpenUsageSettings);
-                    })
+                    });
                 }),
             },
             cx,

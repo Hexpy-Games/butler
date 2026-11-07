@@ -9,9 +9,9 @@ use futures::stream::LocalBoxStream;
 use crate::ui::source::model::{Access, Operation};
 use crate::ui::source::wire::SessionView;
 use crate::ui::source::{
-    Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, ClientMessageId,
-    ComposerContext, Decision, EventCursor, Fetch, LiveEvent, PageCursor, RequestRef, Risk,
-    SentTurn, SessionId, Source, SourceError, Space, Timestamp, TurnId,
+    Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, Decision,
+    EventCursor, Fetch, LiveEvent, PageCursor, RequestRef, Risk, SessionId, Source, SourceError,
+    Space, Timestamp, TurnId,
 };
 
 pub(super) const LONG: &str = "c-long";
@@ -234,26 +234,11 @@ impl Source for Fixture {
         ready(chat_ref("c-new"))
     }
 
-    fn send(&self, _: &ChatId, _: ClientMessageId, _: String) -> Fetch<SentTurn> {
-        ready(SentTurn {
-            turn: TurnId("t-new".into()),
-        })
-    }
-
     fn cancel(&self, _: &TurnId) -> Fetch<()> {
         ready(())
     }
 
     fn answer(&self, _: &SessionId, _: &RequestRef, _: Decision) -> Fetch<()> {
         ready(())
-    }
-
-    fn composer(&self) -> ComposerContext {
-        ComposerContext {
-            state: crate::ui::source::model::Controls::Loaded,
-            permission: "먼저 확인".into(),
-            model: "Luna".into(),
-            effort: "중간".into(),
-        }
     }
 }

@@ -28,7 +28,7 @@ impl Shell {
         });
         let queue = shell.clone();
         chat::on_queue_changed(cx, move |cx| {
-            let _ = queue.update(cx, |this, cx| this.reload_queue(cx));
+            let _ = queue.update(cx, super::Shell::reload_queue);
         });
         let open = shell;
         cx.set_global(AssistantHooks {
@@ -45,7 +45,7 @@ impl Shell {
     }
 
     /// The settings the transcript reads: the chats intro flag and developer mode.
-    pub(super) fn load_settings(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn load_settings(cx: &mut Context<Self>) {
         let request = Jobs::run(cx, |client| async move { client.get_settings().await });
         cx.spawn(async move |this, cx| {
             let Some(Ok(raw)) = request.await else {

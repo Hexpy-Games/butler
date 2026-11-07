@@ -83,10 +83,20 @@ const POPOVERS: [&str; 4] = [
     "composer-documents-menu",
 ];
 
+/// What keeps the card unfolded.
+#[derive(Default)]
+struct Fold {
+    /// The field has been engaged and no click outside has folded it.
+    engaged: bool,
+    /// A toolbar popover is open.
+    protected: bool,
+}
+
 pub(crate) struct Composer {
     input: Entity<EditableTextState>,
     editor: ComposerEditor,
-    controls: Controls,
+    /// The catalog, settings and chat controls (the shot harness reads `load_state`).
+    pub(crate) controls: Controls,
     attachments: Attachments,
     context_control: Entity<ComposerContextControl>,
     /// The `@` menu and the atom chips.
@@ -95,12 +105,11 @@ pub(crate) struct Composer {
     inputs: Inputs,
     /// The draft revision the editor shows.
     synced_revision: u64,
-    /// A toolbar popover is open.
-    protected: bool,
+    /// Whether the card is unfolded.
+    fold: Fold,
     /// The field's placeholder (new chat or follow-up).
     placeholder: &'static str,
     theme: Theme,
-    engaged: bool,
     /// The open chat's turn is running.
     pub(crate) streaming: bool,
     /// The open chat's first outstanding authority request (shown instead of the input), and
@@ -138,7 +147,7 @@ impl Composer {
         let subscriptions = vec![
             cx.on_blur(&handle, window, |this: &mut Self, window, cx| {
                 this.editor.save_selection(window, cx);
-                this.engaged = false;
+                this.fold.engaged = false;
                 cx.notify();
             }),
             cx.subscribe_in(&input, window, |this, _, _: &TextChanged, window, cx| {
@@ -162,10 +171,9 @@ impl Composer {
             references: References::default(),
             inputs: Inputs::default(),
             synced_revision: 0,
-            protected: false,
+            fold: Fold::default(),
             placeholder,
             theme,
-            engaged: false,
             streaming: false,
             approval: None,
             new_chat: true,
@@ -198,13 +206,13 @@ impl Composer {
         if self.disabled.is_some() {
             return;
         }
-        self.engaged = true;
+        self.fold.engaged = true;
         self.editor.focus(FocusPlacement::Restore, window, cx);
         cx.notify();
     }
 
     pub(crate) fn fold(&mut self) {
-        self.engaged = false;
+        self.fold.engaged = false;
     }
 
     /// The card's measured height, shared with the conversation's composer reserve.
@@ -237,7 +245,7 @@ impl Composer {
             None,
             move |id, _, cx| {
                 let id = id.to_string();
-                let _ = open.update(cx, |this, cx| this.open_attached(&id, cx));
+                let _ = open.update(cx, |_, cx| Self::open_attached(&id, cx));
             },
             move |id, _, cx| {
                 let id = id.to_string();
@@ -340,7 +348,7 @@ impl Render for Composer {
         self.pull_state(window, cx);
         self.take_focus_request(window, cx);
         self.sync_mentions(window, cx);
-        self.protected = Self::popover_open(window, cx);
+        self.fold.protected = Self::popover_open(window, cx);
         let height = self.height.clone();
         let probe = canvas(
             move |b, _, _| height.set(b.size.height.as_f32()),
@@ -353,7 +361,7 @@ impl Render for Composer {
         let lang = butler_ds::ui::context::Ds::get(cx).lang();
         let this = cx.entity();
         let notice = notice::git_dependency_notice(
-            self.inputs.git_missing,
+            self.inputs.git.missing,
             self.git_notice_dismissed,
             lang,
             move |_, cx| {
@@ -373,7 +381,7 @@ impl Render for Composer {
                 .active_progress()
                 .and_then(|p| p.state.as_deref()),
         );
-        let expanded = self.engaged || self.approval.is_some() || self.protected;
+        let expanded = self.fold.engaged || self.approval.is_some() || self.fold.protected;
         let mut card = ComposerCard::new("composer-card").expanded(expanded);
         if self.new_chat {
             card = card.large();
@@ -408,15 +416,15 @@ impl Render for Composer {
         .child(probe)
         .child(card)
         .on_click(cx.listener(|this, _, window, cx| {
-            if !this.engaged && this.approval.is_none() {
+            if !this.fold.engaged && this.approval.is_none() {
                 this.engage(window, cx);
             }
         }))
         // useComposerPresentation: a pointer-down anywhere else folds the composer, unless a
         // toolbar popover is open or the IME is composing.
         .on_mouse_down_out(cx.listener(|this, _, window, cx| {
-            if this.engaged && !this.protected && !this.composing(window, cx) {
-                this.engaged = false;
+            if this.fold.engaged && !this.fold.protected && !this.composing(window, cx) {
+                this.fold.engaged = false;
                 if let Some(f) = &this.shell_focus {
                     window.focus(f, cx);
                 }

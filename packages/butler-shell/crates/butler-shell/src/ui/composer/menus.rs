@@ -21,12 +21,19 @@ use gpui::{
 };
 
 pub(crate) use model::{
-    ModelChoice, ModelFooter, ReasoningFooterOption, model_display_name, model_options,
+    ModelChoice, ModelFooter, Pick, ReasoningFooterOption, model_display_name, model_options,
     model_options_filter, reasoning_budget_summary, reasoning_option_label,
 };
 
 use super::state::{ComposerModelState, WorkspaceMode};
 use crate::ui::source::wire::{AccessMode, ReasoningEffort};
+
+/// Called with the chosen access mode.
+pub(crate) type AccessHandler = Rc<dyn Fn(&AccessMode, &mut Window, &mut App)>;
+/// Called with the chosen workspace mode.
+type WorkspaceHandler = Rc<dyn Fn(WorkspaceMode, &mut Window, &mut App)>;
+/// Called with the chosen reasoning effort.
+pub(crate) type ReasoningHandler = Rc<dyn Fn(&ReasoningEffort, &mut Window, &mut App)>;
 
 /// `ACCESS_MODES`: the order the access menus list them, the recommended mode first.
 pub(crate) const ACCESS_MODES: [AccessMode; 5] = [
@@ -113,7 +120,7 @@ fn permission_title(lang: Lang) -> &'static str {
 pub(crate) fn access_mode_options(
     id: &'static str,
     value: &AccessMode,
-    on_select: Rc<dyn Fn(&AccessMode, &mut Window, &mut App)>,
+    on_select: &AccessHandler,
     cx: &App,
 ) -> AnyElement {
     let ds = Ds::get(cx);
@@ -143,7 +150,7 @@ pub(crate) fn access_mode_options(
 /// `on_change` (`handleAccessModeChange`) and closes the menu.
 pub(crate) fn access_mode_menu(
     access_mode: &AccessMode,
-    on_change: Rc<dyn Fn(&AccessMode, &mut Window, &mut App)>,
+    on_change: AccessHandler,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -160,15 +167,11 @@ pub(crate) fn access_mode_menu(
             .into_any_element()
     });
     let closing = popover.clone();
-    let options = access_mode_options(
-        "composer-access-option",
-        access_mode,
-        Rc::new(move |mode, window, cx| {
-            on_change(mode, window, cx);
-            closing.set_open(false, window, cx);
-        }),
-        cx,
-    );
+    let select: AccessHandler = Rc::new(move |mode, window, cx| {
+        on_change(mode, window, cx);
+        closing.set_open(false, window, cx);
+    });
+    let options = access_mode_options("composer-access-option", access_mode, &select, cx);
     let content = popover.content(
         PopoverContent::new()
             .align(Align::Start)
@@ -211,7 +214,7 @@ pub(crate) fn workspace_select(
     git_project: bool,
     mode: WorkspaceMode,
     sending: bool,
-    on_change: Rc<dyn Fn(WorkspaceMode, &mut Window, &mut App)>,
+    on_change: WorkspaceHandler,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
@@ -312,9 +315,9 @@ pub(crate) struct ModelMenuProps {
     pub(crate) reasoning: ReasoningEffort,
     pub(crate) available_reasoning: Vec<ReasoningEffort>,
     /// `handleModelChoice`.
-    pub(crate) on_model: Rc<dyn Fn(&ModelChoice, &mut Window, &mut App)>,
+    pub(crate) on_model: Pick,
     /// `handleReasoningChange`.
-    pub(crate) on_reasoning: Rc<dyn Fn(&ReasoningEffort, &mut Window, &mut App)>,
+    pub(crate) on_reasoning: ReasoningHandler,
 }
 
 /// `ModelMenu`: the model control and the popover of the models and reasoning choices.
@@ -364,7 +367,7 @@ pub(crate) fn model_menu(props: ModelMenuProps, window: &mut Window, cx: &mut Ap
         "composer-model-options",
         &models,
         &model,
-        on_model,
+        &on_model,
         Some(ModelFooter { options }),
         &filter,
         cx,

@@ -20,12 +20,12 @@ use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{AccessMode, ReasoningEffort, SessionControlsView};
 
 /// The catalog, Settings and chat controls, and what the composer shows of them.
-pub(super) struct Controls {
+pub(crate) struct Controls {
     pub(super) catalog: ModelCatalog,
     pub(super) catalog_state: CatalogState,
     pub(super) settings: ComposerSettings,
     pub(super) snapshot: Option<SessionControlsView>,
-    pub(super) load_state: ControlsLoadState,
+    pub(crate) load_state: ControlsLoadState,
     pub(super) shown: ComposerModelResolution,
     /// The owner chose a control in this chat (`composerSelectionTouchedRef`).
     touched: bool,
@@ -89,12 +89,12 @@ impl Composer {
     /// The agent attached: reads the catalog, Settings and the open chat's controls.
     pub(super) fn load_controls(&mut self, cx: &mut Context<Self>) {
         self.controls.catalog_state = CatalogState::Loading;
-        self.load_catalog(cx);
-        self.load_settings(cx);
+        Self::load_catalog(cx);
+        Self::load_settings(cx);
         self.load_session_controls(false, cx);
     }
 
-    fn load_catalog(&mut self, cx: &mut Context<Self>) {
+    fn load_catalog(cx: &mut Context<Self>) {
         let fetch = Jobs::run(cx, |client| async move { client.get_model_catalog().await });
         cx.spawn(async move |this, cx| {
             let Some(loaded) = fetch.await else { return };
@@ -112,7 +112,7 @@ impl Composer {
         .detach();
     }
 
-    fn load_settings(&mut self, cx: &mut Context<Self>) {
+    fn load_settings(cx: &mut Context<Self>) {
         let fetch = Jobs::run(cx, |client| async move { client.get_settings().await });
         cx.spawn(async move |this, cx| {
             let Some(loaded) = fetch.await else { return };

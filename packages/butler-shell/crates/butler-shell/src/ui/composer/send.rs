@@ -89,7 +89,7 @@ impl Composer {
         };
         let queued = outgoing.submission.controls.queue_policy == QueuePolicy::EnqueueIfBusy;
         if let (true, Some(chat)) = (queued, self.inputs.chat_id.clone()) {
-            self.queue(chat, outgoing, cx);
+            Self::queue(chat, outgoing, cx);
             return;
         }
         ComposerState::update(cx, |draft| draft.submission_accepted(&outgoing.submission));
@@ -121,7 +121,7 @@ impl Composer {
 
     /// `queueMessage` of a started chat: the draft leaves the editor once the queue took it and
     /// stays when it did not.
-    fn queue(&mut self, chat: String, outgoing: Outgoing, cx: &mut Context<Self>) {
+    fn queue(chat: String, outgoing: Outgoing, cx: &mut Context<Self>) {
         let (text, controls) = (outgoing.text.clone(), outgoing.submission.controls.clone());
         let fetch = Jobs::run(cx, move |client| async move {
             queue_message(&client, &chat, &text, &controls).await

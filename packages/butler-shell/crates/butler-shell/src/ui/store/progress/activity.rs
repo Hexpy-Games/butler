@@ -43,8 +43,8 @@ impl TurnActivityProjection {
     }
 }
 
-pub(super) fn text(value: &Option<String>) -> Option<&str> {
-    value.as_deref().filter(|text| !text.is_empty())
+pub(super) fn text(value: Option<&str>) -> Option<&str> {
+    value.filter(|text| !text.is_empty())
 }
 
 /// `projectTurnActivity`.
@@ -91,10 +91,10 @@ pub(crate) fn project_completed_work_blocks(rows: &[ProgressRow]) -> Vec<WorkBlo
 
 fn is_phase_activity_row(row: &ProgressRow) -> bool {
     row.kind.as_deref() == Some("message")
-        && text(&row.work_block_id).is_none()
-        && text(&row.semantic_block_id).is_some()
+        && text(row.work_block_id.as_deref()).is_none()
+        && text(row.semantic_block_id.as_deref()).is_some()
         && row.work_decision_source.as_deref() == Some("model-authored")
-        && text(&row.work_decision_summary).is_some()
+        && text(row.work_decision_summary.as_deref()).is_some()
 }
 
 fn sorted_operations(mut operations: Vec<(usize, ProgressRow)>) -> Vec<ProgressRow> {
@@ -107,14 +107,14 @@ fn phase_activity_rows(rows: &[ProgressRow]) -> Vec<PhaseActivity> {
     let authored: HashSet<&str> = rows
         .iter()
         .filter(|row| is_phase_activity_row(row))
-        .filter_map(|row| text(&row.semantic_block_id))
+        .filter_map(|row| text(row.semantic_block_id.as_deref()))
         .collect();
     let mut current_by_block: HashMap<&str, usize> = HashMap::new();
     let mut before_activity: HashMap<&str, Vec<(usize, ProgressRow)>> = HashMap::new();
     let mut thinking_before: Vec<(usize, ProgressRow)> = Vec::new();
     for (position, row) in rows.iter().enumerate() {
         if is_phase_activity_row(row) {
-            let block = text(&row.semantic_block_id).unwrap_or_default();
+            let block = text(row.semantic_block_id.as_deref()).unwrap_or_default();
             let summary = row.work_decision_summary.clone().unwrap_or_default();
             let mut earlier = std::mem::take(&mut thinking_before);
             earlier.extend(before_activity.remove(block).unwrap_or_default());
@@ -135,7 +135,7 @@ fn phase_activity_rows(rows: &[ProgressRow]) -> Vec<PhaseActivity> {
             continue;
         }
         if row.bridge_phase.as_deref() == Some("model_round_waiting")
-            && text(&row.thinking_title).is_some()
+            && text(row.thinking_title.as_deref()).is_some()
         {
             match activities.last_mut() {
                 Some(latest) => latest.operations.push(row.clone()),
@@ -143,7 +143,7 @@ fn phase_activity_rows(rows: &[ProgressRow]) -> Vec<PhaseActivity> {
             }
             continue;
         }
-        let Some(block) = text(&row.semantic_block_id) else {
+        let Some(block) = text(row.semantic_block_id.as_deref()) else {
             continue;
         };
         if row.bridge_phase.as_deref() != Some("btcc_operation") {
@@ -196,12 +196,12 @@ fn latest_public_activity(rows: &[ProgressRow], has_model_activity: bool) -> Opt
         .find(|row| {
             if row.kind.as_deref() != Some("message")
                 || row.state != "running"
-                || text(&row.work_block_id).is_some()
+                || text(row.work_block_id.as_deref()).is_some()
             {
                 return false;
             }
             if row.bridge_phase.as_deref() == Some("model_round_waiting")
-                || text(&row.work_decision_source).is_some()
+                || text(row.work_decision_source.as_deref()).is_some()
             {
                 return false;
             }
@@ -219,9 +219,9 @@ fn current_semantic_state(rows: &[ProgressRow], activities: &[PhaseActivity]) ->
             || (row.kind.as_deref() == Some("message")
                 && row.bridge_phase.as_deref() != Some("btcc_operation")
                 && row.bridge_phase.as_deref() != Some("model_round_waiting")
-                && text(&row.semantic_block_id).is_some())
+                && text(row.semantic_block_id.as_deref()).is_some())
     });
-    if let Some(stage) = latest_model_activity.and_then(|row| text(&row.activity_stage)) {
+    if let Some(stage) = latest_model_activity.and_then(|row| text(row.activity_stage.as_deref())) {
         return Some(stage.to_string());
     }
     activities

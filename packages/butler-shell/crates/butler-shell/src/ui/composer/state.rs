@@ -288,6 +288,10 @@ pub(crate) struct ComposerControls {
 }
 
 /// What `useComposerSubmit` closes over.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the closed-over flags of useComposerSubmit (useComposerSubmit.ts) field for field"
+)]
 pub(crate) struct SubmitInput {
     /// `readText?.() ?? text`
     pub(crate) text: String,

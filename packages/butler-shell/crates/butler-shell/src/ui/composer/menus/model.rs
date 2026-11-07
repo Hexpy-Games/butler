@@ -167,11 +167,14 @@ pub(crate) fn model_choice(
     (next.model_ref.clone(), reasoning)
 }
 
+/// Called when a footer option is picked.
+pub(crate) type Choice = Rc<dyn Fn(&mut Window, &mut App)>;
+
 /// One reasoning choice below the model list.
 pub(crate) struct ReasoningFooterOption {
     pub(crate) label: SharedString,
     pub(crate) selected: bool,
-    pub(crate) on_select: Rc<dyn Fn(&mut Window, &mut App)>,
+    pub(crate) on_select: Choice,
 }
 
 /// `ModelOptions`'s `footer`.
@@ -179,7 +182,7 @@ pub(crate) struct ModelFooter {
     pub(crate) options: Vec<ReasoningFooterOption>,
 }
 
-type Pick = Rc<dyn Fn(&ModelChoice, &mut Window, &mut App)>;
+pub(crate) type Pick = Rc<dyn Fn(&ModelChoice, &mut Window, &mut App)>;
 
 /// `ModelOptions`: the model choices with search and provider filters. `filter` is the state
 /// from [`model_options_filter`], so the search and filter survive reopening.
@@ -187,7 +190,7 @@ pub(crate) fn model_options(
     id: &'static str,
     models: &[ModelChoice],
     value: &str,
-    on_select: Pick,
+    on_select: &Pick,
     footer: Option<ModelFooter>,
     filter: &Entity<ModelOptionsFilter>,
     cx: &mut App,

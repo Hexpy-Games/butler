@@ -182,7 +182,7 @@ fn readout(
         )
         .child(bars)
         .child(series_rows(view, &values, lang, Ds::get(cx)))
-        .child(parts_rows(parts, props.on_emphasis.clone(), Ds::get(cx)))
+        .child(parts_rows(parts, &props.on_emphasis, Ds::get(cx)))
         .into_any_element()
 }
 
@@ -348,7 +348,7 @@ fn series_rows(
 
 fn parts_rows(
     parts: Option<Vec<super::timeline::Part>>,
-    on_emphasis: EmphasisHandler,
+    on_emphasis: &EmphasisHandler,
     ds: &Ds,
 ) -> AnyElement {
     let open = parts.as_ref().is_some_and(|p| !p.is_empty());

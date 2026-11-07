@@ -7,8 +7,8 @@ use chrono::DateTime;
 use super::row_ops::{is_terminal_state, minimum, overlay};
 use crate::ui::source::wire::{ProgressDetailRow, ProgressRow};
 
-fn text(value: &Option<String>) -> Option<&str> {
-    value.as_deref().filter(|text| !text.is_empty())
+fn text(value: Option<&str>) -> Option<&str> {
+    value.filter(|text| !text.is_empty())
 }
 
 fn normalize(value: Option<&str>) -> String {
@@ -95,13 +95,13 @@ fn semantic_key(row: &ProgressRow) -> Option<String> {
 }
 
 fn direct_key(row: &ProgressRow) -> String {
-    if row.kind.as_deref() == Some("work_block") && text(&row.work_block_id).is_some() {
+    if row.kind.as_deref() == Some("work_block") && text(row.work_block_id.as_deref()).is_some() {
         return format!("work-event:{}", row.id);
     }
     if let Some(todo) = todo_key(row) {
         return format!("todo:{todo}");
     }
-    if let Some(call) = text(&row.tool_call_id) {
+    if let Some(call) = text(row.tool_call_id.as_deref()) {
         return format!("tool:{call}");
     }
     match semantic_key(row) {
@@ -136,7 +136,7 @@ fn non_empty_details(row: &ProgressRow) -> Option<&[ProgressDetailRow]> {
 }
 
 fn have_compatible_evidence(left: &ProgressRow, right: &ProgressRow) -> bool {
-    let differs = |a: &Option<String>, b: &Option<String>| matches!((text(a), text(b)), (Some(a), Some(b)) if a != b);
+    let differs = |a: &Option<String>, b: &Option<String>| matches!((text(a.as_deref()), text(b.as_deref())), (Some(a), Some(b)) if a != b);
     if differs(&left.semantic_block_id, &right.semantic_block_id)
         || differs(&left.work_block_id, &right.work_block_id)
     {
@@ -249,7 +249,7 @@ fn target_slot(
     incoming: &ProgressRow,
     direct: &str,
 ) -> Option<usize> {
-    let call = text(&incoming.tool_call_id);
+    let call = text(incoming.tool_call_id.as_deref());
     if let Some(call) = call
         && let Some(at) = by_key
             .iter()
@@ -260,14 +260,15 @@ fn target_slot(
     let sole = |slots: Vec<usize>| (slots.len() == 1).then(|| slots[0]);
     if call.is_some() && !by_key.iter().any(|(key, _)| key == direct) {
         return sole(keys_where(by_key, |candidate| {
-            text(&candidate.tool_call_id).is_none()
+            text(candidate.tool_call_id.as_deref()).is_none()
                 && !is_terminal_state(&candidate.state)
                 && rows_semantically_match(candidate, incoming)
         }));
     }
     if call.is_none() && !is_terminal_state(&incoming.state) {
         return sole(keys_where(by_key, |candidate| {
-            text(&candidate.tool_call_id).is_some() && rows_semantically_match(candidate, incoming)
+            text(candidate.tool_call_id.as_deref()).is_some()
+                && rows_semantically_match(candidate, incoming)
         }));
     }
     None

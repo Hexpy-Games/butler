@@ -56,9 +56,12 @@ pub(crate) struct TranscriptCtx<'a> {
     pub(crate) message_id: Option<&'a str>,
 }
 
+/// Sends a text as a message.
+type SendHandler = Rc<dyn Fn(&str, &mut App)>;
+
 #[derive(Default)]
 struct Actions {
-    send: Option<Rc<dyn Fn(&str, &mut App)>>,
+    send: Option<SendHandler>,
 }
 
 impl Global for Actions {}

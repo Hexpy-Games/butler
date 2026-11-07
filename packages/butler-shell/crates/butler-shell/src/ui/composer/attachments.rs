@@ -110,7 +110,9 @@ pub(crate) struct PickedFile {
 impl PickedFile {
     /// A regular file at `path`; `None` for anything else.
     pub(crate) fn from_path(path: &Path) -> Option<Self> {
-        let metadata = std::fs::metadata(path).ok().filter(|m| m.is_file())?;
+        let metadata = std::fs::metadata(path)
+            .ok()
+            .filter(std::fs::Metadata::is_file)?;
         let name = path.file_name()?.to_string_lossy().into_owned();
         Some(Self {
             mime_type: mime_of(&name).to_owned(),
@@ -327,7 +329,7 @@ pub(crate) fn upload_notices(outcome: &UploadOutcome, cx: &App) -> Vec<Toast> {
     }
     if !outcome.oversized.is_empty() {
         let names = join(&outcome.oversized);
-        let limit = format_size(ATTACHMENT_MAX_BYTES as i64);
+        let limit = format_size(i64::try_from(ATTACHMENT_MAX_BYTES).unwrap_or(i64::MAX));
         toasts.push(Toast::error(if korean {
             format!("{names} — 파일당 {limit} 이하로 줄이거나 다른 파일을 선택해 주세요.")
         } else {

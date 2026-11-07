@@ -20,6 +20,8 @@ use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::ProjectDashboardDocument;
 
 type Choose = Rc<dyn Fn(&mut Window, &mut App)>;
+/// Called with a yes/no choice.
+pub(crate) type FlagHandler = Rc<dyn Fn(bool, &mut Window, &mut App)>;
 
 /// What the menu shows and does (the `useComposerStore` selectors it reads).
 pub(crate) struct AttachmentMenu {
@@ -31,9 +33,9 @@ pub(crate) struct AttachmentMenu {
     /// Why the model takes no images (`imageRefusalLabel(imagesBlockedBy)`), when it does not.
     pub(crate) images_blocked: Option<SharedString>,
     /// `openAttachmentPicker`: `true` for "Attach image".
-    pub(crate) on_pick_file: Rc<dyn Fn(bool, &mut Window, &mut App)>,
+    pub(crate) on_pick_file: FlagHandler,
     /// `handlePlanModeChange`.
-    pub(crate) on_plan_mode: Rc<dyn Fn(bool, &mut Window, &mut App)>,
+    pub(crate) on_plan_mode: FlagHandler,
     /// `addProjectDocument`.
     pub(crate) on_document: PickDocument,
 }
@@ -47,7 +49,7 @@ struct DocumentsState {
 
 /// `ComposerAttachmentMenu`: the "+" button and its popover.
 pub(crate) fn attachment_menu(
-    menu: AttachmentMenu,
+    menu: &AttachmentMenu,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -67,7 +69,7 @@ pub(crate) fn attachment_menu(
         let popover = popover.clone();
         Rc::new(move |window, cx| popover.set_open(false, window, cx))
     };
-    let body = menu_body(&menu, label, &close, window, cx);
+    let body = menu_body(menu, label, &close, window, cx);
     let content = popover.content(
         PopoverContent::new()
             .align(Align::Start)
@@ -134,7 +136,7 @@ fn menu_body(
     cx: &mut App,
 ) -> AnyElement {
     let mut attachments = OptionMenuSection::new(tr(cx, "Attachments", "첨부")).first();
-    if let Some(project) = menu.project_id.clone() {
+    if let Some(project) = menu.project_id.as_deref() {
         attachments = attachments.child(document_menu(menu, project, close, window, cx));
     }
     let file = (
@@ -179,7 +181,7 @@ fn menu_body(
 /// `ComposerProjectDocumentMenu`: the "Project documents" row; its popover is the picker.
 fn document_menu(
     menu: &AttachmentMenu,
-    project_id: String,
+    project_id: &str,
     close_menu: &Choose,
     window: &mut Window,
     cx: &mut App,
@@ -222,7 +224,7 @@ fn document_menu(
 /// and starts fresh (no documents, empty search, "all") each time it opens.
 fn document_picker(
     menu: &AttachmentMenu,
-    project_id: String,
+    project_id: &str,
     nested: &Popover,
     close_all: Choose,
     title: &'static str,
@@ -242,7 +244,7 @@ fn document_picker(
             SharedString::from("all")
         });
     if nested.is_open(cx) {
-        load_when_needed(&state, &project_id, cx);
+        load_when_needed(&state, project_id, cx);
     } else {
         reset(&state, &search, &filter, cx);
     }

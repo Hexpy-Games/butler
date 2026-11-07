@@ -77,7 +77,7 @@ fn matches_at(chars: &[char], at: usize, needle: &str) -> Option<usize> {
     let mut end = at;
     for expected in needle.chars() {
         let c = *chars.get(end)?;
-        if c.to_ascii_lowercase() != expected.to_ascii_lowercase() {
+        if !c.eq_ignore_ascii_case(&expected) {
             return None;
         }
         end += 1;

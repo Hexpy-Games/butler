@@ -72,16 +72,16 @@ fn is_tool_control_row(row: &ProgressRow) -> bool {
     if matches!(row.kind.as_deref(), Some("decision" | "work_block")) {
         return false;
     }
-    text(&row.safe_tool_name).is_some()
-        || text(&row.safe_input_label).is_some()
-        || text(&row.tool_call_id).is_some()
+    text(row.safe_tool_name.as_deref()).is_some()
+        || text(row.safe_input_label.as_deref()).is_some()
+        || text(row.tool_call_id.as_deref()).is_some()
 }
 
 fn read_model(lang: Lang, row: &ProgressRow) -> Option<ActivityReadModel> {
     if let (Some(id), Some(kind), Some(summary)) = (
-        text(&row.runtime_fault_id),
-        text(&row.runtime_fault_kind),
-        text(&row.runtime_fault_public_summary),
+        text(row.runtime_fault_id.as_deref()),
+        text(row.runtime_fault_kind.as_deref()),
+        text(row.runtime_fault_public_summary.as_deref()),
     ) {
         return Some(ActivityReadModel::RuntimeFault {
             fault_id: id.to_string(),
@@ -92,7 +92,7 @@ fn read_model(lang: Lang, row: &ProgressRow) -> Option<ActivityReadModel> {
             safe_cause: row.runtime_fault_safe_cause.clone(),
         });
     }
-    if let Some(receipt) = text(&row.receipt_kind) {
+    if let Some(receipt) = text(row.receipt_kind.as_deref()) {
         return Some(ActivityReadModel::Receipt {
             label: row.safe_label.clone(),
             state: row.state.clone(),
@@ -102,7 +102,7 @@ fn read_model(lang: Lang, row: &ProgressRow) -> Option<ActivityReadModel> {
     if row.kind.as_deref() == Some("decision")
         && is_public_decision_source(row.public_decision_source.as_deref())
     {
-        let summary = text(&row.public_decision_summary)?;
+        let summary = text(row.public_decision_summary.as_deref())?;
         return Some(ActivityReadModel::Decision {
             summary: summary.to_string(),
             rationale: row.public_decision_rationale.clone(),
@@ -114,7 +114,7 @@ fn read_model(lang: Lang, row: &ProgressRow) -> Option<ActivityReadModel> {
         });
     }
     if row.kind.as_deref() == Some("work_block")
-        && let Some(id) = text(&row.work_block_id)
+        && let Some(id) = text(row.work_block_id.as_deref())
     {
         return Some(ActivityReadModel::WorkBlock {
             id: id.to_string(),
@@ -153,8 +153,8 @@ fn tool_control_model(lang: Lang, row: &ProgressRow) -> ActivityReadModel {
         (Some(input), Some(tool)) if !input.is_empty() && !tool.is_empty() => {
             format!("{tool_name}: {input}")
         }
-        _ => text(&row.safe_tool_name)
-            .or(text(&row.safe_input_label))
+        _ => text(row.safe_tool_name.as_deref())
+            .or(text(row.safe_input_label.as_deref()))
             .unwrap_or(tool_label(lang))
             .to_string(),
     };

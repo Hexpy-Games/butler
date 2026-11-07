@@ -44,7 +44,7 @@ pub(super) struct References {
     /// The field's bounds as last drawn, in window coordinates.
     pub(super) field: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// Where the chips were last placed; a change draws once more with the settled layout.
-    marks: Vec<(i32, i32)>,
+    marks: Vec<(Pixels, Pixels)>,
 }
 
 impl References {
@@ -62,7 +62,7 @@ impl Composer {
             self.rebuild_candidates();
         }
         let focused = self.focus_handle(cx).is_focused(window);
-        let token = if focused && self.engaged {
+        let token = if focused && self.fold.engaged {
             self.editor.active_mention(window, cx)
         } else {
             None
@@ -73,7 +73,7 @@ impl Composer {
             .map(|token| rank_mentions(&self.references.candidates, &token.query))
             .unwrap_or_default();
         if opened {
-            self.load_navigation(cx);
+            Self::load_navigation(cx);
         }
     }
 
@@ -89,7 +89,7 @@ impl Composer {
     }
 
     /// The navigation the candidates and chips read; read again when the menu opens.
-    pub(super) fn load_navigation(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn load_navigation(cx: &mut Context<Self>) {
         let fetch = Jobs::run(cx, |client| async move { client.list_navigation().await });
         cx.spawn(async move |this, cx| {
             let Some(Ok(raw)) = fetch.await else {
@@ -231,7 +231,7 @@ impl Composer {
                 bounds.origin.x - field.origin.x,
                 bounds.origin.y - field.origin.y,
             );
-            marks.push((left.as_f32().round() as i32, top.as_f32().round() as i32));
+            marks.push((left.round(), top.round()));
             let chip = atom_chip(
                 SharedString::from(format!("composer-atom-{at}")),
                 &atom,

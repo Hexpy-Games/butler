@@ -53,7 +53,7 @@ pub(crate) fn assistant_branch_actions(
         project_id,
         client: t.client.clone(),
     };
-    Some(branch_message_actions(source, window, cx))
+    Some(branch_message_actions(&source, window, cx))
 }
 
 /// What the form branches from, and where the new conversation goes.
@@ -107,7 +107,7 @@ impl FormState {
 }
 
 /// The two icon buttons and the dialog they open (`BranchMessageActions`).
-fn branch_message_actions(source: Source, window: &mut Window, cx: &mut App) -> AnyElement {
+fn branch_message_actions(source: &Source, window: &mut Window, cx: &mut App) -> AnyElement {
     let copy = copy_text(cx);
     let key = ElementId::from(SharedString::from(format!("branch-{}", source.message_id)));
     let state = FormState::new(&key, window, cx);
@@ -145,7 +145,7 @@ fn branch_message_actions(source: Source, window: &mut Window, cx: &mut App) -> 
             })
     };
     let content = match current {
-        Some(current) => session_branch_form(&source, current, &state, &dialog, cx),
+        Some(current) => session_branch_form(source, current, &state, &dialog, cx),
         None => DialogContent::new(),
     };
     let content = dialog.content(content, window, cx);

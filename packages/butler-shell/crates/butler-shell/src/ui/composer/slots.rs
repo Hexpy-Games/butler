@@ -35,7 +35,7 @@ impl Composer {
             ComposerState::read(cx, |draft| (draft.uploading_count, draft.workspace_mode));
         let (pick, plan, document) = (weak.clone(), weak.clone(), weak.clone());
         let attach = attachment_menu(
-            AttachmentMenu {
+            &AttachmentMenu {
                 uploading: uploading > 0,
                 project_id: self.inputs.project_id.clone(),
                 plan_mode: shown.plan_mode,
@@ -73,7 +73,7 @@ impl Composer {
         let workspace = {
             let weak = weak.clone();
             workspace_select(
-                self.inputs.git_project && self.inputs.session_id.is_none(),
+                self.inputs.git.project && self.inputs.session_id.is_none(),
                 workspace_mode,
                 false,
                 Rc::new(move |mode, _, cx| {

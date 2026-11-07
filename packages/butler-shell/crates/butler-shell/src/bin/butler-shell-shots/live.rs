@@ -87,13 +87,9 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "stable" => stable(h),
         "attached" => attached(h),
         "controls" => wait(h, |s, app| {
-            s.composer
-                .read(app)
-                .context
-                .as_ref()
-                .is_some_and(|context| {
-                    (context.state == ui::source::model::Controls::Loaded) == (arg == "loaded")
-                })
+            (s.composer.read(app).controls.load_state
+                == ui::composer::state::ControlsLoadState::Ready)
+                == (arg == "loaded")
         }),
         "cursor" => {
             let cursor: u64 = arg.parse()?;

@@ -6,6 +6,7 @@ use crate::ui::source::wire::{
     AnswerBlock, AnswerBlockActionsItemsItem, AnswerBlockChartSeriesItem,
     AnswerBlockMetricsItemsItemValue, AnswerCellValue, AnswerLeafBlock, CardItem, CardValue,
 };
+use std::fmt::Write as _;
 
 /// `text`: escapes the characters Markdown reads, and folds line breaks into spaces.
 fn text(value: &str) -> String {
@@ -48,7 +49,7 @@ fn link(label: &str, source: Option<&str>) -> String {
     let mut destination = String::new();
     for c in url.as_str().chars() {
         if "()<>\\".contains(c) {
-            destination.push_str(&format!("%{:x}", u32::from(c)));
+            let _ = write!(destination, "%{:x}", u32::from(c));
         } else {
             destination.push(c);
         }
@@ -144,7 +145,7 @@ fn table(columns: &[String], rows: &[Vec<String>]) -> String {
     lines.join("\n")
 }
 
-fn cell(value: &Option<AnswerCellValue>) -> String {
+fn cell(value: Option<&AnswerCellValue>) -> String {
     match value {
         None => String::new(),
         Some(AnswerCellValue::Variant1(value)) => value.clone(),
@@ -209,7 +210,7 @@ fn data(block: &AnswerBlock) -> String {
         AnswerBlock::Table { columns, rows, .. } => {
             let rows: Vec<Vec<String>> = rows
                 .iter()
-                .map(|cells| cells.iter().map(cell).collect())
+                .map(|cells| cells.iter().map(|value| cell(value.as_ref())).collect())
                 .collect();
             table(columns, &rows)
         }

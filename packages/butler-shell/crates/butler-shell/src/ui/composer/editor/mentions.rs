@@ -265,7 +265,9 @@ impl MentionMenu {
     /// Arrow keys wrap around the `rows`.
     pub(crate) fn step(&mut self, step: isize, rows: usize) {
         if rows > 0 {
-            self.active = (self.active as isize + step).rem_euclid(rows as isize) as usize;
+            let rows = isize::try_from(rows).unwrap_or(isize::MAX);
+            let active = isize::try_from(self.active).unwrap_or(isize::MAX);
+            self.active = usize::try_from((active + step).rem_euclid(rows)).unwrap_or(0);
         }
     }
 

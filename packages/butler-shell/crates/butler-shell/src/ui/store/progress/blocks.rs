@@ -31,8 +31,8 @@ pub(crate) struct SharedProgressReducer {
     current_open: Option<String>,
 }
 
-fn non_empty(value: &Option<String>) -> Option<&str> {
-    value.as_deref().filter(|text| !text.is_empty())
+fn non_empty(value: Option<&str>) -> Option<&str> {
+    value.filter(|text| !text.is_empty())
 }
 
 impl SharedProgressReducer {
@@ -72,7 +72,7 @@ impl SharedProgressReducer {
     }
 
     fn append_block_marker(&mut self, row: &ProgressRow) {
-        let Some(id) = non_empty(&row.work_block_id) else {
+        let Some(id) = non_empty(row.work_block_id.as_deref()) else {
             return;
         };
         let existing = self.position(id);
@@ -105,16 +105,16 @@ impl SharedProgressReducer {
     }
 
     fn append_tool_row(&mut self, row: &ProgressRow) {
-        let id = non_empty(&row.work_block_id)
+        let id = non_empty(row.work_block_id.as_deref())
             .map(str::to_string)
             .unwrap_or_else(|| {
                 format!(
                     "unbound:{}",
-                    non_empty(&row.tool_call_id).unwrap_or(&row.id)
+                    non_empty(row.tool_call_id.as_deref()).unwrap_or(&row.id)
                 )
             });
-        let explicit =
-            non_empty(&row.work_decision_id).is_some() || row.work_block_sequence.is_some();
+        let explicit = non_empty(row.work_decision_id.as_deref()).is_some()
+            || row.work_block_sequence.is_some();
         let at = match self.position(&id) {
             Some(at) => at,
             None if explicit => return,
@@ -123,7 +123,7 @@ impl SharedProgressReducer {
         if self.blocks[at].closed || self.current_open.as_deref() != Some(id.as_str()) {
             return;
         }
-        let key = non_empty(&row.tool_call_id)
+        let key = non_empty(row.tool_call_id.as_deref())
             .map_or_else(|| format!("row:{}", row.id), |call| format!("tool:{call}"));
         let block = &mut self.blocks[at];
         let next = match block.rows.iter().find(|(known, _)| *known == key) {
@@ -156,7 +156,7 @@ impl SharedProgressReducer {
             .clone()
             .or_else(|| row.work_block_label.clone())
             .unwrap_or_else(|| {
-                if non_empty(&row.work_block_id).is_some() {
+                if non_empty(row.work_block_id.as_deref()).is_some() {
                     String::new()
                 } else {
                     row.safe_label.clone()
@@ -209,15 +209,16 @@ pub(crate) fn project_shared_work_blocks(
         .filter(|row| {
             row.kind.as_deref() == Some("message")
                 && row.work_decision_source.as_deref() == Some("model-authored")
-                && non_empty(&row.work_decision_summary).is_some()
-                && non_empty(&row.work_block_id).is_none()
+                && non_empty(row.work_decision_summary.as_deref()).is_some()
+                && non_empty(row.work_block_id.as_deref()).is_none()
         })
-        .filter_map(|row| non_empty(&row.semantic_block_id))
+        .filter_map(|row| non_empty(row.semantic_block_id.as_deref()))
         .collect();
     let mut reducer = SharedProgressReducer::default();
     for row in sort_projection_rows(rows) {
         let skipped = row.bridge_phase.as_deref() == Some("btcc_operation")
-            && non_empty(&row.semantic_block_id).is_some_and(|block| phases.contains(block));
+            && non_empty(row.semantic_block_id.as_deref())
+                .is_some_and(|block| phases.contains(block));
         if !skipped {
             reducer.append(row);
         }

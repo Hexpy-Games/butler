@@ -262,7 +262,7 @@ fn working_file_menu(
     content = content.child(
         Item::new(copy.save)
             .icon(Icon::Save)
-            .on_select(move |_, cx| save_file(id.clone(), name.clone(), cx)),
+            .on_select(move |_, cx| save_file(id.clone(), &name, cx)),
     );
     let id = file.file_id.clone();
     content = content.child(

@@ -83,12 +83,12 @@ fn children(
 }
 
 /// A leaf block as the block the family renders take (every leaf variant is one of the two groups).
-pub(super) fn leaf_block(leaf: AnswerLeafBlock) -> Result<AnswerBlock, AnswerLeafBlock> {
-    data_leaf(leaf).or_else(text_leaf)
+pub(super) fn leaf_block(leaf: AnswerLeafBlock) -> Result<AnswerBlock, Box<AnswerLeafBlock>> {
+    data_leaf(leaf).or_else(|other| text_leaf(*other))
 }
 
 /// The data-like leaves (cards, table, gallery, facts, metrics, chart, callout, actions).
-fn data_leaf(leaf: AnswerLeafBlock) -> Result<AnswerBlock, AnswerLeafBlock> {
+fn data_leaf(leaf: AnswerLeafBlock) -> Result<AnswerBlock, Box<AnswerLeafBlock>> {
     use AnswerLeafBlock as L;
     Ok(match leaf {
         L::Cards {
@@ -157,12 +157,12 @@ fn data_leaf(leaf: AnswerLeafBlock) -> Result<AnswerBlock, AnswerLeafBlock> {
             text,
         },
         L::Actions { id, title, items } => AnswerBlock::Actions { id, title, items },
-        other => return Err(other),
+        other => return Err(Box::new(other)),
     })
 }
 
 /// The text-like leaves (timeline, checklist, progress, text, image, quote).
-fn text_leaf(leaf: AnswerLeafBlock) -> Result<AnswerBlock, AnswerLeafBlock> {
+fn text_leaf(leaf: AnswerLeafBlock) -> Result<AnswerBlock, Box<AnswerLeafBlock>> {
     use AnswerLeafBlock as L;
     Ok(match leaf {
         L::Timeline { id, title, items } => AnswerBlock::Timeline { id, title, items },
@@ -195,7 +195,7 @@ fn text_leaf(leaf: AnswerLeafBlock) -> Result<AnswerBlock, AnswerLeafBlock> {
             cite,
             source,
         },
-        other => return Err(other),
+        other => return Err(Box::new(other)),
     })
 }
 

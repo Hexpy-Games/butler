@@ -147,7 +147,7 @@ fn artifact_item(artifact: &Artifact, cx: &App) -> ArtifactItem {
     item.action(
         ArtifactAction::new(Media::get(cx).save)
             .icon(Icon::Save)
-            .on_click(move |_, _, cx| save_file(file_id.clone(), name.clone(), cx)),
+            .on_click(move |_, _, cx| save_file(file_id.clone(), &name, cx)),
     )
 }
 

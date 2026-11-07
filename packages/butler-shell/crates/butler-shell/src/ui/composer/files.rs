@@ -156,7 +156,7 @@ impl Composer {
     }
 
     /// The tile's open: a picture in the viewer, another file in the browser.
-    pub(super) fn open_attached(&mut self, id: &str, cx: &mut Context<Self>) {
+    pub(super) fn open_attached(id: &str, cx: &mut Context<Self>) {
         let attachments = ComposerState::read(cx, |state| state.attachments.clone());
         open_attachment(
             &attachments,

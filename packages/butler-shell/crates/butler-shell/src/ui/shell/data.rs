@@ -52,7 +52,7 @@ impl Shell {
     /// A fresh snapshot: the first page of chats, then live updates after its cursor.
     pub(super) fn connect(&mut self, cx: &mut Context<Self>) {
         if self.source.is_some() {
-            self.load_settings(cx);
+            Self::load_settings(cx);
             let load = self.store.begin_snapshot();
             self.load_chats(load, cx);
         }

@@ -230,7 +230,7 @@ pub(super) fn merge_snapshot_map(snapshots: &mut Snapshots, incoming: &Snapshots
         let mut incoming_snapshot = snapshot.clone();
         incoming_snapshot.turn_id =
             Some(snapshot.turn_id.clone().unwrap_or_else(|| turn_id.clone()));
-        incoming_snapshot.safe_progress_rows = rows.clone();
+        incoming_snapshot.safe_progress_rows.clone_from(&rows);
         let Some(previous) = find(snapshots, turn_id).cloned() else {
             put(snapshots, turn_id, incoming_snapshot);
             changed = true;
@@ -323,7 +323,7 @@ pub(super) fn merge_from_latest(
         .or_else(|| turn_state.map(str::to_string))
         .unwrap_or_default();
     let mut incoming = latest.clone();
-    incoming.safe_progress_rows = rows.clone();
+    incoming.safe_progress_rows.clone_from(&rows);
     let previous_state = previous
         .as_ref()
         .and_then(|p| p.state.clone())
@@ -359,7 +359,7 @@ pub(super) fn merge_from_latest(
     let merged = merge_progress_rows(&previous_rows, &rows, revive);
     next.turn_id = Some(turn_id.clone());
     if next_state.is_some() {
-        next.state = next_state.clone();
+        next.state.clone_from(&next_state);
     }
     next.safe_progress_rows = rows_for_merged_terminal_state(merged, next_state.as_deref());
     if previous.as_ref() == Some(&next) {

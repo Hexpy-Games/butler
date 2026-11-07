@@ -36,7 +36,7 @@ pub(super) fn fallback_ordinary_activity(
     };
     let working = copy(lang).working.to_string();
     vec![PhaseActivity {
-        id: text(&first.semantic_block_id)
+        id: text(first.semantic_block_id.as_deref())
             .map_or_else(|| format!("turn:{resolved}:ordinary"), str::to_string),
         phase: None,
         title: working.clone(),
@@ -70,16 +70,16 @@ fn dedupe_ordinary_operations(rows: &[ProgressRow], turn_id: &str) -> Vec<Progre
     for row in merge_tool_rows(rows) {
         let ordinary = row.bridge_phase.as_deref() == Some("btcc_operation")
             || (row.bridge_phase.as_deref() == Some("model_round_waiting")
-                && text(&row.thinking_title).is_some());
+                && text(row.thinking_title.as_deref()).is_some());
         let other_turn = row
             .turn_id
             .as_deref()
             .is_some_and(|id| id.trim() != turn_id);
         if !ordinary
             || other_turn
-            || text(&row.work_block_id).is_some()
-            || text(&row.work_contract_id).is_some()
-            || text(&row.work_stream_id).is_some()
+            || text(row.work_block_id.as_deref()).is_some()
+            || text(row.work_contract_id.as_deref()).is_some()
+            || text(row.work_stream_id.as_deref()).is_some()
         {
             continue;
         }

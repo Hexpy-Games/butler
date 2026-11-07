@@ -79,7 +79,7 @@ pub(crate) fn current_turn_status(
         activity_label: None,
     };
     let id = ElementId::from(SharedString::from(format!("turn-status-line:{}", turn.id)));
-    Some(current_turn_status_line(&status, id, lang, window, cx))
+    Some(current_turn_status_line(&status, &id, lang, window, cx))
 }
 
 fn sub(id: &ElementId, name: &'static str) -> ElementId {
@@ -223,29 +223,29 @@ fn resolve<'a>(status: &'a Status, lang: Lang) -> (String, Option<&'a str>) {
 /// `CurrentTurnStatus`.
 fn current_turn_status_line(
     status: &Status,
-    id: ElementId,
+    id: &ElementId,
     lang: Lang,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     keep_time(
-        sub(&id, "clock"),
+        sub(id, "clock"),
         status.started_at.is_some() || status.model_round_wait.is_some(),
         window,
         cx,
     );
     let (text, summary_line) = resolve(status, lang);
-    let mark = ButlerThinkingMark::new(sub(&id, "mark"))
+    let mark = ButlerThinkingMark::new(sub(id, "mark"))
         .state(MarkState::Working)
         .morph_key(status.mark_key.clone());
-    let label = MessageStatusLabel::new(sub(&id, "label"), mark);
+    let label = MessageStatusLabel::new(sub(id, "label"), mark);
     let label = match summary_line {
         // A summary line rolls in as its text changes.
         Some(line) => {
             let rolling = SharedString::from(text);
             label.child(
                 RollingSwap::new(
-                    sub(&id, "swap"),
+                    sub(id, "swap"),
                     SharedString::from(line.to_string()),
                     move |_, _| {
                         Typo::body(rolling.clone())

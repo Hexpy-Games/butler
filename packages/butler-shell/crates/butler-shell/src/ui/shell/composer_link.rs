@@ -26,13 +26,13 @@ fn client_message_id() -> String {
 
 impl Shell {
     /// `sendMessage`: the draft goes into the open chat, or into a new one created first.
-    pub(super) fn send(&mut self, outgoing: impl Into<Outgoing>, cx: &mut Context<Self>) {
+    pub(crate) fn send(&mut self, outgoing: impl Into<Outgoing>, cx: &mut Context<Self>) {
         let outgoing = outgoing.into();
         let Some(source) = self.source.clone() else {
             return;
         };
         if let Some(chat) = self.store.selected().cloned() {
-            return self.send_to(chat, outgoing, false, cx);
+            return Self::send_to(chat, &outgoing, false, cx);
         }
         Self::run(
             source.create_chat(),
@@ -42,7 +42,7 @@ impl Shell {
                     this.store.open(Some(chat.clone()));
                     this.show_view(false, cx);
                     this.reload_open_chat(cx);
-                    this.send_to(chat, outgoing, true, cx);
+                    Self::send_to(chat, &outgoing, true, cx);
                 }
                 Err(e) => this.failed(&e, this.theme.strings.send_failed, cx),
             },
@@ -50,13 +50,7 @@ impl Shell {
     }
 
     /// Posts the whole message; a new chat first takes the controls the owner chose.
-    fn send_to(
-        &mut self,
-        chat: ChatRef,
-        outgoing: Outgoing,
-        new_chat: bool,
-        cx: &mut Context<Self>,
-    ) {
+    fn send_to(chat: ChatRef, outgoing: &Outgoing, new_chat: bool, cx: &mut Context<Self>) {
         let body = outgoing.body(&chat.chat.0, &client_message_id());
         let controls = outgoing.session_controls().filter(|_| new_chat);
         let session = chat.session.0.to_string();
