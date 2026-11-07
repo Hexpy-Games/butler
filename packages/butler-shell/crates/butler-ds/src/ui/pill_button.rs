@@ -149,7 +149,7 @@ impl PillButton {
         Some(row.into_any_element())
     }
 
-    fn control(mut self, ds: &Ds) -> Control {
+    pub(crate) fn control(mut self, ds: &Ds) -> Control {
         let mut button = Button::new(self.id.clone())
             .variant(Variant::Borderless)
             .shape(Shape::Pill);

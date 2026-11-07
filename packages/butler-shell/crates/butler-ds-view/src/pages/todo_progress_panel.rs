@@ -1,9 +1,9 @@
-//! TodoProgressPanel.showcase.tsx: the plan steps attached to the composer (without the composer
-//! card, a P2-S6 block) and every state.
+//! TodoProgressPanel.showcase.tsx: the plan steps attached to the composer and every state.
 use butler_ds::ui::blocks::todo_progress_panel::{TodoItem, TodoProgressPanel, TodoState};
 use gpui::IntoElement as _;
 
 use super::Story;
+use super::attached_composer::attached;
 use crate::copy::Lang;
 
 struct Copy {
@@ -63,11 +63,10 @@ pub(super) fn stories() -> Vec<Story> {
     vec![
         Story {
             name: "Attached to the composer",
-            render: |lang, _, _| {
+            render: |lang, window, cx| {
                 let c = copy(lang);
-                TodoProgressPanel::new("todo-attached", c.heading)
-                    .items(items(&c, 3))
-                    .into_any_element()
+                let panel = TodoProgressPanel::new("todo-attached", c.heading).items(items(&c, 3));
+                attached(lang, "todo-composer", panel, window, cx)
             },
         },
         Story {

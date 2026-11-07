@@ -18,6 +18,8 @@ use crate::ui::{control, convert, focus};
 const AREA_PAD: [f32; 2] = [9., 10.];
 /// `min-height: 140px` of the bordered textarea (DS: Textarea.module.css:3).
 const AREA_MIN_HEIGHT: f32 = 140.;
+/// `max-height: calc(8lh + ...)` of the composer's editor (DS: ComposerCard.module.css:129).
+const COMPOSER_MAX_LINES: f32 = 8.;
 /// `width: 5.5rem` of the compact input (DS: Input.module.css:25).
 const COMPACT_WIDTH_REM: f32 = 5.5;
 /// Side padding of the default input (DS: Input.module.css:5).
@@ -32,6 +34,7 @@ pub(super) fn build(
     match (p.spec.look, p.spec.shape) {
         (Look::Underline, Shape::Line { .. }) => underline_line(p, hover, cx),
         (Look::Underline, Shape::Area { .. }) => underline_area(p, window, cx),
+        (Look::Bare, Shape::Area { rows, .. }) => bare_area(p, rows, cx),
         (_, Shape::Line { compact }) => boxed_line(p, compact, window, cx),
         (_, Shape::Area { rows, grow }) => boxed_area(p, rows, grow, cx),
     }
@@ -253,6 +256,32 @@ fn boxed_area(p: &Parts, rows: Option<u32>, grow: bool, cx: &App) -> AnyElement 
         sizing.height = Some(min.max(rows));
     }
     boxed(p, div().w_full(), editor(p, &sizing, None, cx), cx)
+}
+
+/// The composer card's editor: no box, padded by the card (`--composer-inner-padding-*`), from
+/// one line to eight, then scrolling.
+fn bare_area(p: &Parts, rows: Option<u32>, cx: &App) -> AnyElement {
+    let (inline, block) = crate::ui::blocks::scope::composer(cx).map_or((px(0.), px(0.)), |vars| {
+        (px(vars.padding.0), px(vars.padding.1))
+    });
+    let frame_h = block * 2.;
+    let min = p.m.lh + frame_h;
+    let max = p.m.lh * COMPOSER_MAX_LINES + frame_h;
+    let sizing = Sizing {
+        pad: [inline, block, inline, block],
+        height: rows.map(|rows| (p.m.lh * rows as f32 + frame_h).clamp(min, max)),
+        min_height: Some(min),
+        max_height: Some(max),
+        ..Sizing::default()
+    };
+    let room = focus::room(Ds::get(cx));
+    div()
+        .relative()
+        .w_full()
+        .children(tab_stop(p))
+        .child(editor(p, &sizing, None, cx))
+        .children(p.focused.then(|| focus::publish(p.handle.clone(), room)))
+        .into_any_element()
 }
 
 /// The underline: one line tall in the flow, its line drawn `1px` below (`2px` while focused)

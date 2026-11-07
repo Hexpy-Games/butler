@@ -1,7 +1,7 @@
-//! Tooltip.showcase.tsx. SettingsField is a stand-in (`standins.rs`); "Why a control is
-//! unavailable" needs the ComposerControl block and stays out.
+//! Tooltip.showcase.tsx. SettingsField is a stand-in (`standins.rs`).
 use butler_ds::tokens::Length;
 use butler_ds::ui::Icon;
+use butler_ds::ui::blocks::composer_control::ComposerControl;
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
@@ -32,6 +32,8 @@ struct Copy {
     sandbox: &'static str,
     sandbox_hint: &'static str,
     unavailable: &'static str,
+    model: &'static str,
+    model_hint: &'static str,
     field_hint: &'static str,
 }
 
@@ -52,6 +54,8 @@ fn copy(lang: Lang) -> Copy {
             sandbox: "Command sandbox",
             sandbox_hint: "Runs commands that change files in an isolated environment.",
             unavailable: "Not available on this device",
+            model: "Model",
+            model_hint: "Switch models after this response finishes",
             field_hint: "A disabled reason opens to the right, clear of the label and description above the control.",
         },
         Copy {
@@ -69,6 +73,8 @@ fn copy(lang: Lang) -> Copy {
             sandbox: "명령 격리",
             sandbox_hint: "파일을 바꾸는 명령을 격리된 환경에서 실행합니다.",
             unavailable: "이 기기에서는 사용할 수 없습니다",
+            model: "모델",
+            model_hint: "이 응답이 끝난 뒤 모델을 바꿀 수 있습니다",
             field_hint: "사용할 수 없는 이유는 컨트롤 오른쪽에 열려 위의 이름과 설명을 가리지 않습니다.",
         },
     )
@@ -87,6 +93,10 @@ pub(super) fn stories() -> Vec<Story> {
         Story {
             name: "Disabled reason beside a settings control",
             render: reason_beside_field,
+        },
+        Story {
+            name: "Why a control is unavailable",
+            render: unavailable_control,
         },
         Story {
             name: "Long label wraps inside the viewport",
@@ -246,6 +256,19 @@ fn long_label(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
                 .variant(Variant::Outline)
                 .size(Size::Sm)
                 .text(c.shortcut),
+        )
+        .into_any_element()
+}
+
+/// ComposerModelStatusButton: a disabled control explains itself on hover.
+fn unavailable_control(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+    let c = copy(lang);
+    Tooltip::new("tooltip-unavailable")
+        .label(c.model_hint)
+        .child(
+            ComposerControl::new("tooltip-unavailable-control", c.model)
+                .icon(icon(Icon::AiChip, IconSize::Sm, Ds::get(cx)))
+                .aria_disabled(),
         )
         .into_any_element()
 }

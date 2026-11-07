@@ -164,6 +164,12 @@ impl Select {
         self.wrap(false, rows, pill.into_any_element())
     }
 
+    /// A trigger that is the caller's own control (`ComposerSelectControl`), as wide as it is.
+    pub fn control_trigger(&self, control: AnyElement, content: &SelectContent) -> AnyElement {
+        let boxed = div().flex().child(control).into_any_element();
+        self.wrap(false, std::rc::Rc::new(content.rows()), boxed)
+    }
+
     fn wrap(&self, fill: bool, rows: std::rc::Rc<Vec<Row>>, child: AnyElement) -> AnyElement {
         let (press, typing, focus) = (self.clone(), self.clone(), self.trigger_focus.clone());
         let inner = div()
