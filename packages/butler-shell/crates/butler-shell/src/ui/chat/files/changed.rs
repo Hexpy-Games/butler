@@ -14,7 +14,9 @@ use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Cross, Inline, MinWidth, Space, Stack, StackItem, WithItem as _};
 use butler_ds::ui::overlay::place::Align;
 use butler_ds::ui::typo::Typo;
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window, div};
+use gpui::{
+    AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _, Window, div,
+};
 
 use super::media::{ViewerSet, WorkingRow, format_size, inline_image_files, working_file_rows};
 use super::support::{add_to_library, open_viewer, save_file, tr};
