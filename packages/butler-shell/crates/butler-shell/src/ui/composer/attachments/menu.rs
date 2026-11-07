@@ -15,7 +15,7 @@ use butler_ds::ui::overlay::place::{Align, Side};
 use butler_ds::ui::popover::{MenuSize, Popover, PopoverContent};
 use butler_ds::ui::toast::{self, Toast};
 use butler_shell_client::ShellClient;
-use gpui::{AnyElement, App, Entity, IntoElement as _, SharedString, Window};
+use gpui::{AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Window};
 
 use super::documents::{PickDocument, load_documents, picker_filters, picker_groups, tr};
 use crate::ui::source::wire::ProjectDashboardDocument;

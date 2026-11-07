@@ -188,8 +188,8 @@ struct MaterialsPage {
     status: String,
     #[serde(default)]
     documents: Vec<ProjectDashboardDocument>,
-    #[serde(default)]
-    nextCursor: Option<String>,
+    #[serde(default, rename = "nextCursor")]
+    next_cursor: Option<String>,
 }
 
 /// The project's documents, every page of them; `Err` when a request or a page fails. An
@@ -211,7 +211,7 @@ pub(crate) async fn load_documents(
             break;
         }
         documents.extend(page.documents);
-        cursor = page.nextCursor;
+        cursor = page.next_cursor;
         if cursor.is_none() {
             break;
         }
@@ -263,7 +263,7 @@ async fn complete(
     let mut page = read_page(client, document, None).await?;
     let mut markdown = page.markdown.clone();
     let mut seen = std::collections::HashSet::new();
-    while let Some(cursor) = page.nextCursor.clone() {
+    while let Some(cursor) = page.next_cursor.clone() {
         if !seen.insert(cursor.clone()) {
             return Err(());
         }
