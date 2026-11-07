@@ -19,6 +19,25 @@ export const APP_RENDERER_SCHEME_PRIVILEGES = Object.freeze({
   }),
 });
 
+// The gateway's web UI policy (butler-gateway static_ui.rs) plus the local
+// gateway origins: the web UI reaches the gateway on its own origin, but
+// app://butler loads message images, video, PDFs and output frames from
+// http://127.0.0.1 or localhost. blob: images are pictures the page draws
+// itself (image-edit previews).
+export const APP_RENDERER_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: http://127.0.0.1:* http://localhost:*",
+  "media-src 'self' http://127.0.0.1:* http://localhost:*",
+  "font-src 'self' data:",
+  "connect-src 'self' http://127.0.0.1:* http://localhost:*",
+  "frame-src 'self' http://127.0.0.1:* http://localhost:*",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+].join("; ");
+
 const entryDocumentPaths = new Set(["/", "/index.html"]);
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -105,6 +124,7 @@ export function createAppRendererProtocolHandler({ distRoot, noticesFile = null,
         headers: {
           "content-type": rendererMimeType(realFile),
           "x-content-type-options": "nosniff",
+          "content-security-policy": APP_RENDERER_CONTENT_SECURITY_POLICY,
         },
       });
     } catch {
