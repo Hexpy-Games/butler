@@ -12,6 +12,7 @@
 )]
 
 use std::fs;
+use std::time::Duration;
 
 use butler_e2e::e2e::HarnessError;
 use butler_e2e::e2e::scenario::{Fixture, Setup};
@@ -95,5 +96,43 @@ async fn cred_05_unsigned_builds_keep_keys_in_the_file() -> Result<(), HarnessEr
         .agent
         .cli(&["config", "set", "secrets.store", "vault", "--json"])?;
     assert_ne!(refused.code, Some(0), "{refused:?}");
+    s.finish().await
+}
+
+/// CRED-06 — Starting never reads a saved key: with the key store hanging
+/// (a FIFO nobody writes, like a store prompt nobody answers), the agent
+/// answers its first `GET /credentials` well within a stall, listing the
+/// saved key with its masked value.
+#[tokio::test]
+async fn cred_06_start_does_not_read_saved_keys() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("CRED-06")?.fixture(Fixture::Empty);
+    let data = setup.sandbox.data.clone();
+    fs::create_dir_all(data.join("auth"))?;
+    fs::write(
+        data.join("auth/model-provider-credentials.json"),
+        serde_json::to_vec(&serde_json::json!({"credentials": [{
+            "id": "cred_openai", "provider_id": "openai", "auth_type": "api_key",
+            "label": "openai", "storage": "fallback_file", "masked_value": "sk-...6"
+        }]}))?,
+    )?;
+    let store = data.join("auth/credential-store.json");
+    let _ = std::process::Command::new("mkfifo").arg(&store).status();
+    butler_e2e::skip_unless!(store.exists(), "this host has no FIFOs");
+    // A start that reads the store waits out its 30 s limit first.
+    let (s, listed) = tokio::time::timeout(Duration::from_secs(20), async {
+        let s = setup.start().await?;
+        let listed = s.gw.get("/credentials").await?;
+        Ok::<_, HarnessError>((s, listed))
+    })
+    .await
+    .expect("the agent waited on the key store before answering")?;
+    assert_eq!(listed.status, 200, "{}", listed.text);
+    let credentials = listed.data()["credentials"].as_array().unwrap();
+    assert_eq!(credentials.len(), 1, "{}", listed.text);
+    assert_eq!(credentials[0]["id"], "cred_openai", "{}", listed.text);
+    assert_eq!(credentials[0]["provider_id"], "openai", "{}", listed.text);
+    assert_eq!(credentials[0]["masked_value"], "sk-...6", "{}", listed.text);
+    fs::remove_file(&store)?;
     s.finish().await
 }

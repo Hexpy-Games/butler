@@ -127,7 +127,6 @@ pub struct ModelConfiguration {
     client: Client,
     configuration_writes: Arc<ConfigurationWrites>,
     secrets: ProviderSecrets,
-    log_secrets: tokio::sync::OnceCell<()>,
     chatgpt_authority: Arc<chatgpt::authority::ChatGptAuthority>,
     chatgpt_models: chatgpt::models::Cache,
     account_revision: tokio::sync::watch::Sender<u64>,
@@ -216,14 +215,11 @@ impl ModelConfiguration {
             client,
             configuration_writes,
             secrets,
-            log_secrets: tokio::sync::OnceCell::new(),
         })
     }
 
     pub async fn read(&self) -> Result<ModelConfigurationRead, ModelCatalogError> {
-        let read = self.read_from(&self.data_root).await?;
-        self.register_log_secrets(&read).await;
-        Ok(read)
+        self.read_from(&self.data_root).await
     }
 
     async fn read_from(&self, root: &Path) -> Result<ModelConfigurationRead, ModelCatalogError> {
