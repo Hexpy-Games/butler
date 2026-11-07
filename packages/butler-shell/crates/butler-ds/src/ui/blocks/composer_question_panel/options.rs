@@ -90,6 +90,59 @@ fn trailing(question: &Question, index: usize, selected: bool, ds: &Ds) -> Optio
     Some(icon(glyph, IconSize::Md, ds).into_any_element())
 }
 
+/// The inline underline field that edits the "other" answer.
+fn other_editor(rows: &Rows, question: &Question) -> AnyElement {
+    let (model, ctx) = (rows.model.clone(), rows.ctx.clone());
+    let key: SharedString = format!("other-{}", question.id).into();
+    let placeholder = question
+        .placeholder
+        .clone()
+        .unwrap_or_else(|| rows.labels.other.clone());
+    let mut input = Input::new((rows.id.clone(), key))
+        .variant(InputVariant::Underline)
+        .text_size(TextSize::Label)
+        .placeholder(placeholder)
+        .default_value(rows.snapshot.answers[rows.step].other.clone())
+        .on_change(move |text, _, cx| {
+            let text = text.to_owned();
+            mutate(&model, &ctx, cx, move |model, ctx, cx| {
+                model.update(
+                    |answer| {
+                        answer.other = text;
+                        answer.skipped = false;
+                    },
+                    ctx,
+                    cx,
+                );
+            });
+        });
+    if rows.ctx.busy {
+        input = input.disabled();
+    }
+    div().min_w_0().flex_1().child(input).into_any_element()
+}
+
+/// The label of one row: the editor, or the option text.
+fn row_label(rows: &Rows, question: &Question, index: usize, editing: bool) -> AnyElement {
+    if editing {
+        return other_editor(rows, question);
+    }
+    let other = index == question.options.len();
+    let typed = &rows.snapshot.answers[rows.step].other;
+    let text = match question.options.get(index) {
+        Some(option) => option.label.clone(),
+        None if !typed.is_empty() => typed.clone().into(),
+        None => rows.labels.other.clone(),
+    };
+    let label = Typo::label(text);
+    let label = if other {
+        label.truncate()
+    } else {
+        label.wrap(Wrap::Anywhere)
+    };
+    div().min_w_0().child(label).into_any_element()
+}
+
 /// The content of one row: the number, the label (with the recommended tag) over the
 /// description, and the trailing mark.
 fn row_content(
@@ -100,52 +153,8 @@ fn row_content(
     selected: bool,
     ds: &Ds,
 ) -> AnyElement {
-    let other = index == question.options.len();
     let option = question.options.get(index);
-    let label: AnyElement = if editing {
-        let (model, ctx) = (rows.model.clone(), rows.ctx.clone());
-        let key: SharedString = format!("other-{}", question.id).into();
-        let placeholder = question
-            .placeholder
-            .clone()
-            .unwrap_or_else(|| rows.labels.other.clone());
-        let mut input = Input::new((rows.id.clone(), key))
-            .variant(InputVariant::Underline)
-            .text_size(TextSize::Label)
-            .placeholder(placeholder)
-            .default_value(rows.snapshot.answers[rows.step].other.clone())
-            .on_change(move |text, _, cx| {
-                let text = text.to_owned();
-                mutate(&model, &ctx, cx, move |model, ctx, cx| {
-                    model.update(
-                        |answer| {
-                            answer.other = text;
-                            answer.skipped = false;
-                        },
-                        ctx,
-                        cx,
-                    );
-                });
-            });
-        if rows.ctx.busy {
-            input = input.disabled();
-        }
-        div().min_w_0().flex_1().child(input).into_any_element()
-    } else {
-        let typed = &rows.snapshot.answers[rows.step].other;
-        let text = match option {
-            Some(option) => option.label.clone(),
-            None if !typed.is_empty() => typed.clone().into(),
-            None => rows.labels.other.clone(),
-        };
-        let label = Typo::label(text);
-        let label = if other {
-            label.truncate()
-        } else {
-            label.wrap(Wrap::Anywhere)
-        };
-        div().min_w_0().child(label).into_any_element()
-    };
+    let label = row_label(rows, question, index, editing);
     let tag = option.filter(|option| option.recommended).map(|_| {
         Tag::new(
             (rows.id.clone(), "recommended"),
@@ -251,7 +260,7 @@ pub(super) fn options(
         .selected(highlighted || selected)
         .on_click(move |_, window, cx| {
             mutate(&model, &ctx, cx, |model, ctx, cx| {
-                model.choose(index, ctx, window, cx)
+                model.choose(index, ctx, window, cx);
             });
         });
         if rows.ctx.busy {
@@ -281,7 +290,9 @@ pub(super) fn review(rows: &Rows, cx: &mut App) -> AnyElement {
         .stretch()
         .metrics(ds.len(Length::SpaceSm), row_height(ds))
         .on_click(move |_, _, cx| {
-            mutate(&model, &ctx, cx, |model, ctx, cx| model.go(index, ctx, cx))
+            mutate(&model, &ctx, cx, |model, ctx, cx| {
+                model.go(index, ctx, cx);
+            })
         });
         if rows.ctx.busy {
             row = row.disabled();
