@@ -11,8 +11,8 @@ mod watch;
 use super::wire;
 use super::{
     AuthorityCard, ChatId, ChatPage, ChatRef, ClientMessageId, ComposerContext, Decision,
-    EventCursor, Fetch, LiveEvent, MessageCursor, MessagePage, PageCursor, RequestRef, SentTurn,
-    SessionId, Source, SourceError, TurnId, model::AllowScope,
+    EventCursor, Fetch, LiveEvent, PageCursor, RequestRef, SentTurn, SessionId, Source,
+    SourceError, TurnId, model::AllowScope,
 };
 use butler_shell_client::{AuthorityDecision, PageRequest, ShellClient};
 use futures::{
@@ -169,15 +169,23 @@ impl Source for Agent {
             ))
         }))
     }
-    fn messages(&self, session: &SessionId, before: Option<MessageCursor>) -> Fetch<MessagePage> {
+    fn open_session(&self, session: &SessionId) -> Fetch<wire::SessionView> {
         let (client, session) = (self.client.clone(), session.0.to_string());
         self.presentation.remember(self.fetch(async move {
-            let (raw, context) = tokio::join!(
-                client.message_window(&session, before.as_ref().map(|c| c.0.as_str()), 200),
+            let (view, context) = tokio::join!(
+                session_view::fetch(&client, &session, None),
                 presentation::read(&client, &session)
             );
-            Ok((convert::window(&raw?)?, context?))
+            Ok((view?, context?))
         }))
+    }
+    fn session_view(
+        &self,
+        session: &SessionId,
+        before: Option<String>,
+    ) -> Fetch<wire::SessionView> {
+        let (client, session) = (self.client.clone(), session.0.to_string());
+        self.fetch(async move { session_view::fetch(&client, &session, before.as_deref()).await })
     }
 
     fn authority(&self, session: &SessionId) -> Fetch<Vec<AuthorityCard>> {

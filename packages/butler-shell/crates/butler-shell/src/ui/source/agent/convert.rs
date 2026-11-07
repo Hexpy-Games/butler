@@ -1,15 +1,12 @@
 //! Wire projections retain exact approval text; unknown wire kinds remain visible.
 use super::super::wire;
 use super::super::{
-    ActivityItem, Approval, AuthorityCard, CardKind, ChatId, ChatRef, ChatSummary, EventCursor,
-    Message, MessageCursor, MessagePage, RequestRef, Risk, Role, SessionId, SourceError, Space,
-    Timestamp, TurnId,
-    model::{Access, Operation, Target, ToolChip},
+    Approval, AuthorityCard, CardKind, ChatId, ChatRef, ChatSummary, RequestRef, Risk, SessionId,
+    SourceError, Space, Timestamp,
+    model::{Access, Operation, Target},
 };
 use butler_shell_client::{AuthorityPage, Error};
 use serde_json::Value;
-
-use crate::ui::Icon;
 
 pub(super) fn error(error: &Error) -> SourceError {
     match error.kind() {
@@ -64,35 +61,6 @@ pub(super) fn active(state: &str) -> bool {
         state,
         "delivered" | "failed" | "cancelled" | "completed" | "runtime_fault"
     )
-}
-pub(super) fn message(raw: &wire::MessageProjection) -> Result<Message, Error> {
-    let role = match raw.role.as_deref().ok_or(Error::Protocol)? {
-        "user" => Role::User,
-        "assistant" => Role::Assistant,
-        other => Role::Other(other.to_owned()),
-    };
-    Ok(Message {
-        id: raw.id.clone().ok_or(Error::Protocol)?.into(),
-        role,
-        text: raw.text.clone().ok_or(Error::Protocol)?,
-        activity: activity(raw),
-        streaming: matches!(
-            raw.status.as_deref(),
-            Some("streaming" | "draft" | "provisional")
-        ),
-    })
-}
-pub(super) fn window(raw: &Value) -> Result<MessagePage, Error> {
-    let raw = decode::<wire::WindowProjection>(raw)?;
-    Ok(MessagePage {
-        messages: raw.messages.iter().map(message).collect::<Result<_, _>>()?,
-        older: raw
-            .message_window
-            .and_then(|w| w.previous_cursor_token)
-            .map(MessageCursor),
-        running: raw.active_turn.and_then(|t| t.id).map(|s| TurnId(s.into())),
-        events: EventCursor(raw.cursors.events),
-    })
 }
 pub(super) fn authority(page: AuthorityPage) -> Result<Vec<AuthorityCard>, Error> {
     page.requests
@@ -162,27 +130,4 @@ fn approval(value: &Value) -> Result<Approval, Error> {
             _ => None,
         },
     })
-}
-
-/// The gateway's public activity groups, with complete tool input labels.
-fn activity(raw: &wire::MessageProjection) -> Vec<ActivityItem> {
-    raw.work_blocks
-        .iter()
-        .filter_map(|block| {
-            let title = block.label.as_ref()?.to_owned().into();
-            let tools = block
-                .rows
-                .iter()
-                .filter_map(|row| {
-                    let name = row.safe_tool_name.as_deref()?;
-                    let label = row.safe_input_label.as_deref().unwrap_or(name);
-                    Some(ToolChip {
-                        icon: Icon::Wrench,
-                        title: label.to_owned().into(),
-                    })
-                })
-                .collect();
-            Some(ActivityItem { title, tools })
-        })
-        .collect()
 }

@@ -6,13 +6,12 @@ use futures::FutureExt as _;
 use futures::StreamExt as _;
 use futures::stream::LocalBoxStream;
 
-use crate::ui::Icon;
-use crate::ui::source::model::{Access, Operation, ToolChip};
+use crate::ui::source::model::{Access, Operation};
+use crate::ui::source::wire::SessionView;
 use crate::ui::source::{
-    ActivityItem, Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary,
-    ClientMessageId, ComposerContext, Decision, EventCursor, Fetch, LiveEvent, Message,
-    MessageCursor, MessagePage, PageCursor, RequestRef, Risk, Role, SentTurn, SessionId, Source,
-    Space, Timestamp, TurnId,
+    Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, ClientMessageId,
+    ComposerContext, Decision, EventCursor, Fetch, LiveEvent, PageCursor, RequestRef, Risk,
+    SentTurn, SessionId, Source, SourceError, Space, Timestamp, TurnId,
 };
 
 pub(super) const LONG: &str = "c-long";
@@ -98,74 +97,62 @@ const REPLIES: [&str; 3] = [
     "다크 모드 글래스는 중앙이 `rgba(23, 24, 26, 1)`로 불투명합니다.\n\n| 항목 | 값 |\n|---|---|\n| 메시지 | 320개 |\n| 목표 | 60fps |",
 ];
 
-fn message(id: String, role: Role, text: &str) -> Message {
-    Message {
-        id: id.into(),
-        role,
-        text: text.to_owned(),
-        activity: Vec::new(),
-        streaming: false,
-    }
+/// One wire message record of `session`.
+fn message(id: &str, role: &str, text: &str, cursor: usize) -> serde_json::Value {
+    serde_json::json!({"id": id, "chat_id": format!("s-{LONG}"), "role": role, "text": text,
+        "status": "delivered", "cursor": cursor,
+        "created_at": "2026-01-01T10:00:00Z", "updated_at": "2026-01-01T10:00:00Z"})
 }
 
-fn tool(icon: Icon, title: &str) -> ToolChip {
-    ToolChip {
-        icon,
-        title: title.to_owned().into(),
-    }
-}
-
-fn long_chat() -> Vec<Message> {
+fn long_chat() -> Vec<serde_json::Value> {
     let mut out = Vec::new();
     for i in 0..12 {
-        out.push(message(format!("m{i}u"), Role::User, USER_LINES[i % 3]));
-        let mut reply = message(format!("m{i}a"), Role::Assistant, REPLIES[i % 3]);
-        if i == 11 {
-            reply.activity = vec![
-                ActivityItem {
-                    title: "저장소 구조 확인".into(),
-                    tools: vec![tool(
-                        Icon::Terminal,
-                        "rg --files packages/butler-app/client/ui",
-                    )],
-                },
-                ActivityItem {
-                    title: "디자인 토큰 읽기".into(),
-                    tools: vec![tool(Icon::FileText, "tokens.css 읽기")],
-                },
-                ActivityItem {
-                    title: "비교표 작성".into(),
-                    tools: Vec::new(),
-                },
-            ];
-        }
-        out.push(reply);
+        out.push(message(&format!("m{i}u"), "user", USER_LINES[i % 3], 2 * i));
+        out.push(message(&format!("m{i}a"), "assistant", REPLIES[i % 3], 2 * i + 1));
     }
     out
 }
 
-fn approval_chat() -> Vec<Message> {
+fn approval_chat() -> Vec<serde_json::Value> {
     let mut reply = message(
-        "a1".into(),
-        Role::Assistant,
+        "a1",
+        "assistant",
         "release 빌드를 실행하려면 명령 실행 승인이 필요합니다.",
+        1,
     );
-    reply.streaming = true;
-    reply.activity = vec![ActivityItem {
-        title: "빌드 명령 준비".into(),
-        tools: vec![tool(
-            Icon::Terminal,
-            "cargo build --release -p butler-agent",
-        )],
-    }];
+    reply["status"] = "streaming".into();
     vec![
         message(
-            "a0".into(),
-            Role::User,
+            "a0",
+            "user",
             "배포 전에 release 빌드가 깨지지 않는지 한 번 돌려 주세요.",
+            0,
         ),
         reply,
     ]
+}
+
+/// The session view of `session` with its messages and running turn.
+fn view(session: &SessionId) -> Result<SessionView, SourceError> {
+    let messages = match session.0.as_ref() {
+        "s-c-long" => long_chat(),
+        "s-c-approval" => approval_chat(),
+        _ => Vec::new(),
+    };
+    let turn = (session.0.as_ref() == "s-c-approval").then(|| {
+        serde_json::json!({"id": "t-approval", "state": "waiting_for_tool", "cancellable": true,
+            "retryable": false, "created_at": "2026-01-01T10:00:00Z",
+            "updated_at": "2026-01-01T10:00:00Z"})
+    });
+    let count = messages.len();
+    let view = serde_json::json!({
+        "session_id": session.0.as_ref(), "kind": "chat", "status": "active",
+        "active_turn": turn, "messages": messages,
+        "message_window": {"next_cursor": count, "complete": true},
+        "cursors": {"messages": count, "events": 1},
+        "generated_at": "2026-01-01T10:00:00Z", "updated_at": "2026-01-01T10:00:00Z"
+    });
+    serde_json::from_value(view).map_err(|_| SourceError::Missing)
 }
 
 fn command_card() -> AuthorityCard {
@@ -217,19 +204,12 @@ impl Source for Fixture {
         })
     }
 
-    fn messages(&self, session: &SessionId, _: Option<MessageCursor>) -> Fetch<MessagePage> {
-        let messages = match session.0.as_ref() {
-            "s-c-long" => long_chat(),
-            "s-c-approval" => approval_chat(),
-            _ => Vec::new(),
-        };
-        let running = (session.0.as_ref() == "s-c-approval").then(|| TurnId("t-approval".into()));
-        ready(MessagePage {
-            messages,
-            older: None,
-            running,
-            events: EventCursor(1),
-        })
+    fn open_session(&self, session: &SessionId) -> Fetch<SessionView> {
+        futures::future::ready(view(session)).boxed_local()
+    }
+
+    fn session_view(&self, session: &SessionId, _: Option<String>) -> Fetch<SessionView> {
+        futures::future::ready(view(session)).boxed_local()
     }
 
     fn authority(&self, session: &SessionId) -> Fetch<Vec<AuthorityCard>> {

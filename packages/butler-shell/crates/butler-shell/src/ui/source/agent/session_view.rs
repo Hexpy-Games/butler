@@ -7,10 +7,6 @@ use butler_shell_client::{Error, ShellClient};
 const WINDOW_LIMIT: u32 = 200;
 
 /// Opens `session`, or reads the window older than `before` (a `previous_cursor_token`).
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 pub(crate) async fn fetch(
     client: &ShellClient,
     session: &str,

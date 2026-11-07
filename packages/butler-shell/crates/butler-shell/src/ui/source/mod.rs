@@ -11,10 +11,9 @@ use futures::future::LocalBoxFuture;
 use futures::stream::LocalBoxStream;
 
 pub(crate) use model::{
-    ActivityItem, Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary,
-    ClientMessageId, ComposerContext, Decision, EventCursor, LiveEvent, LiveUpdate, Message,
-    MessageCursor, MessagePage, PageCursor, RequestRef, Risk, Role, SentTurn, SessionId, Space,
-    Timestamp, TurnId,
+    Approval, AuthorityCard, CardKind, ChatId, ChatPage, ChatRef, ChatSummary, ClientMessageId,
+    ComposerContext, Decision, EventCursor, LiveEvent, LiveUpdate, PageCursor, RequestRef, Risk,
+    SentTurn, SessionId, Space, Timestamp, TurnId,
 };
 
 /// Why a request failed, in the UI's terms (no credential or wire detail).
@@ -51,8 +50,12 @@ pub(crate) trait Source {
     }
     /// One page of chats, newest activity first; `None` starts a fresh snapshot.
     fn chats(&self, cursor: Option<PageCursor>) -> Fetch<ChatPage>;
-    /// A session's latest message window, or the window before `before`.
-    fn messages(&self, session: &SessionId, before: Option<MessageCursor>) -> Fetch<MessagePage>;
+    /// Opens a session: its latest view, and the composer's controls for it.
+    fn open_session(&self, session: &SessionId) -> Fetch<wire::SessionView>;
+    /// A session's latest view again (`before` `None`), or the message window before `before`
+    /// (a `previous_cursor_token`).
+    fn session_view(&self, session: &SessionId, before: Option<String>)
+    -> Fetch<wire::SessionView>;
     /// A session's outstanding authority requests, in the agent's order.
     fn authority(&self, session: &SessionId) -> Fetch<Vec<AuthorityCard>>;
     /// Live updates after `after` (a snapshot's cursor); ends when the connection drops.

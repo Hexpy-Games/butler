@@ -4,8 +4,6 @@
 //! approval as it was sent.
 use gpui::SharedString;
 
-use crate::ui::Icon;
-
 /// Chat identity as the agent names it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct ChatId(pub(crate) SharedString);
@@ -36,10 +34,6 @@ pub(crate) struct ClientMessageId(pub(crate) String);
 /// An opaque keyset cursor into the chat list.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PageCursor(pub(crate) String);
-
-/// An opaque cursor to the window before a message window.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct MessageCursor(pub(crate) String);
 
 /// A durable event cursor: live updates resume after it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -80,50 +74,6 @@ pub(crate) struct ChatSummary {
 pub(crate) struct ChatPage {
     pub(crate) chats: Vec<ChatSummary>,
     pub(crate) next: Option<PageCursor>,
-    /// The event cursor of this snapshot.
-    pub(crate) events: EventCursor,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Role {
-    User,
-    Assistant,
-    Other(String),
-}
-
-/// A tool call shown under an activity step.
-#[derive(Clone, Debug)]
-pub(crate) struct ToolChip {
-    /// The DS icon used for the tool.
-    pub(crate) icon: Icon,
-    pub(crate) title: SharedString,
-}
-
-/// One step of a turn's activity.
-#[derive(Clone, Debug)]
-pub(crate) struct ActivityItem {
-    pub(crate) title: SharedString,
-    pub(crate) tools: Vec<ToolChip>,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct Message {
-    pub(crate) id: SharedString,
-    pub(crate) role: Role,
-    /// Markdown for assistant messages, plain text for the user's.
-    pub(crate) text: String,
-    pub(crate) activity: Vec<ActivityItem>,
-    /// Still being written by a running turn.
-    pub(crate) streaming: bool,
-}
-
-/// A window of a session's messages in display order (oldest first).
-pub(crate) struct MessagePage {
-    pub(crate) messages: Vec<Message>,
-    /// Where the window before this one starts; `None` at the beginning of the chat.
-    pub(crate) older: Option<MessageCursor>,
-    /// The chat's running turn, if any.
-    pub(crate) running: Option<TurnId>,
     /// The event cursor of this snapshot.
     pub(crate) events: EventCursor,
 }
@@ -294,14 +244,12 @@ pub(crate) struct SentTurn {
 pub(crate) enum LiveUpdate {
     /// An individual live projection failed.
     Failed(super::SourceError),
-    /// A message was added or changed (streamed text grows in place).
-    Message {
+    /// A live event the open session's transcript and turn progress read: message created,
+    /// updated or deleted, a turn state change, or a progress row. `event` is the gateway
+    /// envelope as sent.
+    Event {
         session: SessionId,
-        message: Message,
-    },
-    MessageDeleted {
-        session: SessionId,
-        id: SharedString,
+        event: Box<super::wire::AppEventEnvelope>,
     },
     /// A chat's turn started (`Some`) or ended (`None`).
     Turn {

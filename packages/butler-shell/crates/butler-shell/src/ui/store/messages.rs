@@ -7,23 +7,50 @@ use std::collections::HashMap;
 const LIVE_MESSAGE_STATUSES: [&str; 4] = ["pending", "thinking", "streaming", "retrying"];
 
 /// The open session's view, paged older on demand and patched by live events.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 #[derive(Default)]
 pub(crate) struct MessageCache {
     view: Option<SessionView>,
 }
 
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 impl MessageCache {
     /// Replaces the cache with a freshly opened session view.
     pub(crate) fn open(&mut self, view: SessionView) {
         self.view = Some(view);
+    }
+
+    /// Merges the latest window into the shown view: the view's own fields come from `latest`,
+    /// its messages merge into the current ones, and older windows already paged in stay.
+    pub(crate) fn refresh(&mut self, mut latest: SessionView) {
+        let Some(view) = self.view.as_mut().filter(|v| v.session_id == latest.session_id) else {
+            self.view = Some(latest);
+            return;
+        };
+        let mut messages = std::mem::take(&mut view.messages);
+        merge_messages(&mut messages, std::mem::take(&mut latest.messages));
+        latest.messages = messages;
+        let paged_further = match (
+            view.message_window.previous_cursor,
+            latest.message_window.previous_cursor,
+        ) {
+            (None, _) => true,
+            (Some(known), Some(newest)) => known < newest,
+            (Some(_), None) => false,
+        };
+        if paged_further {
+            let known = &view.message_window;
+            let window = &mut latest.message_window;
+            window.previous_cursor = known.previous_cursor;
+            window.previous_cursor_token.clone_from(&known.previous_cursor_token);
+            window.has_more = known.has_more;
+            window.complete = known.complete;
+        }
+        let history = latest.activity_history.get_or_insert_with(Vec::new);
+        for entry in view.activity_history.take().into_iter().flatten() {
+            if !history.iter().any(|known| known.turn_id == entry.turn_id) {
+                history.push(entry);
+            }
+        }
+        *view = latest;
     }
 
     /// Merges an older window in front of the current messages.
@@ -89,6 +116,13 @@ impl MessageCache {
 
     pub(crate) fn view(&self) -> Option<&SessionView> {
         self.view.as_ref()
+    }
+
+    /// The shown messages, for the freeze of a finished turn's activity.
+    pub(crate) fn messages_mut(&mut self) -> &mut [MessageRecord] {
+        self.view
+            .as_mut()
+            .map_or(&mut [], |view| view.messages.as_mut_slice())
     }
 }
 
