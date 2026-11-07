@@ -1,8 +1,10 @@
 //! The conversation: a virtualized message list (ConversationShell, MessageRow). It shows what
 //! the shell hands it; when the top row comes into view and older messages exist, it asks for
 //! them (never the whole chat at once).
+pub(crate) mod activity;
 mod answers;
 mod assistant;
+pub(crate) mod files;
 mod intro;
 mod list;
 mod markdown;
