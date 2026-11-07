@@ -40,8 +40,7 @@ export async function shots(binary: string, out: string, name: string, data: str
   }
   try {
     await expect("LIVE READY");
-    const showDrawer = Number(size.split("x")[0]) <= 640 ? ["click sidebar-toggle"] : [];
-    for (const command of ["connected", chat ? `open ${chat}` : "new", "stable", ...showDrawer, "drag sidebar-toggle -10000",
+    for (const command of ["connected", chat ? `open ${chat}` : "new", "stable", "drag sidebar-toggle -10000",
       ...steps.map(step => "click" in step ? `click ${step.click}` : `expect-anchor ${step.expect}`),
       `shot ${name}`, `layout ${name} ${anchors.join(" ")}`]) {
       process.child.stdin!.write(`${command}\n`);
