@@ -16,8 +16,14 @@ macro_rules! poster {
         (
             $module,
             $tone,
-            include_bytes!(concat!("../../../../assets/wallpaper/butler.", $module, ".", $tone, ".png"))
-                .as_slice(),
+            include_bytes!(concat!(
+                "../../../../assets/wallpaper/butler.",
+                $module,
+                ".",
+                $tone,
+                ".png"
+            ))
+            .as_slice(),
         )
     };
 }
@@ -47,7 +53,8 @@ const POSTERS: &[(&str, &str, &[u8])] = &[
     poster!("stipple", "dark"),
 ];
 
-static DECODED: OnceLock<Mutex<HashMap<(&'static str, &'static str), Arc<Image>>>> = OnceLock::new();
+static DECODED: OnceLock<Mutex<HashMap<(&'static str, &'static str), Arc<Image>>>> =
+    OnceLock::new();
 
 fn tone_name(tone: WallpaperTone) -> &'static str {
     match tone {

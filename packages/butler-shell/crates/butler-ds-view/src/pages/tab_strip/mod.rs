@@ -239,53 +239,62 @@ fn demo(spec: Spec, lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement
         state.clone(),
         state,
     );
-    let mut strip = TabStrip::new(gpui::ElementId::Name(format!("{}-strip", spec.id).into()), groups)
-        .active(active)
-        .labels(labels(lang))
-        .on_activate(move |id, _, cx| {
-            a.update(cx, |s, cx| {
-                s.active = Some(id.to_owned().into());
-                cx.notify();
-            })
+    let mut strip = TabStrip::new(
+        gpui::ElementId::Name(format!("{}-strip", spec.id).into()),
+        groups,
+    )
+    .active(active)
+    .labels(labels(lang))
+    .on_activate(move |id, _, cx| {
+        a.update(cx, |s, cx| {
+            s.active = Some(id.to_owned().into());
+            cx.notify();
         })
-        .on_close(move |id, _, cx| {
-            c.update(cx, |s, cx| {
-                s.close(id);
-                cx.notify();
-            })
+    })
+    .on_close(move |id, _, cx| {
+        c.update(cx, |s, cx| {
+            s.close(id);
+            cx.notify();
         })
-        .on_move(move |mv, _, cx| {
-            m.update(cx, |s, cx| {
-                s.groups = apply_move(&s.groups, mv);
-                cx.notify();
-            })
+    })
+    .on_move(move |mv, _, cx| {
+        m.update(cx, |s, cx| {
+            s.groups = apply_move(&s.groups, mv);
+            cx.notify();
         })
-        .on_toggle_group(move |id, collapsed, _, cx| {
-            t.update(cx, |s, cx| {
-                if let Some(group) = s.groups.iter_mut().find(|group| group.id() == id) {
-                    group.set_collapsed(collapsed);
-                }
-                cx.notify();
-            })
+    })
+    .on_toggle_group(move |id, collapsed, _, cx| {
+        t.update(cx, |s, cx| {
+            if let Some(group) = s.groups.iter_mut().find(|group| group.id() == id) {
+                group.set_collapsed(collapsed);
+            }
+            cx.notify();
         })
-        .on_new_tab(move |_, cx| {
-            n.update(cx, |s, cx| {
-                s.new_tab(None);
-                cx.notify();
-            })
+    })
+    .on_new_tab(move |_, cx| {
+        n.update(cx, |s, cx| {
+            s.new_tab(None);
+            cx.notify();
         })
-        .on_new_tab_in_group(move |id, _, cx| {
-            g.update(cx, |s, cx| {
-                s.new_tab(Some(id));
-                cx.notify();
-            })
-        });
+    })
+    .on_new_tab_in_group(move |id, _, cx| {
+        g.update(cx, |s, cx| {
+            s.new_tab(Some(id));
+            cx.notify();
+        })
+    });
     if spec.hide_chip {
         strip = strip.hide_chip();
     }
     if spec.trailing {
         let label = lang.pick("Bring in a tab", "내 탭 가져오기");
-        strip = strip.child(IconButton::new(gpui::ElementId::Name(format!("{}-bring", spec.id).into()), label).glyph(Icon::TabIn));
+        strip = strip.child(
+            IconButton::new(
+                gpui::ElementId::Name(format!("{}-bring", spec.id).into()),
+                label,
+            )
+            .glyph(Icon::TabIn),
+        );
     }
     let row = div().w_full();
     match spec.cap {

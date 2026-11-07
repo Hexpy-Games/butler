@@ -124,11 +124,9 @@ impl RenderOnce for DocumentTile {
                             .map(|badge| Tag::new((self.id.clone(), "badge"), badge)),
                     )
                     .children((!second_line.is_empty()).then(|| {
-                        div().min_w_0().child(
-                            Typo::caption(second_line)
-                                .tone(Tone::Secondary)
-                                .truncate(),
-                        )
+                        div()
+                            .min_w_0()
+                            .child(Typo::caption(second_line).tone(Tone::Secondary).truncate())
                     })),
             );
         }

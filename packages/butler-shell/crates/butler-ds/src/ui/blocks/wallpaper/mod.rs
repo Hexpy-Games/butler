@@ -11,8 +11,8 @@ mod still;
 use std::sync::Arc;
 
 use gpui::{
-    App, Div, Image, ImageSource, IntoElement, ObjectFit, ParentElement as _, RenderOnce, SharedString,
-    Styled as _, StyledImage as _, Window, div, hsla, img,
+    App, Div, Image, ImageSource, IntoElement, ObjectFit, ParentElement as _, RenderOnce,
+    SharedString, Styled as _, StyledImage as _, Window, div, hsla, img,
 };
 
 pub use image_cache::{ImageCache, ImageLoader, bundled_image, default_image_asset};

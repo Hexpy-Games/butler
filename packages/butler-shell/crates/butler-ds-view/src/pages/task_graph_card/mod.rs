@@ -51,7 +51,11 @@ fn every_status(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     Grid::new("tgc-every-status")
         .columns(Columns::AUTO_FIT)
         .gap(Space::Md)
-        .children(TaskGraphStatus::ALL.iter().map(|&status| card_for(task, status, lang)))
+        .children(
+            TaskGraphStatus::ALL
+                .iter()
+                .map(|&status| card_for(task, status, lang)),
+        )
         .into_any_element()
 }
 
@@ -117,8 +121,6 @@ fn glyphs(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         .gap(Space::Sm)
         .child(icons)
         .child(TaskGraphStepLine::new("tgc-step", step))
-        .child(
-            Typo::caption(status_label(lang, TaskGraphStatus::Running)).tone(Tone::Tertiary),
-        )
+        .child(Typo::caption(status_label(lang, TaskGraphStatus::Running)).tone(Tone::Tertiary))
         .into_any_element()
 }

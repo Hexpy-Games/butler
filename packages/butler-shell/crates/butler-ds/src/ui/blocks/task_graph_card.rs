@@ -9,8 +9,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    App, ElementId, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    Styled as _, Window, div,
+    App, ElementId, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Window,
+    div,
 };
 
 use crate::tokens::{Color, Length};
@@ -230,7 +230,10 @@ impl RenderOnce for TaskGraphCard {
                     .size(SlotSize::Md)
                     .min_line()
                     .tone(SlotTone::Tertiary)
-                    .child(TaskGraphStatusIcon::new(format!("{id}-status"), self.status)),
+                    .child(TaskGraphStatusIcon::new(
+                        format!("{id}-status"),
+                        self.status,
+                    )),
             )
             .child(
                 div()
@@ -260,10 +263,11 @@ impl RenderOnce for TaskGraphCard {
         let body = Stack::new()
             .gap(Space::Xs)
             .child(head)
-            .children(
-                self.meta
-                    .map(|meta| div().min_w_0().child(Typo::caption(meta).tone(Tone::Tertiary).truncate())),
-            )
+            .children(self.meta.map(|meta| {
+                div()
+                    .min_w_0()
+                    .child(Typo::caption(meta).tone(Tone::Tertiary).truncate())
+            }))
             .child(foot)
             .children(step);
         let mut card = Card::new(ElementId::Name(id.clone()))

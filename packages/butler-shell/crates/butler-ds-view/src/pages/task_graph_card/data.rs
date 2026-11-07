@@ -125,10 +125,18 @@ fn chain(done: bool, cancelled: bool) -> Vec<DemoTask> {
         (S::Done, "1m 12s")
     };
     vec![
-        task("scan", t("Scan the Downloads folder", "다운로드 폴더 훑어보기"), S::Done)
-            .by(1, luna(), "48s"),
-        task("rules", t("Decide how to sort", "정리 기준 정하기"), rules_status)
-            .by(1, luna(), rules_time),
+        task(
+            "scan",
+            t("Scan the Downloads folder", "다운로드 폴더 훑어보기"),
+            S::Done,
+        )
+        .by(1, luna(), "48s"),
+        task(
+            "rules",
+            t("Decide how to sort", "정리 기준 정하기"),
+            rules_status,
+        )
+        .by(1, luna(), rules_time),
         last,
     ]
 }
@@ -143,14 +151,27 @@ fn research(failed: bool) -> Vec<DemoTask> {
     let r2 = if failed {
         task("r2", notion, S::Failed)
             .by(3, luna(), "3m 31s")
-            .reason(t("The pricing page did not open", "요금제 페이지를 열 수 없습니다"))
+            .reason(t(
+                "The pricing page did not open",
+                "요금제 페이지를 열 수 없습니다",
+            ))
     } else {
-        task("r2", notion, S::Running).by(3, luna(), "9m 01s").step(step)
+        task("r2", notion, S::Running)
+            .by(3, luna(), "9m 01s")
+            .step(step)
     };
-    let (r3_status, r3_time) = if failed { (S::Done, "2m 46s") } else { (S::Running, "9m 01s") };
+    let (r3_status, r3_time) = if failed {
+        (S::Done, "2m 46s")
+    } else {
+        (S::Running, "9m 01s")
+    };
     vec![
-        task("brief", t("Set comparison criteria", "비교 기준 정리"), S::Done)
-            .by(1, sol(), "1m 35s"),
+        task(
+            "brief",
+            t("Set comparison criteria", "비교 기준 정리"),
+            S::Done,
+        )
+        .by(1, sol(), "1m 35s"),
         task("r1", t("Research Obsidian", "Obsidian 조사"), S::Done).by(2, luna(), "3m 04s"),
         r2,
         task("r3", t("Research Bear", "Bear 조사"), r3_status)
@@ -180,7 +201,11 @@ fn skip() -> Vec<DemoTask> {
         task("links", t("Check every link", "링크 확인"), S::Running)
             .by(2, luna(), "1m 02s")
             .step(t("Opening links", "링크 여는 중")),
-        task("shots", t("Retake screenshots", "스크린샷 다시 찍기"), S::Pending),
+        task(
+            "shots",
+            t("Retake screenshots", "스크린샷 다시 찍기"),
+            S::Pending,
+        ),
         task("publish", t("Publish", "게시"), S::Pending),
     ]
 }
@@ -188,8 +213,18 @@ fn skip() -> Vec<DemoTask> {
 /// `LONG`: id, English, Korean, status.
 const LONG: [(&str, &str, &str, S); 16] = [
     ("l1", "Confirm requirements", "요구사항 확인", S::Done),
-    ("l2", "Study the search code", "현재 검색 코드 조사", S::Done),
-    ("l3a", "Fix the ranking function", "정렬 함수 고치기", S::Done),
+    (
+        "l2",
+        "Study the search code",
+        "현재 검색 코드 조사",
+        S::Done,
+    ),
+    (
+        "l3a",
+        "Fix the ranking function",
+        "정렬 함수 고치기",
+        S::Done,
+    ),
     ("l3b", "Rebuild the index", "색인 다시 만들기", S::Done),
     ("l3c", "Tidy the result labels", "화면 문구 정리", S::Done),
     ("l4", "Merge the changes", "변경 합치기", S::Done),
@@ -248,7 +283,12 @@ impl GraphId {
                 let mut only = chain(false, false).remove(2);
                 only.id = "one";
                 only.worker = Some(1);
-                ("one", t("Clean up meeting notes", "회의록 정리"), vec![only], Vec::new())
+                (
+                    "one",
+                    t("Clean up meeting notes", "회의록 정리"),
+                    vec![only],
+                    Vec::new(),
+                )
             }
             Self::Chain => (
                 "chain",

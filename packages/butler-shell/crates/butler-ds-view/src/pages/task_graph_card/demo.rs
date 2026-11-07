@@ -119,7 +119,11 @@ pub(crate) fn demo_counts(graph: &DemoGraph, lang: Lang) -> String {
         .iter()
         .filter(|task| task.status == TaskGraphStatus::Done)
         .count();
-    format!("{done}/{}{}", graph.tasks.len(), demo_copy(lang).done_suffix)
+    format!(
+        "{done}/{}{}",
+        graph.tasks.len(),
+        demo_copy(lang).done_suffix
+    )
 }
 
 fn meta_of(task: &DemoTask, lang: Lang) -> String {
@@ -149,15 +153,20 @@ pub(crate) fn demo_card(task: &DemoTask, lang: Lang) -> TaskGraphCard {
 
 fn facts(task: &DemoTask, lang: Lang) -> Vec<TaskGraphDetailFact> {
     let c = demo_copy(lang);
-    let assignee = task
-        .worker
-        .map_or_else(|| c.unassigned.to_owned(), |worker| worker_label(lang, worker));
+    let assignee = task.worker.map_or_else(
+        || c.unassigned.to_owned(),
+        |worker| worker_label(lang, worker),
+    );
     let mut facts = vec![TaskGraphDetailFact::text("assignee", c.assignee, assignee)];
     if let Some(model) = task.model {
         facts.push(TaskGraphDetailFact::text("model", c.model, model));
     }
     if let Some(time) = &task.time {
-        facts.push(TaskGraphDetailFact::text("time", c.time, local_time(time, lang)));
+        facts.push(TaskGraphDetailFact::text(
+            "time",
+            c.time,
+            local_time(time, lang),
+        ));
     }
     if let (TaskGraphStatus::Running, Some(step)) = (task.status, task.step) {
         let line = TaskGraphStepLine::new(format!("{}-detail-step", task.id), step.get(lang));
@@ -166,7 +175,11 @@ fn facts(task: &DemoTask, lang: Lang) -> Vec<TaskGraphDetailFact> {
     facts
 }
 
-fn related(graph: &DemoGraph, ids: impl Iterator<Item = &'static str>, lang: Lang) -> Vec<RelatedTask> {
+fn related(
+    graph: &DemoGraph,
+    ids: impl Iterator<Item = &'static str>,
+    lang: Lang,
+) -> Vec<RelatedTask> {
     ids.filter_map(|id| graph.task(id))
         .map(|task| RelatedTask {
             id: SharedString::from(task.id),
@@ -177,8 +190,16 @@ fn related(graph: &DemoGraph, ids: impl Iterator<Item = &'static str>, lang: Lan
 
 fn relations(graph: &DemoGraph, task: &DemoTask, lang: Lang) -> Vec<TaskGraphDetailRelation> {
     let c = demo_copy(lang);
-    let before = graph.edges.iter().filter(|edge| edge.1 == task.id).map(|edge| edge.0);
-    let after = graph.edges.iter().filter(|edge| edge.0 == task.id).map(|edge| edge.1);
+    let before = graph
+        .edges
+        .iter()
+        .filter(|edge| edge.1 == task.id)
+        .map(|edge| edge.0);
+    let after = graph
+        .edges
+        .iter()
+        .filter(|edge| edge.0 == task.id)
+        .map(|edge| edge.1);
     vec![
         TaskGraphDetailRelation {
             id: "after".into(),
