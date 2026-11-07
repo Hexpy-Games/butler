@@ -268,14 +268,15 @@ fn view(session: &SessionId, turn: Option<&str>) -> SessionView {
     .unwrap()
 }
 
+/// Past the snapshot's event cursor (10) and the session view's (5), so the store applies it.
 fn message_event(session: &SessionId, kind: &str, payload: serde_json::Value) -> LiveEvent {
     LiveEvent {
-        cursor: Some(EventCursor(6)),
+        cursor: Some(EventCursor(11)),
         update: LiveUpdate::Event {
             session: session.clone(),
             event: Box::new(AppEventEnvelope {
                 protocol_version: "1".into(),
-                id: 6,
+                id: 11,
                 r#type: kind.into(),
                 created_at: "2026-01-01T00:00:01Z".into(),
                 payload,
@@ -305,7 +306,7 @@ fn session_views_and_live_events_keep_messages_deletions_and_running_turns() {
     assert!(matches!(applied, Applied::Transcript));
     let shown = store.shown_view().unwrap();
     assert!(shown.messages.iter().any(|m| m.text == "Scheduled result"));
-    assert_eq!(store.cursor, Some(EventCursor(6)));
+    assert_eq!(store.cursor, Some(EventCursor(11)));
     let deleted = serde_json::json!({"chat_id": chat.session.0.as_ref(), "message_id": "future"});
     let event = |cursor: u64| {
         let mut event = message_event(&chat.session, "message.deleted", deleted.clone());
@@ -313,15 +314,15 @@ fn session_views_and_live_events_keep_messages_deletions_and_running_turns() {
         event
     };
     assert!(matches!(
-        store.apply(store.epoch() + 1, event(7)),
+        store.apply(store.epoch() + 1, event(12)),
         Applied::Store
     ));
     assert!(matches!(
-        store.apply(store.epoch(), event(7)),
+        store.apply(store.epoch(), event(12)),
         Applied::Transcript
     ));
     assert!(matches!(
-        store.apply(store.epoch(), event(7)),
+        store.apply(store.epoch(), event(12)),
         Applied::Store
     ));
     let shown = store.shown_view().unwrap();
