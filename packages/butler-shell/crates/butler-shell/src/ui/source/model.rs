@@ -79,7 +79,6 @@ pub(crate) struct ChatSummary {
 /// One page of chats, newest activity first.
 pub(crate) struct ChatPage {
     pub(crate) chats: Vec<ChatSummary>,
-    pub(crate) next: Option<PageCursor>,
     /// The event cursor of this snapshot.
     pub(crate) events: EventCursor,
 }
@@ -292,6 +291,7 @@ pub(crate) struct SentTurn {
 
 /// One live change.
 pub(crate) enum LiveUpdate {
+    NavigationEvent(Box<super::wire::AppEventEnvelope>),
     /// An individual live projection failed.
     Failed(super::SourceError),
     /// A message was added or changed (streamed text grows in place).

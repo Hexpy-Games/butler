@@ -1,300 +1,326 @@
-//! Sidebar rows (NavRow, NavSectionHeading, Tabs, Spinner).
-use std::time::Duration;
-
-use gpui::{
-    Animation, AnimationExt as _, AnyElement, Context, FontWeight, Hsla, SharedString,
-    Transformation, div, percentage, prelude::*, px, svg,
+//! SpaceRow, branch, identity and unfinished subtask lines use DS rows.
+use super::Shell;
+use crate::ui::{Icon, source::wire::SpaceNodeKind, store::navigation::SpaceRowData};
+use butler_ds::ui::{
+    blocks::{
+        collapsible_nav_group::CollapsibleNavGroup,
+        nav_row::{NavRow, NavRowChildren},
+    },
+    context::Ds,
+    glyph_toggle::GlyphToggle,
+    icon::{IconSize, icon},
+    icon_slot::{IconSlot, SlotSize},
+    typo::{Tone, Typo},
 };
-
-use super::{Click, Tab};
-use crate::ui::Icon;
-use crate::ui::motion::{mix, spring_fast};
-use crate::ui::shell::Shell;
-use crate::ui::theme::{Theme, alpha, typo};
-use crate::ui::widgets::{IconButtonSpec, hover_listener, icon, icon_button, text, tooltip};
-
-pub(super) enum Trailing {
-    None,
-    Spinner,
-    Chevron(bool),
-}
-
-pub(super) struct RowSpec {
-    pub(super) key: SharedString,
-    pub(super) icon: Option<Icon>,
-    pub(super) label: SharedString,
-    pub(super) active: bool,
-    pub(super) trailing: Trailing,
-    pub(super) muted: bool,
-    pub(super) gap: f32,
-    pub(super) meta: Option<(SharedString, SharedString)>,
-    /// Why the row is disabled (its tooltip), when it is.
-    pub(super) disabled: Option<SharedString>,
-}
-
-impl RowSpec {
-    pub(super) fn new(
-        key: impl Into<SharedString>,
-        icon: Option<Icon>,
-        label: impl Into<SharedString>,
-    ) -> Self {
-        Self {
-            key: key.into(),
-            icon,
-            label: label.into(),
-            active: false,
-            trailing: Trailing::None,
-            muted: false,
-            gap: 10.,
-            meta: None,
-            disabled: None,
-        }
-    }
-
-    pub(super) fn disabled(mut self, reason: Option<SharedString>) -> Self {
-        self.disabled = reason;
-        self
-    }
-}
-
-fn trailing(spec: &RowSpec, hovered: bool, t: &Theme) -> Option<AnyElement> {
-    let more = || icon(Icon::MoreHorizontal, 16., t.sidebar_text2).into_any_element();
-    match spec.trailing {
-        Trailing::None if hovered && spec.icon == Some(Icon::MessageSquare) => Some(more()),
-        Trailing::None => None,
-        Trailing::Spinner | Trailing::Chevron(_) if hovered => Some(more()),
-        Trailing::Spinner => Some(spinner(t.sidebar_text2).into_any_element()),
-        Trailing::Chevron(open) => {
-            let glyph = if open {
-                Icon::ChevronDown
-            } else {
-                Icon::ChevronRight
-            };
-            Some(icon(glyph, 16., t.sidebar_text2).into_any_element())
-        }
-    }
-}
-
-fn meta_line(loc: SharedString, age: SharedString, t: &Theme) -> impl IntoElement {
-    div()
-        .flex()
-        .justify_between()
-        .gap(px(8.))
-        .pl(px(34.))
-        .pr(px(8.))
-        .mt(px(-4.))
-        .child(text(loc, typo::CAPTION, FontWeight::NORMAL, t.sidebar_text2).truncate())
-        .child(text(age, typo::CAPTION, FontWeight::NORMAL, t.sidebar_text2).flex_none())
-}
-
-/// The row's content: icon, label, trailing action target and, in flat lists, the meta line.
-fn row_block(spec: &RowSpec, hovered: bool, t: &Theme) -> gpui::Div {
-    let enabled = spec.disabled.is_none();
-    let label_color = if spec.muted || !enabled {
-        t.sidebar_text2
-    } else {
-        t.text
-    };
-    let weight = if spec.active {
-        FontWeight::MEDIUM
-    } else {
-        FontWeight::NORMAL
-    };
-    let lead = match spec.icon {
-        Some(name) => icon(name, 16., alpha(t.text, 0.82)).into_any_element(),
-        None => div().w(px(16.)).flex_none().into_any_element(),
-    };
-    let label = text(spec.label.clone(), typo::LABEL, weight, label_color);
-    let left = div()
-        .flex()
-        .flex_1()
-        .min_w_0()
-        .items_center()
-        .gap(px(spec.gap))
-        .child(lead)
-        .child(label.flex_1().min_w_0().truncate());
-    let mut row = div()
-        .flex()
-        .items_center()
-        .gap(px(10.))
-        .h(px(30.))
-        .w_full()
-        .px(px(8.))
-        .child(left);
-    if let Some(tr) = trailing(spec, hovered, t) {
-        // The 30px action target sits flush with the row edge (--nav-action-edge-offset).
-        let target = div()
-            .size(px(30.))
-            .mr(px(-8.))
-            .flex_none()
-            .flex()
-            .items_center();
-        row = row.child(target.justify_center().child(tr));
-    }
-    let block = div().flex().flex_col().w_full().child(row);
-    match spec.meta.clone() {
-        Some((loc, age)) => block.pb(px(6.)).child(meta_line(loc, age, t)),
-        None => block,
-    }
-}
-
+use gpui::{AnyElement, Context, div, prelude::*};
 impl Shell {
-    /// NavRow: 30px, 8px inline padding, 16px icon at 82%, 13px label; hover fills
-    /// --selection 60% on --motion-fast, active is a flat --selection 75% with a 500 label.
-    pub(super) fn nav_row(
+    pub(super) fn space_row(
         &mut self,
-        spec: RowSpec,
-        click: Click,
+        row: &SpaceRowData,
+        flat: bool,
+        shortcut: bool,
+        scope: &str,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let t = self.theme.clone();
-        let enabled = spec.disabled.is_none();
-        let hovered = self.hover.is(&spec.key) && enabled;
-        let block = row_block(&spec, hovered, &t);
-        let (base, hover_bg) = if spec.active {
-            (t.nav_active, t.nav_active)
+        let key = row.node.key.clone();
+        let path = row
+            .ancestors
+            .iter()
+            .map(String::as_str)
+            .chain(std::iter::once(key.as_str()))
+            .collect::<Vec<_>>()
+            .join("/");
+        let instance = format!("{scope}:{path}");
+        let content = self.space_row_content(row, flat, shortcut, &instance, cx);
+        let kind = if shortcut { "shortcut-row" } else { "row" };
+        let content = Self::row_gestures(
+            crate::ui::widgets::anchor(div(), &format!("sidebar-{kind}-{}", row.node.entityId))
+                .id(gpui::SharedString::from(format!("space-row-{instance}"))),
+            key,
+            instance.clone(),
+            cx,
+        )
+        .child(content)
+        .into_any_element();
+        let enabled = !flat && !shortcut;
+        let content = if enabled || row.session.is_some() {
+            self.space_drag_row(row, content, enabled, &instance, cx)
         } else {
-            (
-                Hsla {
-                    alpha: 0.,
-                    ..t.nav_hover
-                },
-                t.nav_hover,
+            content
+        };
+        let mut block = div().flex().flex_col().child(content);
+        if !flat
+            && !shortcut
+            && let Some(session) = &row.session
+        {
+            block = block.child(self.subtask_lines(session, cx));
+        }
+        block.into_any_element()
+    }
+    fn space_row_content(
+        &mut self,
+        row: &SpaceRowData,
+        flat: bool,
+        shortcut: bool,
+        instance: &str,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let key = row.node.key.clone();
+        let actions = self.space_row_actions(
+            row,
+            !shortcut && row.node.kind != SpaceNodeKind::Session,
+            instance,
+            cx,
+        );
+        if row.node.kind != SpaceNodeKind::Session && !shortcut {
+            self.space_row_branch(row, actions, instance, cx)
+        } else {
+            let identity = self.space_identity(row, cx);
+            let id = row.node.entityId.clone();
+            let click_instance = instance.to_owned();
+            let mut nav = NavRow::new(
+                gpui::SharedString::from(format!("row-{key}-{shortcut}")),
+                row.title.clone(),
             )
-        };
-        let el = div()
-            .id(spec.key.clone())
-            .w_full()
-            .rounded(px(8.))
-            .on_hover(hover_listener(&spec.key, cx));
-        let el = match &click {
-            Click::Chat(Some(chat)) => {
-                crate::ui::widgets::anchor(el, &format!("sidebar-row-{}", chat.chat.0))
+            .icon(identity)
+            .actions(actions);
+            if row.project.is_some() {
+                nav = nav.disabled();
+            } else {
+                nav = nav.on_click(cx.listener(move |s, _, w, cx| {
+                    if !s.sidebar.take_long_press(&click_instance) {
+                        s.open_sidebar_session(&id, w, cx);
+                    }
+                }));
             }
-            _ => el,
-        };
-        let el = match spec.disabled {
-            Some(reason) => el.tooltip(tooltip(reason, &t)),
-            None => el
-                .cursor_pointer()
-                .on_click(cx.listener(move |this, _, window, cx| this.on_row(&click, window, cx))),
-        };
-        el.child(block)
-            .with_spring(spec.key, spring_fast(hovered), move |el, v| {
-                el.bg(mix(base, hover_bg, v))
+            if crate::ui::store::navigation::NavigationModel::is_route_active(
+                &row.node.entityId,
+                self.store.selected().map(|c| c.session.0.as_ref()),
+            ) {
+                nav = nav.active();
+            }
+            if flat {
+                nav = nav
+                    .multiline()
+                    .label_element(space_row_label(row, true))
+                    .meta(self.space_row_meta(row));
+            }
+            if row.project.is_some() {
+                butler_ds::ui::tooltip::Tooltip::new(gpui::SharedString::from(format!(
+                    "project-shortcut-{}",
+                    row.node.key
+                )))
+                .label(self.theme.strings.not_yet)
+                .child(nav)
+                .into_any_element()
+            } else {
+                nav.into_any_element()
+            }
+        }
+    }
+    pub(super) fn space_row_branch(
+        &mut self,
+        row: &SpaceRowData,
+        actions: AnyElement,
+        instance: &str,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let key = row.node.key.clone();
+        let click_instance = instance.to_owned();
+        let expanded = !self.sidebar.collapsed.contains(&key);
+        let mut group = CollapsibleNavGroup::new(
+            gpui::SharedString::from(key.clone()),
+            row.title.clone(),
+            expanded,
+        )
+        .glyph(space_glyph(row))
+        .indented()
+        .actions(actions)
+        .on_toggle(cx.listener(move |s, _, _, cx| {
+            if s.sidebar.take_long_press(&click_instance) {
+                return;
+            }
+            s.sidebar.toggle(&key);
+            s.refresh_canon(cx);
+            cx.notify();
+        }));
+        if expanded {
+            if let Some(project) = &row.project {
+                self.sidebar.canon_visible.insert(project.id.clone());
+                if !self.sidebar.canon_previous.contains(&project.id) {
+                    self.load_canon_sidebar(project.id.clone(), cx);
+                }
+                group = group.child(self.canon_sidebar_groups(&project.id, cx));
+            }
+            let children = self.store.navigation.children(Some(&row.node.key));
+            let visible = self
+                .sidebar
+                .branch_counts
+                .get(&row.node.key)
+                .copied()
+                .unwrap_or(5);
+            let active = self.store.selected().map(|c| c.session.0.as_ref());
+            let reveal = children
+                .iter()
+                .position(|r| {
+                    self.sidebar.reveal_path.contains(&r.node.key)
+                        || active == Some(r.node.entityId.as_str())
+                })
+                .map_or(0, |i| i + 1);
+            let limit = visible.max(reveal);
+            for child in children.iter().take(limit) {
+                group =
+                    group.child(self.space_row(child, false, false, self.sidebar.tab.value(), cx));
+            }
+            if children.len() > limit {
+                group = group.child(self.sidebar_session_load_more(
+                    Some(row.node.key.clone()),
+                    children.len() - limit,
+                    limit,
+                    cx,
+                ));
+            }
+        }
+        group.into_any_element()
+    }
+    pub(super) fn space_identity(
+        &mut self,
+        row: &SpaceRowData,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let glyph = IconSlot::new().size(SlotSize::Sidebar).child(icon(
+            space_glyph(row),
+            IconSize::Sm,
+            Ds::get(cx),
+        ));
+        if row.node.entityId == "general" {
+            return glyph.into_any_element();
+        }
+        let row = row.clone();
+        GlyphToggle::new(
+            gpui::SharedString::from(format!("pin-{}", row.node.key)),
+            format!(
+                "{} {}",
+                row.title,
+                if row.pinned {
+                    self.copy("Unpin", "고정 해제")
+                } else {
+                    self.copy("Pin", "고정")
+                }
+            ),
+            row.pinned,
+        )
+        .glyph(glyph)
+        .toggle_glyph(icon(Icon::Sparkles, IconSize::Sm, Ds::get(cx)))
+        .on_click(cx.listener(move |s, _, _, cx| {
+            cx.stop_propagation();
+            s.pin_sidebar_row(&row, cx);
+        }))
+        .into_any_element()
+    }
+    pub(super) fn space_row_meta(&self, row: &SpaceRowData) -> AnyElement {
+        let age = chrono::DateTime::parse_from_rfc3339(&row.updated_at)
+            .ok()
+            .map(|at| {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs());
+                self.theme.strings.relative_age(
+                    i64::try_from(now)
+                        .unwrap_or(i64::MAX)
+                        .saturating_sub(at.timestamp())
+                        .max(0),
+                )
             })
+            .unwrap_or_default();
+        div()
+            .flex()
+            .justify_between()
+            .child(Typo::caption(row.location.clone()).tone(Tone::Secondary))
+            .child(Typo::caption(age).tone(Tone::Secondary))
             .into_any_element()
     }
-
-    /// NavSectionHeading, with the new-chat and new-folder actions when `actions`.
-    pub(super) fn heading(
-        &mut self,
-        title: &'static str,
-        actions: bool,
+    pub(super) fn subtask_lines(
+        &self,
+        session: &crate::ui::source::wire::SessionSummary,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let t = self.theme.sidebar_scope();
-        let mut row = div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .min_h(px(30.))
-            .px(px(4.))
-            .child(text(
-                title,
-                typo::LABEL,
-                FontWeight::MEDIUM,
-                t.sidebar_text3,
-            ));
-        if actions {
-            let new_chat = self.disconnected();
-            let mut group = div().flex().items_center().gap(px(2.)).mr(px(-4.));
-            for (id, glyph, disabled) in [
-                ("h-new", Icon::PencilLine, new_chat),
-                ("h-folder", Icon::FolderPlus, Some(t.strings.not_yet.into())),
-            ] {
-                let key: SharedString = id.into();
-                let spec = IconButtonSpec::new(id, glyph, self.hover.is(id))
-                    .size(30., 14.)
-                    .disabled(disabled);
-                let click = cx.listener(|this, _, window, cx| this.open_chat(None, window, cx));
-                group = group.child(icon_button(&t, spec, hover_listener(&key, cx), click));
-            }
-            row = row.child(group);
+        let mut children = NavRowChildren::new();
+        for task in &session.subtasks {
+            children = children.child(self.subtask_line(&session.id, task, cx));
         }
-        row.into_any_element()
+        children.into_any_element()
     }
-
-    pub(super) fn tabs(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let t = self.theme.clone();
-        let mut list = div()
-            .flex()
-            .gap(px(4.))
-            .p(px(4.))
-            .border_1()
-            .border_color(t.line)
-            .rounded(px(8.))
-            .bg(t.surface);
-        for (tab, glyph, label) in [
-            (Tab::All, Icon::ListFilter, t.strings.all),
-            (Tab::Recent, Icon::Clock3, t.strings.recent),
-            (Tab::Running, Icon::Activity, t.strings.running),
-        ] {
-            let key: SharedString = format!("tab-{label}").into();
-            let active = self.sidebar.tab == tab;
-            let hovered = self.hover.is(&key);
-            let fg = if active || hovered {
-                t.text
-            } else {
-                t.sidebar_text2
-            };
-            let (off, on) = if active {
-                (t.selection, t.selection)
-            } else {
-                (
-                    Hsla {
-                        alpha: 0.,
-                        ..t.selection
-                    },
-                    alpha(t.selection, 0.72),
+    fn subtask_line(
+        &self,
+        parent_id: &str,
+        task: &crate::ui::source::wire::SubtaskView,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let id = task.session_id.clone();
+        let parent = parent_id.to_owned();
+        let mark = match task.state {
+            crate::ui::source::wire::SubtaskState::Paused => {
+                let relation = task.relation_id.clone();
+                let weak = cx.entity().downgrade();
+                butler_ds::ui::icon_button::IconButton::new(
+                    gpui::SharedString::from(format!("resume-{id}")),
+                    self.copy("Resume", "계속하기"),
                 )
-            };
-            let el = div()
-                .id(key.clone())
-                .flex_1()
-                .min_w_0()
-                .h(px(30.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .gap(px(4.))
-                .px(px(8.))
-                .rounded(px(8.))
-                .cursor_pointer()
-                .on_hover(hover_listener(&key, cx))
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    this.on_row(&Click::Tab(tab), window, cx);
-                }))
-                .child(icon(glyph, 16., fg))
-                .child(text(label, typo::LABEL, FontWeight::MEDIUM, fg));
-            list = list.child(el.with_spring(key, spring_fast(hovered), move |el, v| {
-                el.bg(mix(off, on, v))
-            }));
+                .glyph(Icon::Play)
+                .on_click(move |_, _, cx| {
+                    let _ = weak.update(cx, |s, cx| {
+                        s.mutate(
+                            crate::ui::source::sidebar::Mutation::ResumeSubtask(
+                                relation.clone(),
+                                parent.clone(),
+                            ),
+                            cx,
+                        );
+                    });
+                })
+                .into_any_element()
+            }
+            crate::ui::source::wire::SubtaskState::NeedsApproval => {
+                icon(Icon::CircleAlert, IconSize::Sm, Ds::get(cx)).into_any_element()
+            }
+            _ => Typo::caption(match (task.plan_completed, task.plan_total) {
+                (Some(done), Some(total)) if total > 0 => {
+                    format!("{}/{total}", done.max(0).saturating_add(1).min(total))
+                }
+                _ => String::new(),
+            })
+            .tone(Tone::Secondary)
+            .into_any_element(),
+        };
+        NavRow::new(
+            gpui::SharedString::from(format!("subtask-{id}")),
+            task.title.clone(),
+        )
+        .reserve_icon()
+        .actions(mark)
+        .disabled()
+        .into_any_element()
+    }
+}
+pub(super) fn space_glyph(row: &SpaceRowData) -> Icon {
+    if row.node.entityId == "general" {
+        Icon::GeneralChat
+    } else {
+        match row.node.kind {
+            SpaceNodeKind::Group => Icon::Folder,
+            SpaceNodeKind::Project => Icon::Briefcase,
+            _ if row.node.scopeProjectId.is_some() => Icon::Notebook,
+            _ => Icon::MessageSquare,
         }
-        list.into_any_element()
     }
 }
 
-/// Butler's custom 270° sidebar loader arc from assets/icons/spinner.svg.
-fn spinner(color: Hsla) -> impl IntoElement {
-    svg()
-        .path(SharedString::from("icons/spinner.svg"))
-        .size(px(16.))
-        .flex_none()
-        .text_color(color)
-        .with_animation(
-            "spin",
-            Animation::new(Duration::from_millis(2000)).repeat(),
-            |el, t| el.with_transformation(Transformation::rotate(percentage(t))),
-        )
+fn space_row_label(row: &SpaceRowData, flat: bool) -> Typo {
+    let label = Typo::body(row.title.clone());
+    if flat {
+        label.line_clamp(2)
+    } else {
+        label.truncate()
+    }
 }

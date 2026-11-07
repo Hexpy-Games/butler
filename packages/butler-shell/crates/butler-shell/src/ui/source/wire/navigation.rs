@@ -1,4 +1,5 @@
 //! Typed renderer wire contracts; field names follow their TypeScript sources.
+use super::SubtaskView;
 use serde::Deserialize;
 
 /// TS: packages/butler-app/client/shared/dashboard-space-contracts.ts:58 NavigationView (inline NavigationViewAutomationsSummary).
@@ -17,6 +18,8 @@ pub(crate) struct NavigationViewSettingsSummary {
 /// TS: packages/butler-app/client/shared/dashboard-space-contracts.ts:54 NavigationView
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub(crate) struct NavigationView {
+    #[serde(default)]
+    pub(crate) archive_count: i64,
     pub(crate) space: SpaceView,
     #[serde(default)]
     pub(crate) chats: Vec<SessionSummary>,
@@ -82,7 +85,19 @@ pub(crate) struct SessionSummarySafeStatusLabelParameters {
 
 /// TS: packages/butler-app/client/shared/message-session-contracts.ts:154 SessionSummary
 #[derive(Debug, Clone, PartialEq, Deserialize)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent SessionSummary wire fields mirror TypeScript"
+)]
 pub(crate) struct SessionSummary {
+    #[serde(default)]
+    pub(crate) running_delegated_work: bool,
+    #[serde(default)]
+    pub(crate) attention_required: bool,
+    #[serde(default)]
+    pub(crate) attention_source: Option<String>,
+    #[serde(default)]
+    pub(crate) subtasks: Vec<SubtaskView>,
     #[serde(default)]
     pub(crate) epic_ids: Option<Vec<String>>,
     #[serde(default)]
@@ -96,6 +111,7 @@ pub(crate) struct SessionSummary {
     pub(crate) project_id: Option<String>,
     #[serde(default)]
     pub(crate) project: Option<SessionSummaryProject>,
+    #[serde(default)]
     pub(crate) session_hint: String,
     pub(crate) created_at: String,
     pub(crate) updated_at: String,
@@ -112,9 +128,11 @@ pub(crate) struct SessionSummary {
     pub(crate) safe_status_label_parameters: Option<SessionSummarySafeStatusLabelParameters>,
     #[serde(default)]
     pub(crate) safe_status_content: Option<InterfaceContentReferences>,
+    #[serde(default)]
     pub(crate) unread: bool,
     pub(crate) pinned: bool,
     pub(crate) archived: bool,
+    #[serde(default)]
     pub(crate) automation_target_count: i64,
 }
 
@@ -202,6 +220,8 @@ pub(crate) enum TurnState {
     RuntimeFault,
     #[serde(rename = "failed")]
     Failed,
+    #[serde(rename = "session_starting")]
+    SessionStarting,
     #[serde(rename = "retrying")]
     Retrying,
     #[serde(other)]

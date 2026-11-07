@@ -60,12 +60,10 @@ impl Source for Fake {
         let page = match cursor {
             None => ChatPage {
                 chats: vec![chat(1), chat(2)],
-                next: Some(PageCursor("p2".into())),
                 events: EventCursor(10 * snapshot),
             },
             Some(_) => ChatPage {
                 chats: vec![chat(3)],
-                next: None,
                 events: EventCursor(10 * snapshot),
             },
         };
@@ -132,21 +130,7 @@ fn titles(store: &Store) -> Vec<String> {
 
 // test-category: pure-logic
 #[test]
-fn paging_and_live_chat_updates_preserve_visible_order() {
-    let (fake, mut store) = (Fake::new(), Store::default());
-    let first = store.begin_snapshot();
-    assert!(
-        store.begin_more().is_none(),
-        "no second load while one is in flight"
-    );
-    store.chats_loaded(&first, block_on(fake.chats(first.cursor.clone())).unwrap());
-    let more = store.begin_more().expect("a next page");
-    store.chats_loaded(&more, block_on(fake.chats(more.cursor.clone())).unwrap());
-    assert_eq!(titles(&store), ["chat 1", "chat 2", "chat 3"]);
-    assert!(
-        store.begin_more().is_none(),
-        "the last page has no next cursor"
-    );
+fn live_chat_updates_preserve_visible_order() {
     let mut store = Store::default();
     let mut pinned = chat(1);
     pinned.pinned = true;
@@ -178,8 +162,8 @@ fn resync_supersedes_a_load_in_flight_and_keeps_the_list() {
     let (fake, mut store) = (Fake::new(), Store::default());
     let first = store.begin_snapshot();
     store.chats_loaded(&first, block_on(fake.chats(None)).unwrap());
-    let more = store.begin_more().expect("a next page");
-    let stale = block_on(fake.chats(more.cursor.clone())).unwrap();
+    let more = store.begin_snapshot();
+    let stale = block_on(fake.chats(None)).unwrap();
     let resync = store.begin_snapshot();
     assert_eq!(
         store.chats_loaded(&more, stale),
@@ -194,7 +178,7 @@ fn resync_supersedes_a_load_in_flight_and_keeps_the_list() {
     let cursor = store.chats_loaded(&resync, block_on(fake.chats(None)).unwrap());
     assert_eq!(
         cursor,
-        Some(EventCursor(20)),
+        Some(EventCursor(30)),
         "the new snapshot hands its cursor to live"
     );
     assert_eq!(titles(&store), ["chat 1", "chat 2"]);

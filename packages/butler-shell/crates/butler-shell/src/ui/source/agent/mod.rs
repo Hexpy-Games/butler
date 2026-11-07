@@ -4,6 +4,7 @@ mod frame;
 mod live;
 mod presentation;
 mod refresh;
+mod sidebar;
 mod watch;
 
 use super::wire;
@@ -119,6 +120,46 @@ impl Agent {
 }
 
 impl Source for Agent {
+    fn canon_overview(&self, project: &str) -> Fetch<wire::CanonOverview> {
+        let (client, project) = (self.client.clone(), project.to_owned());
+        self.fetch(async move { convert::decode(&client.get_canon(&project).await?) })
+    }
+    fn canon_plan(&self, id: &str) -> Fetch<wire::CanonPlan> {
+        let (client, id) = (self.client.clone(), id.to_owned());
+        self.fetch(async move { convert::decode(&client.get_canon_plan(&id).await?) })
+    }
+
+    fn sidebar_updates(&self) -> Fetch<wire::SidebarUpdateStatus> {
+        let client = self.client.clone();
+        self.fetch(async move { convert::decode(&client.get_updates().await?) })
+    }
+
+    fn canon_sidebar(&self, project: &str) -> Fetch<wire::CanonSidebar> {
+        let (client, project) = (self.client.clone(), project.to_owned());
+        self.fetch(async move { convert::decode(&client.get_canon_sidebar(&project).await?) })
+    }
+    fn create_sidebar_chat(&self, body: serde_json::Value) -> Fetch<ChatRef> {
+        let client = self.client.clone();
+        self.fetch(async move {
+            let raw = client.create_session_with(&body).await?;
+            let raw = convert::decode::<wire::CreatedSessionProjection>(&raw)?;
+            convert::identity(&raw.session)
+        })
+    }
+
+    fn navigation(&self) -> Fetch<wire::NavigationView> {
+        self.sidebar_navigation()
+    }
+    fn work_status(&self) -> Fetch<wire::WorkStatusView> {
+        self.sidebar_work_status()
+    }
+    fn sidebar_mutation(
+        &self,
+        command: super::sidebar::Mutation,
+    ) -> Fetch<wire::SidebarMutationResult> {
+        self.sidebar_mutate(command)
+    }
+
     fn summary(&self, session: &SessionId) -> Fetch<wire::SessionSummaryView> {
         self.frame_summary(session)
     }
@@ -155,7 +196,6 @@ impl Source for Agent {
                         .iter()
                         .map(convert::chat)
                         .collect::<Result<_, _>>()?,
-                    next: page.next_cursor.map(PageCursor),
                     events: EventCursor(page.event_cursor),
                 },
                 context,

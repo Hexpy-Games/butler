@@ -29,7 +29,7 @@ fn client_message_id() -> ClientMessageId {
 
 impl Shell {
     /// Runs `fetch` and hands its result to `done` on the UI thread.
-    pub(super) fn run<T: 'static>(
+    pub(crate) fn run<T: 'static>(
         fetch: Fetch<T>,
         cx: &mut Context<Self>,
         done: impl FnOnce(&mut Self, Result<T, SourceError>, &mut Context<Self>) + 'static,
@@ -69,8 +69,14 @@ impl Shell {
     /// A fresh snapshot: the first page of chats, then live updates after its cursor.
     pub(super) fn connect(&mut self, cx: &mut Context<Self>) {
         if self.source.is_some() {
+            self.store.navigation.in_flight = false;
+            self.store.navigation.dirty = false;
+            self.store.navigation.generation += 1;
+            self.sidebar.begin_snapshot();
             let load = self.store.begin_snapshot();
             self.load_chats(load, cx);
+            self.refresh_sidebar(cx);
+            self.refresh_sidebar_update(cx);
         }
     }
 
@@ -78,30 +84,26 @@ impl Shell {
         let Some(source) = self.source.clone() else {
             return;
         };
-        Self::run(
-            source.chats(load.cursor.clone()),
-            cx,
-            move |this, result, cx| {
-                match result {
-                    Ok(page) => {
-                        if let Some(after) = this.store.chats_loaded(&load, page) {
-                            if let Some(monitor) = &this.rediscover {
-                                let _ = monitor.send(MonitorSignal::SnapshotLoaded);
-                            }
-                            this.connected_notice(cx);
-                            this.sync_attention(cx);
-                            this.subscribe(load.epoch, after, cx);
-                            this.reload_open_chat(cx);
+        Self::run(source.chats(None), cx, move |this, result, cx| {
+            match result {
+                Ok(page) => {
+                    if let Some(after) = this.store.chats_loaded(&load, page) {
+                        if let Some(monitor) = &this.rediscover {
+                            let _ = monitor.send(MonitorSignal::SnapshotLoaded);
                         }
-                    }
-                    Err(e) => {
-                        this.store.chats_failed(&load);
-                        this.failed(&e, this.theme.strings.load_failed, cx);
+                        this.connected_notice(cx);
+                        this.sync_attention(cx);
+                        this.subscribe(load.epoch, after, cx);
+                        this.reload_open_chat(cx);
                     }
                 }
-                cx.notify();
-            },
-        );
+                Err(e) => {
+                    this.store.chats_failed(&load);
+                    this.failed(&e, this.theme.strings.load_failed, cx);
+                }
+            }
+            cx.notify();
+        });
     }
 
     fn subscribe(&mut self, epoch: u64, after: EventCursor, cx: &mut Context<Self>) {
@@ -126,6 +128,10 @@ impl Shell {
     }
 
     fn apply(&mut self, epoch: u64, event: crate::ui::source::LiveEvent, cx: &mut Context<Self>) {
+        let sidebar_event = match &event.update {
+            crate::ui::source::LiveUpdate::NavigationEvent(e) => Some(e.clone()),
+            _ => None,
+        };
         let attention_changed = matches!(&event.update, crate::ui::source::LiveUpdate::Chat(_));
         match self.store.apply(epoch, event) {
             Applied::Store => {}
@@ -140,18 +146,14 @@ impl Shell {
             }),
             Applied::Resync => self.connect(cx),
         }
+        if let Some(event) = sidebar_event {
+            self.sidebar_live_event(&event, cx);
+        }
         if attention_changed {
             self.sync_attention(cx);
         }
         self.sync_composer(cx);
         cx.notify();
-    }
-
-    /// The next page of chats, when the sidebar wants more rows than are loaded.
-    pub(crate) fn load_more_chats(&mut self, cx: &mut Context<Self>) {
-        if let Some(load) = self.store.begin_more() {
-            self.load_chats(load, cx);
-        }
     }
 
     /// Opens `chat` from its latest messages (`None`: a new chat).
@@ -175,6 +177,12 @@ impl Shell {
             self.session_menu.summary = None;
         }
         self.store.open(chat);
+        if let Some(id) = self.store.selected().map(|c| c.session.0.to_string()) {
+            self.reveal_sidebar(&id);
+            self.mark_sidebar_read(&id, cx);
+        } else {
+            self.sidebar.new_chat_parent = None;
+        }
         self.composer.update(cx, |c, cx| {
             c.set_new_chat(new_chat, cx);
             if new_chat {
@@ -188,8 +196,34 @@ impl Shell {
         cx.notify();
     }
 
+    pub(crate) fn open_sidebar_draft(
+        &mut self,
+        parent: Option<crate::ui::source::sidebar::DraftTarget>,
+        cx: &mut Context<Self>,
+    ) {
+        self.session_menu.rename = None;
+        self.session_menu.summary = None;
+        self.store.open(None);
+        self.sidebar.new_chat_parent = parent;
+        self.chat.update(cx, |c, cx| {
+            c.show(None, None);
+            cx.notify();
+        });
+        self.composer.update(cx, |c, cx| {
+            c.set_new_chat(true, cx);
+            cx.notify();
+        });
+        self.sync_composer(cx);
+        if let Some(handle) = self.sidebar.window_handle {
+            let composer = self.composer.clone();
+            let _ = handle.update(cx, move |_, window, cx| {
+                composer.update(cx, |c, cx| c.engage(window, cx));
+            });
+        }
+        cx.notify();
+    }
     /// Reloads the open chat's latest window and its authority requests.
-    fn reload_open_chat(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn reload_open_chat(&mut self, cx: &mut Context<Self>) {
         let (Some(chat), Some(source)) = (self.store.selected().cloned(), self.source.clone())
         else {
             return;
@@ -267,12 +301,16 @@ impl Shell {
             let _ = retry.send(MonitorSignal::Retry);
         }
         self.store.lost();
+        self.store.navigation.in_flight = false;
+        self.store.navigation.dirty = false;
+        self.store.navigation.generation += 1;
+        self.sidebar.connection_lost();
         self.sync_composer(cx);
         cx.notify();
     }
 
     /// The composer follows the open chat: the agent, a running turn and its first request.
-    pub(super) fn sync_composer(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn sync_composer(&mut self, cx: &mut Context<Self>) {
         let streaming = self.store.running().is_some();
         let approval = self.store.approval().cloned();
         let pending = approval
@@ -302,7 +340,10 @@ impl Shell {
         }
         // A new chat: create it, open it, then send into it.
         Self::run(
-            source.create_chat(),
+            self.sidebar.new_chat_parent.as_ref().map_or_else(
+                || source.create_chat(),
+                |target| source.create_sidebar_chat(target.body()),
+            ),
             cx,
             move |this, result, cx| match result {
                 Ok(chat) => {
@@ -410,7 +451,7 @@ impl Shell {
     }
 
     /// A failed request: a brief toast, or the disconnected state when the agent is gone.
-    pub(super) fn failed(
+    pub(crate) fn failed(
         &mut self,
         error: &SourceError,
         toast: &'static str,

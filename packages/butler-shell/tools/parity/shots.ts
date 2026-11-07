@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnTrackedProcess } from "../../../../tests/support/native-app-server.ts";
 
-export async function shots(binary: string, out: string, name: string, data: string, scale: number, size: string, dark: boolean, chat?: string) {
+export async function shots(binary: string, out: string, name: string, data: string, scale: number, size: string, dark: boolean, chat?: string, anchors: string[] = []) {
   const log = join(out, "logs", `${name}-shots.log`);
   const writer = openSync(log, "w"), reader = openSync(log, "r");
   const lines: string[] = [];
@@ -39,7 +39,8 @@ export async function shots(binary: string, out: string, name: string, data: str
   }
   try {
     await expect("LIVE READY");
-    for (const command of ["connected", chat ? `open ${chat}` : "new", "stable", `shot ${name}`, `layout ${name}`]) {
+    const showDrawer = Number(size.split("x")[0]) <= 640 ? ["click sidebar-toggle"] : [];
+    for (const command of ["connected", chat ? `open ${chat}` : "new", "stable", ...showDrawer, "hover sidebar -10000 -10000", `shot ${name}`, `layout ${name} ${anchors.join(" ")}`]) {
       process.child.stdin!.write(`${command}\n`);
       await expect("LIVE OK");
     }

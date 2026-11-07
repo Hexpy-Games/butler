@@ -212,7 +212,6 @@ impl Source for Fixture {
     fn chats(&self, _: Option<PageCursor>) -> Fetch<ChatPage> {
         ready(ChatPage {
             chats: chats(),
-            next: None,
             events: EventCursor(1),
         })
     }

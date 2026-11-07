@@ -1,0 +1,239 @@
+{
+  "name": "sidebar-tree",
+  "seed": [
+    {
+      "method": "PATCH",
+      "path": "/settings",
+      "body": {
+        "language": "ko",
+        "access_mode": "full_access",
+        "reduce_motion": true
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/projects",
+      "body": {
+        "source": "scratch",
+        "display_name": "제품"
+      },
+      "save": {
+        "project_a": "project.id"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/projects",
+      "body": {
+        "source": "scratch",
+        "display_name": "연구"
+      },
+      "save": {
+        "project_b": "project.id"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/navigation",
+      "body": {},
+      "save": {
+        "revision": "space.revision"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/space/groups",
+      "body": {
+        "action": "create",
+        "title": "계획",
+        "parentKey": null,
+        "expectedRevision": "${revision}"
+      },
+      "save": {
+        "revision": "space.revision",
+        "group": "space.groups.0.id"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "body": {
+        "kind": "chat",
+        "title": "회의 준비",
+        "group_id": "${group}"
+      },
+      "save": {
+        "chat_0": "session.id"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "body": {
+        "kind": "chat",
+        "title": "검토 자료",
+        "group_id": "${group}"
+      },
+      "save": {
+        "chat_1": "session.id"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "body": {
+        "kind": "chat",
+        "title": "다음 단계",
+        "group_id": "${group}"
+      },
+      "save": {
+        "chat_2": "session.id"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "body": {
+        "kind": "chat",
+        "title": "즐겨찾기"
+      },
+      "save": {
+        "pinned": "session.id"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/navigation",
+      "body": {},
+      "save": {
+        "revision": "space.revision"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/space/pins",
+      "body": {
+        "action": "pin",
+        "nodeKey": "s:${pinned}",
+        "pinned": true,
+        "expectedRevision": "${revision}"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "body": {
+        "kind": "chat",
+        "title": "읽지 않은 대화"
+      },
+      "save": {
+        "unread": "session.id"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/messages",
+      "body": {
+        "chat_id": "${unread}",
+        "text": "검토할 내용을 정리해 주세요"
+      },
+      "wait": true
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "body": {
+        "kind": "chat",
+        "title": "진행 중"
+      },
+      "save": {
+        "running": "session.id"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/messages",
+      "body": {
+        "chat_id": "${running}",
+        "text": "계속 작업해 주세요"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/projects/${project_a}/canon/epics",
+      "body": {
+        "title": "제품 검토",
+        "description": "",
+        "assignee": "app-user"
+      },
+      "save": {
+        "epic": "id"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/navigation",
+      "body": {},
+      "save": {
+        "revision": "space.revision"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/space/moves",
+      "body": {
+        "action": "move",
+        "sourceKey": "p:${project_a}",
+        "targetKey": "s:${running}",
+        "position": "before",
+        "expectedRevision": "${revision}"
+      }
+    }
+  ],
+  "open": {
+    "new": true
+  },
+  "anchors": [
+    {
+      "anchor": "sidebar-row-${project_a}",
+      "electron": "[data-slot=\"nav-drop-scope\"] [data-tree-item=\"p:${project_a}\"]"
+    },
+    {
+      "anchor": "sidebar-row-${project_b}",
+      "electron": "[data-slot=\"nav-drop-scope\"] [data-tree-item=\"p:${project_b}\"]"
+    },
+    {
+      "anchor": "sidebar-row-${chat_0}",
+      "electron": "[data-slot=\"nav-drop-scope\"] [data-tree-item=\"s:${chat_0}\"]"
+    },
+    {
+      "anchor": "sidebar-row-${chat_1}",
+      "electron": "[data-slot=\"nav-drop-scope\"] [data-tree-item=\"s:${chat_1}\"]"
+    },
+    {
+      "anchor": "sidebar-row-${chat_2}",
+      "electron": "[data-slot=\"nav-drop-scope\"] [data-tree-item=\"s:${chat_2}\"]"
+    },
+    {
+      "anchor": "sidebar-row-${pinned}",
+      "electron": "[data-slot=\"nav-drop-scope\"] [data-tree-item=\"s:${pinned}\"]"
+    },
+    {
+      "anchor": "sidebar-row-${unread}",
+      "electron": "[data-slot=\"nav-drop-scope\"] [data-tree-item=\"s:${unread}\"]"
+    },
+    {
+      "anchor": "sidebar-row-${running}",
+      "electron": "[data-slot=\"nav-drop-scope\"] [data-tree-item=\"s:${running}\"]"
+    },
+    {
+      "anchor": "sidebar-row-${group}",
+      "electron": "[data-slot=\"nav-drop-scope\"] [data-tree-item=\"g:${group}\"]"
+    },
+    {
+      "anchor": "sidebar-epic-${epic}",
+      "electron": "[data-canon-epic=\"${epic}\"] [data-test-class~=\"canon-epic-row\"]"
+    }
+  ],
+  "pendingReply": "계속 작업해 주세요"
+}

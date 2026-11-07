@@ -22,7 +22,7 @@ pub(super) struct SessionMenu {
 }
 
 impl Shell {
-    pub(super) fn load_summary(&mut self, chat: &ChatRef, cx: &mut Context<Self>) {
+    pub(crate) fn load_summary(&mut self, chat: &ChatRef, cx: &mut Context<Self>) {
         self.session_menu.summary = None;
         let Some(source) = self.source.clone() else {
             return;

@@ -83,6 +83,7 @@ impl Harness {
             })?;
         cx.update(|cx| {
             window.update(cx, |shell, window, cx| {
+                window.activate();
                 window.focus(&shell.focus_handle(), cx);
             })
         })?;
@@ -99,6 +100,8 @@ impl Harness {
     }
 
     fn layout(&mut self, dir: &Path, name: &str) -> anyhow::Result<()> {
+        let mut arguments = name.split_whitespace();
+        let name = arguments.next().context("layout <name> [anchors…]")?;
         settle(&mut self.cx, self.handle);
         let mut anchors = self.cx.update(|app| {
             self.window.read(app).map(|s| {
@@ -131,6 +134,7 @@ impl Harness {
                 names
             })
         })?;
+        anchors.extend(arguments.map(str::to_owned));
         anchors.sort();
         anchors.dedup();
         let mut layout = Vec::new();

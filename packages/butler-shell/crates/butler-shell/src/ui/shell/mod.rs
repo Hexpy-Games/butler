@@ -12,7 +12,6 @@ mod titlebar;
 
 use std::cell::Cell;
 use std::rc::Rc;
-use std::time::Duration;
 
 use gpui::{
     AppContext as _, Bounds, Context, Entity, FocusHandle, KeyBinding, Pixels, SharedString,
@@ -23,12 +22,10 @@ use crate::ui::chat::{Chat, LoadOlder};
 use crate::ui::composer::{Composer, ComposerEvent};
 use crate::ui::dialog::Dialog;
 use crate::ui::i18n::Locale;
-use crate::ui::motion::Hover;
 use crate::ui::sidebar::SidebarState;
 use crate::ui::source::Source;
 use crate::ui::store::Store;
 use crate::ui::theme::Theme;
-use crate::ui::widgets::HasHover;
 
 actions!(
     shell,
@@ -53,23 +50,19 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
     ]
 }
 
-/// How often relative ages ("12분") are redrawn.
-const AGE_TICK: Duration = Duration::from_secs(30);
-
 pub(crate) struct Shell {
     pub(crate) theme: Theme,
     pub(crate) chat: Entity<Chat>,
     pub(crate) composer: Entity<Composer>,
     pub(crate) dialog: Option<Entity<Dialog>>,
-    pub(crate) hover: Hover,
     pub(crate) sidebar: SidebarState,
-    sidebar_open: bool,
+    pub(super) sidebar_open: bool,
     frame: frame::FrameState,
     pending_navigation: Option<navigation::Navigation>,
     attention: notifications::Attention,
     session_menu: session_menu::SessionMenu,
     /// The agent, while one is attached; `None` shows the disconnected state.
-    source: Option<Rc<dyn Source>>,
+    pub(crate) source: Option<Rc<dyn Source>>,
     incompatible: bool,
     pub(crate) store: Store,
     theme_override: Option<bool>,
@@ -81,12 +74,6 @@ pub(crate) struct Shell {
     live_task: Option<gpui::Task<()>>,
     connection_task: Option<gpui::Task<()>>,
     rediscover: Option<tokio::sync::mpsc::UnboundedSender<crate::ui::source::agent::MonitorSignal>>,
-}
-
-impl HasHover for Shell {
-    fn hover_state(&mut self) -> &mut Hover {
-        &mut self.hover
-    }
 }
 
 fn appearance(dark: bool) -> WindowAppearance {
@@ -128,7 +115,15 @@ impl Shell {
         let composer = cx.new(|cx| Composer::new(theme.clone(), window, cx));
         let focus = cx.focus_handle();
         let subscriptions = vec![
-            cx.observe_window_activation(window, |_, window, cx| {
+            cx.observe_window_activation(window, |this, window, cx| {
+                this.sidebar.attended = window.is_window_active();
+                this.sync_minute_clock(cx);
+                if this.sidebar.attended
+                    && let Some(id) = this.store.selected().map(|c| c.session.0.to_string())
+                {
+                    this.mark_sidebar_read(&id, cx);
+                }
+                cx.notify();
                 if !window.is_window_active() {
                     butler_ds::ui::blocks::adaptive_shell::peek::window_blurred(window, cx);
                 }
@@ -145,7 +140,6 @@ impl Shell {
             chat,
             composer,
             dialog: None,
-            hover: Hover::default(),
             sidebar: SidebarState::new(),
             sidebar_open: true,
             frame: frame::FrameState::default(),
@@ -167,7 +161,6 @@ impl Shell {
         Self::notification_responses(window, cx);
         shell.sync_composer(cx);
         shell.connect(cx);
-        Self::tick_ages(cx);
         shell
     }
 
@@ -183,24 +176,6 @@ impl Shell {
         self.source
             .is_none()
             .then(|| self.theme.strings.not_running.into())
-    }
-
-    /// Redraws relative ages while chats are listed.
-    fn tick_ages(cx: &mut Context<Self>) {
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(AGE_TICK).await;
-                let alive = this.update(cx, |this, cx| {
-                    if !this.store.chats.is_empty() {
-                        cx.notify();
-                    }
-                });
-                if alive.is_err() {
-                    return;
-                }
-            }
-        })
-        .detach();
     }
 
     fn set_dark(&mut self, dark: bool, cx: &mut Context<Self>) {

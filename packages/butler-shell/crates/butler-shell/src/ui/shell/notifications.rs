@@ -12,7 +12,7 @@ pub(super) struct Attention {
 }
 
 impl Shell {
-    pub(super) fn copy(&self, en: &'static str, ko: &'static str) -> &'static str {
+    pub(crate) fn copy(&self, en: &'static str, ko: &'static str) -> &'static str {
         match self.theme.strings.locale {
             Locale::En => en,
             Locale::Ko => ko,

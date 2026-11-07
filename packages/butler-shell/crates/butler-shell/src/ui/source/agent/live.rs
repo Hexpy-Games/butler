@@ -51,10 +51,13 @@ async fn pump(
         {
             match event {
                 Ok(event) => {
-                    let updates = match updates(dirty, &event.raw) {
+                    let mut updates = match updates(dirty, &event.raw) {
                         Ok(updates) => updates,
                         Err(error) => vec![LiveUpdate::Failed(convert::error(&error))],
                     };
+                    if let Ok(envelope) = convert::decode::<wire::AppEventEnvelope>(&event.raw) {
+                        updates.insert(0, LiveUpdate::NavigationEvent(Box::new(envelope)));
+                    }
                     if deliver(send, event.cursor.map(EventCursor), updates)
                         .await
                         .is_err()

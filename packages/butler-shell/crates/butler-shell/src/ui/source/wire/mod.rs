@@ -23,3 +23,6 @@ mod events;
 pub(crate) use events::*;
 mod projection;
 pub(crate) use projection::*;
+
+mod sidebar;
+pub(crate) use sidebar::*;

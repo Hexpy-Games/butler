@@ -5,6 +5,7 @@
 //! by `agent`. Without a source the shell shows its disconnected state.
 pub(crate) mod agent;
 pub(crate) mod model;
+pub(crate) mod sidebar;
 pub(crate) mod wire;
 
 use futures::future::LocalBoxFuture;
@@ -40,6 +41,31 @@ pub(crate) enum SessionAction {
 }
 
 pub(crate) trait Source {
+    fn sidebar_updates(&self) -> Fetch<wire::SidebarUpdateStatus> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn canon_overview(&self, _: &str) -> Fetch<wire::CanonOverview> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn canon_plan(&self, _: &str) -> Fetch<wire::CanonPlan> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn canon_sidebar(&self, _: &str) -> Fetch<wire::CanonSidebar> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn create_sidebar_chat(&self, _: serde_json::Value) -> Fetch<ChatRef> {
+        self.create_chat()
+    }
+    fn navigation(&self) -> Fetch<wire::NavigationView> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn work_status(&self) -> Fetch<wire::WorkStatusView> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+    fn sidebar_mutation(&self, _: sidebar::Mutation) -> Fetch<wire::SidebarMutationResult> {
+        Box::pin(async { Err(SourceError::Missing) })
+    }
+
     fn summary(&self, _: &SessionId) -> Fetch<wire::SessionSummaryView> {
         Box::pin(async { Err(SourceError::Missing) })
     }

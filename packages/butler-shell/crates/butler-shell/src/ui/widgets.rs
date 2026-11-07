@@ -111,12 +111,6 @@ impl IconButtonSpec {
         }
     }
 
-    pub(crate) fn size(mut self, size: f32, icon_size: f32) -> Self {
-        self.size = size;
-        self.icon_size = icon_size;
-        self
-    }
-
     pub(crate) fn disabled(mut self, reason: Option<SharedString>) -> Self {
         self.disabled = reason;
         self

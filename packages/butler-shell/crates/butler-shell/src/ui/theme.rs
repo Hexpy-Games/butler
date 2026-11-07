@@ -69,36 +69,6 @@ impl Platform {
             _ => Self::Linux,
         }
     }
-
-    fn sidebar(self) -> (Color, Color, Color, Color, Color) {
-        // AdaptiveShellCards.module.css:11 uses the platform-mapped sidebar-bg.
-        match self {
-            // AdaptiveShell.module.css:52: macOS material, row fills and sidebar text.
-            Self::Mac => (
-                Color::MacSidebarBg,
-                Color::MacSidebarTextSecondary,
-                Color::MacSidebarTextTertiary,
-                Color::MacSidebarHoverBg,
-                Color::MacSidebarSelectedBg,
-            ),
-            // AdaptiveShell.module.css:66: Windows material, row fills and sidebar text.
-            Self::Windows => (
-                Color::WindowsSidebarBg,
-                Color::WindowsSidebarTextSecondary,
-                Color::WindowsSidebarTextTertiary,
-                Color::WindowsSidebarHoverBg,
-                Color::WindowsSidebarSelectedBg,
-            ),
-            // AdaptiveShell.module.css:32: Linux keeps the base sidebar tokens.
-            Self::Linux => (
-                Color::SidebarBg,
-                Color::SidebarTextSecondary,
-                Color::SidebarTextTertiary,
-                Color::SidebarHoverBg,
-                Color::SidebarSelectedBg,
-            ),
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -112,12 +82,8 @@ pub(crate) struct Theme {
     pub(crate) text: Hsla,
     /// --text-secondary (workspace).
     pub(crate) text2: Hsla,
-    /// --sidebar-text-secondary, mapped by platform.
-    pub(crate) sidebar_text2: Hsla,
     /// --text-tertiary (workspace).
     pub(crate) text3: Hsla,
-    /// --sidebar-text-tertiary, mapped by platform.
-    pub(crate) sidebar_text3: Hsla,
     /// --placeholder.
     pub(crate) placeholder: Hsla,
     /// --color-text-disabled: disabled controls change colour, not opacity.
@@ -126,10 +92,6 @@ pub(crate) struct Theme {
     pub(crate) selection: Hsla,
     /// --selection-strong.
     pub(crate) selection_strong: Hsla,
-    /// Platform --sidebar-hover-bg, falling back to --selection at 60%.
-    pub(crate) nav_hover: Hsla,
-    /// Platform --sidebar-selected-bg, falling back to --selection at 75%.
-    pub(crate) nav_active: Hsla,
     /// --line.
     pub(crate) line: Hsla,
     /// --line-strong.
@@ -187,16 +149,6 @@ fn shadow(context: &TokenContext) -> BoxShadow {
 }
 
 impl Theme {
-    /// AdaptiveShell.module.css:120 and AdaptiveShellCards.module.css:89:
-    /// inherited text aliases also reach shared controls in the shell scope.
-    pub(crate) fn sidebar_scope(&self) -> Self {
-        Self {
-            text2: self.sidebar_text2,
-            text3: self.sidebar_text3,
-            ..self.clone()
-        }
-    }
-
     pub(crate) fn new(
         dark: bool,
         platform: Platform,
@@ -208,10 +160,7 @@ impl Theme {
             ..TokenContext::DEFAULT
         };
         let c = |token| color(&context, token);
-        let (_, secondary, tertiary, hover, selected) = platform.sidebar();
         let selection = c(Color::Selection);
-        // AdaptiveShell.module.css:116-131: sidebar text aliases and optional row fills.
-        let row_fill = |token, fallback| context.try_color(token).map_or(fallback, |_| c(token));
         Self {
             dark,
             platform,
@@ -220,14 +169,10 @@ impl Theme {
             text: c(Color::TextPrimary),
             text2: c(Color::TextSecondary),
             text3: c(Color::TextTertiary),
-            sidebar_text2: c(secondary),
-            sidebar_text3: c(tertiary),
             placeholder: c(Color::Placeholder),
             text_disabled: c(Color::ColorTextDisabled),
             selection,
             selection_strong: c(Color::SelectionStrong),
-            nav_hover: row_fill(hover, alpha(selection, 0.60)),
-            nav_active: row_fill(selected, alpha(selection, 0.75)),
             line: c(Color::Line),
             line_strong: c(Color::LineStrong),
             surface: c(Color::Surface),
