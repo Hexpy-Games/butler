@@ -133,7 +133,6 @@ pub(crate) enum DraftStatus {
 
 /// `AnswerDraftFooter`: reserves the completed response's controls before handoff, with live copy
 /// unavailable. `draft` is the turn's draft status, `None` when it has no answer-card calls.
-#[allow(dead_code, reason = "called by the message footer of the row unit")]
 pub(crate) fn answer_draft_footer(
     id: &str,
     draft: Option<DraftStatus>,

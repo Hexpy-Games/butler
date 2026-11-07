@@ -10,6 +10,7 @@ mod notifications;
 mod render;
 mod session_menu;
 mod titlebar;
+mod transcript;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -20,7 +21,7 @@ use gpui::{
     Subscription, Window, WindowAppearance, actions,
 };
 
-use crate::ui::chat::{Chat, LoadOlder};
+use crate::ui::chat::Chat;
 use crate::ui::composer::{Composer, ComposerEvent};
 use crate::ui::dialog::Dialog;
 use crate::ui::i18n::Locale;
@@ -82,6 +83,8 @@ pub(crate) struct Shell {
     live_task: Option<gpui::Task<()>>,
     connection_task: Option<gpui::Task<()>>,
     rediscover: Option<tokio::sync::mpsc::UnboundedSender<crate::ui::source::agent::MonitorSignal>>,
+    /// The open chat's latest window is being read again.
+    refreshing: bool,
 }
 
 impl HasHover for Shell {
@@ -125,7 +128,7 @@ impl Shell {
             options.code_font,
             options.locale.strings(),
         );
-        let chat = cx.new(|_| Chat::new(theme.clone()));
+        let chat = cx.new(|_| Chat::new());
         let composer = cx.new(|cx| Composer::new(theme.clone(), window, cx));
         let focus = cx.focus_handle();
         let subscriptions = vec![
@@ -135,9 +138,6 @@ impl Shell {
                 }
             }),
             cx.subscribe_in(&composer, window, Self::on_composer),
-            cx.subscribe(&chat, |this: &mut Self, _, e: &LoadOlder, cx| {
-                this.load_older(e, cx);
-            }),
         ];
         let composer_h = composer.read(cx).height_cell();
         cx.set_window_appearance(options.dark.map(appearance));
@@ -164,7 +164,9 @@ impl Shell {
             live_task: None,
             connection_task: None,
             rediscover: None,
+            refreshing: false,
         };
+        Self::transcript_hooks(cx);
         Self::notification_responses(window, cx);
         shell.sync_composer(cx);
         shell.connect(cx);
@@ -215,10 +217,6 @@ impl Shell {
             self.theme.strings,
         );
         let t = self.theme.clone();
-        self.chat.update(cx, |c, cx| {
-            c.theme = t.clone();
-            cx.notify();
-        });
         self.composer.update(cx, |c, cx| {
             c.set_theme(t.clone(), cx);
             cx.notify();

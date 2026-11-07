@@ -1,6 +1,7 @@
 //! UI copy in Korean and English. Strings that exist in packages/butler-i18n (TypeScript, so
 //! not readable at build time) use the same key, named on each field with its catalog path
 //! and the same text; `shell.*` fields are new to this app. Product terms follow AGENTS.md.
+pub(crate) mod composer;
 pub(crate) mod media;
 
 use crate::ui::source::Risk;
@@ -254,5 +255,88 @@ impl Strings {
             (Locale::Ko, _) => format!("{days}일"),
             (Locale::En, _) => format!("{days}d"),
         }
+    }
+}
+
+// Transcript (I1): the message rows, the user footer, the chats intro and the jump button.
+
+/// The transcript's copy, by the DS language the rows render in.
+pub(crate) struct TranscriptStrings {
+    /// common.copy
+    pub(crate) copy: &'static str,
+    /// interfaceDetails.contextCompaction.{started, completed}
+    pub(crate) compacting: &'static str,
+    pub(crate) compacted: &'static str,
+    /// interfaceDetails.questionAnswer.{answered, skipped, message}
+    pub(crate) answered: &'static str,
+    pub(crate) skipped: &'static str,
+    pub(crate) answered_in_message: &'static str,
+    /// conversation.messageActions.{showMore, showLess, copyMessage, copied}
+    pub(crate) show_more: &'static str,
+    pub(crate) show_less: &'static str,
+    pub(crate) copy_message: &'static str,
+    pub(crate) copied: &'static str,
+    /// conversation.chatsIntro
+    pub(crate) chats_intro: &'static str,
+    /// conversation.scrollToBottom.{aria, latest, newMessages}
+    pub(crate) jump_aria: &'static str,
+    pub(crate) jump_latest: &'static str,
+    pub(crate) jump_new: &'static str,
+    /// settings.errors.saveFailed
+    pub(crate) save_failed: &'static str,
+}
+
+static TRANSCRIPT_KO: TranscriptStrings = TranscriptStrings {
+    copy: "복사",
+    compacting: "컨텍스트 자동 압축 중",
+    compacted: "컨텍스트 자동 압축 완료",
+    answered: "답변함",
+    skipped: "건너뜀",
+    answered_in_message: "메시지로 답변함",
+    show_more: "더보기",
+    show_less: "접기",
+    copy_message: "메시지 복사",
+    copied: "복사됨",
+    chats_intro: "이제 여기선 편하게 얘기해요. 길어지는 건 문서로 드릴게요.",
+    jump_aria: "최신 메시지와 입력창으로 이동",
+    jump_latest: "최신으로 이동",
+    jump_new: "새 메시지",
+    save_failed: "저장하지 못했습니다.",
+};
+
+static TRANSCRIPT_EN: TranscriptStrings = TranscriptStrings {
+    copy: "Copy",
+    compacting: "Context automatically compacting",
+    compacted: "Context automatically compacted",
+    answered: "Answered",
+    skipped: "Skipped",
+    answered_in_message: "Answered by message",
+    show_more: "Show more",
+    show_less: "Show less",
+    copy_message: "Copy message",
+    copied: "Copied",
+    chats_intro: "You can talk to me casually here. Anything long, I'll send as a document.",
+    jump_aria: "Scroll to the latest message and composer",
+    jump_latest: "Latest",
+    jump_new: "New messages",
+    save_failed: "Couldn't save.",
+};
+
+/// The transcript's copy in `lang`.
+pub(crate) fn transcript(lang: butler_ds::ui::context::Lang) -> &'static TranscriptStrings {
+    match lang {
+        butler_ds::ui::context::Lang::Ko => &TRANSCRIPT_KO,
+        butler_ds::ui::context::Lang::En => &TRANSCRIPT_EN,
+    }
+}
+
+/// interfaceTemplates.workedDuration
+pub(crate) fn worked_duration(lang: butler_ds::ui::context::Lang, total_seconds: i64) -> String {
+    let (minutes, seconds) = (total_seconds / 60, total_seconds % 60);
+    match (lang, total_seconds < 60) {
+        (butler_ds::ui::context::Lang::Ko, true) => format!("{total_seconds}초"),
+        (butler_ds::ui::context::Lang::Ko, false) => format!("{minutes}분 {seconds:02}초"),
+        (butler_ds::ui::context::Lang::En, true) => format!("{total_seconds}s"),
+        (butler_ds::ui::context::Lang::En, false) => format!("{minutes}m {seconds:02}s"),
     }
 }

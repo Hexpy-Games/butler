@@ -29,7 +29,7 @@ fn open_source_click(
         };
         error.update(cx, |error, _| *error = None);
         let session_id = session_id.clone();
-        let done = remote::run(async move {
+        let done = remote::run(cx, async move {
             client
                 .create_space_branch_source(&json!({ "sessionId": session_id }))
                 .await
@@ -62,7 +62,6 @@ fn open_source_click(
 }
 
 /// `SessionBranchSeed`: the summary a branched session starts from, and a way back to the source.
-#[allow(dead_code, reason = "called by the list unit above the first message")]
 pub(crate) fn session_branch_seed(
     t: &TranscriptCtx,
     window: &mut Window,

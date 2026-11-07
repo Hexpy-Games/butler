@@ -16,46 +16,21 @@ use gpui::{
 };
 
 use super::TranscriptCtx;
-use super::activity::message_activity;
 use super::activity::steward::steward_progress;
+use super::activity::{is_general_chat, message_activity};
 use super::answers::answer_blocks;
 use super::files::message_files;
-use super::message_markdown::message_markdown;
+use super::message_markdown::message_markdown_in;
 use crate::ui::source::wire::{InitiatedOriginState, MessageRecord, MessageRecordRole};
 use copy::text;
 
-#[allow(
-    unused_imports,
-    reason = "P2 shell-wave: entries the row, list and shell units call"
-)]
 pub(crate) use branch::assistant_branch_actions;
-#[allow(
-    unused_imports,
-    reason = "P2 shell-wave: entries the row, list and shell units call"
-)]
-pub(crate) use failure::{message_retry_actions, message_trace_menu};
-#[allow(
-    unused_imports,
-    reason = "P2 shell-wave: entries the row, list and shell units call"
-)]
-pub(crate) use footer::{
-    DraftStatus, FooterMeta, ResponseFooter, answer_draft_footer, assistant_response_footer,
+pub(crate) use failure::{
+    can_retry_with_current_controls, message_retry_actions, message_trace_menu, retryable,
 };
-#[allow(
-    unused_imports,
-    reason = "P2 shell-wave: installed by the shell at wave integration"
-)]
+pub(crate) use footer::{FooterMeta, ResponseFooter, answer_draft_footer, assistant_response_footer};
 pub(crate) use hooks::{AssistantHooks, TraceTarget};
-#[allow(
-    unused_imports,
-    reason = "P2 shell-wave: entries the row, list and shell units call"
-)]
 pub(crate) use seed::session_branch_seed;
-
-/// `isGeneralChat`
-fn general_chat(message: &MessageRecord) -> bool {
-    message.chat_id.as_deref() == Some("general")
-}
 
 /// `isAssistantFailureNoticeMessage`
 fn failure_message(message: &MessageRecord) -> bool {
@@ -74,18 +49,76 @@ fn initiated_kind(message: &MessageRecord) -> Option<&str> {
         .map(|origin| origin.kind.as_str())
 }
 
-/// The assistant message body.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
-pub(crate) fn assistant_body(
+/// The assistant message: its body, then the draft footer while it runs or the response footer
+/// once it settled (`MessageContent`).
+pub(crate) fn assistant_message(
     msg: &MessageRecord,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
-) -> AnyElement {
-    let bubble = general_chat(msg);
+) -> Vec<AnyElement> {
+    let (body, steward) = assistant_body(msg, t, window, cx);
+    let mut parts = vec![body];
+    let running = t.live_message == Some(msg.id.as_str())
+        || matches!(msg.status.as_deref(), Some("streaming" | "pending"));
+    if running {
+        // No answer-card draft source is wired yet, so no draft status shows.
+        parts.extend(answer_draft_footer(&msg.id, None, cx).into_iter().flatten());
+    } else {
+        parts.extend(response_footer(msg, t, steward, window, cx));
+    }
+    parts
+}
+
+/// `AssistantResponseFooter` of a settled answer, with its branch and trace actions.
+fn response_footer(
+    msg: &MessageRecord,
+    t: &TranscriptCtx,
+    steward: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> Vec<AnyElement> {
+    let actions: Vec<AnyElement> = assistant_branch_actions(msg, t, window, cx)
+        .into_iter()
+        .chain(message_trace_menu(msg, cx))
+        .collect();
+    let kind = initiated_kind(msg);
+    let failed_notice = msg.failure_notice.is_some();
+    assistant_response_footer(
+        ResponseFooter {
+            id: &msg.id,
+            bubble: is_general_chat(msg.chat_id.as_deref()),
+            time_only: matches!(kind, Some("approval_needed" | "work_failed")),
+            copy_text: &msg.text,
+            meta: t.footer_meta.get(&msg.id),
+            status: if failed_notice {
+                Some("failed")
+            } else {
+                msg.status.as_deref()
+            },
+            suppress_terminal_status: kind == Some("work_failed")
+                || steward
+                || (msg.incomplete == Some(true) && !failed_notice),
+            actions: (!actions.is_empty()).then(|| {
+                Stack::row()
+                    .gap(Space::None)
+                    .children(actions)
+                    .into_any_element()
+            }),
+        },
+        cx,
+    )
+}
+
+/// The assistant message body, and whether it shows steward progress.
+fn assistant_body(
+    msg: &MessageRecord,
+    t: &TranscriptCtx,
+    window: &mut Window,
+    cx: &mut App,
+) -> (AnyElement, bool) {
+    let mut steward = false;
+    let bubble = is_general_chat(msg.chat_id.as_deref());
     let failure = failure_message(msg);
     let mut parts: Vec<AnyElement> = Vec::new();
     if !bubble {
@@ -103,15 +136,16 @@ pub(crate) fn assistant_body(
         parts.push(Typo::caption(step).tone(Tone::Secondary).into_any_element());
     }
     if bubble {
-        bubble_body(msg, t, failure, &mut parts, window, cx);
+        bubble_body(msg, t, failure, (&mut parts, &mut steward), window, cx);
     } else {
-        answer_reply(msg, t, failure, &mut parts, window, cx);
+        answer_reply(msg, t, failure, (&mut parts, &mut steward), window, cx);
         parts.extend(attachments(msg, t, window, cx));
     }
-    Stack::new()
+    let body = Stack::new()
         .gap(Space::Lg)
         .children(parts)
-        .into_any_element()
+        .into_any_element();
+    (body, steward)
 }
 
 /// The `general` chat: the answer in a bubble, steward progress, then files and cards under it.
@@ -119,7 +153,7 @@ fn bubble_body(
     msg: &MessageRecord,
     t: &TranscriptCtx,
     failure: bool,
-    parts: &mut Vec<AnyElement>,
+    (parts, steward): (&mut Vec<AnyElement>, &mut bool),
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -132,7 +166,9 @@ fn bubble_body(
                 .into_any_element(),
         );
     }
-    parts.extend(steward_progress(msg, t, window, cx));
+    let progress = steward_progress(msg, t, window, cx);
+    *steward = progress.is_some();
+    parts.extend(progress);
     let mut under = MessageBubbleAttachments::new();
     if !failure {
         under = under.children(blocks(msg, t, window, cx));
@@ -147,7 +183,7 @@ fn answer_reply(
     msg: &MessageRecord,
     t: &TranscriptCtx,
     failure: bool,
-    parts: &mut Vec<AnyElement>,
+    (parts, steward): (&mut Vec<AnyElement>, &mut bool),
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -160,6 +196,7 @@ fn answer_reply(
     }
     match steward_progress(msg, t, window, cx) {
         Some(progress) => {
+            *steward = true;
             reply.push(progress);
             parts.push(
                 Stack::new()
@@ -183,7 +220,7 @@ fn blocks(
         .answer_blocks
         .as_deref()
         .filter(|sets| !sets.is_empty())?;
-    Some(answer_blocks(sets, t, window, cx))
+    answer_blocks(sets, t, window, cx)
 }
 
 /// `AssistantReplyText`: the work-failure line, else the message's markdown.
@@ -198,10 +235,11 @@ fn reply_text(msg: &MessageRecord, cx: &mut App) -> AnyElement {
             .wrap(Wrap::Anywhere)
             .into_any_element();
     }
-    message_markdown(
+    message_markdown_in(
         ElementId::from(SharedString::from(format!("reply-{}", msg.id))),
         SharedString::from(msg.text.clone()),
         msg.status.as_deref() == Some("streaming"),
+        msg.attachments.as_deref().unwrap_or_default(),
         cx,
     )
 }

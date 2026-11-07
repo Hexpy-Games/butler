@@ -28,7 +28,7 @@ fn retry_click(t: &TranscriptCtx, turn_id: String, with_current_controls: bool) 
         set_retrying(Some(turn_id.clone()), cx);
         window.refresh();
         let turn = turn_id.clone();
-        let done = super::remote::run(async move {
+        let done = super::remote::run(cx, async move {
             if with_current_controls {
                 client.retry_turn_with_current_controls(&turn).await
             } else {
@@ -47,12 +47,12 @@ fn retry_click(t: &TranscriptCtx, turn_id: String, with_current_controls: bool) 
 }
 
 /// `isRetryableFailureMessage`
-fn retryable(message: &MessageRecord) -> bool {
+pub(crate) fn retryable(message: &MessageRecord) -> bool {
     message.retryable == Some(true) && message.retry_mode.is_some()
 }
 
 /// `canRetryWithCurrentControls`
-fn can_retry_with_current_controls(message: &MessageRecord) -> bool {
+pub(crate) fn can_retry_with_current_controls(message: &MessageRecord) -> bool {
     message.retryable == Some(true) && message.retry_with_current_controls == Some(true)
 }
 
@@ -133,7 +133,6 @@ pub(super) fn failure_notice(
 }
 
 /// `MessageRetryActions`: Retry, and Retry with current settings next to it.
-#[allow(dead_code, reason = "called by the message footer of the row unit")]
 pub(crate) fn message_retry_actions(
     turn_id: &str,
     with_current_controls: bool,
@@ -170,7 +169,6 @@ pub(crate) fn message_retry_actions(
 }
 
 /// `MessageTraceMenu`: developer mode, the answer's overflow menu with the log view for its trace.
-#[allow(dead_code, reason = "called by the message footer of the row unit")]
 pub(crate) fn message_trace_menu(message: &MessageRecord, cx: &App) -> Option<AnyElement> {
     let hooks = hooks(cx);
     let trace = hooks

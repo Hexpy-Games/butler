@@ -12,7 +12,9 @@ use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::{blocks, context::Ds, focus, icon_button::IconButton, overlay, toast};
 use gpui::{AnyElement, Context, IntoElement, Render, Window, canvas, div, prelude::*};
 
-use super::{Shell, TextSizeDown, TextSizeReset, TextSizeUp, ToggleSidebar, system_dark};
+use super::{
+    Shell, TextSizeDown, TextSizeReset, TextSizeUp, ToggleSidebar, image_viewer, system_dark,
+};
 use crate::ui::Icon;
 use crate::ui::widgets::anchor;
 
@@ -180,6 +182,7 @@ impl Render for Shell {
             .line_height(ds.len(Length::TypoBodyLineHeight))
             .text_color(ds.color(Color::TextPrimary))
             .child(frame)
+            .children(image_viewer::overlay(window, cx))
             .children(dialog)
             .child(rename)
             .child(toast::Toaster::new().offset(ds.len(Length::TitlebarSafeAreaTop)));

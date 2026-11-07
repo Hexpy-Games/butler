@@ -4,14 +4,15 @@
 //! newest message until the reader scrolls away, and a jump button brings it back.
 mod turn;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use butler_ds::tokens::Length;
 use butler_ds::ui::blocks::conversation_shell::ConversationScrollToBottomButton;
-use butler_ds::ui::blocks::message_row::{MessageRow, Role};
+use butler_ds::ui::blocks::message_row::{Entering, MessageRow, Role};
 use butler_ds::ui::blocks::scope;
-use butler_ds::ui::context::{Ds, Lang};
+use butler_ds::ui::context::Ds;
 use gpui::{
     AnyElement, App, Entity, FollowMode, Global, InteractiveElement as _, IntoElement as _,
     ListAlignment, ListState, ParentElement as _, SharedString, Styled as _, WeakEntity, Window,
@@ -19,13 +20,16 @@ use gpui::{
 };
 
 use super::TranscriptCtx;
-use super::activity::status::current_turn_status;
-use super::intro::chats_intro;
+use super::activity::timeline::turn_activity_panel;
+use super::assistant::{FooterMeta, session_branch_seed};
+use super::intro::{self, chats_intro};
 use super::queue::queued_rows;
 use super::row::message_row;
+use crate::ui::i18n::transcript as strings;
 use crate::ui::smooth_scroll::SmoothScroll;
 use crate::ui::source::wire::{
-    MessageRecord, QueuedMessageRecordState, SessionQueueView, SessionView, SessionViewTurn,
+    MessageRecord, ProgressRow, QueuedMessageRecordState, SessionQueueView, SessionView,
+    SessionViewTurn,
 };
 use turn::{Live, collapse_assistant_attempts, reuse, turn_info};
 
@@ -39,13 +43,8 @@ const COLUMN_MAX: f32 = 760.;
 const COLUMN_SHARE: f32 = 0.86;
 
 /// The window before the one shown: the shell fetches it and merges it into the view.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 pub(crate) struct OlderRequest {
     pub(crate) session_id: String,
-    pub(crate) before_cursor: i64,
     pub(crate) before_cursor_token: Option<String>,
 }
 
@@ -57,10 +56,6 @@ struct OlderHandlers(Option<OlderHandler>);
 impl Global for OlderHandlers {}
 
 /// Registers what runs when the top row comes into view and older messages exist.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 pub(crate) fn on_load_older(cx: &mut App, handler: impl Fn(OlderRequest, &mut App) + 'static) {
     cx.default_global::<OlderHandlers>().0 = Some(Rc::new(handler));
 }
@@ -70,6 +65,8 @@ pub(crate) fn on_load_older(cx: &mut App, handler: impl Fn(OlderRequest, &mut Ap
 enum Row {
     /// The room above the first message; reaching it asks for older messages.
     Top,
+    /// `SessionBranchSeed`: what a branched session starts from.
+    Seed,
     /// A message; the live one also carries the running turn it shows.
     Message(Rc<MessageRecord>, Option<Rc<SessionViewTurn>>),
     /// The running turn's own row, when no message carries its activity.
@@ -90,7 +87,10 @@ fn same_turn(a: Option<&Rc<SessionViewTurn>>, b: Option<&Rc<SessionViewTurn>>) -
 
 fn same(a: &Row, b: &Row) -> bool {
     match (a, b) {
-        (Row::Top, Row::Top) | (Row::Intro, Row::Intro) | (Row::Reserve, Row::Reserve) => true,
+        (Row::Top, Row::Top)
+        | (Row::Seed, Row::Seed)
+        | (Row::Intro, Row::Intro)
+        | (Row::Reserve, Row::Reserve) => true,
         (Row::Message(a, x), Row::Message(b, y)) => {
             Rc::ptr_eq(a, b) && same_turn(x.as_ref(), y.as_ref())
         }
@@ -141,7 +141,13 @@ struct State {
     list: ListState,
     smooth: SmoothScroll,
     view: Option<Rc<SessionView>>,
+    entering: Rc<HashMap<String, Entering>>,
+    footer_meta: Rc<HashMap<String, FooterMeta>>,
     client: Option<butler_shell_client::ShellClient>,
+    /// The message carrying the running turn.
+    live_id: Option<String>,
+    /// The chats intro shows.
+    intro: bool,
     queue: Option<Rc<SessionQueueView>>,
     messages: Vec<Rc<MessageRecord>>,
     turn: Option<Rc<SessionViewTurn>>,
@@ -176,7 +182,11 @@ impl State {
             smooth: SmoothScroll::list(list.clone()),
             list,
             view: None,
+            entering: Rc::default(),
+            footer_meta: Rc::default(),
             client: None,
+            live_id: None,
+            intro: false,
             queue: None,
             messages: Vec::new(),
             turn: None,
@@ -193,17 +203,30 @@ impl State {
     }
 
     /// Takes in this frame's view, queue and composer reserve; tells the list what changed.
-    fn sync(&mut self, t: &TranscriptCtx, queue: Option<&SessionQueueView>, reserve: Option<f32>) {
+    fn sync(
+        &mut self,
+        t: &TranscriptCtx,
+        queue: Option<&SessionQueueView>,
+        reserve: Option<f32>,
+        intro: bool,
+    ) {
         self.client = t.client.clone();
-        let view_changed = self.view.as_deref() != Some(t.view);
+        self.entering = t.entering.clone();
+        self.footer_meta = t.footer_meta.clone();
+        let view_changed = !self
+            .view
+            .as_ref()
+            .is_some_and(|view| Rc::ptr_eq(view, &t.shared));
         let queue_changed = self.queue.as_deref() != queue;
+        let intro_changed = self.intro != intro;
+        self.intro = intro;
         if view_changed {
-            self.view = Some(Rc::new(t.view.clone()));
+            self.view = Some(t.shared.clone());
         }
         if queue_changed {
             self.queue = queue.map(|queue| reuse(self.queue.as_ref(), queue.clone()));
         }
-        if view_changed || queue_changed || self.rows.is_empty() {
+        if view_changed || queue_changed || intro_changed || self.rows.is_empty() {
             self.rebuild();
         }
         let reserve = reserve.unwrap_or(self.reserve);
@@ -240,7 +263,16 @@ impl State {
         self.turn = turn;
         let info = turn_info(&view);
         let live = self.live.message(&self.messages, info.as_ref());
+        self.live_id = live.and_then(|ix| self.messages.get(ix)).map(|m| m.id.clone());
+        let window = &view.message_window;
+        self.older = window
+            .previous_cursor
+            .filter(|_| window.has_more.unwrap_or(!window.complete))
+            .map(|cursor| (cursor, window.previous_cursor_token.clone()));
         let mut rows = vec![Row::Top];
+        if view.branch_seed.is_some() && self.older.is_none() {
+            rows.push(Row::Seed);
+        }
         for (ix, message) in self.messages.iter().enumerate() {
             let carried = if live == Some(ix) {
                 self.turn.clone()
@@ -262,17 +294,12 @@ impl State {
         {
             rows.push(Row::Queued(queue.clone()));
         }
-        if view.session_id == "general" {
+        if self.intro {
             rows.push(Row::Intro);
         }
         rows.push(Row::Reserve);
         splice_changes(&self.list, &self.rows, &rows);
         self.rows = rows;
-        let window = &view.message_window;
-        self.older = window
-            .previous_cursor
-            .filter(|_| window.has_more.unwrap_or(!window.complete))
-            .map(|cursor| (cursor, window.previous_cursor_token.clone()));
         self.version = self.messages.last().map_or_else(
             || "empty".to_owned(),
             |last| {
@@ -299,13 +326,10 @@ impl State {
 }
 
 /// The transcript: rows in the ConversationShell list surface, auto-scroll and follow-latest.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 pub(crate) fn transcript(
     t: &TranscriptCtx,
     queue: Option<&SessionQueueView>,
+    wheel: &RefCell<Option<SmoothScroll>>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -316,11 +340,13 @@ pub(crate) fn transcript(
     let session = t.view.session_id.clone();
     let state = window.use_keyed_state(key, cx, |_, cx| State::new(session, cx.weak_entity()));
     let reserve = scope::conversation(cx).map(|vars| vars.composer_reserve);
-    state.update(cx, |state, _| state.sync(t, queue, reserve));
+    let intro = intro::visible(&t.view.session_id, cx);
+    state.update(cx, |state, _| state.sync(t, queue, reserve, intro));
     let (list_state, smooth, away, unread) = {
         let s = state.read(cx);
         (s.list.clone(), s.smooth.clone(), s.away, s.unread)
     };
+    *wheel.borrow_mut() = Some(smooth.clone());
     let rows_state = state.clone();
     let rows = list(list_state, move |ix, window, cx| {
         render_row(&rows_state, ix, window, cx)
@@ -339,18 +365,8 @@ pub(crate) fn transcript(
 
 /// `ScrollToBottomButton.ts`.
 fn jump_button(state: &Entity<State>, unread: bool, cx: &App) -> AnyElement {
-    let (aria, latest, fresh) = match Ds::get(cx).lang() {
-        Lang::En => (
-            "Scroll to the latest message and composer",
-            "Latest",
-            "New messages",
-        ),
-        Lang::Ko => (
-            "최신 메시지와 입력창으로 이동",
-            "최신으로 이동",
-            "새 메시지",
-        ),
-    };
+    let text = strings(Ds::get(cx).lang());
+    let (aria, latest, fresh) = (text.jump_aria, text.jump_latest, text.jump_new);
     let state = state.clone();
     ConversationScrollToBottomButton::new("transcript-jump", aria)
         .unread(unread)
@@ -387,7 +403,6 @@ fn top_row(state: &Entity<State>, cx: &mut App) -> AnyElement {
         state.asked = Some(cursor);
         Some(OlderRequest {
             session_id: state.session.clone(),
-            before_cursor: cursor,
             before_cursor_token: token,
         })
     });
@@ -406,17 +421,22 @@ fn top_row(state: &Entity<State>, cx: &mut App) -> AnyElement {
 
 /// `TranscriptRows`: one list item.
 fn render_row(state: &Entity<State>, ix: usize, window: &mut Window, cx: &mut App) -> AnyElement {
-    let (row, view, client) = {
+    let (row, shared, client, entering, footer_meta, live_id) = {
         let s = state.read(cx);
-        (s.rows.get(ix).cloned(), s.view.clone(), s.client.clone())
+        (
+            s.rows.get(ix).cloned(),
+            s.view.clone(),
+            s.client.clone(),
+            s.entering.clone(),
+            s.footer_meta.clone(),
+            s.live_id.clone(),
+        )
     };
-    let (Some(row), Some(view)) = (row, view) else {
+    let (Some(row), Some(shared)) = (row, shared) else {
         return div().into_any_element();
     };
-    let t = TranscriptCtx {
-        view: &view,
-        client,
-    };
+    let mut t = TranscriptCtx::new(&shared, client, entering, footer_meta);
+    t.live_message = live_id.as_deref();
     let element = match row {
         Row::Top => return top_row(state, cx),
         Row::Reserve => {
@@ -424,14 +444,26 @@ fn render_row(state: &Entity<State>, ix: usize, window: &mut Window, cx: &mut Ap
                 scope::conversation(cx).map_or(DEFAULT_RESERVE, |vars| vars.composer_reserve);
             return div().h(px(reserve)).into_any_element();
         }
-        Row::Message(message, _) => message_row(&message, &t, window, cx),
-        Row::Activity(_) => match current_turn_status(&t, window, cx) {
-            Some(status) => MessageRow::new("active-turn-activity", Role::Assistant)
-                .activity()
-                .child(status)
-                .into_any_element(),
-            None => div().into_any_element(),
+        Row::Seed => match session_branch_seed(&t, window, cx) {
+            Some(seed) => seed,
+            None => return div().into_any_element(),
         },
+        Row::Message(message, _) => message_row(&message, &t, window, cx),
+        Row::Activity(turn) => {
+            let rows: Vec<ProgressRow> = turn
+                .progress
+                .iter()
+                .flat_map(|progress| progress.safe_progress_rows.iter())
+                .cloned()
+                .collect();
+            match turn_activity_panel(&rows, Some(&turn.id), &t, window, cx) {
+                Some(panel) => MessageRow::new("active-turn-activity", Role::Assistant)
+                    .activity()
+                    .child(panel)
+                    .into_any_element(),
+                None => div().into_any_element(),
+            }
+        }
         Row::Queued(queue) => queued_rows(&queue, &t, window, cx),
         Row::Intro => MessageRow::new("chats-intro", Role::Assistant)
             .bubble()

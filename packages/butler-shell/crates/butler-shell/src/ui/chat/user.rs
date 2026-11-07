@@ -6,47 +6,19 @@ use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::copy_button::CopyButton;
 use butler_ds::ui::inline_reference::{InlineFlow, InlineReference};
 use butler_ds::ui::typo::{Typo, Wrap};
-use chrono::{DateTime, Datelike, FixedOffset, Utc};
+use chrono::{DateTime, Datelike, Local};
 use gpui::{
     AnyElement, App, Entity, IntoElement, ParentElement as _, RenderOnce, SharedString,
     Styled as _, Window, canvas, div,
 };
 
 use super::TranscriptCtx;
+use crate::ui::i18n::transcript;
 use crate::ui::source::wire::{MessageContentPart, MessageRecord};
 
 /// `COLLAPSED_LINES`.
 const COLLAPSED_LINES: usize = 5;
 const COLLAPSED_HEIGHT_LINES: f32 = 5.;
-
-/// conversation.messageActions.{showMore, showLess, copyMessage, copied}
-struct Strings {
-    show_more: &'static str,
-    show_less: &'static str,
-    copy_message: &'static str,
-    copied: &'static str,
-}
-
-const KO: Strings = Strings {
-    show_more: "더보기",
-    show_less: "접기",
-    copy_message: "메시지 복사",
-    copied: "복사됨",
-};
-
-const EN: Strings = Strings {
-    show_more: "Show more",
-    show_less: "Show less",
-    copy_message: "Copy message",
-    copied: "Copied",
-};
-
-fn copy(cx: &App) -> &'static Strings {
-    match Ds::get(cx).lang() {
-        Lang::Ko => &KO,
-        Lang::En => &EN,
-    }
-}
 
 /// The `expanded` and `overflowing` state of `UserMessageText`; `full` is the measured height.
 struct State {
@@ -62,10 +34,6 @@ struct UserMessageText {
 }
 
 /// The user message body.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 pub(crate) fn user_body(
     msg: &MessageRecord,
     _t: &TranscriptCtx,
@@ -202,7 +170,7 @@ impl RenderOnce for UserMessageText {
             (s.expanded, s.full)
         };
         let overflowing = full > f32::from(line) * COLLAPSED_HEIGHT_LINES + 1.;
-        let strings = copy(cx);
+        let strings = transcript(Ds::get(cx).lang());
         let toggle = overflowing.then(|| {
             let state = state.clone();
             Button::new(SharedString::from(format!("{}-toggle", self.id)))
@@ -233,7 +201,7 @@ impl RenderOnce for UserMessageText {
 
 /// `formatClock`: hour and two-digit minute, with month and day when the time is not today and
 /// the year when it is not this year.
-fn format_clock(date: &DateTime<FixedOffset>, lang: Lang, now: &DateTime<FixedOffset>) -> String {
+pub(super) fn format_clock(date: &DateTime<Local>, lang: Lang, now: &DateTime<Local>) -> String {
     let (same_year, same_day) = (
         date.year() == now.year(),
         date.year() == now.year() && date.ordinal() == now.ordinal(),
@@ -256,23 +224,19 @@ fn format_clock(date: &DateTime<FixedOffset>, lang: Lang, now: &DateTime<FixedOf
     format!("{day} {clock}")
 }
 
-/// The footer under a user message: the send time and the copy button. SW3 (`row.rs`) puts it in
-/// the row's footer slot.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
+/// The footer under a user message: the send time and the copy button, in the row's footer
+/// slot.
 pub(crate) fn user_footer(msg: &MessageRecord, cx: &App) -> MessageFooter {
     let lang = Ds::get(cx).lang();
     let sent_at = msg
         .created_at
         .as_deref()
         .and_then(|raw| DateTime::parse_from_rfc3339(raw).ok());
-    let strings = copy(cx);
+    let strings = transcript(lang);
     MessageFooter::new()
         .children(sent_at.map(|at| {
-            let now = Utc::now().with_timezone(at.offset());
-            Typo::text(format_clock(&at, lang, &now))
+            let at = at.with_timezone(&Local);
+            Typo::text(format_clock(&at, lang, &Local::now()))
                 .tabular()
                 .into_any_element()
         }))

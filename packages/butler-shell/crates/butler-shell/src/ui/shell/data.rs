@@ -8,10 +8,9 @@ use futures::StreamExt as _;
 use gpui::{Context, Window};
 
 use super::Shell;
-use crate::ui::chat::LoadOlder;
+use crate::ui::source::agent::MonitorSignal;
 use crate::ui::source::{
     ChatRef, ClientMessageId, Decision, EventCursor, Fetch, RequestRef, SourceError,
-    agent::MonitorSignal,
 };
 use crate::ui::store::{Applied, ChatsLoad};
 
@@ -70,6 +69,7 @@ impl Shell {
     /// A fresh snapshot: the first page of chats, then live updates after its cursor.
     pub(super) fn connect(&mut self, cx: &mut Context<Self>) {
         if self.source.is_some() {
+            self.load_settings(cx);
             let load = self.store.begin_snapshot();
             self.load_chats(load, cx);
         }
@@ -131,15 +131,11 @@ impl Shell {
         match self.store.apply(epoch, event) {
             Applied::Store => {}
             Applied::Failed(error) => self.failed(&error, self.theme.strings.load_failed, cx),
-            Applied::Message(session, message) => self.chat.update(cx, |c, cx| {
-                c.upsert(&session, message);
-                cx.notify();
-            }),
-            Applied::MessageDeleted(session, id) => self.chat.update(cx, |c, cx| {
-                c.remove(&session, &id);
-                cx.notify();
-            }),
+            Applied::Transcript(_) => self.show_view(true, cx),
             Applied::Resync => self.connect(cx),
+        }
+        if self.store.view_stale() {
+            self.refresh_open_view(cx);
         }
         if attention_changed {
             self.sync_attention(cx);
@@ -168,7 +164,6 @@ impl Shell {
         // A dialog belongs to the open chat's request.
         self.close_dialog(cx);
         let new_chat = chat.is_none();
-        self.chat.update(cx, |c, _| c.show(chat.clone(), None));
         self.session_menu.rename = None;
         if let Some(chat) = &chat {
             self.load_summary(chat, cx);
@@ -176,6 +171,7 @@ impl Shell {
             self.session_menu.summary = None;
         }
         self.store.open(chat);
+        self.show_view(false, cx);
         self.composer.update(cx, |c, cx| {
             c.set_new_chat(new_chat, cx);
             if new_chat {
@@ -197,15 +193,13 @@ impl Shell {
         };
         let shown = chat.clone();
         Self::run(
-            source.messages(&chat.session, None),
+            source.open_session(&chat.session),
             cx,
             move |this, result, cx| match result {
-                Ok(page) => {
-                    if this.store.messages_loaded(&shown, &page) {
-                        this.chat.update(cx, |c, cx| {
-                            c.show(Some(shown), Some(page));
-                            cx.notify();
-                        });
+                Ok(view) => {
+                    if this.store.view_loaded(&shown, view) {
+                        this.show_view(false, cx);
+                        this.reload_queue(cx);
                     }
                     this.sync_composer(cx);
                 }
@@ -230,24 +224,6 @@ impl Shell {
                     this.sync_composer(cx);
                 }
                 Err(error) => this.chat_failed(&chat, &error, this.theme.strings.load_failed, cx),
-            },
-        );
-    }
-
-    pub(super) fn load_older(&mut self, e: &LoadOlder, cx: &mut Context<Self>) {
-        let Some(source) = self.source.clone() else {
-            return;
-        };
-        let chat = e.0.clone();
-        Self::run(
-            source.messages(&chat.session, Some(e.1.clone())),
-            cx,
-            move |this, result, cx| match result {
-                Ok(page) => this.chat.update(cx, |c, cx| {
-                    c.prepend(&chat, page);
-                    cx.notify();
-                }),
-                Err(e) => this.chat_failed(&chat, &e, this.theme.strings.load_failed, cx),
             },
         );
     }
@@ -308,8 +284,7 @@ impl Shell {
             move |this, result, cx| match result {
                 Ok(chat) => {
                     this.store.open(Some(chat.clone()));
-                    this.chat
-                        .update(cx, |c, _| c.show(Some(chat.clone()), None));
+                    this.show_view(false, cx);
                     this.reload_open_chat(cx);
                     this.send_to(chat, id, text, cx);
                 }
@@ -391,7 +366,7 @@ impl Shell {
         });
     }
 
-    fn chat_failed(
+    pub(super) fn chat_failed(
         &mut self,
         chat: &ChatRef,
         error: &SourceError,
@@ -400,10 +375,7 @@ impl Shell {
     ) {
         if self.store.chat_failed(chat, error) {
             self.close_dialog(cx);
-            self.chat.update(cx, |c, cx| {
-                c.show(None, None);
-                cx.notify();
-            });
+            self.show_view(false, cx);
             self.composer.update(cx, |c, cx| c.set_new_chat(true, cx));
             self.sync_composer(cx);
         }

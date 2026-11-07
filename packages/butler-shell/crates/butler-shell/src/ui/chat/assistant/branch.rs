@@ -31,7 +31,6 @@ enum Mode {
 
 /// Branch actions for a settled answer in `general` or a project session. From a project
 /// session the new conversation stays in that project (`BranchProjectContext` is the view's).
-#[allow(dead_code, reason = "called by the message footer of the row unit")]
 pub(crate) fn assistant_branch_actions(
     message: &MessageRecord,
     t: &TranscriptCtx,
@@ -218,7 +217,7 @@ fn create_click(
             cx.notify();
         });
         error.update(cx, |error, _| *error = None);
-        let done = remote::run(async move { client.create_space_branches(&body).await });
+        let done = remote::run(cx, async move { client.create_space_branches(&body).await });
         let (mode, pending, error) = (mode.clone(), pending.clone(), error.clone());
         cx.spawn(async move |cx| {
             let result = done.await;
