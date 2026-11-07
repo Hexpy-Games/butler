@@ -82,7 +82,10 @@ fn progress_card(
         disclosure = disclosure.live();
     }
     if expanded {
-        disclosure = disclosure.child(timeline(progress.rows, t, window, cx));
+        let turn_id = Some(progress.turn.id.as_str());
+        if let Some(work) = timeline(progress.rows, turn_id, None, live, t, window, cx) {
+            disclosure = disclosure.child(work);
+        }
     }
     let header = Stack::row()
         .gap(Space::Sm)
