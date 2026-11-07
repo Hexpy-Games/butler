@@ -12,6 +12,7 @@ mod block_columns;
 mod block_tabs;
 mod bottom_sheet;
 mod boxes;
+mod breadcrumb;
 mod butler_thinking_mark;
 mod button;
 mod card;
@@ -20,6 +21,7 @@ mod chart;
 mod clickable;
 mod collapsible;
 mod collapsible_nav_group;
+mod command_panel;
 mod composer_adjunct_panel;
 mod composer_card;
 mod composer_control;
@@ -78,6 +80,7 @@ mod popover;
 mod presence;
 mod progress_meter;
 mod progress_ring;
+mod prompt_suggestion_list;
 mod question_answer_card;
 mod queued_message;
 mod rolling_status_line;
@@ -98,8 +101,14 @@ mod success_check;
 mod suggestion_list;
 mod surface_panel;
 mod switch;
+mod tab_strip;
 mod tabs;
 mod tag;
+mod task_graph_canvas;
+mod task_graph_card;
+mod task_graph_detail;
+mod task_graph_lanes;
+mod task_graph_section;
 mod textarea;
 mod tinted_glass;
 mod titlebar_shell;
@@ -110,6 +119,7 @@ mod typo;
 mod unread_dot;
 mod usage_bars;
 mod usage_summary_rows;
+mod wallpaper;
 mod wallpaper_stage;
 mod work_activity;
 mod worker_activity_panel;
@@ -345,11 +355,32 @@ fn composer_blocks() -> Vec<Page> {
     ]
 }
 
+/// The palette, inspector, new-chat and viewer blocks (P2-S7).
+fn s7_blocks() -> Vec<Page> {
+    vec![
+        page!("command-panel", "CommandPanel", command_panel),
+        page!("task-graph-card", "TaskGraphCard", task_graph_card),
+        page!("task-graph-detail", "TaskGraphDetail", task_graph_detail),
+        page!("task-graph-canvas", "TaskGraphCanvas", task_graph_canvas),
+        page!("task-graph-lanes", "TaskGraphLanes", task_graph_lanes),
+        page!("task-graph-section", "TaskGraphSection", task_graph_section),
+        page!(
+            "prompt-suggestion-list",
+            "PromptSuggestionList",
+            prompt_suggestion_list
+        ),
+        page!("wallpaper", "Wallpaper", wallpaper),
+        page!("tab-strip", "TabStrip", tab_strip),
+        page!("breadcrumb", "Breadcrumb", breadcrumb),
+    ]
+}
+
 pub(crate) fn all() -> Vec<Page> {
     let mut pages = primitives();
     pages.extend(blocks());
     pages.extend(answer_blocks());
     pages.extend(composer_blocks());
+    pages.extend(s7_blocks());
     pages
 }
 
