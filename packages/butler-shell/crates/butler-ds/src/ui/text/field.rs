@@ -5,7 +5,10 @@ use gpui::{
     AnyElement, App, ElementId, Entity, FocusHandle, Focusable as _, FontWeight, Hsla,
     IntoElement as _, ParentElement as _, Pixels, SharedString, Window, div,
 };
-use gpui_elements::editable_text::{EditableTextState, StringStorage};
+use gpui_elements::editable_text::{EditableTextState, StringStorage, TextChanged};
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use super::TextSize;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
@@ -18,6 +21,8 @@ pub(super) enum Look {
     Default,
     Quiet,
     Underline,
+    /// No box, border or ring: the editor alone (ComposerCard's editor slot).
+    Bare,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,7 +46,11 @@ pub(super) struct Spec {
     pub(super) read_only: bool,
     pub(super) invalid: bool,
     pub(super) probe: Option<SharedString>,
+    pub(super) on_change: Option<ChangeHandler>,
 }
+
+/// `onChange`: the field's text after an edit by the user.
+pub(super) type ChangeHandler = Rc<dyn Fn(&str, &mut Window, &mut App)>;
 
 /// The editor state of field `id`, created with `initial` the first time.
 pub(super) fn state_of(
@@ -118,7 +127,7 @@ impl Colors {
             border = ds.color(Color::ColorDangerBorder);
         }
         let fill = match (spec.look, spec.disabled) {
-            (Look::Quiet, true) => transparent,
+            (Look::Quiet, true) | (Look::Bare, _) => transparent,
             (Look::Quiet, false) => convert::mix(raised, transparent, focus),
             (_, true) => ds.color(Color::ColorDisabledBg),
             (_, false) => raised,
@@ -185,6 +194,7 @@ pub(super) struct Parts {
 
 pub(super) fn render(spec: Spec, window: &mut Window, cx: &mut App) -> AnyElement {
     let state = state_of(&spec.id, window, cx, &spec.initial);
+    listen(&spec, &state, window, cx);
     if let Some(value) = &spec.value
         && state.read(cx).as_str() != value.as_ref()
     {
@@ -224,4 +234,27 @@ pub(super) fn render(spec: Spec, window: &mut Window, cx: &mut App) -> AnyElemen
             .into_any_element(),
         None => el,
     }
+}
+
+/// Reports the user's edits to `on_change`. One subscription lives as long as the field; the
+/// handler is the latest the owner passed, read when the edit arrives.
+fn listen(spec: &Spec, state: &Entity<EditableTextState>, window: &mut Window, cx: &mut App) {
+    type Slot = Rc<RefCell<Option<ChangeHandler>>>;
+    let slot = window
+        .use_keyed_state((spec.id.clone(), "on-change"), cx, |_, _| Slot::default())
+        .read(cx)
+        .clone();
+    *slot.borrow_mut() = spec.on_change.clone();
+    window.use_keyed_state((spec.id.clone(), "on-change-sub"), cx, {
+        let (slot, state) = (slot.clone(), state.clone());
+        move |window, cx| {
+            window.subscribe(&state, cx, move |state, _: &TextChanged, window, cx| {
+                let handler = slot.borrow().clone();
+                if let Some(handler) = handler {
+                    let text = state.read(cx).as_str().to_owned();
+                    handler(&text, window, cx);
+                }
+            })
+        }
+    });
 }

@@ -4,6 +4,7 @@ mod animated_number;
 mod artifact_list;
 mod artifact_preview;
 mod aspect_frame;
+mod attached_composer;
 mod attachment_list;
 mod avatar;
 mod block_action_frame;
@@ -19,6 +20,10 @@ mod chart;
 mod clickable;
 mod collapsible;
 mod collapsible_nav_group;
+mod composer_adjunct_panel;
+mod composer_card;
+mod composer_control;
+mod context_donut_button;
 mod context_menu;
 mod conversation_shell;
 mod copy_button;
@@ -294,10 +299,29 @@ fn answer_blocks() -> Vec<Page> {
     ]
 }
 
+/// The composer blocks (P2-S6).
+fn composer_blocks() -> Vec<Page> {
+    vec![
+        page!("composer-card", "ComposerCard", composer_card),
+        page!("composer-control", "ComposerControl", composer_control),
+        page!(
+            "context-donut-button",
+            "ContextDonutButton",
+            context_donut_button
+        ),
+        page!(
+            "composer-adjunct-panel",
+            "ComposerAdjunctPanel",
+            composer_adjunct_panel
+        ),
+    ]
+}
+
 pub(crate) fn all() -> Vec<Page> {
     let mut pages = primitives();
     pages.extend(blocks());
     pages.extend(answer_blocks());
+    pages.extend(composer_blocks());
     pages
 }
 
@@ -344,6 +368,11 @@ fn frame(name: &str, content: AnyElement, ds: &Ds, forced: Option<f32>) -> AnyEl
         .text_color(ds.color(Color::TextPrimary))
         .child(preview)
         .into_any_element()
+}
+
+/// A child id of a static page id (`(parent, "name")`).
+pub(crate) fn sub(parent: &'static str, name: &'static str) -> gpui::ElementId {
+    (gpui::ElementId::from(parent), name).into()
 }
 
 /// `body` wrapped in a block with a stable geometry selector.

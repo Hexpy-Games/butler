@@ -1,6 +1,6 @@
 {
   "name": "ds-view",
-  "description": "DS Viewer item pages for the B1, B2, B3, B4, B5, P2-S1, P2-S2, P2-S3, P2-S4 and P2-S5 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
+  "description": "DS Viewer item pages for the B1, B2, B3, B4, B5, P2-S1, P2-S2, P2-S3, P2-S4, P2-S5 and P2-S6 primitives; each story canvas is captured next to the native butler-ds-view page of the same id.",
   "pages": [
     { "page": "presence", "entry": "components/Presence" },
     { "page": "box", "entry": "components/Box" },
@@ -101,6 +101,10 @@
     { "page": "artifact-list", "entry": "blocks/ArtifactList" },
     { "page": "artifact-preview", "entry": "blocks/ArtifactPreview" },
     { "page": "changed-line-diff", "entry": "blocks/ChangedLineDiff" },
-    { "page": "image-viewer", "entry": "blocks/ImageViewer" }
+    { "page": "image-viewer", "entry": "blocks/ImageViewer" },
+    { "page": "composer-card", "entry": "blocks/ComposerCard" },
+    { "page": "composer-control", "entry": "blocks/ComposerControl" },
+    { "page": "context-donut-button", "entry": "blocks/ContextDonutButton" },
+    { "page": "composer-adjunct-panel", "entry": "blocks/ComposerAdjunctPanel" }
   ]
 }
