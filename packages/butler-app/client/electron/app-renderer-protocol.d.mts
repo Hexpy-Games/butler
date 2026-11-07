@@ -12,6 +12,8 @@ export const APP_RENDERER_SCHEME_PRIVILEGES: Readonly<{
   }>;
 }>;
 
+export const APP_RENDERER_CONTENT_SECURITY_POLICY: string;
+
 export function selectRendererUrl(input: {
   devUrl?: string | null;
   staticDistRoot?: string | null;
