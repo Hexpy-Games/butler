@@ -1,6 +1,59 @@
 //! The row's long press and context menu share the same controlled menu state.
 use super::Shell;
-use gpui::{Context, Div, MouseButton, MouseDownEvent, MouseMoveEvent, Stateful, prelude::*};
+use butler_ds::ui::blocks::sidebar_shell::ScrollSlot;
+use gpui::{
+    AnyElement, Bounds, Context, Div, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels,
+    ScrollHandle, Stateful, WeakEntity, canvas, div, point, prelude::*, px,
+};
+
+/// `scrollIntoView({ block: "nearest" })`: scrolls `handle` the least that brings `row` into its
+/// viewport, aligning a taller row at its top.
+fn scroll_nearest(handle: &ScrollHandle, row: Bounds<Pixels>) {
+    let view = handle.bounds();
+    let above = (row.top() - view.top()).as_f32();
+    let below = (row.bottom() - view.bottom()).as_f32();
+    let delta = if above < 0. {
+        -above
+    } else if below > 0. {
+        -below.min(above)
+    } else {
+        return;
+    };
+    let offset = handle.offset();
+    let max = handle.max_offset().y.as_f32();
+    let next = (offset.y.as_f32() + delta).clamp(-max, 0.);
+    handle.set_offset(point(offset.x, px(next)));
+}
+
+/// `SpaceRow`'s reveal effect: the row named by `reveal_path[0]` scrolls into view once, when it
+/// first paints. Wraps `content` with the probe that measures it.
+pub(super) fn reveal_row(
+    content: AnyElement,
+    scroll: ScrollSlot,
+    shell: WeakEntity<Shell>,
+) -> AnyElement {
+    let probe = canvas(
+        |bounds, _, _| bounds,
+        move |_, bounds, window, cx| {
+            let Some(handle) = scroll.borrow().clone() else {
+                return;
+            };
+            if handle.bounds().size.height <= px(0.) {
+                window.request_animation_frame();
+                return;
+            }
+            scroll_nearest(&handle, bounds);
+            let shell = shell.clone();
+            window.defer(cx, move |_, cx| {
+                let _ = shell.update(cx, |s, _| s.sidebar.reveal_scroll = None);
+            });
+            window.request_animation_frame();
+        },
+    )
+    .absolute()
+    .size_full();
+    div().relative().child(probe).child(content).into_any_element()
+}
 impl Shell {
     pub(super) fn row_gestures(
         element: Stateful<Div>,

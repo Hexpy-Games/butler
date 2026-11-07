@@ -48,6 +48,10 @@ pub(crate) struct SidebarState {
     visible_count: usize,
     branch_counts: HashMap<String, usize>,
     reveal_path: Vec<String>,
+    /// The row to scroll into view: `reveal_path[0]` until its row has painted.
+    reveal_scroll: Option<String>,
+    /// The sidebar scroller's handle, published by the shell each frame.
+    scroll: butler_ds::ui::blocks::sidebar_shell::ScrollSlot,
     dialog: Option<dialogs::SpaceDialog>,
     dialog_serial: u64,
     fields: HashMap<
@@ -220,6 +224,7 @@ impl Shell {
                     )
                     .scroll_header(header)
                     .sticky_header(browse)
+                    .scroll_slot(self.sidebar.scroll.clone())
                     .child(tree)
                     .footer(footer),
             )
@@ -292,6 +297,7 @@ impl Shell {
         for key in &path {
             self.sidebar.collapsed.remove(key);
         }
+        self.sidebar.reveal_scroll = path.first().cloned();
         self.sidebar.reveal_path = path;
     }
     fn show_sidebar_session(&mut self, id: String, cx: &mut Context<Self>) {

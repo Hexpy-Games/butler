@@ -188,8 +188,13 @@ impl Shell {
         let weak = cx.entity().downgrade();
         let source = key.clone();
         let started_instance = instance.to_owned();
+        let content = if self.sidebar.reveal_scroll.as_deref() == Some(key.as_str()) {
+            super::gestures::reveal_row(content, self.sidebar.scroll.clone(), weak.clone())
+        } else {
+            content
+        };
         let target = NavDropTarget::new(key.clone(), content)
-            .indicator(0., 30.)
+            .row_header()
             .dragging(self.sidebar.drag_instance.as_deref() == Some(instance))
             .draggable(
                 SpaceDragPayload::Node(key.clone()),
@@ -229,8 +234,10 @@ impl Shell {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        // Auto-scroll awaits SidebarShell exposing its scroll handle.
         let mut scope = NavDropScope::new("space-drop-scope");
+        if let Some(handle) = self.sidebar.scroll.borrow().clone() {
+            scope = scope.scroll(handle);
+        }
         for element in body {
             scope = scope.other(element);
         }
