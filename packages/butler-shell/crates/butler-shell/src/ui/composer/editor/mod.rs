@@ -15,26 +15,32 @@ pub(crate) mod serialize;
 use std::ops::Range;
 
 use gpui::{
-    App, Entity, EntityInputHandler as _, Focusable as _, SharedString, Window,
+    App, Bounds, Entity, Pixels, Point, EntityInputHandler as _, Focusable as _, SharedString, Window,
     utf8_to_utf16_offset, utf16_to_utf8_offset,
 };
 use gpui_elements::editable_text::EditableTextState;
 
+use self::mentions::mention_token;
 use self::serialize::append_part;
+use crate::ui::source::wire::ProjectSourceContentPart;
 
 /// An inline atom (Lexical decorator node).
 #[allow(
     dead_code,
     reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
 )]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Atom {
     /// `ProjectReferenceNode`.
     Project { id: String, label: SharedString },
     /// `SessionReferenceNode` (a dropped sidebar session).
     Session { id: String, label: SharedString },
-    /// `ProjectSourceNode`.
-    ProjectSource { id: String, label: SharedString },
+    /// `ProjectSourceNode`: `id` is the source's id, `part` the whole content part.
+    ProjectSource {
+        id: String,
+        label: SharedString,
+        part: ProjectSourceContentPart,
+    },
 }
 
 /// The editor content in order (`serialization.ts`).
@@ -42,7 +48,7 @@ pub(crate) enum Atom {
     dead_code,
     reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
 )]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ComposerPart {
     Text(String),
     Atom(Atom),
@@ -355,5 +361,81 @@ impl ComposerEditor {
         let end = self.text(cx).len();
         self.replace(Some(end..end), &clean, window, cx);
         self.focus(FocusPlacement::End, window, cx);
+    }
+
+    /// The selection's caret as a UTF-8 offset in the field's text.
+    fn caret(&self, window: &mut Window, cx: &mut App) -> Option<usize> {
+        let input = self.input.clone()?;
+        let text = self.text(cx);
+        let selection = input.update(cx, |input, cx| input.selected_text_range(false, window, cx))?;
+        let end = if selection.reversed { selection.range.start } else { selection.range.end };
+        Some(utf16_to_utf8_offset(&text, end))
+    }
+
+    /// `replaceMentionToken`: the `@word` ending at the caret becomes `atom` and a space (none
+    /// added when whitespace follows), as one edit (one undo step) that leaves the caret after
+    /// the space. Nothing happens while the IME composes. Returns whether it replaced a token.
+    pub(crate) fn apply_mention(&mut self, atom: &Atom, window: &mut Window, cx: &mut App) -> bool {
+        if self.composing(window, cx) {
+            return false;
+        }
+        let Some(caret) = self.caret(window, cx) else {
+            return false;
+        };
+        let text = self.text(cx);
+        let Some(token) = mention_token(&text, caret) else {
+            return false;
+        };
+        let spaced = text[token.end..].chars().next().is_some_and(char::is_whitespace);
+        let trailing = if spaced { "" } else { " " };
+        self.replace_with_atom(token.start..token.end, atom, trailing, window, cx)
+    }
+
+    /// The `@word` under the caret, for the mention list; `None` while the IME composes
+    /// (`mentionKeys` are skipped then).
+    pub(crate) fn active_mention(
+        &self,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<mentions::MentionToken> {
+        if self.composing(window, cx) {
+            return None;
+        }
+        let caret = self.caret(window, cx)?;
+        mention_token(&self.text(cx), caret)
+    }
+
+    /// The box of the text in the UTF-8 `range` (the caret's box when empty), in window
+    /// coordinates. `field` is the editor element's bounds; anchors the mention list above the `@`.
+    pub(crate) fn range_bounds(
+        &self,
+        range: Range<usize>,
+        field: Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<Bounds<Pixels>> {
+        let input = self.input.clone()?;
+        let text = self.text(cx);
+        let range = utf8_to_utf16_offset(&text, range.start)..utf8_to_utf16_offset(&text, range.end);
+        input.update(cx, |input, cx| input.bounds_for_range(range, field, window, cx))
+    }
+
+    /// Each character's laid-out left edge (window x), the input of `drop::drop_offset`.
+    pub(crate) fn char_lefts(&self, field: Bounds<Pixels>, window: &mut Window, cx: &mut App) -> Vec<f32> {
+        let text = self.text(cx);
+        text.char_indices()
+            .filter_map(|(at, c)| {
+                let bounds = self.range_bounds(at..at + c.len_utf8(), field, window, cx)?;
+                Some(bounds.origin.x.as_f32())
+            })
+            .collect()
+    }
+
+    /// The byte offset of the character under `point` (window coordinates).
+    pub(crate) fn offset_at(&self, point: Point<Pixels>, window: &mut Window, cx: &mut App) -> Option<usize> {
+        let input = self.input.clone()?;
+        let text = self.text(cx);
+        let index = input.update(cx, |input, cx| input.character_index_for_point(point, window, cx))?;
+        Some(utf16_to_utf8_offset(&text, index))
     }
 }

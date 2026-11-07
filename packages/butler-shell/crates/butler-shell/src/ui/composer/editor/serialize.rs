@@ -1,10 +1,9 @@
-//! `serialization.ts`: parts ↔ the send body's text and content parts. A project-source atom
-//! carries its whole content part (`ProjectSourceNode.reference()`) as JSON in `Atom::id`.
+//! `serialization.ts`: parts ↔ the send body's text and content parts.
 use serde_json::{Value, json};
 
 use super::{Atom, ComposerPart};
 use crate::ui::source::wire::{
-    MessageContent, MessageContentPart, ProjectSourceReferenceKind,
+    MessageContent, MessageContentPart, ProjectSourceContentPart, ProjectSourceReferenceKind,
 };
 
 /// `appendPart`: text runs merge and empty text is dropped.
@@ -53,25 +52,17 @@ fn part_from_wire(part: &MessageContentPart) -> ComposerPart {
             source,
             titleSnapshot,
             topic,
-        } => {
-            let mut reference = json!({
-                "type": "project_source_ref",
-                "projectId": projectId,
-                "source": {
-                    "kind": kind_name(&source.kind),
-                    "id": source.id,
-                    "revision": source.revision,
-                },
-                "titleSnapshot": titleSnapshot,
-            });
-            if let (Some(topic), Some(object)) = (topic, reference.as_object_mut()) {
-                object.insert("topic".to_owned(), json!(topic));
-            }
-            ComposerPart::Atom(Atom::ProjectSource {
-                id: reference.to_string(),
-                label: titleSnapshot.clone().into(),
-            })
-        }
+        } => ComposerPart::Atom(Atom::ProjectSource {
+            id: source.id.clone(),
+            label: titleSnapshot.clone().into(),
+            part: ProjectSourceContentPart {
+                r#type: "project_source_ref".to_owned(),
+                projectId: projectId.clone(),
+                source: source.clone(),
+                titleSnapshot: titleSnapshot.clone(),
+                topic: topic.clone(),
+            },
+        }),
     }
 }
 
@@ -93,10 +84,9 @@ pub(crate) fn draft_parts(content: Option<&MessageContent>, text: &str) -> Vec<C
     }
 }
 
-/// `$readComposerContent`'s part for one editor part, in the wire's JSON shape. A project-source
-/// atom whose reference is not a valid project-source part yields nothing.
-fn part_json(part: &ComposerPart) -> Option<Value> {
-    Some(match part {
+/// `$readComposerContent`'s part for one editor part, in the wire's JSON shape.
+fn part_json(part: &ComposerPart) -> Value {
+    match part {
         ComposerPart::Text(text) => json!({ "type": "text", "text": text }),
         ComposerPart::Atom(Atom::Session { id, label }) => {
             json!({ "type": "session_ref", "sessionId": id, "titleSnapshot": label.to_string() })
@@ -104,23 +94,28 @@ fn part_json(part: &ComposerPart) -> Option<Value> {
         ComposerPart::Atom(Atom::Project { id, label }) => {
             json!({ "type": "project_ref", "projectId": id, "titleSnapshot": label.to_string() })
         }
-        ComposerPart::Atom(Atom::ProjectSource { id, .. }) => {
-            let reference: Value = serde_json::from_str(id).ok()?;
-            let valid = matches!(
-                serde_json::from_value::<MessageContentPart>(reference.clone()),
-                Ok(MessageContentPart::ProjectSourceRef { .. })
-            );
-            if !valid {
-                return None;
+        ComposerPart::Atom(Atom::ProjectSource { part, .. }) => {
+            let mut reference = json!({
+                "type": "project_source_ref",
+                "projectId": part.projectId,
+                "source": {
+                    "kind": kind_name(&part.source.kind),
+                    "id": part.source.id,
+                    "revision": part.source.revision,
+                },
+                "titleSnapshot": part.titleSnapshot,
+            });
+            if let (Some(topic), Some(object)) = (&part.topic, reference.as_object_mut()) {
+                object.insert("topic".to_owned(), json!(topic));
             }
             reference
         }
-    })
+    }
 }
 
 /// The send body's `content_parts`: `{ version: 1, parts }`.
 pub(crate) fn content_json(parts: &[ComposerPart]) -> Value {
-    json!({ "version": 1, "parts": parts.iter().filter_map(part_json).collect::<Vec<_>>() })
+    json!({ "version": 1, "parts": parts.iter().map(part_json).collect::<Vec<_>>() })
 }
 
 /// `messageContentText`: text as written, each atom as `@title`.
