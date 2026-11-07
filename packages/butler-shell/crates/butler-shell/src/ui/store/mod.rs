@@ -10,6 +10,7 @@ mod tests;
 pub(crate) mod drafts;
 pub(crate) mod messages;
 pub(crate) mod progress;
+pub(crate) mod task_graph;
 
 use std::collections::{HashMap, HashSet};
 
@@ -292,7 +293,10 @@ impl Store {
         }
         match event.update {
             LiveUpdate::Failed(error) => return Applied::Failed(error),
-            LiveUpdate::Event { session, event: raw } => {
+            LiveUpdate::Event {
+                session,
+                event: raw,
+            } => {
                 if event.cursor.is_some_and(|c| {
                     self.message_snapshots
                         .get(&session)

@@ -5,6 +5,7 @@ pub(crate) mod activity;
 mod answers;
 mod assistant;
 mod content;
+pub(crate) mod empty;
 pub(crate) mod files;
 mod footer_meta;
 mod intro;
@@ -143,7 +144,11 @@ impl Chat {
         }
         if let (true, true, Some(old), Some(new)) = (live, same_session, &self.view, &view) {
             let known: HashSet<&str> = old.messages.iter().map(|m| m.id.as_str()).collect();
-            for message in new.messages.iter().filter(|m| !known.contains(m.id.as_str())) {
+            for message in new
+                .messages
+                .iter()
+                .filter(|m| !known.contains(m.id.as_str()))
+            {
                 let kind = if self.queued.contains(&message.id) {
                     Entering::Delivered
                 } else {
