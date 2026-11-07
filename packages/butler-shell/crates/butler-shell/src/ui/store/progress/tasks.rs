@@ -1,8 +1,4 @@
 //! `app/conversation-progress/composer-tasks.ts`: the todo rows of a turn as composer tasks.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use butler_ds::ui::context::Lang;
 
 use super::rows::semantic_progress_rows;

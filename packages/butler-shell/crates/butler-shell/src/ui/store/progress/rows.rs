@@ -1,9 +1,5 @@
 //! `app/conversation-progress/progress-rows.ts`: which progress rows show, and the summary
 //! rows of a turn.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use std::collections::HashMap;
 
 use butler_ds::ui::context::Lang;
@@ -154,54 +150,8 @@ pub(crate) fn semantic_progress_rows(lang: Lang, rows: &[ProgressRow]) -> Vec<Pr
     last_n(messages, 8)
 }
 
-/// `summaryProgressRows`.
-pub(crate) fn summary_progress_rows(lang: Lang, rows: &[ProgressRow]) -> Vec<ProgressRow> {
-    let visible: Vec<ProgressRow> = visible_progress_rows(lang, rows)
-        .into_iter()
-        .filter(|row| row.bridge_phase.as_deref() != Some("model_round_waiting"))
-        .collect();
-    let todos = sorted_todo_rows(
-        visible
-            .iter()
-            .filter(|row| is_todo(row) && row.bridge_phase.as_deref() == Some("btcc_work_ledger"))
-            .collect(),
-    );
-    if !todos.is_empty() {
-        return todos.into_iter().take(8).collect();
-    }
-    let work = dedupe_last(
-        visible.iter().filter(|row| is_work_row(row)).collect(),
-        |row| row.work_block_id.clone().unwrap_or_else(|| row.id.clone()),
-    );
-    if !work.is_empty() {
-        return last_n(work, 8);
-    }
-    visible
-        .iter()
-        .rev()
-        .find(|row| is_model_authored_activity(row))
-        .map(|row| vec![row.clone()])
-        .unwrap_or_default()
-}
-
 fn is_todo(row: &ProgressRow) -> bool {
     row.kind.as_deref() == Some("todo")
-}
-
-fn has_text(value: &Option<String>) -> bool {
-    value.as_deref().is_some_and(|text| !text.is_empty())
-}
-
-fn is_model_authored_activity(row: &ProgressRow) -> bool {
-    if row.kind.as_deref() == Some("decision") {
-        return row.public_decision_source.as_deref() == Some("model-authored")
-            && has_text(&row.public_decision_summary);
-    }
-    row.kind.as_deref() == Some("message")
-        && row.work_decision_source.as_deref() == Some("model-authored")
-        && has_text(&row.work_decision_summary)
-        && has_text(&row.work_decision_rationale)
-        && has_text(&row.work_decision_next_step)
 }
 
 /// `sortedTodoRows`: one row per todo id, merged, ordered by `safe_order` then first seen.

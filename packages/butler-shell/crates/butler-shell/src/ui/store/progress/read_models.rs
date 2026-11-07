@@ -1,8 +1,4 @@
 //! `activity.ts` read models: what each visible progress row stands for.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use butler_ds::ui::context::Lang;
 
 use super::activity::text;

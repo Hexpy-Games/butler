@@ -24,10 +24,6 @@ use crate::ui::source::wire::MessageRecord;
 const NARROW_WIDTH: f32 = 480.;
 
 /// Steward children progress under a message; `None` when there is none.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 pub(crate) fn steward_progress(
     msg: &MessageRecord,
     t: &TranscriptCtx,

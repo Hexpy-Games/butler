@@ -1,8 +1,4 @@
 //! `butler-progress-projection/src/public-text.ts`: text that is safe to show as progress.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use serde_json::Value;
 
 const SECRET_KEYS: [&str; 8] = [

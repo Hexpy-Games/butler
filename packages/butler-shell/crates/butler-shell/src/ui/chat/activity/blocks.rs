@@ -1,78 +1,33 @@
 //! `WorkBlocks`, `WorkBlockDetails`, `workBlock*`.
 use butler_ds::ui::Icon;
-use butler_ds::ui::blocks::work_activity::{ToolItem, WorkActivityBlock};
+use butler_ds::ui::blocks::work_activity::WorkActivityBlock;
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon::icon_px;
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::rolling_swap::RollingSwap;
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window, div, px};
+use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window, px};
 
+use super::tools::tool_column;
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::i18n::Locale;
-use crate::ui::source::wire::{ProgressRow, WorkBlockView};
+use crate::ui::source::wire::WorkBlockView;
 
-const TOOL_KINDS: [&str; 6] = [
-    "searched",
-    "read",
-    "ran_command",
-    "edited",
-    "dispatch",
-    "used_tool",
-];
-
-pub(super) fn locale(cx: &App) -> Locale {
-    match Ds::get(cx).lang() {
+pub(super) fn locale_of(lang: Lang) -> Locale {
+    match lang {
         Lang::Ko => Locale::Ko,
         Lang::En => Locale::En,
     }
 }
 
-/// `isWorkActivityToolRow`: a row that names a tool call, an input, details or a tool kind.
-fn is_tool_row(row: &ProgressRow) -> bool {
-    row.thinking_title.is_some()
-        || row.tool_call_id.is_some()
-        || row.safe_input_label.is_some()
-        || row.safe_detail_rows.as_ref().is_some_and(|d| !d.is_empty())
-        || row.kind.as_deref().is_some_and(|k| TOOL_KINDS.contains(&k))
+pub(super) fn locale(cx: &App) -> Locale {
+    locale_of(Ds::get(cx).lang())
 }
 
-/// `workActivityToolsFromRows`: one tool item per tool row.
-pub(super) fn tool_items(rows: &[ProgressRow], lang: Lang) -> Vec<ToolItem> {
-    rows.iter()
-        .filter(|row| is_tool_row(row))
-        .enumerate()
-        .map(|(index, row)| match &row.thinking_title {
-            Some(title) => {
-                let summary = if lang == Lang::Ko {
-                    "생각"
-                } else {
-                    "Thinking"
-                };
-                let item = ToolItem::new(
-                    format!(
-                        "thinking:{}",
-                        row.tool_call_id.as_deref().unwrap_or(&row.id)
-                    ),
-                    title.clone(),
-                    summary,
-                );
-                match row.thinking_body.as_deref().filter(|b| !b.is_empty()) {
-                    Some(body) => item.details(body.to_string()),
-                    None => item,
-                }
-            }
-            None => {
-                let name = row.safe_tool_name.clone().unwrap_or_default();
-                let title = if row.safe_label.is_empty() {
-                    name.clone()
-                } else {
-                    row.safe_label.clone()
-                };
-                ToolItem::new(format!("{}:{index}", row.id), title, name)
-            }
-        })
-        .collect()
+/// Where the content column of a block starts, which its tool rows line up with.
+// DS: WorkActivityBlock geometry (`content_x`)
+pub(super) fn content_x(compact: bool) -> f32 {
+    if compact { 28. } else { 44. }
 }
 
 /// `WorkDecisionBody`: the block's rationale and next step, one per line.
@@ -85,33 +40,64 @@ fn decision_body(block: &WorkBlockView) -> Option<String> {
     (!lines.is_empty()).then(|| lines.join("\n"))
 }
 
-/// `ActivityBlock` of WorkBlocks.tsx.
-fn block_view(block: &WorkBlockView, lang: Lang) -> AnyElement {
+/// `ActivityBlock` of WorkBlocks.tsx without its toolchain.
+fn block_header(block: &WorkBlockView) -> WorkActivityBlock {
     let running = !matches!(block.state.as_str(), "delivered" | "failed" | "cancelled");
-    let mut view = WorkActivityBlock::new(format!("work-block-{}", block.id), block.label.clone())
-        .tools(tool_items(&block.rows, lang));
+    let mut view = WorkActivityBlock::new(format!("work-block-{}", block.id), block.label.clone());
     if running {
         view = view.live();
     }
     if let Some(body) = decision_body(block) {
         view = view.description(body);
     }
-    view.into_any_element()
+    view
+}
+
+/// `workActivityToolsForBlock`: the block's tool rows.
+fn block_tools(
+    block: &WorkBlockView,
+    t: &TranscriptCtx,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<AnyElement> {
+    tool_column(
+        &block.rows,
+        Some(&block.label),
+        content_x(false),
+        t,
+        window,
+        cx,
+    )
+}
+
+fn block_view(
+    block: &WorkBlockView,
+    t: &TranscriptCtx,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let tools = block_tools(block, t, window, cx);
+    Stack::new()
+        .gap(Space::Sm)
+        .child(block_header(block))
+        .children(tools)
+        .into_any_element()
 }
 
 fn toggle_state(id: &str, window: &mut Window, cx: &mut App) -> gpui::Entity<bool> {
     window.use_keyed_state(format!("{id}-expanded"), cx, |_, _| false)
 }
 
-/// `CollapsedTurnActivity`: the header, the latest block while live, every block when expanded.
-pub(super) fn collapsed_turn_activity(
+/// `CollapsedTurnActivity` / `CompletedWorkBlocks`: the header, the latest block while live,
+/// every block when expanded; `None` without blocks.
+pub(crate) fn work_blocks(
     blocks: &[WorkBlockView],
     live: bool,
+    t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
     let latest = blocks.last()?.clone();
-    let lang = Ds::get(cx).lang();
     let key = format!("work-blocks-{}", blocks[0].id);
     let state = toggle_state(&key, window, cx);
     let expanded = *state.read(cx);
@@ -140,7 +126,11 @@ pub(super) fn collapsed_turn_activity(
     );
     let mut body = Stack::new().gap(Space::Md);
     if expanded {
-        body = body.children(blocks.iter().map(|block| block_view(block, lang)));
+        let views: Vec<AnyElement> = blocks
+            .iter()
+            .map(|block| block_view(block, t, window, cx))
+            .collect();
+        body = body.children(views);
         let collapse = {
             let state = state.clone();
             move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
@@ -150,28 +140,27 @@ pub(super) fn collapsed_turn_activity(
                 });
             }
         };
-        let collapse_label = if lang == Lang::Ko {
-            "접기"
-        } else {
-            "Collapse"
-        };
         body = body.child(
             Stack::new().cross(Cross::Start).child(
                 Button::new(format!("{key}-collapse"))
                     .variant(Variant::Borderless)
                     .size(Size::Xs)
                     .icon_start(icon_px(Icon::ListChecks, px(14.)))
-                    .text(collapse_label)
+                    .text(strings.activity_collapse())
                     .on_click(collapse),
             ),
         );
     } else if live {
         let item_key: SharedString = latest.id.clone().into();
-        body = body.child(RollingSwap::new(
-            format!("{key}-swap"),
-            item_key,
-            move |_, cx| block_view(&latest, Ds::get(cx).lang()),
-        ));
+        let tools = block_tools(&latest, t, window, cx);
+        let swapped = latest;
+        body = body
+            .child(RollingSwap::new(
+                format!("{key}-swap"),
+                item_key,
+                move |_, _| block_header(&swapped).into_any_element(),
+            ))
+            .children(tools);
     }
     Some(
         Stack::new()
@@ -180,14 +169,4 @@ pub(super) fn collapsed_turn_activity(
             .child(body)
             .into_any_element(),
     )
-}
-
-/// Completed work blocks (`CompletedWorkBlocks`).
-pub(crate) fn work_blocks(
-    blocks: &[WorkBlockView],
-    _t: &TranscriptCtx,
-    window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
-    collapsed_turn_activity(blocks, false, window, cx).unwrap_or_else(|| div().into_any_element())
 }

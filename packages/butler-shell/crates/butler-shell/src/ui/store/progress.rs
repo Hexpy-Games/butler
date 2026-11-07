@@ -34,10 +34,6 @@ use crate::ui::source::wire::{
 };
 
 /// The turns' progress snapshots of the open session.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 #[derive(Default)]
 pub(crate) struct TurnProgress {
     session_id: Option<String>,
@@ -70,10 +66,6 @@ fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key)?.as_str()
 }
 
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 impl TurnProgress {
     /// Rebuilds progress from a session view.
     pub(crate) fn load(&mut self, view: &SessionView) {

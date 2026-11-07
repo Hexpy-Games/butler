@@ -1,9 +1,5 @@
 //! The plan, disclosure and phase labels of `conversation.work` and `interfaceStatus`, and the
 //! elapsed-time text.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use butler_ds::ui::context::Lang;
 
 use super::copy::copy;
@@ -14,24 +10,6 @@ pub(crate) fn elapsed(lang: Lang, total_seconds: u64) -> String {
     match lang {
         Lang::En => format!("{minutes}m {seconds}s"),
         Lang::Ko => format!("{minutes}분 {seconds}초"),
-    }
-}
-
-/// `conversation.work.disclosureLabel`.
-pub(crate) fn disclosure_label(lang: Lang, status: &str, latest: &str, earlier: usize) -> String {
-    match (lang, earlier) {
-        (_, 0) => format!("{status}, {latest}"),
-        (Lang::En, 1) => format!("{status}, {latest}, 1 earlier record"),
-        (Lang::En, n) => format!("{status}, {latest}, {n} earlier records"),
-        (Lang::Ko, n) => format!("{status}, {latest}, 이전 기록 {n}개"),
-    }
-}
-
-/// `conversation.work.detailsRegionLabel`.
-pub(crate) fn details_region_label(lang: Lang, label: &str) -> String {
-    match lang {
-        Lang::En => format!("{label} details"),
-        Lang::Ko => format!("{label} 세부 내역"),
     }
 }
 

@@ -1,9 +1,5 @@
 //! `guided.tools` (the inline labels and `additionalToolLabels`) and `progress.operations` of
 //! packages/butler-i18n, as the progress labels read them.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use butler_ds::ui::context::Lang;
 
 type Table = &'static [(&'static str, &'static str)];

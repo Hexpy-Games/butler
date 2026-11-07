@@ -36,10 +36,6 @@ struct Status<'a> {
 }
 
 /// The running turn's status line; `None` when no turn runs.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
 pub(crate) fn current_turn_status(
     t: &TranscriptCtx,
     window: &mut Window,

@@ -7,47 +7,33 @@ use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon::icon_px;
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::rolling_swap::RollingSwap;
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window, div, px};
+use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window, px};
 
-use super::blocks::{locale, tool_items};
-use super::project::{PhaseActivity, phase_label, project};
+use super::blocks::{content_x, locale, locale_of, work_blocks};
+use super::is_general_chat;
 use super::status::current_turn_status;
+use super::tools::tool_column;
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::source::wire::ProgressRow;
-
-/// The activity timeline of one turn.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
-pub(crate) fn timeline(
-    rows: &[ProgressRow],
-    t: &TranscriptCtx,
-    window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
-    let turn_id = rows.iter().find_map(|row| row.turn_id.clone());
-    let live = t
-        .view
-        .active_turn
-        .as_ref()
-        .is_some_and(|turn| Some(&turn.id) == turn_id.as_ref());
-    timeline_with(rows, turn_id.as_deref(), None, live, window, cx)
-        .unwrap_or_else(|| div().into_any_element())
-}
+use crate::ui::store::progress::activity::{
+    PhaseActivity, TurnActivityProjection, project_turn_activity,
+};
+use crate::ui::store::progress::copy::copy;
+use crate::ui::store::progress::labels::phase_label;
 
 /// `TurnActivityTimeline` for the phase activities of `rows`; `None` when there are none.
 /// `state` is the turn's current state (`currentState`).
-pub(super) fn timeline_with(
+pub(super) fn timeline(
     rows: &[ProgressRow],
     turn_id: Option<&str>,
     state: Option<&str>,
     live: bool,
+    t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
     let lang = Ds::get(cx).lang();
-    let projection = project(rows, turn_id, lang);
+    let projection = project_turn_activity(lang, rows, turn_id);
     let activities = projection.phase_activities;
     let latest = activities.last()?.clone();
     let state = state.map(str::to_string).or(projection.semantic_state);
@@ -55,9 +41,8 @@ pub(super) fn timeline_with(
     let open = window.use_keyed_state(format!("{key}-expanded"), cx, |_, _| false);
     let expanded = *open.read(cx);
     let current = phase_label(lang, state.as_deref().or(latest.phase.as_deref()));
-    let header_label = locale(cx)
-        .strings()
-        .activity_history(live, current, activities.len());
+    let strings = locale(cx).strings();
+    let header_label = strings.activity_history(live, current, activities.len());
     let set = |value: Option<bool>| {
         let open = open.clone();
         move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
@@ -82,35 +67,31 @@ pub(super) fn timeline_with(
     let mut body = Stack::new().gap(Space::Sm);
     if expanded {
         let last = activities.len() - 1;
-        body = body.child(
-            Stack::new()
-                .gap(Space::Sm)
-                .children(activities.iter().enumerate().map(|(index, activity)| {
-                    activity_block(activity, index < last, false, lang).into_any_element()
-                })),
-        );
-        let collapse = if lang == Lang::Ko {
-            "접기"
-        } else {
-            "Collapse"
-        };
+        let views: Vec<AnyElement> = activities
+            .iter()
+            .enumerate()
+            .map(|(index, activity)| activity_view(activity, index < last, t, window, cx))
+            .collect();
+        body = body.child(Stack::new().gap(Space::Sm).children(views));
         body = body.child(
             Stack::new().cross(Cross::Start).child(
                 Button::new(format!("{key}-collapse"))
                     .variant(Variant::Borderless)
                     .size(Size::Xs)
                     .icon_start(icon_px(Icon::ListChecks, px(14.)))
-                    .text(collapse)
+                    .text(strings.activity_collapse())
                     .on_click(set(Some(false))),
             ),
         );
     } else {
         // The current step folds away with its spacing when the turn settles; the header stays.
         let item_key: SharedString = latest.id.clone().into();
+        let tools = activity_tools(&latest, t, window, cx);
         let step = RollingSwap::new(format!("{key}-swap"), item_key, move |_, cx| {
             activity_block(&latest, false, false, Ds::get(cx).lang()).into_any_element()
         })
         .motion(live);
+        let step = Stack::new().gap(Space::Xs).child(step).children(tools);
         body = body.child(Collapsible::new(format!("{key}-step"), live).child(step));
     }
     Some(
@@ -122,18 +103,41 @@ pub(super) fn timeline_with(
     )
 }
 
+/// `workActivityToolsFromRows` of a phase activity: its operations' tool rows.
+fn activity_tools(
+    activity: &PhaseActivity,
+    t: &TranscriptCtx,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<AnyElement> {
+    tool_column(&activity.operations, None, content_x(true), t, window, cx)
+}
+
 /// `ActivityBlock` of TurnActivityBlock.tsx: a compact work activity with its operations.
+fn activity_view(
+    activity: &PhaseActivity,
+    connected: bool,
+    t: &TranscriptCtx,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let lang = Ds::get(cx).lang();
+    let tools = activity_tools(activity, t, window, cx);
+    Stack::new()
+        .gap(Space::Xs)
+        .child(activity_block(activity, connected, false, lang))
+        .children(tools)
+        .into_any_element()
+}
+
+/// `ActivityBlock` of TurnActivityBlock.tsx without its toolchain.
 fn activity_block(
     activity: &PhaseActivity,
     connected: bool,
     live: bool,
     lang: Lang,
 ) -> WorkActivityBlock {
-    let (content, intent, next) = if lang == Lang::Ko {
-        ("내용:", "의도:", "다음:")
-    } else {
-        ("Content:", "Intent:", "Next:")
-    };
+    let [content, intent, next] = locale_of(lang).strings().activity_detail_labels();
     let phase = phase_label(lang, activity.phase.as_deref());
     let meta = match activity.created_at.as_deref().map(activity_time) {
         Some(time) => format!("{phase} · {time}"),
@@ -155,8 +159,7 @@ fn activity_block(
         display_title(activity, lang),
     )
     .compact()
-    .description(lines.join("\n"))
-    .tools(tool_items(&activity.operations, lang));
+    .description(lines.join("\n"));
     if connected {
         block = block.connected();
     }
@@ -167,19 +170,11 @@ fn activity_block(
 }
 
 /// `activityDisplayTitle`: the raw request echo reads as "Check request".
-fn display_title(activity: &PhaseActivity, lang: Lang) -> String {
+pub(super) fn display_title(activity: &PhaseActivity, lang: Lang) -> String {
     if has_request_marker(&activity.title) {
-        start_work(lang).to_string()
+        copy(lang).start_work.to_string()
     } else {
         activity.title.clone()
-    }
-}
-
-fn start_work(lang: Lang) -> &'static str {
-    if lang == Lang::Ko {
-        "요청 내용 확인"
-    } else {
-        "Check request"
     }
 }
 
@@ -204,11 +199,7 @@ fn delegated_request_goal(activity: &PhaseActivity, lang: Lang) -> String {
     let Some(end) = request_marker_end(&activity.summary) else {
         return activity.summary.clone();
     };
-    let title = if has_request_marker(&activity.title) {
-        start_work(lang).to_string()
-    } else {
-        activity.title.clone()
-    };
+    let title = display_title(activity, lang);
     let request = quoted(activity.summary[end..].trim_start()).unwrap_or(&title);
     normalize(request)
 }
@@ -246,23 +237,40 @@ fn activity_time(value: &str) -> String {
     )
 }
 
-/// `TurnActivityPanel`: the running turn's timeline above its live status line.
-#[allow(
-    dead_code,
-    reason = "wired by Opus at wave integration (live turn row)"
-)]
+/// `hasLiveWork`.
+fn has_live_work(projection: &TurnActivityProjection) -> bool {
+    projection.decisions().next().is_some()
+        || !projection.work_blocks.is_empty()
+        || !projection.phase_activities.is_empty()
+        || projection.public_activity.is_some()
+        || projection.model_round_wait.is_some()
+        || projection.operation.is_some()
+}
+
+/// `TurnActivityPanel`: the running turn's work above its live status line; the line alone
+/// until work arrives and in the general chat.
 pub(crate) fn turn_activity_panel(
     rows: &[ProgressRow],
     turn_id: Option<&str>,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
-) -> AnyElement {
-    let work = timeline_with(rows, turn_id, None, true, window, cx);
+) -> Option<AnyElement> {
+    let projection = project_turn_activity(Ds::get(cx).lang(), rows, turn_id);
+    if is_general_chat(Some(&t.view.session_id)) || !has_live_work(&projection) {
+        return current_turn_status(t, window, cx);
+    }
+    // `liveTurnWork`: without a phase timeline the live work blocks stand in.
+    let work = match timeline(rows, turn_id, None, true, t, window, cx) {
+        Some(timeline) => Some(timeline),
+        None => work_blocks(&projection.work_blocks, true, t, window, cx),
+    };
     let status = current_turn_status(t, window, cx);
-    Stack::new()
-        .gap(Space::Md)
-        .children(work)
-        .children(status)
-        .into_any_element()
+    Some(
+        Stack::new()
+            .gap(Space::Md)
+            .children(work)
+            .children(status)
+            .into_any_element(),
+    )
 }

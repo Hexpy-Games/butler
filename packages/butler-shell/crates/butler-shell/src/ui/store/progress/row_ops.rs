@@ -1,9 +1,5 @@
 //! `shared-progress-row-operations.ts` and the row spreads of `utils.ts`: merging and folding
 //! progress rows.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use std::collections::HashMap;
 
 use crate::ui::source::wire::ProgressRow;

@@ -1,9 +1,5 @@
 //! `app/conversation-progress/terminal-activity.ts`: a settled turn's work blocks, kept on its
 //! assistant message.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use std::collections::HashMap;
 
 use chrono::DateTime;

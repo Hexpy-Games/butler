@@ -1,10 +1,6 @@
 //! The `appCopy` strings the progress projections and the status rows read, and the
 //! `copy.ts` label functions over them (`interfaceProgressLabel`, `localizeProgressRow`,
 //! `interfaceText`).
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use butler_ds::ui::context::Lang;
 
 use super::tool_titles;

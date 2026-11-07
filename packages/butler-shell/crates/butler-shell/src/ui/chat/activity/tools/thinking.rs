@@ -5,7 +5,6 @@ use butler_ds::ui::typo::{Role, Run, Tone, Typo, Weight, Wrap};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Task, Window};
 
 use super::copy::text;
-use crate::ui::chat::TranscriptCtx;
 use crate::ui::chat::activity::operation::{Ids, fetch_page};
 use crate::ui::source::wire::ProgressRow;
 
@@ -77,7 +76,6 @@ fn paragraph(body: &str) -> Typo {
 pub(super) fn thinking_details(
     row: &ProgressRow,
     ids: Option<Ids>,
-    t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -88,11 +86,11 @@ pub(super) fn thinking_details(
     } else if let Some(ids) = ids
         && !state.read(cx).started
     {
-        let client = t.client.clone();
         state.update(cx, |summary, cx| {
             summary.started = true;
+            let page = fetch_page(cx, ids, 0);
             summary.task = Some(cx.spawn(async move |this, cx| {
-                let page = fetch_page(client, ids, 0).await;
+                let page = page.await;
                 let _ = this.update(cx, |summary, cx| {
                     match page {
                         Some((content, _, _)) => summary.stored = Some(content),

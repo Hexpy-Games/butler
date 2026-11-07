@@ -1,9 +1,5 @@
 //! `app/conversation-progress/activity.ts`, `ordinary-activity-fallback.ts` and
 //! `compact-display-title.ts`: a turn's progress rows projected for the activity timeline.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use std::collections::{HashMap, HashSet};
 
 use butler_ds::ui::context::Lang;
@@ -14,28 +10,6 @@ use super::read_models::{ActivityReadModel, project_activity_read_models};
 use super::row_ops::{is_terminal_state, merge_tool_rows};
 use super::rows::visible_progress_rows;
 use crate::ui::source::wire::{ProgressRow, WorkBlockView};
-
-const LIFECYCLE_LABELS: [&str; 11] = [
-    "accepted",
-    "started",
-    "thinking",
-    "queued for butler service",
-    "working on request",
-    "checking response",
-    "response checked",
-    "preparing final answer",
-    "final answer ready",
-    "completed",
-    "delivered",
-];
-const COMPLETED_ACTIVITY_KINDS: [&str; 6] = [
-    "searched",
-    "read",
-    "ran_command",
-    "edited",
-    "dispatch",
-    "used_tool",
-];
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PhaseActivity {
@@ -115,38 +89,6 @@ pub(crate) fn project_work_blocks(rows: &[ProgressRow]) -> Vec<WorkBlockView> {
 /// `projectCompletedWorkBlocks`.
 pub(crate) fn project_completed_work_blocks(rows: &[ProgressRow]) -> Vec<WorkBlockView> {
     project_shared_work_blocks(rows, true)
-}
-
-/// `projectCompletedActivityRows`.
-pub(crate) fn project_completed_activity_rows(
-    lang: Lang,
-    rows: &[ProgressRow],
-) -> Vec<ProgressRow> {
-    let mut keys: Vec<String> = Vec::new();
-    let mut by_key: HashMap<String, ProgressRow> = HashMap::new();
-    for row in visible_progress_rows(lang, rows) {
-        let kind = row.kind.clone().unwrap_or_default();
-        if kind == "todo" || kind == "work_block" {
-            continue;
-        }
-        let lifecycle = LIFECYCLE_LABELS.contains(&row.safe_label.trim().to_lowercase().as_str());
-        let visible = COMPLETED_ACTIVITY_KINDS.contains(&kind.as_str())
-            || text(&row.safe_tool_name).is_some()
-            || text(&row.safe_input_label).is_some()
-            || (kind == "message" && !lifecycle);
-        if !visible {
-            continue;
-        }
-        let key = match text(&row.tool_call_id) {
-            Some(call) => format!("tool:{call}"),
-            None => format!("row:{}", row.id),
-        };
-        if !by_key.contains_key(&key) {
-            keys.push(key.clone());
-        }
-        by_key.insert(key, row);
-    }
-    keys.iter().filter_map(|key| by_key.remove(key)).collect()
 }
 
 fn is_phase_activity_row(row: &ProgressRow) -> bool {

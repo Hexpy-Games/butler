@@ -1,8 +1,4 @@
 //! `ordinary-activity-fallback.ts` and `compact-display-title.ts`.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use std::collections::HashSet;
 
 use butler_ds::ui::context::Lang;

@@ -1,8 +1,4 @@
 //! `shared-progress-reducer.ts`: progress rows folded into work blocks.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use std::collections::HashSet;
 
 use super::row_ops::{

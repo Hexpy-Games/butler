@@ -1,9 +1,5 @@
 //! `app/utils.ts`: merging progress rows and turn snapshots as live events and fresh views
 //! arrive.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use std::collections::HashSet;
 
 use chrono::DateTime;

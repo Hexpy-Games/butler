@@ -1,7 +1,6 @@
 //! `TurnActivityTimeline/Panel/Block/Pending/Message`, `MessageTurnActivity`, `CompletedWorkBlocks`.
 pub(crate) mod blocks;
 pub(crate) mod operation;
-mod project;
 pub(crate) mod status;
 pub(crate) mod steward;
 pub(crate) mod timeline;
@@ -11,18 +10,24 @@ use gpui::{AnyElement, App, Window};
 
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::source::wire::MessageRecord;
+use crate::ui::store::progress::row_ops::is_terminal_state;
 
-/// A message's turn activity and completed work blocks; `None` when it has none.
-#[allow(
-    dead_code,
-    reason = "P2 shell-wave skeleton: wired by Opus at wave integration"
-)]
+/// `isGeneralChat`.
+pub(crate) fn is_general_chat(chat_id: Option<&str>) -> bool {
+    chat_id == Some("general")
+}
+
+/// A message's turn activity and completed work blocks; `None` when it has none, and always
+/// `None` in the general chat, which shows the status line alone.
 pub(crate) fn message_activity(
     msg: &MessageRecord,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
+    if is_general_chat(msg.chat_id.as_deref()) {
+        return None;
+    }
     let turn_id = msg.turn_id.as_deref().filter(|id| !id.is_empty());
     let running = t
         .view
@@ -34,14 +39,14 @@ pub(crate) fn message_activity(
     let state = msg
         .status
         .as_deref()
-        .filter(|status| !running && project::is_terminal(status));
-    if let Some(timeline) = timeline::timeline_with(rows, turn_id, state, running, window, cx) {
+        .filter(|status| !running && is_terminal_state(status));
+    if let Some(timeline) = timeline::timeline(rows, turn_id, state, running, t, window, cx) {
         return Some(timeline);
     }
     // Completed work blocks stand in when the turn has no phase timeline.
-    let blocks = msg.work_blocks.as_deref().unwrap_or(&[]);
     if running {
         return None;
     }
-    blocks::collapsed_turn_activity(blocks, false, window, cx)
+    let blocks = msg.work_blocks.as_deref().unwrap_or(&[]);
+    blocks::work_blocks(blocks, false, t, window, cx)
 }

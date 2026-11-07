@@ -1,8 +1,4 @@
 //! `app/utils.ts`: the per-turn progress snapshots and how they merge.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use super::merge::{
     merge_progress_rows, progress_merge_state, rows_for_merged_terminal_state,
     should_revive_for_retry, timestamp_ms,

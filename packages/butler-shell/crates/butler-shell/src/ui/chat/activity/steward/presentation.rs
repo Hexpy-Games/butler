@@ -2,11 +2,12 @@
 //! status lines (`workBlockLatestStatus.ts`, `workBlockTail.ts`) the card shows.
 use butler_ds::ui::context::Lang;
 
+use crate::ui::chat::activity::timeline::display_title;
 use crate::ui::source::wire::{
     MessageRecord, MessageRecordRole, ProgressRow, SessionView, SessionViewStatus, SessionViewTurn,
     StewardResultViewStatus, StewardSessionSummaryView, WorkPlanActionStatus,
 };
-use crate::ui::store::progress::activity::{PhaseActivity, project_turn_activity};
+use crate::ui::store::progress::activity::project_turn_activity;
 use crate::ui::store::progress::copy::{
     copy, interface_progress_label, interface_text, public_operation_title, tool_fallback,
     tool_title,
@@ -280,16 +281,6 @@ pub(super) fn worker_activity_title(lang: Lang, current: &str, task_title: &str)
     }
 }
 
-/// `activityDisplayTitle`: the raw request echo reads as "Check request".
-fn activity_display_title(lang: Lang, activity: &PhaseActivity) -> String {
-    let lower = activity.title.to_lowercase();
-    if lower.contains("user request:") || activity.title.contains("사용자 요청:") {
-        copy(lang).start_work.to_string()
-    } else {
-        activity.title.clone()
-    }
-}
-
 /// `toolchainGroupLabel`: the kind of a work step.
 fn group_label(lang: Lang, row: &ProgressRow) -> String {
     let copy = copy(lang);
@@ -352,7 +343,7 @@ pub(super) fn latest_status(
     } else {
         phase_label(lang, Some(settled_state)).to_string()
     };
-    let parts = [activity_display_title(lang, latest), kind];
+    let parts = [display_title(latest, lang), kind];
     Some(
         parts
             .iter()
@@ -371,6 +362,6 @@ pub(super) fn tail(lang: Lang, rows: &[ProgressRow], turn_id: &str) -> (Option<S
     let previous = activities
         .len()
         .checked_sub(2)
-        .map(|at| activity_display_title(lang, &activities[at]));
+        .map(|at| display_title(&activities[at], lang));
     (previous, activities.len().saturating_sub(1))
 }

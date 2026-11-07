@@ -1,8 +1,7 @@
 //! `progress-row-projection-fields.ts`: the fields a turn event's payload gives a progress row.
 #![allow(
-    dead_code,
     clippy::cast_possible_truncation,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration; the counts are small non-negative integers"
+    reason = "the counts are small non-negative integers"
 )]
 use serde_json::{Map, Value, json};
 

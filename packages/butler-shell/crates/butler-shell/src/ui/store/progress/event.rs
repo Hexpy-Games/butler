@@ -1,8 +1,4 @@
 //! `progress-row-from-turn-event.ts`: the progress row one public turn event stands for.
-#![allow(
-    dead_code,
-    reason = "P2 shell-wave: consumed by the units wired at wave integration"
-)]
 use serde_json::{Value, json};
 
 use super::fields::{
