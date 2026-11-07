@@ -8,6 +8,7 @@ use gpui::{App, ParentElement as _, SharedString, Window};
 use super::Atom;
 use super::atoms::session_display_title;
 use crate::ui::i18n::Locale;
+use crate::ui::i18n::composer::mentions::project_label;
 use crate::ui::source::wire::{NavigationView, SessionSummary};
 
 /// The `@` word the caret is in: `@` at the start of the text or after whitespace, then
@@ -289,14 +290,6 @@ impl MentionMenu {
     }
 }
 
-/// composer.mentionProject.
-fn mention_project_label(locale: Locale) -> &'static str {
-    match locale {
-        Locale::Ko => "프로젝트",
-        Locale::En => "Project",
-    }
-}
-
 /// The menu's list: a conversation or project per row. The caller anchors it above the `@`
 /// (`side="top"`, `align="start"`, 6px offset) in a popover and passes `choose` for a click.
 pub(crate) fn mention_list(
@@ -326,7 +319,7 @@ pub(crate) fn mention_list(
         .query(query.to_owned())
         .active(index == active);
         let meta = match item.kind {
-            MentionKind::Project => Some(mention_project_label(locale).to_owned()),
+            MentionKind::Project => Some(project_label(locale).to_owned()),
             MentionKind::Session => item.project_name.clone(),
         };
         if let Some(meta) = meta {

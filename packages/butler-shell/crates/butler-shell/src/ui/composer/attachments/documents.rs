@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::filtered_select_popover::{Filter, Group, Item};
-use butler_ds::ui::context::{Ds, Lang};
+use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::toast::Toast;
 use butler_shell_client::ShellClient;
@@ -17,18 +17,11 @@ use serde::Deserialize;
 
 use super::{ATTACHMENT_MAX_BYTES, Extra, Uploaded, upload_bytes};
 use crate::ui::composer::state::ComposerAttachment;
+use crate::ui::i18n::composer::attachments::copy;
 use crate::ui::source::wire::{
     MessageContentPart, ProjectDashboardDocument, ProjectDashboardDocumentKind,
     ProjectDashboardDocumentType, ProjectSourceReference, ProjectSourceReferenceKind,
 };
-
-/// The English or the Korean text, by the app language.
-pub(super) fn tr(cx: &App, en: &'static str, ko: &'static str) -> &'static str {
-    match Ds::get(cx).lang() {
-        Lang::En => en,
-        Lang::Ko => ko,
-    }
-}
 
 /// A picker group id (`ProjectDocumentGroup`); the filter ids are these and "all".
 const GROUPS: [&str; 6] = ["spec", "roadmap", "work", "plan", "report", "task"];
@@ -38,13 +31,14 @@ pub(crate) type PickDocument = Rc<dyn Fn(&ProjectDashboardDocument, &mut Window,
 
 /// `projectDocumentGroups` titles.
 fn group_title(id: &str, cx: &App) -> &'static str {
+    let copy = copy(Ds::get(cx).lang());
     match id {
-        "spec" => tr(cx, "Spec", "스펙"),
-        "roadmap" => tr(cx, "Roadmap", "로드맵"),
-        "work" => tr(cx, "Work", "작업"),
-        "plan" => tr(cx, "Plan", "계획"),
-        "report" => tr(cx, "Report", "보고서"),
-        _ => tr(cx, "Task", "하위 작업"),
+        "spec" => copy.spec,
+        "roadmap" => copy.roadmap,
+        "work" => copy.work,
+        "plan" => copy.plan,
+        "report" => copy.report,
+        _ => copy.task,
     }
 }
 
@@ -53,7 +47,7 @@ pub(crate) fn picker_filters(
     cx: &App,
     on_select: impl Fn(&str, &mut Window, &mut App) + Clone + 'static,
 ) -> Vec<Filter> {
-    let all = tr(cx, "All", "전체");
+    let all = copy(Ds::get(cx).lang()).all;
     std::iter::once(("all", all))
         .chain(GROUPS.map(|id| (id, group_title(id, cx))))
         .map(|(id, label)| {
@@ -386,8 +380,5 @@ fn failed(stale: &impl Fn() -> bool, name: String) -> DocumentOutcome {
 
 /// The toast of a project document that could not be attached.
 pub(crate) fn document_failed_notice(name: &str, cx: &App) -> Toast {
-    Toast::error(match Ds::get(cx).lang() {
-        Lang::Ko => format!("{name} — 연결을 확인한 뒤 파일을 다시 선택해 주세요."),
-        Lang::En => format!("{name} — Check your connection, then select the file again."),
-    })
+    Toast::error((copy(Ds::get(cx).lang()).upload_failed)(name))
 }

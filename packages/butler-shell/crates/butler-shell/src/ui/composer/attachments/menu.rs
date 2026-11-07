@@ -15,7 +15,8 @@ use butler_ds::ui::popover::{MenuSize, Popover, PopoverContent};
 use butler_ds::ui::toast::{self, Toast};
 use gpui::{AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Window};
 
-use super::documents::{PickDocument, load_documents, picker_filters, picker_groups, tr};
+use super::documents::{PickDocument, load_documents, picker_filters, picker_groups};
+use crate::ui::i18n::composer::attachments::copy;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::ProjectDashboardDocument;
 
@@ -54,7 +55,7 @@ pub(crate) fn attachment_menu(
     cx: &mut App,
 ) -> AnyElement {
     let popover = Popover::new("composer-attachment-menu", window, cx);
-    let label = tr(cx, "More options", "추가 기능");
+    let label = copy(Ds::get(cx).lang()).more_options;
     let uploading = menu.uploading;
     let trigger = popover.trigger(|toggle| {
         let mut button = IconButton::new("composer-attachment-button", label)
@@ -135,19 +136,19 @@ fn menu_body(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let mut attachments = OptionMenuSection::new(tr(cx, "Attachments", "첨부")).first();
+    let mut attachments = OptionMenuSection::new(copy(Ds::get(cx).lang()).attachments).first();
     if let Some(project) = menu.project_id.as_deref() {
         attachments = attachments.child(document_menu(menu, project, close, window, cx));
     }
     let file = (
         "composer-attach-file",
-        tr(cx, "Attach file", "파일 첨부"),
+        copy(Ds::get(cx).lang()).attach_file,
         Icon::Paperclip,
         false,
     );
     let image = (
         "composer-attach-image",
-        tr(cx, "Attach image", "이미지 첨부"),
+        copy(Ds::get(cx).lang()).attach_image,
         Icon::ImageIcon,
         true,
     );
@@ -156,16 +157,16 @@ fn menu_body(
         .child(attach_row(menu, close, image, cx));
     let normal = (
         "composer-mode-normal",
-        tr(cx, "Normal", "일반"),
+        copy(Ds::get(cx).lang()).normal,
         Icon::MessageSquarePlus,
         false,
     );
-    let mut response = OptionMenuSection::new(tr(cx, "Response mode", "응답 방식"))
+    let mut response = OptionMenuSection::new(copy(Ds::get(cx).lang()).response_mode)
         .child(mode_row(menu, close, normal, cx));
     if menu.project_id.is_some() {
         let plan = (
             "composer-mode-plan",
-            tr(cx, "Plan", "계획"),
+            copy(Ds::get(cx).lang()).plan,
             Icon::ListChecks,
             true,
         );
@@ -187,7 +188,7 @@ fn document_menu(
     cx: &mut App,
 ) -> AnyElement {
     let nested = Popover::new("composer-documents-menu", window, cx);
-    let title = tr(cx, "Project documents", "프로젝트 문서");
+    let title = copy(Ds::get(cx).lang()).project_documents;
     let trigger = nested.trigger(|toggle| {
         OptionMenuItem::new("composer-documents-item", title)
             .icon(icon(Icon::FileText, IconSize::Md, Ds::get(cx)))
@@ -274,8 +275,8 @@ fn document_picker(
     FilteredSelectPopover::new(
         "composer-documents-list",
         title,
-        tr(cx, "Search document titles", "문서 제목 검색"),
-        tr(cx, "No project documents.", "프로젝트 문서가 없습니다."),
+        copy(Ds::get(cx).lang()).search_documents,
+        copy(Ds::get(cx).lang()).no_documents,
     )
     .search(search_now, move |text, _, cx| {
         let text = SharedString::from(text.to_owned());
@@ -320,11 +321,7 @@ fn load_when_needed(state: &Entity<DocumentsState>, project_id: &str, cx: &mut A
             documents: Vec::new(),
         };
     });
-    let failed = tr(
-        cx,
-        "Project documents failed",
-        "프로젝트 문서를 불러오지 못했습니다",
-    );
+    let failed = copy(Ds::get(cx).lang()).documents_failed;
     let state = state.clone();
     let requested = project.clone();
     let fetch = Jobs::run(cx, move |client| load_documents(client, requested));

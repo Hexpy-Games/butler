@@ -18,7 +18,7 @@ use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::attachment_list::{
     AttachmentItem, AttachmentList, ThumbnailFit, TileLayout, Variant,
 };
-use butler_ds::ui::context::{Ds, Lang};
+use butler_ds::ui::context::Ds;
 use butler_ds::ui::toast::Toast;
 use butler_shell_client::{ShellClient, Upload};
 use gpui::{
@@ -27,8 +27,8 @@ use gpui::{
     Window, div,
 };
 
-use self::documents::tr;
 use super::state::ComposerAttachment;
+use crate::ui::i18n::composer::attachments::copy;
 use crate::ui::shell::image_viewer::{ImageViewerHost, ViewerImage};
 use crate::ui::source::wire::{MessageFileKind, MessageFileRef};
 
@@ -303,38 +303,29 @@ fn extension(name: &str, cx: &App) -> String {
         .filter(|ext| {
             (1..=5).contains(&ext.chars().count()) && ext.chars().all(char::is_alphanumeric)
         })
-        .map_or_else(|| tr(cx, "File", "파일").to_owned(), str::to_uppercase)
+        .map_or_else(
+            || copy(Ds::get(cx).lang()).file.to_owned(),
+            str::to_uppercase,
+        )
 }
 
 /// The notices of a finished batch (`addFiles`' tail), as toasts.
 pub(crate) fn upload_notices(outcome: &UploadOutcome, cx: &App) -> Vec<Toast> {
     let mut toasts = Vec::new();
     let join = |names: &[String]| names.join(", ");
-    let korean = Ds::get(cx).lang() == Lang::Ko;
+    let copy = copy(Ds::get(cx).lang());
     if !outcome.failed.is_empty() {
         let names = join(&outcome.failed);
-        toasts.push(Toast::error(if korean {
-            format!("{names} — 연결을 확인한 뒤 파일을 다시 선택해 주세요.")
-        } else {
-            format!("{names} — Check your connection, then select the file again.")
-        }));
+        toasts.push(Toast::error((copy.upload_failed)(&names)));
     }
     if !outcome.empty.is_empty() {
         let names = join(&outcome.empty);
-        toasts.push(Toast::error(if korean {
-            format!("{names} — 빈 파일입니다.")
-        } else {
-            format!("{names} — File is empty.")
-        }));
+        toasts.push(Toast::error((copy.upload_empty)(&names)));
     }
     if !outcome.oversized.is_empty() {
         let names = join(&outcome.oversized);
         let limit = format_size(i64::try_from(ATTACHMENT_MAX_BYTES).unwrap_or(i64::MAX));
-        toasts.push(Toast::error(if korean {
-            format!("{names} — 파일당 {limit} 이하로 줄이거나 다른 파일을 선택해 주세요.")
-        } else {
-            format!("{names} — Reduce each file to {limit} or less, or select another file.")
-        }));
+        toasts.push(Toast::error((copy.upload_oversized)(&names, &limit)));
     }
     toasts
 }
@@ -390,17 +381,14 @@ pub(crate) fn composer_attachments(
                 )
             })
             .collect();
-        let lang = Ds::get(cx).lang();
+        let copy = copy(Ds::get(cx).lang());
         AttachmentList::new("composer-attachments", items)
             .variant(Variant::Tiles)
             .tile_layout(TileLayout::Row)
-            .empty_label(tr(cx, "Attached files", "첨부 파일"))
+            .empty_label(copy.attached_files)
             .on_open(on_open)
             .on_remove(on_remove)
-            .remove_label(move |name| match lang {
-                Lang::En => format!("Remove {name}"),
-                Lang::Ko => format!("{name} 제거"),
-            })
+            .remove_label(move |name| (copy.remove)(name))
             .into_any_element()
     });
     if elements.is_none() && tiles.is_none() {
