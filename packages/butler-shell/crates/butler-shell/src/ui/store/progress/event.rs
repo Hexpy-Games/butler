@@ -42,6 +42,124 @@ fn public_note_row(event: &AgentTurnEvent, payload: &Payload) -> Option<Progress
         _ => "running",
     };
     let mut fields = base(event, "message", &note, state);
+    set(
+        &mut fields,
+        "interface_label_key",
+        optional_text(payload.get("interfaceLabelKey")),
+    );
+    set(
+        &mut fields,
+        "interface_label_parameters",
+        label_parameters(payload.get("interfaceLabelParameters")),
+    );
+    set(
+        &mut fields,
+        "interface_content",
+        read_interface_content(payload.get("interfaceContent")),
+    );
+    let label = optional_text(first(payload, &["decisionTitle", "workBlockLabel"]))
+        .or_else(|| work_block_id.as_ref().map(|_| note.clone()));
+    set(&mut fields, "work_block_id", work_block_id);
+    set(&mut fields, "work_block_label", label);
+    let bridge = optional_text(payload.get("bridgePhase")).or_else(|| {
+        (payload.get("operational") == Some(&Value::Bool(true)))
+            .then(|| "operational_recovery".to_string())
+    });
+    set(&mut fields, "bridge_phase", bridge);
+    fields.extend(work_decision_fields(payload));
+    row_from(fields)
+}
+
+fn work_block_row(
+    event: &AgentTurnEvent,
+    payload: &Payload,
+    phase: &'static str,
+) -> Option<ProgressRow> {
+    let decision = work_decision_fields(payload);
+    let title = decision
+        .get("work_decision_title")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| optional_text(first(payload, &["label", "safeLabel"])))
+        .unwrap_or_else(|| "Working".to_string());
+    let state = if phase == "completed" {
+        completed_block_state(payload)
+    } else {
+        "running"
+    };
+    let mut fields = base(event, "work_block", &title, state);
+    let id = optional_text(payload.get("workBlockId")).unwrap_or_else(|| event.id.clone());
+    fields.insert("work_block_id".into(), id.into());
+    fields.insert("work_block_label".into(), title.into());
+    fields.insert("work_block_phase".into(), phase.into());
+    set(&mut fields, "work_block_sequence", block_sequence(payload));
+    fields.extend(decision);
+    row_from(fields)
+}
+
+fn todo_row(event: &AgentTurnEvent, payload: &Payload) -> Option<ProgressRow> {
+    let todo_id = optional_text(first(payload, &["todoId", "inputLabel"]));
+    let state = optional_text(payload.get("state")).unwrap_or_else(|| "running".to_string());
+    let label = safe_text(payload.get("safeLabel"), "Working step");
+    let mut fields = base(event, "todo", &label, &state);
+    if let Some(id) = &todo_id {
+        fields.insert("id".into(), id.clone().into());
+    }
+    set(&mut fields, "safe_input_label", todo_id);
+    set(
+        &mut fields,
+        "bridge_phase",
+        optional_text(payload.get("bridgePhase")),
+    );
+    set(
+        &mut fields,
+        "work_stream_id",
+        optional_text(payload.get("workstreamId")),
+    );
+    set(
+        &mut fields,
+        "semantic_block_id",
+        optional_text(payload.get("semanticBlockId")),
+    );
+    set(
+        &mut fields,
+        "safe_detail_rows",
+        detail_rows(payload.get("detailRows")),
+    );
+    set(
+        &mut fields,
+        "safe_order",
+        optional_non_negative_integer(payload.get("safeOrder")),
+    );
+    row_from(fields)
+}
+
+fn tool_row(event: &AgentTurnEvent, payload: &Payload) -> Option<ProgressRow> {
+    if event.kind == "tool.progress" && payload.get("activityKind") == Some(&json!("todo")) {
+        return todo_row(event, payload);
+    }
+    let tool_name = safe_text(payload.get("toolName"), "Tool");
+    let input_label = optional_text(payload.get("inputLabel"));
+    let default_label = match &input_label {
+        Some(input) => format!("{tool_name}: {input}"),
+        None => tool_name.clone(),
+    };
+    let state = match event.kind.as_str() {
+        "tool.failed" => "failed",
+        "tool.cancelled" => "cancelled",
+        "tool.completed" => "delivered",
+        _ => "running",
+    };
+    let kind = progress_kind(payload.get("activityKind"));
+    let label = safe_text(payload.get("safeLabel"), &default_label);
+    let mut fields = base(event, &kind, &label, state);
+    let decision = work_decision_fields(payload);
+    fields.insert("safe_tool_name".into(), tool_name.into());
+    set(
+        &mut fields,
+        "interface_content",
+        read_interface_content(payload.get("interfaceContent")),
+    );
     const TEXT_FIELDS: [(&str, &str); 7] = [
         ("interface_label_key", "interfaceLabelKey"),
         ("tool_call_id", "toolCallId"),

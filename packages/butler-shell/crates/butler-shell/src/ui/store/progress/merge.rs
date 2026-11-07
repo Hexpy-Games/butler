@@ -133,6 +133,12 @@ fn detail_rows_compatible(
     })
 }
 
+fn non_empty_details(row: &ProgressRow) -> Option<&[ProgressDetailRow]> {
+    row.safe_detail_rows
+        .as_deref()
+        .filter(|rows| !rows.is_empty())
+}
+
 fn have_compatible_evidence(left: &ProgressRow, right: &ProgressRow) -> bool {
     let differs = |a: &Option<String>, b: &Option<String>| matches!((text(a), text(b)), (Some(a), Some(b)) if a != b);
     if differs(&left.semantic_block_id, &right.semantic_block_id)
@@ -140,12 +146,7 @@ fn have_compatible_evidence(left: &ProgressRow, right: &ProgressRow) -> bool {
     {
         return false;
     }
-    let details = |row: &ProgressRow| {
-        row.safe_detail_rows
-            .as_deref()
-            .filter(|rows| !rows.is_empty())
-    };
-    if !detail_rows_compatible(details(left), details(right)) {
+    if !detail_rows_compatible(non_empty_details(left), non_empty_details(right)) {
         return false;
     }
     match (&left.safe_path_labels, &right.safe_path_labels) {
