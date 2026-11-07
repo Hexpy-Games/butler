@@ -114,7 +114,7 @@ export const stories: ShowcaseStory[] = [
   { name: "New chat with the shoreline decoration", widths: ["375", "app", "wide"], render: (context) => <DecoratedComposers context={context} scene="shoreline" /> },
   { name: "New chat with the cherry decoration", widths: ["375", "app", "wide"], render: (context) => <DecoratedComposers context={context} scene="cherry" /> },
   {
-    // Beside the browser pane the conversation column is 340–560px; its composer is 316–536px. The control
+    // Beside the browser pane the conversation column is at least 340px; its composer is at least 316px. The control
     // row keeps the wide inset: the + icon on the text inset, send clear of the curve.
     name: "Narrow conversation column (340 and 400px)",
     states: ["narrow"],
