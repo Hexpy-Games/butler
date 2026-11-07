@@ -4,8 +4,8 @@
 //! its group's top sits above that line, from the group's box and the scroller's top edge as
 //! the last frame painted them (the SidebarShell sticky header's mechanism).
 use gpui::{
-    AnyElement, App, Bounds, ElementId, Entity, Hsla, IntoElement as _, Pixels, Styled as _,
-    Window, canvas, div, px,
+    AnyElement, App, Bounds, ElementId, Entity, Hsla, IntoElement as _, ParentElement as _, Pixels,
+    Styled as _, Window, canvas, div, px,
 };
 
 /// How far a measurement may drift before it counts as changed.
