@@ -188,7 +188,7 @@ impl UserMessageText {
 
 impl RenderOnce for UserMessageText {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = window.use_keyed_state((self.id.clone(), "state"), cx, |_, _| State {
+        let state = window.use_keyed_state(SharedString::from(format!("{}-state", self.id)), cx, |_, _| State {
             expanded: false,
             full: 0.,
         });
