@@ -106,9 +106,9 @@ pub(super) fn span_recorder(state: Entity<Span>) -> AnyElement {
 /// `.stickyGroup > .content`: the rows clipped by `clip` px at the top, so they hide behind the
 /// stuck header, with the focus-ring room left open on the other edges
 /// (`clip-path: inset(clip -room -room)`). The negative margins pad the room back so the rows
-/// keep their place.
+/// keep their place; the top edge has no room, as `--sticky-clip-top` is 0.
 pub(super) fn clipped(rows: AnyElement, clip: f32, room: Pixels) -> AnyElement {
-    let inner = div().min_w_0().pt(room).mt(px(-clip)).child(rows);
+    let inner = div().min_w_0().mt(px(-clip)).child(rows);
     div()
         .min_w_0()
         .mx(-room)
