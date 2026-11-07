@@ -6,7 +6,7 @@ use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Cross, Justify, Space, Stack};
-use gpui::{AnyElement, App, ClickEvent, IntoElement as _, Window};
+use gpui::{AnyElement, App, ClickEvent, IntoElement as _, ParentElement as _, Window};
 
 use crate::ui::i18n::composer::words;
 use crate::ui::source::wire::SessionSummaryView;

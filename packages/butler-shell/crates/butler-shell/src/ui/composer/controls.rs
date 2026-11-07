@@ -7,7 +7,8 @@ use gpui::Context;
 use serde_json::{Value, json};
 
 use super::Composer;
-use super::menus::{ModelChoice, model_choice};
+use super::menus::ModelChoice;
+use super::menus::model::model_choice;
 use super::queue::{access_wire, effort_wire};
 use super::state::{
     CatalogState, ComposerModelResolution, ComposerModelState, ComposerSettings, ControlsLoadState,
@@ -119,7 +120,7 @@ impl Composer {
     /// `useSessionControlSnapshot`: a chat not yet created shows the Settings controls; a started
     /// one reads its own. `quiet` rereads in place, without returning to the loading state.
     pub(super) fn load_session_controls(&mut self, quiet: bool, cx: &mut Context<Self>) {
-        let Some(session) = self.inputs.session.clone() else {
+        let Some(session) = self.inputs.session_id.clone() else {
             self.controls.snapshot = None;
             self.controls.load_state = ControlsLoadState::Ready;
             self.resolve(cx);
@@ -144,7 +145,7 @@ impl Composer {
 
     /// A controls read (or a persisted change) of `session` came back; `None` when it failed.
     fn controls_read(&mut self, session: &str, value: Option<Value>, cx: &mut Context<Self>) {
-        if self.inputs.session.as_deref() != Some(session) {
+        if self.inputs.session_id.as_deref() != Some(session) {
             return;
         }
         match value.and_then(|value| serde_json::from_value::<SessionControlsView>(value).ok()) {
@@ -247,7 +248,7 @@ impl Composer {
     /// `persistControls`: a chat that exists keeps what the owner chose.
     fn persist(&mut self, patch: &Value, cx: &mut Context<Self>) {
         self.controls.touched = true;
-        let Some(session) = self.inputs.session.clone() else {
+        let Some(session) = self.inputs.session_id.clone() else {
             return;
         };
         let (requested, body) = (session.clone(), patch.clone());

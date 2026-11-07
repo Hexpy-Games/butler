@@ -59,7 +59,7 @@ impl Composer {
             return;
         }
         let (started, epoch) = (self.attachments.started(), self.attachments.epoch());
-        let (count, session) = (allowed.len(), self.inputs.session.clone());
+        let (count, session) = (allowed.len(), self.inputs.session_id.clone());
         ComposerState::update(cx, |state| state.uploading_count += count);
         self.recompute(cx);
         let fetch = Jobs::run(cx, move |client| {
@@ -104,7 +104,7 @@ impl Composer {
         cx: &mut Context<Self>,
     ) {
         let (started, epoch) = (self.attachments.started(), self.attachments.epoch());
-        let (document, session) = (document.clone(), self.inputs.session.clone());
+        let (document, session) = (document.clone(), self.inputs.session_id.clone());
         ComposerState::update(cx, |state| state.uploading_count += 1);
         self.recompute(cx);
         let fetch = Jobs::run(cx, move |client| {
