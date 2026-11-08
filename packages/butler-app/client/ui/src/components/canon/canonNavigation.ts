@@ -23,7 +23,7 @@ export async function openEpicConversation(_projectId: string, epic: EpicCard): 
 /** Open an epic in the board's existing detail panel. */
 export function openCanonEpic(projectId: string, epicId?: string) {
   const app = useButlerStore.getState();
-  useProjectDashboardState.getState().update(projectId, { tab: "board" });
+  useProjectDashboardState.getState().update(projectId, { tab: "work" });
   app.openProjectDashboard(projectId);
   app.setView({ kind: "project-dashboard", projectId, epicId });
 }

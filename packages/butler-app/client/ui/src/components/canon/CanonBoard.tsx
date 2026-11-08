@@ -2,7 +2,8 @@ import { CanonTagChooser } from "./CanonTagChooser.tsx";
 import { useCanonTags } from "./useCanonTags.ts";
 import { CanonBoardPlanSelect } from "./CanonBoardPlanSelect.tsx";
 import { useCanonPlanSelection } from "./useCanonPlanSelection.ts";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { canonEpicPlan } from "./canonPlanSelection.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { CanonPlan } from "@/app/canonApi.ts";
 import { Box, Button, ButtonContainer, Grid, KanbanDragScope, KanbanLane, Plus, Stack, Typo } from "@/butler-ds";
@@ -31,6 +32,16 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
   const copy = appCopy.canon;
   const canon = board.canon?.project_id === projectId ? board.canon : null;
   const selection = useCanonPlanSelection(projectId, canon);
+  // A newly selected task brings its plan on screen, so a task opened from chat is seen in its lanes.
+  const shownFor = useRef<string | null>(null);
+  useEffect(() => {
+    const epic = selectionDetail.selected;
+    if (!epic) { shownFor.current = null; return; }
+    if (!canon || shownFor.current === epic) return;
+    shownFor.current = epic;
+    const plan = canonEpicPlan(canon, epic);
+    if (plan !== undefined && plan !== selection.id) selection.select(plan);
+  }, [canon, selectionDetail.selected, selection]);
   const selectedPlan = canon?.plans.find(plan => plan.id === selection.id);
   const cards = useMemo(() => new Map(canon ? canonCards(canon).map(card => [card.id, card]) : []), [canon]);
   return <Stack gap="lg" data-test-class="canon-board">

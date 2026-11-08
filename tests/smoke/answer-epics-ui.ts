@@ -95,13 +95,14 @@ async function captureCards(page: Page, theme: string) {
   const room = await first.evaluate(node => Number.parseFloat(getComputedStyle(node).getPropertyValue("--focus-ring-room")) || 4);
   await page.screenshot({ path: join(evidence, `chat-focus-${theme}.png`), clip: { x: box.x - room, y: box.y - room, width: box.width + room * 2, height: box.height + room * 2 } });
 }
-async function navigation(page: Page, keyboard: boolean) {
-  const card = page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item="docs"]').getByRole("button");
-  if (keyboard) { await card.focus(); await card.press("Enter"); } else await card.click();
+async function navigation(page: Page, open: () => Promise<void>, epicId: string) {
+  await open();
   await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
+  await page.getByRole("tab", { name: "보드", selected: true }).waitFor();
+  await page.locator('[data-test-class="project-dashboard-view"] [role="tabpanel"] [data-kanban-item="' + epicId + '"]').waitFor();
   assert.deepEqual(await page.evaluate(async () => {
     const { useButlerStore } = await import(/* @vite-ignore */ String("/epic-reference.tsx")); return useButlerStore.getState().view;
-  }), { kind: "project-dashboard", projectId: "butler", epicId: "docs" });
+  }), { kind: "project-dashboard", projectId: "butler", epicId });
 }
 try {
   await vite.listen(); const base = vite.resolvedUrls!.local[0];
@@ -150,8 +151,10 @@ try {
     await grid.screenshot({ path: join(evidence, `chat-${width}-${theme}-${wall}.png`) });
     if (width === 1440 && wall === "plain") await captureCards(page, theme);
   }
-  await navigation(page, false);
-  await open(page, base, 1440, "light", "plain"); await navigation(page, true);
+  const docsCard = () => page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item="docs"]').getByRole("button");
+  await navigation(page, () => docsCard().click(), "docs");
+  await open(page, base, 1440, "light", "plain");
+  await navigation(page, async () => { const card = docsCard(); await card.focus(); await card.press("Enter"); }, "docs");
   fixture = "proposal";
   for (const theme of ["light", "dark"]) {
     await open(page, base, 1440, theme, "plain");
@@ -175,6 +178,8 @@ try {
     await card.locator('xpath=ancestor::*[contains(normalize-space(.), "요청한 과제를 확인했습니다.")][1]').screenshot({ path: join(evidence, `receipt-${name}-${width}-${theme}.png`) });
   }
   fixture = "proposal";
+  await open(page, base, 1440, "light", "plain");
+  await navigation(page, () => page.locator('[data-test-class="canon-proposal-card"]').getByRole("button", { name: "열기", exact: true }).click(), "release");
   proposalState = "open";
   await open(page, base, 1440, "light", "plain");
   await page.locator('[data-test-class="canon-proposal-card"][data-state="open"]').waitFor();
