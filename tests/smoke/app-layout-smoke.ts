@@ -1867,6 +1867,7 @@ try {
       !modelMenuLayout.reasoningLabels.some((label) =>
         label.includes("reasoning"),
       ) &&
+      modelMenuLayout.resultsHeight >= 190 &&
       modelMenuLayout.resultsHeight <= 210 &&
       modelMenuLayout.searchFilterGap >= 7 &&
       modelMenuLayout.width <= 540,
