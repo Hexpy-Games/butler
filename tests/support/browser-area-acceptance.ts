@@ -20,7 +20,7 @@ export async function alignment(page: ElectronPage, main: Main, win: string, evi
         const w=${win};
         const dom=await w.webContents.executeJavaScript("(() => {const s=document.querySelector('[data-slot=native-view-slot]');const r=document.querySelector('[data-slot=native-view-frame]').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,covered:s.hasAttribute('data-occluded'),still:Boolean(s.querySelector('img'))}})()");
         const v=w.contentView.children.find(v=>'webContents' in v && v.webContents!==w.webContents);
-        return {dom,native:v?.getBounds() ?? null};
+        return {dom,native:v?.getVisible() ? v.getBounds() : null};
       })()`));
       await new Promise(done=>setTimeout(done, 25));
     }
