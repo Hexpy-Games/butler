@@ -30,13 +30,16 @@ const vite = await createServer({ server: { host: "127.0.0.1", port: 0 }, logLev
   resolveId(id) { if (id === "/epic-reference.tsx") return id; }, load(id) { if (id === "/epic-reference.tsx") return reference; },
 }] });
 let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
-let background = "plain", proposal = false, state: "ready" | "missing" | "error" = "ready";
+let background = "plain", state: "ready" | "missing" | "error" = "ready";
 const overview = structuredClone(epicOverview);
 let canonReads = 0, sharedReads = 0;
+let fixture: "answer" | "proposal" | "both" = "answer";
 let proposalState: "open" | "applied" = "applied";
+let markRenamed = () => {}, renamedServed = Promise.resolve();
 const errors: string[] = [];
 const message = (): MessageRecord => ({ id: "answer", chat_id: "butler-client", role: "assistant", status: "delivered", text: "요청한 과제를 확인했습니다.", created_at: "2026-11-02T08:00:00Z",
-  ...(proposal ? { canon_proposals: [{ proposal_id: "registration", turn_id: "turn", source_call_id: "create" }] } : { answer_blocks: [{ call_id: "epics", set_ids: [], spec: { v: 2, blocks: [{ type: "epics", project_id: "butler", ids: epicOrder }] } }] }) });
+  ...(fixture === "proposal" || fixture === "both" ? { canon_proposals: [{ proposal_id: "registration", turn_id: "turn", source_call_id: "create" }, ...(fixture === "both" ? [{ proposal_id: "renamed", turn_id: "turn", source_call_id: "rename" }] : [])] } : {}),
+  ...(fixture === "answer" || fixture === "both" ? { answer_blocks: [{ call_id: "epics", set_ids: [], spec: { v: 2, blocks: [{ type: "epics", project_id: "butler", ids: epicOrder }] } }] } : {}) });
 async function open(page: Page, base: string, width: number, theme: string, wall: string) {
   background = wall;
   await page.setViewportSize({ width, height: 1100 });
@@ -113,7 +116,9 @@ try {
       return ok(overview);
     }
     if (url.pathname === "/projects/butler/canon/sidebar") return ok({ project_id: "butler", groups: [] });
+    if (url.pathname === "/canon/proposals/renamed") { await route.fulfill({ json: { ok: true, data: { ...appliedProposal, proposal_id: "renamed", changes: [{ op: "epic.update", id: "docs", title: "문서 검토" }] } } }); markRenamed(); return; }
     if (url.pathname === "/canon/proposals/registration") {
+      if (fixture === "both") await renamedServed;
       if (route.request().method() === "POST") { proposalState = "applied"; return ok({ ok: true }); }
       return ok({ ...appliedProposal, state: proposalState });
     }
@@ -141,12 +146,24 @@ try {
   }
   await navigation(page, false);
   await open(page, base, 1440, "light", "plain"); await navigation(page, true);
-  proposal = true;
+  fixture = "proposal";
   for (const theme of ["light", "dark"]) {
     await open(page, base, 1440, theme, "plain");
     await page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item="release"]').waitFor();
     await page.locator('[data-test-class="canon-proposal-card"]').locator("..").screenshot({ path: join(evidence, `proposal-applied-${theme}.png`) });
   }
+  fixture = "both";
+  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) {
+    renamedServed = new Promise(resolve => { markRenamed = resolve; });
+    await open(page, base, width, theme, "plain");
+    await page.locator('[data-test-class="canon-proposal-card"][data-proposal-id="registration"]').waitFor();
+    await page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item="release"]').first().waitFor();
+    await page.locator('[data-test-class="canon-proposal-card"]').first().locator('xpath=ancestor::*[.//*[@data-test-class="answer-blocks"]][1]').screenshot({ path: join(evidence, `reply-and-receipt-${width}-${theme}.png`) });
+    assert.equal(await page.locator('[data-kanban-item="release"]').count(), 1, "a created epic the reply already shows renders once");
+    assert.equal(await page.locator('[data-test-class="chat-epic-cards"]').count(), 1, "the receipt adds no second grid");
+    assert.equal(await page.locator('[data-test-class="canon-proposal-card"]').count(), 1, "a reply's applied proposals share one receipt");
+  }
+  fixture = "proposal";
   proposalState = "open";
   await open(page, base, 1440, "light", "plain");
   await page.locator('[data-test-class="canon-proposal-card"][data-state="open"]').waitFor();
@@ -154,7 +171,7 @@ try {
   await page.getByRole("button", { name: "등록", exact: true }).click();
   await page.locator('[data-test-class="canon-proposal-card"][data-state="applied"]').waitFor();
   await page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item="release"]').waitFor();
-  proposal = false;
+  fixture = "answer";
   await open(page, base, 1440, "light", "plain");
   await page.locator('[data-kanban-item="release"]').waitFor();
   await page.evaluate(async () => {
