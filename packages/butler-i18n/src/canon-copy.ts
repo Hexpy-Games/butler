@@ -53,7 +53,7 @@ export interface CanonCopy {
   noEpics: string; noDescription: string; conversationFailed: string; epicPlaceholder: string;
   newInGroup: (group: string) => string; epicCount: (n: number) => string;
   epicCaption: (group: string) => string;
-  newEpic: string; newPlan: string; backlog: string; backlogDescription: string;
+  newEpic: string; newPlan: string; backlog: string;
   epic: string; title: string; description: string; optional: string; plan: string; assignee: string;
   none: string; me: string; cancel: string; create: string; save: string; edit: string; editPlan: string; close: string; dueOn: string;
   titlePlaceholder: string; descriptionPlaceholder: string; titleRequired: string;
@@ -70,7 +70,6 @@ export interface CanonCopy {
   tasks: (done: number, total: number) => string;
   due: (date: string) => string;
   ordinal: (n: number) => string;
-  backlogCount: (n: number) => string;
   moved: (plan: string) => string;
   personLabel: (name: string, self: boolean) => string;
   cardStatusChanged: (title: string, status: string) => string;
