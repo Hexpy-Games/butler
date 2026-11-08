@@ -34,8 +34,8 @@ export function withQuestionAnswers(messages: MessageRecord[], answers: readonly
   const completed = answers.filter(a => a.response.status === "answered");
   if (!completed.length) return messages;
   const messageIds = new Set(messages.map(m => m.id));
-  const followups = new Map(completed.map(a => [`question-followup-${a.request_ref}`, a]));
-  const remaining = completed.filter(answer => !messageIds.has(`question-followup-${answer.request_ref}`))
+  const followups = new Map(completed.map(a => [a.followup_message_id, a]));
+  const remaining = completed.filter(answer => !messageIds.has(answer.followup_message_id))
     .sort((left, right) => Date.parse(left.updated_at) - Date.parse(right.updated_at));
   let nextAnswer = 0;
   const result: MessageRecord[] = [];

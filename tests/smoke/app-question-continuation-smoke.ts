@@ -11,12 +11,26 @@ const texts = ["Before the first question.", "Before the second question.", "Bef
 // Background rounds (title, smart group) stream the same text but offer no tools; only the conversation turn does.
 const isConversation = (request: import("../support/native-app-server.ts").StubModelRequest) =>
   request.stream && Array.isArray(request.body.tools) && request.body.tools.length > 0 && JSON.stringify(request.messages).includes("Help me choose.");
+// A second request in the same chat: the question is answered later, after the reply ends.
+const later = { round: 0, input: "" };
+const isLater = (request: import("../support/native-app-server.ts").StubModelRequest) =>
+  request.stream && Array.isArray(request.body.tools) && request.body.tools.length > 0 && JSON.stringify(request.messages).includes("Help me plan.");
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 const server = await createNativeAppServer({
   uiRoot: process.env.BUTLER_SMOKE_UI_ROOT,
   config: { user: { name: "Smoke", language: "en" } },
-  stubReply: request => isConversation(request) ? (round++, round <= 3 ? "" : texts[3]) : "{}",
-  stubToolCall: request => isConversation(request) && round <= 3 ? { name: "ask_user", arguments: { questions: [{
+  stubReply: request => {
+    if (isLater(request)) {
+      later.round++;
+      if (later.round === 3) later.input = JSON.stringify(request.messages);
+      return ["", "Card is up.", "Got your answer."][later.round - 1] ?? "";
+    }
+    return isConversation(request) ? (round++, round <= 3 ? "" : texts[3]) : "{}";
+  },
+  stubToolCall: request => isLater(request) ? (later.round === 1 ? { name: "ask_user", arguments: { questions: [{
+    id: "platform", eyebrow: "Platform", title: "Where should it run?", kind: "single", allow_custom: false,
+    options: [{ id: "web", label: "Web" }, { id: "mobile", label: "Mobile" }],
+  }] } } : null) : isConversation(request) && round <= 3 ? { name: "ask_user", arguments: { questions: [{
     id: `format-${round}`, eyebrow: "Format", title: `Question ${round}?`, kind: "single", allow_custom: false,
     options: [{ id: "full", label: `Answer ${round}` }, { id: "brief", label: "Brief" }],
   }] } } : null,
@@ -29,6 +43,7 @@ async function transcript(page: import("playwright").Page, expected: string[]): 
   if (baseline) return;
   const rows = page.locator('[data-test-class~="message-list"] > article');
   const content = await rows.allTextContents();
+  assert(!content.some(row => row.includes("Answers to your deferred questions")), `no raw follow-up: ${JSON.stringify(content)}`);
   const indexes = expected.map(text => content.findIndex(row => row.includes(text)));
   assert(indexes.every((index, position) => index >= 0 && (position === 0 || index > indexes[position - 1])),
     `chronological distinct rows: ${JSON.stringify({ expected, content })}`);
@@ -83,7 +98,29 @@ try {
   await transcript(page, expected);
   assert.equal(round, 4, "exactly four stub rounds");
   await captureLayouts(page, "answered", expected, texts[3]);
-  console.log(JSON.stringify({ ok: true, service: "question-continuation", rounds: round, rows: expected.length, liveAndReload: true }));
+  // Answered later: the follow-up turn shows the answer card in place of the queued answer text.
+  await page.locator('[data-slot="composer-compact-preview"]').click();
+  await page.locator('[contenteditable="true"]').fill("Help me plan.");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const panel = page.locator('[data-slot="composer-question-panel"]');
+  await panel.getByText("Where should it run?", { exact: true }).waitFor();
+  await panel.getByRole("button", { name: "Answer later", exact: true }).click();
+  await page.getByText("Card is up.", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Answer pending", exact: true }).click();
+  await panel.getByText("Mobile", { exact: true }).click();
+  await page.getByText("Got your answer.", { exact: true }).waitFor();
+  expected.push("Help me plan.", "Card is up.", "Got your answer.");
+  const answered = page.locator('[data-slot="question-answer-card"]').filter({ hasText: "Mobile" });
+  await answered.waitFor();
+  await transcript(page, expected);
+  await page.reload();
+  await page.getByText("Got your answer.", { exact: true }).waitFor();
+  await answered.waitFor();
+  await transcript(page, expected);
+  assert.equal(await answered.count(), 1, "one answer card for the later answer");
+  assert(later.input.includes("Answers to your deferred questions") && later.input.includes('\\"mobile\\"'), "the model still receives the answers");
+  await captureLayouts(page, "answered-later", expected, "Got your answer.");
+  console.log(JSON.stringify({ ok: true, service: "question-continuation", rounds: round, laterRounds: later.round, rows: expected.length, liveAndReload: true }));
 } finally {
   await browser.close();
   await server.stop();
