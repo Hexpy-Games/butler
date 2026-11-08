@@ -13,7 +13,7 @@ export function CanonBoardPlanSelect({ plans, value, onChange, bottomInset = 0 }
     <PopoverTrigger asChild><SelectButton size="sm" aria-label={copy.plan}>
       {options.find(plan => plan.id === value)?.title ?? copy.backlog}
     </SelectButton></PopoverTrigger>
-    <PopoverContent align="start" density="list" collisionPadding={{ top: 56, right: 8, left: 8, bottom: bottomInset + 8 }}>
+    <PopoverContent align="start" data-menu-size="compact" collisionPadding={{ top: 56, right: 8, left: 8, bottom: bottomInset + 8 }}>
       <Stack gap="sm" data-test-class="canon-plan-chooser" aria-label={copy.plan}>
         <Typo.Label>{copy.plan}</Typo.Label>
         <Stack align="row" cross="center" gap="xs">
