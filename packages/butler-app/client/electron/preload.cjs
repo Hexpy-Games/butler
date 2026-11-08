@@ -1354,7 +1354,7 @@ const butlerApp = Object.freeze({
     body: JSON.stringify(request ?? {}),
   }),
   getModelCatalog: () => requestJson("/model-catalog"),
-  upsertProviderCredential: (request) => requestJson("/model-catalog/provider-credentials", {
+  upsertProviderCredential: (request) => requestBridgeResult("/model-catalog/provider-credentials", {
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
