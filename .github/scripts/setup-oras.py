@@ -1,16 +1,46 @@
 """Install only the checksum-verified official ORAS executable in job temp."""
 import hashlib
+import http.client
 import os
 from pathlib import Path
 import platform
 import subprocess
 import tarfile
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 
 VERSION = '1.2.3'
 RELEASE = f'https://github.com/oras-project/oras/releases/download/v{VERSION}'
+
+
+# A release download is idempotent and checksum-verified, so a transient
+# GitHub failure (5xx, 429, timeout, dropped connection) is retried.
+RETRY_DELAYS = (5, 15, 40, 90)
+
+
+def transient(error):
+    """Timeouts, resets, 429 and 5xx; other answers and TLS trust failures are final."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code >= 500 or error.code == 429
+    if isinstance(error, urllib.error.URLError):
+        return isinstance(error.reason, Exception) and transient(error.reason)
+    return isinstance(error, (TimeoutError, ConnectionError, http.client.IncompleteRead))
+
+
+def download(url):
+    for attempt, delay in enumerate((*RETRY_DELAYS, None), 1):
+        try:
+            with urllib.request.urlopen(url, timeout=120) as response:
+                return response.read()
+        except Exception as error:
+            if delay is None or not transient(error):
+                raise
+            print(f'Download of {url} failed ({error}); retrying in {delay} s '
+                  f'(attempt {attempt + 1} of {len(RETRY_DELAYS) + 1}).')
+            time.sleep(delay)
 
 
 def install():
@@ -21,10 +51,8 @@ def install():
     binary = 'oras.exe' if system == 'windows' else 'oras'
     root = Path(tempfile.mkdtemp(prefix='oras-', dir=os.environ['RUNNER_TEMP']))
     archive = root / asset
-    with urllib.request.urlopen(f'{RELEASE}/{asset}', timeout=120) as response:
-        archive.write_bytes(response.read())
-    with urllib.request.urlopen(f'{RELEASE}/oras_{VERSION}_checksums.txt', timeout=120) as response:
-        checksums = response.read().decode().splitlines()
+    archive.write_bytes(download(f'{RELEASE}/{asset}'))
+    checksums = download(f'{RELEASE}/oras_{VERSION}_checksums.txt').decode().splitlines()
     matches = [line.split()[0] for line in checksums if line.split()[-1] == asset]
     actual = hashlib.sha256(archive.read_bytes()).hexdigest()
     if len(matches) != 1 or actual != matches[0]:
