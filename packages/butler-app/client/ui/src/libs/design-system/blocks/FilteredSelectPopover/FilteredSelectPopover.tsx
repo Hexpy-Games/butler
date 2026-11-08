@@ -128,6 +128,7 @@ export function FilteredSelectPopover({
           ))}
         </div>
       ) : null}
+      <div className={styles.divider} data-slot="filtered-select-divider" />
       <ScrollArea
         className={dsClass(styles.results)}
         contentClassName={dsClass(styles.resultsContent)}

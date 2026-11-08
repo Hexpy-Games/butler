@@ -22,15 +22,17 @@ export async function verifyBoardSelector(page: Page, server: NativeAppServerHan
   await board.getByRole("button", { name: "계획", exact: true }).click();
   const chooser = planChooser(page);
   await chooser.waitFor();
-  const insets = await chooser.evaluate(element => {
-    const box = element.closest('[data-slot="popover-content"]')!.getBoundingClientRect();
-    const textLeft = (node: Element) => { const range = document.createRange(); range.selectNodeContents(node); return range.getBoundingClientRect().left; };
-    const rows = [...element.querySelectorAll('[data-slot="filtered-select-item"]')].map(row => row.getBoundingClientRect());
-    return { title: textLeft(element.firstElementChild!) - box.left, label: textLeft(element.querySelector('[data-slot="filtered-select-item"] span span')!) - box.left,
-      left: Math.min(...rows.map(row => row.left)) - box.left, right: box.right - Math.max(...rows.map(row => row.right)) };
+  const panel = await chooser.evaluate(element => {
+    const rect = (selector: string) => element.querySelector(selector)!.getBoundingClientRect();
+    const range = document.createRange(); range.selectNodeContents(element.firstElementChild!);
+    const popover = element.closest('[data-slot="popover-content"]')!.getBoundingClientRect();
+    const search = rect("input"), row = rect('[data-slot="filtered-select-item"]'), divider = rect('[data-slot="filtered-select-divider"]');
+    return { title: range.getBoundingClientRect().left - popover.left, start: search.left - popover.left, end: popover.right - search.right,
+      rowStart: row.left - popover.left, rowEnd: popover.right - row.right, above: divider.top - search.bottom, below: row.top - divider.bottom };
   });
-  assert(Math.abs(insets.title - insets.label) < 1, "Plan title lines up with the row labels");
-  assert(Math.abs(insets.left - insets.right) < 1, "Plan rows keep equal side insets");
+  assert([panel.title, panel.rowStart, panel.end, panel.rowEnd].every(inset => Math.abs(inset - panel.start) < 1),
+    `Title, search and rows share one panel inset: ${JSON.stringify(panel)}`);
+  assert(Math.abs(panel.above - panel.below) < 1 && panel.above >= 8, `The divider has equal space above and below: ${JSON.stringify(panel)}`);
   assert.equal(await chooser.locator('[data-slot="filtered-select-filters"], [data-slot="filtered-select-group-title"]').count(), 0,
     "Flat plan choices have no empty filter or group-title rows");
   assert.equal(await chooser.locator('[data-slot="filtered-select-item"]').last().innerText(), "백로그");
