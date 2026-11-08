@@ -5361,6 +5361,11 @@ License: https://github.com/seanmonstar/num_cpus/blob/342af76b486335e5a955c7314f
 Copyright (c) 2015-2025 Sean McArthur
 
 =====
+objc2-app-kit 0.3.2
+Zlib OR Apache-2.0 OR MIT
+License: https://crates.io/crates/objc2-app-kit/0.3.2
+
+=====
 objc2-core-foundation 0.3.2
 Zlib OR Apache-2.0 OR MIT
 License: https://crates.io/crates/objc2-core-foundation/0.3.2
