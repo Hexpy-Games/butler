@@ -124,6 +124,50 @@ pub(crate) fn screen(
         .as_ref()
         .filter(|model| model.bytes_total > 0)
         .map(|model| status::megabytes(model.bytes_total));
+    let cards = choices(copy, value, saving, size_mb, cx);
+    let readiness = view.readiness.clone();
+    let mut action = SetupWizardStepAction::new("first-run-memory-continue", copy.continue_)
+        .forward()
+        .on_click(cx.listener(move |view, _, _, cx| {
+            if let Some(enabled) = value {
+                let readiness = readiness.clone();
+                view.memory
+                    .update(cx, |memory, cx| memory.choose(enabled, readiness, cx));
+            }
+        }));
+    let enabled = !(value.is_none() || saving || waiting);
+    if !enabled {
+        action = action.disabled();
+    }
+    let mut tooltip = Tooltip::new("first-run-memory-waiting").side(Side::Top);
+    if waiting {
+        tooltip = tooltip.label(copy.prep_working);
+    }
+    step_card(view, view.step(cx).id(), copy.title, [cards], cx)
+        .description(copy.lede)
+        .on_back(
+            shared(view.lang).back,
+            cx.listener(|view, _, _, cx| view.back_to_consent(cx)),
+        )
+        .action(
+            crate::ui::widgets::control_anchor(
+                gpui::div().flex(),
+                "first-run-memory-continue",
+                enabled,
+            )
+            .child(tooltip.child(action)),
+        )
+        .into_any_element()
+}
+
+/// The two memory choices (`FirstRunMemory` cards).
+fn choices(
+    copy: &'static copy::Words,
+    value: Option<bool>,
+    saving: bool,
+    size_mb: Option<u64>,
+    cx: &mut Context<Onboarding>,
+) -> AnyElement {
     let state = if saving {
         ChoiceState::Disabled
     } else {
@@ -148,53 +192,15 @@ pub(crate) fn screen(
         .on_click(cx.listener(|view, _, _, cx| {
             view.memory.update(cx, |memory, cx| memory.pick(false, cx));
         }));
-    let readiness = view.readiness.clone();
-    let mut action = SetupWizardStepAction::new("first-run-memory-continue", copy.continue_)
-        .forward()
-        .on_click(cx.listener(move |view, _, _, cx| {
-            if let Some(enabled) = value {
-                let readiness = readiness.clone();
-                view.memory
-                    .update(cx, |memory, cx| memory.choose(enabled, readiness, cx));
-            }
-        }));
-    let enabled = !(value.is_none() || saving || waiting);
-    if !enabled {
-        action = action.disabled();
-    }
-    let mut tooltip = Tooltip::new("first-run-memory-waiting").side(Side::Top);
-    if waiting {
-        tooltip = tooltip.label(copy.prep_working);
-    }
-    step_card(
-        view,
-        view.step(cx).id(),
-        copy.title,
-        [ChoiceCardList::new()
-            .child(on)
-            .child(
-                crate::ui::widgets::control_anchor(
-                    gpui::div().flex().flex_col(),
-                    "first-run-memory-off",
-                    !saving,
-                )
-                .child(off),
+    ChoiceCardList::new()
+        .child(on)
+        .child(
+            crate::ui::widgets::control_anchor(
+                gpui::div().flex().flex_col(),
+                "first-run-memory-off",
+                !saving,
             )
-            .into_any_element()],
-        cx,
-    )
-    .description(copy.lede)
-    .on_back(
-        shared(view.lang).back,
-        cx.listener(|view, _, _, cx| view.back_to_consent(cx)),
-    )
-    .action(
-        crate::ui::widgets::control_anchor(
-            gpui::div().flex(),
-            "first-run-memory-continue",
-            enabled,
+            .child(off),
         )
-        .child(tooltip.child(action)),
-    )
-    .into_any_element()
+        .into_any_element()
 }
