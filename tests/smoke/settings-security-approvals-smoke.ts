@@ -139,7 +139,7 @@ async function runLocale(locale: "ko" | "en") {
         await screenshot(page, key, "conversation-input");
         if (!before) await screenshot(page, key, "default-permission");
         await open(page, server.url, appCopy.settings.sections.models, width);
-        if (!before) assert.deepEqual(await sectionIds(page), ["butler-model", "backup-models", "advanced-models"]);
+        if (!before) assert.deepEqual(await sectionIds(page), ["butler-model", "backup-models", "image-models", "advanced-models"]);
         await screenshot(page, key, "butler-model");
         if (before) { await screenshot(page, key, "saved-keys"); await screenshot(page, key, "permissions"); }
         await open(page, server.url, appCopy.settings.sections.security, width);
