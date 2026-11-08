@@ -26,7 +26,8 @@ export function ComposerQuestionPanel(props: ComposerQuestionPanelProps) {
 function QuestionPanelBody(props: ComposerQuestionPanelProps) {
   const panel = useRef<HTMLDivElement>(null);
   const { defer, deferring } = useQuestionDeferral(panel, props.onCollapse, props.state !== "collapsed");
-  const m = useQuestionPanel({ ...props, onCollapse: () => defer(), state: deferring ? "working" : props.state });
+  const later = props.onCollapse && (props.placement === "conversation" ? props.onCollapse : () => defer());
+  const m = useQuestionPanel({ ...props, onCollapse: later, state: deferring ? "working" : props.state });
   const previousStep = useRef(m.step);
   useEffect(() => {
     const tab = panel.current?.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
@@ -50,7 +51,7 @@ function QuestionPanelBody(props: ComposerQuestionPanelProps) {
     <ComposerPanelHeader icon={<ListChecks size="sm" aria-hidden="true" />} tabbed={questions.length > 1}
       eyebrow={m.review ? labels.review : m.question.header}
       title={<Typo.Label weight="medium" wrap="anywhere">{m.review ? labels.send : m.question.text}</Typo.Label>}
-      aside={<IconButton label={labels.later} disabled={m.busy} onClick={() => defer()}><Clock3 size="md" /></IconButton>} />
+      aside={later && <IconButton label={labels.later} disabled={m.busy} onClick={later}><Clock3 size="md" /></IconButton>} />
     <ComposerPanelBody single={questions.length === 1} dataSlot="question-options-scroll">
       {m.review ? <Stack gap="xs">{questions.map((q, i) => <Clickable key={q.id} disabled={m.busy} stretch className={dsClass(styles.option)} onClick={() => m.go(i)}>
         <Inline cross="start" wrap={false} grow><Stack grow minWidth="0" gap="none"><Typo.Caption tone="tertiary">{q.header}</Typo.Caption>

@@ -6,12 +6,11 @@ import type { AuthorityDecisionTransportView, UserQuestionResponse } from "@/app
 import type { QuestionAnswer, ComposerQuestionPanelProps } from "@/butler-ds";
 import { answerWire, questionProps } from "./userQuestions";
 
-export function useComposerQuestion(): { key: string; panel: ComposerQuestionPanelProps } | undefined {
+export function useComposerQuestion(): { key: string; waiting: boolean; panel: ComposerQuestionPanelProps } | undefined {
   useAppLocale();
   const sessionId = useButlerStore(s => s.activeChatId);
   const request = useButlerStore(s => s.sessionViews[s.activeChatId]?.pending_questions?.[0]
     ?? (s.sessionView?.session_id === s.activeChatId ? s.sessionView.pending_questions?.[0] : undefined));
-  const [collapsed, setCollapsed] = useState<string>();
   const [pending, setPending] = useState<string>();
   const [failed, setFailed] = useState<string>();
   const draft = useRef<{ key: string; answers: readonly QuestionAnswer[]; step: number } | undefined>(undefined);
@@ -32,10 +31,10 @@ export function useComposerQuestion(): { key: string; panel: ComposerQuestionPan
     } catch { setFailed(key); }
     finally { inFlight.current = undefined; setPending(undefined); }
   };
-  return { key, panel: { labels: appCopy.interfaceDetails.questionPanel, questions: questionProps(questions), state: pending === key ? "submitting" : failed === key ? "error" : (collapsed === key || (request.question_state === "deferred" && collapsed !== `expanded:${key}`)) ? "collapsed" : "open",
+  return { key, waiting: request.question_state === "pending", panel: { labels: appCopy.interfaceDetails.questionPanel, questions: questionProps(questions), state: pending === key ? "submitting" : failed === key ? "error" : "open",
     error: failed === key ? appCopy.interfaceDetails.decisionFailed : undefined,
     onSubmit: answers => void submit({ status: "answered", answers: answerWire(questions, answers) }), onSkip: () => void submit({ status: "answered", answers: answerWire(questions, []) }),
-    onCollapse: () => { setCollapsed(key); if (request.question_state !== "deferred") void submit({ status: "deferred" }); }, onExpand: () => setCollapsed(`expanded:${key}`),
+    onCollapse: request.question_state === "pending" ? () => void submit({ status: "deferred" }) : undefined,
     defaultAnswers: draft.current?.key === key ? draft.current.answers : undefined,
     defaultStep: draft.current?.key === key ? draft.current.step : undefined,
     onDraftChange: (answers, step) => { draft.current = { key, answers, step }; },
