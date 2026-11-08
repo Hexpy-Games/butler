@@ -54,6 +54,10 @@ impl ModelsPage {
             let _ = this.update(cx, |page, cx| page.go(&route, window, cx));
         });
         let root = cx.new(|cx| RootPage::new(ctx.clone(), navigate.clone(), window, cx));
+        ctx.set_subpage(
+            Some(title::subpage(&ModelRoute::Root, navigate.clone())),
+            cx,
+        );
         Self {
             ctx,
             navigate,
@@ -79,7 +83,7 @@ impl ModelsPage {
             }
         };
         self.ctx
-            .set_subpage(title::subpage(route, self.navigate.clone()), cx);
+            .set_subpage(Some(title::subpage(route, self.navigate.clone())), cx);
         cx.notify();
     }
 }

@@ -120,7 +120,8 @@ fn rows(children: Vec<AnyElement>, flush: bool, cx: &App) -> gpui::Div {
 }
 
 /// `content` in a scroller of at most `max` high, with the edge fades and `--focus-ring-room`
-/// around the rows so a ring is never clipped.
+/// beside the rows so a ring is never clipped. `.scroller` has no padding: the first row starts
+/// at the list's top edge and `max` holds the rows alone.
 fn capped(
     id: &ElementId,
     content: gpui::Div,
@@ -134,7 +135,7 @@ fn capped(
         ds.len(Length::ScrollFadeSize),
         ds.len(Length::SpaceXs),
     );
-    let column = div().w_full().py(edge).px(room).child(content);
+    let column = div().w_full().px(room).child(content);
     let area = div()
         .flex()
         .flex_col()

@@ -2,7 +2,7 @@
 use butler_ds::ui::context::Lang;
 use butler_ds::ui::layout::{Cross, Justify, Space, Stack};
 use butler_ds::ui::typo::{Tone, Typo};
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, Timelike as _};
 use gpui::{IntoElement, ParentElement as _};
 use serde::Deserialize;
 use serde_json::Value;
@@ -105,16 +105,28 @@ fn duration(ms: f64) -> String {
     }
 }
 
-/// `formatTimestamp`: the local date and time; the raw text when it does not parse.
+/// `formatTimestamp`: the local date and time; the raw text when it does not parse. Both
+/// locales' `Intl.DateTimeFormat` default to a 12-hour clock with two-digit fields.
 fn timestamp(value: &str, lang: Lang) -> String {
     let Ok(at) = DateTime::parse_from_rfc3339(value) else {
         return value.to_owned();
     };
-    let format = match lang {
-        Lang::Ko => "%Y. %m. %d. %H:%M:%S",
-        Lang::En => "%m/%d/%Y, %H:%M:%S",
-    };
-    at.with_timezone(&Local).format(format).to_string()
+    let at = at.with_timezone(&Local);
+    let afternoon = at.hour() >= 12;
+    match lang {
+        Lang::Ko => {
+            let half = if afternoon { "오후" } else { "오전" };
+            format!(
+                "{} {half} {}",
+                at.format("%Y. %m. %d."),
+                at.format("%I:%M:%S")
+            )
+        }
+        Lang::En => {
+            let half = if afternoon { "PM" } else { "AM" };
+            format!("{} {half}", at.format("%m/%d/%Y, %I:%M:%S"))
+        }
+    }
 }
 
 pub(super) fn card(event: &Event, lang: Lang, copy: &Words) -> impl IntoElement {

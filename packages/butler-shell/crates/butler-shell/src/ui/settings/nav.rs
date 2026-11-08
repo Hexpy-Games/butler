@@ -9,7 +9,7 @@ use butler_ds::ui::scroll::ScrollArea;
 use butler_ds::ui::separator::{Separator, SeparatorTone};
 use butler_ds::ui::text::{Input, InputVariant};
 use butler_ds::ui::typo::Typo;
-use gpui::{AnyElement, Context, IntoElement as _, ParentElement as _};
+use gpui::{AnyElement, Context, IntoElement as _, ParentElement as _, Styled as _, div};
 
 use super::sections::{self, Group, SectionId};
 use super::{SettingsEvent, SettingsView};
@@ -60,6 +60,7 @@ pub(super) fn settings_sidebar(
                 SettingsNavItem::new(id.id(), id.copy(lang).label)
                     .glyph(id.icon())
                     .active(id == active)
+                    .probe(format!("settings-nav-{}", id.id()))
                     .on_select(cx.listener(move |this, _, window, cx| this.show(id, window, cx)))
             })
             .collect();
@@ -76,9 +77,18 @@ pub(super) fn settings_sidebar(
         .child(Stack::new().gap(Space::None).child(search))
         .children(empty)
         .child(
-            ScrollArea::new("settings-navigation-scroll")
-                .fill()
-                .child(list),
+            // The scroll port, named for the harness: a click centres its row in it first, as
+            // Electron's `scrollIntoView({block: "center"})` does.
+            crate::ui::widgets::anchor(div(), "settings-nav-scroll")
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_h_0()
+                .child(
+                    ScrollArea::new("settings-navigation-scroll")
+                        .fill()
+                        .child(list),
+                ),
         )
         .into_any_element()
 }

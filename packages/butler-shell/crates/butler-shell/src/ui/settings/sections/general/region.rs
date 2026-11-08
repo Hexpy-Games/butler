@@ -105,7 +105,7 @@ fn timezone(
         .width(Width::Fixed)
         .results_max_rows(6.5);
     let shown = current.replace('_', " ");
-    let trigger = popover.trigger(|toggle| {
+    let trigger = popover.trigger_fill(|toggle| {
         SelectButton::new("timezone-trigger")
             .text(shown)
             .on_click(toggle.on_click())

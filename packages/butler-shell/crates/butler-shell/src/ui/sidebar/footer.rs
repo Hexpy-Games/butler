@@ -24,9 +24,11 @@ impl Shell {
     }
     /// `SidebarSettingsItem`: opens General.
     fn sidebar_settings_item(&self, cx: &Context<Self>) -> AnyElement {
-        NavRow::new("settings", self.theme.strings.settings)
+        let row = NavRow::new("settings", self.theme.strings.settings)
             .glyph(Icon::Settings)
-            .on_click(cx.listener(|s, _, window, cx| s.open_settings("general", window, cx)))
+            .on_click(cx.listener(|s, _, window, cx| s.open_settings("general", window, cx)));
+        crate::ui::widgets::anchor(div().w_full(), "sidebar-settings")
+            .child(row)
             .into_any_element()
     }
     fn sidebar_update_item(

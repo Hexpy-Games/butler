@@ -79,6 +79,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         | "size"
         | "click"
         | "drag"
+        | "reveal"
         | "expect-anchor"
         | "expect-no-anchor"
         | "expect-scale"

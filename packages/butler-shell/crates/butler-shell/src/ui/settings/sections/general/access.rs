@@ -94,7 +94,7 @@ pub(super) fn field(
     let glyph = access_mode_icon(value, IconSize::Sm, ds);
     let name = access_label(value, ds.lang());
     let trigger_id = SharedString::from(format!("{}-trigger", spec.id));
-    let trigger = popover.trigger(|toggle| {
+    let trigger = popover.trigger_fill(|toggle| {
         SelectButton::new(trigger_id)
             .child(
                 Inline::new()

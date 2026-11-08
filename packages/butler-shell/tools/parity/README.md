@@ -41,6 +41,9 @@ A scene may set `reply` (the stub model's text) and `toolCalls` (stub tool calls
 A scene may also set `ready` (`authority_requests`, `pending_questions` or `artifacts`:
 what `/session-view` must show before capture) and `steps` (`{click: anchor}` / `{expect: anchor}`,
 run in order before each screenshot on both sides; Electron uses the anchor's `electron` selector).
+Electron's click centres its target in its scroll port first (`scrollIntoView({block: "center"})`);
+an anchor that sits in a scroll port names that port's gpui anchor as `scroll`, and the native side
+centres it there (`reveal`) before the click. The native capture waits until two frames match.
 
 For gpui-to-gpui review, run `parity-diff <dirA> <dirB> <outDir>` directly. Exact
 RGBA differences are counted. Different dimensions and missing pairs are printed;

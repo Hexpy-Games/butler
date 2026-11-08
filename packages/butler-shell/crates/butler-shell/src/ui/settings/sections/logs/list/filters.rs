@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-use butler_ds::ui::label::Label;
+use butler_ds::ui::field::{Field, FieldLabel};
 use butler_ds::ui::layout::{Inline, Space, Stack};
 use butler_ds::ui::native_select::NativeSelect;
 use butler_ds::ui::switch::Switch;
@@ -141,9 +141,9 @@ impl LogList {
 
     fn live_switch(&self, copy: &'static LogsCopy, view: &Entity<Self>) -> AnyElement {
         let view = view.clone();
-        Inline::new()
-            .gap(Space::Xs)
-            .child(Label::new().child(SharedString::from(copy.live)))
+        // `<Field><FieldLabel>…</FieldLabel><Switch /></Field>`: a vertical field.
+        Field::new("logs-live-field")
+            .child(FieldLabel::new().child(SharedString::from(copy.live)))
             .child(
                 Switch::new("logs-live")
                     .checked(self.live)

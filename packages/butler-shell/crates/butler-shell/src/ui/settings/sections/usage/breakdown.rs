@@ -7,6 +7,7 @@ use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::clickable::{Bleed, Clickable};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::layout::{Box as DsBox, Cross, Justify, MinWidth, Space, Stack, WithItem as _};
+use butler_ds::ui::separator::Separator;
 use butler_ds::ui::skeleton::SkeletonRows;
 use butler_ds::ui::tabs::{ListVariant, Tabs, TabsList, Trigger};
 use butler_ds::ui::typo::{Tone, Typo};
@@ -194,9 +195,27 @@ impl UsagePage {
             };
             rows(&tool_rows, &list)
         };
-        Tabs::new("usage-breakdown")
-            .gap(Space::Md)
-            .default_value("chats")
+        let panel = match self.tab.as_ref() {
+            "models" => models,
+            "tools" => tools,
+            _ => chats,
+        };
+        self.tabbed(words, panel, cx)
+    }
+
+    /// `<Stack gap="none"><TabsList variant="line" /><Separator /></Stack>`, then the panel
+    /// `gap="md"` below: the rule sits between the list and the panel, so the page holds the
+    /// open tab and shows its panel under the rule.
+    fn tabbed(&self, words: &Words, panel: AnyElement, cx: &mut Context<Self>) -> AnyElement {
+        let page = cx.entity().downgrade();
+        let tabs = Tabs::new("usage-breakdown")
+            .value(self.tab.clone())
+            .on_value_change(move |value, _, cx| {
+                let _ = page.update(cx, |this, cx| {
+                    this.tab = value.to_owned().into();
+                    cx.notify();
+                });
+            })
             .list(
                 TabsList::new(words.trend)
                     .variant(ListVariant::Line)
@@ -205,10 +224,16 @@ impl UsagePage {
                         Trigger::new("models", words.models),
                         Trigger::new("tools", words.tools),
                     ]),
+            );
+        Stack::new()
+            .gap(Space::Md)
+            .child(
+                Stack::new()
+                    .gap(Space::None)
+                    .child(tabs)
+                    .child(Separator::new()),
             )
-            .panel("chats", chats)
-            .panel("models", models)
-            .panel("tools", tools)
+            .child(panel)
             .into_any_element()
     }
 

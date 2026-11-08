@@ -1,5 +1,6 @@
-//! The header line of the add, edit and management routes (`ModelSettingsTitle.tsx`): Back and
-//! the trail "Models > Model management > page". At the root there is none.
+//! The header line of the models routes (`ModelSettingsTitle.tsx`): Back and the trail
+//! "Models > Model management > page". At the root the line keeps its room but is hidden
+//! (`invisible={hidden}`), so the page starts at the same height on every route.
 use std::rc::Rc;
 
 use butler_ds::ui::blocks::breadcrumb::{
@@ -8,7 +9,7 @@ use butler_ds::ui::blocks::breadcrumb::{
 };
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon_button::IconButton;
-use butler_ds::ui::layout::{Cross, Space, Stack};
+use butler_ds::ui::layout::{Cross, Space, Stack, WithItem as _};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _};
 
 use super::root::copy;
@@ -36,18 +37,20 @@ impl Page {
     }
 }
 
-/// The section's subpage for a route; `None` at the root.
-pub(super) fn subpage(route: &ModelRoute, navigate: Navigate) -> Option<Subpage> {
-    let (key, page) = match route {
-        ModelRoute::Root => return None,
-        ModelRoute::Management => ("models/management", Page::Management),
-        ModelRoute::Add => ("models/add", Page::Add),
-        ModelRoute::Edit(_) => ("models/edit", Page::Edit),
+/// The section's header line for a route. React keys the page by the section alone
+/// (`pageKey={activeSection}`), so every route keeps the `models` key.
+pub(super) fn subpage(route: &ModelRoute, navigate: Navigate) -> Subpage {
+    // `pageTitle`: the root falls through to the add title, hidden.
+    let (page, hidden) = match route {
+        ModelRoute::Root => (Page::Add, true),
+        ModelRoute::Management => (Page::Management, false),
+        ModelRoute::Add => (Page::Add, false),
+        ModelRoute::Edit(_) => (Page::Edit, false),
     };
-    Some(Subpage {
-        key: key.into(),
-        secondary: Rc::new(move |_, cx| trail(page, &navigate, cx)),
-    })
+    Subpage {
+        key: SectionId::Models.id().into(),
+        secondary: Rc::new(move |_, cx| trail(page, hidden, &navigate, cx)),
+    }
 }
 
 /// A trail step that goes to `route`.
@@ -65,7 +68,7 @@ fn step(
     )
 }
 
-fn trail(page: Page, navigate: &Navigate, cx: &App) -> AnyElement {
+fn trail(page: Page, hidden: bool, navigate: &Navigate, cx: &App) -> AnyElement {
     let lang = Ds::get(cx).lang();
     let words = copy::words(lang);
     let models = SectionId::Models.copy(lang).label;
@@ -97,10 +100,10 @@ fn trail(page: Page, navigate: &Navigate, cx: &App) -> AnyElement {
     let list = list
         .child(BreadcrumbSeparator::new())
         .child(BreadcrumbItem::new().child(BreadcrumbPage::new().child(title)));
-    Stack::row()
+    let line = Stack::row()
         .cross(Cross::Center)
         .gap(Space::Sm)
         .child(back)
-        .child(Breadcrumb::new(words.breadcrumb).child(list))
-        .into_any_element()
+        .child(Breadcrumb::new(words.breadcrumb).child(list));
+    if hidden { line.invisible() } else { line }.into_any_element()
 }

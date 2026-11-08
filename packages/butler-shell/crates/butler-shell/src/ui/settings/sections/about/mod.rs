@@ -1,5 +1,5 @@
 //! Settings: About (`AboutSettings.tsx`, `DiagnosticsExportField.tsx`, `OpenSourceLicenses.tsx`).
-//! The app info is read from `/app-info`; the developer mode switch saves `diagnostics_enabled`
+//! The app describes itself (`/app-info`); the developer mode switch saves `diagnostics_enabled`
 //! and the frame shows or hides Logs.
 mod copy;
 mod diagnostics;
@@ -10,20 +10,17 @@ use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::inline_reference::InlineReference;
 use butler_ds::ui::tooltip::Tooltip;
-use butler_shell_client::Error;
 use gpui::{
     AnyView, App, AppContext as _, Context, IntoElement, ParentElement as _, Render, Window,
 };
-use serde::Deserialize;
 use serde_json::json;
 
 use self::copy::{Words, words};
 use crate::ui::settings::controls::SettingsSwitch;
-use crate::ui::settings::state::{Load, fetch};
+use crate::ui::settings::state::Load;
 use crate::ui::settings::{Save, SectionCtx};
 
 /// `AppInfoView`: the fields the page shows.
-#[derive(Deserialize)]
 struct AppInfo {
     name: Option<String>,
     repository_url: Option<String>,
@@ -53,15 +50,16 @@ impl AboutPage {
         page
     }
 
+    /// `api.ts` answers `GET /app-info` from the desktop bridge, not the agent: the app
+    /// describes itself (`main.mjs` `appInfoView`). The shell is that app.
     fn load(&mut self, cx: &mut Context<Self>) {
-        self.info = Load::Loading;
-        fetch(
-            cx,
-            |client| async move { client.get_app_info().await },
-            |this: &mut Self, result: Result<AppInfo, Error>, _| {
-                this.info = result.map_or(Load::Failed, Load::Ready);
-            },
-        );
+        self.info = Load::Ready(AppInfo {
+            name: Some("Butler".to_owned()),
+            repository_url: Some("https://github.com/Hexpy-Games/butler".to_owned()),
+            protocol_version: Some("butler.app.v1".to_owned()),
+            developer_mode_available: Some(true),
+        });
+        cx.notify();
     }
 }
 

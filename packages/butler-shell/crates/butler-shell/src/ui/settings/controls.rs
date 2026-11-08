@@ -19,7 +19,7 @@ use butler_ds::ui::tooltip::{Side, Tooltip};
 use butler_ds::ui::typo::{Tone, Typo, Wrap};
 use gpui::{
     AnyElement, App, ElementId, Entity, Focusable as _, IntoElement, ParentElement as _,
-    RenderOnce, SharedString, Window, div,
+    RenderOnce, SharedString, Styled as _, Window, div,
 };
 
 use crate::ui::Icon;
@@ -282,7 +282,15 @@ impl RenderOnce for SettingsSelect {
                         .min_width(MinWidth::Zero)
                         .child(control),
                 )
-                .child(StackItem::new().shrink(false).child(action))
+                // React's item holds an inline-flex button whose line box is exactly the
+                // button (its text baseline sits inside it). Laid out as a flex item here, the
+                // button keeps that height: gpui's inline-flex baseline is the box's bottom, so
+                // the strut's descent would add a few px below it.
+                .child(
+                    StackItem::new()
+                        .shrink(false)
+                        .child(div().flex().child(action)),
+                )
                 .into_any_element(),
             None => control.into_any_element(),
         };

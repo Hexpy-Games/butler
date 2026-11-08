@@ -122,7 +122,7 @@ async function runScene(scene: Scene) {
     await app.main(`${app.win}.webContents.debugger.attach('1.3')`);
     for (const theme of themes) for (const size of sizes) {
       const name = await capture(app, scene, anchors, size, theme);
-      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "chat" in scene.open ? seeded.chat : undefined, anchors.map(item => item.anchor), scene.steps);
+      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "chat" in scene.open ? seeded.chat : undefined, anchors, scene.steps);
     }
   } finally {
     releaseReply?.();

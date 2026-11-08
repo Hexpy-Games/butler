@@ -56,11 +56,22 @@ fn loaded_at(updated_at: &str, lang: Lang) -> Option<String> {
     let at = chrono::DateTime::parse_from_rfc3339(updated_at)
         .ok()?
         .with_timezone(&chrono::Local);
-    let format = match lang {
-        Lang::Ko => "%Y. %-m. %-d. %H:%M:%S",
-        Lang::En => "%-m/%-d/%Y, %-I:%M:%S %p",
-    };
-    Some(at.format(format).to_string())
+    // Both locales default to a 12-hour clock; Korean names the half of the day first.
+    Some(match lang {
+        Lang::Ko => {
+            let half = if at.format("%p").to_string() == "PM" {
+                "오후"
+            } else {
+                "오전"
+            };
+            format!(
+                "{} {half} {}",
+                at.format("%Y. %-m. %-d."),
+                at.format("%-I:%M:%S")
+            )
+        }
+        Lang::En => at.format("%-m/%-d/%Y, %-I:%M:%S %p").to_string(),
+    })
 }
 
 struct PersonalizationPage {

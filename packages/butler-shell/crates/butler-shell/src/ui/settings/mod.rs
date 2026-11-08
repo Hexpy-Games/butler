@@ -261,9 +261,13 @@ impl Render for SettingsView {
             .subpage
             .as_ref()
             .map(|subpage| (subpage.key.clone(), subpage.secondary.clone()));
-        // React orders pages by index and a subpage at index + 0.5; the DS order is whole.
+        // React orders pages by index and a page keyed under the section (a log trace) at
+        // index + 0.5; the DS order is whole.
+        let nested = subpage
+            .as_ref()
+            .is_some_and(|(key, _)| key.as_ref() != self.section.id());
         let order = index.map_or(-1, |index| i32::try_from(index).unwrap_or(i32::MAX / 4)) * 2
-            + i32::from(subpage.is_some());
+            + i32::from(nested);
         let key: SharedString = subpage
             .as_ref()
             .map_or_else(|| self.section.id().into(), |(key, _)| key.clone());
@@ -290,11 +294,17 @@ impl Render for SettingsView {
             .detail_navigation(back)
             .sidebar(sidebar)
             .detail_header(header)
-            .detail(self.page.clone());
+            .detail(
+                crate::ui::widgets::anchor(
+                    div().w_full(),
+                    &format!("settings-page-{}", self.section.id()),
+                )
+                .child(self.page.clone()),
+            );
         if let Some(description) = description {
             shell = shell.page_description(description);
         }
-        div()
+        crate::ui::widgets::anchor(div(), "settings")
             .track_focus(&self.focus)
             .key_context("Settings")
             .on_key_down(cx.listener(|_, event, window, cx| Self::on_key(event, window, cx)))

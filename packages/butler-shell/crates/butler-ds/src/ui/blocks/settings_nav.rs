@@ -4,8 +4,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, Styled as _, Window, div,
+    AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement,
+    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div,
 };
 
 use super::nav_row::NavRow;
@@ -26,6 +26,7 @@ pub struct SettingsNavItem {
     mark: Option<Mark>,
     active: bool,
     badge: Option<SharedString>,
+    probe: Option<SharedString>,
     on_select: Option<Handler>,
 }
 
@@ -37,6 +38,7 @@ impl SettingsNavItem {
             mark: None,
             active: false,
             badge: None,
+            probe: None,
             on_select: None,
         }
     }
@@ -60,6 +62,12 @@ impl SettingsNavItem {
     /// Text (a number), never colour alone.
     pub fn badge(mut self, badge: impl Into<SharedString>) -> Self {
         self.badge = Some(badge.into());
+        self
+    }
+
+    /// Names the row for the screenshot harness's geometry selector.
+    pub fn probe(mut self, name: impl Into<SharedString>) -> Self {
+        self.probe = Some(name.into());
         self
     }
 
@@ -124,7 +132,15 @@ impl RenderOnce for SettingsNav {
             if let Some(handler) = item.on_select {
                 row = row.on_click(move |event, window, cx| handler(event, window, cx));
             }
-            section = section.child(row);
+            section = match item.probe {
+                Some(name) => section.child(
+                    div()
+                        .w_full()
+                        .debug_selector(move || name.to_string())
+                        .child(row),
+                ),
+                None => section.child(row),
+            };
         }
         // `.nav { width: 100%; min-width: 0 }`
         div().w_full().min_w_0().child(section)

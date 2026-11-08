@@ -1,7 +1,9 @@
 import type { NativeAppServerHandle } from "../../../../tests/support/native-app-server.ts";
 import { waitBrowser } from "../../../../tests/support/browser-agent-app.ts";
 
-export type Anchor = { anchor: string; electron: string };
+/** `scroll` names the gpui anchor of the scroll port the anchor sits in: before a click the native
+ * side centres the anchor in it, as Electron's click does (`scrollIntoView({block: "center"})`). */
+export type Anchor = { anchor: string; electron: string; scroll?: string };
 export type Box = { anchor: string; x: number; y: number; w: number; h: number };
 export type Scene = {
   name: string;

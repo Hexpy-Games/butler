@@ -6,8 +6,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    SharedString, Styled as _, Window, div, prelude::FluentBuilder as _,
+    AnyElement, App, Bounds, ClickEvent, Element, ElementId, GlobalElementId, InspectorElementId,
+    InteractiveElement as _, IntoElement, LayoutId, ParentElement, Pixels, RenderOnce,
+    SharedString, Styled as _, Window, div, point, prelude::FluentBuilder as _, px,
 };
 
 use crate::tokens::{Color, Length};
@@ -299,8 +300,8 @@ impl RenderOnce for SettingsSection {
     }
 }
 
-/// A settings page: sections `--settings-section-gap` apart, plus an optional footer. The
-/// footer's stickiness belongs to the detail scroll area that hosts the page.
+/// A settings page: sections `--settings-section-gap` apart, plus an optional footer that sticks
+/// to the bottom of the scroll area showing the page (`.footer { position: sticky; bottom: 0 }`).
 #[derive(IntoElement)]
 pub struct SettingsPage {
     labels: SettingsSectionLabels,
@@ -357,14 +358,82 @@ impl RenderOnce for SettingsPage {
                     .map(|section| section.with_labels(&labels)),
             )
             .children(self.footer.map(|footer| {
-                div()
-                    .flex()
-                    .justify_end()
-                    .py(ds.len(Length::SpaceMd))
-                    .border_t(ds.len(Length::BorderHairline))
-                    .border_color(ds.color(Color::Line))
-                    .bg(ds.color(Color::SettingsBg))
-                    .child(footer)
+                StickyBottom(
+                    div()
+                        .flex()
+                        .justify_end()
+                        .py(ds.len(Length::SpaceMd))
+                        .border_t(ds.len(Length::BorderHairline))
+                        .border_color(ds.color(Color::Line))
+                        .bg(ds.color(Color::SettingsBg))
+                        .child(footer)
+                        .into_any_element(),
+                )
             }))
+    }
+}
+
+/// `position: sticky; bottom: 0`: laid out where it falls, but while that runs past the bottom
+/// of the area that clips it (the scroll port), drawn against that bottom edge instead, over the
+/// content it covers. It is the page's last child, so it never lifts above the page.
+struct StickyBottom(AnyElement);
+
+impl IntoElement for StickyBottom {
+    type Element = Self;
+
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl Element for StickyBottom {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, ()) {
+        (self.0.request_layout(window, cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        &mut (): &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let port = window.content_mask().bounds;
+        let lift = (bounds.bottom() - port.bottom()).max(px(0.));
+        window.with_element_offset(point(px(0.), -lift), |window| {
+            self.0.prepaint(window, cx);
+        });
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        &mut (): &mut (),
+        &mut (): &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.0.paint(window, cx);
     }
 }

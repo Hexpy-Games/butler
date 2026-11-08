@@ -71,6 +71,8 @@ struct UsagePage {
     selection: Option<(String, usize)>,
     emphasis: Option<Emphasis>,
     picker: Picker,
+    /// The breakdown's open tab (`Tabs defaultValue="chats"`).
+    tab: gpui::SharedString,
     /// `useLastQuota`: the last good quota of each provider.
     last_quota: HashMap<String, Quota>,
     toast: Option<ToastId>,
@@ -105,6 +107,7 @@ impl UsagePage {
             },
             last_quota: HashMap::new(),
             toast: None,
+            tab: "chats".into(),
             _settings: settings,
         };
         page.load_range(cx);
