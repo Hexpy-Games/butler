@@ -253,8 +253,9 @@ fn shimmer_text(
         .text_size(size)
         .line_height(line_height)
         .text_color(secondary)
-        .child(text.clone());
+        .child(div().child(text.clone()));
     if Loop::Decorative.runs(ds) {
+        let mut overlay = div().absolute().top_0().left_0().size_full();
         let timing = Timing::linear(ds.duration(crate::tokens::Duration::ShimmerDuration));
         for (at, character) in text.char_indices() {
             for bounds in line
@@ -278,9 +279,10 @@ fn shimmer_text(
                             .text_color(primary)
                             .child(text.clone()),
                     );
-                el = el.child(copy.motion(sweep(x, start, &timing)));
+                overlay = overlay.child(copy.motion(sweep(x, start, &timing)));
             }
         }
+        el = el.child(overlay);
     }
     el.into_any_element()
 }
