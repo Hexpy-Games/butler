@@ -196,10 +196,7 @@
 }
 
 .results {
-  max-height: min(
-    calc(var(--filtered-select-results-max-rows, 6.65) * 30px),
-    42vh
-  );
+  height: min(calc(var(--filtered-select-results-max-rows, 6.65) * 30px), 42vh);
   min-width: 0;
 }
 
@@ -212,17 +209,6 @@
 .divider + .results,
 .results + .divider {
   margin-top: calc(-1 * var(--space-sm));
-}
-
-/* Last in the panel, the results end on the panel padding, so the space
-   after the last row matches the space above the title. They keep
-   --focus-ring-room for the last row's ring and give it back below. */
-.root .results:last-child {
-  margin-bottom: calc(-1 * var(--focus-ring-room));
-}
-
-.root .results:last-child .resultsContent {
-  padding-block-end: var(--focus-ring-room);
 }
 
 .divider {
