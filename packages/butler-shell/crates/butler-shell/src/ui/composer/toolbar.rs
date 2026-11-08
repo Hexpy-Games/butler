@@ -36,7 +36,7 @@ impl Composer {
         let draft = ComposerState::read(cx, |draft| draft.text.trim().to_owned());
         let empty = draft.is_empty();
         let line: SharedString = if empty {
-            self.placeholder.into()
+            self.theme.strings.placeholder.into()
         } else {
             draft.into()
         };

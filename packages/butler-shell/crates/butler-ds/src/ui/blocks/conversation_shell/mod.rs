@@ -231,7 +231,7 @@ impl RenderOnce for ConversationShell {
             composer_reserve: self.composer_reserve,
             glide,
         };
-        let aside_layers = aside::render(&slot, width, window, cx);
+        let aside_layers = aside::render(&slot, (width, f32::from(size.height)), window, cx);
         let ds = Ds::get(cx);
         let backdrop = self.background.take().map(|layer| {
             div()

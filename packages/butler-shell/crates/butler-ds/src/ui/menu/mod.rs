@@ -288,7 +288,7 @@ impl Menu {
         });
         let ds = Ds::get(cx);
         let side = shown.map_or(spec.side, |resolved| resolved.side);
-        let animated = motion::animate(
+        let animated = motion::animate_glass(
             &format!("{}-menu", self.id),
             phase,
             side,

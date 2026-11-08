@@ -143,7 +143,7 @@ fn panel(
     (layout, on): (AsideLayout, bool),
     ds: &Ds,
     scroller: AnyElement,
-    shell_w: f32,
+    (shell_w, shell_h, alpha): (f32, f32, f32),
 ) -> AnyElement {
     let mut aside = div().absolute().flex().flex_col().min_h_0();
     // The open aside takes the pointer over the conversation under it, as the topmost DOM box
@@ -168,19 +168,22 @@ fn panel(
                 wanted
             };
             let bottom = (slot.composer_reserve - space(Length::SpaceSm)).max(0.);
+            // `.asideGlass { height: 100% }`: the glass fills the panel between its insets.
+            let height = (shell_h - slot.top - bottom).max(0.);
             aside
                 .top(px(slot.top))
                 .right(ds.len(Length::SpaceSm))
                 .bottom(px(bottom))
                 .w(px(width))
-                .child(floating_glass(scroller))
+                .child(floating_glass(scroller, (height, alpha)))
                 .into_any_element()
         }
     }
 }
 
 /// The glass is the floating aside's only surface: it fills the panel, its scroller inside.
-fn floating_glass(scroller: AnyElement) -> AnyElement {
+/// `alpha` is its presence: the glass materializes with it and only the content fades.
+fn floating_glass(scroller: AnyElement, (height, alpha): (f32, f32)) -> AnyElement {
     div()
         .size_full()
         .flex()
@@ -190,6 +193,8 @@ fn floating_glass(scroller: AnyElement) -> AnyElement {
             TintedGlass::new()
                 .radius(GlassRadius::Popover)
                 .padding(GlassPadding::None)
+                .height(px(height))
+                .presence(alpha)
                 .child(div().flex().flex_col().h_full().min_h_0().child(scroller)),
         )
         .into_any_element()
@@ -200,7 +205,7 @@ fn floating_glass(scroller: AnyElement) -> AnyElement {
 fn layer(
     slot: &Slot,
     (layout, on): (AsideLayout, bool),
-    shell_w: f32,
+    shell: (f32, f32),
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
@@ -225,23 +230,27 @@ fn layer(
     );
     let content = kept.read(cx).clone().filter(|_| alpha > 0.001)?;
     let scroller = scroll(slot, layout, content(layout), window, cx);
-    let panel = panel(slot, (layout, on), Ds::get(cx), scroller, shell_w);
-    Some(
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .opacity(alpha)
-            .child(panel)
-            .into_any_element(),
-    )
+    let panel = panel(
+        slot,
+        (layout, on),
+        Ds::get(cx),
+        scroller,
+        (shell.0, shell.1, alpha),
+    );
+    let layer = div().absolute().top_0().left_0().size_full();
+    // The floating glass takes `alpha` as its presence (LG research §5 Appear/disappear): the
+    // docked aside has no glass and fades whole.
+    let layer = match layout {
+        AsideLayout::Docked => layer.opacity(alpha),
+        AsideLayout::Floating => layer,
+    };
+    Some(layer.child(panel).into_any_element())
 }
 
 /// Both layouts as Presence fades; the last content stays for the exit.
 pub(super) fn render(
     slot: &Slot,
-    shell_w: f32,
+    shell: (f32, f32),
     window: &mut Window,
     cx: &mut App,
 ) -> Vec<AnyElement> {
@@ -253,6 +262,6 @@ pub(super) fn render(
         (AsideLayout::Floating, floating),
     ]
     .into_iter()
-    .filter_map(|which| layer(slot, which, shell_w, window, cx))
+    .filter_map(|which| layer(slot, which, shell, window, cx))
     .collect()
 }

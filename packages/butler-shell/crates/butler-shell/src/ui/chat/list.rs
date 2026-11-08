@@ -2,6 +2,7 @@
 //! (`useMessageList`, `useMessageListLayout`, `useLiveMessageId`, `useConversationAutoScroll`).
 //! The rows are gpui `list` items laid in the ConversationShell column; the list follows the
 //! newest message until the reader scrolls away, and a jump button brings it back.
+mod request;
 mod turn;
 
 use std::cell::RefCell;
@@ -26,12 +27,12 @@ use super::intro::{self, chats_intro};
 use super::queue::queued_rows;
 use super::row::message_row;
 use crate::ui::i18n::transcript as strings;
+use crate::ui::inspector::sections::asks::{pending_asks, request_source_message};
 use crate::ui::smooth_scroll::SmoothScroll;
 use crate::ui::source::wire::{
-    MessageRecord, ProgressRow, QueuedMessageRecordState, SessionQueueView, SessionView,
-    SessionViewTurn,
+    MessageRecord, MessageRecordRole, ProgressRow, SessionQueueView, SessionView, SessionViewTurn,
 };
-use turn::{Live, collapse_assistant_attempts, reuse, turn_info};
+use turn::{Live, collapse_assistant_attempts, has_visible_queue, reuse, turn_info, version};
 
 /// `MESSAGE_LIST_TOP_PADDING` (conversationUtils.tsx).
 const TOP_PADDING: f32 = 32.;
@@ -72,6 +73,8 @@ enum Row {
     /// The running turn's own row, when no message carries its activity.
     Activity(Rc<SessionViewTurn>),
     Queued(Rc<SessionQueueView>),
+    /// `ConversationRequestSlot`: the decision, when one waits (the row is empty otherwise).
+    Request,
     Intro,
     /// The room under the last row for the floating composer.
     Reserve,
@@ -90,6 +93,7 @@ fn same(a: &Row, b: &Row) -> bool {
         (Row::Top, Row::Top)
         | (Row::Seed, Row::Seed)
         | (Row::Intro, Row::Intro)
+        | (Row::Request, Row::Request)
         | (Row::Reserve, Row::Reserve) => true,
         (Row::Message(a, x), Row::Message(b, y)) => {
             Rc::ptr_eq(a, b) && same_turn(x.as_ref(), y.as_ref())
@@ -115,26 +119,6 @@ fn splice_changes(list: &ListState, old: &[Row], new: &[Row]) {
     }
 }
 
-/// `queuedConversationItems`: whether a queued follow-up still waits or failed, and is not yet
-/// a message of the transcript.
-fn has_visible_queue(
-    queue: &SessionQueueView,
-    messages: &[Rc<MessageRecord>],
-    session: &str,
-) -> bool {
-    let shown = |id: &str| messages.iter().any(|message| message.id == id);
-    queue.queued_messages.iter().any(|record| {
-        let key = record.client_message_id.as_deref().unwrap_or(&record.id);
-        record.chat_id == session
-            && matches!(
-                record.state,
-                QueuedMessageRecordState::Queued | QueuedMessageRecordState::Failed
-            )
-            && !shown(key)
-            && !record.dispatched_message_id.as_deref().is_some_and(shown)
-    })
-}
-
 /// What one open session's transcript keeps between frames.
 struct State {
     session: String,
@@ -157,6 +141,10 @@ struct State {
     older: Option<(i64, Option<String>)>,
     asked: Option<i64>,
     reserve: f32,
+    /// The message the open decision was asked under (`ConversationRequestProvider`).
+    request_source: Option<String>,
+    /// The decision's row, while it shows something.
+    request_ix: Option<usize>,
     /// The reader scrolled away from the newest message.
     away: bool,
     unread: bool,
@@ -195,6 +183,8 @@ impl State {
             older: None,
             asked: None,
             reserve: DEFAULT_RESERVE,
+            request_source: None,
+            request_ix: None,
             away: false,
             unread: false,
             seen: None,
@@ -209,6 +199,7 @@ impl State {
         queue: Option<&SessionQueueView>,
         reserve: Option<f32>,
         intro: bool,
+        request_source: Option<String>,
     ) {
         self.client.clone_from(&t.client);
         self.entering = t.entering.clone();
@@ -220,13 +211,16 @@ impl State {
         let queue_changed = self.queue.as_deref() != queue;
         let intro_changed = self.intro != intro;
         self.intro = intro;
+        let source_changed = self.request_source != request_source;
+        self.request_source = request_source;
         if view_changed {
             self.view = Some(t.shared.clone());
         }
         if queue_changed {
             self.queue = queue.map(|queue| reuse(self.queue.as_ref(), queue.clone()));
         }
-        if view_changed || queue_changed || intro_changed || self.rows.is_empty() {
+        if view_changed || queue_changed || intro_changed || source_changed || self.rows.is_empty()
+        {
             self.rebuild();
         }
         let reserve = reserve.unwrap_or(self.reserve);
@@ -275,6 +269,11 @@ impl State {
         if view.branch_seed.is_some() && self.older.is_none() {
             rows.push(Row::Seed);
         }
+        // A request asked before Butler wrote anything gets its own row after the messages.
+        let anchored = self.messages.iter().position(|message| {
+            message.role != MessageRecordRole::User
+                && self.request_source.as_deref() == Some(message.id.as_str())
+        });
         for (ix, message) in self.messages.iter().enumerate() {
             let carried = if live == Some(ix) {
                 self.turn.clone()
@@ -282,6 +281,10 @@ impl State {
                 None
             };
             rows.push(Row::Message(message.clone(), carried));
+            // `ConversationRequestAnchor`: the decision sits under the message it was asked in.
+            if anchored == Some(ix) {
+                rows.push(Row::Request);
+            }
         }
         if let (true, Some(turn)) = (
             info.is_some_and(|info| info.show) && live.is_none(),
@@ -296,25 +299,16 @@ impl State {
         {
             rows.push(Row::Queued(queue.clone()));
         }
+        if anchored.is_none() {
+            rows.push(Row::Request);
+        }
         if self.intro {
             rows.push(Row::Intro);
         }
         rows.push(Row::Reserve);
         splice_changes(&self.list, &self.rows, &rows);
         self.rows = rows;
-        self.version = self.messages.last().map_or_else(
-            || "empty".to_owned(),
-            |last| {
-                format!(
-                    "{}:{}:{}:{}",
-                    last.id,
-                    last.cursor
-                        .map_or_else(String::new, |cursor| cursor.to_string()),
-                    last.status.as_deref().unwrap_or(""),
-                    last.text.len()
-                )
-            },
-        );
+        self.version = version(&self.messages);
     }
 
     /// `scrollToBottom`: follow the newest message again.
@@ -343,12 +337,18 @@ pub(crate) fn transcript(
     let state = window.use_keyed_state(key, cx, |_, cx| State::new(session, cx.weak_entity()));
     let reserve = scope::conversation(cx).map(|vars| vars.composer_reserve);
     let intro = intro::visible(&t.view.session_id, cx);
-    state.update(cx, |state, _| state.sync(t, queue, reserve, intro));
+    let source = pending_asks(&t.view.session_id, t.view.cursors.events, window, cx)
+        .and_then(|page| request_source_message(t.view, &page));
+    state.update(cx, |state, _| state.sync(t, queue, reserve, intro, source));
     let (list_state, smooth, away, unread) = {
         let s = state.read(cx);
         (s.list.clone(), s.smooth.clone(), s.away, s.unread)
     };
     *wheel.borrow_mut() = Some(smooth.clone());
+    // A decision's height changes with its own state (collapse, step, pending): measure it again.
+    if let Some(ix) = state.read(cx).request_ix {
+        list_state.remeasure_items(ix..ix + 1);
+    }
     let rows_state = state.clone();
     let rows = list(list_state, move |ix, window, cx| {
         render_row(&rows_state, ix, window, cx)
@@ -465,6 +465,16 @@ fn render_row(state: &Entity<State>, ix: usize, window: &mut Window, cx: &mut Ap
             }
         }
         Row::Queued(queue) => queued_rows(&queue, &t, window, cx),
+        Row::Request => {
+            let shown = request::request_row(&t, window, cx);
+            state.update(cx, |s, _| {
+                s.request_ix = shown.as_ref().map(|_| ix);
+            });
+            match shown {
+                Some(row) => row,
+                None => return div().into_any_element(),
+            }
+        }
         Row::Intro => MessageRow::new("chats-intro", Role::Assistant)
             .bubble()
             .child(chats_intro(&t, window, cx))

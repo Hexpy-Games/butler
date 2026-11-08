@@ -11,10 +11,10 @@ use gpui::{
 use super::chrome::{Chrome, bar, caption, fit_clamp, nav, picture, pointer_offset};
 use super::zoom::{DOUBLE_CLICK_ZOOM, FIT, MAX_ZOOM, MIN_ZOOM, View, ZOOM_STEP, zoom_at};
 use super::{Handler, ViewerImage, ViewerLabels};
-use crate::tokens::{Color, Filter, Length};
+use crate::tokens::{Color, Length};
 use crate::ui::Icon;
-use crate::ui::backdrop::Backdrop;
 use crate::ui::context::Ds;
+use crate::ui::liquid_glass::{self, LiquidGlass};
 use crate::ui::media_frame::{Load, resolve};
 
 /// A drag of a zoomed picture: the pointer and the view where it started.
@@ -294,15 +294,15 @@ fn keys(
     }
 }
 
-/// The blurred surface-tone scrim of the modal.
+/// The modal's scrim: Liquid Glass over the page behind it (`over_content`: nothing else is
+/// glass under it).
 fn scrim(ds: &Ds) -> gpui::Canvas<Bounds<Pixels>> {
-    let backdrop = Backdrop::new(ds, Filter::ImageViewerOverlayFilter);
-    let fill = ds.color(Color::ImageViewerOverlayBg);
+    let dark = ds.dark();
+    let glass = LiquidGlass::over_content().adapt(ds);
     canvas(
         |bounds, _, _| bounds,
         move |bounds, _, window, _| {
-            backdrop.paint(bounds, Corners::default(), window);
-            window.paint_quad(gpui::PaintQuad::new(bounds).background(fill));
+            liquid_glass::paint(bounds, Corners::default(), dark, glass, window);
         },
     )
 }

@@ -47,6 +47,8 @@ dunce.workspace = true
 libproc.workspace = true
 sysinfo.workspace = true
 zip.workspace = true
+# Display accessibility settings (`display_accessibility`): safe objc2 bindings.
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }
 
 # The process table (identity, liveness, host facts), Job Objects that
 # contain command trees, paths without a needless `\\?\` prefix, and the

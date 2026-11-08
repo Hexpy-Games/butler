@@ -1,4 +1,7 @@
 //! Window inputs and the sidebar preference suspended while the sidebar is a drawer.
+use butler_ds::ui::blocks::adaptive_shell::frame::{
+    AutoCollapse, CHAT_WIDTH_DEFAULT, MIN_PAGE_WIDTH, sidebar_auto_collapses,
+};
 use butler_ds::ui::blocks::adaptive_shell::grip::Drag;
 use butler_ds::ui::context::{Ds, Platform};
 use gpui::{Context, Window};
@@ -9,6 +12,10 @@ pub(super) struct FrameState {
     pub width: f32,
     pub suspended: Option<bool>,
     pub resize_start: Option<f32>,
+    /// `useSidebarAutoCollapse`'s state (the hysteresis input).
+    pub auto_collapsed: bool,
+    /// Whether the sidebar is open as of the last frame (the title row follows it).
+    pub open: bool,
 }
 
 impl Default for FrameState {
@@ -17,6 +24,8 @@ impl Default for FrameState {
             width: 304.,
             suspended: None,
             resize_start: None,
+            auto_collapsed: false,
+            open: true,
         }
     }
 }
@@ -44,10 +53,7 @@ impl Shell {
         };
         let mut ds = Ds::new(tokens, ds_platform(options.platform));
         ds.detect_fonts(&cx.text_system().all_font_names());
-        ds.set_lang(match options.locale {
-            crate::ui::i18n::Locale::En => butler_ds::ui::context::Lang::En,
-            crate::ui::i18n::Locale::Ko => butler_ds::ui::context::Lang::Ko,
-        });
+        ds.set_lang(options.locale.ds_lang());
         ds.install(cx);
     }
 
@@ -62,12 +68,33 @@ impl Shell {
         }
         let platform = ds_platform(self.theme.platform);
         let reduced = cx.reduce_motion();
+        let display = butler_platform::display_accessibility::read();
         Ds::update(cx, |ds| {
             ds.set_viewport(size.width.into(), size.height.into());
             ds.set_platform(platform);
             ds.set_dark(self.theme.dark);
             ds.set_os_reduced_motion(reduced);
+            ds.set_os_reduced_transparency(display.reduce_transparency);
+            ds.set_os_increased_contrast(display.increase_contrast);
         });
+    }
+
+    /// `useSidebarAutoCollapse` (`useBrowserShell.ts`): while the right slot holds a pane, the
+    /// docked sidebar steps aside when the page would be narrower than `MIN_PAGE_WIDTH`.
+    pub(super) fn sidebar_auto_collapsed(&mut self, shell_width: f32, cx: &gpui::App) -> bool {
+        let pane_open = self.store.selected().is_some_and(|chat| {
+            let files = crate::ui::viewer::session_files(cx, chat.session.0.as_ref());
+            crate::ui::viewer::right_slot_pane(None, &files).is_some()
+        });
+        self.frame.auto_collapsed = pane_open
+            && sidebar_auto_collapses(AutoCollapse {
+                shell_width,
+                sidebar_width: self.frame.width,
+                chat_width: self.split_chat_width().unwrap_or(CHAT_WIDTH_DEFAULT),
+                collapsed: self.frame.auto_collapsed,
+                min_page_width: MIN_PAGE_WIDTH,
+            });
+        self.frame.auto_collapsed
     }
 
     pub(super) fn resize_sidebar(&mut self, width: f32, cx: &mut Context<Self>) {

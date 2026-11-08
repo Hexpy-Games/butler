@@ -147,6 +147,10 @@ fn assistant_body(
         answer_reply(msg, t, failure, (&mut parts, &mut steward), window, cx);
         parts.extend(attachments(msg, t, window, cx));
     }
+    // `MessageLiveGroup`: the live answer carries the turn's status line under it.
+    if t.live_message == Some(msg.id.as_str()) {
+        parts.extend(super::activity::status::current_turn_status(t, window, cx));
+    }
     let body = Stack::new()
         .gap(Space::Lg)
         .children(parts)

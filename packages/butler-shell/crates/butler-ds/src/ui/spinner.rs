@@ -4,17 +4,20 @@
 //! keyframes) while the whole arc turns once per `--spinner-rotate-duration` (linear), so the
 //! pattern never repeats in lockstep. A turning spinner is a status signal: it is exempt from
 //! reduced motion and always keeps running (owner decision).
+//!
+//! The orbit loop is rasterized once as a flipbook of SVG frames and the GPU picks the frame and
+//! adds the turn from the animation clock, so the scene does not change while it spins.
+use std::fmt::Write as _;
 use std::time::Duration;
 
 use gpui::{
-    App, ElementId, IntoElement, ParentElement as _, RenderOnce, Styled as _, Window, canvas, div,
-    point, px,
+    App, ElementId, FrameSpec, InteractiveElement as _, IntoElement, ParentElement as _,
+    RenderOnce, Styled as _, Window, animation_time_ms, canvas, div, px,
 };
 
 use super::arc;
 use super::context::Ds;
 use super::convert;
-use super::motion::{Timing, Tween};
 use crate::tokens::{Duration as DsDuration, Easing};
 
 /// `r` of the circle in the 100-unit view box, and the stroke rule `max(1.35px, size * 0.071)`.
@@ -85,74 +88,103 @@ fn milliseconds(duration: Duration) -> f32 {
     duration.as_secs_f32() * 1000.
 }
 
-impl RenderOnce for Spinner {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let ds = Ds::get(cx);
-        let (orbit_ms, turn_ms) = (
-            milliseconds(ds.duration(DsDuration::SpinnerDuration)),
-            milliseconds(ds.duration(DsDuration::SpinnerRotateDuration)),
-        );
-        let ease = convert::easing(ds.tokens().ease(Easing::SpinnerEasing));
-        // Both periods fit a whole number of times into their least common multiple.
-        let cycle = lcm_ms(orbit_ms, turn_ms);
-        let side = self.fit.unwrap_or(self.size);
-        let stroke = MIN_STROKE_PX.max(self.size * STROKE_SIZE_RATIO) * side / self.size;
-        Tween::new(
-            self.id,
-            div(),
-            Timing::linear(Duration::from_secs_f32(cycle / 1000.)),
-            move |el, t| {
-                let elapsed = t * cycle;
-                let pose = pose(
-                    (elapsed % orbit_ms) / orbit_ms,
-                    (elapsed % turn_ms) / turn_ms,
-                    &ease,
-                );
-                el.size(px(side)).flex_none().child(
-                    canvas(
-                        |_, _, _| (),
-                        move |bounds, (), window, _| {
-                            let color = window.text_style().color;
-                            let unit = f32::from(bounds.size.width) / VIEW;
-                            let center = point(
-                                bounds.origin.x + bounds.size.width / 2.,
-                                bounds.origin.y + bounds.size.height / 2.,
-                            );
-                            let angle = |s: f32| pose.turn + s / 100. * std::f32::consts::TAU;
-                            arc::stroke(
-                                window,
-                                center,
-                                RADIUS * unit,
-                                stroke,
-                                (
-                                    angle(pose.from),
-                                    (pose.to - pose.from) / 100. * std::f32::consts::TAU,
-                                ),
-                                color,
-                            );
-                        },
-                    )
-                    .size_full(),
-                )
-            },
-        )
-        .repeat()
-    }
-}
+/// Flipbook frames rasterized per second of the orbit loop.
+const FRAMES_PER_SECOND: f32 = 60.;
 
-/// The least common multiple of two periods in whole milliseconds.
-fn lcm_ms(first: f32, second: f32) -> f32 {
+/// One orbit frame as SVG: the shapes `arc::stroke` paints (a polyline through the same
+/// 96-per-turn points and a disc at each end), in a `side` by `side` view box. Black, since the
+/// sprite is tinted with the text colour.
+fn frame_svg(side: f32, stroke: f32, pose: &Pose) -> Vec<u8> {
+    let center = side / 2.;
+    let radius = RADIUS * side / VIEW;
+    let angle = |s: f32| pose.turn + s / 100. * std::f32::consts::TAU;
+    let (start, sweep) = (
+        angle(pose.from),
+        (pose.to - pose.from) / 100. * std::f32::consts::TAU,
+    );
+    let at = |angle: f32| (center + radius * angle.cos(), center + radius * angle.sin());
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
-        reason = "durations are small whole millisecond counts"
+        reason = "a small non-negative segment count"
     )]
-    let (long, short) = (first.round().max(1.) as u64, second.round().max(1.) as u64);
-    let (mut gcd, mut rest) = (long, short);
-    while rest != 0 {
-        (gcd, rest) = (rest, gcd % rest);
+    let steps = ((sweep.abs() / std::f32::consts::TAU * 96.).ceil() as usize).max(1);
+    let mut svg = format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{side}\" height=\"{side}\" viewBox=\"0 0 {side} {side}\">"
+    );
+    if sweep.abs() > 1e-4 {
+        let mut d = String::new();
+        for i in 0..=steps {
+            let (x, y) = at(start + sweep * i as f32 / steps as f32);
+            d.push_str(if i == 0 { "M" } else { "L" });
+            _ = write!(d, "{x} {y} ");
+        }
+        _ = write!(
+            svg,
+            "<path d=\"{d}\" fill=\"none\" stroke=\"#000\" stroke-width=\"{stroke}\"/>"
+        );
     }
-    #[expect(clippy::cast_precision_loss, reason = "a small millisecond count")]
-    let cycle = (long / gcd * short) as f32;
-    cycle
+    for end in [start, start + sweep] {
+        let (x, y) = at(end);
+        _ = write!(
+            svg,
+            "<circle cx=\"{x}\" cy=\"{y}\" r=\"{}\" fill=\"#000\"/>",
+            stroke / 2.
+        );
+    }
+    svg.push_str("</svg>");
+    svg.into_bytes()
+}
+
+impl RenderOnce for Spinner {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let ds = Ds::get(cx);
+        let (orbit, turn) = (
+            ds.duration(DsDuration::SpinnerDuration),
+            ds.duration(DsDuration::SpinnerRotateDuration),
+        );
+        let ease = convert::easing(ds.tokens().ease(Easing::SpinnerEasing));
+        let side = self.fit.unwrap_or(self.size);
+        let stroke = MIN_STROKE_PX.max(self.size * STROKE_SIZE_RATIO) * side / self.size;
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a small positive frame count"
+        )]
+        let frame_count = (milliseconds(orbit) / 1000. * FRAMES_PER_SECOND)
+            .round()
+            .max(1.) as usize;
+        // The loop starts at frame 0 when the spinner first renders.
+        let start_ms = *window
+            .use_keyed_state((self.id.clone(), "start"), cx, |_, _| animation_time_ms())
+            .read(cx);
+        let spec = FrameSpec {
+            frame_count,
+            period: orbit,
+            start_ms,
+            turn: Some(turn),
+        };
+        div().id(self.id).size(px(side)).flex_none().child(
+            canvas(
+                |_, _, _| (),
+                move |bounds, (), window, cx| {
+                    let color = window.text_style().color;
+                    window
+                        .paint_svg_frames(
+                            bounds,
+                            format!("butler-ds/spinner/{side}/{stroke}").into(),
+                            spec,
+                            &|i| {
+                                let orbit = i as f32 / frame_count as f32;
+                                frame_svg(side, stroke, &pose(orbit, 0., &ease))
+                            },
+                            Some(color),
+                            cx,
+                        )
+                        .ok();
+                },
+            )
+            .size_full(),
+        )
+    }
 }

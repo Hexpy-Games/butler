@@ -3,7 +3,7 @@ use blocks::adaptive_shell::{AdaptiveShell, HandleSide, ShellPlatform, ShellWind
 use blocks::adaptive_shell::{
     grip::{HintSide, ResizeHandle},
     parts::{ChromeFloatingToggle, ShellCard},
-    peek::{self, SidebarPeek},
+    peek::{self, CloseReason, SidebarPeek},
 };
 use blocks::{
     conversation_shell::ConversationShell, responsive::ChromeEnvironment, scope::ShellFrame,
@@ -13,13 +13,14 @@ use butler_ds::ui::{blocks, context::Ds, focus, icon_button::IconButton, overlay
 use gpui::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*};
 
 use super::{
-    Shell, TextSizeDown, TextSizeReset, TextSizeUp, ToggleSidebar, image_viewer, system_dark,
+    Shell, TextSizeDown, TextSizeReset, TextSizeUp, ToggleSidebar, image_viewer, region,
+    system_dark,
 };
 use crate::ui::Icon;
 use crate::ui::widgets::anchor;
 
 impl Shell {
-    fn conversation(&self, cx: &Context<Self>) -> AnyElement {
+    pub(super) fn conversation(&self, cx: &Context<Self>) -> AnyElement {
         let content = if self.source.is_some() {
             self.chat.clone().into_any_element()
         } else {
@@ -52,7 +53,8 @@ impl Shell {
     /// The conversation's aside: the session sections while session info is open.
     fn with_aside(&self, shell: ConversationShell) -> ConversationShell {
         match self.aside() {
-            Some(aside) => shell.aside(aside),
+            // `Conversation.tsx`: `asideFloatOpen={infoShown}`, the same fact as the aside.
+            Some(aside) => shell.aside(aside).aside_float_open(true),
             None => shell,
         }
     }
@@ -81,19 +83,14 @@ impl Shell {
             })
     }
 
-    fn adaptive_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let size = window.viewport_size();
-        let mut input = ShellWindow::new(size.width.into(), size.height.into());
-        input.fullscreen = window.is_fullscreen();
-        let platform = match self.theme.platform {
-            crate::ui::theme::Platform::Mac => ShellPlatform::Darwin,
-            crate::ui::theme::Platform::Windows => ShellPlatform::Win32,
-            crate::ui::theme::Platform::Linux => ShellPlatform::Linux,
-        };
-        let drawer = input.width <= 640.;
-        let open = self.sidebar_open && (drawer || input.width >= 720.);
-        let peek = SidebarPeek::new("sidebar-peek", !drawer && !open, window, cx);
-        let toggle = IconButton::new(
+    /// The window chrome's sidebar toggle; while a pane folds the sidebar (`peek`), it peeks.
+    fn sidebar_toggle(
+        &self,
+        open: bool,
+        peek: Option<SidebarPeek>,
+        cx: &mut Context<Self>,
+    ) -> IconButton {
+        IconButton::new(
             "sidebar-toggle",
             if open {
                 self.copy("Hide sidebar", "사이드바 숨기기")
@@ -106,11 +103,45 @@ impl Shell {
         } else {
             Icon::PanelLeft
         })
-        .on_click(cx.listener(|s, _, w, cx| s.toggle_sidebar(&ToggleSidebar, w, cx)));
+        .on_click(cx.listener(move |s, _, w, cx| {
+            if let Some(peek) = &peek {
+                if peek.open(cx) {
+                    peek.close(CloseReason::PressOutside, w, cx);
+                } else {
+                    peek.show(w, cx);
+                }
+            } else {
+                s.toggle_sidebar(&ToggleSidebar, w, cx);
+            }
+        }))
+    }
+
+    fn adaptive_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let size = window.viewport_size();
+        let mut input = ShellWindow::new(size.width.into(), size.height.into());
+        input.fullscreen = window.is_fullscreen();
+        let platform = match self.theme.platform {
+            crate::ui::theme::Platform::Mac => ShellPlatform::Darwin,
+            crate::ui::theme::Platform::Windows => ShellPlatform::Win32,
+            crate::ui::theme::Platform::Linux => ShellPlatform::Linux,
+        };
+        let drawer = input.width <= 640.;
+        // `useSidebarAutoCollapse`: a pane beside the chat folds the sidebar when the page gets
+        // too narrow; the toggle then peeks instead (`AppShell.tsx` WindowChromeLayer onToggle).
+        let auto = !drawer && self.sidebar_auto_collapsed(input.width, cx);
+        let open = self.sidebar_open && (drawer || (input.width >= 720. && !auto));
+        let peek = SidebarPeek::new("sidebar-peek", !drawer && !open, window, cx);
+        let toggle = self.sidebar_toggle(open, auto.then(|| peek.clone()), cx);
         let dismiss = cx.entity().downgrade();
         let width = self.sidebar_width(cx);
-        let sidebar = self.render_sidebar(window, cx);
-        let title = self.render_titlebar(open, window, cx);
+        self.frame.open = open;
+        let sidebar = self.regions.sidebar.clone().cached(region::fill());
+        // The workspace first: the titlebar follows the split it builds.
+        let workspace = {
+            let conversation = self.regions.conversation.clone().cached(region::fill());
+            self.workspace(conversation.into_any_element(), cx)
+        };
+        let title = self.regions.titlebar.clone().cached(region::fill());
         let mut shell = AdaptiveShell::new("app-frame", input)
             .frame(ShellFrame::Cards)
             .chrome_environment(ChromeEnvironment::Electron)
@@ -122,10 +153,7 @@ impl Shell {
             .peek(peek)
             .sidebar(sidebar)
             .title(title)
-            .workspace({
-                let conversation = self.conversation(cx);
-                self.workspace(conversation, window, cx)
-            })
+            .workspace(workspace)
             .chrome(ChromeFloatingToggle::new(
                 "chrome",
                 anchor(div(), "sidebar-toggle").child(toggle),
@@ -152,6 +180,9 @@ impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.theme_override.is_none() {
             self.set_dark(system_dark(window), cx);
+        }
+        if let Some(title) = self.pending_title.take() {
+            window.set_window_title(title);
         }
         self.frame_inputs(window, cx);
         self.feed_composer(window, cx);

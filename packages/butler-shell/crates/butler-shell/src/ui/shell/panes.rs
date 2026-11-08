@@ -15,10 +15,11 @@ use gpui::{
 };
 
 use super::navigation::Navigation;
+use super::region;
 use super::{Shell, TogglePalette};
 use crate::ui::inspector::{
     InspectorCtx, InspectorPane, SessionActionHandler, SessionInfoActionsProps,
-    session_info_actions, session_sections_model, tasks_panel_in_dialog,
+    SessionSectionsState, session_info_actions, session_sections_model, tasks_panel_in_dialog,
 };
 use crate::ui::palette::{CommandPalette, PaletteEvent};
 use crate::ui::source::wire::SessionView;
@@ -27,6 +28,8 @@ use crate::ui::viewer;
 pub(super) struct Panes {
     palette: Entity<CommandPalette>,
     inspector: Entity<InspectorPane>,
+    /// The state the session sections read besides the view (the titlebar and the inspector).
+    sections: Entity<SessionSectionsState>,
     /// Where the aside writes the layout the inspector pane draws.
     layout: Rc<Cell<AsideLayout>>,
     /// The open chat's view as last shown.
@@ -39,23 +42,30 @@ pub(super) struct Panes {
     graph_open: bool,
     /// The conversation column's width while the viewer is beside it.
     chat_width: Option<f32>,
+    /// `splitChatWidth` (`AppShell.tsx`): the conversation's width while the viewer holds the
+    /// right slot, as of the last workspace; `None` without the viewer.
+    split: Option<f32>,
 }
 
 impl Shell {
     pub(super) fn new_panes(window: &mut Window, cx: &mut Context<Self>) -> (Panes, Subscription) {
         let palette = cx.new(|cx| CommandPalette::new(window, cx));
         let subscription = cx.subscribe_in(&palette, window, Self::on_palette);
-        let inspector = cx.new(|_| InspectorPane::new());
+        let sections = cx.new(SessionSectionsState::new);
+        cx.observe(&sections, |_, _, cx| cx.notify()).detach();
+        let inspector = cx.new(|_| InspectorPane::new(sections.clone()));
         let layout = inspector.read(cx).layout_cell();
         let panes = Panes {
             palette,
             inspector,
+            sections,
             layout,
             view: None,
             info_open: false,
             task_graph_enabled: false,
             graph_open: false,
             chat_width: None,
+            split: None,
         };
         (panes, subscription)
     }
@@ -104,6 +114,9 @@ impl Shell {
     /// The open view goes to the inspector pane too.
     pub(super) fn feed_panes(&mut self, view: Option<Rc<SessionView>>, cx: &mut Context<Self>) {
         self.panes.view.clone_from(&view);
+        self.panes
+            .sections
+            .update(cx, |sections, cx| sections.show(view.as_deref(), cx));
         self.panes.inspector.update(cx, |pane, cx| {
             pane.set_view(view);
             cx.notify();
@@ -137,10 +150,7 @@ impl Shell {
             view: &view,
             layout: AsideLayout::Docked,
         };
-        let model = Rc::new(session_sections_model(&ctx, window, cx));
-        self.panes
-            .inspector
-            .update(cx, |pane, _| pane.set_model(model.clone()));
+        let model = session_sections_model(&ctx, &self.panes.sections, cx);
         if !model.has_ids && !self.panes.task_graph_enabled {
             return None;
         }
@@ -174,6 +184,12 @@ impl Shell {
     pub(super) fn viewer_toggle(&self, cx: &Context<Self>) -> Option<AnyElement> {
         let session = self.store.selected()?.session.0.clone();
         viewer::file_viewer_toggle(&session, None, cx)
+    }
+
+    /// `AppShell.tsx` `splitChatWidth={pane ? chatWidth : undefined}`: the width the split gives
+    /// the conversation column while the viewer is beside it (400 until dragged).
+    pub(super) fn split_chat_width(&self) -> Option<f32> {
+        self.panes.split
     }
 
     /// `SessionInfoActions`' task graph dialog.
@@ -215,17 +231,23 @@ impl Shell {
     pub(super) fn workspace(
         &mut self,
         conversation: AnyElement,
-        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let Some(session) = self.store.selected().map(|c| c.session.0.to_string()) else {
+            self.panes.split = None;
             return conversation;
         };
-        let pane = viewer::file_viewer_pane(&session, window, cx);
+        let files = viewer::session_files(cx, &session);
+        let pane_open = viewer::right_slot_pane(None, &files).is_some();
+        self.panes.split = pane_open.then(|| {
+            self.panes
+                .chat_width
+                .unwrap_or(butler_ds::ui::blocks::adaptive_shell::frame::CHAT_WIDTH_DEFAULT)
+        });
         let width = cx.entity().downgrade();
         let mut split = AdaptiveShellSplit::new("conversation-split")
             .chat(conversation)
-            .pane_open(pane.is_some())
+            .pane_open(pane_open)
             .on_chat_width_change(move |next, _, cx| {
                 let _ = width.update(cx, |s, cx| {
                     s.panes.chat_width = Some(next);
@@ -235,10 +257,23 @@ impl Shell {
         if let Some(width) = self.panes.chat_width {
             split = split.chat_width(width);
         }
-        if let Some(pane) = pane {
-            split = split.pane(pane);
+        if pane_open {
+            split = split.pane(self.regions.viewer.clone().cached(region::fill()));
         }
         split.into_any_element()
+    }
+
+    /// The viewer pane of the open conversation (empty while there is none; `workspace` only
+    /// embeds it while the pane is open).
+    pub(super) fn render_viewer_pane(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let session = self.store.selected().map(|c| c.session.0.to_string());
+        session
+            .and_then(|session| viewer::file_viewer_pane(&session, window, cx))
+            .unwrap_or_else(|| gpui::div().into_any_element())
     }
 
     pub(super) fn palette(&self) -> Entity<CommandPalette> {

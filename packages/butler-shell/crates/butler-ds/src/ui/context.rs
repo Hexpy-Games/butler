@@ -57,6 +57,13 @@ pub fn keep_words<E: gpui::Styled>(el: E) -> E {
         .overflow_wrap(gpui::OverflowWrap::BreakWord)
 }
 
+/// The OS "Reduce Transparency" and "Increase Contrast" settings.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct DisplaySettings {
+    reduce_transparency: bool,
+    increase_contrast: bool,
+}
+
 /// Token context plus the app-level inputs that are not tokens.
 pub struct Ds {
     tokens: TokenContext,
@@ -64,6 +71,8 @@ pub struct Ds {
     modality: Modality,
     os_reduced_motion: bool,
     app_reduced_motion: bool,
+    /// The OS display settings Liquid Glass reads.
+    display: DisplaySettings,
     lang: Lang,
     body_font: SharedString,
     code_font: Font,
@@ -90,6 +99,7 @@ impl Ds {
             modality: Modality::default(),
             os_reduced_motion: false,
             app_reduced_motion: false,
+            display: DisplaySettings::default(),
             lang: Lang::default(),
             body_font,
             code_font,
@@ -160,6 +170,14 @@ impl Ds {
         self.tokens.reduced_motion
     }
 
+    pub fn reduced_transparency(&self) -> bool {
+        self.display.reduce_transparency
+    }
+
+    pub fn increased_contrast(&self) -> bool {
+        self.display.increase_contrast
+    }
+
     pub fn compact(&self) -> bool {
         self.tokens.compact
     }
@@ -222,6 +240,14 @@ impl Ds {
     pub fn set_os_reduced_motion(&mut self, on: bool) {
         self.os_reduced_motion = on;
         self.tokens.reduced_motion = on || self.app_reduced_motion;
+    }
+
+    pub fn set_os_reduced_transparency(&mut self, on: bool) {
+        self.display.reduce_transparency = on;
+    }
+
+    pub fn set_os_increased_contrast(&mut self, on: bool) {
+        self.display.increase_contrast = on;
     }
 
     pub fn set_app_reduced_motion(&mut self, on: bool) {

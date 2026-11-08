@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::composer_decision_panel::{Action, ComposerDecisionPanel};
+use butler_ds::ui::blocks::composer_panel::Placement;
 use butler_ds::ui::blocks::markdown_content::MarkdownContent;
 use butler_ds::ui::blocks::surface_panel::{Elevation, SurfacePanel};
 use butler_ds::ui::button::Variant;
@@ -207,10 +208,19 @@ fn open_instruction(plan_id: &str, cx: &mut App) {
     cx.refresh_windows();
 }
 
+/// A plan waits for a decision and the owner is not writing its instruction.
+pub(super) fn waiting(ctx: DecisionCtx<'_>, cx: &App) -> bool {
+    actionable(ctx, cx).is_some_and(|plan| {
+        cx.try_global::<PlanState>()
+            .is_some_and(|state| state.editing.as_deref() != Some(plan.id.as_str()))
+    })
+}
+
 /// `ComposerPlanDecisionSurface`; `None` when no plan waits for a decision, or the owner is
 /// writing the instruction (`editingInstruction`).
 pub(crate) fn plan_surface(
     ctx: DecisionCtx<'_>,
+    placement: Placement,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
@@ -250,6 +260,7 @@ pub(crate) fn plan_surface(
                 }
             },
         )
+        .placement(placement)
         .eyebrow(copy.plan)
         .action(instruction)
         .action(action(Decision::Reject, copy.reject, Variant::Secondary))

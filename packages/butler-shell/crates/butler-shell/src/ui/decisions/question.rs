@@ -1,6 +1,7 @@
 //! the question panel (useComposerQuestion, userQuestions.ts).
 use std::rc::Rc;
 
+use butler_ds::ui::blocks::composer_panel::Placement;
 use butler_ds::ui::blocks::composer_question_panel::{
     Answer, ComposerQuestionPanel, PanelState, Question, QuestionKind, QuestionOption,
 };
@@ -216,33 +217,14 @@ pub(super) fn question_pending(ctx: DecisionCtx<'_>) -> bool {
         .is_some_and(|questions| !questions.is_empty())
 }
 
-/// the question panel (useComposerQuestion); `None` when this session has nothing for it or the
-/// panel is collapsed (`question.panel.state !== "collapsed"`).
+/// The question panel (useComposerQuestion) in `placement`, in every state: `ConversationRequestPortal`
+/// shows it collapsed too. `None` when this session has nothing for it.
 pub(crate) fn question_surface(
     ctx: DecisionCtx<'_>,
+    placement: Placement,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
-    let (collapsed, panel) = question_panel(ctx, window, cx)?;
-    (!collapsed).then_some(panel)
-}
-
-/// The collapsed panel above the field (`ComposerInputSurface`'s attachment branch).
-pub(crate) fn question_attachment(
-    ctx: DecisionCtx<'_>,
-    window: &mut Window,
-    cx: &mut App,
-) -> Option<AnyElement> {
-    let (collapsed, panel) = question_panel(ctx, window, cx)?;
-    collapsed.then_some(panel)
-}
-
-/// The panel and whether it is collapsed.
-fn question_panel(
-    ctx: DecisionCtx<'_>,
-    window: &mut Window,
-    cx: &mut App,
-) -> Option<(bool, AnyElement)> {
     let session = ctx.view.session_id.clone();
     let state = window.use_keyed_state("composer-question-state", cx, |_, _| {
         QuestionState::default()
@@ -289,6 +271,7 @@ fn question_panel(
         question_props(questions),
         move |answers, window, cx| submit.answered(answers, window, cx),
     )
+    .placement(placement)
     .labels(copy.labels())
     .state(panel_state)
     .on_skip(move |window, cx| skip.answered(&[], window, cx))
@@ -309,10 +292,9 @@ fn question_panel(
     if let Some((answers, step)) = draft {
         panel = panel.default_answers(answers).default_step(step);
     }
-    Some((
-        panel_state == PanelState::Collapsed,
+    Some(
         crate::ui::widgets::anchor(div().id("question-card").w_full(), "question-card")
             .child(panel)
             .into_any_element(),
-    ))
+    )
 }

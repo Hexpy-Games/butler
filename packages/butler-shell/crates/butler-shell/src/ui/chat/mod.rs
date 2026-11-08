@@ -200,7 +200,16 @@ impl Render for Chat {
             }
             return div().id("chat-list").size_full().into_any_element();
         };
-        if shared.messages.is_empty() && shared.active_turn.is_none() {
+        // `showMessageList`: a waiting question or approval keeps the transcript.
+        let waiting = shared
+            .pending_questions
+            .as_ref()
+            .is_some_and(|q| !q.is_empty())
+            || shared
+                .authority_requests
+                .as_ref()
+                .is_some_and(|r| !r.is_empty());
+        if shared.messages.is_empty() && shared.active_turn.is_none() && !waiting {
             let ctx = empty::EmptyCtx {
                 project_id: shared.project_id.as_deref(),
                 epic_id: shared

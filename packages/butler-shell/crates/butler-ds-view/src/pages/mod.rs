@@ -18,6 +18,8 @@ mod button;
 mod card;
 mod changed_line_diff;
 mod chart;
+mod check_card;
+mod choice_card;
 mod clickable;
 mod collapsible;
 mod collapsible_nav_group;
@@ -33,6 +35,7 @@ mod conversation_shell;
 mod copy_button;
 mod dialog;
 mod dialog_contained;
+mod dialog_form;
 mod disclosure_row;
 mod done_icon_button;
 mod drag_preview;
@@ -43,6 +46,7 @@ mod event_timeline;
 mod expandable_text;
 mod field;
 mod filtered_select_popover;
+mod form_section;
 mod glyph_toggle;
 mod grid;
 mod icon_button;
@@ -75,6 +79,7 @@ mod notice;
 mod option_menu;
 mod overflow_action_menu;
 mod panel_header;
+mod percent_input_control;
 mod pill_button;
 mod popover;
 mod presence;
@@ -83,12 +88,22 @@ mod progress_ring;
 mod prompt_suggestion_list;
 mod question_answer_card;
 mod queued_message;
+mod registry;
 mod rolling_status_line;
 mod rolling_swap;
 mod scroll_area;
 mod segmented_control;
 mod select;
 mod separator;
+mod settings_action_field;
+mod settings_field;
+mod settings_header;
+mod settings_nav;
+mod settings_secret_rows;
+mod settings_section;
+mod settings_shell;
+mod setup_wizard_shell;
+mod setup_wizard_step_card;
 mod sidebar_shell;
 mod skeleton;
 mod slider;
@@ -105,6 +120,8 @@ mod switch;
 mod tab_strip;
 mod tabs;
 mod tag;
+mod tag_color_swatches;
+mod tag_field;
 mod task_graph_canvas;
 mod task_graph_card;
 mod task_graph_detail;
@@ -115,6 +132,7 @@ mod tinted_glass;
 mod titlebar_shell;
 mod toast;
 mod todo_progress_panel;
+mod token_input_control;
 mod tooltip;
 mod typo;
 mod unread_dot;
@@ -138,6 +156,8 @@ use gpui::{
 use crate::app::conversation_bg;
 use crate::copy::Lang;
 
+pub(crate) use registry::all;
+
 /// One example: its name and how it renders.
 pub(crate) struct Story {
     pub(crate) name: &'static str,
@@ -148,242 +168,6 @@ pub(crate) struct Page {
     pub(crate) id: &'static str,
     pub(crate) title: &'static str,
     pub(crate) stories: fn() -> Vec<Story>,
-}
-
-macro_rules! page {
-    ($id:literal, $title:literal, $module:ident) => {
-        Page {
-            id: $id,
-            title: $title,
-            stories: $module::stories,
-        }
-    };
-}
-
-/// The primitives (B1 to B5, P2-S1).
-fn primitives() -> Vec<Page> {
-    vec![
-        page!("presence", "Presence", presence),
-        page!("box", "Box", boxes),
-        page!("stack", "Stack", stack),
-        page!("inline", "Inline", inline),
-        page!("grid", "Grid", grid),
-        page!("layout", "Layout", layout),
-        page!("typo", "Typo", typo),
-        page!("separator", "Separator", separator),
-        page!("kbd", "Kbd", kbd),
-        page!("label", "Label", label),
-        page!("input", "Input", input),
-        page!("textarea", "Textarea", textarea),
-        page!("field", "Field", field),
-        page!("native-select", "NativeSelect", native_select),
-        page!("tinted-glass", "TintedGlass", tinted_glass),
-        page!("card", "Card", card),
-        page!("tooltip", "Tooltip", tooltip),
-        page!("popover", "Popover", popover),
-        page!("dropdown-menu", "DropdownMenu", dropdown_menu),
-        page!("context-menu", "ContextMenu", context_menu),
-        page!("select", "Select", select),
-        page!("dialog", "Dialog", dialog),
-        page!("bottom-sheet", "BottomSheet", bottom_sheet),
-        page!("toast", "Toast", toast),
-        page!("button", "Button", button),
-        page!("icon-button", "IconButton", icon_button),
-        page!("pill-button", "PillButton", pill_button),
-        page!("clickable", "Clickable", clickable),
-        page!("copy-button", "CopyButton", copy_button),
-        page!("done-icon-button", "DoneIconButton", done_icon_button),
-        page!("glyph-toggle", "GlyphToggle", glyph_toggle),
-        page!("segmented-control", "SegmentedControl", segmented_control),
-        page!("switch", "Switch", switch),
-        page!("slider", "Slider", slider),
-        page!("spinner", "Spinner", spinner),
-        page!("skeleton", "Skeleton", skeleton),
-        page!("progress-ring", "ProgressRing", progress_ring),
-        page!("success-check", "SuccessCheck", success_check),
-        page!("scroll-area", "ScrollArea", scroll_area),
-        page!("collapsible", "Collapsible", collapsible),
-        page!("tabs", "Tabs", tabs),
-        page!("tag", "Tag", tag),
-        page!("icon-slot", "IconSlot", icon_slot),
-        page!("unread-dot", "UnreadDot", unread_dot),
-        page!("aspect-frame", "AspectFrame", aspect_frame),
-        page!("meta-list", "MetaList", meta_list),
-        page!("rolling-swap", "RollingSwap", rolling_swap),
-        page!(
-            "rolling-status-line",
-            "RollingStatusLine",
-            rolling_status_line
-        ),
-        page!("animated-number", "AnimatedNumber", animated_number),
-        page!("avatar", "Avatar", avatar),
-        page!("icon-tile", "IconTile", icon_tile),
-        page!(
-            "butler-thinking-mark",
-            "ButlerThinkingMark",
-            butler_thinking_mark
-        ),
-        page!("expandable-text", "ExpandableText", expandable_text),
-        page!("media-frame", "MediaFrame", media_frame),
-        page!("inline-reference", "InlineReference", inline_reference),
-    ]
-}
-
-/// The blocks (P2-S2 shells, P2-S3 navigation and rows).
-fn blocks() -> Vec<Page> {
-    vec![
-        page!("adaptive-shell", "AdaptiveShell", adaptive_shell),
-        page!(
-            "conversation-shell",
-            "ConversationShell",
-            conversation_shell
-        ),
-        page!("sidebar-shell", "SidebarShell", sidebar_shell),
-        page!("titlebar-shell", "TitlebarShell", titlebar_shell),
-        page!("panel-header", "PanelHeader", panel_header),
-        page!("surface-panel", "SurfacePanel", surface_panel),
-        page!("wallpaper-stage", "WallpaperStage", wallpaper_stage),
-        page!("inspector-panel", "InspectorPanel", inspector_panel),
-        page!("nav-row", "NavRow", nav_row),
-        page!("nav-section", "NavSection", nav_section),
-        page!(
-            "collapsible-nav-group",
-            "CollapsibleNavGroup",
-            collapsible_nav_group
-        ),
-        page!(
-            "overflow-action-menu",
-            "OverflowActionMenu",
-            overflow_action_menu
-        ),
-        page!("nav-drop-target", "NavDropTarget", nav_drop_target),
-        page!("drag-preview", "DragPreview", drag_preview),
-        page!("list-row", "ListRow", list_row),
-        page!("disclosure-row", "DisclosureRow", disclosure_row),
-        page!("key-value-row", "KeyValueRow", key_value_row),
-        page!("empty-line", "EmptyLine", empty_line),
-        page!("status-capsule", "StatusCapsule", status_capsule),
-        page!("markdown-content", "MarkdownContent", markdown_content),
-        page!("message-row", "MessageRow", message_row),
-        page!(
-            "message-avatar-block",
-            "MessageAvatarBlock",
-            message_avatar_block
-        ),
-        page!("work-activity-block", "WorkActivityBlock", work_activity),
-        page!(
-            "worker-activity-row",
-            "WorkerActivityRow",
-            worker_activity_row
-        ),
-        page!(
-            "worker-activity-panel",
-            "WorkerActivityPanel",
-            worker_activity_panel
-        ),
-        page!(
-            "todo-progress-panel",
-            "TodoProgressPanel",
-            todo_progress_panel
-        ),
-        page!("queued-message", "QueuedMessage", queued_message),
-        page!(
-            "question-answer-card",
-            "QuestionAnswerCard",
-            question_answer_card
-        ),
-        page!("event-timeline", "EventTimeline", event_timeline),
-        page!("item-card", "ItemCard", item_card),
-        page!("chart", "Chart", chart),
-        page!("attachment-list", "AttachmentList", attachment_list),
-        page!("element-chip", "ElementChip", element_chip),
-        page!("artifact-list", "ArtifactList", artifact_list),
-        page!("artifact-preview", "ArtifactPreview", artifact_preview),
-        page!("changed-line-diff", "ChangedLineDiff", changed_line_diff),
-        page!("image-viewer", "ImageViewer", image_viewer),
-    ]
-}
-
-/// The answer, attachment and artifact blocks (P2-S5).
-fn answer_blocks() -> Vec<Page> {
-    vec![
-        page!("metric-card", "MetricCard", metric_card),
-        page!("metric-grid", "MetricGrid", metric_grid),
-        page!("progress-meter", "ProgressMeter", progress_meter),
-        page!("status-checklist", "StatusChecklist", status_checklist),
-        page!("block-columns", "BlockColumns", block_columns),
-        page!("block-tabs", "BlockTabs", block_tabs),
-        page!("block-action-frame", "BlockActionFrame", block_action_frame),
-        page!("notice", "Notice", notice),
-    ]
-}
-
-/// The composer blocks (P2-S6).
-fn composer_blocks() -> Vec<Page> {
-    vec![
-        page!("composer-card", "ComposerCard", composer_card),
-        page!("composer-control", "ComposerControl", composer_control),
-        page!(
-            "context-donut-button",
-            "ContextDonutButton",
-            context_donut_button
-        ),
-        page!(
-            "composer-adjunct-panel",
-            "ComposerAdjunctPanel",
-            composer_adjunct_panel
-        ),
-        page!(
-            "composer-decision-panel",
-            "ComposerDecisionPanel",
-            composer_decision_panel
-        ),
-        page!(
-            "composer-question-panel",
-            "ComposerQuestionPanel",
-            composer_question_panel
-        ),
-        page!("option-menu", "OptionMenu", option_menu),
-        page!(
-            "filtered-select-popover",
-            "FilteredSelectPopover",
-            filtered_select_popover
-        ),
-        page!("suggestion-list", "SuggestionList", suggestion_list),
-        page!("split-button", "SplitButton", split_button),
-        page!("usage-bars", "UsageBars", usage_bars),
-        page!("usage-summary-rows", "UsageSummaryRows", usage_summary_rows),
-    ]
-}
-
-/// The palette, inspector, new-chat and viewer blocks (P2-S7).
-fn s7_blocks() -> Vec<Page> {
-    vec![
-        page!("command-panel", "CommandPanel", command_panel),
-        page!("task-graph-card", "TaskGraphCard", task_graph_card),
-        page!("task-graph-detail", "TaskGraphDetail", task_graph_detail),
-        page!("task-graph-canvas", "TaskGraphCanvas", task_graph_canvas),
-        page!("task-graph-lanes", "TaskGraphLanes", task_graph_lanes),
-        page!("task-graph-section", "TaskGraphSection", task_graph_section),
-        page!(
-            "prompt-suggestion-list",
-            "PromptSuggestionList",
-            prompt_suggestion_list
-        ),
-        page!("wallpaper", "Wallpaper", wallpaper),
-        page!("tab-strip", "TabStrip", tab_strip),
-        page!("breadcrumb", "Breadcrumb", breadcrumb),
-        page!("step-sortable-list", "StepSortableList", step_sortable_list),
-    ]
-}
-
-pub(crate) fn all() -> Vec<Page> {
-    let mut pages = primitives();
-    pages.extend(blocks());
-    pages.extend(answer_blocks());
-    pages.extend(composer_blocks());
-    pages.extend(s7_blocks());
-    pages
 }
 
 /// Forces every story canvas to one width (logical px), so a page can be compared with the React

@@ -7,6 +7,7 @@ pub(crate) mod image_viewer;
 pub(crate) mod navigation;
 mod notifications;
 mod panes;
+mod region;
 mod render;
 mod session_menu;
 mod titlebar;
@@ -61,6 +62,8 @@ pub(crate) struct Shell {
     pub(super) sidebar_open: bool,
     frame: frame::FrameState,
     pending_navigation: Option<navigation::Navigation>,
+    /// A window title the next frame applies: the app title in a newly chosen language.
+    pending_title: Option<&'static str>,
     attention: notifications::Attention,
     session_menu: session_menu::SessionMenu,
     /// The agent, while one is attached; `None` shows the disconnected state.
@@ -71,6 +74,8 @@ pub(crate) struct Shell {
     /// The composer card's measured height (the conversation keeps room for it).
     composer_h: Rc<Cell<f32>>,
     panes: panes::Panes,
+    /// The cached views the window is composed of.
+    regions: region::Regions,
     focus: FocusHandle,
     _subscriptions: Vec<Subscription>,
     live_task: Option<gpui::Task<()>>,
@@ -146,6 +151,7 @@ impl Shell {
         let mut subscriptions = subscriptions;
         subscriptions.push(palette_events);
         let composer_h = composer.read(cx).height_cell();
+        let regions = region::Regions::new(&cx.entity(), cx);
         cx.set_window_appearance(options.dark.map(appearance));
         let mut shell = Self {
             theme,
@@ -155,6 +161,7 @@ impl Shell {
             sidebar_open: true,
             frame: frame::FrameState::default(),
             pending_navigation: None,
+            pending_title: None,
             attention: notifications::Attention::default(),
             session_menu: session_menu::SessionMenu::default(),
             source: options.source,
@@ -163,6 +170,7 @@ impl Shell {
             theme_override: options.dark,
             composer_h,
             panes,
+            regions,
             focus,
             _subscriptions: subscriptions,
             live_task: None,
@@ -205,6 +213,28 @@ impl Shell {
         let t = self.theme.clone();
         self.composer.update(cx, |c, cx| {
             c.set_theme(t.clone(), cx);
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    /// `setAppCopyLanguage`: the UI copy and the design system follow the app's language.
+    pub(crate) fn set_locale(&mut self, locale: Locale, cx: &mut Context<Self>) {
+        if self.theme.strings.locale == locale {
+            return;
+        }
+        self.theme = Theme::new(
+            self.theme.dark,
+            self.theme.platform,
+            self.theme.code_font.clone(),
+            locale.strings(),
+        );
+        self.pending_title = Some(self.theme.strings.app_title);
+        let lang = locale.ds_lang();
+        butler_ds::ui::context::Ds::update(cx, |ds| ds.set_lang(lang));
+        let t = self.theme.clone();
+        self.composer.update(cx, |c, cx| {
+            c.set_theme(t, cx);
             cx.notify();
         });
         cx.notify();

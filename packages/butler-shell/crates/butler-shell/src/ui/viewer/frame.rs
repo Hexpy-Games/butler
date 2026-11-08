@@ -155,16 +155,19 @@ impl RenderOnce for FileViewerPage {
         let body = Box::new()
             .padding_y(Space::Xxl)
             .child(Box::new().padding(Space::Xxl).children(self.children));
-        crate::ui::widgets::anchor(div().id("file-viewer-page").size_full(), "file-viewer-page")
-            .child(
-                ScrollArea::new("file-viewer-scroll").fill().child(
-                    div()
-                        .w_full()
-                        .max_w(px(max))
-                        .mx_auto()
-                        .px(Space::Xxl.px(ds))
-                        .child(body),
-                ),
+        // The scroll is the column's flex child itself (React `FileViewerPage` renders `ScrollArea
+        // fill` directly); a wrapper that is not a flex column gives it no height.
+        ScrollArea::new("file-viewer-scroll").fill().child(
+            crate::ui::widgets::anchor(
+                div()
+                    .id("file-viewer-page")
+                    .w_full()
+                    .max_w(px(max))
+                    .mx_auto()
+                    .px(Space::Xxl.px(ds)),
+                "file-viewer-page",
             )
+            .child(body),
+        )
     }
 }

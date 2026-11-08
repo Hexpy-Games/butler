@@ -302,6 +302,8 @@ pub(crate) fn session_info_actions(
 ) -> AnyElement {
     let _ = (window, ctx);
     let copy = SessionInfo::get(cx);
+    // One title-row line: a wrapping row measures a gap taller than its buttons, which pulls the
+    // buttons above the row's centre line.
     let mut row = button::container(ButtonSize::IconSm);
     if let Some(open_graph) = props.on_open_task_graph {
         row = row.child(
@@ -328,8 +330,9 @@ pub(crate) fn session_info_actions(
         Presence::new("session-info-toggle-presence", props.has_ids)
             .motion(PresenceMotion::Fade)
             .child(
+                // A flex box: a block would lay the button in a line box taller than it.
                 crate::ui::widgets::anchor(
-                    div().id("session-info-toggle-anchor"),
+                    div().id("session-info-toggle-anchor").flex(),
                     "session-info-toggle",
                 )
                 .child(toggle),

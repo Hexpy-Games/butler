@@ -280,7 +280,8 @@ impl RenderOnce for MessageStatusLabel {
                     .items_center()
                     .justify_center()
                     .size(px(18.)) // DS: MessageRow.module.css:196
-                    .child(self.mark),
+                    // DS: MessageRow.module.css:205 `.statusMark > * { width:100%; height:100% }`
+                    .child(div().size_full().child(self.mark)),
             )
             .child(div().flex_1().min_w_0().overflow_hidden().child(content))
     }

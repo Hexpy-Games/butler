@@ -31,7 +31,8 @@ struct ModelWire {
     auth_type: Option<String>,
     image_input_support: Option<String>,
     image_accepted_mime_types: Option<Vec<String>>,
-    image_max_inline_bytes: Option<i64>,
+    /// A JSON number the agent's catalog types as `f64` (`butler-models` catalog.rs).
+    image_max_inline_bytes: Option<f64>,
 }
 
 impl From<ModelWire> for ModelChoice {
@@ -45,6 +46,11 @@ impl From<ModelWire> for ModelChoice {
                 Some((effort, tokens))
             })
             .collect();
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "catalog byte limits are whole numbers well inside i64"
+        )]
+        let image_max_inline_bytes = model.image_max_inline_bytes.map(|bytes| bytes as i64);
         Self {
             provider_label: if model.provider_label.is_empty() {
                 model.provider_id.clone().into()
@@ -66,7 +72,7 @@ impl From<ModelWire> for ModelChoice {
             auth_type: model.auth_type.map(Into::into),
             image_input_support: model.image_input_support.map(Into::into),
             image_accepted_mime_types: model.image_accepted_mime_types,
-            image_max_inline_bytes: model.image_max_inline_bytes,
+            image_max_inline_bytes,
         }
     }
 }

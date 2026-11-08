@@ -15,7 +15,7 @@ use crate::ui::chat::AssistantHooks;
 use crate::ui::i18n::Locale;
 use crate::ui::i18n::session_sections::SessionSections;
 use crate::ui::source::agent::Jobs;
-use crate::ui::source::wire::{PendingAsk, PendingAskKind, SessionPendingAsks};
+use crate::ui::source::wire::{PendingAsk, PendingAskKind, SessionPendingAsks, SessionView};
 
 /// The reader's state: what it asked for last and the page that came back.
 #[derive(Default)]
@@ -26,7 +26,7 @@ struct AsksState {
 
 /// `usePendingAsks`: the open session's page; `None` until one arrives. An unavailable
 /// projection never fabricates a section.
-pub(super) fn pending_asks(
+pub(crate) fn pending_asks(
     session_id: &str,
     events: i64,
     window: &mut Window,
@@ -60,6 +60,49 @@ pub(super) fn pending_asks(
         .page
         .clone()
         .filter(|page| page.session_id == session_id)
+}
+
+/// `ConversationRequestProvider`'s `sourceMessageId`: the message the open decision was asked
+/// under. An authority request is an approval, else a pending question is a question; the ask
+/// is the one of the same session and turn (and call, for an approval).
+pub(crate) fn request_source_message(
+    view: &SessionView,
+    page: &SessionPendingAsks,
+) -> Option<String> {
+    let field = |value: &serde_json::Value, key: &str| {
+        value.get(key).and_then(|v| v.as_str()).map(str::to_owned)
+    };
+    let approval = view.authority_requests.as_deref().and_then(|requests| {
+        requests
+            .iter()
+            .find(|r| field(r, "request_ref").is_some_and(|s| !s.trim().is_empty()))
+    });
+    let (kind, turn, call) = if let Some(request) = approval {
+        (
+            PendingAskKind::Approval,
+            field(request, "source_turn_id"),
+            field(request, "source_call_id"),
+        )
+    } else {
+        let question = view.pending_questions.as_ref()?.first()?;
+        (
+            PendingAskKind::Question,
+            Some(question.source_turn_id.clone()),
+            None,
+        )
+    };
+    page.asks
+        .iter()
+        .find(|ask| {
+            ask.kind == kind
+                && ask.source_session_id == view.session_id
+                && Some(&ask.source_turn_id) == turn.as_ref()
+                && call
+                    .as_ref()
+                    .is_none_or(|call| ask.source_call_id.as_ref() == Some(call))
+        })?
+        .source_message_id
+        .clone()
 }
 
 /// `PendingAskRows`

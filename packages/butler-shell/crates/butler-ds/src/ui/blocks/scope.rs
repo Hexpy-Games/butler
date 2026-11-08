@@ -254,27 +254,8 @@ impl Element for Scope {
             .child
             .take()
             .unwrap_or_else(|| gpui::Empty.into_any_element());
-        let spec = &self.spec;
-        let (mark, density, dark) = {
-            let mut saved = (0, Density::default(), false);
-            Ds::update(cx, |ds| {
-                saved = (ds.begin_remap(&spec.remap), ds.density(), ds.dark());
-                if let Some(density) = spec.density {
-                    ds.set_density(density);
-                }
-                if let Some(dark) = spec.dark {
-                    ds.set_dark(dark);
-                }
-            });
-            saved
-        };
-        push_globals(spec, cx);
-        let layout = child.request_layout(window, cx);
-        pop_globals(spec, cx);
-        Ds::update(cx, |ds| {
-            ds.end_remap(mark);
-            ds.set_density(density);
-            ds.set_dark(dark);
+        let layout = within(&self.spec, window, cx, |window, cx| {
+            child.request_layout(window, cx)
         });
         (layout, child)
     }
@@ -288,7 +269,11 @@ impl Element for Scope {
         window: &mut Window,
         cx: &mut App,
     ) {
-        child.prepaint(window, cx);
+        // Lists render their rows here, so the scope holds for prepaint as it does for layout
+        // (CSS custom properties inherit in every phase).
+        within(&self.spec, window, cx, |window, cx| {
+            child.prepaint(window, cx)
+        });
     }
 
     fn paint(
@@ -301,8 +286,39 @@ impl Element for Scope {
         window: &mut Window,
         cx: &mut App,
     ) {
-        child.paint(window, cx);
+        within(&self.spec, window, cx, |window, cx| child.paint(window, cx));
     }
+}
+
+/// Runs `f` with the scope's theme remap, density, darkness and globals applied.
+fn within<R>(
+    spec: &Spec,
+    window: &mut Window,
+    cx: &mut App,
+    f: impl FnOnce(&mut Window, &mut App) -> R,
+) -> R {
+    let (mark, density, dark) = {
+        let mut saved = (0, Density::default(), false);
+        Ds::update(cx, |ds| {
+            saved = (ds.begin_remap(&spec.remap), ds.density(), ds.dark());
+            if let Some(density) = spec.density {
+                ds.set_density(density);
+            }
+            if let Some(dark) = spec.dark {
+                ds.set_dark(dark);
+            }
+        });
+        saved
+    };
+    push_globals(spec, cx);
+    let out = f(window, cx);
+    pop_globals(spec, cx);
+    Ds::update(cx, |ds| {
+        ds.end_remap(mark);
+        ds.set_density(density);
+        ds.set_dark(dark);
+    });
+    out
 }
 
 /// Pushes the scope's overrides onto their globals for the child's layout.

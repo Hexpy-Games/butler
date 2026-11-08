@@ -122,6 +122,7 @@ impl Shell {
         let (title, subtitle) = self.title_copy(cx);
         let mut bar = TitlebarShell::new("workspace-title", title)
             .collapsed(!open)
+            .split_chat_width(self.split_chat_width())
             .drag_region();
         if let Some(subtitle) = subtitle {
             bar = bar.subtitle(subtitle);

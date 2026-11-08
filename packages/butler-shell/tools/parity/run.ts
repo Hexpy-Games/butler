@@ -79,6 +79,12 @@ async function capture(app: App, scene: Scene, anchors: Scene["anchors"], size: 
     if ("click" in step) await app.page.clickSelector(selector);
   }
   await app.page.expression("document.fonts.ready.then(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))))");
+  // Steady state: every timed animation (enter, exit, crossfade) has finished. Loops such as
+  // spinners and scroll-driven animations never end and are not waited for.
+  await waitBrowser(() => app.page.expression<boolean>(`document.getAnimations().every(a => {
+    const timing = a.effect?.getComputedTiming();
+    return a.playState !== "running" || timing?.iterations === Infinity || typeof timing?.duration !== "number";
+  })`), "animations settle");
   const boxes = await app.page.expression<Box[]>(`(${JSON.stringify(anchors)}).flatMap(({anchor,electron})=>{
     const el=document.querySelector(electron);if(!el)return [];
     const b=el.getBoundingClientRect();if(!b.width||!b.height)return [];

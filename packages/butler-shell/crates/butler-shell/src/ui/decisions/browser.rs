@@ -4,6 +4,7 @@ mod stills;
 
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::composer_decision_panel::{Action, ComposerDecisionPanel, Detail};
+use butler_ds::ui::blocks::composer_panel::Placement;
 use butler_ds::ui::button::Variant;
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::toast::{self, Toast};
@@ -96,6 +97,7 @@ fn stop(turn: Option<String>, cx: &mut App) {
 /// ComposerBrowserHandoffSurface; `None` when this session has nothing for it.
 pub(crate) fn browser_surface(
     ctx: DecisionCtx<'_>,
+    placement: Placement,
     _window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
@@ -118,6 +120,7 @@ pub(crate) fn browser_surface(
         handoff.title,
         |_, _, _| {},
     )
+    .placement(placement)
     .eyebrow(copy.eyebrow)
     .details(handoff.details.into_iter().map(Detail::line))
     .action(

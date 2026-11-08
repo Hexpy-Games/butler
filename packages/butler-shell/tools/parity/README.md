@@ -19,6 +19,12 @@ bun packages/butler-shell/tools/parity/run.ts chat-long approval new-chat \
   --out "$TMPDIR/butler-parity" --sizes 1280x800,390x844 --themes light,dark --scale 2
 ```
 
+The Electron side is captured with CDP `Page.captureScreenshot`, which records the web
+content only. On macOS the real window draws the sidebar vibrancy material behind the
+translucent sidebar and titlebar (`main.mjs` `vibrancy: "sidebar"`); the capture shows white
+there instead. Do not treat the backdrop colour of those areas, or a white fill that blends
+into it (a pressed pane toggle), as a gpui difference.
+
 Open `report.html` in the output directory. PNGs and logical-pixel layout JSON
 are under `electron/` and `gpui/`; heatmaps are under `diff/`. Child diagnostics
 and PIDs are under `logs/`. The Electron helper manages its own file-backed logs
