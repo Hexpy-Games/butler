@@ -24,7 +24,8 @@ async function liftTo(page: Page, source: Locator, target: Locator, position = "
   await page.mouse.move(start.x + 20 + 10, start.y + start.height / 2, { steps: 3 });
   await page.mouse.move(end.x + end.width - 20, end.y + (position === "before" ? 4 : end.height - 12), { steps: 15 });
   await page.locator('[data-drop-target="true"]').waitFor();
-  await page.locator('[data-drop]').first().waitFor();
+  // An empty lane marks the drop on its zero-height list (drawn by ::before), so wait for the mark, not its box.
+  await page.locator('[data-drop]').first().waitFor({ state: "attached" });
 }
 export async function captureCanonDrag(page: Page, path: string): Promise<void> {
   const source = item(page, "ChatGPT 공식 로그인"), target = item(page, "문서");
@@ -54,9 +55,11 @@ export async function verifyCanonDrags(page: Page, server: NativeAppServerHandle
   await page.mouse.up(); await waitToast(page, `‘${moving.title}’ 진행 중`);
   canon = await read();
   assert.equal(canon.plans.find(plan => plan.id === planId)!.works.find(card => card.id === moving.id)!.canon_status, "in_progress");
+  await settleDrag(page);
+  await verifyBacklogStatusDrag(page, read);
+  canon = await read();
   const backlog = canon.backlog[0]!;
-  await page.locator('[data-slot="kanban-drag-scope"][data-dragging]').waitFor({ state: "hidden" });
-  await page.waitForTimeout(DND_KIT_CLICK_GUARD_MS);
+  await settleDrag(page);
   await moveFromBacklog(page, backlog.title, planId);
   canon = await read();
   assert.equal(canon.plans.find(plan => plan.id === planId)!.works.find(card => card.id === backlog.id)!.plan_id, planId);
@@ -92,6 +95,22 @@ async function verifyCancelledMove(page: Page, server: NativeAppServerHandle, pr
   const saved = await server.api<CanonOverview>(`/projects/${projectId}/canon`);
   assert.equal(saved.plans.find(plan => plan.id === planId)!.works.find(epic => epic.id === card.id)!.canon_status,
     "cancelled", "Moving to another group's completed lane preserves cancellation");
+}
+
+async function settleDrag(page: Page): Promise<void> {
+  await page.locator('[data-slot="kanban-drag-scope"][data-dragging]').waitFor({ state: "hidden" });
+  await page.waitForTimeout(DND_KIT_CLICK_GUARD_MS);
+}
+/** The backlog has a plan's status lanes: a drag changes the status and keeps the task out of every plan. */
+async function verifyBacklogStatusDrag(page: Page, read: () => Promise<CanonOverview>): Promise<void> {
+  const card = (await read()).backlog[1]!;
+  await selectBoardPlan(page, "백로그");
+  const lane = '[data-canon-backlog] [data-canon-lane="in_progress"]';
+  await liftTo(page, item(page, card.title), page.locator(`${lane} [data-slot="kanban-lane"]`), "end");
+  await page.mouse.up(); await waitToast(page, `‘${card.title}’ 진행 중`);
+  await page.locator(`${lane} [data-kanban-item="${card.id}"]`).waitFor();
+  assert.equal((await read()).backlog.find(epic => epic.id === card.id)?.canon_status, "in_progress");
+  await settleDrag(page);
 }
 
 async function moveFromBacklog(page: Page, title: string, planId: string) {
