@@ -5,7 +5,7 @@
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
     "deploy/licenses/refresh.py": "9949f1b408013b4350f973aa9b01a693b3f6815c8f1f94f9a63203d13e6aedfb",
-    "packages/butler-agent/rust/Cargo.lock": "340cedefd3c163c04604645ba696ad8d8fc7b2da0514e9e34b330fe8c43341a3",
+    "packages/butler-agent/rust/Cargo.lock": "9a2bc3621da61cb7a89a8e419314cec34a2b6f9ffc372cf3b743f543ab128471",
     "packages/butler-agent/rust/Cargo.toml": "f285ad63272b66159ce655ff34c66177287cf157785d8bf84a569929a991060c",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "5d8ff50c2c4b2c2d2ead256681c9a3cf2587668550d527def047df0300d0d7d5",
@@ -22,7 +22,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "be3c98a025c2aa6f2d7eed44663c2f88294e10c22d4a4ddcd323f3e6b75b32a6",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "446f223fa76294ea8a5e8479a0a4f522610ad92d3fdaa863cc7f9acffae8f8e5",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "e83c1a6b8fa5f4ecdf52b00374ecd3fd7dbdfe14418cbdaf91cd497656c9b6f6",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "c43e99fdaf58e386eb07aca9ffdaf9eb7c6e94ac4f7ed5e02126d2f5c175054c",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "c11bf595617ff037807742ff86900d6f3d813df267d83aadcbaf2195683cf25d",
     "packages/butler-agent/rust/crates/butler-shell-client/Cargo.toml": "5b3359d305f05246a9493ad56e65c9696ce43ac6a0b574a565f9fdf616cba073",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
@@ -22138,6 +22138,28 @@
       "copyright": [
         "Copyright (c) 2015-2025 Sean McArthur"
       ]
+    },
+    {
+      "id": "rust:objc2-app-kit@0.3.2",
+      "name": "objc2-app-kit",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "source": "https://github.com/madsmtm/objc2/tree/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "artifacts": [
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "259b22f571b54fed25f68ec5abd8eda223e7b0547a806f13ba797a0eabecd64f",
+        "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
+      ],
+      "files": [
+        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+      ],
+      "links": [
+        "https://crates.io/crates/objc2-app-kit/0.3.2"
+      ],
+      "copyright": []
     },
     {
       "id": "rust:objc2-core-foundation@0.3.2",
