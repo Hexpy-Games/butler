@@ -108,7 +108,7 @@ impl State {
             .url(&["events", "live"], &[("cursor", self.cursor.to_string())])?;
         self.response = Some(
             self.client
-                .request(Method::GET, url, &super::transport::Body::None, true)
+                .request(Method::GET, url, &super::transport::Body::None, true, None)
                 .await?,
         );
         Ok(())

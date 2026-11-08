@@ -10,6 +10,7 @@ mod panes;
 mod region;
 mod render;
 mod session_menu;
+mod settings_link;
 mod titlebar;
 mod transcript;
 
@@ -83,6 +84,15 @@ pub(crate) struct Shell {
     rediscover: Option<tokio::sync::mpsc::UnboundedSender<crate::ui::source::agent::MonitorSignal>>,
     /// Whether the open chat's latest window is being read again.
     refresh: Refresh,
+    /// The settings screen while it is open (it replaces the frame).
+    settings_view: Option<Entity<crate::ui::settings::SettingsView>>,
+    /// A settings page a hook without the window asked for; the next frame opens it.
+    pending_settings: Option<String>,
+    /// The last `/settings` (the store's `settings`); the settings screen opens with it.
+    settings_raw: Option<Rc<serde_json::Value>>,
+    /// Light or dark is forced (`ShellOptions::dark`, the shot harness): the theme setting
+    /// does not apply.
+    forced_theme: bool,
 }
 
 /// The open chat's refresh: idle, running, or running with another asked for meanwhile.
@@ -177,6 +187,10 @@ impl Shell {
             connection_task: None,
             rediscover: None,
             refresh: Refresh::Idle,
+            settings_view: None,
+            pending_settings: None,
+            settings_raw: None,
+            forced_theme: options.dark.is_some(),
         };
         Self::transcript_hooks(cx);
         Self::notification_responses(window, cx);

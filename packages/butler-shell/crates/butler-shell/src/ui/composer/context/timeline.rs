@@ -14,7 +14,7 @@ use crate::ui::i18n::composer::usage::{UsageCopy, copy};
 const SPLIT_SLOT_VALUES: usize = 8;
 
 /// `usageSeries`.
-pub(super) fn usage_series(c: &UsageCopy) -> Vec<Series> {
+pub(crate) fn usage_series(c: &UsageCopy) -> Vec<Series> {
     vec![
         Series {
             id: "new".into(),
@@ -81,22 +81,22 @@ pub(crate) fn usage_tokens(value: f64, lang: Lang) -> String {
     format!("{}{suffix}", fixed(scaled, decimals(scaled)))
 }
 
-pub(super) struct TimelineBucket {
-    pub(super) values: Vec<f64>,
-    pub(super) requests: f64,
-    pub(super) prompt: f64,
-    pub(super) cached: f64,
-    pub(super) output: f64,
-    pub(super) delegated: f64,
-    pub(super) total: f64,
-    pub(super) label: String,
-    pub(super) bar: BarBucket,
+pub(crate) struct TimelineBucket {
+    pub(crate) values: Vec<f64>,
+    pub(crate) requests: f64,
+    pub(crate) prompt: f64,
+    pub(crate) cached: f64,
+    pub(crate) output: f64,
+    pub(crate) delegated: f64,
+    pub(crate) total: f64,
+    pub(crate) label: String,
+    pub(crate) bar: BarBucket,
 }
 
-pub(super) struct Timeline {
-    pub(super) buckets: Vec<TimelineBucket>,
-    pub(super) axis_labels: Vec<AxisLabel>,
-    pub(super) step_hours: u32,
+pub(crate) struct Timeline {
+    pub(crate) buckets: Vec<TimelineBucket>,
+    pub(crate) axis_labels: Vec<AxisLabel>,
+    pub(crate) step_hours: u32,
 }
 
 /// `usageBucketLabel`; `start` and `end` are wall-clock milliseconds.
@@ -216,7 +216,7 @@ fn timeline_bucket(
 }
 
 /// `usageTimeline`.
-pub(super) fn usage_timeline(
+pub(crate) fn usage_timeline(
     view: Option<&UsageMonitorView>,
     max_bars: usize,
     lang: Lang,
@@ -269,15 +269,15 @@ pub(super) fn usage_timeline(
 }
 
 /// `usageReadout`'s values.
-pub(super) struct Readout {
-    pub(super) requests: f64,
-    pub(super) prompt: f64,
-    pub(super) cached: f64,
-    pub(super) output: f64,
-    pub(super) total: f64,
+pub(crate) struct Readout {
+    pub(crate) requests: f64,
+    pub(crate) prompt: f64,
+    pub(crate) cached: f64,
+    pub(crate) output: f64,
+    pub(crate) total: f64,
 }
 
-pub(super) fn usage_readout(
+pub(crate) fn usage_readout(
     view: Option<&UsageMonitorView>,
     bucket: Option<&TimelineBucket>,
 ) -> Readout {
@@ -303,7 +303,7 @@ pub(super) fn usage_readout(
 }
 
 /// `usageShare`.
-fn usage_share(value: f64, lang: Lang) -> String {
+pub(crate) fn usage_share(value: f64, lang: Lang) -> String {
     if value > 0. && value < 0.01 {
         return copy(lang).tiny_share.to_owned();
     }

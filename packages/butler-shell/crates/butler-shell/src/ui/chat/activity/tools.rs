@@ -17,6 +17,7 @@ use gpui::{
     px,
 };
 
+pub(crate) use self::labels::tool_label;
 use self::labels::{activity_icon, detail_text, nonempty, summary_label};
 use super::operation::{Ids, output_details};
 use crate::ui::chat::TranscriptCtx;

@@ -152,6 +152,7 @@ impl RenderOnce for Textarea {
                 disabled: self.disabled,
                 read_only: self.read_only,
                 invalid: self.invalid,
+                masked: false,
                 probe: self.probe,
                 on_change: self.on_change,
             },

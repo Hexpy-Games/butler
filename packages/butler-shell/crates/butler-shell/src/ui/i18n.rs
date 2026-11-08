@@ -18,6 +18,7 @@ pub(crate) mod plan_decision;
 pub(crate) mod question;
 pub(crate) mod session_info;
 pub(crate) mod session_sections;
+pub(crate) mod settings;
 pub(crate) mod task_graph;
 
 pub(crate) use messages::{AssistantStrings, assistant, transcript, worked_duration};

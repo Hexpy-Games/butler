@@ -34,6 +34,7 @@ pub struct Input {
     disabled: bool,
     read_only: bool,
     invalid: bool,
+    masked: bool,
     probe: Option<SharedString>,
     on_change: Option<ChangeHandler>,
 }
@@ -51,6 +52,7 @@ impl Input {
             disabled: false,
             read_only: false,
             invalid: false,
+            masked: false,
             probe: None,
             on_change: None,
         }
@@ -108,6 +110,12 @@ impl Input {
     }
 
     /// `onChange`: the text after each edit the user makes (not after `value` replaces it).
+    /// `type="password"`: shows a mask dot per character and keeps the text off the clipboard.
+    pub fn masked(mut self) -> Self {
+        self.masked = true;
+        self
+    }
+
     pub fn on_change(mut self, handler: impl Fn(&str, &mut Window, &mut App) + 'static) -> Self {
         self.on_change = Some(Rc::new(handler));
         self
@@ -143,6 +151,7 @@ impl RenderOnce for Input {
                 disabled: self.disabled,
                 read_only: self.read_only,
                 invalid: self.invalid,
+                masked: self.masked,
                 probe: self.probe,
                 on_change: self.on_change,
             },

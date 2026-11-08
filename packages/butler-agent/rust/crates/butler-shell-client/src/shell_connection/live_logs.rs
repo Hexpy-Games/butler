@@ -56,7 +56,7 @@ impl State {
                 let url = self.client.url(&["logs", "live"], &[])?;
                 match self
                     .client
-                    .request(Method::GET, url, &Body::None, true)
+                    .request(Method::GET, url, &Body::None, true, None)
                     .await
                 {
                     Ok(response) => self.response = Some(response),

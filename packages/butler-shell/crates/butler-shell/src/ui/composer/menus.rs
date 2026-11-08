@@ -22,7 +22,7 @@ use gpui::{
 
 pub(crate) use model::{
     ModelChoice, ModelFooter, Pick, ReasoningFooterOption, model_display_name, model_options,
-    model_options_filter, reasoning_budget_summary, reasoning_option_label,
+    model_options_filter, reasoning_budget_summary, reasoning_option_label, token_window_label,
 };
 
 use super::state::{ComposerModelState, WorkspaceMode};

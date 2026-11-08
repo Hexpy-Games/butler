@@ -115,16 +115,13 @@ impl Shell {
         &mut self,
         _: &Entity<Composer>,
         event: &ComposerEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match event {
             ComposerEvent::Send(outgoing) => self.send(outgoing.as_ref().clone(), cx),
             ComposerEvent::Stop => self.stop(cx),
-            // Settings is not in the shell yet.
-            ComposerEvent::OpenUsageSettings => {
-                toast::show(cx, Toast::message(self.theme.strings.not_yet));
-            }
+            ComposerEvent::OpenUsageSettings => self.open_settings("usage", window, cx),
         }
     }
 
@@ -185,7 +182,8 @@ impl Shell {
     /// The navigation and refresh hooks the decision panels and the task graph call
     /// (`openSession`, `openSessionObserver`, `refreshSessionView`). Opening a session goes
     /// through the shell's pending navigation (taken on the next frame, which has the window).
-    /// Schedules and memory settings are P3 screens; until then they say so.
+    /// Memory settings open on the next frame (the hook has no window); schedules are a P3
+    /// screen and say so until then.
     fn install_navigation_hooks(cx: &mut Context<Self>) {
         let open = |cx: &mut Context<Self>| -> OpenHook {
             let shell = cx.entity().downgrade();
@@ -206,13 +204,20 @@ impl Shell {
             })
         };
         let refresh = cx.entity().downgrade();
+        let memory = cx.entity().downgrade();
         let schedule = not_yet(cx);
         let hooks = decisions::InitiatedHooks {
             open_session: Some(open(cx)),
             // The observer over the parent is not ported; the subtask's own chat opens.
             open_observer: Some(open(cx)),
             open_automation: Some(Rc::new(move |_, cx| schedule(cx))),
-            open_memory_settings: Some(not_yet(cx)),
+            // `InitiatedPanels.tsx:25`: `openSettings("memory")`.
+            open_memory_settings: Some(Rc::new(move |cx: &mut App| {
+                let _ = memory.update(cx, |this, cx| {
+                    this.pending_settings = Some("memory".to_owned());
+                    cx.notify();
+                });
+            })),
             refresh_session: Some(Rc::new(move |_, cx| {
                 let _ = refresh.update(cx, Shell::refresh_open_view);
             })),

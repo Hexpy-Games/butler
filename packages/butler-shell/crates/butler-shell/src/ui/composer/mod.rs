@@ -7,7 +7,7 @@ mod decision;
 pub(crate) mod editor;
 mod files;
 mod inputs;
-mod menus;
+pub(crate) mod menus;
 mod notice;
 pub(crate) mod queue;
 mod references;
@@ -46,6 +46,7 @@ use crate::ui::source::wire::{QueuedMessageRecord, SessionView};
 use crate::ui::theme::Theme;
 
 pub(crate) use inputs::Inputs;
+pub(crate) use wire::decode_catalog;
 
 /// `fillComposerWithTemplate`: puts a suggestion into an empty composer and focuses it.
 pub(crate) fn fill_composer_with_template(text: &str, cx: &mut App) {

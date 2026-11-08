@@ -8,6 +8,7 @@ pub(crate) mod field;
 pub(crate) mod i18n;
 pub(crate) mod inspector;
 pub(crate) mod palette;
+pub(crate) mod settings;
 pub(crate) mod shell;
 pub(crate) mod sidebar;
 pub(crate) mod smooth_scroll;

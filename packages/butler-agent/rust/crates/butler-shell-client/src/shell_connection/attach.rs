@@ -21,6 +21,17 @@ struct Instance {
 struct Auth {
     token: String,
 }
+/// `app/runtime/auth/local-admin.json` (`APP_LOCAL_ADMIN_FILE`); no Debug, so the secret never
+/// reaches a log line.
+#[derive(Deserialize)]
+struct LocalAdmin {
+    schema: String,
+    secret: String,
+}
+const LOCAL_ADMIN: [&str; 4] = ["app", "runtime", "auth", "local-admin.json"];
+const LOCAL_ADMIN_SCHEMA: &str = "butler.app-local-admin.v1";
+/// Shorter secrets count as missing, as in the agent (`APP_LOCAL_ADMIN_MIN_LENGTH`).
+const LOCAL_ADMIN_MIN_LENGTH: usize = 32;
 
 impl ShellClient {
     /// Stable attachment identity, excluding credentials.
@@ -118,4 +129,21 @@ pub(crate) fn read_token(data: &Path) -> Result<String, Error> {
         return Err(Error::LocalMetadata);
     }
     Ok(auth.token)
+}
+
+/// The local admin credential (`readAppLocalAdmin`), read on every admin call so a file the agent
+/// created later is picked up. Registered as a secret so no log line can carry it.
+pub(crate) fn read_admin(data: &Path) -> Result<String, Error> {
+    let path = LOCAL_ADMIN
+        .iter()
+        .fold(data.to_path_buf(), |path, part| path.join(part));
+    let bytes = std::fs::read(path).map_err(|_| Error::LocalMetadata)?;
+    let admin: LocalAdmin = serde_json::from_slice(&bytes).map_err(|_| Error::LocalMetadata)?;
+    let visible = admin.secret.len() >= LOCAL_ADMIN_MIN_LENGTH
+        && admin.secret.bytes().all(|b| (0x21..=0x7e).contains(&b));
+    if admin.schema != LOCAL_ADMIN_SCHEMA || !visible {
+        return Err(Error::LocalMetadata);
+    }
+    butler_log::register_secret(&admin.secret);
+    Ok(admin.secret)
 }

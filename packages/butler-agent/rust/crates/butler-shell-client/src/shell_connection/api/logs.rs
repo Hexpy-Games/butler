@@ -118,6 +118,7 @@ impl ShellClient {
                 self.url(&["logs", "export"], &[])?,
                 &super::super::transport::Body::Json(body),
                 false,
+                None,
             )
             .await?;
         Self::read_download(response).await

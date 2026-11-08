@@ -198,12 +198,12 @@ pub(crate) enum UsageStatus {
 
 /// The wall-clock offset of the local zone, in milliseconds. The DS buckets and `usage_time` read
 /// local calendar time as wall-clock milliseconds.
-pub(super) fn local_offset_ms() -> i64 {
+pub(crate) fn local_offset_ms() -> i64 {
     i64::from(chrono::Local::now().offset().local_minus_utc()) * 1000
 }
 
 /// The current time in epoch milliseconds (`Date.now()`).
-pub(super) fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()
@@ -211,7 +211,7 @@ pub(super) fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-pub(super) fn parse_ms(value: &str) -> Option<i64> {
+pub(crate) fn parse_ms(value: &str) -> Option<i64> {
     chrono::DateTime::parse_from_rfc3339(value)
         .ok()
         .map(|at| at.timestamp_millis())
@@ -235,13 +235,13 @@ pub(super) fn month_day(wall: i64, lang: Lang) -> String {
 }
 
 /// "14:05" from wall-clock milliseconds.
-pub(super) fn clock(wall: i64) -> String {
+pub(crate) fn clock(wall: i64) -> String {
     let minutes = wall.rem_euclid(86_400_000) / 60_000;
     format!("{:02}:{:02}", minutes / 60, minutes % 60)
 }
 
 /// "14:05" today; "Oct 2" / "10월 2일" for another day; "—" when the date is unreadable.
-pub(super) fn usage_time(value: &str, now: i64, lang: Lang) -> String {
+pub(crate) fn usage_time(value: &str, now: i64, lang: Lang) -> String {
     let Some(at) = parse_ms(value) else {
         return "—".to_owned();
     };

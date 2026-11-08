@@ -89,7 +89,7 @@ struct CatalogWire {
 }
 
 /// The catalog of a `/model-catalog` response; `None` when it is not a catalog.
-pub(super) fn decode_catalog(value: &Value) -> Option<ModelCatalog> {
+pub(crate) fn decode_catalog(value: &Value) -> Option<ModelCatalog> {
     let wire = CatalogWire::deserialize(value).ok()?;
     Some(ModelCatalog {
         generation: wire.generation,

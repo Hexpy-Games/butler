@@ -2,9 +2,8 @@
 //! of `CommandPalette.tsx`.
 use butler_ds::ui::context::Lang;
 
-use crate::ui::i18n::palette::{
-    Every, SETTINGS_SECTIONS, Words, clock, daily_at, every, weekday, weekly_at, words,
-};
+use crate::ui::i18n::palette::{Every, Words, clock, daily_at, every, weekday, weekly_at, words};
+use crate::ui::i18n::settings::SETTINGS_SECTIONS;
 use crate::ui::source::wire::{
     CalendarSchedule, CalendarScheduleKind, CommandPaletteResult, CommandPaletteResultKind,
 };
@@ -122,8 +121,8 @@ fn log_trace_results(query: &str, developer_mode: bool, lang: Lang) -> Vec<Comma
     let needle = normalize(query);
     let logs = SETTINGS_SECTIONS
         .iter()
-        .find(|(id, _, _)| *id == "logs")
-        .map_or("", |(_, ko, en)| if lang == Lang::Ko { ko } else { en });
+        .find(|section| section.id == "logs")
+        .map_or("", |section| section.of(lang).label);
     let names = [copy.open_logs, words(Lang::En).open_logs, logs];
     if !needle.is_empty() && !names.iter().any(|name| normalize(name).contains(&needle)) {
         return Vec::new();
@@ -142,8 +141,8 @@ fn settings_results(query: &str, developer_mode: bool, lang: Lang) -> Vec<Comman
     let needle = normalize(query);
     SETTINGS_SECTIONS
         .iter()
-        .filter(|(id, _, _)| developer_mode || *id != "logs")
-        .map(|(id, ko, en)| (*id, if lang == Lang::Ko { *ko } else { *en }, *en))
+        .filter(|section| developer_mode || section.id != "logs")
+        .map(|section| (section.id, section.of(lang).label, section.en.label))
         .filter(|(_, label, english)| {
             normalize(label).contains(&needle) || normalize(english).contains(&needle)
         })

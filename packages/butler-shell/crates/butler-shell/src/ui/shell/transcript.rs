@@ -2,11 +2,10 @@
 //! opening a session; and the open chat's view shown in it.
 use std::rc::Rc;
 
-use gpui::{App, BorrowAppContext as _, Context};
+use gpui::{App, Context};
 
 use super::{Shell, navigation::Navigation};
 use crate::ui::chat::{self, AssistantHooks, OlderRequest};
-use crate::ui::i18n::Locale;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::SessionQueueView;
 
@@ -45,32 +44,15 @@ impl Shell {
         });
     }
 
-    /// The settings the transcript reads: the chats intro flag and developer mode.
+    /// GET /settings on connect; [`Shell::apply_settings`] applies it app-wide.
     pub(super) fn load_settings(cx: &mut Context<Self>) {
         let request = Jobs::run(cx, |client| async move { client.get_settings().await });
         cx.spawn(async move |this, cx| {
             let Some(Ok(raw)) = request.await else {
                 return;
             };
-            let flag = |key: &str| raw.get(key).and_then(serde_json::Value::as_bool);
-            let (seen, developer) = (flag("chats_intro_seen"), flag("diagnostics_enabled"));
-            // `setAppCopyLanguage(settings.language)`: the app copy follows the app setting.
-            let locale = raw
-                .get("language")
-                .and_then(serde_json::Value::as_str)
-                .map(Locale::from_language);
-            let _ = this.update(cx, |this, cx| {
-                if let Some(locale) = locale {
-                    this.set_locale(locale, cx);
-                }
-                if let Some(seen) = seen {
-                    chat::set_chats_intro_seen(cx, seen);
-                }
-                cx.update_global(|hooks: &mut AssistantHooks, _| {
-                    hooks.developer_mode = developer == Some(true);
-                });
-                cx.notify();
-            });
+            let raw = Rc::new(raw);
+            let _ = this.update(cx, |this, cx| this.apply_settings(&raw, cx));
         })
         .detach();
     }

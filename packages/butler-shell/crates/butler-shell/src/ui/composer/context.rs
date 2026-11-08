@@ -11,7 +11,7 @@
 mod account;
 mod popover;
 pub(crate) mod timeline;
-mod usage;
+pub(crate) mod usage;
 
 use std::collections::HashMap;
 use std::rc::Rc;

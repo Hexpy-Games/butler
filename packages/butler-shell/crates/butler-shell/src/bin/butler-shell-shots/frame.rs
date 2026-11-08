@@ -3,7 +3,7 @@ use super::{Harness, settle, ui};
 use anyhow::{Context as _, ensure};
 use gpui::{
     Focusable as _, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PlatformInput,
-    point, px, size,
+    ScrollDelta, ScrollWheelEvent, TouchPhase, point, px, size,
 };
 
 pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
@@ -22,6 +22,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             })
         }
         "click" | "drag" => pointer(h, command, arg),
+        "reveal" => reveal(h, arg),
         "expect-anchor" | "expect-no-anchor" => {
             settle(&mut h.cx, h.handle);
             ensure!(
@@ -60,6 +61,36 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         }
         _ => anyhow::bail!("unknown frame command"),
     }
+}
+
+/// `reveal <anchor> <port>`: scrolls `port` (a scroll port) so the anchor's centre sits at the
+/// port's centre, as far as the port scrolls: Electron's click runs
+/// `scrollIntoView({block: "center"})` first. One wheel step over the port does it.
+fn reveal(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let (anchor, port) = arg.split_once(' ').context("reveal <anchor> <port>")?;
+    let target =
+        h.cx.debug_bounds(h.handle, anchor)?
+            .context("missing reveal target")?;
+    let port =
+        h.cx.debug_bounds(h.handle, port)?
+            .context("missing scroll port")?;
+    let position = port.center();
+    let delta = target.center().y - position.y;
+    move_pointer(h, position, None)?;
+    h.cx.update_window(h.handle, |_, w, cx| {
+        w.dispatch_event(
+            PlatformInput::ScrollWheel(ScrollWheelEvent {
+                position,
+                delta: ScrollDelta::Pixels(point(px(0.), -delta)),
+                modifiers: Default::default(),
+                touch_phase: TouchPhase::Moved,
+            }),
+            cx,
+        );
+    })?;
+    settle(&mut h.cx, h.handle);
+    Ok(())
 }
 
 fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
