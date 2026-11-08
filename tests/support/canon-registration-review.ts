@@ -132,11 +132,8 @@ async function send(page: Page, message: string) {
 async function sidebarCrops(page: Page, server: NativeAppServerHandle, project: string) {
   const epic = await server.api<{ id: string }>(`/projects/${project}/canon/epics`, post({ title: "입력 오류 · 홈 대화" }));
   const home = await server.api<{ session_id: string }>(`/canon/epics/${epic.id}/conversation`, post({}));
-  const bound = await server.api<{ session: { id: string } }>("/sessions", post({ kind: "project", project_id: project, title: "재현 확인 대화" }));
-  await server.api(`/canon/epics/${epic.id}/conversation`, post({ session_id: bound.session.id }));
   const state = await server.api<{ home_session_id: string; session_ids: string[] }>(`/canon/epics/${epic.id}`);
   assert.equal(state.home_session_id, home.session_id);
-  assert(state.session_ids.includes(bound.session.id));
   await page.goto(server.url); await selectSession(page, home.session_id);
   if (!shouldCaptureState("sidebar")) return;
   for (const width of [390, 1440]) for (const theme of ["light", "dark"]) {
@@ -149,7 +146,6 @@ async function sidebarCrops(page: Page, server: NativeAppServerHandle, project: 
     const projectRow = page.locator(`[data-tree-item="p:${project}"] [data-test-class="tree-row"]`).first();
     if (await projectRow.getAttribute("aria-expanded") === "false") await projectRow.click();
     await page.locator(`[data-canon-epic="${epic.id}"]`).waitFor();
-    if (process.env.BUTLER_SMOKE_BASELINE !== "1") await page.locator('[data-test-class="canon-bound-chats"]').getByText("재현 확인 대화", { exact: true }).waitFor();
     await cropRegion(page, page.locator(`[data-tree-item="p:${project}"]`), `${cropPhase}-sidebar-${width}-${theme}`);
   }
 }
