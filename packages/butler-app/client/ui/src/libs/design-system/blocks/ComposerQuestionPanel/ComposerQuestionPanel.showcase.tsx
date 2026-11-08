@@ -48,17 +48,17 @@ function Demo({ context, kind = "single", initial = "open", step = 0 }: {
 function ConversationDemo({ context, kind = "single" }: { context: ShowcaseRenderContext; kind?: keyof ReturnType<typeof questionFixtures> }) {
   const ko = context.locale === "ko-KR";
   const questions: ComposerQuestion[] = questionFixtures(ko)[kind];
-  const [state, setState] = useState<QuestionPanelState>("open");
+  const [deferred, setDeferred] = useState(false);
   const [answers, setAnswers] = useState<readonly QuestionAnswer[] | null>(null);
   const [revision, setRevision] = useState(0);
   return <Stack gap="md">
     <Typo.Body>{ko ? "검색 결과를 최근 수정순으로 바꿨습니다." : "Search results now sort by last modified."}</Typo.Body>
     {answers ? <>
       <QuestionAnswerCard questions={questions} answers={answers} variant="answered" labels={ko ? { answered: "답변 완료", skipped: "건너뜀", message: "메시지로 답함" } : undefined} />
-      <Button size="sm" variant="borderless" onClick={() => { setAnswers(null); setState("open"); setRevision(revision + 1); }}>{ko ? "다시" : "Reset"}</Button>
-    </> : <ComposerQuestionPanel key={revision} placement="conversation" questions={questions} state={state} labels={ko ? koLabels : undefined}
+      <Button size="sm" variant="borderless" onClick={() => { setAnswers(null); setDeferred(false); setRevision(revision + 1); }}>{ko ? "다시" : "Reset"}</Button>
+    </> : <ComposerQuestionPanel key={revision} placement="conversation" questions={questions} labels={ko ? koLabels : undefined}
       onSubmit={setAnswers} onSkip={() => setAnswers(questions.map((q) => ({ id: q.id, selected: [], text: "", other: "", skipped: true })))}
-      onCollapse={() => setState("collapsed")} onExpand={() => setState("open")} />}
+      onCollapse={deferred ? undefined : () => setDeferred(true)} />}
   </Stack>;
 }
 export const stories: ShowcaseStory[] = [
