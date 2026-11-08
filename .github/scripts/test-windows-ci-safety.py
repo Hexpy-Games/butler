@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 import tempfile
 import unittest
+import urllib.error
 import zipfile
 from unittest.mock import patch
 
@@ -444,6 +445,24 @@ class WindowsSafety(command_coverage.WindowsCommandCoverage):
                         self.assertEqual(installed.read_bytes(), b'official executable fixture')
                         self.assertEqual(execute.call_args.args[0], [str(installed), 'version'])
                         self.assertFalse((root / 'outside').exists())
+
+    # test-category: pure-logic
+    def test_release_downloads_retry_transient_failures_only(self):
+        url = 'https://github.com/example/releases/download/v1/asset'
+        for module in (oras_setup, zstd_setup):
+            busy = urllib.error.HTTPError(url, 502, 'Bad Gateway', {}, None)
+            with patch.object(module.urllib.request, 'urlopen', side_effect=[busy, io.BytesIO(b'asset')]) as fetch, \
+                 patch.object(module.time, 'sleep') as sleep, contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(module.download(url), b'asset')
+            self.assertEqual(fetch.call_count, 2)
+            sleep.assert_called_once_with(module.RETRY_DELAYS[0])
+            missing = urllib.error.HTTPError(url, 404, 'Not Found', {}, None)
+            with patch.object(module.urllib.request, 'urlopen', side_effect=missing) as fetch, \
+                 patch.object(module.time, 'sleep') as sleep:
+                with self.assertRaises(urllib.error.HTTPError):
+                    module.download(url)
+            self.assertEqual(fetch.call_count, 1)
+            sleep.assert_not_called()
 
     # test-category: security
     def test_checker_rejects_windows_shell_and_oras_in_jobs_defaults_and_actions(self):
