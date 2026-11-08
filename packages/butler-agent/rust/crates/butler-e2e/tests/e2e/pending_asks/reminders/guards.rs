@@ -4,9 +4,11 @@ use super::*;
 async fn rm_04_schedule_subsession_and_question_followup_cannot_settle() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
-    let (s, provider, server) = setup("RM-04").await?;
+    let (mut s, provider, server) = setup("RM-04").await?;
     let card = ask(&s, "general").await?;
-    let q = named_ask(&s, &provider, "Destination").await?;
+    let q = legacy_open_asks(&mut s, &card, &["Destination".into()])
+        .await?
+        .remove(0);
     let mut questions = crate::ask_user::stub::questions();
     questions.sort_all_objects();
     let mut answer = crate::ask_user::answer();
@@ -32,7 +34,7 @@ async fn rm_04_schedule_subsession_and_question_followup_cannot_settle() -> Resu
         )
         .await?;
     assert_eq!(answered.status, 202, "{}", answered.text);
-    wait_delivered(&s, 3).await?;
+    wait_delivered(&s, 2).await?;
     let message = "Run the schedule";
     script(
         &provider,

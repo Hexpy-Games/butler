@@ -42,11 +42,11 @@ void risoPrint(){
   fragColor=vec4(col,1.);
 }
 
-// Interface: two editions of one print (riso-core.js STOCK). Day paper = the lower stop of the light --conversation-bg
-// (250 250 248, token --riso-paper-day); night stock 25 28 36 (--riso-paper-night); inks per edition (--riso-ink-*).
+// Interface: two editions of one print (riso-core.js STOCK). Paper = the lower stop of each theme's --conversation-bg
+// (day 250 250 248, token --riso-paper-day; night 22 23 25, --riso-paper-night); inks per edition (--riso-ink-*).
 void risoBind(bool night){
   uRes=u_resolution; uCss=u_css; uPr=u_pixelRatio; uMis=u_lift; uGain=u_pulse; uNight=night?1.:0.; uBleed=.16; uCol=u_col;
-  uPaper=(night?vec3(25.,28.,36.):vec3(250.,250.,248.))/255.;
+  uPaper=(night?vec3(22.,23.,25.):vec3(250.,250.,248.))/255.;
   uA=(night?vec3(96.,140.,255.):vec3(0.,120.,191.))/255.;
   uB=(night?vec3(255.,112.,190.):vec3(255.,72.,176.))/255.;
   uC=(night?vec3(150.,96.,236.):vec3(96.,56.,156.))/255.;

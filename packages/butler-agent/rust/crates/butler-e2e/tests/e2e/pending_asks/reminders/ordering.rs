@@ -54,9 +54,11 @@ async fn rm_06_other_tool_results_block_chat_settlement() -> Result<(), HarnessE
 #[tokio::test]
 async fn rm_07_two_asks_can_be_settled_before_other_tools() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (s, provider, server) = setup("RM-07").await?;
-    let first = named_ask(&s, &provider, "Destination").await?;
+    let (mut s, provider, server) = setup("RM-07").await?;
     let second = named_ask(&s, &provider, "Format").await?;
+    let first = legacy_open_asks(&mut s, &second, &["Destination".into()])
+        .await?
+        .remove(0);
     let message = "Choose A for both.";
     let mut second_call = resolve(&second["ask_id"], "answered", "A", "Choose A for both");
     second_call["id"] = json!("fc_resolve_second");
@@ -85,6 +87,36 @@ async fn rm_07_two_asks_can_be_settled_before_other_tools() -> Result<(), Harnes
     assert_eq!(asks(&s, "general").await?["open_count"], 0);
     let view = s.gw.get("/session-view?session_id=general").await?;
     assert_eq!(view.data()["question_answers"].as_array().unwrap().len(), 2);
+    server.abort();
+    s.finish().await
+}
+
+#[tokio::test]
+async fn rm_one_card_second_ask_is_refused_while_a_card_is_open() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, provider, server) = setup("RM-ONE-CARD").await?;
+    let first = named_ask(&s, &provider, "Destination").await?;
+    let message = "Keep this choice on an open card: Format";
+    let mut args = crate::ask_user::stub::questions();
+    args["questions"][0]["title"] = json!("Format");
+    args["wait"] = json!(false);
+    script(
+        &provider,
+        message,
+        vec![call("ask_user", &args), reply("Saved.")],
+    );
+    let (_, turn) = s.turn("general", message).await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    assert!(
+        results(&provider)
+            .iter()
+            .any(|r| r["error"]["code"] == "question_card_open"),
+        "{:?}",
+        results(&provider)
+    );
+    let page = asks(&s, "general").await?;
+    assert_eq!(page["open_count"], 1);
+    assert_eq!(page["asks"], json!([first]));
     server.abort();
     s.finish().await
 }

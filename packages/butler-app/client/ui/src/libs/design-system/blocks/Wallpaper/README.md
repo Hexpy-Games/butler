@@ -87,8 +87,8 @@ buffer serves rest and events: DPR ≤ 1.5 within 2.4MP (touch: 1.2MP).
   next keyframe, so scrolling never redraws the print; one that appears or
   goes redraws at once.
 - Drift modules are not dimmed under reduced motion; their paper follows the
-  theme (`--riso-paper`: the lower stop of the light `--conversation-bg`, or
-  the night stock).
+  theme (`--riso-paper`: the lower stop of that theme's `--conversation-bg`,
+  so riso and the plain background share one paper).
 
 `intro` (a `createWallpaperIntroTimeline` clock, set by SetupWizardShell
 `intro="full"`) plays the first-run ink intro on the same canvas: its own
