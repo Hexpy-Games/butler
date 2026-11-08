@@ -8,7 +8,8 @@ use gpui::{
 };
 
 use super::context::Ds;
-use super::liquid_glass::{self, LiquidGlass};
+use super::liquid_glass::{self, LiquidGlass, Presence};
+use super::motion::{Props, Transition};
 use super::strut;
 use crate::tokens::{Color, Length};
 
@@ -50,7 +51,7 @@ pub struct TintedGlass {
     square_bottom: bool,
     column: Option<Pixels>,
     height: Option<Pixels>,
-    presence: Option<f32>,
+    presence: Option<Presence>,
     children: Vec<AnyElement>,
 }
 
@@ -103,7 +104,7 @@ impl TintedGlass {
     /// content fades. Without it the glass takes the presence of the enclosing overlay
     /// ([`liquid_glass::presence`]), if any. The caller must not fade the glass's ancestors.
     pub fn presence(mut self, progress: f32) -> Self {
-        self.presence = Some(progress.clamp(0., 1.));
+        self.presence = Some(Presence::Static(progress.clamp(0., 1.)));
         self
     }
 
@@ -127,14 +128,38 @@ impl ParentElement for TintedGlass {
 }
 
 impl Paint {
-    fn new(ds: &Ds, radius: Pixels, square: (bool, bool), presence: f32) -> Self {
-        Self {
+    fn new(ds: &Ds, radius: Pixels, square: (bool, bool), presence: Presence) -> (Self, gpui::Div) {
+        let mut glass = LiquidGlass::over_content().adapt(ds);
+        glass.materialize = presence;
+        let content = match presence {
+            Presence::Static(t) => div().min_w_0().overflow_hidden().opacity(t),
+            Presence::Moving {
+                from,
+                to,
+                start_ms,
+                timing,
+            } => Transition {
+                from: 0.,
+                to: 1.,
+                start_ms,
+            }
+            .apply(
+                div().min_w_0().overflow_hidden(),
+                &timing,
+                &Props {
+                    opacity: Some((from, to)),
+                    ..Default::default()
+                },
+            ),
+        };
+        let paint = Self {
             radius,
             square_top: square.0,
             square_bottom: square.1,
             dark: ds.dark(),
-            glass: LiquidGlass::over_content().materialize(presence).adapt(ds),
-        }
+            glass,
+        };
+        (paint, content)
     }
 
     fn corners(&self, radius: Pixels) -> Corners<Pixels> {
@@ -163,7 +188,7 @@ impl RenderOnce for TintedGlass {
         let presence = self
             .presence
             .or_else(|| liquid_glass::presence(cx))
-            .unwrap_or(1.);
+            .unwrap_or(Presence::Static(1.));
         let ds = Ds::get(cx);
         let radius = ds.len(match self.radius {
             GlassRadius::Control => Length::RadiusControl,
@@ -177,7 +202,8 @@ impl RenderOnce for TintedGlass {
             GlassPadding::Md => ds.len(Length::Space3),
             GlassPadding::Lg => ds.len(Length::Space4),
         };
-        let paint = Paint::new(ds, radius, (self.square_top, self.square_bottom), presence);
+        let (paint, content) =
+            Paint::new(ds, radius, (self.square_top, self.square_bottom), presence);
         let layer = canvas(
             |_, _, _| (),
             move |bounds, (), window, _| paint.paint(bounds, window),
@@ -221,10 +247,7 @@ impl RenderOnce for TintedGlass {
                 .child(layer)
                 // The 1px border of the surface stays in layout, so the content keeps the DS geometry.
                 .child(
-                    shrink(fill(round(
-                        div().min_w_0().overflow_hidden().opacity(presence),
-                    )))
-                    .child(
+                    shrink(fill(round(content))).child(
                         shrink(fill(strut::container(div(), ds)))
                             .px(padding + px(1.)) // DS: TintedGlass.module.css:5
                             .pt(padding + px(1.))

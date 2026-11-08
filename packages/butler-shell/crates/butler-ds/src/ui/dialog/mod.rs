@@ -26,7 +26,7 @@ use crate::tokens::{Color, Duration as DsDuration, Length};
 use crate::ui::context::Ds;
 use crate::ui::layer::{Layer, Z};
 use crate::ui::menu::TriggerBox;
-use crate::ui::motion::{Timing, Tween};
+use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::overlay::dismiss::{Dismissable, Handle, Reason};
 use crate::ui::overlay::lifecycle::{Lifecycle, Phase, Spec};
 use crate::ui::overlay::motion::{self, Motion as Keyframes};
@@ -283,16 +283,22 @@ impl Dialog {
             Keyframes::DIALOG
         };
         let id = format!("{}-dialog", self.id);
-        let scrim = (self.modal || area.card.is_some())
-            .then(|| self.scrim(&id, phase, scrim_motion, &area, ds));
         let surface = content.surface(ds, &geo, &env);
-        let Some(animated) =
-            motion::animate_glass(&id, phase, side, (0.5, 0.5), keyframes, surface, ds)
-        else {
+        let top = ds.len(Length::Space2xl);
+        let scrim = (self.modal || area.card.is_some())
+            .then(|| self.scrim(&id, phase, scrim_motion, &area, (window, cx)));
+        let Some(animated) = motion::animate_glass(
+            &id,
+            phase,
+            side,
+            (0.5, 0.5),
+            keyframes,
+            surface,
+            (window, cx),
+        ) else {
             return div().into_any_element();
         };
         let child = self.guarded(animated, handle, focus, area.card.is_some());
-        let top = ds.len(Length::Space2xl);
         if area.card.is_some() {
             return div()
                 .absolute()
@@ -324,7 +330,15 @@ impl Dialog {
 
     /// The scrim (`--dialog-overlay-bg`) fading with the dialog; a modal one takes every pointer
     /// and wheel event, so the page under it neither receives clicks nor scrolls.
-    fn scrim(&self, id: &str, phase: Phase, motion: Keyframes, area: &Area, ds: &Ds) -> AnyElement {
+    fn scrim(
+        &self,
+        id: &str,
+        phase: Phase,
+        motion: Keyframes,
+        area: &Area,
+        (window, cx): (&mut Window, &mut App),
+    ) -> AnyElement {
+        let ds = Ds::get(cx);
         let mut scrim = div()
             .w(px(area.size.0))
             .h(px(area.size.1))
@@ -346,11 +360,20 @@ impl Dialog {
         } else {
             Timing::token(ds, motion.exit, motion.exit_ease)
         };
-        Tween::new(
-            format!("{id}-scrim-{enter}-{key}"),
+        transition(
+            format!("{id}-scrim-in-{key}"),
+            (if enter { 1. } else { 0. }, false),
+            &timing,
+            window,
+            cx,
+        )
+        .apply(
             scrim,
-            timing,
-            move |el, t| el.opacity(if enter { t } else { 1. - t }),
+            &timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
         )
         .into_any_element()
     }

@@ -2,16 +2,16 @@
 //! from the trigger's side and the keyframes' `scale` about the surface's transform origin (exit:
 //! a fade and the scale, and for the mobile sheet a short travel back). Reduced motion zeroes the
 //! travel and scale tokens and leaves the fade.
-use std::cell::Cell;
-
-use gpui::{AnyElement, Div, IntoElement as _, ParentElement as _, Styled as _, div, px};
+use gpui::{
+    AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, Window, div, point, px,
+};
 
 use super::lifecycle::Phase;
 use super::place::Side;
 use crate::tokens::{Duration as DsDuration, Easing, Length, Number};
 use crate::ui::context::Ds;
-use crate::ui::liquid_glass::with_presence;
-use crate::ui::motion::{Timing, Tween};
+use crate::ui::liquid_glass::{Presence, with_presence};
+use crate::ui::motion::{Props, Timing, transition};
 
 /// One overlay family's keyframes.
 #[derive(Clone, Copy, Debug)]
@@ -104,19 +104,6 @@ fn from_trigger(side: Side, distance: f32) -> (f32, f32) {
     }
 }
 
-/// The surface in its animated wrapper at progress `shown` (0 absent, 1 present): faded by it, or
-/// for a glass surface given as its presence.
-fn finish(el: Div, content: &Cell<Option<AnyElement>>, (shown, glass): (f32, bool)) -> Div {
-    let content = content
-        .take()
-        .unwrap_or_else(|| gpui::Empty.into_any_element());
-    if glass {
-        el.child(with_presence(shown, content))
-    } else {
-        el.opacity(shown).child(content)
-    }
-}
-
 /// `content` with the enter or exit of `phase` on `side`, scaling about `origin` (fractions of
 /// its box); nothing when closed.
 pub fn animate(
@@ -126,9 +113,16 @@ pub fn animate(
     origin: (f32, f32),
     motion: Motion,
     content: AnyElement,
-    ds: &Ds,
+    (window, cx): (&mut Window, &mut App),
 ) -> Option<AnyElement> {
-    build(id, phase, (side, origin), motion, content, (ds, false))
+    build(
+        id,
+        phase,
+        (side, origin),
+        motion,
+        content,
+        (window, cx, false),
+    )
 }
 
 /// [`animate`] for a surface whose root is a TintedGlass: the progress is not an opacity but the
@@ -141,9 +135,16 @@ pub fn animate_glass(
     origin: (f32, f32),
     motion: Motion,
     content: AnyElement,
-    ds: &Ds,
+    (window, cx): (&mut Window, &mut App),
 ) -> Option<AnyElement> {
-    build(id, phase, (side, origin), motion, content, (ds, true))
+    build(
+        id,
+        phase,
+        (side, origin),
+        motion,
+        content,
+        (window, cx, true),
+    )
 }
 
 fn build(
@@ -152,43 +153,54 @@ fn build(
     (side, origin): (Side, (f32, f32)),
     motion: Motion,
     content: AnyElement,
-    (ds, glass): (&Ds, bool),
+    (window, cx, glass): (&mut Window, &mut App, bool),
 ) -> Option<AnyElement> {
+    let (key, entering) = match phase {
+        Phase::Closed => return None,
+        Phase::Open { key } => (key, true),
+        Phase::Exiting { key, .. } => (key, false),
+    };
+    let ds = Ds::get(cx);
     let scale = motion.scale.map_or(1., |token| ds.number(token));
-    let wrapper = move || div().relative().transform_origin(origin.0, origin.1);
-    match phase {
-        Phase::Closed => None,
-        Phase::Open { key } => {
-            let content = Cell::new(Some(content));
-            let timing = Timing::token(ds, motion.enter, motion.enter_ease);
-            let distance = motion.enter_distance.map_or(0., |d| f32::from(ds.len(d)));
-            let (dx, dy) = from_trigger(side, distance);
-            Some(
-                Tween::new(format!("{id}-in-{key}"), wrapper(), timing, move |el, t| {
-                    let el = el.left(px(dx * (1. - t))).top(px(dy * (1. - t)));
-                    finish(el.scale(scale + (1. - scale) * t), &content, (t, glass))
-                })
-                .into_any_element(),
-            )
-        }
-        Phase::Exiting { key, .. } => {
-            let content = Cell::new(Some(content));
-            let timing = Timing::token(ds, motion.exit, motion.exit_ease);
-            let (dx, dy) = motion
-                .exit_distance
-                .map_or((0., 0.), |d| from_trigger(side, f32::from(ds.len(d))));
-            Some(
-                Tween::new(
-                    format!("{id}-out-{key}"),
-                    wrapper(),
-                    timing,
-                    move |el, t| {
-                        let el = el.left(px(dx * t)).top(px(dy * t));
-                        finish(el.scale(1. - (1. - scale) * t), &content, (1. - t, glass))
-                    },
-                )
-                .into_any_element(),
-            )
-        }
-    }
+    let (duration, easing, distance) = if entering {
+        (motion.enter, motion.enter_ease, motion.enter_distance)
+    } else {
+        (motion.exit, motion.exit_ease, motion.exit_distance)
+    };
+    let timing = Timing::token(ds, duration, easing);
+    let (dx, dy) = from_trigger(side, distance.map_or(0., |d| f32::from(ds.len(d))));
+    let value = transition(
+        format!("{id}-in-{key}"),
+        (if entering { 1. } else { 0. }, false),
+        &timing,
+        window,
+        cx,
+    );
+    let props = Props {
+        opacity: (!glass).then_some((0., 1.)),
+        offset: Some((point(px(dx), px(dy)), point(px(0.), px(0.)))),
+        scale: Some((scale, 1.)),
+        origin: Some(origin),
+        ..Default::default()
+    };
+    let content = if glass {
+        let presence = if value.moving(&timing) {
+            Presence::Moving {
+                from: value.from,
+                to: value.to,
+                start_ms: value.start_ms,
+                timing,
+            }
+        } else {
+            Presence::Static(value.target())
+        };
+        with_presence(presence, content).into_any_element()
+    } else {
+        content
+    };
+    Some(
+        value
+            .apply(div().relative().child(content), &timing, &props)
+            .into_any_element(),
+    )
 }

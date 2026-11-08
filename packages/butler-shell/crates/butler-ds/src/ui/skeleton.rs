@@ -5,12 +5,12 @@
 //! token and a shape; `lines` is a paragraph with the DS width ramp.
 use gpui::{
     App, ElementId, IntoElement, ParentElement as _, Pixels, RenderOnce, SharedString, Styled as _,
-    Window, div, linear_color_stop, linear_gradient, px, relative,
+    Window, div, linear_color_stop, linear_gradient, point, px, relative,
 };
 
 use super::context::Ds;
 use super::convert;
-use super::motion::{Loop, Timing, Tween};
+use super::motion::{Loop, Props, Timing, looping, mounted_at};
 use crate::tokens::{Color, Duration as DsDuration, Length};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -146,25 +146,27 @@ fn ch(window: &mut Window) -> Pixels {
 impl RenderOnce for Skeleton {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let unit = ch(window);
-        let ds = Ds::get(cx);
         if let Some(lines) = self.lines {
-            let rows = (0..lines).map(|index| {
-                block(
-                    ds,
-                    &(self.id.clone(), index),
-                    Look {
-                        width: Fit::Fraction(paragraph_width(index, lines)),
-                        height: self.height,
-                        aspect: None,
-                        shape: self.shape,
-                        still: self.still,
-                    },
-                )
-            });
+            let rows: Vec<_> = (0..lines)
+                .map(|index| {
+                    block(
+                        &(self.id.clone(), index),
+                        Look {
+                            width: Fit::Fraction(paragraph_width(index, lines)),
+                            height: self.height,
+                            aspect: None,
+                            shape: self.shape,
+                            still: self.still,
+                        },
+                        window,
+                        cx,
+                    )
+                })
+                .collect();
             return div()
                 .flex()
                 .flex_col()
-                .gap(ds.len(Length::SpaceSm))
+                .gap(Ds::get(cx).len(Length::SpaceSm))
                 .children(rows)
                 .into_any_element();
         }
@@ -174,7 +176,6 @@ impl RenderOnce for Skeleton {
             None => Fit::Auto,
         };
         block(
-            ds,
             &(self.id, 0),
             Look {
                 width,
@@ -183,6 +184,8 @@ impl RenderOnce for Skeleton {
                 shape: self.shape,
                 still: self.still,
             },
+            window,
+            cx,
         )
         .into_any_element()
     }
@@ -206,7 +209,8 @@ struct Look {
 }
 
 /// One placeholder block: the fill, the size rules and the sheen.
-fn block(ds: &Ds, key: &(ElementId, usize), look: Look) -> gpui::Div {
+fn block(key: &(ElementId, usize), look: Look, window: &mut Window, cx: &mut App) -> gpui::Div {
+    let ds = Ds::get(cx);
     let radius = match look.shape {
         Shape::Rect => ds.len(Length::RadiusControl),
         Shape::Pill | Shape::Circle => ds.len(Length::RadiusPill),
@@ -239,14 +243,15 @@ fn block(ds: &Ds, key: &(ElementId, usize), look: Look) -> gpui::Div {
         None => el.min_h(px(16.)), // DS: Skeleton.module.css:4 (1rem)
     };
     if Loop::Decorative.runs(ds) && !look.still {
-        el = el.child(sheen(ds, key));
+        el = el.child(sheen(key, window, cx));
     }
     el
 }
 
 /// The sweep: a band as wide as the block that moves from -100% to 100% of the width, clear at
 /// both edges and `mix(--surface 58%, transparent)` in the middle.
-fn sheen(ds: &Ds, key: &(ElementId, usize)) -> impl IntoElement {
+fn sheen(key: &(ElementId, usize), window: &mut Window, cx: &mut App) -> impl IntoElement {
+    let ds = Ds::get(cx);
     let peak = convert::with_alpha(ds.color(Color::Surface), 0.58); // DS: Skeleton.module.css:30
     let clear = gpui::Hsla { alpha: 0., ..peak };
     let half = |angle: f32, from, to| {
@@ -258,20 +263,24 @@ fn sheen(ds: &Ds, key: &(ElementId, usize)) -> impl IntoElement {
     };
     let timing = Timing::linear(ds.duration(DsDuration::ShimmerDuration));
     let id = SharedString::from(format!("{}-{}-sheen", key.0, key.1));
-    Tween::new(id, div(), timing, move |el, t| {
-        el.absolute().top_0().left_0().size_full().child(
-            div()
-                .absolute()
-                .top_0()
-                .h_full()
-                .w_full()
-                .left(relative(-1. + 2. * t))
-                .flex()
-                .child(half(90., clear, peak))
-                .child(half(90., peak, clear)),
-        )
-    })
-    .repeat()
+    looping(
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .h_full()
+            .w_full()
+            .flex()
+            .child(half(90., clear, peak))
+            .child(half(90., peak, clear)),
+        &timing,
+        mounted_at(id, window, cx),
+        false,
+        &Props {
+            relative_offset: Some((point(-1., 0.), point(1., 0.))),
+            ..Default::default()
+        },
+    )
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -311,18 +320,17 @@ impl SkeletonRows {
 }
 
 impl RenderOnce for SkeletonRows {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
         let gap = ds.len(match self.shape {
             RowsShape::List => Length::SpaceMd,
             RowsShape::Field => Length::SettingsFieldGap,
         });
         let bar = ds.len(Length::ControlHeightLg);
+        let field_gap = ds.len(Length::SettingsFieldControlGap);
+        let field_height = ds.len(Length::FontSize2);
         let rows = (0..self.rows).map(|row| {
-            let mut cell = div()
-                .flex()
-                .flex_col()
-                .gap(ds.len(Length::SettingsFieldControlGap));
+            let mut cell = div().flex().flex_col().gap(field_gap);
             if self.shape == RowsShape::Field {
                 // A label bar: 30% wide, one `--font-size-2` tall.
                 let look = Look {
@@ -332,9 +340,8 @@ impl RenderOnce for SkeletonRows {
                     shape: Shape::Rect,
                     still: false,
                 };
-                cell = cell.child(
-                    block(ds, &(self.id.clone(), row * 2), look).h(ds.len(Length::FontSize2)),
-                );
+                cell = cell
+                    .child(block(&(self.id.clone(), row * 2), look, window, cx).h(field_height));
             }
             let look = Look {
                 width: Fit::Auto,
@@ -343,7 +350,7 @@ impl RenderOnce for SkeletonRows {
                 shape: Shape::Rect,
                 still: false,
             };
-            cell.child(block(ds, &(self.id.clone(), row * 2 + 1), look).h(bar))
+            cell.child(block(&(self.id.clone(), row * 2 + 1), look, window, cx).h(bar))
         });
         div().flex().flex_col().gap(gap).children(rows)
     }

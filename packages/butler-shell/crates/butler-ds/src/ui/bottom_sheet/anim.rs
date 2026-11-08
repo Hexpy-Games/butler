@@ -1,15 +1,14 @@
 //! A sheet's motion (BottomSheet.module.css `sheet-slide-in`, `sheet-fade-in`, `sheet-slide-out`,
-//! `sheet-fade-out` and the backdrop's). gpui has no element transform, so the translate is the
-//! surface's `top` while it is positioned relative to its place.
+//! `sheet-fade-out` and the backdrop's), retained on the animation clock.
 use gpui::{
     AnyElement, App, Entity, InteractiveElement as _, IntoElement as _, ParentElement as _,
-    Styled as _, Window, div, px,
+    Styled as _, Window, div, point, px,
 };
 
 use super::state::SheetState;
 use crate::tokens::{Color, Duration as DsDuration, Easing};
 use crate::ui::context::Ds;
-use crate::ui::motion::{Timing, Tween};
+use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::overlay::lifecycle::Phase;
 
 /// What the animation needs besides the phase.
@@ -47,89 +46,102 @@ pub(crate) fn animate(
     let from = frame.state.read(cx).held_offset();
     let ds = Ds::get(cx);
     let reduced = ds.reduced_motion();
-    match phase {
-        Phase::Closed => None,
-        Phase::Open { key } => {
-            let slide = Timing::token(ds, DsDuration::MotionDeliberate, Easing::MotionEaseSettle);
-            if reduced {
-                // `animation-name: sheet-fade-in` keeps the first duration and curve of the list.
-                return Some(
-                    Tween::new(
-                        format!("{id}-in-{key}"),
-                        div().relative().top(px(offset)).child(content),
-                        slide,
-                        gpui::Styled::opacity,
-                    )
-                    .into_any_element(),
-                );
-            }
-            let fade = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
-            let moving = Tween::new(
-                format!("{id}-slide-{key}"),
-                div().relative().child(content),
-                slide,
-                move |el, t| el.top(px(if t < 1. { height * (1. - t) } else { offset })),
-            );
-            Some(
-                Tween::new(
-                    format!("{id}-in-{key}"),
-                    div().child(moving),
-                    fade,
-                    gpui::Styled::opacity,
-                )
-                .into_any_element(),
-            )
-        }
-        Phase::Exiting { key, .. } => {
-            let out = Timing::token(ds, DsDuration::MotionExitSlow, Easing::MotionEaseAccelerate);
-            Some(
-                Tween::new(
-                    format!("{id}-out-{key}"),
-                    div().relative().child(content),
-                    out,
-                    move |el, t| {
-                        let top = if reduced {
-                            from
-                        } else {
-                            from + (height - from) * t
-                        };
-                        el.top(px(top)).opacity(1. - t)
-                    },
-                )
-                .into_any_element(),
-            )
-        }
+    let (key, entering) = match phase {
+        Phase::Closed => return None,
+        Phase::Open { key } => (key, true),
+        Phase::Exiting { key, .. } => (key, false),
+    };
+    let slide = if entering {
+        Timing::token(ds, DsDuration::MotionDeliberate, Easing::MotionEaseSettle)
+    } else {
+        Timing::token(ds, DsDuration::MotionExitSlow, Easing::MotionEaseAccelerate)
+    };
+    let fade = if reduced || !entering {
+        slide
+    } else {
+        Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard)
+    };
+    let target = if entering { 1. } else { 0. };
+    let value = transition(
+        format!("{id}-slide-{key}"),
+        (target, reduced),
+        &slide,
+        window,
+        cx,
+    );
+    let props = Props {
+        offset: Some((
+            point(px(0.), px(height)),
+            point(px(0.), px(if entering { 0. } else { from })),
+        )),
+        ..Default::default()
+    };
+    let mut moving = if reduced {
+        div()
+            .relative()
+            .top(px(if entering { offset } else { from }))
+            .child(content)
+    } else {
+        value.apply(div().relative().child(content), &slide, &props)
+    };
+    if entering && !value.moving(&slide) {
+        moving = moving.top(px(offset));
     }
+    Some(
+        transition(format!("{id}-in-{key}"), (target, false), &fade, window, cx)
+            .apply(
+                div().child(moving),
+                &fade,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
+            )
+            .into_any_element(),
+    )
 }
 
 /// The backdrop (`--dialog-overlay-bg`) over the whole window: it fades in over `--motion-base`
 /// on the standard curve and out over `--motion-exit-slow` on the accelerate curve.
-pub(crate) fn backdrop(id: &str, phase: Phase, size: (f32, f32), ds: &Ds) -> Option<AnyElement> {
+pub(crate) fn backdrop(
+    id: &str,
+    phase: Phase,
+    size: (f32, f32),
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<AnyElement> {
+    let ds = Ds::get(cx);
     let scrim = div()
         .w(px(size.0))
         .h(px(size.1))
         .bg(ds.color(Color::DialogOverlayBg))
         .occlude();
-    match phase {
-        Phase::Closed => None,
-        Phase::Open { key } => {
-            let timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
-            Some(
-                Tween::new(format!("{id}-in-{key}"), scrim, timing, |el, t| {
-                    el.opacity(t)
-                })
-                .into_any_element(),
-            )
-        }
-        Phase::Exiting { key, .. } => {
-            let timing =
-                Timing::token(ds, DsDuration::MotionExitSlow, Easing::MotionEaseAccelerate);
-            Some(
-                Tween::new(format!("{id}-out-{key}"), scrim, timing, |el, t| {
-                    el.opacity(1. - t)
-                })
-                .into_any_element(),
-            )
-        }
-    }
+    let (key, entering) = match phase {
+        Phase::Closed => return None,
+        Phase::Open { key } => (key, true),
+        Phase::Exiting { key, .. } => (key, false),
+    };
+    let timing = if entering {
+        Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard)
+    } else {
+        Timing::token(ds, DsDuration::MotionExitSlow, Easing::MotionEaseAccelerate)
+    };
+    Some(
+        transition(
+            format!("{id}-backdrop-in-{key}"),
+            (if entering { 1. } else { 0. }, false),
+            &timing,
+            window,
+            cx,
+        )
+        .apply(
+            scrim,
+            &timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
+        )
+        .into_any_element(),
+    )
 }

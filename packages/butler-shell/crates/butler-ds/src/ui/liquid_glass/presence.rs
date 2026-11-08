@@ -7,27 +7,41 @@ use gpui::{
     LayoutId, Pixels, Window,
 };
 
+use crate::ui::motion::Timing;
+
+/// Static presence or a retained materialization on the animation clock.
+#[derive(Clone, Copy)]
+pub enum Presence {
+    Static(f32),
+    Moving {
+        from: f32,
+        to: f32,
+        start_ms: u32,
+        timing: Timing,
+    },
+}
+
 /// The enclosing presences, innermost last; `None` ends the scope for a glass's own children.
 #[derive(Default)]
-struct Presences(Vec<Option<f32>>);
+struct Presences(Vec<Option<Presence>>);
 
 impl gpui::Global for Presences {}
 
 /// The presence of the innermost enclosing overlay, if the caller is inside one.
-pub fn presence(cx: &App) -> Option<f32> {
+pub fn presence(cx: &App) -> Option<Presence> {
     cx.try_global::<Presences>()
         .and_then(|stack| stack.0.last().copied().flatten())
 }
 
 pub struct WithPresence {
-    value: Option<f32>,
+    value: Option<Presence>,
     child: Option<AnyElement>,
 }
 
 /// `child` laid out, prepainted and painted with presence `t` in effect.
-pub fn with_presence(t: f32, child: impl IntoElement) -> WithPresence {
+pub fn with_presence(t: Presence, child: impl IntoElement) -> WithPresence {
     WithPresence {
-        value: Some(t.clamp(0., 1.)),
+        value: Some(t),
         child: Some(child.into_any_element()),
     }
 }
@@ -48,7 +62,7 @@ impl IntoElement for WithPresence {
     }
 }
 
-fn within<R>(value: Option<f32>, cx: &mut App, f: impl FnOnce(&mut App) -> R) -> R {
+fn within<R>(value: Option<Presence>, cx: &mut App, f: impl FnOnce(&mut App) -> R) -> R {
     cx.default_global::<Presences>().0.push(value);
     let out = f(cx);
     cx.default_global::<Presences>().0.pop();

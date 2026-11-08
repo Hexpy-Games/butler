@@ -4,15 +4,15 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, Corners, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement, Pixels, RenderOnce, StatefulInteractiveElement as _, Styled as _, Window,
-    canvas, div, px,
+    LayerMotion, MotionRepeat, ParentElement, Pixels, RenderOnce, StatefulInteractiveElement as _,
+    Styled as _, Window, canvas, div, px,
 };
 
 use super::context::Ds;
 use super::convert;
 use super::focus;
 use super::layout::{ItemProps, WithItem};
-use super::motion::{Loop, Timing, Tween};
+use super::motion::{Loop, Props, Timing, looping, mounted_at};
 use super::strut;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 
@@ -119,17 +119,6 @@ impl ParentElement for Card {
     }
 }
 
-/// The ring of a running card at pulse progress `t` (one loop, 0 to 1): opacity 0.6, 0.15, 0.6
-/// with the standard easing on each half.
-fn pulse(ease: impl Fn(f32) -> f32, t: f32) -> f32 {
-    let (from, to, local) = if t < 0.5 {
-        (PULSE_HIGH, PULSE_LOW, t * 2.)
-    } else {
-        (PULSE_LOW, PULSE_HIGH, t * 2. - 1.)
-    };
-    from + (to - from) * ease(local)
-}
-
 fn ring(color: gpui::Hsla, radius: Pixels, opacity: f32) -> gpui::Div {
     let shadow = gpui::BoxShadow {
         color: convert::with_alpha(color, opacity).into(),
@@ -213,8 +202,8 @@ impl RenderOnce for Card {
         if let (true, Some(handler)) = (self.interactive, self.on_click.clone()) {
             el = el.on_click(move |event, window, cx| handler(event, window, cx));
         }
+        let ring = self.running.then(|| self.running_ring(radius, window, cx));
         let ds = Ds::get(cx);
-        let ring = self.running.then(|| self.running_ring(ds, radius));
         strut::scope(
             true,
             strut::container(self.item.apply(el, ds), ds)
@@ -226,17 +215,56 @@ impl RenderOnce for Card {
 
 impl Card {
     /// The ring of a running card, pulsing every `--pulse-duration` (static under reduced motion).
-    fn running_ring(&self, ds: &Ds, radius: Pixels) -> AnyElement {
+    fn running_ring(&self, radius: Pixels, window: &mut Window, cx: &mut App) -> AnyElement {
+        let ds = Ds::get(cx);
         let color = convert::with_alpha(ds.color(Color::WorkerActive), RING_SHARE);
         if !Loop::Decorative.runs(ds) {
             return ring(color, radius, PULSE_HIGH).into_any_element();
         }
-        let timing = Timing::linear(ds.duration(DsDuration::PulseDuration));
-        let ease = convert::easing(ds.tokens().ease(Easing::MotionEaseStandard));
-        Tween::new((self.id.clone(), "pulse"), div(), timing, move |_, t| {
-            ring(color, radius, pulse(&ease, t))
-        })
-        .repeat()
-        .into_any_element()
+        let mut timing = Timing::token(ds, DsDuration::PulseDuration, Easing::MotionEaseStandard);
+        let cycle = Timing::linear(timing.duration);
+        timing.duration /= 2;
+        let start = mounted_at((self.id.clone(), "pulse"), window, cx);
+        // Source-over at weight one must reach HIGH over LOW exactly.
+        let overlay_alpha =
+            (color.alpha * (PULSE_HIGH - PULSE_LOW)) / (1. - color.alpha * PULSE_LOW);
+        let halves = [((0., 0.5), (1., 0.)), ((0.5, 1.), (0., 1.))];
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .child(ring(color, radius, PULSE_LOW))
+            .children(halves.map(|(visible, opacity)| {
+                let pulse = looping(
+                    ring(
+                        gpui::Hsla {
+                            alpha: overlay_alpha,
+                            ..color
+                        },
+                        radius,
+                        1.,
+                    ),
+                    &timing,
+                    start,
+                    false,
+                    &Props {
+                        opacity: Some(opacity),
+                        ..Default::default()
+                    },
+                );
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .motion(LayerMotion {
+                        visible,
+                        repeat: MotionRepeat::Loop,
+                        ..cycle.motion(start)
+                    })
+                    .child(pulse)
+            }))
+            .into_any_element()
     }
 }

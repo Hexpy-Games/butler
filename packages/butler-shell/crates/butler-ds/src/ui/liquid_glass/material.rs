@@ -311,6 +311,7 @@ pub(super) fn paint(
     m: &Material,
     tone_offset: f32,
     grow: f32,
+    appear: Option<(Material, gpui::LayerMotion)>,
     window: &mut gpui::Window,
 ) {
     if bounds.size.width < px(1.) || bounds.size.height < px(1.) {
@@ -320,10 +321,30 @@ pub(super) fn paint(
     let (w, h) = (shape.size.width.as_f32(), shape.size.height.as_f32());
     let radii = radii.map(|r| px((r.as_f32() + grow).min(w / 2.).min(h / 2.)));
     if let Some(shadow) = &m.shadow {
-        window.paint_drop_shadows_outside(shape, radii, 0., std::slice::from_ref(shadow));
+        if let Some((_, motion)) = &appear {
+            window.with_motion(*motion, shape, |window| {
+                window.paint_drop_shadows_outside(shape, radii, 0., std::slice::from_ref(shadow));
+            });
+        } else {
+            window.paint_drop_shadows_outside(shape, radii, 0., std::slice::from_ref(shadow));
+        }
     }
     let blur = [Filter::Blur(px(m.blur))];
-    window.paint_backdrop_lens(shape, radii, 0., &blur, lens(m, w.min(h) / 2., tone_offset));
+    let half = w.min(h) / 2.;
+    if let Some((m_from, motion)) = appear {
+        window.paint_backdrop_lens_appearing(
+            shape,
+            radii,
+            0.,
+            &blur,
+            lens(m, half, tone_offset),
+            lens(&m_from, half, tone_offset),
+            px(m_from.blur),
+            motion,
+        );
+    } else {
+        window.paint_backdrop_lens(shape, radii, 0., &blur, lens(m, half, tone_offset));
+    }
 }
 
 /// The rest bounds snapped to device pixels like gpui's quads, grown per side by

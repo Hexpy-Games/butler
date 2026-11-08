@@ -228,7 +228,6 @@ fn sub_layer(
         window,
         cx,
     );
-    let ds = Ds::get(cx);
     let side = resolved.map_or(Side::Right, |resolved| resolved.side);
     let origin = resolved.map_or((0., 0.5), |resolved| resolved.origin);
     let animated = motion::animate_glass(
@@ -238,7 +237,7 @@ fn sub_layer(
         origin,
         Motion::MENU,
         content,
-        ds,
+        (window, cx),
     )?;
     let frozen = match synced.phase {
         Phase::Exiting { frozen, .. } => frozen,

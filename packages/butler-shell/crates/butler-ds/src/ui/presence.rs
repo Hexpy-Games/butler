@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use gpui::{
     AnyElement, App, ElementId, Entity, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    Styled as _, Window, div, px,
+    Styled as _, Window, div, point, px,
 };
 
 use super::context::Ds;
-use super::motion::{Timing, Tween};
+use super::motion::{Props, Timing, transition};
 use crate::tokens::{Duration as DsDuration, Easing, Length, Number};
 
 /// The built-in motion of a [`Presence`].
@@ -37,7 +37,7 @@ enum Phase {
 
 struct State {
     phase: Phase,
-    /// Bumped on every change of `present`, so each enter and exit restarts its animation.
+    /// Bumped on each enter; the matching exit retargets the same transition.
     generation: usize,
 }
 
@@ -105,7 +105,6 @@ impl RenderOnce for Presence {
                     } else {
                         Phase::Gone
                     };
-                    state.generation += 1;
                 }
             }
             (state.phase, state.generation)
@@ -120,14 +119,13 @@ impl RenderOnce for Presence {
                 cx,
             );
         }
-        let ds = Ds::get(cx);
         let Some(child) = self.child.filter(|_| phase != Phase::Gone) else {
             return div().into_any_element();
         };
         let id = ElementId::from(SharedString::from(format!("{}-{generation}", self.id)));
         match (phase, self.motion) {
             (_, PresenceMotion::None) => child,
-            (phase, motion) => animated(id, (phase == Phase::Exiting, motion), child, ds),
+            (phase, motion) => animated(id, (phase == Phase::Exiting, motion), child, (window, cx)),
         }
     }
 }
@@ -138,36 +136,38 @@ fn animated(
     id: ElementId,
     (exiting, motion): (bool, PresenceMotion),
     child: AnyElement,
-    ds: &Ds,
+    (window, cx): (&mut Window, &mut App),
 ) -> AnyElement {
-    let pop = ds.number(Number::MotionScaleCheck);
-    if exiting {
-        let timing = Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate);
-        let to = if motion == PresenceMotion::Pop {
-            pop
-        } else {
-            1.
-        };
-        return Tween::new(id, div().child(child), timing, move |el, t| {
-            el.scale(1. - (1. - to) * t).opacity(1. - t)
-        })
-        .into_any_element();
-    }
-    let travel = match motion {
-        PresenceMotion::Rise => f32::from(ds.len(Length::MotionDistanceSm)),
-        _ => 0.,
+    let ds = Ds::get(cx);
+    let timing = if exiting {
+        Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate)
+    } else {
+        Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseDecelerate)
     };
-    let timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseDecelerate);
     let from = match motion {
-        PresenceMotion::Pop => pop,
-        PresenceMotion::ScaleIn => SCALE_IN_FROM,
+        PresenceMotion::Pop => ds.number(Number::MotionScaleCheck),
+        PresenceMotion::ScaleIn if !exiting => SCALE_IN_FROM,
         _ => 1.,
     };
-    Tween::new(id, div().relative().child(child), timing, move |el, t| {
-        el.top(px(travel * (1. - t)))
-            .scale(from + (1. - from) * t)
-            .opacity(t)
-    })
+    let travel = if motion == PresenceMotion::Rise && !exiting {
+        ds.len(Length::MotionDistanceSm)
+    } else {
+        px(0.)
+    };
+    let props = Props {
+        opacity: Some((0., 1.)),
+        offset: Some((point(px(0.), travel), point(px(0.), px(0.)))),
+        scale: Some((from, 1.)),
+        ..Default::default()
+    };
+    transition(
+        id,
+        (if exiting { 0. } else { 1. }, false),
+        &timing,
+        window,
+        cx,
+    )
+    .apply(div().relative().child(child), &timing, &props)
     .into_any_element()
 }
 

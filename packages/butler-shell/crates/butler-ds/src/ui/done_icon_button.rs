@@ -11,7 +11,7 @@ use gpui::{
 
 use super::context::Ds;
 use super::icon_button::IconButton;
-use super::motion::{Timing, Tween};
+use super::motion::{Props, Timing, transition};
 use super::success_check::SuccessCheck;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
 
@@ -151,7 +151,13 @@ fn finish(state: &Entity<State>, outcome: Outcome, on_error: Option<ErrorHandler
 
 impl DoneIconButton {
     /// The action icon and the check share one cell and crossfade over `--motion-fast`.
-    fn glyphs(&mut self, state: &Entity<State>, done: bool, cx: &App) -> AnyElement {
+    fn glyphs(
+        &mut self,
+        state: &Entity<State>,
+        done: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
         let ds = Ds::get(cx);
         let (run, flips) = {
             let s = state.read(cx);
@@ -178,31 +184,32 @@ impl DoneIconButton {
         // DS: DoneIconButton.module.css:20,25 `transform: scale(var(--motion-scale-menu))`.
         let shrink = 1. - ds.number(Number::MotionScaleMenu);
         let id = (self.id.clone(), format!("morph-{flips}"));
-        let body = move |el: gpui::Div, p: f32, action: Option<AnyElement>, check: SuccessCheck| {
-            el.relative()
-                .size(side)
-                .child(
-                    cell(action.unwrap_or_else(|| div().into_any_element()))
-                        .opacity(1. - p)
-                        .scale(1. - shrink * p),
-                )
-                .child(
-                    cell(check.into_any_element())
-                        .text_color(check_color)
-                        .opacity(p)
-                        .scale(1. - shrink * (1. - p)),
-                )
-        };
-        if flips == 0 {
-            return body(div(), if done { 1. } else { 0. }, action, check).into_any_element();
-        }
-        // A flip runs from the side the button was on to the other.
-        let parts = std::cell::Cell::new(Some((action, check)));
-        Tween::new(id, div(), timing, move |el, t| match parts.take() {
-            Some((action, check)) => body(el, if done { t } else { 1. - t }, action, check),
-            None => el,
-        })
-        .into_any_element()
+        let (from, to) = if done { (0., 1.) } else { (1., 0.) };
+        let value = transition(id, (1., flips == 0), &timing, window, cx);
+        let action = cell(action.unwrap_or_else(|| div().into_any_element()));
+        let check = cell(check.into_any_element()).text_color(check_color);
+        div()
+            .relative()
+            .size(side)
+            .child(value.apply(
+                action,
+                &timing,
+                &Props {
+                    opacity: Some((1. - from, 1. - to)),
+                    scale: Some((1. - shrink * from, 1. - shrink * to)),
+                    ..Default::default()
+                },
+            ))
+            .child(value.apply(
+                check,
+                &timing,
+                &Props {
+                    opacity: Some((from, to)),
+                    scale: Some((1. - shrink * (1. - from), 1. - shrink * (1. - to))),
+                    ..Default::default()
+                },
+            ))
+            .into_any_element()
     }
 }
 
@@ -219,7 +226,7 @@ impl RenderOnce for DoneIconButton {
                 }
             }
         });
-        let glyphs = self.glyphs(&state, done, cx);
+        let glyphs = self.glyphs(&state, done, window, cx);
         let label = if done {
             self.done_label.clone()
         } else {

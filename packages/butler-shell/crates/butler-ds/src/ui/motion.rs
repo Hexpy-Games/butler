@@ -1,17 +1,15 @@
-//! Motion on the DS tokens. Reduced motion is the OS setting or the app setting, both held by
-//! [`Ds`]; the tokens already zero the distances and scales under it, so token-driven motion
-//! becomes a pure opacity fade. [`Tween`] therefore does not consult gpui's own
-//! `App::reduce_motion` (which would freeze fades as well). Loops follow [`Loop`].
+//! Time-driven DS motion on retained painted groups. Tokens zero travel and scale under
+//! reduced motion, leaving opacity fades. Decorative loops follow [`Loop`].
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
-    LayoutId, Pixels, Window,
+    App, ElementId, LayerMotion, MotionEasing, MotionRepeat, Pixels, Point, Styled, Window,
+    animation_time_ms, point, relative,
 };
 
 use super::context::Ds;
 use super::convert;
-use crate::tokens::{Duration as DsDuration, Easing};
+use crate::tokens::{Duration as DsDuration, Ease, Easing};
 
 /// A repeating animation, and whether reduced motion stops it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,145 +26,226 @@ impl Loop {
     }
 }
 
-/// One timed animation: its duration and easing curve (a token's, or any function).
+/// One timed animation: its duration and token easing curve.
+#[derive(Clone, Copy)]
 pub struct Timing {
     pub duration: Duration,
-    ease: Box<dyn Fn(f32) -> f32>,
+    ease: Ease,
 }
 
 impl Timing {
     pub fn token(ds: &Ds, duration: DsDuration, ease: Easing) -> Self {
         Self {
             duration: ds.duration(duration),
-            ease: Box::new(convert::easing(ds.tokens().ease(ease))),
+            ease: ds.tokens().ease(ease),
         }
-    }
-
-    /// The eased value at linear progress `x` (0 to 1).
-    pub fn ease(&self, x: f32) -> f32 {
-        (self.ease)(x)
     }
 
     pub fn linear(duration: Duration) -> Self {
         Self {
             duration,
-            ease: Box::new(|x| x),
+            ease: Ease::Linear(&[(0., 0.), (1., 1.)]),
+        }
+    }
+
+    /// The eased CPU value at linear progress `x` (0 to 1).
+    pub fn ease(&self, x: f32) -> f32 {
+        convert::ease_at(self.ease, x)
+    }
+
+    pub fn ms(&self) -> u32 {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "DS durations fit the animation clock"
+        )]
+        {
+            self.duration.as_millis() as u32
+        }
+    }
+
+    pub fn easing(&self) -> MotionEasing {
+        match self.ease {
+            Ease::Bezier(b) => MotionEasing::CubicBezier(b),
+            Ease::Linear(stops) => {
+                let points: Vec<_> = stops.iter().map(|&(value, at)| (at, value)).collect();
+                MotionEasing::linear(&points)
+            }
+        }
+    }
+
+    pub fn motion(&self, start_ms: u32) -> LayerMotion {
+        LayerMotion {
+            start_ms,
+            duration_ms: self.ms(),
+            easing: self.easing(),
+            ..LayerMotion::NONE
         }
     }
 }
 
-/// An element whose appearance is a function of animation progress (eased 0 to 1).
-pub struct Tween<E> {
-    id: ElementId,
-    element: Option<E>,
-    timing: Timing,
-    repeat: bool,
-    apply: Box<dyn Fn(E, f32) -> E>,
+/// Property endpoints at scalar zero and one.
+#[derive(Default)]
+pub struct Props {
+    pub opacity: Option<(f32, f32)>,
+    pub offset: Option<(Point<Pixels>, Point<Pixels>)>,
+    pub relative_offset: Option<(Point<f32>, Point<f32>)>,
+    pub scale: Option<(f32, f32)>,
+    pub origin: Option<(f32, f32)>,
 }
 
-impl<E: IntoElement + 'static> Tween<E> {
-    pub fn new(
-        id: impl Into<ElementId>,
-        element: E,
-        timing: Timing,
-        apply: impl Fn(E, f32) -> E + 'static,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            element: Some(element),
-            timing,
-            repeat: false,
-            apply: Box::new(apply),
+/// A scalar heading toward a target on gpui's wrapping animation clock.
+#[derive(Clone, Copy)]
+pub struct Transition {
+    pub(super) from: f32,
+    pub(super) to: f32,
+    pub(super) start_ms: u32,
+}
+
+/// Retargets from the current value, without requesting host frames.
+pub fn transition(
+    id: impl Into<ElementId>,
+    (target, jump): (f32, bool),
+    timing: &Timing,
+    window: &mut Window,
+    cx: &mut App,
+) -> Transition {
+    let now = animation_time_ms();
+    let state = window.use_keyed_state(id, cx, |_, _| {
+        (
+            Transition {
+                from: 0.,
+                to: target,
+                start_ms: now,
+            },
+            *timing,
+        )
+    });
+    state.update(cx, |(value, previous), _| {
+        if jump {
+            *value = Transition {
+                from: target,
+                to: target,
+                start_ms: now.wrapping_sub(timing.ms()),
+            };
+        } else if target != value.to {
+            *value = Transition {
+                from: value.value(previous),
+                to: target,
+                start_ms: now,
+            };
         }
+        *previous = *timing;
+        *value
+    })
+}
+
+impl Transition {
+    pub fn target(&self) -> f32 {
+        self.to
     }
 
-    pub fn repeat(mut self) -> Self {
-        self.repeat = true;
-        self
+    pub fn value(&self, timing: &Timing) -> f32 {
+        if !self.moving(timing) {
+            return self.to;
+        }
+        let elapsed = animation_time_ms().wrapping_sub(self.start_ms);
+        self.from + (self.to - self.from) * timing.ease(elapsed as f32 / timing.ms() as f32)
+    }
+
+    pub fn moving(&self, timing: &Timing) -> bool {
+        animation_time_ms().wrapping_sub(self.start_ms) < timing.ms()
+    }
+
+    pub fn apply<E: Styled>(&self, mut el: E, timing: &Timing, props: &Props) -> E {
+        if self.moving(timing) {
+            let mut motion = timing.motion(self.start_ms);
+            if let Some((a, b)) = props.opacity {
+                motion.opacity = (a + (b - a) * self.from, a + (b - a) * self.to);
+            }
+            if let Some((a, b)) = props.offset {
+                motion.offset = (a + (b - a) * self.from, a + (b - a) * self.to);
+            }
+            if let Some((a, b)) = props.relative_offset {
+                motion.relative_offset = (a + (b - a) * self.from, a + (b - a) * self.to);
+            }
+            if let Some((a, b)) = props.scale {
+                motion.scale = (a + (b - a) * self.from, a + (b - a) * self.to);
+            }
+            if let Some((x, y)) = props.origin {
+                motion.origin = point(x, y);
+            }
+            return el.motion(motion);
+        }
+        if let Some((a, b)) = props.opacity {
+            el = el.opacity(a + (b - a) * self.to);
+        }
+        if let Some((a, b)) = props.scale {
+            el = el.scale(a + (b - a) * self.to);
+        }
+        if let Some((x, y)) = props.origin {
+            el = el.transform_origin(x, y);
+        }
+        if let Some((a, b)) = props.offset {
+            let p = a + (b - a) * self.to;
+            el = el.relative().left(p.x).top(p.y);
+        }
+        if let Some((a, b)) = props.relative_offset {
+            let p = a + (b - a) * self.to;
+            el = el.relative().left(relative(p.x)).top(relative(p.y));
+        }
+        el
     }
 }
 
-impl<E: IntoElement + 'static> IntoElement for Tween<E> {
-    type Element = Self;
-
-    fn into_element(self) -> Self {
-        self
-    }
+/// The clock value of an id's first render.
+pub fn mounted_at(id: impl Into<ElementId>, window: &mut Window, cx: &mut App) -> u32 {
+    *window
+        .use_keyed_state(id, cx, |_, _| animation_time_ms())
+        .read(cx)
 }
 
-impl<E: IntoElement + 'static> Element for Tween<E> {
-    type RequestLayoutState = AnyElement;
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<ElementId> {
-        Some(self.id.clone())
+/// A mount animation, from scalar zero to one.
+pub fn enter<E: Styled>(
+    id: impl Into<ElementId>,
+    timing: &Timing,
+    props: &Props,
+    el: E,
+    window: &mut Window,
+    cx: &mut App,
+) -> E {
+    Transition {
+        from: 0.,
+        to: 1.,
+        start_ms: mounted_at(id, window, cx),
     }
+    .apply(el, timing, props)
+}
 
-    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        id: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, AnyElement) {
-        let Some(id) = id else {
-            let empty = gpui::Empty.into_any_element();
-            return (window.request_layout(gpui::Style::default(), [], cx), empty);
-        };
-        let now = cx.background_executor().now();
-        let start = window.with_element_state(id, |start: Option<Instant>, _| {
-            let start = start.unwrap_or(now);
-            (start, start)
-        });
-        let total = self.timing.duration.as_secs_f32();
-        let elapsed = now.saturating_duration_since(start).as_secs_f32();
-        let (linear, done) = if total <= 0. {
-            (1., true)
-        } else if self.repeat {
-            ((elapsed / total).fract(), false)
+/// A repeating zero-to-one motion; alternate reverses every other iteration.
+pub fn looping<E: Styled>(
+    el: E,
+    timing: &Timing,
+    start_ms: u32,
+    alternate: bool,
+    props: &Props,
+) -> E {
+    el.motion(LayerMotion {
+        repeat: if alternate {
+            MotionRepeat::Alternate
         } else {
-            ((elapsed / total).min(1.), elapsed >= total)
-        };
-        if !done {
-            window.request_animation_frame();
-        }
-        let eased = (self.timing.ease)(linear);
-        let element = self.element.take().map(|e| (self.apply)(e, eased));
-        let mut element = element.map_or_else(
-            || gpui::Empty.into_any_element(),
-            IntoElement::into_any_element,
-        );
-        (element.request_layout(window, cx), element)
-    }
-
-    fn prepaint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
-        element: &mut AnyElement,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        element.prepaint(window, cx);
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
-        element: &mut AnyElement,
-        &mut (): &mut (),
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        element.paint(window, cx);
-    }
+            MotionRepeat::Loop
+        },
+        opacity: props.opacity.unwrap_or(LayerMotion::NONE.opacity),
+        offset: props.offset.unwrap_or(LayerMotion::NONE.offset),
+        relative_offset: props
+            .relative_offset
+            .unwrap_or(LayerMotion::NONE.relative_offset),
+        scale: props.scale.unwrap_or(LayerMotion::NONE.scale),
+        origin: props
+            .origin
+            .map_or(LayerMotion::NONE.origin, |(x, y)| point(x, y)),
+        ..timing.motion(start_ms)
+    })
 }
 
 /// A value that eases toward a target over a duration (a CSS transition of one property).

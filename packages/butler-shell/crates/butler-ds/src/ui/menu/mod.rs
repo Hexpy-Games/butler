@@ -286,7 +286,6 @@ impl Menu {
                 cx,
             )
         });
-        let ds = Ds::get(cx);
         let side = shown.map_or(spec.side, |resolved| resolved.side);
         let animated = motion::animate_glass(
             &format!("{}-menu", self.id),
@@ -295,7 +294,7 @@ impl Menu {
             shown.map_or((0.5, 0.), |resolved| resolved.origin),
             motion::Motion::MENU,
             content,
-            ds,
+            (window, cx),
         );
         let Some(animated) = animated else {
             return div().into_any_element();
