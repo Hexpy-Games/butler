@@ -21,6 +21,14 @@ export async function verifyBoardSelector(page: Page, server: NativeAppServerHan
   await board.getByRole("button", { name: "계획", exact: true }).click();
   const chooser = page.locator('[data-test-class="canon-plan-chooser"]');
   await chooser.waitFor();
+  const outside = await chooser.evaluate(element => {
+    const popover = element.closest('[data-slot="popover-content"]')!, style = getComputedStyle(popover), box = popover.getBoundingClientRect();
+    const left = box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    const right = box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+    return [...element.querySelectorAll('[data-slot="option-menu-item"]')].map(item => item.getBoundingClientRect())
+      .filter(item => item.left < left - 0.5 || item.right > right + 0.5).length;
+  });
+  assert.equal(outside, 0, "Plan rows fit inside the popover padding");
   assert.equal(await chooser.locator('[data-slot="filtered-select-filters"], [data-slot="filtered-select-group-title"]').count(), 0,
     "Flat plan choices have no empty filter or group-title rows");
   assert.equal(await chooser.locator('[data-slot="option-menu-item"]').last().innerText(), "백로그");
