@@ -21,6 +21,7 @@ pub fn read() -> DisplayAccessibility {
     }
 }
 
+/// The current settings: both off where the OS has no reader.
 #[cfg(not(target_os = "macos"))]
 pub fn read() -> DisplayAccessibility {
     DisplayAccessibility::default()
