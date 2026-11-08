@@ -255,6 +255,25 @@ async fn applied_proposal_exposes_created_ids_for_answer_cards() -> Result<(), H
             .await?,
         200,
     );
+    let token = view["message_window"]["next_cursor_token"]
+        .as_str()
+        .unwrap();
+    let delta = data(
+        s.gw.get(&format!(
+            "/session-view?session_id={chat}&cursor_token={token}"
+        ))
+        .await?,
+        200,
+    );
+    assert_eq!(
+        delta["messages"],
+        json!([]),
+        "nothing new since the full read"
+    );
+    assert_eq!(
+        delta["canon_proposals"], view["canon_proposals"],
+        "the latest turn's proposal rides a delta without its messages"
+    );
     let proposal = view["canon_proposals"][0]["proposal_id"].as_str().unwrap();
     let proposal = data(
         s.gw.get(&format!("/canon/proposals/{proposal}")).await?,
