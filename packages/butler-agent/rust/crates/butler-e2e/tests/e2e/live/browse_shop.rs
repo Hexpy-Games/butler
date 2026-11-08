@@ -50,6 +50,7 @@ async fn run_shop(
     run: usize,
 ) -> Result<Value, HarnessError> {
     live::spend_turn()?;
+    let priced = published_price(&provider.choice.model);
     let s = Setup::new("LIVE-BROWSE-SHOP")?
         .live(provider)
         .access(Access::AskExceptReads)
@@ -96,14 +97,17 @@ async fn run_shop(
         "list_price_cost":usage["cost"]});
     assert!(usage["input_tokens"].as_u64().is_some_and(|n| n > 0));
     assert!(usage["output_tokens"].as_u64().is_some_and(|n| n > 0));
-    assert_eq!(
-        usage["cost"]["available"], true,
-        "list-price usage required"
-    );
-    assert!(
-        usage["cost"]["usd"].as_f64().is_some(),
-        "list-price USD required"
-    );
+    // A subscription plan has no list price; require it where the catalog publishes one.
+    if priced {
+        assert_eq!(
+            usage["cost"]["available"], true,
+            "list-price usage required"
+        );
+        assert!(
+            usage["cost"]["usd"].as_f64().is_some(),
+            "list-price USD required"
+        );
+    }
     // Never allow a card: scenario teardown cancels the pending turn.
     s.finish().await?;
     Ok(record)
@@ -153,4 +157,17 @@ fn rounds(s: &Scenario, turn: &str) -> Result<u64, HarnessError> {
         [turn],
         |r| r.get(0),
     )?)
+}
+
+/// Whether the catalog publishes a list price for `model` (`provider/model`).
+fn published_price(model: &str) -> bool {
+    let catalog: Value = serde_json::from_str(include_str!(
+        "../../../../butler-models/src/models/catalog/static-catalog.json"
+    ))
+    .unwrap();
+    catalog["models"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|m| m["model_ref"] == model && m["pricing"]["status"] == "published")
 }
