@@ -3,6 +3,9 @@ use super::{AppApplication, GatewayApplicationError};
 use crate::gateway::{GatewayApplication, MessageSendRequest, SendMessageCommand};
 use serde_json::json;
 
+/// Later answers are queued under this client id prefix followed by the request ref.
+pub(super) const CLIENT_ID_PREFIX: &str = "question-followup-";
+
 pub(super) async fn send(
     app: &AppApplication,
     session: &str,
@@ -19,7 +22,7 @@ pub(super) async fn send(
             text: Some(json!(format!(
                 "Answers to your deferred questions:\n{input}"
             ))),
-            client_message_id: Some(json!(format!("question-followup-{request_ref}"))),
+            client_message_id: Some(json!(format!("{CLIENT_ID_PREFIX}{request_ref}"))),
             attachments: None,
             model: None,
             reasoning_effort: None,
