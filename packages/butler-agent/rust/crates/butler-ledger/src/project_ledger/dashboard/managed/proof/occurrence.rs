@@ -34,8 +34,8 @@ pub(super) fn validate(
             .join("occurrences")
             .join(format!("{occurrence_id}.json")),
     )?;
-    identity.matches_occurrence(&occurrence, &occurrence_id, binding, root)?;
-    let attempt = last_admitted_attempt(&occurrence, &occurrence_id, identity.request_sha, root)?;
+    identity.matches_occurrence(&occurrence, &occurrence_id, binding)?;
+    let attempt = last_admitted_attempt(&occurrence, &occurrence_id, identity.request_sha)?;
     let publication_id = required_string(attempt, "publicationId")?;
     let receipt = read_json(
         &storage
@@ -52,7 +52,7 @@ pub(super) fn validate(
         || receipt.get("baseHead") != attempt.get("expectedBase")
         || receipt
             .get("candidateHead")
-            .is_none_or(|head| validate_head(head, root).is_err())
+            .is_none_or(|head| validate_head(head).is_err())
     {
         return Err(invalid());
     }
@@ -141,8 +141,10 @@ impl<'a> Identity<'a> {
         occurrence: &Value,
         occurrence_id: &str,
         binding: &ProjectLedgerBinding,
-        root: &Path,
     ) -> Result<(), ProjectLedgerReadError> {
+        // The stored roots record where the Ledger was when published; the
+        // occurrence id and ledgerProjectId already bind it to this Ledger, and
+        // the data folder may have moved since.
         if occurrence.get("schema").and_then(Value::as_str)
             != Some("butler.btcc-project-ledger-effect-occurrence.v2")
             || occurrence.get("occurrenceId").and_then(Value::as_str) != Some(occurrence_id)
@@ -152,8 +154,7 @@ impl<'a> Identity<'a> {
             || occurrence
                 .get("ledgerRoot")
                 .and_then(Value::as_str)
-                .map(Path::new)
-                != Some(root)
+                .is_none()
             || occurrence
                 .pointer("/operationIdentity/kind")
                 .and_then(Value::as_str)
@@ -175,7 +176,6 @@ fn last_admitted_attempt<'a>(
     occurrence: &'a Value,
     occurrence_id: &str,
     request_sha: &str,
-    root: &Path,
 ) -> Result<&'a Value, ProjectLedgerReadError> {
     let attempts = occurrence
         .get("attempts")
@@ -189,7 +189,7 @@ fn last_admitted_attempt<'a>(
             || candidate.get("requestSha256").and_then(Value::as_str) != Some(request_sha)
             || candidate
                 .get("expectedBase")
-                .is_none_or(|head| validate_head(head, root).is_err())
+                .is_none_or(|head| validate_head(head).is_err())
             || candidate
                 .get("targetPreconditions")
                 .and_then(Value::as_array)
@@ -227,7 +227,7 @@ fn expected_publication(
     Ok(format!("{:x}", Sha256::digest(body.as_bytes())))
 }
 
-fn validate_head(head: &Value, root: &Path) -> Result<(), ProjectLedgerReadError> {
+fn validate_head(head: &Value) -> Result<(), ProjectLedgerReadError> {
     let value = head.as_object().ok_or_else(invalid)?;
     let keys = [
         "schema",
@@ -245,11 +245,7 @@ fn validate_head(head: &Value, root: &Path) -> Result<(), ProjectLedgerReadError
             head.get("schema").and_then(Value::as_str),
             Some("butler.btcc-project-ledger-head.v1" | "butler.btcc-project-ledger-head.v2")
         )
-        || head
-            .get("projectRoot")
-            .and_then(Value::as_str)
-            .map(Path::new)
-            != Some(root)
+        || head.get("projectRoot").and_then(Value::as_str).is_none()
         || !digest_shape(required_string(head, "sourceSha256")?)
         || !digest_shape(required_string(head, "storageSha256")?)
         || head

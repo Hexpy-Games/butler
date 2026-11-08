@@ -67,7 +67,7 @@ impl ProjectWorkRepository {
     ) -> Result<Relation, BtccError> {
         for _attempt in 0..3 {
             let before = self.source_version(hints.clone()).await?;
-            let works = self.session_works(session_id, hints.as_deref()).await?;
+            let (works, skipped) = self.session_works(session_id, hints.as_deref()).await?;
             let after = self.source_version(hints.clone()).await?;
             if before != after {
                 continue;
@@ -76,7 +76,9 @@ impl ProjectWorkRepository {
             if hints.is_some() && heads == 0 {
                 return Box::pin(self.relation_from_ids(session_id, turn_id, None)).await;
             }
-            if heads != usize::from(!works.is_empty()) {
+            // An unreadable head leaves the session with no readable head; the
+            // turn proceeds as if it had none.
+            if heads > 1 || (heads == 0 && !works.is_empty() && !skipped) {
                 return Err(invalid("project_work_managed_record_invalid"));
             }
             let binding_count = works
@@ -101,19 +103,31 @@ impl ProjectWorkRepository {
         &self,
         session_id: &str,
         hints: Option<&[String]>,
-    ) -> Result<Vec<Snapshot>, BtccError> {
+    ) -> Result<(Vec<Snapshot>, bool), BtccError> {
         let ids = match hints {
             Some(ids) => ids.to_vec(),
             None => self.ids_for_session(session_id).await?,
         };
         let mut works = Vec::new();
+        let mut skipped = false;
         for id in ids.into_iter().collect::<HashSet<_>>() {
-            let current = self.require_current(&id).await?;
+            let current = match self.require_current(&id).await {
+                Ok(current) => current,
+                Err(error) if error.code() == "project_work_managed_record_invalid" => {
+                    butler_core::diagnostic!(
+                        "[project-work] unreadable Work skipped work_id={id} code={}",
+                        error.code()
+                    );
+                    skipped = true;
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
             if current.view.session_id == session_id {
                 works.push(current);
             }
         }
-        Ok(works)
+        Ok((works, skipped))
     }
 
     /// The one Work among `ids` bound to `turn_id`; two is corrupt.
