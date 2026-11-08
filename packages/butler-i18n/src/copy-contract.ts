@@ -302,7 +302,7 @@ interface ConversationCopy {
     };
   };
   imageTools: {
-    model: string; off: string; apiKey: string; apiKeyOnly: string; defaultQuality: string;
+    model: string; off: string; defaultQuality: string;
     quality: Record<"low" | "medium" | "high" | "xhigh" | "max", string>;
     size: string; qualityLabel: string; prompt: string; default: string; edit: string; download: string;
     editor: string; brush: string; eraser: string; brushSize: string; undo: string; original: string; compare: string;
