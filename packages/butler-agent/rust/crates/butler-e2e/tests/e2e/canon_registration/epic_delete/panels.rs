@@ -97,11 +97,14 @@ async fn assert_past_panels(
     for (kind, expected) in [("canon_hold", "continued"), ("canon_take_here", "taken")] {
         let source = format!("past-{kind}");
         let deadline = std::time::Instant::now() + Duration::from_secs(15);
-        while canon.query_row::<String, _, _>(
+        // Replay writes the row after the restart; until then there is none.
+        while rusqlite::OptionalExtension::optional(canon.query_row::<String, _, _>(
             "SELECT state FROM canon_intents WHERE op_id=?1",
             [format!("{source}:epic-deleted")],
             |r| r.get(0),
-        )? != "applied"
+        ))?
+        .as_deref()
+            != Some("applied")
         {
             assert!(std::time::Instant::now() < deadline);
             tokio::time::sleep(Duration::from_millis(20)).await;

@@ -137,6 +137,20 @@ async fn assert_deleted(
         json!({"running":0,"failed":0,"held":0,"waiting":0})
     );
     assert!(!view.to_string().contains(epic), "{view}");
+    // The outbox posts the card on the automation task's next wake, after the turns above end.
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    while app.query_row::<String, _, _>(
+        "SELECT state FROM app_initiated_messages WHERE source_key=?1",
+        [source],
+        |r| r.get(0),
+    )? != "posted"
+    {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "hold card never posted"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     let messages = s.gw.messages(chat).await?;
     let card = messages
         .iter()
