@@ -55,7 +55,7 @@ pub(super) fn follow_caret(
             };
             let offset = handle.offset();
             handle.set_offset(point(offset.x, offset.y + shift));
-            window.request_animation_frame();
+            crate::ui::motion::remeasure(window);
         },
     )
     .absolute()

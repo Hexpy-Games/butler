@@ -401,9 +401,6 @@ impl Select {
             None
         };
         let hidden = aligned && geometry.is_none();
-        if hidden {
-            window.request_animation_frame();
-        }
         let view = surface::View {
             rows,
             value: self.selected(cx),

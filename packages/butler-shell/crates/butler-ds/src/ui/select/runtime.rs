@@ -176,40 +176,30 @@ pub(super) fn start_auto(rt: &Entity<Rt>, way: Way, step: f32, window: &mut Wind
         return;
     };
     let rt = rt.clone();
-    window
-        .spawn(cx, async move |cx| {
-            loop {
-                cx.background_executor().timer(AUTO_SCROLL).await;
-                let live = cx
-                    .update(|window, cx| {
-                        let live = rt.update(cx, |rt, cx| {
-                            let (up, down) = rt.scroll_buttons();
-                            let scrollable = if way == Way::Up { up } else { down };
-                            if rt.auto.map(|(running, _)| running) != Some(serial) || !scrollable {
-                                if rt.auto.map(|(running, _)| running) == Some(serial) {
-                                    rt.auto = None;
-                                }
-                                return false;
-                            }
-                            let offset = rt.scroll.offset();
-                            let max = rt.scroll.max_offset().y;
-                            let by = px(match way {
-                                Way::Up => step,
-                                Way::Down => -step,
-                            });
-                            let y = (offset.y + by).clamp(-max, px(0.));
-                            rt.scroll.set_offset(point(offset.x, y));
-                            cx.notify();
-                            true
-                        });
-                        window.refresh();
-                        live
-                    })
-                    .unwrap_or(false);
-                if !live {
-                    break;
+    crate::ui::motion::delay(window, cx, AUTO_SCROLL, move |window, cx| {
+        let live = rt.update(cx, |rt, cx| {
+            let (up, down) = rt.scroll_buttons();
+            let scrollable = if way == Way::Up { up } else { down };
+            if rt.auto.map(|(running, _)| running) != Some(serial) || !scrollable {
+                if rt.auto.map(|(running, _)| running) == Some(serial) {
+                    rt.auto = None;
                 }
+                return false;
             }
-        })
-        .detach();
+            let offset = rt.scroll.offset();
+            let max = rt.scroll.max_offset().y;
+            let by = px(match way {
+                Way::Up => step,
+                Way::Down => -step,
+            });
+            let y = (offset.y + by).clamp(-max, px(0.));
+            rt.scroll.set_offset(point(offset.x, y));
+            rt.auto = None;
+            cx.notify();
+            true
+        });
+        if live {
+            start_auto(&rt, way, step, window, cx);
+        }
+    });
 }

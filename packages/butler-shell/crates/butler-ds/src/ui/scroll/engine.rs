@@ -352,7 +352,7 @@ pub fn fade(
         focus::hand_off_ring(cx);
     }
     if moving || lingering {
-        window.request_animation_frame();
+        crate::ui::motion::input_frame(window);
     }
     let (axis, fade) = (cfg.axis, f32::from(cfg.size));
     let watch = {
@@ -405,7 +405,7 @@ fn observe(state: &Entity<State>, params: (Axis, f32, f32), window: &mut Window,
         .filter(|focused| keyboard && *focused != own && own.contains_focused(window, cx))
         .and_then(|focused| focus::published(cx, &focused));
     if state.update(cx, |s, _| s.observe(params, target, now)) {
-        window.request_animation_frame();
+        crate::ui::motion::input_frame(window);
     }
 }
 

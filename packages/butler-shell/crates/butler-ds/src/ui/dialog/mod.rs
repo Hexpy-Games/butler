@@ -261,7 +261,6 @@ impl Dialog {
     ) -> AnyElement {
         // A card is measured by the frame before this one.
         let Some(area) = self.area(&content, window) else {
-            window.request_animation_frame();
             return div().into_any_element();
         };
         let ds = Ds::get(cx);

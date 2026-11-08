@@ -189,23 +189,17 @@ fn schedule_exit(
     cx: &mut App,
 ) {
     let entity = state.clone();
-    window
-        .spawn(cx, async move |cx| {
-            cx.background_executor().timer(exit).await;
-            cx.update(|_, cx| {
-                let ended = entity.update(cx, |state, cx| {
-                    let ended = state.phase == Phase::Exiting && state.generation == generation;
-                    if ended {
-                        state.phase = Phase::Gone;
-                        cx.notify();
-                    }
-                    ended
-                });
-                if let (true, Some(callback)) = (ended, callback) {
-                    callback(cx);
-                }
-            })
-            .ok();
-        })
-        .detach();
+    crate::ui::motion::delay(window, cx, exit, move |_, cx| {
+        let ended = entity.update(cx, |state, cx| {
+            let ended = state.phase == Phase::Exiting && state.generation == generation;
+            if ended {
+                state.phase = Phase::Gone;
+                cx.notify();
+            }
+            ended
+        });
+        if let (true, Some(callback)) = (ended, callback) {
+            callback(cx);
+        }
+    });
 }

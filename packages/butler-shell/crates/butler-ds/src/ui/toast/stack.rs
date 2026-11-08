@@ -3,8 +3,9 @@
 use std::time::Instant;
 
 use gpui::{
-    AnyElement, App, InteractiveElement as _, IntoElement as _, MouseMoveEvent, MouseUpEvent,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, Window, canvas, div, px,
+    AnyElement, App, AppContext as _, InteractiveElement as _, IntoElement as _, MouseMoveEvent,
+    MouseUpEvent, ParentElement as _, StatefulInteractiveElement as _, Styled as _, Window, canvas,
+    div, px,
 };
 
 use super::layout::{self, Frame, VISIBLE};
@@ -29,7 +30,7 @@ pub(super) fn build(
         .find(|item| item.removed_at.is_none())
         .map_or(0., |item| item.height.get());
     let place = view::Place { left: 0., width };
-    let (mut busy, mut extent, mut visible) = (false, 0_f32, 0_usize);
+    let (mut extent, mut visible) = (0_f32, 0_usize);
     let mut toasts = Vec::new();
     for (index, item) in state.items.iter_mut().enumerate() {
         let frame = Frame {
@@ -46,8 +47,6 @@ pub(super) fn build(
                 resolved.y.target() + resolved.height * (1. + resolved.scale.target()) / 2.;
             extent = extent.max(bottom);
         }
-        busy |= item.height.get() <= 0.
-            || item.toast.kind == super::Kind::Loading && !ds.reduced_motion();
         let born = *item.born.get_or_insert(now);
         toasts.push(view::render(
             item,
@@ -63,9 +62,6 @@ pub(super) fn build(
     toasts.reverse();
     let mounted = state.items.len();
     drop(state);
-    if busy {
-        window.request_animation_frame();
-    }
     let ds = Ds::get(cx);
     let timing = Timing::token(ds, DsDuration::MotionEnterOverlay, Easing::MotionEaseEnter);
     let hover = store.clone();
@@ -145,13 +141,14 @@ pub(super) fn schedule(store: &Store, now: Instant, window: &mut Window, cx: &mu
         state.wake = Some(next);
         (next.saturating_duration_since(now), store.clone())
     };
-    window
-        .spawn(cx, async move |cx| {
-            cx.background_executor()
-                .timer(delay + std::time::Duration::from_millis(1))
-                .await;
+    let view = window.current_view();
+    crate::ui::motion::delay(
+        window,
+        cx,
+        delay + std::time::Duration::from_millis(1),
+        move |_, cx| {
             store.0.borrow_mut().wake = None;
-            cx.update(|window, _| window.refresh()).ok();
-        })
-        .detach();
+            cx.notify(view);
+        },
+    );
 }

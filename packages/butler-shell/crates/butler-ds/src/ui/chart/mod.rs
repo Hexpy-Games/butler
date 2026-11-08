@@ -268,7 +268,7 @@ impl RenderOnce for Chart {
                         pointer.size = bounds.size;
                         pointer.origin = bounds.origin;
                     });
-                    window.request_animation_frame();
+                    crate::ui::motion::remeasure(window);
                 }
                 paint::chart((window, cx), bounds, &drawn, active);
             },

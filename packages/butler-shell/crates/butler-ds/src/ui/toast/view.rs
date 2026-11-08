@@ -282,9 +282,11 @@ pub(super) struct Place {
 fn measure(item: &Item, forced: bool) -> gpui::Canvas<()> {
     let measured = item.height.clone();
     canvas(
-        move |bounds: Bounds<Pixels>, _, _| {
-            if !forced {
-                measured.set(f32::from(bounds.size.height));
+        move |bounds: Bounds<Pixels>, window, _| {
+            if !forced
+                && measured.replace(f32::from(bounds.size.height)) != f32::from(bounds.size.height)
+            {
+                crate::ui::motion::remeasure(window);
             }
         },
         |_, (), _, _| {},

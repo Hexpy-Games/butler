@@ -71,13 +71,14 @@ fn dwell(target: &NavDropTarget, id: &ElementId, window: &mut Window, cx: &mut A
         }
         return;
     }
-    let since = since.unwrap_or(now);
-    if now.duration_since(since) >= target.dwell && !fired {
-        state.update(cx, |state, _| *state = (Some(since), true));
-        window.defer(cx, move |window, cx| handler(window, cx));
-    } else if !fired {
-        state.update(cx, |state, _| *state = (Some(since), false));
-        window.request_animation_frame();
+    if since.is_none() {
+        state.update(cx, |state, _| *state = (Some(now), false));
+        crate::ui::motion::delay(window, cx, target.dwell, move |window, cx| {
+            if *state.read(cx) == (Some(now), false) {
+                state.update(cx, |state, _| state.1 = true);
+                handler(window, cx);
+            }
+        });
     }
 }
 
@@ -209,7 +210,7 @@ fn recorder(key: SharedString, boxes: Boxes) -> gpui::Canvas<Bounds<Pixels>> {
         move |_, bounds, window, _| {
             let moved = boxes.borrow_mut().insert(key.clone(), bounds) != Some(bounds);
             if moved {
-                window.request_animation_frame();
+                crate::ui::motion::remeasure(window);
             }
         },
     )

@@ -170,7 +170,7 @@ impl RenderOnce for CollapsibleList {
             (entering, merged, again)
         };
         if again {
-            window.request_animation_frame();
+            crate::ui::motion::remeasure(window);
         }
         if merged.is_empty() {
             return div().hidden();

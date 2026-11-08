@@ -36,7 +36,13 @@ fn disc(window: &mut Window, center: Point<Pixels>, radius: f32, color: Hsla) {
 }
 
 /// A full ring of `width` around `center`.
-pub fn ring(window: &mut Window, center: Point<Pixels>, radius: f32, width: f32, color: Hsla) {
+pub fn ring(
+    window: &mut impl super::thinking_mark::Painter,
+    center: Point<Pixels>,
+    radius: f32,
+    width: f32,
+    color: Hsla,
+) {
     let steps = 96;
     let mut path = PathBuilder::stroke(px(width));
     for i in 0..=steps {

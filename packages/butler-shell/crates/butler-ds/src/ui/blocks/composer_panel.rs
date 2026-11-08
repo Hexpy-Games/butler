@@ -90,12 +90,7 @@ pub fn exit_progress(
         cx,
     );
     if changed && value.moving(&timing) {
-        window
-            .spawn(cx, async move |cx| {
-                cx.background_executor().timer(timing.duration).await;
-                cx.update(|window, _| window.refresh()).ok();
-            })
-            .detach();
+        crate::ui::motion::wake_after(window, cx, timing.duration);
     }
     value
 }

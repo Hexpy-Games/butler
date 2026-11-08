@@ -258,19 +258,13 @@ fn on_hover(state: &Entity<State>, on: bool, label: bool, window: &mut Window, c
         s.generation
     });
     let entity = state.clone();
-    window
-        .spawn(cx, async move |cx| {
-            cx.background_executor().timer(OPEN_DELAY).await;
-            cx.update(|_, cx| {
-                entity.update(cx, |s, cx| {
-                    if s.hovered && s.generation == generation {
-                        s.show(cx);
-                    }
-                });
-            })
-            .ok();
-        })
-        .detach();
+    crate::ui::motion::delay(window, cx, OPEN_DELAY, move |_, cx| {
+        entity.update(cx, |s, cx| {
+            if s.hovered && s.generation == generation {
+                s.show(cx);
+            }
+        });
+    });
 }
 
 /// Records the trigger's window bounds and whether its ancestors clip it out of sight entirely.

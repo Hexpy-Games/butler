@@ -3,8 +3,8 @@
 use std::time::Duration;
 
 use gpui::{
-    App, ElementId, LayerMotion, MotionEasing, MotionRepeat, Pixels, Point, Styled, Window,
-    animation_time_ms, point, relative,
+    App, AppContext as _, ElementId, LayerMotion, MotionEasing, MotionRepeat, Pixels, Point,
+    Styled, Window, animation_time_ms, point, relative,
 };
 
 use super::context::Ds;
@@ -266,4 +266,40 @@ pub fn looping<E: Styled>(
             .map_or(LayerMotion::NONE.origin, |(x, y)| point(x, y)),
         ..timing.motion(start_ms)
     })
+}
+
+/// Requests one layout frame after a measured size or position changes. Stop once it settles.
+pub fn remeasure(window: &mut Window) {
+    window.request_animation_frame();
+}
+
+/// Requests a frame while ongoing input drives a wheel glide or drag edge auto-scroll.
+pub fn input_frame(window: &mut Window) {
+    window.request_animation_frame();
+}
+
+/// Requests a fallback frame only when `paint_live` reports that a live layer is covered.
+pub fn live_fallback_frame(window: &mut Window) {
+    window.request_animation_frame();
+}
+
+/// Runs a one-shot callback after `after`; use for delayed intent, dismissal or completion.
+pub fn delay(
+    window: &mut Window,
+    cx: &mut App,
+    after: Duration,
+    f: impl FnOnce(&mut Window, &mut App) + 'static,
+) {
+    window
+        .spawn(cx, async move |cx| {
+            cx.background_executor().timer(after).await;
+            cx.update(f).ok();
+        })
+        .detach();
+}
+
+/// Wakes only the calling view after `after`, for example to unmount a completed exit.
+pub fn wake_after(window: &mut Window, cx: &mut App, after: Duration) {
+    let view = window.current_view();
+    delay(window, cx, after, move |_, cx| cx.notify(view));
 }

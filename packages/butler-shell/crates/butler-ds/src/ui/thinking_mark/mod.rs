@@ -13,24 +13,26 @@
 mod geometry;
 mod halftone;
 mod morph;
+mod paint;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::time::Instant;
+use std::sync::Arc;
 
 use gpui::{
-    App, Bounds, Corners, ElementId, Hsla, IntoElement, ParentElement as _, Pixels, RenderOnce,
-    SharedString, Styled as _, Window, canvas, div, point, px, size,
+    App, Bounds, ElementId, Hsla, IntoElement, ParentElement as _, Pixels, RenderOnce,
+    SharedString, Styled as _, Window, canvas, div,
 };
 
-use self::geometry::{CENTER, DESIGN, RING_R, RING_W, morph_sd, rest_outline};
-use self::halftone::{Frame, lattice, mis_of, pitch_of, size_class};
 use self::morph::MorphSim;
+pub use self::paint::Painter;
+use self::paint::{Painting, paint_rest, paint_ring, paint_screen, square};
 use super::aspect_frame::AspectFrame;
 use super::context::Ds;
 use super::convert;
 use super::icon::IconSize;
+use super::motion::{self, Props, Timing, looping, transition};
 use crate::tokens::{Color, Duration as DsDuration, Easing};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -97,72 +99,77 @@ struct SharedSims(RefCell<HashMap<SharedString, Rc<RefCell<MorphSim>>>>);
 
 impl gpui::Global for SharedSims {}
 
-/// The reduced-motion breathe, and the settle back to full opacity when it ends.
+/// The reduced-motion breathe remembers its mount clock for the return to full opacity.
 #[derive(Default)]
 struct Breathe {
-    since: Option<Instant>,
-    settle: Option<(Instant, f32)>,
-    last: f32,
+    since: Option<u32>,
 }
 
-/// The easings and durations of the breathe.
+/// The breathe's half-period and easing.
 struct Cadence {
-    /// One way of the breathe: twice the pulse duration.
-    pulse: std::time::Duration,
-    slow: std::time::Duration,
-    spinner: crate::tokens::Ease,
-    standard: crate::tokens::Ease,
+    pulse: Timing,
 }
 
 impl Breathe {
-    /// The canvas opacity now, and whether it is still moving: while `breathing` it alternates
-    /// between 1 and 0.45 on the Spinner easing; leaving it settles from where it is back to 1.
-    fn opacity(&mut self, now: Instant, breathing: bool, cadence: &Cadence) -> (f32, bool) {
-        if breathing {
-            let since = *self.since.get_or_insert(now);
-            self.settle = None;
-            let phase = (now.saturating_duration_since(since).as_secs_f32()
-                / cadence.pulse.as_secs_f32())
-            .rem_euclid(2.);
-            let q = if phase < 1. { phase } else { 2. - phase };
-            self.last = 1. - 0.55 * convert::ease_at(cadence.spinner, q); // DS: ButlerThinkingMark.module.css:6
-            return (self.last, true);
-        }
-        if self.since.take().is_some() {
-            self.settle = Some((now, self.last));
-        }
-        let Some((start, from)) = self.settle else {
-            return (1., false);
+    fn opacity(&mut self, now: u32, breathing: bool, cadence: &Cadence) -> (f32, bool) {
+        let since = if breathing {
+            *self.since.get_or_insert(now)
+        } else {
+            let Some(since) = self.since.take() else {
+                return (1., false);
+            };
+            since
         };
-        let u = now.saturating_duration_since(start).as_secs_f32() / cadence.slow.as_secs_f32();
-        if u >= 1. {
-            self.settle = None;
-            self.last = 1.;
-            return (1., false);
-        }
-        self.last = from + (1. - from) * convert::ease_at(cadence.standard, u);
-        (self.last, true)
+        let phase = (now.wrapping_sub(since) as f32 / cadence.pulse.ms() as f32).rem_euclid(2.);
+        let q = if phase < 1. { phase } else { 2. - phase };
+        (1. - 0.55 * cadence.pulse.ease(q), !breathing)
     }
 }
 
-/// One ink printed as a layer at its own alpha: the rest logo while idle, else the screen.
-fn layer(ink: usize, look: Painting, alpha: f32) -> gpui::Div {
-    let drawing = canvas(
+/// The mark's canvas: static at rest; the same spring snapshot paints live or covered.
+fn layer(
+    key: u64,
+    snapshot: MorphSim,
+    look: Painting,
+    reduced: bool,
+) -> gpui::Canvas<Bounds<Pixels>> {
+    canvas(
         |bounds, _, _| bounds,
-        move |bounds, _: Bounds<Pixels>, window, _| {
-            let (area, _) = square(bounds);
-            if look.idle && ink == 0 {
-                let k = f32::from(area.size.width) / DESIGN;
+        move |bounds, _, window, _| {
+            let (area, k) = square(bounds);
+            if reduced || snapshot.idle {
                 paint_rest(window, area, k, look.key);
                 paint_ring(window, area, k, look.key);
-            } else if !look.idle {
-                paint_screen(window, area, &look, ink);
+                return;
+            }
+            let paint = Arc::new(move |seconds: f32| {
+                let mut frame = snapshot;
+                frame.update(seconds, snapshot.working);
+                Painting {
+                    m: frame.progress(),
+                    t: frame.time(),
+                    ..look
+                }
+            });
+            let live_paint = paint.clone();
+            let live = Arc::new(move |seconds: f32, canvas: &mut gpui::LiveCanvas| {
+                let (area, _) = square(Bounds::new(Default::default(), canvas.size()));
+                let look = live_paint(seconds);
+                for (ink, alpha) in [(1, look.blue.alpha), (2, look.pink.alpha), (0, 1.)] {
+                    canvas.layer(area, alpha, |canvas| paint_screen(canvas, area, &look, ink));
+                }
+            });
+            if !window.paint_live(key, bounds, snapshot.start_ms, live) {
+                let seconds =
+                    gpui::animation_time_ms().wrapping_sub(snapshot.start_ms) as f32 / 1000.;
+                let look = paint(seconds);
+                for (ink, alpha) in [(1, look.blue.alpha), (2, look.pink.alpha), (0, 1.)] {
+                    window.layer(area, alpha, |window| paint_screen(window, area, &look, ink));
+                }
+                motion::live_fallback_frame(window);
             }
         },
     )
-    .absolute()
-    .size_full();
-    div().absolute().size_full().opacity(alpha).child(drawing)
 }
 
 #[derive(IntoElement)]
@@ -219,192 +226,45 @@ impl ButlerThinkingMark {
         self
     }
 
-    fn simulation(&self, window: &mut Window, cx: &mut App) -> Rc<RefCell<MorphSim>> {
-        if let Some(key) = &self.morph_key {
+    fn simulation(&self, reduced: bool, window: &mut Window, cx: &mut App) -> MorphSim {
+        let sim = if let Some(key) = &self.morph_key {
             let sims = cx.default_global::<SharedSims>();
-            return sims.0.borrow_mut().entry(key.clone()).or_default().clone();
-        }
-        window
-            .use_keyed_state((self.id.clone(), "sim"), cx, |_, _| {
-                Rc::new(RefCell::new(MorphSim::default()))
-            })
-            .read(cx)
-            .clone()
-    }
-}
-
-/// What a frame paints.
-#[derive(Clone)]
-struct Painting {
-    m: f32,
-    t: f32,
-    idle: bool,
-    key: Hsla,
-    blue: Hsla,
-    pink: Hsla,
-}
-
-/// The square the mark is drawn in, and the scale from design units.
-fn square(bounds: Bounds<Pixels>) -> (Bounds<Pixels>, f32) {
-    let side = bounds.size.width.min(bounds.size.height);
-    let origin = point(
-        bounds.origin.x + (bounds.size.width - side) / 2.,
-        bounds.origin.y + (bounds.size.height - side) / 2.,
-    );
-    (
-        Bounds::new(origin, size(side, side)),
-        f32::from(side) / DESIGN,
-    )
-}
-
-fn polygon(window: &mut Window, points: impl Iterator<Item = gpui::Point<Pixels>>, color: Hsla) {
-    let mut path = gpui::PathBuilder::fill();
-    for (n, p) in points.enumerate() {
-        if n == 0 {
-            path.move_to(p);
+            sims.0.borrow_mut().entry(key.clone()).or_default().clone()
         } else {
-            path.line_to(p);
+            window
+                .use_keyed_state((self.id.clone(), "sim"), cx, |_, _| {
+                    Rc::new(RefCell::new(MorphSim::default()))
+                })
+                .read(cx)
+                .clone()
+        };
+        let now = gpui::animation_time_ms();
+        let working = self.state == MarkState::Working;
+        let mut sim = sim.borrow_mut();
+        let leaving = sim.working && !working;
+        let elapsed = now.wrapping_sub(sim.start_ms) as f32 / 1000.;
+        if reduced {
+            sim.park();
+        } else {
+            sim.update(elapsed, working);
         }
-    }
-    path.close();
-    if let Ok(path) = path.build() {
-        window.paint_path(path, color);
-    }
-}
-
-/// The exact logo: the traced ribbon and the ring.
-fn paint_rest(window: &mut Window, area: Bounds<Pixels>, k: f32, color: Hsla) {
-    let rays = rest_outline();
-    let centre = area.center();
-    polygon(
-        window,
-        rays.iter().enumerate().map(|(n, r)| {
-            let angle = n as f32 / rays.len() as f32 * std::f32::consts::TAU;
-            point(
-                centre.x + px(angle.cos() * r * k),
-                centre.y + px(angle.sin() * r * k),
-            )
-        }),
-        color,
-    );
-}
-
-fn paint_ring(window: &mut Window, area: Bounds<Pixels>, k: f32, color: Hsla) {
-    super::arc::ring(window, area.center(), RING_R * k, RING_W * k, color);
-}
-
-/// One screen of dots (`ink` 0 key, 1 blue, 2 pink), `(dx, dy)` design units off register.
-fn paint_dots(
-    window: &mut Window,
-    area: Bounds<Pixels>,
-    k: f32,
-    frame: &Frame,
-    ink: usize,
-    offset: (f32, f32),
-    color: Hsla,
-) {
-    let class = size_class(f32::from(area.size.width));
-    let layer = &lattice(class)[ink];
-    // The clip to the outline of the early morph: dots whose centre is outside it are dropped.
-    let margin = (frame.m < CLIP_RELEASE).then(|| 3. * pitch_of(class) * frame.m);
-    let origin = area.origin;
-    for cell in &layer.cells {
-        let r = frame.dot_radius(layer, cell, ink);
-        if r <= 0. {
-            continue;
-        }
-        if let Some(margin) = margin {
-            let dc = (cell.x - CENTER).hypot(cell.y - CENTER);
-            if morph_sd(geometry::sd_ribbon(cell.x, cell.y), dc, frame.m, frame.br) > margin {
-                continue;
+        sim.start_ms = now;
+        if leaving && !reduced {
+            let mut settle = *sim;
+            let mut seconds = 0.;
+            while !settle.idle {
+                settle.update(0.05, false);
+                seconds += 0.05;
             }
+            motion::wake_after(window, cx, std::time::Duration::from_secs_f32(seconds));
         }
-        let (x, y) = (cell.x + offset.0, cell.y + offset.1);
-        let bounds = Bounds::new(
-            point(origin.x + px((x - r) * k), origin.y + px((y - r) * k)),
-            size(px(2. * r * k), px(2. * r * k)),
-        );
-        window.paint_quad(
-            gpui::PaintQuad::new(bounds)
-                .background(color)
-                .corner_radii(Corners::all(px(r * k))),
-        );
-    }
-}
-
-/// Progress past which the clip trims nothing. // DS: morph-outline.ts:56
-const CLIP_RELEASE: f32 = 0.6;
-
-/// The halftone moon: the riso screens off register, the key screen on top, then the ring.
-fn paint_screen(window: &mut Window, area: Bounds<Pixels>, look: &Painting, ink: usize) {
-    let k = f32::from(area.size.width) / DESIGN;
-    let frame = Frame::new(look.m, look.t);
-    let class = size_class(f32::from(area.size.width));
-    let (t, m) = (look.t, look.m);
-    // Misregistration opens with the morph: the inks start in register on the key dots.
-    let mis = (7. + 4. * (t * 1.2).sin()) * mis_of(class) * m;
-    let mis2 = (-5. + 3. * (t * 0.95).cos()) * mis_of(class) * m;
-    // Cross-fade the last halftone edge into the exact rest logo below M = 0.05.
-    let blend = (m / 0.05).min(1.);
-    match ink {
-        1 if m > 0.001 => paint_dots(
-            window,
-            area,
-            k,
-            &frame,
-            1,
-            (mis, mis2),
-            Hsla {
-                alpha: 1.,
-                ..look.blue
-            },
-        ),
-        2 if m > 0.001 => paint_dots(
-            window,
-            area,
-            k,
-            &frame,
-            2,
-            (-mis2, mis * 0.6),
-            Hsla {
-                alpha: 1.,
-                ..look.pink
-            },
-        ),
-        0 => {
-            if blend < 1. {
-                paint_rest(
-                    window,
-                    area,
-                    k,
-                    Hsla {
-                        alpha: look.key.alpha * (1. - blend),
-                        ..look.key
-                    },
-                );
-            }
-            paint_dots(
-                window,
-                area,
-                k,
-                &frame,
-                0,
-                (0., 0.),
-                Hsla {
-                    alpha: blend,
-                    ..look.key
-                },
-            );
-            paint_ring(window, area, k, look.key);
-        }
-        _ => {}
+        *sim
     }
 }
 
 impl RenderOnce for ButlerThinkingMark {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let now = cx.background_executor().now();
-        let sim = self.simulation(window, cx);
+        let now = gpui::animation_time_ms();
         let breathe =
             window.use_keyed_state((self.id.clone(), "breathe"), cx, |_, _| Breathe::default());
         let ds = Ds::get(cx);
@@ -417,46 +277,60 @@ impl RenderOnce for ButlerThinkingMark {
         };
         let theme = self.theme.unwrap_or(scope);
         let (blue, pink) = riso(theme, ds, scope);
+        let mut pulse = Timing::token(ds, DsDuration::PulseDuration, Easing::SpinnerEasing);
+        pulse.duration *= 2;
+        let cadence = Cadence { pulse };
+        let slow = Timing::token(ds, DsDuration::MotionSlow, Easing::MotionEaseStandard);
+        let snapshot = self.simulation(reduced, window, cx);
         let breathing = reduced && working;
-        let pulse = ds.duration(DsDuration::PulseDuration) * 2;
-        let slow = ds.duration(DsDuration::MotionSlow);
-        let spinner = ds.tokens().ease(Easing::SpinnerEasing);
-        let standard = ds.tokens().ease(Easing::MotionEaseStandard);
-        let (m, t, idle) = {
-            let mut sim = sim.borrow_mut();
-            if reduced {
-                sim.park();
-            } else {
-                sim.update(now, working);
-            }
-            (sim.progress(), sim.time(), sim.idle)
-        };
-        let cadence = Cadence {
-            pulse,
-            slow,
-            spinner,
-            standard,
-        };
-        let (opacity, animating) = breathe.update(cx, |b, _| b.opacity(now, breathing, &cadence));
-        if animating || (!reduced && !idle) {
-            window.request_animation_frame();
+        let (opacity, ended) = breathe.update(cx, |b, _| b.opacity(now, breathing, &cadence));
+        if breathing || ended {
+            transition(
+                (self.id.clone(), "settle"),
+                (opacity, true),
+                &slow,
+                window,
+                cx,
+            );
         }
+        let settle = transition((self.id.clone(), "settle"), (1., false), &slow, window, cx);
+        let start = breathe.read(cx).since.unwrap_or(now);
+        let key = {
+            use std::hash::{Hash, Hasher};
+            let mut hash = std::hash::DefaultHasher::new();
+            (window.current_view(), &self.id).hash(&mut hash);
+            hash.finish()
+        };
         let look = Painting {
-            m,
-            t,
-            idle,
+            m: snapshot.progress(),
+            t: snapshot.time(),
             key: key_ink(theme),
             blue,
             pink,
         };
-        // Each riso ink prints as one layer at its own alpha, under the key ink.
-        let stack = div()
-            .relative()
-            .size_full()
-            .opacity(opacity)
-            .child(layer(1, look.clone(), look.blue.alpha))
-            .child(layer(2, look.clone(), look.pink.alpha))
-            .child(layer(0, look, 1.));
+        let drawing = layer(key, snapshot, look, reduced).absolute().size_full();
+        let stack = div().relative().size_full().child(drawing);
+        let stack = if breathing {
+            looping(
+                stack,
+                &cadence.pulse,
+                start,
+                true,
+                &Props {
+                    opacity: Some((1., 0.45)),
+                    ..Default::default()
+                },
+            )
+        } else {
+            settle.apply(
+                stack,
+                &slow,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
+            )
+        };
         let mut frame = AspectFrame::new();
         if let Some(size) = self.size {
             frame = frame.size(size);

@@ -31,8 +31,15 @@ impl Measure {
         div().absolute().top_0().left_0().size_full().child(
             canvas(
                 |_, _, _| (),
-                move |bounds, (), _, _| {
+                move |bounds, (), window, _| {
                     let mut measure = shared.borrow_mut();
+                    let previous = match slot {
+                        None => measure.origin,
+                        Some(slot) => measure.triggers.get(slot).copied().flatten(),
+                    };
+                    if previous != Some(bounds) {
+                        crate::ui::motion::remeasure(window);
+                    }
                     match slot {
                         None => measure.origin = Some(bounds),
                         Some(slot) => {
@@ -97,11 +104,6 @@ impl Slide {
             measure.origin,
             active.and_then(|i| measure.triggers.get(i).copied().flatten()),
         ) else {
-            let waiting = active.is_some() && !self.ready;
-            drop(measure);
-            if waiting {
-                window.request_animation_frame();
-            }
             return None;
         };
         let sizes: Vec<f32> = std::iter::once(f32::from(origin.size.width))

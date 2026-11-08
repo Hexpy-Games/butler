@@ -226,9 +226,6 @@ impl ResizeHandle {
             .hover_since
             .is_some_and(|since| now.saturating_duration_since(since) >= delay);
         let hint_shown = live && !dragging && (hint_due || focused);
-        if state.hover_since.is_some() && !hint_due && !dragging {
-            window.request_animation_frame();
-        }
         let fast = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
         let enter = Timing::token(ds, DsDuration::MotionEnterMenu, Easing::MotionEaseEnter);
         let exit = Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseAccelerate);
@@ -353,6 +350,10 @@ impl RenderOnce for ResizeHandle {
                 hover.update(cx, |state, _| {
                     state.hover_since = on.then(|| state.hover_since.unwrap_or(now));
                 });
+                if *on {
+                    let after = hint_delay(Ds::get(cx));
+                    crate::ui::motion::wake_after(window, cx, after);
+                }
                 window.refresh();
             })
             .child(pill(self.id.clone(), &shown, ds))

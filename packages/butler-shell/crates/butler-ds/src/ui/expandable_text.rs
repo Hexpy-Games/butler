@@ -186,13 +186,9 @@ fn toggle(state: Entity<State>, collapsed: f32, reduced: bool) -> Handler {
             cx.notify();
         });
         let state = state.clone();
-        window
-            .spawn(cx, async move |cx| {
-                cx.background_executor().timer(timing.duration).await;
-                cx.update(|_, cx| state.update(cx, |_, cx| cx.notify()))
-                    .ok();
-            })
-            .detach();
+        crate::ui::motion::delay(window, cx, timing.duration, move |_, cx| {
+            state.update(cx, |_, cx| cx.notify());
+        });
     })
 }
 

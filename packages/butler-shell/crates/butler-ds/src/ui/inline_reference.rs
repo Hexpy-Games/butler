@@ -15,9 +15,9 @@ use gpui::{
 use super::Icon;
 use super::context::Ds;
 use super::control::{Blend, Control, Ring};
-use super::convert;
 use super::icon::icon_px;
 use super::media_frame::{Load, resolve};
+use super::motion::{Props, Timing};
 use super::tooltip::Tooltip;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 
@@ -176,54 +176,48 @@ fn favicon_slot(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let now = cx.background_executor().now();
-    let arrived = window.use_keyed_state((id.clone(), "favicon-at"), cx, |_, _| {
-        None::<std::time::Instant>
-    });
     let data = source.and_then(|source| {
         match resolve(&(id.clone(), "favicon").into(), source, window, cx) {
             Load::Ready(data) => Some(data),
             _ => None,
         }
     });
-    let (fast, ease) = {
-        let ds = Ds::get(cx);
-        (
-            ds.duration(DsDuration::MotionFast),
-            ds.tokens().ease(Easing::MotionEaseStandard),
-        )
-    };
-    let loaded = match (data.is_some(), *arrived.read(cx)) {
-        (true, Some(since)) => {
-            let t = now.saturating_duration_since(since).as_secs_f32() / fast.as_secs_f32();
-            Some((t >= 1., convert::ease_at(ease, t.clamp(0., 1.))))
-        }
-        (true, None) => {
-            arrived.update(cx, |at, _| *at = Some(now));
-            Some((false, 0.))
-        }
-        _ => None,
-    };
-    if loaded.is_some_and(|(done, _)| !done) {
-        window.request_animation_frame();
+    let timing = Timing::token(
+        Ds::get(cx),
+        DsDuration::MotionFast,
+        Easing::MotionEaseStandard,
+    );
+    let arrived = window.use_keyed_state((id.clone(), "favicon-at"), cx, |_, _| None::<u32>);
+    if data.is_some() && arrived.read(cx).is_none() {
+        arrived.update(cx, |at, _| *at = Some(gpui::animation_time_ms()));
     }
+    let fade = super::motion::Transition {
+        from: 0.,
+        to: f32::from(data.is_some()),
+        start_ms: arrived.read(cx).unwrap_or_default(),
+    };
     let ds = Ds::get(cx);
     let side = em * 1.125; // DS: InlineReference.module.css:75
     let radius = ds.len(Length::RadiusControl) / 2.;
-    let fade = loaded.map_or(0., |(_, t)| t);
     let globe = div()
         .absolute()
         .size_full()
         .flex()
         .items_center()
         .justify_center()
-        .opacity(1. - fade)
         .child(icon_px(Icon::Globe2, em * 0.95)); // DS: InlineReference.module.css:89
+    let globe = fade.apply(
+        globe,
+        &timing,
+        &Props {
+            opacity: Some((1., 0.)),
+            ..Default::default()
+        },
+    );
     let plate = data.map(|data| {
         div()
             .absolute()
             .size_full()
-            .opacity(fade)
             .rounded(radius)
             .bg(ds.color(Color::FaviconPlate))
             .border(ds.len(Length::BorderHairline))
@@ -234,6 +228,16 @@ fn favicon_slot(
                     .size_full()
                     .object_fit(gpui::ObjectFit::Contain),
             )
+    });
+    let plate = plate.map(|plate| {
+        fade.apply(
+            plate,
+            &timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
+        )
     });
     div()
         .relative()

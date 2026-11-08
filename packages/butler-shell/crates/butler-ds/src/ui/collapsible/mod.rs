@@ -162,26 +162,20 @@ impl State {
         };
         let state = state.clone();
         let duration = timing.duration;
-        window
-            .spawn(cx, async move |cx| {
-                cx.background_executor().timer(duration).await;
-                cx.update(|window, cx| {
-                    let exited = state.update(cx, |s, cx| {
-                        if s.generation != generation {
-                            return false;
-                        }
-                        s.phase = Phase::Settled;
-                        s.mounted = open || keep != KeepMounted::No;
-                        cx.notify();
-                        !open && keep == KeepMounted::No
-                    });
-                    if let (true, Some(handler)) = (exited, on_exit) {
-                        handler(window, cx);
-                    }
-                })
-                .ok();
-            })
-            .detach();
+        crate::ui::motion::delay(window, cx, duration, move |window, cx| {
+            let exited = state.update(cx, |s, cx| {
+                if s.generation != generation {
+                    return false;
+                }
+                s.phase = Phase::Settled;
+                s.mounted = open || keep != KeepMounted::No;
+                cx.notify();
+                !open && keep == KeepMounted::No
+            });
+            if let (true, Some(handler)) = (exited, on_exit) {
+                handler(window, cx);
+            }
+        });
     }
 }
 

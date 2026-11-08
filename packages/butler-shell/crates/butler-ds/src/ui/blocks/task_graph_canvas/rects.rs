@@ -37,7 +37,12 @@ impl Measure {
         self.rects.get(id).copied()
     }
 
-    fn record(&mut self, id: &SharedString, bounds: Bounds<Pixels>, first_line: Option<f32>) {
+    fn record(
+        &mut self,
+        id: &SharedString,
+        bounds: Bounds<Pixels>,
+        first_line: Option<f32>,
+    ) -> bool {
         let left = f32::from(bounds.left() - self.origin.x);
         let top = f32::from(bounds.top() - self.origin.y);
         let (width, height) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
@@ -48,9 +53,11 @@ impl Measure {
             mid_y: top + height / 2.,
             first_line_y: top + first_line.unwrap_or(height / 2.),
         };
-        if self.rects.get(id) != Some(&rect) {
-            self.rects.insert(id.clone(), rect);
+        if self.rects.get(id) == Some(&rect) {
+            return false;
         }
+        self.rects.insert(id.clone(), rect);
+        true
     }
 }
 
@@ -92,7 +99,11 @@ pub(crate) fn slot(
 ) -> Div {
     let (measure, key) = (measure.clone(), id.clone());
     let recorder = canvas(
-        move |bounds, _, cx| measure.update(cx, |m, _| m.record(&key, bounds, first_line)),
+        move |bounds, window, cx| {
+            if measure.update(cx, |m, _| m.record(&key, bounds, first_line)) {
+                crate::ui::motion::remeasure(window);
+            }
+        },
         |_, (), _, _| {},
     )
     .absolute()

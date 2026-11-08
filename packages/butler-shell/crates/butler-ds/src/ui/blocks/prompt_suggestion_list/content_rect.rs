@@ -188,7 +188,7 @@ pub(super) fn reporter(
             if let Some(report) = &on_report {
                 report(next, window, cx);
             }
-            window.request_animation_frame();
+            crate::ui::motion::remeasure(window);
         },
     )
     .absolute()

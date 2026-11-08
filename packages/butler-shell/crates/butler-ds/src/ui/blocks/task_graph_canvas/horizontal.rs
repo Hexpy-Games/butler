@@ -299,9 +299,6 @@ fn reveal_selected(
     let (Some(card), Some(first), true) =
         (measured.rect(selected), first, viewport.size.width > px(0.))
     else {
-        if viewport.size.width > px(0.) {
-            window.request_animation_frame();
-        }
         return;
     };
     let (left, right) = (
@@ -312,7 +309,7 @@ fn reveal_selected(
         let farthest = f32::from(handle.max_offset().x).max(0.);
         let target = (card.left - first.left).clamp(0., farthest);
         handle.set_offset(point(px(-target), handle.offset().y));
-        window.request_animation_frame();
+        crate::ui::motion::remeasure(window);
     }
     revealed.update(cx, |revealed, _| *revealed = Some(selected.clone()));
 }

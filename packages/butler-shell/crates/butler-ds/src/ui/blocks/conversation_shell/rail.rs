@@ -69,12 +69,7 @@ pub(super) fn rail(
         (reserved, held, latch.was_held, began_exit)
     });
     if began_exit {
-        window
-            .spawn(cx, async move |cx| {
-                cx.background_executor().timer(EXIT_WINDOW).await;
-                cx.update(|window, _| window.refresh()).ok();
-            })
-            .detach();
+        crate::ui::motion::wake_after(window, cx, EXIT_WINDOW);
     }
     let ds = Ds::get(cx);
     let timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseDecelerate);

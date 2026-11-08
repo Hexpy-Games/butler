@@ -99,7 +99,7 @@ pub fn paint(
         reduce_transparency: glass.reduce_transparency,
         increase_contrast: glass.increase_contrast,
     };
-    let m = material::material(dark, (w, h), circle, glass.place, settings);
+    let mut m = material::material(dark, (w, h), circle, glass.place, settings);
     let appear = match presence {
         Presence::Static(_) => None,
         Presence::Moving {
@@ -118,6 +118,18 @@ pub fn paint(
                     ..settings
                 },
             );
+            let maximum = from.max(to);
+            m.shadow = material::material(
+                dark,
+                (w, h),
+                circle,
+                glass.place,
+                Settings {
+                    materialize: maximum,
+                    ..settings
+                },
+            )
+            .shadow;
             Some((
                 m_from,
                 gpui::LayerMotion {

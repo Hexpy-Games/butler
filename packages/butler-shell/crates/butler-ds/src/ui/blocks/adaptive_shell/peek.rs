@@ -116,7 +116,7 @@ impl SidebarPeek {
         window.refresh();
     }
 
-    pub fn close(&self, reason: CloseReason, window: &mut Window, cx: &mut App) {
+    pub fn close(&self, reason: CloseReason, _window: &mut Window, cx: &mut App) {
         self.state.update(cx, |state, cx| {
             state.generation += 1;
             state.timer = None;
@@ -126,7 +126,6 @@ impl SidebarPeek {
                 cx.notify();
             }
         });
-        window.refresh();
     }
 
     /// The pointer entered the sidebar (or the toggle over it): stay open.
@@ -176,18 +175,15 @@ impl SidebarPeek {
             return;
         };
         let peek = self.clone();
-        window
-            .spawn(cx, async move |cx| {
-                cx.background_executor()
-                    .timer(Duration::from_millis(PEEK_DISMISS_MS))
-                    .await;
-                cx.update(|window, cx| {
-                    if peek.state.read(cx).timer == Some(generation) {
-                        peek.close(reason, window, cx);
-                    }
-                })
-                .ok();
-            })
-            .detach();
+        crate::ui::motion::delay(
+            window,
+            cx,
+            Duration::from_millis(PEEK_DISMISS_MS),
+            move |window, cx| {
+                if peek.state.read(cx).timer == Some(generation) {
+                    peek.close(reason, window, cx);
+                }
+            },
+        );
     }
 }

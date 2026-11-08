@@ -4,7 +4,6 @@
 //! viewport. Reduced motion, or `motion(false)`, swaps at once.
 use std::cell::Cell;
 use std::rc::Rc;
-use std::time::Instant;
 
 use gpui::{
     AnyElement, App, ElementId, IntoElement, ParentElement as _, RenderOnce, SharedString,
@@ -12,7 +11,7 @@ use gpui::{
 };
 
 use super::context::Ds;
-use super::convert;
+use super::motion::{self, Props, Timing, Transition};
 use crate::tokens::{Duration as DsDuration, Easing};
 
 /// How a frame's content is drawn; kept so the frame that leaves can be drawn once more.
@@ -21,7 +20,7 @@ pub type Frame = Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>;
 struct State {
     key: SharedString,
     frame: Frame,
-    outgoing: Option<(Frame, Instant)>,
+    outgoing: Option<(Frame, u32)>,
     /// The height of the frame last painted: a frame travels its own height.
     height: Rc<Cell<f32>>,
 }
@@ -66,7 +65,7 @@ impl RollingSwap {
 }
 
 /// A frame in the viewport's one grid cell, `dy` px down from its place.
-fn cell(content: AnyElement, dy: f32, opacity: f32, height: Option<Rc<Cell<f32>>>) -> AnyElement {
+fn cell(content: AnyElement, dy: f32, opacity: f32, height: Option<Rc<Cell<f32>>>) -> gpui::Div {
     let probe = height.map(|height| {
         canvas(
             move |bounds, _, _| height.set(f32::from(bounds.size.height)),
@@ -84,12 +83,11 @@ fn cell(content: AnyElement, dy: f32, opacity: f32, height: Option<Rc<Cell<f32>>
         .opacity(opacity)
         .child(content)
         .children(probe)
-        .into_any_element()
 }
 
 impl RenderOnce for RollingSwap {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let now = cx.background_executor().now();
+        let now = gpui::animation_time_ms();
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| State {
             key: self.item_key.clone(),
             frame: self.frame.clone(),
@@ -98,8 +96,15 @@ impl RenderOnce for RollingSwap {
         });
         let ds = Ds::get(cx);
         let rolls = self.motion && !ds.reduced_motion();
-        let duration = ds.duration(DsDuration::AdaptivePanelDuration);
-        let ease = ds.tokens().ease(Easing::AdaptivePanelEasing);
+        let timing = Timing::token(
+            ds,
+            DsDuration::AdaptivePanelDuration,
+            Easing::AdaptivePanelEasing,
+        );
+        let changed = state.read(cx).key != self.item_key;
+        if changed && rolls {
+            motion::wake_after(window, cx, timing.duration);
+        }
         let (prior, height) = state.update(cx, |state, _| {
             let prior = state.frame.clone();
             if state.key != self.item_key {
@@ -110,7 +115,7 @@ impl RenderOnce for RollingSwap {
             if state
                 .outgoing
                 .as_ref()
-                .is_some_and(|(_, since)| now.saturating_duration_since(*since) >= duration)
+                .is_some_and(|(_, since)| now.wrapping_sub(*since) >= timing.ms())
             {
                 state.outgoing = None;
             }
@@ -127,14 +132,32 @@ impl RenderOnce for RollingSwap {
         let Some((leaving, since)) = prior else {
             return viewport.child(cell(current, 0., 1., Some(height)));
         };
-        window.request_animation_frame();
-        let t = convert::ease_at(
-            ease,
-            (now.saturating_duration_since(since).as_secs_f32() / duration.as_secs_f32()).min(1.),
-        );
-        // `translateY(-100%)` out, `translateY(100%)` in.
+        let roll = Transition {
+            from: 0.,
+            to: 1.,
+            start_ms: since,
+        };
         viewport
-            .child(cell(leaving(window, cx), -travel * t, 1. - t, None))
-            .child(cell(current, travel * (1. - t), t, Some(height)))
+            .child(roll.apply(
+                cell(leaving(window, cx), 0., 1., None),
+                &timing,
+                &Props {
+                    opacity: Some((1., 0.)),
+                    offset: Some((
+                        gpui::point(px(0.), px(0.)),
+                        gpui::point(px(0.), px(-travel)),
+                    )),
+                    ..Default::default()
+                },
+            ))
+            .child(roll.apply(
+                cell(current, 0., 1., Some(height)),
+                &timing,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    offset: Some((gpui::point(px(0.), px(travel)), gpui::point(px(0.), px(0.)))),
+                    ..Default::default()
+                },
+            ))
     }
 }

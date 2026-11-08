@@ -107,13 +107,19 @@ fn run(
     window
         .spawn(cx, async move |cx| {
             let outcome = task.await;
-            cx.update(|_, cx| finish(&state, outcome, on_error, cx))
+            cx.update(|window, cx| finish(&state, outcome, on_error, window, cx))
                 .ok();
         })
         .detach();
 }
 
-fn finish(state: &Entity<State>, outcome: Outcome, on_error: Option<ErrorHandler>, cx: &mut App) {
+fn finish(
+    state: &Entity<State>,
+    outcome: Outcome,
+    on_error: Option<ErrorHandler>,
+    window: &mut Window,
+    cx: &mut App,
+) {
     match outcome {
         Ok(()) => {
             let generation = state.update(cx, |s, cx| {
@@ -124,18 +130,14 @@ fn finish(state: &Entity<State>, outcome: Outcome, on_error: Option<ErrorHandler
                 s.generation
             });
             let state = state.clone();
-            cx.spawn(async move |cx| {
-                cx.background_executor().timer(DONE_FEEDBACK).await;
-                cx.update(|cx| {
-                    state.update(cx, |s, cx| {
-                        if s.generation == generation {
-                            s.done = false;
-                            cx.notify();
-                        }
-                    });
+            crate::ui::motion::delay(window, cx, DONE_FEEDBACK, move |_, cx| {
+                state.update(cx, |s, cx| {
+                    if s.generation == generation {
+                        s.done = false;
+                        cx.notify();
+                    }
                 });
-            })
-            .detach();
+            });
         }
         Err(error) => {
             state.update(cx, |s, cx| {
