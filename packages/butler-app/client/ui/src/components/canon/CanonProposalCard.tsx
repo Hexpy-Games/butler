@@ -1,7 +1,7 @@
 import { apiErrorCode } from "@/app/api.ts";
 import { CanonProposalChanges } from "./CanonProposalChanges.tsx";
 import { useState } from "react";
-import { Button, ButtonContainer, Card, Stack, Tag, Tooltip, Typo } from "@/butler-ds";
+import { Box, Button, ButtonContainer, Card, Section, Stack, Tag, Tooltip, Typo } from "@/butler-ds";
 import { useAppLocale } from "@/app/copy.ts";
 import { openCanonEpic } from "./canonNavigation.ts";
 import { ChatEpicCards } from "./ChatEpicCards.tsx";
@@ -18,34 +18,28 @@ import { useCanonProposals } from "./useCanonProposal.ts";
 
 const projectOf = (p: CanonProposal) => "id" in p.project ? p.project.id ?? null : null;
 /** A reply's proposals: drafts and other settled rows stay one per proposal; applied ones merge into one receipt per project. */
-export function CanonProposalCards({ ids, sessionId, projectId, shown }: { ids: readonly string[]; sessionId: string; projectId: string | null; shown?: ReadonlySet<string> }) {
+export function CanonProposalCards({ ids, sessionId, projectId }: { ids: readonly string[]; sessionId: string; projectId: string | null }) {
   const { proposals, refresh } = useCanonProposals(ids);
   return <>{proposals.map(p => {
     if (p.state !== "applied") return <Proposal key={p.proposal_id} proposal={p} sessionId={sessionId} projectId={projectId} refresh={() => refresh(p.proposal_id)} />;
     const group = proposals.filter(other => other.state === "applied" && projectOf(other) === projectOf(p));
-    return group[0] === p ? <AppliedReceipt key={p.proposal_id} proposals={group} shown={shown} /> : null;
+    return group[0] === p ? <AppliedReceipt key={p.proposal_id} proposals={group} /> : null;
   })}</>;
 }
-function AppliedReceipt({ proposals, shown }: { proposals: CanonProposal[]; shown?: ReadonlySet<string> }) {
+const receiptOps = new Set(["epic.create", "epic.edit", "epic.move"]);
+function AppliedReceipt({ proposals }: { proposals: CanonProposal[] }) {
   const copy = canonProposalCopy(useAppLocale().startsWith("ko"));
   const [first] = proposals;
   const project = projectOf(first);
   const changes = proposals.flatMap(p => p.changes);
-  const deletes = changes.some(change => change.op === "epic.delete");
-  const mixedDelete = deletes && changes.some(change => change.op !== "epic.delete");
-  const created = changes.flatMap(change => change.op === "epic.create" && change.id && !shown?.has(change.id) ? [change.id] : []);
-  const open = () => {
-    if (!project) return;
-    openCanonEpic(project, changes.find(change => change.op.startsWith("epic.") && change.op !== "epic.delete" && change.id)?.id);
-  };
-  return <Stack gap="sm"><Card padding="sm" data-test-class="canon-proposal-card" data-proposal-id={first.proposal_id} data-state="applied">
-    <Stack align="row" cross="center" justify="between" gap="sm">
-      <Typo.Caption>{deletes ? mixedDelete ? copy.changed : copy.deleted : first.resolved_by === null ? copy.record : first.resolved_by === "chat" ? copy.chat : copy.added}</Typo.Caption>
-      <ButtonContainer size="sm" justify="end"><Button size="sm" variant="outline" onClick={open}>{copy.open}</Button></ButtonContainer>
-    </Stack>
-  </Card>
-    {project && created.length > 0 && <ChatEpicCards projectId={project} ids={created} />}
-  </Stack>;
+  const ids = [...new Set(changes.flatMap(change => receiptOps.has(change.op) && change.id ? [change.id] : []))];
+  return <Box surface="muted" border="hairline" radius="panel" padding="md" data-test-class="canon-proposal-card" data-proposal-id={first.proposal_id} data-state="applied">
+    <Section title={copy.receipt(changes)} actions={<ButtonContainer size="sm" justify="end">
+      <Button size="sm" variant="outline" onClick={() => { if (project) openCanonEpic(project, ids[0]); }}>{copy.open}</Button>
+    </ButtonContainer>}>
+      {project && ids.length > 0 && <ChatEpicCards projectId={project} ids={ids} />}
+    </Section>
+  </Box>;
 }
 function Proposal({ proposal: p, sessionId, projectId, refresh }: {
   proposal: CanonProposal; sessionId: string; projectId: string | null; refresh: () => Promise<void>;

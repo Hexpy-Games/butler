@@ -33,13 +33,20 @@ let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
 let background = "plain", state: "ready" | "missing" | "error" = "ready";
 const overview = structuredClone(epicOverview);
 let canonReads = 0, sharedReads = 0;
-let fixture: "answer" | "proposal" | "both" = "answer";
+let fixture: "answer" | "proposal" | "receipt" = "answer";
+const create = (id: string) => ({ op: "epic.create", id, title: id }), edit = (id: string) => ({ op: "epic.edit", id, title: id });
+const receipts = {
+  added: { proposals: { registration: ["release", "docs", "cancelled"].map(create) }, reply: ["docs", "release", "cancelled"], title: "과제 3개 등록" },
+  edited: { proposals: { renamed: ["docs", "release"].map(edit) }, reply: [], title: "과제 2개 변경" },
+  mixed: { proposals: { registration: [create("release")], renamed: [edit("docs")] }, reply: epicOrder, title: "과제 1개 등록, 1개 변경" },
+};
+let receipt: keyof typeof receipts = "added";
 let proposalState: "open" | "applied" = "applied";
-let markRenamed = () => {}, renamedServed = Promise.resolve();
 const errors: string[] = [];
 const message = (): MessageRecord => ({ id: "answer", chat_id: "butler-client", role: "assistant", status: "delivered", text: "요청한 과제를 확인했습니다.", created_at: "2026-11-02T08:00:00Z",
-  ...(fixture === "proposal" || fixture === "both" ? { canon_proposals: [{ proposal_id: "registration", turn_id: "turn", source_call_id: "create" }, ...(fixture === "both" ? [{ proposal_id: "renamed", turn_id: "turn", source_call_id: "rename" }] : [])] } : {}),
-  ...(fixture === "answer" || fixture === "both" ? { answer_blocks: [{ call_id: "epics", set_ids: [], spec: { v: 2, blocks: [{ type: "epics", project_id: "butler", ids: epicOrder }] } }] } : {}) });
+  ...(fixture === "proposal" ? { canon_proposals: [{ proposal_id: "registration", turn_id: "turn", source_call_id: "create", epic_ids: [] }] } : {}),
+  ...(fixture === "receipt" ? { canon_proposals: Object.entries(receipts[receipt].proposals).map(([id, changes]) => ({ proposal_id: id, turn_id: "turn", source_call_id: id, epic_ids: changes.map(change => change.id) })) } : {}),
+  ...(fixture === "answer" || (fixture === "receipt" && receipts[receipt].reply.length) ? { answer_blocks: [{ call_id: "epics", set_ids: [], spec: { v: 2, blocks: [{ type: "epics", project_id: "butler", ids: fixture === "receipt" ? receipts[receipt].reply : epicOrder }] } }] } : {}) });
 async function open(page: Page, base: string, width: number, theme: string, wall: string) {
   background = wall;
   await page.setViewportSize({ width, height: 1100 });
@@ -117,9 +124,8 @@ try {
       return ok(overview);
     }
     if (url.pathname === "/projects/butler/canon/sidebar") return ok({ project_id: "butler", groups: [] });
-    if (url.pathname === "/canon/proposals/renamed") { await route.fulfill({ json: { ok: true, data: { ...appliedProposal, proposal_id: "renamed", changes: [{ op: "epic.update", id: "docs", title: "문서 검토" }] } } }); markRenamed(); return; }
+    if (fixture === "receipt" && url.pathname.startsWith("/canon/proposals/")) { const id = url.pathname.split("/")[3]; return ok({ ...appliedProposal, proposal_id: id, changes: (receipts[receipt].proposals as Record<string, unknown[]>)[id] }); }
     if (url.pathname === "/canon/proposals/registration") {
-      if (fixture === "both") await renamedServed;
       if (route.request().method() === "POST") { proposalState = "applied"; return ok({ ok: true }); }
       return ok({ ...appliedProposal, state: proposalState });
     }
@@ -155,16 +161,21 @@ try {
     await page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item="release"]').waitFor();
     await page.locator('[data-test-class="canon-proposal-card"]').locator("..").screenshot({ path: join(evidence, `proposal-applied-${theme}.png`) });
   }
-  fixture = "both";
-  for (const width of [1440, 390]) for (const theme of ["light", "dark"]) {
-    renamedServed = new Promise(resolve => { markRenamed = resolve; });
+  fixture = "receipt";
+  for (const name of Object.keys(receipts) as (keyof typeof receipts)[]) for (const width of [1440, 390]) for (const theme of ["light", "dark"]) {
+    receipt = name;
+    const { proposals, reply, title } = receipts[name];
+    const owned = [...new Set(Object.values(proposals).flat().map(change => change.id))];
     await open(page, base, width, theme, "plain");
-    await page.locator('[data-test-class="canon-proposal-card"][data-proposal-id="registration"]').waitFor();
-    await page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item="release"]').first().waitFor();
-    await page.locator('[data-test-class="canon-proposal-card"]').first().locator('xpath=ancestor::*[.//*[@data-test-class="answer-blocks"]][1]').screenshot({ path: join(evidence, `reply-and-receipt-${width}-${theme}.png`) });
-    assert.equal(await page.locator('[data-kanban-item="release"]').count(), 1, "a created epic the reply already shows renders once");
-    assert.equal(await page.locator('[data-test-class="chat-epic-cards"]').count(), 1, "the receipt adds no second grid");
-    assert.equal(await page.locator('[data-test-class="canon-proposal-card"]').count(), 1, "a reply's applied proposals share one receipt");
+    const card = page.locator('[data-test-class="canon-proposal-card"]');
+    await card.getByText(title, { exact: true }).waitFor();
+    await card.locator("[data-kanban-item]").nth(owned.length - 1).waitFor();
+    assert.equal(await card.count(), 1, "a reply's applied proposals share one receipt");
+    assert.deepEqual(await card.locator("[data-kanban-item]").evaluateAll(nodes => nodes.map(node => node.getAttribute("data-kanban-item"))), owned, "the receipt holds every 과제 it touched");
+    for (const id of owned) assert.equal(await page.locator(`[data-kanban-item="${id}"]`).count(), 1, `${id} renders once`);
+    assert.equal(await page.locator('[data-answer-block="epics"]').count(), reply.some(id => !owned.includes(id)) ? 1 : 0, "the reply keeps only 과제 the receipt does not show");
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await card.locator('xpath=ancestor::*[contains(normalize-space(.), "요청한 과제를 확인했습니다.")][1]').screenshot({ path: join(evidence, `receipt-${name}-${width}-${theme}.png`) });
   }
   fixture = "proposal";
   await open(page, base, 1440, "light", "plain");

@@ -1,6 +1,6 @@
 import type { MessageFileRef } from "../ui/src/app/types.ts";
 import type { CanonTagColor } from "./canon-contracts.ts";
-export interface CanonProposalAnchor { proposal_id: string; turn_id: string; source_call_id: string }
+export interface CanonProposalAnchor { proposal_id: string; turn_id: string; source_call_id: string; epic_ids: string[] }
 export interface CanonProposal {
   proposal_id: string; session_id: string; state: "open" | "applied" | "cancelled" | "superseded" | "stale";
   summary: string; target_label: string;
