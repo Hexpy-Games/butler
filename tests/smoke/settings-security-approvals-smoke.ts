@@ -147,7 +147,7 @@ async function runLocale(locale: "ko" | "en") {
           await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
           await section(page, "grants").getByText(appCopy.settings.grants.targetUnknown, { exact: true }).waitFor();
           assert.equal(await rows(page).count(), 12, "dedupe across same-title conversations");
-          assert.deepEqual(await sectionIds(page), ["remote-access", "grants", "saved-keys", "security-advanced"]);
+          assert.deepEqual(await sectionIds(page), ["remote-access", "grants", "saved-keys", "connected-accounts", "security-advanced"]);
           assert.equal(await section(page, "grants").getByText(appCopy.settings.grants.conversations(2), { exact: false }).count(), 1);
           await screenshot(page, key, "grants"); await screenshot(page, key, "saved-keys");
           const overflow = await section(page, "grants").evaluate(node => node.scrollWidth > node.clientWidth + 1);
@@ -177,7 +177,7 @@ async function runLocale(locale: "ko" | "en") {
         await section(page, "device-pairing").waitFor();
         await section(page, "security-advanced").getByRole("button").click();
         await page.getByPlaceholder(appCopy.settings.security.hostPlaceholder).waitFor();
-        if (!before) assert.deepEqual(await sectionIds(page), ["remote-access", "device-pairing", "paired-devices", "grants", "saved-keys", "security-advanced"]);
+        if (!before) assert.deepEqual(await sectionIds(page), ["remote-access", "device-pairing", "paired-devices", "grants", "saved-keys", "connected-accounts", "security-advanced"]);
         await screenshot(page, `${key}-enabled`, "remote-access");
         await screenshot(page, `${key}-enabled`, before ? "allowed-hosts" : "security-advanced");
         await remote.click();
@@ -199,7 +199,7 @@ async function runLocale(locale: "ko" | "en") {
           await page.getByRole("button", { name: fixture.command, exact: true }).waitFor();
           const refusedMessage = code === "loopback_required" ? appCopy.settings.security.hostOnly : code === "admin_credential_required" ? appCopy.settings.security.adminRequired : appCopy.settings.sectionState.error;
           await section(page, "remote-access").getByText(refusedMessage, { exact: true }).waitFor();
-          assert.deepEqual(await sectionIds(page), ["remote-access", "grants", "saved-keys"]);
+          assert.deepEqual(await sectionIds(page), ["remote-access", "grants", "saved-keys", "connected-accounts"]);
           await screenshot(page, `${locale}-refused-${code}`, "remote-access");
         }
         responses.refusal = "";
