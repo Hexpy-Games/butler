@@ -7,7 +7,7 @@ export function CanonBoundChats({ epic }: { epic: EpicCard }) {
   const navigation = useButlerStore(state => state.navigation);
   const active = useButlerStore(state => state.activeChatId);
   const rows = projectSpace(navigation);
-  const bound = epic.session_ids.filter(id => id !== epic.home_session_id).flatMap(id => {
+  const bound = epic.sessions.filter(s => s.worked === 1 && s.session_id !== epic.home_session_id).flatMap(({ session_id: id }) => {
     const row = rows.get(`s:${id}`); return row ? [row] : [];
   });
   if (!bound.length) return null;

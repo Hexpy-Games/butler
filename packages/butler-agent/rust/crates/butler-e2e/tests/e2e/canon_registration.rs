@@ -190,6 +190,15 @@ async fn assert_bound(
     assert_eq!(sidebar["groups"][0]["rows"][0]["id"], id);
     Ok(())
 }
+/// The first 과제 row's first bound session, as the sidebar sends it.
+async fn sidebar_session(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
+    let sidebar = data(
+        s.gw.get(&format!("/projects/{project}/canon/sidebar"))
+            .await?,
+        200,
+    );
+    Ok(sidebar["groups"][0]["rows"][0]["sessions"][0].clone())
+}
 #[tokio::test]
 async fn cp_01_card_applies_chat_origin_binds_without_moving_and_links_work()
 -> Result<(), HarnessError> {
@@ -205,6 +214,12 @@ async fn cp_01_card_applies_chat_origin_binds_without_moving_and_links_work()
     assert_eq!(result["ok"], true, "{result}");
     let epic = epic_id(&result);
     assert_bound(&s, &chat, &project, &epic, "user").await?;
+    let registered = sidebar_session(&s, &project).await?;
+    assert_eq!(registered["session_id"], chat);
+    assert_eq!(
+        registered["worked"], 0,
+        "the registering chat is not nested: {registered}"
+    );
     live.wait_for(Duration::from_secs(10), |e| {
         e["type"] == "pending_asks.changed"
             && e["payload"]["proposal_id"] == id
@@ -226,6 +241,12 @@ async fn cp_01_card_applies_chat_origin_binds_without_moving_and_links_work()
         !results
             .iter()
             .any(|r| r["error"]["code"] == "canon_epic_not_bound")
+    );
+    let worked = sidebar_session(&s, &project).await?;
+    assert_eq!(worked["session_id"], chat);
+    assert_eq!(
+        worked["worked"], 1,
+        "a chat that worked the 과제 is nested: {worked}"
     );
     let progress = data(
         s.gw.get(&format!("/canon/epics/{epic}/progress")).await?,
