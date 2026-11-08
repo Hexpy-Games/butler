@@ -417,7 +417,7 @@ impl Select {
         let animated = if hidden {
             Some(div().opacity(0.).child(surface).into_any_element())
         } else {
-            motion::animate(
+            motion::animate_glass(
                 &format!("{}-select", self.id),
                 phase,
                 Side::Bottom,

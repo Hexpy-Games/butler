@@ -72,6 +72,7 @@ pub mod command_sandbox;
 pub mod cpu;
 pub mod data_paths;
 pub mod desktop;
+pub mod display_accessibility;
 pub mod download_mark;
 pub mod fs_space;
 pub mod host_file_behavior;

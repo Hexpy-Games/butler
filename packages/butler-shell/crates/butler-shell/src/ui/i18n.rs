@@ -29,12 +29,35 @@ pub(crate) enum Locale {
 }
 
 impl Locale {
-    /// The locale for a BCP 47 tag (the OS's): Korean for `ko*`, English otherwise.
+    /// The locale for a BCP 47 tag (the OS's, React's fallback until the app's language setting
+    /// is known): Korean for `ko*`, English otherwise.
     pub(crate) fn from_tag(tag: &str) -> Self {
         if tag.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("ko")) {
             Self::Ko
         } else {
             Self::En
+        }
+    }
+
+    /// The locale for the app's language setting (`appLocaleFromLanguage`): Korean for "ko",
+    /// "ko-KR" or a name containing "korean" or "한국", English otherwise.
+    pub(crate) fn from_language(language: &str) -> Self {
+        let language = language.trim().to_lowercase();
+        if matches!(language.as_str(), "ko" | "ko-kr")
+            || language.contains("korean")
+            || language.contains("한국")
+        {
+            Self::Ko
+        } else {
+            Self::En
+        }
+    }
+
+    /// The design system's language for this locale.
+    pub(crate) fn ds_lang(self) -> butler_ds::ui::context::Lang {
+        match self {
+            Self::Ko => butler_ds::ui::context::Lang::Ko,
+            Self::En => butler_ds::ui::context::Lang::En,
         }
     }
 
@@ -72,9 +95,8 @@ pub(crate) struct Strings {
     pub(crate) settings: &'static str,
     /// common.more
     pub(crate) show_more: &'static str,
-    /// composer.placeholder, composer.placeholderFollowUp
+    /// composer.placeholder
     pub(crate) placeholder: &'static str,
-    pub(crate) placeholder_follow_up: &'static str,
     /// composer.messageComposer
     pub(crate) message_composer: &'static str,
     /// composer.sendNowFailed
@@ -107,7 +129,6 @@ static KO: Strings = Strings {
     settings: "설정",
     show_more: "더보기",
     placeholder: "버틀러에게 무엇이든 물어보세요",
-    placeholder_follow_up: "후속 변경사항 요청",
     message_composer: "메시지 입력",
     send_failed: "보내지 못했습니다",
     cancel: "취소",
@@ -134,7 +155,6 @@ static EN: Strings = Strings {
     settings: "Settings",
     show_more: "More",
     placeholder: "Ask Butler anything",
-    placeholder_follow_up: "Ask for follow-up changes",
     message_composer: "Message composer",
     send_failed: "Couldn't send",
     cancel: "Cancel",

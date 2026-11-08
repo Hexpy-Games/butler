@@ -11,6 +11,7 @@ use std::rc::Rc;
 
 use butler_ds::tokens::Length;
 use butler_ds::ui::blocks::composer_decision_panel::{ComposerDecisionPanel, Detail};
+use butler_ds::ui::blocks::composer_panel::Placement;
 use butler_ds::ui::blocks::split_button::{SplitButton, SplitItem, SplitSize};
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Ds;
@@ -223,6 +224,7 @@ fn decision(view: &SessionView, window: &mut Window, cx: &mut App) -> Option<Dec
 /// ComposerAuthorityDecisionSurface; `None` when this session has nothing for it.
 pub(crate) fn authority_surface(
     ctx: DecisionCtx<'_>,
+    placement: Placement,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
@@ -231,7 +233,14 @@ pub(crate) fn authority_surface(
         return None;
     }
     let decision = decision(ctx.view, window, cx)?;
-    Some(surface(&decision, cx))
+    Some(surface(&decision, placement, cx))
+}
+
+/// An authority request or browser handoff waits (what the two surfaces return `None` without).
+pub(super) fn has_request(view: &SessionView) -> bool {
+    view.authority_requests.as_deref().is_some_and(|requests| {
+        !request::cards(requests).is_empty() || !request::valid(requests).is_empty()
+    })
 }
 
 /// A control the live harness drives by id.
@@ -309,7 +318,7 @@ fn allow(d: &Decision) -> SplitButton {
     }
 }
 
-fn surface(d: &Decision, cx: &mut App) -> AnyElement {
+fn surface(d: &Decision, placement: Placement, cx: &mut App) -> AnyElement {
     let copy = d.copy;
     let details = d.view.details.iter().map(|line| match line {
         Line::Text(text) => Detail::line(approval_line(text)),
@@ -323,6 +332,7 @@ fn surface(d: &Decision, cx: &mut App) -> AnyElement {
         |_, _, _| {},
     )
     .eyebrow(copy.permission())
+    .placement(placement)
     .literal()
     .details(details)
     .aside(aside(d, cx));

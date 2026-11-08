@@ -45,7 +45,7 @@ impl LabelTone {
     ];
 
     /// Border, fill and ink tokens.
-    fn tokens(self) -> (Color, Color, Color) {
+    pub(crate) fn tokens(self) -> (Color, Color, Color) {
         match self {
             Self::Gray => (
                 Color::TagLabelGrayBorder,

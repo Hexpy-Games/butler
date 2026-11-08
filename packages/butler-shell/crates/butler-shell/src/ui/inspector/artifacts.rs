@@ -1,23 +1,30 @@
 //! `ArtifactsPanel` and `AutomationTargetsPanel`.
 use std::collections::HashMap;
 
+use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::Icon;
-use butler_ds::ui::blocks::artifact_list::{ArtifactAction, ArtifactItem, ArtifactList};
 use butler_ds::ui::blocks::empty_line::EmptyLine;
 use butler_ds::ui::blocks::inspector_panel::InspectorInset;
 use butler_ds::ui::blocks::list_row::ListRow;
-use butler_ds::ui::context::Ds;
+use butler_ds::ui::button::{self, Button, Size as ButtonSize, Variant};
+use butler_ds::ui::card::Card;
+use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Cross, Justify, Space, Stack};
-use butler_ds::ui::typo::{Tone, Typo, Weight};
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window};
+use butler_ds::ui::typo::{Tone, Typo, Weight, Wrap};
+use gpui::{
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, MouseButton,
+    ParentElement as _, SharedString, Styled as _, Window, div,
+};
 
 use super::InspectorCtx;
 use crate::ui::chat::files::support::save_file;
+use crate::ui::i18n::Locale;
 use crate::ui::i18n::inspector_artifacts::InspectorArtifacts;
 use crate::ui::i18n::media::Media;
 use crate::ui::source::wire::{MessageRecord, SessionArtifactSummary};
 use crate::ui::viewer::{self, FileViewerEntry};
+use crate::ui::widgets::anchor;
 
 /// One result per workspace path and content; keep its latest delivery (`sessionArtifacts`).
 fn session_artifacts(
@@ -75,35 +82,101 @@ fn open_artifact(artifact: &SessionArtifactSummary, session: &str, cx: &mut App)
     viewer::open(cx, session, entry);
 }
 
-/// One tile (`DocumentTile` with `artifactCardActions`).
-fn artifact_item(
+/// `artifactDescription` and `artifactMeta`: the size, then the age, as the caption line.
+fn artifact_caption(artifact: &SessionArtifactSummary, cx: &App) -> String {
+    let strings = match Ds::get(cx).lang() {
+        Lang::Ko => Locale::Ko.strings(),
+        Lang::En => Locale::En.strings(),
+    };
+    let age = chrono::DateTime::parse_from_rfc3339(&artifact.created_at)
+        .map(|at| strings.relative_age((chrono::Utc::now() - at.to_utc()).num_seconds().max(0)))
+        .unwrap_or_default();
+    [artifact.size_bytes.map(format_artifact_size), Some(age)]
+        .into_iter()
+        .flatten()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+/// One tile (`DocumentTile` with `artifactCardActions`, `clickTarget="tile"`): the icon on the
+/// title line, the title over its caption, the save action at the top right.
+fn artifact_tile(
     artifact: &SessionArtifactSummary,
     index: usize,
     session: &str,
     cx: &App,
-) -> ArtifactItem {
-    let mut item = ArtifactItem::new(artifact.title.clone())
-        .icon(Icon::FileText)
-        .anchor(format!("artifact-tile-{index}"));
-    if let Some(bytes) = artifact.size_bytes {
-        item = item.description(format_artifact_size(bytes));
-    }
-    if artifact.kind != "web"
-        && let Some(file_id) = artifact.file_id.clone()
-    {
-        let name = artifact
-            .safe_path_label
-            .clone()
-            .filter(|label| !label.is_empty())
-            .unwrap_or_else(|| artifact.title.clone());
-        item = item.action(
-            ArtifactAction::new(Media::get(cx).save)
-                .icon(Icon::Save)
-                .on_click(move |_, _, cx| save_file(file_id.clone(), &name, cx)),
+) -> AnyElement {
+    let ds = Ds::get(cx);
+    let id = SharedString::from(format!("inspector-artifact-{index}"));
+    let mut copy = Stack::new().gap(Space::Xs).child(
+        Typo::body(artifact.title.clone())
+            .weight(Weight::Medium)
+            .line_clamp(2)
+            .wrap(Wrap::Anywhere),
+    );
+    let caption = artifact_caption(artifact, cx);
+    if !caption.is_empty() {
+        copy = copy.child(
+            div()
+                .min_w_0()
+                .child(Typo::caption(caption).tone(Tone::Secondary).truncate()),
         );
     }
+    let body = div()
+        .flex()
+        .items_start()
+        .flex_1()
+        .min_w_0()
+        .gap(ds.len(Length::SpaceSm))
+        .child(
+            div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .justify_center()
+                .h(ds.len(Length::TypoBodyLineHeight))
+                .text_color(ds.color(Color::TextTertiary))
+                .child(icon(Icon::FileText, IconSize::Md, ds)),
+        )
+        .child(div().flex_1().min_w_0().child(copy));
+    let save = (artifact.kind != "web")
+        .then(|| artifact.file_id.clone())
+        .flatten()
+        .map(|file_id| {
+            let name = artifact
+                .safe_path_label
+                .clone()
+                .filter(|label| !label.is_empty())
+                .unwrap_or_else(|| artifact.title.clone());
+            let button = Button::new((ElementId::from(id.clone()), "save"))
+                .variant(Variant::Outline)
+                .size(ButtonSize::Xs)
+                .icon_start(icon(Icon::Save, IconSize::Sm, ds))
+                .text(Media::get(cx).save)
+                .on_click(move |_, _, cx| save_file(file_id.clone(), &name, cx));
+            // The action does not open the tile.
+            div()
+                .flex_none()
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(button::container(ButtonSize::Xs).child(button))
+        });
     let (opened, session) = (artifact.clone(), session.to_owned());
-    item.on_open(move |_, _, cx| open_artifact(&opened, &session, cx))
+    let card = Card::new(id)
+        .interactive()
+        .on_click(move |_, _, cx| open_artifact(&opened, &session, cx))
+        .child(
+            div()
+                .flex()
+                .items_start()
+                .gap(ds.len(Length::SpaceSm))
+                .min_w_0()
+                .child(body)
+                .children(save),
+        );
+    anchor(div().w_full(), &format!("artifact-tile-{index}"))
+        .child(card)
+        .into_any_element()
 }
 
 /// `SessionSectionHeader`: the title with its count at the end.
@@ -134,17 +207,19 @@ pub(crate) fn artifacts_panel(
 ) -> AnyElement {
     let copy = InspectorArtifacts::get(cx);
     let all = session_artifacts(&ctx.view.artifacts, &ctx.view.messages);
-    let body: AnyElement = if all.is_empty() {
-        EmptyLine::new(copy.artifacts_empty)
-            .icon(icon(Icon::Circle, IconSize::Md, Ds::get(cx)))
-            .into_any_element()
-    } else {
-        let mut list = ArtifactList::new(SharedString::from("inspector-artifacts"));
-        for (index, artifact) in all.iter().enumerate() {
-            list = list.item(artifact_item(artifact, index, &ctx.view.session_id, cx));
-        }
-        list.into_any_element()
-    };
+    let body: AnyElement =
+        if all.is_empty() {
+            EmptyLine::new(copy.artifacts_empty)
+                .icon(icon(Icon::Circle, IconSize::Md, Ds::get(cx)))
+                .into_any_element()
+        } else {
+            Stack::new()
+                .gap(Space::Xs)
+                .children(all.iter().enumerate().map(|(index, artifact)| {
+                    artifact_tile(artifact, index, &ctx.view.session_id, cx)
+                }))
+                .into_any_element()
+        };
     InspectorInset::new()
         .child(
             Stack::new()

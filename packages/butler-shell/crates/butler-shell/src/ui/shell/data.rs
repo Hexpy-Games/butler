@@ -5,6 +5,7 @@ use futures::StreamExt as _;
 use gpui::{Context, Window};
 
 use super::Shell;
+use crate::ui::i18n::Locale;
 use crate::ui::source::agent::MonitorSignal;
 use crate::ui::source::{ChatRef, EventCursor, Fetch, SourceError};
 use crate::ui::store::{Applied, ChatsLoad};
@@ -64,6 +65,8 @@ impl Shell {
         }
     }
 
+    /// The app's language setting (`settings.language`: Settings, else `user.language`, else
+    /// English). The OS locale stands until it is known.
     fn load_chats(&mut self, load: ChatsLoad, cx: &mut Context<Self>) {
         let Some(source) = self.source.clone() else {
             return;
@@ -116,6 +119,13 @@ impl Shell {
             crate::ui::source::LiveUpdate::NavigationEvent(e) => Some(e.clone()),
             _ => None,
         };
+        // `settings.updated` carries the changed subset; a language in it switches the UI.
+        if let crate::ui::source::LiveUpdate::NavigationEvent(e) = &event.update
+            && e.r#type == "settings.updated"
+            && let Some(language) = e.payload["settings"]["language"].as_str()
+        {
+            self.set_locale(Locale::from_language(language), cx);
+        }
         let attention_changed = matches!(&event.update, crate::ui::source::LiveUpdate::Chat(_));
         if let crate::ui::source::LiveUpdate::Inspector(envelope) = &event.update {
             crate::ui::inspector::live_event(envelope, cx);
@@ -166,7 +176,6 @@ impl Shell {
         }
         self.show_view(false, cx);
         self.composer.update(cx, |c, cx| {
-            c.set_new_chat(new_chat, cx);
             if new_chat {
                 c.engage(window, cx);
             } else {
@@ -188,10 +197,7 @@ impl Shell {
         self.store.open(None);
         self.sidebar.new_chat_parent = parent;
         self.show_view(false, cx);
-        self.composer.update(cx, |c, cx| {
-            c.set_new_chat(true, cx);
-            cx.notify();
-        });
+        self.composer.update(cx, |_, cx| cx.notify());
         self.sync_composer(cx);
         if let Some(handle) = self.sidebar.window_handle {
             let composer = self.composer.clone();
@@ -303,7 +309,6 @@ impl Shell {
     ) {
         if self.store.chat_failed(chat, error) {
             self.show_view(false, cx);
-            self.composer.update(cx, |c, cx| c.set_new_chat(true, cx));
             self.sync_composer(cx);
         }
         self.failed(error, toast, cx);

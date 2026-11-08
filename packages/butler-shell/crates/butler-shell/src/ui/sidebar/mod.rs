@@ -314,10 +314,7 @@ impl Shell {
         self.show_view(false, cx);
         self.load_summary(&chat, cx);
         self.reload_open_chat(cx);
-        self.composer.update(cx, |c, cx| {
-            c.set_new_chat(false, cx);
-            c.fold();
-        });
+        self.composer.update(cx, |c, _| c.fold());
         self.sync_composer(cx);
     }
     fn sidebar_input(&self) -> SharedString {

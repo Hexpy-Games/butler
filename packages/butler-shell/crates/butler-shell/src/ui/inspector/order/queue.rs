@@ -81,7 +81,7 @@ pub(crate) fn use_canon_queue(
 }
 
 /// `observeCanonQueue`
-fn observe(cx: &mut App, session_id: &str) {
+pub(crate) fn observe(cx: &mut App, session_id: &str) {
     let readers = readers(cx);
     readers.tokens += 1;
     let token = readers.tokens;
@@ -102,7 +102,8 @@ fn observe(cx: &mut App, session_id: &str) {
     }
 }
 
-fn release(cx: &mut App, session_id: &str) {
+/// `observeCanonQueue`'s unsubscribe.
+pub(crate) fn release(cx: &mut App, session_id: &str) {
     let readers = readers(cx);
     if let Some(reader) = readers.by_session.get_mut(session_id) {
         reader.observers = reader.observers.saturating_sub(1);

@@ -3,7 +3,10 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ui::source::wire::{MessageRecord, MessageRecordRole, ProgressRow, SessionView};
+use crate::ui::source::wire::{
+    MessageRecord, MessageRecordRole, ProgressRow, QueuedMessageRecordState, SessionQueueView,
+    SessionView,
+};
 
 /// `ACTIVE_TURN_STATES` (app/constants.ts).
 const ACTIVE_TURN_STATES: [&str; 7] = [
@@ -224,4 +227,41 @@ pub(super) fn reuse<T: PartialEq>(previous: Option<&Rc<T>>, next: T) -> Rc<T> {
         Some(previous) if **previous == next => previous.clone(),
         _ => Rc::new(next),
     }
+}
+
+/// `queuedConversationItems`: whether a queued follow-up still waits or failed, and is not yet
+/// a message of the transcript.
+pub(super) fn has_visible_queue(
+    queue: &SessionQueueView,
+    messages: &[Rc<MessageRecord>],
+    session: &str,
+) -> bool {
+    let shown = |id: &str| messages.iter().any(|message| message.id == id);
+    queue.queued_messages.iter().any(|record| {
+        let key = record.client_message_id.as_deref().unwrap_or(&record.id);
+        record.chat_id == session
+            && matches!(
+                record.state,
+                QueuedMessageRecordState::Queued | QueuedMessageRecordState::Failed
+            )
+            && !shown(key)
+            && !record.dispatched_message_id.as_deref().is_some_and(shown)
+    })
+}
+
+/// The last message's identity, cursor, status and length: the key a changed transcript bumps.
+pub(super) fn version(messages: &[Rc<MessageRecord>]) -> String {
+    messages.last().map_or_else(
+        || "empty".to_owned(),
+        |last| {
+            format!(
+                "{}:{}:{}:{}",
+                last.id,
+                last.cursor
+                    .map_or_else(String::new, |cursor| cursor.to_string()),
+                last.status.as_deref().unwrap_or(""),
+                last.text.len()
+            )
+        },
+    )
 }

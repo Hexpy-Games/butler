@@ -6,6 +6,7 @@ use gpui::{App, BorrowAppContext as _, Context};
 
 use super::{Shell, navigation::Navigation};
 use crate::ui::chat::{self, AssistantHooks, OlderRequest};
+use crate::ui::i18n::Locale;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::SessionQueueView;
 
@@ -53,7 +54,15 @@ impl Shell {
             };
             let flag = |key: &str| raw.get(key).and_then(serde_json::Value::as_bool);
             let (seen, developer) = (flag("chats_intro_seen"), flag("diagnostics_enabled"));
-            let _ = this.update(cx, |_, cx| {
+            // `setAppCopyLanguage(settings.language)`: the app copy follows the app setting.
+            let locale = raw
+                .get("language")
+                .and_then(serde_json::Value::as_str)
+                .map(Locale::from_language);
+            let _ = this.update(cx, |this, cx| {
+                if let Some(locale) = locale {
+                    this.set_locale(locale, cx);
+                }
                 if let Some(seen) = seen {
                     chat::set_chats_intro_seen(cx, seen);
                 }
@@ -110,6 +119,8 @@ impl Shell {
             c.set_view(view, live, cx);
             cx.notify();
         });
+        // The titlebar's session actions and the aside read the view too.
+        cx.notify();
     }
 
     /// Reads the open chat's latest window again and merges it into the shown view.

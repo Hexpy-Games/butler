@@ -5,7 +5,8 @@
 //! (`useSessionSectionsModel`) is the sections themselves: a section whose content is `None`
 //! (or whose data is empty) is not built, so no floating separator is left behind. The open
 //! session's view is the session summary here, so no section waits for a summary to load.
-mod asks;
+pub(crate) mod asks;
+mod state;
 mod subtasks;
 
 use std::collections::HashSet;
@@ -18,13 +19,14 @@ use butler_ds::ui::card::{Card, CardPadding};
 use butler_ds::ui::layout::{Box as DsBox, Cross, Justify, Space, Stack};
 use butler_ds::ui::separator::Separator;
 use butler_ds::ui::typo::{Tone, Typo, Weight};
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window};
+use gpui::{AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Window};
 
 use super::InspectorCtx;
 use crate::ui::i18n::session_sections::SessionSections;
 use crate::ui::source::wire::{
     CanonQueueItemState, MessageRecordRole, SessionPendingAsks, SessionView, SubtaskState,
 };
+pub(crate) use state::SessionSectionsState;
 
 /// What `useSessionSectionsModel` reads besides the view: the pending asks and the number of
 /// queue items not done (`notDone`). Data only; no section is built here.
@@ -33,9 +35,14 @@ struct Data {
     not_done: i64,
 }
 
-fn data(ctx: &InspectorCtx<'_>, window: &mut Window, cx: &mut App) -> Data {
+fn data(ctx: &InspectorCtx<'_>, state: &Entity<SessionSectionsState>, cx: &mut App) -> Data {
     let view = ctx.view;
-    let queue = super::order::queue::use_canon_queue(&view.session_id, window, cx);
+    let asks = state
+        .read(cx)
+        .asks(&view.session_id)
+        .filter(|page| page.open_count > 0)
+        .cloned();
+    let queue = super::order::queue::snapshot(cx, &view.session_id);
     let not_done = queue
         .view
         .iter()
@@ -45,8 +52,7 @@ fn data(ctx: &InspectorCtx<'_>, window: &mut Window, cx: &mut App) -> Data {
         .filter(|item| item.state != CanonQueueItemState::Done)
         .count();
     Data {
-        asks: asks::pending_asks(&view.session_id, view.cursors.events, window, cx)
-            .filter(|page| page.open_count > 0),
+        asks,
         not_done: i64::try_from(not_done).unwrap_or(i64::MAX),
     }
 }
@@ -64,10 +70,10 @@ pub(crate) struct SessionSectionsModel {
 /// have no data here yet (their entries are P5 and P4 stubs), so they do not count.
 pub(crate) fn session_sections_model(
     ctx: &InspectorCtx<'_>,
-    window: &mut Window,
+    state: &Entity<SessionSectionsState>,
     cx: &mut App,
 ) -> SessionSectionsModel {
-    let data = data(ctx, window, cx);
+    let data = data(ctx, state, cx);
     let view = ctx.view;
     let has_ids = data.asks.is_some()
         || view.subtasks.as_ref().is_some_and(|s| !s.is_empty())

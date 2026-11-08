@@ -168,6 +168,8 @@ struct Metrics {
     controls: f32,
     action: ActionScale,
     compact: bool,
+    /// `--titlebar-height`: the row every slot centres on.
+    row: f32,
 }
 
 impl Metrics {
@@ -227,6 +229,7 @@ impl Metrics {
                 fixed: false,
             },
             compact,
+            row: len(Length::TitlebarHeight),
         }
     }
 }
@@ -238,7 +241,12 @@ fn actions(content: AnyElement, scale: ActionScale) -> AnyElement {
             action: Some(scale),
             ..Spec::default()
         },
-        div().flex_none().flex().items_center().child(content),
+        div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .self_center()
+            .child(content),
     )
     .into_any_element()
 }
@@ -262,20 +270,32 @@ fn copy(bar: &mut TitlebarShell, m: &Metrics, ds: &Ds) -> Div {
     });
     let has_actions = bar.title_actions.is_some();
     let title_actions = bar.title_actions.take().map(|content| {
-        // Centred on the title line and no taller than it: margin-block of half the difference.
-        let margin = (f32::from(line) - m.action.side) / 2.;
-        div()
-            .flex_none()
-            .my(px(margin))
-            .child(actions(content, m.action))
+        // Centred on the title line and no taller than it (TitlebarShell.module.css:173): a box
+        // of the line's height with the buttons pulled up by half the difference, which moves
+        // them without changing the box.
+        let offset = (m.action.side - f32::from(line)) / 2.;
+        div().flex_none().h(line).flex().items_start().child(
+            div()
+                .relative()
+                .top(px(-offset))
+                .child(actions(content, m.action)),
+        )
     });
-    let copy = div()
+    // The text keeps its baseline; every control shares the row's centre line, so a button's own
+    // baseline never moves the title.
+    let text = div()
         .flex()
         .items_baseline()
         .gap(ds.len(Length::SpaceSm))
         .min_w_0()
         .child(title)
-        .children(subtitle)
+        .children(subtitle);
+    let copy = div()
+        .flex()
+        .items_center()
+        .gap(ds.len(Length::SpaceSm))
+        .min_w_0()
+        .child(text)
         .children(title_actions);
     // The actions may reach past the line, so the bar then does not clip them.
     if has_actions {
@@ -331,6 +351,7 @@ fn identity(bar: &mut TitlebarShell, m: &Metrics, ds: &Ds) -> Div {
         .flex()
         .flex_auto()
         .items_center()
+        .h(px(m.row))
         .min_w_0()
         .gap(ds.len(Length::SpaceSm))
         .children(back)
@@ -360,6 +381,7 @@ impl RenderOnce for TitlebarShell {
             let mut group = div()
                 .flex()
                 .items_center()
+                .h(px(m.row))
                 .min_w_0()
                 .gap(ds.len(if m.compact {
                     Length::SpaceXs

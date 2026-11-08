@@ -4,6 +4,7 @@
 //! and fades out keeping its last label and position.
 pub mod place;
 
+use std::cell::Cell;
 use std::time::{Duration, Instant};
 
 use gpui::{
@@ -16,6 +17,7 @@ pub use place::{Align, Side};
 
 use super::context::Ds;
 use super::layer::{Layer, Z, safe_top};
+use super::liquid_glass;
 use super::motion::{Timing, Tween};
 use super::strut;
 use super::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
@@ -218,6 +220,7 @@ impl RenderOnce for Tooltip {
         let layer = self.layer(&state, window, cx);
         let child = self.child.take();
         let hover_state = state.clone();
+        let press_state = state.clone();
         let label = self.label.is_some();
         let mut wrapper = div()
             .id(self.id.clone())
@@ -228,7 +231,9 @@ impl RenderOnce for Tooltip {
             .tab_stop(false)
             .on_hover(move |on, window, cx| {
                 on_hover(&hover_state, *on, label, window, cx);
-            });
+            })
+            // Radix closes on pointer down and stays closed until the pointer leaves and returns.
+            .capture_any_mouse_down(move |_, _, cx| press_state.update(cx, State::hide));
         if self.fill {
             wrapper = wrapper.flex_1().min_w_0();
         }
@@ -360,15 +365,22 @@ impl Tooltip {
                 Side::Left => (travel, 0.),
                 Side::Right => (-travel, 0.),
             };
-            Tween::new(id, div().relative().child(content), timing, move |el, t| {
-                el.left(px(dx * (1. - t))).top(px(dy * (1. - t))).opacity(t)
+            // The glass takes the progress as its presence, not as an opacity.
+            let content = Cell::new(Some(content));
+            Tween::new(id, div().relative(), timing, move |el, t| {
+                el.left(px(dx * (1. - t)))
+                    .top(px(dy * (1. - t)))
+                    .child(liquid_glass::with_presence(t, shown_content(&content)))
             })
             .into_any_element()
         } else {
             let timing =
                 Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseAccelerate);
-            Tween::new(id, div().child(content), timing, |el, t| el.opacity(1. - t))
-                .into_any_element()
+            let content = Cell::new(Some(content));
+            Tween::new(id, div(), timing, move |el, t| {
+                el.child(liquid_glass::with_presence(1. - t, shown_content(&content)))
+            })
+            .into_any_element()
         };
         let hidden = shown.clipped;
         Some(Layer::new(
@@ -424,4 +436,11 @@ impl Tooltip {
             .child(probe)
             .into_any_element()
     }
+}
+
+/// The surface held for the animation's one build, taken out when the Tween applies it.
+fn shown_content(content: &Cell<Option<AnyElement>>) -> AnyElement {
+    content
+        .take()
+        .unwrap_or_else(|| gpui::Empty.into_any_element())
 }

@@ -11,10 +11,10 @@ use gpui::{
 use super::layout::Resolved;
 use super::state::Item;
 use super::{Action, Kind, Store, Toast};
-use crate::tokens::{Color, Filter, Length, Number, Shadow};
-use crate::ui::backdrop::Backdrop;
+use crate::tokens::{Color, Length, Number};
 use crate::ui::context::Ds;
 use crate::ui::convert;
+use crate::ui::liquid_glass::{self, LiquidGlass};
 
 /// sonner's font sizes and the box it gives each part.
 const TITLE_LINE: f32 = 1.5; // DS: sonner styles.css `[data-title]`
@@ -26,39 +26,33 @@ const SPINNER_BARS: usize = 12;
 /// `--gray11` of sonner's light theme, the loading bars' colour.
 const SPINNER_GRAY: f32 = 0.435; // DS: sonner styles.css `.sonner-loading-bar`
 
-/// The colours of a toast's tone.
+/// The colours of a toast's tone (the glass behind it is the same for every kind).
 struct Tone {
-    background: Hsla,
-    border: Hsla,
     text: Hsla,
     icon: Hsla,
+    /// The kind's translucent fill and border over the glass; none for a plain message.
+    tint: Option<(Hsla, Hsla)>,
 }
 
 fn tone(kind: Kind, ds: &Ds) -> Tone {
-    let popover = ds.color(Color::Popover);
     let normal = Tone {
-        background: popover,
-        border: ds.color(Color::Line),
         text: ds.color(Color::TextPrimary),
         icon: ds.color(Color::TextPrimary),
+        tint: None,
     };
-    // The tint sits over the popover surface so the text stays readable.
+    // Toast.module.css:45-61 `--normal-bg` / `--normal-border` / `--normal-text` per kind. React
+    // lays the bg token over the popover; here it lies translucent over the glass.
     let toned = |bg, border, text| Tone {
-        background: crate::ui::control::over(ds.color(bg), popover),
-        border: ds.color(border),
         text: ds.color(text),
         icon: ds.color(text),
+        tint: Some((ds.color(bg), ds.color(border))),
     };
     match kind {
-        Kind::Success => Tone {
-            icon: ds.color(Color::ColorSuccess),
-            text: ds.color(Color::ColorSuccess),
-            ..toned(
-                Color::ColorSuccessBg,
-                Color::ColorSuccessBorder,
-                Color::ColorSuccess,
-            )
-        },
+        Kind::Success => toned(
+            Color::ColorSuccessBg,
+            Color::ColorSuccessBorder,
+            Color::ColorSuccess,
+        ),
         Kind::Warning => toned(
             Color::ColorWarningBg,
             Color::ColorWarningBorder,
@@ -73,13 +67,15 @@ fn tone(kind: Kind, ds: &Ds) -> Tone {
     }
 }
 
-/// The glass behind a toast: the card shadow, `backdrop-filter: var(--composer-glass-filter)`,
-/// the tone's fill and its 1px border.
-fn surface(tone: &Tone, ds: &Ds) -> gpui::Canvas<()> {
+/// The glass behind a toast: Liquid Glass over the content, materialized by `progress` (the
+/// toast's presence; the lens draws its own shadow, rim and hairline), then the kind's
+/// translucent fill and 1px border (Toast.module.css:45-80) over it. The glass is not faded
+/// with the content: it ramps its lensing instead (LG research §5, §8.1.6).
+fn surface(tone: &Tone, progress: f32, ds: &Ds) -> gpui::Canvas<()> {
     let radius = ds.len(Length::RadiusPanel);
-    let shadow = convert::box_shadows(ds.tokens().shadow(Shadow::ShadowCard), ds.tokens());
-    let backdrop = Backdrop::new(ds, Filter::ComposerGlassFilter);
-    let (fill, border) = (tone.background, tone.border);
+    let dark = ds.dark();
+    let glass = LiquidGlass::over_content().materialize(progress).adapt(ds);
+    let tint = tone.tint;
     canvas(
         |_, _, _| (),
         move |bounds: Bounds<Pixels>, (), window: &mut Window, _| {
@@ -87,19 +83,21 @@ fn surface(tone: &Tone, ds: &Ds) -> gpui::Canvas<()> {
                 .min(bounds.size.height / 2.)
                 .min(bounds.size.width / 2.);
             let radii = Corners::all(r);
-            window.paint_drop_shadows_outside(bounds, radii, 0., &shadow);
-            backdrop.paint(bounds, radii, window);
-            window.paint_quad(
-                gpui::PaintQuad::new(bounds)
-                    .background(fill)
-                    .corner_radii(radii),
-            );
-            window.paint_quad(
-                gpui::PaintQuad::new(bounds)
-                    .corner_radii(radii)
-                    .border_widths(Edges::all(px(1.))) // DS: sonner styles.css `border: 1px`
-                    .border_color(border),
-            );
+            liquid_glass::paint(bounds, radii, dark, glass, window);
+            if let Some((fill, border)) = tint {
+                let fade = progress.clamp(0., 1.);
+                window.paint_quad(
+                    gpui::PaintQuad::new(bounds)
+                        .background(convert::with_alpha(fill, fade))
+                        .corner_radii(radii),
+                );
+                window.paint_quad(
+                    gpui::PaintQuad::new(bounds)
+                        .corner_radii(radii)
+                        .border_widths(Edges::all(px(1.))) // DS: sonner styles.css `border: 1px`
+                        .border_color(convert::with_alpha(border, fade)),
+                );
+            }
         },
     )
     .absolute()
@@ -353,7 +351,6 @@ pub(super) fn render(
         .left(px(place.left))
         .w(px(place.width))
         .scale(scale)
-        .opacity(resolved.opacity)
         .on_mouse_down(MouseButton::Left, move |event, window, cx| {
             let now = cx.background_executor().now();
             down.begin_swipe(id, event.position, now, cx);
@@ -373,7 +370,7 @@ pub(super) fn render(
             .debug_selector(|| "toast-front".to_owned())
     });
     outer
-        .child(surface(&tone, ds))
+        .child(surface(&tone, resolved.opacity, ds))
         .child(content)
         .child(probe)
         .children(marker)

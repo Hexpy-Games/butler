@@ -286,7 +286,8 @@ impl Dialog {
         let scrim = (self.modal || area.card.is_some())
             .then(|| self.scrim(&id, phase, scrim_motion, &area, ds));
         let surface = content.surface(ds, &geo, &env);
-        let Some(animated) = motion::animate(&id, phase, side, (0.5, 0.5), keyframes, surface, ds)
+        let Some(animated) =
+            motion::animate_glass(&id, phase, side, (0.5, 0.5), keyframes, surface, ds)
         else {
             return div().into_any_element();
         };

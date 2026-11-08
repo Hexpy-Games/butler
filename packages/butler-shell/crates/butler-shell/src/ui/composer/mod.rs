@@ -39,7 +39,7 @@ use self::editor::clipboard::Paste;
 use self::editor::{ComposerEditor, FocusPlacement};
 use self::references::{MentionKey, References};
 use self::state::{ComposerState, image_refusal_label};
-use crate::ui::decisions::{DecisionCtx, decision_surface, set_plan_gate};
+use crate::ui::decisions::{DecisionCtx, decision_active, set_plan_gate};
 use crate::ui::field;
 use crate::ui::sidebar::SpaceDragPayload;
 use crate::ui::source::wire::{QueuedMessageRecord, SessionView};
@@ -110,7 +110,7 @@ struct Fold {
     engaged: bool,
     /// A toolbar popover is open.
     protected: bool,
-    /// A decision surface took the input's place in the last frame.
+    /// A decision waits in the transcript (`decision.plan || .authority || .question`).
     decision: bool,
 }
 
@@ -129,17 +129,13 @@ pub(crate) struct Composer {
     synced_revision: u64,
     /// Whether the card is unfolded.
     fold: Fold,
-    /// The field's placeholder (new chat or follow-up).
-    placeholder: &'static str,
     theme: Theme,
     /// The open chat's turn is running.
     pub(crate) streaming: bool,
-    /// The open chat's view, for the decision surfaces that take the input's place.
+    /// The open chat's view, for the decisions the transcript shows.
     decision_view: Option<Rc<SessionView>>,
     /// The open chat's queued follow-ups, for the plan decision's gate.
     queue: Vec<QueuedMessageRecord>,
-    /// The new-chat composer (`large`).
-    new_chat: bool,
     git_notice_dismissed: bool,
     /// Why the composer cannot be used (shown as a tooltip), when it cannot.
     pub(crate) disabled: Option<SharedString>,
@@ -154,7 +150,6 @@ impl EventEmitter<ComposerEvent> for Composer {}
 
 impl Composer {
     pub(crate) fn new(theme: Theme, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let placeholder = theme.strings.placeholder;
         let input = cx.new(|cx| EditableTextState::new(StringStorage::default(), cx));
         let handle = input.read(cx).focus_handle(cx);
         let mut editor = ComposerEditor::default();
@@ -188,12 +183,10 @@ impl Composer {
             inputs: Inputs::default(),
             synced_revision: 0,
             fold: Fold::default(),
-            placeholder,
             theme,
             streaming: false,
             decision_view: None,
             queue: Vec::new(),
-            new_chat: true,
             git_notice_dismissed: false,
             disabled: None,
             shell_focus: None,
@@ -204,17 +197,6 @@ impl Composer {
 
     pub(crate) fn set_theme(&mut self, theme: Theme, _cx: &mut Context<Self>) {
         self.theme = theme;
-    }
-
-    /// The placeholder for a new chat or a follow-up.
-    pub(crate) fn set_new_chat(&mut self, new_chat: bool, _cx: &mut Context<Self>) {
-        let s = self.theme.strings;
-        self.new_chat = new_chat;
-        self.placeholder = if new_chat {
-            s.placeholder
-        } else {
-            s.placeholder_follow_up
-        };
     }
 
     /// `focusComposer`: expands the card and puts the caret back where it was.
@@ -242,15 +224,13 @@ impl Composer {
     }
 
     fn body(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        // The decision itself renders in the transcript (`ConversationRequestPortal`); the
+        // composer keeps its input and toolbar below it.
         let view = self.decision_view.clone();
-        let surface = view
+        self.fold.decision = view
             .as_deref()
-            .and_then(|view| decision_surface(DecisionCtx { view }, window, cx));
-        self.fold.decision = surface.is_some();
-        if let Some(surface) = surface {
-            return vec![surface];
-        }
-        let (attachment, placeholder) = self.decision_attachment(window, cx);
+            .is_some_and(|view| decision_active(DecisionCtx { view }, cx));
+        let (attachment, placeholder) = self.decision_attachment(cx);
         let lang = butler_ds::ui::context::Ds::get(cx).lang();
         let (attached, refused) = ComposerState::read(cx, |draft| {
             (draft.attachments.clone(), draft.blocked_attachments.clone())
@@ -278,7 +258,7 @@ impl Composer {
         let input = field::field(
             "composer-input",
             &self.input,
-            placeholder.unwrap_or(self.placeholder),
+            placeholder.unwrap_or(self.theme.strings.placeholder),
             &self.theme,
         )
         .aria_label(self.theme.strings.message_composer);
@@ -406,10 +386,9 @@ impl Composer {
         );
         let body = self.body(window, cx);
         let expanded = self.fold.engaged || self.fold.decision || self.fold.protected;
-        let mut card = ComposerCard::new("composer-card").expanded(expanded);
-        if self.new_chat {
-            card = card.large();
-        }
+        let mut card = ComposerCard::new("composer-card")
+            .expanded(expanded)
+            .large();
         if file_drag_active(cx) {
             card = card.drop_active();
         }
@@ -432,8 +411,18 @@ impl Render for Composer {
         // `useComposerPlanDecision`'s inputs: plan mode and the open chat's queue.
         set_plan_gate(cx, self.controls.shown.plan_mode, &self.queue);
         let height = self.height.clone();
+        let this = cx.entity().downgrade();
         let probe = canvas(
-            move |b, _, _| height.set(b.size.height.as_f32()),
+            move |b, window, cx| {
+                // The conversation keeps room for the card: a new height re-renders it (this
+                // view's ancestors) on the next frame.
+                let next = b.size.height.as_f32();
+                if height.replace(next) != next {
+                    window.defer(cx, move |_, cx| {
+                        let _ = this.update(cx, |_, cx| cx.notify());
+                    });
+                }
+            },
             |_, (), _, _| {},
         )
         .absolute()
@@ -461,7 +450,7 @@ impl Render for Composer {
         .child(probe)
         .child(card)
         .on_click(cx.listener(|this, _, window, cx| {
-            if !this.fold.engaged && !this.fold.decision {
+            if !this.fold.engaged {
                 this.engage(window, cx);
             }
         }))

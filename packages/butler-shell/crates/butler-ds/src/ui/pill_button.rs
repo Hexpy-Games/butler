@@ -7,12 +7,12 @@ use gpui::{
     Styled as _, Window, div, px,
 };
 
-use super::backdrop::Backdrop;
 use super::button::{Button, Shape, Variant};
 use super::context::Ds;
 use super::control::{Blend, Control, Disabled};
 use super::convert;
-use crate::tokens::{Color, Filter, Length};
+use super::liquid_glass::{self, LiquidGlass};
+use crate::tokens::{Color, Length};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Surface {
@@ -198,15 +198,10 @@ impl PillButton {
         control
     }
 
-    /// The glass capsule: border, fill, card shadow and backdrop blur.
+    /// The glass capsule: Liquid Glass on the composer card's glass (`on_glass`: its own rim and
+    /// hairline, no shadow). The lens draws the fill, border and shadow, so none is set here; the
+    /// 1px the border took stays in the padding.
     fn glass(control: &mut Control, ds: &Ds) {
-        control.border = Some((
-            px(1.), // DS: PillButton.module.css:6
-            Blend::hover(
-                ds.color(Color::ComposerGlassBorder),
-                ds.color(Color::LineStrong),
-            ),
-        ));
         let (left, top, right, bottom) = (
             control.padding[0],
             control.padding[1],
@@ -214,17 +209,13 @@ impl PillButton {
             control.padding[3],
         );
         control.padding = [left + px(1.), top + px(1.), right + px(1.), bottom + px(1.)];
-        control.fill = Blend::hover(
-            ds.color(Color::ComposerGlassBg),
-            ds.color(Color::ComposerGlassControlBg),
-        );
+        control.fill = Blend::flat(gpui::transparent_black());
         control.fg = Blend::flat(ds.color(Color::TextPrimary));
         control.text_size = ds.len(Length::FontSize2);
-        control.shadows = convert::box_shadows(
-            ds.tokens().shadow(crate::tokens::Shadow::ShadowCard),
-            ds.tokens(),
-        );
-        control.backdrop = Some(Backdrop::new(ds, Filter::ComposerGlassFilter));
+        let glass = LiquidGlass::on_glass(0., 0.).adapt(ds);
+        control
+            .overlay
+            .push(glass_layer(glass, ds.dark(), control.radius));
         let floor = ds.len(Length::Space4) * 2.;
         control.min_height = Some(if ds.compact() {
             ds.len(Length::ControlHitTarget)
@@ -232,6 +223,22 @@ impl PillButton {
             floor
         });
     }
+}
+
+/// The Liquid Glass lens over the pill's box, under its content.
+fn glass_layer(glass: LiquidGlass, dark: bool, radius: gpui::Pixels) -> AnyElement {
+    gpui::canvas(
+        |_, _, _| (),
+        move |bounds, (), window, _| {
+            let radii = gpui::Corners::all(radius);
+            liquid_glass::paint(bounds, radii, dark, glass, window);
+        },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+    .into_any_element()
 }
 
 /// `inset 0 0 0 var(--border-width-strong) var(--accent)`.
