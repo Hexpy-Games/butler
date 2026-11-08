@@ -76,10 +76,10 @@ pub(super) struct GeneralCopy {
     pub(super) rerun: [&'static str; 3],
     /// settings.fullReset.label, description, action
     pub(super) full_reset: [&'static str; 3],
+    /// settings.fullReset.resetting
+    pub(super) resetting: &'static str,
     /// common.save
     pub(super) save: &'static str,
-    /// shell.notYet
-    pub(super) not_yet: &'static str,
 }
 
 static KO: GeneralCopy = GeneralCopy {
@@ -181,8 +181,8 @@ static KO: GeneralCopy = GeneralCopy {
         "채팅부터 기억까지 모두 지우고 처음부터 시작합니다.",
         "초기화",
     ],
+    resetting: "초기화 중…",
     save: "저장",
-    not_yet: "준비 중",
 };
 
 static EN: GeneralCopy = GeneralCopy {
@@ -290,8 +290,8 @@ static EN: GeneralCopy = GeneralCopy {
         "Erase everything, from chats to memory, and start fresh.",
         "Reset",
     ],
+    resetting: "Resetting…",
     save: "Save",
-    not_yet: "Coming soon",
 };
 
 pub(super) fn words(lang: Lang) -> &'static GeneralCopy {

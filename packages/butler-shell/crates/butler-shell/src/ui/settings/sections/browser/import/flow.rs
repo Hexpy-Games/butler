@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 use super::dialog::ImportDialog;
 use super::model::{Counts, FILE, Folder, Session, Sources};
-use crate::ui::settings::state::fetch;
+use crate::ui::settings::state::{fetch, fetch_if};
 use crate::ui::source::agent::Jobs;
 
 /// `apiErrorCode(e) ?? "import_unreadable"`: the client returns no error codes.
@@ -162,15 +162,18 @@ impl ImportDialog {
     /// `usePasswordExportPolling`: once a second until the CSV is in.
     fn poll(id: String, cx: &mut Context<Self>) {
         let body = json!({ "export_id": id });
-        fetch(
+        fetch_if(
             cx,
             move |client| async move { client.poll_browser_password_export(&body).await },
             move |this: &mut Self, result: Result<Counts, Error>, cx| {
                 if this.export_id.as_deref() != Some(id.as_str()) {
-                    return;
+                    return false;
                 }
                 match result {
-                    Ok(counts) if counts.waiting == Some(true) => Self::poll_later(id, cx),
+                    Ok(counts) if counts.waiting == Some(true) => {
+                        Self::poll_later(id, cx);
+                        return false;
+                    }
                     Ok(counts) => {
                         let error = counts.error.clone();
                         this.result = Some(carry(this.result.as_ref(), counts, true));
@@ -183,6 +186,7 @@ impl ImportDialog {
                         this.export_id = None;
                     }
                 }
+                true
             },
         );
     }

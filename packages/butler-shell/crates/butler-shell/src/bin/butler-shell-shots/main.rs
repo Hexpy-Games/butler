@@ -14,6 +14,10 @@
 #[path = "../../ui/mod.rs"]
 mod ui;
 
+// The UI reads the App lifecycle; the harness never starts it (`lifecycle::runtime` is none).
+#[path = "../../lifecycle/mod.rs"]
+mod lifecycle;
+
 mod fixture;
 mod frame;
 mod live;

@@ -79,16 +79,21 @@ pub fn runtime_prompt_environment() -> String {
     format!("OS: {os}\nShell: {shell}")
 }
 
+/// This host's architecture as Node's `process.arch` names it: `arm64`, `x64`
+/// (other architectures keep Rust's name).
+pub fn node_architecture() -> &'static str {
+    match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        "x86_64" => "x64",
+        other => other,
+    }
+}
+
 /// The `<os>-<arch>` tag of the release artifacts that run on this host:
 /// `darwin-arm64`, `linux-x64`, `windows-x64`, ... (other architectures keep
 /// Rust's name).
 pub fn release_platform() -> String {
-    let arch = match std::env::consts::ARCH {
-        "aarch64" => "arm64",
-        "x86_64" => "x64",
-        other => other,
-    };
-    format!("{}-{arch}", sys::RELEASE_OS)
+    format!("{}-{}", sys::RELEASE_OS, node_architecture())
 }
 
 /// Resolves the installed command alias to its verified original executable.

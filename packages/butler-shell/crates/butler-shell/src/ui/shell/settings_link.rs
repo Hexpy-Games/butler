@@ -66,6 +66,12 @@ impl Shell {
                 self.close_settings(window, cx);
                 self.navigate(Navigation::Session(id.to_string()), window, cx);
             }
+            // `RerunSetupField` `openRerun`: Settings closes and the setup shows again.
+            SettingsEvent::RerunSetup => {
+                self.close_settings(window, cx);
+                self.onboarding.rerun = true;
+                cx.notify();
+            }
             SettingsEvent::Open(_) => {}
         }
     }

@@ -48,6 +48,12 @@
 //! - [`powershell_text`]: PowerShell string literals for the scripts Butler starts.
 //! - [`user_auth`]: asking the user to verify themselves (Touch ID, Windows
 //!   Hello or the account password) before a secret is shown.
+//! - [`app_shell`]: the installed App's resources, installation root and
+//!   whether it may register with the OS.
+//! - [`login_item`]: opening the App at login.
+//! - [`tray`]: the App's status icon and menu.
+//! - [`notification_settings`]: whether the App can post OS notifications
+//!   and where their settings are.
 //!
 //! macOS and Linux implement the behavior Butler shipped with. Windows
 //! implements what the service needs to run and stop (process identity,
@@ -63,6 +69,7 @@
 pub mod account_dirs;
 pub mod agent_homes;
 pub mod app_browser;
+pub mod app_shell;
 pub mod app_update;
 pub mod browser_process;
 pub mod browser_profiles;
@@ -79,8 +86,10 @@ pub mod host_file_behavior;
 pub mod install_link;
 pub mod instance;
 pub mod launcher;
+pub mod login_item;
 pub mod memory;
 pub mod network;
+pub mod notification_settings;
 pub mod powershell_text;
 pub mod process_control;
 pub mod process_names;
@@ -95,6 +104,7 @@ pub mod storage_size;
 pub mod system_wake;
 pub mod time_zone;
 pub mod tool_paths;
+pub mod tray;
 pub mod user_auth;
 pub mod user_dirs;
 

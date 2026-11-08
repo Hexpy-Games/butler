@@ -61,7 +61,7 @@ impl Regions {
                 let open = shell.frame.open;
                 shell.render_titlebar(open, window, cx)
             }),
-            conversation: region(|shell, _, cx| shell.conversation(cx)),
+            conversation: region(|shell, window, cx| shell.conversation(window, cx)),
             viewer: region(Shell::render_viewer_pane),
         }
     }

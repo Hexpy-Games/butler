@@ -1,13 +1,19 @@
 //! What the transcript asks of the shell: older messages, sending, the queue, settings and
 //! opening a session; and the open chat's view shown in it.
 use std::rc::Rc;
+use std::time::Duration;
 
 use gpui::{App, Context};
+use serde_json::Value;
 
 use super::{Shell, navigation::Navigation};
 use crate::ui::chat::{self, AssistantHooks, OlderRequest};
+use crate::ui::onboarding::gate::{self, Gate};
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::SessionQueueView;
+
+/// `ONBOARDING_SETTINGS_RETRY_MS`: while the agent is still starting.
+const SETTINGS_RETRY: Duration = Duration::from_millis(2000);
 
 impl Shell {
     /// Registers what the transcript asks of the shell: older messages, sending, the queue and
@@ -44,17 +50,53 @@ impl Shell {
         });
     }
 
-    /// GET /settings on connect; [`Shell::apply_settings`] applies it app-wide.
-    pub(super) fn load_settings(cx: &mut Context<Self>) {
-        let request = Jobs::run(cx, |client| async move { client.get_settings().await });
-        cx.spawn(async move |this, cx| {
-            let Some(Ok(raw)) = request.await else {
-                return;
-            };
-            let raw = Rc::new(raw);
-            let _ = this.update(cx, |this, cx| this.apply_settings(&raw, cx));
-        })
-        .detach();
+    /// `useOnboardingGate`'s load on connect: `/settings` and `/model-catalog` together. The
+    /// settings apply app-wide ([`Shell::apply_settings`]); once both answer, the gate resolves
+    /// (never back from the workspace). While the gate is pending a failure retries every 2 s.
+    pub(super) fn load_settings(&mut self, cx: &mut Context<Self>) {
+        self.settings_task = Some(cx.spawn(async move |this, cx| {
+            loop {
+                let (settings, catalog) = cx.update(|cx| {
+                    (
+                        Jobs::run(cx, |client| async move { client.get_settings().await }),
+                        Jobs::run(cx, |client| async move { client.get_model_catalog().await }),
+                    )
+                });
+                let (settings, catalog) = futures::future::join(settings, catalog).await;
+                let settings = settings.and_then(Result::ok).map(Rc::new);
+                let catalog = catalog.and_then(Result::ok).map(Rc::new);
+                let retry = this.update(cx, |this, cx| this.settings_loaded(settings, catalog, cx));
+                if !matches!(retry, Ok(true)) {
+                    return;
+                }
+                cx.background_executor().timer(SETTINGS_RETRY).await;
+            }
+        }));
+    }
+
+    /// Applies what loaded; whether to read again (the gate is still pending).
+    fn settings_loaded(
+        &mut self,
+        settings: Option<Rc<Value>>,
+        catalog: Option<Rc<Value>>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if let Some(raw) = &settings {
+            self.apply_settings(raw, cx);
+        }
+        if let Some(catalog) = &catalog {
+            self.catalog_raw = Some(catalog.clone());
+        }
+        match (settings, catalog) {
+            (Some(raw), Some(_)) => {
+                if self.onboarding.gate != Gate::Workspace {
+                    self.onboarding.gate = gate::resolve(&raw);
+                    cx.notify();
+                }
+                false
+            }
+            _ => self.onboarding.gate == Gate::Pending,
+        }
     }
 
     /// Reloads the open chat's queued follow-ups.

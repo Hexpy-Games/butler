@@ -1,7 +1,11 @@
 use crate::{AttachState, Error, ShellClient};
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use butler_platform::instance::{process_executable, process_start, same_executable};
 use butler_platform::process_control::{Liveness, liveness};
-use serde::Deserialize;
+use hmac::{Hmac, Mac as _};
+use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use std::path::{Path, PathBuf};
 
 const INSTANCE: &str = "state/butler-agent-native-service.json";
@@ -33,10 +37,43 @@ const LOCAL_ADMIN_SCHEMA: &str = "butler.app-local-admin.v1";
 /// Shorter secrets count as missing, as in the agent (`APP_LOCAL_ADMIN_MIN_LENGTH`).
 const LOCAL_ADMIN_MIN_LENGTH: usize = 32;
 
+/// `projectFolderTokenTtlMs`
+const FOLDER_TOKEN_TTL_MS: u128 = 5 * 60 * 1000;
+/// The token body, in Electron's key order; the signature covers its base64url text.
+#[derive(Serialize)]
+struct FolderPayload<'a> {
+    path: &'a str,
+    issued_at: u128,
+    expires_at: u128,
+}
+
 impl ShellClient {
     /// Stable attachment identity, excluding credentials.
     pub fn instance_identity(&self) -> &(u32, String, String) {
         &self.inner.identity
+    }
+
+    /// A folder-selection token for `path` (`v1.<b64url payload>.<b64url HMAC-SHA256>`),
+    /// signed with the data folder's secret, which is read on each call and never kept.
+    pub fn folder_selection_token(&self, path: &Path) -> Result<String, Error> {
+        let secret = read_folder_secret(&self.inner.data)?;
+        let path = std::path::absolute(path).map_err(|_| Error::LocalMetadata)?;
+        let issued_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| Error::LocalMetadata)?
+            .as_millis();
+        let payload = serde_json::to_vec(&FolderPayload {
+            path: path.to_str().ok_or(Error::LocalMetadata)?,
+            issued_at,
+            expires_at: issued_at + FOLDER_TOKEN_TTL_MS,
+        })
+        .map_err(|_| Error::LocalMetadata)?;
+        let payload = URL_SAFE_NO_PAD.encode(payload);
+        let mut mac =
+            Hmac::<Sha256>::new_from_slice(secret.as_bytes()).map_err(|_| Error::LocalMetadata)?;
+        mac.update(payload.as_bytes());
+        let signature = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
+        Ok(format!("v1.{payload}.{signature}"))
     }
 
     pub(super) async fn instance_alive(&self) -> bool {
@@ -146,4 +183,25 @@ pub(crate) fn read_admin(data: &Path) -> Result<String, Error> {
     }
     butler_log::register_secret(&admin.secret);
     Ok(admin.secret)
+}
+
+/// `resolveProjectFolderTokenSecret`: `BUTLER_PROJECT_FOLDER_TOKEN_SECRET` wins, else the data
+/// folder's secret file the Agent created. Registered as a secret so no log line can carry it.
+fn read_folder_secret(data: &Path) -> Result<String, Error> {
+    let from_env = std::env::var("BUTLER_PROJECT_FOLDER_TOKEN_SECRET")
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    let secret = match from_env {
+        Some(secret) => secret,
+        None => std::fs::read_to_string(data.join(butler_platform::data_paths::FOLDER_SECRET))
+            .map_err(|_| Error::LocalMetadata)?
+            .trim()
+            .to_owned(),
+    };
+    if secret.is_empty() {
+        return Err(Error::LocalMetadata);
+    }
+    butler_log::register_secret(&secret);
+    Ok(secret)
 }

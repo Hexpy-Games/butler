@@ -10,6 +10,15 @@ use crate::ui::source::agent::MonitorSignal;
 use crate::ui::source::{ChatRef, EventCursor, Fetch, SourceError};
 use crate::ui::store::{Applied, ChatsLoad};
 
+/// `watchAppLogging`'s events: the App's log level is read again.
+fn logging_changed(kind: &str, payload: &serde_json::Value) -> bool {
+    matches!(kind, "logs.cleared" | "stream.reconcile_required")
+        || (kind == "settings.updated"
+            && ["log_level", "log_category_levels", "diagnostics_enabled"]
+                .iter()
+                .any(|key| payload["settings"].get(key).is_some()))
+}
+
 impl Shell {
     /// Runs `fetch` and hands its result to `done` on the UI thread.
     pub(crate) fn run<T: 'static>(
@@ -57,11 +66,14 @@ impl Shell {
             self.store.navigation.dirty = false;
             self.store.navigation.generation += 1;
             self.sidebar.begin_snapshot();
-            Self::load_settings(cx);
+            self.load_settings(cx);
             let load = self.store.begin_snapshot();
             self.load_chats(load, cx);
             self.refresh_sidebar(cx);
             self.refresh_sidebar_update(cx);
+            // `watchAppLogging` / `watchAppUserWork` on (re)connect.
+            crate::lifecycle::logs::refresh(cx);
+            crate::lifecycle::app_update::work_changed(cx);
         }
     }
 
@@ -125,6 +137,14 @@ impl Shell {
             && let Some(language) = e.payload["settings"]["language"].as_str()
         {
             self.set_locale(Locale::from_language(language), cx);
+        }
+        // Each committed event: the App's log level may change, and the work a deferred App
+        // update waits on may settle.
+        if let crate::ui::source::LiveUpdate::NavigationEvent(e) = &event.update {
+            if logging_changed(&e.r#type, &e.payload) {
+                crate::lifecycle::logs::refresh(cx);
+            }
+            crate::lifecycle::app_update::work_changed(cx);
         }
         let attention_changed = matches!(&event.update, crate::ui::source::LiveUpdate::Chat(_));
         if let crate::ui::source::LiveUpdate::Inspector(envelope) = &event.update {

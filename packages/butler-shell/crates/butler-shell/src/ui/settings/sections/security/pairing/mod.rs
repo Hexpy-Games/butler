@@ -17,7 +17,7 @@ use serde::Deserialize;
 
 use super::SecurityPage;
 use super::copy::{Words, words};
-use crate::ui::settings::state::fetch;
+use crate::ui::settings::state::{fetch, fetch_if};
 
 const POLL: Duration = Duration::from_secs(1);
 
@@ -121,12 +121,12 @@ impl SecurityPage {
         if self.pairing.epoch != epoch {
             return;
         }
-        fetch(
+        fetch_if(
             cx,
             |client| async move { client.get_pairing_status().await },
             move |this: &mut Self, result: Result<Option<StatusView>, Error>, cx| {
                 if this.pairing.epoch != epoch {
-                    return;
+                    return false;
                 }
                 match result {
                     Ok(Some(status)) if status.id == id && status.status == "paired" => {
@@ -137,8 +137,10 @@ impl SecurityPage {
                         this.refresh_devices(cx);
                     }
                     Ok(Some(status)) if status.id == id && status.status == "active" => {
+                        let changed = this.pairing.remaining != status.expires_in;
                         this.pairing.remaining = status.expires_in;
                         this.schedule_poll(cx);
+                        return changed;
                     }
                     Ok(status) => {
                         let invalidated = status.is_some_and(|s| s.invalidated_by.is_some());
@@ -146,6 +148,7 @@ impl SecurityPage {
                     }
                     Err(_) => this.pairing_failed(cx),
                 }
+                true
             },
         );
     }

@@ -27,7 +27,7 @@ shots = ["gpui/test-support", "dep:gpui_wgpu"]
 butler-ds = { path = "../butler-ds" }
 butler-shell-client = { path = "../../../butler-agent/rust/crates/butler-shell-client" }
 butler-platform = { path = "../../../butler-agent/rust/crates/butler-platform" }
-tokio = { version = "1", features = ["rt", "sync", "time", "macros", "net"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros", "net", "process", "io-util"] }
 notify = "=9.0.0-rc.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -45,6 +45,8 @@ sys-locale.workspace = true
 url = "2"
 percent-encoding = "2"
 uuid = { version = "1", features = ["v4"] }
+# The package updater checks the staged artifact's SHA-256 (lifecycle/app_update).
+sha2 = "=0.10.9"
 
 [dev-dependencies]
 futures = { workspace = true, features = ["executor"] }

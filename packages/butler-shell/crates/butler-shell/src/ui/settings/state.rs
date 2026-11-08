@@ -20,12 +20,13 @@ use crate::ui::i18n::settings::words;
 use crate::ui::source::agent::Jobs;
 
 /// What the settings tell the window: new settings (applied app-wide), a page to show, a chat to
-/// open, or close.
+/// open, run the setup again, or close.
 #[derive(Clone, Debug)]
 pub(crate) enum SettingsEvent {
     Changed(Rc<Value>),
     Open(SectionId),
     OpenSession(SharedString),
+    RerunSetup,
     Close,
 }
 
@@ -67,6 +68,22 @@ pub(crate) fn fetch<P: 'static, T: DeserializeOwned + 'static, F, Fut>(
     F: FnOnce(ShellClient) -> Fut + Send + 'static,
     Fut: Future<Output = Result<Value, Error>> + Send + 'static,
 {
+    fetch_if(cx, call, move |page, result, cx| {
+        done(page, result, cx);
+        true
+    });
+}
+
+/// [`fetch`] for polls: `done` returns whether the page's data changed, and the page re-renders
+/// only then, so an unchanged answer wakes no window draw.
+pub(crate) fn fetch_if<P: 'static, T: DeserializeOwned + 'static, F, Fut>(
+    cx: &mut Context<P>,
+    call: F,
+    done: impl FnOnce(&mut P, Result<T, Error>, &mut Context<P>) -> bool + 'static,
+) where
+    F: FnOnce(ShellClient) -> Fut + Send + 'static,
+    Fut: Future<Output = Result<Value, Error>> + Send + 'static,
+{
     let request = Jobs::run(cx, call);
     cx.spawn(async move |this, cx| {
         let result = match request.await {
@@ -75,8 +92,9 @@ pub(crate) fn fetch<P: 'static, T: DeserializeOwned + 'static, F, Fut>(
             None => Err(Error::Connection),
         };
         let _ = this.update(cx, |this, cx| {
-            done(this, result, cx);
-            cx.notify();
+            if done(this, result, cx) {
+                cx.notify();
+            }
         });
     })
     .detach();

@@ -6,14 +6,16 @@ use butler_ds::ui::toast::Toast;
 use butler_ds::ui::typo::{Tone, Typo};
 use butler_shell_client::Error;
 use gpui::{Context, ParentElement as _};
-use serde_json::json;
+use serde_json::{Value, json};
+use std::rc::Rc;
 
 use super::copy::{Words, words};
 use super::format::memory_model_description;
-use super::types::{MemoryModel, Readiness};
 use super::{MemoryPage, lang, later};
+use crate::ui::onboarding::memory::status::{Retry, megabytes, memory_status, parse};
+use crate::ui::onboarding::readiness::MemoryModel;
 use crate::ui::settings::controls::SettingsSwitch;
-use crate::ui::settings::state::fetch;
+use crate::ui::settings::state::{fetch, fetch_if};
 
 #[derive(Default)]
 pub(super) struct ModelPrep {
@@ -28,16 +30,17 @@ impl ModelPrep {
     /// `settled`: chosen and nothing more will change without the owner.
     fn settled(&self) -> bool {
         self.loaded
-            && self.model.as_ref().is_none_or(|model| {
-                matches!(model.state.as_str(), "unset" | "off" | "ready" | "failed")
-            })
+            && self
+                .model
+                .as_ref()
+                .is_none_or(|model| matches!(&*model.state, "unset" | "off" | "ready" | "failed"))
     }
 
     /// `memoryModelChoice(model) === "on"`
     fn chosen(&self) -> bool {
         self.model
             .as_ref()
-            .is_some_and(|model| !matches!(model.state.as_str(), "unset" | "off"))
+            .is_some_and(|model| !matches!(&*model.state, "unset" | "off"))
     }
 }
 
@@ -48,17 +51,40 @@ impl MemoryPage {
             return;
         }
         self.model.polling = true;
-        fetch(
+        fetch_if(
             cx,
             |client| async move { client.get_setup_readiness().await },
-            |this: &mut Self, result: Result<Readiness, Error>, cx| {
+            |this: &mut Self, result: Result<Value, Error>, cx| {
                 this.model.polling = false;
+                let mut changed = false;
                 if let Ok(view) = result {
+                    let model = view.get("memory_model").and_then(parse);
+                    changed = !this.model.loaded || this.model.model != model;
                     this.model.loaded = true;
-                    this.model.model = view.memory_model;
+                    this.model.model = model;
                 }
                 if !this.model.settled() {
                     later(cx, super::MemoryPage::poll_model);
+                }
+                changed
+            },
+        );
+    }
+
+    /// `MemoryModelStatus`'s Retry: POST /setup/readiness/retry `{memory_model_only: true}`, then
+    /// the poll follows the new download.
+    fn retry_model(cx: &mut Context<Self>) {
+        let body = json!({ "memory_model_only": true });
+        fetch(
+            cx,
+            move |client| async move { client.retry_setup_readiness(&body).await },
+            |this: &mut Self, result: Result<Value, Error>, cx| {
+                if let Ok(view) = result {
+                    this.model.loaded = true;
+                    this.model.model = view.get("memory_model").and_then(parse);
+                }
+                if !this.model.settled() {
+                    this.poll_model(cx);
                 }
             },
         );
@@ -71,12 +97,12 @@ impl MemoryPage {
         fetch(
             cx,
             move |client| async move { client.choose_memory_model(&body).await },
-            |this: &mut Self, result: Result<Readiness, Error>, cx| {
+            |this: &mut Self, result: Result<Value, Error>, cx| {
                 this.model.saving = false;
                 match result {
                     Ok(view) => {
                         this.model.loaded = true;
-                        this.model.model = view.memory_model;
+                        this.model.model = view.get("memory_model").and_then(parse);
                         if !this.model.settled() {
                             this.poll_model(cx);
                         }
@@ -101,15 +127,11 @@ impl MemoryPage {
         cx: &mut Context<Self>,
     ) -> SettingsSection {
         let model = self.model.model.as_ref();
-        #[expect(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "whole megabytes of a download"
-        )]
         let size_mb = model
-            .filter(|model| model.bytes_total > 0 && model.state != "ready")
-            .map(|model| (model.bytes_total as f64 / 1_000_000.0).round() as u64);
+            .filter(|model| model.bytes_total > 0 && &*model.state != "ready")
+            .map(|model| megabytes(model.bytes_total));
         let page = cx.weak_entity();
+        let retry_page = page.clone();
         let mut switch = SettingsSwitch::new("memory-model", copy.memory_choice_on)
             .description(memory_model_description(size_mb, lang))
             .checked(self.model.chosen())
@@ -117,17 +139,22 @@ impl MemoryPage {
             .on_change(move |enabled, _, cx| {
                 let _ = page.update(cx, |this, cx| this.choose_memory_model(enabled, cx));
             });
-        if model.is_some_and(|model| model.state == "ready") {
+        if model.is_some_and(|model| &*model.state == "ready") {
             switch =
                 switch.after_control(Typo::caption(copy.memory_model_ready).tone(Tone::Success));
         }
-        // CARVE-OUT(G-onboard): `first-run/MemoryModelStatus`, the download progress, the failure
-        // reason and its Retry, which React shows under the switch while the model is not ready.
-        SettingsSection::new(
+        let retry: Retry = Rc::new(move |_, cx| {
+            let _ = retry_page.update(cx, |_, cx| super::MemoryPage::retry_model(cx));
+        });
+        let mut section = SettingsSection::new(
             "memory-model",
             SettingsSectionKind::Form,
             copy.memory_model_label,
         )
-        .child(switch)
+        .child(switch);
+        if let Some(status) = memory_status(self.model.model.as_ref(), lang, retry) {
+            section = section.child(status);
+        }
+        section
     }
 }

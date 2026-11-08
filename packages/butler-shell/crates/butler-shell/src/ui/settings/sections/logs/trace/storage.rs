@@ -178,6 +178,8 @@ impl LogStorage {
             cx,
             |client| async move { client.delete_logs().await },
             |this: &mut Self, result: Result<Cleared, Error>, cx| {
+                // The App's own log drops its queue and segments too (`butler:app-log-change`).
+                crate::lifecycle::logs::clear();
                 let copy = copy::get(cx);
                 this.clearing = false;
                 let next = match result {

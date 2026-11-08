@@ -24,6 +24,10 @@ pub(super) struct Words {
     pub(super) unavailable: &'static str,
     /// settings.actions.updateApplying
     pub(super) applying: &'static str,
+    /// settings.actions.updateDeferred
+    pub(super) update_deferred: &'static str,
+    /// settings.actions.updateAfterWork
+    pub(super) update_after_work: &'static str,
     /// settings.errors.loadUpdates
     pub(super) load_failed: &'static str,
     /// settings.errors.checkUpdates
@@ -78,6 +82,8 @@ const KO: Words = Words {
     checking: "확인 중",
     unavailable: "최신 정보를 확인할 수 없음",
     applying: "적용 중",
+    update_deferred: "작업이 끝나면 자동으로 업데이트합니다.",
+    update_after_work: "작업이 끝나면 업데이트",
     load_failed: "업데이트 정보 불러오기 실패",
     check_failed: "업데이트 확인 실패",
     apply_failed: "업데이트 적용 실패",
@@ -112,6 +118,8 @@ const EN: Words = Words {
     checking: "Checking",
     unavailable: "Can't check",
     applying: "Applying",
+    update_deferred: "Butler will update automatically when work finishes.",
+    update_after_work: "Update after work finishes",
     load_failed: "Failed to load update info",
     check_failed: "Failed to check updates",
     apply_failed: "Failed to apply update",

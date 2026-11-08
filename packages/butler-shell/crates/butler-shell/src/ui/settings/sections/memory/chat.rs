@@ -19,7 +19,7 @@ use super::format::free_text;
 use super::reset::{ResetKind, ResetState};
 use super::types::{Receipt, newer};
 use super::{MemoryPage, lang, later, with_reason};
-use crate::ui::settings::state::fetch;
+use crate::ui::settings::state::{fetch, fetch_if};
 
 /// The kinds of receipt the reset and consolidation flows own.
 const OTHER_KINDS: [&str; 4] = ["automatic", "profile", "project_memory", "consolidation"];
@@ -79,15 +79,17 @@ impl MemoryPage {
         };
         self.cleanup.polling = true;
         later(cx, move |_, cx| {
-            fetch(
+            fetch_if(
                 cx,
                 move |client| async move { client.get_memory_cleanup(&id).await },
                 |this: &mut Self, result: Result<Receipt, Error>, cx| {
                     this.cleanup.polling = false;
+                    let before = this.cleanup.receipt.clone();
                     if let Ok(next) = result {
                         this.accept_cleanup(next, true, cx);
                     }
                     this.poll_cleanup(cx);
+                    this.cleanup.receipt != before
                 },
             );
         });

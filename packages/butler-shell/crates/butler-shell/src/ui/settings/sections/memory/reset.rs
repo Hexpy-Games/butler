@@ -19,7 +19,7 @@ use super::format::{removed_chat, removed_profile, removed_project};
 use super::types::{Receipt, newer};
 use super::{MemoryPage, lang, later, with_reason};
 use crate::ui::settings::confirm::{Detail, Request};
-use crate::ui::settings::state::fetch;
+use crate::ui::settings::state::{fetch, fetch_if};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ResetKind {
@@ -114,15 +114,17 @@ impl MemoryPage {
         };
         self.reset.polling = true;
         later(cx, move |_, cx| {
-            fetch(
+            fetch_if(
                 cx,
                 move |client| async move { client.get_memory_reset(&id).await },
                 |this: &mut Self, result: Result<Receipt, Error>, cx| {
                     this.reset.polling = false;
+                    let before = this.reset.receipt.clone();
                     if let Ok(next) = result {
                         this.accept_reset(next, true, cx);
                     }
                     this.poll_reset(cx);
+                    this.reset.receipt != before
                 },
             );
         });
