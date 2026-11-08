@@ -33,11 +33,11 @@ export function UsageSessionSelect({ sessions, value, onChange, open, onOpenChan
     <PopoverTrigger asChild><SelectButton ref={triggerRef} size="sm" aria-label={copy.chats}>
       <RollingSwap itemKey={value ?? "all"}>{title}</RollingSwap>
     </SelectButton></PopoverTrigger>
-    <PopoverContent width="default" align="start" density="list">
+    <PopoverContent align="start" data-menu-size="fit">
       <FilteredSelectPopover title={copy.chats} searchLabel={copy.search} searchPlaceholder={copy.search}
         searchClearLabel={appCopy.interfaceDetails.clearSearch} searchValue={query} onSearchChange={setQuery}
         filters={[{ id: "all", label: copy.all }, ...(["chat", "schedule", "butler"] as const).map(id => ({ id, label: usageKind(id) }))]}
-        activeFilterId={kind} onFilterChange={setKind} emptyLabel={copy.noMatches} resultsMaxRows={7}
+        activeFilterId={kind} onFilterChange={setKind} emptyLabel={copy.noMatches} resultsMaxRows={7} width="fixed"
         footerTitle={copy.pickerFooter(range)}
         groups={[{ id: "sessions", title: copy.usageOrder, items: [
           ...(!query && kind === "all" ? [{ id: "all", label: copy.all, selected: value === null, onSelect: () => select(null) }] : []),
