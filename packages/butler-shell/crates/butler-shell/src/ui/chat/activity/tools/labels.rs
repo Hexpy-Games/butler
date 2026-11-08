@@ -13,9 +13,14 @@ pub(super) fn nonempty(value: Option<&str>) -> Option<&str> {
     value.filter(|value| !value.is_empty())
 }
 
+/// `appCopy.guided.tools[name]`: a tool's label by its id, when the copy has one.
+pub(crate) fn tool_label(lang: Lang, name: &str) -> Option<&'static str> {
+    find(lang, &format!("tool.{name}"))
+}
+
 /// `appCopy.guided.tools[name] ?? appCopy.guided.tools.fallback`
 fn tool_name_label(lang: Lang, name: &str) -> &'static str {
-    find(lang, &format!("tool.{name}")).unwrap_or_else(|| text(lang, "tool.fallback"))
+    tool_label(lang, name).unwrap_or_else(|| text(lang, "tool.fallback"))
 }
 
 fn public_tool_label(row: &ProgressRow, lang: Lang) -> String {

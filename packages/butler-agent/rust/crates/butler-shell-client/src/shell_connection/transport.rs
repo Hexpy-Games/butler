@@ -5,6 +5,9 @@ use serde_json::Value;
 use std::{fmt, path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
+/// The request header that carries the local admin credential (`APP_ADMIN_HEADER`).
+const ADMIN_HEADER: &str = "x-butler-admin";
+
 /// Cloneable authenticated local agent connection. Debug always redacts auth.
 #[derive(Clone)]
 pub struct ShellClient {
@@ -40,7 +43,7 @@ impl ShellClient {
         query: &[(&str, String)],
     ) -> Result<crate::Download, Error> {
         let response = self
-            .request(method, self.url(segments, query)?, &Body::None, false)
+            .request(method, self.url(segments, query)?, &Body::None, false, None)
             .await?;
         Self::read_download(response).await
     }
@@ -91,6 +94,7 @@ impl ShellClient {
                     bytes,
                 },
                 false,
+                None,
             )
             .await?;
         let bytes = response.bytes().await.map_err(|_| Error::Connection)?;
@@ -137,6 +141,7 @@ impl ShellClient {
         url: Url,
         body: &Body<'_>,
         live: bool,
+        admin: Option<&str>,
     ) -> Result<Response, Error> {
         // Only the message ingress dedupes client ids. Session creation and
         // authority side effects have no end-to-end retry guarantee.
@@ -148,7 +153,7 @@ impl ShellClient {
         let mut delay = Duration::from_millis(200);
         for attempt in 0..3 {
             let result = self
-                .authenticated_request(method.clone(), url.clone(), body, live)
+                .authenticated_request(method.clone(), url.clone(), body, live, admin)
                 .await;
             if !idempotent
                 || attempt == 2
@@ -167,10 +172,11 @@ impl ShellClient {
         url: Url,
         body: &Body<'_>,
         live: bool,
+        admin: Option<&str>,
     ) -> Result<Response, Error> {
         let token = self.inner.token.lock().await.clone();
         let first = self
-            .send(method.clone(), url.clone(), body, live, &token)
+            .send(method.clone(), url.clone(), body, live, &token, admin)
             .await?;
         if first.status().as_u16() != 401 {
             return checked(first).await;
@@ -194,7 +200,7 @@ impl ShellClient {
         if next == token {
             return Err(Error::Authentication);
         }
-        checked(self.send(method, url, body, live, &next).await?).await
+        checked(self.send(method, url, body, live, &next, admin).await?).await
     }
     async fn send(
         &self,
@@ -203,6 +209,7 @@ impl ShellClient {
         body: &Body<'_>,
         live: bool,
         token: &str,
+        admin: Option<&str>,
     ) -> Result<Response, Error> {
         let mut request = self
             .inner
@@ -210,6 +217,9 @@ impl ShellClient {
             .request(method, url)
             .phase(butler_log::http::Phase::current().sensitive())
             .bearer_auth(token);
+        if let Some(admin) = admin {
+            request = request.header(ADMIN_HEADER, admin);
+        }
         if !live {
             request = request.timeout(Duration::from_secs(30));
         }
@@ -232,12 +242,41 @@ impl ShellClient {
         query: &[(&str, String)],
         body: Option<&Value>,
     ) -> Result<T, Error> {
+        self.json_as(method, segments, query, body, None).await
+    }
+    /// A request carrying the app's local admin credential (`x-butler-admin`), read on every call
+    /// from `<data>/app/runtime/auth/local-admin.json` (schema "butler.app-local-admin.v1", field
+    /// "secret", at least 32 visible ASCII). Missing or invalid: `Error::LocalMetadata`, React's
+    /// `admin_credential_required` state. The credential is never logged.
+    pub(crate) async fn admin_json<T: DeserializeOwned>(
+        &self,
+        method: Method,
+        segments: &[&str],
+        query: &[(&str, String)],
+        body: Option<&Value>,
+    ) -> Result<T, Error> {
+        let data = self.inner.data.clone();
+        let admin = tokio::task::spawn_blocking(move || super::attach::read_admin(&data))
+            .await
+            .map_err(|_| Error::LocalMetadata)??;
+        self.json_as(method, segments, query, body, Some(&admin))
+            .await
+    }
+    async fn json_as<T: DeserializeOwned>(
+        &self,
+        method: Method,
+        segments: &[&str],
+        query: &[(&str, String)],
+        body: Option<&Value>,
+        admin: Option<&str>,
+    ) -> Result<T, Error> {
         let response = self
             .request(
                 method,
                 self.url(segments, query)?,
                 &body.map_or(Body::None, Body::Json),
                 false,
+                admin,
             )
             .await?;
         #[derive(serde::Deserialize)]

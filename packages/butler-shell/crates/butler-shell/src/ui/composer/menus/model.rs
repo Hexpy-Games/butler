@@ -73,7 +73,7 @@ pub(crate) fn model_display_name(model: &ModelChoice) -> SharedString {
 }
 
 /// `tokenWindowLabel`.
-fn token_window_label(tokens: Option<f64>, copy: &Copy) -> String {
+pub(crate) fn token_window_label(tokens: Option<f64>, copy: &Copy) -> String {
     let Some(tokens) = tokens.filter(|tokens| tokens.is_finite()) else {
         return copy.context_unknown.to_owned();
     };

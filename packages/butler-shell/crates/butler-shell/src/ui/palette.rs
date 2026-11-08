@@ -37,8 +37,8 @@ pub(crate) enum PaletteEvent {
     OpenProjectChat(String),
     /// `automation:<id>` -> the schedule's detail view (P3 carries the id).
     OpenSchedule,
-    /// `settings:<section>` -> `openSettings` (P3 carries the section).
-    OpenSettings,
+    /// `settings:<section>` -> `openSettings(section)`.
+    OpenSettings(String),
     /// A space result: `useOrganization.reveal("g:<id>")`.
     RevealGroup(String),
     /// `openLatestLogTrace`: the open conversation's latest turn, else the log list.
@@ -215,7 +215,7 @@ fn navigation(route: &str) -> Option<PaletteEvent> {
         "session" => Some(PaletteEvent::OpenSession(rest)),
         "project" => Some(PaletteEvent::OpenProjectChat(rest)),
         "automation" => Some(PaletteEvent::OpenSchedule),
-        "settings" => Some(PaletteEvent::OpenSettings),
+        "settings" => Some(PaletteEvent::OpenSettings(rest)),
         _ => None,
     }
 }

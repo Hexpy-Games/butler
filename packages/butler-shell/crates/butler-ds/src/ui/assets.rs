@@ -14,6 +14,7 @@ impl AssetSource for Assets {
         Ok(FILES
             .iter()
             .chain(super::toast::ASSETS)
+            .chain(super::provider_logo::ASSETS)
             .find(|(p, _)| *p == path)
             .map(|(_, b)| Cow::Borrowed(*b)))
     }
@@ -22,6 +23,7 @@ impl AssetSource for Assets {
         Ok(FILES
             .iter()
             .chain(super::toast::ASSETS)
+            .chain(super::provider_logo::ASSETS)
             .filter(|(p, _)| p.starts_with(path))
             .map(|(p, _)| SharedString::from(*p))
             .collect())

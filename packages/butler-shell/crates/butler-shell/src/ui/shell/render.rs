@@ -10,13 +10,14 @@ use blocks::{
 };
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::{blocks, context::Ds, focus, icon_button::IconButton, overlay, toast};
-use gpui::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*};
+use gpui::{AnyElement, Context, Entity, IntoElement, Render, Window, div, prelude::*};
 
 use super::{
     Shell, TextSizeDown, TextSizeReset, TextSizeUp, ToggleSidebar, image_viewer, region,
     system_dark,
 };
 use crate::ui::Icon;
+use crate::ui::settings::SettingsView;
 use crate::ui::widgets::anchor;
 
 impl Shell {
@@ -116,7 +117,8 @@ impl Shell {
         }))
     }
 
-    fn adaptive_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    /// The AdaptiveShell window facts: the window's size and the platform.
+    fn shell_window(&self, window: &Window) -> (ShellWindow, ShellPlatform) {
         let size = window.viewport_size();
         let mut input = ShellWindow::new(size.width.into(), size.height.into());
         input.fullscreen = window.is_fullscreen();
@@ -125,6 +127,24 @@ impl Shell {
             crate::ui::theme::Platform::Windows => ShellPlatform::Win32,
             crate::ui::theme::Platform::Linux => ShellPlatform::Linux,
         };
+        (input, platform)
+    }
+
+    /// `AppShell` with `settingsActive`: the settings screen is the shell's only child (no
+    /// sidebar, title row or window chrome).
+    fn settings_frame(&self, view: Entity<SettingsView>, window: &Window) -> AnyElement {
+        let (input, platform) = self.shell_window(window);
+        AdaptiveShell::new("app-frame", input)
+            .frame(ShellFrame::Cards)
+            .chrome_environment(ChromeEnvironment::Electron)
+            .platform(platform)
+            .settings_active(true)
+            .settings(view)
+            .into_any_element()
+    }
+
+    fn adaptive_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let (input, platform) = self.shell_window(window);
         let drawer = input.width <= 640.;
         // `useSidebarAutoCollapse`: a pane beside the chat folds the sidebar when the page gets
         // too narrow; the toggle then peeks instead (`AppShell.tsx` WindowChromeLayer onToggle).
@@ -191,7 +211,13 @@ impl Render for Shell {
         {
             self.navigate(request, window, cx);
         }
-        let frame = self.adaptive_frame(window, cx);
+        if let Some(section) = self.pending_settings.take() {
+            self.open_settings(&section, window, cx);
+        }
+        let frame = match self.settings_view.clone() {
+            Some(view) => self.settings_frame(view, window),
+            None => self.adaptive_frame(window, cx),
+        };
         let rename = self.render_rename(window, cx);
         let task_graph = self.render_task_graph(window, cx);
         let sidebar_dialog = self.space_dialogs(window, cx);

@@ -12,7 +12,7 @@ use crate::ui::source::wire::{
     QueuedMessageRecord, ReasoningEffort, SessionQueueView,
 };
 
-pub(super) fn effort_wire(effort: &ReasoningEffort) -> Option<&'static str> {
+pub(crate) fn effort_wire(effort: &ReasoningEffort) -> Option<&'static str> {
     match effort {
         ReasoningEffort::None => Some("none"),
         ReasoningEffort::Low => Some("low"),

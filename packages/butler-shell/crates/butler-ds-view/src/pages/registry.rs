@@ -2,8 +2,8 @@
 use super::{
     Page, adaptive_shell, animated_number, artifact_list, artifact_preview, aspect_frame,
     attachment_list, avatar, block_action_frame, block_columns, block_tabs, bottom_sheet, boxes,
-    breadcrumb, butler_thinking_mark, button, card, changed_line_diff, chart, check_card,
-    choice_card, clickable, collapsible, collapsible_nav_group, command_panel,
+    breadcrumb, butler_thinking_mark, button, card, card_list, changed_line_diff, chart,
+    check_card, choice_card, clickable, collapsible, collapsible_nav_group, command_panel,
     composer_adjunct_panel, composer_card, composer_control, composer_decision_panel,
     composer_question_panel, context_donut_button, context_menu, conversation_shell, copy_button,
     dialog, dialog_form, disclosure_row, done_icon_button, drag_preview, dropdown_menu,
@@ -13,17 +13,17 @@ use super::{
     list_row, markdown_content, media_frame, message_avatar_block, message_row, meta_list,
     metric_card, metric_grid, native_select, nav_drop_target, nav_row, nav_section, notice,
     option_menu, overflow_action_menu, panel_header, percent_input_control, pill_button, popover,
-    presence, progress_meter, progress_ring, prompt_suggestion_list, question_answer_card,
-    queued_message, rolling_status_line, rolling_swap, scroll_area, segmented_control, select,
-    separator, settings_action_field, settings_field, settings_header, settings_nav,
-    settings_secret_rows, settings_section, settings_shell, setup_wizard_shell,
-    setup_wizard_step_card, sidebar_shell, skeleton, slider, spinner, split_button, stack,
-    status_capsule, status_checklist, step_sortable_list, success_check, suggestion_list,
-    surface_panel, switch, tab_strip, tabs, tag, tag_color_swatches, tag_field, task_graph_canvas,
-    task_graph_card, task_graph_detail, task_graph_lanes, task_graph_section, textarea,
-    tinted_glass, titlebar_shell, toast, todo_progress_panel, token_input_control, tooltip, typo,
-    unread_dot, usage_bars, usage_summary_rows, wallpaper, wallpaper_stage, work_activity,
-    worker_activity_panel, worker_activity_row,
+    presence, progress_meter, progress_ring, prompt_suggestion_list, provider_logo,
+    question_answer_card, queued_message, rolling_status_line, rolling_swap, scroll_area,
+    segmented_control, select, separator, settings_action_field, settings_field, settings_header,
+    settings_nav, settings_secret_rows, settings_section, settings_shell, setup_wizard_shell,
+    setup_wizard_step_card, sidebar_shell, skeleton, slider, sortable_card_list, spinner,
+    split_button, stack, status_capsule, status_checklist, step_sortable_list, success_check,
+    suggestion_list, surface_panel, switch, tab_strip, tabs, tag, tag_color_swatches, tag_field,
+    task_graph_canvas, task_graph_card, task_graph_detail, task_graph_lanes, task_graph_section,
+    textarea, time_picker, tinted_glass, titlebar_shell, toast, todo_progress_panel,
+    token_input_control, tooltip, typo, unread_dot, usage_bars, usage_summary_rows, wallpaper,
+    wallpaper_stage, work_activity, worker_activity_panel, worker_activity_row,
 };
 
 macro_rules! page {
@@ -102,6 +102,8 @@ fn primitives() -> Vec<Page> {
         page!("expandable-text", "ExpandableText", expandable_text),
         page!("media-frame", "MediaFrame", media_frame),
         page!("inline-reference", "InlineReference", inline_reference),
+        page!("time-picker", "TimePicker", time_picker),
+        page!("provider-logo", "ProviderLogo", provider_logo),
     ]
 }
 
@@ -236,6 +238,8 @@ fn composer_blocks() -> Vec<Page> {
             "PercentInputControl",
             percent_input_control
         ),
+        page!("card-list", "CardList", card_list),
+        page!("sortable-card-list", "SortableCardList", sortable_card_list),
         page!(
             "settings-action-field",
             "SettingsActionField",

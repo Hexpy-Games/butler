@@ -89,11 +89,17 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         match event {
-            PaletteEvent::Dismissed => self.composer.update(cx, |c, cx| c.engage(window, cx)),
+            PaletteEvent::Dismissed => match self.settings_view.clone() {
+                Some(view) => view.update(cx, |view, cx| view.focus(window, cx)),
+                None => self.composer.update(cx, |c, cx| c.engage(window, cx)),
+            },
+            // A chat replaces the settings screen (`view` leaves `settings`).
             PaletteEvent::OpenSession(id) => {
+                self.settings_view = None;
                 self.navigate(Navigation::Session(id.clone()), window, cx);
             }
             PaletteEvent::OpenProjectChat(project) => {
+                self.settings_view = None;
                 let target = crate::ui::source::sidebar::DraftTarget::Project(project.clone());
                 self.open_sidebar_draft(Some(target), cx);
             }
@@ -101,11 +107,11 @@ impl Shell {
                 self.reveal_node(&format!("g:{group}"), true);
                 cx.notify();
             }
-            // Schedules, settings and the log trace land with the screens that own them (P3);
-            // until then the palette says so.
-            PaletteEvent::OpenSchedule
-            | PaletteEvent::OpenSettings
-            | PaletteEvent::OpenLogTrace => {
+            PaletteEvent::OpenSettings(section) => self.open_settings(section, window, cx),
+            // `openLatestLogTrace`: the latest turn's trace is not wired yet; the log list opens.
+            PaletteEvent::OpenLogTrace => self.open_settings("logs", window, cx),
+            // Schedules land with the screen that owns them (P3); until then the palette says so.
+            PaletteEvent::OpenSchedule => {
                 toast::show(cx, Toast::message(self.theme.strings.not_yet));
             }
         }

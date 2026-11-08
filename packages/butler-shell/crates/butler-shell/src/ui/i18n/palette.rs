@@ -75,28 +75,6 @@ pub(crate) fn words(lang: Lang) -> &'static Words {
     }
 }
 
-/// settings.sections, in the order of `visibleSettingsSectionIds` with developer mode on:
-/// id, Korean, English.
-pub(crate) const SETTINGS_SECTIONS: [(&str, &str, &str); 17] = [
-    ("general", "일반", "General"),
-    ("appearance", "모양", "Appearance"),
-    ("personalization", "개인화", "Personalization"),
-    ("memory", "기억", "Memory"),
-    ("models", "모델", "Models"),
-    ("updates", "업데이트", "Updates"),
-    ("usage", "사용량", "Usage"),
-    ("logs", "로그", "Logs"),
-    ("browser", "브라우저", "Browser"),
-    ("security", "보안", "Security"),
-    ("system", "시스템 이벤트", "System events"),
-    ("archives", "아카이브", "Archives"),
-    ("about", "정보", "About"),
-    ("mcp", "MCP", "MCP"),
-    ("hooks", "훅", "Hooks"),
-    ("skills", "스킬", "Skills"),
-    ("server", "서버", "Server"),
-];
-
 /// automations.everyHours, everyMinutes, everySeconds
 pub(crate) fn every(lang: Lang, unit: Every, count: i64) -> String {
     match (lang, unit) {

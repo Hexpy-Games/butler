@@ -34,6 +34,10 @@ pub(super) enum Shape {
 }
 
 /// One field as its component describes it.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent HTML attributes of one field"
+)]
 pub(super) struct Spec {
     pub(super) id: ElementId,
     pub(super) look: Look,
@@ -45,6 +49,8 @@ pub(super) struct Spec {
     pub(super) disabled: bool,
     pub(super) read_only: bool,
     pub(super) invalid: bool,
+    /// `type="password"`: the editor shows one mask dot per character.
+    pub(super) masked: bool,
     pub(super) probe: Option<SharedString>,
     pub(super) on_change: Option<ChangeHandler>,
 }

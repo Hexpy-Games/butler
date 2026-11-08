@@ -58,6 +58,7 @@ pub struct AdaptiveShell {
     pub(crate) handles: Vec<(HandleSide, AnyElement)>,
     pub(crate) inspector: Option<Inspector>,
     pub(crate) scrim: Option<Callback>,
+    pub(crate) settings: Option<AnyElement>,
 }
 
 impl AdaptiveShell {
@@ -86,6 +87,7 @@ impl AdaptiveShell {
             handles: Vec::new(),
             inspector: None,
             scrim: None,
+            settings: None,
         }
     }
 
@@ -102,6 +104,14 @@ impl AdaptiveShell {
     /// The settings screen is up: panel motion is off.
     pub fn settings_active(mut self, active: bool) -> Self {
         self.settings_active = active;
+        self
+    }
+
+    /// The settings screen, the shell's only child while settings are active
+    /// (`.root[data-settings-active]`: `display: block`, the settings background, or the shell
+    /// surface in the docked cards frame). The sidebar, title, workspace and chrome are not drawn.
+    pub fn settings(mut self, settings: impl IntoElement) -> Self {
+        self.settings = Some(settings.into_any_element());
         self
     }
 

@@ -171,7 +171,11 @@ pub(super) fn render(mut shell: AdaptiveShell, window: &mut Window, cx: &mut App
         borderless: drawer && shell.window.width <= responsive::COMPACT_MAX,
     };
     let remap = platform_remap(shell.environment, shell.platform);
-    let root = if ctx.drawer {
+    let root = if let Some(settings) = shell.settings.take() {
+        root_box(&shell, &ctx, Ds::get(cx))
+            .child(settings)
+            .into_any_element()
+    } else if ctx.drawer {
         drawer::root(&mut shell, &ctx, cx)
     } else {
         docked(&mut shell, &ctx, window, cx)

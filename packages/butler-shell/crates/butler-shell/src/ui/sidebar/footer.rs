@@ -8,7 +8,6 @@ use butler_ds::ui::{
     blocks::{nav_row::NavRow, nav_section::sidebar_nav},
     button::Button,
     progress_ring::{ProgressRing, Size},
-    tooltip::Tooltip,
     typo::{Tone, Typo},
 };
 use gpui::{AnyElement, Context, SharedString, div, prelude::*};
@@ -20,17 +19,14 @@ impl Shell {
         {
             footer.push(row);
         }
-        footer.push(self.sidebar_settings_item());
+        footer.push(self.sidebar_settings_item(cx));
         sidebar_nav(footer, butler_ds::ui::context::Ds::get(cx))
     }
-    fn sidebar_settings_item(&self) -> AnyElement {
-        Tooltip::new("sidebar-settings-tip")
-            .label(self.theme.strings.not_yet)
-            .child(
-                NavRow::new("settings", self.theme.strings.settings)
-                    .glyph(Icon::Settings)
-                    .disabled(),
-            )
+    /// `SidebarSettingsItem`: opens General.
+    fn sidebar_settings_item(&self, cx: &Context<Self>) -> AnyElement {
+        NavRow::new("settings", self.theme.strings.settings)
+            .glyph(Icon::Settings)
+            .on_click(cx.listener(|s, _, window, cx| s.open_settings("general", window, cx)))
             .into_any_element()
     }
     fn sidebar_update_item(
@@ -65,9 +61,10 @@ impl Shell {
                 _ => self.copy("Updating", "업데이트 중"),
             };
             let leading = Self::update_icon(&stage, percent, cx);
+            // `SidebarUpdateItem`: the row opens Updates.
             let mut row = NavRow::new("sidebar-update", label)
                 .icon(leading)
-                .disabled();
+                .on_click(cx.listener(|s, _, window, cx| s.open_settings("updates", window, cx)));
             if let Some(percent) = percent {
                 row = row.badge(format!("{:.0}%", percent * 100.));
             }
@@ -82,6 +79,7 @@ impl Shell {
                         Button::new("sidebar-update-restart")
                             .text(self.copy("Restart", "다시 시작"))
                             .on_click(cx.listener(move |s, _, _, cx| {
+                                cx.stop_propagation();
                                 s.mutate(
                                     Mutation::ApplyUpdate(
                                         serde_json::json!({"component":component}),

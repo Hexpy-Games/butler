@@ -110,6 +110,7 @@ fn editable(p: &Parts, ds: &Ds) -> EditableTextElement {
     .marked_color(p.c.text)
     .caret_w(px(1.))
     .accepts_input(!p.spec.read_only)
+    .masked(p.spec.masked.then_some('\u{2022}'))
     .text_color(p.c.text)
     .text_size(p.m.size)
     .line_height(p.m.lh);
