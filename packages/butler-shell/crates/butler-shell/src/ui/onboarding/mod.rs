@@ -30,8 +30,7 @@ use butler_ds::ui::blocks::wallpaper::WallpaperTone;
 use butler_ds::ui::context::Lang;
 use gpui::{
     AnyElement, AppContext as _, Context, Entity, EventEmitter, FocusHandle, IntoElement,
-    ParentElement as _, Render, SharedString, Styled as _, Subscription, Window, WindowAppearance,
-    div,
+    ParentElement as _, Render, Styled as _, Subscription, Window, WindowAppearance, div,
 };
 use serde_json::Value;
 
@@ -91,7 +90,6 @@ pub(crate) struct Onboarding {
     pub(crate) imports: Entity<import::Imports>,
     /// The step card's title: focused when the card changes.
     pub(crate) title: FocusHandle,
-    shown_key: SharedString,
     intro: SetupWizardIntro,
     _subscriptions: Vec<Subscription>,
 }
@@ -211,7 +209,6 @@ impl Onboarding {
             reply,
             imports,
             title: cx.focus_handle(),
-            shown_key: SharedString::default(),
             _subscriptions: subscriptions,
         }
     }
@@ -355,10 +352,6 @@ impl Onboarding {
 impl Render for Onboarding {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let key = self.stage_key(cx);
-        if self.shown_key != key {
-            self.shown_key = key.clone();
-            self.title.focus(window, cx);
-        }
         let body = self.body(window, cx);
         let lang = self.lang;
         // ANIM-MIGRATE(setup card morph between steps): the DS stage swaps the cards by key.

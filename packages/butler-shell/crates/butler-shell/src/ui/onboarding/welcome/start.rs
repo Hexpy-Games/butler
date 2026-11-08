@@ -3,19 +3,21 @@ use butler_ds::ui::blocks::setup_wizard_shell::{
     SetupWizardContent, SetupWizardMark, SetupWizardVariant,
 };
 use butler_ds::ui::button::{Button, Size, Variant};
+use butler_ds::ui::context::Ds;
 use butler_ds::ui::context::Lang;
 use butler_ds::ui::field::{Field, FieldLabel};
 use butler_ds::ui::inline_reference::InlineReference;
 use butler_ds::ui::layout::{Cross, Justify, Space, Stack};
 use butler_ds::ui::native_select::{NativeSelect, Size as SelectSize};
 use butler_ds::ui::tooltip::Tooltip;
-use butler_ds::ui::typo::{TextAlign, Tone, Typo};
-use gpui::{AnyElement, Context, IntoElement as _, ParentElement as _, Window};
+use butler_ds::ui::typo::{Role, TextAlign, Tone, Typo};
+use gpui::{AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Window, div};
 
 use super::copy::words;
 use super::language_code;
 use crate::ui::onboarding::readiness::{ReadinessStatus, prep_status, preparation_line};
 use crate::ui::onboarding::{Mode, Onboarding};
+use crate::ui::widgets::control_anchor;
 
 /// Opens the Butler user manual's first-run page in the user's browser.
 pub(super) const FIRST_RUN_GUIDE_URL: &str =
@@ -91,10 +93,10 @@ fn rows(
     if blocked {
         tip = tip.label(copy.agree_blocked);
     }
-    let mut buttons = Stack::new()
-        .gap(Space::Md)
-        .cross(Cross::Stretch)
-        .child(tip.child(start));
+    let mut buttons = Stack::new().gap(Space::Md).cross(Cross::Stretch).child(
+        control_anchor(div().flex(), "first-run-start", !(blocked || saving))
+            .child(tip.child(start)),
+    );
     if view.mode == Mode::Rerun {
         buttons = buttons.child(
             Button::new("first-run-cancel")
@@ -114,10 +116,11 @@ fn rows(
             .gap(Space::Sm)
             .child(preparation_line(view, window, cx))
             .child(Typo::caption("·").tone(Tone::Tertiary))
-            .child(
+            .child(caption_text(
                 InlineReference::external("first-run-guide", FIRST_RUN_GUIDE_URL)
                     .label(copy.learn_more),
-            )
+                cx,
+            ))
             .into_any_element()
     };
     Stack::new()
@@ -125,4 +128,17 @@ fn rows(
         .child(buttons)
         .child(status)
         .into_any_element()
+}
+
+/// `<Typo.Caption as="span">` around inline content: it takes the caption's type scale, as the
+/// guide link does in React (FirstRunWelcome.tsx:70).
+fn caption_text(child: impl IntoElement, cx: &App) -> AnyElement {
+    let ds = Ds::get(cx);
+    let mut span = div();
+    if let Some(caption) = Role::Caption.tokens() {
+        span = span
+            .text_size(ds.len(caption.size))
+            .line_height(ds.len(caption.line_height));
+    }
+    span.child(child).into_any_element()
 }

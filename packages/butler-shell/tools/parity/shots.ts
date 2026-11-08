@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { spawnTrackedProcess } from "../../../../tests/support/native-app-server.ts";
 import type { Anchor, Scene } from "./scene.ts";
 
-export async function shots(binary: string, out: string, name: string, data: string, scale: number, size: string, dark: boolean, chat?: string, anchors: Anchor[] = [], steps: Scene["steps"] = []) {
+/** `open`: a chat id, the first-run setup (`"setup"`), or a new chat when undefined. */
+export async function shots(binary: string, out: string, name: string, data: string, scale: number, size: string, dark: boolean, open?: string, anchors: Anchor[] = [], steps: Scene["steps"] = []) {
   const log = join(out, "logs", `${name}-shots.log`);
   const writer = openSync(log, "w"), reader = openSync(log, "r");
   const lines: string[] = [];
@@ -21,7 +22,7 @@ export async function shots(binary: string, out: string, name: string, data: str
   };
   const watcher = watch(log, drain);
   const home = mkdtempSync(join(tmpdir(), "butler-parity-shots-"));
-  const process = spawnTrackedProcess(binary, [join(out, "gpui"), "--data", data, "--scale", String(scale), "--size", size, ...(dark ? ["--dark"] : [])], { stdio: ["pipe", writer, writer], cleanupPaths: [home], env: { ...globalThis.process.env, HOME: home, BUTLER_DATA: data, BUTLER_E2E_TIER: "stub" } });
+  const process = spawnTrackedProcess(binary, [join(out, "gpui"), "--data", data, "--app", "--scale", String(scale), "--size", size, ...(dark ? ["--dark"] : [])], { stdio: ["pipe", writer, writer], cleanupPaths: [home], env: { ...globalThis.process.env, HOME: home, BUTLER_DATA: data, BUTLER_E2E_TIER: "stub" } });
   closeSync(writer);
   writeFileSync(join(out, "logs", `${name}-shots.pid`), String(process.pid));
   let error: Error | undefined;
@@ -40,11 +41,14 @@ export async function shots(binary: string, out: string, name: string, data: str
   }
   try {
     await expect("LIVE READY");
-    for (const command of ["connected", chat ? `open ${chat}` : "new", "stable", "drag sidebar-toggle -10000",
+    const start = open === "setup" ? ["wait-anchor first-run-setup"]
+      : ["connected", open ? `open ${open}` : "new", "stable", "drag sidebar-toggle -10000"];
+    // Like Electron's steps, each one first waits for its anchor (an answer may still be on its way).
+    for (const command of [...start,
       ...steps.flatMap(step => {
-        if (!("click" in step)) return [`expect-anchor ${step.expect}`];
+        if (!("click" in step)) return [`wait-anchor ${step.expect}`];
         const port = anchors.find(item => item.anchor === step.click)?.scroll;
-        return [...(port ? [`reveal ${step.click} ${port}`] : []), `click ${step.click}`];
+        return [`wait-anchor ${step.click}`, ...(port ? [`reveal ${step.click} ${port}`] : []), `click ${step.click}`];
       }),
       `shot ${name}`, `layout ${name} ${anchors.map(item => item.anchor).join(" ")}`]) {
       process.child.stdin!.write(`${command}\n`);

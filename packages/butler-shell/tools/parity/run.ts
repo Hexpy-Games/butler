@@ -54,24 +54,35 @@ const answer = `## 회의 준비 · Meeting notes
 
 다음 회의에서는 검토 결과와 남은 질문을 함께 확인하겠습니다.`;
 
-async function capture(app: App, scene: Scene, anchors: Scene["anchors"], size: string, theme: string) {
-  const [width, height] = size.split("x").map(Number);
-  const name = `${scene.name}-${size}-${theme}`;
-  const cdp = <T>(method: string, params: unknown) => app.main<T>(`${app.win}.webContents.debugger.sendCommand(${JSON.stringify(method)},${JSON.stringify(params)})`);
-  await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme, reduce_motion: true }) });
-  await app.main(`${app.win}.setContentSize(${width},${height})`);
-  await cdp("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: false });
-  await cdp("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }, { name: "prefers-reduced-motion", value: "reduce" }] });
-  await app.page.reload();
-  const title = "chat" in scene.open ? scene.open.chat : "새 대화";
+async function openChat(app: App, open: { chat: string } | { new: true }) {
+  const title = "chat" in open ? open.chat : "새 대화";
   await waitBrowser(() => app.page.expression(`Boolean([...document.querySelectorAll('[role="button"],button')].find(el=>el.getAttribute('aria-label')===${JSON.stringify(title)}))`), `chat row ${title}`);
   const visible = await app.page.expression<boolean>(`[...document.querySelectorAll('[role="button"],button')].some(el => {
     const b=el.getBoundingClientRect();return el.getAttribute('aria-label')===${JSON.stringify(title)} && b.width>0 && b.height>0 && b.x>=0 && b.right<=innerWidth;
   })`);
   if (!visible) await app.page.clickRole("button", "사이드바 보기");
-  if ("chat" in scene.open) await app.page.clickRole("button", title);
+  if ("chat" in open) await app.page.clickRole("button", title);
   else await app.click(title);
+}
+
+async function reset(app: App, scene: Scene) {
+  for (const step of scene.reset ?? []) await app.gateway.api(step.path, { method: step.method, body: JSON.stringify(step.body) });
+}
+
+async function capture(app: App, scene: Scene, anchors: Scene["anchors"], size: string, theme: string) {
+  const [width, height] = size.split("x").map(Number);
+  const name = `${scene.name}-${size}-${theme}`;
+  const cdp = <T>(method: string, params: unknown) => app.main<T>(`${app.win}.webContents.debugger.sendCommand(${JSON.stringify(method)},${JSON.stringify(params)})`);
+  await reset(app, scene);
+  await app.gateway.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme, reduce_motion: true }) });
+  await app.main(`${app.win}.setContentSize(${width},${height})`);
+  await cdp("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: false });
+  await cdp("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }, { name: "prefers-reduced-motion", value: "reduce" }] });
+  await app.page.reload();
+  if ("setup" in scene.open) await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('[data-test-class="first-run-setup"]'))`), "first-run setup");
+  else await openChat(app, scene.open);
   for (const step of scene.steps ?? []) {
+
     const anchor = "click" in step ? step.click : step.expect;
     const selector = anchors.find(item => item.anchor === anchor)?.electron;
     if (!selector) throw new Error(`Scene ${scene.name} step uses unknown anchor ${anchor}`);
@@ -103,7 +114,7 @@ async function runScene(scene: Scene) {
   const app = await browserAgentApp(join(out, "logs", scene.name), request => {
     if (toolCalls.length && request.stream && Array.isArray(request.body.tools) && request.body.tools.length) return toolCalls.shift()!;
     return null;
-  }, process.env.BUTLER_SMOKE_RENDERER_DIST, { stubReply: async request => {
+  }, process.env.BUTLER_SMOKE_RENDERER_DIST, { onboardingComplete: !("setup" in scene.open), stubReply: async request => {
     if (request.stream && scene.pendingReply && JSON.stringify(request.messages).includes(scene.pendingReply)) await pendingReply;
     return request.stream ? scene.reply ?? answer : "{}";
   } });
@@ -122,7 +133,8 @@ async function runScene(scene: Scene) {
     await app.main(`${app.win}.webContents.debugger.attach('1.3')`);
     for (const theme of themes) for (const size of sizes) {
       const name = await capture(app, scene, anchors, size, theme);
-      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "chat" in scene.open ? seeded.chat : undefined, anchors, scene.steps);
+      await reset(app, scene);
+      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "setup" in scene.open ? "setup" : "chat" in scene.open ? seeded.chat : undefined, anchors, scene.steps);
     }
   } finally {
     releaseReply?.();

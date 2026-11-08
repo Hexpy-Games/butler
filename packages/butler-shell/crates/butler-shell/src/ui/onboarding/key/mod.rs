@@ -85,7 +85,8 @@ pub(crate) struct KeyForm {
     pub(super) status: Status,
     sequence: u64,
     debounce: Option<Task<()>>,
-    /// The field takes the focus on its next render: on mount, and after a failure.
+    /// The field takes the focus on its next render: after a failure (on open, the card's title
+    /// takes it).
     focus: bool,
 }
 
@@ -100,7 +101,7 @@ impl KeyForm {
             status: Status::Idle,
             sequence: 0,
             debounce: None,
-            focus: true,
+            focus: false,
         }
     }
 

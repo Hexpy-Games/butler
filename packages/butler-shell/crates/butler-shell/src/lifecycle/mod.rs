@@ -86,9 +86,19 @@ pub(crate) fn runtime(cx: &App) -> Option<Entity<AgentRuntime>> {
         .map(|global| global.0.clone())
 }
 
-/// The runtime global, the supervisor, the crash hook, the last-window rule and the tray
-/// (not for a legacy data folder, whose only screen is the recovery notice).
+/// [`start`], the last-window rule and the tray (not for a legacy data folder, whose only screen
+/// is the recovery notice).
 pub(crate) fn init(cx: &mut App, data: PathBuf, legacy: bool) {
+    start(cx, data, legacy);
+    cx.on_window_closed(|cx, _| window::closed(cx)).detach();
+    if !legacy {
+        tray::init(cx);
+    }
+}
+
+/// The runtime global, the supervisor and the crash hook, and the lease release on a forced
+/// quit: the App's hold on its Agent, without the window and tray rules.
+pub(crate) fn start(cx: &mut App, data: PathBuf, legacy: bool) {
     logs::install_crash_hook(&data);
     let (supervisor, mut statuses) = Supervisor::start(data.clone(), legacy);
     let entity = cx.new(|_| AgentRuntime {
@@ -121,10 +131,6 @@ pub(crate) fn init(cx: &mut App, data: PathBuf, legacy: bool) {
         async {}
     })
     .detach();
-    cx.on_window_closed(|cx, _| window::closed(cx)).detach();
-    if !legacy {
-        tray::init(cx);
-    }
 }
 
 /// Electron `ensureServer` at startup and the boot screen's Try again.

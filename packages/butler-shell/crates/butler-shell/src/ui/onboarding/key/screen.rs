@@ -12,8 +12,8 @@ use butler_ds::ui::text::{self, Input};
 use butler_ds::ui::tooltip::Tooltip;
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{
-    AnyElement, Context, Entity, Focusable as _, IntoElement as _, ParentElement as _,
-    SharedString, Window, div,
+    AnyElement, App, Context, Entity, Focusable as _, IntoElement, ParentElement as _, RenderOnce,
+    SharedString, Styled as _, Window, div,
 };
 
 use super::copy::{Words, words};
@@ -26,18 +26,13 @@ const KEY_FIELD: &str = "first-run-api-key";
 
 pub(crate) fn key_screen(
     view: &Onboarding,
-    window: &mut Window,
+    _window: &mut Window,
     cx: &mut Context<Onboarding>,
 ) -> AnyElement {
     let Some(form) = view.key.clone() else {
         return div().into_any_element();
     };
-    if form.update(cx, KeyForm::take_focus) {
-        text::state(KEY_FIELD, window, cx)
-            .read(cx)
-            .focus_handle(cx)
-            .focus(window, cx);
-    }
+    let focus = form.update(cx, KeyForm::take_focus);
     let copy = words(view.lang);
     let (card_id, value, typed) = {
         let form = form.read(cx);
@@ -57,7 +52,7 @@ pub(crate) fn key_screen(
     } else {
         typed
     };
-    let field = key_field(view.lang, &form, value, status, connected, cx);
+    let field = key_field(view.lang, &form, value, focus, status, connected, cx);
     let mut links = Inline::new().gap(Space::Md);
     if let Some(url) = spec.key_url {
         links =
@@ -80,15 +75,23 @@ pub(crate) fn key_screen(
     if !connected {
         tip = tip.label(copy.connect_first);
     }
-    step_card(view, (copy.key_title)(name), [field, links], cx)
-        .content_key(format!("key:{card_id:?}"))
-        .description(copy.key_hint)
-        .on_back(
-            shared(view.lang).back,
-            cx.listener(|view, _, _, cx| view.back_to_list(cx)),
-        )
-        .action(tip.child(next))
-        .into_any_element()
+    step_card(
+        view,
+        format!("key:{card_id:?}"),
+        (copy.key_title)(name),
+        [field, links],
+        cx,
+    )
+    .description(copy.key_hint)
+    .on_back(
+        shared(view.lang).back,
+        cx.listener(|view, _, _, cx| view.back_to_list(cx)),
+    )
+    .action(
+        crate::ui::widgets::control_anchor(div().flex(), "first-run-key-next", connected)
+            .child(tip.child(next)),
+    )
+    .into_any_element()
 }
 
 /// `KeyStatusLine`: the failure with Retry where a second try can help, else the progress.
@@ -138,11 +141,35 @@ fn failure_line(copy: &Words, lang: Lang, failure: Failure, form: &Entity<KeyFor
     lines.into_any_element()
 }
 
-/// The API key field: masked, invalid on a failure, locked once connected.
+/// The field takes the focus when asked (after a failed check). Its state is keyed where the input
+/// renders, so the input renders here first and the lookup follows at the same place; a
+/// lookup in the screen's render (or before this render) reaches a different, never drawn
+/// state.
+#[derive(IntoElement)]
+struct AutoFocus {
+    input: Input,
+    focus: bool,
+}
+
+impl RenderOnce for AutoFocus {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let input = self.input.render(window, cx).into_any_element();
+        if self.focus {
+            text::state(KEY_FIELD, window, cx)
+                .read(cx)
+                .focus_handle(cx)
+                .focus(window, cx);
+        }
+        input
+    }
+}
+
+/// The API key field: masked, invalid on a failure, locked once connected; `focus` after a failure.
 fn key_field(
     lang: Lang,
     form: &Entity<KeyForm>,
     value: SharedString,
+    focus: bool,
     status: Status,
     connected: bool,
     cx: &Context<Onboarding>,
@@ -159,9 +186,15 @@ fn key_field(
     if connected {
         input = input.disabled();
     }
-    Field::new("first-run-key-field")
-        .child(FieldLabel::new().child(copy.key_label))
-        .child(input)
-        .child(status_line(copy, lang, status, form, cx))
+    crate::ui::widgets::anchor(div().flex().flex_col(), "first-run-key-field")
+        .child(
+            Field::new("first-run-key-field")
+                .child(FieldLabel::new().child(copy.key_label))
+                .child(
+                    crate::ui::widgets::anchor(div().flex().flex_col(), KEY_FIELD)
+                        .child(AutoFocus { input, focus }),
+                )
+                .child(status_line(copy, lang, status, form, cx)),
+        )
         .into_any_element()
 }

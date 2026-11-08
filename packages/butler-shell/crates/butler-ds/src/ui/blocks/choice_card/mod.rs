@@ -36,10 +36,14 @@ pub enum ChoiceState {
     Disabled,
 }
 
-/// The side of the leading glyph (`--choice-card-glyph-size`: `--icon-size-sm`). The 640px ramp
-/// that steps it up to `--icon-size-md` is not ported (the DS view has no viewport query).
+/// The side of the leading glyph (`--choice-card-glyph-size`): `--icon-size-sm`, one step up to
+/// `--icon-size-md` on a compact (640px and narrower) window, beside that ramp's larger titles.
 pub fn glyph_size(ds: &Ds) -> Pixels {
-    ds.len(Length::IconSizeSm) // DS: ChoiceCard.module.css:20
+    ds.len(if ds.compact() {
+        Length::IconSizeMd // DS: ChoiceCard.module.css:128-133
+    } else {
+        Length::IconSizeSm // DS: ChoiceCard.module.css:20
+    })
 }
 
 /// A DS icon at the glyph size, for the `icon` slot.

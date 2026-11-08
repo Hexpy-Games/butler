@@ -10,7 +10,8 @@ use butler_ds::ui::toast::{self, Toast, ToastId};
 use butler_ds::ui::tooltip::{Side, Tooltip};
 use butler_shell_client::Error;
 use gpui::{
-    AnyElement, Context, Entity, EventEmitter, IntoElement as _, ParentElement as _, Window,
+    AnyElement, Context, Entity, EventEmitter, IntoElement as _, ParentElement as _, Styled as _,
+    Window,
 };
 use serde_json::{Value, json};
 
@@ -157,7 +158,8 @@ pub(crate) fn screen(
                     .update(cx, |memory, cx| memory.choose(enabled, readiness, cx));
             }
         }));
-    if value.is_none() || saving || waiting {
+    let enabled = !(value.is_none() || saving || waiting);
+    if !enabled {
         action = action.disabled();
     }
     let mut tooltip = Tooltip::new("first-run-memory-waiting").side(Side::Top);
@@ -166,10 +168,18 @@ pub(crate) fn screen(
     }
     step_card(
         view,
+        view.step(cx).id(),
         copy.title,
         [ChoiceCardList::new()
             .child(on)
-            .child(off)
+            .child(
+                crate::ui::widgets::control_anchor(
+                    gpui::div().flex().flex_col(),
+                    "first-run-memory-off",
+                    !saving,
+                )
+                .child(off),
+            )
             .into_any_element()],
         cx,
     )
@@ -178,6 +188,13 @@ pub(crate) fn screen(
         shared(view.lang).back,
         cx.listener(|view, _, _, cx| view.back_to_consent(cx)),
     )
-    .action(tooltip.child(action))
+    .action(
+        crate::ui::widgets::control_anchor(
+            gpui::div().flex(),
+            "first-run-memory-continue",
+            enabled,
+        )
+        .child(tooltip.child(action)),
+    )
     .into_any_element()
 }

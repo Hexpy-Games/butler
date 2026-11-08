@@ -10,7 +10,7 @@ use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::separator::Separator;
 use butler_ds::ui::tooltip::Tooltip;
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, Context, IntoElement as _, ParentElement as _, Window};
+use gpui::{AnyElement, Context, IntoElement as _, ParentElement as _, Styled as _, Window};
 
 use super::copy::words;
 use super::start::FIRST_RUN_GUIDE_URL;
@@ -61,10 +61,17 @@ pub(crate) fn consent_screen(
     if blocked {
         tip = tip.label(copy.agree_blocked);
     }
-    let mut card = step_card(view, copy.consent_title, body, cx)
+    let mut card = step_card(view, view.step(cx).id(), copy.consent_title, body, cx)
         .footer_start(footer)
         .action(decline)
-        .action(tip.child(agree));
+        .action(
+            crate::ui::widgets::control_anchor(
+                gpui::div().flex(),
+                "first-run-agree",
+                !(blocked || saving),
+            )
+            .child(tip.child(agree)),
+        );
     if view.mode != Mode::Consent {
         card = card.on_back(
             shared_words(view.lang).back,

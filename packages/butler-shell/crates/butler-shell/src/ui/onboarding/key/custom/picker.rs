@@ -67,8 +67,7 @@ pub(super) fn screen(
         let cards = model_cards(options, snap.model.as_ref(), false, server, cx);
         ChoiceCardList::new().children(cards).into_any_element()
     };
-    step_card(view, copy.custom_title, [body], cx)
-        .content_key("models:other")
+    step_card(view, "models:other", copy.custom_title, [body], cx)
         .on_back(
             shared(view.lang).back,
             cx.listener(|view, _, _, cx| view.back_to_list(cx)),

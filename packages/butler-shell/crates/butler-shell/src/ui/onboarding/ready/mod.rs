@@ -8,7 +8,7 @@ use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Lang;
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, App, Context, IntoElement as _, ParentElement as _, Window};
+use gpui::{AnyElement, App, Context, IntoElement as _, ParentElement as _, Styled as _, Window};
 use serde_json::{Value, json};
 
 use super::card::step_card;
@@ -36,8 +36,7 @@ pub(crate) fn screen(
 ) -> AnyElement {
     let copy = words(view.lang);
     let Some((card, _)) = view.commit.read(cx).connected() else {
-        return step_card(view, copy.finishing, [], cx)
-            .content_key("finishing")
+        return step_card(view, "finishing", copy.finishing, [], cx)
             .footer_start(prep_status(view, window, cx))
             .into_any_element();
     };
@@ -67,14 +66,16 @@ pub(crate) fn screen(
     if show_notice {
         body.push(notice_row(copy, cx));
     }
-    step_card(view, copy.done_title, body, cx)
-        .content_key("ready")
+    step_card(view, "ready", copy.done_title, body, cx)
         .description(copy.done_body)
         .on_back(
             shared_words(view.lang).back,
             cx.listener(|view, _, _, cx| view.back_from_ready(cx)),
         )
-        .action(forward)
+        .action(
+            crate::ui::widgets::control_anchor(gpui::div().flex(), "first-run-finish", !saving)
+                .child(forward),
+        )
         .into_any_element()
 }
 

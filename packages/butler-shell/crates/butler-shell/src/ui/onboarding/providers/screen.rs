@@ -1,7 +1,7 @@
 //! The list screen (`FirstRunProviderList`, `firstRunCardView`, `CardGlyph`): the well-known
 //! services on top, the rest behind "more".
 use butler_ds::ui::blocks::choice_card::{
-    ChoiceCard, ChoiceCardList, ChoiceState, ChoiceTile, ChoiceTileGrid,
+    self, ChoiceCard, ChoiceCardList, ChoiceState, ChoiceTile, ChoiceTileGrid,
 };
 use butler_ds::ui::blocks::notice::{Notice, NoticeTone};
 use butler_ds::ui::button::{Button, Size, Variant};
@@ -12,7 +12,9 @@ use butler_ds::ui::provider_logo::{ProviderLogo, ProviderLogoSize, provider_logo
 use butler_ds::ui::spinner::Spinner;
 use butler_ds::ui::tag::{Tag, Tone as TagTone};
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, Window};
+use gpui::{
+    AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, Styled as _, Window,
+};
 
 use super::copy::{Words, more_providers, words};
 use super::{CardId, CardKind, card};
@@ -73,16 +75,19 @@ fn card_view(id: CardId, tile: bool, snap: &Snapshot, copy: &Words) -> (ChoiceSt
     }
 }
 
-/// `CardGlyph`: the brand logo, or the neutral server icon (Other).
-fn glyph(
-    id: CardId,
-    size: ProviderLogoSize,
-    icon_size: IconSize,
-    cx: &Context<Onboarding>,
-) -> AnyElement {
+/// `CardGlyph`: the brand logo, or the neutral server icon (Other), at the card's glyph size: the
+/// card and the tile size whatever glyph they hold to `--choice-card-glyph-size`.
+/// // DS: ChoiceCard.module.css:135-149, 238-241
+fn glyph(id: CardId, cx: &Context<Onboarding>) -> AnyElement {
     match provider_logo_name(card(id).provider_id.unwrap_or_default(), None, false) {
-        Some(name) => ProviderLogo::new(name).size(size).into_any_element(),
-        None => icon(Icon::Server, icon_size, Ds::get(cx)).into_any_element(),
+        Some(name) => ProviderLogo::new(name)
+            .size(if Ds::get(cx).compact() {
+                ProviderLogoSize::Md
+            } else {
+                ProviderLogoSize::Sm
+            })
+            .into_any_element(),
+        None => choice_card::glyph(Icon::Server, cx).into_any_element(),
     }
 }
 
@@ -95,19 +100,22 @@ fn top_card(
 ) -> AnyElement {
     let (state, description) = card_view(id, false, snap, copy);
     let index = id as usize;
-    let mut row = ChoiceCard::new(
-        ("first-run-card", index),
-        glyph(id, ProviderLogoSize::Lg, IconSize::Lg, cx),
-        copy.names[index],
-    )
-    .description(description)
-    .state(state)
-    .selected(current)
-    .on_click(cx.listener(move |view, _, window, cx| view.pick(id, window, cx)));
+    let mut row = ChoiceCard::new(("first-run-card", index), glyph(id, cx), copy.names[index])
+        .description(description)
+        .state(state)
+        .selected(current)
+        .on_click(cx.listener(move |view, _, window, cx| view.pick(id, window, cx)));
     if current {
         row = row.tag(Tag::new(("first-run-tag", index), copy.current).tone(TagTone::Accent));
     }
-    row.into_any_element()
+    let name = format!("first-run-card-{}", format!("{id:?}").to_lowercase());
+    crate::ui::widgets::control_anchor(
+        gpui::div().flex().flex_col(),
+        &name,
+        state != ChoiceState::Disabled,
+    )
+    .child(row)
+    .into_any_element()
 }
 
 fn more_tile(
@@ -119,16 +127,12 @@ fn more_tile(
 ) -> AnyElement {
     let (state, description) = card_view(id, true, snap, copy);
     let index = id as usize;
-    ChoiceTile::new(
-        ("first-run-tile", index),
-        glyph(id, ProviderLogoSize::Md, IconSize::Md, cx),
-        copy.names[index],
-    )
-    .description(description)
-    .state(state)
-    .selected(current)
-    .on_click(cx.listener(move |view, _, window, cx| view.pick(id, window, cx)))
-    .into_any_element()
+    ChoiceTile::new(("first-run-tile", index), glyph(id, cx), copy.names[index])
+        .description(description)
+        .state(state)
+        .selected(current)
+        .on_click(cx.listener(move |view, _, window, cx| view.pick(id, window, cx)))
+        .into_any_element()
 }
 
 /// Butler is still preparing: the pick is kept and connects once it is ready.
@@ -184,18 +188,18 @@ pub(crate) fn screen(
         .map(|id| top_card(*id, current == Some(*id), &snap, copy, cx))
         .collect::<Vec<_>>();
     body.push(ChoiceCardList::new().children(cards).into_any_element());
+    // The tiles' column is in the body also while "more" is closed (empty, it still takes a
+    // gap). // FirstRunProviderList.tsx:51-55
+    let mut more = Stack::new().cross(Cross::Start).gap(Space::Sm);
     if expanded {
         let tiles = snap
             .more
             .iter()
             .map(|id| more_tile(*id, current == Some(*id), &snap, copy, cx))
             .collect::<Vec<_>>();
-        body.push(
-            ChoiceTileGrid::new("first-run-more-providers")
-                .children(tiles)
-                .into_any_element(),
-        );
+        more = more.child(ChoiceTileGrid::new("first-run-more-providers").children(tiles));
     }
+    body.push(more.into_any_element());
 
     let label = if expanded {
         copy.show_less.to_owned()
@@ -218,8 +222,7 @@ pub(crate) fn screen(
                 cx.notify();
             });
         }));
-    step_card(view, copy.title, body, cx)
-        .content_key("providers")
+    step_card(view, "providers", copy.title, body, cx)
         .description(copy.lede)
         .on_back(
             shared.back,

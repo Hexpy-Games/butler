@@ -91,12 +91,10 @@ pub(crate) fn screen(
     } else {
         (copy.title)(NAME)
     };
-    let mut step = step_card(view, title, elements, cx)
-        .content_key(key)
-        .on_back(
-            shared(view.lang).back,
-            cx.listener(|view, _, _, cx| view.back_to_list(cx)),
-        );
+    let mut step = step_card(view, key, title, elements, cx).on_back(
+        shared(view.lang).back,
+        cx.listener(|view, _, _, cx| view.back_to_list(cx)),
+    );
     if off {
         step = step.description(copy.plan_off_body);
     } else if !signed {

@@ -10,7 +10,8 @@ use butler_ds::ui::typo::{Tone, Typo};
 use butler_shell_client::{Error, ShellClient};
 use chrono::{SecondsFormat, Utc};
 use gpui::{
-    AnyElement, Context, EventEmitter, IntoElement as _, ParentElement as _, SharedString, Window,
+    AnyElement, Context, EventEmitter, IntoElement as _, ParentElement as _, SharedString,
+    Styled as _, Window,
 };
 use serde_json::{Map, Value, json};
 
@@ -253,13 +254,18 @@ pub(crate) fn reply_screen(
     if locked {
         next = next.disabled();
     }
-    let mut card = step_card(view, copy.reply_title, [field.into_any_element()], cx)
-        .content_key("reply")
-        .description(copy.reply_body)
-        .on_back(
-            common.back,
-            cx.listener(|view, _, window, cx| view.back_from_reply(window, cx)),
-        );
+    let mut card = step_card(
+        view,
+        "reply",
+        copy.reply_title,
+        [field.into_any_element()],
+        cx,
+    )
+    .description(copy.reply_body)
+    .on_back(
+        common.back,
+        cx.listener(|view, _, window, cx| view.back_from_reply(window, cx)),
+    );
     if !connected {
         card = card.footer_start(readiness::prep_status(view, window, cx));
     }
@@ -270,5 +276,9 @@ pub(crate) fn reply_screen(
                 .on_click(move |_, _, cx| on_retry.update(cx, Reply::retry)),
         );
     }
-    card.action(next).into_any_element()
+    card.action(
+        crate::ui::widgets::control_anchor(gpui::div().flex(), "first-run-reply-next", !locked)
+            .child(next),
+    )
+    .into_any_element()
 }

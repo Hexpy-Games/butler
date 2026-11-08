@@ -11,7 +11,10 @@ use butler_ds::ui::provider_logo::{ProviderLogo, ProviderLogoName};
 use butler_ds::ui::spinner::Spinner;
 use butler_ds::ui::tooltip::Tooltip;
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, App, Context, IntoElement as _, ParentElement as _, SharedString, Window};
+use gpui::{
+    AnyElement, App, Context, IntoElement as _, ParentElement as _, SharedString, Styled as _,
+    Window,
+};
 
 use super::copy::{Words, added, found, items_progress, items_title, needs_key, words};
 use super::{Counts, Source};
@@ -104,18 +107,24 @@ fn tools(view: &Onboarding, cx: &mut Context<Onboarding>) -> AnyElement {
     } else {
         next
     };
-    let card = step_card(view, text.agents_title, body, cx)
+    let card = step_card(view, "agents", text.agents_title, body, cx)
         .description(text.agents_body)
-        .content_key("agents")
         .on_back(
             shared(lang).back,
             cx.listener(|view, _, _, cx| view.back_from_import(cx)),
         );
+    // The harness's way past the step: Skip, or Next when nothing was found.
+    let leave = |action| {
+        crate::ui::widgets::control_anchor(gpui::div().flex(), "first-run-agents-skip", true)
+            .child(action)
+    };
     if empty {
-        return card.action(next).into_any_element();
+        return card.action(leave(next)).into_any_element();
     }
-    let skip = SetupWizardStepAction::new("first-run-agents-skip", text.skip)
-        .on_click(cx.listener(|view, _, _, cx| view.finish_import(cx)));
+    let skip = leave(
+        SetupWizardStepAction::new("first-run-agents-skip", text.skip)
+            .on_click(cx.listener(|view, _, _, cx| view.finish_import(cx))),
+    );
     let next = if picked == 0 {
         Tooltip::new("first-run-agents-pick-one")
             .label(text.pick_one)
@@ -199,18 +208,23 @@ fn items(view: &Onboarding, source: &Source, cx: &mut Context<Onboarding>) -> An
     if error {
         body.push(failed(text));
     }
-    step_card(view, items_title(lang, &source.name), body, cx)
-        .description(items_progress(&source.name, index + 1, total))
-        .content_key(format!("agents:{}", source.key))
-        .on_back(
-            shared(lang).back,
-            cx.listener(move |view, _, _, cx| {
-                view.imports
-                    .update(cx, |imports, cx| imports.open(index.checked_sub(1), cx));
-            }),
-        )
-        .action(action)
-        .into_any_element()
+    step_card(
+        view,
+        format!("agents:{}", source.key),
+        items_title(lang, &source.name),
+        body,
+        cx,
+    )
+    .description(items_progress(&source.name, index + 1, total))
+    .on_back(
+        shared(lang).back,
+        cx.listener(move |view, _, _, cx| {
+            view.imports
+                .update(cx, |imports, cx| imports.open(index.checked_sub(1), cx));
+        }),
+    )
+    .action(action)
+    .into_any_element()
 }
 
 fn item_cards(
@@ -304,8 +318,7 @@ fn result(view: &Onboarding, cx: &mut Context<Onboarding>) -> AnyElement {
         .gap(Space::Sm)
         .children(rows)
         .into_any_element();
-    step_card(view, text.done_title, [body], cx)
-        .content_key("agents:done")
+    step_card(view, "agents:done", text.done_title, [body], cx)
         .on_back(
             shared(lang).back,
             cx.listener(|view, _, _, cx| view.back_from_import(cx)),

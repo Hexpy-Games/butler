@@ -349,8 +349,7 @@ fn server_screen(
             body.extend(server_fields(copy, url, key, snap.failed, server));
         }
     }
-    let mut card = step_card(view, copy.other_title, body, cx)
-        .content_key("custom")
+    let mut card = step_card(view, "custom", copy.other_title, body, cx)
         .description(copy.other_body)
         .on_back(
             shared(view.lang).back,
