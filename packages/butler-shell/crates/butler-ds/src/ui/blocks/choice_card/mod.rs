@@ -10,16 +10,13 @@ use gpui::{
     SharedString, Styled as _, Window, div, px,
 };
 
-use super::anim::ramp;
-
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::Icon;
 use crate::ui::context::Ds;
 use crate::ui::control::{Blend, Control, Disabled, DisabledLook, Width, over};
-use crate::ui::convert::mix;
 use crate::ui::icon::{IconSize, IconView, icon, icon_px};
 use crate::ui::layout::{Space, Stack};
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::spinner::Spinner;
 use crate::ui::typo::{Tone, Typo, Weight};
 
@@ -72,73 +69,70 @@ pub(crate) fn surface(
 ) -> Control {
     let timing = Timing::token(Ds::get(cx), face.fade, Easing::MotionEaseStandard);
     let disabled = face.state == ChoiceState::Disabled;
-    let selected = ramp(
-        (id.clone(), "selected"),
-        (f32::from(u8::from(face.selected)), false),
-        &timing,
-        window,
-        cx,
-    );
-    let dim = ramp(
-        (id.clone(), "dim"),
-        (if disabled { 0.5 } else { 1. }, false), // DS: ChoiceCard.module.css:105
-        &timing,
-        window,
-        cx,
-    );
+    let selected = face.selected && !face.placeholder && !disabled;
+    let [selected, dim] = [
+        ("selected", f32::from(selected)),
+        ("dim", if disabled { 0.5 } else { 1. }),
+    ]
+    .map(|(name, target)| transition((id.clone(), name), (target, false), &timing, window, cx));
     let ds = Ds::get(cx);
-    let (line, strong) = (ds.color(Color::Line), ds.color(Color::LineStrong));
-    let (accent, info) = (ds.color(Color::Accent), ds.color(Color::ColorInfoBg));
-    let (bg, hover_bg) = (ds.color(Color::ControlBg), ds.color(Color::ControlHoverBg));
-    let pressed = ds.color(Color::SelectionStrong);
-    let mut control = Control::new(id, ds);
-    control.width = Width::Full;
-    control.inline = false;
-    control.justify_center = false;
-    control.scale = false;
-    control.radius = ds.len(Length::RadiusPanel);
-    control.min_height = face.min_height.map(px);
-    let pad = ds.len(face.padding) + ds.len(Length::BorderHairline);
-    control.padding = [pad; 4];
-    let (rest, hover) = (mix(info, bg, selected), mix(info, hover_bg, selected));
-    control.fill = if face.placeholder {
-        Blend::flat(gpui::transparent_black())
-    } else if disabled {
-        Blend::flat(bg)
-    } else {
-        Blend {
-            rest,
-            hover,
-            active: (face.state != ChoiceState::Loading).then(|| over(pressed, hover)),
-        }
+    let opacity = Props {
+        opacity: Some((0., 1.)),
+        ..Default::default()
     };
+    let pad = ds.len(face.padding) + ds.len(Length::BorderHairline);
+    let mut control = Control {
+        width: Width::Full,
+        inline: false,
+        justify_center: false,
+        scale: false,
+        radius: ds.len(Length::RadiusPanel),
+        min_height: face.min_height.map(px),
+        padding: [pad; 4],
+        disabled: if disabled {
+            Disabled::Aria
+        } else {
+            Disabled::No
+        },
+        disabled_look: DisabledLook::Opacity(1.),
+        not_allowed: disabled,
+        ..Control::new(id, ds)
+    };
+    let bg = ds.color(Color::ControlBg);
+    let hover = ds.color(Color::ControlHoverBg);
+    control.fill = match (face.placeholder, disabled) {
+        (true, _) => Blend::flat(gpui::transparent_black()),
+        (_, true) => Blend::flat(bg),
+        _ => Blend {
+            rest: bg,
+            hover,
+            active: (face.state != ChoiceState::Loading)
+                .then(|| over(ds.color(Color::SelectionStrong), hover)),
+        },
+    };
+    let line = ds.color(Color::Line);
     let border = match face.state {
         ChoiceState::Disabled => Blend::flat(line),
         ChoiceState::Error => Blend::flat(ds.color(Color::DangerLineStrong)),
-        _ => Blend::hover(mix(accent, line, selected), mix(accent, strong, selected)),
+        _ => Blend::hover(line, ds.color(Color::LineStrong)),
     };
     control.border = Some((ds.len(Length::BorderHairline), border));
-    control.disabled = if disabled {
-        Disabled::Aria
+    let selected_border = ds.color(if face.state == ChoiceState::Error {
+        Color::DangerLineStrong
     } else {
-        Disabled::No
-    };
-    control.disabled_look = DisabledLook::Opacity(1.);
-    control.not_allowed = disabled;
-    let gated = (!matches!(face.state, ChoiceState::Loading | ChoiceState::Disabled))
-        .then_some(on_click)
-        .flatten();
-    control.on_click(gated);
-    control.children = vec![
-        div()
-            .flex()
-            .flex_1()
-            .min_w_0()
-            .items_center()
-            .opacity(dim)
-            .child(body)
-            .into_any_element(),
-    ];
+        Color::Accent
+    });
+    let info = ds.color(Color::ColorInfoBg);
+    let mut selected_fill = Blend::flat(info);
+    selected_fill.active =
+        (face.state != ChoiceState::Loading).then(|| over(ds.color(Color::SelectionStrong), info));
+    let selected_border = Blend::flat(selected_border);
+    control.tone = Some((selected, timing, selected_fill, selected_border));
+    control.on_click(
+        on_click.filter(|_| !matches!(face.state, ChoiceState::Loading | ChoiceState::Disabled)),
+    );
+    let body = div().flex().flex_1().min_w_0().items_center().child(body);
+    control.children = vec![dim.apply(body, &timing, &opacity).into_any_element()];
     control
 }
 

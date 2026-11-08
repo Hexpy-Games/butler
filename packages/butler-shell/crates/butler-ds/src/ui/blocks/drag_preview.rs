@@ -10,14 +10,13 @@ use gpui::{
     SharedString, Styled as _, Window, canvas, div, point, px,
 };
 
-use super::anim::ramp;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number, Shadow};
 use crate::ui::Icon;
 use crate::ui::context::Ds;
 use crate::ui::convert;
 use crate::ui::icon::{IconSize, icon};
 use crate::ui::layer::{Layer, Z};
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, transition};
 
 /// A picked element's crop: its intrinsic size (it never scales up) and a painter that draws it
 /// at the scale the matte fits it to (gpui has no image box that scales its children).
@@ -307,18 +306,6 @@ fn lifted_tab(title: SharedString, site: Option<AnyElement>, invalid: bool, ds: 
 
 impl RenderOnce for DragPreview {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        // Floating: it lifts in once (`drag-lift`, dropped under reduced motion).
-        let lift = {
-            let (timing, jump) = {
-                let ds = Ds::get(cx);
-                (
-                    Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseEmphasized),
-                    ds.reduced_motion(),
-                )
-            };
-            self.at
-                .map(|_| ramp((self.id.clone(), "lift"), (1., jump), &timing, window, cx))
-        };
         let ds = Ds::get(cx);
         let body = match self.kind {
             Kind::Elements { images, count } => stack(images, count, self.invalid, ds),
@@ -328,13 +315,19 @@ impl RenderOnce for DragPreview {
             return body;
         };
         let lifted = ds.number(Number::MotionScaleLift);
-        let progress = lift.unwrap_or(1.);
-        let body = div()
-            .pt(ds.len(Length::SpaceMd))
-            .pl(ds.len(Length::SpaceMd))
-            .opacity(progress)
-            .scale(lifted + (1. - lifted) * progress)
-            .child(body);
+        let timing = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseEmphasized);
+        let jump = ds.reduced_motion();
+        let (pad_top, pad_left) = (ds.len(Length::SpaceMd), ds.len(Length::SpaceMd));
+        let progress = transition((self.id.clone(), "lift"), (1., jump), &timing, window, cx);
+        let body = progress.apply(
+            div().pt(pad_top).pl(pad_left).child(body),
+            &timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                scale: Some((lifted, 1.)),
+                ..Default::default()
+            },
+        );
         match at {
             Floating::Fixed(pointer) => Layer::new(Z::Drag, pointer, body).into_any_element(),
             Floating::Absolute(pointer) => div()

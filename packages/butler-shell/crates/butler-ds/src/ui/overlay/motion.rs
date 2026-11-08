@@ -11,7 +11,7 @@ use super::place::Side;
 use crate::tokens::{Duration as DsDuration, Easing, Length, Number};
 use crate::ui::context::Ds;
 use crate::ui::liquid_glass::{Presence, with_presence};
-use crate::ui::motion::{Props, Timing, transition};
+use crate::ui::motion::{Props, Timing, keyed};
 
 /// One overlay family's keyframes.
 #[derive(Clone, Copy, Debug)]
@@ -169,13 +169,20 @@ fn build(
     };
     let timing = Timing::token(ds, duration, easing);
     let (dx, dy) = from_trigger(side, distance.map_or(0., |d| f32::from(ds.len(d))));
-    let value = transition(
-        format!("{id}-in-{key}"),
-        (if entering { 1. } else { 0. }, false),
-        &timing,
-        window,
-        cx,
-    );
+    let enter_timing = Timing::token(ds, motion.enter, motion.enter_ease);
+    let enter = keyed(format!("{id}-in-{key}"), 0., 1., &enter_timing, window, cx);
+    let value = if entering {
+        enter
+    } else {
+        keyed(
+            format!("{id}-out-{key}"),
+            enter.value(&enter_timing),
+            0.,
+            &timing,
+            window,
+            cx,
+        )
+    };
     let props = Props {
         opacity: (!glass).then_some((0., 1.)),
         offset: Some((point(px(dx), px(dy)), point(px(0.), px(0.)))),

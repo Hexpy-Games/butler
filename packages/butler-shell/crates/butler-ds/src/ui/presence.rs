@@ -9,7 +9,7 @@ use gpui::{
 };
 
 use super::context::Ds;
-use super::motion::{Props, Timing, transition};
+use super::motion::{Props, Timing, keyed};
 use crate::tokens::{Duration as DsDuration, Easing, Length, Number};
 
 /// The built-in motion of a [`Presence`].
@@ -37,7 +37,7 @@ enum Phase {
 
 struct State {
     phase: Phase,
-    /// Bumped on each enter; the matching exit retargets the same transition.
+    /// Bumped on each enter; each generation has one key per phase.
     generation: usize,
 }
 
@@ -160,15 +160,23 @@ fn animated(
         scale: Some((from, 1.)),
         ..Default::default()
     };
-    transition(
-        id,
-        (if exiting { 0. } else { 1. }, false),
-        &timing,
-        window,
-        cx,
-    )
-    .apply(div().relative().child(child), &timing, &props)
-    .into_any_element()
+    let enter_timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseDecelerate);
+    let enter = keyed((id.clone(), "enter"), 0., 1., &enter_timing, window, cx);
+    let value = if exiting {
+        keyed(
+            (id, "exit"),
+            enter.value(&enter_timing),
+            0.,
+            &timing,
+            window,
+            cx,
+        )
+    } else {
+        enter
+    };
+    value
+        .apply(div().relative().child(child), &timing, &props)
+        .into_any_element()
 }
 
 /// Unmounts the child once the exit has run, unless `present` changed meanwhile.

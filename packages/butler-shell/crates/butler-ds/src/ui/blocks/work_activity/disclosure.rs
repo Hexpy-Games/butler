@@ -13,13 +13,12 @@ use gpui::{
 use super::marker;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::Icon;
-use crate::ui::blocks::anim;
 use crate::ui::clickable::{Clickable, Variant};
 use crate::ui::collapsible::Collapsible;
 use crate::ui::context::Ds;
 use crate::ui::convert;
 use crate::ui::icon::icon_px;
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::rolling_swap::RollingSwap;
 use crate::ui::strut;
 use crate::ui::tag::Tag;
@@ -229,7 +228,7 @@ fn collapse_icon(id: &ElementId, expanded: bool, window: &mut Window, cx: &mut A
             Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate)
         }
     };
-    let shown = anim::ramp(
+    let shown = transition(
         (id.clone(), "collapse"),
         (if expanded { 1. } else { 0. }, false),
         &timing,
@@ -238,17 +237,24 @@ fn collapse_icon(id: &ElementId, expanded: bool, window: &mut Window, cx: &mut A
     );
     let ds = Ds::get(cx);
     let rise = f32::from(ds.len(Length::MotionDistanceXs));
-    div()
-        .relative()
-        .top(px(rise * (1. - shown)))
-        .opacity(shown)
-        .flex()
-        .flex_none()
-        .items_center()
-        .justify_center()
-        .size(px(CAPTION_LINE))
-        .text_color(ds.color(Color::TextSecondary))
-        .child(icon_px(Icon::ChevronUpIcon, ds.len(Length::IconSizeSm)))
+    shown
+        .apply(
+            div()
+                .relative()
+                .flex()
+                .flex_none()
+                .items_center()
+                .justify_center()
+                .size(px(CAPTION_LINE))
+                .text_color(ds.color(Color::TextSecondary))
+                .child(icon_px(Icon::ChevronUpIcon, ds.len(Length::IconSizeSm))),
+            &timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                offset: Some((gpui::point(px(0.), px(rise)), gpui::point(px(0.), px(0.)))),
+                ..Default::default()
+            },
+        )
         .into_any_element()
 }
 

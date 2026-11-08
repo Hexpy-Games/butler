@@ -7,11 +7,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use gpui::{App, Bounds, Div, ParentElement as _, Pixels, Styled as _, Window, canvas, div, px};
+use gpui::{
+    App, Bounds, Div, ElementId, ParentElement as _, Pixels, Styled as _, Window, canvas, div, px,
+};
 
 use crate::tokens::{Color, Easing, Length};
 use crate::ui::context::Ds;
-use crate::ui::{convert, motion::Ramp};
+use crate::ui::motion::{Timing, transition};
 
 /// Boxes measured during paint: the content origin and each trigger.
 #[derive(Default)]
@@ -49,8 +51,6 @@ impl Measure {
 }
 
 pub(super) struct Slide {
-    x: Ramp,
-    width: Ramp,
     /// The content's width and each trigger's: a change is a resize.
     sizes: Vec<f32>,
     ready: bool,
@@ -60,8 +60,6 @@ pub(super) struct Slide {
 impl Slide {
     pub(super) fn new() -> Self {
         Self {
-            x: Ramp::at(0.),
-            width: Ramp::at(0.),
             sizes: Vec::new(),
             ready: false,
             measure: Shared::default(),
@@ -77,17 +75,23 @@ impl Slide {
     /// moving.
     pub(super) fn place(
         &mut self,
+        id: &ElementId,
         active: Option<usize>,
         window: &mut Window,
-        cx: &App,
-    ) -> (Option<Div>, bool) {
+        cx: &mut App,
+    ) -> Option<Div> {
         let ds = Ds::get(cx);
-        let (reduced, duration) = (
-            ds.reduced_motion(),
-            ds.duration(crate::tokens::Duration::MotionBase),
+        let reduced = ds.reduced_motion();
+        let timing = Timing::token(
+            ds,
+            crate::tokens::Duration::MotionBase,
+            Easing::MotionEaseDecelerate,
         );
-        let ease = convert::easing(ds.tokens().ease(Easing::MotionEaseDecelerate));
-        let now = cx.background_executor().now();
+        let (bottom, height, color) = (
+            ds.len(Length::FocusRingRoom),
+            ds.len(Length::BorderWidthStrong),
+            ds.color(Color::Accent),
+        );
         let measure = self.measure.borrow();
         let (Some(origin), Some(box_)) = (
             measure.origin,
@@ -98,7 +102,7 @@ impl Slide {
             if waiting {
                 window.request_animation_frame();
             }
-            return (None, false);
+            return None;
         };
         let sizes: Vec<f32> = std::iter::once(f32::from(origin.size.width))
             .chain(
@@ -114,19 +118,32 @@ impl Slide {
         let jump = !self.ready || resized || reduced;
         self.sizes = sizes;
         self.ready = true;
-        self.x.retarget(x, now, jump);
-        self.width.retarget(width, now, jump);
-        let ((x, x_moving), (width, width_moving)) = (
-            self.x.sample(now, duration, &ease),
-            self.width.sample(now, duration, &ease),
+        let x = transition((id.clone(), "indicator-x"), (x, jump), &timing, window, cx);
+        let width = transition(
+            (id.clone(), "indicator-width"),
+            (width, jump),
+            &timing,
+            window,
+            cx,
         );
-        let bar = div()
-            .absolute()
-            .left(px(x))
-            .w(px(width))
-            .bottom(ds.len(Length::FocusRingRoom))
-            .h(ds.len(Length::BorderWidthStrong))
-            .bg(ds.color(Color::Accent));
-        (Some(bar), x_moving || width_moving)
+        let left = x.from.min(x.to);
+        let right = (x.from + width.from).max(x.to + width.to);
+        let clip = |x: f32, width: f32| gpui::Edges {
+            left: px(x - left),
+            right: px(right - x - width),
+            ..Default::default()
+        };
+        let mut motion = x.motion(&timing);
+        motion.clip = Some((clip(x.from, width.from), clip(x.to, width.to)));
+        Some(
+            div()
+                .absolute()
+                .left(px(left))
+                .w(px(right - left))
+                .bottom(bottom)
+                .h(height)
+                .motion(motion)
+                .child(div().size_full().bg(color)),
+        )
     }
 }

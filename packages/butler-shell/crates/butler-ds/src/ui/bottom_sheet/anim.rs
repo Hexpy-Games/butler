@@ -8,7 +8,7 @@ use gpui::{
 use super::state::SheetState;
 use crate::tokens::{Color, Duration as DsDuration, Easing};
 use crate::ui::context::Ds;
-use crate::ui::motion::{Props, Timing, transition};
+use crate::ui::motion::{Props, Timing, keyed};
 use crate::ui::overlay::lifecycle::Phase;
 
 /// What the animation needs besides the phase.
@@ -30,75 +30,72 @@ pub(crate) fn animate(
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
-    let now = cx.background_executor().now();
-    let (offset, easing) = frame
-        .state
-        .update(cx, |state, cx| state.offset(now, Ds::get(cx)));
-    if easing {
-        window.request_animation_frame();
-    }
-    let height = frame
-        .state
-        .read(cx)
-        .surface
-        .bounds()
-        .map_or(frame.window_height, |b| f32::from(b.size.height));
-    let from = frame.state.read(cx).held_offset();
-    let ds = Ds::get(cx);
-    let reduced = ds.reduced_motion();
     let (key, entering) = match phase {
         Phase::Closed => return None,
         Phase::Open { key } => (key, true),
         Phase::Exiting { key, .. } => (key, false),
     };
-    let slide = if entering {
-        Timing::token(ds, DsDuration::MotionDeliberate, Easing::MotionEaseSettle)
-    } else {
-        Timing::token(ds, DsDuration::MotionExitSlow, Easing::MotionEaseAccelerate)
-    };
-    let fade = if reduced || !entering {
-        slide
+    let state = frame.state.read(cx);
+    let ds = Ds::get(cx);
+    let reduced = ds.reduced_motion();
+    let height = state
+        .surface
+        .bounds()
+        .map_or(frame.window_height, |b| f32::from(b.size.height));
+    let from = state.held_offset();
+    let (offset, settle) = state.offset(ds);
+    let enter_slide = Timing::token(ds, DsDuration::MotionDeliberate, Easing::MotionEaseSettle);
+    let exit = Timing::token(ds, DsDuration::MotionExitSlow, Easing::MotionEaseAccelerate);
+    let enter_fade = if reduced {
+        enter_slide
     } else {
         Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard)
     };
-    let target = if entering { 1. } else { 0. };
-    let value = transition(
-        format!("{id}-slide-{key}"),
-        (target, reduced),
-        &slide,
-        window,
-        cx,
-    );
-    let props = Props {
-        offset: Some((
-            point(px(0.), px(height)),
-            point(px(0.), px(if entering { 0. } else { from })),
-        )),
-        ..Default::default()
-    };
-    let mut moving = if reduced {
-        div()
-            .relative()
-            .top(px(if entering { offset } else { from }))
-            .child(content)
-    } else {
-        value.apply(div().relative().child(content), &slide, &props)
-    };
-    if entering && !value.moving(&slide) {
-        moving = moving.top(px(offset));
+    let mut moving = div().relative().child(content);
+    if entering {
+        moving = offset.apply(
+            moving,
+            &settle,
+            &Props {
+                offset: Some((point(px(0.), px(0.)), point(px(0.), px(1.)))),
+                ..Default::default()
+            },
+        );
     }
-    Some(
-        transition(format!("{id}-in-{key}"), (target, false), &fade, window, cx)
-            .apply(
-                div().child(moving),
-                &fade,
-                &Props {
-                    opacity: Some((0., 1.)),
-                    ..Default::default()
-                },
-            )
-            .into_any_element(),
-    )
+    let layers = [
+        (
+            "slide",
+            enter_slide,
+            Props {
+                offset: (!reduced).then_some((
+                    point(px(0.), px(height)),
+                    point(px(0.), px(if entering { 0. } else { from })),
+                )),
+                ..Default::default()
+            },
+        ),
+        (
+            "fade",
+            enter_fade,
+            Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
+        ),
+    ];
+    for (name, incoming, props) in layers {
+        let enter_id = format!("{id}-{name}-in-{key}");
+        let exit_id = format!("{id}-{name}-out-{key}");
+        let enter = keyed(enter_id, 0., 1., &incoming, window, cx);
+        let timing = if entering { incoming } else { exit };
+        let value = if entering {
+            enter
+        } else {
+            keyed(exit_id, enter.value(&incoming), 0., &timing, window, cx)
+        };
+        moving = value.apply(div().relative().child(moving), &timing, &props);
+    }
+    Some(moving.into_any_element())
 }
 
 /// The backdrop (`--dialog-overlay-bg`) over the whole window: it fades in over `--motion-base`
@@ -126,22 +123,37 @@ pub(crate) fn backdrop(
     } else {
         Timing::token(ds, DsDuration::MotionExitSlow, Easing::MotionEaseAccelerate)
     };
-    Some(
-        transition(
-            format!("{id}-backdrop-in-{key}"),
-            (if entering { 1. } else { 0. }, false),
+    let enter_timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
+    let incoming = keyed(
+        format!("{id}-backdrop-in-{key}"),
+        0.,
+        1.,
+        &enter_timing,
+        window,
+        cx,
+    );
+    let value = if entering {
+        incoming
+    } else {
+        keyed(
+            format!("{id}-backdrop-out-{key}"),
+            incoming.value(&enter_timing),
+            0.,
             &timing,
             window,
             cx,
         )
-        .apply(
-            scrim,
-            &timing,
-            &Props {
-                opacity: Some((0., 1.)),
-                ..Default::default()
-            },
-        )
-        .into_any_element(),
+    };
+    Some(
+        value
+            .apply(
+                scrim,
+                &timing,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
+            )
+            .into_any_element(),
     )
 }

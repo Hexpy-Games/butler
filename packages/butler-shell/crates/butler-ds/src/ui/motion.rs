@@ -1,6 +1,6 @@
 //! Time-driven DS motion on retained painted groups. Tokens zero travel and scale under
 //! reduced motion, leaving opacity fades. Decorative loops follow [`Loop`].
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use gpui::{
     App, ElementId, LayerMotion, MotionEasing, MotionRepeat, Pixels, Point, Styled, Window,
@@ -30,7 +30,7 @@ impl Loop {
 #[derive(Clone, Copy)]
 pub struct Timing {
     pub duration: Duration,
-    ease: Ease,
+    pub(super) ease: Ease,
 }
 
 impl Timing {
@@ -90,11 +90,12 @@ pub struct Props {
     pub offset: Option<(Point<Pixels>, Point<Pixels>)>,
     pub relative_offset: Option<(Point<f32>, Point<f32>)>,
     pub scale: Option<(f32, f32)>,
+    pub rotation: Option<(f32, f32)>,
     pub origin: Option<(f32, f32)>,
 }
 
 /// A scalar heading toward a target on gpui's wrapping animation clock.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Transition {
     pub(super) from: f32,
     pub(super) to: f32,
@@ -113,9 +114,9 @@ pub fn transition(
     let state = window.use_keyed_state(id, cx, |_, _| {
         (
             Transition {
-                from: 0.,
+                from: target,
                 to: target,
-                start_ms: now,
+                start_ms: now.wrapping_sub(timing.ms()),
             },
             *timing,
         )
@@ -139,7 +140,27 @@ pub fn transition(
     })
 }
 
+/// A phase animation, starting at the first render of `id`.
+pub fn keyed(
+    id: impl Into<ElementId>,
+    from: f32,
+    to: f32,
+    _timing: &Timing,
+    window: &mut Window,
+    cx: &mut App,
+) -> Transition {
+    let id = id.into();
+    let start_ms = mounted_at(id.clone(), window, cx);
+    let endpoints = window.use_keyed_state((id, "endpoints"), cx, |_, _| (from, to));
+    let (from, to) = *endpoints.read(cx);
+    Transition { from, to, start_ms }
+}
+
 impl Transition {
+    pub fn motion(&self, timing: &Timing) -> LayerMotion {
+        timing.motion(self.start_ms)
+    }
+
     pub fn target(&self) -> f32 {
         self.to
     }
@@ -158,7 +179,7 @@ impl Transition {
 
     pub fn apply<E: Styled>(&self, mut el: E, timing: &Timing, props: &Props) -> E {
         if self.moving(timing) {
-            let mut motion = timing.motion(self.start_ms);
+            let mut motion = self.motion(timing);
             if let Some((a, b)) = props.opacity {
                 motion.opacity = (a + (b - a) * self.from, a + (b - a) * self.to);
             }
@@ -170,6 +191,9 @@ impl Transition {
             }
             if let Some((a, b)) = props.scale {
                 motion.scale = (a + (b - a) * self.from, a + (b - a) * self.to);
+            }
+            if let Some((a, b)) = props.rotation {
+                motion.rotation = (a + (b - a) * self.from, a + (b - a) * self.to);
             }
             if let Some((x, y)) = props.origin {
                 motion.origin = point(x, y);
@@ -213,12 +237,7 @@ pub fn enter<E: Styled>(
     window: &mut Window,
     cx: &mut App,
 ) -> E {
-    Transition {
-        from: 0.,
-        to: 1.,
-        start_ms: mounted_at(id, window, cx),
-    }
-    .apply(el, timing, props)
+    keyed(id, 0., 1., timing, window, cx).apply(el, timing, props)
 }
 
 /// A repeating zero-to-one motion; alternate reverses every other iteration.
@@ -241,73 +260,10 @@ pub fn looping<E: Styled>(
             .relative_offset
             .unwrap_or(LayerMotion::NONE.relative_offset),
         scale: props.scale.unwrap_or(LayerMotion::NONE.scale),
+        rotation: props.rotation.unwrap_or(LayerMotion::NONE.rotation),
         origin: props
             .origin
             .map_or(LayerMotion::NONE.origin, |(x, y)| point(x, y)),
         ..timing.motion(start_ms)
     })
-}
-
-/// A value that eases toward a target over a duration (a CSS transition of one property).
-/// A new target restarts from wherever the value is now.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Ramp {
-    value: f32,
-    from: f32,
-    to: f32,
-    since: Option<Instant>,
-}
-
-impl Ramp {
-    /// At rest on `value`.
-    pub fn at(value: f32) -> Self {
-        Self {
-            value,
-            from: value,
-            to: value,
-            since: None,
-        }
-    }
-
-    pub fn target(&self) -> f32 {
-        self.to
-    }
-
-    /// Where the value is now (as of the last [`Self::sample`]).
-    pub fn value(&self) -> f32 {
-        self.value
-    }
-
-    /// Heads for `to`; `jump` lands there at once (no transition).
-    pub fn retarget(&mut self, to: f32, now: Instant, jump: bool) {
-        if (to - self.to).abs() < f32::EPSILON && !jump {
-            return;
-        }
-        self.from = if jump { to } else { self.value };
-        self.to = to;
-        self.since = (!jump).then_some(now);
-        if jump {
-            self.value = to;
-        }
-    }
-
-    /// The value at `now`, and whether it is still moving.
-    pub fn sample(
-        &mut self,
-        now: Instant,
-        duration: Duration,
-        ease: &dyn Fn(f32) -> f32,
-    ) -> (f32, bool) {
-        let Some(since) = self.since else {
-            return (self.to, false);
-        };
-        let total = duration.as_secs_f32();
-        let elapsed = now.saturating_duration_since(since).as_secs_f32();
-        if total <= 0. || elapsed >= total {
-            *self = Self::at(self.to);
-            return (self.to, false);
-        }
-        self.value = self.from + (self.to - self.from) * ease(elapsed / total);
-        (self.value, true)
-    }
 }

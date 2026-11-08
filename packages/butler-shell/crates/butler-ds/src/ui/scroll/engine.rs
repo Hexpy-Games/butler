@@ -18,7 +18,8 @@ use gpui::{
 
 use crate::tokens::{Duration as DsDuration, Easing};
 use crate::ui::context::{Ds, Modality};
-use crate::ui::{convert, focus, motion::Ramp};
+use crate::ui::focus;
+use crate::ui::motion::{Timing, transition};
 
 /// The scroll axis; the fade follows it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -89,8 +90,6 @@ pub struct Scroller {
 struct State {
     handle: ScrollHandle,
     focus: FocusHandle,
-    start: Ramp,
-    end: Ramp,
     flags: Flags,
     host: bool,
     revealed: Option<FocusHandle>,
@@ -166,28 +165,45 @@ struct Lengths {
     inset: Edges<Pixels>,
 }
 
-/// What a frame needs from the animation clock.
-struct Clock<'a> {
-    now: Instant,
-    duration: std::time::Duration,
-    ease: &'a dyn Fn(f32) -> f32,
-    instant: bool,
-}
-
 impl State {
     /// The fades for this frame (and whether they are still moving).
-    fn lengths(&mut self, cfg: &Config, clock: &Clock, room: f32) -> (Lengths, bool) {
+    fn lengths(
+        &mut self,
+        cfg: &Config,
+        (timing, instant): (Timing, bool),
+        room: f32,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (Lengths, bool) {
+        let flags = read(&self.handle, cfg.axis);
+        let host = self.host;
+        let active = |at: bool| {
+            if flags.overflowing && !at && !host {
+                f32::from(cfg.size)
+            } else {
+                0.
+            }
+        };
+        let start = transition(
+            (cfg.id.clone(), "fade-start"),
+            (active(flags.at_start), instant),
+            &timing,
+            window,
+            cx,
+        );
+        let end = transition(
+            (cfg.id.clone(), "fade-end"),
+            (active(flags.at_end), instant),
+            &timing,
+            window,
+            cx,
+        );
+        let moving = start.moving(&timing) || end.moving(&timing);
+        let (start, end) = (start.value(&timing), end.value(&timing));
         let flags = read(&self.handle, cfg.axis);
         self.flags = flags;
-        let size = f32::from(cfg.size);
         let active = |edge_at: bool| flags.overflowing && !edge_at && !self.host;
         let (start_on, end_on) = (active(flags.at_start), active(flags.at_end));
-        self.start
-            .retarget(if start_on { size } else { 0. }, clock.now, clock.instant);
-        self.end
-            .retarget(if end_on { size } else { 0. }, clock.now, clock.instant);
-        let (start, start_moving) = self.start.sample(clock.now, clock.duration, clock.ease);
-        let (end, end_moving) = self.end.sample(clock.now, clock.duration, clock.ease);
         let guard = f32::from(cfg.guard);
         // The fade turns solid `room` early; the guard strip is clipped away first.
         let edge = |length: f32, on: bool| {
@@ -208,7 +224,7 @@ impl State {
                 (lengths.fade.right, lengths.inset.right) = (fade_end, inset_end);
             }
         }
-        (lengths, start_moving || end_moving)
+        (lengths, moving)
     }
 
     /// Runs after the scroller painted: reads the new edges, reveals the focused control and
@@ -295,8 +311,6 @@ pub fn fade(
     let state = window.use_keyed_state((cfg.id.clone(), "fade"), cx, |_, cx| State {
         handle: ScrollHandle::new(),
         focus: cx.focus_handle().tab_stop(false),
-        start: Ramp::at(0.),
-        end: Ramp::at(0.),
         flags: Flags::default(),
         host: false,
         revealed: None,
@@ -307,11 +321,10 @@ pub fn fade(
         state.update(cx, |s, _| s.focus = focus);
     }
     let now = cx.background_executor().now();
-    let (duration, ease, instant, room, keyboard) = {
+    let (timing, instant, room, keyboard) = {
         let ds = Ds::get(cx);
         (
-            ds.duration(DsDuration::MotionBase),
-            convert::easing(ds.tokens().ease(Easing::MotionEaseDecelerate)),
+            Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseDecelerate),
             ds.reduced_motion(),
             f32::from(focus::room(ds)),
             text_field || ds.modality().focus_visible(),
@@ -322,14 +335,14 @@ pub fn fade(
         (state.handle.clone(), state.focus.clone())
     };
     let ring_inside = keyboard && focus_handle.contains_focused(window, cx);
-    let clock = Clock {
-        now,
-        duration,
-        ease: &ease,
-        instant,
-    };
-    let (lengths, moving, host, lingering) = state.update(cx, |s, _| {
-        let (lengths, moving) = s.lengths(cfg, &clock, if ring_inside { room } else { 0. });
+    let (lengths, moving, host, lingering) = state.update(cx, |s, cx| {
+        let (lengths, moving) = s.lengths(
+            cfg,
+            (timing, instant),
+            if ring_inside { room } else { 0. },
+            window,
+            cx,
+        );
         let lingering = s
             .scrolled_at
             .is_some_and(|at| now.saturating_duration_since(at).as_millis() < LINGER_MS);

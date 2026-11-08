@@ -11,7 +11,7 @@ use gpui::{
 
 use super::context::Ds;
 use super::icon_button::IconButton;
-use super::motion::{Props, Timing, transition};
+use super::motion::{Props, Timing, keyed};
 use super::success_check::SuccessCheck;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
 
@@ -185,7 +185,11 @@ impl DoneIconButton {
         let shrink = 1. - ds.number(Number::MotionScaleMenu);
         let id = (self.id.clone(), format!("morph-{flips}"));
         let (from, to) = if done { (0., 1.) } else { (1., 0.) };
-        let value = transition(id, (1., flips == 0), &timing, window, cx);
+        let value = if flips == 0 {
+            super::motion::transition(id, (1., true), &timing, window, cx)
+        } else {
+            keyed(id, 0., 1., &timing, window, cx)
+        };
         let action = cell(action.unwrap_or_else(|| div().into_any_element()));
         let check = cell(check.into_any_element()).text_color(check_color);
         div()

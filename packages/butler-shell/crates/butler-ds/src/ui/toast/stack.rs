@@ -9,19 +9,20 @@ use gpui::{
 
 use super::layout::{self, Frame, VISIBLE};
 use super::{Store, view};
+use crate::tokens::{Duration as DsDuration, Easing};
 use crate::ui::context::Ds;
+use crate::ui::motion::Timing;
 
 /// The stack's toasts and their pointer handling, `width` wide and as tall as what is visible.
 pub(super) fn build(
     store: &Store,
     width: f32,
     now: Instant,
-    ds: &Ds,
     window: &mut Window,
+    cx: &mut App,
 ) -> AnyElement {
     let mut state = store.0.borrow_mut();
-    let offsets = state.offsets();
-    let expanded = state.expanded;
+    let (offsets, expanded) = (state.offsets(), state.expanded);
     let front_height = state
         .items
         .iter()
@@ -37,15 +38,16 @@ pub(super) fn build(
             offset: offsets[index],
             expanded,
         };
-        let resolved = layout::resolve(item, &frame, ds, now);
-        let shown = item.removed_at.is_none() && index < VISIBLE;
-        if shown {
+        let resolved = layout::resolve(item, &frame, window, cx);
+        let ds = Ds::get(cx);
+        if item.removed_at.is_none() && index < VISIBLE {
             visible += 1;
-            let bottom = resolved.y + resolved.height * (1. + resolved.scale) / 2.;
+            let bottom =
+                resolved.y.target() + resolved.height * (1. + resolved.scale.target()) / 2.;
             extent = extent.max(bottom);
         }
-        let loading = item.toast.kind == super::Kind::Loading && !ds.reduced_motion();
-        busy |= resolved.moving || item.height.get() <= 0. || loading;
+        busy |= item.height.get() <= 0.
+            || item.toast.kind == super::Kind::Loading && !ds.reduced_motion();
         let born = *item.born.get_or_insert(now);
         toasts.push(view::render(
             item,
@@ -64,9 +66,15 @@ pub(super) fn build(
     if busy {
         window.request_animation_frame();
     }
+    let ds = Ds::get(cx);
+    let timing = Timing::token(ds, DsDuration::MotionEnterOverlay, Easing::MotionEaseEnter);
     let hover = store.clone();
-    let region = div()
+    div()
         .id("toaster")
+        .layout_motion(gpui::LayoutMotion {
+            duration_ms: timing.ms(),
+            easing: timing.easing(),
+        })
         .relative()
         .w(px(width))
         .h(px(extent))
@@ -83,8 +91,8 @@ pub(super) fn build(
         .debug_selector(|| "toaster".to_owned())
         .children(toasts)
         .child(markers(mounted, visible, expanded))
-        .child(pointer(store.clone()));
-    region.into_any_element()
+        .child(pointer(store.clone()))
+        .into_any_element()
 }
 
 /// Zero-size markers the live harness can look for (`expect anchor toasts:3`).

@@ -11,7 +11,7 @@ use crate::ui::context::Ds;
 pub(super) struct Frame<'a> {
     pub(super) geometry: &'a layout::Geometry,
     /// The height (px) each column is drawn at now.
-    pub(super) drawn: &'a [f32],
+    pub(super) drawn: &'a [(crate::ui::motion::Transition, crate::ui::motion::Timing)],
     pub(super) selected: Option<usize>,
     pub(super) ready: bool,
     pub(super) plot_h: f32,
@@ -79,10 +79,10 @@ impl UsageBars {
                 |(index, column)| {
                     draw::column(
                         column,
-                        frame.drawn.get(index).copied().unwrap_or(0.),
+                        frame.drawn[index],
                         frame.selected == Some(index),
                         frame.selected.is_some(),
-                        (self.size, emphasis),
+                        (self.size, emphasis, frame.plot_h),
                         ds,
                     )
                 },

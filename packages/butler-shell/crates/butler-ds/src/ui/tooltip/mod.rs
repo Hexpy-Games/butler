@@ -17,7 +17,7 @@ pub use place::{Align, Side};
 use super::context::Ds;
 use super::layer::{Layer, Z, safe_top};
 use super::liquid_glass;
-use super::motion::{Props, Timing, transition};
+use super::motion::{Props, Timing, keyed};
 use super::strut;
 use super::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
@@ -372,16 +372,25 @@ impl Tooltip {
                 0.,
             )
         };
-        let value = transition(id, (if open { 1. } else { 0. }, false), &timing, window, cx);
-        let presence = if value.moving(&timing) {
-            liquid_glass::Presence::Moving {
-                from: value.from,
-                to: value.to,
-                start_ms: value.start_ms,
-                timing,
-            }
+        let enter_timing = Timing::token(ds, DsDuration::MotionEnterMenu, Easing::MotionEaseEnter);
+        let enter = keyed((id.clone(), "enter"), 0., 1., &enter_timing, window, cx);
+        let value = if open {
+            enter
         } else {
-            liquid_glass::Presence::Static(value.target())
+            keyed(
+                (id, "exit"),
+                enter.value(&enter_timing),
+                0.,
+                &timing,
+                window,
+                cx,
+            )
+        };
+        let presence = liquid_glass::Presence::Moving {
+            from: value.from,
+            to: value.to,
+            start_ms: value.start_ms,
+            timing,
         };
         let animated = value.apply(
             div()

@@ -13,7 +13,7 @@ use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::card::{Card, CardPadding, CardRadius};
 use crate::ui::context::Ds;
 use crate::ui::icon_slot::{IconSlot, SlotSize, SlotTone};
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, Transition, transition};
 use crate::ui::scroll::{MaxHeight, ScrollArea};
 use crate::ui::typo::{Tone, Typo};
 use crate::ui::{focus, strut};
@@ -74,17 +74,30 @@ pub fn exit_progress(
     leaving: bool,
     window: &mut Window,
     cx: &mut App,
-) -> f32 {
+) -> Transition {
     let ds = Ds::get(cx);
     let timing = Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate);
     let jump = ds.reduced_motion();
-    crate::ui::blocks::anim::ramp(
-        (id.into(), "exit"),
+    let id = id.into();
+    let seen = window.use_keyed_state((id.clone(), "exit-target"), cx, |_, _| leaving);
+    let changed = *seen.read(cx) != leaving;
+    seen.update(cx, |value, _| *value = leaving);
+    let value = transition(
+        (id, "exit"),
         (if leaving { 1. } else { 0. }, jump),
         &timing,
         window,
         cx,
-    )
+    );
+    if changed && value.moving(&timing) {
+        window
+            .spawn(cx, async move |cx| {
+                cx.background_executor().timer(timing.duration).await;
+                cx.update(|window, _| window.refresh()).ok();
+            })
+            .detach();
+    }
+    value
 }
 
 /// The key handler: the event, whether the frame itself has focus.
@@ -101,7 +114,7 @@ pub struct FrameKeys {
 pub fn frame(
     placement: Placement,
     keys: FrameKeys,
-    leaving: f32,
+    leaving: Transition,
     content: AnyElement,
     window: &mut Window,
     cx: &mut App,
@@ -116,19 +129,26 @@ pub fn frame(
     let sm = ds.len(Length::SpaceSm);
     let on_key = keys.on_key;
     let own = handle.clone();
-    let mut surface = div()
-        .id(keys.id.clone())
-        .track_focus(&focus::tab_stop(&handle, true))
-        .on_key_down(move |event, window, cx| {
-            let own = own.is_focused(window);
-            on_key(event, own, window, cx);
-        })
-        .relative()
-        .min_w_0()
-        .rounded(radius)
-        .opacity(1. - leaving)
-        .top(sm * leaving)
-        .child(content);
+    let timing = Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate);
+    let mut surface = leaving.apply(
+        div()
+            .id(keys.id.clone())
+            .track_focus(&focus::tab_stop(&handle, true))
+            .on_key_down(move |event, window, cx| {
+                let own = own.is_focused(window);
+                on_key(event, own, window, cx);
+            })
+            .relative()
+            .min_w_0()
+            .rounded(radius)
+            .child(content),
+        &timing,
+        &Props {
+            opacity: Some((1., 0.)),
+            offset: Some((gpui::point(px(0.), px(0.)), gpui::point(px(0.), sm))),
+            ..Default::default()
+        },
+    );
     if focused {
         surface = surface.child(
             div()

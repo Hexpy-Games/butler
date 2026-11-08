@@ -11,13 +11,12 @@ use gpui::{
     RenderOnce, SharedString, Styled as _, Window, canvas, div, point, px,
 };
 
-use super::anim::ramp;
 pub use super::choice_card::ChoiceCardList as CheckCardList;
 use super::choice_card::{ChoiceState, Face, row_body, surface, text_column};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
 use crate::ui::context::Ds;
 use crate::ui::convert::{easing, mix};
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Timing, transition};
 use crate::ui::overlay::place::{Align, Side};
 use crate::ui::tooltip::Tooltip;
 
@@ -155,13 +154,17 @@ fn paint_check(bounds: Bounds<Pixels>, fraction: f32, color: Hsla, window: &mut 
 fn indicator(id: ElementId, checked: bool, window: &mut Window, cx: &mut App) -> AnyElement {
     let ds = Ds::get(cx);
     let timing = Timing::linear(Duration::from_secs_f32(total(checked, ds) / 1000.));
-    let p = ramp(
+    let progress = transition(
         id,
         (f32::from(u8::from(checked)), false),
         &timing,
         window,
         cx,
     );
+    if progress.moving(&timing) {
+        window.request_animation_frame();
+    }
+    let p = progress.value(&timing);
     let ds = Ds::get(cx);
     let phase = phase(p, checked, !ds.reduced_motion(), ds);
     let hairline = ds.len(Length::BorderHairline);

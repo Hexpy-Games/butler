@@ -26,7 +26,7 @@ use crate::tokens::{Color, Duration as DsDuration, Length};
 use crate::ui::context::Ds;
 use crate::ui::layer::{Layer, Z};
 use crate::ui::menu::TriggerBox;
-use crate::ui::motion::{Props, Timing, transition};
+use crate::ui::motion::{Props, Timing, keyed};
 use crate::ui::overlay::dismiss::{Dismissable, Handle, Reason};
 use crate::ui::overlay::lifecycle::{Lifecycle, Phase, Spec};
 use crate::ui::overlay::motion::{self, Motion as Keyframes};
@@ -360,22 +360,37 @@ impl Dialog {
         } else {
             Timing::token(ds, motion.exit, motion.exit_ease)
         };
-        transition(
+        let enter_timing = Timing::token(ds, motion.enter, motion.enter_ease);
+        let incoming = keyed(
             format!("{id}-scrim-in-{key}"),
-            (if enter { 1. } else { 0. }, false),
-            &timing,
+            0.,
+            1.,
+            &enter_timing,
             window,
             cx,
-        )
-        .apply(
-            scrim,
-            &timing,
-            &Props {
-                opacity: Some((0., 1.)),
-                ..Default::default()
-            },
-        )
-        .into_any_element()
+        );
+        let value = if enter {
+            incoming
+        } else {
+            keyed(
+                format!("{id}-scrim-out-{key}"),
+                incoming.value(&enter_timing),
+                0.,
+                &timing,
+                window,
+                cx,
+            )
+        };
+        value
+            .apply(
+                scrim,
+                &timing,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
+            )
+            .into_any_element()
     }
 
     /// The content in the dismiss stack while open, and in the focus scope: a modal one keeps

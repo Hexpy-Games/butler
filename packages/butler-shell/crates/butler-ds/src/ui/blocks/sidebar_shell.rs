@@ -10,12 +10,11 @@ use gpui::{
     RenderOnce, ScrollHandle, Styled as _, Window, div, px,
 };
 
-use super::anim::ramp;
 use super::measure;
 use super::scope::{self, Spec};
 use crate::tokens::{Color, Density, Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::scroll::engine::{self, Axis, Config};
 use crate::ui::{convert, strut};
 
@@ -330,30 +329,24 @@ impl SidebarShell {
     /// The column under the title row: it fades and slides out while collapsed.
     fn body(&mut self, shown: bool, window: &mut Window, cx: &mut App) -> AnyElement {
         let ds = Ds::get(cx);
-        let base = |duration, ease| Timing::token(ds, duration, ease);
-        let (opacity_in, opacity_out) = (
-            base(DsDuration::MotionBase, Easing::MotionEaseStandard),
-            base(DsDuration::MotionFast, Easing::MotionEaseStandard),
-        );
-        let (slide_in, slide_out) = (
-            base(DsDuration::MotionSlow, Easing::MotionEaseEmphasized),
-            base(DsDuration::MotionBase, Easing::MotionEaseEmphasized),
-        );
+        let (fade_duration, slide_duration) = if shown {
+            (DsDuration::MotionBase, DsDuration::MotionSlow)
+        } else {
+            (DsDuration::MotionFast, DsDuration::MotionBase)
+        };
+        let fade = Timing::token(ds, fade_duration, Easing::MotionEaseStandard);
+        let slide = Timing::token(ds, slide_duration, Easing::MotionEaseEmphasized);
+        let (fade, slide) = (&fade, &slide);
         let target = f32::from(u8::from(shown));
         let jump = ds.reduced_motion();
-        let (fade, slide) = if shown {
-            (&opacity_in, &slide_in)
-        } else {
-            (&opacity_out, &slide_out)
-        };
-        let opacity = ramp(
+        let opacity = transition(
             (self.id.clone(), "opacity"),
             (target, jump),
             fade,
             window,
             cx,
         );
-        let slid = ramp(
+        let slid = transition(
             (self.id.clone(), "slide"),
             (target, false),
             slide,
@@ -378,16 +371,39 @@ impl SidebarShell {
             .min_w_0()
             .min_h_0()
             .gap(ds.len(Length::SpaceXs));
-        if opacity <= 0.001 && !shown {
+        if opacity.target() == 0. && !opacity.moving(fade) && !shown {
             return column.into_any_element();
         }
         let scroller = self.scroller(window, cx);
-        column
-            .left(px(-COLLAPSED_SHIFT * (1. - slid)))
-            .opacity(opacity)
-            .children(header)
-            .child(scroller)
-            .children(footer)
+        let column = column.children(header).child(scroller).children(footer);
+        let column = slid.apply(
+            column,
+            slide,
+            &Props {
+                offset: Some((
+                    gpui::point(px(-COLLAPSED_SHIFT), px(0.)),
+                    gpui::point(px(0.), px(0.)),
+                )),
+                ..Default::default()
+            },
+        );
+        opacity
+            .apply(
+                div()
+                    .relative()
+                    .flex()
+                    .flex_col()
+                    .flex_auto()
+                    .w_full()
+                    .min_w_0()
+                    .min_h_0()
+                    .child(column),
+                fade,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
+            )
             .into_any_element()
     }
 }

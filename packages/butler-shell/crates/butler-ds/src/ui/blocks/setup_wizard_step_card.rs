@@ -18,7 +18,7 @@ use crate::ui::button::{self, Button, Size, Variant};
 use crate::ui::context::Ds;
 use crate::ui::icon::{IconSize, icon};
 use crate::ui::layout::{Cross, Justify, MinWidth, Space, Stack, WithItem as _};
-use crate::ui::motion::{Props, Timing, transition};
+use crate::ui::motion::{Props, Timing, keyed};
 use crate::ui::typo::{Tone, Typo};
 
 type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -274,7 +274,7 @@ impl RenderOnce for SetupWizardStepCard {
             let ds = Ds::get(cx);
             let timing = Timing::token(ds, Duration::MotionBase, Easing::MotionEaseDecelerate);
             let key = self.content_key.clone().unwrap_or_default();
-            transition((self.id.clone(), key), (1., false), &timing, window, cx)
+            keyed((self.id.clone(), key), 0., 1., &timing, window, cx)
                 .apply(
                     div().child(body),
                     &timing,

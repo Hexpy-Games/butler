@@ -58,12 +58,13 @@ fn paint_segment(color: Hsla, hatched: bool, emphasis: Option<Emphasis>, ds: &Ds
 /// One stacked column in its slot; its segments share its height by value, with no gaps.
 pub(super) fn column(
     column: &Column,
-    height: f32,
+    (motion, timing): (crate::ui::motion::Transition, crate::ui::motion::Timing),
     selected: bool,
     dimmed: bool,
-    (size, emphasis): (Size, Option<Emphasis>),
+    (size, emphasis, plot_h): (Size, Option<Emphasis>, f32),
     ds: &Ds,
 ) -> AnyElement {
+    let height = motion.target();
     let mut stack = div().flex().flex_col_reverse().w_full();
     let mut stack_h = 0.;
     let count = column.segments.len();
@@ -101,11 +102,18 @@ pub(super) fn column(
     if dimmed && !selected {
         col = col.opacity(DIM);
     }
+    let clip = |height: f32| gpui::Edges {
+        top: px(plot_h - height),
+        ..Default::default()
+    };
+    let mut layer = motion.motion(&timing);
+    layer.clip = Some((clip(motion.from), clip(motion.to)));
     div()
         .flex()
         .flex_1()
         .min_w_0()
         .h_full()
+        .motion(layer)
         .items_end()
         .justify_center()
         .px(px(1.))

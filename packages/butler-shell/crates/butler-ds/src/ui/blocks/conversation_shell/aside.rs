@@ -9,9 +9,9 @@ use gpui::{
 use std::rc::Rc;
 
 use crate::tokens::{Duration as DsDuration, Easing, Length};
-use crate::ui::blocks::anim::ramp;
 use crate::ui::context::Ds;
-use crate::ui::motion::Timing;
+use crate::ui::liquid_glass::{Presence, with_presence};
+use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::scroll::engine::{self, Axis, Config};
 use crate::ui::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
 
@@ -143,7 +143,7 @@ fn panel(
     (layout, on): (AsideLayout, bool),
     ds: &Ds,
     scroller: AnyElement,
-    (shell_w, shell_h, alpha): (f32, f32, f32),
+    (shell_w, shell_h, alpha): (f32, f32, Presence),
 ) -> AnyElement {
     let mut aside = div().absolute().flex().flex_col().min_h_0();
     // The open aside takes the pointer over the conversation under it, as the topmost DOM box
@@ -183,20 +183,20 @@ fn panel(
 
 /// The glass is the floating aside's only surface: it fills the panel, its scroller inside.
 /// `alpha` is its presence: the glass materializes with it and only the content fades.
-fn floating_glass(scroller: AnyElement, (height, alpha): (f32, f32)) -> AnyElement {
+fn floating_glass(scroller: AnyElement, (height, alpha): (f32, Presence)) -> AnyElement {
     div()
         .size_full()
         .flex()
         .flex_col()
         .min_h_0()
-        .child(
+        .child(with_presence(
+            alpha,
             TintedGlass::new()
                 .radius(GlassRadius::Popover)
                 .padding(GlassPadding::None)
                 .height(px(height))
-                .presence(alpha)
                 .child(div().flex().flex_col().h_full().min_h_0().child(scroller)),
-        )
+        ))
         .into_any_element()
 }
 
@@ -221,27 +221,46 @@ fn layer(
         Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate)
     };
     let name = SharedString::from(format!("aside-fade-{layout:?}"));
-    let alpha = ramp(
+    let alpha = transition(
         (slot.id.clone(), name),
         (f32::from(u8::from(on)), false),
         &timing,
         window,
         cx,
     );
-    let content = kept.read(cx).clone().filter(|_| alpha > 0.001)?;
+    let content = kept
+        .read(cx)
+        .clone()
+        .filter(|_| alpha.target() > 0. || alpha.moving(&timing))?;
     let scroller = scroll(slot, layout, content(layout), window, cx);
     let panel = panel(
         slot,
         (layout, on),
         Ds::get(cx),
         scroller,
-        (shell.0, shell.1, alpha),
+        (
+            shell.0,
+            shell.1,
+            Presence::Moving {
+                from: alpha.from,
+                to: alpha.to,
+                start_ms: alpha.start_ms,
+                timing,
+            },
+        ),
     );
     let layer = div().absolute().top_0().left_0().size_full();
     // The floating glass takes `alpha` as its presence (LG research §5 Appear/disappear): the
     // docked aside has no glass and fades whole.
     let layer = match layout {
-        AsideLayout::Docked => layer.opacity(alpha),
+        AsideLayout::Docked => alpha.apply(
+            layer,
+            &timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
+        ),
         AsideLayout::Floating => layer,
     };
     Some(layer.child(panel).into_any_element())

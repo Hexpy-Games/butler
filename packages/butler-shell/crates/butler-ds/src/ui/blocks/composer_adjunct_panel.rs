@@ -10,11 +10,11 @@ use gpui::{
 
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::Icon;
-use crate::ui::blocks::{anim, scope};
+use crate::ui::blocks::scope;
 use crate::ui::collapsible::{Collapsible, KeepMounted};
 use crate::ui::context::Ds;
 use crate::ui::icon::icon_px;
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, Transition, transition};
 use crate::ui::strut;
 use crate::ui::typo::{Tone, Typo};
 
@@ -84,14 +84,15 @@ impl RenderOnce for ComposerAdjunctPanel {
         let default = self.default_collapsed;
         let state = window.use_keyed_state((self.id.clone(), "collapsed"), cx, move |_, _| default);
         let collapsed = *state.read(cx);
-        let turned = anim::ramp(
+        let timing = Timing::token(
+            Ds::get(cx),
+            DsDuration::MotionBase,
+            Easing::MotionEaseStandard,
+        );
+        let turned = transition(
             (self.id.clone(), "chevron"),
             (if collapsed { 1. } else { 0. }, false),
-            &Timing::token(
-                Ds::get(cx),
-                DsDuration::MotionBase,
-                Easing::MotionEaseStandard,
-            ),
+            &timing,
             window,
             cx,
         );
@@ -112,7 +113,7 @@ impl RenderOnce for ComposerAdjunctPanel {
                 heading: self.heading,
                 icon: self.icon,
                 summary: self.summary.filter(|_| collapsed),
-                turned,
+                turned: (turned, timing),
                 padding: (inline, top),
             };
             header(parts, &state, ds)
@@ -138,7 +139,7 @@ struct Header {
     icon: Option<AnyElement>,
     summary: Option<SharedString>,
     /// How far the chevron has turned toward collapsed, 0 to 1.
-    turned: f32,
+    turned: (Transition, Timing),
     /// The inline and block padding.
     padding: (Pixels, Pixels),
 }
@@ -168,8 +169,22 @@ fn header(parts: Header, state: &gpui::Entity<bool>, ds: &Ds) -> gpui::Stateful<
         ))
     });
     let chevron = slot(
-        icon_px(Icon::ChevronDown, ds.len(Length::IconSizeSm))
-            .turned(-std::f32::consts::FRAC_PI_2 * parts.turned),
+        parts.turned.0.apply(
+            div().child(
+                icon_px(Icon::ChevronDown, ds.len(Length::IconSizeSm)).turned(
+                    if parts.turned.0.moving(&parts.turned.1) {
+                        0.
+                    } else {
+                        -std::f32::consts::FRAC_PI_2 * parts.turned.0.target()
+                    },
+                ),
+            ),
+            &parts.turned.1,
+            &Props {
+                rotation: Some((0., -std::f32::consts::FRAC_PI_2)),
+                ..Default::default()
+            },
+        ),
         ds,
     );
     let on = state.clone();

@@ -14,10 +14,9 @@ use gpui::{
 use super::overlay::{label_height, outside_label};
 use super::{NavDropPosition, NavDropTarget};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
-use crate::ui::blocks::anim::ramp;
 use crate::ui::context::Ds;
 use crate::ui::convert;
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, Transition, transition};
 use crate::ui::typo::{Tone, Typo};
 
 pub(super) type Boxes = Rc<RefCell<HashMap<SharedString, Bounds<Pixels>>>>;
@@ -32,7 +31,13 @@ pub(super) struct Slot {
 }
 
 /// The accent fade-in of an indicator: `fade-in`/`indicator-in` over the token timing.
-fn fade(id: ElementId, on: bool, fast: bool, window: &mut Window, cx: &mut App) -> f32 {
+fn fade(
+    id: ElementId,
+    on: bool,
+    fast: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> (Transition, Timing) {
     let (timing, jump) = {
         let ds = Ds::get(cx);
         let duration = if fast {
@@ -45,7 +50,10 @@ fn fade(id: ElementId, on: bool, fast: bool, window: &mut Window, cx: &mut App) 
             ds.reduced_motion(),
         )
     };
-    ramp(id, (f32::from(u8::from(on)), jump), &timing, window, cx)
+    (
+        transition(id, (f32::from(u8::from(on)), jump), &timing, window, cx),
+        timing,
+    )
 }
 
 /// Calls the row's `on_dwell` once after a drag has rested on it for `dwell`.
@@ -74,7 +82,7 @@ fn dwell(target: &NavDropTarget, id: &ElementId, window: &mut Window, cx: &mut A
 }
 
 /// A line centred in the slot: `before` above the row, `after` below it.
-fn slot_line(position: NavDropPosition, slot: Slot, opacity: f32, ds: &Ds) -> Div {
+fn slot_line(position: NavDropPosition, slot: Slot, opacity: (Transition, Timing), ds: &Ds) -> Div {
     let stroke = f32::from(ds.len(Length::BorderWidthStrong));
     let line = div()
         .absolute()
@@ -82,8 +90,15 @@ fn slot_line(position: NavDropPosition, slot: Slot, opacity: f32, ds: &Ds) -> Di
         .right(ds.len(Length::SpaceXs))
         .h(px(stroke))
         .rounded(ds.len(Length::RadiusPill))
-        .bg(ds.color(Color::Accent))
-        .opacity(opacity);
+        .bg(ds.color(Color::Accent));
+    let line = opacity.0.apply(
+        line,
+        &opacity.1,
+        &Props {
+            opacity: Some((0., 1.)),
+            ..Default::default()
+        },
+    );
     if position == NavDropPosition::Before {
         line.top(px(-(slot.gap + slot.spacing + stroke) / 2.))
     } else {
@@ -93,7 +108,7 @@ fn slot_line(position: NavDropPosition, slot: Slot, opacity: f32, ds: &Ds) -> Di
 }
 
 /// The inset ring and tint over the target header (`inside`, `group`, `outside`).
-fn ring(box_: (f32, f32), (invalid, opacity): (bool, f32), ds: &Ds) -> Div {
+fn ring(box_: (f32, f32), (invalid, opacity): (bool, (Transition, Timing)), ds: &Ds) -> Div {
     let stroke = ds.len(Length::BorderWidthStrong);
     let accent = ds.color(Color::Accent);
     let ring = div()
@@ -103,8 +118,15 @@ fn ring(box_: (f32, f32), (invalid, opacity): (bool, f32), ds: &Ds) -> Div {
         .left_0()
         .right_0()
         .rounded(ds.len(Length::RadiusControl))
-        .opacity(opacity)
         .border(stroke);
+    let ring = opacity.0.apply(
+        ring,
+        &opacity.1,
+        &Props {
+            opacity: Some((0., 1.)),
+            ..Default::default()
+        },
+    );
     if invalid {
         ring.border_dashed()
             .border_color(convert::with_alpha(ds.color(Color::ColorDangerText), 0.7))
@@ -139,7 +161,7 @@ pub(super) struct Ctx<'a> {
 }
 
 /// How far the row has travelled down to open the slot, eased over `--motion-base`.
-fn travelled(id: &ElementId, goal: f32, window: &mut Window, cx: &mut App) -> f32 {
+fn travelled(id: &ElementId, goal: f32, window: &mut Window, cx: &mut App) -> (Transition, Timing) {
     let (timing, jump) = {
         let ds = Ds::get(cx);
         (
@@ -147,11 +169,18 @@ fn travelled(id: &ElementId, goal: f32, window: &mut Window, cx: &mut App) -> f3
             ds.reduced_motion(),
         )
     };
-    ramp((id.clone(), "shift"), (goal, jump), &timing, window, cx)
+    (
+        transition((id.clone(), "shift"), (goal, jump), &timing, window, cx),
+        timing,
+    )
 }
 
 /// The indicators over a row for its drop: the slot line, or the ring (and the group hint).
-fn indicators(target: &NavDropTarget, (ctx, opacity): (&Ctx, f32), ds: &Ds) -> Vec<AnyElement> {
+fn indicators(
+    target: &NavDropTarget,
+    (ctx, opacity): (&Ctx, (Transition, Timing)),
+    ds: &Ds,
+) -> Vec<AnyElement> {
     let Some(position) = target.drop else {
         return Vec::new();
     };
@@ -212,12 +241,18 @@ pub(super) fn render(
     let ds = Ds::get(cx);
     let layers = indicators(&target, (ctx, opacity), ds);
     let anchor = format!("nav-drop:{}", target.key);
-    let mut inner = div()
-        .id(id.clone())
-        .debug_selector(move || anchor.clone())
-        .relative()
-        .top(px(shift))
-        .opacity(if target.dragging { 0.5 } else { 1. }); // DS: NavDropTarget.module.css:25
+    let mut inner = shift.0.apply(
+        div()
+            .id(id.clone())
+            .debug_selector(move || anchor.clone())
+            .relative()
+            .opacity(if target.dragging { 0.5 } else { 1. }),
+        &shift.1,
+        &Props {
+            offset: Some((gpui::point(px(0.), px(0.)), gpui::point(px(0.), px(1.)))),
+            ..Default::default()
+        },
+    ); // DS: NavDropTarget.module.css:25
     for attach in std::mem::take(&mut target.attach) {
         inner = attach(inner);
     }

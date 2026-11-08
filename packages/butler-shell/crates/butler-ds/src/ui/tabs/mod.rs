@@ -19,7 +19,7 @@ pub use list::{ListVariant, TabsList, Trigger};
 use crate::tokens::{Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
 use crate::ui::layout::Space;
-use crate::ui::motion::{Props, Timing, transition};
+use crate::ui::motion::{Props, Timing, keyed};
 use crate::ui::{focus, strut};
 
 type Handler = Rc<dyn Fn(&str, &mut Window, &mut App)>;
@@ -222,7 +222,7 @@ impl Tabs {
         let key = ElementId::from(SharedString::from(format!("{}-enter-{value}", self.id)));
         let rise = px(2.); // DS: Tabs.module.css:231
         Some(
-            transition(key, (1., false), &timing, window, cx)
+            keyed(key, 0., 1., &timing, window, cx)
                 .apply(
                     panel.relative(),
                     &timing,
