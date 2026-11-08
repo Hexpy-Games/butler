@@ -57,7 +57,7 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
     <Stack align="row" cross="center" justify="between" gap="sm">
       <Typo.Caption>{p.state === "applied" ? deletes ? mixedDelete ? copy.changed : copy.deleted : p.resolved_by === null ? copy.record : p.resolved_by === "chat" ? copy.chat : copy.added
         : p.state === "cancelled" ? copy.cancelled : p.state === "superseded" ? copy.superseded : copy.stale}</Typo.Caption>
-      {p.state === "applied" && <ButtonContainer size="sm" justify="end"><Button size="sm" variant="link" onClick={open}>{copy.open}</Button></ButtonContainer>}
+      {p.state === "applied" && <ButtonContainer size="sm" justify="end"><Button size="sm" variant="outline" onClick={open}>{copy.open}</Button></ButtonContainer>}
     </Stack>
   </Card>
     {p.state === "applied" && "id" in p.project && p.project.id && created.length > 0 && <ChatEpicCards projectId={p.project.id} ids={created} />}

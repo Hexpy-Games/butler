@@ -13,7 +13,7 @@ import type {
 import { ProjectDashboardHeader } from "./ProjectDashboardHeader.tsx";
 import { ProjectDocumentDialog } from "./ProjectDocumentDialog.tsx";
 import { ProjectDashboardComposer } from "./ProjectDashboardComposer.tsx";
-import { useProjectDashboardState } from "@/app/projectDashboardState.ts";
+import { useProjectDashboardState, type ProjectDashboardTab } from "@/app/projectDashboardState.ts";
 import { useComposerStore } from "@/components/conversation/composerStore.ts";
 import { ProjectStatisticsPanel } from "./ProjectStatisticsPanel.tsx";
 import { ProjectOverviewPanel } from "./ProjectOverviewPanel.tsx";
@@ -56,7 +56,7 @@ export function ProjectDashboardView({
   const tab = useProjectDashboardState((state) => project ? state.projects[project.id]?.tab ?? "overview" : "overview");
   const scrollRef = useProjectDashboardScroll(project?.id, tab);
   const updateDashboardState = useProjectDashboardState((state) => state.update);
-  const setTab = (tab: string) => { if (project) updateDashboardState(project.id, { tab }); };
+  const setTab = (tab: string) => { if (project) updateDashboardState(project.id, { tab: tab as ProjectDashboardTab }); };
   const selectionEpoch = useRef(0);
   const attachArtifact = useProjectArtifactAttachment(project?.id);
   const { background, onColumnRect, onComposerRect } = useProjectDashboardBackground(project);
