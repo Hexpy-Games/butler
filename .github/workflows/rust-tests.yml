@@ -180,6 +180,7 @@ jobs:
               smoke sidebar-drag-scroll
               smoke sidebar-add-menu-smoke
               smoke settings-bugs-smoke
+              smoke settings-image-key-smoke
               smoke app-usage-subtask-share-smoke
               smoke app-delegated-work-smoke
               smoke answer-blocks-ui
