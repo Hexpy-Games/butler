@@ -13,7 +13,13 @@ async fn model_facing_prompts_carry_no_handback_rules() -> Result<(), HarnessErr
     )?)?;
     for (key, text) in &prefixes {
         assert_no_handback(key, text);
-        if key.starts_with("legacy|") {
+        if key.starts_with("legacy|")
+            || key.starts_with("delegated|steward|")
+            || matches!(
+                key.as_str(),
+                "phase_minimal|butler|execution" | "phase_minimal|butler|read_only"
+            )
+        {
             assert!(
                 text.contains("else best judgment and why"),
                 "{key} lacks judgment"
@@ -34,9 +40,6 @@ async fn model_facing_prompts_carry_no_handback_rules() -> Result<(), HarnessErr
         root.join("crates/butler-runtime/src/capabilities/catalog/catalog.json"),
     )?)?;
     descriptions(&catalog);
-    for tool in catalog["tools"].as_array().into_iter().flatten() {
-        role_texts("catalog roleText", &tool["roleText"]);
-    }
     for entry in std::fs::read_dir(root.join("../resources/prompts"))? {
         let path = entry?.path();
         if path.extension().is_some_and(|ext| ext == "md") {
@@ -67,14 +70,6 @@ fn descriptions(value: &Value) {
             }
         }
         Value::Array(items) => items.iter().for_each(descriptions),
-        _ => {}
-    }
-}
-
-fn role_texts(source: &str, value: &Value) {
-    match value {
-        Value::String(text) => assert_no_handback(source, text),
-        Value::Object(fields) => fields.values().for_each(|value| role_texts(source, value)),
         _ => {}
     }
 }

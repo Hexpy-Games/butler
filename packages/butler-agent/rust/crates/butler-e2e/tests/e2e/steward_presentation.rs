@@ -82,7 +82,6 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     );
     intent::assert_intent_carried(&script.requests.lock().unwrap());
     intent::assert_packet_stated_once(&script.requests.lock().unwrap());
-    intent::assert_role_tool_text(&script.requests.lock().unwrap());
     files::assert_delegated_files(&s).await?;
     assert_sidebar_work(&s, false).await?;
     let activity = s.gw.get("/worker-activity?include_history=true").await?;

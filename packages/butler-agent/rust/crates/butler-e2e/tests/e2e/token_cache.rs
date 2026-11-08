@@ -175,7 +175,7 @@ async fn independent_bookkeeping_shares_one_round_without_optional_records()
         requests[0]["instructions"]
             .as_str()
             .unwrap()
-            .contains("Make independent tool calls together in one round")
+            .contains("Batch independent bookkeeping calls in one native tool round")
     );
     let metrics = super::token_metrics::report(&s, &requests, "Batched Work replay")?;
     assert_eq!(

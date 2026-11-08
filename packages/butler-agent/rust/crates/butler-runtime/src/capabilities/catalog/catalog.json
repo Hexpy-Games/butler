@@ -80,14 +80,14 @@
       "definition": {
         "type": "function",
         "name": "web_search",
-        "description": "Find pages on the public web: the first step of any research, current or external information, or answers that need sources. Each result has an id and a url. Plan several focused searches. For broad research, search without a domain filter first; if a filtered or source-specific search is empty or blocked, broaden the query or use another accessible authoritative or reputable source.",
+        "description": "Find pages on the public web: the first step of any research, current or external information, or answers that need sources. Each result has an id and a url. Butler may plan several focused searches. For broad research, search without a domain filter first; if a filtered or source-specific search is empty or blocked, broaden the query or use another accessible authoritative or reputable source.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "query": {
               "type": "string",
-              "description": "Search request or missing evidence. For broad research, plan diverse sources instead of narrowing every search to a few sites."
+              "description": "Search request or missing evidence. For broad research, let Butler plan diverse sources instead of narrowing every search to a few sites."
             },
             "allowed_domains": {
               "type": "array",
@@ -4691,7 +4691,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_steward",
-        "description": "Hand work to a Steward, who plans it, runs Workers and reports back while you stay available to the user; your route rules say which work to hand over. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also receives the user's message verbatim, project context and bounded conversation. Write request as your reading of the message, in the user's scope and output form, adding no format they did not ask for. safe_title is optional and defaults to the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id instead of asking the user to restart. When a result hands back capability_unavailable_in_child, finish its requested_action in that result Turn with your own tools and normal approval, or grant the tool when you delegate again; the user never handles it.",
+        "description": "Hand work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Your instructions say what else to delegate and what to keep yourself. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also gets the user's message verbatim, project context and bounded conversation; write request as your reading of it, in the user's scope and output form, adding no format they did not ask for. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4723,7 +4723,7 @@
             },
             "previous_relation_id": {
               "type": "string",
-              "description": "A closed Steward relation from this chat. Its prior request and results attach as context; the new request and current authority govern."
+              "description": "Closed Steward relation from this parent chat. Runtime attaches its prior request and results as context, preserving the new request and current authority."
             }
           },
           "required": [
@@ -4749,7 +4749,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_worker",
-        "description": "Assign one action of your accepted Plan to a Worker as a Task, with its own scope, inputs, return contract and a compact implementation brief. Split actions into Tasks that do not overlap, each owning its subjects and aspects or its files, with the results it builds on as inputs and what it returns; on overlap, merge, narrow or wait, and say why. To replace a running Worker while keeping its scope, pass replaces_relation_id.",
+        "description": "Assign one Task of your accepted Plan to a Worker, with its own scope, inputs, return contract and a compact implementation brief. Split the work in the Plan so each Worker gets a distinct part. Integrate, review, validate and report their results. To replace a running Worker while retaining its scope, pass replaces_relation_id.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4772,13 +4772,13 @@
                 "maxLength": 500
               },
               "maxItems": 8,
-              "description": "Observable outcomes for this Worker's output only, never a request to list limits or unverified items. Project Ledger updates and whole-Work integration checks stay with you."
+              "description": "Observable outcomes for this Worker's assigned output only, never a request to list limits or unverified items. Steward retains Project Ledger updates and whole-Work integration checks."
             },
             "implementation_brief": {
               "type": "string",
               "minLength": 1,
               "maxLength": 6000,
-              "description": "Relevant code, current state, constraints, and the contents of the applicable Spec/Plan decisions you have read; a reference alone does not give the Worker their contents."
+              "description": "Relevant code, current state, constraints, and the contents of applicable Spec/Plan decisions already read by Steward. References alone do not supply their contents."
             },
             "safe_title": {
               "type": "string",
@@ -4929,7 +4929,7 @@
       "definition": {
         "type": "function",
         "name": "steer_steward",
-        "description": "Queue an instruction for an active Steward; it applies at the next safe boundary in the same relation and Work. A queued instruction is not a completed one: report completion only from the Steward's result. With several active Stewards, pass the exact relation_id or safe_title; an ambiguous target is refused. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened: on delegated_session_closed, start new work in this same turn with delegate_to_steward and previous_relation_id, which opens a new card.",
+        "description": "Queue an instruction for delegated work by default. Set mode=steer only for an immediate correction to a currently running child turn. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened. If delegated_session_closed is returned, start new work in this same turn with delegate_to_steward(previous_relation_id) for a Steward, or delegate_to_worker for a Worker. The new assignment gets a new card. Queued is not completed.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4961,7 +4961,7 @@
                 "queue",
                 "steer"
               ],
-              "description": "queue (default), or steer for an immediate correction while the Steward's turn is running."
+              "description": "Default: queue. Immediate steer requires a running turn."
             }
           },
           "required": [
@@ -4987,7 +4987,7 @@
       "definition": {
         "type": "function",
         "name": "steer_worker",
-        "description": "Queue an instruction for an active Worker; it applies at the Worker's next safe boundary. A queued instruction is not a completed one. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened: on delegated_session_closed, assign the work again with delegate_to_worker, which opens a new card.",
+        "description": "Queue an instruction for delegated work by default. Set mode=steer only for an immediate correction to a currently running child turn. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened. If delegated_session_closed is returned, start new work in this same turn with delegate_to_steward(previous_relation_id) for a Steward, or delegate_to_worker for a Worker. The new assignment gets a new card. Queued is not completed.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5013,7 +5013,7 @@
                 "queue",
                 "steer"
               ],
-              "description": "queue (default), or steer for an immediate correction while the Worker's turn is running."
+              "description": "Default: queue. Immediate steer requires a running turn."
             }
           },
           "required": [
@@ -5039,7 +5039,7 @@
       "definition": {
         "type": "function",
         "name": "wait_for_worker",
-        "description": "Suspend until a Worker result or direction arrives; results resume this same Work. Call it once your Worker assignments or steering are done. Waiting neither finishes the Work nor sends your report. If no Worker is active, it returns at once; handle the available results.",
+        "description": "Suspend this Steward execution until a Worker result or direction arrives. Use after Worker assignment or steering is finished; do not execute independently while Workers are outstanding. This does not finish the Work or report to Butler. If no Worker is active, continue and handle available results.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5088,7 +5088,7 @@
       "definition": {
         "type": "function",
         "name": "cancel_steward",
-        "description": "Stop one active Steward relation through the durable cancel_turn queue. Pass relation_id when more than one Steward is active. A fresh retry of the same objective needs the prior relation to have ended.",
+        "description": "Stop one active Steward relation through the existing durable cancel_turn queue. Provide relation_id when more than one Steward is active.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5181,7 +5181,7 @@
       "definition": {
         "type": "function",
         "name": "replace_work_plan",
-        "description": "Open or revise the Plan for the Work that start_work or continue_work selected. Call start_work or continue_work first, since ordinary tools never select Work. A revision may start from any stage without a prior result Review; keep completed action keys and their results. Keep objective as the overall multi-Turn user outcome, and put the current milestone in actions and checkpoints. Use start_new only as a compatibility translation for older callers that cannot use start_work. Skip a Plan for simple conversation, stable knowledge or a single read-only lookup.",
+        "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Choose execution_mode during planning: Butler uses direct only for one small action that needs a Work binding for its effect approval, and hands substantial work to delegate_to_steward, which records its own Plan; Steward uses workers when actions can run in parallel or any action is long, otherwise direct; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single read-only lookup. A Steward records its Plan here before its first change.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5212,7 +5212,7 @@
                 "steward",
                 "workers"
               ],
-              "description": "Who executes the actions: direct = you, steward = a Steward (delegate_to_steward records this itself), workers = your Workers through delegate_to_worker. Keep completed action keys when you change who executes them."
+              "description": "Who executes Plan actions: direct = this role, steward = a Steward executes (delegate_to_steward records this itself), workers = Steward delegates to Workers. Preserve completed action keys when revising ownership on an existing Plan."
             },
             "actions": {
               "type": "array",
@@ -5273,7 +5273,7 @@
                 "minLength": 1
               },
               "default": [],
-              "description": "Outcomes the delivered result must show, each observable with a tool before you report (a produced page or chart viewed as the user will see it, a change seen working). Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Write outcomes, not report contents: never a check to list caveats or unverified items. Result and completion reviews test the result against them."
+              "description": "Outcomes the delivered result must show, each observable with a tool before reporting (a produced page or chart viewed as the user will see it, a change seen working). Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Write outcomes, not report contents: never a check to list caveats or unverified items. Result and completion reviews test the result against them."
             },
             "presentation": {
               "type": "array",
@@ -5338,24 +5338,6 @@
             "execution_mode",
             "actions"
           ]
-        }
-      },
-      "roleText": {
-        "steward": {
-          "description": "Record your Plan here before your first change: until its Plan Review is accepted, the runtime refuses every change (files, documents, artifacts, commands with effects, publishing, Worker assignments), though reads may come first.",
-          "parameters": {
-            "execution_mode": "Who executes the actions. workers: your Workers, through delegate_to_worker; choose it when two or more actions can run independently or any action is long (research across several sources, a multi-file change, a long build or test run). direct: you; choose it only when every action is short and depends on the previous one, or no suitable Worker exists, and say why in the Plan. Keep completed action keys when you change who executes them."
-          }
-        },
-        "butler": {
-          "parameters": {
-            "execution_mode": "Who executes the actions. direct: you do, for one small action that needs a Work for its effect approval. steward: a Steward does; delegate_to_steward records this itself, so hand substantial work there instead of planning it here. Keep completed action keys when you change who executes them."
-          }
-        },
-        "worker": {
-          "parameters": {
-            "execution_mode": "Who executes the actions: direct, meaning you."
-          }
         }
       },
       "effectBoundary": "durable_work",
@@ -5433,7 +5415,7 @@
       "definition": {
         "type": "function",
         "name": "record_work_review",
-        "description": "Record a concise Plan Review, or optionally a result Review or whole-Work completion Validation, with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Result Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Accept a usable result once no remaining gap that matters can be closed with tools; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
+        "description": "Record a concise Plan Review, or optionally a result Review or whole-Work completion Validation, with the current action progress. A Steward's accepted Plan Review is required before its first change. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Result Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Accept a usable result once no remaining gap that matters can be closed with tools; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5514,14 +5496,6 @@
           ]
         }
       },
-      "roleText": {
-        "butler": {
-          "description": "Checkpoints/result Reviews require milestones, recovery or quality decisions."
-        },
-        "steward": {
-          "description": "Checkpoints/result Reviews require milestones, recovery or quality decisions."
-        }
-      },
       "effectBoundary": "durable_work",
       "category": "work",
       "tags": [],
@@ -5532,7 +5506,7 @@
       "definition": {
         "type": "function",
         "name": "record_work_disposition",
-        "description": "Atomically settle the exact bound Work. Completed requires all Plan actions done or skipped, no remaining actions, eligible evidence and no unresolved or in-flight effects. Open saves progress and needs remaining actions or a next_condition; blocked needs a concrete next_condition. The runtime settles Work without a Plan or Review so interrupted work can always close; that is a recovery allowance, not a reason to skip planning.",
+        "description": "Atomically settle the exact bound Work. Completed requires all Plan actions done/skipped, no remaining actions, eligible evidence, no unresolved/in-flight effects. Open saves progress; delegated sessions continue actionable work with wait/approval. Open needs remaining actions or next_condition; blocked needs a concrete next_condition. The runtime settles Work without a Plan or Review so interrupted work can always close; this is a recovery allowance, not a reason to skip planning. Missing child tool: blocked capability_handoff (capability_unavailable_in_child, requested_action tool_name/arguments); parent completes, never user homework.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -5644,14 +5618,6 @@
             "disposition",
             "summary"
           ]
-        }
-      },
-      "roleText": {
-        "steward": {
-          "description": "This is the only way your assignment closes. Open keeps the same assignment going while actionable work remains (waiting for Workers or an approval); completed, or genuinely blocked, ends it and carries your full report to Butler."
-        },
-        "worker": {
-          "description": "Open keeps the same assignment going while actionable work remains; completed or blocked ends it and carries your report to the Steward."
         }
       },
       "effectBoundary": "durable_work",
@@ -6955,7 +6921,7 @@
       "definition": {
         "type": "function",
         "name": "browser_screenshot",
-        "description": "Attach visuals when the answer is about visual things; capture the visible result and attach its JPEG to the reply. Crop to the requested content: pass ref, or region [x,y,width,height] in the observation's screenshot coordinates (capture_regions lists measured candidates; DOM rects are CSS pixels, scale them by image_geometry). A whole-viewport region is refused as region_is_viewport; omit region only when the user asked for the whole view. Review the returned pixels and untrusted_content.fields before replying; recapture if anything is cut off or wrong. Show it inline with ![caption](exact returned artifact path).",
+        "description": "Attach visuals when the answer is about visual things; capture the visible result and attach its JPEG to the reply. Crop to the requested content: pass ref, or region [x,y,width,height] in the observation's screenshot coordinates (capture_regions lists measured candidates; DOM rects are CSS pixels, scale them by image_geometry). A whole-viewport region is refused as region_is_viewport; omit region only when the user asked for the whole view. Review the returned pixels and untrusted_content.fields before replying; recapture if anything is cut off or wrong. Show it inline with ![caption](exact returned artifact path) and pass that exact path to a delegated parent.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -6990,14 +6956,6 @@
         "concurrencySafe": false,
         "interruptBehavior": "continue",
         "transcriptVisibility": "visible"
-      },
-      "roleText": {
-        "steward": {
-          "description": "Pass that exact path in your report."
-        },
-        "worker": {
-          "description": "Pass that exact path in your report."
-        }
       },
       "effectBoundary": "none",
       "category": "control",
@@ -7968,7 +7926,7 @@
       "definition": {
         "type": "function",
         "name": "canon_queue",
-        "description": "Runs canon epics one after another in this conversation, each step in its own Turn and Work, which may delegate it. Use it, not one delegate_to_steward call, when the user asks for several epics or a whole plan; never merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id alone now; after puts it in the step following target_epic_id; together runs it in target_epic_id's step; remove takes out a waiting epic. For chosen epics, start_now the first, then after for each next. set_order sends the whole order of a run's unfinished steps; pinned steps at the front may be left out. When a plan run note is shown, pass its Revision as run_revision; the note always shows the current queue, and a stale run_revision is refused. With no note there is no run yet: leave run_revision out. No approval card is needed; read-only refuses it. A held_elsewhere result offers the user a choice; never take another conversation's epic without it.",
+        "description": "Runs canon epics one after another in this conversation, each step in its own Butler Turn and Work, which may delegate it. Use it, not one delegate_to_steward call, when the user asks for several epics or a whole plan; never merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id alone now; after puts it in the step following target_epic_id; together runs it in target_epic_id's step; remove takes out a waiting epic. For chosen epics, start_now the first, then after for each next. set_order sends the whole order of a run's unfinished steps; pinned steps at the front may be left out. When a plan run note is shown, pass its Revision as run_revision; the note always shows the current queue, and a stale run_revision is refused. With no note there is no run yet: leave run_revision out. No approval card is needed; read-only refuses it. A held_elsewhere result offers the user a choice; never take another conversation's epic without it.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -8826,7 +8784,7 @@
     "replace_work_plan": {
       "type": "function",
       "name": "replace_work_plan",
-      "description": "Open or revise the Plan for the Work that start_work or continue_work selected. Call start_work or continue_work first, since ordinary tools never select Work. A revision may start from any stage without a prior result Review; keep completed action keys and their results. Keep objective as the overall multi-Turn user outcome, and put the current milestone in actions and checkpoints. Use start_new only as a compatibility translation for older callers that cannot use start_work. Skip a Plan for simple conversation, stable knowledge or a single read-only lookup.",
+      "description": "Open or revise the Plan for the Work explicitly selected by start_work or continue_work. Revision starts planning from any current stage without a prior result review; retain completed action keys and results. Use start_new only as a compatibility translation when older callers cannot use start_work. Ordinary tools never select Work; choose start_work or continue_work before this Plan operation. Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints. Choose execution_mode during planning: Butler uses direct only for one small action that needs a Work binding for its effect approval, and hands substantial work to delegate_to_steward, which records its own Plan; Steward uses workers when actions can run in parallel or any action is long, otherwise direct; Worker uses direct. Planning, management, integration, review, validation, and reporting stay with the current role. Do not use this for simple conversation, stable knowledge, or a single read-only lookup. A Steward records its Plan here before its first change.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -8857,7 +8815,7 @@
               "steward",
               "workers"
             ],
-            "description": "Who executes the actions: direct = you, steward = a Steward (delegate_to_steward records this itself), workers = your Workers through delegate_to_worker. Keep completed action keys when you change who executes them."
+            "description": "Who executes Plan actions: direct = this role, steward = a Steward executes (delegate_to_steward records this itself), workers = Steward delegates to Workers. Preserve completed action keys when revising ownership on an existing Plan."
           },
           "actions": {
             "type": "array",
@@ -8897,7 +8855,7 @@
               "minLength": 1
             },
             "default": [],
-            "description": "Outcomes the delivered result must show, each observable with a tool before you report (a produced page or chart viewed as the user will see it, a change seen working). Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Write outcomes, not report contents: never a check to list caveats or unverified items. Result and completion reviews test the result against them."
+            "description": "Outcomes the delivered result must show, each observable with a tool before reporting (a produced page or chart viewed as the user will see it, a change seen working). Make each explicit constraint in the request its own check: a requested count, in the unit the request names and each one distinct; dates or ranges; other stated limits. Write outcomes, not report contents: never a check to list caveats or unverified items. Result and completion reviews test the result against them."
           },
           "presentation": {
             "type": "array",
@@ -9203,7 +9161,7 @@
     "delegate_to_worker": {
       "type": "function",
       "name": "delegate_to_worker",
-      "description": "Assign one action of your accepted Plan to a Worker as a Task, with its own scope, inputs, return contract and a compact implementation brief. Split actions into Tasks that do not overlap, each owning its subjects and aspects or its files, with the results it builds on as inputs and what it returns; on overlap, merge, narrow or wait, and say why. To replace a running Worker while keeping its scope, pass replaces_relation_id.",
+      "description": "Assign one Task of your accepted Plan to a Worker, with its own scope, inputs, return contract and a compact implementation brief. Split the work in the Plan so each Worker gets a distinct part. Integrate, review, validate and report their results. To replace a running Worker while retaining its scope, pass replaces_relation_id.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -9226,13 +9184,13 @@
               "maxLength": 500
             },
             "maxItems": 8,
-            "description": "Observable outcomes for this Worker's output only, never a request to list limits or unverified items. Project Ledger updates and whole-Work integration checks stay with you."
+            "description": "Observable outcomes for this Worker's assigned output only, never a request to list limits or unverified items. Steward retains Project Ledger updates and whole-Work integration checks."
           },
           "implementation_brief": {
             "type": "string",
             "minLength": 1,
             "maxLength": 6000,
-            "description": "Relevant code, current state, constraints, and the contents of the applicable Spec/Plan decisions you have read; a reference alone does not give the Worker their contents."
+            "description": "Relevant code, current state, constraints, and the contents of applicable Spec/Plan decisions already read by Steward. References alone do not supply their contents."
           },
           "safe_title": {
             "type": "string",
@@ -9490,7 +9448,7 @@
     "cancel_steward": {
       "type": "function",
       "name": "cancel_steward",
-      "description": "Stop one active Steward relation through the durable cancel_turn queue. Pass relation_id when more than one Steward is active. A fresh retry of the same objective needs the prior relation to have ended.",
+      "description": "Stop one active Steward relation through the existing durable cancel_turn queue. Provide relation_id when more than one Steward is active.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -9818,7 +9776,7 @@
     "record_work_review": {
       "type": "function",
       "name": "record_work_review",
-      "description": "Record a concise Plan Review, or optionally a result Review or whole-Work completion Validation, with the current action progress. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Result Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Accept a usable result once no remaining gap that matters can be closed with tools; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
+      "description": "Record a concise Plan Review, or optionally a result Review or whole-Work completion Validation, with the current action progress. A Steward's accepted Plan Review is required before its first change. Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review when those quality records are useful. Result and completion test the result against each Plan check and each explicit constraint in the request: a requested count, in the unit the request names and each one distinct, and its dates or limits. One that fails is revise, or partial when it cannot be met; never accept. The runtime derives the fixed graph transition from subject and verdict; never choose a raw stage. For a revised or partial result/completion, use correction_scope only to say whether correction belongs in planning or execution. When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates. The runtime validates only the fixed semantic mapping, known action keys, and durable bindings; it does not judge the Review or Validation meaning. Result Reviews and completion Validation are optional quality records, never completion blockers. They never change Work to completed; record_work_disposition is the sole closeout and Work-status authority. Accept a usable result once no remaining gap that matters can be closed with tools; partial means a material requested outcome remains unfinished. A review records judgment but never replaces real tool evidence.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10422,14 +10380,14 @@
     "web_search": {
       "type": "function",
       "name": "web_search",
-      "description": "Find pages on the public web: the first step of any research, current or external information, or answers that need sources. Each result has an id and a url. Plan several focused searches. For broad research, search without a domain filter first; if a filtered or source-specific search is empty or blocked, broaden the query or use another accessible authoritative or reputable source.",
+      "description": "Find pages on the public web: the first step of any research, current or external information, or answers that need sources. Each result has an id and a url. Butler may plan several focused searches. For broad research, search without a domain filter first; if a filtered or source-specific search is empty or blocked, broaden the query or use another accessible authoritative or reputable source.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "query": {
             "type": "string",
-            "description": "Search request or missing evidence. For broad research, plan diverse sources instead of narrowing every search to a few sites."
+            "description": "Search request or missing evidence. For broad research, let Butler plan diverse sources instead of narrowing every search to a few sites."
           },
           "allowed_domains": {
             "type": "array",
@@ -10718,7 +10676,7 @@
     "delegate_to_steward": {
       "type": "function",
       "name": "delegate_to_steward",
-      "description": "Hand work to a Steward, who plans it, runs Workers and reports back while you stay available to the user; your route rules say which work to hand over. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also receives the user's message verbatim, project context and bounded conversation. Write request as your reading of the message, in the user's scope and output form, adding no format they did not ask for. safe_title is optional and defaults to the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id instead of asking the user to restart. When a result hands back capability_unavailable_in_child, finish its requested_action in that result Turn with your own tools and normal approval, or grant the tool when you delegate again; the user never handles it.",
+      "description": "Hand work to a Steward, who plans it, runs Workers and reports back while you stay available to the user. Use it for research across several sources with a synthesized answer, files, documents or artifacts whose content you must write or produce, work with several parts or phases, and anything you expect to need more than about eight tool calls. Your instructions say what else to delegate and what to keep yourself. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also gets the user's message verbatim, project context and bounded conversation; write request as your reading of it, in the user's scope and output form, adding no format they did not ask for. Optional safe_title; otherwise the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id; do not ask the user to restart.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10750,7 +10708,7 @@
           },
           "previous_relation_id": {
             "type": "string",
-            "description": "A closed Steward relation from this chat. Its prior request and results attach as context; the new request and current authority govern."
+            "description": "Closed Steward relation from this parent chat. Runtime attaches its prior request and results as context, preserving the new request and current authority."
           }
         },
         "required": [
@@ -10978,7 +10936,7 @@
     "record_work_disposition": {
       "type": "function",
       "name": "record_work_disposition",
-      "description": "Atomically settle the exact bound Work. Completed requires all Plan actions done or skipped, no remaining actions, eligible evidence and no unresolved or in-flight effects. Open saves progress and needs remaining actions or a next_condition; blocked needs a concrete next_condition. The runtime settles Work without a Plan or Review so interrupted work can always close; that is a recovery allowance, not a reason to skip planning.",
+      "description": "Atomically settle the bound Work. Settling needs no Plan or Review so interrupted work can always close; this is a recovery allowance, not a reason to skip planning. Completed: all Plan actions done/skipped, none remaining, eligible evidence, no unresolved/in-flight effects. Open: progress plus remaining actions or next_condition; delegated children continue actionable work with wait/approval. Blocked: concrete next_condition. Missing child tool: blocked capability_handoff (capability_unavailable_in_child, requested_action tool_name/arguments); parent completes, never user homework.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -11095,7 +11053,7 @@
     "wait_for_worker": {
       "type": "function",
       "name": "wait_for_worker",
-      "description": "Suspend until a Worker result or direction arrives; results resume this same Work. Call it once your Worker assignments or steering are done. Waiting neither finishes the Work nor sends your report. If no Worker is active, it returns at once; handle the available results.",
+      "description": "Suspend this Steward execution until a Worker result or direction arrives. Use after Worker assignment or steering is finished; do not execute independently while Workers are outstanding. This does not finish the Work or report to Butler. If no Worker is active, continue and handle available results.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -12168,7 +12126,7 @@
     "steer_steward": {
       "type": "function",
       "name": "steer_steward",
-      "description": "Queue an instruction for an active Steward; it applies at the next safe boundary in the same relation and Work. A queued instruction is not a completed one: report completion only from the Steward's result. With several active Stewards, pass the exact relation_id or safe_title; an ambiguous target is refused. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened: on delegated_session_closed, start new work in this same turn with delegate_to_steward and previous_relation_id, which opens a new card.",
+      "description": "Queue an instruction for delegated work by default. Set mode=steer only for an immediate correction to a currently running child turn. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened. If delegated_session_closed is returned, start new work in this same turn with delegate_to_steward(previous_relation_id) for a Steward, or delegate_to_worker for a Worker. The new assignment gets a new card. Queued is not completed.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -12200,7 +12158,7 @@
               "queue",
               "steer"
             ],
-            "description": "queue (default), or steer for an immediate correction while the Steward's turn is running."
+            "description": "Default: queue. Immediate steer requires a running turn."
           }
         },
         "required": [
@@ -12215,7 +12173,7 @@
     "steer_worker": {
       "type": "function",
       "name": "steer_worker",
-      "description": "Queue an instruction for an active Worker; it applies at the Worker's next safe boundary. A queued instruction is not a completed one. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened: on delegated_session_closed, assign the work again with delegate_to_worker, which opens a new card.",
+      "description": "Queue an instruction for delegated work by default. Set mode=steer only for an immediate correction to a currently running child turn. A finished, failed, cancelled or interrupted assignment cannot be steered or reopened. If delegated_session_closed is returned, start new work in this same turn with delegate_to_steward(previous_relation_id) for a Steward, or delegate_to_worker for a Worker. The new assignment gets a new card. Queued is not completed.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -12241,7 +12199,7 @@
               "queue",
               "steer"
             ],
-            "description": "queue (default), or steer for an immediate correction while the Worker's turn is running."
+            "description": "Default: queue. Immediate steer requires a running turn."
           }
         },
         "required": [
@@ -13619,7 +13577,7 @@
     "browser_screenshot": {
       "type": "function",
       "name": "browser_screenshot",
-      "description": "Attach visuals when the answer is about visual things; capture the visible result and attach its JPEG to the reply. Crop to the requested content: pass ref, or region [x,y,width,height] in the observation's screenshot coordinates (capture_regions lists measured candidates; DOM rects are CSS pixels, scale them by image_geometry). A whole-viewport region is refused as region_is_viewport; omit region only when the user asked for the whole view. Review the returned pixels and untrusted_content.fields before replying; recapture if anything is cut off or wrong. Show it inline with ![caption](exact returned artifact path).",
+      "description": "Attach visuals when the answer is about visual things; capture the visible result and attach its JPEG to the reply. Crop to the requested content: pass ref, or region [x,y,width,height] in the observation's screenshot coordinates (capture_regions lists measured candidates; DOM rects are CSS pixels, scale them by image_geometry). A whole-viewport region is refused as region_is_viewport; omit region only when the user asked for the whole view. Review the returned pixels and untrusted_content.fields before replying; recapture if anything is cut off or wrong. Show it inline with ![caption](exact returned artifact path) and pass that exact path to a delegated parent.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -14589,7 +14547,7 @@
     "canon_queue": {
       "type": "function",
       "name": "canon_queue",
-      "description": "Runs canon epics one after another in this conversation, each step in its own Turn and Work, which may delegate it. Use it, not one delegate_to_steward call, when the user asks for several epics or a whole plan; never merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id alone now; after puts it in the step following target_epic_id; together runs it in target_epic_id's step; remove takes out a waiting epic. For chosen epics, start_now the first, then after for each next. set_order sends the whole order of a run's unfinished steps; pinned steps at the front may be left out. When a plan run note is shown, pass its Revision as run_revision; the note always shows the current queue, and a stale run_revision is refused. With no note there is no run yet: leave run_revision out. No approval card is needed; read-only refuses it. A held_elsewhere result offers the user a choice; never take another conversation's epic without it.",
+      "description": "Runs canon epics one after another in this conversation, each step in its own Butler Turn and Work, which may delegate it. Use it, not one delegate_to_steward call, when the user asks for several epics or a whole plan; never merely because an epic is bound or a plan exists. plan_run queues a plan's unfinished epics in canon order. start_now starts epic_id alone now; after puts it in the step following target_epic_id; together runs it in target_epic_id's step; remove takes out a waiting epic. For chosen epics, start_now the first, then after for each next. set_order sends the whole order of a run's unfinished steps; pinned steps at the front may be left out. When a plan run note is shown, pass its Revision as run_revision; the note always shows the current queue, and a stale run_revision is refused. With no note there is no run yet: leave run_revision out. No approval card is needed; read-only refuses it. A held_elsewhere result offers the user a choice; never take another conversation's epic without it.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

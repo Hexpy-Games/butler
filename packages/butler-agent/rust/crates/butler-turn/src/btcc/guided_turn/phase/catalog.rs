@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use super::policy::PolicyRole;
 use crate::btcc::BtccCode;
 use serde::Deserialize;
 use serde_json::Value;
@@ -19,49 +18,6 @@ pub(crate) struct GuidedCatalogTool {
     pub(super) safety_notes: Vec<String>,
     #[serde(default)]
     pub(super) durable: bool,
-    #[serde(default)]
-    pub(super) role_text: HashMap<String, RoleText>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-pub(super) struct RoleText {
-    #[serde(default)]
-    description: Option<String>,
-    #[serde(default)]
-    parameters: HashMap<String, String>,
-}
-
-impl GuidedCatalogTool {
-    /// The catalog's `roleText` adds role-only text to a shared tool definition; it is never sent itself.
-    pub(super) fn definition_for(&self, role: &PolicyRole) -> Value {
-        let key = match role {
-            PolicyRole::Butler => "butler",
-            PolicyRole::Steward => "steward",
-            PolicyRole::Worker => "worker",
-            PolicyRole::Other(_) => return self.definition.clone(),
-        };
-        let mut definition = self.definition.clone();
-        let Some(text) = self.role_text.get(key) else {
-            return definition;
-        };
-        if let Some(extra) = &text.description
-            && let Some(slot) = definition.get_mut("description")
-        {
-            let shared = slot.as_str().unwrap_or_default();
-            *slot = Value::String(format!("{shared} {extra}"));
-        }
-        for (param, description) in &text.parameters {
-            if let Some(property) = definition
-                .get_mut("parameters")
-                .and_then(|parameters| parameters.get_mut("properties"))
-                .and_then(|properties| properties.get_mut(param))
-                .and_then(Value::as_object_mut)
-            {
-                property.insert("description".into(), Value::String(description.clone()));
-            }
-        }
-        definition
-    }
 }
 
 /// Whether project ledger effects are enabled for the session.
