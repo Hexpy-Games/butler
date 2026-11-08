@@ -25,7 +25,7 @@ export function useComposerDecision(isComposing: boolean, enabled = true) {
   const authority = enabled ? activeAuthority : undefined;
   const plan = enabled ? activePlan : undefined;
   let onSubmit: ComposerSubmit = plan?.onSubmitInstruction ?? submit;
-  if (question && question.panel.state !== "collapsed") onSubmit = event => event.preventDefault();
+  if (question?.waiting) onSubmit = event => event.preventDefault();
   if (authority) {
     onSubmit = authority.composingMessage ? submit : (event) => event.preventDefault();
   }
