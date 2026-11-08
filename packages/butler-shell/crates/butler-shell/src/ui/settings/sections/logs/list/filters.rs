@@ -1,5 +1,6 @@
 //! 목록's filters (`LogFilters.tsx`): search, level, source, category, period and the live
 //! switch above the log list.
+use butler_ds::ui::motion;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
@@ -28,7 +29,7 @@ impl LogList {
             return;
         }
         self.search = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(SEARCH_DELAY).await;
+            motion::sleep(cx.background_executor(), SEARCH_DELAY).await;
             let _ = this.update(cx, |list, cx| list.set_filter(|filter| filter.q = text, cx));
         }));
     }

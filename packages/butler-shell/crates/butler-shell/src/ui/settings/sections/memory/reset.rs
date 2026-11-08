@@ -20,6 +20,7 @@ use super::types::{Receipt, newer};
 use super::{MemoryPage, lang, later, with_reason};
 use crate::ui::settings::confirm::{Detail, Request};
 use crate::ui::settings::state::fetch;
+use crate::ui::source::agent::Jobs;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ResetKind {
@@ -114,17 +115,27 @@ impl MemoryPage {
         };
         self.reset.polling = true;
         later(cx, move |_, cx| {
-            fetch(
-                cx,
-                move |client| async move { client.get_memory_reset(&id).await },
-                |this: &mut Self, result: Result<Receipt, Error>, cx| {
+            let request = Jobs::run(cx, move |client| async move {
+                client.get_memory_reset(&id).await
+            });
+            cx.spawn(async move |this, cx| {
+                let next = request
+                    .await
+                    .and_then(Result::ok)
+                    .and_then(|value| serde_json::from_value::<Receipt>(value).ok());
+                let _ = this.update(cx, |this, cx| {
                     this.reset.polling = false;
-                    if let Ok(next) = result {
+                    let previous = this.reset.receipt.clone();
+                    if let Some(next) = next {
                         this.accept_reset(next, true, cx);
                     }
+                    if this.reset.receipt != previous {
+                        cx.notify();
+                    }
                     this.poll_reset(cx);
-                },
-            );
+                });
+            })
+            .detach();
         });
     }
 

@@ -1,5 +1,6 @@
 //! WorkerActivityRow.showcase.tsx: a worker that completes (the success pulse), and a running one
 //! with a stop action.
+use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_ds::ui::Icon;
@@ -78,8 +79,14 @@ fn completes(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let done = replayed
         .read(cx)
         .is_some_and(|at| now.saturating_duration_since(at) >= COMPLETES_AFTER);
-    if replayed.read(cx).is_some() && !done {
-        window.request_animation_frame();
+    if let Some(at) = *replayed.read(cx)
+        && !done
+    {
+        motion::wake_after(
+            window,
+            cx,
+            COMPLETES_AFTER.saturating_sub(now.saturating_duration_since(at)),
+        );
     }
     let ds = Ds::get(cx);
     let glyph = if done {

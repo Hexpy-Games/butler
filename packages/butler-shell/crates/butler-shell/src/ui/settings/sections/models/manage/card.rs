@@ -3,6 +3,7 @@
 //! at the agent flow's `auth_url`; the card then polls the flow until the browser finishes.
 //! F4: React also re-reads the account on window focus and on `setup.chatgpt_account_changed`;
 //! here it reads on open and after its own actions.
+use butler_ds::ui::motion;
 use std::time::{Duration, Instant};
 
 use butler_ds::ui::blocks::notice::{Notice, NoticeTone};
@@ -24,6 +25,7 @@ use crate::ui::Icon;
 use crate::ui::settings::SectionCtx;
 use crate::ui::settings::controls::provider_mark;
 use crate::ui::settings::state::fetch;
+use crate::ui::source::agent::Jobs;
 
 const POLL: Duration = Duration::from_secs(1); // useSignIn.ts SIGN_IN_POLL_MS
 const TIMEOUT: Duration = Duration::from_mins(5); // useSignIn.ts SIGN_IN_TIMEOUT_MS
@@ -41,7 +43,7 @@ enum Phase {
 }
 
 /// `OpenAIOAuthLoginResult`, merged over the flow's earlier answers.
-#[derive(Clone, Default, Deserialize)]
+#[derive(Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 struct SignInFlow {
     flow_id: Option<String>,
@@ -206,7 +208,7 @@ impl ChatGptCard {
 
     fn schedule_poll(id: u64, started: Instant, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(POLL).await;
+            motion::sleep(cx.background_executor(), POLL).await;
             let _ = this.update(cx, |this, cx| this.poll(id, started, cx));
         })
         .detach();
@@ -224,18 +226,25 @@ impl ChatGptCard {
         let Some(flow_id) = self.flow.as_ref().and_then(|flow| flow.flow_id.clone()) else {
             return;
         };
-        fetch(
-            cx,
-            move |client| async move { client.get_setup_oauth_flow(&flow_id).await },
-            move |this: &mut Self, result: Result<SignInFlow, Error>, cx| {
-                if let Ok(flow) = result {
+        let request = Jobs::run(cx, move |client| async move {
+            client.get_setup_oauth_flow(&flow_id).await
+        });
+        cx.spawn(async move |this, cx| {
+            let result = request.await.and_then(Result::ok);
+            let _ = this.update(cx, move |this, cx| {
+                let previous = (this.phase, this.flow.clone());
+                if let Some(flow) = result.and_then(|value| serde_json::from_value(value).ok()) {
                     this.settle(id, flow, cx);
+                }
+                if previous != (this.phase, this.flow.clone()) {
+                    cx.notify();
                 }
                 if this.run == id && this.phase == Phase::Waiting {
                     Self::schedule_poll(id, started, cx);
                 }
-            },
-        );
+            });
+        })
+        .detach();
     }
 
     /// `cancel`: a cancel that lands after the code exchange answers `completed`, and the

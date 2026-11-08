@@ -283,6 +283,12 @@ pub fn live_fallback_frame(window: &mut Window) {
     window.request_animation_frame();
 }
 
+/// For delays, debounces and data polls. Never animate with it; motion goes through
+/// `LayerMotion`. A poll notifies only when the fetched value changed.
+pub async fn sleep(executor: &gpui::BackgroundExecutor, duration: Duration) {
+    executor.timer(duration).await;
+}
+
 /// Runs a one-shot callback after `after`; use for delayed intent, dismissal or completion.
 pub fn delay(
     window: &mut Window,

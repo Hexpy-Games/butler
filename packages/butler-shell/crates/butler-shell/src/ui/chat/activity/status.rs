@@ -1,4 +1,5 @@
 //! `CurrentTurnStatus`, `CurrentStatusText`, `CurrentModelRoundWaiting`, `AssistantStatusLabel`.
+use butler_ds::ui::motion;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use butler_ds::ui::blocks::message_row::MessageStatusLabel;
@@ -139,7 +140,7 @@ fn keep_time(id: ElementId, running: bool, window: &mut Window, cx: &mut App) {
     let clock = clock.downgrade();
     window
         .spawn(cx, async move |cx| {
-            cx.background_executor().timer(Duration::from_secs(1)).await;
+            motion::sleep(cx.background_executor(), Duration::from_secs(1)).await;
             cx.update(|_, cx| {
                 clock
                     .update(cx, |clock, cx| {

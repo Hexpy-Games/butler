@@ -1,4 +1,5 @@
 //! The import flow's actions (`useBrowserImport.ts`): every call is an admin route.
+use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_shell_client::Error;
@@ -162,10 +163,17 @@ impl ImportDialog {
     /// `usePasswordExportPolling`: once a second until the CSV is in.
     fn poll(id: String, cx: &mut Context<Self>) {
         let body = json!({ "export_id": id });
-        fetch(
-            cx,
-            move |client| async move { client.poll_browser_password_export(&body).await },
-            move |this: &mut Self, result: Result<Counts, Error>, cx| {
+        let request = Jobs::run(cx, move |client| async move {
+            client.poll_browser_password_export(&body).await
+        });
+        cx.spawn(async move |this, cx| {
+            let result = request
+                .await
+                .unwrap_or(Err(Error::Connection))
+                .and_then(|value| {
+                    serde_json::from_value::<Counts>(value).map_err(|_| Error::Protocol)
+                });
+            let _ = this.update(cx, move |this, cx| {
                 if this.export_id.as_deref() != Some(id.as_str()) {
                     return;
                 }
@@ -177,19 +185,22 @@ impl ImportDialog {
                         this.export_id = None;
                         this.error = error;
                         (this.on_imported)(cx);
+                        cx.notify();
                     }
                     Err(_) => {
                         this.error = Some(UNREADABLE.into());
                         this.export_id = None;
+                        cx.notify();
                     }
                 }
-            },
-        );
+            });
+        })
+        .detach();
     }
 
     fn poll_later(id: String, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_secs(1)).await;
+            motion::sleep(cx.background_executor(), Duration::from_secs(1)).await;
             let _ = this.update(cx, |this, cx| {
                 if this.export_id.as_deref() == Some(id.as_str()) {
                     Self::poll(id, cx);

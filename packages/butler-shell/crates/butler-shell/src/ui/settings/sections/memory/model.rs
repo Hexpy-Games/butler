@@ -14,6 +14,7 @@ use super::types::{MemoryModel, Readiness};
 use super::{MemoryPage, lang, later};
 use crate::ui::settings::controls::SettingsSwitch;
 use crate::ui::settings::state::fetch;
+use crate::ui::source::agent::Jobs;
 
 #[derive(Default)]
 pub(super) struct ModelPrep {
@@ -48,20 +49,32 @@ impl MemoryPage {
             return;
         }
         self.model.polling = true;
-        fetch(
+        let request = Jobs::run(
             cx,
             |client| async move { client.get_setup_readiness().await },
-            |this: &mut Self, result: Result<Readiness, Error>, cx| {
+        );
+        cx.spawn(async move |this, cx| {
+            let result = request
+                .await
+                .unwrap_or(Err(Error::Connection))
+                .and_then(|value| {
+                    serde_json::from_value::<Readiness>(value).map_err(|_| Error::Protocol)
+                });
+            let _ = this.update(cx, move |this, cx| {
                 this.model.polling = false;
-                if let Ok(view) = result {
+                if let Ok(view) = result
+                    && (!this.model.loaded || this.model.model != view.memory_model)
+                {
                     this.model.loaded = true;
                     this.model.model = view.memory_model;
+                    cx.notify();
                 }
                 if !this.model.settled() {
                     later(cx, super::MemoryPage::poll_model);
                 }
-            },
-        );
+            });
+        })
+        .detach();
     }
 
     /// `choose`: POST /setup/memory-model.

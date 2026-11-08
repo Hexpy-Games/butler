@@ -8,6 +8,7 @@ use butler_ds::ui::card::{Card, CardPadding};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::icon_px;
 use butler_ds::ui::layout::{Cross, Space, Stack};
+use butler_ds::ui::motion;
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 use std::time::Duration;
 
@@ -190,9 +191,17 @@ fn streaming(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let chars: Vec<(usize, char)> = source.char_indices().collect();
     let shown = ((elapsed.as_millis() / TICK.as_millis()) as usize * CHUNK).min(chars.len());
     let done = shown >= chars.len();
-    if !done {
-        window.request_animation_frame();
-    }
+    window.use_keyed_state(format!("md-ticker-{:?}", started.read(cx)), cx, |_, cx| {
+        let steps = chars.len().div_ceil(CHUNK);
+        cx.spawn(async move |this, cx| {
+            for _ in 0..steps {
+                motion::sleep(cx.background_executor(), TICK).await;
+                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                    return;
+                }
+            }
+        })
+    });
     let end = chars.get(shown).map_or(source.len(), |(at, _)| *at);
     let replay = Button::new("md-stream-replay")
         .size(Size::Sm)

@@ -296,7 +296,8 @@ impl Control {
             (hover, moving, s.pressed, s.hovered)
         });
         if moving {
-            window.request_animation_frame();
+            // The foreground is arbitrary children; it re-renders for the fade's duration only.
+            crate::ui::motion::input_frame(window);
         }
         let ds = Ds::get(cx);
         let color = match (self.disabled.is_on(), self.disabled_look) {

@@ -9,6 +9,7 @@
 //! Use: put `layer()` as an absolute sibling right before the scroller in the same relative
 //! parent; it eases in prepaint (before the scroller lays out, so a step shows the same frame)
 //! and intercepts wheel notches in the capture phase over its bounds.
+use butler_ds::ui::motion;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
@@ -140,7 +141,7 @@ impl SmoothScroll {
             pending - step
         };
         if s.pending != 0. {
-            window.request_animation_frame();
+            motion::input_frame(window);
         }
     }
 

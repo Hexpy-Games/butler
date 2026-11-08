@@ -1,5 +1,6 @@
 //! 기록 (`LogLevelFields.tsx`, `LogCategoryLevels.tsx`, `useLogConfig.ts`): the preset, the
 //! full-logging lease and per-category overrides.
+use butler_ds::ui::motion;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -72,14 +73,19 @@ impl LogList {
                 .update(cx, super::super::trace::LogStorage::reload);
         }
         self.config = Some(config);
-        let running = self.minutes_left().is_some_and(|minutes| minutes > 0);
+        let mut previous = self.minutes_left();
+        let running = previous.is_some_and(|minutes| minutes > 0);
         self.lease = running.then(|| {
             cx.spawn(async move |this, cx| {
                 loop {
-                    cx.background_executor().timer(LEASE_TICK).await;
+                    motion::sleep(cx.background_executor(), LEASE_TICK).await;
                     let Ok(ended) = this.update(cx, |list, cx| {
-                        cx.notify();
-                        list.minutes_left() == Some(0)
+                        let minutes = list.minutes_left();
+                        if minutes != previous {
+                            previous = minutes;
+                            cx.notify();
+                        }
+                        minutes == Some(0)
                     }) else {
                         return;
                     };

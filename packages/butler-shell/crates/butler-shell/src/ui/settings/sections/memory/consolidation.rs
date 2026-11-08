@@ -26,6 +26,7 @@ use super::{MemoryPage, lang, later, with_reason};
 use crate::ui::Icon;
 use crate::ui::settings::Save;
 use crate::ui::settings::state::fetch;
+use crate::ui::source::agent::Jobs;
 
 #[derive(Default)]
 pub(super) struct Consolidation {
@@ -49,12 +50,24 @@ impl Consolidation {
 impl MemoryPage {
     /// `reload`: GET /memory/consolidation.
     pub(super) fn reload_consolidation(cx: &mut Context<Self>) {
-        fetch(
-            cx,
-            |client| async move { client.get_memory_consolidation().await },
-            |this: &mut Self, result: Result<ConsolidationStatus, Error>, cx| {
+        let request = Jobs::run(cx, |client| async move {
+            client.get_memory_consolidation().await
+        });
+        cx.spawn(async move |this, cx| {
+            let result = request
+                .await
+                .unwrap_or(Err(Error::Connection))
+                .and_then(|value| {
+                    serde_json::from_value::<ConsolidationStatus>(value)
+                        .map_err(|_| Error::Protocol)
+                });
+            let _ = this.update(cx, move |this, cx| {
                 this.consolidation.polling = false;
-                if let Ok(next) = result {
+                if let Ok(next) = result
+                    && (this.consolidation.lease_busy
+                        || this.consolidation.status.as_ref() != Some(&next)
+                        || this.consolidation.active != next.active)
+                {
                     this.consolidation.lease_busy = false;
                     match next.active.clone() {
                         Some(active) => this.accept_consolidation(active, cx),
@@ -70,10 +83,12 @@ impl MemoryPage {
                         }
                     }
                     this.consolidation.status = Some(next);
+                    cx.notify();
                 }
                 this.poll_consolidation(cx);
-            },
-        );
+            });
+        })
+        .detach();
     }
 
     /// Reads the status again while a run is in progress or the lease is held elsewhere (React:

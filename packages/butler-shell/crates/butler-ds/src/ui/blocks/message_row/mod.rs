@@ -246,7 +246,8 @@ impl MessageRow {
         let fill = ds.color(Color::UserMessageBg);
         let shown = delivered.map_or(1., |(value, timing)| value.value(&timing));
         if delivered.is_some_and(|(value, timing)| value.moving(&timing)) {
-            window.request_animation_frame();
+            // The foreground is arbitrary children; it re-renders for the fade's duration only.
+            crate::ui::motion::input_frame(window);
         }
         let ink = crate::ui::convert::mix(
             ds.color(Color::TextPrimary),
