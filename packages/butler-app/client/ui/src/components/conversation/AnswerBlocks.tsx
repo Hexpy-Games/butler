@@ -2,6 +2,7 @@ import { ChatEpicCards } from "../canon/ChatEpicCards";
 import { memo, useMemo } from "react";
 import type { AnswerBlockSet } from "../../../../shared/app-contracts";
 import type { AnswerBlockView } from "../../../../shared/answer-blocks-view";
+import type { CanonProposalAnchor } from "../../../../shared/canon-proposal-contracts";
 import { parseAnswerBlocks } from "../../../../shared/answer-blocks-parse";
 import { answerMetricTrend } from "../../../../shared/answer-metric-trend";
 import { Button, Popup, Inline, KeyValueRow, MetricCard, MetricGrid, Notice, PillButton, Presence, usePresence, Reply, ItemCardSkeleton, Skeleton, Stack } from "@/butler-ds";
@@ -44,11 +45,12 @@ const Block = memo(function Block({ block, path, streaming, incoming }: { block:
 });
 
 /** Domain records are parsed once per changed block snapshot; all presentation belongs to DS blocks. */
-export const AnswerBlocks = memo(function AnswerBlocks({ sets, sessionId, turnId, messageId, replyText, saved, preview }: { sets?: AnswerBlockSet[]; sessionId?: string; turnId?: string; messageId?: string; replyText?: string; saved?: boolean; preview?: boolean }) {
+export const AnswerBlocks = memo(function AnswerBlocks({ sets, sessionId, turnId, messageId, replyText, saved, preview, receipts }: { receipts?: readonly CanonProposalAnchor[]; sets?: AnswerBlockSet[]; sessionId?: string; turnId?: string; messageId?: string; replyText?: string; saved?: boolean; preview?: boolean }) {
   const parsed = useMemo(() => sets?.flatMap(set => {
     const spec = parseAnswerBlocks(set?.spec);
     return spec ? spec.blocks : [];
   }) ?? [], [sets]);
+  const owned = useMemo(() => new Set(receipts?.flatMap(receipt => receipt.epic_ids) ?? []), [receipts]);
   useAppLocale();
   const reducedMotion = useButlerStore(state => state.settings.reduce_motion);
   const draft = useAnswerDrafts(state => turnId ? state.answerDrafts[turnId] : undefined);
@@ -67,7 +69,10 @@ export const AnswerBlocks = memo(function AnswerBlocks({ sets, sessionId, turnId
       const streaming = entry?.open === true;
       const incoming = entry?.incoming;
       const key = ("id" in block ? block.id : undefined) ?? `${index}:${block.type}`;
-      if (ready && block.type === "epics") return <Block key={key} block={block} path={`/blocks/${index}`} streaming={streaming} />;
+      if (ready && block.type === "epics") {
+        const ids = block.ids.filter(id => !owned.has(id));
+        return ids.length ? <Block key={key} block={ids.length < block.ids.length ? { ...block, ids } : block} path={`/blocks/${index}`} streaming={streaming} /> : null;
+      }
       return <AnswerBlockFrame key={key} block={block} path={`/blocks/${index}`}>
         {ready ? <Block block={block} path={`/blocks/${index}`} streaming={streaming} incoming={incoming} /> : block.type === "cards" ? <ItemCardSkeleton media={block.media} /> : <Skeleton height="row" width="full" />}
         {streaming && ready && block.type !== "cards" && block.type !== "table" ? <Skeleton height="row" width="full" /> : null}

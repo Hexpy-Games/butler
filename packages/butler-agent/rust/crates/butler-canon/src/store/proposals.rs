@@ -176,9 +176,21 @@ pub fn turn_cards(db: &Connection, turns: &[String]) -> Result<Vec<Value>> {
             .collect::<rusqlite::Result<Vec<_>>>()?;
         for id in ids {
             let row = get(db, &id)?;
-            result.push(
-                json!({"proposal_id":id,"turn_id":turn,"source_call_id":row["source_call_id"]}),
-            );
+            let epic_ids = if row["state"] == "applied" {
+                view::resolved_changes(&row)?
+                    .into_iter()
+                    .filter(|c| {
+                        matches!(
+                            c["op"].as_str(),
+                            Some("epic.create" | "epic.edit" | "epic.move")
+                        )
+                    })
+                    .filter_map(|c| c["id"].as_str().map(str::to_owned))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
+            result.push(json!({"proposal_id":id,"turn_id":turn,"source_call_id":row["source_call_id"],"epic_ids":epic_ids}));
         }
     }
     Ok(result)
