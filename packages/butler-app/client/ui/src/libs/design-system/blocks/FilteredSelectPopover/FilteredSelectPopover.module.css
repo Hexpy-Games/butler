@@ -1,10 +1,16 @@
+/* Panel spacing: the menu popover's --space-xs inset plus this --space-sm
+   puts every region (title, search, filters, results, footer) --space-md
+   from the popover edge, one step above the --space-sm gaps between regions
+   (card anatomy). Regions share that one inline edge; dividers are hairlines
+   with the --space-sm gap above and below. */
 .root {
+  box-sizing: border-box;
   display: grid;
   width: max-content;
   min-width: min(280px, calc(100vw - 32px));
   max-width: min(520px, calc(100vw - 32px));
-  gap: var(--space-1);
-  padding: 0;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
   color: var(--text-primary);
 }
 
@@ -12,6 +18,12 @@
   width: min(320px, calc(100vw - 32px));
   min-width: min(320px, calc(100vw - 32px));
   max-width: min(320px, calc(100vw - 32px));
+}
+
+/* In a popover the block fills it, so a fit popover wider than the block's
+   content (its 320px minimum) keeps every region on both panel edges. */
+[data-slot="popover-content"] > .root:not([data-width="fixed"]) {
+  width: auto;
 }
 
 /* On mobile every popover is a screen-wide sheet: the chooser fills it, as an
@@ -26,7 +38,7 @@
 
 .title {
   min-width: 0;
-  padding: 3px var(--space-2) var(--space-xs);
+  padding: 0;
   color: var(--text-primary);
   font-size: var(--font-size-2);
   font-weight: var(--font-weight-semibold);
@@ -48,7 +60,7 @@
 .searchLabel {
   display: block;
   min-width: 0;
-  padding: 0 var(--space-1);
+  padding: 0;
 }
 
 /* The search box asks for one width on every platform. An input's own
@@ -118,11 +130,12 @@
   display: flex;
   min-width: 0;
   gap: var(--space-xs);
-  /* The row scrolls (overflow clips), so it keeps --focus-ring-room above the
-     chips; the margin gives that room back so the spacing is unchanged. */
-  margin-top: calc(var(--space-xs) - var(--focus-ring-room));
+  /* The row scrolls (overflow clips), so it keeps --focus-ring-room around
+     the chips; the negative margin gives it back, so the chips sit on the
+     panel edge and the region gap is unchanged. */
+  margin: calc(-1 * var(--focus-ring-room));
   overflow-x: auto;
-  padding: var(--focus-ring-room) var(--space-1) var(--space-1);
+  padding: var(--focus-ring-room);
   scrollbar-width: none;
 }
 
@@ -178,8 +191,22 @@
 .results {
   height: min(calc(var(--filtered-select-results-max-rows, 6.65) * 30px), 42vh);
   min-width: 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+}
+
+/* Each divider sits directly on the results, whose --space-sm edge padding
+   is the divider's space on that side; the region gap is the other side. */
+.root .results {
+  --scroll-area-edge-padding: var(--space-sm);
+}
+
+.divider + .results,
+.results + .divider {
+  margin-top: calc(-1 * var(--space-sm));
+}
+
+.divider {
+  min-width: 0;
+  border-top: var(--border-hairline) solid var(--line);
 }
 
 .resultsContent {
