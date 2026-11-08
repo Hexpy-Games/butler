@@ -35,7 +35,8 @@ export interface FilteredSelectItem {
 
 export interface FilteredSelectGroup {
   id: string;
-  title: ReactNode;
+  /** Omit for a flat list: the group renders no title row. */
+  title?: ReactNode;
   items: FilteredSelectItem[];
 }
 
@@ -107,24 +108,26 @@ export function FilteredSelectPopover({
         value={searchValue}
         onChange={onSearchChange}
       />
-      <div
-        ref={filtersFadeRef}
-        className={styles.filters}
-        data-slot="filtered-select-filters"
-      >
-        {filters.map((filter) => (
-          <Button
-            key={filter.id}
-            size="xs"
-            shape="pill"
-            variant={filter.id === activeFilterId ? "secondary" : "borderless"}
-            data-selected={filter.id === activeFilterId ? "true" : undefined}
-            onClick={() => onFilterChange(filter.id)}
-          >
-            {filter.label}
-          </Button>
-        ))}
-      </div>
+      {filters.length > 0 ? (
+        <div
+          ref={filtersFadeRef}
+          className={styles.filters}
+          data-slot="filtered-select-filters"
+        >
+          {filters.map((filter) => (
+            <Button
+              key={filter.id}
+              size="xs"
+              shape="pill"
+              variant={filter.id === activeFilterId ? "secondary" : "borderless"}
+              data-selected={filter.id === activeFilterId ? "true" : undefined}
+              onClick={() => onFilterChange(filter.id)}
+            >
+              {filter.label}
+            </Button>
+          ))}
+        </div>
+      ) : null}
       <ScrollArea
         className={dsClass(styles.results)}
         contentClassName={dsClass(styles.resultsContent)}
@@ -136,12 +139,9 @@ export function FilteredSelectPopover({
         {visibleGroups.length > 0 ? (
           visibleGroups.map((group) => (
             <section key={group.id} className={styles.group}>
-              <div
-                className={styles.groupTitle}
-                data-slot="filtered-select-group-title"
-              >
-                {group.title}
-              </div>
+              {group.title ? (
+                <div className={styles.groupTitle} data-slot="filtered-select-group-title">{group.title}</div>
+              ) : null}
               <div className={styles.groupItems}>
                 {group.items.map((item) => (
                   <FilteredSelectItemButton key={item.id} item={item} />

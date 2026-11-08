@@ -28,6 +28,11 @@ Keep filtering state in the product container. Pass `searchValue`, filter
 options, grouped result items, and footer options into this block. The block
 does not import stores, domain models, or app copy.
 
+A chooser that needs no filter chips passes `filters={[]}`, and a flat list
+leaves its group's `title` out; neither leaves an empty row. Put it in
+`PopoverContent data-menu-size="fit"`, so the popover takes the block's width
+and the title and search box keep the block's own inset.
+
 ## Who Can Use This Component
 
 Any Butler UI agent or developer building a searchable chooser popover.

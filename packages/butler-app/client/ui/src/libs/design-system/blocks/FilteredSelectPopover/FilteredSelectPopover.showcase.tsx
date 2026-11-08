@@ -20,6 +20,7 @@ const labels = {
     timezone: "Time zone", zones: ["Asia/Seoul", "America/Los_Angeles", "Europe/Berlin", "UTC"],
     tags: "Tags", tagSearch: "Search tags", tagPlaceholder: "Search tags…", noTags: "No tags",
     tagNames: ["bug", "design", "research"], tagMenu: (name: string) => `${name} tag menu`, rename: "Rename", recolor: "Change color", remove: "Delete",
+    plan: "Plan", planSearch: "Search plans", noPlans: "No results", planNames: ["Preview 14", "Empty plan", "Backlog"],
   },
   "ko-KR": {
     model: "모델", search: "모델 검색", placeholder: "모델 검색…", clear: "검색 지우기", empty: "모델이 없습니다",
@@ -27,6 +28,7 @@ const labels = {
     timezone: "시간대", zones: ["Asia/Seoul", "America/Los_Angeles", "Europe/Berlin", "UTC"],
     tags: "태그", tagSearch: "태그 검색", tagPlaceholder: "태그 검색…", noTags: "태그가 없습니다",
     tagNames: ["버그", "디자인", "조사"], tagMenu: (name: string) => `${name} 태그 메뉴`, rename: "이름 바꾸기", recolor: "색 바꾸기", remove: "삭제",
+    plan: "계획", planSearch: "계획 검색", noPlans: "검색 결과 없음", planNames: ["프리뷰 14", "빈 계획", "백로그"],
   },
 } as const;
 
@@ -104,8 +106,25 @@ function TagPicker({ context }: { context: ShowcaseRenderContext }) {
   );
 }
 
+/** CanonBoardPlanSelect: no filters and one untitled group, so the list is flat. */
+function PlanPicker({ context }: { context: ShowcaseRenderContext }) {
+  const copy = labels[context.locale];
+  const [query, setQuery] = useState("");
+  const [plan, setPlan] = useState<string>(copy.planNames[0]);
+  return (
+    <FilteredSelectPopover
+      activeFilterId="" emptyLabel={copy.noPlans} filters={[]} onFilterChange={() => undefined}
+      groups={[{ id: "plans", items: copy.planNames.filter((name) => name.toLowerCase().includes(query.toLowerCase()))
+        .map((name) => ({ id: name, label: name, selected: name === plan, onSelect: () => setPlan(name) })) }]}
+      onSearchChange={setQuery} searchClearLabel={copy.clear} searchLabel={copy.planSearch}
+      searchPlaceholder={copy.planSearch} searchValue={query} title={copy.plan} width="fixed"
+    />
+  );
+}
+
 export const stories: ShowcaseStory[] = [
   { name: "Model picker", states: ["selected"], render: (context) => <ModelPicker context={context} /> },
   { name: "Searchable select (fixed width)", render: (context) => <TimeZonePicker context={context} /> },
   { name: "Rows with actions", states: ["hover", "focus-visible"], render: (context) => <TagPicker context={context} /> },
+  { name: "Flat list", states: ["selected"], render: (context) => <PlanPicker context={context} /> },
 ];
