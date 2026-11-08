@@ -452,6 +452,7 @@ pub(crate) trait AuthorityRepository {
     fn revoke_permission(&mut self, owner: &str, grant_ref: &str, now: &str)
     -> AuthorityResult<()>;
     fn find_identity(&mut self, sha: &str) -> AuthorityResult<Option<AuthorityRecord>>;
+    fn has_open_question(&mut self, owner: &str) -> AuthorityResult<bool>;
     fn find_slot(
         &mut self,
         record: &AuthorityAdmissionInput,

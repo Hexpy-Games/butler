@@ -8,6 +8,8 @@ use butler_turn::btcc::{
 };
 use serde_json::json;
 
+const CARD_OPEN: &str = "A question card is already open in this conversation. Ask this in your reply instead; put questions needed together in one card.";
+
 pub(super) async fn execute(
     owner: &GuidedTools,
     call: &ModelRoundToolCall,
@@ -38,8 +40,15 @@ pub(super) async fn execute(
             questions,
             wait,
         )
-        .await
-        .map_err(|error| ToolExecutionError::Integrity(error.into()))?;
+        .await;
+    let admitted = match admitted {
+        Err(error) if error.code() == "question_card_open" => {
+            return encode(
+                &json!({"ok":false,"error":{"code":"question_card_open","message":CARD_OPEN}}),
+            );
+        }
+        admitted => admitted.map_err(|error| ToolExecutionError::Integrity(error.into()))?,
+    };
     let request_ref = match admitted {
         AuthorityAdmissionResult::Pending { request_ref, .. } => {
             return encode(&json!({"ok":true,"authority_pending":true,"request_ref":request_ref}));
