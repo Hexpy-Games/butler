@@ -2514,6 +2514,7 @@ aho-corasick 1.1.5
 Unlicense OR MIT
 License: https://github.com/BurntSushi/aho-corasick/blob/5178060ce73d91938f8582d0360e3be031380440/COPYING
 License: https://github.com/BurntSushi/aho-corasick/blob/5178060ce73d91938f8582d0360e3be031380440/LICENSE-MIT
+License: https://github.com/BurntSushi/aho-corasick/blob/5178060ce73d91938f8582d0360e3be031380440/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -3157,6 +3158,7 @@ Copyright (c) 2019 Daniel "Lokathor" Gee.
 byteorder-lite 0.1.0
 Unlicense OR MIT
 License: https://github.com/image-rs/byteorder-lite/blob/7d44da06a48fe10d7e23efd9a932d18a7a2def63/LICENSE-MIT
+License: https://github.com/image-rs/byteorder-lite/blob/7d44da06a48fe10d7e23efd9a932d18a7a2def63/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -3164,6 +3166,7 @@ byteorder 1.5.0
 Unlicense OR MIT
 License: https://github.com/BurntSushi/byteorder/blob/ec068eefa042d494475db125c4b034bd8e9e34dd/COPYING
 License: https://github.com/BurntSushi/byteorder/blob/ec068eefa042d494475db125c4b034bd8e9e34dd/LICENSE-MIT
+License: https://github.com/BurntSushi/byteorder/blob/ec068eefa042d494475db125c4b034bd8e9e34dd/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -3443,6 +3446,7 @@ csv-core 0.1.13
 Unlicense OR MIT
 License: https://github.com/BurntSushi/rust-csv/blob/a0a3c9e4b493c216fb6d8284c9ac918444ba67f3/csv-core/COPYING
 License: https://github.com/BurntSushi/rust-csv/blob/a0a3c9e4b493c216fb6d8284c9ac918444ba67f3/csv-core/LICENSE-MIT
+License: https://github.com/BurntSushi/rust-csv/blob/a0a3c9e4b493c216fb6d8284c9ac918444ba67f3/csv-core/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -3450,6 +3454,7 @@ csv 1.4.0
 Unlicense OR MIT
 License: https://github.com/BurntSushi/rust-csv/blob/4a3997e91d668ea1d8595bdef15625a77cf2308a/COPYING
 License: https://github.com/BurntSushi/rust-csv/blob/4a3997e91d668ea1d8595bdef15625a77cf2308a/LICENSE-MIT
+License: https://github.com/BurntSushi/rust-csv/blob/4a3997e91d668ea1d8595bdef15625a77cf2308a/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -3848,6 +3853,20 @@ License: https://github.com/marcianx/downcast-rs/blob/d30dcb42084251a20017eb4521
 Copyright (c) 2020 Ashish Myles and contributors
 
 =====
+dpi 0.1.2
+Apache-2.0 AND MIT
+License: https://github.com/rust-windowing/winit/blob/587ade844dfb0eada3696ba1cb263c66eea80581/dpi/LICENSE
+License: https://github.com/rust-windowing/winit/blob/587ade844dfb0eada3696ba1cb263c66eea80581/dpi/LICENSE-LIBM-MIT
+Copyright (c) 2018 Jorge Aparicio
+Copyright © 2005-2020 Rich Felker, et al.
+Copyright © 1993,2004 Sun Microsystems or
+Copyright © 2003-2011 David Schultz or
+Copyright © 2003-2009 Steven G. Kargl or
+Copyright © 2003-2009 Bruce D. Evans or
+Copyright © 2008 Stephen L. Moshier or
+Copyright © 2017-2018 Arm Limited
+
+=====
 dtoa-short 0.3.5
 MPL-2.0
 License: https://github.com/upsuper/dtoa-short/blob/2d905cdb8b2e08163dc0d015f529877fe657b4ef/LICENSE
@@ -4096,6 +4115,7 @@ fst 0.4.7
 Unlicense OR MIT
 License: https://github.com/BurntSushi/fst/blob/fbd5992376f176c35af2644d74efad58f5656e5c/COPYING
 License: https://github.com/BurntSushi/fst/blob/fbd5992376f176c35af2644d74efad58f5656e5c/LICENSE-MIT
+License: https://github.com/BurntSushi/fst/blob/fbd5992376f176c35af2644d74efad58f5656e5c/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -4685,6 +4705,7 @@ jiff-core 0.1.1
 Unlicense OR MIT
 License: https://github.com/BurntSushi/jiff/blob/7e8133168382ab8d65a795126c2c9624f61e9e89/crates/jiff-core/COPYING
 License: https://github.com/BurntSushi/jiff/blob/7e8133168382ab8d65a795126c2c9624f61e9e89/crates/jiff-core/LICENSE-MIT
+License: https://github.com/BurntSushi/jiff/blob/7e8133168382ab8d65a795126c2c9624f61e9e89/crates/jiff-core/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -4692,6 +4713,7 @@ jiff-tzdb-platform 0.1.3
 Unlicense OR MIT
 License: https://github.com/BurntSushi/jiff/blob/939549520e6004b051b02c8b5f74973b833f3670/crates/jiff-tzdb-platform/COPYING
 License: https://github.com/BurntSushi/jiff/blob/939549520e6004b051b02c8b5f74973b833f3670/crates/jiff-tzdb-platform/LICENSE-MIT
+License: https://github.com/BurntSushi/jiff/blob/939549520e6004b051b02c8b5f74973b833f3670/crates/jiff-tzdb-platform/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -4699,6 +4721,7 @@ jiff-tzdb 0.1.8
 Unlicense OR MIT
 License: https://github.com/BurntSushi/jiff/blob/bc70277861e54973e8a9be91bc92c44de56719b5/crates/jiff-tzdb/COPYING
 License: https://github.com/BurntSushi/jiff/blob/bc70277861e54973e8a9be91bc92c44de56719b5/crates/jiff-tzdb/LICENSE-MIT
+License: https://github.com/BurntSushi/jiff/blob/bc70277861e54973e8a9be91bc92c44de56719b5/crates/jiff-tzdb/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -4706,6 +4729,7 @@ jiff 0.2.37
 Unlicense OR MIT
 License: https://github.com/BurntSushi/jiff/blob/4100a7c71125b9523029566d1d18f8b227ecd18c/crates/jiff/COPYING
 License: https://github.com/BurntSushi/jiff/blob/4100a7c71125b9523029566d1d18f8b227ecd18c/crates/jiff/LICENSE-MIT
+License: https://github.com/BurntSushi/jiff/blob/4100a7c71125b9523029566d1d18f8b227ecd18c/crates/jiff/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -4714,12 +4738,24 @@ Apache-2.0
 License: https://github.com/databendlabs/jsonb/blob/c39b24aaea2c27edf6e596874d3a08b8e7806e60/LICENSE
 
 =====
+keyboard-types 0.7.0
+MIT OR Apache-2.0
+License: https://github.com/pyfisch/keyboard-types/blob/61a081f1e78a881a369abc22c3a0e37049bd655e/LICENSE-APACHE
+License: https://github.com/pyfisch/keyboard-types/blob/61a081f1e78a881a369abc22c3a0e37049bd655e/LICENSE-MIT
+Copyright (c) 2017 Pyfisch
+
+=====
 keyring-core 1.0.0
 MIT OR Apache-2.0
 License: https://github.com/open-source-cooperative/keyring-core/blob/eb41b5cd54694c1622d3c30c59f2e87368463151/LICENSE-APACHE
 License: https://github.com/open-source-cooperative/keyring-core/blob/eb41b5cd54694c1622d3c30c59f2e87368463151/LICENSE-MIT
 Copyright [2017] [keyring developers]
 Copyright (c) 2016 keyring Developers
+
+=====
+ksni 0.3.1
+Unlicense
+License: https://github.com/iovxw/ksni/blob/6c6284caed19b70710e431dcfd15ac5a2a21f414/UNLICENSE
 
 =====
 kurbo 0.13.1
@@ -5094,6 +5130,7 @@ memchr 2.8.3
 Unlicense OR MIT
 License: https://github.com/BurntSushi/memchr/blob/5fdb40c054e1fff359a2f7bdf7f87a13b34b465d/COPYING
 License: https://github.com/BurntSushi/memchr/blob/5fdb40c054e1fff359a2f7bdf7f87a13b34b465d/LICENSE-MIT
+License: https://github.com/BurntSushi/memchr/blob/5fdb40c054e1fff359a2f7bdf7f87a13b34b465d/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -5198,6 +5235,15 @@ License: https://github.com/awxkee/moxcms/blob/c4affa196727d17f21a7f6f148a558867
 License: https://github.com/awxkee/moxcms/blob/c4affa196727d17f21a7f6f148a558867decb470/LICENSE.md
 Copyright 2024 Radzivon Bartoshyk
 Copyright (c) Radzivon Bartoshyk. All rights reserved.
+
+=====
+muda 0.17.2
+Apache-2.0 OR MIT
+License: https://github.com/tauri-apps/muda/blob/ab98b5ee6fd61a01d302debdcb6603c98f69e672/LICENSE-APACHE
+License: https://github.com/tauri-apps/muda/blob/ab98b5ee6fd61a01d302debdcb6603c98f69e672/LICENSE-MIT
+License: https://github.com/tauri-apps/muda/blob/ab98b5ee6fd61a01d302debdcb6603c98f69e672/LICENSE.spdx
+Copyright (c) 2022-2022 Tauri Programme within The Commons Conservancy
+PackageCopyrightText: 2020-2022, The Tauri Programme in the Commons Conservancy
 
 =====
 multer 3.1.0
@@ -5371,6 +5417,11 @@ Zlib OR Apache-2.0 OR MIT
 License: https://crates.io/crates/objc2-core-foundation/0.3.2
 
 =====
+objc2-core-graphics 0.3.2
+Zlib OR Apache-2.0 OR MIT
+License: https://crates.io/crates/objc2-core-graphics/0.3.2
+
+=====
 objc2-core-services 0.3.2
 Zlib OR Apache-2.0 OR MIT
 License: https://crates.io/crates/objc2-core-services/0.3.2
@@ -5395,6 +5446,16 @@ License: https://crates.io/crates/objc2-io-kit/0.3.2
 objc2-local-authentication 0.3.2
 Zlib OR Apache-2.0 OR MIT
 License: https://crates.io/crates/objc2-local-authentication/0.3.2
+
+=====
+objc2-security 0.3.2
+Zlib OR Apache-2.0 OR MIT
+License: https://crates.io/crates/objc2-security/0.3.2
+
+=====
+objc2-service-management 0.3.2
+Zlib OR Apache-2.0 OR MIT
+License: https://crates.io/crates/objc2-service-management/0.3.2
 
 =====
 objc2 0.6.5
@@ -5649,6 +5710,13 @@ piper 0.2.5
 MIT OR Apache-2.0
 License: https://github.com/smol-rs/piper/blob/85da45edce0b9262f00d79d9a42ce0372fb42a10/LICENSE-APACHE
 License: https://github.com/smol-rs/piper/blob/85da45edce0b9262f00d79d9a42ce0372fb42a10/LICENSE-MIT
+
+=====
+png 0.17.16
+MIT OR Apache-2.0
+License: https://github.com/image-rs/image-png/blob/fbf256669ff23594bf4c618b61fde6a52b79e088/LICENSE-APACHE
+License: https://github.com/image-rs/image-png/blob/fbf256669ff23594bf4c618b61fde6a52b79e088/LICENSE-MIT
+Copyright (c) 2015 nwin
 
 =====
 png 0.18.1
@@ -6174,6 +6242,7 @@ same-file 1.0.6
 Unlicense OR MIT
 License: https://github.com/BurntSushi/same-file/blob/5799cd323b8eefd17a089c950dac113f66c89c9e/COPYING
 License: https://github.com/BurntSushi/same-file/blob/5799cd323b8eefd17a089c950dac113f66c89c9e/LICENSE-MIT
+License: https://github.com/BurntSushi/same-file/blob/5799cd323b8eefd17a089c950dac113f66c89c9e/UNLICENSE
 Copyright (c) 2017 Andrew Gallant
 
 =====
@@ -6421,6 +6490,12 @@ License: https://github.com/servo/rust-smallvec/blob/700e1c3ff899cda7799b18e0804
 Copyright (c) 2018 The Servo Project Developers
 
 =====
+smappservice-rs 0.1.3
+MIT
+License: https://github.com/gethopp/smappservice-rs/blob/61454a3b814ad71b52d749edb51e6adcdfc5028e/LICENSE.md
+Copyright (c) 2025 iparaskev
+
+=====
 snafu-derive 0.8.9
 MIT OR Apache-2.0
 License: https://github.com/shepmaster/snafu/blob/fd06040704379e9a76a9d35e34488d6f48849237/snafu-derive/LICENSE-APACHE
@@ -6635,6 +6710,7 @@ tantivy-fst 0.5.0
 Unlicense OR MIT
 License: https://github.com/quickwit-inc/fst/blob/29e16b3ec1b62fa21bcf4ba65d28088e67a5663f/COPYING
 License: https://github.com/quickwit-inc/fst/blob/29e16b3ec1b62fa21bcf4ba65d28088e67a5663f/LICENSE-MIT
+License: https://github.com/quickwit-inc/fst/blob/29e16b3ec1b62fa21bcf4ba65d28088e67a5663f/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 Copyright (c) 2019 Paul Masurel
 
@@ -6911,6 +6987,15 @@ License: https://github.com/tokio-rs/tracing/blob/2d55f6faf9be83e7e4634129fb9681
 Copyright (c) 2019 Tokio Contributors
 
 =====
+tray-icon 0.21.0
+MIT OR Apache-2.0
+License: https://github.com/tauri-apps/tray-icon/blob/34a3442868725d53c042d619f5c60c84dc5072df/LICENSE-APACHE
+License: https://github.com/tauri-apps/tray-icon/blob/34a3442868725d53c042d619f5c60c84dc5072df/LICENSE-MIT
+License: https://github.com/tauri-apps/tray-icon/blob/34a3442868725d53c042d619f5c60c84dc5072df/LICENSE.spdx
+Copyright (c) 2022-2022 Tauri Programme within The Commons Conservancy
+PackageCopyrightText: 2020-2022, The Tauri Programme in the Commons Conservancy
+
+=====
 try-lock 0.2.5
 MIT
 License: https://github.com/seanmonstar/try-lock/blob/fd160ecd9105e8afcc43dbea450a0ef6e5128cce/LICENSE
@@ -7069,6 +7154,7 @@ utf8-ranges 1.0.5
 Unlicense OR MIT
 License: https://github.com/BurntSushi/utf8-ranges/blob/be9b8dfcaf449453cbf83ac85260ee80323f4f77/COPYING
 License: https://github.com/BurntSushi/utf8-ranges/blob/be9b8dfcaf449453cbf83ac85260ee80323f4f77/LICENSE-MIT
+License: https://github.com/BurntSushi/utf8-ranges/blob/be9b8dfcaf449453cbf83ac85260ee80323f4f77/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -7092,6 +7178,7 @@ walkdir 2.5.0
 Unlicense OR MIT
 License: https://github.com/BurntSushi/walkdir/blob/4f26be4d450910916ea11533b2efc52b9a6483bc/COPYING
 License: https://github.com/BurntSushi/walkdir/blob/4f26be4d450910916ea11533b2efc52b9a6483bc/LICENSE-MIT
+License: https://github.com/BurntSushi/walkdir/blob/4f26be4d450910916ea11533b2efc52b9a6483bc/UNLICENSE
 Copyright (c) 2015 Andrew Gallant
 
 =====
@@ -7147,6 +7234,7 @@ winapi-util 0.1.11
 Unlicense OR MIT
 License: https://github.com/BurntSushi/winapi-util/blob/803874c57dc1f10ecd42f7c86d9de72f53818432/COPYING
 License: https://github.com/BurntSushi/winapi-util/blob/803874c57dc1f10ecd42f7c86d9de72f53818432/LICENSE-MIT
+License: https://github.com/BurntSushi/winapi-util/blob/803874c57dc1f10ecd42f7c86d9de72f53818432/UNLICENSE
 Copyright (c) 2017 Andrew Gallant
 
 =====
@@ -7333,6 +7421,13 @@ License: https://github.com/microsoft/windows-rs/blob/308e08ec259027ebbef11b8ef8
 Copyright (c) Microsoft Corporation.
 
 =====
+windows-sys 0.60.2
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/sys/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/4b8893b307719ec23cce698269ca572ef301dc5c/crates/libs/sys/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
 windows-sys 0.61.2
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/sys/license-apache-2.0
@@ -7344,6 +7439,13 @@ windows-targets 0.52.6
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/libs/targets/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/libs/targets/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
+windows-targets 0.53.5
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/targets/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/targets/license-mit
 Copyright (c) Microsoft Corporation.
 
 =====
@@ -7386,6 +7488,13 @@ windows_x86_64_msvc 0.52.6
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/targets/x86_64_msvc/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/db06b51c2ebb743efb544d40e3064efa49f28d38/crates/targets/x86_64_msvc/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
+windows_x86_64_msvc 0.53.1
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/targets/x86_64_msvc/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238/crates/targets/x86_64_msvc/license-mit
 Copyright (c) Microsoft Corporation.
 
 =====

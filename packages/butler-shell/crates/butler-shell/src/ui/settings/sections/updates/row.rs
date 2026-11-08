@@ -15,6 +15,7 @@ use gpui::{AnyElement, App, ClickEvent, IntoElement as _, ParentElement as _, Wi
 
 use super::copy::Words;
 use super::model::{ComponentView, Progress, failure_message, format_bytes};
+use crate::lifecycle::app_update::AppUpdateStatus;
 use crate::ui::Icon;
 
 pub(super) type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -25,6 +26,8 @@ pub(super) struct Row<'a> {
     pub(super) applying: Option<&'a str>,
     /// The progress of this component, when it has one.
     pub(super) progress: Option<&'a Progress>,
+    /// The App's restart coordinator (`useAppUpdateState`).
+    pub(super) restart: &'a AppUpdateStatus,
     pub(super) copy: &'static Words,
     pub(super) on_apply: Handler,
     pub(super) on_cancel: Handler,
@@ -121,10 +124,15 @@ impl Row<'_> {
             Some(progress) => progress.stage.as_str(),
             None => "",
         };
-        // CARVE-OUT(G-native): React also reads the Electron restart coordinator
-        // (`useAppUpdateState`): "deferred" and "preparing/restarting/choice_required" make the
-        // app row wait or busy. The shell has no such state, so only the agent's stage counts.
-        let busy = matches!(stage, "checking" | "verifying" | "applying" | "restarting");
+        let deferred = *self.restart == AppUpdateStatus::Deferred;
+        let restart_running = matches!(
+            self.restart,
+            AppUpdateStatus::Preparing
+                | AppUpdateStatus::Restarting
+                | AppUpdateStatus::ChoiceRequired(_)
+        );
+        let busy = restart_running
+            || matches!(stage, "checking" | "verifying" | "applying" | "restarting");
         let cancelling = stage == "downloading" && self.progress.is_some_and(|p| p.cancellable);
         let unknown_download =
             stage == "downloading" && self.progress.is_none_or(|p| p.known_total().is_none());
@@ -135,7 +143,9 @@ impl Row<'_> {
         if let Some(detail) = status.bundled_agent_label() {
             column = column.child(Typo::caption(detail));
         }
-        if busy {
+        if deferred {
+            column = column.child(Typo::caption(copy.update_deferred).tone(Tone::Secondary));
+        } else if busy {
             let label = match stage {
                 "checking" => copy.checking,
                 "verifying" => copy.verifying,
@@ -159,7 +169,7 @@ impl Row<'_> {
             .wrap(true)
             .child(column);
         if !busy && (stage != "downloading" || cancelling) {
-            head = head.child(self.button(&id, stage, cancelling));
+            head = head.child(self.button(&id, stage, cancelling, deferred));
         }
         Field::new(id)
             .child(head)
@@ -167,15 +177,17 @@ impl Row<'_> {
             .into_any_element()
     }
 
-    fn button(&self, id: &str, stage: &str, cancelling: bool) -> AnyElement {
+    fn button(&self, id: &str, stage: &str, cancelling: bool, deferred: bool) -> AnyElement {
         let status = self.status;
         let copy = self.copy;
-        let outline = cancelling || !status.update_available;
-        let blocked =
-            (!status.update_available && !matches!(stage, "failed" | "ready") && !cancelling)
-                || (self.applying.is_some() && stage != "ready" && !cancelling);
+        let outline = cancelling || deferred || !status.update_available;
+        let blocked = deferred
+            || (!status.update_available && !matches!(stage, "failed" | "ready") && !cancelling)
+            || (self.applying.is_some() && stage != "ready" && !cancelling);
         let label = if cancelling {
             copy.cancel
+        } else if deferred {
+            copy.update_after_work
         } else if stage == "failed" {
             copy.retry
         } else if stage == "ready" {

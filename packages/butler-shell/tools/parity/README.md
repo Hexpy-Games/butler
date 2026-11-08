@@ -44,6 +44,21 @@ run in order before each screenshot on both sides; Electron uses the anchor's `e
 Electron's click centres its target in its scroll port first (`scrollIntoView({block: "center"})`);
 an anchor that sits in a scroll port names that port's gpui anchor as `scroll`, and the native side
 centres it there (`reveal`) before the click. The native capture waits until two frames match.
+Each step first waits up to 30 s for its anchor on both sides (`wait-anchor` natively): an answer
+may still be on its way. A control that can be disabled names its state, `<name>` while it takes
+clicks and `<name>-disabled` while not, as the Electron selector's `:not(:disabled)` does.
+
+The native side runs as the App (`--app`): its lifecycle starts, and the supervisor attaches to the
+scene's Agent as Electron's main process does (the setup check reads it).
+
+`open: {"setup": true}` starts the Agent with the first run not done; both sides wait for the setup
+(`first-run-setup`) instead of opening a chat. `reset` lists requests sent before every capture on
+both sides, so state a step saves (the consent, a reply language) is the seed's again when the next
+capture starts. The `onboarding-*` scenes reach each first-run screen this way: welcome, consent,
+memory, the provider list and the API key form from a fresh first run; reply language, import and
+ready from a saved consent and connection (`savedConnection`, the resumed first run). The backdrop
+is the bundled 320x200 poster of the riso print until the wallpaper engine lands (P6), so compare
+the card region (`first-run-card`) rather than the whole frame.
 
 For gpui-to-gpui review, run `parity-diff <dirA> <dirB> <outDir>` directly. Exact
 RGBA differences are counted. Different dimensions and missing pairs are printed;

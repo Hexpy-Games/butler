@@ -114,7 +114,11 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         | "shared_locks"
         | "powershell_text"
         | "host_file_behavior"
-        | "display_accessibility" => &[],
+        | "display_accessibility"
+        | "app_shell"
+        | "tray" => &[],
+        // The login item and notifications register only from a packaged App.
+        "login_item" | "notification_settings" => &["app_shell"],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.

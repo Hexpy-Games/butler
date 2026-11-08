@@ -6,6 +6,7 @@ mod canon;
 mod canon_queue;
 mod credentials;
 mod dashboard;
+mod data_reset;
 mod documents;
 mod files;
 mod history;

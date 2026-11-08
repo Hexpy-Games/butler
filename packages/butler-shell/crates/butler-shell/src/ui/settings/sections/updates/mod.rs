@@ -1,7 +1,8 @@
 //! Settings: Updates (`UpdatesSettings.tsx`, `UpdatePreviewSwitch.tsx`, `useUpdateActions.ts`).
 //!
-//! The app package updater (Electron `useAppUpdateState`) and live progress events are not
-//! ported: the page reads `/updates` on open and after its own actions.
+//! The page reads `/updates` on open and after its own actions (live progress events are not
+//! ported). The App's restart coordinator (Electron `useAppUpdateState`) is
+//! `lifecycle::app_update`; a staged App package goes to it after Apply.
 mod copy;
 mod model;
 mod row;
@@ -26,6 +27,7 @@ use serde_json::json;
 use self::copy::words;
 use self::model::{APP, Cancelled, ComponentView, Progress, Status};
 use self::row::Row;
+use crate::lifecycle::app_update::{self, AppUpdateStatus};
 use crate::ui::Icon;
 use crate::ui::settings::controls::SettingsSwitch;
 use crate::ui::settings::state::fetch;
@@ -63,6 +65,8 @@ impl UpdatesPage {
         let settings = cx.observe(&ctx.state, |this, state, cx| {
             this.settings_changed(&state, cx);
         });
+        let update = app_update::entity(cx);
+        cx.observe(&update, |_, _, cx| cx.notify()).detach();
         let mut page = Self {
             ctx,
             view: None,
@@ -195,6 +199,7 @@ impl UpdatesPage {
             },
             |this: &mut Self, result: Result<ComponentView, Error>, cx| match result {
                 Ok(applied) => {
+                    Self::open_staged(&applied, cx);
                     let mut components = this
                         .view
                         .clone()
@@ -209,6 +214,23 @@ impl UpdatesPage {
                 Err(_) => Self::apply_failed(cx),
             },
         );
+    }
+
+    /// `butler:open-update-artifact`: an App package that is staged is handed to the installer
+    /// (`applyUpdate` of the preload). A refusal reads like a failed apply.
+    fn open_staged(applied: &ComponentView, cx: &mut Context<Self>) {
+        let path = applied.artifact_path.as_deref().unwrap_or("").trim();
+        let staged = applied.stage_status.as_deref() == Some("staged");
+        if applied.component != APP || !staged || path.is_empty() {
+            return;
+        }
+        let opened = app_update::open_staged(&json!({ "artifact_path": path }), cx);
+        cx.spawn(async move |this, cx| {
+            if opened.await.is_err() {
+                let _ = this.update(cx, |_, cx| Self::apply_failed(cx));
+            }
+        })
+        .detach();
     }
 
     /// The failed or cancelled snapshot owns the feedback; without one, a generic error.
@@ -286,11 +308,19 @@ impl UpdatesPage {
 impl Render for UpdatesPage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let copy = words(Ds::get(cx).lang());
+        let restart = app_update::status(cx);
+        let restart_running = matches!(
+            restart,
+            AppUpdateStatus::Preparing
+                | AppUpdateStatus::Restarting
+                | AppUpdateStatus::ChoiceRequired(_)
+        );
         let applying = self
             .progress
             .as_ref()
             .filter(|progress| progress.is_running())
-            .map(|progress| progress.component.as_str());
+            .map(|progress| progress.component.as_str())
+            .or(restart_running.then_some(APP));
         let busy = self.loading || applying.is_some();
 
         let channel = self.channel_section(copy, busy, cx);
@@ -337,6 +367,7 @@ impl Render for UpdatesPage {
                 status,
                 applying,
                 progress,
+                restart: &restart,
                 copy,
                 on_apply: Rc::new(apply),
                 on_cancel: Rc::new(cancel),

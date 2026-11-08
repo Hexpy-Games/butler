@@ -56,7 +56,7 @@ pub(super) struct Card {
 }
 
 /// A cleanup or reset operation (`MemoryReceipt`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub(super) struct Receipt {
     #[serde(default)]
     pub(super) kind: Option<String>,
@@ -131,19 +131,19 @@ pub(super) struct PatternView {
     pub(super) patterns: Vec<Pattern>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub(super) struct ConsolidationReceipt {
     pub(super) operation_id: String,
     pub(super) phase: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub(super) struct LastRun {
     pub(super) at: String,
     pub(super) status: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub(super) struct ConsolidationStatus {
     #[serde(default)]
     pub(super) active: Option<ConsolidationReceipt>,
@@ -165,18 +165,4 @@ pub(super) struct MemorySettings {
     pub(super) consolidation_time: Option<String>,
     pub(super) consolidation_model: Option<String>,
     pub(super) consolidation_reasoning_effort: Option<ReasoningEffort>,
-}
-
-/// `GET /setup/readiness` `memory_model` (`MemoryModelProgress`).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub(super) struct MemoryModel {
-    pub(super) state: String,
-    #[serde(default)]
-    pub(super) bytes_total: u64,
-}
-
-#[derive(Deserialize)]
-pub(super) struct Readiness {
-    #[serde(default)]
-    pub(super) memory_model: Option<MemoryModel>,
 }

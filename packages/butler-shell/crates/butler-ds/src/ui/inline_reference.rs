@@ -289,13 +289,26 @@ fn external_items(
         el.into_any_element()
     };
     let gap_width = space(window);
-    let mut chars = text.chars();
-    let first: String = chars.next().into_iter().collect();
+    let chars: Vec<char> = text.chars().collect();
+    // A space between label words is a margin (a text item's width drops trailing whitespace).
+    let margin = |n: usize| {
+        if chars.get(n + 1).is_some_and(|next| next.is_whitespace()) {
+            gap_width
+        } else {
+            px(0.)
+        }
+    };
+    // `.external` inks the whole link, the globe included.
     let lead = div()
         .flex()
         .items_baseline()
+        .text_color(ink)
+        .mr(margin(0))
         .child(slot)
-        .child(piece(0, first))
+        .child(piece(
+            0,
+            chars.first().map(char::to_string).unwrap_or_default(),
+        ))
         .into_any_element();
     let mut items = vec![
         Tooltip::new((id.clone(), "tip"))
@@ -304,17 +317,16 @@ fn external_items(
             .child(lead)
             .into_any_element(),
     ];
-    // A space between label words is a margin (a text item's width drops trailing whitespace).
-    let rest: Vec<char> = chars.collect();
     items.extend(
-        rest.iter()
+        chars
+            .iter()
             .enumerate()
+            .skip(1)
             .filter(|(_, c)| !c.is_whitespace())
             .map(|(n, c)| {
-                let spaced = rest.get(n + 1).is_some_and(|next| next.is_whitespace());
                 div()
-                    .mr(if spaced { gap_width } else { px(0.) })
-                    .child(piece(n + 1, c.to_string()))
+                    .mr(margin(n))
+                    .child(piece(n, c.to_string()))
                     .into_any_element()
             }),
     );

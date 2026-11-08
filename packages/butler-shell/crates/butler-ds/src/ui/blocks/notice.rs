@@ -25,17 +25,20 @@ pub struct Notice {
     tone: NoticeTone,
     icon: Option<AnyElement>,
     title: Option<SharedString>,
-    message: SharedString,
+    message: AnyElement,
     action: Option<AnyElement>,
 }
 
 impl Notice {
     pub fn new(tone: NoticeTone, message: impl Into<SharedString>) -> Self {
+        let message: SharedString = message.into();
         Self {
             tone,
             icon: None,
             title: None,
-            message: message.into(),
+            message: Typo::body(message)
+                .tone(TypoTone::Inherit)
+                .into_any_element(),
             action: None,
         }
     }
@@ -47,6 +50,12 @@ impl Notice {
 
     pub fn title(mut self, title: impl Into<SharedString>) -> Self {
         self.title = Some(title.into());
+        self
+    }
+
+    /// Custom message content, for example a status line in a `RollingSwap`.
+    pub fn message_content(mut self, message: impl IntoElement) -> Self {
+        self.message = message.into_any_element();
         self
     }
 
@@ -112,7 +121,7 @@ impl RenderOnce for Notice {
         if let Some(title) = self.title {
             message = message.child(Typo::label(title).tone(TypoTone::Inherit));
         }
-        message = message.child(Typo::body(self.message).tone(TypoTone::Inherit));
+        message = message.child(self.message);
         let mut lead = div()
             .flex()
             .flex_1()

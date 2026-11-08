@@ -1,5 +1,4 @@
 //! The import flow's actions (`useBrowserImport.ts`): every call is an admin route.
-use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_shell_client::Error;
@@ -8,7 +7,7 @@ use serde_json::{Value, json};
 
 use super::dialog::ImportDialog;
 use super::model::{Counts, FILE, Folder, Session, Sources};
-use crate::ui::settings::state::fetch;
+use crate::ui::settings::state::{fetch, fetch_if};
 use crate::ui::source::agent::Jobs;
 
 /// `apiErrorCode(e) ?? "import_unreadable"`: the client returns no error codes.
@@ -163,44 +162,38 @@ impl ImportDialog {
     /// `usePasswordExportPolling`: once a second until the CSV is in.
     fn poll(id: String, cx: &mut Context<Self>) {
         let body = json!({ "export_id": id });
-        let request = Jobs::run(cx, move |client| async move {
-            client.poll_browser_password_export(&body).await
-        });
-        cx.spawn(async move |this, cx| {
-            let result = request
-                .await
-                .unwrap_or(Err(Error::Connection))
-                .and_then(|value| {
-                    serde_json::from_value::<Counts>(value).map_err(|_| Error::Protocol)
-                });
-            let _ = this.update(cx, move |this, cx| {
+        fetch_if(
+            cx,
+            move |client| async move { client.poll_browser_password_export(&body).await },
+            move |this: &mut Self, result: Result<Counts, Error>, cx| {
                 if this.export_id.as_deref() != Some(id.as_str()) {
-                    return;
+                    return false;
                 }
                 match result {
-                    Ok(counts) if counts.waiting == Some(true) => Self::poll_later(id, cx),
+                    Ok(counts) if counts.waiting == Some(true) => {
+                        Self::poll_later(id, cx);
+                        return false;
+                    }
                     Ok(counts) => {
                         let error = counts.error.clone();
                         this.result = Some(carry(this.result.as_ref(), counts, true));
                         this.export_id = None;
                         this.error = error;
                         (this.on_imported)(cx);
-                        cx.notify();
                     }
                     Err(_) => {
                         this.error = Some(UNREADABLE.into());
                         this.export_id = None;
-                        cx.notify();
                     }
                 }
-            });
-        })
-        .detach();
+                true
+            },
+        );
     }
 
     fn poll_later(id: String, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            motion::sleep(cx.background_executor(), Duration::from_secs(1)).await;
+            butler_ds::ui::motion::sleep(cx.background_executor(), Duration::from_secs(1)).await;
             let _ = this.update(cx, |this, cx| {
                 if this.export_id.as_deref() == Some(id.as_str()) {
                     Self::poll(id, cx);

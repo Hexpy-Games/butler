@@ -17,11 +17,13 @@ use super::{
     system_dark,
 };
 use crate::ui::Icon;
+use crate::ui::lifecycle_view;
+use crate::ui::onboarding::{self, gate::Gate};
 use crate::ui::settings::SettingsView;
 use crate::ui::widgets::anchor;
 
 impl Shell {
-    pub(super) fn conversation(&self, cx: &Context<Self>) -> AnyElement {
+    pub(super) fn conversation(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let content = if self.source.is_some() {
             self.chat.clone().into_any_element()
         } else {
@@ -36,11 +38,19 @@ impl Shell {
                 .into_any_element()
         };
         let reserve = self.composer_h.get() + f32::from(Ds::get(cx).len(Length::SpaceLg)) * 2.;
+        // `LiveConnectionNotice` above the conversation (`AgentStatusNotice`).
+        let lang = self.theme.strings.locale.ds_lang();
+        let notice = crate::lifecycle::runtime(cx).and_then(|runtime| {
+            runtime.update(cx, |runtime, cx| {
+                lifecycle_view::agent_notice(runtime, lang, window, cx)
+            })
+        });
         anchor(div(), "chat-card")
             .size_full()
             .relative()
             .flex()
             .flex_col()
+            .children(notice)
             .child(
                 ShellCard::new().child(
                     self.with_aside(ConversationShell::new("conversation", reserve))
@@ -118,7 +128,7 @@ impl Shell {
     }
 
     /// The AdaptiveShell window facts: the window's size and the platform.
-    fn shell_window(&self, window: &Window) -> (ShellWindow, ShellPlatform) {
+    pub(super) fn shell_window(&self, window: &Window) -> (ShellWindow, ShellPlatform) {
         let size = window.viewport_size();
         let mut input = ShellWindow::new(size.width.into(), size.height.into());
         input.fullscreen = window.is_fullscreen();
@@ -141,6 +151,40 @@ impl Shell {
             .settings_active(true)
             .settings(view)
             .into_any_element()
+    }
+
+    /// What fills the window (`AppShell`, `AppOnboardingShell`): the quit card, the legacy
+    /// recovery, the boot state while the gate waits, the setup, then the settings or the frame.
+    fn frame(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let lang = self.theme.strings.locale.ds_lang();
+        let runtime = crate::lifecycle::runtime(cx);
+        if runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.read(cx).quitting)
+        {
+            return lifecycle_view::quit(lang, window, cx);
+        }
+        if runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.read(cx).legacy)
+        {
+            return onboarding::legacy::screen(lang, window, cx);
+        }
+        if self.onboarding.gate == Gate::Pending {
+            // The shot harness has no lifecycle: its pending window shows the frame.
+            if let Some(runtime) = runtime {
+                return runtime.update(cx, |runtime, cx| {
+                    lifecycle_view::boot(runtime, lang, window, cx)
+                });
+            }
+        } else if self.onboarding.shows() {
+            let view = self.onboarding_view(window, cx);
+            return self.onboarding_frame(view, window);
+        }
+        match self.settings_view.clone() {
+            Some(view) => self.settings_frame(view, window),
+            None => self.adaptive_frame(window, cx),
+        }
     }
 
     fn adaptive_frame(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -214,14 +258,13 @@ impl Render for Shell {
         if let Some(section) = self.pending_settings.take() {
             self.open_settings(&section, window, cx);
         }
-        let frame = match self.settings_view.clone() {
-            Some(view) => self.settings_frame(view, window),
-            None => self.adaptive_frame(window, cx),
-        };
+        let frame = self.frame(window, cx);
         let rename = self.render_rename(window, cx);
         let task_graph = self.render_task_graph(window, cx);
         let sidebar_dialog = self.space_dialogs(window, cx);
         let viewer = image_viewer::overlay(window, cx);
+        let lang = self.theme.strings.locale.ds_lang();
+        let update_choice = lifecycle_view::update_choice(lang, window, cx);
         let ds = Ds::get(cx);
         let root = div()
             .track_focus(&self.focus)
@@ -247,6 +290,7 @@ impl Render for Shell {
             .children(viewer)
             .child(rename)
             .children(task_graph)
+            .children(update_choice)
             .child(self.palette())
             .child(sidebar_dialog)
             .child(toast::Toaster::new().offset(ds.len(Length::TitlebarSafeAreaTop)));

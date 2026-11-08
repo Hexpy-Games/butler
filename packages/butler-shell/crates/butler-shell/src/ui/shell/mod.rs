@@ -6,6 +6,7 @@ mod frame;
 pub(crate) mod image_viewer;
 pub(crate) mod navigation;
 mod notifications;
+mod onboarding_link;
 mod panes;
 mod region;
 mod render;
@@ -13,6 +14,8 @@ mod session_menu;
 mod settings_link;
 mod titlebar;
 mod transcript;
+
+pub(crate) use titlebar::window_controls;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -93,6 +96,12 @@ pub(crate) struct Shell {
     /// Light or dark is forced (`ShellOptions::dark`, the shot harness): the theme setting
     /// does not apply.
     forced_theme: bool,
+    /// The onboarding gate, Run setup again and the setup view.
+    onboarding: onboarding_link::OnboardingState,
+    /// The last `/model-catalog`; the onboarding opens with it.
+    catalog_raw: Option<Rc<serde_json::Value>>,
+    /// The `/settings` and `/model-catalog` read, retried while the gate is pending.
+    settings_task: Option<gpui::Task<()>>,
 }
 
 /// The open chat's refresh: idle, running, or running with another asked for meanwhile.
@@ -141,7 +150,7 @@ impl Shell {
         let chat = cx.new(|_| Chat::new());
         let composer = cx.new(|cx| Composer::new(theme.clone(), window, cx));
         let focus = cx.focus_handle();
-        let subscriptions = vec![
+        let mut subscriptions = vec![
             cx.observe_window_activation(window, |this, window, cx| {
                 this.sidebar.attended = window.is_window_active();
                 this.sync_minute_clock(cx);
@@ -158,8 +167,14 @@ impl Shell {
             cx.subscribe_in(&composer, window, Self::on_composer),
         ];
         let (panes, palette_events) = Self::new_panes(window, cx);
-        let mut subscriptions = subscriptions;
         subscriptions.push(palette_events);
+        let onboarding = onboarding_link::OnboardingState::new(options.source.is_some());
+        if let Some(runtime) = crate::lifecycle::runtime(cx) {
+            subscriptions.push(cx.observe(&runtime, |_, _, cx| cx.notify()));
+        }
+        // The update choice dialog and the sidebar's update row follow the App update.
+        let update = crate::lifecycle::app_update::entity(cx);
+        subscriptions.push(cx.observe(&update, |_, _, cx| cx.notify()));
         let composer_h = composer.read(cx).height_cell();
         let regions = region::Regions::new(&cx.entity(), cx);
         cx.set_window_appearance(options.dark.map(appearance));
@@ -191,6 +206,9 @@ impl Shell {
             pending_settings: None,
             settings_raw: None,
             forced_theme: options.dark.is_some(),
+            onboarding,
+            catalog_raw: None,
+            settings_task: None,
         };
         Self::transcript_hooks(cx);
         Self::notification_responses(window, cx);

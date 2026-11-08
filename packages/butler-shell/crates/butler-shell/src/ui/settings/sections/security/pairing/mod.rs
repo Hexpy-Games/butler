@@ -1,7 +1,6 @@
 //! The device pairing section (`SecurityPairingSection.tsx`, `usePairingSession.ts`). The code
 //! lives only in this page while it is shown; it is never logged and is dropped when paired,
 //! failed, or when remote access goes off.
-use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_ds::ui::blocks::settings_field::{ControlWidth, SettingsField};
@@ -18,8 +17,7 @@ use serde::Deserialize;
 
 use super::SecurityPage;
 use super::copy::{Words, words};
-use crate::ui::settings::state::fetch;
-use crate::ui::source::agent::Jobs;
+use crate::ui::settings::state::{fetch, fetch_if};
 
 const POLL: Duration = Duration::from_secs(1);
 
@@ -110,7 +108,7 @@ impl SecurityPage {
     fn schedule_poll(&mut self, cx: &mut Context<Self>) {
         let epoch = self.pairing.epoch;
         self.pairing.timer = Some(cx.spawn(async move |this, cx| {
-            motion::sleep(cx.background_executor(), POLL).await;
+            butler_ds::ui::motion::sleep(cx.background_executor(), POLL).await;
             let _ = this.update(cx, |this, cx| this.poll_pairing(epoch, cx));
         }));
     }
@@ -123,20 +121,12 @@ impl SecurityPage {
         if self.pairing.epoch != epoch {
             return;
         }
-        let request = Jobs::run(
+        fetch_if(
             cx,
             |client| async move { client.get_pairing_status().await },
-        );
-        cx.spawn(async move |this, cx| {
-            let result = request
-                .await
-                .unwrap_or(Err(Error::Connection))
-                .and_then(|value| {
-                    serde_json::from_value::<Option<StatusView>>(value).map_err(|_| Error::Protocol)
-                });
-            let _ = this.update(cx, move |this, cx| {
+            move |this: &mut Self, result: Result<Option<StatusView>, Error>, cx| {
                 if this.pairing.epoch != epoch {
-                    return;
+                    return false;
                 }
                 match result {
                     Ok(Some(status)) if status.id == id && status.status == "paired" => {
@@ -145,28 +135,22 @@ impl SecurityPage {
                         this.pairing.paired = true;
                         this.pairing.epoch += 1;
                         this.refresh_devices(cx);
-                        cx.notify();
                     }
                     Ok(Some(status)) if status.id == id && status.status == "active" => {
-                        if this.pairing.remaining != status.expires_in {
-                            this.pairing.remaining = status.expires_in;
-                            cx.notify();
-                        }
+                        let changed = this.pairing.remaining != status.expires_in;
+                        this.pairing.remaining = status.expires_in;
                         this.schedule_poll(cx);
+                        return changed;
                     }
                     Ok(status) => {
                         let invalidated = status.is_some_and(|s| s.invalidated_by.is_some());
                         this.replace_code(epoch, invalidated, cx);
-                        cx.notify();
                     }
-                    Err(_) => {
-                        this.pairing_failed(cx);
-                        cx.notify();
-                    }
+                    Err(_) => this.pairing_failed(cx),
                 }
-            });
-        })
-        .detach();
+                true
+            },
+        );
     }
 
     /// The old code is hidden while its replacement is issued.

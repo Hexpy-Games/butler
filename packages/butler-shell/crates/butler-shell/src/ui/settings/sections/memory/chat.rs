@@ -19,8 +19,7 @@ use super::format::free_text;
 use super::reset::{ResetKind, ResetState};
 use super::types::{Receipt, newer};
 use super::{MemoryPage, lang, later, with_reason};
-use crate::ui::settings::state::fetch;
-use crate::ui::source::agent::Jobs;
+use crate::ui::settings::state::{fetch, fetch_if};
 
 /// The kinds of receipt the reset and consolidation flows own.
 const OTHER_KINDS: [&str; 4] = ["automatic", "profile", "project_memory", "consolidation"];
@@ -80,27 +79,19 @@ impl MemoryPage {
         };
         self.cleanup.polling = true;
         later(cx, move |_, cx| {
-            let request = Jobs::run(cx, move |client| async move {
-                client.get_memory_cleanup(&id).await
-            });
-            cx.spawn(async move |this, cx| {
-                let next = request
-                    .await
-                    .and_then(Result::ok)
-                    .and_then(|value| serde_json::from_value::<Receipt>(value).ok());
-                let _ = this.update(cx, |this, cx| {
+            fetch_if(
+                cx,
+                move |client| async move { client.get_memory_cleanup(&id).await },
+                |this: &mut Self, result: Result<Receipt, Error>, cx| {
                     this.cleanup.polling = false;
-                    let previous = this.cleanup.receipt.clone();
-                    if let Some(next) = next {
+                    let before = this.cleanup.receipt.clone();
+                    if let Ok(next) = result {
                         this.accept_cleanup(next, true, cx);
                     }
-                    if this.cleanup.receipt != previous {
-                        cx.notify();
-                    }
                     this.poll_cleanup(cx);
-                });
-            })
-            .detach();
+                    this.cleanup.receipt != before
+                },
+            );
         });
     }
 

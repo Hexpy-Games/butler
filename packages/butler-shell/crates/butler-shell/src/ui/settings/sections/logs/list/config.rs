@@ -1,6 +1,5 @@
 //! 기록 (`LogLevelFields.tsx`, `LogCategoryLevels.tsx`, `useLogConfig.ts`): the preset, the
 //! full-logging lease and per-category overrides.
-use butler_ds::ui::motion;
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -73,19 +72,20 @@ impl LogList {
                 .update(cx, super::super::trace::LogStorage::reload);
         }
         self.config = Some(config);
-        let mut previous = self.minutes_left();
-        let running = previous.is_some_and(|minutes| minutes > 0);
+        let running_minutes = self.minutes_left();
+        let running = running_minutes.is_some_and(|minutes| minutes > 0);
         self.lease = running.then(|| {
             cx.spawn(async move |this, cx| {
+                let mut shown = running_minutes;
                 loop {
-                    motion::sleep(cx.background_executor(), LEASE_TICK).await;
+                    butler_ds::ui::motion::sleep(cx.background_executor(), LEASE_TICK).await;
                     let Ok(ended) = this.update(cx, |list, cx| {
-                        let minutes = list.minutes_left();
-                        if minutes != previous {
-                            previous = minutes;
+                        let left = list.minutes_left();
+                        if left != shown {
+                            shown = left;
                             cx.notify();
                         }
-                        minutes == Some(0)
+                        left == Some(0)
                     }) else {
                         return;
                     };
@@ -128,6 +128,8 @@ impl LogList {
             move |client| async move { api::write_config(&client, &level, &categories).await },
             move |this: &mut Self, result: Result<LogConfig, Error>, cx| {
                 this.level.saving = false;
+                // The App's own log follows the new level (`butler:app-log-change`).
+                crate::lifecycle::logs::refresh(cx);
                 let copy = super::copy::get(cx);
                 let saved = words(butler_ds::ui::context::Ds::get(cx).lang());
                 match result {

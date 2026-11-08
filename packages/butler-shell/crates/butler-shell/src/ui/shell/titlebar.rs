@@ -1,7 +1,9 @@
 //! Product title and workspace identity inside the DS titlebar.
 use super::Shell;
 use crate::ui::{Icon, source::wire};
-use butler_ds::ui::{blocks::titlebar_shell::TitlebarShell, icon_button::IconButton, typo::Typo};
+use butler_ds::ui::{
+    blocks::titlebar_shell::TitlebarShell, context::Lang, icon_button::IconButton, typo::Typo,
+};
 use gpui::{AnyElement, Context, IntoElement as _, Window, WindowControlArea, div, prelude::*};
 
 impl Shell {
@@ -76,43 +78,6 @@ impl Shell {
         (title, subtitle)
     }
 
-    fn window_controls(&self) -> AnyElement {
-        let mut row = div().flex().items_center();
-        for (id, label, glyph, area) in [
-            (
-                "wc-min",
-                self.copy("Minimize", "최소화"),
-                Icon::Minus,
-                WindowControlArea::Min,
-            ),
-            (
-                "wc-max",
-                self.copy("Maximize", "최대화"),
-                Icon::Square,
-                WindowControlArea::Max,
-            ),
-            (
-                "wc-close",
-                self.copy("Close", "닫기"),
-                Icon::X,
-                WindowControlArea::Close,
-            ),
-        ] {
-            row = row.child(
-                div().window_control_area(area).child(
-                    IconButton::new(id, label)
-                        .glyph(glyph)
-                        .on_click(move |_, w, _| match area {
-                            WindowControlArea::Min => w.minimize_window(),
-                            WindowControlArea::Max => w.zoom_window(),
-                            _ => w.remove_window(),
-                        }),
-                ),
-            );
-        }
-        row.into_any_element()
-    }
-
     pub(super) fn render_titlebar(
         &mut self,
         open: bool,
@@ -137,11 +102,50 @@ impl Shell {
             bar = bar.trailing(toggle);
         }
         if !matches!(self.theme.platform, crate::ui::theme::Platform::Mac) {
-            bar = bar.window_controls(self.window_controls());
+            bar = bar.window_controls(window_controls(self.theme.strings.locale.ds_lang()));
         }
         crate::ui::widgets::anchor(div(), "titlebar")
             .w_full()
             .child(bar)
             .into_any_element()
     }
+}
+
+/// Minimize, maximize and close (Windows and Linux); the setup screen shows them too.
+pub(crate) fn window_controls(lang: Lang) -> AnyElement {
+    let copy = |en: &'static str, ko: &'static str| if lang == Lang::Ko { ko } else { en };
+    let mut row = div().flex().items_center();
+    for (id, label, glyph, area) in [
+        (
+            "wc-min",
+            copy("Minimize", "최소화"),
+            Icon::Minus,
+            WindowControlArea::Min,
+        ),
+        (
+            "wc-max",
+            copy("Maximize", "최대화"),
+            Icon::Square,
+            WindowControlArea::Max,
+        ),
+        (
+            "wc-close",
+            copy("Close", "닫기"),
+            Icon::X,
+            WindowControlArea::Close,
+        ),
+    ] {
+        row = row.child(
+            div().window_control_area(area).child(
+                IconButton::new(id, label)
+                    .glyph(glyph)
+                    .on_click(move |_, w, _| match area {
+                        WindowControlArea::Min => w.minimize_window(),
+                        WindowControlArea::Max => w.zoom_window(),
+                        _ => w.remove_window(),
+                    }),
+            ),
+        );
+    }
+    row.into_any_element()
 }

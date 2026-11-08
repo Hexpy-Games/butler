@@ -7,6 +7,8 @@ pub(crate) mod decisions;
 pub(crate) mod field;
 pub(crate) mod i18n;
 pub(crate) mod inspector;
+pub(crate) mod lifecycle_view;
+pub(crate) mod onboarding;
 pub(crate) mod palette;
 pub(crate) mod settings;
 pub(crate) mod shell;

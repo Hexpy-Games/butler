@@ -17,6 +17,10 @@ pub(super) struct ComponentView {
     pub(super) update_available: bool,
     pub(super) check_state: Option<String>,
     bundled_agent_version: Option<String>,
+    /// `UpdateApplyResult`: "staged" once the package waits for the restart.
+    pub(super) stage_status: Option<String>,
+    /// `UpdateApplyResult`: the staged package, relative to the data folder.
+    pub(super) artifact_path: Option<String>,
 }
 
 impl ComponentView {
