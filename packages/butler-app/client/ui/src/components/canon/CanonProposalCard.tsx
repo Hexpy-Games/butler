@@ -41,7 +41,7 @@ function AppliedReceipt({ proposals, shown }: { proposals: CanonProposal[]; show
   return <Stack gap="sm"><Card padding="sm" data-test-class="canon-proposal-card" data-proposal-id={first.proposal_id} data-state="applied">
     <Stack align="row" cross="center" justify="between" gap="sm">
       <Typo.Caption>{deletes ? mixedDelete ? copy.changed : copy.deleted : first.resolved_by === null ? copy.record : first.resolved_by === "chat" ? copy.chat : copy.added}</Typo.Caption>
-      <ButtonContainer size="sm" justify="end"><Button size="sm" variant="link" onClick={open}>{copy.open}</Button></ButtonContainer>
+      <ButtonContainer size="sm" justify="end"><Button size="sm" variant="outline" onClick={open}>{copy.open}</Button></ButtonContainer>
     </Stack>
   </Card>
     {project && created.length > 0 && <ChatEpicCards projectId={project} ids={created} />}

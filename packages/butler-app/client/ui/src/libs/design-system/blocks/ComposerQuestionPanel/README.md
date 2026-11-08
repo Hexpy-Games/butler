@@ -8,10 +8,10 @@ DS-only question form, a sibling of ComposerDecisionPanel. Place it inside Compo
 Butler asked: inside a flat bordered `Card radius="lg"` (12px, no shadow, no
 TintedGlass), with a 12px content inset and control-radius (8px) buttons.
 The header row stays icon, small label and title. The default
-`placement="composer"` is unchanged. Collapsed is the same pill in both placements.
+`placement="composer"` is unchanged. In the conversation the panel never collapses: Later, shown only while onCollapse is passed, keeps the card open.
 
 ## Contract
-Pass 1–4 questions with unique ids, type, header, text, options and optional allowOther/placeholder. onSubmit returns one answer per question: id, selected option indices, text, other and skipped. Delivery state is caller-owned: open, submitting, error, collapsed or working. Remount with a new key for a new request. defaultAnswers/defaultStep are showcase and restoration seeds. Optional onDraftChange reports snapshots for a caller that remounts the surface when collapsing.
+Pass 1–4 questions with unique ids, type, header, text, options and optional allowOther/placeholder. onSubmit returns one answer per question: id, selected option indices, text, other and skipped. Delivery state is caller-owned: open, submitting, error, collapsed or working. Remount with a new key for a new request. defaultAnswers/defaultStep are showcase and restoration seeds. onCollapse is optional. Optional onDraftChange reports snapshots for a caller that remounts the surface when collapsing.
 
 ## Behavior
 Single-choice tap sends immediately for one question and advances for multiple questions. Multi/text/Other require confirmation. Multi-question review permits skipped answers and edits. Recommendation highlights without selecting. Keyboard: 1–9 choices, up/down highlight, Enter select/advance/send, Space multi toggle, Esc collapse, left/right questions. Other uses an underline Textarea that wraps and grows up to the DS six-line cap. Enter confirms, Shift+Enter inserts a newline, and composing Enter never confirms. Inputs preserve typing and IME; Tabs retains native navigation. Touch targets and scroll fades use DS primitives. Labels default to English; showcase supplies Korean.
