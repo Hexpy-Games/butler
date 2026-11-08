@@ -4,10 +4,11 @@ import { join } from "node:path";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 import type { CanonOverview } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+const planChooser = (page: Page) => page.locator('[data-slot="filtered-select-popover"][aria-label="계획"]');
 export async function selectBoardPlan(page: Page, title: string) {
   await page.locator('[data-test-class="canon-board"]').getByRole("button", { name: "계획", exact: true }).click();
-  await page.locator('[data-test-class="canon-plan-chooser"]').getByRole("button", { name: title, exact: true }).click();
-  await page.locator('[data-test-class="canon-plan-chooser"]').waitFor({ state: "hidden" });
+  await planChooser(page).getByRole("button", { name: title, exact: true }).click();
+  await planChooser(page).waitFor({ state: "hidden" });
 }
 export async function verifyBoardSelector(page: Page, server: NativeAppServerHandle, projectId: string,
   planId: string, name: string, shots: string, reopen: () => Promise<void>) {
@@ -19,40 +20,35 @@ export async function verifyBoardSelector(page: Page, server: NativeAppServerHan
   assert(canon.plans.every(plan => typeof plan.updated_at === "number"), "API supplies real update timestamps");
   await page.screenshot({ path: join(shots, `${name}-closed.png`), animations: "disabled" });
   await board.getByRole("button", { name: "계획", exact: true }).click();
-  const chooser = page.locator('[data-test-class="canon-plan-chooser"]');
+  const chooser = planChooser(page);
   await chooser.waitFor();
-  const outside = await chooser.evaluate(element => {
-    const popover = element.closest('[data-slot="popover-content"]')!, style = getComputedStyle(popover), box = popover.getBoundingClientRect();
-    const left = box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
-    const right = box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
-    return [...element.querySelectorAll('[data-slot="option-menu-item"]')].map(item => item.getBoundingClientRect())
-      .filter(item => item.left < left - 0.5 || item.right > right + 0.5).length;
+  const insets = await chooser.evaluate(element => {
+    const box = element.closest('[data-slot="popover-content"]')!.getBoundingClientRect();
+    const textLeft = (node: Element) => { const range = document.createRange(); range.selectNodeContents(node); return range.getBoundingClientRect().left; };
+    const rows = [...element.querySelectorAll('[data-slot="filtered-select-item"]')].map(row => row.getBoundingClientRect());
+    return { title: textLeft(element.firstElementChild!) - box.left, label: textLeft(element.querySelector('[data-slot="filtered-select-item"] span span')!) - box.left,
+      left: Math.min(...rows.map(row => row.left)) - box.left, right: box.right - Math.max(...rows.map(row => row.right)) };
   });
-  assert.equal(outside, 0, "Plan rows fit inside the popover padding");
+  assert(Math.abs(insets.title - insets.label) < 1, "Plan title lines up with the row labels");
+  assert(Math.abs(insets.left - insets.right) < 1, "Plan rows keep equal side insets");
   assert.equal(await chooser.locator('[data-slot="filtered-select-filters"], [data-slot="filtered-select-group-title"]').count(), 0,
     "Flat plan choices have no empty filter or group-title rows");
-  assert.equal(await chooser.locator('[data-slot="option-menu-item"]').last().innerText(), "백로그");
+  assert.equal(await chooser.locator('[data-slot="filtered-select-item"]').last().innerText(), "백로그");
   await page.screenshot({ path: join(shots, `${name}-open.png`), animations: "disabled" });
-  await chooser.getByRole("textbox", { name: "계획 검색", exact: true }).fill("단일");
-  assert.deepEqual(await chooser.locator('[data-slot="option-menu-item"]').allTextContents(), ["단일 과제 계획"]);
-  const result = await chooser.locator('[data-slot="option-menu-item"]').boundingBox();
-  const results = await chooser.locator('[data-test-class="canon-plan-results"]').boundingBox();
-  const padding = await chooser.locator('[data-test-class="canon-plan-results"] > div').evaluate(element => {
-    const style = getComputedStyle(element);
-    return parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-  });
-  assert(result && results && Math.abs(results.height - result.height - padding) < 1,
-    "Search results contain exactly the content and DS focus-ring padding");
+  await chooser.getByPlaceholder("계획 검색", { exact: true }).fill("단일");
+  assert.deepEqual(await chooser.locator('[data-slot="filtered-select-item"]').allTextContents(), ["단일 과제 계획"]);
+  const result = await chooser.locator('[data-slot="filtered-select-item"]').boundingBox();
+  const results = await chooser.locator('[data-slot="filtered-select-results"]').boundingBox();
   assert(result && results && result.y >= results.y && result.y + result.height <= results.y + results.height,
     "Filtered result is fully visible without scrolling");
   const popover = await chooser.boundingBox(), composer = await page.locator('[data-test-class~="composer-wrap"]').boundingBox();
   assert(popover && (!composer || popover.y + popover.height <= composer.y), "Selector stays above composer");
   await page.screenshot({ path: join(shots, `${name}-search.png`), animations: "disabled" });
-  await chooser.getByRole("textbox", { name: "계획 검색", exact: true }).fill("일치하지 않는 검색");
-  assert.equal(await chooser.locator('[data-slot="option-menu-item"]').count(), 0);
+  await chooser.getByPlaceholder("계획 검색", { exact: true }).fill("일치하지 않는 검색");
+  assert.equal(await chooser.locator('[data-slot="filtered-select-item"]').count(), 0);
   await chooser.getByText("검색 결과 없음", { exact: true }).waitFor();
   await chooser.getByRole("button", { name: "검색 지우기", exact: true }).click();
-  assert.equal(await chooser.locator('[data-slot="option-menu-item"]').count(), canon.plans.length + 1);
+  assert.equal(await chooser.locator('[data-slot="filtered-select-item"]').count(), canon.plans.length + 1);
   await page.keyboard.press("Escape");
   for (const option of [...canon.plans, { id: null, title: "백로그" }]) {
     await selectBoardPlan(page, option.title);
