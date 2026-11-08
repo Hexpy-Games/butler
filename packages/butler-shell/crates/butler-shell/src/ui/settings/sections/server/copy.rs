@@ -12,8 +12,8 @@ pub(super) struct Words {
     pub(super) default_project_folder: &'static str,
     /// settings.actions.chooseFolder
     pub(super) choose_folder: &'static str,
-    /// shell.notYet
-    pub(super) not_yet: &'static str,
+    /// settings.errors.chooseFolder
+    pub(super) choose_failed: &'static str,
 }
 
 const KO: Words = Words {
@@ -22,7 +22,7 @@ const KO: Words = Words {
     server_url: "서버 URL",
     default_project_folder: "기본 프로젝트 폴더",
     choose_folder: "폴더 선택",
-    not_yet: "준비 중",
+    choose_failed: "폴더 선택 실패",
 };
 
 const EN: Words = Words {
@@ -31,7 +31,7 @@ const EN: Words = Words {
     server_url: "Server URL",
     default_project_folder: "Default project folder",
     choose_folder: "Choose folder",
-    not_yet: "Coming soon",
+    choose_failed: "Failed to choose folder",
 };
 
 pub(super) fn words(lang: Lang) -> &'static Words {

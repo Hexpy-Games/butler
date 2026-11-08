@@ -1,5 +1,6 @@
 //! SidebarFooter, update progress and client-side SpaceSidebar paging.
 use super::Shell;
+use crate::lifecycle::app_update::AppUpdateStatus;
 use crate::ui::{
     Icon,
     source::{sidebar::Mutation, wire::UpdateProgressViewStage},
@@ -77,19 +78,26 @@ impl Shell {
                     crate::ui::source::wire::UpdateComponentId::Unknown => None,
                 };
                 if let Some(component) = component {
-                    row = row.actions(
-                        Button::new("sidebar-update-restart")
-                            .text(self.copy("Restart", "다시 시작"))
-                            .on_click(cx.listener(move |s, _, _, cx| {
-                                cx.stop_propagation();
-                                s.mutate(
-                                    Mutation::ApplyUpdate(
-                                        serde_json::json!({"component":component}),
-                                    ),
-                                    cx,
-                                );
-                            })),
-                    );
+                    let mut restart = Button::new("sidebar-update-restart")
+                        .text(self.copy("Restart", "다시 시작"))
+                        .on_click(cx.listener(move |s, _, _, cx| {
+                            cx.stop_propagation();
+                            s.mutate(
+                                Mutation::ApplyUpdate(serde_json::json!({"component":component})),
+                                cx,
+                            );
+                        }));
+                    // An App update already deciding or running keeps Restart off.
+                    if matches!(
+                        crate::lifecycle::app_update::status(cx),
+                        AppUpdateStatus::Deferred
+                            | AppUpdateStatus::Preparing
+                            | AppUpdateStatus::Restarting
+                            | AppUpdateStatus::ChoiceRequired(_)
+                    ) {
+                        restart = restart.disabled();
+                    }
+                    row = row.actions(restart);
                 }
             }
             return Some(row.into_any_element());

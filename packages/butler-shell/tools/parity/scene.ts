@@ -13,7 +13,11 @@ export type Scene = {
   /** Tool calls the stub model makes, one per streamed round with tools, in order, before it replies. */
   toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
   seed: Array<{ method: string; path: string; body: Record<string, unknown>; wait?: boolean; save?: Record<string, string> }>;
-  open: { chat: string } | { new: true };
+  /** `setup`: the first run is not complete, so the window opens on the setup (both sides wait for it). */
+  open: { chat: string } | { new: true } | { setup: true };
+  /** Sent before every capture on both sides, so a state a step saves (the consent, a memory choice)
+   * is back to the seed's when the next capture starts. */
+  reset?: Array<{ method: string; path: string; body: Record<string, unknown> }>;
   anchors: Anchor[];
   /** What must exist in `/session-view` before capture. */
   ready?: "authority_requests" | "pending_questions" | "artifacts";

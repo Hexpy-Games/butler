@@ -80,12 +80,14 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         | "click"
         | "drag"
         | "reveal"
+        | "wait-anchor"
         | "expect-anchor"
         | "expect-no-anchor"
         | "expect-scale"
         | "expect-session"
         | "expect-composer-focus"
         | "wait" => super::frame::command(h, command, arg),
+        "agent" | "diagnostics" | "app-quit" => super::app::command(h, dir, command, arg),
         "connected" => wait(h, |s, _| {
             s.disconnected().is_none() && s.store.cursor.is_some() && !s.store.chats.is_empty()
         }),
@@ -145,12 +147,20 @@ pub(super) fn run(
     dir: &Path,
     data: std::path::PathBuf,
     dark: bool,
+    app: bool,
     options: &super::Options,
 ) -> anyhow::Result<()> {
     std::fs::create_dir_all(dir)?;
-    let mut h = Harness::open(None, dark, options)?;
+    let mut h = Harness::open(None, dark, options, |cx| {
+        if app {
+            super::app::start(cx, &data);
+        }
+    })?;
     let attachment = Attachment::start(Some(data));
     h.update(|s, _, cx| s.attach(attachment, cx))?;
+    if app {
+        h.cx.update(super::lifecycle::ensure_ready);
+    }
     println!("LIVE READY");
     io::stdout().flush()?;
     for line in io::stdin().lock().lines() {

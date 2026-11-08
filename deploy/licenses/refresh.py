@@ -96,7 +96,7 @@ def fetch_text(url):
 
 def license_files(directory):
     files = sorted(p for p in directory.rglob("*") if p.is_file()
-                   and re.match(r"^(licen[cs]e|copying|notice|copyright)([._-]|$)", p.name, re.I))
+                   and re.match(r"^(unlicen[cs]e|licen[cs]e|copying|notice|copyright)([._-]|$)", p.name, re.I))
     result = []
     for file in files:
         text = file.read_text(encoding="utf-8")

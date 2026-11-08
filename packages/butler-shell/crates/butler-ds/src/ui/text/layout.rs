@@ -137,6 +137,9 @@ fn plain_text(p: &Parts, ds: &Ds, cx: &App) -> Div {
             p.spec.placeholder.clone().unwrap_or_default(),
             p.c.placeholder,
         )
+    } else if p.spec.masked {
+        // `type="password"` stays dots while disabled: one per character, as the editor masks.
+        ("\u{2022}".repeat(text.chars().count()).into(), p.c.text)
     } else {
         (text.into(), p.c.text)
     };

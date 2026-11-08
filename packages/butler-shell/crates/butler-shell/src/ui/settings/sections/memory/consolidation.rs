@@ -25,7 +25,7 @@ use super::types::{ConsolidationReceipt, ConsolidationStatus, MemorySettings};
 use super::{MemoryPage, lang, later, with_reason};
 use crate::ui::Icon;
 use crate::ui::settings::Save;
-use crate::ui::settings::state::fetch;
+use crate::ui::settings::state::{fetch, fetch_if};
 
 #[derive(Default)]
 pub(super) struct Consolidation {
@@ -49,11 +49,16 @@ impl Consolidation {
 impl MemoryPage {
     /// `reload`: GET /memory/consolidation.
     pub(super) fn reload_consolidation(cx: &mut Context<Self>) {
-        fetch(
+        fetch_if(
             cx,
             |client| async move { client.get_memory_consolidation().await },
             |this: &mut Self, result: Result<ConsolidationStatus, Error>, cx| {
                 this.consolidation.polling = false;
+                let before = (
+                    this.consolidation.status.clone(),
+                    this.consolidation.active.clone(),
+                    this.consolidation.lease_busy,
+                );
                 if let Ok(next) = result {
                     this.consolidation.lease_busy = false;
                     match next.active.clone() {
@@ -72,6 +77,12 @@ impl MemoryPage {
                     this.consolidation.status = Some(next);
                 }
                 this.poll_consolidation(cx);
+                let after = (
+                    &this.consolidation.status,
+                    &this.consolidation.active,
+                    this.consolidation.lease_busy,
+                );
+                after != (&before.0, &before.1, before.2)
             },
         );
     }

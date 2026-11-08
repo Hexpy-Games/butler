@@ -23,7 +23,7 @@ use super::copy::{Words, words};
 use crate::ui::Icon;
 use crate::ui::settings::SectionCtx;
 use crate::ui::settings::controls::provider_mark;
-use crate::ui::settings::state::fetch;
+use crate::ui::settings::state::{fetch, fetch_if};
 
 const POLL: Duration = Duration::from_secs(1); // useSignIn.ts SIGN_IN_POLL_MS
 const TIMEOUT: Duration = Duration::from_mins(5); // useSignIn.ts SIGN_IN_TIMEOUT_MS
@@ -41,7 +41,7 @@ enum Phase {
 }
 
 /// `OpenAIOAuthLoginResult`, merged over the flow's earlier answers.
-#[derive(Clone, Default, Deserialize)]
+#[derive(Clone, Default, PartialEq, Deserialize)]
 #[serde(default)]
 struct SignInFlow {
     flow_id: Option<String>,
@@ -224,16 +224,19 @@ impl ChatGptCard {
         let Some(flow_id) = self.flow.as_ref().and_then(|flow| flow.flow_id.clone()) else {
             return;
         };
-        fetch(
+        fetch_if(
             cx,
             move |client| async move { client.get_setup_oauth_flow(&flow_id).await },
             move |this: &mut Self, result: Result<SignInFlow, Error>, cx| {
+                let before = (this.flow.clone(), this.phase, this.run);
                 if let Ok(flow) = result {
                     this.settle(id, flow, cx);
                 }
                 if this.run == id && this.phase == Phase::Waiting {
                     Self::schedule_poll(id, started, cx);
                 }
+                (this.flow.as_ref(), this.phase, this.run)
+                    != (before.0.as_ref(), before.1, before.2)
             },
         );
     }

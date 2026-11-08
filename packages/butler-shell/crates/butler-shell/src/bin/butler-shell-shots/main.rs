@@ -14,6 +14,12 @@
 #[path = "../../ui/mod.rs"]
 mod ui;
 
+// The UI reads the App lifecycle; the harness starts it only as the App (`--app`), otherwise
+// `lifecycle::runtime` is none.
+#[path = "../../lifecycle/mod.rs"]
+mod lifecycle;
+
+mod app;
 mod fixture;
 mod frame;
 mod live;
@@ -78,8 +84,15 @@ impl Drop for Harness {
 }
 
 impl Harness {
-    fn open(source: Option<Rc<dyn Source>>, dark: bool, options: &Options) -> anyhow::Result<Self> {
+    /// `before` runs on the app before the window opens (the App's lifecycle, as `main.rs`).
+    fn open(
+        source: Option<Rc<dyn Source>>,
+        dark: bool,
+        options: &Options,
+        before: impl FnOnce(&mut gpui::App),
+    ) -> anyhow::Result<Self> {
         let mut cx = context(options.scale)?;
+        cx.update(before);
         let code_font = cx.update(|cx| ui::theme::code_font(&cx.text_system().all_font_names()));
         let window =
             cx.open_window(size(px(options.width), px(options.height)), |window, cx| {
@@ -227,7 +240,7 @@ fn open_chat(
 }
 
 fn connected(dir: &Path, dark: bool, theme: &str, options: &Options) -> anyhow::Result<()> {
-    let mut h = Harness::open(Some(Rc::new(fixture::Fixture)), dark, options)?;
+    let mut h = Harness::open(Some(Rc::new(fixture::Fixture)), dark, options, |_| {})?;
     h.update(|shell, window, cx| open_chat(shell, fixture::LONG, window, cx))?;
     h.shot(dir, &format!("w2-1x-{theme}-chat"))?;
     h.update(|shell, window, cx| open_chat(shell, fixture::APPROVAL, window, cx))?;
@@ -239,7 +252,7 @@ fn connected(dir: &Path, dark: bool, theme: &str, options: &Options) -> anyhow::
 }
 
 fn disconnected(dir: &Path, dark: bool, theme: &str, options: &Options) -> anyhow::Result<()> {
-    let mut h = Harness::open(None, dark, options)?;
+    let mut h = Harness::open(None, dark, options, |_| {})?;
     h.shot(dir, &format!("w2-1x-{theme}-disconnected"))
 }
 
@@ -299,7 +312,7 @@ fn main() -> ExitCode {
     let result = (|| {
         let args: Vec<_> = std::env::args_os().collect();
         let dir = args.get(1).map(PathBuf::from).context(
-            "usage: butler-shell-shots <dir> [--data <dir>] [--scale <f32>] [--size <W>x<H>] [--platform mac|windows|linux]",
+            "usage: butler-shell-shots <dir> [--data <dir> [--app]] [--scale <f32>] [--size <W>x<H>] [--platform mac|windows|linux]",
         )?;
         let options = Options::parse(&args)?;
         let data = args
@@ -307,8 +320,10 @@ fn main() -> ExitCode {
             .find(|p| p[0] == "--data")
             .map(|p| PathBuf::from(&p[1]));
         let dark = args.iter().any(|a| a == "--dark");
+        // `--app`: the harness is the App, whose lifecycle starts and supervises the Agent.
+        let app = args.iter().any(|a| a == "--app");
         match data {
-            Some(data) => live::run(&dir, data, dark, &options),
+            Some(data) => live::run(&dir, data, dark, app, &options),
             None => run(&dir, &options),
         }
     })();

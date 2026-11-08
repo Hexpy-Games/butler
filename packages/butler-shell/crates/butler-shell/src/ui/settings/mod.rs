@@ -67,6 +67,7 @@ impl SectionCtx {
         self.state.update(cx, |state, cx| {
             state.pending_confirm = Some(confirm::Pending {
                 request,
+                typed: String::new(),
                 on_accept: Box::new(on_accept),
             });
             cx.notify();
@@ -83,6 +84,12 @@ impl SectionCtx {
     pub(crate) fn open_session(&self, id: SharedString, cx: &mut App) {
         self.state
             .update(cx, |_, cx| cx.emit(SettingsEvent::OpenSession(id)));
+    }
+
+    /// `openRerun` (`RerunSetupField`): Settings closes and the setup shows again.
+    pub(crate) fn rerun_setup(&self, cx: &mut App) {
+        self.state
+            .update(cx, |_, cx| cx.emit(SettingsEvent::RerunSetup));
     }
 
     /// A page inside the section, or back to the section (`None`).

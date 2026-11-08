@@ -50,11 +50,11 @@ impl Render for GeneralPage {
             .section(sidebar(ctx, &slice, copy))
             .section(default_permission(ctx, &slice, copy, window, cx))
             .section(notifications(ctx, &slice, copy))
-            .section(native::notification_permission(copy))
-            .section(app_behavior(ctx, &slice, copy))
+            .section(native::notifications::section(ctx, copy, cx))
+            .section(app_behavior(ctx, &slice, copy, cx))
             .section(search::provider(ctx, &slice.web_search, copy, window, cx))
             .section(search::behavior(ctx, &slice.web_search, copy))
-            .section(native::full_reset(copy))
+            .section(native::full_reset::section(ctx, copy))
     }
 }
 
@@ -291,10 +291,12 @@ fn notifications(ctx: &SectionCtx, slice: &Slice, copy: &'static GeneralCopy) ->
 }
 
 /// App behavior: tray, start at login, rerun setup.
-fn app_behavior(ctx: &SectionCtx, slice: &Slice, copy: &'static GeneralCopy) -> SettingsSection {
-    // CARVE-OUT(G-native): StartAtLoginField reads and sets the login item through Electron;
-    // the shell has no login-item capability yet, so the field is absent (React hides it too
-    // when the login settings are unavailable).
+fn app_behavior(
+    ctx: &SectionCtx,
+    slice: &Slice,
+    copy: &'static GeneralCopy,
+    cx: &App,
+) -> SettingsSection {
     form("app-behavior", copy.sections[6])
         .child(
             switch(
@@ -306,5 +308,6 @@ fn app_behavior(ctx: &SectionCtx, slice: &Slice, copy: &'static GeneralCopy) -> 
             )
             .description(copy.descriptions[6]),
         )
-        .child(native::rerun_setup(copy))
+        .children(native::login::field(ctx, copy, cx))
+        .child(native::rerun::field(ctx, copy))
 }

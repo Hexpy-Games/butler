@@ -1,8 +1,9 @@
 //! `LogExportDialog.tsx` and `exportLogs` (`logsTransport.ts`): a period and whether to include
 //! stored bodies, then the zip the agent builds is saved where the owner chooses.
-// CARVE-OUT(G-native): Electron main adds the app's own crash records to the zip; the agent's
-// zip is saved as it is.
-use std::path::PathBuf;
+//! As `logs-export.mjs` does, the app's own crash records are added to the zip as
+//! `app/ui-crashes.json`, and the file is written beside the destination and renamed.
+use std::io::Write as _;
+use std::path::{Path, PathBuf};
 
 use butler_ds::ui::blocks::dialog_form::DialogForm;
 use butler_ds::ui::blocks::settings_field::SettingsField;
@@ -12,6 +13,7 @@ use butler_ds::ui::layout::Justify;
 use butler_ds::ui::native_select::NativeSelect;
 use butler_ds::ui::switch::Switch;
 use butler_ds::ui::toast::Toast;
+use butler_platform::secure_fs;
 use chrono::{SecondsFormat, TimeDelta, Utc};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{AnyElement, Context, IntoElement as _, ParentElement as _, Window};
@@ -19,6 +21,7 @@ use serde_json::json;
 
 use super::copy;
 use super::storage::{LogStorage, announce};
+use crate::lifecycle::logs;
 use crate::ui::source::agent::Jobs;
 
 /// The hours each period reaches back (`PERIOD_HOURS`); `None` is all time.
@@ -118,6 +121,7 @@ impl LogStorage {
         }
         let directory = butler_platform::user_dirs::non_empty_home_dir()
             .map_or_else(PathBuf::new, |home| home.join("Downloads"));
+        let data = crate::lifecycle::runtime(cx).map(|runtime| runtime.read(cx).data.clone());
         let ask = cx.prompt_for_new_path(&directory, Some("butler-logs.zip"));
         cx.spawn(async move |this, cx| {
             // `None`: the owner chose no file, which is neither a success nor a failure.
@@ -131,7 +135,7 @@ impl LogStorage {
                     Some(match zip.await.flatten() {
                         Some(bytes) => {
                             cx.background_executor()
-                                .spawn(async move { std::fs::write(path, bytes).is_ok() })
+                                .spawn(async move { save(&path, bytes, data.as_deref()) })
                                 .await
                         }
                         None => false,
@@ -158,4 +162,17 @@ impl LogStorage {
         })
         .detach();
     }
+}
+
+/// `writeExport`: the agent's zip plus the crash records, written beside `destination` and
+/// renamed, so a failed export leaves no partial zip. A zip that cannot take the extra entry
+/// (zip64, damaged) is saved as it is.
+fn save(destination: &Path, mut zip: Vec<u8>, data: Option<&Path>) -> bool {
+    let crashes = data.map(logs::read_crashes).unwrap_or_default();
+    if !crashes.is_empty()
+        && let Ok(json) = serde_json::to_vec_pretty(&crashes)
+    {
+        logs::zip::append_entry(&mut zip, "app/ui-crashes.json", &json);
+    }
+    secure_fs::replace_private(destination, |file| file.write_all(&zip), |error| error).is_ok()
 }
