@@ -15,7 +15,8 @@ struct Steered {
     db: Connection,
 }
 
-/// Steers a Steward during its final report, then holds the Worker its direction starts.
+/// Steers a Steward during its final report, then holds the Worker its direction starts
+/// while the Steward waits on it.
 async fn direction_worker_running(name: &str) -> Result<Steered, HarnessError> {
     let (s, script, server, _, chat) = setup(name, false, false).await?;
     script.delegate.store(true, Ordering::SeqCst);
@@ -49,6 +50,21 @@ async fn direction_worker_running(name: &str) -> Result<Steered, HarnessError> {
     script.hold_workers_again();
     script.finish_report();
     script.wait_held().await;
+    // The Steward's next round runs beside the held Worker and ends waiting on it.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !db
+        .query_row(
+            "SELECT suspension_reason='waiting_for_worker' FROM btcc_turns
+             WHERE session_id=(SELECT child_session_id FROM btcc_session_relations WHERE relation_id=?1)
+             ORDER BY rowid DESC LIMIT 1",
+            [&relation],
+            |row| row.get::<_, Option<bool>>(0),
+        )?
+        .unwrap_or(false)
+    {
+        assert!(Instant::now() < deadline, "the Steward never waited on its Worker");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     Ok(Steered {
         s,
         script,
