@@ -492,7 +492,7 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (method === "GET" && url.pathname === "/model-catalog") return await callBridge<T>(bridge, "getModelCatalog");
   if (method === "POST" && url.pathname === "/model-catalog/provider-credentials") {
-    return await callBridge<T>(bridge, "upsertProviderCredential", parseBody(options.body));
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "upsertProviderCredential", parseBody(options.body)));
   }
   if (method === "POST" && url.pathname === "/model-catalog/registered-models") {
     return await callBridge<T>(bridge, "registerHostedModel", parseBody(options.body));
