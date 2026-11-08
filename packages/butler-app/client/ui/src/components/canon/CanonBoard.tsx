@@ -5,12 +5,11 @@ import { useCanonPlanSelection } from "./useCanonPlanSelection.ts";
 import { useMemo, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import type { CanonPlan } from "@/app/canonApi.ts";
-import { Box, Button, ButtonContainer, Grid, KanbanDragScope, KanbanLane, Plus, Stack, Typo } from "@/butler-ds";
+import { Box, Button, ButtonContainer, Grid, KanbanDragScope, Plus, Stack, Typo } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
 import { canComplete, canonCards } from "./canonLanes.ts";
 import { useCanonBoard } from "./useCanonBoard.ts";
 import { CanonPlanLanes } from "./CanonPlanLanes.tsx";
-import { EpicCard } from "./EpicCard.tsx";
 import { EpicCreateDialog } from "./EpicCreateDialog.tsx";
 import { PlanFormDialog } from "./PlanFormDialog.tsx";
 import { useCanonSelection } from "./useCanonSelection.ts";
@@ -50,18 +49,12 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
       <KanbanDragScope onMove={move => void board.move(move)} disabled={board.busy || board.moving}
         canDrop={(id, lane) => canComplete(cards.get(id), lane)} labels={copy.drag}>
       <Stack gap="xl">
-        {!selectedPlan && <Box data-canon-backlog>
-          <KanbanLane laneId="backlog" label={copy.backlog} height="content" layout="grid" title={<Stack align="row" cross="baseline" gap="sm" wrap>
-            <Typo.PanelTitle>{copy.backlog}</Typo.PanelTitle><Typo.Caption tone="secondary">{copy.backlogCount(canon.backlog.length)}</Typo.Caption>
-          </Stack>}>
-              {canon.backlog.filter(matches).map(epic => <EpicCard key={epic.id} epic={epic} selected={selectionDetail.selected === epic.id} onSelect={selectionDetail.select} />)}
-              {!canon.backlog.length && !canon.plans.length && <Typo.Caption tone="secondary">{copy.backlogDescription}</Typo.Caption>}
-              <Button variant="borderless" size="xs" onClick={() => setCreate({ planId: null })}><Plus size="xs" />{copy.newEpic}</Button>
-          </KanbanLane>
-        </Box>}
-        {(selectedPlan ? [selectedPlan] : []).map(plan => <CanonPlanLanes key={plan.id} plan={plan} caption={planCaption(plan, locale)}
+        {!selectedPlan && <Box data-canon-backlog><CanonPlanLanes plan={{ id: null, title: copy.backlog, works: canon.backlog }}
+          caption={planCaption({ works: canon.backlog, due_on: null }, locale)} matches={matches} selected={selectionDetail.selected}
+          onSelect={selectionDetail.select} onCreate={planId => setCreate({ planId })} /></Box>}
+        {selectedPlan && <CanonPlanLanes key={selectedPlan.id} plan={selectedPlan} caption={planCaption(selectedPlan, locale)}
           matches={matches} selected={selectionDetail.selected} onSelect={selectionDetail.select} onCreate={planId => setCreate({ planId })}
-          onEdit={() => setPlanForm({ plan })} />)}
+          onEdit={() => setPlanForm({ plan: selectedPlan })} />}
       </Stack>
       </KanbanDragScope>
     </Grid>}
