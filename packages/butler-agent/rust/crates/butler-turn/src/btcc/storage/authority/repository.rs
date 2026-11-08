@@ -38,6 +38,11 @@ impl AuthorityRepository for SqliteAuthorityRepository<'_> {
     fn find_identity(&mut self, sha: &str) -> AuthorityResult<Option<AuthorityRecord>> {
         query::find(self.db, "identity_sha256", sha)
     }
+    fn has_open_question(&mut self, owner: &str) -> AuthorityResult<bool> {
+        Ok(query::list_pending(self.db, owner)?
+            .iter()
+            .any(|r| r.capability == "ask_user"))
+    }
     fn find_slot(
         &mut self,
         input: &AuthorityAdmissionInput,

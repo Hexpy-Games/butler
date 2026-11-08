@@ -4,13 +4,16 @@ use super::*;
 async fn rm_projection_bounds_titles_orders_and_counts_every_open_ask() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
-    let (s, provider, server) = setup("RM-BOUNDS").await?;
-    let mut ids = Vec::new();
-    for n in 0..10 {
-        ids.push(
-            named_ask(&s, &provider, &format!("{n}:{}", "한".repeat(170))).await?["ask_id"].clone(),
-        );
-    }
+    let (mut s, provider, server) = setup("RM-BOUNDS").await?;
+    let title = |n: usize| format!("{n}:{}", "한".repeat(170));
+    let newest = named_ask(&s, &provider, &title(9)).await?;
+    let older = (0..9).map(title).collect::<Vec<_>>();
+    let mut ids = legacy_open_asks(&mut s, &newest, &older)
+        .await?
+        .iter()
+        .map(|q| q["ask_id"].clone())
+        .collect::<Vec<_>>();
+    ids.push(newest["ask_id"].clone());
     provider.requests.lock().unwrap().clear();
     s.turn("general", "What is the current status?").await?;
     let requests = provider.requests.lock().unwrap().clone();
@@ -37,7 +40,7 @@ async fn rm_projection_bounds_titles_orders_and_counts_every_open_ask() -> Resul
         )
         .await?;
     assert_eq!(answered.status, 202, "{}", answered.text);
-    super::guards::wait_delivered(&s, 12).await?;
+    super::guards::wait_delivered(&s, 3).await?;
     let requests = provider.requests.lock().unwrap().clone();
     let projection = reminder(requests.last().unwrap());
     assert_eq!(
@@ -147,11 +150,15 @@ async fn rm_eight_open_and_eight_settled_korean_entries_fit_json_budget() -> Res
 {
     butler_e2e::gate!();
     let (mut s, provider, server) = setup("RM-EIGHT-EACH").await?;
-    let mut ids = Vec::new();
-    for index in 0..16 {
-        let title = format!("{index}:{}", "한".repeat(170));
-        ids.push(named_ask(&s, &provider, &title).await?["ask_id"].clone());
-    }
+    let title = |n: usize| format!("{n}:{}", "한".repeat(170));
+    let newest = named_ask(&s, &provider, &title(15)).await?;
+    let older = (0..15).map(title).collect::<Vec<_>>();
+    let mut ids = legacy_open_asks(&mut s, &newest, &older)
+        .await?
+        .iter()
+        .map(|q| q["ask_id"].clone())
+        .collect::<Vec<_>>();
+    ids.push(newest["ask_id"].clone());
     // Seed eight already-settled receipts together between process lifetimes,
     // so no intervening follow-up reply consumes their reminder window.
     s.agent.terminate().await?;
