@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use gpui::{
     App, AppContext as _, ElementId, LayerMotion, MotionEasing, MotionRepeat, Pixels, Point,
-    Styled, Window, animation_time_ms, point, relative,
+    Styled, Window, animation_time_ms, point,
 };
 
 use super::context::Ds;
@@ -209,13 +209,25 @@ impl Transition {
         if let Some((x, y)) = props.origin {
             el = el.transform_origin(x, y);
         }
-        if let Some((a, b)) = props.offset {
-            let p = a + (b - a) * self.to;
-            el = el.relative().left(p.x).top(p.y);
-        }
-        if let Some((a, b)) = props.relative_offset {
-            let p = a + (b - a) * self.to;
-            el = el.relative().left(relative(p.x)).top(relative(p.y));
+        // A resting offset or turn has no layout-neutral style: hold it as a motion that has
+        // already finished (it keeps the element's own positioning and asks for no frames).
+        let at = |(a, b): (Point<Pixels>, Point<Pixels>)| a + (b - a) * self.to;
+        let offset = props.offset.map(at).unwrap_or_default();
+        let relative_offset = props
+            .relative_offset
+            .map(|(a, b)| a + (b - a) * self.to)
+            .unwrap_or_default();
+        let rotation = props.rotation.map_or(0., |(a, b)| a + (b - a) * self.to);
+        if offset != Point::default() || relative_offset != Point::default() || rotation != 0. {
+            let mut held = timing.motion(animation_time_ms().wrapping_sub(timing.ms().max(1)));
+            held.duration_ms = held.duration_ms.max(1);
+            held.offset = (offset, offset);
+            held.relative_offset = (relative_offset, relative_offset);
+            held.rotation = (rotation, rotation);
+            if let Some((x, y)) = props.origin {
+                held.origin = point(x, y);
+            }
+            el = el.motion(held);
         }
         el
     }
