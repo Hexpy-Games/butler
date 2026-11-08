@@ -248,6 +248,8 @@ jobs:
       platform: darwin-arm64
       perf-fixture: ${{ needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['macos-perf'] }}
       ort-mode: static-ort
+      # Cold (no snapshot): 73 min production build + ~46 min perf-fixture build (run 42436811511).
+      timeout-minutes: 150
 
   macos-updates:
     needs: changes
@@ -280,6 +282,8 @@ jobs:
     with:
       runner: macos-15
       platform: darwin-arm64
+      # Cold (no snapshot): still linking release test binaries at 90 min (run 42436811511).
+      timeout-minutes: 180
 
   macos-perf:
     needs: [changes, macos-perf-archive, macos-native, macos-archive]
