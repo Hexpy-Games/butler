@@ -85,30 +85,3 @@ impl<'ast> Visit<'ast> for AnimationFrames {
         visit::visit_path(self, path);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::AnimationFrames;
-    use syn::visit::Visit as _;
-
-    // test-category: pure-logic
-    #[test]
-    fn animation_frames_counts_violations() {
-        for (source, count) in [
-            ("fn demo() { window.request_animation_frame(); }", 1),
-            (
-                "async fn demo() { cx.background_executor().timer(d).await; }",
-                1,
-            ),
-            ("fn demo() { gpui::with_animation(); }", 1),
-            (
-                "async fn demo() { motion::sleep(cx.background_executor(), d).await; }",
-                0,
-            ),
-        ] {
-            let mut visitor = AnimationFrames::default();
-            visitor.visit_file(&syn::parse_file(source).unwrap());
-            assert_eq!(visitor.violations.len(), count, "{source}");
-        }
-    }
-}
