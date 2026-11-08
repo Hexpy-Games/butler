@@ -22,7 +22,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "be3c98a025c2aa6f2d7eed44663c2f88294e10c22d4a4ddcd323f3e6b75b32a6",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "446f223fa76294ea8a5e8479a0a4f522610ad92d3fdaa863cc7f9acffae8f8e5",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "e83c1a6b8fa5f4ecdf52b00374ecd3fd7dbdfe14418cbdaf91cd497656c9b6f6",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "bb3dc17c28cefdea20281441b25281dd9ab58dab16ce8a86baaf66d7e1ae17bd",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "c11bf595617ff037807742ff86900d6f3d813df267d83aadcbaf2195683cf25d",
     "packages/butler-agent/rust/crates/butler-shell-client/Cargo.toml": "531abd531ef87b82656139147704b4dbb2cfffbc70d234345731d065165baa7b",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",

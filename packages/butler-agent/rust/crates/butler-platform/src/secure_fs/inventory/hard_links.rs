@@ -75,6 +75,21 @@ impl Cache {
     }
 }
 
+/// Now on the clock inode change times come from. Linux stamps ctime from the
+/// coarse realtime clock, which trails `SystemTime::now()` by up to a tick; a
+/// link made in that tick would otherwise look older than the snapshot.
+fn inode_clock_now() -> Duration {
+    #[cfg(target_os = "linux")]
+    if let Ok(now) = nix::time::clock_gettime(nix::time::ClockId::CLOCK_REALTIME_COARSE)
+        && let (Ok(secs), Ok(nanos)) = (u64::try_from(now.tv_sec()), u32::try_from(now.tv_nsec()))
+    {
+        return Duration::new(secs, nanos);
+    }
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+}
+
 #[derive(Debug)]
 struct Snapshot {
     files: HashSet<FileId>,
@@ -88,9 +103,7 @@ impl Snapshot {
             files: HashSet::new(),
             revision,
             incomplete: false,
-            started: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default(),
+            started: inode_clock_now(),
         };
         let budget = MAX_ENTRIES / roots.len().max(1);
         for root in roots {
