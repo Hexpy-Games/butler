@@ -72,14 +72,15 @@ try {
     response = undefined; pending = true;
     await page.reload();
     await panel.waitFor();
-    await panel.getByRole("button", { name: "Answer later", exact: true }).click();
-    const pill = page.getByRole("button", { name: "Answer pending", exact: true });
-    await pill.waitFor();
+    const later = panel.getByRole("button", { name: "Answer later", exact: true });
+    await later.click();
+    for (let i = 0; i < 100 && !response; i++) await page.waitForTimeout(20);
     assert.deepEqual(response, { status: "deferred" });
+    await later.waitFor({ state: "detached" });
+    assert.equal(await page.getByRole("button", { name: "Answer pending", exact: true }).count(), 0, "a deferred card stays open");
     await page.reload();
-    await pill.waitFor();
-    await pill.click();
     await panel.waitFor();
+    assert.equal(await later.count(), 0, "a deferred card loads open with nothing left to defer");
     await panel.getByText("Full", { exact: true }).click();
     await card.waitFor();
     assert.deepEqual(response, { status: "answered", answers: [{ id: "format", selected: ["full"], custom: null, skipped: false }] });
@@ -146,7 +147,7 @@ try {
     await api(`/authority-requests/question-ref-smoke/answer?session_id=${encodeURIComponent(sessionId)}`, { method: "POST", body: JSON.stringify(response) });
     assert.deepEqual(bridged, { sessionId, requestRef: "question-ref-smoke", response });
   } finally { globalThis.window = originalWindow; }
-  console.log(JSON.stringify({ ok: true, checks: ["approval-before-question", "stable-option-ids", "answer-summary", "free-text-input", "card-control-options-dropped", "reload", "later-restore", "desktop-bridge", "320px", "375px", "390px", "430px", "768px", "1280px"] }));
+  console.log(JSON.stringify({ ok: true, checks: ["approval-before-question", "stable-option-ids", "answer-summary", "free-text-input", "card-control-options-dropped", "reload", "later-stays-open", "desktop-bridge", "320px", "375px", "390px", "430px", "768px", "1280px"] }));
 } finally {
   await browser.close(); await server.stop(); rmSync(dir, { recursive: true, force: true });
 }
