@@ -136,6 +136,12 @@
   outline: none;
 }
 
+/* A closing sidebar takes no clicks while it slides away, like the inspector
+   (useInspectorInert); a peek gives them back (AdaptiveShellFrame). */
+.sidebar[data-open="false"] {
+  pointer-events: none;
+}
+
 /* Docked sidebar keeps its full width while its track collapses and slides
    on the compositor; the workspace is FLIP-translated in step. */
 .root[data-panel-layout="docked"] .sidebar {

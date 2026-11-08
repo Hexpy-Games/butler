@@ -20,7 +20,7 @@ import { SidebarFooter } from "../layout/SidebarFooter";
 import { SidebarSessionLoadMore } from "../layout/SidebarSessionLoadMore";
 import { SpaceWorkStatus } from "./SpaceWorkStatus";
 
-export function SpaceSidebar({ open }: { open?: boolean } = {}) {
+export function SpaceSidebar() {
   const locale = useAppLocale();
   const navigation = useButlerStore((s) => s.navigation);
   const leftOpen = useButlerStore((s) => s.leftOpen);
@@ -88,7 +88,7 @@ export function SpaceSidebar({ open }: { open?: boolean } = {}) {
   return (
     <>
       <SidebarShell
-        collapsed={!(open ?? leftOpen)}
+        collapsed={!leftOpen}
         titlebar={<SidebarTrafficSpace />}
         scrollRef={scrollRef}
         ariaLabel={appCopy.space.navigation}

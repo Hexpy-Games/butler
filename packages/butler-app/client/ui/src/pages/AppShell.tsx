@@ -219,7 +219,7 @@ function AppWorkspaceContent({ leftOpen, pane, chatWidth }: { leftOpen: boolean;
   if (isSettingsView) return <ErrorBoundary scope="settings"><SettingsView isActive={isSettingsView} /></ErrorBoundary>;
   return <>
     <AdaptiveShellSidebar data-test-class="sidebar-slot" id="butler-left-sidebar" open={leftOpen}>
-      <Sidebar open={leftOpen} />
+      <Sidebar />
     </AdaptiveShellSidebar>
     <AdaptiveShellWorkspace data-test-class="workspace">
       <AdaptiveShellTitle><Titlebar sidebarOpen={leftOpen} splitChatWidth={pane ? chatWidth : undefined} /></AdaptiveShellTitle>
