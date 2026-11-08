@@ -19,7 +19,7 @@ try {
   const progress: EpicProgressSnapshot = {
     epic_id: epic.id, stage: "execution", stage_history: [], disposition: "open", running: true,
     counts: { completed: 2, total: 5 },
-    actions: Array.from({ length: 5 }, (_, i) => ({ work_id: "work", actionKey: `action-${i}`, description: `확인 ${i + 1}`, dependencyKeys: [], status: i < 2 ? "done" : "pending" })),
+    actions: Array.from({ length: 5 }, (_, i) => ({ work_id: "work", actionKey: `action-${i}`, description: `확인 ${i + 1}`, dependencyKeys: [], status: i < 2 ? "done" : i === 2 ? "active" : "pending" })),
   };
   for (const theme of ["light", "dark"]) {
     const current = await server.api<{ revision: number }>(`/canon/epics/${epic.id}`);
@@ -42,8 +42,8 @@ try {
       await card.getByText("작업 2/5", { exact: false }).waitFor();
       await card.click();
       const detail = page.locator('[data-test-class="canon-epic-detail"]');
-      await detail.getByText("확인 5", { exact: true }).waitFor();
-      await detail.getByText("실행", { exact: true }).waitFor();
+      await detail.getByText("2/5 완료", { exact: true }).waitFor();
+      await detail.getByText("확인 3", { exact: true }).waitFor();
       const status = detail.getByRole("combobox", { name: "상태", exact: true });
       for (const [value, message] of [["done", "진행 중에는 완료할 수 없습니다"], ["cancelled", "진행 중에는 취소할 수 없습니다"]]) {
         const option = status.locator(`option[value="${value}"]`);
@@ -56,7 +56,7 @@ try {
       await page.reload({ waitUntil: "load" });
       await openCanonBoard(page);
       await page.locator(`[data-kanban-item="${epic.id}"]`).getByRole("button").first().click();
-      await detail.getByText("확인 5", { exact: true }).waitFor();
+      await detail.getByText("2/5 완료", { exact: true }).waitFor();
       assert(await status.locator('option[value="done"]').isEnabled());
       assert(await status.locator('option[value="cancelled"]').isEnabled());
       await status.selectOption("done");
