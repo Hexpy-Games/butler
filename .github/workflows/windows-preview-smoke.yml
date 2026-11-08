@@ -444,8 +444,10 @@ jobs:
             if ($code -ne 0) { throw "Composer permission smoke failed: $code" }
           } finally { Remove-Item $profile -Recurse -Force }
       - name: Pure Task Scheduler XML from compiled harness
+        if: ${{ !cancelled() }}
         run: ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests windows_startup_xml
       - name: Installed release stub chat
+        if: ${{ !cancelled() }}
         run: ../../../deploy/windows-installed-e2e.ps1 -Tests installed_preview
       - name: Installed release native command regression matrix
         if: ${{ !cancelled() }}
