@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import { browserRandomId } from "./id.ts";
 
+export type ProjectDashboardTab = "overview" | "work" | "materials" | "history" | "statistics";
+
 interface DashboardViewState {
-  tab?: string;
+  tab?: ProjectDashboardTab;
   activationRevision?: number;
   refreshRevision?: number;
   scrollPositions?: Record<string, number>;
