@@ -299,7 +299,9 @@ fn reveal_selected(
     let (Some(card), Some(first), true) =
         (measured.rect(selected), first, viewport.size.width > px(0.))
     else {
-        window.request_animation_frame();
+        if viewport.size.width > px(0.) {
+            window.request_animation_frame();
+        }
         return;
     };
     let (left, right) = (

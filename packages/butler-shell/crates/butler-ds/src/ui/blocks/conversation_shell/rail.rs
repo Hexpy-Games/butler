@@ -47,7 +47,7 @@ pub(super) fn rail(
 ) -> Rail {
     let state = window.use_keyed_state((id.clone(), "rail"), cx, |_, _| Latch::default());
     let now = cx.background_executor().now();
-    let (reserved, held, was_held) = state.update(cx, |latch, _| {
+    let (reserved, held, was_held, leaving) = state.update(cx, |latch, _| {
         if aside_shown != latch.aside_shown {
             latch.aside_shown = aside_shown;
             latch.left_at = (!aside_shown).then_some(now);
@@ -66,9 +66,9 @@ pub(super) fn rail(
             latch.view = None;
         }
         let reserved = wants && (showing || (view.is_some() && latch.view.as_ref() == view));
-        (reserved, held, latch.was_held)
+        (reserved, held, latch.was_held, leaving)
     });
-    if held {
+    if leaving {
         window.request_animation_frame();
     }
     let ds = Ds::get(cx);

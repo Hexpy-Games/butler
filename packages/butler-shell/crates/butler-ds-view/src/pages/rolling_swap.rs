@@ -51,11 +51,20 @@ fn ticker(lang: Lang, auto: bool, window: &mut Window, cx: &mut App) -> AnyEleme
     });
     let step = window.use_keyed_state(format!("{id}-step"), cx, |_, _| 0usize);
     let index = if auto {
-        window.request_animation_frame();
         let elapsed = cx
             .background_executor()
             .now()
             .saturating_duration_since(*started.read(cx));
+        let remainder = Duration::from_nanos(
+            u64::try_from(elapsed.as_nanos() % TICK.as_nanos()).unwrap_or_default(),
+        );
+        let next = TICK.saturating_sub(remainder);
+        window
+            .spawn(cx, async move |cx| {
+                cx.background_executor().timer(next).await;
+                cx.update(|window, _| window.refresh()).ok();
+            })
+            .detach();
         (elapsed.as_millis() / TICK.as_millis()) as usize % list.len()
     } else {
         *step.read(cx)

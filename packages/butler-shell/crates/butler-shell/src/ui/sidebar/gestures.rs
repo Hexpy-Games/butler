@@ -39,7 +39,6 @@ pub(super) fn reveal_row(
                 return;
             };
             if handle.bounds().size.height <= px(0.) {
-                window.request_animation_frame();
                 return;
             }
             scroll_nearest(&handle, bounds);
