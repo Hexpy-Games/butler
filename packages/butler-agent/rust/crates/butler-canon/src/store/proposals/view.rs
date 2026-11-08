@@ -1,8 +1,8 @@
 //! Keyed live projection for transcript cards and independent ask consumers.
 use super::*;
 
-pub fn detail(db: &Connection, id: &str, language: &str) -> Result<Value> {
-    let row = get(db, id)?;
+/// Changes with the ids an applied proposal produced (created epics get their new id).
+pub fn resolved_changes(row: &Value) -> Result<Vec<Value>> {
     let document = &row["document"];
     let mut changes = document["changes"]
         .as_array()
@@ -20,6 +20,13 @@ pub fn detail(db: &Connection, id: &str, language: &str) -> Result<Value> {
             }
         }
     }
+    Ok(changes)
+}
+
+pub fn detail(db: &Connection, id: &str, language: &str) -> Result<Value> {
+    let row = get(db, id)?;
+    let document = &row["document"];
+    let mut changes = resolved_changes(&row)?;
     for change in &mut changes {
         if change["op"] == "epic.move" {
             let current = optional_work(db, text(change, "id")?)?.unwrap_or(Value::Null);
