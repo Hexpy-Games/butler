@@ -14,11 +14,38 @@ import { EpicMarkdown } from "./EpicMarkdown.tsx";
 import { CanonProposalProject } from "./CanonProposalProject.tsx";
 import { CanonProposalFact } from "./CanonProposalFact.tsx";
 import { canonProposalCopy } from "./canonProposalCopy.ts";
-import { useCanonProposal } from "./useCanonProposal.ts";
+import { useCanonProposals } from "./useCanonProposal.ts";
 
-export function CanonProposalCard({ id, sessionId, projectId }: { id: string; sessionId: string; projectId: string | null }) {
-  const { proposal, refresh } = useCanonProposal(id);
-  return proposal ? <Proposal key={id} proposal={proposal} sessionId={sessionId} projectId={projectId} refresh={refresh} /> : null;
+const projectOf = (p: CanonProposal) => "id" in p.project ? p.project.id ?? null : null;
+/** A reply's proposals: drafts and other settled rows stay one per proposal; applied ones merge into one receipt per project. */
+export function CanonProposalCards({ ids, sessionId, projectId, shown }: { ids: readonly string[]; sessionId: string; projectId: string | null; shown?: ReadonlySet<string> }) {
+  const { proposals, refresh } = useCanonProposals(ids);
+  return <>{proposals.map(p => {
+    if (p.state !== "applied") return <Proposal key={p.proposal_id} proposal={p} sessionId={sessionId} projectId={projectId} refresh={() => refresh(p.proposal_id)} />;
+    const group = proposals.filter(other => other.state === "applied" && projectOf(other) === projectOf(p));
+    return group[0] === p ? <AppliedReceipt key={p.proposal_id} proposals={group} shown={shown} /> : null;
+  })}</>;
+}
+function AppliedReceipt({ proposals, shown }: { proposals: CanonProposal[]; shown?: ReadonlySet<string> }) {
+  const copy = canonProposalCopy(useAppLocale().startsWith("ko"));
+  const [first] = proposals;
+  const project = projectOf(first);
+  const changes = proposals.flatMap(p => p.changes);
+  const deletes = changes.some(change => change.op === "epic.delete");
+  const mixedDelete = deletes && changes.some(change => change.op !== "epic.delete");
+  const created = changes.flatMap(change => change.op === "epic.create" && change.id && !shown?.has(change.id) ? [change.id] : []);
+  const open = () => {
+    if (!project) return;
+    openCanonEpic(project, changes.find(change => change.op.startsWith("epic.") && change.op !== "epic.delete" && change.id)?.id);
+  };
+  return <Stack gap="sm"><Card padding="sm" data-test-class="canon-proposal-card" data-proposal-id={first.proposal_id} data-state="applied">
+    <Stack align="row" cross="center" justify="between" gap="sm">
+      <Typo.Caption>{deletes ? mixedDelete ? copy.changed : copy.deleted : first.resolved_by === null ? copy.record : first.resolved_by === "chat" ? copy.chat : copy.added}</Typo.Caption>
+      <ButtonContainer size="sm" justify="end"><Button size="sm" variant="link" onClick={open}>{copy.open}</Button></ButtonContainer>
+    </Stack>
+  </Card>
+    {project && created.length > 0 && <ChatEpicCards projectId={project} ids={created} />}
+  </Stack>;
 }
 function Proposal({ proposal: p, sessionId, projectId, refresh }: {
   proposal: CanonProposal; sessionId: string; projectId: string | null; refresh: () => Promise<void>;
@@ -46,22 +73,9 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
     }
     finally { setBusy(false); }
   };
-  const open = () => {
-    const project = "id" in p.project ? p.project.id : null;
-    if (!project) return;
-    const epic = p.changes.find(change => change.op.startsWith("epic.") && change.op !== "epic.delete" && change.id)?.id;
-    openCanonEpic(project, epic);
-  };
-  const created = p.changes.flatMap(change => change.op === "epic.create" && change.id ? [change.id] : []);
-  if (p.state !== "open") return <Stack gap="sm"><Card padding="sm" data-test-class="canon-proposal-card" data-proposal-id={p.proposal_id} data-state={p.state}>
-    <Stack align="row" cross="center" justify="between" gap="sm">
-      <Typo.Caption>{p.state === "applied" ? deletes ? mixedDelete ? copy.changed : copy.deleted : p.resolved_by === null ? copy.record : p.resolved_by === "chat" ? copy.chat : copy.added
-        : p.state === "cancelled" ? copy.cancelled : p.state === "superseded" ? copy.superseded : copy.stale}</Typo.Caption>
-      {p.state === "applied" && <ButtonContainer size="sm" justify="end"><Button size="sm" variant="link" onClick={open}>{copy.open}</Button></ButtonContainer>}
-    </Stack>
-  </Card>
-    {p.state === "applied" && "id" in p.project && p.project.id && created.length > 0 && <ChatEpicCards projectId={p.project.id} ids={created} />}
-  </Stack>;
+  if (p.state !== "open") return <Card padding="sm" data-test-class="canon-proposal-card" data-proposal-id={p.proposal_id} data-state={p.state}>
+    <Typo.Caption>{p.state === "cancelled" ? copy.cancelled : p.state === "superseded" ? copy.superseded : copy.stale}</Typo.Caption>
+  </Card>;
   const empty = chooseProject && target === "@new" && !name.trim();
   return <Card radius="lg" data-test-class="canon-proposal-card" data-proposal-id={p.proposal_id} data-state={p.state}>
     <Stack gap="lg">
