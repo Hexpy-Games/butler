@@ -2,7 +2,10 @@
    puts every region (title, search, filters, results, footer) --space-md
    from the popover edge, one step above the --space-sm gaps between regions
    (card anatomy). Regions share that one inline edge; dividers are hairlines
-   with the --space-sm gap above and below. */
+   with the --space-sm gap above and below. Boxes (search field, chips, row
+   highlights) sit on that edge; all text (title, typed text, chip labels,
+   group labels, rows, footer title) starts on one column --space-sm inside
+   it. */
 .root {
   box-sizing: border-box;
   display: grid;
@@ -38,7 +41,7 @@
 
 .title {
   min-width: 0;
-  padding: 0;
+  padding: 0 var(--space-sm);
   color: var(--text-primary);
   font-size: var(--font-size-2);
   font-weight: var(--font-weight-semibold);
@@ -77,7 +80,10 @@
   contain-intrinsic-inline-size: 215px;
 }
 
+/* The typed text starts on the panel's text column, --space-sm inside the
+   box, like row, label and chip text. */
 .searchInput {
+  padding-left: calc(var(--space-sm) - var(--border-hairline));
   padding-right: 32px;
 }
 
@@ -131,8 +137,9 @@
   min-width: 0;
   gap: var(--space-xs);
   /* The row scrolls (overflow clips), so it keeps --focus-ring-room around
-     the chips; the negative margin gives it back, so the chips sit on the
-     panel edge and the region gap is unchanged. */
+     the chips; the negative margin gives it back, so the region gap is
+     unchanged. Chips sit on the panel edge like the search field; their own
+     --space-sm padding puts the label on the text column. */
   margin: calc(-1 * var(--focus-ring-room));
   overflow-x: auto;
   padding: var(--focus-ring-room);
@@ -189,7 +196,10 @@
 }
 
 .results {
-  height: min(calc(var(--filtered-select-results-max-rows, 6.65) * 30px), 42vh);
+  max-height: min(
+    calc(var(--filtered-select-results-max-rows, 6.65) * 30px),
+    42vh
+  );
   min-width: 0;
 }
 
@@ -202,6 +212,17 @@
 .divider + .results,
 .results + .divider {
   margin-top: calc(-1 * var(--space-sm));
+}
+
+/* Last in the panel, the results end on the panel padding, so the space
+   after the last row matches the space above the title. They keep
+   --focus-ring-room for the last row's ring and give it back below. */
+.root .results:last-child {
+  margin-bottom: calc(-1 * var(--focus-ring-room));
+}
+
+.root .results:last-child .resultsContent {
+  padding-block-end: var(--focus-ring-room);
 }
 
 .divider {
