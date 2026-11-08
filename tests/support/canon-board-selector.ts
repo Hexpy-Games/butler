@@ -23,16 +23,23 @@ export async function verifyBoardSelector(page: Page, server: NativeAppServerHan
   const chooser = planChooser(page);
   await chooser.waitFor();
   const panel = await chooser.evaluate(element => {
-    const rect = (selector: string) => element.querySelector(selector)!.getBoundingClientRect();
-    const range = document.createRange(); range.selectNodeContents(element.firstElementChild!);
-    const popover = element.closest('[data-slot="popover-content"]')!.getBoundingClientRect();
-    const search = rect("input"), row = rect('[data-slot="filtered-select-item"]'), divider = rect('[data-slot="filtered-select-divider"]');
-    return { title: range.getBoundingClientRect().left - popover.left, start: search.left - popover.left, end: popover.right - search.right,
-      rowStart: row.left - popover.left, rowEnd: popover.right - row.right, above: divider.top - search.bottom, below: row.top - divider.bottom };
+    const rect = (node: Element) => node.getBoundingClientRect();
+    const textLeft = (node: Element) => { const range = document.createRange(); range.selectNodeContents(node); return range.getBoundingClientRect().left; };
+    const popover = rect(element.closest('[data-slot="popover-content"]')!);
+    const input = element.querySelector("input")!, style = getComputedStyle(input), search = rect(input);
+    const rows = [...element.querySelectorAll('[data-slot="filtered-select-item"]')], row = rect(rows[0]!), last = rect(rows.at(-1)!);
+    const divider = rect(element.querySelector('[data-slot="filtered-select-divider"]')!), title = element.firstElementChild!;
+    return { start: search.left - popover.left, end: popover.right - search.right, rowStart: row.left - popover.left, rowEnd: popover.right - row.right,
+      titleText: textLeft(title), inputText: search.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft),
+      rowText: textLeft(rows[0]!.querySelector("span span")!), above: divider.top - search.bottom, below: row.top - divider.bottom,
+      top: rect(title).top - popover.top, bottom: popover.bottom - last.bottom };
   });
-  assert([panel.title, panel.rowStart, panel.end, panel.rowEnd].every(inset => Math.abs(inset - panel.start) < 1),
-    `Title, search and rows share one panel inset: ${JSON.stringify(panel)}`);
+  assert([panel.rowStart, panel.end, panel.rowEnd].every(inset => Math.abs(inset - panel.start) < 1),
+    `Search and rows share one box edge: ${JSON.stringify(panel)}`);
+  assert(Math.abs(panel.titleText - panel.rowText) < 1 && Math.abs(panel.inputText - panel.rowText) < 1,
+    `Title, typed text and rows share one text column: ${JSON.stringify(panel)}`);
   assert(Math.abs(panel.above - panel.below) < 1 && panel.above >= 8, `The divider has equal space above and below: ${JSON.stringify(panel)}`);
+  assert(Math.abs(panel.top - panel.bottom) < 1, `The space after the last row matches the space above the title: ${JSON.stringify(panel)}`);
   assert.equal(await chooser.locator('[data-slot="filtered-select-filters"], [data-slot="filtered-select-group-title"]').count(), 0,
     "Flat plan choices have no empty filter or group-title rows");
   assert.equal(await chooser.locator('[data-slot="filtered-select-item"]').last().innerText(), "백로그");

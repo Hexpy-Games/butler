@@ -45,14 +45,21 @@ The search box fills the popover's width and asks for the same intrinsic
 width on every platform, so the popover is as wide on Windows and Linux as on
 macOS. Search inputs should expose a clear button when populated, and filter chips
 should have enough breathing room to read as a separate control row.
-The result region should keep a stable fixed height around 200px and scroll
-internally, including when search has no matches.
+The result region takes its content height up to about 200px and scrolls
+beyond it. It keeps its opening height while the list is filtered, including
+when search has no matches, so the panel does not jump as you type.
 Panel spacing: inside a menu popover (`data-menu-size`, --space-xs inset) the
 block adds --space-sm, so the title, search box, filter chips, result rows and
 footer all sit --space-md from the popover edge and share one left and right
 edge. Regions are --space-sm apart, and each divider is a hairline with that
---space-sm gap above and below it. Rows keep the results ScrollArea's
-focus-ring inset, and the scrollbar sits in the ScrollArea's lane beside them.
+--space-sm gap above and below it. Boxes (search field, filter and footer
+chips, row highlights) sit on that edge; all text (title, typed text, chip
+labels, group labels, row labels, footer title) starts on one column
+--space-sm inside it. On touch screens chips keep their wider --space-md
+padding (short labels stay pills, not circles), so their labels sit
+--space-xs past that column.
+Rows keep the results ScrollArea's focus-ring inset, and the scrollbar sits in
+the ScrollArea's lane beside them.
 When the popover opens, the selected row is scrolled into view inside the
 results region. The selected row shows a trailing check mark and exposes
 `aria-current="true"`.
