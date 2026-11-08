@@ -108,10 +108,7 @@ try {
       }
       await page.getByRole("tab", { name: "보드", exact: true }).click();
       await page.locator('[data-canon-epic] [data-test-class="canon-epic-title"]').getByText("입력 후 응답이 사라짐", { exact: true }).waitFor();
-      if (!baseline) {
-        const bound = page.locator('[data-test-class="canon-bound-chats"]');
-        await bound.waitFor(); await auditCanonCardFocus(page, bound);
-      }
+      if (!baseline) assert.equal(await page.locator('[data-test-class="canon-bound-chats"]').count(), 0, "the registering chat is not nested under its 과제");
       await page.screenshot({ path: join(shots, `${baseline ? "before" : "after"}-1440-${theme}-sidebar.png`) });
     }
     await captureRegistrationVariants(page, server, pending.asks[0]!, projectId, shots, baseline);
