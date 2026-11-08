@@ -26,9 +26,10 @@ async fn live_browse_shop_off_auto_five_each() -> Result<(), HarnessError> {
                 .map(|record| record[key].as_u64().unwrap())
                 .sum::<u64>()
         };
-        let cost: f64 = records
+        // A model without a published list price has no USD total.
+        let cost: Option<f64> = records
             .iter()
-            .map(|record| record["list_price_cost"]["usd"].as_f64().unwrap())
+            .map(|record| record["list_price_cost"]["usd"].as_f64())
             .sum();
         live::report(
             "LIVE-BROWSE-SHOP",
@@ -36,7 +37,7 @@ async fn live_browse_shop_off_auto_five_each() -> Result<(), HarnessError> {
             "runs":records.len(),"successes":successes[mode],
             "success_rate":successes[mode] as f64 / records.len() as f64,
             "rounds":sum("rounds"),"input_tokens":sum("input_tokens"),
-            "output_tokens":sum("output_tokens"),"list_price_cost":{"available":true,"usd":cost}})
+            "output_tokens":sum("output_tokens"),"list_price_cost":{"available":cost.is_some(),"usd":cost}})
             .to_string(),
         );
     }
