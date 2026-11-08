@@ -106,7 +106,6 @@ try {
   await panel.getByText("Where should it run?", { exact: true }).waitFor();
   await panel.getByRole("button", { name: "Answer later", exact: true }).click();
   await page.getByText("Card is up.", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "Answer pending", exact: true }).click();
   await panel.getByText("Mobile", { exact: true }).click();
   await page.getByText("Got your answer.", { exact: true }).waitFor();
   expected.push("Help me plan.", "Card is up.", "Got your answer.");
