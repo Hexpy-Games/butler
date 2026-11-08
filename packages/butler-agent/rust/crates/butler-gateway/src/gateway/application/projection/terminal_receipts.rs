@@ -7,17 +7,19 @@ use tokio::time::Instant;
 pub(super) struct Pending(parking_lot::Mutex<BTreeMap<String, Instant>>);
 
 impl ProjectionContext {
-    pub(super) async fn finish_terminal_turn(
-        &self,
-        turn: String,
-    ) -> Result<(), GatewayApplicationError> {
+    /// A failed notification stays pending for its retry (and startup
+    /// reconciliation); it never fails the projection or the read that ran it.
+    pub(super) async fn finish_terminal_turn(&self, turn: String) {
         self.terminal_receipts
             .0
             .lock()
             .insert(turn.clone(), Instant::now() + Duration::from_secs(1));
-        self.notify_terminal_turn(turn.clone()).await?;
-        self.terminal_receipts.0.lock().remove(&turn);
-        Ok(())
+        match self.notify_terminal_turn(turn.clone()).await {
+            Ok(()) => {
+                self.terminal_receipts.0.lock().remove(&turn);
+            }
+            Err(error) => tracing::warn!(%error, "Terminal notification remains pending"),
+        }
     }
 
     async fn notify_terminal_turn(&self, turn: String) -> Result<(), GatewayApplicationError> {
@@ -42,9 +44,7 @@ impl ProjectionContext {
             .map(|(turn, _)| turn.clone())
             .collect::<Vec<_>>();
         for turn in due {
-            if let Err(error) = self.finish_terminal_turn(turn).await {
-                tracing::warn!(%error, "Terminal notification remains pending");
-            }
+            self.finish_terminal_turn(turn).await;
         }
     }
 
