@@ -112,6 +112,18 @@ async fn delivered_steward_result_reports_blocked_work() -> Result<(), HarnessEr
     assert_eq!(child["result"]["work_status"], "blocked", "{child}");
     assert_eq!(child["status"], "failed", "{child}");
     assert_eq!(child["approved_plan_completed"], 1);
+    let general = s.gw.get("/session-view?session_id=general").await?;
+    let subtasks = &general.data()["subtasks"];
+    assert_eq!(subtasks[0]["session_id"], child["session_id"], "{subtasks}");
+    assert_eq!(subtasks[0]["state"], "blocked", "{subtasks}");
+    let navigation = s.gw.get("/navigation").await?;
+    let chat = navigation.data()["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|chat| chat["id"] == "general")
+        .unwrap();
+    assert_eq!(&chat["subtasks"], subtasks, "{chat}");
     let own =
         s.gw.get(&format!(
             "/session-view?session_id={}",
