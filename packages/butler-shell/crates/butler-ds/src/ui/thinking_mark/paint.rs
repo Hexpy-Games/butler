@@ -6,7 +6,10 @@ use gpui::{Bounds, Corners, Hsla, Pixels, Window, point, px, size};
 /// Shared painting of the static logo and the live canvas, including ink-layer opacity.
 pub trait Painter {
     fn paint_quad(&mut self, quad: gpui::PaintQuad);
-    fn paint_path(&mut self, path: gpui::Path<Pixels>, color: Hsla);
+    /// A filled polygon (the traced logo).
+    fn polygon(&mut self, points: Vec<gpui::Point<Pixels>>, color: Hsla);
+    /// A full ring of `width` around `center`.
+    fn ring(&mut self, center: gpui::Point<Pixels>, radius: f32, width: f32, color: Hsla);
     fn layer(&mut self, area: Bounds<Pixels>, alpha: f32, paint: impl FnOnce(&mut Self));
 }
 
@@ -14,8 +17,22 @@ impl Painter for Window {
     fn paint_quad(&mut self, quad: gpui::PaintQuad) {
         self.paint_quad(quad);
     }
-    fn paint_path(&mut self, path: gpui::Path<Pixels>, color: Hsla) {
-        self.paint_path(path, color);
+    fn polygon(&mut self, points: Vec<gpui::Point<Pixels>>, color: Hsla) {
+        let mut path = gpui::PathBuilder::fill();
+        for (n, p) in points.into_iter().enumerate() {
+            if n == 0 {
+                path.move_to(p);
+            } else {
+                path.line_to(p);
+            }
+        }
+        path.close();
+        if let Ok(path) = path.build() {
+            self.paint_path(path, color);
+        }
+    }
+    fn ring(&mut self, center: gpui::Point<Pixels>, radius: f32, width: f32, color: Hsla) {
+        crate::ui::arc::ring(self, center, radius, width, color);
     }
     fn layer(&mut self, area: Bounds<Pixels>, alpha: f32, paint: impl FnOnce(&mut Self)) {
         self.with_motion(
@@ -34,35 +51,26 @@ impl Painter for gpui::LiveCanvas {
     fn paint_quad(&mut self, quad: gpui::PaintQuad) {
         self.paint_quad(quad);
     }
-    fn paint_path(&mut self, path: gpui::Path<Pixels>, color: Hsla) {
-        self.paint_path(path, color);
+    fn polygon(&mut self, points: Vec<gpui::Point<Pixels>>, color: Hsla) {
+        self.fill(vec![points], false, color);
     }
-    fn layer(&mut self, area: Bounds<Pixels>, alpha: f32, paint: impl FnOnce(&mut Self)) {
-        let bounds = area.scale(self.scale_factor);
-        let boundary = gpui::FilterBoundary {
-            order: 0,
-            bounds,
-            content_mask: gpui::ContentMask {
-                bounds,
-                ..Default::default()
-            },
-            corner_radii: Default::default(),
-            corner_smoothing: 0.,
-            filters: Default::default(),
-            opacity: alpha,
-            scale: 1.,
-            scale_origin: Default::default(),
-            motion: gpui::LayerMotion::NONE,
-            motion_bounds: bounds,
-            is_start: true,
-            inline: false,
+    fn ring(&mut self, center: gpui::Point<Pixels>, radius: f32, width: f32, color: Hsla) {
+        // The stroked 96-gon of `arc::ring` as its filled outline: outer edge, then the inner
+        // edge reversed so non-zero winding leaves the hole.
+        let circle = |r: f32| -> Vec<gpui::Point<Pixels>> {
+            (0..96)
+                .map(|i| {
+                    let a = i as f32 / 96. * std::f32::consts::TAU;
+                    point(center.x + px(r * a.cos()), center.y + px(r * a.sin()))
+                })
+                .collect()
         };
-        self.scene.insert_primitive(boundary.clone());
-        paint(self);
-        self.scene.insert_primitive(gpui::FilterBoundary {
-            is_start: false,
-            ..boundary
-        });
+        let mut inner = circle(radius - width / 2.);
+        inner.reverse();
+        self.fill(vec![circle(radius + width / 2.), inner], false, color);
+    }
+    fn layer(&mut self, _: Bounds<Pixels>, alpha: f32, paint: impl FnOnce(&mut Self)) {
+        self.group(alpha, paint);
     }
 }
 
@@ -94,18 +102,7 @@ fn polygon(
     points: impl Iterator<Item = gpui::Point<Pixels>>,
     color: Hsla,
 ) {
-    let mut path = gpui::PathBuilder::fill();
-    for (n, p) in points.enumerate() {
-        if n == 0 {
-            path.move_to(p);
-        } else {
-            path.line_to(p);
-        }
-    }
-    path.close();
-    if let Ok(path) = path.build() {
-        window.paint_path(path, color);
-    }
+    window.polygon(points.collect(), color);
 }
 
 /// The exact logo: the traced ribbon and the ring.
@@ -126,7 +123,7 @@ pub(super) fn paint_rest(window: &mut impl Painter, area: Bounds<Pixels>, k: f32
 }
 
 pub(super) fn paint_ring(window: &mut impl Painter, area: Bounds<Pixels>, k: f32, color: Hsla) {
-    crate::ui::arc::ring(window, area.center(), RING_R * k, RING_W * k, color);
+    window.ring(area.center(), RING_R * k, RING_W * k, color);
 }
 
 /// One screen of dots (`ink` 0 key, 1 blue, 2 pink), `(dx, dy)` design units off register.
