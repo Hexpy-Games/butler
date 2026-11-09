@@ -14,26 +14,18 @@ pub enum SubtaskState {
     Paused,
     /// Waiting on the owner's decision somewhere in its subtree.
     NeedsApproval,
-    /// Idle after a blocked result, waiting for the owner's direction.
-    Blocked,
-    /// Not running: queued to start or idle.
-    Waiting,
 }
 
 impl SubtaskState {
-    /// A pending decision wins over an interruption; otherwise the child's own activity decides, so an idle child never reads as working.
+    /// A pending decision wins over an interruption: the owner acts on it first.
     #[must_use]
-    pub fn of(awaiting_decision: bool, recoverable: bool, activity: &str) -> Self {
+    pub fn of(awaiting_decision: bool, recoverable: bool) -> Self {
         if awaiting_decision {
             Self::NeedsApproval
         } else if recoverable {
             Self::Paused
         } else {
-            match activity {
-                "active" => Self::Working,
-                "blocked" => Self::Blocked,
-                _ => Self::Waiting,
-            }
+            Self::Working
         }
     }
 }
@@ -95,7 +87,7 @@ impl SubsessionService {
                     Some(&relation.safe_title),
                     &relation.packet.objective,
                 ),
-                state: SubtaskState::of(row.awaiting_decision, recoverable, row.activity),
+                state: SubtaskState::of(row.awaiting_decision, recoverable),
                 plan_completed: plan.map(|(_, _, completed)| completed),
                 plan_total: plan.map(|(_, total, _)| total),
                 started_at: relation.created_at.clone(),
