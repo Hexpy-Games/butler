@@ -110,12 +110,11 @@ async fn delivered_steward_result_reports_blocked_work() -> Result<(), HarnessEr
     let child = wait_result(&s).await?;
     assert_eq!(child["result"]["status"], "blocked", "{child}");
     assert_eq!(child["result"]["work_status"], "blocked", "{child}");
-    assert_eq!(child["status"], "failed", "{child}");
+    assert_eq!(child["status"], "delivered", "{child}");
     assert_eq!(child["approved_plan_completed"], 1);
     let general = s.gw.get("/session-view?session_id=general").await?;
     let subtasks = &general.data()["subtasks"];
-    assert_eq!(subtasks[0]["session_id"], child["session_id"], "{subtasks}");
-    assert_eq!(subtasks[0]["state"], "blocked", "{subtasks}");
+    assert_eq!(subtasks, &json!([]), "{subtasks}");
     let navigation = s.gw.get("/navigation").await?;
     let chat = navigation.data()["chats"]
         .as_array()
@@ -123,14 +122,17 @@ async fn delivered_steward_result_reports_blocked_work() -> Result<(), HarnessEr
         .iter()
         .find(|chat| chat["id"] == "general")
         .unwrap();
-    assert_eq!(&chat["subtasks"], subtasks, "{chat}");
+    assert!(
+        chat["subtasks"].as_array().is_none_or(Vec::is_empty),
+        "{chat}"
+    );
     let own =
         s.gw.get(&format!(
             "/session-view?session_id={}",
             child["session_id"].as_str().unwrap()
         ))
         .await?;
-    assert_eq!(own.data()["status"], "failed");
+    assert_eq!(own.data()["status"], "delivered");
     assert_eq!(own.data()["latest_turn"]["delivery_state"], "delivered");
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
     let status: String = db

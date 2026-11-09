@@ -199,7 +199,12 @@ fn result_text(
         &feedback,
         delegation,
     )?;
-    text.push_str(&super::assets::delivery_assets(tx, &completion.turn)?);
+    text.push_str(&super::assets::delivery_assets(
+        tx,
+        &completion.session,
+        &completion.turn,
+        delegation.packet.child_role,
+    )?);
     text.push_str(&delivery_artifacts(
         tx,
         &completion.turn,
