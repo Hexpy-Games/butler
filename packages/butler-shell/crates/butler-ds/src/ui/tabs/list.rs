@@ -31,6 +31,7 @@ pub struct Trigger {
     label: SharedString,
     icon: Option<Icon>,
     pub(super) disabled: bool,
+    anchor: Option<SharedString>,
 }
 
 impl Trigger {
@@ -40,6 +41,7 @@ impl Trigger {
             label: label.into(),
             icon: None,
             disabled: false,
+            anchor: None,
         }
     }
 
@@ -50,6 +52,12 @@ impl Trigger {
 
     pub fn disabled(mut self) -> Self {
         self.disabled = true;
+        self
+    }
+
+    /// Names the trigger for the live harness (`debug_selector`).
+    pub fn anchor(mut self, name: impl Into<SharedString>) -> Self {
+        self.anchor = Some(name.into());
         self
     }
 }
@@ -121,6 +129,7 @@ impl TabsList {
             .is_some_and(|h| focus::visible(ds, h.is_focused(window), false));
         let id = ElementId::from(SharedString::from(format!("{}-trigger-{index}", ctx.id)));
         let mut control = Control::new(id, ds);
+        control.debug.clone_from(&trigger.anchor);
         control.radius = ds.len(Length::RadiusControl);
         control.scale = false;
         control.weight = ds.number(Number::FontWeightMedium);

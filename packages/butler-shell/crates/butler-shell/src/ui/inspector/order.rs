@@ -17,11 +17,14 @@ use butler_ds::ui::spinner::Spinner;
 use butler_ds::ui::success_check::SuccessCheck;
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{
-    AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _, Window, div,
+    AnyElement, App, Global, IntoElement as _, ParentElement as _, SharedString, Styled as _,
+    Window, div,
 };
 
 use super::InspectorCtx;
 use crate::ui::i18n::canon_order::CanonOrder;
+use crate::ui::manage::ManageCtx;
+use crate::ui::manage::canon::aside::EpicInspector;
 use crate::ui::source::wire::{
     CanonQueueChain, CanonQueueItem, CanonQueueItemState, CanonQueueOrigin, CanonQueueView,
 };
@@ -308,12 +311,42 @@ fn order_marker(
     }
 }
 
-/// `canon/EpicInspector`: deferred to P4, where the canon board owns `EpicDetail` and `useCanonBoard`.
+/// The epic a session is bound to: its project and its id (`useActiveCanonEpic`'s match).
+type EpicOf = Rc<dyn Fn(&str, &App) -> Option<(SharedString, SharedString)>>;
+
+/// What the session info needs to show the epic: the management context the inspector reads
+/// through, and the sidebar's session-to-epic index. The shell installs it.
+#[derive(Clone)]
+struct EpicHost {
+    manage: ManageCtx,
+    epic_of: EpicOf,
+}
+
+impl Global for EpicHost {}
+
+/// Registers the management context and what finds a session's epic.
+pub(crate) fn install_epic_host(
+    cx: &mut App,
+    manage: ManageCtx,
+    epic_of: impl Fn(&str, &App) -> Option<(SharedString, SharedString)> + 'static,
+) {
+    cx.set_global(EpicHost {
+        manage,
+        epic_of: Rc::new(epic_of),
+    });
+}
+
+/// `canon/EpicInspector` of the session info: the bound epic's compact detail.
 pub(crate) fn epic_inspector(
     ctx: &InspectorCtx<'_>,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
-    let _ = (ctx, window, cx);
-    None
+    let host = cx.try_global::<EpicHost>().cloned()?;
+    let (project, epic) = (host.epic_of)(ctx.view.session_id.as_str(), cx)?;
+    let key = SharedString::from(format!("epic-inspector-{project}-{epic}"));
+    let inspector = window.use_keyed_state(key, cx, |window, cx| {
+        EpicInspector::new(host.manage.clone(), project, epic, true, window, cx)
+    });
+    Some(inspector.into_any_element())
 }

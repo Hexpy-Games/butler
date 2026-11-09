@@ -3,8 +3,8 @@
 //! `ProviderQuotaGauge`, `providerQuotaPresentation`, `usage/UsageHistory`, `usage/UsageReadout`).
 //!
 //! The timeline, readout values and token notation are the context popover's
-//! (`composer::context`). Not ported: the live refresh of the page (the React event buses are
-//! follow-up F4); the activity heatmap and its daily / weekly / cumulative control (G-heat).
+//! (`composer::context`). The activity heatmap and its daily / weekly / cumulative control are
+//! `history`. Not ported: the live refresh of the page (the React event buses are follow-up F4).
 mod breakdown;
 mod copy;
 mod format;
@@ -208,7 +208,7 @@ impl Render for UsagePage {
         let mut page = SettingsPage::new()
             .labels(SectionCtx::labels(cx))
             .section(self.overview(&sessions, window, cx))
-            .section(self.history_section(lang));
+            .section(self.history_section(lang, window, cx));
         if let Some(images) = self.images_section(lang, cx) {
             page = page.section(images);
         }

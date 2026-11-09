@@ -36,6 +36,7 @@
 //! - [`service_registration`]: login-time start of the service (launchd,
 //!   systemd `--user`, Task Scheduler).
 //! - [`network`]: the machine's own interface addresses.
+//! - [`network_status`]: whether the machine is online, watched on interface changes.
 //! - [`cpu`]: how many performance cores the machine has.
 //! - [`memory`]: how much physical memory the machine has.
 //! - [`desktop`]: whether a browser can open, and opening a link in it.
@@ -89,6 +90,7 @@ pub mod launcher;
 pub mod login_item;
 pub mod memory;
 pub mod network;
+pub mod network_status;
 pub mod notification_settings;
 pub mod powershell_text;
 pub mod process_control;

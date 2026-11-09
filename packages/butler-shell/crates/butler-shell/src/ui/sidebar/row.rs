@@ -87,19 +87,15 @@ impl Shell {
             .open(self.sidebar.menus.contains(instance))
             .into_any_element();
         if row.project.is_some() {
-            let dashboard = butler_ds::ui::tooltip::Tooltip::new(SharedString::from(format!(
-                "dashboard-{}",
-                row.node.key
-            )))
-            .label(self.theme.strings.not_yet)
-            .child(
-                IconButton::new(
-                    SharedString::from(format!("dashboard-{}", row.node.key)),
-                    self.copy("Dashboard", "대시보드"),
-                )
-                .glyph(Icon::LayoutDashboard)
-                .disabled(),
-            );
+            let project = SharedString::from(row.node.entityId.clone());
+            let dashboard = IconButton::new(
+                SharedString::from(format!("dashboard-{}", row.node.key)),
+                self.copy("Dashboard", "대시보드"),
+            )
+            .glyph(Icon::LayoutDashboard)
+            .on_click(cx.listener(move |s, _, w, cx| {
+                s.open_project_dashboard(project.clone(), w, cx);
+            }));
             gpui::div()
                 .flex()
                 .child(dashboard)
@@ -222,18 +218,20 @@ impl Shell {
             )
             .icon(identity)
             .actions(actions);
-            if row.project.is_some() {
-                nav = nav.disabled();
-            } else {
-                nav = nav.on_click(cx.listener(move |s, _, w, cx| {
-                    if !s.sidebar.take_long_press(&click_instance) {
-                        s.open_sidebar_session(&id, w, cx);
-                    }
-                }));
-            }
+            let project = row.project.is_some();
+            nav = nav.on_click(cx.listener(move |s, _, w, cx| {
+                if s.sidebar.take_long_press(&click_instance) {
+                    return;
+                }
+                if project {
+                    s.open_project_dashboard(id.clone().into(), w, cx);
+                } else {
+                    s.open_sidebar_session(&id, w, cx);
+                }
+            }));
             if crate::ui::store::navigation::NavigationModel::is_route_active(
                 &row.node.entityId,
-                self.store.selected().map(|c| c.session.0.as_ref()),
+                self.route_chat(cx),
             ) {
                 nav = nav.active();
             }
@@ -243,17 +241,7 @@ impl Shell {
                     .label_element(space_row_label(row, true))
                     .meta(self.space_row_meta(row, cx));
             }
-            if row.project.is_some() {
-                butler_ds::ui::tooltip::Tooltip::new(gpui::SharedString::from(format!(
-                    "project-shortcut-{}",
-                    row.node.key
-                )))
-                .label(self.theme.strings.not_yet)
-                .child(nav)
-                .into_any_element()
-            } else {
-                nav.into_any_element()
-            }
+            nav.into_any_element()
         }
     }
     pub(super) fn space_row_branch(

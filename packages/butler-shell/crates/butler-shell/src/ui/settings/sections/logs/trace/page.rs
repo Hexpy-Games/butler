@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use butler_ds::ui::blocks::key_value_row::KeyValueRow;
 use butler_ds::ui::blocks::settings_section::{SettingsPage, SettingsSection, SettingsSectionKind};
+use butler_ds::ui::blocks::span_bar::{SpanAxis, SpanInset, span_rows};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::copy_button::CopyButton;
 use butler_ds::ui::layout::{Cross, Space, Stack};
@@ -98,11 +99,10 @@ impl TracePage {
         cx.notify();
     }
 
-    /// The visible rows, under the axis.
-    // CARVE-OUT(G-span): React puts a SpanAxis (the trace's total on a shared time scale) above
-    // the rows; the rows keep their start and length as text.
+    /// The axis and the visible rows (`TraceSteps`).
     fn rows(&self, loaded: &Loaded, copy: &'static Words, cx: &Context<Self>) -> AnyElement {
         let Loaded { trace, steps } = loaded;
+        let total = model::total(trace);
         let rows = model::visible(steps, &self.open).into_iter().map(|index| {
             let toggle = cx.listener(move |this, _: &ClickEvent, _, cx| this.toggle(index, cx));
             step::row(
@@ -110,13 +110,19 @@ impl TracePage {
                 trace,
                 steps,
                 index,
+                total,
                 self.open.contains(&index),
                 toggle,
             )
         });
         Stack::new()
-            .gap(Space::None)
-            .children(rows)
+            .gap(Space::Sm)
+            .child(
+                SpanAxis::new("trace-axis", total)
+                    .inset(SpanInset::Row)
+                    .format(move |ms| format_ms(copy, ms)),
+            )
+            .child(span_rows(rows))
             .into_any_element()
     }
 }

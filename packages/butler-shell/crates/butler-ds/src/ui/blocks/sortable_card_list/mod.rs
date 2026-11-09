@@ -7,9 +7,10 @@
 //!
 //! Not reproduced: the neighbours sliding aside while dragging (the dragged card stays in
 //! place, dimmed, and the indicator shows where it lands), the lift's scale, the keyboard
-//! lift/cancel (Space, Escape: an arrow moves at once), the screen-reader live region,
-//! `actions` per card and the `empty` node (text only, `empty_message`), and the 6 px drag
-//! activation (gpui starts a drag after 2 px).
+//! lift/cancel (Space, Escape: an arrow moves at once), the screen-reader live region, the
+//! `empty` node (text only, `empty_message`), and the 6 px drag activation (gpui starts a drag
+//! after 2 px). A card's title, description and actions can be element slots ([`Slot`]), as
+//! React's `ReactNode` props are.
 mod copy;
 mod drag;
 mod row;
@@ -33,6 +34,37 @@ use crate::ui::typo::{Tone, Typo};
 
 type OnRemove = Rc<dyn Fn(&SharedString, &mut Window, &mut App)>;
 
+/// A node of a card (React's `ReactNode` props), built each time the row or its lifted copy
+/// paints. Two slots are equal when they are the same slot.
+#[derive(Clone)]
+pub struct Slot(Build);
+
+type Build = Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>;
+
+impl Slot {
+    pub fn new(build: impl Fn(&mut Window, &mut App) -> AnyElement + 'static) -> Self {
+        Self(Rc::new(build))
+    }
+
+    fn build(&self, window: &mut Window, cx: &mut App) -> AnyElement {
+        (self.0)(window, cx)
+    }
+}
+
+impl std::fmt::Debug for Slot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Slot")
+    }
+}
+
+impl PartialEq for Slot {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for Slot {}
+
 /// A card of the list (`SortableCardItemData`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortableCardItem {
@@ -43,6 +75,12 @@ pub struct SortableCardItem {
     pub description: Option<SharedString>,
     pub meta: Option<SharedString>,
     pub leading: Option<Icon>,
+    /// Replaces `title` in the card (the title stays the accessible name).
+    pub title_element: Option<Slot>,
+    /// Replaces `description` in the card.
+    pub description_element: Option<Slot>,
+    /// Controls at the card's trailing edge, before the remove button.
+    pub actions: Option<Slot>,
 }
 
 impl SortableCardItem {
@@ -54,6 +92,9 @@ impl SortableCardItem {
             description: None,
             meta: None,
             leading: None,
+            title_element: None,
+            description_element: None,
+            actions: None,
         }
     }
 
@@ -74,6 +115,30 @@ impl SortableCardItem {
 
     pub fn leading(mut self, leading: Icon) -> Self {
         self.leading = Some(leading);
+        self
+    }
+
+    pub fn title_element(
+        mut self,
+        build: impl Fn(&mut Window, &mut App) -> AnyElement + 'static,
+    ) -> Self {
+        self.title_element = Some(Slot::new(build));
+        self
+    }
+
+    pub fn description_element(
+        mut self,
+        build: impl Fn(&mut Window, &mut App) -> AnyElement + 'static,
+    ) -> Self {
+        self.description_element = Some(Slot::new(build));
+        self
+    }
+
+    pub fn actions(
+        mut self,
+        build: impl Fn(&mut Window, &mut App) -> AnyElement + 'static,
+    ) -> Self {
+        self.actions = Some(Slot::new(build));
         self
     }
 }

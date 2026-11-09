@@ -27,6 +27,9 @@ pub(crate) struct Inputs {
     /// The open chat; `None` for a new chat.
     pub(crate) chat_id: Option<String>,
     pub(crate) session_id: Option<String>,
+    /// The draft the composer edits in place of the open chat's (the dashboard's
+    /// `dashboard:<project>`, D4).
+    pub(crate) draft_key: Option<String>,
     /// The open chat's project, which gates plan mode and the project documents.
     pub(crate) project_id: Option<String>,
     /// Git facts of the open or new chat.
@@ -94,7 +97,8 @@ impl Composer {
             return;
         }
         let previous = std::mem::replace(&mut self.inputs, inputs);
-        let chat_changed = self.inputs.session_id != previous.session_id;
+        let chat_changed = self.inputs.session_id != previous.session_id
+            || self.inputs.draft_key != previous.draft_key;
         if chat_changed {
             self.switch_chat(window, cx);
         }
@@ -115,7 +119,7 @@ impl Composer {
     /// `useComposerDraftSession` and the effects on `activeChatId`: the chat's draft becomes the
     /// composer's, its attachments and controls start over.
     fn switch_chat(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let key = self.inputs.session_id.clone();
+        let key = (self.inputs.draft_key.clone()).or_else(|| self.inputs.session_id.clone());
         state::use_draft_session(key.as_deref().unwrap_or(state::NEW_CHAT_DRAFT), cx);
         ComposerState::update(cx, |draft| {
             draft.attachments.clear();

@@ -3332,6 +3332,13 @@ License: https://github.com/servo/core-foundation-rs/blob/548b65cd3046bb46fc5ceb
 Copyright (c) 2012-2013 Mozilla Foundation
 
 =====
+core-foundation 0.9.4
+MIT OR Apache-2.0
+License: https://github.com/servo/core-foundation-rs/blob/795398aa3775bbdaf03419fcd2cc0dad7ebbc4dc/core-foundation/LICENSE-APACHE
+License: https://github.com/servo/core-foundation-rs/blob/795398aa3775bbdaf03419fcd2cc0dad7ebbc4dc/core-foundation/LICENSE-MIT
+Copyright (c) 2012-2013 Mozilla Foundation
+
+=====
 core_detect 1.0.0
 MIT OR Apache-2.0
 License: https://github.com/thomcc/core_detect/blob/a0f957776563806e7d20978471676e0db72892ba/LICENSE-APACHE
@@ -4613,12 +4620,26 @@ License: https://github.com/hsivonen/idna_adapter/blob/1d9782f32c9e29218542b4a94
 Copyright (c) The rust-url developers
 
 =====
+if-addrs 0.10.2
+MIT OR BSD-3-Clause
+License: https://github.com/messense/if-addrs/blob/ffddd95740b9803e3074952547339e41236ea18e/LICENSE-BSD
+License: https://github.com/messense/if-addrs/blob/ffddd95740b9803e3074952547339e41236ea18e/LICENSE-MIT
+Copyright 2018 MaidSafe.net limited.
+Copyright 2020 messense
+
+=====
 if-addrs 0.15.0
 MIT OR BSD-3-Clause
 License: https://github.com/messense/if-addrs/blob/3cdbc8b7cfc70a328102bd8b1efdd3408c5d75b2/LICENSE-BSD
 License: https://github.com/messense/if-addrs/blob/3cdbc8b7cfc70a328102bd8b1efdd3408c5d75b2/LICENSE-MIT
 Copyright 2018 MaidSafe.net limited.
 Copyright 2020 messense
+
+=====
+if-watch 3.2.1
+MIT
+License: https://crates.io/crates/if-watch/3.2.1
+Copyright (c) <year> <copyright holders>
 
 =====
 image-webp 0.2.4
@@ -5295,10 +5316,46 @@ Jim Turner,
 and ndarray developers
 
 =====
+netlink-packet-core 0.7.0
+MIT
+License: https://github.com/rust-netlink/netlink-packet-core/blob/91e71b69fe8d94a8ae7e2748b0443272c6c3307c/.github/workflows/license.yml
+License: https://github.com/rust-netlink/netlink-packet-core/blob/91e71b69fe8d94a8ae7e2748b0443272c6c3307c/LICENSE-MIT
+
+=====
+netlink-packet-route 0.17.1
+MIT
+License: https://github.com/rust-netlink/netlink-packet-route/blob/3477b3700f8df49fcbc568f791d0c8f68845b9f6/.github/workflows/license.yml
+License: https://github.com/rust-netlink/netlink-packet-route/blob/3477b3700f8df49fcbc568f791d0c8f68845b9f6/LICENSE-MIT
+
+=====
+netlink-packet-utils 0.5.2
+MIT
+License: https://github.com/rust-netlink/netlink-packet-utils/blob/51ef4512ad03da863a0cb6dbc97186db24fdd267/.github/workflows/license.yml
+License: https://github.com/rust-netlink/netlink-packet-utils/blob/51ef4512ad03da863a0cb6dbc97186db24fdd267/LICENSE-MIT
+
+=====
+netlink-proto 0.11.5
+MIT
+License: https://github.com/rust-netlink/netlink-proto/blob/7adac0358108e37fede5bbf5143d4a4b980b550c/.github/workflows/license.yml
+License: https://github.com/rust-netlink/netlink-proto/blob/7adac0358108e37fede5bbf5143d4a4b980b550c/LICENSE-MIT
+
+=====
+netlink-sys 0.8.8
+MIT
+License: https://github.com/rust-netlink/netlink-sys/blob/7b2743a514f88127c76de2567fd4e6c7d89e00ff/.github/workflows/license.yml
+License: https://github.com/rust-netlink/netlink-sys/blob/7b2743a514f88127c76de2567fd4e6c7d89e00ff/LICENSE-MIT
+
+=====
 new_debug_unreachable 1.0.6
 MIT
 License: https://github.com/mbrubeck/rust-debug-unreachable/blob/4b3fa6e0b6d728ed2018690e087a440dd29e7d06/LICENSE-MIT
 Copyright (c) 2015 Jonathan Reem
+
+=====
+nix 0.26.4
+MIT
+License: https://github.com/nix-rust/nix/blob/08d8ba9fc3b5a0b9f6211bc286e6bf336b7c3463/LICENSE
+Copyright (c) 2015 Carl Lerche + nix-rust Authors
 
 =====
 nix 0.29.0
@@ -6140,6 +6197,12 @@ Apache-2.0
 License: https://github.com/conradkleinespel/rpassword/blob/11515101cf108ce825dcd5ef5bac703a591f36c1/LICENSE-APACHE
 
 =====
+rtnetlink 0.13.1
+MIT
+License: https://github.com/rust-netlink/rtnetlink/blob/5e5c688159ed6a2c66755c1d9ed3f754338a02a6/.github/workflows/license.yml
+License: https://github.com/rust-netlink/rtnetlink/blob/5e5c688159ed6a2c66755c1d9ed3f754338a02a6/LICENSE-MIT
+
+=====
 rtoolbox 0.0.6
 Apache-2.0
 License: https://github.com/conradkleinespel/rtoolbox/blob/af99b45fefac5f9eb6891fb4ddd9c1e992fbf24d/LICENSE-APACHE
@@ -6678,6 +6741,20 @@ sysinfo 0.37.2
 MIT
 License: https://github.com/GuillaumeGomez/sysinfo/blob/067dd61372205880dda017c942fec0042421e45e/LICENSE
 Copyright (c) 2015 Guillaume Gomez
+
+=====
+system-configuration-sys 0.6.0
+MIT OR Apache-2.0
+License: https://github.com/mullvad/system-configuration-rs/blob/fd43df6f57de954878d824c14c08b57045e46e76/system-configuration-sys/LICENSE-APACHE
+License: https://github.com/mullvad/system-configuration-rs/blob/fd43df6f57de954878d824c14c08b57045e46e76/system-configuration-sys/LICENSE-MIT
+Copyright (c) 2024 Mullvad VPN AB
+
+=====
+system-configuration 0.6.1
+MIT OR Apache-2.0
+License: https://github.com/mullvad/system-configuration-rs/blob/c7a1626d79410a2f35e0361de952b6076a33d95c/system-configuration/LICENSE-APACHE
+License: https://github.com/mullvad/system-configuration-rs/blob/c7a1626d79410a2f35e0361de952b6076a33d95c/system-configuration/LICENSE-MIT
+Copyright (c) 2024 Mullvad VPN AB
 
 =====
 tagptr 0.2.0
@@ -7259,6 +7336,13 @@ License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed76
 Copyright (c) Microsoft Corporation.
 
 =====
+windows-core 0.53.0
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/b1fadff390546098457f18d0da1da17ff3419688/crates/libs/core/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/b1fadff390546098457f18d0da1da17ff3419688/crates/libs/core/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
 windows-core 0.56.0
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/core/license-apache-2.0
@@ -7407,6 +7491,13 @@ License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed76
 Copyright (c) Microsoft Corporation.
 
 =====
+windows-sys 0.48.0
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/406944152ef28d3273236edc958c2bfbf825775d/crates/libs/sys/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/406944152ef28d3273236edc958c2bfbf825775d/crates/libs/sys/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
 windows-sys 0.52.0
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/3a605cba064b26f2a198ac58085f8c8836f47c38/crates/libs/sys/license-apache-2.0
@@ -7432,6 +7523,13 @@ windows-sys 0.61.2
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/sys/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/sys/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
+windows-targets 0.48.5
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/b769fa7570f8eeaede0ed1995a7dbe1e9591a35b/crates/libs/targets/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/b769fa7570f8eeaede0ed1995a7dbe1e9591a35b/crates/libs/targets/license-mit
 Copyright (c) Microsoft Corporation.
 
 =====
@@ -7463,6 +7561,13 @@ License: https://github.com/microsoft/windows-rs/blob/d468916ac27a36fb8a12bafc1b
 Copyright (c) Microsoft Corporation.
 
 =====
+windows 0.53.0
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/b1fadff390546098457f18d0da1da17ff3419688/crates/libs/windows/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/b1fadff390546098457f18d0da1da17ff3419688/crates/libs/windows/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
 windows 0.56.0
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/ae896c59e4d05895cb17d3b2c3c7c56ccac47207/crates/libs/windows/license-apache-2.0
@@ -7481,6 +7586,13 @@ windows 0.62.2
 MIT OR Apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/windows/license-apache-2.0
 License: https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/windows/license-mit
+Copyright (c) Microsoft Corporation.
+
+=====
+windows_x86_64_msvc 0.48.5
+MIT OR Apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/b769fa7570f8eeaede0ed1995a7dbe1e9591a35b/crates/targets/x86_64_msvc/license-apache-2.0
+License: https://github.com/microsoft/windows-rs/blob/b769fa7570f8eeaede0ed1995a7dbe1e9591a35b/crates/targets/x86_64_msvc/license-mit
 Copyright (c) Microsoft Corporation.
 
 =====

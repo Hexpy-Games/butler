@@ -61,12 +61,12 @@ fn progress(subtask: &SubtaskView) -> Option<String> {
     Some(format!("{}/{total}", (completed.max(0) + 1).min(total)))
 }
 
-/// `openSubtask`: opens the subtask's session. The observer over the parent conversation
-/// (`openSessionObserver`) has no route from the inspector.
+/// `openSubtask` (subtasks.ts:42): the subtask's observer over its parent. The inspector shows
+/// the sections of the open chat, so the parent is the active chat.
 fn open_subtask(session_id: &str, cx: &mut App) {
     let open = cx
         .try_global::<AssistantHooks>()
-        .and_then(|hooks| hooks.open_session.clone());
+        .and_then(|hooks| hooks.open_observer.clone());
     if let Some(open) = open {
         open(session_id, cx);
     }

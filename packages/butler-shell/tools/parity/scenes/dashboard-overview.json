@@ -1,0 +1,75 @@
+{
+  "name": "dashboard-overview",
+  "seed": [
+    {
+      "method": "PATCH",
+      "path": "/settings",
+      "body": {
+        "language": "ko",
+        "access_mode": "full_access",
+        "reduce_motion": true
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/projects",
+      "body": {
+        "source": "scratch",
+        "display_name": "제품"
+      },
+      "save": {
+        "project": "project.id"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/sessions",
+      "body": {
+        "kind": "chat",
+        "title": "출시 논의",
+        "project_id": "${project}"
+      }
+    }
+  ],
+  "open": {
+    "new": true
+  },
+  "steps": [
+    {
+      "click": "sidebar-dashboard-${project}"
+    },
+    {
+      "expect": "project-dashboard-view"
+    }
+  ],
+  "anchors": [
+    {
+      "anchor": "sidebar-dashboard-${project}",
+      "electron": "[data-tree-item=\"p:${project}\"] [aria-label=\"프로젝트 대시보드\"]"
+    },
+    {
+      "anchor": "project-dashboard-view",
+      "electron": "[data-test-class=\"project-dashboard-view\"]"
+    },
+    {
+      "anchor": "dashboard-tab-overview",
+      "electron": "[role=\"tab\"][id$=\"-trigger-overview\"]"
+    },
+    {
+      "anchor": "dashboard-tab-work",
+      "electron": "[role=\"tab\"][id$=\"-trigger-work\"]"
+    },
+    {
+      "anchor": "dashboard-tab-materials",
+      "electron": "[role=\"tab\"][id$=\"-trigger-materials\"]"
+    },
+    {
+      "anchor": "dashboard-tab-history",
+      "electron": "[role=\"tab\"][id$=\"-trigger-history\"]"
+    },
+    {
+      "anchor": "dashboard-tab-statistics",
+      "electron": "[role=\"tab\"][id$=\"-trigger-statistics\"]"
+    }
+  ]
+}

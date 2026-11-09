@@ -24,6 +24,7 @@ use gpui::{
 
 use self::loader::PictureId;
 use crate::ui::i18n::media::Media;
+use crate::ui::images::ImageAsset;
 
 /// One message file the viewer can show.
 #[derive(Clone, Debug)]
@@ -42,6 +43,8 @@ pub(crate) struct ViewerEntry {
     pub(crate) source: Option<String>,
     /// When the source was read (ISO time).
     pub(crate) checked: Option<String>,
+    /// A generated picture and its conversation: the viewer then shows the image actions.
+    pub(crate) generated: Option<(Rc<ImageAsset>, String)>,
 }
 
 impl ViewerEntry {
@@ -53,7 +56,14 @@ impl ViewerEntry {
             caption: None,
             source: None,
             checked: None,
+            generated: None,
         }
+    }
+
+    /// The picture is a generated image of `session`.
+    pub(crate) fn generated(mut self, asset: Rc<ImageAsset>, session: &str) -> Self {
+        self.generated = Some((asset, session.to_owned()));
+        self
     }
 }
 
@@ -82,6 +92,14 @@ pub(crate) fn install(cx: &mut App) {
 pub(crate) fn open(images: Vec<ViewerEntry>, index: usize, cx: &mut App) {
     if cx.has_global::<ImageViewerHost>() {
         cx.update_global::<ImageViewerHost, _>(|host, _| host.open_entries(images, index));
+        cx.refresh_windows();
+    }
+}
+
+/// `closeImageViewer`
+pub(crate) fn close(cx: &mut App) {
+    if cx.has_global::<ImageViewerHost>() {
+        cx.update_global::<ImageViewerHost, _>(|host, _| *host.open.borrow_mut() = None);
         cx.refresh_windows();
     }
 }
@@ -134,6 +152,14 @@ impl ImageViewerHost {
                 *close_open.borrow_mut() = None;
                 window.refresh();
             });
+        if let Some((asset, session)) = images[index].generated.clone() {
+            for action in
+                crate::ui::images::viewer_actions(&asset, &session, &images[index].name, cx)
+            {
+                viewer = viewer.action(action);
+            }
+            return Some(viewer.into_any_element());
+        }
         if let Some(url) = images[index].source.clone() {
             viewer = viewer.action(source_action(url, index, self.open.clone(), lang));
         }

@@ -11,6 +11,7 @@ use super::navigation::Navigation;
 use super::{Shell, appearance};
 use crate::ui::chat::{self, AssistantHooks};
 use crate::ui::i18n::Locale;
+use crate::ui::manage::{HistoryFrom, View};
 use crate::ui::settings::sections::normalize;
 use crate::ui::settings::{SettingsEvent, SettingsView};
 
@@ -65,6 +66,17 @@ impl Shell {
             SettingsEvent::OpenSession(id) => {
                 self.close_settings(window, cx);
                 self.navigate(Navigation::Session(id.to_string()), window, cx);
+            }
+            // `openHistory("settings")`: History with Settings › Browser as its parent.
+            SettingsEvent::OpenHistory => {
+                self.close_settings(window, cx);
+                self.set_view(
+                    View::History {
+                        from: HistoryFrom::Settings,
+                    },
+                    window,
+                    cx,
+                );
             }
             // `RerunSetupField` `openRerun`: Settings closes and the setup shows again.
             SettingsEvent::RerunSetup => {

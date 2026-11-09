@@ -2,9 +2,8 @@
 //! `useOnlineStatus`, `app/setupProviders.ts`): the cards, the local model servers and the list
 //! screen.
 //!
-//! Online status: gpui has no `navigator.onLine`, so the rule is the Agent's own answer. The
-//! list is online until the local-model-servers request gets no reply (no Agent, or the call
-//! failed); it is online again as soon as one succeeds.
+//! Online status: the OS network status (`lifecycle::network`, the rule of `navigator.onLine`),
+//! not the Agent's answer; an unreachable Agent is the readiness view's state.
 mod copy;
 mod options;
 mod screen;
@@ -12,6 +11,7 @@ mod screen;
 use gpui::{Context, SharedString};
 use serde_json::Value;
 
+use crate::lifecycle::network;
 use crate::ui::source::agent::Jobs;
 use copy::local_model_count;
 use options::{Server, model_options, parse_servers};
@@ -141,12 +141,18 @@ pub(crate) fn connection_card_id(model: &Value) -> Option<CardId> {
 
 /// `useLocalModelServers` and the online status.
 #[derive(Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent states (checking, failed, online, fetched), not one mode"
+)]
 pub(crate) struct LocalServers {
     servers: Vec<Server>,
     options: Vec<LocalModelOption>,
     checking: bool,
-    /// The last request got no reply.
+    /// The last request got no reply (the Agent was not ready); it is tried again.
     failed: bool,
+    /// The OS network status.
+    online: bool,
     fetched: bool,
     /// "More services" opened or closed by the user; unset follows the AI in use.
     more_open: Option<bool>,
@@ -154,8 +160,18 @@ pub(crate) struct LocalServers {
 
 impl LocalServers {
     pub(crate) fn new(cx: &mut Context<Self>) -> Self {
-        let _ = cx;
-        Self::default()
+        let online = network::online(cx);
+        if let Some(status) = network::entity(cx) {
+            cx.observe(&status, |this, status, cx| {
+                this.online = status.read(cx).online;
+                cx.notify();
+            })
+            .detach();
+        }
+        Self {
+            online,
+            ..Self::default()
+        }
     }
 
     /// The frame calls it on every flow change while the AI step shows; it fetches only when
@@ -172,7 +188,7 @@ impl LocalServers {
     }
 
     pub(crate) fn online(&self) -> bool {
-        !self.failed
+        self.online
     }
 
     pub(crate) fn checking(&self) -> bool {

@@ -12,7 +12,6 @@ pub(crate) enum Mutation {
     CanonConversation(String),
     CanonCreate(String, Value),
     CanonPlanEdit(String, Value),
-    ApplyUpdate(Value),
     ResumeSubtask(String, String),
 }
 #[derive(Clone)]

@@ -40,6 +40,8 @@ pub(super) struct Words {
     pub(super) copy_id: &'static str,
     /// settings.logs.trace.seconds: `{value}` is the number
     pub(super) seconds: &'static str,
+    /// settings.logs.trace.spoken: `{start}` and `{length}`
+    pub(super) spoken: &'static str,
     /// settings.logs.trace.depth: `{level}` is the number
     pub(super) depth: &'static str,
     /// settings.logs.trace.steps
@@ -116,6 +118,7 @@ const KO: Words = Words {
     load_failed: "추적을 불러오지 못했습니다",
     copy_id: "추적 ID 복사",
     seconds: "{value}초",
+    spoken: "시작 {start}, {length}",
     depth: "깊이 {level}",
     steps: &[
         ("http.server", "앱 요청"),
@@ -222,6 +225,7 @@ const EN: Words = Words {
     load_failed: "Couldn't load the trace",
     copy_id: "Copy trace ID",
     seconds: "{value}s",
+    spoken: "Starts {start}, {length}",
     depth: "Depth {level}",
     steps: &[
         ("http.server", "App request"),
@@ -340,6 +344,13 @@ impl Words {
     /// `copy.seconds(value)`
     pub(super) fn seconds(&self, value: &str) -> String {
         self.seconds.replace("{value}", value)
+    }
+
+    /// `copy.spoken(start, length)`
+    pub(super) fn spoken(&self, start: &str, length: &str) -> String {
+        self.spoken
+            .replace("{start}", start)
+            .replace("{length}", length)
     }
 
     /// `copy.depth(level)`

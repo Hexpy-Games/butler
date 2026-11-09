@@ -188,18 +188,18 @@ impl UpdatesPage {
         );
     }
 
-    /// `apply`: POST /updates/apply. The answer replaces the component's status.
-    fn apply(component: String, cx: &mut Context<Self>) {
-        fetch(
-            cx,
-            move |client| async move {
-                client
-                    .apply_update(&json!({ "component": component }))
-                    .await
-            },
-            |this: &mut Self, result: Result<ComponentView, Error>, cx| match result {
-                Ok(applied) => {
-                    Self::open_staged(&applied, cx);
+    /// `apply`: `app_update::apply` (POST /updates/apply, then a staged App package to the
+    /// installer). The answer replaces the component's status; a failure reads like a failed
+    /// apply.
+    fn apply(component: &str, cx: &mut Context<Self>) {
+        let applied = app_update::apply(json!({ "component": component }), cx);
+        cx.spawn(async move |this, cx| {
+            let applied = applied
+                .await
+                .ok()
+                .and_then(|raw| serde_json::from_value::<ComponentView>(raw).ok());
+            let _ = this.update(cx, |this, cx| match applied {
+                Some(applied) => {
                     let mut components = this
                         .view
                         .clone()
@@ -211,24 +211,8 @@ impl UpdatesPage {
                     }
                     this.set_view(components, cx);
                 }
-                Err(_) => Self::apply_failed(cx),
-            },
-        );
-    }
-
-    /// `butler:open-update-artifact`: an App package that is staged is handed to the installer
-    /// (`applyUpdate` of the preload). A refusal reads like a failed apply.
-    fn open_staged(applied: &ComponentView, cx: &mut Context<Self>) {
-        let path = applied.artifact_path.as_deref().unwrap_or("").trim();
-        let staged = applied.stage_status.as_deref() == Some("staged");
-        if applied.component != APP || !staged || path.is_empty() {
-            return;
-        }
-        let opened = app_update::open_staged(&json!({ "artifact_path": path }), cx);
-        cx.spawn(async move |this, cx| {
-            if opened.await.is_err() {
-                let _ = this.update(cx, |_, cx| Self::apply_failed(cx));
-            }
+                None => Self::apply_failed(cx),
+            });
         })
         .detach();
     }
@@ -360,7 +344,7 @@ impl Render for UpdatesPage {
             .as_ref()
             .filter(|p| p.component == status.component);
         let component = status.component.clone();
-        let apply = cx.listener(move |_, _: &ClickEvent, _, cx| Self::apply(component.clone(), cx));
+        let apply = cx.listener(move |_, _: &ClickEvent, _, cx| Self::apply(&component, cx));
         let cancel = cx.listener(|_, _: &ClickEvent, _, cx| Self::cancel(cx));
         versions = versions.child(
             Row {

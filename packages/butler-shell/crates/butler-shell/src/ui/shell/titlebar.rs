@@ -1,5 +1,7 @@
-//! Product title and workspace identity inside the DS titlebar.
+//! Product title and workspace identity inside the DS titlebar; a management view shows its own
+//! title (`activeTitleForView`) and, when nested, the back button (`useTitlebarBack`).
 use super::Shell;
+use crate::ui::manage::route;
 use crate::ui::{Icon, source::wire};
 use butler_ds::ui::{
     blocks::titlebar_shell::TitlebarShell, context::Lang, icon_button::IconButton, typo::Typo,
@@ -84,7 +86,12 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let (title, subtitle) = self.title_copy(cx);
+        let lang = self.theme.strings.locale.ds_lang();
+        let session = self.on_session(cx);
+        let (title, subtitle) = match route::active_title(&self.view(cx), lang) {
+            Some(title) => (title.into(), None),
+            None => self.title_copy(cx),
+        };
         let mut bar = TitlebarShell::new("workspace-title", title)
             .collapsed(!open)
             .split_chat_width(self.split_chat_width())
@@ -92,13 +99,16 @@ impl Shell {
         if let Some(subtitle) = subtitle {
             bar = bar.subtitle(subtitle);
         }
-        if self.store.selected().is_some() {
+        if let Some(label) = self.back_label(cx) {
+            bar = bar.back(label, cx.listener(|s, _, w, cx| s.titlebar_back(w, cx)));
+        }
+        if session && self.store.selected().is_some() {
             bar = bar.title_actions(self.render_session_menu(window, cx));
         }
-        if let Some(actions) = self.session_actions(window, cx) {
+        if session && let Some(actions) = self.session_actions(window, cx) {
             bar = bar.chat_trailing(actions);
         }
-        if let Some(toggle) = self.viewer_toggle(cx) {
+        if session && let Some(toggle) = self.viewer_toggle(cx) {
             bar = bar.trailing(toggle);
         }
         if !matches!(self.theme.platform, crate::ui::theme::Platform::Mac) {

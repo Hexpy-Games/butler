@@ -26,7 +26,10 @@ use crate::ui::decisions::{
     initiated_panels, plan_document_card,
 };
 use crate::ui::i18n::{AssistantStrings, assistant};
-use crate::ui::source::wire::{InitiatedOriginState, MessageRecord, MessageRecordRole};
+use crate::ui::images::{self, GeneratedImagesInput, ImageToolRow};
+use crate::ui::source::wire::{
+    InitiatedOriginState, MessageRecord, MessageRecordRole, ProgressRow,
+};
 
 pub(crate) use branch::assistant_branch_actions;
 pub(crate) use failure::{
@@ -213,6 +216,11 @@ fn answer_reply(
         reply.push(failure::failure_notice(msg, t, cx));
     } else {
         reply.push(reply_text(msg, cx));
+        reply.extend(images::generated_images(
+            &generated_images_input(msg, t),
+            window,
+            cx,
+        ));
         reply.extend(blocks(msg, t, window, cx));
     }
     match steward_progress(msg, t, window, cx) {
@@ -227,6 +235,71 @@ fn answer_reply(
             );
         }
         None => parts.extend(reply),
+    }
+}
+
+/// What `GeneratedImages` reads of the message: the turn's image tool rows (the settled rows,
+/// else the live turn's), the revision that re-reads unresolved outputs, and the request's
+/// first line as the title.
+fn generated_images_input(msg: &MessageRecord, t: &TranscriptCtx) -> GeneratedImagesInput {
+    let live: Vec<&ProgressRow> = t
+        .view
+        .active_turn
+        .iter()
+        .filter(|_| t.live_message == Some(msg.id.as_str()))
+        .flat_map(|turn| turn.progress.iter())
+        .flat_map(|progress| progress.safe_progress_rows.iter())
+        .collect();
+    let rows: Vec<&ProgressRow> = match msg.turn_activity_rows.as_deref() {
+        Some(rows) => rows.iter().collect(),
+        None => live,
+    };
+    let mut tools: Vec<ImageToolRow> = Vec::new();
+    for row in rows {
+        let tool = row.safe_tool_name.as_deref().unwrap_or_default();
+        let (Some(call), Some(result)) =
+            (row.tool_call_id.as_deref(), row.tool_result_id.as_deref())
+        else {
+            continue;
+        };
+        if !matches!(tool, "generate_image" | "edit_image")
+            || tools.iter().any(|known| known.call_id.as_ref() == call)
+        {
+            continue;
+        }
+        tools.push(ImageToolRow {
+            call_id: SharedString::from(call.to_owned()),
+            result_id: SharedString::from(result.to_owned()),
+            tool: SharedString::from(tool.to_owned()),
+            failed: tool == "edit_image" && (row.state == "failed" || row.failure_code.is_some()),
+        });
+    }
+    let request = t
+        .view
+        .messages
+        .iter()
+        .find(|m| {
+            m.role == MessageRecordRole::User && m.turn_id.is_some() && m.turn_id == msg.turn_id
+        })
+        .map_or("", |m| m.text.as_str());
+    let title: String = request
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .chars()
+        .take(80)
+        .collect();
+    GeneratedImagesInput {
+        turn: msg.turn_id.clone().map(SharedString::from),
+        session: SharedString::from(msg.chat_id.clone().unwrap_or_default()),
+        revision: format!(
+            "{}:{}",
+            msg.status.as_deref().unwrap_or_default(),
+            msg.updated_at.as_deref().unwrap_or_default()
+        )
+        .into(),
+        rows: tools,
+        title: title.into(),
     }
 }
 

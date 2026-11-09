@@ -41,6 +41,8 @@ use self::references::{MentionKey, References};
 use self::state::{ComposerState, image_refusal_label};
 use crate::ui::decisions::{DecisionCtx, decision_active, set_plan_gate};
 use crate::ui::field;
+use crate::ui::manage::ManageCtx;
+use crate::ui::manage::library::detail::{CardDrag, drop_cards_on_session};
 use crate::ui::sidebar::SpaceDragPayload;
 use crate::ui::source::wire::{QueuedMessageRecord, SessionView};
 use crate::ui::theme::Theme;
@@ -144,6 +146,8 @@ pub(crate) struct Composer {
     pub(crate) shell_focus: Option<FocusHandle>,
     /// The card's height as last drawn.
     height: Rc<Cell<f32>>,
+    /// Where a dropped library card attaches; the shell sets it once built.
+    pub(crate) manage: Option<ManageCtx>,
     _subscriptions: Vec<gpui::Subscription>,
 }
 
@@ -192,6 +196,7 @@ impl Composer {
             disabled: None,
             shell_focus: None,
             height: Rc::new(Cell::new(48.)),
+            manage: None,
             _subscriptions: subscriptions,
         }
     }
@@ -403,6 +408,16 @@ impl Composer {
     }
 }
 
+impl Composer {
+    /// `conversationAt`: library cards dropped on the composer card attach to the open chat.
+    fn drop_cards(&mut self, drag: &CardDrag, cx: &mut Context<Self>) {
+        let (Some(ctx), Some(chat)) = (self.manage.clone(), self.inputs.chat_id.clone()) else {
+            return;
+        };
+        drop_cards_on_session(&ctx, drag, &chat.into(), cx);
+    }
+}
+
 impl Render for Composer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.pull_state(window, cx);
@@ -434,6 +449,7 @@ impl Render for Composer {
         let column = butler_ds::ui::blocks::scope::conversation(cx).unwrap_or_default();
         let ds = butler_ds::ui::context::Ds::get(cx);
         let dropped = cx.entity().downgrade();
+        let tint = ds.color(butler_ds::tokens::Color::Selection);
         let surface = crate::ui::widgets::anchor(div(), "composer")
             .absolute()
             .bottom(ds.len(butler_ds::tokens::Length::SpaceLg))
@@ -448,6 +464,8 @@ impl Render for Composer {
         .on_drop(cx.listener(|this, drag: &SpaceDragPayload, window, cx| {
             this.drop_session(drag, window, cx);
         }))
+        .on_drag_over::<CardDrag>(move |style, _, _, _| style.bg(tint))
+        .on_drop(cx.listener(|this, drag: &CardDrag, _, cx| this.drop_cards(drag, cx)))
         .child(probe)
         .child(card)
         .on_click(cx.listener(|this, _, window, cx| {

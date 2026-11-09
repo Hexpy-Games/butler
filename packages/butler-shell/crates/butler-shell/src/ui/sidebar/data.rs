@@ -42,6 +42,7 @@ impl Shell {
                         s.sidebar.undo_revision = Some(notice.revision);
                     }
                     s.apply_sidebar_navigation(view);
+                    s.push_navigation(cx);
                     s.store.navigation.retry_pending = false;
                 }
                 Ok(_) => {

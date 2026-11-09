@@ -1,0 +1,74 @@
+{
+  "name": "library-main",
+  "seed": [
+    {
+      "method": "PATCH",
+      "path": "/settings",
+      "body": {
+        "language": "ko",
+        "access_mode": "full_access",
+        "reduce_motion": true
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/library",
+      "body": {
+        "id": "scrap-1",
+        "kind": "scrap",
+        "title": "여행 계획",
+        "url": "https://example.com/trip",
+        "site": "example.com",
+        "text": "여행 계획",
+        "crop": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        "capturedAt": "2026-10-09T00:00:00Z"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/library",
+      "body": {
+        "id": "bookmark-1",
+        "kind": "bookmark",
+        "title": "예제 문서",
+        "url": "https://example.com/docs",
+        "capturedAt": "2026-10-09T00:00:00Z"
+      }
+    }
+  ],
+  "open": {
+    "new": true
+  },
+  "steps": [
+    {
+      "click": "library-entry"
+    },
+    {
+      "expect": "library-page"
+    },
+    {
+      "expect": "library-item-scrap-1"
+    },
+    {
+      "expect": "library-item-bookmark-1"
+    }
+  ],
+  "anchors": [
+    {
+      "anchor": "library-entry",
+      "electron": "[data-test-class=\"library-entry\"]"
+    },
+    {
+      "anchor": "library-page",
+      "electron": "[data-test-class=\"library-region\"]"
+    },
+    {
+      "anchor": "library-item-scrap-1",
+      "electron": "[data-library-item=\"scrap-1\"]"
+    },
+    {
+      "anchor": "library-item-bookmark-1",
+      "electron": "[data-library-item=\"bookmark-1\"]"
+    }
+  ]
+}

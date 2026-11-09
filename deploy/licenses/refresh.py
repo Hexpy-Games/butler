@@ -174,6 +174,13 @@ def crate_evidence(package):
         text = fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/Apache-2.0.txt")
         files = [("Apache-2.0 (elected from upstream Apache-2.0 / MIT / MPL-2.0)", text),
                  ("Upstream package declaration", (directory / "Cargo.toml").read_text(encoding="utf-8"))]
+    if not files and package["name"] == "if-watch" and package["version"] == "3.2.1":
+        # Upstream declares MIT OR Apache-2.0 but ships no license file or
+        # copyright notice. Elect MIT; keep the declaration verbatim.
+        license_id = "MIT"
+        source = "https://crates.io/crates/if-watch/3.2.1"
+        files = [("Upstream MIT OR Apache-2.0 declaration (no copyright notice supplied)", (directory / "Cargo.toml").read_text(encoding="utf-8")),
+                 ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
     if package["name"] == "random_word":
         base = "https://raw.githubusercontent.com/MitchellRhysHall/random_word/dc1cab8d7951ff4285ea9158c8954d663fdd6fbf"
         files = [(f"{base}/src/license/en.txt", fetch(f"{base}/src/license/en.txt")),

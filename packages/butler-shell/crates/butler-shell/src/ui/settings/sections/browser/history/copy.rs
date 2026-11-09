@@ -24,8 +24,6 @@ pub(super) struct Words {
     pub(super) remove: &'static str,
     /// browser.failed
     pub(super) failed: &'static str,
-    /// shell.notYet
-    pub(super) not_yet: &'static str,
 }
 
 static KO: Words = Words {
@@ -45,7 +43,6 @@ static KO: Words = Words {
     cancel: "취소",
     remove: "삭제",
     failed: "페이지를 열지 못함",
-    not_yet: "준비 중",
 };
 
 static EN: Words = Words {
@@ -65,7 +62,6 @@ static EN: Words = Words {
     cancel: "Cancel",
     remove: "Delete",
     failed: "Could not open page",
-    not_yet: "Coming soon",
 };
 
 pub(super) fn words(lang: Lang) -> &'static Words {

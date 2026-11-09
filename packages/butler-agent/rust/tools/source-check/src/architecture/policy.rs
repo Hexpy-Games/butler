@@ -99,6 +99,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         | "desktop"
         | "launcher"
         | "network"
+        | "network_status"
         | "process_table"
         | "storage_size"
         | "stdio"

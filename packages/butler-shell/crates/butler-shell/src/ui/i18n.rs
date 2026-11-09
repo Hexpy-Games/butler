@@ -10,6 +10,7 @@ pub(crate) mod composer;
 pub(crate) mod file_viewer;
 pub(crate) mod initiated;
 pub(crate) mod inspector_artifacts;
+pub(crate) mod manage;
 pub(crate) mod media;
 mod messages;
 pub(crate) mod new_chat;

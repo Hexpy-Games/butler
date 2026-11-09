@@ -2,7 +2,7 @@
 //! does with the composer's events, and the handlers the composer installs once.
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::toast::{self, Toast};
-use gpui::{App, Context, Entity, Window};
+use gpui::{App, BorrowAppContext as _, Context, Entity, SharedString, Window};
 
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::navigation::Navigation;
 use super::{Shell, image_viewer};
+use crate::ui::chat::AssistantHooks;
 use crate::ui::composer::queue::on_delete_queued;
 use crate::ui::composer::{
     Composer, ComposerEvent, Inputs, Outgoing, clear_composer_text, composer_text, focus_composer,
@@ -17,7 +18,9 @@ use crate::ui::composer::{
 use crate::ui::decisions;
 use crate::ui::i18n::composer::words;
 use crate::ui::inspector;
+use crate::ui::manage::{ManageCtx, Topic, View};
 use crate::ui::source::agent::{Jobs, sent_turn, source_error};
+use crate::ui::source::sidebar::DraftTarget;
 use crate::ui::source::{ChatRef, Fetch, SentTurn, SourceError};
 
 /// A message id unique to this process run (time plus a counter); sending twice with the same
@@ -37,11 +40,14 @@ impl Shell {
     /// `sendMessage`: the draft goes into the open chat, or into a new one created first.
     pub(crate) fn send(&mut self, outgoing: impl Into<Outgoing>, cx: &mut Context<Self>) {
         let outgoing = outgoing.into();
+        if let Some(project) = self.dashboard_project(cx) {
+            return self.send_dashboard(project, outgoing, cx);
+        }
         let Some(source) = self.source.clone() else {
             return;
         };
         if let Some(chat) = self.store.selected().cloned() {
-            return Self::send_to(chat, &outgoing, false, cx);
+            return Self::send_to(chat, &outgoing, false, None, cx);
         }
         Self::run(
             self.sidebar.new_chat_parent.as_ref().map_or_else(
@@ -54,15 +60,44 @@ impl Shell {
                     this.store.open(Some(chat.clone()));
                     this.show_view(false, cx);
                     this.reload_open_chat(cx);
-                    Self::send_to(chat, &outgoing, true, cx);
+                    Self::send_to(chat, &outgoing, true, None, cx);
                 }
                 Err(e) => this.failed(&e, this.theme.strings.send_failed, cx),
             },
         );
     }
 
-    /// Posts the whole message; a new chat first takes the controls the owner chose.
-    fn send_to(chat: ChatRef, outgoing: &Outgoing, new_chat: bool, cx: &mut Context<Self>) {
+    /// The dashboard's send (`dashboardTarget`): a new chat of the project takes the message and
+    /// the dashboard stays the view; its topic moves once the turn is accepted.
+    fn send_dashboard(
+        &mut self,
+        project: SharedString,
+        outgoing: Outgoing,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(source) = self.source.clone() else {
+            return;
+        };
+        let target = DraftTarget::Project(project.to_string());
+        Self::run(
+            source.create_sidebar_chat(target.body()),
+            cx,
+            move |this, result, cx| match result {
+                Ok(chat) => Self::send_to(chat, &outgoing, true, Some(project), cx),
+                Err(e) => this.failed(&e, this.theme.strings.send_failed, cx),
+            },
+        );
+    }
+
+    /// Posts the whole message; a new chat first takes the controls the owner chose. A dashboard
+    /// send moves the project's dashboard topic on acceptance.
+    fn send_to(
+        chat: ChatRef,
+        outgoing: &Outgoing,
+        new_chat: bool,
+        dashboard: Option<SharedString>,
+        cx: &mut Context<Self>,
+    ) {
         let body = outgoing.body(&chat.chat.0, &client_message_id());
         let controls = outgoing.session_controls().filter(|_| new_chat);
         let session = chat.session.0.to_string();
@@ -82,16 +117,22 @@ impl Shell {
         Self::run(sent, cx, move |this, result, cx| match result {
             Ok(sent) => {
                 this.store.turn_started(&chat.chat, sent.turn);
+                if let Some(project) = dashboard {
+                    this.bump_topic(Topic::Dashboard(project), cx);
+                }
                 this.sync_composer(cx);
             }
             Err(e) => this.chat_failed(&chat, &e, this.theme.strings.send_failed, cx),
         });
     }
 
-    /// What the composer needs of the open chat and the agent.
-    fn composer_inputs(&self) -> Inputs {
-        let chat = self.store.selected();
-        let mut inputs = Inputs::from_summary(self.session_menu.summary.as_ref());
+    /// What the composer needs of the open chat and the agent. On the dashboard it writes the
+    /// project's next chat under the draft key `dashboard:<project>` (D4).
+    fn composer_inputs(&self, cx: &App) -> Inputs {
+        let dashboard = self.dashboard_project(cx);
+        let chat = self.store.selected().filter(|_| dashboard.is_none());
+        let summary = self.session_menu.summary.as_ref();
+        let mut inputs = Inputs::from_summary(summary.filter(|_| dashboard.is_none()));
         inputs.connected = self.source.is_some() && !self.incompatible;
         inputs.chat_id = chat.map(|c| c.chat.0.to_string());
         inputs.session_id = chat.map(|c| c.session.0.to_string());
@@ -99,16 +140,19 @@ impl Shell {
             .and_then(|c| self.store.summary(c))
             .and_then(|row| row.space.as_ref())
             .filter(|space| space.project)
-            .map(|space| space.id.to_string());
+            .map(|space| space.id.to_string())
+            .or_else(|| dashboard.as_ref().map(ToString::to_string));
+        inputs.draft_key = dashboard.map(|project| format!("dashboard:{project}"));
         inputs.reconnecting = self.source.is_some() && self.attention.disconnected;
         inputs
     }
 
     /// Tells the composer about the chat; it acts only on what changed.
     pub(super) fn feed_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let inputs = self.composer_inputs();
+        let inputs = self.composer_inputs(cx);
         self.composer
             .update(cx, |composer, cx| composer.set_inputs(inputs, window, cx));
+        self.attach_pending_document(cx);
     }
 
     pub(super) fn on_composer(
@@ -127,8 +171,9 @@ impl Shell {
 
     /// Shell init: the image viewer host, and what deletes a queued message that is loaded
     /// into the composer for editing.
-    pub(super) fn install_composer(cx: &mut Context<Self>) {
+    pub(super) fn install_composer(manage: &ManageCtx, cx: &mut Context<Self>) {
         image_viewer::install(cx);
+        crate::ui::images::install(manage.live.clone(), cx);
         // An answered request or question: the open view (which carries the requests) is read
         // again.
         let shell = cx.entity().downgrade();
@@ -159,7 +204,7 @@ impl Shell {
                 }),
             },
         );
-        Self::install_navigation_hooks(cx);
+        Self::install_navigation_hooks(manage, cx);
         on_delete_queued(cx, |id, cx| {
             let id = id.to_owned();
             let fetch = Jobs::run(cx, move |client| async move {
@@ -179,12 +224,13 @@ impl Shell {
         });
     }
 
-    /// The navigation and refresh hooks the decision panels and the task graph call
-    /// (`openSession`, `openSessionObserver`, `refreshSessionView`). Opening a session goes
-    /// through the shell's pending navigation (taken on the next frame, which has the window).
-    /// Memory settings open on the next frame (the hook has no window); schedules are a P3
-    /// screen and say so until then.
-    fn install_navigation_hooks(cx: &mut Context<Self>) {
+    /// The navigation and refresh hooks the decision panels, the task graph and the transcript
+    /// call (`openSession`, `openSessionObserver`, `setView(automation-detail)`,
+    /// `refreshSessionView`). Opening a session goes through the shell's pending navigation
+    /// (taken on the next frame, which has the window); the management actions go through
+    /// `manage`, whose events reach the shell with the window. Memory settings open on the next
+    /// frame.
+    fn install_navigation_hooks(manage: &ManageCtx, cx: &mut Context<Self>) {
         let open = |cx: &mut Context<Self>| -> OpenHook {
             let shell = cx.entity().downgrade();
             Rc::new(move |id: &str, cx: &mut App| {
@@ -195,22 +241,21 @@ impl Shell {
                 });
             })
         };
-        let not_yet = |cx: &mut Context<Self>| -> Rc<dyn Fn(&mut App)> {
-            let shell = cx.entity().downgrade();
-            Rc::new(move |cx: &mut App| {
-                let _ = shell.update(cx, |this, cx| {
-                    toast::show(cx, Toast::message(this.theme.strings.not_yet));
-                });
+        let observe = |manage: &ManageCtx| -> OpenHook {
+            let manage = manage.clone();
+            Rc::new(move |id: &str, cx: &mut App| {
+                manage.open_observer(id.to_owned().into(), None, cx);
             })
         };
+        let schedule = manage.clone();
         let refresh = cx.entity().downgrade();
         let memory = cx.entity().downgrade();
-        let schedule = not_yet(cx);
         let hooks = decisions::InitiatedHooks {
             open_session: Some(open(cx)),
-            // The observer over the parent is not ported; the subtask's own chat opens.
-            open_observer: Some(open(cx)),
-            open_automation: Some(Rc::new(move |_, cx| schedule(cx))),
+            open_observer: Some(observe(manage)),
+            open_automation: Some(Rc::new(move |id: &str, cx: &mut App| {
+                schedule.set_view(View::AutomationDetail(id.to_owned().into()), cx);
+            })),
             // `InitiatedPanels.tsx:25`: `openSettings("memory")`.
             open_memory_settings: Some(Rc::new(move |cx: &mut App| {
                 let _ = memory.update(cx, |this, cx| {
@@ -223,7 +268,12 @@ impl Shell {
             })),
         };
         cx.set_global(hooks);
-        let observer = open(cx);
+        let observer = observe(manage);
         inspector::on_open_session_observer(cx, move |id, cx| observer(id, cx));
+        // `WorkerCallCapsule` and the subtask rows (`openSessionObserver`).
+        let observer = observe(manage);
+        cx.update_default_global(|hooks: &mut AssistantHooks, _| {
+            hooks.open_observer = Some(observer);
+        });
     }
 }

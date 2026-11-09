@@ -14,6 +14,7 @@ use gpui::{
 struct GroupMenu {
     shell: WeakEntity<Shell>,
     key: String,
+    project: String,
     plan: Option<String>,
     open: bool,
     label: String,
@@ -43,7 +44,16 @@ impl RenderOnce for GroupMenu {
                 .on_click(toggle.on_click())
                 .into_any_element()
         });
-        let mut content = DropdownMenuContent::new().child(Item::new(self.overview).disabled());
+        // `openPlanOverview(project, plan)` (the backlog has no plan).
+        let (overview, project) = (self.shell.clone(), self.project);
+        let overview_plan = self.plan.clone();
+        let open = Item::new(self.overview).on_select(move |window, cx| {
+            let _ = overview.update(cx, |s, cx| {
+                let plan = overview_plan.clone().map(SharedString::from);
+                s.open_plan_overview(project.clone().into(), plan, window, cx);
+            });
+        });
+        let mut content = DropdownMenuContent::new().child(open);
         if let Some(plan) = self.plan {
             let weak = self.shell;
             content = content.child(Item::new(self.edit).on_select(move |_, cx| {
@@ -67,6 +77,7 @@ impl Shell {
     ) -> AnyElement {
         let weak = cx.entity().downgrade();
         let project = project.to_owned();
+        let menu_project = project.clone();
         let plan = (group.kind != "backlog").then(|| group.key.clone());
         let selected = plan.clone();
         let create = IconButton::new(
@@ -105,6 +116,7 @@ impl Shell {
         let menu = GroupMenu {
             shell: cx.entity().downgrade(),
             key: key.to_owned(),
+            project: menu_project,
             plan,
             open: self.sidebar.menus.contains(key),
             label: if group.kind == "backlog" {

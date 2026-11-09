@@ -35,8 +35,8 @@ pub(crate) enum PaletteEvent {
     OpenSession(String),
     /// `project:<id>` -> `openNewProjectChat`.
     OpenProjectChat(String),
-    /// `automation:<id>` -> the schedule's detail view (P3 carries the id).
-    OpenSchedule,
+    /// `automation:<id>` -> the schedule's detail view.
+    OpenSchedule(String),
     /// `settings:<section>` -> `openSettings(section)`.
     OpenSettings(String),
     /// A space result: `useOrganization.reveal("g:<id>")`.
@@ -214,7 +214,7 @@ fn navigation(route: &str) -> Option<PaletteEvent> {
     match prefix {
         "session" => Some(PaletteEvent::OpenSession(rest)),
         "project" => Some(PaletteEvent::OpenProjectChat(rest)),
-        "automation" => Some(PaletteEvent::OpenSchedule),
+        "automation" => Some(PaletteEvent::OpenSchedule(rest)),
         "settings" => Some(PaletteEvent::OpenSettings(rest)),
         _ => None,
     }

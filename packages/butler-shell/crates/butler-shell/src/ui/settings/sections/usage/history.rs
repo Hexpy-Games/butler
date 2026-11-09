@@ -1,18 +1,29 @@
-//! `usage/UsageHistory.tsx`: the lifetime and streak figures.
-//!
-//! CARVE-OUT(G-heat): React draws an ActivityHeatmap of the days under a daily / weekly /
-//! cumulative control; the DS has no heatmap block yet, so only the figures show.
+//! `usage/UsageHistory.tsx`: the lifetime and streak figures, and the heatmap of the days under a
+//! daily / weekly / cumulative control (`usageHistoryModel.ts` is `history/model.rs`).
+mod model;
+
+use butler_ds::ui::blocks::activity_heatmap::{
+    ActivityHeatmap, ActivityHeatmapDay, HeatmapCell, ScrollAnchor,
+};
 use butler_ds::ui::blocks::metric_card::{GridVariant, MetricCard, MetricGrid, Trend};
 use butler_ds::ui::blocks::settings_section::{SettingsSection, SettingsSectionKind};
 use butler_ds::ui::context::Lang;
 use butler_ds::ui::layout::{Space, Stack};
-use gpui::ParentElement as _;
+use butler_ds::ui::segmented_control::{Choice, SegmentedControl};
+use chrono::{Datelike as _, NaiveDate};
+use gpui::{App, Context, ParentElement as _, SharedString, Window, div};
+
+use self::model::{Mode, Window as Span, window};
 
 use super::UsagePage;
 use super::copy::{Words, words};
 use super::format::{duration_minutes, history_date};
 use super::wire::{History, Streak};
 use crate::ui::composer::context::timeline::usage_tokens;
+use crate::ui::widgets::anchor;
+
+/// `localeWeekStart`: the app's two languages both start the week on Sunday.
+const WEEK_START: u32 = 0;
 
 /// The caption line a card reserves when it has nothing to say.
 const BLANK: &str = " ";
@@ -104,18 +115,154 @@ fn skeleton(words: &Words) -> MetricGrid {
     )
 }
 
+/// The month name over a week: `Intl` `{ month: "short" }`.
+fn month_label(date: NaiveDate, lang: Lang) -> String {
+    match lang {
+        Lang::En => date.format("%b").to_string(),
+        Lang::Ko => format!("{}월", date.month()),
+    }
+}
+
+/// The shown value, level and tooltip of one day under `mode`.
+fn heat_day(
+    span: &Span,
+    (index, today): (usize, &str),
+    (mode, lang): (Mode, Lang),
+    words: &Words,
+) -> Option<ActivityHeatmapDay> {
+    let date = span.dates.get(index)?;
+    if mode == Mode::Daily && date.as_str() > today {
+        return None;
+    }
+    let (week, row) = (index / 7, index % 7);
+    let weekly = history_date(&span.dates[week * 7], lang);
+    let value = match mode {
+        Mode::Daily => span.values[index],
+        Mode::Weekly => span.weeks[week],
+        Mode::Cumulative => span.cumulative[week],
+    };
+    let height = match mode {
+        Mode::Weekly => span.weekly_heights[week],
+        _ => span.cumulative_heights[week],
+    };
+    let label = match mode {
+        Mode::Daily => history_date(date, lang),
+        Mode::Weekly => (words.week_of)(&weekly),
+        Mode::Cumulative => (words.through_week)(&weekly),
+    };
+    let level = match mode {
+        Mode::Daily => span.levels[index],
+        _ if row + height >= 7 => 3,
+        _ => 0,
+    };
+    let month = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .map_or_else(|_| String::new(), |d| month_label(d, lang));
+    let words_of = if value > 0. {
+        usage_tokens(value, lang)
+    } else {
+        words.no_usage.to_owned()
+    };
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a token count"
+    )]
+    let count = value as u64;
+    Some(
+        ActivityHeatmapDay::new(date.clone(), label, Some(count))
+            .month_label(month)
+            .count_label(words_of)
+            .level(level),
+    )
+}
+
+/// `heatmapDays`; while the history loads every day is empty.
+fn heat_days(
+    history: Option<&History>,
+    mode: Mode,
+    lang: Lang,
+    words: &Words,
+) -> Vec<ActivityHeatmapDay> {
+    let days = history.map(|h| h.days.as_slice()).unwrap_or_default();
+    let today = days.last().map_or_else(
+        || chrono::Local::now().format("%Y-%m-%d").to_string(),
+        |(date, _)| date.clone(),
+    );
+    let end = NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+        .unwrap_or_else(|_| chrono::Local::now().date_naive());
+    let span = window(days, history.map_or(0., |h| h.prior_total), WEEK_START, end);
+    (0..span.dates.len())
+        .filter_map(|index| heat_day(&span, (index, &today), (mode, lang), words))
+        .map(|day| match history {
+            Some(_) => day,
+            None => ActivityHeatmapDay {
+                count: Some(0),
+                count_label: Some(SharedString::default()),
+                level: Some(0),
+                ..day
+            },
+        })
+        .collect()
+}
+
 impl UsagePage {
-    pub(super) fn history_section(&self, lang: Lang) -> SettingsSection {
+    /// `UsageHistory`
+    pub(super) fn history_section(
+        &self,
+        lang: Lang,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> SettingsSection {
         let words = words(lang);
         let grid = match &self.history {
             Some(history) => stats(history, words, lang),
             None => skeleton(words),
         };
+        let mode = window.use_keyed_state("usage-history-mode", cx, |_, _| {
+            SharedString::from(Mode::Daily.key())
+        });
+        let write = mode.clone();
+        let mode = Mode::of(mode.read(cx));
+        let control = SegmentedControl::new("usage-history-view", words.history_title, mode.key())
+            .options([
+                Choice::new(Mode::Daily.key(), words.view_daily),
+                Choice::new(Mode::Weekly.key(), words.view_weekly),
+                Choice::new(Mode::Cumulative.key(), words.view_cumulative),
+            ])
+            .on_value_change(move |value: &str, _: &mut Window, cx: &mut App| {
+                write.update(cx, |mode, cx| {
+                    *mode = SharedString::from(Mode::of(value).key());
+                    cx.notify();
+                });
+            });
+        let labels = (0..7)
+            .map(|row| {
+                if row % 2 == 0 {
+                    SharedString::default()
+                } else {
+                    words.weekdays[(WEEK_START as usize + row) % 7].into()
+                }
+            })
+            .collect();
+        let heatmap = ActivityHeatmap::new(
+            "usage-history-heatmap",
+            heat_days(self.history.as_ref(), mode, lang, words),
+        )
+        .aria_label(words.history_title)
+        .cell(HeatmapCell::Compact)
+        .scroll_anchor(ScrollAnchor::End)
+        .start_weekday(0)
+        .weekday_labels(labels);
+        let body = Stack::new()
+            .gap(Space::Lg)
+            .child(grid)
+            .child(control)
+            .child(heatmap);
         SettingsSection::new(
             "usage-history",
             SettingsSectionKind::Status,
             words.history_title,
         )
-        .child(Stack::new().gap(Space::Lg).child(grid))
+        .child(anchor(div(), "usage-history").child(body))
     }
 }

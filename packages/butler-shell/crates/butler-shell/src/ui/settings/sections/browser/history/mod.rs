@@ -10,14 +10,16 @@ use butler_ds::ui::layout::{Cross, Justify, Space, Stack};
 use butler_ds::ui::native_select::NativeSelect;
 use butler_ds::ui::switch::Switch;
 use butler_ds::ui::toast::{self, Toast};
-use butler_ds::ui::tooltip::Tooltip;
 use butler_ds::ui::typo::Typo;
 use butler_shell_client::Error;
-use gpui::{AnyElement, Context, ParentElement as _, SharedString, Window};
+use gpui::{
+    AnyElement, Context, InteractiveElement as _, ParentElement as _, SharedString, Window, div,
+};
 use serde_json::{Value, json};
 
 use crate::ui::settings::SectionCtx;
 use crate::ui::settings::state::fetch;
+use crate::ui::widgets::anchor;
 use copy::words;
 
 /// The clear dialog's form (`range`, `only`, `busy`).
@@ -29,12 +31,16 @@ struct Clear {
 
 /// `BrowserHistorySection`
 pub(super) struct BrowserHistory {
+    ctx: SectionCtx,
     clear: Option<Clear>,
 }
 
 impl BrowserHistory {
-    pub(super) fn new(_: &SectionCtx) -> Self {
-        Self { clear: None }
+    pub(super) fn new(ctx: &SectionCtx) -> Self {
+        Self {
+            ctx: ctx.clone(),
+            clear: None,
+        }
     }
 
     pub(super) fn section(
@@ -44,17 +50,18 @@ impl BrowserHistory {
     ) -> SettingsSection {
         let copy = words(Ds::get(cx).lang());
         let me = cx.entity();
-        // CARVE-OUT(G-native): React's View opens the history page (`openHistory("settings")`);
-        // the browser is not ported, so the button is disabled.
-        let view = Tooltip::new("browser-history-view-reason")
-            .label(copy.not_yet)
-            .child(
+        // `openHistory("settings")`: Settings closes and the history page shows.
+        let ctx = self.ctx.clone();
+        let view = anchor(
+            div().id("browser-history-view-anchor").child(
                 Button::new("browser-history-view")
                     .size(Size::Sm)
                     .variant(Variant::Outline)
                     .text(copy.view)
-                    .disabled(),
-            );
+                    .on_click(move |_, _, cx| ctx.open_history(cx)),
+            ),
+            "browser-history-view",
+        );
         let erase = Button::new("browser-history-erase")
             .size(Size::Sm)
             .variant(Variant::Outline)

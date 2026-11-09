@@ -3,6 +3,7 @@
 //! (`list_chats`, `message_window`, `authority_requests`, `live_events(cursor)`,
 //! `cancel_turn`, `answer_authority`) and is adapted by `agent`. Without a source the shell shows its disconnected state.
 pub(crate) mod agent;
+pub(crate) mod fetch;
 pub(crate) mod model;
 pub(crate) mod sidebar;
 pub(crate) mod wire;

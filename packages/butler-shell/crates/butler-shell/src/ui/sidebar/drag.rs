@@ -1,5 +1,6 @@
 //! app/space/drag.ts and move.ts, with typed gpui payloads instead of MIME strings.
 use super::{Shell, dialogs::SpaceDialog};
+use crate::ui::manage::library::detail::{CardDrag, drop_cards_on_session};
 use crate::ui::{
     source::{sidebar::SpaceCommand, wire::SpaceNodeKind},
     store::navigation::SpaceRowData,
@@ -196,6 +197,7 @@ impl Shell {
         } else {
             content
         };
+        let content = Self::card_drop_row(row, content, cx);
         let target = NavDropTarget::new(key.clone(), content)
             .row_header()
             .dragging(self.sidebar.drag_instance.as_deref() == Some(instance))
@@ -233,6 +235,31 @@ impl Shell {
         } else {
             scope.into_any_element()
         }
+    }
+    /// `conversationAt`: a library card dropped on a conversation row attaches to it
+    /// (`libraryCardDrag.dropOn`). Only session rows take it.
+    fn card_drop_row(row: &SpaceRowData, content: AnyElement, cx: &Context<Self>) -> AnyElement {
+        let Some(session) = row
+            .session
+            .as_ref()
+            .map(|s| SharedString::from(s.id.clone()))
+        else {
+            return content;
+        };
+        let shell = cx.entity().downgrade();
+        let tint = butler_ds::ui::context::Ds::get(cx).color(butler_ds::tokens::Color::Selection);
+        div()
+            .w_full()
+            .on_drag_over::<CardDrag>(move |style, _, _, _| style.bg(tint))
+            .on_drop::<CardDrag>(move |drag, _, cx| {
+                cx.stop_propagation();
+                let Some(ctx) = shell.upgrade().map(|s| s.read(cx).manage_ctx()) else {
+                    return;
+                };
+                drop_cards_on_session(&ctx, drag, &session, cx);
+            })
+            .child(content)
+            .into_any_element()
     }
     pub(super) fn space_drop_scope(
         &self,

@@ -139,14 +139,15 @@ pub(super) struct Lifted {
 }
 
 impl Render for Lifted {
-    fn render(&mut self, _: &mut gpui::Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut gpui::Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let nodes = row::Nodes::build(&self.item, window, cx);
         let (radius, fill, shadow, card) = {
             let ds = Ds::get(cx);
             (
                 ds.len(Length::RadiusPanel),
                 ds.color(Color::ColorSurfaceRaisedOpaque),
                 convert::box_shadows(ds.tokens().shadow(Shadow::ShadowDragLift), ds.tokens()),
-                row::card(&self.item, row::static_grip(ds), None, ds),
+                row::card(&self.item, nodes, row::static_grip(ds), None, ds),
             )
         };
         let mut surface = div().rounded(radius).bg(fill).shadow(shadow).child(card);
