@@ -33,7 +33,8 @@ export interface ComposerQuestionPanelProps extends Omit<DsBaseProps<HTMLAttribu
   questions: readonly ComposerQuestion[];
   onSubmit: (answers: readonly QuestionAnswer[]) => void;
   onSkip: () => void;
-  onCollapse: () => void;
+  /** Answer later. Omit when there is nothing to defer: no Later button, Esc does nothing. In `placement="conversation"` the panel never collapses: Later runs without exit motion and the caller keeps the panel open. */
+  onCollapse?: () => void;
   onExpand?: () => void;
   /** Optional snapshot for restoring drafts when a caller remounts the surface. */
   onDraftChange?: (answers: readonly QuestionAnswer[], step: number) => void;

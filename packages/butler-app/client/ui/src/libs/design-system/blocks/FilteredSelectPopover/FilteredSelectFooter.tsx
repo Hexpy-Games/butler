@@ -15,26 +15,29 @@ export function FilteredSelectFooter({
   if (!title && options.length === 0) return null;
 
   return (
-    <div className={styles.footer} data-slot="filtered-select-footer">
-      {title ? (
-        <div className={styles.footerTitle} data-slot="filtered-select-footer-title">
-          {title}
+    <>
+      <div className={styles.divider} data-slot="filtered-select-divider" />
+      <div className={styles.footer} data-slot="filtered-select-footer">
+        {title ? (
+          <div className={styles.footerTitle} data-slot="filtered-select-footer-title">
+            {title}
+          </div>
+        ) : null}
+        <div ref={optionsFadeRef} className={styles.footerOptions}>
+          {options.map((option) => (
+            <Button
+              key={option.id}
+              size="xs"
+              shape="pill"
+              variant={option.selected ? "secondary" : "borderless"}
+              data-selected={option.selected ? "true" : undefined}
+              onClick={option.onSelect}
+            >
+              {option.label}
+            </Button>
+          ))}
         </div>
-      ) : null}
-      <div ref={optionsFadeRef} className={styles.footerOptions}>
-        {options.map((option) => (
-          <Button
-            key={option.id}
-            size="xs"
-            shape="pill"
-            variant={option.selected ? "secondary" : "borderless"}
-            data-selected={option.selected ? "true" : undefined}
-            onClick={option.onSelect}
-          >
-            {option.label}
-          </Button>
-        ))}
       </div>
-    </div>
+    </>
   );
 }

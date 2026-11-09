@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import type { CanonPlan } from "@/app/canonApi.ts";
-import { IconButton, Input, OptionMenu, OptionMenuItem, Popover, PopoverContent, PopoverTrigger, ScrollArea, SelectButton, Stack, Typo, X } from "@/butler-ds";
+import { FilteredSelectPopover, Popover, PopoverContent, PopoverTrigger, SelectButton } from "@/butler-ds";
 export function CanonBoardPlanSelect({ plans, value, onChange, bottomInset = 0 }: {
   bottomInset?: number; plans: CanonPlan[]; value: string | null; onChange: (id: string | null) => void;
 }) {
@@ -13,22 +13,14 @@ export function CanonBoardPlanSelect({ plans, value, onChange, bottomInset = 0 }
     <PopoverTrigger asChild><SelectButton size="sm" aria-label={copy.plan}>
       {options.find(plan => plan.id === value)?.title ?? copy.backlog}
     </SelectButton></PopoverTrigger>
-    <PopoverContent align="start" density="list" collisionPadding={{ top: 56, right: 8, left: 8, bottom: bottomInset + 8 }}>
-      <Stack gap="sm" data-test-class="canon-plan-chooser" aria-label={copy.plan}>
-        <Typo.Label>{copy.plan}</Typo.Label>
-        <Stack align="row" cross="center" gap="xs">
-          <Input aria-label={copy.searchPlan} placeholder={copy.searchPlan} value={search}
-            onChange={event => setSearch(event.target.value)} />
-          {search && <IconButton label={copy.clearSearch} onClick={() => setSearch("")}><X /></IconButton>}
-        </Stack>
-        <ScrollArea maxHeight="xs" dataTestClass="canon-plan-results">
-          <OptionMenu title={copy.plan}>
-            {filtered.map(plan => <OptionMenuItem key={plan.id ?? "backlog"} label={plan.title} selected={plan.id === value}
-              onClick={() => { onChange(plan.id); setOpen(false); setSearch(""); }} />)}
-            {filtered.length === 0 && <Typo.Caption>{copy.noResults}</Typo.Caption>}
-          </OptionMenu>
-        </ScrollArea>
-      </Stack>
+    <PopoverContent align="start" data-menu-size="fit" collisionPadding={{ top: 56, right: 8, left: 8, bottom: bottomInset + 8 }}>
+      <FilteredSelectPopover title={copy.plan} searchLabel={copy.searchPlan} searchPlaceholder={copy.searchPlan}
+        searchClearLabel={copy.clearSearch} searchValue={search} onSearchChange={setSearch}
+        filters={[]} activeFilterId="" onFilterChange={() => undefined} emptyLabel={copy.noResults} width="fixed"
+        groups={[{ id: "plans", items: filtered.map(plan => ({
+          id: plan.id ?? "backlog", label: plan.title, selected: plan.id === value,
+          onSelect: () => { onChange(plan.id); setOpen(false); setSearch(""); },
+        })) }]} />
     </PopoverContent>
   </Popover>;
 }

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import type { EpicCard as CardData, PlanCards } from "@/app/canonApi.ts";
+import type { EpicCard as CardData } from "@/app/canonApi.ts";
 import { Box, Button, ButtonContainer, ArrowLeft, ArrowRight, Grid, IconButton, KanbanBoard, KanbanLane, Pencil, Plus, Section, Stack, Typo } from "@/butler-ds";
 import { EpicCard } from "./EpicCard.tsx";
 import { CANON_LANES, canonLaneId } from "./canonLanes.ts";
 export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, onEdit, matches }: {
   matches: (epic: CardData) => boolean;
-  plan: PlanCards; caption: string; onEdit: () => void; selected: string | null; onSelect: (id: string) => void; onCreate: (planId: string) => void;
+  /** `id` is null for the backlog, which has no plan to edit. */
+  plan: { id: string | null; title: string; works: CardData[] };
+  caption: string; onEdit?: () => void; selected: string | null; onSelect: (id: string) => void; onCreate: (planId: string | null) => void;
 }) {
   useAppLocale();
   const boardRef = useRef<HTMLElement | null>(null);
@@ -42,12 +44,12 @@ export function CanonPlanLanes({ plan, caption, selected, onSelect, onCreate, on
         <ArrowRight size="xs" />
       </IconButton>
     </>}
-    <IconButton label={appCopy.canon.edit} onClick={onEdit}><Pencil size="sm" /></IconButton>
+    {onEdit && <IconButton label={appCopy.canon.edit} onClick={onEdit}><Pencil size="sm" /></IconButton>}
   </ButtonContainer>}>
     <Grid columns="1" ref={element => {
       // This wrapper owns the board as its direct child; keep DS internals untouched.
       boardRef.current = element?.firstElementChild as HTMLElement | null;
-    }}><KanbanBoard scroll data-plan-id={plan.id} data-test-class="canon-plan-lanes">
+    }}><KanbanBoard scroll data-plan-id={plan.id ?? undefined} data-test-class="canon-plan-lanes">
     {CANON_LANES.map(status => {
       const cards = plan.works.filter(epic => matches(epic) && (epic.canon_status === "cancelled" ? "done" : epic.canon_status) === status);
       const label = status === "blocked" ? appCopy.canon.blockedLane : appCopy.canon.statuses[status];

@@ -90,13 +90,87 @@ async fn named_ask_with_questions(
         .unwrap()
         .clone())
 }
+/// Conversations from before the one-open-card rule can still hold several open cards. Seeds one
+/// single-question card per title by cloning `newest`'s row, older than it and in the given order.
+async fn legacy_open_asks(
+    s: &mut Scenario,
+    newest: &Value,
+    titles: &[String],
+) -> Result<Vec<Value>, HarnessError> {
+    s.agent.terminate().await?;
+    let data = s.sandbox.data.clone();
+    let reference = newest["ask_id"]
+        .as_str()
+        .unwrap()
+        .strip_prefix("question:")
+        .unwrap()
+        .to_owned();
+    let count = titles.len();
+    let titles = titles.to_vec();
+    tokio::task::spawn_blocking(move || -> Result<(), HarnessError> {
+        let db = butler_platform::sqlite::open(data.join("agent-runtime/btcc.sqlite"))?;
+        let mut info = db.prepare("PRAGMA table_info(btcc_authority_requests)")?;
+        let names = info
+            .query_map([], |r| r.get::<_, String>(1))?
+            .collect::<Result<Vec<_>, _>>()?;
+        let values = names
+            .iter()
+            .map(|name| match name.as_str() {
+                "request_id"
+                | "identity_sha256"
+                | "schedule_client_message_id"
+                | "action_key"
+                | "source_call_id" => format!("r.{name}||'-legacy-'||?2"),
+                "request_ref" => "'question-ref-legacy-'||?2".into(),
+                "created_at" | "updated_at" => {
+                    format!("strftime('%Y-%m-%dT%H:%M:%fZ', r.{name}, ?3)")
+                }
+                "normalized_input_json" => "json_set(r.normalized_input_json,'$.questions',\
+                    json_array(json_set(json_extract(r.normalized_input_json,'$.questions[0]'),\
+                    '$.title',?4)))"
+                    .into(),
+                _ => format!("r.{name}"),
+            })
+            .collect::<Vec<_>>();
+        let sql = format!(
+            "INSERT INTO btcc_authority_requests ({}) SELECT {} FROM btcc_authority_requests r \
+             WHERE r.request_ref=?1",
+            names.join(","),
+            values.join(",")
+        );
+        for (i, title) in titles.iter().enumerate() {
+            let age = format!("-{} seconds", titles.len() - i);
+            assert_eq!(
+                db.execute(&sql, rusqlite::params![reference, i, age, title])?,
+                1
+            );
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|error| HarnessError(error.to_string()))??;
+    s.restart().await?;
+    let page = asks(s, "general").await?;
+    Ok((0..count)
+        .map(|i| format!("question:question-ref-legacy-{i}"))
+        .map(|id| {
+            page["asks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|q| q["ask_id"] == id)
+                .unwrap()
+                .clone()
+        })
+        .collect())
+}
 #[tokio::test]
 async fn rm_01_unrelated_reply_uses_one_closing_line_without_reasking() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
-    let (s, provider, server) = setup("RM-01").await?;
-    named_ask(&s, &provider, "Destination").await?;
+    let (mut s, provider, server) = setup("RM-01").await?;
     let second = named_ask(&s, &provider, "Format").await?;
+    legacy_open_asks(&mut s, &second, &["Destination".into()]).await?;
     let message = "What is two plus two?";
     let text = "Four.\nStill open: Format, Destination.";
     script(&provider, message, vec![reply(text)]);
@@ -124,13 +198,15 @@ async fn rm_02_chat_answer_settles_only_the_named_ask_and_updates_its_card()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (mut s, provider, server) = setup("RM-02").await?;
-    let first = named_ask(&s, &provider, "Destination").await?;
     let mut questions = crate::ask_user::stub::questions();
     let mut other = questions["questions"][0].clone();
     other["id"] = json!("details");
     other["title"] = json!("Which details?");
     questions["questions"].as_array_mut().unwrap().push(other);
     let second = named_ask_with_questions(&s, &provider, "Format", questions).await?;
+    let first = legacy_open_asks(&mut s, &second, &["Destination".into()])
+        .await?
+        .remove(0);
     let live = LiveEvents::subscribe(&s.gw, 0).await?;
     let message = "두 번째는\n A로";
     script(
