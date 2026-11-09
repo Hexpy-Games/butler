@@ -6,22 +6,24 @@ import { join } from "node:path";
 import type { Locator, Page } from "playwright";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { liveDelegationBrowser } from "../support/live-delegation-browser.ts";
-import { firstStepActivity, stepObjective, stepTitles, workCardStepsStub } from "../support/work-card-steps-stub.ts";
+import {
+  firstStepActivity, stepObjective, stepTitles, workCardStepsStub, workerCardTitle, workerObjective, workerStepTitles,
+} from "../support/work-card-steps-stub.ts";
 import { probeFocusRing, probeFocusRingFrames } from "../support/focus-ring-clipping.ts";
 
-async function waitForHold(held: Promise<void>) {
+async function waitForHold(held: Promise<void>, message = "Child did not reach the held read") {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([held, new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error("Child did not reach the held read")), 30_000);
+      timer = setTimeout(() => reject(new Error(message)), 30_000);
     })]);
   } finally { clearTimeout(timer); }
 }
 
-async function openSteps(card: Locator) {
+async function openSteps(card: Locator, key = "collect sources") {
   const trigger = card.locator('[data-test-class="work-activity-disclosure-toggle"][aria-expanded]').first();
   if (await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();
-  await card.locator('[data-step-key="collect sources"]').waitFor();
+  await card.locator(`[data-step-key="${key}"]`).waitFor();
 }
 
 async function assertSteps(page: Page, card: Locator) {
@@ -51,12 +53,12 @@ async function assertSteps(page: Page, card: Locator) {
 }
 
 async function scrollDetails(page: Page, card: Locator, edge: "top" | "bottom") {
-  await card.locator('[data-test-class="work-block-details-scroll"]').hover();
+  const scroll = card.locator('[data-test-class="work-block-details-scroll"]');
+  await scroll.hover();
   await page.mouse.wheel(0, edge === "top" ? -100000 : 100000);
-  await page.waitForFunction(edge => {
-    const node = document.querySelector('[data-test-class="work-block-details-scroll"]')!;
-    return edge === "top" ? node.scrollTop === 0 : node.scrollHeight - node.scrollTop - node.clientHeight < 1;
-  }, edge);
+  await page.waitForFunction(([node, edge]) =>
+    edge === "top" ? node!.scrollTop === 0 : node!.scrollHeight - node!.scrollTop - node!.clientHeight < 1,
+  [await scroll.elementHandle(), edge] as const);
 }
 
 async function capture(card: Locator, name: string) {
@@ -148,8 +150,44 @@ try {
   await card.locator('[data-step-key="collect sources"]').getByText(`내용: ${firstStepActivity}`, { exact: true }).first().waitFor();
   await card.locator('[data-step-key="collect sources"]').scrollIntoViewIfNeeded();
   await capture(card, "steps-reloaded-expanded");
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ max_simultaneous_workers: 2 }) });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator('[data-slot="composer-compact-preview"]').click();
+  await page.locator('[contenteditable="true"]').fill(workerObjective);
+  await page.locator('[data-test-class="composer-send-button"]').click();
+  const workerCard = page.locator(`[data-test-class~="steward-parent-progress-card"][aria-label="${workerCardTitle}"]`);
+  await waitForHold(stub.whenWorkersHeld(), "Workers did not reach the held answer");
+  await workerCard.getByText("완료 0/2 · 지금: research domestic, research overseas", { exact: true }).waitFor();
+  const reopen = async () => {
+    await openSteps(workerCard, "research domestic");
+    await scrollDetails(page, workerCard, "top");
+    await workerCard.locator('[data-step-key="research domestic"]').evaluate(node => node.scrollIntoView({ block: "start" }));
+    await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+    await page.mouse.move(1200, 900);
+  };
+  await reopen();
+  await capture(workerCard, "workers-held-1440-light");
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: "dark" }) });
+  await page.reload();
+  await reopen();
+  await capture(workerCard, "workers-held-1440-dark");
+  await workerCard.locator('[data-test-class="work-activity-disclosure-toggle"][aria-expanded]').first().click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await workerCard.getByText("지금: research domestic 외 1", { exact: true }).waitFor();
+  await reopen();
+  await capture(workerCard, "workers-held-390-dark");
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: "light" }) });
+  await page.reload();
+  await reopen();
+  await capture(workerCard, "workers-held-390-light");
+  for (const title of workerStepTitles) {
+    const capsule = workerCard.locator(`[data-step-key="${title}"] [data-test-class="step-worker-capsule"]`);
+    assert.equal(await capsule.count(), 1);
+    assert.match(await capsule.innerText(), new RegExp(`Research ${title}`));
+  }
+  assert.equal(await workerCard.locator('[data-test-class="step-worker-capsule"]').count(), 2);
   assert.deepEqual(errors, [], "no browser errors");
-  console.log(JSON.stringify({ ok: true, browser: browser.name, steps: 4, revisions: 1, viewport: 390, historyAfterReload: true }));
+  console.log(JSON.stringify({ ok: true, browser: browser.name, steps: 4, workerSteps: 2, revisions: 1, viewport: 390, historyAfterReload: true }));
 } catch (error) {
   console.error(JSON.stringify({ body: await browser?.page.locator("body").innerText(), calls: server?.stubModelCalls.length }));
   throw error;
