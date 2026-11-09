@@ -109,6 +109,7 @@ pub(super) fn publish(
         artifacts: scan(data, inventory)
             .into_iter()
             .filter(|file| file.size > 0 && before.0.get(&file.relative) != Some(&file.fingerprint))
+            .filter(|file| contained(data, file, inventory))
             .take(MAX_ARTIFACTS)
             .map(|file| artifact(&file))
             .collect(),
@@ -327,16 +328,15 @@ fn scan(data: &Path, inventory: &secure_fs::SecretInventory) -> Vec<File> {
     let mut result = Vec::new();
     let mut count = 0;
     let collator = LocaleCollation::new("en-US").ok();
-    visit(
-        &root,
-        &root,
-        0,
-        &mut count,
-        &mut result,
-        collator.as_ref(),
-        inventory,
-    );
+    visit(&root, &root, 0, &mut count, &mut result, collator.as_ref());
     result
+}
+
+/// A changed file is published only when a contained read can open it.
+fn contained(data: &Path, file: &File, inventory: &secure_fs::SecretInventory) -> bool {
+    let root = data.join("artifacts/generated");
+    let root = inventory.canonical_root(&root).unwrap_or(root);
+    secure_fs::open_contained(&root, Path::new(&file.relative), inventory).is_ok()
 }
 
 fn visit(
@@ -346,7 +346,6 @@ fn visit(
     count: &mut usize,
     out: &mut Vec<File>,
     collator: Option<&LocaleCollation>,
-    inventory: &butler_platform::secure_fs::SecretInventory,
 ) {
     if depth > MAX_DEPTH || *count >= MAX_FILES {
         return;
@@ -369,40 +368,27 @@ fn visit(
             continue;
         };
         if kind.is_dir() {
-            visit(
-                root,
-                &entry.path(),
-                depth + 1,
-                count,
-                out,
-                collator,
-                inventory,
-            );
+            visit(root, &entry.path(), depth + 1, count, out, collator);
             continue;
         }
         if !kind.is_file() {
             continue;
         }
         *count += 1;
-        let Ok(real) = butler_platform::secure_fs::canonicalize(entry.path()) else {
+        // `root` is canonical and `file_type` does not follow links, so a
+        // directory entry's path is already canonical; metadata is enough
+        // for a fingerprint, and only published files are opened.
+        let path = entry.path();
+        let Ok(relative) = path.strip_prefix(root) else {
             continue;
         };
-        if !real.starts_with(root) {
-            continue;
-        }
-        let Ok(relative) = real.strip_prefix(root) else {
-            continue;
-        };
-        let Ok(file) = secure_fs::open_contained(root, relative, inventory) else {
-            continue;
-        };
-        let Ok(stat) = file.metadata() else {
+        let Ok(stat) = entry.metadata() else {
             continue;
         };
         let modified = stat.modified().unwrap_or(std::time::UNIX_EPOCH);
         out.push(File {
             relative: relative.to_string_lossy().replace('\\', "/"),
-            path: real,
+            path,
             fingerprint: format!(
                 "{}:{}:{}:{}",
                 file_id(&stat),
