@@ -480,6 +480,8 @@ export const koKrCopy: AppCopy = {
     fileTitle: (action, target) => `${action}: ${target}`, conceptionSummary: text => text ? `요청의 목표와 범위를 확인했습니다: ${text}` : "요청의 목표와 범위를 확인했습니다.", workInProgress: text => `${text} 작업을 진행하고 있습니다.`, toolsSummary: text => text ? `${text} 도구로 필요한 정보를 확인하고 있습니다.` : "필요한 도구로 작업을 진행하고 있습니다.",
   },
   serverErrors: {
+    provider_credential_save_failed: "키를 저장하지 못했습니다.", image_model_credential_invalid: "이미 삭제된 키입니다. 목록을 새로 고치세요.",
+    image_model_requires_api_key: "API 키만 쓸 수 있습니다.", image_model_unknown: "이 이미지 모델은 쓸 수 없습니다.",
     output_transfer_pending: "결과물을 옮기는 중입니다. 잠시 후 다시 시도해 주세요.",
     model_not_in_chatgpt_plan: 'ChatGPT 플랜에 없는 모델입니다.',
     credential_in_use_by_default: "기본 모델이 이 키를 씁니다. 기본 모델을 먼저 바꾸세요.", credential_in_use: "이 키를 쓰는 모델이 있습니다. 키와 함께 삭제하세요.", credential_not_found: "이미 삭제된 키입니다. 목록을 새로 고치세요.",
@@ -982,7 +984,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       },
     },
     imageTools: {
-      model: "모델", off: "사용 안 함", apiKey: "API 키", apiKeyOnly: "API 키 전용", defaultQuality: "기본 품질",
+      model: "모델", off: "사용 안 함", defaultQuality: "기본 품질",
       quality: { low: "낮음", medium: "보통", high: "높음", xhigh: "매우 높음", max: "최고" },
       size: "크기", qualityLabel: "품질", prompt: "프롬프트", default: "기본", edit: "편집", download: "다운로드",
       editor: "이미지 편집", brush: "브러시", eraser: "지우개", brushSize: "브러시 크기", undo: "실행 취소",
