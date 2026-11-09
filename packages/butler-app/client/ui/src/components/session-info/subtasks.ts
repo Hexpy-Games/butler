@@ -7,6 +7,8 @@ export function subtaskStateLabel(state: SubtaskState): string {
   const c = appCopy.sessionInfo;
   if (state === "paused") return c.subtaskPaused;
   if (state === "needs_approval") return c.subtaskNeedsApproval;
+  if (state === "blocked") return appCopy.guided.workerStatus.blocked;
+  if (state === "waiting") return appCopy.guided.workerStatus.waiting;
   return appCopy.space.working;
 }
 
