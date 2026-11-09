@@ -67,6 +67,7 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 `Briefcase` identifies a project; `LayoutDashboard` opens its dashboard.
 `Flag` marks a milestone or goal in a plan.
 `Ticket` marks a 과제 (task) row; a task is not a conversation, so it never uses a chat glyph.
+`TableOfContents` marks the sidebar's 전체보기 (show all) view; `ListFilter` is for real filters.
 `AppleReminder` (a reminder card with a checklist) toggles 세션 정보 (Session info).
 Use them to distinguish conversation kinds without adding an action symbol.
 
