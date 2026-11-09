@@ -6,7 +6,9 @@ use blocks::adaptive_shell::{
     peek::{self, CloseReason, SidebarPeek},
 };
 use blocks::{
-    conversation_shell::ConversationShell, responsive::ChromeEnvironment, scope::ShellFrame,
+    conversation_shell::{ConversationShell, Gutter},
+    responsive::ChromeEnvironment,
+    scope::ShellFrame,
 };
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::{blocks, context::Ds, focus, icon_button::IconButton, overlay, toast};
@@ -21,6 +23,14 @@ use crate::ui::lifecycle_view;
 use crate::ui::onboarding::{self, gate::Gate};
 use crate::ui::settings::SettingsView;
 use crate::ui::widgets::anchor;
+
+/// `Conversation.tsx`'s `contentGutter` while the new chat shows: the title icon
+/// (`clamp(40px, 5.333vw, 54px)`) twice plus its 10px gap, so the column, the composer and the
+/// prompt list share the new chat's narrower width.
+fn new_chat_gutter(ds: &Ds) -> Gutter {
+    let icon = (ds.tokens().viewport.0 * 0.053_33).clamp(40., 54.);
+    Gutter::Px(2. * icon + 10.)
+}
 
 impl Shell {
     pub(super) fn conversation(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -38,6 +48,11 @@ impl Shell {
                 .into_any_element()
         };
         let reserve = self.composer_h.get() + f32::from(Ds::get(cx).len(Length::SpaceLg)) * 2.;
+        let gutter = if self.chat.read(cx).shows_empty() {
+            new_chat_gutter(Ds::get(cx))
+        } else {
+            Gutter::default()
+        };
         let notice = self.live_notice(window, cx);
         anchor(div(), "chat-card")
             .size_full()
@@ -47,9 +62,11 @@ impl Shell {
             .children(notice)
             .child(
                 ShellCard::new().child(
-                    self.with_aside(ConversationShell::new("conversation", reserve))
-                        .child(content)
-                        .child(self.composer.clone()),
+                    self.with_aside(
+                        ConversationShell::new("conversation", reserve).content_gutter(gutter),
+                    )
+                    .child(content)
+                    .child(self.composer.clone()),
                 ),
             )
             .into_any_element()

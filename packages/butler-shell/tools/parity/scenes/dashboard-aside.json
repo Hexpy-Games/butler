@@ -81,7 +81,7 @@
     },
     {
       "anchor": "canon-aside",
-      "electron": "[data-slot=\"card\"]:has([data-test-class=\"canon-aside-close\"])"
+      "electron": "[data-slot=\"management-page-aside\"]:has([data-test-class=\"canon-aside-close\"])"
     },
     {
       "anchor": "epic-detail",

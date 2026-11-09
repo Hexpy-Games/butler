@@ -24,6 +24,9 @@ const PRINT_NOISE: u32 = 1;
 /// `WallpaperPass::source`: the print pass samples the density pass (`u_density`).
 const PREVIOUS_PASS: u32 = 2;
 /// Density texels per CSS px. // DS: glPrint.ts:52
+/// The drift render policy's pixel ratio and pixel budget. // DS: scheduler.ts:36
+const MAX_PIXEL_RATIO: f32 = 1.5;
+const MAX_PIXELS: f32 = 2_400_000.;
 const DENSITY_SCALE: f32 = 0.25;
 /// Day-phase steps a cached frame redraws at. // DS: glScene.ts:24
 const DAY_PHASE_BUCKETS: f32 = 96.;
@@ -137,11 +140,15 @@ fn paint(
     if css[0] < 1. || css[1] < 1. {
         return;
     }
-    let scale = window.scale_factor();
-    // Rounded for the canvas, up for the density target. // DS: scheduler.ts:64, glPrint.ts:56
+    // `wallpaperCanvasSize` with the drift policy (scheduler.ts:36, 60-62: pixel ratio at most
+    // 1.5, at most 2.4M pixels): the buffer Electron draws riso into; the composite scales it to
+    // the bounds. Rounded for the canvas, up for the density target. // DS: glPrint.ts:56
+    let base = window.scale_factor().min(MAX_PIXEL_RATIO);
+    let target = (css[0] * css[1] * base * base).max(1.);
+    let scale = base.min((MAX_PIXELS / target).sqrt() * base);
     let buffer = [
-        (css[0] * scale).round().max(1.),
-        (css[1] * scale).round().max(1.),
+        (css[0] * scale).round().max(2.),
+        (css[1] * scale).round().max(2.),
     ];
     let density = [
         (css[0] * DENSITY_SCALE).ceil().max(1.),

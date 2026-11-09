@@ -2,9 +2,11 @@
 //! SetupWizardShell.module.css): the content column of a step. In the wizard it is 52ch (the
 //! `Wide` width fills the body); in the focus variant 420px (`Wide`: 520px). `solid` puts it on
 //! an opaque card over the wallpaper with one shared token inset.
-use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Styled as _, Window, div, px};
+use gpui::{
+    AnyElement, App, IntoElement, ParentElement, RenderOnce, Styled as _, Window, canvas, div, px,
+};
 
-use super::SetupWizardVariant;
+use super::{SetupWizardVariant, record_card};
 use crate::tokens::Length;
 use crate::ui::blocks::measure;
 use crate::ui::context::Ds;
@@ -95,13 +97,31 @@ impl RenderOnce for SetupWizardContent {
         } else {
             column.into_any_element()
         };
-        let frame = div().w_full().min_w_0();
+        let frame = div().relative().w_full().min_w_0();
         let frame = match max {
             Some(max) => frame.max_w(px(max)),
             None => frame,
         };
-        frame.child(body)
+        frame.child(body).children(self.solid.then(card_probe))
     }
+}
+
+/// `data-setup-card`: records the solid card's window rect for the shell's riso keep-out and
+/// asks for another frame when it moved, so the backdrop takes it.
+fn card_probe() -> AnyElement {
+    canvas(
+        |_, _, _| (),
+        |bounds, (), window, cx: &mut App| {
+            if record_card(bounds, cx) {
+                crate::ui::motion::remeasure(window);
+            }
+        },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+    .into_any_element()
 }
 
 /// The rows of a step's list, indented one `xl` step. // DS: SetupWizardShell.module.css:107

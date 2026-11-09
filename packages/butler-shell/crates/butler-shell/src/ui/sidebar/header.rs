@@ -13,6 +13,7 @@ use butler_ds::{
         },
         button::{Button, Size, Variant},
         context::Ds,
+        toast::{self, Toast},
         typo::{Tone, Typo},
     },
 };
@@ -74,7 +75,7 @@ impl Shell {
             .into_any_element()
     }
 
-    /// The primary actions: new chat, search, 예약 작업 and 서랍, each active on its view.
+    /// The primary actions: new chat, search, 예약 작업, 브라우저 and 서랍, each active on its view.
     fn primary_entries(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let s = self.theme.strings;
         let mut new = NavRow::new("p-new", s.new_chat)
@@ -99,6 +100,13 @@ impl Shell {
         if matches!(view, View::Automations | View::AutomationDetail(_)) {
             schedules = schedules.active();
         }
+        // CARVE-OUT(G-cef): `BrowserEntry` opens the in-app browser, which lands in P5; until then
+        // the row (always shown: the browser is always on) answers with the coming-soon toast.
+        let browser = NavRow::new("p-browser", self.copy("Browser", "브라우저"))
+            .glyph(Icon::Globe2)
+            .on_click(cx.listener(|s, _, _, cx| {
+                toast::show(cx, Toast::message(s.theme.strings.not_yet));
+            }));
         // CARVE-OUT(G-cef): `LibraryEntry`'s `onDwell={beginDwell}` serves the in-app browser's
         // element drags; it lands with the browser (`library::detail::drop_dwell`).
         let mut library = NavRow::new("p-library", s.library)
@@ -113,6 +121,7 @@ impl Shell {
             anchor(div(), "sidebar-schedules")
                 .child(schedules)
                 .into_any_element(),
+            browser.into_any_element(),
             anchor(div(), "library-entry")
                 .child(library)
                 .into_any_element(),

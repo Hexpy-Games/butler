@@ -7,6 +7,7 @@ mod decision;
 pub(crate) mod editor;
 mod files;
 mod inputs;
+mod library_drop;
 pub(crate) mod menus;
 mod notice;
 pub(crate) mod queue;
@@ -43,7 +44,7 @@ use self::state::{ComposerState, image_refusal_label};
 use crate::ui::decisions::{DecisionCtx, decision_active, set_plan_gate};
 use crate::ui::field;
 use crate::ui::manage::ManageCtx;
-use crate::ui::manage::library::detail::{CardDrag, drop_cards_on_session};
+use crate::ui::manage::library::detail::CardDrag;
 use crate::ui::sidebar::SpaceDragPayload;
 use crate::ui::source::wire::{QueuedMessageRecord, SessionView};
 use crate::ui::theme::Theme;
@@ -414,16 +415,6 @@ impl Composer {
     }
 }
 
-impl Composer {
-    /// `conversationAt`: library cards dropped on the composer card attach to the open chat.
-    fn drop_cards(&mut self, drag: &CardDrag, cx: &mut Context<Self>) {
-        let (Some(ctx), Some(chat)) = (self.manage.clone(), self.inputs.chat_id.clone()) else {
-            return;
-        };
-        drop_cards_on_session(&ctx, drag, &chat.into(), cx);
-    }
-}
-
 impl Render for Composer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.pull_state(window, cx);
@@ -462,7 +453,12 @@ impl Render for Composer {
         let tint = ds.color(butler_ds::tokens::Color::Selection);
         let surface = crate::ui::widgets::anchor(div(), "composer")
             .absolute()
-            .bottom(ds.len(butler_ds::tokens::Length::SpaceLg))
+            // `.floating` 22px; `.floating.large` (every conversation composer) 34px.
+            .bottom(px(if self.inputs.draft_key.is_some() {
+                22.
+            } else {
+                34.
+            }))
             .left(px(column.column_left))
             .w(px(column.column_width.max(0.)))
             .id("composer");
