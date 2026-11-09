@@ -4,15 +4,15 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, Corners, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement, Pixels, RenderOnce, StatefulInteractiveElement as _, Styled as _, Window,
-    canvas, div, px,
+    LayerMotion, MotionEasing, MotionRepeat, ParentElement, Pixels, RenderOnce,
+    StatefulInteractiveElement as _, Styled as _, Window, canvas, div, px,
 };
 
 use super::context::Ds;
 use super::convert;
 use super::focus;
 use super::layout::{ItemProps, WithItem};
-use super::motion::{Loop, Timing, Tween};
+use super::motion::{Loop, Timing, mounted_at};
 use super::strut;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 
@@ -119,8 +119,7 @@ impl ParentElement for Card {
     }
 }
 
-/// The ring of a running card at pulse progress `t` (one loop, 0 to 1): opacity 0.6, 0.15, 0.6
-/// with the standard easing on each half.
+/// The original two-half running-ring pulse, sampled for the retained motion curve.
 fn pulse(ease: impl Fn(f32) -> f32, t: f32) -> f32 {
     let (from, to, local) = if t < 0.5 {
         (PULSE_HIGH, PULSE_LOW, t * 2.)
@@ -213,8 +212,8 @@ impl RenderOnce for Card {
         if let (true, Some(handler)) = (self.interactive, self.on_click.clone()) {
             el = el.on_click(move |event, window, cx| handler(event, window, cx));
         }
+        let ring = self.running.then(|| self.running_ring(radius, window, cx));
         let ds = Ds::get(cx);
-        let ring = self.running.then(|| self.running_ring(ds, radius));
         strut::scope(
             true,
             strut::container(self.item.apply(el, ds), ds)
@@ -226,17 +225,30 @@ impl RenderOnce for Card {
 
 impl Card {
     /// The ring of a running card, pulsing every `--pulse-duration` (static under reduced motion).
-    fn running_ring(&self, ds: &Ds, radius: Pixels) -> AnyElement {
+    fn running_ring(&self, radius: Pixels, window: &mut Window, cx: &mut App) -> AnyElement {
+        let ds = Ds::get(cx);
         let color = convert::with_alpha(ds.color(Color::WorkerActive), RING_SHARE);
         if !Loop::Decorative.runs(ds) {
             return ring(color, radius, PULSE_HIGH).into_any_element();
         }
-        let timing = Timing::linear(ds.duration(DsDuration::PulseDuration));
-        let ease = convert::easing(ds.tokens().ease(Easing::MotionEaseStandard));
-        Tween::new((self.id.clone(), "pulse"), div(), timing, move |_, t| {
-            ring(color, radius, pulse(&ease, t))
-        })
-        .repeat()
-        .into_any_element()
+        let timing = Timing::token(ds, DsDuration::PulseDuration, Easing::MotionEaseStandard);
+        let points: Vec<_> = (0..23)
+            .map(|k| {
+                let x = k as f32 / 22.;
+                (
+                    x,
+                    (pulse(|p| timing.ease(p), x) - PULSE_LOW) / (PULSE_HIGH - PULSE_LOW),
+                )
+            })
+            .collect();
+        let start = mounted_at((self.id.clone(), "pulse"), window, cx);
+        ring(color, radius, 1.)
+            .motion(LayerMotion {
+                opacity: (PULSE_LOW, PULSE_HIGH),
+                repeat: MotionRepeat::Loop,
+                easing: MotionEasing::linear(&points),
+                ..timing.motion(start)
+            })
+            .into_any_element()
     }
 }

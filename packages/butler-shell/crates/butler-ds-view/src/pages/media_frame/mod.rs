@@ -1,6 +1,7 @@
 //! MediaFrame.showcase.tsx (and MediaFrame.demo.tsx: the pictures that arrive late).
 pub(super) mod fixtures;
 
+use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_ds::ui::button::{Button, Size, Variant};
@@ -233,7 +234,7 @@ pub(super) fn late(
         .saturating_duration_since(*started.read(cx));
     let wait = Duration::from_millis(delay);
     if elapsed < wait {
-        window.request_animation_frame();
+        motion::wake_after(window, cx, wait.saturating_sub(elapsed));
         return None;
     }
     Some(src())

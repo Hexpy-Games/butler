@@ -15,10 +15,9 @@ use gpui::{
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::Icon;
 use crate::ui::context::Ds;
-use crate::ui::control::Glide;
-use crate::ui::convert;
 use crate::ui::focus;
 use crate::ui::icon::{IconSize, icon};
+use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::tag::LabelTone;
 use crate::ui::tooltip::Tooltip;
 
@@ -120,24 +119,20 @@ impl TagColorSwatches {
             .use_keyed_state((id.clone(), "focus"), cx, |_, cx| cx.focus_handle())
             .read(cx)
             .clone();
-        let state = window.use_keyed_state((id.clone(), "hover"), cx, |_, _| Glide::default());
-        let (duration, ease) = {
-            let ds = Ds::get(cx);
-            let duration = if ds.reduced_motion() {
-                Duration::ZERO
-            } else {
-                ds.duration(DsDuration::MotionFast)
-            };
-            (
-                duration,
-                convert::easing(ds.tokens().ease(Easing::MotionEaseStandard)),
-            )
+        let state = window.use_keyed_state((id.clone(), "hover"), cx, |_, _| false);
+        let ds = Ds::get(cx);
+        let timing = if ds.reduced_motion() {
+            Timing::linear(Duration::ZERO)
+        } else {
+            Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard)
         };
-        let now = cx.background_executor().now();
-        let (hover, moving) = state.update(cx, |s, _| s.sample(now, duration, &ease));
-        if moving {
-            window.request_animation_frame();
-        }
+        let hover = transition(
+            (id.clone(), "hover-ring"),
+            (f32::from(*state.read(cx)), false),
+            &timing,
+            window,
+            cx,
+        );
         let focused = focus::visible(Ds::get(cx), handle.is_focused(window), false);
         let ds = Ds::get(cx);
         let checked = tone == self.value;
@@ -148,7 +143,7 @@ impl TagColorSwatches {
         });
         let ink = ds.color(tone.tokens().2);
         let chip = chip(tone, checked, ds);
-        let ring = ring(focused, checked, hover, ds);
+        let ring = ring(focused, checked, (hover, timing), ds);
         let mut swatch = div()
             .id(id.clone())
             .relative()
@@ -162,15 +157,13 @@ impl TagColorSwatches {
             .text_color(ink)
             .track_focus(&focus::tab_stop(&handle, tab_stop))
             .on_hover(move |on, _, cx| {
-                let now = cx.background_executor().now();
                 state.update(cx, |s, cx| {
-                    let at = s.mix;
-                    s.retarget(*on, now, at);
+                    *s = *on;
                     cx.notify();
                 });
             })
             .child(chip)
-            .children(ring);
+            .child(ring);
         if let (Some(handler), false) = (self.on_change.clone(), checked) {
             swatch = swatch.on_click(move |_, window, cx| handler(tone, window, cx));
         }
@@ -212,7 +205,12 @@ fn chip(tone: LabelTone, checked: bool, ds: &Ds) -> gpui::Div {
 }
 
 /// The ring inside the swatch's box: focus, else chosen, else the hover hairline fading in.
-fn ring(focused: bool, checked: bool, hover: f32, ds: &Ds) -> Option<gpui::Div> {
+fn ring(
+    focused: bool,
+    checked: bool,
+    (hover, timing): (crate::ui::motion::Transition, Timing),
+    ds: &Ds,
+) -> gpui::Div {
     let (width, color) = if focused {
         (
             ds.len(Length::FocusRingWidth),
@@ -223,25 +221,29 @@ fn ring(focused: bool, checked: bool, hover: f32, ds: &Ds) -> Option<gpui::Div> 
             ds.len(Length::BorderWidthStrong),
             ds.color(Color::TextPrimary),
         )
-    } else if hover > 0. {
-        let line = ds.color(Color::LineStrong);
-        (
-            ds.len(Length::BorderHairline),
-            convert::with_alpha(line, hover),
-        )
     } else {
-        return None;
+        (ds.len(Length::BorderHairline), ds.color(Color::LineStrong))
     };
-    Some(
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .rounded_full()
-            .border(width)
-            .border_color(color),
-    )
+    let ring = div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .rounded_full()
+        .border(width)
+        .border_color(color);
+    if focused || checked {
+        ring
+    } else {
+        hover.apply(
+            ring,
+            &timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
+        )
+    }
 }
 
 /// Arrow, Home and End keys: focus and choose the target swatch (the arrows wrap).

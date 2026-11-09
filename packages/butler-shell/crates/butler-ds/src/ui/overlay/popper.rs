@@ -37,11 +37,18 @@ impl Anchor {
     pub fn probe(&self) -> gpui::Div {
         let cell = self.0.clone();
         div().absolute().top_0().left_0().size_full().child(
-            canvas(move |bounds, _, _| cell.set(Some(bounds)), |_, (), _, _| {})
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full(),
+            canvas(
+                move |bounds, window, _| {
+                    if cell.replace(Some(bounds)) != Some(bounds) {
+                        crate::ui::motion::remeasure(window);
+                    }
+                },
+                |_, (), _, _| {},
+            )
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full(),
         )
     }
 }
@@ -236,7 +243,7 @@ impl Element for Placed {
         };
         if self.frozen.is_none() && self.output.0.replace(Some(resolved)) != Some(resolved) {
             // The content sizes itself from this on its next render.
-            window.request_animation_frame();
+            crate::ui::motion::remeasure(window);
         }
         let scale = window.scale_factor();
         let offset = point(

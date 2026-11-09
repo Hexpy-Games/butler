@@ -334,7 +334,7 @@ async fn wait_for_gateway(run: u64, cx: &mut AsyncApp) -> Result<(), Failure> {
         if attempt == GATEWAY_ATTEMPTS {
             break;
         }
-        cx.background_executor().timer(GATEWAY_DELAY).await;
+        butler_ds::ui::motion::sleep(cx.background_executor(), GATEWAY_DELAY).await;
     }
     Err(last.unwrap_or_else(|| Failure::coded("agent_service_not_ready")))
 }
@@ -350,7 +350,7 @@ async fn read_settings(run: u64, cx: &mut AsyncApp) -> Result<Value, Failure> {
             Some(Ok(settings)) => return Ok(settings),
             Some(Err(error)) => return Err(Failure::other(error.to_string())),
             None if attempt == GATEWAY_ATTEMPTS => break,
-            None => cx.background_executor().timer(GATEWAY_DELAY).await,
+            None => butler_ds::ui::motion::sleep(cx.background_executor(), GATEWAY_DELAY).await,
         }
     }
     Err(Failure::other("agent unavailable".into()))

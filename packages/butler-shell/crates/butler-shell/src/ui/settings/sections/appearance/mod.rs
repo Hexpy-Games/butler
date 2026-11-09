@@ -5,6 +5,7 @@
 mod copy;
 mod sections;
 
+use butler_ds::ui::motion;
 use std::time::Duration;
 
 use gpui::{AnyView, App, AppContext as _, Context, IntoElement, Render, Window};
@@ -105,7 +106,7 @@ impl AppearancePage {
         let edit = self.edits;
         cx.notify();
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(OVERLAY_SAVE_DELAY).await;
+            motion::sleep(cx.background_executor(), OVERLAY_SAVE_DELAY).await;
             let _ = this.update(cx, |this, cx| {
                 if this.edits == edit {
                     this.commit_overlay(cx);

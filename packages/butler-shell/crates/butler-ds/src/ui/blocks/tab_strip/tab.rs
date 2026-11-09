@@ -68,7 +68,7 @@ fn reveal_probe(want: &Reveal, tab: SharedString) -> AnyElement {
         |_, _, _| (),
         move |bounds, (), window, cx| {
             if reveal(bounds, &want, &tab, cx) {
-                window.request_animation_frame();
+                crate::ui::motion::remeasure(window);
             }
         },
     )

@@ -1,5 +1,6 @@
 //! Toast.showcase.tsx. The viewer mounts the one `Toaster` at its root (`app.rs`); the stories
 //! only raise toasts.
+use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_ds::ui::button::{Button, Size, Variant};
@@ -103,9 +104,7 @@ fn trigger(id: &'static str, text: &'static str, click: Click) -> AnyElement {
 fn later(window: &mut Window, cx: &mut App, delay: u64, then: impl FnOnce(&mut App) + 'static) {
     window
         .spawn(cx, async move |cx| {
-            cx.background_executor()
-                .timer(Duration::from_millis(delay))
-                .await;
+            motion::sleep(cx.background_executor(), Duration::from_millis(delay)).await;
             cx.update(|_, cx| then(cx)).ok();
         })
         .detach();

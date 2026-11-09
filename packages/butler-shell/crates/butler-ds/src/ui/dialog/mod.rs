@@ -26,7 +26,7 @@ use crate::tokens::{Color, Duration as DsDuration, Length};
 use crate::ui::context::Ds;
 use crate::ui::layer::{Layer, Z};
 use crate::ui::menu::TriggerBox;
-use crate::ui::motion::{Timing, Tween};
+use crate::ui::motion::{Props, Timing, keyed};
 use crate::ui::overlay::dismiss::{Dismissable, Handle, Reason};
 use crate::ui::overlay::lifecycle::{Lifecycle, Phase, Spec};
 use crate::ui::overlay::motion::{self, Motion as Keyframes};
@@ -261,7 +261,6 @@ impl Dialog {
     ) -> AnyElement {
         // A card is measured by the frame before this one.
         let Some(area) = self.area(&content, window) else {
-            window.request_animation_frame();
             return div().into_any_element();
         };
         let ds = Ds::get(cx);
@@ -283,16 +282,22 @@ impl Dialog {
             Keyframes::DIALOG
         };
         let id = format!("{}-dialog", self.id);
-        let scrim = (self.modal || area.card.is_some())
-            .then(|| self.scrim(&id, phase, scrim_motion, &area, ds));
         let surface = content.surface(ds, &geo, &env);
-        let Some(animated) =
-            motion::animate_glass(&id, phase, side, (0.5, 0.5), keyframes, surface, ds)
-        else {
+        let top = ds.len(Length::Space2xl);
+        let scrim = (self.modal || area.card.is_some())
+            .then(|| self.scrim(&id, phase, scrim_motion, &area, (window, cx)));
+        let Some(animated) = motion::animate_glass(
+            &id,
+            phase,
+            side,
+            (0.5, 0.5),
+            keyframes,
+            surface,
+            (window, cx),
+        ) else {
             return div().into_any_element();
         };
         let child = self.guarded(animated, handle, focus, area.card.is_some());
-        let top = ds.len(Length::Space2xl);
         if area.card.is_some() {
             return div()
                 .absolute()
@@ -324,7 +329,15 @@ impl Dialog {
 
     /// The scrim (`--dialog-overlay-bg`) fading with the dialog; a modal one takes every pointer
     /// and wheel event, so the page under it neither receives clicks nor scrolls.
-    fn scrim(&self, id: &str, phase: Phase, motion: Keyframes, area: &Area, ds: &Ds) -> AnyElement {
+    fn scrim(
+        &self,
+        id: &str,
+        phase: Phase,
+        motion: Keyframes,
+        area: &Area,
+        (window, cx): (&mut Window, &mut App),
+    ) -> AnyElement {
+        let ds = Ds::get(cx);
         let mut scrim = div()
             .w(px(area.size.0))
             .h(px(area.size.1))
@@ -346,13 +359,37 @@ impl Dialog {
         } else {
             Timing::token(ds, motion.exit, motion.exit_ease)
         };
-        Tween::new(
-            format!("{id}-scrim-{enter}-{key}"),
-            scrim,
-            timing,
-            move |el, t| el.opacity(if enter { t } else { 1. - t }),
-        )
-        .into_any_element()
+        let enter_timing = Timing::token(ds, motion.enter, motion.enter_ease);
+        let incoming = keyed(
+            format!("{id}-scrim-in-{key}"),
+            0.,
+            1.,
+            &enter_timing,
+            window,
+            cx,
+        );
+        let value = if enter {
+            incoming
+        } else {
+            keyed(
+                format!("{id}-scrim-out-{key}"),
+                incoming.value(&enter_timing),
+                0.,
+                &timing,
+                window,
+                cx,
+            )
+        };
+        value
+            .apply(
+                scrim,
+                &timing,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
+            )
+            .into_any_element()
     }
 
     /// The content in the dismiss stack while open, and in the focus scope: a modal one keeps

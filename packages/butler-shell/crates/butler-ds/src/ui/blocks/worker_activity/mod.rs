@@ -11,7 +11,7 @@ mod rail;
 use super::composer_adjunct_panel::ComposerAdjunctPanel;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
-use crate::ui::convert;
+use crate::ui::motion::{self, Props, Timing, Transition};
 use crate::ui::strut;
 use crate::ui::typo::{Tone, Typo, Weight};
 
@@ -117,16 +117,11 @@ fn completed_now(
     phase: Option<&str>,
     window: &mut Window,
     cx: &mut App,
-) -> Option<f32> {
+) -> Option<(Transition, Timing)> {
     let previous =
         window.use_keyed_state(format!("{id}-phase"), cx, |_, _| phase.map(str::to_owned));
-    let began =
-        window.use_keyed_state(
-            format!("{id}-done-at"),
-            cx,
-            |_, _| None::<std::time::Instant>,
-        );
-    let now = cx.background_executor().now();
+    let began = window.use_keyed_state(format!("{id}-done-at"), cx, |_, _| None::<u32>);
+    let now = gpui::animation_time_ms();
     let before = previous.read(cx).clone();
     if phase == Some("complete") && before.as_deref().is_some_and(|p| p != "complete") {
         began.update(cx, |at, _| *at = Some(now));
@@ -135,26 +130,30 @@ fn completed_now(
         previous.update(cx, |p, _| *p = phase.map(str::to_owned));
     }
     let started = (*began.read(cx))?;
-    let (length, ease) = {
-        let ds = Ds::get(cx);
-        let reduced = ds.reduced_motion();
-        let token = if reduced {
-            DsDuration::MotionFast
-        } else {
-            DsDuration::MotionDeliberate
-        };
-        (
-            ds.duration(token),
-            ds.tokens().ease(Easing::MotionEaseDecelerate),
-        )
+    let ds = Ds::get(cx);
+    let token = if ds.reduced_motion() {
+        DsDuration::MotionFast
+    } else {
+        DsDuration::MotionDeliberate
     };
-    let t = now.saturating_duration_since(started).as_secs_f32() / length.as_secs_f32();
-    if t >= 1. {
+    let timing = Timing::token(ds, token, Easing::MotionEaseDecelerate);
+    let value = Transition {
+        from: 0.,
+        to: 1.,
+        start_ms: started,
+    };
+    if !value.moving(&timing) {
         began.update(cx, |at, _| *at = None);
         return None;
     }
-    window.request_animation_frame();
-    Some(convert::ease_at(ease, t))
+    motion::wake_after(
+        window,
+        cx,
+        std::time::Duration::from_millis(u64::from(
+            timing.ms().saturating_sub(now.wrapping_sub(started)),
+        )),
+    );
+    Some((value, timing))
 }
 
 impl RenderOnce for WorkerActivityRow {
@@ -345,19 +344,29 @@ fn heading_line(
 }
 
 /// The worker's icon: tertiary, in the success colour while the completion pulse runs.
-fn leading_icon(icon: AnyElement, finishing: Option<f32>, ds: &Ds) -> gpui::Div {
+fn leading_icon(icon: AnyElement, finishing: Option<(Transition, Timing)>, ds: &Ds) -> gpui::Div {
     let ink = if finishing.is_some() {
         ds.color(Color::ColorSuccessText)
     } else {
         ds.color(Color::TextTertiary)
     };
-    div()
+    let icon = div()
         .flex()
         .flex_none()
         .items_center()
         .justify_center()
         .size(ds.len(Length::TypoBodyLineHeight))
         .text_color(ink)
-        .opacity(finishing.unwrap_or(1.))
-        .child(icon)
+        .child(icon);
+    match finishing {
+        Some((value, timing)) => value.apply(
+            icon,
+            &timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
+        ),
+        None => icon,
+    }
 }

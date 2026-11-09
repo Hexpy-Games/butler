@@ -239,7 +239,7 @@ fn content_basis(
     let height = f32::from(handle.bounds().size.height + handle.max_offset().y);
     if (height - *seen.read(cx)).abs() > 0.5 {
         seen.update(cx, |seen, _| *seen = height);
-        window.request_animation_frame();
+        crate::ui::motion::remeasure(window);
     }
     (height > 0.).then(|| px(height).into())
 }

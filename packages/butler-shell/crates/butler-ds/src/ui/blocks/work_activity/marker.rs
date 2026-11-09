@@ -4,8 +4,7 @@ use gpui::{AnyElement, App, ElementId, IntoElement as _, Styled as _, Window, di
 
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
-use crate::ui::convert;
-use crate::ui::motion::Loop;
+use crate::ui::motion::{Loop, Timing, mounted_at};
 
 /// The dot's side. // DS: WorkActivityBlock.module.css:77
 pub(super) const SIDE: f32 = 7.;
@@ -29,20 +28,7 @@ pub(super) fn dot(
     cx: &mut App,
 ) -> AnyElement {
     let id = id.into();
-    let started = window.use_keyed_state((id, "pulse"), cx, |_, cx| cx.background_executor().now());
-    let now = cx.background_executor().now();
-    let begun = *started.read(cx);
-    let (opacity, running) = {
-        let ds = Ds::get(cx);
-        let period = ds.duration(DsDuration::MotionLivePulse).as_secs_f32();
-        let ease = convert::easing(ds.tokens().ease(Easing::MotionEaseStandard));
-        let running = live && Loop::Decorative.runs(ds);
-        let phase = (now.saturating_duration_since(begun).as_secs_f32() / period).fract();
-        (if running { pulse(phase, ease) } else { 1. }, running)
-    };
-    if running {
-        window.request_animation_frame();
-    }
+    let start = mounted_at((id, "pulse"), window, cx);
     let ds = Ds::get(cx);
     let dot = div()
         .flex_none()
@@ -50,11 +36,25 @@ pub(super) fn dot(
         .rounded(ds.len(Length::RadiusPill));
     if live {
         let ink = ds.color(Color::TextPrimary);
-        dot.border(px(1.))
-            .border_color(ink)
-            .bg(ink)
-            .opacity(opacity)
+        let dot = dot.border(px(1.)).border_color(ink).bg(ink);
+        if Loop::Decorative.runs(ds) {
+            let timing = Timing::token(ds, DsDuration::MotionLivePulse, Easing::MotionEaseStandard);
+            let points: Vec<_> = (0..23)
+                .map(|k| {
+                    let x = k as f32 / 22.;
+                    (x, (1. - pulse(x, |p| timing.ease(p))) / 0.65)
+                })
+                .collect();
+            dot.motion(gpui::LayerMotion {
+                repeat: gpui::MotionRepeat::Loop,
+                opacity: (1., 0.35),
+                easing: gpui::MotionEasing::linear(&points),
+                ..timing.motion(start)
+            })
             .into_any_element()
+        } else {
+            dot.into_any_element()
+        }
     } else {
         dot.border(px(1.))
             .border_color(ds.color(Color::LineStrong))

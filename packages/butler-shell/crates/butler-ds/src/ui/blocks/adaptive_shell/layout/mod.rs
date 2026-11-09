@@ -1,17 +1,19 @@
 //! Assembling an AdaptiveShell: the geometry of the docked layout (the grid of the CSS, with the
 //! sidebar and inspector sliding over it) and the shared facts both layouts use.
 use gpui::{
-    AnyElement, App, Div, IntoElement as _, ParentElement as _, Styled as _, Window, div, px,
+    AnyElement, App, Div, InteractiveElement as _, IntoElement as _, ParentElement as _,
+    Styled as _, Window, div, px,
 };
 
 use super::frame_cfg::{HandleSide, ShellPlatform};
 use super::grip::HANDLE_WIDTH;
 use super::track::{self, Facts, Tracks};
 use super::{AdaptiveShell, ShellFrame};
-use crate::tokens::{Color, Length};
+use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::blocks::responsive::{self, ChromeEnvironment};
 use crate::ui::blocks::scope::{self, ShellVars, Spec};
 use crate::ui::context::Ds;
+use crate::ui::motion::{Props, Timing};
 use crate::ui::strut;
 
 mod drawer;
@@ -328,33 +330,48 @@ fn handle_at(side: HandleSide, handle: AnyElement, ctx: &Ctx, ds: &Ds) -> Div {
 fn docked(shell: &mut AdaptiveShell, ctx: &Ctx, window: &mut Window, cx: &mut App) -> AnyElement {
     let ds = Ds::get(cx);
     let t = &ctx.t;
-    // The track follows the committed state: closing is 0 at once, opening commits at the end
-    // of the slide, so the workspace reflows once, already in place.
-    let settled_open = shell.left_open && t.left >= 0.999;
-    let left_track = if settled_open { ctx.left_w } else { 0. };
-    let right_track = t.right * ctx.right_w;
-    let shift = t.left * ctx.left_w - left_track;
-    let moving = shift.abs() > 0.01;
+    let timing = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
+    );
+    let layout = gpui::LayoutMotion {
+        duration_ms: if ctx.reduced || shell.resizing || shell.settings_active {
+            0
+        } else {
+            timing.ms()
+        },
+        easing: timing.easing(),
+    };
+    let left_track = t.left.target() * ctx.left_w;
+    let right_track = t.right.target() * ctx.right_w;
     let workspace = workspace_box(shell, ctx, (left_track, right_track), ds);
     let cell = div()
+        .id((shell.id.clone(), "workspace-track"))
+        .layout_motion(layout)
         .relative()
         .flex_auto()
         .min_w_0()
         .h_full()
-        .when_moving(moving)
-        .child(
-            div()
-                .relative()
-                .size_full()
-                .left(px(shift))
-                .child(workspace),
-        );
+        .child(workspace);
     let mut root = root_box(shell, ctx, ds)
         .flex()
         .flex_row()
-        .child(div().w(px(left_track)).flex_none())
+        .child(
+            div()
+                .id((shell.id.clone(), "left-track"))
+                .layout_motion(layout)
+                .w(px(left_track))
+                .flex_none(),
+        )
         .child(cell)
-        .child(div().w(px(right_track)).flex_none());
+        .child(
+            div()
+                .id((shell.id.clone(), "right-track"))
+                .layout_motion(layout)
+                .w(px(right_track))
+                .flex_none(),
+        );
     root = root.children(sidebar_layer(shell, ctx, window, cx));
     let ds = Ds::get(cx);
     root = root.children(inspector_layer(shell, ctx, ds));
@@ -363,17 +380,6 @@ fn docked(shell: &mut AdaptiveShell, ctx: &Ctx, window: &mut Window, cx: &mut Ap
     }
     root = root.children(peek::sidebar_peek(shell, ctx, cx));
     root.children(shell.chrome.take()).into_any_element()
-}
-
-trait WhenMoving: Sized {
-    fn when_moving(self, moving: bool) -> Self;
-}
-
-impl WhenMoving for Div {
-    /// The workspace clips at the cell's edge while it slides (the clip-path of the slide).
-    fn when_moving(self, moving: bool) -> Self {
-        if moving { self.overflow_hidden() } else { self }
-    }
 }
 
 /// The docked sidebar: its full width slides on the compositor while the track collapses.
@@ -385,17 +391,26 @@ fn sidebar_layer(
 ) -> Option<AnyElement> {
     let ds = Ds::get(cx);
     let t = &ctx.t;
-    let settled_closed = !shell.left_open && t.left <= 0.001 && t.left_fade <= 0.001;
+    let timing = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
+    );
+    let fade = Timing::token(
+        ds,
+        if shell.left_open {
+            DsDuration::MotionFast
+        } else {
+            DsDuration::MotionExitFast
+        },
+        Easing::MotionEaseStandard,
+    );
+    let settled_closed = !shell.left_open && !t.left.moving(&timing) && !t.left_fade.moving(&fade);
     if ctx.peeking || settled_closed {
         return None;
     }
     let content = shell.sidebar.take()?;
     let reduced = ds.reduced_motion();
-    let slide = if reduced {
-        0.
-    } else {
-        (1. - t.left) * ctx.left_w
-    };
     let top = if ctx.cards {
         f32::from(ds.len(Length::BorderHairline))
     } else {
@@ -410,18 +425,48 @@ fn sidebar_layer(
         .absolute()
         .top(px(ctx.inset))
         .bottom(px(ctx.inset))
-        .left(px(ctx.inset - slide))
+        .left(px(ctx.inset))
         .w(px(ctx.left_w))
         .pt(px(top))
         .overflow_hidden()
         .child(scope::scoped(tones, content));
-    Some(if reduced { el.opacity(t.left_fade) } else { el }.into_any_element())
+    Some(
+        if reduced {
+            t.left_fade.apply(
+                el,
+                &fade,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
+            )
+        } else {
+            t.left.apply(
+                el,
+                &timing,
+                &Props {
+                    offset: Some((
+                        gpui::point(px(-ctx.left_w), px(0.)),
+                        gpui::point(px(0.), px(0.)),
+                    )),
+                    ..Default::default()
+                },
+            )
+        }
+        .into_any_element(),
+    )
 }
 
 /// The docked inspector: its full width over the right track, sliding in from the edge.
 fn inspector_layer(shell: &mut AdaptiveShell, ctx: &Ctx, ds: &Ds) -> Option<AnyElement> {
     let t = &ctx.t;
-    if !ctx.inspector_open && t.right <= 0.001 && t.right_fade <= 0.001 {
+    let timing = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
+    );
+    let fade = Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseStandard);
+    if !ctx.inspector_open && !t.right.moving(&timing) && !t.right_fade.moving(&fade) {
         return None;
     }
     let inspector = shell.inspector.take()?;

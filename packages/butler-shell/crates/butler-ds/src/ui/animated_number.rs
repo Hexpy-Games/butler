@@ -4,7 +4,6 @@
 //! cell, keep the width stable while counting; the start sizer is released when the count ends.
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Instant;
 
 use gpui::{
     App, ElementId, FontFeatures, FontWeight, IntoElement, ParentElement as _, RenderOnce,
@@ -13,6 +12,7 @@ use gpui::{
 
 use super::context::Ds;
 use super::convert;
+use super::motion;
 use super::typo::Role;
 use crate::tokens::{Duration as DsDuration, Easing};
 
@@ -35,9 +35,10 @@ pub fn grouped(value: f64) -> String {
     out
 }
 
+#[derive(Clone, Copy)]
 enum Run {
-    Count { from: f64, since: Instant },
-    Fade { since: Instant },
+    Count { from: f64, since: u32 },
+    Fade { since: u32 },
 }
 
 struct State {
@@ -86,10 +87,16 @@ struct Timing {
 }
 
 /// Moves the run to `now`: the value shown, the width sizer, and the fade's progress.
-fn step(state: &mut State, now: Instant, timing: &Timing) -> (f64, f64, Option<f32>) {
+fn step(
+    state: &mut State,
+    now: u32,
+    timing: &Timing,
+    value: f64,
+    reduced: bool,
+) -> (f64, f64, Option<Run>, bool) {
     match state.run {
         Some(Run::Count { from, since }) => {
-            let elapsed = now.saturating_duration_since(since);
+            let elapsed = std::time::Duration::from_millis(u64::from(now.wrapping_sub(since)));
             if elapsed >= timing.count {
                 state.shown = state.target;
                 state.sizer = state.target;
@@ -102,23 +109,34 @@ fn step(state: &mut State, now: Instant, timing: &Timing) -> (f64, f64, Option<f
                 state.shown = if whole { value.round() } else { value };
             }
         }
-        Some(Run::Fade { since }) if now.saturating_duration_since(since) >= timing.fade => {
+        Some(Run::Fade { since })
+            if std::time::Duration::from_millis(u64::from(now.wrapping_sub(since)))
+                >= timing.fade =>
+        {
             state.run = None;
         }
         Some(Run::Fade { .. }) | None => {}
     }
-    let fading = match state.run {
-        Some(Run::Fade { since }) => {
-            Some(now.saturating_duration_since(since).as_secs_f32() / timing.fade.as_secs_f32())
+    let changed = value != state.target;
+    if changed {
+        let from = state.shown;
+        state.target = value;
+        if reduced {
+            state.shown = value;
+            state.sizer = value;
+            state.run = Some(Run::Fade { since: now });
+        } else {
+            state.sizer = from;
+            state.run = Some(Run::Count { from, since: now });
         }
-        _ => None,
-    };
-    (state.shown, state.sizer, fading)
+    }
+    (state.shown, state.sizer, state.run, changed)
 }
 
 /// A type role's size, line height, weight and letter spacing on `root`.
-fn with_role(mut root: gpui::Div, role: Role, ds: &Ds) -> gpui::Div {
-    let Some(tokens) = role.tokens() else {
+fn with_role(mut root: gpui::Div, role: Option<Role>, ds: &Ds) -> gpui::Div {
+    root.text_style().font_features = Some(FontFeatures(Arc::new(vec![("tnum".to_owned(), 1)])));
+    let Some(tokens) = role.and_then(Role::tokens) else {
         return root;
     };
     root = root
@@ -135,7 +153,7 @@ fn with_role(mut root: gpui::Div, role: Role, ds: &Ds) -> gpui::Div {
 
 impl RenderOnce for AnimatedNumber {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let now = cx.background_executor().now();
+        let now = gpui::animation_time_ms();
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| State {
             target: self.value,
             shown: self.value,
@@ -149,24 +167,11 @@ impl RenderOnce for AnimatedNumber {
             fade: ds.duration(DsDuration::MotionFast),
             ease: ds.tokens().ease(Easing::MotionEaseDecelerate),
         };
-        let ((shown, sizer, fading), moving) = state.update(cx, |state, _| {
-            if self.value != state.target {
-                let from = state.shown;
-                state.target = self.value;
-                if reduced {
-                    state.shown = self.value;
-                    state.sizer = self.value;
-                    state.run = Some(Run::Fade { since: now });
-                } else {
-                    state.sizer = from;
-                    state.run = Some(Run::Count { from, since: now });
-                }
-            }
-            let shown = step(state, now, &timing);
-            (shown, state.run.is_some())
+        let (shown, sizer, run, changed) = state.update(cx, |state, _| {
+            step(state, now, &timing, self.value, reduced)
         });
-        if moving {
-            window.request_animation_frame();
+        if changed {
+            motion::wake_after(window, cx, if reduced { timing.fade } else { timing.count });
         }
         let format = &self.format;
         let cell = |text: String| {
@@ -177,20 +182,53 @@ impl RenderOnce for AnimatedNumber {
                 .whitespace_nowrap()
                 .child(text)
         };
-        let value = cell(format(shown)).opacity(fading.unwrap_or(1.).clamp(0., 1.));
-        let stack = div()
+        let mut stack = div()
+            .relative()
             .grid()
             .grid_cols_max_content(1)
             .grid_rows(1)
             .child(cell(format(sizer)).invisible())
-            .child(cell(format(self.value)).invisible())
-            .child(value);
-        let mut root = div().flex().flex_none().whitespace_nowrap().child(stack);
-        root.text_style().font_features =
-            Some(FontFeatures(Arc::new(vec![("tnum".to_owned(), 1)])));
-        match self.role {
-            Some(role) => with_role(root, role, Ds::get(cx)),
-            None => root,
+            .child(cell(format(self.value)).invisible());
+        match run {
+            Some(Run::Count { from, since }) => {
+                let linear = motion::Timing::linear(timing.count);
+                let n = linear.ms().saturating_mul(60).div_ceil(1000);
+                let whole = from.fract() == 0. && self.value.fract() == 0.;
+                stack = stack.children((0..n).map(|i| {
+                    let progress = convert::ease_at(timing.ease, (i + 1) as f32 / n as f32);
+                    let value = from + (self.value - from) * f64::from(progress);
+                    let value = if whole { value.round() } else { value };
+                    div()
+                        .absolute()
+                        .size_full()
+                        .motion(gpui::LayerMotion {
+                            visible: (i as f32 / n as f32, (i + 1) as f32 / n as f32),
+                            ..linear.motion(since)
+                        })
+                        .child(cell(format(value)))
+                }));
+            }
+            Some(Run::Fade { since }) => {
+                let fade = motion::Transition {
+                    from: 0.,
+                    to: 1.,
+                    start_ms: since,
+                };
+                stack = stack.child(fade.apply(
+                    cell(format(shown)),
+                    &motion::Timing::linear(timing.fade),
+                    &motion::Props {
+                        opacity: Some((0., 1.)),
+                        ..Default::default()
+                    },
+                ));
+            }
+            None => stack = stack.child(cell(format(shown))),
         }
+        with_role(
+            div().flex().flex_none().whitespace_nowrap().child(stack),
+            self.role,
+            Ds::get(cx),
+        )
     }
 }

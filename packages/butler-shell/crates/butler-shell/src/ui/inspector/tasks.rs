@@ -5,6 +5,7 @@ mod load;
 mod present;
 mod view;
 
+use butler_ds::ui::motion;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -127,7 +128,7 @@ fn task_graph_clock(id: ElementId, running: bool, window: &mut Window, cx: &mut 
         let clock = clock.downgrade();
         window
             .spawn(cx, async move |cx| {
-                cx.background_executor().timer(Duration::from_secs(1)).await;
+                motion::sleep(cx.background_executor(), Duration::from_secs(1)).await;
                 cx.update(|_, cx| {
                     clock
                         .update(cx, |clock, cx| {

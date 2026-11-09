@@ -11,13 +11,12 @@ use gpui::{
     RenderOnce, SharedString, Styled as _, Window, canvas, div, point, px,
 };
 
-use super::anim::ramp;
 pub use super::choice_card::ChoiceCardList as CheckCardList;
 use super::choice_card::{ChoiceState, Face, row_body, surface, text_column};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
 use crate::ui::context::Ds;
 use crate::ui::convert::{easing, mix};
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Timing, transition};
 use crate::ui::overlay::place::{Align, Side};
 use crate::ui::tooltip::Tooltip;
 
@@ -155,50 +154,78 @@ fn paint_check(bounds: Bounds<Pixels>, fraction: f32, color: Hsla, window: &mut 
 fn indicator(id: ElementId, checked: bool, window: &mut Window, cx: &mut App) -> AnyElement {
     let ds = Ds::get(cx);
     let timing = Timing::linear(Duration::from_secs_f32(total(checked, ds) / 1000.));
-    let p = ramp(
+    let progress = transition(
         id,
         (f32::from(u8::from(checked)), false),
         &timing,
         window,
         cx,
     );
+    let moving = progress.moving(&timing);
+    if moving {
+        let elapsed = Duration::from_millis(u64::from(
+            gpui::animation_time_ms().wrapping_sub(progress.start_ms),
+        ));
+        crate::ui::motion::wake_after(window, cx, timing.duration.saturating_sub(elapsed));
+    }
     let ds = Ds::get(cx);
-    let phase = phase(p, checked, !ds.reduced_motion(), ds);
-    let hairline = ds.len(Length::BorderHairline);
     let side = ds.len(Length::IconSizeMd);
-    let mark_side = ds.len(Length::IconSizeXs);
-    let accent = ds.color(Color::Accent);
-    let mut ink = ds.color(Color::PrimaryForeground);
-    ink.alpha *= phase.mark_opacity;
-    let scale = ds.number(Number::MotionScaleCheck);
-    let ring = mix(accent, ds.color(Color::LineStrong), phase.fill);
-    let fill = div()
-        .absolute()
-        .top(-hairline)
-        .bottom(-hairline)
-        .left(-hairline)
-        .right(-hairline)
-        .rounded(ds.len(Length::RadiusPill))
-        .bg(accent)
-        .opacity(phase.fill)
-        .scale(scale + (1. - scale) * phase.fill);
-    let mark = canvas(
-        |_, _, _| (),
-        move |bounds, (), window, _| paint_check(bounds, phase.mark, ink, window),
-    )
-    .size(mark_side);
+    let n = timing.ms().saturating_mul(60).div_ceil(1000);
+    let frames = (0..if moving { n } else { 1 }).map(|i| {
+        let p = if moving {
+            progress.from + (progress.to - progress.from) * (i + 1) as f32 / n as f32
+        } else {
+            progress.to
+        };
+        let phase = phase(p, checked, !ds.reduced_motion(), ds);
+        let hairline = ds.len(Length::BorderHairline);
+        let accent = ds.color(Color::Accent);
+        let mut ink = ds.color(Color::PrimaryForeground);
+        ink.alpha *= phase.mark_opacity;
+        let scale = ds.number(Number::MotionScaleCheck);
+        let ring = mix(accent, ds.color(Color::LineStrong), phase.fill);
+        let fill = div()
+            .absolute()
+            .top(-hairline)
+            .bottom(-hairline)
+            .left(-hairline)
+            .right(-hairline)
+            .rounded(ds.len(Length::RadiusPill))
+            .bg(accent)
+            .opacity(phase.fill)
+            .scale(scale + (1. - scale) * phase.fill);
+        let mark = canvas(
+            |_, _, _| (),
+            move |bounds, (), window, _| paint_check(bounds, phase.mark, ink, window),
+        )
+        .size(ds.len(Length::IconSizeXs));
+        let frame = div()
+            .relative()
+            .flex()
+            .flex_none()
+            .items_center()
+            .justify_center()
+            .size(side)
+            .border(hairline)
+            .border_color(ring)
+            .rounded(ds.len(Length::RadiusPill))
+            .child(fill)
+            .child(div().relative().child(mark));
+        let layer = div().absolute().size_full().child(frame);
+        if moving {
+            layer.motion(gpui::LayerMotion {
+                visible: (i as f32 / n as f32, (i + 1) as f32 / n as f32),
+                ..timing.motion(progress.start_ms)
+            })
+        } else {
+            layer
+        }
+    });
     div()
         .relative()
-        .flex()
         .flex_none()
-        .items_center()
-        .justify_center()
         .size(side)
-        .border(hairline)
-        .border_color(ring)
-        .rounded(ds.len(Length::RadiusPill))
-        .child(fill)
-        .child(div().relative().child(mark))
+        .children(frames)
         .into_any_element()
 }
 

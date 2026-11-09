@@ -4,7 +4,6 @@
 //! and fades out keeping its last label and position.
 pub mod place;
 
-use std::cell::Cell;
 use std::time::{Duration, Instant};
 
 use gpui::{
@@ -18,7 +17,7 @@ pub use place::{Align, Side};
 use super::context::Ds;
 use super::layer::{Layer, Z, safe_top};
 use super::liquid_glass;
-use super::motion::{Timing, Tween};
+use super::motion::{Props, Timing, keyed};
 use super::strut;
 use super::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
@@ -259,19 +258,13 @@ fn on_hover(state: &Entity<State>, on: bool, label: bool, window: &mut Window, c
         s.generation
     });
     let entity = state.clone();
-    window
-        .spawn(cx, async move |cx| {
-            cx.background_executor().timer(OPEN_DELAY).await;
-            cx.update(|_, cx| {
-                entity.update(cx, |s, cx| {
-                    if s.hovered && s.generation == generation {
-                        s.show(cx);
-                    }
-                });
-            })
-            .ok();
-        })
-        .detach();
+    crate::ui::motion::delay(window, cx, OPEN_DELAY, move |_, cx| {
+        entity.update(cx, |s, cx| {
+            if s.hovered && s.generation == generation {
+                s.show(cx);
+            }
+        });
+    });
 }
 
 /// Records the trigger's window bounds and whether its ancestors clip it out of sight entirely.
@@ -355,8 +348,8 @@ impl Tooltip {
         let ds = Ds::get(cx);
         let content = Self::surface(&shown, cap, state, ds);
         let origin = point(px(shown.left), px(shown.top));
-        let id = ElementId::from(SharedString::from(format!("{}-{key}-{open}", self.id)));
-        let animated = if open {
+        let id = ElementId::from(SharedString::from(format!("{}-{key}", self.id)));
+        let (timing, dx, dy) = if open {
             let timing = Timing::token(ds, DsDuration::MotionEnterMenu, Easing::MotionEaseEnter);
             let travel = f32::from(ds.len(Length::MotionDistanceSm));
             let (dx, dy) = match shown.side {
@@ -365,23 +358,44 @@ impl Tooltip {
                 Side::Left => (travel, 0.),
                 Side::Right => (-travel, 0.),
             };
-            // The glass takes the progress as its presence, not as an opacity.
-            let content = Cell::new(Some(content));
-            Tween::new(id, div().relative(), timing, move |el, t| {
-                el.left(px(dx * (1. - t)))
-                    .top(px(dy * (1. - t)))
-                    .child(liquid_glass::with_presence(t, shown_content(&content)))
-            })
-            .into_any_element()
+            (timing, dx, dy)
         } else {
-            let timing =
-                Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseAccelerate);
-            let content = Cell::new(Some(content));
-            Tween::new(id, div(), timing, move |el, t| {
-                el.child(liquid_glass::with_presence(1. - t, shown_content(&content)))
-            })
-            .into_any_element()
+            (
+                Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseAccelerate),
+                0.,
+                0.,
+            )
         };
+        let enter_timing = Timing::token(ds, DsDuration::MotionEnterMenu, Easing::MotionEaseEnter);
+        let enter = keyed((id.clone(), "enter"), 0., 1., &enter_timing, window, cx);
+        let value = if open {
+            enter
+        } else {
+            keyed(
+                (id, "exit"),
+                enter.value(&enter_timing),
+                0.,
+                &timing,
+                window,
+                cx,
+            )
+        };
+        let presence = liquid_glass::Presence::Moving {
+            from: value.from,
+            to: value.to,
+            start_ms: value.start_ms,
+            timing,
+        };
+        let animated = value.apply(
+            div()
+                .relative()
+                .child(liquid_glass::with_presence(presence, content)),
+            &timing,
+            &Props {
+                offset: Some((point(px(dx), px(dy)), point(px(0.), px(0.)))),
+                ..Default::default()
+            },
+        );
         let hidden = shown.clipped;
         Some(Layer::new(
             Z::Tooltip,
@@ -436,11 +450,4 @@ impl Tooltip {
             .child(probe)
             .into_any_element()
     }
-}
-
-/// The surface held for the animation's one build, taken out when the Tween applies it.
-fn shown_content(content: &Cell<Option<AnyElement>>) -> AnyElement {
-    content
-        .take()
-        .unwrap_or_else(|| gpui::Empty.into_any_element())
 }

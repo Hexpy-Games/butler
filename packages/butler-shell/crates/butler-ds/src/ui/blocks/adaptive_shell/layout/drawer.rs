@@ -2,14 +2,18 @@
 //! the inspector slide in over the workspace under a scrim; below 641px the open sidebar pushes
 //! the workspace aside, above it the workspace narrows beside it. The inspector's docked form
 //! lives here too, as it shares the panel's slide.
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, div, px};
+use gpui::{
+    AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, Styled as _,
+    div, px,
+};
 
 use super::{AdaptiveShell, Ctx, NAV_FILLS, panel_rows, root_box, shell_tones, workspace_box};
-use crate::tokens::{Color, Length};
+use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::blocks::adaptive_shell::parts;
 use crate::ui::blocks::responsive::COMPACT_MAX;
 use crate::ui::blocks::scope::{self, Spec};
 use crate::ui::context::Ds;
+use crate::ui::motion::{Props, Timing};
 
 /// The inspector drawer is at most this share of a tablet window (`min(var(--right-panel-width), 92vw)`).
 const INSPECTOR_SHARE: f32 = 0.92; // DS: AdaptiveShell.module.css:259
@@ -39,33 +43,66 @@ pub(super) fn root(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -> AnyEle
         inspector_width(shell, compact, ds),
     );
     let reduced = ds.reduced_motion();
-    let narrows = !compact && shell.left_open && t.left >= 0.999;
-    let spacer = if narrows { dw } else { 0. };
-    let shift = if reduced { 0. } else { t.left * dw - spacer };
-    let workspace = workspace_box(shell, ctx, (0., 0.), ds);
-    let cell = div().relative().flex_auto().min_w_0().h_full().child(
-        div()
-            .relative()
-            .size_full()
-            .left(px(shift))
-            .child(workspace),
+    let timing = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
     );
+    let layout = gpui::LayoutMotion {
+        duration_ms: if reduced { 0 } else { timing.ms() },
+        easing: timing.easing(),
+    };
+    let spacer = if !compact && shell.left_open { dw } else { 0. };
+    let workspace = workspace_box(shell, ctx, (0., 0.), ds);
+    let cell = div()
+        .id((shell.id.clone(), "drawer-workspace"))
+        .layout_motion(layout)
+        .relative()
+        .flex_auto()
+        .min_w_0()
+        .h_full()
+        .child(workspace);
+    let cell = if compact && !reduced {
+        t.left.apply(
+            cell,
+            &timing,
+            &Props {
+                offset: Some((gpui::point(px(0.), px(0.)), gpui::point(px(dw), px(0.)))),
+                ..Default::default()
+            },
+        )
+    } else {
+        cell
+    };
     let mut root = root_box(shell, ctx, ds)
         .flex()
         .flex_row()
-        .child(div().w(px(spacer)).flex_none())
+        .child(
+            div()
+                .id((shell.id.clone(), "drawer-track"))
+                .layout_motion(layout)
+                .w(px(spacer))
+                .flex_none(),
+        )
         .child(cell);
     let backdrop = shell
         .scrim
         .take()
-        .filter(|_| t.scrim > 0.001)
+        .filter(|_| t.scrim.target() > 0. || t.scrim.moving(&timing))
         .map(|dismiss| {
             let open = shell.left_open || ctx.inspector_open;
-            parts::scrim(
-                (shell.id.clone(), "scrim"),
-                t.scrim,
-                open.then_some(dismiss),
-                ds,
+            t.scrim.apply(
+                div().absolute().size_full().child(parts::scrim(
+                    (shell.id.clone(), "scrim"),
+                    1.,
+                    open.then_some(dismiss),
+                    ds,
+                )),
+                &timing,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
             )
         });
     root = root.children(backdrop);
@@ -80,7 +117,13 @@ pub(super) fn root(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -> AnyEle
 /// The sidebar drawer: `left: 0`, translated out by its own width while closed.
 fn sidebar(shell: &mut AdaptiveShell, (ctx, ds): (&Ctx, &Ds), width: f32) -> Option<AnyElement> {
     let t = &ctx.t;
-    if !shell.left_open && t.left <= 0.001 && t.left_fade <= 0.001 {
+    let timing = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
+    );
+    let fade = Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseStandard);
+    if !shell.left_open && !t.left.moving(&timing) && !t.left_fade.moving(&fade) {
         return None;
     }
     let content = shell.sidebar.take()?;
@@ -113,12 +156,42 @@ fn drawer_panel(
         .overflow_hidden()
         .bg(ds.color(Color::AdaptivePanelBg))
         .child(content);
-    let el = if ctx.reduced { el.opacity(fade) } else { el };
-    let slide = if ctx.reduced { 0. } else { (1. - open) * width };
-    if right {
-        el.right(px(-slide))
+    let el = if right { el.right_0() } else { el.left_0() };
+    let timing = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
+    );
+    if ctx.reduced {
+        let timing = Timing::token(
+            ds,
+            if open.target() == 1. {
+                DsDuration::MotionFast
+            } else {
+                DsDuration::MotionExitFast
+            },
+            Easing::MotionEaseStandard,
+        );
+        fade.apply(
+            el,
+            &timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
+        )
     } else {
-        el.left(px(-slide))
+        open.apply(
+            el,
+            &timing,
+            &Props {
+                offset: Some((
+                    gpui::point(px(if right { width } else { -width }), px(0.)),
+                    gpui::point(px(0.), px(0.)),
+                )),
+                ..Default::default()
+            },
+        )
     }
 }
 
@@ -130,7 +203,13 @@ fn inspector(
     ds: &Ds,
 ) -> Vec<AnyElement> {
     let t = &ctx.t;
-    if !ctx.inspector_open && t.right <= 0.001 && t.right_fade <= 0.001 {
+    let timing = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
+    );
+    let fade = Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseStandard);
+    if !ctx.inspector_open && !t.right.moving(&timing) && !t.right_fade.moving(&fade) {
         return Vec::new();
     }
     let Some(inspector) = shell.inspector.take() else {
@@ -166,12 +245,11 @@ pub(super) fn docked_inspector(content: AnyElement, ctx: &Ctx, ds: &Ds) -> AnyEl
     } else {
         (ctx.right_w, ctx.inset, ctx.inset, ctx.inset)
     };
-    let slide = if reduced { 0. } else { (1. - t.right) * width };
     let el = div()
         .absolute()
         .top(px(top))
         .bottom(px(bottom))
-        .right(px(edge - slide))
+        .right(px(edge))
         .w(px(width))
         .overflow_hidden()
         .child(div().size_full().child(content));
@@ -182,9 +260,37 @@ pub(super) fn docked_inspector(content: AnyElement, ctx: &Ctx, ds: &Ds) -> AnyEl
         el
     };
     if reduced {
-        el.opacity(t.right_fade)
+        let fade = Timing::token(
+            ds,
+            if ctx.inspector_open {
+                DsDuration::MotionFast
+            } else {
+                DsDuration::MotionExitFast
+            },
+            Easing::MotionEaseStandard,
+        );
+        t.right_fade.apply(
+            el,
+            &fade,
+            &Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
+        )
     } else {
-        el
+        let timing = Timing::token(
+            ds,
+            DsDuration::AdaptivePanelDuration,
+            Easing::AdaptivePanelEasing,
+        );
+        t.right.apply(
+            el,
+            &timing,
+            &Props {
+                offset: Some((gpui::point(px(width), px(0.)), gpui::point(px(0.), px(0.)))),
+                ..Default::default()
+            },
+        )
     }
     .into_any_element()
 }

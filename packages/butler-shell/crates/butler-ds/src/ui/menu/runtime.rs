@@ -348,21 +348,14 @@ pub(super) fn pointer_move(
 
 fn schedule_open(rt: &Entity<Runtime>, row: Row, serial: u64, window: &mut Window, cx: &mut App) {
     let rt = rt.clone();
-    window
-        .spawn(cx, async move |cx| {
-            cx.background_executor().timer(OPEN_INTENT).await;
-            cx.update(|window, cx| {
-                rt.update(cx, |rt, cx| {
-                    if rt.pending == Some(serial) {
-                        rt.open_sub(row.lvl, row.idx, None, false);
-                        cx.notify();
-                    }
-                });
-                window.refresh();
-            })
-            .ok();
-        })
-        .detach();
+    crate::ui::motion::delay(window, cx, OPEN_INTENT, move |_, cx| {
+        rt.update(cx, |rt, cx| {
+            if rt.pending == Some(serial) {
+                rt.open_sub(row.lvl, row.idx, None, false);
+                cx.notify();
+            }
+        });
+    });
 }
 
 /// The pointer left a row: a submenu trigger cancels its open intent and sets the grace

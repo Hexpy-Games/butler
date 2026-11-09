@@ -49,7 +49,7 @@ pub(super) struct Metrics {
 impl Metrics {
     pub(super) fn new(root_width: f32, ds: &Ds, cx: &App) -> Self {
         let conversation = scope::conversation(cx);
-        let container = conversation.map_or(0., |vars| vars.width);
+        let container = conversation.as_ref().map_or(0., |vars| vars.width);
         let within = |limit: f32| container > 0. && container <= limit;
         let len = |token| f32::from(ds.len(token));
         let compact = within(COMPACT);
@@ -59,6 +59,7 @@ impl Metrics {
             root_width - 2. * len(Length::AdaptivePageGutter)
         } else {
             conversation
+                .as_ref()
                 .filter(|vars| vars.column_width > 0.)
                 .map_or(CONTENT_MAX.min(CONTENT_SHARE * root_width), |vars| {
                     vars.column_width

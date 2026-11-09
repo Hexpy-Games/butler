@@ -188,6 +188,8 @@ impl Metrics {
             .max(0.);
         let shift = self.keep_out / 2.;
         ConversationVars {
+            // The page has no conversation scroll whose motion this keys.
+            motion_id: None,
             composer_reserve: reserve,
             width,
             column_width: if width > 0. { column } else { 0. },

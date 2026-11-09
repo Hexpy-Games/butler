@@ -18,11 +18,12 @@ use butler_ds::ui::button::{Button, Variant};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Cross, Justify, Space, Stack};
+use butler_ds::ui::motion;
 use butler_ds::ui::spinner::Spinner;
 use butler_ds::ui::toast::{self, Toast};
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{
-    AnyElement, App, Context, IntoElement as _, ParentElement as _, Styled as _, Task, Window, div,
+    AnyElement, App, Context, IntoElement as _, ParentElement as _, Styled as _, Window, div,
 };
 
 use self::copy::words;
@@ -107,22 +108,18 @@ pub(crate) fn boot(
 /// The one-shot timer behind the quit card's slow hint.
 struct Slow {
     shown: bool,
-    _timer: Task<()>,
 }
 
 impl Slow {
-    fn new(cx: &mut Context<Self>) -> Self {
-        let timer = cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(SLOW_AFTER).await;
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let this = cx.weak_entity();
+        motion::delay(window, cx, SLOW_AFTER, move |_, cx| {
             let _ = this.update(cx, |slow, cx| {
                 slow.shown = true;
                 cx.notify();
             });
         });
-        Self {
-            shown: false,
-            _timer: timer,
-        }
+        Self { shown: false }
     }
 }
 
@@ -130,7 +127,7 @@ impl Slow {
 pub(crate) fn quit(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let words = words(lang);
     let slow = window
-        .use_keyed_state("quit-slow", cx, |_, cx| Slow::new(cx))
+        .use_keyed_state("quit-slow", cx, Slow::new)
         .read(cx)
         .shown;
     let mut card = Stack::new()

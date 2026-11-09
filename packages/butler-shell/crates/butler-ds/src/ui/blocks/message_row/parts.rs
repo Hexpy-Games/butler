@@ -1,20 +1,18 @@
 //! The parts of a message row (MessageRow.tsx, MessageBubble.tsx, MessageTurnGroup.tsx): the
 //! footer, the status row and its label (with the thinking shimmer), the bubble and the files
 //! under it, and the group of rows of one turn.
-use std::ops::Range;
 
 use gpui::{
-    AnyElement, App, HighlightStyle, IntoElement, ParentElement, RenderOnce, SharedString,
-    Styled as _, StyledText, Window, div, px, relative,
+    AnyElement, App, IntoElement, ParentElement, RenderOnce, SharedString, Styled as _, Window,
+    div, px, relative,
 };
 
 use super::MessageRow;
 use crate::tokens::{Color, Length, Number};
 use crate::ui::blocks::scope::{self, ActionScale, Spec};
 use crate::ui::context::Ds;
-use crate::ui::convert;
 use crate::ui::layout::{Space, Stack};
-use crate::ui::motion::Loop;
+use crate::ui::motion::{Loop, Timing, mounted_at};
 use crate::ui::typo::Role;
 
 /// The footer's icon actions keep a 26px row (`--icon-button-size`, DS: MessageRow.module.css:93).
@@ -192,15 +190,25 @@ impl MessageStatusLabel {
     }
 }
 
-/// The colour of the shimmer's text at fraction `x` of its width, `phase` (0 to 1) into a sweep:
-/// `linear-gradient(90deg, secondary 40%, primary 50%, secondary 60%)` on a 250% wide image whose
-/// position travels from 100% to 0%.
-fn sweep(x: f32, phase: f32, secondary: gpui::Hsla, primary: gpui::Hsla) -> gpui::Hsla {
-    let u = 0.6 * (1. - phase) + 0.4 * x;
-    let weight = (1. - (u - 0.5).abs() / 0.1).max(0.);
-    convert::mix(primary, secondary, weight)
+/// The original triangular character weight on a linear, wrapping motion clock.
+fn sweep(x: f32, start: u32, timing: &Timing) -> gpui::LayerMotion {
+    let at = |u: f32| (0.6 + 0.4 * x - u) / 0.6;
+    let points = [
+        (0., 0.),
+        (at(0.6), 0.),
+        (at(0.5), 1.),
+        (at(0.4), 0.),
+        (1., 0.),
+    ];
+    gpui::LayerMotion {
+        repeat: gpui::MotionRepeat::Loop,
+        opacity: (0., 1.),
+        easing: gpui::MotionEasing::linear(&points),
+        ..timing.motion(start)
+    }
 }
 
+/// The secondary text and character-clipped primary copies on the retained shimmer clock.
 fn shimmer_text(
     id: &gpui::ElementId,
     role: Role,
@@ -208,54 +216,75 @@ fn shimmer_text(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let tick = window.use_keyed_state((id.clone(), "shimmer"), cx, |_, cx| {
-        cx.background_executor().now()
-    });
-    let now = cx.background_executor().now();
-    let begun = *tick.read(cx);
+    let start = mounted_at((id.clone(), "shimmer"), window, cx);
     let ds = Ds::get(cx);
     let (secondary, primary) = (ds.color(Color::TextSecondary), ds.color(Color::TextPrimary));
-    let running = Loop::Decorative.runs(ds);
-    let period = ds.duration(crate::tokens::Duration::ShimmerDuration);
-    let spec = role.tokens();
-    let body = ds.body_font().clone();
-    let phase = if running {
-        window.request_animation_frame();
-        (now.saturating_duration_since(begun).as_secs_f32()
-            / period.as_secs_f32().max(f32::EPSILON))
-        .fract()
-    } else {
-        0.
+    let style = window.text_style();
+    let (size, line_height, weight) = match role.tokens() {
+        Some(spec) => (
+            ds.len(spec.size),
+            ds.len(spec.line_height),
+            gpui::FontWeight(ds.number(spec.weight)),
+        ),
+        None => (
+            style.font_size.to_pixels(window.rem_size()),
+            style.line_height_in_pixels(window.rem_size()),
+            style.font_weight,
+        ),
     };
-    let count = text.chars().count().max(1);
-    let highlights: Vec<(Range<usize>, HighlightStyle)> = text
-        .char_indices()
-        .enumerate()
-        .map(|(index, (at, c))| {
-            let x = (index as f32 + 0.5) / count as f32;
-            let color = if running {
-                sweep(x, phase, secondary, primary)
-            } else {
-                secondary
-            };
-            (
-                at..at + c.len_utf8(),
-                HighlightStyle {
-                    color: Some(color),
-                    ..HighlightStyle::default()
-                },
-            )
-        })
-        .collect();
-    let mut el = div().font_family(body).text_color(secondary);
-    if let Some(spec) = spec {
-        el = el
-            .text_size(ds.len(spec.size))
-            .line_height(ds.len(spec.line_height))
-            .font_weight(gpui::FontWeight(ds.number(spec.weight)));
+    let mut font = style.font();
+    font.family = ds.body_font().clone();
+    font.weight = weight;
+    let line = window.text_system().shape_line(
+        text.clone(),
+        size,
+        &[gpui::TextRun {
+            len: text.len(),
+            font: font.clone(),
+            color: primary,
+            letter_spacing: style.letter_spacing,
+            ..Default::default()
+        }],
+    );
+    let mut el = div()
+        .relative()
+        .font_family(font.family)
+        .font_weight(font.weight)
+        .text_size(size)
+        .line_height(line_height)
+        .text_color(secondary)
+        .child(div().child(text.clone()));
+    if Loop::Decorative.runs(ds) {
+        let mut overlay = div().absolute().top_0().left_0().size_full();
+        let timing = Timing::linear(ds.duration(crate::tokens::Duration::ShimmerDuration));
+        for (at, character) in text.char_indices() {
+            for bounds in line
+                .platform_layout
+                .selection_bounds(at..at + character.len_utf8(), line_height)
+            {
+                let (left, right) = (bounds.left(), bounds.right());
+                let x = f32::from((left + right) / 2.) / f32::from(line.width());
+                let copy = div()
+                    .absolute()
+                    .top_0()
+                    .left(left)
+                    .w(right - left)
+                    .h(line_height)
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .relative()
+                            .left(-left)
+                            .w(line.width())
+                            .text_color(primary)
+                            .child(text.clone()),
+                    );
+                overlay = overlay.child(copy.motion(sweep(x, start, &timing)));
+            }
+        }
+        el = el.child(overlay);
     }
-    el.child(StyledText::new(text.clone()).with_highlights(highlights))
-        .into_any_element()
+    el.into_any_element()
 }
 
 impl RenderOnce for MessageStatusLabel {

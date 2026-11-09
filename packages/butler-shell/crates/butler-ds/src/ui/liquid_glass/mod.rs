@@ -10,12 +10,12 @@ use gpui::{Bounds, Corners, Pixels, Window, px};
 
 pub use material::Place;
 use material::Settings;
-pub use presence::{presence, with_presence, without_presence};
+pub use presence::{Presence, presence, with_presence, without_presence};
 
 use crate::ui::context::Ds;
 
 /// How a native glass element sits and responds.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct LiquidGlass {
     pub place: Place,
     /// Added to the fill's brightness (hover, press).
@@ -24,7 +24,7 @@ pub struct LiquidGlass {
     pub grow: f32,
     /// 0..=1: how far the glass has materialized (LG research §5 Appear/disappear): the lens
     /// ramps from identity instead of the glass fading. 1 is the full material.
-    pub materialize: f32,
+    pub materialize: Presence,
     reduce_transparency: bool,
     increase_contrast: bool,
     reduce_motion: bool,
@@ -36,7 +36,7 @@ impl LiquidGlass {
             place: Place::Content,
             lift: 0.,
             grow: 0.,
-            materialize: 1.,
+            materialize: Presence::Static(1.),
             reduce_transparency: false,
             increase_contrast: false,
             reduce_motion: false,
@@ -48,7 +48,7 @@ impl LiquidGlass {
             place: Place::OnGlass,
             lift,
             grow,
-            materialize: 1.,
+            materialize: Presence::Static(1.),
             reduce_transparency: false,
             increase_contrast: false,
             reduce_motion: false,
@@ -57,7 +57,7 @@ impl LiquidGlass {
 
     /// How far the glass has materialized (an overlay's presence progress).
     pub fn materialize(mut self, progress: f32) -> Self {
-        self.materialize = progress;
+        self.materialize = Presence::Static(progress);
         self
     }
 
@@ -86,16 +86,58 @@ pub fn paint(
     let radii = radii.map(|r| px(r.as_f32().min(w / 2.).min(h / 2.)));
     let r = radii.max().as_f32();
     let circle = (w - h).abs() < 0.5 && r >= w / 2. - 0.5;
+    let presence = if glass.reduce_motion {
+        Presence::Static(1.)
+    } else {
+        glass.materialize
+    };
     let settings = Settings {
-        // Reduce Motion: instant, no animated lensing (LG research §6, §8.1.8).
-        materialize: if glass.reduce_motion {
-            1.
-        } else {
-            glass.materialize
+        materialize: match presence {
+            Presence::Static(t) => t,
+            Presence::Moving { to, .. } => to,
         },
         reduce_transparency: glass.reduce_transparency,
         increase_contrast: glass.increase_contrast,
     };
-    let m = material::material(dark, (w, h), circle, glass.place, settings);
-    material::paint(bounds, radii, &m, glass.lift, glass.grow, window);
+    let mut m = material::material(dark, (w, h), circle, glass.place, settings);
+    let appear = match presence {
+        Presence::Static(_) => None,
+        Presence::Moving {
+            from,
+            to,
+            start_ms,
+            timing,
+        } => {
+            let m_from = material::material(
+                dark,
+                (w, h),
+                circle,
+                glass.place,
+                Settings {
+                    materialize: from,
+                    ..settings
+                },
+            );
+            let maximum = from.max(to);
+            m.shadow = material::material(
+                dark,
+                (w, h),
+                circle,
+                glass.place,
+                Settings {
+                    materialize: maximum,
+                    ..settings
+                },
+            )
+            .shadow;
+            Some((
+                m_from,
+                gpui::LayerMotion {
+                    opacity: (from, to),
+                    ..timing.motion(start_ms)
+                },
+            ))
+        }
+    };
+    material::paint(bounds, radii, &m, glass.lift, glass.grow, appear, window);
 }

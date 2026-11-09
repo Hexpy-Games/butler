@@ -13,9 +13,8 @@ use gpui::{
 };
 
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
-use crate::ui::blocks::anim::ramp;
 use crate::ui::context::Ds;
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, Transition, transition};
 use crate::ui::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
 use crate::ui::typo::{Role, Tone, Typo, Weight};
 use crate::ui::{focus, strut};
@@ -202,8 +201,8 @@ fn hint_view(
 
 /// How visible the grabber and the hint are this frame, and whether a drag is under way.
 struct Shown {
-    grip: f32,
-    hint: f32,
+    grip: (Transition, Timing),
+    hint: (Transition, Timing),
     dragging: bool,
 }
 
@@ -227,14 +226,20 @@ impl ResizeHandle {
             .hover_since
             .is_some_and(|since| now.saturating_duration_since(since) >= delay);
         let hint_shown = live && !dragging && (hint_due || focused);
-        if state.hover_since.is_some() && !hint_due && !dragging {
-            window.request_animation_frame();
-        }
         let fast = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
         let enter = Timing::token(ds, DsDuration::MotionEnterMenu, Easing::MotionEaseEnter);
         let exit = Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseAccelerate);
         let level = |on: bool| f32::from(u8::from(on));
-        let grip = ramp(
+        let reduced = ds.reduced_motion();
+        let before =
+            window.use_keyed_state((self.id.clone(), "grip-target"), cx, |_, _| grip_shown);
+        if *before.read(cx) != grip_shown {
+            if !reduced {
+                window.animate_layout(fast.ms());
+            }
+            before.update(cx, |value, _| *value = grip_shown);
+        }
+        let grip = transition(
             (self.id.clone(), "grip"),
             (level(grip_shown), false),
             &fast,
@@ -242,7 +247,7 @@ impl ResizeHandle {
             cx,
         );
         let timing = if hint_shown { &enter } else { &exit };
-        let hint = ramp(
+        let hint = transition(
             (self.id.clone(), "hint"),
             (level(hint_shown), dragging),
             timing,
@@ -250,36 +255,51 @@ impl ResizeHandle {
             cx,
         );
         Shown {
-            grip,
-            hint,
+            grip: (grip, fast),
+            hint: (hint, *timing),
             dragging,
         }
     }
 }
 
 /// The 4x64 pill, centred on the divider; it scales up from 60% of its height as it shows.
-fn pill(shown: &Shown, ds: &Ds) -> gpui::Div {
+fn pill(id: ElementId, shown: &Shown, ds: &Ds) -> gpui::Stateful<gpui::Div> {
     let scale = if ds.reduced_motion() {
         1.
     } else {
-        GRIP_REST_SCALE + (1. - GRIP_REST_SCALE) * shown.grip
+        GRIP_REST_SCALE + (1. - GRIP_REST_SCALE) * shown.grip.0.target()
     };
     let color = if shown.dragging {
         Color::TextSecondary
     } else {
         Color::TextTertiary
     };
-    div()
-        .absolute()
-        .top(gpui::relative(0.5))
-        .left(gpui::relative(0.5))
-        .ml(px(-GRIP_WIDTH / 2.))
-        .mt(px(-GRIP_HEIGHT * scale / 2.))
-        .w(px(GRIP_WIDTH))
-        .h(px(GRIP_HEIGHT * scale))
-        .rounded(ds.len(Length::RadiusPill))
-        .bg(ds.color(color))
-        .opacity(shown.grip)
+    shown.grip.0.apply(
+        div()
+            .id((id, "pill"))
+            .layout_motion(gpui::LayoutMotion {
+                duration_ms: if ds.reduced_motion() {
+                    0
+                } else {
+                    shown.grip.1.ms()
+                },
+                easing: shown.grip.1.easing(),
+            })
+            .absolute()
+            .top(gpui::relative(0.5))
+            .left(gpui::relative(0.5))
+            .ml(px(-GRIP_WIDTH / 2.))
+            .mt(px(-GRIP_HEIGHT * scale / 2.))
+            .w(px(GRIP_WIDTH))
+            .h(px(GRIP_HEIGHT * scale))
+            .rounded(ds.len(Length::RadiusPill))
+            .bg(ds.color(color)),
+        &shown.grip.1,
+        &Props {
+            opacity: Some((0., 1.)),
+            ..Default::default()
+        },
+    )
 }
 
 impl RenderOnce for ResizeHandle {
@@ -296,13 +316,21 @@ impl RenderOnce for ResizeHandle {
         let hint = self
             .hint
             .clone()
-            .filter(|_| shown.hint > 0.001)
+            .filter(|_| shown.hint.0.target() > 0. || shown.hint.0.moving(&shown.hint.1))
             .map(|hint| {
-                div()
-                    .absolute()
-                    .size_full()
-                    .opacity(shown.hint)
-                    .child(hint_view(self.label.clone(), hint, self.hint_side, ds))
+                shown.hint.0.apply(
+                    div().absolute().size_full().child(hint_view(
+                        self.label.clone(),
+                        hint,
+                        self.hint_side,
+                        ds,
+                    )),
+                    &shown.hint.1,
+                    &Props {
+                        opacity: Some((0., 1.)),
+                        ..Default::default()
+                    },
+                )
             });
         let (hover, bounds_state) = (pointer.clone(), pointer);
         let (on_drag, on_key) = (self.on_drag.clone(), self.on_key.clone());
@@ -322,9 +350,13 @@ impl RenderOnce for ResizeHandle {
                 hover.update(cx, |state, _| {
                     state.hover_since = on.then(|| state.hover_since.unwrap_or(now));
                 });
+                if *on {
+                    let after = hint_delay(Ds::get(cx));
+                    crate::ui::motion::wake_after(window, cx, after);
+                }
                 window.refresh();
             })
-            .child(pill(&shown, ds))
+            .child(pill(self.id.clone(), &shown, ds))
             .children(hint);
         if live && on_key.is_some() {
             el = el.track_focus(&tracked);

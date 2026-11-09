@@ -2,6 +2,7 @@
 //! queued bubble alone and in a list, long text and a long unbroken token, send now and delivery
 //! (the bubble resolving into the sent one), editing (the text moves back into the composer) and a
 //! failed send. The Send flight story needs the app's send-flight motion and is not mirrored.
+use butler_ds::ui::motion;
 use std::time::{Duration, Instant};
 
 use butler_ds::ui::blocks::composer_card::{
@@ -260,8 +261,8 @@ fn transition(lang: Lang, send_now: bool, window: &mut Window, cx: &mut App) -> 
     };
     let elapsed = from.map(|at| now.saturating_duration_since(at));
     let delivered = elapsed.is_some_and(|elapsed| elapsed >= after);
-    if elapsed.is_some() && !delivered {
-        window.request_animation_frame();
+    if let Some(elapsed) = elapsed.filter(|_| !delivered) {
+        motion::wake_after(window, cx, after.saturating_sub(elapsed));
     }
     let sending = send_now && from.is_some() && !delivered;
     let row = if delivered {

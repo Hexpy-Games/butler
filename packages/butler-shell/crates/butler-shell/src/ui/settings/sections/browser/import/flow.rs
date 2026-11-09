@@ -193,7 +193,7 @@ impl ImportDialog {
 
     fn poll_later(id: String, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_secs(1)).await;
+            butler_ds::ui::motion::sleep(cx.background_executor(), Duration::from_secs(1)).await;
             let _ = this.update(cx, |this, cx| {
                 if this.export_id.as_deref() == Some(id.as_str()) {
                     Self::poll(id, cx);

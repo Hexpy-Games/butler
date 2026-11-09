@@ -120,7 +120,7 @@ impl KeyForm {
         let key = text.trim().to_owned();
         if key.chars().count() >= MIN_KEY_LENGTH {
             self.debounce = Some(cx.spawn(async move |this, cx| {
-                cx.background_executor().timer(VERIFY_DEBOUNCE).await;
+                butler_ds::ui::motion::sleep(cx.background_executor(), VERIFY_DEBOUNCE).await;
                 let _ = this.update(cx, |this, cx| this.check(id, &key, cx));
             }));
         }

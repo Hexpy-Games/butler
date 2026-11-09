@@ -16,6 +16,7 @@ use gpui::{
 use super::context::Ds;
 use super::convert;
 use super::focus;
+use super::motion::{Props, Timing, Transition, transition};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Number};
 
 pub(crate) type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -48,6 +49,7 @@ pub struct Control {
     /// The inline start / end corners are square (the halves of a joined button group).
     pub(crate) square: [bool; 2],
     pub(crate) fill: Blend,
+    pub(crate) tone: Option<(Transition, Timing, Blend, Blend)>,
     pub(crate) fg: Blend,
     /// Border width and colours.
     pub(crate) border: Option<(Pixels, Blend)>,
@@ -94,6 +96,7 @@ impl Control {
             radius: px(0.),
             square: [false; 2],
             fill: Blend::flat(none),
+            tone: None,
             fg: Blend::flat(ds.color(Color::TextPrimary)),
             border: None,
             shadows: Vec::new(),
@@ -135,30 +138,35 @@ impl RenderOnce for Control {
                     .clone()
             })
         });
-        let now = cx.background_executor().now();
-        let (duration, ease) = {
-            let ds = Ds::get(cx);
-            (
-                ds.duration(DsDuration::MotionFast),
-                convert::easing(ds.tokens().ease(Easing::MotionEaseStandard)),
-            )
-        };
-        let (instant, press_in) = {
-            let ds = Ds::get(cx);
-            (
-                ds.duration(DsDuration::MotionInstant),
-                1. - ds.number(Number::MotionScalePress),
-            )
-        };
-        let (hover, moving, pressed, press) = state.update(cx, |s, _| {
-            let (hover, moving) = s.sample(now, duration, &ease);
-            let into = if s.pressed { instant } else { duration };
-            let (press, pressing) = s.press.sample(now, into, &ease);
-            (hover, moving || pressing, s.pressed, press)
-        });
-        if moving {
-            window.request_animation_frame();
-        }
+        let (foreground, hover, pressed, hovered) = self.fg_color(&state, window, cx);
+        let ds = Ds::get(cx);
+        let live = !self.disabled.is_on();
+        let fade = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
+        let hover_motion = transition(
+            (self.id.clone(), "hover-fill"),
+            (f32::from(live && hovered), false),
+            &fade,
+            window,
+            cx,
+        );
+        let ds = Ds::get(cx);
+        let press_timing = Timing::token(
+            ds,
+            if pressed {
+                DsDuration::MotionInstant
+            } else {
+                DsDuration::MotionFast
+            },
+            Easing::MotionEaseStandard,
+        );
+        let press_in = 1. - ds.number(Number::MotionScalePress);
+        let press = transition(
+            (self.id.clone(), "press"),
+            (f32::from(live && pressed), pressed),
+            &press_timing,
+            window,
+            cx,
+        );
         let shrink = super::strut::shrink_wrap(cx);
         if self.debug.is_none() {
             self.debug = Some(next_anchor(cx, handle.as_ref()));
@@ -166,11 +174,7 @@ impl RenderOnce for Control {
         let handed_off = focus::ring_handed_off(cx);
         let ds = Ds::get(cx);
         let live = !self.disabled.is_on();
-        let (hover, pressed, press) = if live {
-            (hover, pressed, press)
-        } else {
-            (0., false, 0.)
-        };
+        let (hover, pressed) = if live { (hover, pressed) } else { (0., false) };
         let focused = handle
             .as_ref()
             .is_some_and(|h| focus::visible(ds, h.is_focused(window), false));
@@ -180,16 +184,22 @@ impl RenderOnce for Control {
             .map(|h| (h.clone(), self.ring_reach(ds)));
         // A scroller that cannot show the ring whole draws it itself.
         let focused = focused && !handed_off;
-        let mut el = self.frame(ds, hover, pressed, shrink);
-        if self.scale && press > 0. {
-            // DS: Button.module.css:47 `scale: var(--motion-scale-press)`.
-            el = el.scale(1. - press_in * press);
+        let mut el = self.frame(ds, hover, foreground, shrink);
+        if self.scale {
+            el = press.apply(
+                el,
+                &press_timing,
+                &Props {
+                    scale: Some((1., 1. - press_in)),
+                    ..Default::default()
+                },
+            );
         }
         if let Some(outer) = self.outer.take() {
             el = outer(el);
         }
         let el = self.interact(el, &state, handle.as_ref(), live);
-        let el = self.finish(el, hover, pressed, focused, ds);
+        let el = self.finish(el, (hover_motion, fade), pressed, focused, ds);
         let el = match publish {
             Some((handle, reach)) => el.child(focus::publish(handle, reach)),
             None => el,
@@ -211,7 +221,7 @@ impl Control {
     }
 
     /// The outer box: size, padding, text style and the pointer cursor.
-    fn frame(&self, ds: &Ds, hover: f32, pressed: bool, shrink: bool) -> gpui::Stateful<Div> {
+    fn frame(&self, ds: &Ds, hover: f32, foreground: Hsla, shrink: bool) -> gpui::Stateful<Div> {
         let mut el = div()
             .id(self.id.clone())
             .relative()
@@ -225,7 +235,7 @@ impl Control {
             .text_size(self.text_size)
             .font_family(ds.body_font().clone())
             .font_weight(gpui::FontWeight(self.weight))
-            .text_color(self.fg_color(ds, hover, pressed));
+            .text_color(foreground);
         if let Some(line) = self.line_height {
             el = el.line_height(line);
         }
@@ -257,14 +267,46 @@ impl Control {
         if let Some(min) = self.min_height {
             el = el.min_h(min);
         }
+        if let (true, DisabledLook::Opacity(opacity)) = (self.disabled.is_on(), self.disabled_look)
+        {
+            el = el.opacity(opacity);
+        }
+        if let Some(name) = self.debug.clone() {
+            el = el.debug_selector(move || name.to_string());
+        }
         el
     }
 
-    fn fg_color(&self, ds: &Ds, hover: f32, pressed: bool) -> Hsla {
-        match (self.disabled.is_on(), self.disabled_look) {
-            (true, DisabledLook::Text) => ds.color(Color::InteractiveDisabledFg),
-            _ => self.fg.at(hover, pressed),
+    fn fg_color(
+        &self,
+        state: &gpui::Entity<State>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (Hsla, f32, bool, bool) {
+        let now = cx.background_executor().now();
+        let (duration, ease) = {
+            let ds = Ds::get(cx);
+            (
+                ds.duration(DsDuration::MotionFast),
+                convert::easing(ds.tokens().ease(Easing::MotionEaseStandard)),
+            )
+        };
+        let (hover, moving, pressed, hovered) = state.update(cx, |s, _| {
+            let (hover, moving) = s.sample(now, duration, &ease);
+            (hover, moving, s.pressed, s.hovered)
+        });
+        if moving {
+            // The foreground is arbitrary children; it re-renders for the fade's duration only.
+            crate::ui::motion::input_frame(window);
         }
+        let ds = Ds::get(cx);
+        let color = match (self.disabled.is_on(), self.disabled_look) {
+            (true, DisabledLook::Text) => ds.color(Color::InteractiveDisabledFg),
+            _ => self
+                .fg
+                .at(if self.disabled.is_on() { 0. } else { hover }, pressed),
+        };
+        (color, hover, pressed, hovered)
     }
 
     /// Cursor, focus, hover and press tracking, and the click gate.
@@ -334,7 +376,7 @@ impl Control {
     fn finish(
         &mut self,
         el: gpui::Stateful<Div>,
-        hover: f32,
+        (hover, timing): (Transition, Timing),
         pressed: bool,
         focused: bool,
         ds: &Ds,
@@ -345,21 +387,53 @@ impl Control {
         } else {
             surface.top_0().bottom_0()
         };
-        let mut surface = surface
-            .left_0()
-            .right_0()
-            .rounded(self.radius)
-            .bg(self.fill.at(hover, pressed));
+        let base = (None, self.fill, self.border);
+        let tone = self.tone.map(|(value, time, fill, border)| {
+            (
+                Some((value, time)),
+                fill,
+                self.border.map(|(width, _)| (width, border)),
+            )
+        });
+        let opacity = Props {
+            opacity: Some((0., 1.)),
+            ..Default::default()
+        };
+        for (selection, fill, border) in std::iter::once(base).chain(tone) {
+            let mut group = div().absolute().top_0().left_0().size_full();
+            for (value, fade) in [(0., None), (1., Some(hover))] {
+                let mut layer = div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .rounded(self.radius)
+                    .bg(fill.at(value, pressed));
+                if self.square[0] {
+                    layer = layer.rounded_tl(px(0.)).rounded_bl(px(0.));
+                }
+                if self.square[1] {
+                    layer = layer.rounded_tr(px(0.)).rounded_br(px(0.));
+                }
+                if let Some((width, colors)) = border {
+                    layer = layer.border(width).border_color(colors.at(value, pressed));
+                }
+                if let Some(fade) = fade {
+                    layer = fade.apply(layer, &timing, &opacity);
+                }
+                group = group.child(layer);
+            }
+            if let Some((value, time)) = selection {
+                group = value.apply(group, &time, &opacity);
+            }
+            surface = surface.child(group);
+        }
+        let mut surface = surface.left_0().right_0().rounded(self.radius);
         if self.square[0] {
             surface = surface.rounded_tl(px(0.)).rounded_bl(px(0.));
         }
         if self.square[1] {
             surface = surface.rounded_tr(px(0.)).rounded_br(px(0.));
-        }
-        if let Some((width, colors)) = self.border {
-            surface = surface
-                .border(width)
-                .border_color(colors.at(hover, pressed));
         }
         let shadows = self.shadows.clone();
         if focused {
@@ -376,15 +450,7 @@ impl Control {
         if !shadows.is_empty() {
             surface = surface.shadow(shadows);
         }
-        let mut el = el.child(surface.children(std::mem::take(&mut self.overlay)));
-        if let (true, DisabledLook::Opacity(opacity)) = (self.disabled.is_on(), self.disabled_look)
-        {
-            el = el.opacity(opacity);
-        }
-        if let Some(name) = self.debug.take() {
-            el = el.debug_selector(move || name.to_string());
-        }
-        el
+        el.child(surface.children(std::mem::take(&mut self.overlay)))
     }
 }
 

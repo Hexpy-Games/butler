@@ -3,7 +3,6 @@
 //! Window-level facts (the window size, the platform, fullscreen) come in as inputs, so the app
 //! wires them in one place.
 pub mod adaptive_shell;
-pub mod anim;
 pub mod artifact_list;
 pub mod artifact_preview;
 pub mod attachment_list;

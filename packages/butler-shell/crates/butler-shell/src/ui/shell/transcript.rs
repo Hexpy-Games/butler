@@ -70,7 +70,7 @@ impl Shell {
                 if !matches!(retry, Ok(true)) {
                     return;
                 }
-                cx.background_executor().timer(SETTINGS_RETRY).await;
+                butler_ds::ui::motion::sleep(cx.background_executor(), SETTINGS_RETRY).await;
             }
         }));
     }

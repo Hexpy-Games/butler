@@ -1,6 +1,7 @@
 //! The row's long press and context menu share the same controlled menu state.
 use super::Shell;
 use butler_ds::ui::blocks::sidebar_shell::ScrollSlot;
+use butler_ds::ui::motion;
 use gpui::{
     AnyElement, Bounds, Context, Div, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels,
     ScrollHandle, Stateful, WeakEntity, canvas, div, point, prelude::*, px,
@@ -46,7 +47,7 @@ pub(super) fn reveal_row(
             window.defer(cx, move |_, cx| {
                 let _ = shell.update(cx, |s, _| s.sidebar.reveal_scroll = None);
             });
-            window.request_animation_frame();
+            motion::remeasure(window);
         },
     )
     .absolute()
@@ -117,9 +118,11 @@ impl Shell {
         self.sidebar.long_press_key = Some(instance.clone());
         self.sidebar.long_press_origin = Some(origin);
         self.sidebar.long_press_task = Some(cx.spawn(async move |weak, cx| {
-            cx.background_executor()
-                .timer(std::time::Duration::from_millis(500))
-                .await;
+            motion::sleep(
+                cx.background_executor(),
+                std::time::Duration::from_millis(500),
+            )
+            .await;
             let _ = weak.update(cx, |s, cx| {
                 if s.sidebar.long_press_key.as_ref() == Some(&instance) && !cx.has_active_drag() {
                     s.sidebar.cancel_long_press();

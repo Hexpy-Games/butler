@@ -251,7 +251,7 @@ fn advance(
     }
     if shared.tracker.borrow().waiting() {
         shared.tracker.borrow_mut().poll(Instant::now());
-        window.request_animation_frame();
+        crate::ui::motion::input_frame(window);
     }
     let (Some(handle), Some(y)) = (scroll, shared.pointer_y.get()) else {
         return None;
@@ -262,7 +262,7 @@ fn advance(
     let edge = auto_scroll::tick(handle, handle.bounds(), y);
     shared.edge.set(edge);
     if edge.is_some() {
-        window.request_animation_frame();
+        crate::ui::motion::input_frame(window);
     }
     edge
 }

@@ -23,7 +23,8 @@ use std::time::{Duration, Instant};
 use butler_ds::ui::blocks::message_row::Entering;
 use butler_ds::ui::context::Ds;
 use gpui::{
-    App, Context, Global, InteractiveElement as _, IntoElement, Render, Styled as _, Window, div,
+    App, Context, Entity, Global, InteractiveElement as _, IntoElement, Render, Styled as _,
+    Window, div,
 };
 
 use self::assistant::FooterMeta;
@@ -55,6 +56,7 @@ pub(crate) struct TranscriptCtx<'a> {
     pub(crate) footer_meta: Rc<HashMap<String, FooterMeta>>,
     /// The message whose body is rendering.
     pub(crate) message_id: Option<&'a str>,
+    pub(crate) status_line: Option<Entity<activity::status::StatusLineView>>,
 }
 
 /// Sends a text as a message.
@@ -100,6 +102,7 @@ impl<'a> TranscriptCtx<'a> {
             entering,
             footer_meta,
             message_id: None,
+            status_line: None,
         }
     }
 }

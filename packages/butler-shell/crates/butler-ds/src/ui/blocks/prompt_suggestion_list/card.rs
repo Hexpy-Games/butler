@@ -15,11 +15,10 @@ use super::metrics::Metrics;
 use super::text::{Face, run};
 use super::{LIFT, PromptSuggestionItem};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
-use crate::ui::blocks::anim::ramp;
 use crate::ui::blocks::measure;
 use crate::ui::context::Ds;
 use crate::ui::control::{Control, Disabled, DisabledLook, Width};
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, Transition, transition};
 use crate::ui::typo::{Tone, Typo};
 use crate::ui::{convert, focus};
 
@@ -132,7 +131,12 @@ fn focus_visible(card: &Card, window: &mut Window, cx: &mut App) -> bool {
 }
 
 /// The glass state eased over `--motion-base`: `(tone, lift)`, and whether the glass is bright.
-fn motion(card: &Card, pointer: Pointer, window: &mut Window, cx: &mut App) -> (f32, f32, bool) {
+fn motion(
+    card: &Card,
+    pointer: Pointer,
+    window: &mut Window,
+    cx: &mut App,
+) -> (Transition, Transition, bool) {
     let bright = !card.item.disabled && (pointer.over || focus_visible(card, window, cx));
     let (timing, reduced) = {
         let ds = Ds::get(cx);
@@ -143,14 +147,14 @@ fn motion(card: &Card, pointer: Pointer, window: &mut Window, cx: &mut App) -> (
     };
     // Reduced motion draws no lift (`.itemFrame:hover { transform: none }`).
     let lifted = bright && !pointer.down && !reduced;
-    let tone = ramp(
+    let tone = transition(
         (card.id.clone(), "tone"),
         (f32::from(u8::from(bright)), reduced),
         &timing,
         window,
         cx,
     );
-    let lift = ramp(
+    let lift = transition(
         (card.id.clone(), "lift"),
         (f32::from(u8::from(lifted)), reduced),
         &timing,
@@ -174,7 +178,8 @@ pub(super) fn render(
     let (tone, lift, bright) = motion(card, seen, window, cx);
     let card_width = width(card, m, window, cx);
     let ds = Ds::get(cx);
-    let lift_px = LIFT * lift;
+    let lift_px = LIFT * lift.target();
+    let timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
     let set = |change: fn(&mut Pointer)| {
         let pointer = pointer.clone();
         move |cx: &mut App| {
@@ -191,21 +196,27 @@ pub(super) fn render(
         set(|p| *p = Pointer::default()),
     );
     let up_out = up.clone();
-    div()
-        .id((card.id.clone(), "frame"))
-        .relative()
-        .flex()
-        .flex_col()
-        .flex_none()
-        .w(px(card_width))
-        .p(ds.len(Length::BorderHairline))
-        .top(px(-lift_px))
-        .on_hover(move |on, _, cx| if *on { over(cx) } else { leave(cx) })
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| down(cx))
-        .on_mouse_up(MouseButton::Left, move |_, _, cx| up(cx))
-        .on_mouse_up_out(MouseButton::Left, move |_, _, cx| up_out(cx))
-        .child(glass::layer(ds, bright, tone))
-        .child(button(card, ds, cx))
-        .children(recording.map(|recording| recording.record(Slot::Card(lift_px))))
-        .into_any_element()
+    lift.apply(
+        div()
+            .id((card.id.clone(), "frame"))
+            .relative()
+            .flex()
+            .flex_col()
+            .flex_none()
+            .w(px(card_width))
+            .p(ds.len(Length::BorderHairline))
+            .on_hover(move |on, _, cx| if *on { over(cx) } else { leave(cx) })
+            .on_mouse_down(MouseButton::Left, move |_, _, cx| down(cx))
+            .on_mouse_up(MouseButton::Left, move |_, _, cx| up(cx))
+            .on_mouse_up_out(MouseButton::Left, move |_, _, cx| up_out(cx))
+            .child(glass::layer(ds, bright, tone.target()))
+            .child(button(card, ds, cx))
+            .children(recording.map(|recording| recording.record(Slot::Card(lift_px)))),
+        &timing,
+        &Props {
+            offset: Some((gpui::point(px(0.), px(0.)), gpui::point(px(0.), px(-LIFT)))),
+            ..Default::default()
+        },
+    )
+    .into_any_element()
 }

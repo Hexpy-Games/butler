@@ -78,13 +78,9 @@ impl Lifecycle {
         });
         if started_exit {
             let entity = state.clone();
-            window
-                .spawn(cx, async move |cx| {
-                    cx.background_executor().timer(exit).await;
-                    cx.update(|_, cx| entity.update(cx, |_, cx| cx.notify()))
-                        .ok();
-                })
-                .detach();
+            crate::ui::motion::delay(window, cx, exit, move |_, cx| {
+                entity.update(cx, |_, cx| cx.notify());
+            });
         }
         synced
     }

@@ -3,32 +3,34 @@
 use std::time::Instant;
 
 use gpui::{
-    AnyElement, App, InteractiveElement as _, IntoElement as _, MouseMoveEvent, MouseUpEvent,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, Window, canvas, div, px,
+    AnyElement, App, AppContext as _, InteractiveElement as _, IntoElement as _, MouseMoveEvent,
+    MouseUpEvent, ParentElement as _, StatefulInteractiveElement as _, Styled as _, Window, canvas,
+    div, px,
 };
 
 use super::layout::{self, Frame, VISIBLE};
 use super::{Store, view};
+use crate::tokens::{Duration as DsDuration, Easing};
 use crate::ui::context::Ds;
+use crate::ui::motion::Timing;
 
 /// The stack's toasts and their pointer handling, `width` wide and as tall as what is visible.
 pub(super) fn build(
     store: &Store,
     width: f32,
     now: Instant,
-    ds: &Ds,
     window: &mut Window,
+    cx: &mut App,
 ) -> AnyElement {
     let mut state = store.0.borrow_mut();
-    let offsets = state.offsets();
-    let expanded = state.expanded;
+    let (offsets, expanded) = (state.offsets(), state.expanded);
     let front_height = state
         .items
         .iter()
         .find(|item| item.removed_at.is_none())
         .map_or(0., |item| item.height.get());
     let place = view::Place { left: 0., width };
-    let (mut busy, mut extent, mut visible) = (false, 0_f32, 0_usize);
+    let (mut extent, mut visible) = (0_f32, 0_usize);
     let mut toasts = Vec::new();
     for (index, item) in state.items.iter_mut().enumerate() {
         let frame = Frame {
@@ -37,15 +39,14 @@ pub(super) fn build(
             offset: offsets[index],
             expanded,
         };
-        let resolved = layout::resolve(item, &frame, ds, now);
-        let shown = item.removed_at.is_none() && index < VISIBLE;
-        if shown {
+        let resolved = layout::resolve(item, &frame, window, cx);
+        let ds = Ds::get(cx);
+        if item.removed_at.is_none() && index < VISIBLE {
             visible += 1;
-            let bottom = resolved.y + resolved.height * (1. + resolved.scale) / 2.;
+            let bottom =
+                resolved.y.target() + resolved.height * (1. + resolved.scale.target()) / 2.;
             extent = extent.max(bottom);
         }
-        let loading = item.toast.kind == super::Kind::Loading && !ds.reduced_motion();
-        busy |= resolved.moving || item.height.get() <= 0. || loading;
         let born = *item.born.get_or_insert(now);
         toasts.push(view::render(
             item,
@@ -61,12 +62,15 @@ pub(super) fn build(
     toasts.reverse();
     let mounted = state.items.len();
     drop(state);
-    if busy {
-        window.request_animation_frame();
-    }
+    let ds = Ds::get(cx);
+    let timing = Timing::token(ds, DsDuration::MotionEnterOverlay, Easing::MotionEaseEnter);
     let hover = store.clone();
-    let region = div()
+    div()
         .id("toaster")
+        .layout_motion(gpui::LayoutMotion {
+            duration_ms: timing.ms(),
+            easing: timing.easing(),
+        })
         .relative()
         .w(px(width))
         .h(px(extent))
@@ -83,8 +87,8 @@ pub(super) fn build(
         .debug_selector(|| "toaster".to_owned())
         .children(toasts)
         .child(markers(mounted, visible, expanded))
-        .child(pointer(store.clone()));
-    region.into_any_element()
+        .child(pointer(store.clone()))
+        .into_any_element()
 }
 
 /// Zero-size markers the live harness can look for (`expect anchor toasts:3`).
@@ -137,13 +141,14 @@ pub(super) fn schedule(store: &Store, now: Instant, window: &mut Window, cx: &mu
         state.wake = Some(next);
         (next.saturating_duration_since(now), store.clone())
     };
-    window
-        .spawn(cx, async move |cx| {
-            cx.background_executor()
-                .timer(delay + std::time::Duration::from_millis(1))
-                .await;
+    let view = window.current_view();
+    crate::ui::motion::delay(
+        window,
+        cx,
+        delay + std::time::Duration::from_millis(1),
+        move |_, cx| {
             store.0.borrow_mut().wake = None;
-            cx.update(|window, _| window.refresh()).ok();
-        })
-        .detach();
+            cx.notify(view);
+        },
+    );
 }

@@ -50,6 +50,8 @@ pub struct ShellVars {
 /// the split, the title row's chat group and the content under them move on one motion.
 #[derive(Clone, Copy, Debug)]
 pub struct SplitMotion {
+    pub motion: Option<crate::ui::motion::Transition>,
+    pub fade_motion: Option<crate::ui::motion::Transition>,
     pub progress: f32,
     /// The motion is a fade (reduced motion): geometry is placed at once.
     pub fade: f32,
@@ -58,8 +60,9 @@ pub struct SplitMotion {
 }
 
 /// What a ConversationShell tells the scroll, message list and jump button inside it.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ConversationVars {
+    pub motion_id: Option<ElementId>,
     /// `--composer-reserve`: the room kept under the messages for the composer.
     pub composer_reserve: f32,
     /// The conversation's width, once measured (0 before): the column's maths read it.
@@ -81,7 +84,7 @@ impl gpui::Global for Conversations {}
 /// The enclosing conversation's layout facts, if the caller is inside one.
 pub fn conversation(cx: &App) -> Option<ConversationVars> {
     cx.try_global::<Conversations>()
-        .and_then(|scopes| scopes.0.last().copied())
+        .and_then(|scopes| scopes.0.last().cloned())
 }
 
 #[derive(Default)]
@@ -329,8 +332,8 @@ fn push_globals(spec: &Spec, cx: &mut App) {
     if spec.density.is_some() {
         cx.default_global::<Densities>().0 += 1;
     }
-    if let Some(vars) = spec.conversation {
-        cx.default_global::<Conversations>().0.push(vars);
+    if let Some(vars) = &spec.conversation {
+        cx.default_global::<Conversations>().0.push(vars.clone());
     }
     if let Some(scale) = spec.action {
         cx.default_global::<Scales>().0.push(scale);

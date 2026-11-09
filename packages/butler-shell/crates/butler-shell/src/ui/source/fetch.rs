@@ -112,9 +112,10 @@ impl Flight {
 /// poll re-renders only through [`fetch_if`] when its answer changed.
 // It becomes `butler_ds::ui::motion::sleep` when gpui-perf's branch lands (its source-check
 // bans `background_executor().timer` outside the motion module).
-#[allow(dead_code, reason = "seam API: the P4 polls use it; F6 removes this")]
 pub(crate) fn sleep(cx: &AsyncApp, duration: Duration) -> Task<()> {
-    cx.background_executor().timer(duration)
+    let executor = cx.background_executor().clone();
+    let timer = executor.clone();
+    executor.spawn(async move { butler_ds::ui::motion::sleep(&timer, duration).await })
 }
 
 /// Runs `tick` on the page every `period` until the page or the returned task is dropped

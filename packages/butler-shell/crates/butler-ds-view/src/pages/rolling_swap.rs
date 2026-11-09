@@ -1,4 +1,5 @@
-//! RollingSwap.showcase.tsx. The live ticker advances every 1600 ms on the frame clock.
+//! RollingSwap.showcase.tsx. The live ticker advances every 1600 ms with a sleeping ticker.
+use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_ds::ui::button::{Button, Size, Variant};
@@ -55,16 +56,16 @@ fn ticker(lang: Lang, auto: bool, window: &mut Window, cx: &mut App) -> AnyEleme
             .background_executor()
             .now()
             .saturating_duration_since(*started.read(cx));
-        let remainder = Duration::from_nanos(
-            u64::try_from(elapsed.as_nanos() % TICK.as_nanos()).unwrap_or_default(),
-        );
-        let next = TICK.saturating_sub(remainder);
-        window
-            .spawn(cx, async move |cx| {
-                cx.background_executor().timer(next).await;
-                cx.update(|window, _| window.refresh()).ok();
+        window.use_keyed_state(format!("{id}-ticker"), cx, |_, cx| {
+            cx.spawn(async move |this, cx| {
+                loop {
+                    motion::sleep(cx.background_executor(), TICK).await;
+                    if this.update(cx, |_, cx| cx.notify()).is_err() {
+                        return;
+                    }
+                }
             })
-            .detach();
+        });
         (elapsed.as_millis() / TICK.as_millis()) as usize % list.len()
     } else {
         *step.read(cx)

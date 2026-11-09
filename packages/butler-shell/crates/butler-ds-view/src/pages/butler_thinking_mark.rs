@@ -1,4 +1,5 @@
 //! ButlerThinkingMark.showcase.tsx. LoadingIndicator is a stand-in (`standins.rs`).
+use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_ds::ui::button::{Button, Size, Variant, container};
@@ -128,8 +129,14 @@ fn idle_to_working(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement 
     let held = trip
         .read(cx)
         .is_some_and(|since| now.saturating_duration_since(since) < ROUND_TRIP_HOLD);
-    if held {
-        window.request_animation_frame();
+    if let Some(since) = *trip.read(cx)
+        && held
+    {
+        motion::wake_after(
+            window,
+            cx,
+            ROUND_TRIP_HOLD.saturating_sub(now.saturating_duration_since(since)),
+        );
     }
     let on = *working.read(cx) || held;
     let state = if on {

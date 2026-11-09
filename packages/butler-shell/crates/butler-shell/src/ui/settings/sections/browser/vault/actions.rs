@@ -1,6 +1,7 @@
 //! The loads and the actions of `useSignIns` and `useVault`: one action runs at a time (`busy`),
 //! shows its toast, reloads, and a failure shows React's fallback copy (the client returns no
 //! error codes).
+use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_ds::ui::context::{Ds, Lang};
@@ -380,7 +381,7 @@ impl BrowserVault {
 
     fn forget_later(key: SharedString, epoch: u64, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(REVEAL).await;
+            motion::sleep(cx.background_executor(), REVEAL).await;
             let _ = this.update(cx, |this, cx| {
                 if this
                     .revealed

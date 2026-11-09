@@ -11,8 +11,9 @@ use gpui::{
 };
 
 use super::context::Ds;
-use super::control::{Blend, Control, Disabled, DisabledLook, Glide, Width};
+use super::control::{Blend, Control, Disabled, DisabledLook, Width};
 use super::convert;
+use super::motion::{Props, Timing, Transition, transition};
 use super::tooltip::{Align, Side, Tooltip};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Shadow};
 
@@ -141,7 +142,7 @@ impl RenderOnce for Switch {
             move |_, _| initial
         });
         let checked = self.checked.unwrap_or_else(|| *own.read(cx));
-        let t = self.thumb_position(checked, window, cx);
+        let (t, timing) = self.thumb_position(checked, window, cx);
         let blocked = self.reason.is_some();
         let ds = Ds::get(cx);
         let geometry = self.size.geometry();
@@ -164,7 +165,7 @@ impl RenderOnce for Switch {
         };
         control.disabled_look = DisabledLook::Opacity(0.5); // DS: Switch.module.css:31
         control.not_allowed = true;
-        control.children = vec![thumb(ds, &geometry, t)];
+        control.children = vec![thumb(ds, &geometry, t, &timing)];
         let toggle = toggle(own, checked, self.checked.is_some(), self.on_change.clone());
         // Touch and phone: an invisible box grows the hit area to `--control-hit-target`.
         let live = !control.disabled.is_on();
@@ -193,44 +194,50 @@ impl RenderOnce for Switch {
 impl Switch {
     /// The thumb's place along its travel, 0 to 1: it glides over `--motion-base` on the spring
     /// curve toward the value, and sits at once under reduced motion.
-    fn thumb_position(&self, checked: bool, window: &mut Window, cx: &mut App) -> f32 {
-        let glide = window.use_keyed_state((self.id.clone(), "thumb"), cx, move |_, _| {
-            Glide::settled(checked)
-        });
-        let now = cx.background_executor().now();
+    fn thumb_position(
+        &self,
+        checked: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (Transition, Timing) {
         let ds = Ds::get(cx);
-        let duration = if ds.reduced_motion() {
-            std::time::Duration::ZERO
-        } else {
-            ds.duration(DsDuration::MotionBase)
-        };
-        let ease = convert::easing(ds.tokens().ease(Easing::MotionEaseSpring));
-        let (t, moving) = glide.update(cx, |g, _| {
-            if g.hovered != checked {
-                let at = g.mix;
-                g.retarget(checked, now, at);
-            }
-            g.sample(now, duration, &ease)
-        });
-        if moving {
-            window.request_animation_frame();
+        let mut timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseSpring);
+        if ds.reduced_motion() {
+            timing.duration = std::time::Duration::ZERO;
         }
-        t
+        let value = transition(
+            (self.id.clone(), "thumb"),
+            (f32::from(checked), ds.reduced_motion()),
+            &timing,
+            window,
+            cx,
+        );
+        (value, timing)
     }
 }
 
-fn thumb(ds: &Ds, geometry: &Geometry, t: f32) -> gpui::AnyElement {
-    div()
-        .flex_none()
-        .size(px(geometry.thumb))
-        .ml(px(geometry.travel * t))
-        .rounded_full()
-        .bg(ds.color(Color::SwitchThumb))
-        .shadow(convert::box_shadows(
-            ds.tokens().shadow(Shadow::ShadowControl),
-            ds.tokens(),
-        ))
-        .into_any_element()
+fn thumb(ds: &Ds, geometry: &Geometry, t: Transition, timing: &Timing) -> gpui::AnyElement {
+    t.apply(
+        div()
+            .flex_none()
+            .size(px(geometry.thumb))
+            .ml(px(geometry.travel * t.target()))
+            .rounded_full()
+            .bg(ds.color(Color::SwitchThumb))
+            .shadow(convert::box_shadows(
+                ds.tokens().shadow(Shadow::ShadowControl),
+                ds.tokens(),
+            )),
+        timing,
+        &Props {
+            offset: Some((
+                gpui::point(px(-geometry.travel * t.target()), px(0.)),
+                gpui::point(px(geometry.travel * (1. - t.target())), px(0.)),
+            )),
+            ..Default::default()
+        },
+    )
+    .into_any_element()
 }
 
 /// The toggle action: flips the own value when uncontrolled and reports the new one.

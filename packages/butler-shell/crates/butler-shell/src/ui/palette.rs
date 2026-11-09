@@ -1,6 +1,7 @@
 //! The command palette (`components/command/*` on the DS CommandPanel).
 mod labels;
 
+use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_ds::ui::Icon;
@@ -133,7 +134,7 @@ impl CommandPalette {
             results: Vec::new(),
         };
         self.search_task = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(SEARCH_DELAY).await;
+            motion::sleep(cx.background_executor(), SEARCH_DELAY).await;
             let text = query.clone();
             let Ok(request) = this.update(cx, |_, cx| {
                 Jobs::run(cx, move |client| async move {

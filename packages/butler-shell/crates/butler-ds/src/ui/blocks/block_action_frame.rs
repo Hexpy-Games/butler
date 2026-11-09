@@ -9,12 +9,11 @@ use gpui::{
     Styled as _, Window, div,
 };
 
-use super::anim;
 use super::overflow_action_menu::{OverflowActionMenu, OverflowItem};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Shadow};
 use crate::ui::context::Ds;
 use crate::ui::convert;
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, Transition, transition};
 use crate::ui::typo::{Typo, Weight};
 
 /// `block`: a block on its own (section title). `child`: a block inside a container (a smaller title).
@@ -78,17 +77,18 @@ impl ParentElement for BlockActionFrame {
 }
 
 /// The button's opacity: shown on this block's own hover, on focus inside it or while open.
-fn reveal(shown: bool, id: &ElementId, window: &mut Window, cx: &mut App) -> f32 {
+fn reveal(shown: bool, id: &ElementId, window: &mut Window, cx: &mut App) -> (Transition, Timing) {
     let ds = Ds::get(cx);
     let timing = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
     let jump = ds.reduced_motion();
-    anim::ramp(
+    let value = transition(
         (id.clone(), "trigger"),
         (f32::from(u8::from(shown)), jump),
         &timing,
         window,
         cx,
-    )
+    );
+    (value, timing)
 }
 
 /// Hover on the innermost block, and a right click that opens the menu.
@@ -134,7 +134,7 @@ fn gestures(
 fn header(
     frame: &mut BlockActionFrame,
     (open, is_open): (&Entity<bool>, bool),
-    alpha: f32,
+    (alpha, timing): (Transition, Timing),
     ds: &Ds,
 ) -> gpui::Div {
     let titled = frame.title.is_some();
@@ -157,7 +157,14 @@ fn header(
         });
     })
     .items(std::mem::take(&mut frame.actions));
-    let mut trigger = div().opacity(alpha).child(menu);
+    let mut trigger = alpha.apply(
+        div().child(menu),
+        &timing,
+        &Props {
+            opacity: Some((0., 1.)),
+            ..Default::default()
+        },
+    );
     if !titled {
         trigger = trigger
             .rounded(ds.len(Length::RadiusPill))
