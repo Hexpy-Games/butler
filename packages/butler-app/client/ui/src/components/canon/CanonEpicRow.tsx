@@ -1,7 +1,7 @@
 import { CanonBoundChats } from "./CanonBoundChats.tsx";
 import { spaceActivity } from "@/app/space/activity.ts";
 import { useState } from "react";
-import { NavDropTarget, NavRow, Notebook, IconSlot, Stack, Typo } from "@/butler-ds";
+import { NavDropTarget, NavRow, Ticket, IconSlot, Stack, Typo } from "@/butler-ds";
 import { carriesSessionState, useCanonSidebarState } from "@/app/canonSidebarState.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { projectSpace } from "@/app/space/projection.ts";
@@ -27,6 +27,7 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
   const unread = useSessionUnread(session);
   const held = epic.queue?.state === "running" && epic.queue.hold;
   const running = spaceActivity(session) === "working";
+  const glyph = <IconSlot size="sidebar"><Ticket /></IconSlot>;
   const [menuOpen, setMenuOpen] = useState(false);
   const longPress = useLongPressAction(() => { if (row) setMenuOpen(true); });
   const [drop, setDrop] = useState<"before" | "after">();
@@ -55,7 +56,7 @@ export function CanonEpicRow({ projectId, groupKey, epic, busy, onDrop }: {
     }}>
     <NavRow dataTestClass="canon-epic-row" iconInteractive active={active} ariaLabel={epic.title}
       ariaDescription={unread ? appCopy.space.unread : undefined}
-      icon={row ? <SpaceIdentity row={row} /> : <IconSlot size="sidebar"><Notebook /></IconSlot>}
+      icon={row ? <SpaceIdentity row={row} glyph={glyph} /> : glyph}
       label={<Stack as="span" align="row" cross="center" gap="sm" minWidth="0">
         <Typo.Text data-test-class="canon-epic-title" as="span" truncate shrink minWidth="0">{epic.title}</Typo.Text><Stack as="span" shrink={false}><CanonAvatar agent={epic.agent} person={epic.assignee} /></Stack>
       </Stack>}
