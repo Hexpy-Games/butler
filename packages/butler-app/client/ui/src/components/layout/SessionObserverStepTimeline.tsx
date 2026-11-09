@@ -1,8 +1,9 @@
 import { Fragment, useId, useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { projectTurnActivity } from "@/app/conversation-progress";
-import type { SessionView, WorkPlan, WorkPlanAction, WorkPlanRevision } from "@/app/types.ts";
+import type { SessionView, WorkPlan, WorkPlanAction, WorkPlanRevision, StewardSessionSummaryView } from "@/app/types.ts";
 import { Box, DisclosureRow, Separator, Stack, Typo } from "@/butler-ds";
+import { StepWorkerCapsule } from "@/components/conversation/StepWorkerCapsule.tsx";
 import { TurnActivityTimeline } from "@/components/conversation/TurnActivityTimeline.tsx";
 import { observerActivitySources } from "./observerActivitySources.ts";
 import { SessionObserverCurrentStatus, type ObserverPhaseActivity } from "./SessionObserverActivityGroup.tsx";
@@ -29,8 +30,9 @@ function StepActivities({ activities, newest, live }: {
   return <TurnActivityTimeline activities={activities} expandAll live={pulse} pulseLatest={pulse} />;
 }
 
-function StepGroup({ action, activities, newest, live }: {
-  action: WorkPlanAction; activities: StepActivity[]; newest?: StepActivity; live: boolean;
+function StepGroup({ action, activities, workers, newest, live }: {
+  action: WorkPlanAction; activities: StepActivity[]; workers: StewardSessionSummaryView[];
+  newest?: StepActivity; live: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const controlsId = useId();
@@ -40,7 +42,14 @@ function StepGroup({ action, activities, newest, live }: {
       description={<Typo.Caption as="span" truncate title={action.purpose}>{action.purpose}</Typo.Caption>}
       controlsId={controlsId} open={open} onToggle={() => setOpen(value => !value)} />
     <Stack id={controlsId} gap="none" hidden={!open}>
-      {open ? <StepActivities activities={activities} newest={newest} live={live} /> : null}
+      {open ? <>
+        <StepActivities activities={activities} newest={newest} live={live} />
+        {workers.length ? (
+          <Stack gap="xs" data-test-class="step-workers">
+            {workers.map(worker => <StepWorkerCapsule key={worker.session_id} worker={worker} />)}
+          </Stack>
+        ) : null}
+      </> : null}
     </Stack>
   </Stack>;
 }
@@ -55,6 +64,13 @@ export function SessionObserverStepTimeline({ view, plan }: { view: SessionView;
   const activities = projectActivities(view);
   const actions = [...plan.actions].sort((left, right) => left.order - right.order);
   const keys = new Set(actions.map(action => action.action_key));
+  // Session views list Workers in the steward-child summary shape, with the plan action they were delegated for.
+  const children = (view.workers ?? []) as unknown as Array<StewardSessionSummaryView & { action_key?: string }>;
+  const stepWorkers = new Map<string, StewardSessionSummaryView[]>();
+  for (const worker of children) {
+    if (!worker.action_key || !keys.has(worker.action_key)) continue;
+    stepWorkers.set(worker.action_key, [...(stepWorkers.get(worker.action_key) ?? []), worker]);
+  }
   const grouped = new Map<string, StepActivity[]>();
   const before: StepActivity[] = [], after: StepActivity[] = [];
   const firstStart = actions[0]?.started_at;
@@ -80,7 +96,8 @@ export function SessionObserverStepTimeline({ view, plan }: { view: SessionView;
       if (revision) shown.add(revision.revision);
       return <Fragment key={action.action_key}>
         {revision ? <RevisionRow revision={revision} /> : null}
-        <StepGroup action={action} activities={grouped.get(action.action_key) ?? []} newest={newest} live={live} />
+        <StepGroup action={action} activities={grouped.get(action.action_key) ?? []}
+          workers={stepWorkers.get(action.action_key) ?? []} newest={newest} live={live} />
       </Fragment>;
     })}
     {revisions.filter(revision => !shown.has(revision.revision)).map(revision =>
