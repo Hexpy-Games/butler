@@ -33,13 +33,6 @@ export function carriesSessionState(shared: SessionEpic[] | undefined, id: strin
   const working = epics.filter(epic => epic.running);
   return working.length > 0 ? working.some(epic => epic.id === id) : epics[0]!.id === id;
 }
-/** A 과제 nests the one chat that worked only on it; the project list then leaves that chat out. */
-export const nestsUnder = (epic: EpicCard, session: EpicCard["sessions"][number]) =>
-  session.worked === 1 && session.session_id !== epic.home_session_id;
-export function nestedChatIds(sidebar: CanonSidebar | undefined): Set<string> {
-  return new Set(sidebar?.groups.flatMap(group => group.rows.flatMap(epic =>
-    epic.sessions.filter(session => nestsUnder(epic, session)).map(session => session.session_id))) ?? []);
-}
 /** Indexed at read completion; conversation renders never scan the project's works. */
 export const useCanonSidebarState = create<CanonSidebarState>(set => ({
   projects: {}, sessions: {},

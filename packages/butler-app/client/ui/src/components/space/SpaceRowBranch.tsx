@@ -1,8 +1,7 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { CollapsibleList, CollapsibleNavGroup } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
-import { nestedChatIds, useCanonSidebarState } from "@/app/canonSidebarState.ts";
 import { useOrganization } from "@/app/space/organization.ts";
 import { projectSpace, spaceChildren, type SpaceRowData } from "@/app/space/projection.ts";
 import { unreadAncestors } from "@/app/space/unread.ts";
@@ -14,12 +13,7 @@ import { SpaceGlyph } from "./SpaceGlyph.tsx";
 /** Expanded project contents share the existing branch's paging and collapse ownership. */
 export function SpaceRowBranch({ row, depth, label, actions }: { row: SpaceRowData; depth: number; label: ReactNode; actions: ReactNode }) {
   const rowKey = row.node.key;
-  const sidebar = useCanonSidebarState(state => row.project ? state.projects[row.project.id] : undefined);
-  const all = useButlerStore(state => spaceChildren(projectSpace(state.navigation), rowKey));
-  const children = useMemo(() => {
-    const nested = nestedChatIds(sidebar);
-    return nested.size ? all.filter(child => !nested.has(child.node.entityId)) : all;
-  }, [all, sidebar]);
+  const children = useButlerStore(state => spaceChildren(projectSpace(state.navigation), rowKey));
   const activeChild = useButlerStore(state => {
     const current = projectSpace(state.navigation).get(`s:${state.activeChatId}`);
     return children.find(child => child.node.key === current?.node.key || current?.ancestors.includes(child.node.key))?.node.key;
