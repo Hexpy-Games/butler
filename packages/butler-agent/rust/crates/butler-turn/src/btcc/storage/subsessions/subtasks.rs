@@ -6,6 +6,8 @@ pub(crate) struct OpenSubtaskRow {
     pub parent: String,
     pub relation: StoredSubsessionDelegation,
     pub awaiting_decision: bool,
+    /// The child's own activity, as Worker rows read it.
+    pub activity: &'static str,
 }
 
 /// Unfinished direct steward children of the given owners (`?1`, a JSON
@@ -46,11 +48,13 @@ impl SqliteSubsessionRepository {
                     (row.get::<_, String>(0)?, row.get::<_, bool>(2)?),
                 ))
             },
-            |_, relation, (parent, awaiting_decision): (String, bool)| {
+            |db, relation, (parent, awaiting_decision): (String, bool)| {
+                let (_, activity) = super::activity::child_activity(db, &relation)?;
                 Ok(OpenSubtaskRow {
                     parent,
                     relation,
                     awaiting_decision,
+                    activity,
                 })
             },
         )
