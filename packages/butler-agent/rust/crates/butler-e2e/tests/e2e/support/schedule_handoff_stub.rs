@@ -10,22 +10,50 @@ use std::{
 pub(super) const OWNER: &str =
     "Delegate briefing research, then create a daily 07:00 schedule in this chat.";
 pub(super) const ACTION: &str = "예약 작업 등록";
+pub(super) const DECLINED: &str = "예약 작업은 만들지 않았습니다.";
+#[derive(Default)]
+pub(super) enum Recovery {
+    #[default]
+    Runs,
+    Declines,
+}
 #[derive(Default)]
 pub(super) struct Script {
     steps: Mutex<[usize; 3]>,
     parent_work: Mutex<String>,
+    recovery: Recovery,
     pub requests: Mutex<Vec<Value>>,
+    pub recovery_request: Mutex<Option<Value>>,
 }
 pub(super) fn arguments() -> Value {
     json!({"id":"handoff-briefing","title":"아침 브리핑","prompt":"뉴스와 AI 연구를 조사하고 정리해 주세요.",
         "schedule_type":"interval","interval_minutes":1440,"start_at":"2099-01-01T07:00:00+09:00",
         "session_id":"general"})
 }
-pub(super) async fn start()
--> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
+pub(super) fn rewritten() -> Value {
+    let mut value = arguments();
+    value["title"] = json!("아침 브리핑 정리");
+    value
+}
+pub(super) fn recovery_notices(script: &Script) -> usize {
+    let request = script.recovery_request.lock().unwrap().clone();
+    request
+        .map(|body| {
+            body.to_string()
+                .matches("The child lacked create_automation")
+                .count()
+        })
+        .unwrap_or(0)
+}
+pub(super) async fn start(
+    recovery: Recovery,
+) -> Result<(String, Arc<Script>, tokio::task::JoinHandle<()>), HarnessError> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("http://{}", listener.local_addr()?);
-    let script = Arc::new(Script::default());
+    let script = Arc::new(Script {
+        recovery,
+        ..Script::default()
+    });
     let router = Router::new()
         .route("/v1/responses", post(reply))
         .route_layer(axum::middleware::from_fn(
@@ -59,6 +87,9 @@ async fn reply(
     };
     if lane == 0 && step == 1 {
         *script.parent_work.lock().unwrap() = work_id(&body);
+    }
+    if lane == 2 {
+        *script.recovery_request.lock().unwrap() = Some(body.clone());
     }
     let item = match lane {
         1 => child(step, &body),
@@ -97,6 +128,13 @@ fn child(step: usize, body: &Value) -> Value {
     }
 }
 fn recover(step: usize, body: &Value, script: &Script) -> Value {
+    if matches!(script.recovery, Recovery::Declines) {
+        return message(if step == 0 {
+            "예약을 등록하지 못했습니다."
+        } else {
+            DECLINED
+        });
+    }
     match step {
         // Runtime must reject a prose-only failure and continue this same Turn.
         0 => message("예약을 등록하지 못했습니다."),
@@ -112,7 +150,7 @@ fn recover(step: usize, body: &Value, script: &Script) -> Value {
         6 => call(
             "create",
             "tool_call",
-            &json!({"id":"native:create_automation","arguments":arguments()}),
+            &json!({"id":"native:create_automation","arguments":rewritten()}),
         ),
         7 => call(
             "settle",
