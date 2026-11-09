@@ -187,6 +187,22 @@ try {
     console.log(`image tools (${theme}): inline card ${Math.round(bounds.width)}×${Math.round(bounds.height)}`);
     assert.equal(await picture.getAttribute("alt"), pictureTitle);
     await captureResponsive(page, "reply");
+    {
+      // Past the signature expiry, a layout change re-signs before the new src is used.
+      const expiresOf = async () => new URL((await picture.getAttribute("src"))!, base).searchParams.get("expires");
+      await page.waitForFunction(() => Number(new URL(document.querySelector('[data-test-class="generated-image-card"] img')!.getAttribute("src")!, location.href).searchParams.get("w")) > 500);
+      const signedBefore = await expiresOf();
+      assert(signedBefore, "generated image src is signed");
+      await page.evaluate(expires => { const real = Date.now; Object.assign(window, { realNow: real }); Date.now = () => Number(expires) * 1000 + 1000; }, signedBefore);
+      const resigned = page.waitForResponse(response => new URL(response.url()).pathname === `/message-assets/${image}/meta`);
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert((await resigned).ok(), "expired signature is re-signed through /meta");
+      await page.evaluate(() => { Date.now = (window as unknown as { realNow: () => number }).realNow; });
+      await page.waitForFunction(before => new URL(document.querySelector('[data-test-class="generated-image-card"] img')!.getAttribute("src")!, location.href).searchParams.get("expires") !== before, signedBefore);
+      await picture.evaluate((node: HTMLImageElement) => node.decode());
+      assert((await picture.evaluate((node: HTMLImageElement) => node.naturalWidth)) > 0, "re-signed image loads");
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
     await librarySave(page, image);
     const downloaded = page.waitForEvent("download"); await card.getByRole("button", { name: "다운로드", exact: true }).click();
     assert((await downloaded).suggestedFilename().startsWith(image));

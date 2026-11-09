@@ -100,10 +100,8 @@ impl GuidedWorkAdapter {
     }
 
     async fn recovery_instruction(&self) -> Result<Option<String>, BtccError> {
-        if let Some(recovery) = &self.capability_recovery
-            && recovery.pending(&self.scope.turn_id).await?
-        {
-            return Ok(Some(recovery.instruction()));
+        if let Some(recovery) = &self.capability_recovery {
+            return recovery.take_instruction(&self.scope.turn_id).await;
         }
         Ok(None)
     }
