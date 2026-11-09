@@ -4,8 +4,60 @@ use std::time::{Duration, Instant};
 
 const REQUEST: &str = "Make a picture of a kite";
 
+/// The image tool output the App reads from a child's own activity log.
+async fn child_image_output(f: &Fixture, session: &str) -> Result<String, HarnessError> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let view =
+            f.s.gw
+                .get(&format!("/session-view?session_id={session}"))
+                .await?;
+        let turn = view.data()["latest_turn"]["id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let row = view.data()["latest_turn"]["progress"]["safe_progress_rows"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|r| r["safe_tool_name"] == "generate_image" && r["tool_result_id"].is_string())
+            .cloned();
+        if let Some(row) = row {
+            let call = row["tool_call_id"].as_str().unwrap();
+            let result = row["tool_result_id"].as_str().unwrap();
+            let path =
+                format!("/turns/{turn}/operations/{call}/output?result_id={result}&offset=0");
+            let page = f.s.gw.get(&path).await?;
+            return Ok(page.data()["content"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned());
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no generate_image row in the child's activity\n{}",
+            f.s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// The App's image card reads a successful image output with its asset id.
+fn assert_image(content: &str) {
+    let value: Value = serde_json::from_str(content).unwrap();
+    let output = value.get("output").cloned().unwrap_or(value);
+    assert_eq!(output["schema"], "butler.image.v1", "{output}");
+    assert_eq!(output["status"], "ok", "{output}");
+    assert!(
+        output["image"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("img_")),
+        "{output}"
+    );
+}
+
 #[tokio::test]
-async fn steward_makes_an_image_and_its_id_reaches_the_parent() -> Result<(), HarnessError> {
+async fn steward_makes_an_image_and_its_activity_carries_it() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let f = Fixture::start(Access::FullAccess, "openai").await?;
     f.script(
@@ -40,36 +92,13 @@ async fn steward_makes_an_image_and_its_id_reaches_the_parent() -> Result<(), Ha
             ),
         ],
     );
-    f.script(
-        "Delegated result",
-        vec![
-            call(
-                "show",
-                "answer_blocks",
-                &json!({"v":2,"blocks":[{"type":"gallery",
-                    "items":[{"img":"{{IMAGE}}","caption":"Kite"}]}]}),
-            ),
-            json!({"type":"message","id":"shown","role":"assistant","status":"completed",
-                "content":[{"type":"output_text","text":"Here is the kite.","annotations":[]}]}),
-        ],
-    );
     f.run(REQUEST).await?;
-    let deadline = Instant::now() + Duration::from_secs(30);
-    let relayed = loop {
-        let relayed = f.script.requests.lock().unwrap().iter().find_map(|r| {
-            let text = r.to_string();
-            (text.contains("Delegated result") && text.contains("image_assets:")).then_some(text)
-        });
-        if let Some(text) = relayed {
-            break text;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "no image ids reached the parent\n{}",
-            f.s.agent.logs()
-        );
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    };
+    let view = f.s.gw.get("/session-view?session_id=general").await?;
+    let steward = view.data()["steward_children"][0]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let content = child_image_output(&f, &steward).await?;
     let offered = f
         .script
         .requests
@@ -79,35 +108,12 @@ async fn steward_makes_an_image_and_its_id_reaches_the_parent() -> Result<(), Ha
         .filter(|r| r.to_string().contains("role: steward"))
         .any(|r| functions(r).any(|t| t["name"] == "generate_image"));
     assert!(offered, "the steward is offered generate_image");
-    let output = f.output("steward-gen");
-    assert_eq!(output["status"], "ok", "{output}");
-    let image = output["image"].as_str().unwrap().to_owned();
-    assert!(
-        relayed.contains(&image),
-        "the made image's id reaches the parent"
-    );
-    // The parent shows the child's picture as an answer-block image tile.
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        let shown =
-            f.s.gw.messages("general").await?.iter().any(|m| {
-                m["role"] == "assistant" && m["answer_blocks"].to_string().contains(&image)
-            });
-        if shown {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "the parent reply never showed the image\n{}",
-            f.s.agent.logs()
-        );
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    assert_image(&content);
     f.finish().await
 }
 
 #[tokio::test]
-async fn worker_makes_an_image_and_its_id_reaches_steward_and_butler() -> Result<(), HarnessError> {
+async fn worker_makes_an_image_and_its_activity_carries_it() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let f = Fixture::start(Access::FullAccess, "openai").await?;
     let prompt = "Delegate drawing a kite to a worker";
@@ -185,44 +191,34 @@ async fn worker_makes_an_image_and_its_id_reaches_steward_and_butler() -> Result
         vec![close("result-work"), close("result-done")],
     );
     f.run(prompt).await?;
-    let deadline = Instant::now() + Duration::from_secs(60);
-    let butler = loop {
-        let found = f.script.requests.lock().unwrap().iter().find_map(|r| {
-            let text = r.to_string();
-            (text.contains("image_assets:")
-                && !text.contains("role: steward")
-                && !text.contains("role: worker"))
-            .then_some(text)
-        });
-        if let Some(text) = found {
-            break text;
+    let view = f.s.gw.get("/session-view?session_id=general").await?;
+    let steward = view.data()["steward_children"][0]["session_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let worker = loop {
+        let view =
+            f.s.gw
+                .get(&format!("/session-view?session_id={steward}"))
+                .await?;
+        if let Some(worker) = view.data()["workers"][0]["session_id"].as_str() {
+            break worker.to_owned();
         }
         assert!(
             Instant::now() < deadline,
-            "no image ids reached the Butler\n{}",
+            "no worker started\n{}",
             f.s.agent.logs()
         );
         tokio::time::sleep(Duration::from_millis(100)).await;
     };
+    let content = child_image_output(&f, &worker).await?;
     let requests = f.script.requests.lock().unwrap().clone();
     let offered = requests
         .iter()
         .filter(|r| r.to_string().contains("role: worker"))
         .any(|r| functions(r).any(|t| t["name"] == "generate_image"));
     assert!(offered, "the worker is offered generate_image");
-    let output = f.output("worker-gen");
-    assert_eq!(output["status"], "ok", "{output}");
-    let image = output["image"].as_str().unwrap();
-    assert!(
-        requests.iter().any(|r| {
-            let text = r.to_string();
-            text.contains("image_assets:") && text.contains("role: steward") && text.contains(image)
-        }),
-        "the worker's image id reaches the steward"
-    );
-    assert!(
-        butler.contains(image),
-        "the worker's image id reaches the Butler"
-    );
+    assert_image(&content);
     f.finish().await
 }

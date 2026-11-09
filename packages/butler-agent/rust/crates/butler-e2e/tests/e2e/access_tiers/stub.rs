@@ -58,11 +58,6 @@ async fn reply(
         })
         .count();
     let work = work_id(&body);
-    let image = regex::Regex::new(r"img_[a-z0-9]+")
-        .expect("image id pattern")
-        .find(&body.to_string())
-        .map(|m| m.as_str().to_owned())
-        .unwrap_or_default();
     requests.push(body.clone());
     // Rounds keyed by a prefix serve turns whose full request text is
     // rendered by Butler (a delegated steward's packet, a delegated result).
@@ -92,13 +87,8 @@ async fn reply(
     } else {
         item
     };
-    let item: Value = serde_json::from_str(
-        &item
-            .to_string()
-            .replace("{{WORK}}", &work)
-            .replace("{{IMAGE}}", &image),
-    )
-    .expect("stub item");
+    let item: Value =
+        serde_json::from_str(&item.to_string().replace("{{WORK}}", &work)).expect("stub item");
     (
         [("content-type", "text/event-stream")],
         super::super::token_cache::wire(&item),
@@ -109,8 +99,7 @@ pub(crate) fn call(id: &str, name: &str, args: &Value) -> Value {
     json!({"type":"function_call","id":format!("fc_{id}"),"call_id":id,"name":name,"arguments":args.to_string(),"status":"completed"})
 }
 /// The Work id the newest tool output of this request reported, for
-/// `{{WORK}}` placeholders in scripted calls. `{{IMAGE}}` is the first image id the
-/// request carries.
+/// `{{WORK}}` placeholders in scripted calls.
 fn work_id(body: &Value) -> String {
     body["input"]
         .as_array()

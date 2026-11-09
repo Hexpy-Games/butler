@@ -3,6 +3,8 @@ import type { MessageRecord, SessionView } from "@/app/types.ts";
 import { MessageRow, MessageTurnGroup } from "@/butler-ds";
 import { MessageContent } from "@/components/conversation/MessageContent.tsx";
 import { projectTurnActivity } from "@/app/conversation-progress";
+import { useButlerStore } from "@/app/store";
+import { TurnGeneratedImages } from "@/components/images/GeneratedImages.tsx";
 import { SessionObserverActivityGroup, type ObserverPhaseActivity } from "./SessionObserverActivityGroup.tsx";
 import { observerActivitySources } from "./observerActivitySources.ts";
 
@@ -27,6 +29,7 @@ export function SessionObserverTimeline({
   latestTurn?: SessionView["latest_turn"];
   children?: ReactNode;
 }) {
+  const session = useButlerStore(s => s.activeChatId) ?? "";
   const sources = observerActivitySources(messages, activityHistory, activeTurn, latestTurn);
   const ordered = [
     ...[...sources.values()].flatMap((source) =>
@@ -79,6 +82,11 @@ export function SessionObserverTimeline({
               ? <MessageContent message={entry.message} copied={false} footerMeta={null} />
               : <SessionObserverActivityGroup delegatedGoal={entry.id === firstActivityId ? delegatedGoal : undefined} activities={entry.activities} active={entry.active} expandAll={expandActivities}
                   state={entry.activities.some((activity) => activity.turnId === latestTurn?.id) ? latestTurn?.state : undefined} />}
+            {/* A child's pictures show with its own activity, as Butler's show with its reply. */}
+            {entry.kind === "activity" && [...new Set(entry.activities.map((activity) => activity.turnId))].map((turnId) => (
+              <TurnGeneratedImages key={turnId} turnId={turnId} rows={sources.get(turnId)?.rows ?? []}
+                revision={latestTurn?.id === turnId ? latestTurn?.state : undefined} session={session} title={delegatedGoal ?? ""} />
+            ))}
           </MessageRow>
         </Fragment>
       ))}
