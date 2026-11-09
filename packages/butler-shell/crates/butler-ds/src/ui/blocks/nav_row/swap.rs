@@ -8,8 +8,10 @@ use gpui::{
     prelude::FluentBuilder as _,
 };
 
+use crate::tokens::{Duration as DsDuration, Easing};
 use crate::ui::blocks::scope;
 use crate::ui::context::Ds;
+use crate::ui::motion::{Props, Timing, transition};
 
 #[derive(IntoElement)]
 pub struct NavRowSwap {
@@ -44,23 +46,30 @@ impl NavRowSwap {
 }
 
 impl RenderOnce for NavRowSwap {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         // Phones keep the rest content (`@media (width > 640px)`).
-        let desktop = !Ds::get(cx).compact();
-        let reveal = if self.open && desktop {
-            1.
-        } else if desktop {
-            scope::row_reveal(cx).unwrap_or(0.)
-        } else {
-            0.
-        };
-        let shown = reveal > 0.001;
+        let ds = Ds::get(cx);
+        let desktop = !ds.compact();
+        let target = desktop && (self.open || scope::row_reveal(cx).unwrap_or(false));
+        let timing = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
+        let reveal = transition(
+            (self.id.clone(), "reveal"),
+            (f32::from(target), false),
+            &timing,
+            window,
+            cx,
+        );
+        let shown = target || reveal.moving(&timing);
         // Row actions stay out of the hit test while hidden (`pointer-events: none`).
-        let revealed = div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .opacity(reveal)
+        let revealed = reveal
+            .apply(
+                div().flex().items_center().justify_center(),
+                &timing,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
+            )
             .when(!shown, gpui::Styled::invisible)
             .child(self.reveal);
         div()
@@ -72,15 +81,23 @@ impl RenderOnce for NavRowSwap {
             .on_click(|_, _, cx| cx.stop_propagation())
             .child(revealed)
             .children(self.rest.map(|rest| {
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .when(shown, gpui::Styled::invisible)
+                reveal
+                    .apply(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .left_0()
+                            .size_full()
+                            .flex()
+                            .items_center()
+                            .justify_center(),
+                        &timing,
+                        &Props {
+                            opacity: Some((1., 0.)),
+                            ..Default::default()
+                        },
+                    )
+                    .when(target, gpui::Styled::invisible)
                     .child(rest)
             }))
     }

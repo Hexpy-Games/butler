@@ -11,8 +11,8 @@ mod swap;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, Div, ElementId, FontWeight, IntoElement, ParentElement as _,
-    RenderOnce, SharedString, Styled as _, Window, div, px, svg,
+    AnyElement, App, ClickEvent, Div, ElementId, Entity, FocusHandle, FontWeight, IntoElement,
+    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div, px, svg,
 };
 
 pub use children::NavRowChildren;
@@ -21,11 +21,12 @@ pub use swap::NavRowSwap;
 use self::controls::Controls;
 use self::metrics::{Metrics, density_of, fills, metrics};
 use super::scope::{self, Spec};
-use crate::tokens::{Color, Density, Length, Number};
+use crate::tokens::{Color, Density, Duration as DsDuration, Easing, Length, Number};
 use crate::ui::Icon;
 use crate::ui::clickable::Clickable;
 use crate::ui::context::Ds;
-use crate::ui::control::Glide;
+use crate::ui::control::State;
+use crate::ui::motion::{Timing, Transition, transition};
 
 type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -180,14 +181,15 @@ struct Look {
     fg: gpui::Hsla,
     hover_fill: gpui::Hsla,
     selected_fill: gpui::Hsla,
-    /// How far the row shows its swapped-in actions (0 at rest).
-    reveal: f32,
+    /// The transition and target for the row's swapped-in actions.
+    reveal: Transition,
+    target: bool,
     /// `1lh` of the row, and `--icon-size-md`.
     line: f32,
     icon_md: f32,
 }
 
-fn look(row: &NavRow, cx: &App) -> Look {
+fn look(row: &NavRow, reveal: Transition, target: bool, cx: &App) -> Look {
     let ds = Ds::get(cx);
     let mut m = metrics(ds, density_of(ds, row.density, cx));
     if let Some(gap) = row.gap {
@@ -206,7 +208,8 @@ fn look(row: &NavRow, cx: &App) -> Look {
         fg,
         hover_fill,
         selected_fill,
-        reveal: 0.,
+        reveal,
+        target,
         line: f32::from(ds.len(Length::TypoBodyLineHeight)),
         icon_md: f32::from(ds.len(Length::IconSizeMd)),
     }
@@ -336,19 +339,31 @@ impl NavRow {
 
 impl RenderOnce for NavRow {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let mut look = look(&self, cx);
         let interactive = self.on_click.is_some() && !self.disabled;
-        let reveal = if interactive {
-            row_reveal(&self.id, window, cx)
-        } else {
-            0.
-        };
-        look.reveal = reveal;
+        let state = window.use_keyed_state((self.id.clone(), "state"), cx, |_, _| State::default());
+        let focus = window
+            .use_keyed_state((self.id.clone(), "focus"), cx, |_, cx| cx.focus_handle())
+            .read(cx)
+            .clone();
+        let target = interactive && row_reveal(&state, &focus, window, cx);
+        let timing = Timing::token(
+            Ds::get(cx),
+            DsDuration::MotionFast,
+            Easing::MotionEaseStandard,
+        );
+        let reveal = transition(
+            (self.id.clone(), "reveal-actions"),
+            (f32::from(target), false),
+            &timing,
+            window,
+            cx,
+        );
+        let look = look(&self, reveal, target, cx);
         let ds = Ds::get(cx);
         let body = self.body(&look, ds);
         let radius = ds.len(Length::RadiusControl);
         let spec = Spec {
-            row_reveal: Some(reveal),
+            row_reveal: Some(target),
             ..Spec::default()
         };
         let (padding, height) = (px(look.m.padding), px(look.m.height));
@@ -371,6 +386,8 @@ impl RenderOnce for NavRow {
             return row.child(body).into_any_element();
         }
         let row = Clickable::new(self.id)
+            .state(state)
+            .focus(focus)
             .stretch()
             .fills(look.hover_fill, look.selected_fill)
             .metrics(padding, height);
@@ -383,20 +400,8 @@ impl RenderOnce for NavRow {
     }
 }
 
-/// How far the row `id` shows its swapped-in actions: its hover fade, or at once while a
-/// keyboard-focused row (or a control in it) holds focus.
-fn row_reveal(id: &ElementId, window: &mut Window, cx: &mut App) -> f32 {
-    // The hover flag, not the old frame-driven blend (`mix`): since the motion clock the row
-    // fill fades on the compositor and `mix` no longer moves.
-    // ANIM-MIGRATE(row actions fade in with the row hover, --motion-fast)
-    let hovered = window
-        .use_keyed_state((id.clone(), "state"), cx, |_, _| Glide::default())
-        .read(cx)
-        .hovered;
-    let handle = window
-        .use_keyed_state((id.clone(), "focus"), cx, |_, cx| cx.focus_handle())
-        .read(cx)
-        .clone();
-    let focused = handle.contains_focused(window, cx) && Ds::get(cx).modality().focus_visible();
-    if focused || hovered { 1. } else { 0. }
+/// Whether the row shows its actions on hover or while it holds keyboard focus.
+fn row_reveal(state: &Entity<State>, focus: &FocusHandle, window: &Window, cx: &App) -> bool {
+    state.read(cx).hovered
+        || (focus.contains_focused(window, cx) && Ds::get(cx).modality().focus_visible())
 }

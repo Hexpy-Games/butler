@@ -149,15 +149,15 @@ pub fn nav_fills(cx: &App) -> Option<(Color, Color)> {
         .and_then(|fills| fills.0.last().copied())
 }
 
-/// How far the row around the caller shows its swapped-in actions (0 at rest, 1 on hover or
+/// Whether the row around the caller shows its swapped-in actions (on hover or
 /// keyboard focus): `NavRowSwap` reads it, as the CSS reads `.row:hover`.
 #[derive(Default)]
-struct Reveals(Vec<f32>);
+struct Reveals(Vec<bool>);
 
 impl gpui::Global for Reveals {}
 
 /// The enclosing row's reveal, if the caller is inside a row.
-pub fn row_reveal(cx: &App) -> Option<f32> {
+pub fn row_reveal(cx: &App) -> Option<bool> {
     cx.try_global::<Reveals>()
         .and_then(|reveals| reveals.0.last().copied())
 }
@@ -202,7 +202,7 @@ pub fn composer(cx: &App) -> Option<ComposerVars> {
 pub struct Spec {
     pub svg_size: Option<f32>,
     pub nav_fills: Option<(Color, Color)>,
-    pub row_reveal: Option<f32>,
+    pub row_reveal: Option<bool>,
     pub action: Option<ActionScale>,
     pub conversation: Option<ConversationVars>,
     pub vars: Option<ShellVars>,
