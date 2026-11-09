@@ -445,10 +445,10 @@ pub(super) fn turn_admits_zai_image_tool(policy: &GuidedExecutionPolicy) -> bool
 
 /// Image calls follow the access mode for every role; a child's images reach its parent with its result.
 fn image_calls(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
-    if policy.access_mode != AccessMode::ReadOnly {
-        names.extend(["generate_image".into(), "edit_image".into()]);
-    } else {
+    if policy.access_mode == AccessMode::ReadOnly {
         names.remove("generate_image");
         names.remove("edit_image");
+    } else {
+        names.extend(["generate_image".into(), "edit_image".into()]);
     }
 }
