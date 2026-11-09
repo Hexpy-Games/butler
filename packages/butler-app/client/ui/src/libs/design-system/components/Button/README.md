@@ -32,6 +32,7 @@ Product engineers, design-system maintainers, and coding agents can use it when 
 - Compose it with other `@/butler-ds` components before adding bespoke CSS.
 - Keep button labels regular weight. Use surface, tone, icon, or placement for
   emphasis so buttons do not compete with section titles.
+- A label longer than its space truncates with an ellipsis; pass the full label as `title` when it can truncate.
 - Keep layout fluid; do not assume a fixed desktop width.
 - Check at iPhone-width mobile, tablet-ish, and desktop viewports.
 - Keep domain data, app state, and business decisions outside this component.
