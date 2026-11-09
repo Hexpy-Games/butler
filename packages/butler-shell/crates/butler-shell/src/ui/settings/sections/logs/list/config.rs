@@ -78,7 +78,7 @@ impl LogList {
             cx.spawn(async move |this, cx| {
                 let mut shown = running_minutes;
                 loop {
-                    cx.background_executor().timer(LEASE_TICK).await;
+                    butler_ds::ui::motion::sleep(cx.background_executor(), LEASE_TICK).await;
                     let Ok(ended) = this.update(cx, |list, cx| {
                         let left = list.minutes_left();
                         if left != shown {

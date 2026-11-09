@@ -20,12 +20,11 @@ pub use scroll::{
     scroll_to_bottom,
 };
 
-use super::anim::ramp;
 use super::measure;
 use super::scope::{self, ConversationVars, Spec};
 use crate::tokens::{Duration as DsDuration, Easing, GradientToken, Length};
 use crate::ui::context::Ds;
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::{convert, strut};
 use column::{KeepOut, Narrow};
 
@@ -176,13 +175,21 @@ impl ConversationShell {
         let (col, target) = column::column(width, content, keep_out(shown_aside, rail, width, ds));
         let glide = Timing::token(ds, DsDuration::MotionSlow, Easing::MotionEaseEmphasized);
         let jump = ds.reduced_motion() || width <= 0.;
-        let shift = ramp(
+        let motion = transition(
             (self.id.clone(), "column-shift"),
             (target, jump),
             &glide,
             window,
             cx,
         );
+        let seen = window.use_keyed_state((self.id.clone(), "column-target"), cx, |_, _| target);
+        if *seen.read(cx) != target {
+            if !jump {
+                window.animate_layout(glide.ms());
+            }
+            seen.update(cx, |value, _| *value = target);
+        }
+        let shift = motion.target();
         let ds = Ds::get(cx);
         let top_reserve = if cards {
             f32::from(ds.len(Length::SpaceLg))
@@ -195,6 +202,7 @@ impl ConversationShell {
             column_width: if width > 0. { col } else { 0. },
             column_left: ((width - col) / 2. - shift).max(0.),
             column_shift: shift,
+            motion_id: Some(self.id.clone()),
             top_reserve: top_reserve + rail_top(rail, width, ds),
         };
         (vars, target - shift)
@@ -242,11 +250,16 @@ impl RenderOnce for ConversationShell {
                 .overflow_hidden()
                 .child(layer)
         });
-        let rail_layer = self
-            .rail
-            .take()
-            .filter(|_| !rail.held)
-            .map(|el| div().opacity(rail.release).child(el));
+        let rail_layer = self.rail.take().filter(|_| !rail.held).map(|el| {
+            rail.release.apply(
+                div().child(el),
+                &Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseDecelerate),
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
+            )
+        });
         let shell = div()
             .relative()
             .size_full()

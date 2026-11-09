@@ -318,15 +318,16 @@ pub(super) fn tick(hub: &Hub, window: &mut Window) {
     if session.tracker.waiting() {
         session.tracker.poll(Instant::now());
         session.sync_target();
-        window.request_animation_frame();
+        crate::ui::motion::input_frame(window);
     }
-    if let Some(handle) = session.cfg.scroll.clone() {
-        scroll_pane(&handle, window.mouse_position().y.as_f32());
-        window.request_animation_frame();
+    if let Some(handle) = session.cfg.scroll.clone()
+        && scroll_pane(&handle, window.mouse_position().y.as_f32())
+    {
+        crate::ui::motion::input_frame(window);
     }
 }
 
-fn scroll_pane(handle: &ScrollHandle, y: f32) {
+fn scroll_pane(handle: &ScrollHandle, y: f32) -> bool {
     let bounds = handle.bounds();
     let (top, bottom) = (bounds.top().as_f32(), bounds.bottom().as_f32());
     let step = auto_scroll::step(y, top, bottom, (bottom - top) * AUTO_SCROLL_BAND);
@@ -341,7 +342,9 @@ fn scroll_pane(handle: &ScrollHandle, y: f32) {
     if step != 0. && room {
         let next = (scrolled + step).clamp(0., max);
         handle.set_offset(point(offset.x, px(-next)));
+        return true;
     }
+    false
 }
 
 /// Ends the drag: a drop makes the edit (when it changes anything), a cancel leaves everything.

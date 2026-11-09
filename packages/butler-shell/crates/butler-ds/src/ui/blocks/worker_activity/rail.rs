@@ -7,7 +7,7 @@ use gpui::{
 use crate::tokens::{Color, Duration as DsDuration, Length};
 use crate::ui::context::Ds;
 use crate::ui::convert;
-use crate::ui::motion::Loop;
+use crate::ui::motion::{Loop, Props, Timing, Transition, mounted_at};
 
 const PHASES: [&str; 5] = [
     "orienting",
@@ -71,36 +71,38 @@ fn step(index: usize, current: Option<usize>, phase: &str) -> Step {
 /// The rail: five bars and their labels.
 pub(super) fn rail(
     phase: &str,
-    finishing: Option<f32>,
+    finishing: Option<(Transition, Timing)>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let now = current(phase);
-    let begun = window.use_keyed_state("worker-rail-pulse", cx, |_, cx| {
-        cx.background_executor().now()
-    });
-    let started = *begun.read(cx);
-    let elapsed = cx
-        .background_executor()
-        .now()
-        .saturating_duration_since(started);
-    let pulse = {
-        let ds = Ds::get(cx);
-        let period = ds.duration(DsDuration::PulseDuration);
-        let phase = (elapsed.as_secs_f32() / period.as_secs_f32().max(f32::EPSILON)).fract();
-        (Loop::Decorative.runs(ds), phase)
-    };
-    if pulse.0 && now.is_some_and(|n| n < PHASES.len()) && !terminal(phase) {
-        window.request_animation_frame();
-    }
+    let start = mounted_at("worker-rail-pulse", window, cx);
     let ds = Ds::get(cx);
     let spaced = ds.len(Length::Space1);
     let finished = terminal(phase);
     let bars = PHASES.iter().enumerate().map(|(index, _)| {
         let state = step(index, now, phase);
-        let (fill, ink, scale, mut opacity) = bar_look(state, finished, pulse, ds);
-        if let Some(t) = finishing.filter(|_| index == PHASES.len() - 1) {
-            opacity = t;
+        let (fill, ink, _, _) = bar_look(state, finished, (false, 0.), ds);
+        let mut bar = div().h(px(3.)).rounded(ds.len(Length::RadiusPill)).bg(fill);
+        if state == Step::Active && !finished && Loop::Decorative.runs(ds) {
+            let timing = Timing::linear(ds.duration(DsDuration::PulseDuration));
+            bar = bar.motion(gpui::LayerMotion {
+                repeat: gpui::MotionRepeat::Loop,
+                opacity: (0.68, 1.),
+                scale: (1., 1.35),
+                easing: gpui::MotionEasing::linear(&[(0., 0.), (0.5, 1.), (1., 0.)]),
+                ..timing.motion(start)
+            });
+        }
+        if let Some((value, timing)) = finishing.filter(|_| index == PHASES.len() - 1) {
+            bar = value.apply(
+                bar,
+                &timing,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
+            );
         }
         div()
             .flex()
@@ -109,14 +111,7 @@ pub(super) fn rail(
             .min_w_0()
             .flex_1()
             .text_color(ink)
-            .child(
-                div()
-                    .h(px(3.))
-                    .rounded(ds.len(Length::RadiusPill))
-                    .bg(fill)
-                    .opacity(opacity)
-                    .mt(px(3. * (scale - 1.) / 2.)),
-            )
+            .child(bar)
             .child(
                 div()
                     .overflow_hidden()

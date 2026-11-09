@@ -2,8 +2,8 @@
 //! the task box wrap together on baselines. gpui has no inline element inside text, so the text
 //! is cut into words (a space is a margin: a text item's width drops trailing whitespace).
 use gpui::{
-    AnyElement, App, FontWeight, InteractiveElement as _, IntoElement as _, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, font, px,
+    AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, div, font, px,
 };
 
 use super::inline::{self, Piece};
@@ -15,6 +15,7 @@ use crate::ui::convert;
 use crate::ui::icon::icon_px;
 use crate::ui::inline_reference::InlineReference;
 use crate::ui::markdown::{Inline, plain};
+use crate::ui::motion::Props;
 
 /// A task item's box: 13px, as the browser's disabled checkbox.
 const BOX: f32 = 13.;
@@ -96,7 +97,14 @@ fn atoms(
         match node {
             Inline::Text { .. } => {
                 let mut parts = Vec::new();
-                inline::pieces(std::slice::from_ref(node), link, env, &mut parts);
+                let ds = Ds::get(cx);
+                inline::pieces(
+                    std::slice::from_ref(node),
+                    link,
+                    env,
+                    (ds.color(env.ink), ds.color(Color::AccentText)),
+                    &mut parts,
+                );
                 for part in &parts {
                     out.extend(text_words(part, gap, &id, cx));
                 }
@@ -132,15 +140,14 @@ fn text_words(part: &Piece, gap: gpui::Pixels, id: &str, cx: &App) -> Vec<AnyEle
     for (index, (word, spaced)) in words(&part.text).into_iter().enumerate() {
         let mut el = div()
             .whitespace_nowrap()
-            .mr(if spaced { gap } else { px(0.) })
-            .opacity(part.alpha);
-        if part.style.bold {
-            el = el.font_weight(FontWeight::BOLD);
+            .mr(if spaced { gap } else { px(0.) });
+        if let Some(weight) = part.style.font_weight {
+            el = el.font_weight(weight);
         }
-        if part.style.italic {
+        if part.style.font_style == Some(gpui::FontStyle::Italic) {
             el = el.italic();
         }
-        if part.style.strike {
+        if part.style.strikethrough.is_some() {
             el = el.line_through();
         }
         let el = match &part.link {
@@ -152,12 +159,24 @@ fn text_words(part: &Piece, gap: gpui::Pixels, id: &str, cx: &App) -> Vec<AnyEle
                     .underline()
                     .whitespace_nowrap()
                     .mr(if spaced { gap } else { px(0.) })
-                    .opacity(part.alpha)
                     .on_click(move |_, _, cx| super::link::open(&href, cx))
                     .child(word)
                     .into_any_element()
             }
             None => el.child(word).into_any_element(),
+        };
+        let el = match part.fade {
+            Some((value, timing)) => value
+                .apply(
+                    div().child(el),
+                    &timing,
+                    &Props {
+                        opacity: Some((0., 1.)),
+                        ..Default::default()
+                    },
+                )
+                .into_any_element(),
+            None => el,
         };
         items.push(el);
     }

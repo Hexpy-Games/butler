@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ClickEvent, ElementId, FontWeight, IntoElement, OverflowWrap, ParentElement,
-    RenderOnce, SharedString, Styled as _, Window, div, px,
+    RenderOnce, SharedString, Styled as _, Window, div, point, px,
 };
 
 use super::message_row::{bubble_cap, enter};
@@ -19,6 +19,7 @@ use crate::ui::convert;
 use crate::ui::icon::IconSize;
 use crate::ui::icon::icon;
 use crate::ui::icon_button::IconButton;
+use crate::ui::motion::Props;
 use crate::ui::strut;
 use crate::ui::tooltip::Tooltip;
 use crate::ui::typo::{Tone, Typo};
@@ -191,7 +192,6 @@ impl QueuedMessage {
 
 impl RenderOnce for QueuedMessage {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let busy = self.tone == QueuedTone::Sending;
         let failed = self.tone == QueuedTone::Failed;
         let (seen, recorder) = measure::track((self.id.clone(), "bubble"), window, cx);
         let expanded = window.use_keyed_state((self.id.clone(), "expanded"), cx, |_, _| false);
@@ -242,7 +242,7 @@ impl RenderOnce for QueuedMessage {
             )
             .child(text)
             .children(toggle);
-        let controls = self.controls(busy, window, cx);
+        let controls = self.controls(window, cx);
         let ds = Ds::get(cx);
         let row = div()
             .flex()
@@ -254,11 +254,19 @@ impl RenderOnce for QueuedMessage {
             .child(bubble_cap(bubble, false, true))
             .child(controls);
         match progress {
-            Some(t) => div()
-                .relative()
-                .top(ds.len(Length::MotionDistanceSm) * (1. - t))
-                .opacity(t)
-                .child(row)
+            Some((value, timing)) => value
+                .apply(
+                    row,
+                    &timing,
+                    &Props {
+                        opacity: Some((0., 1.)),
+                        offset: Some((
+                            point(px(0.), ds.len(Length::MotionDistanceSm)),
+                            point(px(0.), px(0.)),
+                        )),
+                        ..Default::default()
+                    },
+                )
                 .into_any_element(),
             None => row.into_any_element(),
         }
@@ -266,8 +274,9 @@ impl RenderOnce for QueuedMessage {
 }
 
 impl QueuedMessage {
-    fn controls(&self, busy: bool, _: &mut Window, cx: &mut App) -> AnyElement {
+    fn controls(&self, _: &mut Window, cx: &mut App) -> AnyElement {
         let ds = Ds::get(cx);
+        let busy = self.tone == QueuedTone::Sending;
         let send_now = self.send_now.as_ref().map(|(label, hint, handler)| {
             let mut button = Button::new((self.id.clone(), "send-now"))
                 .size(Size::Xs)

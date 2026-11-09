@@ -29,7 +29,7 @@ pub fn track(
                 || (now.height - size.height).abs() > px(EPSILON);
             if moved {
                 state.update(cx, |state, _| *state = size);
-                window.request_animation_frame();
+                crate::ui::motion::remeasure(window);
             }
         },
     )

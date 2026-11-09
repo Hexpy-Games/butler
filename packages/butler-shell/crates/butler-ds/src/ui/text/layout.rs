@@ -189,6 +189,27 @@ fn surface(p: &Parts, cx: &App) -> (Div, Option<Div>) {
         .bg(p.c.fill)
         .border(p.m.border)
         .border_color(p.c.border);
+    let fill = if p.spec.look == Look::Quiet {
+        let overlay = div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .rounded(p.m.radius)
+            .bg(p.focused_colors.fill)
+            .border(p.m.border)
+            .border_color(p.focused_colors.border);
+        fill.child(p.focus_motion.0.apply(
+            overlay,
+            &p.focus_motion.1,
+            &crate::ui::motion::Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
+        ))
+    } else {
+        fill
+    };
     let ring = p
         .ring
         .then(|| control::ring_layer(focus::shadows(ds), p.m.radius));

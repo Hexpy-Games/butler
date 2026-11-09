@@ -2,126 +2,84 @@
 //! from the baseline, staggered; the same count with new values eases each column from the
 //! height it painted to its new one (FLIP). An update in flight starts from what is painted now.
 //! Reduced motion draws the final heights at once.
-use std::time::{Duration, Instant};
-
-use gpui::{App, ElementId, Window};
+use std::time::Duration;
 
 use crate::tokens::{Duration as DsDuration, Easing};
 use crate::ui::context::Ds;
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Timing, Transition};
+use gpui::{App, ElementId, Window, animation_time_ms};
 
-/// Per-bar grow delay of the approved mockups; the whole stagger stays within `--motion-slow`.
 const GROW_STAGGER: Duration = Duration::from_millis(12);
 
 struct State {
-    /// The targets the last render held.
     targets: Vec<f32>,
-    /// Where each column started, and when the run began.
-    from: Vec<f32>,
-    since: Instant,
-    grow: bool,
+    bars: Vec<(Transition, Timing)>,
 }
 
-/// The height (px) each column is drawn at now, heading for `targets`.
+/// Retained clip motion for each column, in pixels above the baseline.
 pub(super) fn heights(
     id: &ElementId,
     targets: &[f32],
     window: &mut Window,
     cx: &mut App,
-) -> Vec<f32> {
-    let now = cx.background_executor().now();
-    let (jump, slow, deliberate) = {
-        let ds = Ds::get(cx);
-        (
-            ds.reduced_motion(),
-            ds.duration(DsDuration::MotionSlow),
-            ds.duration(DsDuration::MotionDeliberate),
-        )
-    };
-    let (standard, decelerate) = {
-        let ds = Ds::get(cx);
-        (
-            Timing::token(ds, DsDuration::MotionSlow, Easing::MotionEaseStandard),
-            Timing::token(
-                ds,
-                DsDuration::MotionDeliberate,
-                Easing::MotionEaseDecelerate,
-            ),
-        )
-    };
-    let state = window.use_keyed_state((id.clone(), "motion"), cx, |_, _| None::<State>);
-    let (painted, moving) = state.update(cx, |state, _| {
-        let at = |state: &State, now: Instant| {
-            sample(state, now, (slow, deliberate), (&standard, &decelerate))
-        };
-        if let Some(current) = state.as_ref() {
-            let painted = at(current, now).0;
-            if current.targets != targets {
-                let same = current.targets.len() == targets.len();
-                *state = Some(State {
-                    targets: targets.to_vec(),
-                    from: if same {
-                        painted
-                    } else {
-                        vec![0.; targets.len()]
-                    },
-                    since: now,
-                    grow: !same,
-                });
-            }
-        } else {
-            *state = Some(State {
-                targets: targets.to_vec(),
-                from: vec![0.; targets.len()],
-                since: now,
-                grow: true,
-            });
-        }
-        match state.as_ref() {
-            Some(current) if !jump => at(current, now),
-            _ => (targets.to_vec(), false),
-        }
+) -> Vec<(Transition, Timing)> {
+    let ds = Ds::get(cx);
+    let jump = ds.reduced_motion();
+    let standard = Timing::token(ds, DsDuration::MotionSlow, Easing::MotionEaseStandard);
+    let decelerate = Timing::token(
+        ds,
+        DsDuration::MotionDeliberate,
+        Easing::MotionEaseDecelerate,
+    );
+    let state = window.use_keyed_state((id.clone(), "motion"), cx, |_, _| State {
+        targets: Vec::new(),
+        bars: Vec::new(),
     });
-    if moving {
-        window.request_animation_frame();
-    }
-    painted
-}
-
-fn sample(
-    state: &State,
-    now: Instant,
-    (slow, deliberate): (Duration, Duration),
-    (standard, decelerate): (&Timing, &Timing),
-) -> (Vec<f32>, bool) {
-    let elapsed = now.saturating_duration_since(state.since);
-    let step = GROW_STAGGER.min(slow / u32::try_from(state.targets.len().max(1)).unwrap_or(1));
-    let mut moving = false;
-    let heights = state
-        .targets
-        .iter()
-        .zip(&state.from)
-        .enumerate()
-        .map(|(index, (to, from))| {
-            let (delay, duration, timing) = if state.grow {
-                (
-                    step * u32::try_from(index).unwrap_or(0),
-                    deliberate,
-                    decelerate,
-                )
-            } else {
-                (Duration::ZERO, slow, standard)
+    state.update(cx, |state, _| {
+        if state.targets != targets {
+            let same = state.targets.len() == targets.len();
+            let now = animation_time_ms();
+            let timing = if same { standard } else { decelerate };
+            let step = GROW_STAGGER
+                .min(standard.duration / u32::try_from(targets.len().max(1)).unwrap_or(1));
+            let bars = targets
+                .iter()
+                .enumerate()
+                .map(|(index, &to)| {
+                    let from = if jump {
+                        to
+                    } else if same {
+                        let (previous, time) = state.bars[index];
+                        let p = previous.motion(&time).progress(now);
+                        previous.from + (previous.to - previous.from) * p
+                    } else {
+                        0.
+                    };
+                    let delay = if same || jump {
+                        0
+                    } else {
+                        u32::try_from((step * u32::try_from(index).unwrap_or(0)).as_millis())
+                            .unwrap_or(0)
+                    };
+                    (
+                        Transition {
+                            from,
+                            to,
+                            start_ms: if jump {
+                                now.wrapping_sub(timing.ms())
+                            } else {
+                                now.wrapping_add(delay)
+                            },
+                        },
+                        timing,
+                    )
+                })
+                .collect();
+            *state = State {
+                targets: targets.to_vec(),
+                bars,
             };
-            let Some(run) = elapsed.checked_sub(delay) else {
-                moving = true;
-                return *from;
-            };
-            if run >= duration || (to - from).abs() < 0.5 {
-                return *to;
-            }
-            moving = true;
-            from + (to - from) * timing.ease(run.as_secs_f32() / duration.as_secs_f32())
-        })
-        .collect();
-    (heights, moving)
+        }
+        state.bars.clone()
+    })
 }

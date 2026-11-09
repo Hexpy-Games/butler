@@ -6,11 +6,12 @@ use gpui::{
 };
 
 use super::{AdaptiveShell, Ctx, NAV_FILLS, panel_rows, shell_tones};
-use crate::tokens::{Color, Length, Shadow};
+use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Shadow};
 use crate::ui::blocks::adaptive_shell::peek::{CloseReason, SidebarPeek};
 use crate::ui::blocks::scope::{self, Spec};
 use crate::ui::context::Ds;
 use crate::ui::convert;
+use crate::ui::motion::{Props, Timing};
 
 /// The peeked sidebar: a card over the workspace while the pointer is on it.
 pub(super) fn sidebar_peek(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -> Vec<AnyElement> {
@@ -43,33 +44,44 @@ pub(super) fn sidebar_peek(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -
     };
     let shadow = convert::box_shadows(ds.tokens().shadow(Shadow::ShadowWindow), ds.tokens());
     let (enter_peek, leave_peek, out_peek) = (peek.clone(), peek.clone(), peek.clone());
-    let card = div()
-        .id((shell.id.clone(), "peek-card"))
-        .debug_selector(|| "peek-card".to_owned())
-        .absolute()
-        .top(px(sm))
-        .bottom(px(sm))
-        .left(px(sm - travel * (1. - enter)))
-        .w(px(ctx.left_w))
-        .border(ds.len(Length::BorderHairline))
-        .border_color(ds.color(Color::LineStrong))
-        .rounded(ds.len(Length::RadiusPopover))
-        .bg(ds.color(Color::AdaptivePanelBg))
-        .shadow(shadow)
-        .overflow_hidden()
-        .opacity(enter)
-        .on_hover(move |on, window, cx| {
-            if *on {
-                enter_peek.pointer_enter(cx);
-            } else {
-                leave_peek.pointer_leave(window, cx);
-            }
-        })
-        .on_mouse_down_out(move |event, window, cx| {
-            let _ = event;
-            out_peek.close(CloseReason::PressOutside, window, cx);
-        })
-        .child(scope::scoped(tones, content));
+    let timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
+    let card = enter.apply(
+        div()
+            .id((shell.id.clone(), "peek-card"))
+            .debug_selector(|| "peek-card".to_owned())
+            .absolute()
+            .top(px(sm))
+            .bottom(px(sm))
+            .left(px(sm))
+            .w(px(ctx.left_w))
+            .border(ds.len(Length::BorderHairline))
+            .border_color(ds.color(Color::LineStrong))
+            .rounded(ds.len(Length::RadiusPopover))
+            .bg(ds.color(Color::AdaptivePanelBg))
+            .shadow(shadow)
+            .overflow_hidden()
+            .on_hover(move |on, window, cx| {
+                if *on {
+                    enter_peek.pointer_enter(cx);
+                } else {
+                    leave_peek.pointer_leave(window, cx);
+                }
+            })
+            .on_mouse_down_out(move |event, window, cx| {
+                let _ = event;
+                out_peek.close(CloseReason::PressOutside, window, cx);
+            })
+            .child(scope::scoped(tones, content)),
+        &timing,
+        &Props {
+            opacity: Some((0., 1.)),
+            offset: Some((
+                gpui::point(px(-travel), px(0.)),
+                gpui::point(px(0.), px(0.)),
+            )),
+            ..Default::default()
+        },
+    );
     layers.push(card.into_any_element());
     layers
 }

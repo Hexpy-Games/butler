@@ -1,4 +1,5 @@
 //! DoneIconButton.showcase.tsx.
+use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_ds::ui::Icon;
@@ -59,9 +60,7 @@ pub(super) fn save(
 ) -> impl Fn(&mut Window, &mut App) -> gpui::Task<Result<(), gpui::SharedString>> {
     move |window, cx| {
         window.spawn(cx, async move |cx| {
-            cx.background_executor()
-                .timer(Duration::from_millis(300))
-                .await;
+            motion::sleep(cx.background_executor(), Duration::from_millis(300)).await;
             if failing {
                 Err("save_failed".into())
             } else {

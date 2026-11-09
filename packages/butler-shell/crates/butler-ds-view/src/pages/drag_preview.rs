@@ -6,6 +6,7 @@ use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::blocks::drag_preview::{DragPreview, DragPreviewImage, Floating};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Align, Columns, Cross, Grid, Space, Stack};
+use butler_ds::ui::motion;
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{
     AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
@@ -254,7 +255,7 @@ fn record_area(
         move |_, bounds, window, cx| {
             if *area.read(cx) != bounds {
                 area.update(cx, |area, _| *area = bounds);
-                window.request_animation_frame();
+                motion::remeasure(window);
             }
         },
     )

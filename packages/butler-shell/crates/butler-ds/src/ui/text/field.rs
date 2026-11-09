@@ -13,7 +13,7 @@ use std::rc::Rc;
 use super::TextSize;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
 use crate::ui::context::Ds;
-use crate::ui::motion::Ramp;
+use crate::ui::motion::{Timing, Transition, transition};
 use crate::ui::{control, convert, focus};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -163,27 +163,25 @@ fn underline_color(spec: &Spec, focused: bool, hovered: bool, ds: &Ds) -> Hsla {
 }
 
 /// The focus treatment's progress: instant for the default field, eased for the quiet one.
-fn focus_progress(spec: &Spec, focused: bool, window: &mut Window, cx: &mut App) -> f32 {
-    let target = f32::from(u8::from(focused));
-    if spec.look != Look::Quiet {
-        return target;
-    }
-    let ramp = window.use_keyed_state((spec.id.clone(), "quiet"), cx, |_, _| Ramp::at(0.));
-    let now = cx.background_executor().now();
+fn focus_progress(
+    spec: &Spec,
+    focused: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> (Transition, Timing) {
     let ds = Ds::get(cx);
-    let (duration, ease, instant) = (
-        ds.duration(DsDuration::MotionFast),
-        convert::easing(ds.tokens().ease(Easing::MotionEaseStandard)),
-        ds.reduced_motion(),
+    let timing = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
+    let value = transition(
+        (spec.id.clone(), "quiet"),
+        (
+            f32::from(focused),
+            spec.look != Look::Quiet || ds.reduced_motion(),
+        ),
+        &timing,
+        window,
+        cx,
     );
-    let (value, moving) = ramp.update(cx, |ramp, _| {
-        ramp.retarget(target, now, instant);
-        ramp.sample(now, duration, &ease)
-    });
-    if moving {
-        window.request_animation_frame();
-    }
-    value
+    (value, timing)
 }
 
 /// The pieces a layout puts together.
@@ -191,6 +189,8 @@ pub(super) struct Parts {
     pub(super) spec: Spec,
     pub(super) m: Metrics,
     pub(super) c: Colors,
+    pub(super) focus_motion: (Transition, Timing),
+    pub(super) focused_colors: Colors,
     pub(super) state: Entity<EditableTextState>,
     pub(super) handle: FocusHandle,
     pub(super) focused: bool,
@@ -219,7 +219,18 @@ pub(super) fn render(spec: Spec, window: &mut Window, cx: &mut App) -> AnyElemen
     let ring = focused && !focus::ring_handed_off(cx);
     let parts = Parts {
         m: Metrics::of(&spec, window, ds),
-        c: Colors::of(&spec, progress, hovered, ds),
+        c: Colors::of(
+            &spec,
+            if spec.look == Look::Quiet {
+                0.
+            } else {
+                progress.0.target()
+            },
+            hovered,
+            ds,
+        ),
+        focused_colors: Colors::of(&spec, 1., hovered, ds),
+        focus_motion: progress,
         spec,
         state,
         handle,

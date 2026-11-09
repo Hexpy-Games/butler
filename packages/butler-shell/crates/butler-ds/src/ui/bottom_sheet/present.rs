@@ -73,7 +73,7 @@ impl Presented {
             self.state.update(cx, |state, _| state.open(key));
         }
         let id = format!("{}-sheet", self.id);
-        let backdrop = anim::backdrop(&id, self.phase, (width, height), Ds::get(cx));
+        let backdrop = anim::backdrop(&id, self.phase, (width, height), window, cx);
         let theme = self.theme;
         let surface = self.surface((width, height), window, cx);
         let backdrop = backdrop.map(|backdrop| Popper::pinned(Z::Popover, theme, backdrop));

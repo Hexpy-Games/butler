@@ -3,13 +3,13 @@
 //! over `--motion-slow` and the check mark follows one `--motion-menu` beat later. Reduced
 //! motion keeps only the fade. Strokes are drawn as paths in the inherited text colour.
 use gpui::{
-    App, Bounds, Div, ElementId, Hsla, IntoElement, ParentElement as _, PathBuilder, Pixels,
-    RenderOnce, Styled as _, Window, canvas, div, point, px,
+    App, Bounds, Div, ElementId, Hsla, IntoElement, LayerMotion, ParentElement as _, PathBuilder,
+    Pixels, RenderOnce, Styled as _, Window, animation_time_ms, canvas, div, point, px,
 };
 
 use super::context::Ds;
 use super::convert;
-use super::motion::{Timing, Tween};
+use super::motion::{Props, Timing, enter, mounted_at};
 use crate::tokens::{Duration as DsDuration, Easing, Number};
 
 /// Hugeicons geometry (24 grid, 1.5 stroke).
@@ -192,7 +192,7 @@ fn check(size: f32, ring: bool, progress: Progress) -> Div {
 }
 
 impl RenderOnce for SuccessCheck {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
         let done = Progress { ring: 1., mark: 1. };
         if !self.animate {
@@ -204,33 +204,47 @@ impl RenderOnce for SuccessCheck {
             ds.duration(DsDuration::MotionMenu).as_secs_f32(),
         );
         let total = base.max(menu + slow);
+        let timing = Timing::linear(std::time::Duration::from_secs_f32(total));
+        let pop = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
         let ease = convert::easing(ds.tokens().ease(Easing::MotionEaseStandard));
-        let scale_from = ds.number(Number::MotionScaleCheck);
+        let props = Props {
+            opacity: Some((0., 1.)),
+            scale: Some((ds.number(Number::MotionScaleCheck), 1.)),
+            ..Default::default()
+        };
         let draws = !ds.reduced_motion();
-        let (size, ring) = (self.size, self.ring);
-        Tween::new(
-            self.key,
-            div(),
-            Timing::linear(std::time::Duration::from_secs_f32(total)),
-            move |el, t| {
-                let elapsed = t * total;
-                let step = |start: f32, length: f32| {
-                    if length <= 0. {
-                        1.
-                    } else {
-                        ease(((elapsed - start) / length).clamp(0., 1.))
-                    }
-                };
-                let pop = step(0., base);
-                let progress = Progress {
-                    ring: if draws { step(0., slow) } else { 1. },
-                    mark: if draws { step(menu, slow) } else { 1. },
-                };
-                let scale = scale_from + (1. - scale_from) * pop;
-                el.opacity(pop)
-                    .child(check(size, ring, progress).scale(scale))
-            },
-        )
-        .into_any_element()
+        let start_ms = mounted_at(self.key.clone(), window, cx);
+        let el = if !draws || animation_time_ms().wrapping_sub(start_ms) >= timing.ms() {
+            check(self.size, self.ring, done)
+        } else {
+            let n = (timing.ms() * 60).div_ceil(1000);
+            div()
+                .relative()
+                .size(px(self.size))
+                .flex_none()
+                .children((0..n).map(|i| {
+                    let elapsed = (i + 1) as f32 / n as f32 * total;
+                    let step = |start: f32, length: f32| {
+                        if length <= 0. {
+                            1.
+                        } else {
+                            ease(((elapsed - start) / length).clamp(0., 1.))
+                        }
+                    };
+                    let progress = Progress {
+                        ring: step(0., slow),
+                        mark: step(menu, slow),
+                    };
+                    div()
+                        .absolute()
+                        .size_full()
+                        .motion(LayerMotion {
+                            visible: (i as f32 / n as f32, (i + 1) as f32 / n as f32),
+                            ..timing.motion(start_ms)
+                        })
+                        .child(check(self.size, self.ring, progress))
+                }))
+        };
+        enter(self.key, &pop, &props, el, window, cx).into_any_element()
     }
 }

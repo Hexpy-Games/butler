@@ -209,7 +209,7 @@ fn stage(
         move |bounds, _, window, cx| {
             if *record.read(cx) != bounds {
                 record.update(cx, |seen, _| *seen = bounds);
-                window.request_animation_frame();
+                crate::ui::motion::remeasure(window);
             }
         },
     )

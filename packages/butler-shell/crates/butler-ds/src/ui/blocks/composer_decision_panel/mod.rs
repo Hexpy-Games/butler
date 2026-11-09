@@ -312,7 +312,12 @@ impl RenderOnce for ComposerDecisionPanel {
         let pending = window.use_keyed_state((self.id.clone(), "pending"), cx, |_, _| None::<Run>);
         let leaving =
             composer_panel::exit_progress(self.id.clone(), pending.read(cx).is_some(), window, cx);
-        if leaving >= 0.999
+        if leaving.target() == 1.
+            && !leaving.moving(&crate::ui::motion::Timing::token(
+                Ds::get(cx),
+                crate::tokens::Duration::MotionExitBase,
+                crate::tokens::Easing::MotionEaseAccelerate,
+            ))
             && let Some(run) = pending.update(cx, |pending, _| pending.take())
         {
             window.defer(cx, move |window, cx| run(window, cx));

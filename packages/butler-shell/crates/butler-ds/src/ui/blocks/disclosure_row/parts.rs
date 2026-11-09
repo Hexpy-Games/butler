@@ -7,10 +7,9 @@ use gpui::{
 use super::{Affordance, Attention, DisclosureRow, Surface};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::Icon;
-use crate::ui::blocks::anim::ramp;
 use crate::ui::context::Ds;
 use crate::ui::icon::{IconSize, icon};
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Props, Timing, Transition, transition};
 use crate::ui::typo::{Tone, Typo, Weight, Wrap};
 
 /// `--clickable-padding-inline`, the inline padding of a plain row's bleeding trigger.
@@ -75,7 +74,12 @@ impl Layout {
 }
 
 /// How far the chevron has turned (0 closed, 1 open): `--motion-fast` standard.
-pub(super) fn chevron_turn(id: &ElementId, open: bool, window: &mut Window, cx: &mut App) -> f32 {
+pub(super) fn chevron_turn(
+    id: &ElementId,
+    open: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> (Transition, Timing) {
     let (timing, jump) = {
         let ds = Ds::get(cx);
         (
@@ -83,17 +87,23 @@ pub(super) fn chevron_turn(id: &ElementId, open: bool, window: &mut Window, cx: 
             ds.reduced_motion(),
         )
     };
-    ramp(
+    let value = transition(
         (id.clone(), "turn"),
         (f32::from(u8::from(open)), jump),
         &timing,
         window,
         cx,
-    )
+    );
+    (value, timing)
 }
 
 /// `.titleLine`: a problem dot, the title, a muted count, then the chevron.
-fn title_line(row: &mut DisclosureRow, layout: &Layout, turn: f32, ds: &Ds) -> Div {
+fn title_line(
+    row: &mut DisclosureRow,
+    layout: &Layout,
+    turn: (Transition, Timing),
+    ds: &Ds,
+) -> Div {
     let dot = row.attention.map(|attention| {
         let color = match attention {
             Attention::Error => Color::TraceError,
@@ -127,10 +137,20 @@ fn title_line(row: &mut DisclosureRow, layout: &Layout, turn: f32, ds: &Ds) -> D
             .items_center()
             .justify_center()
             .text_color(ds.color(Color::TextTertiary))
-            .child(
-                icon(Icon::ChevronRight, IconSize::Sm, ds)
-                    .turned(turn * std::f32::consts::FRAC_PI_2),
-            )
+            .child(turn.0.apply(
+                div().child(icon(Icon::ChevronRight, IconSize::Sm, ds).turned(
+                    if turn.0.moving(&turn.1) {
+                        0.
+                    } else {
+                        turn.0.target() * std::f32::consts::FRAC_PI_2
+                    },
+                )),
+                &turn.1,
+                &Props {
+                    rotation: Some((0., std::f32::consts::FRAC_PI_2)),
+                    ..Default::default()
+                },
+            ))
     });
     div()
         .flex()
@@ -144,7 +164,12 @@ fn title_line(row: &mut DisclosureRow, layout: &Layout, turn: f32, ds: &Ds) -> D
 }
 
 /// The trigger's content: the first line, the description and the bar.
-pub(super) fn line(row: &mut DisclosureRow, layout: &Layout, turn: f32, ds: &Ds) -> Div {
+pub(super) fn line(
+    row: &mut DisclosureRow,
+    layout: &Layout,
+    turn: (Transition, Timing),
+    ds: &Ds,
+) -> Div {
     let icon = row.icon.take().map(|icon| {
         div()
             .flex()

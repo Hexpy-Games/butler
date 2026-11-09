@@ -401,9 +401,6 @@ impl Select {
             None
         };
         let hidden = aligned && geometry.is_none();
-        if hidden {
-            window.request_animation_frame();
-        }
         let view = surface::View {
             rows,
             value: self.selected(cx),
@@ -413,7 +410,6 @@ impl Select {
             popper: !aligned,
         };
         let surface = theme.scoped(cx, |cx| surface::build(self, &view, &focus, cx));
-        let ds = Ds::get(cx);
         let animated = if hidden {
             Some(div().opacity(0.).child(surface).into_any_element())
         } else {
@@ -425,7 +421,7 @@ impl Select {
                 (0.5, 0.),
                 Motion::MENU,
                 surface,
-                ds,
+                (window, cx),
             )
         };
         let Some(animated) = animated else {

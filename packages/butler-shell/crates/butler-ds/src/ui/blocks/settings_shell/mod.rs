@@ -7,7 +7,7 @@ mod page;
 
 use gpui::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, RenderOnce, SharedString, Styled as _, Window, WindowControlArea, div, px,
+    Pixels, RenderOnce, SharedString, Styled as _, Window, WindowControlArea, div, point, px,
 };
 
 pub use page::{SettingsPageCopy, repeats_settings_copy, settings_page, settings_page_provider};
@@ -17,6 +17,7 @@ use super::scope::{self, Spec};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
 use crate::ui::convert;
+use crate::ui::motion::{Props, Timing, Transition};
 use crate::ui::scroll::ScrollArea;
 use crate::ui::strut;
 
@@ -170,21 +171,32 @@ fn page_direction(shell: &SettingsShell, window: &mut Window, cx: &mut App) -> (
 }
 
 /// `el` entering with the page transition: it fades in and rises (or drops) by the distance.
-fn page_moved(el: Div, enter: Option<(f32, f32)>) -> Div {
+fn page_moved(el: Div, enter: Option<((Transition, Timing), f32)>) -> Div {
     match enter {
-        Some((progress, dy)) => el
-            .relative()
-            .opacity(progress)
-            .top(px(dy * (1. - progress))),
+        Some(((progress, timing), dy)) => progress.apply(
+            el,
+            &timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                offset: Some((point(px(0.), px(dy)), point(px(0.), px(0.)))),
+                ..Default::default()
+            },
+        ),
         None => el,
     }
 }
 
 /// `el` sliding in from `from` px to the side as a compact pane changes.
-fn pane_moved(el: Div, progress: f32, from: f32) -> Div {
-    el.relative()
-        .opacity(progress)
-        .left(px(from * (1. - progress)))
+fn pane_moved(el: Div, (progress, timing): (Transition, Timing), from: f32) -> Div {
+    progress.apply(
+        el,
+        &timing,
+        &Props {
+            opacity: Some((0., 1.)),
+            offset: Some((point(px(from), px(0.)), point(px(0.), px(0.)))),
+            ..Default::default()
+        },
+    )
 }
 
 struct Look {
@@ -246,7 +258,12 @@ impl SettingsShell {
     }
 
     /// The detail header: a compact window leads it with the navigation slot.
-    fn header(&mut self, look: &Look, ds: &Ds, enter: Option<(f32, f32)>) -> Option<AnyElement> {
+    fn header(
+        &mut self,
+        look: &Look,
+        ds: &Ds,
+        enter: Option<((Transition, Timing), f32)>,
+    ) -> Option<AnyElement> {
         let header = self.detail_header.take()?;
         let mut row = div()
             .flex()
@@ -271,7 +288,13 @@ impl SettingsShell {
         )
     }
 
-    fn content(&mut self, look: &Look, ds: &Ds, id: &ElementId, enter: Option<(f32, f32)>) -> Div {
+    fn content(
+        &mut self,
+        look: &Look,
+        ds: &Ds,
+        id: &ElementId,
+        enter: Option<((Transition, Timing), f32)>,
+    ) -> Div {
         let copy = SettingsPageCopy {
             title: self.page_title.take(),
             description: self.page_description.take(),
@@ -305,7 +328,7 @@ impl SettingsShell {
         &mut self,
         look: &Look,
         ds: &Ds,
-        enter: Option<(f32, f32)>,
+        enter: Option<((Transition, Timing), f32)>,
         id: &ElementId,
     ) -> Div {
         let pane = div()

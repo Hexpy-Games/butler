@@ -354,8 +354,10 @@ impl Render for Onboarding {
         let key = self.stage_key(cx);
         let body = self.body(window, cx);
         let lang = self.lang;
-        // ANIM-MIGRATE(setup card morph between steps): the DS stage swaps the cards by key.
-        // ANIM-MIGRATE(first-install ink intro): the DS draws `Full` as the rerun entrance.
+        // ANIM-MIGRATE(setup card morph between steps): requires measured surface edges and
+        // retained old content; motion Props cannot animate layout bounds without scaling text.
+        // ANIM-MIGRATE(first-install ink intro): requires the wallpaper's ink timeline and mark
+        // reveal; motion Props animate painted groups, not the procedural ink or its keep-out.
         let mut shell = SetupWizardShell::new("first-run", words(lang).product)
             .variant(SetupWizardVariant::Focus)
             .anchor(SetupWizardAnchor::Top)

@@ -7,8 +7,10 @@ use butler_ds::ui::context::Ds;
 use butler_ds::ui::copy_button::CopyButton;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::Justify;
+use butler_ds::ui::rolling_swap::RollingSwap;
 use butler_ds::ui::spinner::Spinner;
 use butler_ds::ui::tooltip::Tooltip;
+use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, Window};
 
 use super::copy::{Words, words};
@@ -214,8 +216,14 @@ fn card(state: &SignIn, copy: &Words, cx: &Context<Onboarding>) -> AnyElement {
     } else {
         provider_mark("openai", None, false)
     };
-    // ANIM-MIGRATE(RollingSwap of the status line when it changes)
-    Notice::new(tone, line)
+    let status = RollingSwap::new("first-run-signin-status", line.clone(), move |_, _| {
+        Typo::body(line.clone())
+            .tone(Tone::Inherit)
+            .into_any_element()
+    })
+    .fill();
+    Notice::new(tone, "")
+        .message_content(status)
         .icon(glyph)
         .action(actions)
         .into_any_element()

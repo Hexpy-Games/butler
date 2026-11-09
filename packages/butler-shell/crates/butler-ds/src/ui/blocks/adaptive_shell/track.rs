@@ -6,20 +6,19 @@ use gpui::{App, SharedString, Window};
 
 use super::AdaptiveShell;
 use crate::tokens::{Duration as DsDuration, Easing};
-use crate::ui::blocks::anim::ramp;
 use crate::ui::blocks::scope::SplitMotion;
 use crate::ui::context::Ds;
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Timing, Transition, transition};
 
 /// Every eased quantity of one frame, each 0 (closed) to 1 (open).
 pub(super) struct Tracks {
-    pub left: f32,
+    pub left: Transition,
     /// The docked sidebar's fade (reduced motion).
-    pub left_fade: f32,
-    pub right: f32,
-    pub right_fade: f32,
-    pub scrim: f32,
-    pub peek: f32,
+    pub left_fade: Transition,
+    pub right: Transition,
+    pub right_fade: Transition,
+    pub scrim: Transition,
+    pub peek: Transition,
     pub split: Option<SplitMotion>,
 }
 
@@ -60,7 +59,7 @@ fn panel_pair(
     (name, open, jump): (&'static str, bool, bool),
     window: &mut Window,
     cx: &mut App,
-) -> (f32, f32) {
+) -> (Transition, Transition) {
     let ds = Ds::get(cx);
     let panel = Timing::token(
         ds,
@@ -72,14 +71,24 @@ fn panel_pair(
     } else {
         Timing::token(ds, DsDuration::MotionExitFast, Easing::MotionEaseStandard)
     };
-    let slide = ramp(
+    let before =
+        window.use_keyed_state((shell.id.clone(), format!("{name}-target")), cx, |_, _| {
+            open
+        });
+    if *before.read(cx) != open {
+        if !jump {
+            window.animate_layout(panel.ms());
+        }
+        before.update(cx, |value, _| *value = open);
+    }
+    let slide = transition(
         (shell.id.clone(), name),
         (level(open), jump),
         &panel,
         window,
         cx,
     );
-    let faded = ramp(
+    let faded = transition(
         (shell.id.clone(), SharedString::from(format!("{name}-fade"))),
         (level(open), false),
         &fade,
@@ -106,23 +115,32 @@ fn split_motion(
     let fade = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
     let reduced = ds.reduced_motion();
     let id = &shell.id;
-    let progress = ramp(
+    let progress = transition(
         (id.clone(), "split"),
         (level(split.open), reduced || jump),
         &panel,
         window,
         cx,
     );
-    let faded = ramp(
+    let faded = transition(
         (id.clone(), "split-fade"),
         (level(split.open), jump),
         &fade,
         window,
         cx,
     );
+    let before = window.use_keyed_state((id.clone(), "split-target"), cx, |_, _| split.open);
+    if *before.read(cx) != split.open {
+        if !reduced && !jump {
+            window.animate_layout(panel.ms());
+        }
+        before.update(cx, |value, _| *value = split.open);
+    }
     Some(SplitMotion {
-        progress,
-        fade: faded,
+        progress: progress.target(),
+        fade: faded.target(),
+        motion: Some(progress),
+        fade_motion: Some(faded),
         open: split.open,
         chat_width: split.chat_width,
     })
@@ -148,14 +166,14 @@ pub(super) fn tracks(
     );
     let (left, left_fade) = panel_pair(shell, ("left", shell.left_open, jump), window, cx);
     let (right, right_fade) = panel_pair(shell, ("right", facts.inspector_open, jump), window, cx);
-    let scrim = ramp(
+    let scrim = transition(
         (shell.id.clone(), "scrim"),
         (level(facts.scrim_open), reduced),
         &scrim_timing,
         window,
         cx,
     );
-    let peek = ramp(
+    let peek = transition(
         (shell.id.clone(), "peek"),
         (level(facts.peeking), false),
         &peek_timing,

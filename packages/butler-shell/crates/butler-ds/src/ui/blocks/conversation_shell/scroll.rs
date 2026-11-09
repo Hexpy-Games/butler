@@ -176,7 +176,27 @@ impl RenderOnce for MessageListSurface {
         } else {
             f32::from(ds.len(Length::TitlebarSafeAreaTop))
         };
-        let column = div().flex().flex_col().flex_none().min_w_0().pt(px(top));
+        let timing = crate::ui::motion::Timing::token(
+            ds,
+            crate::tokens::Duration::MotionSlow,
+            crate::tokens::Easing::MotionEaseEmphasized,
+        );
+        let column = div()
+            .id((
+                vars.motion_id
+                    .clone()
+                    .unwrap_or_else(|| "conversation".into()),
+                "column",
+            ))
+            .layout_motion(gpui::LayoutMotion {
+                duration_ms: if ds.reduced_motion() { 0 } else { timing.ms() },
+                easing: timing.easing(),
+            })
+            .flex()
+            .flex_col()
+            .flex_none()
+            .min_w_0()
+            .pt(px(top));
         // Measured: the column's width and its left edge; before that, centred at the gutters' share.
         let column = if vars.column_width > 0. {
             column.w(px(vars.column_width)).ml(px(vars.column_left))
@@ -271,7 +291,17 @@ impl RenderOnce for ConversationScrollToBottomButton {
         }
         // Centred on the column: `right: calc(50% + shift); translateX(50%)`.
         let label = self.label;
+        let timing = crate::ui::motion::Timing::token(
+            ds,
+            crate::tokens::Duration::MotionSlow,
+            crate::tokens::Easing::MotionEaseEmphasized,
+        );
         div()
+            .id((self.id, "column"))
+            .layout_motion(gpui::LayoutMotion {
+                duration_ms: if ds.reduced_motion() { 0 } else { timing.ms() },
+                easing: timing.easing(),
+            })
             .debug_selector(move || format!("jump:{label}"))
             .absolute()
             .bottom(px(bottom))

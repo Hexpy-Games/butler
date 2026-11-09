@@ -1,6 +1,7 @@
 //! MessageRow.showcase.tsx (+ MessageRow.showcaseParts.tsx, ActivityTurn.showcase.tsx): the
 //! activity turns, the default turn, the Chats bubble and the send-and-stream demo. The Chats
 //! bubble's document row is the ArtifactList.
+use butler_ds::ui::motion;
 use std::time::Duration;
 
 use butler_ds::tokens::Length;
@@ -337,8 +338,20 @@ fn send_and_stream(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement 
     let finished = elapsed.is_some_and(|e| {
         e >= ASSISTANT_AT + THINKING + CHUNK_INTERVAL * u32::try_from(total).unwrap_or(0)
     });
-    if elapsed.is_some() && !finished {
-        window.request_animation_frame();
+    if elapsed.is_some() {
+        window.use_keyed_state(format!("mr-ticker-{:?}", sent.read(cx)), cx, |_, cx| {
+            cx.spawn(async move |this, cx| {
+                let steps = [ASSISTANT_AT, THINKING]
+                    .into_iter()
+                    .chain(std::iter::repeat_n(CHUNK_INTERVAL, total));
+                for step in steps {
+                    motion::sleep(cx.background_executor(), step).await;
+                    if this.update(cx, |_, cx| cx.notify()).is_err() {
+                        return;
+                    }
+                }
+            })
+        });
     }
     let send = Button::new("mr-stream-send")
         .text(c.send)

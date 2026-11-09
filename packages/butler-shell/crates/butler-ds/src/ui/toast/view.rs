@@ -3,8 +3,8 @@
 use std::time::Instant;
 
 use gpui::{
-    AnyElement, Bounds, Corners, Edges, FontWeight, Hsla, InteractiveElement as _,
-    IntoElement as _, MouseButton, ParentElement as _, PathBuilder, Pixels, SharedString,
+    AnyElement, Bounds, Corners, FontWeight, Hsla, InteractiveElement as _, IntoElement as _,
+    MouseButton, ParentElement as _, PathBuilder, Pixels, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, canvas, div, point, px, svg,
 };
 
@@ -15,6 +15,7 @@ use crate::tokens::{Color, Length, Number};
 use crate::ui::context::Ds;
 use crate::ui::convert;
 use crate::ui::liquid_glass::{self, LiquidGlass};
+use crate::ui::motion::Props;
 
 /// sonner's font sizes and the box it gives each part.
 const TITLE_LINE: f32 = 1.5; // DS: sonner styles.css `[data-title]`
@@ -71,39 +72,50 @@ fn tone(kind: Kind, ds: &Ds) -> Tone {
 /// toast's presence; the lens draws its own shadow, rim and hairline), then the kind's
 /// translucent fill and 1px border (Toast.module.css:45-80) over it. The glass is not faded
 /// with the content: it ramps its lensing instead (LG research §5, §8.1.6).
-fn surface(tone: &Tone, progress: f32, ds: &Ds) -> gpui::Canvas<()> {
+fn surface(tone: &Tone, resolved: &Resolved, ds: &Ds) -> gpui::Div {
     let radius = ds.len(Length::RadiusPanel);
     let dark = ds.dark();
-    let glass = LiquidGlass::over_content().materialize(progress).adapt(ds);
-    let tint = tone.tint;
-    canvas(
+    let mut glass = LiquidGlass::over_content().adapt(ds);
+    glass.materialize = liquid_glass::Presence::Moving {
+        from: resolved.opacity.from,
+        to: resolved.opacity.to,
+        start_ms: resolved.opacity.start_ms,
+        timing: resolved.fade,
+    };
+    let lens = canvas(
         |_, _, _| (),
-        move |bounds: Bounds<Pixels>, (), window: &mut Window, _| {
+        move |bounds: Bounds<Pixels>, (), window, _| {
             let r = radius
                 .min(bounds.size.height / 2.)
                 .min(bounds.size.width / 2.);
-            let radii = Corners::all(r);
-            liquid_glass::paint(bounds, radii, dark, glass, window);
-            if let Some((fill, border)) = tint {
-                let fade = progress.clamp(0., 1.);
-                window.paint_quad(
-                    gpui::PaintQuad::new(bounds)
-                        .background(convert::with_alpha(fill, fade))
-                        .corner_radii(radii),
-                );
-                window.paint_quad(
-                    gpui::PaintQuad::new(bounds)
-                        .corner_radii(radii)
-                        .border_widths(Edges::all(px(1.))) // DS: sonner styles.css `border: 1px`
-                        .border_color(convert::with_alpha(border, fade)),
-                );
-            }
+            liquid_glass::paint(bounds, Corners::all(r), dark, glass, window);
         },
     )
     .absolute()
-    .top_0()
-    .left_0()
-    .size_full()
+    .size_full();
+    let tint = tone.tint.map(|(fill, border)| {
+        resolved.opacity.apply(
+            div()
+                .absolute()
+                .size_full()
+                .rounded(radius)
+                .bg(fill)
+                .border(px(1.))
+                .border_color(border),
+            &resolved.fade,
+            &Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
+        )
+    });
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .child(lens)
+        .children(tint)
 }
 
 /// sonner's loader: twelve bars on a ring that fade in turn over 1.2s. Under reduced motion they
@@ -270,9 +282,11 @@ pub(super) struct Place {
 fn measure(item: &Item, forced: bool) -> gpui::Canvas<()> {
     let measured = item.height.clone();
     canvas(
-        move |bounds: Bounds<Pixels>, _, _| {
-            if !forced {
-                measured.set(f32::from(bounds.size.height));
+        move |bounds: Bounds<Pixels>, window, _| {
+            if !forced
+                && measured.replace(f32::from(bounds.size.height)) != f32::from(bounds.size.height)
+            {
+                crate::ui::motion::remeasure(window);
             }
         },
         |_, (), _, _| {},
@@ -309,7 +323,6 @@ fn content(
         .font_family(ds.body_font().clone())
         .text_size(size)
         .line_height(ds.len(Length::TypoLabelLineHeight))
-        .opacity(resolved.content)
         .children(icon(toast, tone, clock, ds))
         .child(title)
         .children(toast.cancel.as_ref().map(|cancel| {
@@ -320,11 +333,19 @@ fn content(
             let colors = (ds.color(Color::Primary), ds.color(Color::PrimaryForeground));
             button(format!("toast-{id}-action"), action, colors, store, id, ds)
         }));
-    if toast.kind == Kind::Loading {
+    let row = if toast.kind == Kind::Loading {
         row
     } else {
         row.child(close(id, store, ds))
-    }
+    };
+    resolved.content.apply(
+        row,
+        &resolved.content_time,
+        &Props {
+            opacity: Some((0., 1.)),
+            ..Default::default()
+        },
+    )
 }
 
 /// The toast: positioned in the stack, scaled about its centre when it sits behind the front
@@ -339,7 +360,7 @@ pub(super) fn render(
     ds: &Ds,
 ) -> AnyElement {
     let tone = tone(item.toast.kind, ds);
-    let scale = resolved.scale;
+    let scale = resolved.scale.target();
     let forced = scale < 1. || resolved.height != item.height.get();
     let probe = measure(item, forced);
     let content = content(item, resolved, &tone, store, (now, epoch), ds);
@@ -347,10 +368,9 @@ pub(super) fn render(
     let down = store.clone();
     let mut outer = div()
         .absolute()
-        .top(px(resolved.y + resolved.swipe))
+        .top_0()
         .left(px(place.left))
         .w(px(place.width))
-        .scale(scale)
         .on_mouse_down(MouseButton::Left, move |event, window, cx| {
             let now = cx.background_executor().now();
             down.begin_swipe(id, event.position, now, cx);
@@ -358,7 +378,7 @@ pub(super) fn render(
         })
         .debug_selector(move || format!("toast-{id}"));
     if forced {
-        outer = outer.h(px(resolved.height)).overflow_hidden();
+        outer = outer.h(px(resolved.height));
     }
     // The front toast's box, for a harness that reports geometry.
     let marker = front.then(|| {
@@ -369,10 +389,42 @@ pub(super) fn render(
             .size_full()
             .debug_selector(|| "toast-front".to_owned())
     });
-    outer
-        .child(surface(&tone, resolved.opacity, ds))
+    let mut face = div()
+        .relative()
+        .w_full()
+        .child(surface(&tone, resolved, ds))
         .child(content)
         .child(probe)
-        .children(marker)
+        .children(marker);
+    if forced {
+        face = face.h(px(resolved.height));
+    }
+    let face = resolved.scale.apply(
+        face,
+        &resolved.timing,
+        &Props {
+            scale: Some((0., 1.)),
+            ..Default::default()
+        },
+    );
+    let face = resolved.swipe.apply(
+        div().relative().w_full().child(face),
+        &resolved.timing,
+        &Props {
+            offset: Some((point(px(0.), px(0.)), point(px(0.), px(1.)))),
+            ..Default::default()
+        },
+    );
+    outer = outer.child(face);
+    resolved
+        .y
+        .apply(
+            outer,
+            &resolved.timing,
+            &Props {
+                offset: Some((point(px(0.), px(0.)), point(px(0.), px(1.)))),
+                ..Default::default()
+            },
+        )
         .into_any_element()
 }

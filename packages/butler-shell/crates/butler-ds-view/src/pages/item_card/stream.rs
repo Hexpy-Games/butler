@@ -13,6 +13,7 @@ use butler_ds::ui::done_icon_button::DoneIconButton;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Columns, Grid, GridCross, Inline, Space, Stack};
 use butler_ds::ui::media_frame::{Aspect, Fit, MediaFrame};
+use butler_ds::ui::motion;
 use butler_ds::ui::presence::{Presence, PresenceMotion};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, Window, div};
 
@@ -149,7 +150,31 @@ fn width_columns(width: f32, gap: f32) -> usize {
 }
 
 /// How many cards have arrived `elapsed` into the stream, and whether the list has closed.
-fn timeline(elapsed: std::time::Duration, total: usize) -> (usize, bool) {
+fn timeline(
+    id: String,
+    elapsed: std::time::Duration,
+    total: usize,
+    window: &mut Window,
+    cx: &mut App,
+) -> (usize, bool) {
+    window.use_keyed_state(id, cx, |_, cx| {
+        let count = total;
+        cx.spawn(async move |this, cx| {
+            let steps =
+                [std::time::Duration::from_millis(FIRST)]
+                    .into_iter()
+                    .chain(std::iter::repeat_n(
+                        std::time::Duration::from_millis(EVERY),
+                        count,
+                    ));
+            for step in steps {
+                motion::sleep(cx.background_executor(), step).await;
+                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                    return;
+                }
+            }
+        })
+    });
     let ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
     let count = total as u64;
     let arrived = if ms < FIRST {
@@ -176,10 +201,8 @@ pub(super) fn settle(lang: Lang, reduced: bool, window: &mut Window, cx: &mut Ap
         .background_executor()
         .now()
         .saturating_duration_since(*started.read(cx));
-    let (arrived, closed) = timeline(elapsed, items.len());
-    if !closed {
-        window.request_animation_frame();
-    }
+    let ticker = format!("ic-settle-{tag}-ticker-{current}");
+    let (arrived, closed) = timeline(ticker, elapsed, items.len(), window, cx);
     let (measured, recorder) = measure::track(format!("ic-settle-{tag}-width"), window, cx);
     let live = width_columns(f32::from(measured.width), 8.);
     let across = if closed {

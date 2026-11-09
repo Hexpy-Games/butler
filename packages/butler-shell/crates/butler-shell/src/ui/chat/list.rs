@@ -21,6 +21,7 @@ use gpui::{
 };
 
 use super::TranscriptCtx;
+use super::activity::status::StatusLineView;
 use super::activity::timeline::turn_activity_panel;
 use super::assistant::{FooterMeta, session_branch_seed};
 use super::intro::{self, chats_intro};
@@ -130,6 +131,7 @@ struct State {
     client: Option<butler_shell_client::ShellClient>,
     /// The message carrying the running turn.
     live_id: Option<String>,
+    status_line: Option<Entity<StatusLineView>>,
     /// The chats intro shows.
     intro: bool,
     queue: Option<Rc<SessionQueueView>>,
@@ -174,6 +176,7 @@ impl State {
             footer_meta: Rc::default(),
             client: None,
             live_id: None,
+            status_line: None,
             intro: false,
             queue: None,
             messages: Vec::new(),
@@ -339,7 +342,10 @@ pub(crate) fn transcript(
     let intro = intro::visible(&t.view.session_id, cx);
     let source = pending_asks(&t.view.session_id, t.view.cursors.events, window, cx)
         .and_then(|page| request_source_message(t.view, &page));
-    state.update(cx, |state, _| state.sync(t, queue, reserve, intro, source));
+    state.update(cx, |state, cx| {
+        state.sync(t, queue, reserve, intro, source);
+        StatusLineView::sync(&mut state.status_line, t.view, cx);
+    });
     let (list_state, smooth, away, unread) = {
         let s = state.read(cx);
         (s.list.clone(), s.smooth.clone(), s.away, s.unread)
@@ -439,6 +445,7 @@ fn render_row(state: &Entity<State>, ix: usize, window: &mut Window, cx: &mut Ap
     };
     let mut t = TranscriptCtx::new(&shared, client, entering, footer_meta);
     t.live_message = live_id.as_deref();
+    t.status_line = state.read(cx).status_line.clone();
     let element = match row {
         Row::Top => return top_row(state, cx),
         // The list renders its rows while it prepaints, after the conversation scope has

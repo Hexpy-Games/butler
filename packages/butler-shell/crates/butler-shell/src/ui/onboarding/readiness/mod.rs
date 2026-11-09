@@ -279,7 +279,7 @@ impl Readiness {
             return;
         }
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(POLL).await;
+            butler_ds::ui::motion::sleep(cx.background_executor(), POLL).await;
             let _ = this.update(cx, |this, cx| {
                 if this.attempt == attempt {
                     this.poll(cx);

@@ -1,13 +1,13 @@
 //! The streaming reveal (`streamingReveal.ts`, `useStreamingReveal`): every chunk appended to the
 //! source fades in over `--motion-base`, opacity only, so nothing moves while a reply grows.
 //! Settled text (streaming off) is plain.
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use gpui::{App, ElementId, Window};
 
 use crate::tokens::{Duration as DsDuration, Easing};
 use crate::ui::context::Ds;
-use crate::ui::convert;
+use crate::ui::motion::{Timing, Transition};
 
 /// Chunks younger than this fade (fade duration plus margin: `STREAM_REVEAL_WINDOW_MS`).
 const WINDOW: Duration = Duration::from_millis(400);
@@ -16,7 +16,7 @@ const WINDOW: Duration = Duration::from_millis(400);
 struct Chunk {
     /// Source offset where the chunk starts.
     start: usize,
-    at: Instant,
+    at: u32,
 }
 
 #[derive(Default)]
@@ -26,21 +26,30 @@ struct Tracker {
 }
 
 /// The fade of each chunk of the current text at one frame.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct Reveal {
     /// `(start offset, opacity)`, in arrival order.
-    chunks: Vec<(usize, f32)>,
+    chunks: Vec<(usize, u32)>,
+    timing: Option<Timing>,
 }
 
 impl Reveal {
     /// The opacity of the text at source offset `start`: its covering chunk's fade (the latest
     /// chunk that starts at or before it), 1 where no chunk covers it.
-    pub(super) fn alpha_at(&self, start: usize) -> f32 {
+    pub(super) fn alpha_at(&self, start: usize) -> Option<(Transition, Timing)> {
+        let timing = self.timing?;
         self.chunks
             .iter()
             .rev()
             .find(|(chunk, _)| *chunk <= start)
-            .map_or(1., |(_, alpha)| *alpha)
+            .and_then(|(_, at)| {
+                let value = Transition {
+                    from: 0.,
+                    to: 1.,
+                    start_ms: *at,
+                };
+                value.moving(&timing).then_some((value, timing))
+            })
     }
 
     /// The offsets strictly inside `start..end` where a new chunk begins.
@@ -54,7 +63,9 @@ impl Reveal {
 
     /// Whether any chunk is still fading.
     pub fn fading(&self) -> bool {
-        self.chunks.iter().any(|(_, alpha)| *alpha < 1.)
+        self.chunks
+            .iter()
+            .any(|(start, _)| self.alpha_at(*start).is_some())
     }
 }
 
@@ -69,15 +80,13 @@ pub fn track(
     cx: &mut App,
 ) -> Reveal {
     let state = window.use_keyed_state((id.into(), "reveal"), cx, |_, _| Tracker::default());
-    let now = cx.background_executor().now();
-    let (timing, ease) = {
-        let ds = Ds::get(cx);
-        (
-            ds.duration(DsDuration::MotionBase),
-            ds.tokens().ease(Easing::MotionEaseStandard),
-        )
-    };
-    let reveal = state.update(cx, |tracker, _| {
+    let now = gpui::animation_time_ms();
+    let timing = Timing::token(
+        Ds::get(cx),
+        DsDuration::MotionBase,
+        Easing::MotionEaseStandard,
+    );
+    state.update(cx, |tracker, _| {
         if !active {
             *tracker = Tracker {
                 text: text.to_owned(),
@@ -94,23 +103,16 @@ pub fn track(
             }
             text.clone_into(&mut tracker.text);
         }
-        tracker
-            .chunks
-            .retain(|chunk| now.saturating_duration_since(chunk.at) <= WINDOW + timing);
+        tracker.chunks.retain(|chunk| {
+            Duration::from_millis(u64::from(now.wrapping_sub(chunk.at))) <= WINDOW + timing.duration
+        });
         Reveal {
             chunks: tracker
                 .chunks
                 .iter()
-                .map(|chunk| {
-                    let age = now.saturating_duration_since(chunk.at).as_secs_f32();
-                    let t = (age / timing.as_secs_f32()).clamp(0., 1.);
-                    (chunk.start, convert::ease_at(ease, t))
-                })
+                .map(|chunk| (chunk.start, chunk.at))
                 .collect(),
+            timing: Some(timing),
         }
-    });
-    if reveal.fading() {
-        window.request_animation_frame();
-    }
-    reveal
+    })
 }

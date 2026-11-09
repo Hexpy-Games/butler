@@ -11,21 +11,19 @@ use std::time::Instant;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, Entity, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, Styled as _, Window, canvas, div, px,
+    AnyElement, App, ClickEvent, ElementId, Entity, InteractiveElement as _, IntoElement,
+    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, canvas, div, px,
 };
 
 use super::Icon;
 use super::context::{Ds, Lang};
 use super::control::{Blend, Control, Ring, Width};
-use super::convert;
 use super::icon::{IconSize, icon};
-use super::motion::Ramp;
+use super::motion::{Props, Timing, Transition, transition};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 
 /// A box height in motion: grows to `to` over `--motion-base` or shrinks over `--motion-exit-base`.
 struct Resize {
-    from: f32,
     to: f32,
     since: Instant,
     collapsing: bool,
@@ -40,7 +38,6 @@ struct State {
     /// The box height as last laid out (the start of the next resize).
     shown: f32,
     resize: Option<Resize>,
-    turn: Ramp,
 }
 
 #[derive(IntoElement)]
@@ -98,8 +95,6 @@ struct Step {
     /// The box's height while it resizes.
     height: Option<f32>,
     /// The chevron's turn, 0 to 1.
-    turn: f32,
-    moving: bool,
     clamped: bool,
     full: f32,
 }
@@ -107,37 +102,23 @@ struct Step {
 /// Advances the resize and the chevron to `now`.
 fn step(state: &Entity<State>, now: Instant, collapsed: f32, cx: &mut App) -> Step {
     let ds = Ds::get(cx);
-    let fast = ds.duration(DsDuration::MotionFast);
-    let turn_ease = convert::easing(ds.tokens().ease(Easing::MotionEaseStandard));
-    let expand = (
+    let (expand, exit) = (
         ds.duration(DsDuration::MotionBase),
-        ds.tokens().ease(Easing::MotionEaseStandard),
-    );
-    let exit = (
         ds.duration(DsDuration::MotionExitBase),
-        ds.tokens().ease(Easing::MotionEaseAccelerate),
     );
     state.update(cx, |s, _| {
-        let timing = |collapsing: bool| if collapsing { exit } else { expand };
         if let Some(resize) = &s.resize
-            && now.saturating_duration_since(resize.since) >= timing(resize.collapsing).0
+            && now.saturating_duration_since(resize.since)
+                >= if resize.collapsing { exit } else { expand }
         {
             // A collapse puts the clamp back only once the box is down.
             s.clamped |= resize.collapsing;
             s.resize = None;
         }
-        let (turn, turning) = s.turn.sample(now, fast, &turn_ease);
-        let height = s.resize.as_ref().map(|resize| {
-            let (time, ease) = timing(resize.collapsing);
-            let t = now.saturating_duration_since(resize.since).as_secs_f32() / time.as_secs_f32();
-            let eased = convert::ease_at(ease, t.clamp(0., 1.));
-            resize.from + (resize.to - resize.from) * eased
-        });
+        let height = s.resize.as_ref().map(|resize| resize.to);
         s.shown = height.unwrap_or(if s.clamped { collapsed } else { s.full });
         Step {
             height,
-            turn,
-            moving: height.is_some() || turning,
             clamped: s.clamped,
             full: s.full,
         }
@@ -175,19 +156,26 @@ fn measuring_copy(text: SharedString, state: &Entity<State>, ds: &Ds) -> gpui::D
 
 /// A click on the row: expand, or collapse back to the clamped height.
 fn toggle(state: Entity<State>, collapsed: f32, reduced: bool) -> Handler {
-    Rc::new(move |_, _, cx| {
+    Rc::new(move |_, window, cx| {
         let now = cx.background_executor().now();
+        let ds = Ds::get(cx);
+        let timing = if state.read(cx).expanded {
+            Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate)
+        } else {
+            Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard)
+        };
+        if !reduced {
+            window.animate_layout(timing.ms());
+        }
         state.update(cx, |s, cx| {
             let open = !s.expanded;
             s.expanded = open;
             let from = s.shown;
             let to = if open { s.full } else { collapsed };
-            s.turn.retarget(f32::from(open), now, reduced);
             if open {
                 s.clamped = false;
             }
             s.resize = (!reduced && (from - to).abs() > 0.5).then_some(Resize {
-                from,
                 to,
                 since: now,
                 collapsing: !open,
@@ -197,11 +185,51 @@ fn toggle(state: Entity<State>, collapsed: f32, reduced: bool) -> Handler {
             }
             cx.notify();
         });
+        let state = state.clone();
+        crate::ui::motion::delay(window, cx, timing.duration, move |_, cx| {
+            state.update(cx, |_, cx| cx.notify());
+        });
     })
 }
 
 /// The caption line above the row, when there is one.
-fn stack(meta: Option<SharedString>, row: gpui::Div, ds: &Ds) -> AnyElement {
+fn stack(
+    meta: Option<SharedString>,
+    frame: gpui::Stateful<gpui::Div>,
+    (turn, turn_timing): (Transition, Timing),
+    overflows: bool,
+    ds: &Ds,
+) -> AnyElement {
+    let chevron = div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .size(ds.len(Length::TypoBodyLineHeight))
+        .text_color(ds.color(Color::TextTertiary))
+        .children(overflows.then(|| {
+            turn.apply(
+                div().child(icon(Icon::ChevronRight, IconSize::Sm, ds).turned(
+                    if turn.moving(&turn_timing) {
+                        0.
+                    } else {
+                        turn.target() * std::f32::consts::FRAC_PI_2
+                    },
+                )),
+                &turn_timing,
+                &Props {
+                    rotation: Some((0., std::f32::consts::FRAC_PI_2)),
+                    ..Default::default()
+                },
+            )
+        }));
+    let row = div()
+        .flex()
+        .items_start()
+        .gap(ds.len(Length::SpaceXs))
+        .child(div().flex_1().min_w_0().child(frame))
+        .child(chevron);
+
     div()
         .flex()
         .flex_col()
@@ -252,20 +280,28 @@ impl RenderOnce for ExpandableText {
             full: 0.,
             shown: 0.,
             resize: None,
-            turn: Ramp::at(0.),
         });
         let line = f32::from(Ds::get(cx).len(Length::TypoBodyLineHeight));
         let collapsed = line * f32::from(self.collapsed_lines);
         let Step {
             height,
-            turn,
-            moving,
             clamped,
             full,
         } = step(&state, now, collapsed, cx);
-        if moving {
-            window.request_animation_frame();
-        }
+        let ds = Ds::get(cx);
+        let turn_timing = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
+        let resize_timing = if state.read(cx).expanded {
+            Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard)
+        } else {
+            Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate)
+        };
+        let turn = transition(
+            (self.id.clone(), "turn"),
+            (f32::from(state.read(cx).expanded), ds.reduced_motion()),
+            &turn_timing,
+            window,
+            cx,
+        );
         let overflows = full > collapsed + 1.;
         let ds = Ds::get(cx);
         let mut visible = body_text(self.text.clone(), ds).whitespace_normal();
@@ -274,31 +310,28 @@ impl RenderOnce for ExpandableText {
                 .line_clamp(usize::from(self.collapsed_lines))
                 .text_ellipsis();
         }
-        let mut frame = div().relative().min_w_0().overflow_hidden();
+        let mut frame = div()
+            .id((self.id.clone(), "height"))
+            .relative()
+            .min_w_0()
+            .layout_motion(gpui::LayoutMotion {
+                duration_ms: if ds.reduced_motion() {
+                    0
+                } else {
+                    resize_timing.ms()
+                },
+                easing: resize_timing.easing(),
+            });
+        if clamped {
+            frame = frame.overflow_hidden();
+        }
         if let Some(height) = height {
             frame = frame.h(px(height));
         }
         let frame = frame
             .child(visible)
             .child(measuring_copy(self.text.clone(), &state, ds));
-        let chevron = div()
-            .flex()
-            .flex_none()
-            .items_center()
-            .justify_center()
-            .size(ds.len(Length::TypoBodyLineHeight))
-            .text_color(ds.color(Color::TextTertiary))
-            .children(overflows.then(|| {
-                icon(Icon::ChevronRight, IconSize::Sm, ds)
-                    .turned(turn * std::f32::consts::FRAC_PI_2)
-            }));
-        let row = div()
-            .flex()
-            .items_start()
-            .gap(ds.len(Length::SpaceXs))
-            .child(div().flex_1().min_w_0().child(frame))
-            .child(chevron);
-        let layout = stack(self.meta, row, ds);
+        let layout = stack(self.meta, frame, (turn, turn_timing), overflows, ds);
         if !overflows {
             return div()
                 .min_w_0()

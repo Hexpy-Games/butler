@@ -6,8 +6,7 @@ use std::time::Instant;
 use super::drag::{Detent, Drag, Outcome};
 use crate::tokens::{Duration as DsDuration, Easing};
 use crate::ui::context::Ds;
-use crate::ui::convert;
-use crate::ui::motion::Ramp;
+use crate::ui::motion::{Timing, Transition};
 use crate::ui::overlay::popper::Anchor;
 
 /// The state of one sheet (a BottomSheet or a presented overlay).
@@ -21,7 +20,8 @@ pub struct SheetState {
     /// A press that became a drag must not also click the grabber.
     moved: bool,
     /// `--sheet-drag-y`: set directly while a finger moves the sheet, eased otherwise.
-    offset: Ramp,
+    offset: f32,
+    released_ms: Option<u32>,
     /// The surface's measured box: `translateY(100%)` is its height.
     pub(super) surface: Anchor,
 }
@@ -71,25 +71,26 @@ impl SheetState {
         };
         let offset = drag.follow(y, at, detent);
         self.moved |= drag.moved();
-        self.offset.retarget(offset, at, true);
+        self.offset = offset;
+        self.released_ms = None;
     }
 
     /// The pointer lets go. A dismiss keeps the offset (the exit starts from it); any other
     /// outcome lets it settle back to rest. The caller closes the sheet on `Dismiss`.
-    pub(super) fn release(&mut self, y: f32, at: Instant) -> Option<Outcome> {
+    pub(super) fn release(&mut self, y: f32, _at: Instant) -> Option<Outcome> {
         let drag = self.drag.take()?;
         let outcome = drag.release(y, self.detent());
         match outcome {
             Outcome::Dismiss => {}
             Outcome::Collapse => {
                 self.expanded = false;
-                self.offset.retarget(0., at, false);
+                self.released_ms = Some(gpui::animation_time_ms());
             }
             Outcome::Expand => {
                 self.expanded = true;
-                self.offset.retarget(0., at, false);
+                self.released_ms = Some(gpui::animation_time_ms());
             }
-            Outcome::SpringBack => self.offset.retarget(0., at, false),
+            Outcome::SpringBack => self.released_ms = Some(gpui::animation_time_ms()),
         }
         Some(outcome)
     }
@@ -99,15 +100,25 @@ impl SheetState {
         std::mem::take(&mut self.moved)
     }
 
-    /// The offset now, and whether it is still easing.
-    pub(super) fn offset(&mut self, now: Instant, ds: &Ds) -> (f32, bool) {
-        let ease = convert::easing(ds.tokens().ease(Easing::MotionEaseSettle));
-        self.offset
-            .sample(now, ds.duration(DsDuration::MotionSlow), &ease)
+    /// The drag offset, easing back after release without host frames.
+    pub(super) fn offset(&self, ds: &Ds) -> (Transition, Timing) {
+        let timing = Timing::token(ds, DsDuration::MotionSlow, Easing::MotionEaseSettle);
+        let value = Transition {
+            from: self.offset,
+            to: if self.released_ms.is_some() {
+                0.
+            } else {
+                self.offset
+            },
+            start_ms: self
+                .released_ms
+                .unwrap_or_else(|| gpui::animation_time_ms().wrapping_sub(timing.ms())),
+        };
+        (value, timing)
     }
 
     /// The offset the sheet was last at: the exit starts from it.
     pub(super) fn held_offset(&self) -> f32 {
-        self.offset.target()
+        self.offset
     }
 }

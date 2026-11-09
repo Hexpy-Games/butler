@@ -18,6 +18,7 @@ mod reset;
 mod summary;
 mod types;
 
+use butler_ds::ui::motion;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -103,7 +104,7 @@ fn later(
     f: impl FnOnce(&mut MemoryPage, &mut Context<MemoryPage>) + 'static,
 ) {
     cx.spawn(async move |this, cx| {
-        cx.background_executor().timer(POLL).await;
+        motion::sleep(cx.background_executor(), POLL).await;
         let _ = this.update(cx, f);
     })
     .detach();

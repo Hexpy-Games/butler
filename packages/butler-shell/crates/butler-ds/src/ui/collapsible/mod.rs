@@ -13,16 +13,16 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, Styled as _, Window,
-    canvas, div, px,
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
+    Styled as _, Window, canvas, div, px,
 };
 
 pub use list::{CollapsibleList, Row};
 
 use crate::tokens::{Duration as DsDuration, Easing};
 use crate::ui::context::Ds;
-use crate::ui::motion::Ramp;
-use crate::ui::{convert, focus, strut};
+use crate::ui::motion::{Props, Timing, transition};
+use crate::ui::{focus, strut};
 
 /// What happens to closed content.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -95,136 +95,87 @@ struct State {
     open: bool,
     mounted: bool,
     phase: Phase,
-    /// `None`: height `auto`.
-    height: Option<Ramp>,
-    opacity: Ramp,
-    /// The content's own height, measured while it paints.
     natural: Rc<Cell<Option<f32>>>,
-    /// The opening has begun its timers (it waits for the first measurement).
     started: bool,
-}
-
-/// What a frame draws.
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "independent facts of one frame"
-)]
-struct View {
-    mounted: bool,
-    height: Option<f32>,
-    opacity: f32,
-    moving: bool,
-    exited: bool,
-    hidden: bool,
-}
-
-/// The clock and curves of one frame.
-struct Clock {
-    now: std::time::Instant,
-    reduced: bool,
-    base: std::time::Duration,
-    fast: std::time::Duration,
-    exit: std::time::Duration,
-    standard: Box<dyn Fn(f32) -> f32>,
-    accelerate: Box<dyn Fn(f32) -> f32>,
+    generation: usize,
 }
 
 impl State {
     fn new(open: bool, keep: KeepMounted, appear: bool) -> Self {
-        let revealing = open && appear;
         Self {
             open,
             mounted: open || keep != KeepMounted::No,
-            phase: if revealing {
+            phase: if open && appear {
                 Phase::Opening
             } else {
                 Phase::Settled
             },
-            height: (revealing || !open).then(|| Ramp::at(0.)),
-            opacity: Ramp::at(f32::from(u8::from(open && !appear))),
             natural: Rc::new(Cell::new(None)),
             started: false,
+            generation: 0,
         }
     }
 
-    fn current(&self) -> f32 {
-        self.height
-            .map_or_else(|| self.natural.get().unwrap_or(0.), |h| h.value())
-    }
+    fn step(&mut self, open: bool, ds: &Ds) -> (bool, Timing) {
+        let reduced = ds.reduced_motion();
+        let timing = if open {
+            Timing::token(
+                ds,
+                if reduced {
+                    DsDuration::MotionFast
+                } else {
+                    DsDuration::MotionBase
+                },
+                Easing::MotionEaseStandard,
+            )
+        } else {
+            Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate)
+        };
 
-    fn step(&mut self, (open, keep): (bool, KeepMounted), clock: &Clock) -> View {
-        if open != self.open {
+        if self.open != open {
             self.open = open;
-            let from = self.current();
-            self.height = Some(Ramp::at(from));
-            if open {
-                self.mounted = true;
-                self.phase = Phase::Opening;
-                self.started = false;
-            } else {
-                self.phase = Phase::Closing;
-                self.opacity.retarget(0., clock.now, false);
-                // Reduced motion keeps the height until the fade has ended.
-                if let (false, Some(h)) = (clock.reduced, &mut self.height) {
-                    h.retarget(0., clock.now, false);
+            self.phase = if open { Phase::Opening } else { Phase::Closing };
+            self.mounted |= open;
+            self.started = false;
+            self.generation += 1;
+        }
+        let start = !self.started
+            && self.phase != Phase::Settled
+            && (self.phase == Phase::Closing || self.natural.get().is_some());
+        self.started |= start;
+        (start, timing)
+    }
+    fn advance(
+        state: &gpui::Entity<Self>,
+        keep: KeepMounted,
+        timing: &Timing,
+        on_exit: Option<ExitHandler>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if !Ds::get(cx).reduced_motion() {
+            window.animate_layout(timing.ms());
+        }
+        let (open, generation) = {
+            let s = state.read(cx);
+            (s.open, s.generation)
+        };
+        let state = state.clone();
+        let duration = timing.duration;
+        crate::ui::motion::delay(window, cx, duration, move |window, cx| {
+            let exited = state.update(cx, |s, cx| {
+                if s.generation != generation {
+                    return false;
                 }
+                s.phase = Phase::Settled;
+                s.mounted = open || keep != KeepMounted::No;
+                cx.notify();
+                !open && keep == KeepMounted::No
+            });
+            if let (true, Some(handler)) = (exited, on_exit) {
+                handler(window, cx);
             }
-        }
-        if self.phase == Phase::Opening && !self.started {
-            self.begin_opening(clock);
-        }
-        let exited = self.advance(keep, clock);
-        let moving = self.phase != Phase::Settled && self.mounted;
-        View {
-            mounted: self.mounted,
-            height: self.height.map(|h| h.value()),
-            opacity: self.opacity.value(),
-            moving: moving || exited,
-            exited,
-            hidden: !self.open && keep == KeepMounted::Hidden && self.phase == Phase::Settled,
-        }
-    }
-
-    /// Opening waits for the content's first measurement, then eases 0 to that height.
-    fn begin_opening(&mut self, clock: &Clock) {
-        let Some(natural) = self.natural.get() else {
-            return;
-        };
-        self.started = true;
-        self.opacity.retarget(1., clock.now, false);
-        if let Some(h) = &mut self.height {
-            h.retarget(natural, clock.now, clock.reduced);
-        }
-    }
-
-    /// Samples the ramps and moves to the next phase when they land. True once an exit ended
-    /// and the content unmounted.
-    fn advance(&mut self, keep: KeepMounted, clock: &Clock) -> bool {
-        let (duration, ease): (_, &dyn Fn(f32) -> f32) = match self.phase {
-            Phase::Closing => (clock.exit, &*clock.accelerate),
-            _ if clock.reduced => (clock.fast, &*clock.standard),
-            _ => (clock.base, &*clock.standard),
-        };
-        let (_, opacity_moving) = self.opacity.sample(clock.now, duration, ease);
-        let height_moving = self
-            .height
-            .as_mut()
-            .is_some_and(|h| h.sample(clock.now, duration, ease).1);
-        match self.phase {
-            Phase::Opening if self.started && !opacity_moving && !height_moving => {
-                self.phase = Phase::Settled;
-                self.height = None;
-                false
-            }
-            Phase::Closing if !opacity_moving && !height_moving => {
-                self.phase = Phase::Settled;
-                self.height = Some(Ramp::at(0.));
-                let unmount = keep == KeepMounted::No;
-                self.mounted = !unmount;
-                unmount
-            }
-            _ => false,
-        }
+        });
     }
 }
 
@@ -234,39 +185,40 @@ impl RenderOnce for Collapsible {
         let state = window.use_keyed_state(self.id.clone(), cx, move |_, _| {
             State::new(open, keep, appear)
         });
-        let clock = {
-            let ds = Ds::get(cx);
-            let curve = |ease| Box::new(convert::easing(ds.tokens().ease(ease))) as Box<_>;
-            Clock {
-                now: cx.background_executor().now(),
-                reduced: ds.reduced_motion(),
-                base: ds.duration(DsDuration::MotionBase),
-                fast: ds.duration(DsDuration::MotionFast),
-                exit: ds.duration(DsDuration::MotionExitBase),
-                standard: curve(Easing::MotionEaseStandard),
-                accelerate: curve(Easing::MotionEaseAccelerate),
-            }
-        };
-        let (view, natural) =
-            state.update(cx, |s, _| (s.step((open, keep), &clock), s.natural.clone()));
-        if view.moving {
-            window.request_animation_frame();
+        let ds = Ds::get(cx);
+        let reduced = ds.reduced_motion();
+        let (start, timing) = state.update(cx, |s, cx| s.step(open, Ds::get(cx)));
+        let s = state.read(cx);
+        let (mounted, phase, started) = (s.mounted, s.phase, s.started);
+        let natural = s.natural.clone();
+        let target = f32::from(open && (phase != Phase::Opening || started));
+        let opacity = transition(
+            (self.id.clone(), "opacity"),
+            (target, false),
+            &timing,
+            window,
+            cx,
+        );
+        if start {
+            State::advance(&state, keep, &timing, self.on_exit, window, cx);
         }
-        if let (true, Some(handler)) = (view.exited, self.on_exit.clone()) {
-            window.defer(cx, move |window, cx| handler(window, cx));
+        if !mounted {
+            return div().id((self.id, "height")).hidden();
         }
-        if !view.mounted {
-            return div().hidden();
-        }
-        if view.hidden {
-            // Closed and kept: a `height: 0` box with its clip margin netted out, still a flex
-            // item (so a parent's gap applies); the content is not laid out until it opens.
-            return div().h(px(0.));
+        if !open && keep == KeepMounted::Hidden && phase == Phase::Settled {
+            return div().id((self.id, "height")).h(px(0.));
         }
         let room = focus::room(Ds::get(cx));
+        let probe = state.clone();
         let measure = canvas(
             |_, _, _| (),
-            move |bounds, (), _, _| natural.set(Some(f32::from(bounds.size.height))),
+            move |bounds, (), _, cx| {
+                let height = Some(f32::from(bounds.size.height));
+                let first = natural.replace(height).is_none();
+                if first {
+                    probe.update(cx, |_, cx| cx.notify());
+                }
+            },
         )
         .absolute()
         .top_0()
@@ -278,15 +230,32 @@ impl RenderOnce for Collapsible {
                 .map(|child| strut::scope(true, child)),
         );
         let mut frame = div()
+            .id((self.id, "height"))
             .m(-room)
             .p(room)
             .min_h_0()
-            .overflow_hidden()
-            .opacity(view.opacity)
+            .layout_motion(gpui::LayoutMotion {
+                duration_ms: if reduced { 0 } else { timing.ms() },
+                easing: timing.easing(),
+            })
             .child(content);
-        if let Some(height) = view.height {
-            frame = frame.h(px(height) + room * 2.);
+        let collapsed =
+            !(open || reduced && phase == Phase::Closing) || (phase == Phase::Opening && !started);
+        if collapsed {
+            frame = frame.h(room * 2.);
+        } else if phase == Phase::Opening {
+            frame = frame.h(px(state.read(cx).natural.get().unwrap_or(0.)) + room * 2.);
         }
-        frame
+        if phase == Phase::Settled {
+            frame = frame.overflow_hidden();
+        }
+        opacity.apply(
+            frame,
+            &timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                ..Default::default()
+            },
+        )
     }
 }

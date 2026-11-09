@@ -4,6 +4,7 @@ use crate::ui::{
     Icon,
     store::navigation::{SpaceRowData, space_activity},
 };
+use butler_ds::ui::motion;
 use butler_ds::ui::{
     blocks::{nav_row::NavRow, nav_section::NavSectionHeading},
     context::Ds,
@@ -156,9 +157,7 @@ impl Shell {
         }
         self.sidebar.age_task = Some(cx.spawn(async move |weak, cx| {
             loop {
-                cx.background_executor()
-                    .timer(std::time::Duration::from_secs(60))
-                    .await;
+                motion::sleep(cx.background_executor(), std::time::Duration::from_secs(60)).await;
                 if weak.update(cx, |_, cx| cx.notify()).is_err() {
                     return;
                 }
@@ -198,9 +197,11 @@ impl Shell {
         self.sidebar.work_scheduled = true;
         let generation = self.sidebar.work_generation;
         cx.spawn(async move |weak, cx| {
-            cx.background_executor()
-                .timer(std::time::Duration::from_millis(1500))
-                .await;
+            motion::sleep(
+                cx.background_executor(),
+                std::time::Duration::from_millis(1500),
+            )
+            .await;
             let _ = weak.update(cx, |s, cx| {
                 if s.sidebar.work_generation != generation {
                     return;

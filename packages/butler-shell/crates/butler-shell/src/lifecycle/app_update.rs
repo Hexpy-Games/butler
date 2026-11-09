@@ -157,9 +157,7 @@ pub(crate) fn work_changed(cx: &mut App) {
     }
     let target = entity.clone();
     let timer = cx.spawn(async move |cx| {
-        cx.background_executor()
-            .timer(Duration::from_millis(100))
-            .await;
+        butler_ds::ui::motion::sleep(cx.background_executor(), Duration::from_millis(100)).await;
         cx.spawn(async move |cx| check_deferred(&target, cx).await)
             .detach();
     });

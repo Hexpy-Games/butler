@@ -66,17 +66,14 @@ impl Scope {
         }
         entered.update(cx, |entered, _| *entered = key);
         let scope = scope.clone();
-        window
-            .spawn(cx, async move |cx| {
-                cx.background_executor()
-                    .timer(std::time::Duration::from_millis(32))
-                    .await;
-                cx.update(|window, cx| {
-                    scope.update(cx, |scope, cx| scope.focus_into(window, cx));
-                })
-                .ok();
-            })
-            .detach();
+        crate::ui::motion::delay(
+            window,
+            cx,
+            std::time::Duration::from_millis(32),
+            move |window, cx| {
+                scope.update(cx, |scope, cx| scope.focus_into(window, cx));
+            },
+        );
     }
 
     /// Moves focus to the first tabbable of the scope, else the container. Call it once the scope's

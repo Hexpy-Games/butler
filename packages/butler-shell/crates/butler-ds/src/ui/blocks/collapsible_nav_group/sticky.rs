@@ -47,7 +47,7 @@ impl StickyScroll {
                 let top = f32::from(window.content_mask().bounds.origin.y);
                 if (*state.read(cx) - top).abs() > EPSILON {
                     state.update(cx, |state, _| *state = top);
-                    window.request_animation_frame();
+                    crate::ui::motion::remeasure(window);
                 }
             },
         )
@@ -92,7 +92,7 @@ pub(super) fn span_recorder(state: Entity<Span>) -> AnyElement {
             };
             if (now.top - span.top).abs() > EPSILON || (now.height - span.height).abs() > EPSILON {
                 state.update(cx, |state, _| *state = span);
-                window.request_animation_frame();
+                crate::ui::motion::remeasure(window);
             }
         },
     )

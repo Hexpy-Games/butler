@@ -24,7 +24,6 @@ use gpui::{
 pub(crate) use assets::FILES as ASSETS;
 use state::State;
 
-use crate::ui::context::Ds;
 use crate::ui::layer::{Layer, Z};
 
 /// Which toast it is (sonner's `id`), to update or dismiss it.
@@ -243,7 +242,7 @@ impl RenderOnce for Toaster {
         let top = self
             .offset
             .unwrap_or_else(|| px(if phone { PHONE_OFFSET } else { OFFSET }));
-        let stack = stack::build(&store, width, now, Ds::get(cx), window);
+        let stack = stack::build(&store, width, now, window, cx);
         stack::schedule(&store, now, window, cx);
         Layer::new(Z::Drag, point(px(left), top), stack).into_any_element()
     }

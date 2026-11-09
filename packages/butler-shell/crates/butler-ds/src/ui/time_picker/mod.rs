@@ -22,7 +22,7 @@ use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::Icon;
 use crate::ui::context::{Ds, Lang};
 use crate::ui::icon_button::IconButton;
-use crate::ui::motion::Ramp;
+use crate::ui::motion::{Props, Timing, Transition, transition};
 use crate::ui::overlay::place::Align;
 use crate::ui::popover::{Popover, PopoverContent, Width};
 use crate::ui::{convert, focus};
@@ -120,24 +120,22 @@ impl TimePicker {
 }
 
 /// How far the open or focused treatment has come, 0 to 1 (border colour over `--motion-fast`).
-fn progress(id: &ElementId, active: bool, window: &mut Window, cx: &mut App) -> f32 {
-    let ramp = window.use_keyed_state(sub(id, "border", "ramp"), cx, |_, _| Ramp::at(0.));
-    let now = cx.background_executor().now();
+fn progress(
+    id: &ElementId,
+    active: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> (Transition, Timing) {
     let ds = Ds::get(cx);
-    let (duration, ease, instant) = (
-        ds.duration(DsDuration::MotionFast),
-        convert::easing(ds.tokens().ease(Easing::MotionEaseStandard)),
-        ds.reduced_motion(),
+    let timing = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
+    let value = transition(
+        sub(id, "border", "motion"),
+        (f32::from(active), ds.reduced_motion()),
+        &timing,
+        window,
+        cx,
     );
-    let target = f32::from(u8::from(active));
-    let (value, moving) = ramp.update(cx, |ramp, _| {
-        ramp.retarget(target, now, instant);
-        ramp.sample(now, duration, &ease)
-    });
-    if moving {
-        window.request_animation_frame();
-    }
-    value
+    (value, timing)
 }
 
 impl TimePicker {
@@ -285,7 +283,12 @@ impl TimePicker {
 
 /// `.field`: the Input look (height, line, radius, raised fill), the accent border while open or
 /// focused, and the ring on keyboard focus. Phones and coarse pointers keep the hit target.
-fn field_box(ds: &Ds, progress: f32, ring: bool, disabled: bool) -> gpui::Div {
+fn field_box(
+    ds: &Ds,
+    (progress, timing): (Transition, Timing),
+    ring: bool,
+    disabled: bool,
+) -> gpui::Div {
     let line = ds.color(Color::Line);
     let focused = convert::mix(ds.color(Color::Accent), line, 0.52); // DS: TimePicker.module.css:26
     let (fill, text) = if disabled {
@@ -299,7 +302,23 @@ fn field_box(ds: &Ds, progress: f32, ring: bool, disabled: bool) -> gpui::Div {
             ds.color(Color::TextPrimary),
         )
     };
+    let border = progress.apply(
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .rounded(ds.len(Length::RadiusControl))
+            .border(ds.len(Length::BorderHairline))
+            .border_color(focused),
+        &timing,
+        &Props {
+            opacity: Some((0., 1.)),
+            ..Default::default()
+        },
+    );
     let mut field = div()
+        .relative()
         .flex()
         .items_center()
         .justify_between()
@@ -309,13 +328,14 @@ fn field_box(ds: &Ds, progress: f32, ring: bool, disabled: bool) -> gpui::Div {
         .pl(ds.len(Length::SpaceSm))
         .pr(ds.len(Length::SpaceXs))
         .border(ds.len(Length::BorderHairline))
-        .border_color(convert::mix(focused, line, progress))
+        .border_color(line)
         .rounded(ds.len(Length::RadiusControl))
         .bg(fill)
         .text_color(text)
         .font_family(ds.body_font().clone())
         .text_size(ds.len(Length::TypoBodySize))
-        .line_height(ds.len(Length::TypoBodyLineHeight));
+        .line_height(ds.len(Length::TypoBodyLineHeight))
+        .child(border);
     field = if ds.compact() {
         field.min_h(ds.len(Length::ControlHitTarget))
     } else {

@@ -17,7 +17,7 @@ pub use parts::{
 
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
 use crate::ui::context::{Ds, Lang, keep_words};
-use crate::ui::convert;
+use crate::ui::motion::Props;
 
 /// The widest a user or answer bubble gets: `min(440px, 68%)` of the row
 /// (`--message-bubble-max-width`).
@@ -234,24 +234,26 @@ impl MessageRow {
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
-        let delivered = if self.entering == Entering::Delivered {
+        let delivered = (self.entering == Entering::Delivered).then(|| {
             enter::progress(
                 (self.id.clone(), "delivered"),
                 (DsDuration::MotionSlow, Easing::MotionEaseDecelerate),
                 window,
                 cx,
             )
-        } else {
-            1.
-        };
+        });
         let ds = Ds::get(cx);
         let fill = ds.color(Color::UserMessageBg);
-        let ink = convert::mix(
+        let shown = delivered.map_or(1., |(value, timing)| value.value(&timing));
+        if delivered.is_some_and(|(value, timing)| value.moving(&timing)) {
+            // The foreground is arbitrary children; it re-renders for the fade's duration only.
+            crate::ui::motion::input_frame(window);
+        }
+        let ink = crate::ui::convert::mix(
             ds.color(Color::TextPrimary),
             ds.color(Color::TextSecondary),
-            delivered,
+            shown,
         );
-        let background = convert::with_alpha(fill, 0.4 + 0.6 * delivered);
         let radius = ds.len(Length::RadiusPopover);
         let korean = ds.lang() == Lang::Ko;
         let mut bubble = div().relative().min_w_0();
@@ -260,7 +262,6 @@ impl MessageRow {
         }
         let mut bubble = bubble
             .rounded(radius)
-            .bg(background)
             .overflow_wrap(OverflowWrap::Anywhere)
             .py(px(6.))
             .px(px(10.)) // DS: MessageRow.module.css:63
@@ -269,23 +270,39 @@ impl MessageRow {
             .font_weight(FontWeight(ds.number(Number::FontWeightRegular)))
             .text_color(ink)
             .opacity(if self.tone == Tone::Pending { 0.72 } else { 1. });
-        if delivered < 1. {
-            bubble = bubble.child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .rounded(radius)
-                    .border(ds.len(Length::BorderHairline))
-                    .border_dashed()
-                    .border_color(convert::with_alpha(
-                        ds.color(Color::LineStrong),
-                        1. - delivered,
-                    )),
-            );
+        let background = div().absolute().size_full().rounded(radius).bg(fill);
+        let background = match delivered {
+            Some((value, timing)) => value.apply(
+                background,
+                &timing,
+                &Props {
+                    opacity: Some((0.4, 1.)),
+                    ..Default::default()
+                },
+            ),
+            None => background,
+        };
+        bubble = bubble.child(background);
+        if let Some((value, timing)) = delivered {
+            let pending = div()
+                .absolute()
+                .size_full()
+                .rounded(radius)
+                .border(ds.len(Length::BorderHairline))
+                .border_dashed()
+                .border_color(ds.color(Color::LineStrong));
+            bubble = bubble.child(value.apply(
+                pending,
+                &timing,
+                &Props {
+                    opacity: Some((1., 0.)),
+                    ..Default::default()
+                },
+            ));
         }
-        bubble.children(children).into_any_element()
+        bubble
+            .child(div().relative().children(children))
+            .into_any_element()
     }
 }
 
@@ -350,11 +367,16 @@ impl RenderOnce for MessageRow {
             row = row.child(div().min_w_0().w_full().child(footer));
         }
         match progress {
-            Some(t) => div()
-                .relative()
-                .top(px(rise * (1. - t)))
-                .opacity(t)
-                .child(row)
+            Some((value, timing)) => value
+                .apply(
+                    div().relative().child(row),
+                    &timing,
+                    &Props {
+                        opacity: Some((0., 1.)),
+                        offset: Some((gpui::point(px(0.), px(rise)), gpui::point(px(0.), px(0.)))),
+                        ..Default::default()
+                    },
+                )
                 .into_any_element(),
             None => row.into_any_element(),
         }

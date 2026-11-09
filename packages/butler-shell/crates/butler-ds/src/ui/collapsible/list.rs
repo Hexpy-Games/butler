@@ -7,13 +7,15 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ElementId, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    Styled as _, Window, div,
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    RenderOnce, SharedString, Styled as _, Window, div,
 };
 
 use super::Collapsible;
+use crate::tokens::{Duration as DsDuration, Easing};
 use crate::ui::context::Ds;
 use crate::ui::layout::Space;
+use crate::ui::motion::Timing;
 
 type Render = Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>;
 
@@ -168,16 +170,21 @@ impl RenderOnce for CollapsibleList {
             (entering, merged, again)
         };
         if again {
-            window.request_animation_frame();
+            crate::ui::motion::remeasure(window);
         }
         if merged.is_empty() {
             return div().hidden();
         }
-        let gap = self.gap.px(Ds::get(cx));
+        let ds = Ds::get(cx);
+        let gap = self.gap.px(ds);
+        let timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
+        let exit = Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseAccelerate);
+        let reduced = ds.reduced_motion();
         let rows = merged.into_iter().map(|(row, present)| {
             let (list, state) = (list.clone(), state.clone());
             let key = row.key.clone();
             let id = ElementId::from(SharedString::from(format!("{}-{key}", self.id)));
+            let row_id = (id.clone(), "row");
             let mut item = Collapsible::new(id, present)
                 .on_exit_complete(move |_, cx| {
                     if list.borrow_mut().exiting.remove(&key).is_some() {
@@ -188,7 +195,14 @@ impl RenderOnce for CollapsibleList {
             if entering.contains(&row.key) {
                 item = item.appear();
             }
-            item
+            let timing = if present { timing } else { exit };
+            div()
+                .id(row_id)
+                .layout_motion(gpui::LayoutMotion {
+                    duration_ms: if reduced { 0 } else { timing.ms() },
+                    easing: timing.easing(),
+                })
+                .child(item)
         });
         div().flex().flex_col().gap(gap).children(rows)
     }

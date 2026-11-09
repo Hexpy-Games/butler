@@ -2,13 +2,15 @@
 //! `data-front`, `data-removed`, `data-visible`) turned into target values, and the CSS
 //! transitions between them (Toast.module.css). The `scale` of a collapsed toast behind the front
 //! one is gpui's element scale about its centre.
-use std::time::{Duration, Instant};
+use gpui::{App, Window};
+use std::time::Duration;
 
 use super::state::Item;
 use crate::tokens::{Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
-use crate::ui::convert;
-use crate::ui::motion::Ramp;
+
+use crate::tokens::Ease;
+use crate::ui::motion::{Timing, Transition, transition};
 
 /// The gap between toasts (`gap={8}` of Toaster.tsx).
 pub(super) const GAP: f32 = 8.; // DS: Toaster.tsx:19
@@ -18,13 +20,7 @@ pub(super) const VISIBLE: usize = 3;
 const SHRINK: f32 = 0.05;
 
 /// The values one toast is drawn with.
-pub(super) struct Anim {
-    y: Ramp,
-    scale: Ramp,
-    opacity: Ramp,
-    content: Ramp,
-    swipe: Ramp,
-}
+pub(super) struct Anim;
 
 /// What the stack decides about one toast this frame.
 pub(super) struct Frame {
@@ -36,14 +32,15 @@ pub(super) struct Frame {
 
 /// A toast's drawn state.
 pub(super) struct Resolved {
-    pub y: f32,
-    pub scale: f32,
-    pub opacity: f32,
-    pub content: f32,
-    pub swipe: f32,
-    /// The box height before scaling.
+    pub y: Transition,
+    pub scale: Transition,
+    pub opacity: Transition,
+    pub content: Transition,
+    pub swipe: Transition,
     pub height: f32,
-    pub moving: bool,
+    pub timing: Timing,
+    pub fade: Timing,
+    pub content_time: Timing,
 }
 
 /// The state a toast heads for.
@@ -98,103 +95,95 @@ fn target(item: &Item, frame: &Frame, ds: &Ds) -> Target {
     }
 }
 
-/// CSS `ease`.
-fn css_ease(x: f32) -> f32 {
-    convert::cubic_bezier(0.25, 0.1, 0.25, 1., x)
-}
-
-impl Anim {
-    /// A toast that has just mounted: `translateY(-distance)` and clear, before it transitions in.
-    fn mounting(ds: &Ds, target: &Target) -> Self {
-        let from = -f32::from(ds.len(Length::MotionDistanceLg));
-        Self {
-            y: Ramp::at(from),
-            scale: Ramp::at(target.scale),
-            opacity: Ramp::at(0.),
-            content: Ramp::at(target.content),
-            swipe: Ramp::at(0.),
-        }
-    }
-}
-
-/// How a toast's transform and opacity transition this frame: their duration and curve, and the
-/// opacity's own duration when it differs.
-struct Timing {
-    duration: Duration,
-    curve: Box<dyn Fn(f32) -> f32>,
-    opacity: Option<Duration>,
-}
-
-/// The transform and opacity transition: the enter transition, the shorter exit, sonner's 500ms
-/// for a toast leaving from behind, and its 200ms swipe-out.
-fn timing(item: &Item, frame: &Frame, ds: &Ds) -> Timing {
+/// The transform timing and the independent opacity timing.
+fn timing(item: &Item, frame: &Frame, ds: &Ds) -> (Timing, Timing) {
     let leaving = item.removed_at.is_some();
-    let ms = Duration::from_millis;
-    if item.swipe_out && !ds.reduced_motion() {
-        return Timing {
-            duration: ms(200), // DS: sonner styles.css `swipe-out-*`
-            curve: Box::new(|x| convert::cubic_bezier(0., 0., 0.58, 1., x)), // CSS `ease-out`
-            opacity: None,
-        };
-    }
-    if leaving && frame.index != 0 && !frame.expanded {
-        return Timing {
-            duration: ms(500), // DS: sonner styles.css, a removed toast behind the front one
-            curve: Box::new(css_ease),
-            opacity: Some(ms(200)),
-        };
-    }
-    let (duration, ease) = if leaving {
-        (DsDuration::MotionExitBase, Easing::MotionEaseExit)
+    let css = Ease::Bezier([0.25, 0.1, 0.25, 1.]);
+    let motion = if item.swipe_out && !ds.reduced_motion() {
+        Timing {
+            duration: Duration::from_millis(200),
+            ease: Ease::Bezier([0., 0., 0.58, 1.]),
+        }
+    } else if leaving && frame.index != 0 && !frame.expanded {
+        Timing {
+            duration: Duration::from_millis(500),
+            ease: css,
+        }
+    } else if leaving {
+        Timing::token(ds, DsDuration::MotionExitBase, Easing::MotionEaseExit)
     } else {
-        (DsDuration::MotionEnterOverlay, Easing::MotionEaseEnter)
+        Timing::token(ds, DsDuration::MotionEnterOverlay, Easing::MotionEaseEnter)
     };
-    Timing {
-        duration: ds.duration(duration),
-        curve: Box::new(convert::easing(ds.tokens().ease(ease))),
-        opacity: None,
-    }
+    let fade = if ds.reduced_motion() {
+        Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard)
+    } else if leaving && frame.index != 0 && !frame.expanded && !item.swipe_out {
+        Timing {
+            duration: Duration::from_millis(200),
+            ease: css,
+        }
+    } else {
+        motion
+    };
+    (motion, fade)
 }
 
-/// Moves the toast's ramps toward this frame's target and reads where they are at `now`.
-pub(super) fn resolve(item: &mut Item, frame: &Frame, ds: &Ds, now: Instant) -> Resolved {
+/// Retargets each retained toast layer; no host animation frames are requested.
+pub(super) fn resolve(
+    item: &mut Item,
+    frame: &Frame,
+    window: &mut Window,
+    cx: &mut App,
+) -> Resolved {
+    let ds = Ds::get(cx);
     let target = target(item, frame, ds);
-    let time = timing(item, frame, ds);
+    let (timing, fade) = timing(item, frame, ds);
+    let content_time = Timing {
+        duration: Duration::from_millis(400),
+        ease: Ease::Bezier([0.25, 0.1, 0.25, 1.]),
+    };
     let reduced = ds.reduced_motion();
+    let from = -f32::from(ds.len(Length::MotionDistanceLg));
     let height = if !frame.expanded && frame.index != 0 {
         frame.front_height
     } else {
         item.height.get()
     };
-    let swiping = item.swiping;
-    let anim = item.anim.get_or_insert_with(|| Anim::mounting(ds, &target));
-    anim.y.retarget(target.y, now, reduced);
-    anim.scale.retarget(target.scale, now, reduced);
-    anim.opacity.retarget(target.opacity, now, false);
-    anim.content.retarget(target.content, now, reduced);
-    anim.swipe.retarget(target.swipe, now, swiping || reduced);
-    let curve = &*time.curve;
-    let (y, m1) = anim.y.sample(now, time.duration, curve);
-    let (scale, m2) = anim.scale.sample(now, time.duration, curve);
-    // Reduced motion keeps only a fade, over `--motion-fast` on the standard curve.
-    let standard = convert::easing(ds.tokens().ease(Easing::MotionEaseStandard));
-    let (fade, fade_curve): (_, &dyn Fn(f32) -> f32) = if reduced {
-        (ds.duration(DsDuration::MotionFast), &standard)
-    } else {
-        (time.opacity.unwrap_or(time.duration), curve)
+    let id = format!("toast-{}", item.id);
+    let before = window.use_keyed_state(
+        (gpui::ElementId::from(id.clone()), "region-target"),
+        cx,
+        |_, _| (target.y, target.scale, height),
+    );
+    if *before.read(cx) != (target.y, target.scale, height) {
+        window.animate_layout(timing.ms());
+        before.update(cx, |value, _| *value = (target.y, target.scale, height));
+    }
+    let mut value = |name: &'static str, target: f32, jump: bool, time: &Timing| {
+        transition(
+            (gpui::ElementId::from(id.clone()), name),
+            (target, jump),
+            time,
+            window,
+            cx,
+        )
     };
-    let (opacity, m3) = anim.opacity.sample(now, fade, fade_curve);
-    let (content, m4) = anim
-        .content
-        .sample(now, Duration::from_millis(400), &css_ease);
-    let (swipe, m5) = anim.swipe.sample(now, time.duration, curve);
+    if item.anim.is_none() {
+        value("y", from, true, &timing);
+        value("scale", target.scale, true, &timing);
+        value("opacity", 0., true, &fade);
+        value("content", target.content, true, &content_time);
+        value("swipe", 0., true, &timing);
+        item.anim = Some(Anim);
+    }
     Resolved {
-        y,
-        scale,
-        opacity,
-        content,
-        swipe,
+        y: value("y", target.y, reduced, &timing),
+        scale: value("scale", target.scale, reduced, &timing),
+        opacity: value("opacity", target.opacity, false, &fade),
+        content: value("content", target.content, reduced, &content_time),
+        swipe: value("swipe", target.swipe, item.swiping || reduced, &timing),
         height,
-        moving: m1 || m2 || m3 || m4 || m5,
+        timing,
+        fade,
+        content_time,
     }
 }

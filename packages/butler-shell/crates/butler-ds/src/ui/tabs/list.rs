@@ -193,14 +193,11 @@ impl TabsList {
             })
             .collect();
         let line = self.variant == ListVariant::Line;
-        let (bar, moving) = if line && !ctx.vertical {
-            slide.update(cx, |s, cx| s.place(ctx.active, window, cx))
+        let bar = if line && !ctx.vertical {
+            slide.update(cx, |s, cx| s.place(ctx.id, ctx.active, window, cx))
         } else {
-            (None, false)
+            None
         };
-        if moving {
-            window.request_animation_frame();
-        }
         let ds = Ds::get(cx);
         let room = focus::room(ds);
         let shrink = strut::shrink_wrap(cx);

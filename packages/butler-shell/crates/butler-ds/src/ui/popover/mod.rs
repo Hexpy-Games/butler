@@ -311,7 +311,6 @@ impl Popover {
             _ => None,
         };
         let surface = theme.scoped(cx, |cx| content.surface(Ds::get(cx), &frame));
-        let ds = Ds::get(cx);
         let animated = motion::animate_glass(
             &format!("{}-popover", self.id),
             phase,
@@ -319,7 +318,7 @@ impl Popover {
             frame.resolved.map_or((0.5, 0.), |resolved| resolved.origin),
             motion_kind,
             surface,
-            ds,
+            (window, cx),
         );
         let Some(animated) = animated else {
             return div().into_any_element();

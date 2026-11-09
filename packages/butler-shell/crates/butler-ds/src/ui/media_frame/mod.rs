@@ -11,8 +11,6 @@
 mod load;
 mod paint;
 
-use std::time::Instant;
-
 use gpui::{
     AnyElement, App, Bounds, ElementId, ImageSource, IntoElement, ParentElement, Pixels,
     RenderOnce, Styled as _, StyledImage as _, Window, canvas, div, px,
@@ -24,6 +22,7 @@ use super::Icon;
 use super::context::Ds;
 use super::convert;
 use super::icon::{IconSize, icon};
+use super::motion::{Props, Timing, Transition};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Shadow};
 
 /// Frame shapes, width:height.
@@ -67,7 +66,7 @@ const FILL_MAX_RATIO: f32 = 2.4; // DS: MediaFrame.tsx:35
 struct State {
     /// A render has seen the picture still loading, so its arrival fades in.
     waited: bool,
-    arrived: Option<Instant>,
+    arrived: Option<u32>,
 }
 
 #[derive(IntoElement)]
@@ -218,7 +217,7 @@ fn placeholder_mark(
 
 impl RenderOnce for MediaFrame {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let now = cx.background_executor().now();
+        let now = gpui::animation_time_ms();
         let load = match &self.src {
             Some(source) => resolve(&self.id, source, window, cx),
             None => Load::Failed,
@@ -228,36 +227,18 @@ impl RenderOnce for MediaFrame {
             waited: false,
             arrived: None,
         });
-        let (reduced, slow, ease) = {
-            let ds = Ds::get(cx);
-            (
-                self.reduced_motion.unwrap_or_else(|| ds.reduced_motion()),
-                ds.duration(DsDuration::MotionSlow),
-                ds.tokens().ease(Easing::MotionEaseDecelerate),
-            )
-        };
-        let shown = state.update(cx, |state, _| {
-            // A picture that arrives after the frame was drawn without it (or still loading)
-            // fades in; one that was there from the first draw shows at once.
+        let ds = Ds::get(cx);
+        let reduced = self.reduced_motion.unwrap_or_else(|| ds.reduced_motion());
+        let timing = Timing::token(ds, DsDuration::MotionSlow, Easing::MotionEaseDecelerate);
+        let arrived = state.update(cx, |state, _| {
             if empty || matches!(load, Load::Pending) {
                 state.waited = true;
                 state.arrived = None;
             } else if state.waited && state.arrived.is_none() {
                 state.arrived = Some(now);
             }
-            // A picture decoded when the frame first drew shows at once, and so does every one
-            // under reduced motion.
-            match (state.arrived, reduced) {
-                (Some(since), false) => {
-                    let t = now.saturating_duration_since(since).as_secs_f32() / slow.as_secs_f32();
-                    (convert::ease_at(ease, t.clamp(0., 1.)), t < 1.)
-                }
-                _ => (1., false),
-            }
+            state.arrived.filter(|_| !reduced)
         });
-        if shown.1 {
-            window.request_animation_frame();
-        }
         let ds = Ds::get(cx);
         let frame_radius = ds.len(Length::RadiusControl);
         let mut frame = div()
@@ -273,12 +254,32 @@ impl RenderOnce for MediaFrame {
         let missing = matches!(load, Load::Failed) && self.placeholder;
         let favicon = self.placeholder_icon.take();
         let layers = [
-            self.picture(&load, frame_radius, shown.0, cx),
-            missing
-                .then(|| Self::placeholder_layer(&self.id, favicon.as_ref(), shown.0, window, cx)),
+            self.picture(&load, frame_radius, 1., cx),
+            missing.then(|| Self::placeholder_layer(&self.id, favicon.as_ref(), 1., window, cx)),
         ];
         let frame = frame
-            .children(layers.into_iter().flatten())
+            .child({
+                let layer = div()
+                    .absolute()
+                    .size_full()
+                    .children(layers.into_iter().flatten());
+                match arrived {
+                    Some(start_ms) => Transition {
+                        from: 0.,
+                        to: 1.,
+                        start_ms,
+                    }
+                    .apply(
+                        layer,
+                        &timing,
+                        &Props {
+                            opacity: Some((0., 1.)),
+                            ..Default::default()
+                        },
+                    ),
+                    None => layer,
+                }
+            })
             .children(self.children);
         // The wrapper takes the clamped width, so the aspect ratio resolves against it.
         match self.natural {

@@ -8,9 +8,8 @@ use std::time::{Duration, Instant};
 use gpui::{App, ElementId, SharedString, Window};
 
 use crate::tokens::{Duration as DsDuration, Easing};
-use crate::ui::blocks::anim::ramp;
 use crate::ui::context::Ds;
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Timing, Transition, transition};
 
 #[derive(Default)]
 struct Latch {
@@ -27,14 +26,14 @@ struct Latch {
 const EXIT_WINDOW: Duration = Duration::from_millis(240);
 
 /// What the rail slot does this frame.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy)]
 pub(super) struct Rail {
     /// The column makes room for the rail.
     pub(super) reserved: bool,
     /// Hidden and inert while the aside shows or leaves.
     pub(super) held: bool,
     /// The fade-in of a released rail, 0 to 1 (1 when it never was held).
-    pub(super) release: f32,
+    pub(super) release: Transition,
 }
 
 /// `view` is the rail's view (a conversation id): the room made for the first tab stays for it.
@@ -47,7 +46,8 @@ pub(super) fn rail(
 ) -> Rail {
     let state = window.use_keyed_state((id.clone(), "rail"), cx, |_, _| Latch::default());
     let now = cx.background_executor().now();
-    let (reserved, held, was_held, leaving) = state.update(cx, |latch, _| {
+    let (reserved, held, was_held, began_exit) = state.update(cx, |latch, _| {
+        let began_exit = !aside_shown && latch.aside_shown;
         if aside_shown != latch.aside_shown {
             latch.aside_shown = aside_shown;
             latch.left_at = (!aside_shown).then_some(now);
@@ -66,25 +66,21 @@ pub(super) fn rail(
             latch.view = None;
         }
         let reserved = wants && (showing || (view.is_some() && latch.view.as_ref() == view));
-        (reserved, held, latch.was_held, leaving)
+        (reserved, held, latch.was_held, began_exit)
     });
-    if leaving {
-        window.request_animation_frame();
+    if began_exit {
+        crate::ui::motion::wake_after(window, cx, EXIT_WINDOW);
     }
     let ds = Ds::get(cx);
     let timing = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseDecelerate);
     let target = f32::from(u8::from(!held));
-    let release = if was_held {
-        ramp(
-            (id.clone(), "rail-release"),
-            (target, held),
-            &timing,
-            window,
-            cx,
-        )
-    } else {
-        1.
-    };
+    let release = transition(
+        (id.clone(), "rail-release"),
+        (if was_held { target } else { 1. }, held || !was_held),
+        &timing,
+        window,
+        cx,
+    );
     Rail {
         reserved,
         held,

@@ -6,11 +6,10 @@ use gpui::{
     Window, div, relative,
 };
 
-use super::anim;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
 use crate::ui::icon_slot::{IconSlot, SlotSize, SlotTone};
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Timing, transition};
 use crate::ui::spinner::Spinner;
 use crate::ui::typo::{Tone, Typo};
 
@@ -117,7 +116,7 @@ impl ProgressMeter {
             Easing::MotionEaseDecelerate,
         );
         let jump = ds.reduced_motion();
-        let shown = anim::ramp(
+        let shown = transition(
             (self.id.clone(), "fill"),
             (value / 100., jump),
             &timing,
@@ -143,8 +142,23 @@ impl ProgressMeter {
                 .bg(ds.color(Color::Selection)),
             Look::Thin => track.h(ds.len(Length::BorderWidthStrong)),
         };
+        let (size, probe) = super::measure::track((self.id.clone(), "track-size"), window, cx);
+        let extent = shown.target();
+        let clip = |value: f32| gpui::Edges {
+            right: size.width * (1. - value),
+            ..Default::default()
+        };
+        let mut motion = shown.motion(&timing);
+        motion.clip = Some((clip(shown.from), clip(shown.to)));
         track
-            .child(div().h_full().w(relative(shown.clamp(0., 1.))).bg(fill))
+            .relative()
+            .child(probe)
+            .child(
+                div()
+                    .size_full()
+                    .motion(motion)
+                    .child(div().h_full().w(relative(extent)).bg(fill)),
+            )
             .into_any_element()
     }
 }
