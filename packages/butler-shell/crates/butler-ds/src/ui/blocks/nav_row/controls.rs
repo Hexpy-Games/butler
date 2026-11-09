@@ -2,13 +2,14 @@
 //! badge, then the actions, which a hover-only row lays over the badge's place and fades in.
 use gpui::{
     AnyElement, Div, IntoElement as _, ParentElement as _, Pixels, SharedString, Styled as _, div,
-    prelude::FluentBuilder as _, px,
+    point, prelude::FluentBuilder as _, px,
 };
 
 use super::{ActionsVisibility, Look};
-use crate::tokens::{Color, Length};
+use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::blocks::scope::{self, ActionScale, Spec};
 use crate::ui::context::Ds;
+use crate::ui::motion::{Props, Timing};
 
 /// The icon an action button draws (`--nav-row-action-icon-size`).
 const ACTION_ICON: f32 = 14.; // DS: NavRow.module.css:131
@@ -35,6 +36,7 @@ impl Controls {
 
     fn region(self, look: &Look, ds: &Ds) -> Div {
         let hover = self.actions.is_some() && self.visibility != ActionsVisibility::Visible;
+        let timing = Timing::token(ds, DsDuration::MotionFast, Easing::MotionEaseStandard);
         let mut region = div()
             .relative()
             .flex()
@@ -54,14 +56,26 @@ impl Controls {
         }
         region
             .children(self.badge.map(|badge| {
-                badge_cell(badge, ds).opacity(if hover { 1. - look.reveal } else { 1. })
+                let badge = badge_cell(badge, ds);
+                if hover {
+                    look.reveal.apply(
+                        badge,
+                        &timing,
+                        &Props {
+                            opacity: Some((1., 0.)),
+                            ..Default::default()
+                        },
+                    )
+                } else {
+                    badge
+                }
             }))
             .children(self.actions.map(|actions| {
                 let actions = in_action_scale(actions, look);
                 if hover {
                     let hidden =
                         self.visibility == ActionsVisibility::HoverCompactHidden && look.compact;
-                    hover_actions(actions, look, hidden)
+                    hover_actions(actions, look, hidden, &timing)
                 } else {
                     div()
                         .flex()
@@ -111,22 +125,34 @@ fn badge_cell(badge: SharedString, ds: &Ds) -> Div {
 }
 
 /// `.hoverActions`: centred on the region's end, past the badge's place; they and the badge
-/// swap as the row's reveal (read in `fade`) runs, the actions arriving from 2px right.
-fn hover_actions(actions: AnyElement, look: &Look, compact_hidden: bool) -> AnyElement {
-    let target = look.m.action;
-    let offset = (target - ACTION_ICON) / -2. - 3.; // DS: NavRow.module.css:132
-    let shown = look.reveal > 0.001 && !compact_hidden;
-    let travel = ACTION_TRAVEL * (1. - look.reveal);
-    div()
-        .absolute()
-        .top_0()
-        .bottom_0()
-        .right(px(offset - travel))
-        .min_w(px(target))
-        .flex()
-        .items_center()
-        .justify_center()
-        .opacity(look.reveal)
+/// swap as the row's reveal runs, the actions arriving from 2px right.
+fn hover_actions(
+    actions: AnyElement,
+    look: &Look,
+    compact_hidden: bool,
+    timing: &Timing,
+) -> AnyElement {
+    let side = look.m.action;
+    let offset = (side - ACTION_ICON) / -2. - 3.; // DS: NavRow.module.css:132
+    let shown = (look.target || look.reveal.moving(timing)) && !compact_hidden;
+    look.reveal
+        .apply(
+            div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .right(px(offset))
+                .min_w(px(side))
+                .flex()
+                .items_center()
+                .justify_center(),
+            timing,
+            &Props {
+                opacity: Some((0., 1.)),
+                offset: Some((point(px(ACTION_TRAVEL), px(0.)), point(px(0.), px(0.)))),
+                ..Default::default()
+            },
+        )
         .when(!shown, gpui::Styled::invisible)
         .child(actions)
         .into_any_element()

@@ -3,12 +3,12 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, IntoElement, ParentElement, Pixels, RenderOnce,
-    Styled as _, Window, px,
+    AnyElement, App, ClickEvent, ElementId, Entity, FocusHandle, IntoElement, ParentElement,
+    Pixels, RenderOnce, Styled as _, Window, px,
 };
 
 use super::context::Ds;
-use super::control::{Blend, Control, Disabled, DisabledLook, Ring, Width};
+use super::control::{Blend, Control, Disabled, DisabledLook, Ring, State, Width};
 use super::convert;
 use crate::tokens::{Color, Length};
 
@@ -45,6 +45,8 @@ pub struct Clickable {
     metrics: Option<(Pixels, Pixels)>,
     /// The hover and selected fills a surface sets (`--nav-hover-bg`, `--nav-selected-bg`).
     fills: Option<(gpui::Hsla, gpui::Hsla)>,
+    state: Option<Entity<State>>,
+    focus: Option<FocusHandle>,
     on_click: Option<Handler>,
     children: Vec<AnyElement>,
 }
@@ -60,6 +62,8 @@ impl Clickable {
             disabled: false,
             metrics: None,
             fills: None,
+            state: None,
+            focus: None,
             on_click: None,
             children: Vec::new(),
         }
@@ -88,6 +92,16 @@ impl Clickable {
 
     pub fn disabled(mut self) -> Self {
         self.disabled = true;
+        self
+    }
+
+    pub(crate) fn state(mut self, state: Entity<State>) -> Self {
+        self.state = Some(state);
+        self
+    }
+
+    pub(crate) fn focus(mut self, focus: FocusHandle) -> Self {
+        self.focus = Some(focus);
         self
     }
 
@@ -126,6 +140,8 @@ const MIN_HEIGHT: f32 = 30.; // DS: Clickable.module.css:4
 impl Clickable {
     fn control(mut self, ds: &Ds) -> Control {
         let mut control = Control::new(self.id.clone(), ds);
+        control.state = self.state.take();
+        control.focus = self.focus.take();
         control.disabled = if self.disabled {
             Disabled::Native
         } else {

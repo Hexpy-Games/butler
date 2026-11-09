@@ -25,11 +25,10 @@ pub(crate) type Outer = Box<dyn FnOnce(gpui::Stateful<Div>) -> gpui::Stateful<Di
 
 mod parts;
 
-use parts::State;
 pub use parts::{
     Blend, Disabled, DisabledLook, Ring, Underline, Width, focus_handle, over, reset_anchors,
 };
-pub(crate) use parts::{State as Glide, next_anchor};
+pub(crate) use parts::{State, next_anchor};
 
 /// A control being built: geometry and colours resolved by its component.
 #[expect(
@@ -65,6 +64,7 @@ pub struct Control {
     pub(crate) tab_stop: bool,
     /// The focus handle, when the owner keeps it (a group that moves focus between its controls).
     pub(crate) focus: Option<gpui::FocusHandle>,
+    pub(crate) state: Option<gpui::Entity<State>>,
     pub(crate) text_size: Pixels,
     pub(crate) weight: f32,
     pub(crate) line_height: Option<Pixels>,
@@ -107,6 +107,7 @@ impl Control {
             not_allowed: false,
             tab_stop: true,
             focus: None,
+            state: None,
             text_size: ds.len(crate::tokens::Length::FontSize3),
             weight: ds.number(Number::FontWeightRegular),
             line_height: None,
@@ -129,7 +130,9 @@ impl Control {
 
 impl RenderOnce for Control {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = window.use_keyed_state((self.id.clone(), "state"), cx, |_, _| State::default());
+        let state = self.state.take().unwrap_or_else(|| {
+            window.use_keyed_state((self.id.clone(), "state"), cx, |_, _| State::default())
+        });
         let handle = (self.disabled != Disabled::Native).then(|| {
             self.focus.take().unwrap_or_else(|| {
                 window
