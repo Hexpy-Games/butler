@@ -1,16 +1,21 @@
 //! `CanonPlanLanes.tsx` and the backlog lane of `CanonBoard.tsx`.
+use butler_ds::tokens::Length;
 use butler_ds::ui::blocks::kanban_board::{KanbanBoard, KanbanLane, LaneHeight, LaneLayout};
 use butler_ds::ui::button::{self, Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Cross, Space, Stack};
+use butler_ds::ui::scroll::{Axis, Config, fade, read};
 use butler_ds::ui::section::Section;
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString};
+use gpui::{
+    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, ScrollHandle, SharedString,
+    Window, point,
+};
 
 use super::card::{Opts, card};
-use super::copy::words;
+use super::copy::{Words, words};
 use super::lanes::{CANON_LANES, canon_lane_id, lane_status};
 use crate::ui::Icon;
 use crate::ui::manage::Pick;
@@ -84,7 +89,13 @@ pub(super) fn backlog_lane(canon: &CanonOverview, lanes: &Lanes, cx: &App) -> An
 }
 
 /// `CanonPlanLanes`: the plan's title and progress above its five status lanes.
-pub(super) fn plan_lanes(plan: &PlanCards, caption: String, lanes: &Lanes, cx: &App) -> AnyElement {
+pub(super) fn plan_lanes(
+    plan: &PlanCards,
+    caption: String,
+    lanes: &Lanes,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     let words = words(Ds::get(cx).lang());
     let title = Stack::row()
         .cross(Cross::Baseline)
@@ -92,18 +103,24 @@ pub(super) fn plan_lanes(plan: &PlanCards, caption: String, lanes: &Lanes, cx: &
         .wrap(true)
         .child(Typo::h3(plan.plan.title.clone()))
         .child(Typo::caption(caption).tone(Tone::Secondary));
-    // CARVE-OUT(G-ds): React's previous/next lanes buttons scroll the board and follow its
-    // overflow edges (`scrollWidth`, `scrollLeft`); `KanbanBoard` exposes no scroll handle.
-    let (on_edit, edited) = (lanes.on_edit.clone(), plan.plan.clone());
-    let actions = button::container(Size::Sm).child(
-        IconButton::new(
-            SharedString::from(format!("canon-plan-edit-{}", plan.plan.id)),
-            words.edit,
-        )
-        .glyph(Icon::Pencil)
-        .on_click(move |_, window, cx| on_edit(edited.clone(), window, cx)),
-    );
     let board_id = SharedString::from(format!("canon-plan-lanes-{}", plan.plan.id));
+    let handle = lanes_handle(&board_id, window, cx);
+    let (on_edit, edited) = (lanes.on_edit.clone(), plan.plan.clone());
+    let edit = IconButton::new(
+        SharedString::from(format!("canon-plan-edit-{}", plan.plan.id)),
+        words.edit,
+    )
+    .glyph(Icon::Pencil)
+    .on_click(move |_, window, cx| on_edit(edited.clone(), window, cx));
+    let mut actions = button::container(Size::Sm);
+    // `edges.overflow`: the arrows show only while the lanes overflow the board.
+    let edges = read(&handle, Axis::X);
+    if edges.overflowing {
+        actions = actions
+            .child(lanes_arrow(&board_id, &handle, -1., edges.at_start, words))
+            .child(lanes_arrow(&board_id, &handle, 1., edges.at_end, words));
+    }
+    let actions = actions.child(edit);
     let mut board = KanbanBoard::new(board_id).scroll(true);
     for status in CANON_LANES {
         let lane_id = canon_lane_id(Some(&plan.plan.id), status);
@@ -136,4 +153,46 @@ pub(super) fn plan_lanes(plan: &PlanCards, caption: String, lanes: &Lanes, cx: &
         .actions(actions)
         .child(board)
         .into_any_element()
+}
+
+/// The sideways scroller of a `KanbanBoard::scroll` board, which owns its handle (read by the
+/// id the DS gives its `ScrollArea`, as `management_page::scroll_handle` does).
+fn lanes_handle(board_id: &SharedString, window: &mut Window, cx: &mut App) -> ScrollHandle {
+    let ds = Ds::get(cx);
+    let config = Config {
+        id: (ElementId::from(board_id.clone()), "scroll").into(),
+        axis: Axis::X,
+        size: ds.len(Length::ScrollFadeSize),
+        guard: ds.len(Length::SpaceXs),
+    };
+    fade(&config, None, false, window, cx).handle
+}
+
+/// `scroll(direction)`: the previous/next lanes button, disabled at its edge.
+fn lanes_arrow(
+    board_id: &SharedString,
+    handle: &ScrollHandle,
+    direction: f32,
+    at_edge: bool,
+    words: &Words,
+) -> AnyElement {
+    let (label, glyph, side) = if direction < 0. {
+        (words.previous_lanes, Icon::ArrowLeft, "previous")
+    } else {
+        (words.next_lanes, Icon::ArrowRight, "next")
+    };
+    let handle = handle.clone();
+    let mut arrow = IconButton::new(SharedString::from(format!("{board_id}-{side}")), label)
+        .glyph(glyph)
+        .on_click(move |_, window, _| {
+            // `board.scrollBy({ left: direction * board.clientWidth * 0.8 })`
+            let step = direction * f32::from(handle.bounds().size.width) * 0.8;
+            let offset = handle.offset();
+            handle.set_offset(point(offset.x - gpui::px(step), offset.y));
+            window.refresh();
+        });
+    if at_edge {
+        arrow = arrow.disabled();
+    }
+    arrow.into_any_element()
 }

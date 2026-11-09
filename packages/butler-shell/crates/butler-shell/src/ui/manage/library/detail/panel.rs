@@ -43,6 +43,25 @@ const NAME_MAX: usize = 200;
 /// A picture of unknown size shows at this size until it is measured.
 const NATURAL: (f32, f32) = (360., 270.);
 
+/// The picture's own size in logical px, once it is decoded (`<img>` at its intrinsic size).
+fn decoded_size(
+    src: &gpui::ImageSource,
+    window: &mut Window,
+    cx: &mut gpui::App,
+) -> Option<(f32, f32)> {
+    let render = match src {
+        gpui::ImageSource::Render(data) => data.clone(),
+        gpui::ImageSource::Resource(resource) => window
+            .use_asset::<gpui::ImgResourceLoader>(resource, cx)?
+            .ok()?,
+        gpui::ImageSource::Image(image) => image.clone().use_render_image(window, cx)?,
+        gpui::ImageSource::Custom(_) => return None,
+    };
+    let size = render.size(0);
+    let scale = window.scale_factor();
+    Some((size.width.0 as f32 / scale, size.height.0 as f32 / scale))
+}
+
 /// `LibraryDetail`: a scrap's detail panel.
 pub(crate) struct LibraryDetail {
     ctx: ManageCtx,
@@ -146,7 +165,12 @@ impl LibraryDetail {
     }
 
     /// The scrap's picture, at its own size.
-    fn preview(item: &LibraryItem, copy: &'static Words, cx: &mut Context<Self>) -> AnyElement {
+    fn preview(
+        item: &LibraryItem,
+        copy: &'static Words,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let mut preview = ArtifactPreview::new("library-detail-preview");
         // CARVE-OUT(G-ds): a block scrap renders its answer block (`BlockScrap` over
         // `AnswerBlocks preview`), which needs a transcript context the 서랍 has none of.
@@ -156,6 +180,7 @@ impl LibraryDetail {
                 .as_ref()
                 .map(|s| pixels(s.width, s.height))
                 .or_else(|| item.rect.map(|r| pixels(r.width, r.height)))
+                .or_else(|| decoded_size(&src, window, cx))
                 .unwrap_or(NATURAL);
             preview = preview.child(ArtifactPreviewImage::new(src, natural));
         } else if let (Some(snapshot), false) = (&item.snapshot, item.block.is_some()) {
@@ -391,7 +416,7 @@ impl Render for LibraryDetail {
             self.synced = Some(key);
         }
         let copy = words(Ds::get(cx).lang());
-        let preview = Self::preview(&item, copy, cx);
+        let preview = Self::preview(&item, copy, window, cx);
         let mut side = self.fields(&item, copy, window, cx);
         side.push(Self::meta(&item, copy).into_any_element());
         side.push(self.actions(&item, copy, cx));
@@ -403,6 +428,7 @@ impl Render for LibraryDetail {
         let grid = Grid::new("library-detail-grid")
             .columns(columns)
             .gap(Space::Xl)
+            .page_container()
             .child(preview)
             .child(Stack::new().gap(Space::Lg).children(side));
         let page = PageContainer::new()
@@ -410,7 +436,7 @@ impl Render for LibraryDetail {
             .gutter(Space::Xl)
             .child(Pad::new().padding_y(Space::Xl).child(grid));
         let scroll = ScrollArea::new("library-detail-scroll").fill().child(page);
-        anchor(div().size_full(), "library-detail")
+        anchor(div().size_full().flex().flex_col(), "library-detail")
             .child(scroll)
             .into_any_element()
     }

@@ -2,7 +2,7 @@
 //! shows the session view the shell hands it through `list::transcript`; when the top row comes
 //! into view and older messages exist, it asks for them (never the whole chat at once).
 pub(crate) mod activity;
-mod answers;
+pub(crate) mod answers;
 mod assistant;
 mod content;
 pub(crate) mod empty;

@@ -286,6 +286,11 @@ impl Render for LibraryPage {
             Some(viewer) => viewer,
             None => self.content(window, cx),
         };
-        anchor(div().id("library-region").size_full(), "library-page").child(body)
+        // A column, so a body whose root is a `ScrollArea::fill` fills the page.
+        anchor(
+            div().id("library-region").size_full().flex().flex_col(),
+            "library-page",
+        )
+        .child(body)
     }
 }

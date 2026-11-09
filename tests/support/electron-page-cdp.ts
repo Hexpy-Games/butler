@@ -12,6 +12,8 @@ export interface ElectronPage {
   screenshot(): Promise<Uint8Array>;
   clickText(text: string, scope: string): Promise<void>;
   clickSelector(selector: string): Promise<void>;
+  /** Rests the pointer on the target's centre (no click), as a user does to reveal hover-only controls. */
+  hoverSelector(selector: string): Promise<void>;
   /** Clicks the one element whose computed role and accessible name match exactly. */
   clickRole(role: string, name: string): Promise<void>;
   movePointer(x: number, y: number): Promise<void>;
@@ -108,15 +110,18 @@ async function transport(url: string) {
 }
 
 /** In-page `this` → centre point of an enabled, hit-testable click target. */
-const CLICK_POINT = `function() {
+const pointFunction = (hitTest: boolean) => `function() {
   'use strict';
   const node=this;
   if(!node || node.disabled || node.getAttribute('aria-disabled')==='true')throw new Error('Click target unavailable');
   node.scrollIntoView({block:'center'});
   const box=node.getBoundingClientRect(),x=box.x+box.width/2,y=box.y+box.height/2;
-  if(!box.width || !box.height || !node.contains(document.elementFromPoint(x,y)))throw new Error('Click target not hit-testable');
+  if(!box.width || !box.height${hitTest ? " || !node.contains(document.elementFromPoint(x,y))" : ""})throw new Error('Click target not hit-testable');
   return {x,y};
 }`;
+/** Centre of the target, no hit test: where the pointer rests to reveal hover-only controls. */
+const HOVER_POINT = pointFunction(false);
+const CLICK_POINT = pointFunction(true);
 
 async function connect(url: string): Promise<ElectronPage> {
   const { socket, send, errors, contexts } = await transport(url);
@@ -139,6 +144,13 @@ async function connect(url: string): Promise<ElectronPage> {
       await new Promise(done => setTimeout(done, 200));
     }
     throw new Error(`Electron UI did not become ready: ${fn.toString()}; ${JSON.stringify(await diagnostics())}`);
+  }
+  /** Hovers the target first (as a user does, and as the gpui side reveals), lets a frame pass, then clicks. */
+  async function hoverThenClick(resolve: (declaration: string) => Promise<{ x: number; y: number }>) {
+    const hover = await resolve(HOVER_POINT);
+    await send("Input.dispatchMouseEvent", { type:"mouseMoved", ...hover, buttons:0 });
+    await expression("new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))");
+    await clickPoint(await resolve(CLICK_POINT));
   }
   async function clickPoint(point: { x: number; y: number }) {
     await send("Input.dispatchMouseEvent", {type:"mousePressed",...point,button:"left",clickCount:1});
@@ -180,8 +192,13 @@ async function connect(url: string): Promise<ElectronPage> {
       const result = await send("Page.captureScreenshot", { format:"png" }) as { data:string };
       return Buffer.from(result.data, "base64");
     },
+    hoverSelector: async selector => {
+      const hover = await expression<{x:number;y:number}>(`(${HOVER_POINT}).call(document.querySelector(${JSON.stringify(selector)}))`);
+      await send("Input.dispatchMouseEvent", { type:"mouseMoved", ...hover, buttons:0 });
+      await expression("new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))");
+    },
     clickSelector: async selector => {
-      await clickPoint(await expression<{x:number;y:number}>(`(${CLICK_POINT}).call(document.querySelector(${JSON.stringify(selector)}))`));
+      await hoverThenClick(declaration => expression<{x:number;y:number}>(`(${declaration}).call(document.querySelector(${JSON.stringify(selector)}))`));
     },
     clickRole: async (role, name) => {
       const { root } = await send("DOM.getDocument", { depth: 0 }) as { root: { nodeId: number } };
@@ -189,9 +206,11 @@ async function connect(url: string): Promise<ElectronPage> {
       const found = nodes.filter(node => !node.ignored && node.backendDOMNodeId);
       if (found.length !== 1) throw new Error(`Click target unavailable: ${found.length} ${role} named ${JSON.stringify(name)}`);
       const { object } = await send("DOM.resolveNode", { backendNodeId: found[0]!.backendDOMNodeId }) as { object: { objectId: string } };
-      const result = await send("Runtime.callFunctionOn", { objectId: object.objectId, functionDeclaration: CLICK_POINT, returnByValue: true }) as { exceptionDetails?: unknown; result: { value: { x: number; y: number } } };
-      assert.ok(!result.exceptionDetails, `Electron evaluation failed: ${JSON.stringify(result.exceptionDetails)}`);
-      await clickPoint(result.result.value);
+      await hoverThenClick(async functionDeclaration => {
+        const result = await send("Runtime.callFunctionOn", { objectId: object.objectId, functionDeclaration, returnByValue: true }) as { exceptionDetails?: unknown; result: { value: { x: number; y: number } } };
+        assert.ok(!result.exceptionDetails, `Electron evaluation failed: ${JSON.stringify(result.exceptionDetails)}`);
+        return result.result.value;
+      });
     },
     clickText: async (text, scope) => {
       const point = await expression<{ x:number;y:number }>(`(() => {

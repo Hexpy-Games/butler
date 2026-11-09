@@ -53,6 +53,8 @@ pub struct ScrollArea {
     fill: bool,
     bleed: Option<Bleed>,
     probe: Option<SharedString>,
+    /// `contentClassName` padding: (top, bottom, inline start), replacing the column's own.
+    padding: Option<(Pixels, Pixels, Pixels)>,
     children: Vec<AnyElement>,
 }
 
@@ -66,6 +68,7 @@ impl ScrollArea {
             fill: false,
             bleed: None,
             probe: None,
+            padding: None,
             children: Vec::new(),
         }
     }
@@ -89,6 +92,14 @@ impl ScrollArea {
     /// Take the remaining space of a flex column (`flex: 1; min-height: 0`).
     pub fn fill(mut self) -> Self {
         self.fill = true;
+        self
+    }
+
+    /// Replaces the vertical column's block padding (the fade) and its inline-start ring room, as
+    /// a `contentClassName` that sets `padding-block` and `padding-inline` does. The scrollbar
+    /// lane at the end stays: it is the viewport's gutter, not the content's padding.
+    pub fn content_padding(mut self, top: Pixels, bottom: Pixels, start: Pixels) -> Self {
+        self.padding = Some((top, bottom, start));
         self
     }
 
@@ -250,14 +261,11 @@ impl ScrollArea {
             } else {
                 metrics.lane
             };
-            div()
-                .flex()
-                .flex_col()
-                .flex_none()
-                .w_full()
-                .py(metrics.edge)
-                .pl(metrics.room)
-                .pr(end)
+            let column = div().flex().flex_col().flex_none().w_full();
+            match self.padding {
+                Some((top, bottom, start)) => column.pt(top).pb(bottom).pl(start).pr(end),
+                None => column.py(metrics.edge).pl(metrics.room).pr(end),
+            }
         };
         let stretch = self.orientation == Axis::Y;
         column.children(

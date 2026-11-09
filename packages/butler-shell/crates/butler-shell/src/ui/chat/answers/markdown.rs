@@ -8,6 +8,9 @@ use crate::ui::source::wire::{
 };
 use std::fmt::Write as _;
 
+/// `imageUrl`: the URL a block's `img` asset is written as; `None` leaves it empty.
+pub(super) type ImageUrl<'a> = &'a dyn Fn(&str) -> Option<String>;
+
 /// `text`: escapes the characters Markdown reads, and folds line breaks into spaces.
 fn text(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
@@ -158,11 +161,11 @@ fn joined(blocks: impl Iterator<Item = String>) -> String {
 }
 
 /// The blocks of a container: each with its title, apart by a blank line.
-fn children(leaves: &[AnswerLeafBlock]) -> String {
+fn children(leaves: &[AnswerLeafBlock], images: ImageUrl) -> String {
     leaves
         .iter()
         .filter_map(|leaf| leaf_block(leaf.clone()).ok())
-        .map(|block| titled_block(&block))
+        .map(|block| titled_block(&block, images))
         .collect::<Vec<_>>()
         .join("\n\n")
 }
@@ -263,7 +266,7 @@ fn data(block: &AnswerBlock) -> String {
     }
 }
 
-fn leaf(block: &AnswerBlock) -> String {
+fn leaf(block: &AnswerBlock, images: ImageUrl) -> String {
     match block {
         AnswerBlock::Timeline { items, .. } => joined(items.iter().map(|item| {
             let body = item
@@ -303,9 +306,11 @@ fn leaf(block: &AnswerBlock) -> String {
                 .unwrap_or_default();
             format!("> {}{cite}", text(body))
         }
-        AnswerBlock::Image { caption, .. } => {
-            format!("![{}]()", text(caption.as_deref().unwrap_or_default()))
-        }
+        AnswerBlock::Image { img, caption, .. } => format!(
+            "![{}]({})",
+            text(caption.as_deref().unwrap_or_default()),
+            images(img).unwrap_or_default()
+        ),
         AnswerBlock::Callout { text: body, .. } => format!("> {}", text(body)),
         AnswerBlock::Actions { items, .. } => joined(items.iter().map(|item| match item {
             AnswerBlockActionsItemsItem::Variant1(ask) => {
@@ -319,13 +324,21 @@ fn leaf(block: &AnswerBlock) -> String {
     }
 }
 
-fn block_markdown(block: &AnswerBlock) -> String {
+fn block_markdown(block: &AnswerBlock, images: ImageUrl) -> String {
     match block {
         AnswerBlock::Epics { .. } => String::new(),
-        AnswerBlock::Columns { blocks, .. } | AnswerBlock::Group { blocks, .. } => children(blocks),
+        AnswerBlock::Columns { blocks, .. } | AnswerBlock::Group { blocks, .. } => {
+            children(blocks, images)
+        }
         AnswerBlock::Tabs { tabs, .. } => tabs
             .iter()
-            .map(|tab| format!("### {}\n\n{}", text(&tab.label), children(&tab.blocks)))
+            .map(|tab| {
+                format!(
+                    "### {}\n\n{}",
+                    text(&tab.label),
+                    children(&tab.blocks, images)
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n\n"),
         AnswerBlock::Cards { .. }
@@ -334,18 +347,18 @@ fn block_markdown(block: &AnswerBlock) -> String {
         | AnswerBlock::Facts { .. }
         | AnswerBlock::Metrics { .. }
         | AnswerBlock::Chart { .. } => data(block),
-        _ => leaf(block),
+        _ => leaf(block, images),
     }
 }
 
-fn titled_block(block: &AnswerBlock) -> String {
+fn titled_block(block: &AnswerBlock, images: ImageUrl) -> String {
     if matches!(block, AnswerBlock::Epics { .. }) {
         return String::new();
     }
     let heading = title(block)
         .filter(|title| !title.is_empty())
         .map(|title| format!("### {}", text(title)));
-    [heading, Some(block_markdown(block))]
+    [heading, Some(block_markdown(block, images))]
         .into_iter()
         .flatten()
         .filter(|part| !part.is_empty())
@@ -355,5 +368,16 @@ fn titled_block(block: &AnswerBlock) -> String {
 
 /// `toMarkdown` of a spec holding just `block`.
 pub(super) fn to_markdown(block: &AnswerBlock) -> String {
-    titled_block(block)
+    titled_block(block, &|_| None)
+}
+
+/// `toMarkdown` of a whole spec: its blocks apart by a blank line, `images` resolving each
+/// image block's asset.
+pub(super) fn spec_markdown(blocks: &[AnswerBlock], images: ImageUrl) -> String {
+    blocks
+        .iter()
+        .map(|block| titled_block(block, images))
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }

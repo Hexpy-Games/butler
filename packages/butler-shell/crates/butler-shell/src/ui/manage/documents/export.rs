@@ -8,10 +8,12 @@ use butler_ds::ui::toast::{self, Toast};
 use butler_shell_client::ShellClient;
 use gpui::App;
 use regex::{Captures, Regex};
+use serde_json::Value;
 
 use super::api::Doc;
 use super::copy::words;
-use super::read_view::{Segment, split};
+use super::read_view::{Segment, parse, split};
+use crate::ui::chat::answers::spec_markdown;
 use crate::ui::source::agent::Jobs;
 
 /// An image of the body whose destination is a document asset (`img_…`): alt, id, title.
@@ -75,20 +77,24 @@ pub(super) fn markdown(doc: &Doc, cx: &mut App) {
 }
 
 /// `exportDocumentMarkdown`: only image destinations are replaced; every other byte stays.
-// CARVE-OUT(G-ds): React also turns each `blocks` fence into portable Markdown
-// (`answer-blocks-markdown.ts` `toMarkdown`); `chat::answers::markdown` is private to the chat,
-// so the fence stays as it is.
+/// Each `blocks` fence becomes portable Markdown (`toMarkdown`) with its images inlined; a
+/// fence that is not a spec stays as it is.
 async fn portable(client: &ShellClient, body: &str) -> Option<String> {
     let image = Regex::new(IMAGE).ok()?;
     let parts = split(body);
     let mut ids = BTreeSet::new();
     for part in &parts {
-        if let Segment::Markdown(text) = part {
-            ids.extend(
+        match part {
+            Segment::Markdown(text) => ids.extend(
                 image
                     .captures_iter(text)
                     .filter_map(|found| found.get(2).map(|id| id.as_str().to_owned())),
-            );
+            ),
+            Segment::Blocks { json, .. } => {
+                if let Ok(spec) = serde_json::from_str::<Value>(json) {
+                    asset_ids(&spec, &mut ids);
+                }
+            }
         }
     }
     let mut data = HashMap::new();
@@ -102,10 +108,32 @@ async fn portable(client: &ShellClient, body: &str) -> Option<String> {
             Segment::Markdown(text) => {
                 out.push_str(&image.replace_all(text, |found: &Captures| inline(found, &data)));
             }
-            Segment::Blocks(fence) => out.push_str(fence),
+            Segment::Blocks { fence, json } => match parse(json) {
+                Some(spec) => out.push_str(&spec_markdown(&spec, &|id| data.get(id).cloned())),
+                None => out.push_str(fence),
+            },
         }
     }
     Some(out)
+}
+
+/// The values of every `img` key of a spec (the `JSON.stringify` replacer of
+/// `exportDocumentMarkdown`).
+fn asset_ids(value: &Value, ids: &mut BTreeSet<String>) {
+    match value {
+        Value::Object(map) => {
+            for (key, inner) in map {
+                match inner {
+                    Value::String(id) if key == "img" => {
+                        ids.insert(id.clone());
+                    }
+                    _ => asset_ids(inner, ids),
+                }
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|inner| asset_ids(inner, ids)),
+        _ => {}
+    }
 }
 
 /// `![alt](data:… "title")`

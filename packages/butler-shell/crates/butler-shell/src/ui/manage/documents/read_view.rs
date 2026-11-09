@@ -1,20 +1,30 @@
 //! `DocumentReadView`: the body, read-only. Markdown goes to the DS MarkdownContent; a `blocks`
-//! fence is an answer-block spec.
+//! fence is an answer-block spec, drawn by the chat's answer renderer without a message.
 use gpui::ParentElement as _;
 use std::collections::HashMap;
+use std::ops::Range;
 
 use butler_ds::ui::blocks::markdown_content::MarkdownContent;
 use butler_ds::ui::layout::{Space, Stack};
-use gpui::{AnyElement, App, ImageSource, IntoElement as _, SharedString};
+use gpui::{AnyElement, App, ImageSource, IntoElement as _, SharedString, Window};
 use serde_json::Value;
 
 use super::api::Doc;
+use crate::ui::chat::answers::preview_blocks;
 use crate::ui::shell::image_viewer::loader::{PictureId, picture};
+use crate::ui::source::wire::AnswerBlocks;
 
-/// A part of the body: Markdown, or a valid `blocks` fence (the fence text, markers included).
+/// A part of the body: Markdown, or a valid `blocks` fence (its text, markers included, and the
+/// JSON between the markers).
 pub(super) enum Segment<'a> {
     Markdown(&'a str),
-    Blocks(&'a str),
+    Blocks { fence: &'a str, json: &'a str },
+}
+
+/// `JSON.parse(node.value)` as an answer-block spec; a spec the renderer does not know stays a
+/// visible fence.
+pub(super) fn parse(json: &str) -> Option<AnswerBlocks> {
+    serde_json::from_str(json).ok()
 }
 
 /// An open code fence.
@@ -49,19 +59,21 @@ fn spec(content: &str) -> bool {
     serde_json::from_str::<Value>(content).is_ok_and(|spec| spec["blocks"].is_array())
 }
 
-/// Closes the Markdown before `start`, then the `blocks` fence `start..end`.
+/// Closes the Markdown before the `blocks` fence `fence`, whose JSON is `json`.
 fn take<'a>(
     body: &'a str,
     parts: &mut Vec<Segment<'a>>,
     kept: &mut usize,
-    start: usize,
-    end: usize,
+    (fence, json): (Range<usize>, Range<usize>),
 ) {
-    if *kept < start {
-        parts.push(Segment::Markdown(&body[*kept..start]));
+    if *kept < fence.start {
+        parts.push(Segment::Markdown(&body[*kept..fence.start]));
     }
-    parts.push(Segment::Blocks(&body[start..end]));
-    *kept = end;
+    *kept = fence.end;
+    parts.push(Segment::Blocks {
+        fence: &body[fence],
+        json: &body[json],
+    });
 }
 
 /// The top-level `blocks` fences (`node.type === "code" && node.lang === "blocks"`) and the
@@ -78,7 +90,12 @@ pub(super) fn split(body: &str) -> Vec<Segment<'_>> {
                 .is_some_and(|o| o.marker == marker && len >= o.len && info.is_empty());
             if closes && let Some(done) = open.take() {
                 if done.blocks && spec(&body[done.content..at]) {
-                    take(body, &mut parts, &mut kept, done.start, end);
+                    take(
+                        body,
+                        &mut parts,
+                        &mut kept,
+                        (done.start..end, done.content..at),
+                    );
                 }
             } else if open.is_none() {
                 open = Some(Open {
@@ -98,7 +115,12 @@ pub(super) fn split(body: &str) -> Vec<Segment<'_>> {
         && done.blocks
         && spec(&body[done.content..])
     {
-        take(body, &mut parts, &mut kept, done.start, body.len());
+        take(
+            body,
+            &mut parts,
+            &mut kept,
+            (done.start..body.len(), done.content..body.len()),
+        );
     }
     if kept < body.len() {
         parts.push(Segment::Markdown(&body[kept..]));
@@ -106,23 +128,37 @@ pub(super) fn split(body: &str) -> Vec<Segment<'_>> {
     parts
 }
 
-/// The body of `doc`: one Markdown run or fence after another.
-pub(super) fn read_view(doc: &Doc, cx: &mut App) -> AnyElement {
+/// The body of `doc`: one Markdown run or fence after another. A fence's spec is parsed once
+/// per document, not per frame.
+pub(super) fn read_view(doc: &Doc, window: &mut Window, cx: &mut App) -> AnyElement {
+    let parts = split(&doc.body);
+    let specs = doc.specs.get_or_init(|| {
+        parts
+            .iter()
+            .map(|part| match part {
+                Segment::Blocks { json, .. } => parse(json),
+                Segment::Markdown(_) => None,
+            })
+            .collect()
+    });
     let mut stack = Stack::new().gap(Space::Md);
-    for (index, part) in split(&doc.body).into_iter().enumerate() {
+    for (index, part) in parts.into_iter().enumerate() {
         let id = SharedString::from(format!("document-read-{index}"));
-        stack = match part {
-            Segment::Markdown(text) => {
+        let spec = specs.get(index).and_then(Option::as_ref);
+        stack = match (part, spec) {
+            (Segment::Blocks { .. }, Some(spec)) => {
+                stack.child(preview_blocks(&index.to_string(), spec, window, cx))
+            }
+            (Segment::Blocks { fence, .. }, None) => {
+                stack.child(MarkdownContent::new(id, fence.to_owned()))
+            }
+            (Segment::Markdown(text), _) => {
                 let ready = pictures(doc, text, cx);
                 stack.child(
                     MarkdownContent::new(id, text.to_owned())
                         .image_source(move |src| ready.get(src).cloned()),
                 )
             }
-            // CARVE-OUT(G-ds): the answer-block renderer (`chat::answers::answer_blocks`) needs a
-            // transcript context; React's `AnswerBlocks preview` has none. Until the frame
-            // exposes a context-free entry, the fence shows as the code it is.
-            Segment::Blocks(fence) => stack.child(MarkdownContent::new(id, fence.to_owned())),
         };
     }
     stack.into_any_element()

@@ -4,12 +4,15 @@ mod source;
 
 use std::sync::{Arc, OnceLock};
 
-use butler_ds::ui::blocks::prompt_suggestion_list::{PromptSuggestionItem, PromptSuggestionList};
+use butler_ds::ui::blocks::prompt_suggestion_list::{
+    ContentRect, PromptSuggestionItem, PromptSuggestionList,
+};
 use butler_ds::ui::blocks::wallpaper::{Wallpaper, WallpaperSource, bundled_image};
 use butler_ds::ui::blocks::wallpaper_stage::WallpaperStage;
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::layout::{Box, Cross, Justify, MaxWidth, Space, Stack, WithItem as _};
 use butler_ds::ui::typo::{TextAlign, Tone, Typo, Wrap};
+use chrono::Timelike as _;
 use gpui::{
     AnyElement, App, Entity, Image, ImageFormat, ImageSource, IntoElement as _, ParentElement as _,
     Styled as _, Window, img,
@@ -17,7 +20,7 @@ use gpui::{
 
 use self::source::{EpicInfo, Resolved, Want, fetch, resolve};
 use super::send_message;
-use crate::ui::composer::fill_composer_with_template;
+use crate::ui::composer::{card_rect, fill_composer_with_template};
 use crate::ui::i18n::new_chat::{epic_caption, general_suggestions, project_suggestions, words};
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::NewChatSuggestion;
@@ -88,21 +91,50 @@ fn load(state: &Entity<Loaded>, ctx: &EmptyCtx<'_>, lang: Lang, cx: &mut App) {
     .detach();
 }
 
+/// `u_dayPhase`: local time of day in 0..1 (`wallpaperDayPhase`).
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "seconds since midnight (under 86 400) are exact in f32"
+)]
+fn day_phase() -> f32 {
+    let now = chrono::Local::now();
+    now.num_seconds_from_midnight() as f32 / 86_400.
+}
+
 /// The new-chat screen behind the composer.
 pub(crate) fn empty_state(ctx: EmptyCtx<'_>, window: &mut Window, cx: &mut App) -> AnyElement {
     let lang = Ds::get(cx).lang();
     let state = window.use_keyed_state("new-chat-empty", cx, |_, _| Loaded::default());
     load(&state, &ctx, lang, cx);
+    // `useConversationWallpaper`'s contentRect: what the prompt list reports.
+    let content_rect =
+        window.use_keyed_state("new-chat-content-rect", cx, |_, _| None::<ContentRect>);
     let resolved = state.read(cx).resolved.clone();
     let wallpaper = resolved
         .as_ref()
         .map_or(WallpaperSource::None, |resolved| resolved.wallpaper.clone());
     let content = match (ctx.epic_id, resolved.as_ref().and_then(|r| r.epic.clone())) {
         (Some(_), epic) => epic.map(|epic| epic_empty_state(&epic, lang)),
-        (None, _) => Some(prompt_list(&ctx, resolved.as_ref(), lang, cx)),
+        (None, _) => Some(prompt_list(
+            &ctx,
+            resolved.as_ref(),
+            lang,
+            &content_rect,
+            cx,
+        )),
     };
+    let kept = ctx
+        .epic_id
+        .is_none()
+        .then(|| *content_rect.read(cx))
+        .flatten();
     WallpaperStage::new()
-        .wallpaper(Wallpaper::new(wallpaper))
+        .wallpaper(
+            Wallpaper::new(wallpaper)
+                .content_rect(kept)
+                .content_rect2(card_rect(cx))
+                .day_phase(day_phase()),
+        )
         .children(content)
         .into_any_element()
 }
@@ -149,6 +181,7 @@ fn prompt_list(
     ctx: &EmptyCtx<'_>,
     resolved: Option<&Resolved>,
     lang: Lang,
+    content_rect: &Entity<Option<ContentRect>>,
     cx: &mut App,
 ) -> AnyElement {
     let copy = words(lang);
@@ -179,12 +212,19 @@ fn prompt_list(
         |briefing| briefing.moment.clone(),
     );
     let mark = mark(Ds::get(cx).dark());
+    let content_rect = content_rect.clone();
     let mut list = PromptSuggestionList::new("new-chat", title.to_owned(), items.collect())
         .moment(moment)
         .title_icon(move |_| {
             img(ImageSource::Image(mark.clone()))
                 .size_full()
                 .into_any_element()
+        })
+        .on_content_rect(move |rect, _, cx| {
+            content_rect.update(cx, |kept, cx| {
+                *kept = rect;
+                cx.notify();
+            });
         });
     if let Some(description) = briefing.and_then(|briefing| briefing.description.clone()) {
         list = list.description(description);

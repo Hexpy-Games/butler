@@ -203,6 +203,7 @@ impl Shell {
         Self::notification_responses(window, cx);
         Self::install_composer(&shell.manage_ctx(), cx);
         crate::ui::manage::library::detail::install(&shell.manage_ctx(), cx);
+        crate::ui::manage::install_window(&shell.manage_ctx(), cx);
         let manage = shell.manage_ctx();
         shell
             .composer
@@ -244,6 +245,12 @@ impl Shell {
         }
         let update = crate::lifecycle::app_update::entity(cx);
         subscriptions.push(cx.observe(&update, |_, _, cx| cx.notify()));
+        // `useLibraryNames()` in the titlebar: a renamed item or group retitles it.
+        subscriptions.push(
+            cx.observe_global::<crate::ui::manage::library::types::LibraryNames>(|_, cx| {
+                cx.notify();
+            }),
+        );
         subscriptions
     }
 

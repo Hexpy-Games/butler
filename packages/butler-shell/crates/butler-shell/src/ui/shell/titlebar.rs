@@ -88,8 +88,8 @@ impl Shell {
     ) -> AnyElement {
         let lang = self.theme.strings.locale.ds_lang();
         let session = self.on_session(cx);
-        let (title, subtitle) = match route::active_title(&self.view(cx), lang) {
-            Some(title) => (title.into(), None),
+        let (title, subtitle) = match route::active_title(&self.view(cx), lang, cx) {
+            Some(title) => (title, None),
             None => self.title_copy(cx),
         };
         let mut bar = TitlebarShell::new("workspace-title", title)

@@ -9,6 +9,7 @@ use butler_ds::ui::blocks::empty_line::EmptyLine;
 use butler_ds::ui::blocks::history_row::{HistoryGroup, HistoryRow};
 use butler_ds::ui::button::{self, Button, Size, Variant};
 use butler_ds::ui::context::Ds;
+use butler_ds::ui::field::{Field, FieldLabel};
 use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Box as DsBox, Cross, Justify, Space, Stack};
 use butler_ds::ui::page_container::{Gutter, PageContainer, PageWidth};
@@ -216,10 +217,9 @@ impl HistoryPage {
                 });
             });
         let only = me.clone();
-        let filter = Stack::row()
-            .cross(Cross::Center)
-            .gap(Space::Sm)
-            .child(Typo::body(copy.butler_only))
+        // `<Field><FieldLabel>…</FieldLabel><Switch/></Field>`: the label over the switch.
+        let filter = Field::new("history-only-field")
+            .child(FieldLabel::new().child(SharedString::from(copy.butler_only)))
             .child(
                 Switch::new("history-only")
                     .checked(self.only)
@@ -437,7 +437,12 @@ impl Render for HistoryPage {
             .child(DsBox::new().padding_y(Space::Xl).child(column));
         let page = ScrollArea::new("history-scroll").fill().child(body);
         let page = anchor(
-            div().id("history-page").size_full().child(page),
+            div()
+                .id("history-page")
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(page),
             "history-page",
         );
         div()

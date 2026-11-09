@@ -53,15 +53,16 @@ pub(crate) fn nested_title(parent: &Parent, lang: Lang, cx: &App) -> Option<Shar
 }
 
 /// `activeTitleForView`: the titlebar title of a management view; `None` keeps the chat's.
-pub(crate) fn active_title(view: &View, lang: Lang) -> Option<&'static str> {
+pub(crate) fn active_title(view: &View, lang: Lang, cx: &App) -> Option<SharedString> {
     let copy = words(lang);
     match view {
         View::Session => None,
-        View::History { .. } => Some(copy.history_title),
-        View::Library(_) => Some(copy.library),
-        View::Automations | View::AutomationDetail(_) => Some(copy.automations_title),
-        View::PlanOverview { .. } => Some(copy.canon_overview),
-        View::ProjectDashboard { .. } => Some(copy.project_dashboard),
+        View::History { .. } => Some(copy.history_title.into()),
+        // The titlebar shows `libraryTitle(view)` for a library view (Titlebar.tsx).
+        View::Library(library) => Some(library_title(library, lang, cx)),
+        View::Automations | View::AutomationDetail(_) => Some(copy.automations_title.into()),
+        View::PlanOverview { .. } => Some(copy.canon_overview.into()),
+        View::ProjectDashboard { .. } => Some(copy.project_dashboard.into()),
     }
 }
 

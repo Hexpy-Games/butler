@@ -51,7 +51,7 @@
   "anchors": [
     {
       "anchor": "sidebar-dashboard-${project}",
-      "electron": "[data-tree-item=\"p:${project}\"] [aria-label=\"프로젝트 대시보드\"]"
+      "electron": "[data-tree-item=\"p:${project}\"] [aria-label$=\"프로젝트 대시보드\"]"
     },
     {
       "anchor": "dashboard-tab-materials",

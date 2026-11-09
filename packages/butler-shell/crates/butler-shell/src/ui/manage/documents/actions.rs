@@ -203,7 +203,7 @@ impl DocumentPage {
                     }),
             );
         }
-        crate::ui::widgets::anchor(div().id("document-versions"), "document-versions")
+        crate::ui::widgets::anchor(div().id("document-versions").w_full(), "document-versions")
             .child(history)
             .into_any_element()
     }

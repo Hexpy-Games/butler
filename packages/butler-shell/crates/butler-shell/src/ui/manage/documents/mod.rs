@@ -19,7 +19,7 @@ use butler_ds::ui::scroll::ScrollArea;
 use butler_ds::ui::toast::{self, Action, Toast};
 use butler_shell_client::Error;
 use gpui::{
-    AnyElement, AnyView, App, AppContext as _, Context, Entity, InteractiveElement as _,
+    AnyElement, AnyView, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _,
     IntoElement, ParentElement as _, Render, SharedString, Styled as _, Task, WeakEntity, Window,
     div, px,
 };
@@ -37,6 +37,9 @@ use crate::ui::viewer::{self, FileViewerEntry};
 /// How long after the last Butler edit the page stops saying Butler is editing
 /// (`DocumentSession.remote`).
 const EDITING_LINGER: Duration = Duration::from_millis(1500);
+
+/// A title-row control of the host, built in every render.
+pub(crate) type Slot = Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>;
 
 /// `DocumentReadingPage`: the drawer's reading column around a [`DocumentPage`].
 pub(crate) fn reading_page(
@@ -75,15 +78,32 @@ impl Render for ReadingPage {
     }
 }
 
+/// `FileViewerDocument`: the page of document `id` for the viewer pane, which gives its back
+/// (phone) and close controls. One page is kept per document while the viewer shows it.
+pub(crate) fn viewer_page(
+    id: &str,
+    controls: (Option<Slot>, Slot),
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<AnyElement> {
+    let ctx = super::window_ctx(cx)?;
+    let (leading, trailing) = controls;
+    let key = (ElementId::from("document-viewer"), id.to_owned());
+    let id = SharedString::from(id.to_owned());
+    let page = window.use_keyed_state(key, cx, move |window, cx| {
+        DocumentPage::new(ctx, id, leading, Some(trailing), window, cx)
+    });
+    Some(page.into_any_element())
+}
+
 /// `DocumentPage` (without `DocumentBody`'s editing): the title row, the status note, the
 /// actions and the body of one document, or of the revision picked in the versions list.
 pub(crate) struct DocumentPage {
     ctx: ManageCtx,
     id: SharedString,
-    /// The host's title-row slots. An element is built once, so they show on the first frame
-    /// only; a host that needs them kept builds the page again (see the report).
-    leading: Option<AnyElement>,
-    trailing: Option<AnyElement>,
+    /// The host's title-row slots, built in every render.
+    leading: Option<Slot>,
+    trailing: Option<Slot>,
     /// `state.head`: the document as the server holds it.
     head: Option<Doc>,
     failed: bool,
@@ -107,8 +127,8 @@ impl DocumentPage {
     pub(crate) fn new(
         ctx: ManageCtx,
         id: SharedString,
-        leading: Option<AnyElement>,
-        trailing: Option<AnyElement>,
+        leading: Option<Slot>,
+        trailing: Option<Slot>,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {

@@ -5,8 +5,6 @@ use butler_ds::ui::context::Lang;
 use crate::ui::manage::LibraryKind;
 
 pub(crate) struct Words {
-    /// browser.library
-    pub(crate) library: &'static str,
     /// library.title
     pub(crate) library_title: &'static str,
     /// browser.history.title
@@ -29,7 +27,6 @@ pub(crate) struct Words {
 }
 
 static KO: Words = Words {
-    library: "서랍",
     library_title: "서랍",
     history_title: "방문 기록",
     automations_title: "예약 작업",
@@ -43,7 +40,6 @@ static KO: Words = Words {
 };
 
 static EN: Words = Words {
-    library: "Library",
     library_title: "Library",
     history_title: "History",
     automations_title: "Schedules",

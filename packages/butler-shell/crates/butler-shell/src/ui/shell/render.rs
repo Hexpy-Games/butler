@@ -77,16 +77,28 @@ impl Shell {
         self.clear_split();
         let notice = self.live_notice(window, cx);
         Some(
+            // A column, so the card's `flex: auto` fills the workspace body as the
+            // conversation's card does.
             anchor(div(), "manage-card")
                 .size_full()
+                .flex()
+                .flex_col()
                 .child(
                     ShellCard::new().child(
                         div()
-                            .size_full()
+                            .flex_auto()
+                            .min_h_0()
                             .flex()
                             .flex_col()
                             .children(notice)
-                            .child(div().flex_1().min_h_0().child(page.cached(region::fill()))),
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_h_0()
+                                    // A column, so a page whose root takes `flex: 1` (a
+                                    // `ScrollArea::fill`) fills the slot.
+                                    .child(page.cached(region::fill().flex().flex_col())),
+                            ),
                     ),
                 )
                 .into_any_element(),

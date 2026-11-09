@@ -21,8 +21,9 @@ export type Scene = {
   anchors: Anchor[];
   /** What must exist in `/session-view` before capture. */
   ready?: "authority_requests" | "pending_questions" | "artifacts";
-  /** Before each screenshot, in order: click an anchor or wait for it to exist. */
-  steps?: Array<{ click: string } | { expect: string }>;
+  /** Before each screenshot, in order: click an anchor, rest the pointer on it (reveals hover-only
+   * controls), or wait for it to exist. */
+  steps?: Array<{ click: string } | { hover: string } | { expect: string }>;
 };
 type View = { latest_turn?: { state: string }; messages: Array<{ id: string }> };
 
@@ -76,5 +77,5 @@ export async function seed(server: NativeAppServerHandle, scene: Scene) {
       view.messages.forEach((message, index) => { variables[`message.${index}`] = message.id; });
     }
     return expand(scene.anchors, variables);
-  } };
+  }, steps: () => expand(scene.steps, variables) };
 }

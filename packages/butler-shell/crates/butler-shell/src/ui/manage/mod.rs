@@ -128,6 +128,20 @@ pub(crate) enum ManageEvent {
 
 impl EventEmitter<ManageEvent> for ManageState {}
 
+/// The window's [`ManageCtx`] for code with no page to hand it down (the file viewer's document).
+struct WindowCtx(ManageCtx);
+
+impl gpui::Global for WindowCtx {}
+
+/// Called once by the shell at start-up.
+pub(crate) fn install_window(ctx: &ManageCtx, cx: &mut App) {
+    cx.set_global(WindowCtx(ctx.clone()));
+}
+
+pub(crate) fn window_ctx(cx: &App) -> Option<ManageCtx> {
+    cx.try_global::<WindowCtx>().map(|window| window.0.clone())
+}
+
 /// What every page gets. Cheap to clone.
 #[derive(Clone)]
 pub(crate) struct ManageCtx {

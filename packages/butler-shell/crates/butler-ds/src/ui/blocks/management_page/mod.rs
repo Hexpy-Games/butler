@@ -6,8 +6,8 @@ mod aside;
 mod panel;
 
 use gpui::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    ScrollHandle, SharedString, Styled as _, Window, div, px,
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, Pixels,
+    RenderOnce, ScrollHandle, SharedString, Styled as _, Window, div, px,
 };
 
 use super::conversation_shell::shown;
@@ -199,8 +199,8 @@ impl Metrics {
 }
 
 impl ManagementPage {
-    /// The scrolling content: padding, the page container and the children at the page gap.
-    fn content(&mut self, m: &Metrics, overlay: bool, ds: &Ds) -> AnyElement {
+    /// `.content`'s block padding (top, bottom): it replaces the scroll column's own.
+    fn padding(m: &Metrics, overlay: bool, ds: &Ds) -> (Pixels, Pixels) {
         let len = |token| f32::from(ds.len(token));
         let (top, bottom) = if m.compact {
             (
@@ -215,13 +215,16 @@ impl ManagementPage {
         } else {
             bottom
         };
+        (px(top), px(bottom))
+    }
+
+    /// The scrolling content: the page container and the children at the page gap.
+    fn content(&mut self, m: &Metrics) -> AnyElement {
         let stack = Stack::new()
             .gap(panel::page_gap(m.compact))
             .children(std::mem::take(&mut self.children));
         div()
             .w_full()
-            .pt(px(top))
-            .pb(px(bottom))
             .child(
                 PageContainer::new()
                     .width(self.width)
@@ -264,9 +267,11 @@ impl RenderOnce for ManagementPage {
         let docked = shown == Some(AsideLayout::Docked);
         let m = Metrics::of(&self, docked, window, Ds::get(cx));
         let overlay = self.footer.is_some() && self.placement == FooterPlacement::Overlay;
-        let content = self.content(&m, overlay, Ds::get(cx));
+        let content = self.content(&m);
+        let (top, bottom) = Self::padding(&m, overlay, Ds::get(cx));
         let scroll = ScrollArea::new((self.id.clone(), "scroll"))
             .fill()
+            .content_padding(top, bottom, px(0.))
             .child(content);
         let aside = self.aside.take().zip(shown).map(|(content, layout)| {
             let slot = aside::Slot {

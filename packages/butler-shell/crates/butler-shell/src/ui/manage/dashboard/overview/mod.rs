@@ -42,6 +42,7 @@ fn main_aside(id: &'static str) -> Grid {
             wide: Some(Preset::MainAside),
         }))
         .gap(Space::Xl)
+        .page_container()
 }
 
 impl Overview<'_> {

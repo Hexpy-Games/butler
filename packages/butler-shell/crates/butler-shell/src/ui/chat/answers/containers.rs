@@ -7,7 +7,6 @@ use gpui::{
     Window, div,
 };
 
-use crate::ui::chat::TranscriptCtx;
 use crate::ui::source::wire::{
     AnswerBlock, AnswerBlockCalloutTone, AnswerLeafBlock, AnswerLeafBlockCalloutTone,
 };
@@ -16,7 +15,7 @@ use crate::ui::source::wire::{
 pub(super) fn render(
     block: &AnswerBlock,
     path: &str,
-    t: &TranscriptCtx,
+    message: Option<&str>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -24,7 +23,7 @@ pub(super) fn render(
         AnswerBlock::Columns { blocks, .. } => {
             let mut columns =
                 BlockColumns::new(SharedString::from(format!("answer-columns-{path}")));
-            for column in children(blocks, path, t, window, cx) {
+            for column in children(blocks, path, message, window, cx) {
                 columns = columns.child(column);
             }
             columns.into_any_element()
@@ -37,7 +36,7 @@ pub(super) fn render(
                 let content = Stack::new().gap(Space::Md).children(children(
                     &tab.blocks,
                     &tab_path,
-                    t,
+                    message,
                     window,
                     cx,
                 ));
@@ -50,7 +49,7 @@ pub(super) fn render(
         }
         AnswerBlock::Group { blocks, .. } => Stack::new()
             .gap(Space::Md)
-            .children(children(blocks, path, t, window, cx))
+            .children(children(blocks, path, message, window, cx))
             .into_any_element(),
         _ => div().into_any_element(),
     }
@@ -60,7 +59,7 @@ pub(super) fn render(
 fn children(
     leaves: &[AnswerLeafBlock],
     path: &str,
-    t: &TranscriptCtx,
+    message: Option<&str>,
     window: &mut Window,
     cx: &mut App,
 ) -> Vec<AnyElement> {
@@ -70,7 +69,7 @@ fn children(
         .filter_map(|(index, leaf)| {
             let block = leaf_block(leaf.clone()).ok()?;
             let leaf_path = format!("{path}/blocks/{index}");
-            let rendered = super::child_block(&block, &leaf_path, t, window, cx);
+            let rendered = super::child_block(&block, &leaf_path, message, window, cx);
             let cell = Stack::new().gap(Space::Sm).child(rendered);
             Some(
                 div()

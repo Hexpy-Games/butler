@@ -25,6 +25,7 @@ impl RenderOnce for GroupMenu {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let id = SharedString::from(format!("canon-menu-{}", self.key));
         let weak = self.shell.clone();
+        let anchor = format!("sidebar-canon-menu-{}", self.key);
         let key = self.key;
         let menu = DropdownMenu::new(id.clone(), window, cx)
             .open(self.open)
@@ -63,7 +64,10 @@ impl RenderOnce for GroupMenu {
             }));
         }
         let content = menu.content(content, window, cx);
-        div().flex().child(trigger).child(content)
+        div()
+            .flex()
+            .child(crate::ui::widgets::anchor(div(), &anchor).child(trigger))
+            .child(content)
     }
 }
 impl Shell {
@@ -127,7 +131,8 @@ impl Shell {
             overview: self.copy("Overview", "개요"),
             edit: self.copy("Edit", "수정"),
         };
-        div()
+        // The actions sit on the header row, so the pointer rests here to reveal the hover-only menu.
+        crate::ui::widgets::anchor(div(), &format!("sidebar-canon-group-{key}"))
             .flex()
             .child(create)
             .child(

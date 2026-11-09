@@ -72,10 +72,13 @@
   },
   "steps": [
     {
-      "click": "sidebar-canon-menu"
+      "hover": "sidebar-canon-group-canon:${project}:${plan}"
     },
     {
-      "click": "sidebar-canon-overview"
+      "click": "sidebar-canon-menu-canon:${project}:${plan}"
+    },
+    {
+      "click": "canon-menu-canon:${project}:${plan}-item-0-0"
     },
     {
       "expect": "canon-plan-overview"
@@ -83,11 +86,15 @@
   ],
   "anchors": [
     {
-      "anchor": "sidebar-canon-menu",
-      "electron": "[data-test-class=\"app-sidebar\"] [aria-label=\"출시 준비\"]"
+      "anchor": "sidebar-canon-group-canon:${project}:${plan}",
+      "electron": "[data-test-class=\"app-sidebar\"] [data-test-class=\"canon-sidebar-group\"]:has([aria-label=\"출시 준비 메뉴\"])"
     },
     {
-      "anchor": "sidebar-canon-overview",
+      "anchor": "sidebar-canon-menu-canon:${project}:${plan}",
+      "electron": "[data-test-class=\"app-sidebar\"] [aria-label=\"출시 준비 메뉴\"]"
+    },
+    {
+      "anchor": "canon-menu-canon:${project}:${plan}-item-0-0",
       "electron": "[role=\"menuitem\"]"
     },
     {

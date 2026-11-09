@@ -92,9 +92,10 @@ impl AutomationDetail {
             .on_change(on_text(cx, |this, text| {
                 text.clone_into(&mut this.form.title);
             }));
-        tagged(
-            "automation-title",
-            labelled("automation-title-field", words.field_title, input),
+        labelled(
+            "automation-title-field",
+            words.field_title,
+            tagged("automation-title", input),
         )
     }
 
@@ -106,9 +107,10 @@ impl AutomationDetail {
             .on_change(on_text(cx, |this, text| {
                 text.clone_into(&mut this.form.prompt);
             }));
-        tagged(
-            "automation-prompt",
-            labelled("automation-prompt-field", words.field_prompt, input),
+        labelled(
+            "automation-prompt-field",
+            words.field_prompt,
+            tagged("automation-prompt", input),
         )
     }
 

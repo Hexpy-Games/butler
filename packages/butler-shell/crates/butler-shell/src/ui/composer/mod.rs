@@ -10,6 +10,7 @@ mod inputs;
 pub(crate) mod menus;
 mod notice;
 pub(crate) mod queue;
+mod rect;
 mod references;
 mod send;
 mod slots;
@@ -48,6 +49,7 @@ use crate::ui::source::wire::{QueuedMessageRecord, SessionView};
 use crate::ui::theme::Theme;
 
 pub(crate) use inputs::Inputs;
+pub(crate) use rect::card_rect;
 pub(crate) use wire::decode_catalog;
 
 /// `fillComposerWithTemplate`: puts a suggestion into an empty composer and focuses it.
@@ -391,10 +393,14 @@ impl Composer {
                 .and_then(|p| p.state.as_deref()),
         );
         let body = self.body(window, cx);
-        let expanded = self.fold.engaged || self.fold.decision || self.fold.protected;
-        let mut card = ComposerCard::new("composer-card")
-            .expanded(expanded)
-            .large();
+        // `Boolean(scope || decision...) || presentation.expanded`: the dashboard's scoped
+        // composer (`draft_key`) is always unfolded, and is not `large` (`large={false}`).
+        let scoped = self.inputs.draft_key.is_some();
+        let expanded = scoped || self.fold.engaged || self.fold.decision || self.fold.protected;
+        let mut card = ComposerCard::new("composer-card").expanded(expanded);
+        if !scoped {
+            card = card.large();
+        }
         if file_drag_active(cx) {
             card = card.drop_active();
         }
@@ -428,12 +434,16 @@ impl Render for Composer {
         set_plan_gate(cx, self.controls.shown.plan_mode, &self.queue);
         let height = self.height.clone();
         let this = cx.entity().downgrade();
+        let shared = self.inputs.draft_key.is_none();
         let probe = canvas(
             move |b, window, cx| {
                 // The conversation keeps room for the card: a new height re-renders it (this
                 // view's ancestors) on the next frame.
                 let next = b.size.height.as_f32();
-                if height.replace(next) != next {
+                let resized = height.replace(next) != next;
+                // The new chat's wallpaper keeps clear of the card (`contentRect2`).
+                let moved = shared && rect::record(b, cx);
+                if resized || moved {
                     window.defer(cx, move |_, cx| {
                         let _ = this.update(cx, |_, cx| cx.notify());
                     });

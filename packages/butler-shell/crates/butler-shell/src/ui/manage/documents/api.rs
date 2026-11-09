@@ -2,6 +2,9 @@
 use butler_shell_client::{Error, ShellClient};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::sync::OnceLock;
+
+use crate::ui::source::wire::AnswerBlocks;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -34,6 +37,9 @@ pub(super) struct Doc {
     pub(super) chat_id: Option<String>,
     #[serde(default)]
     pub(super) assets: Vec<Asset>,
+    /// The parsed `blocks` fences of the body, by segment, filled by the first read-only render.
+    #[serde(skip)]
+    pub(super) specs: OnceLock<Vec<Option<AnswerBlocks>>>,
 }
 
 /// `DocumentUpdate`: the `document.updated` payload.

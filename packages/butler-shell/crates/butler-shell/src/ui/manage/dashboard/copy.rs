@@ -99,6 +99,12 @@ pub(super) struct Words {
     pub(super) archived: &'static str,
     /// space.newChat
     pub(super) new_chat: &'static str,
+    /// sidebar.projectMenu
+    pub(super) project_menu: &'static str,
+    /// projectSignpost.wallpaper
+    pub(super) wallpaper: &'static str,
+    /// shell.notYet
+    pub(super) not_yet: &'static str,
     /// briefing.projectMoment
     pub(super) project_moment: &'static str,
     /// canon.epic
@@ -206,6 +212,9 @@ static KO: Words = Words {
     plans: "계획",
     archived: "보관됨",
     new_chat: "새 대화",
+    project_menu: "프로젝트 메뉴",
+    wallpaper: "월페이퍼",
+    not_yet: "준비 중",
     project_moment: "프로젝트",
     epic: "과제",
     close: "닫기",
@@ -309,6 +318,9 @@ static EN: Words = Words {
     plans: "Plans",
     archived: "Archived",
     new_chat: "New chat",
+    project_menu: "Project menu",
+    wallpaper: "Wallpaper",
+    not_yet: "Coming soon",
     project_moment: "Project",
     epic: "Epic",
     close: "Close",

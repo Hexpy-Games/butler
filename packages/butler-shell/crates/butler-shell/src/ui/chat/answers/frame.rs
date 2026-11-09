@@ -10,7 +10,7 @@ use gpui::{
 };
 
 use super::markdown::to_markdown;
-use crate::ui::chat::{TranscriptCtx, open_link};
+use crate::ui::chat::open_link;
 use crate::ui::i18n::media::Media;
 use crate::ui::shell::image_viewer::source::{checked_label, site_of};
 use crate::ui::source::agent::Jobs;
@@ -21,10 +21,10 @@ pub(super) fn frame(
     child: AnyElement,
     block: &AnswerBlock,
     path: &str,
-    t: &TranscriptCtx,
+    message: Option<&str>,
     cx: &App,
 ) -> AnyElement {
-    framed(child, block, path, Level::Block, (t, cx))
+    framed(child, block, path, Level::Block, (message, cx))
 }
 
 /// `AnswerBlockFrame` with `child`: a block inside a container (a smaller title).
@@ -32,10 +32,10 @@ pub(super) fn child_frame(
     child: AnyElement,
     block: &AnswerBlock,
     path: &str,
-    t: &TranscriptCtx,
+    message: Option<&str>,
     cx: &App,
 ) -> AnyElement {
-    framed(child, block, path, Level::Child, (t, cx))
+    framed(child, block, path, Level::Child, (message, cx))
 }
 
 fn framed(
@@ -43,7 +43,7 @@ fn framed(
     block: &AnswerBlock,
     path: &str,
     level: Level,
-    (t, cx): (&TranscriptCtx, &App),
+    (message, cx): (Option<&str>, &App),
 ) -> AnyElement {
     let mut frame = BlockActionFrame::new(SharedString::from(format!("answer-frame-{path}")))
         .level(level)
@@ -51,7 +51,7 @@ fn framed(
     if let Some(title) = title(block) {
         frame = frame.title(SharedString::from(title.to_owned()));
     }
-    for action in actions(block, path, t, cx) {
+    for action in actions(block, path, message, cx) {
         frame = frame.action(action);
     }
     frame.child(child).into_any_element()
@@ -60,8 +60,8 @@ fn framed(
 /// `answerBlockActions`: save to the library (a stored message's block), then copy as Markdown.
 /// A block without a stored message is a preview and has none. Making a document from a block
 /// needs the block as JSON, which the wire types do not write yet.
-fn actions(block: &AnswerBlock, path: &str, t: &TranscriptCtx, cx: &App) -> Vec<OverflowItem> {
-    let Some(message) = t.message_id else {
+fn actions(block: &AnswerBlock, path: &str, message: Option<&str>, cx: &App) -> Vec<OverflowItem> {
+    let Some(message) = message else {
         return Vec::new();
     };
     let copy = Media::get(cx);

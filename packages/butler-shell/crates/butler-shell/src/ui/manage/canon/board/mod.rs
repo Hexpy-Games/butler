@@ -245,6 +245,7 @@ impl CanonBoard {
         canon: &Rc<CanonOverview>,
         plan_id: Option<&str>,
         selected: Option<&str>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let filter = self.effective_filter(cx);
@@ -286,7 +287,7 @@ impl CanonBoard {
             None => content = content.child(backlog_lane(canon, &lanes, cx)),
             Some(plan) => {
                 let caption = words.plan_caption(plan);
-                content = content.child(plan_lanes(plan, caption, &lanes, cx));
+                content = content.child(plan_lanes(plan, caption, &lanes, window, cx));
             }
         }
         let for_drop = canon.clone();
@@ -334,7 +335,13 @@ impl Render for CanonBoard {
         }
         match &canon {
             Some(canon) => {
-                root = root.child(self.lanes(canon, plan_id.as_deref(), selected.as_deref(), cx));
+                root = root.child(self.lanes(
+                    canon,
+                    plan_id.as_deref(),
+                    selected.as_deref(),
+                    window,
+                    cx,
+                ));
             }
             None if !self.failed => root = root.child(Typo::caption(words.loading)),
             None => {}

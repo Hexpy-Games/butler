@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, SharedString, Styled as _,
-    Window, div, linear_color_stop, linear_gradient, px,
+    Window, div, linear_color_stop, linear_gradient,
 };
 
 use crate::tokens::{Color, Length};
@@ -178,8 +178,9 @@ impl RenderOnce for VersionHistory {
             .flex()
             .flex_col()
             .gap(ds.len(Length::SpaceSm))
-            // `min-width: min(20rem, 100%)`; the host (a popover) sets the width above it.
-            .min_w(px(320.)) // DS: VersionHistory.module.css:5
+            // `min-width: min(20rem, 100%)`: the host (a popover, 18rem) is narrower than 20rem,
+            // so the list is as wide as the host and the time at the row's end stays inside it.
+            .w_full() // DS: VersionHistory.module.css:5
             .child(div().flex().flex_col().children(rows))
             .children(footer)
     }

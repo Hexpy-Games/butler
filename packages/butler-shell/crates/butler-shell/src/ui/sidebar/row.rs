@@ -90,15 +90,23 @@ impl Shell {
             let project = SharedString::from(row.node.entityId.clone());
             let dashboard = IconButton::new(
                 SharedString::from(format!("dashboard-{}", row.node.key)),
-                self.copy("Dashboard", "대시보드"),
+                self.copy("Project dashboard", "프로젝트 대시보드"),
             )
             .glyph(Icon::LayoutDashboard)
             .on_click(cx.listener(move |s, _, w, cx| {
+                // The row's own click toggles the group; the action does not.
+                cx.stop_propagation();
                 s.open_project_dashboard(project.clone(), w, cx);
             }));
             gpui::div()
                 .flex()
-                .child(dashboard)
+                .child(
+                    crate::ui::widgets::anchor(
+                        div(),
+                        &format!("sidebar-dashboard-{}", row.node.entityId),
+                    )
+                    .child(dashboard),
+                )
                 .child(swap)
                 .into_any_element()
         } else {

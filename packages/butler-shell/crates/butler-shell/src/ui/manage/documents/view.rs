@@ -48,7 +48,8 @@ fn layout(
 impl Render for DocumentPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let words = words(Ds::get(cx).lang());
-        let (leading, trailing) = (self.leading.take(), self.trailing.take());
+        let leading = self.leading.as_ref().map(|slot| slot(window, cx));
+        let trailing = self.trailing.as_ref().map(|slot| slot(window, cx));
         let page = cx.entity().downgrade();
         let popover = Popover::new(
             SharedString::from(format!("document-versions-{}", self.id)),
@@ -87,7 +88,7 @@ impl Render for DocumentPage {
             .actions(actions)
             .menu_actions(items)
             .menu_label(words.more_actions)
-            .child(read_view(shown, cx));
+            .child(read_view(shown, window, cx));
         let versions = self.versions(head.rev, cx);
         let content = popover.content(
             PopoverContent::new().align(Align::End).child(versions),

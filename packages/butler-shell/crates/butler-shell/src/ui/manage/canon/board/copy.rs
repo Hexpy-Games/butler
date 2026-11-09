@@ -29,6 +29,10 @@ pub(super) struct Words {
     pub(super) reordered: &'static str,
     /// canon.blockedLane
     pub(super) blocked_lane: &'static str,
+    /// canon.previousLanes
+    pub(super) previous_lanes: &'static str,
+    /// canon.nextLanes
+    pub(super) next_lanes: &'static str,
     /// feedback.dashboardLoading
     pub(super) loading: &'static str,
     /// feedback.dashboardRetry
@@ -68,6 +72,8 @@ static KO: Words = Words {
     running: "진행 중에는 완료할 수 없습니다",
     reordered: "과제 순서를 바꿨습니다",
     blocked_lane: "막힘",
+    previous_lanes: "이전 열",
+    next_lanes: "다음 열",
     loading: "프로젝트 정보를 불러오는 중입니다.",
     retry_hint: "연결을 확인한 뒤 다시 시도해 주세요.",
     retry: "다시 시도",
@@ -95,6 +101,8 @@ static EN: Words = Words {
     running: "Cannot complete while running",
     reordered: "Epic order changed",
     blocked_lane: "Blocked",
+    previous_lanes: "Previous lanes",
+    next_lanes: "Next lanes",
     loading: "Loading project information…",
     retry_hint: "Check your connection and try again.",
     retry: "Try again",

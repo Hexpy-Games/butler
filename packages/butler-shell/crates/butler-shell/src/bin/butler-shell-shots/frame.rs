@@ -22,6 +22,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             })
         }
         "click" | "drag" => pointer(h, command, arg),
+        "hover" => hover(h, arg),
         "reveal" => reveal(h, arg),
         "wait-anchor" => wait_anchor(h, arg),
         "expect-anchor" | "expect-no-anchor" => {
@@ -107,6 +108,17 @@ fn reveal(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             cx,
         );
     })?;
+    settle(&mut h.cx, h.handle);
+    Ok(())
+}
+
+/// `hover <anchor>`: rests the pointer on the anchor's centre, as a user does to reveal hover-only controls.
+fn hover(h: &mut Harness, anchor: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let bounds =
+        h.cx.debug_bounds(h.handle, anchor)?
+            .context("missing hover target")?;
+    move_pointer(h, bounds.center(), None)?;
     settle(&mut h.cx, h.handle);
     Ok(())
 }
