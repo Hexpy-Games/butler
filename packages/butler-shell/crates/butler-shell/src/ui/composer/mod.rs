@@ -7,9 +7,11 @@ mod decision;
 pub(crate) mod editor;
 mod files;
 mod inputs;
+mod library_drop;
 pub(crate) mod menus;
 mod notice;
 pub(crate) mod queue;
+mod rect;
 mod references;
 mod send;
 mod slots;
@@ -41,11 +43,14 @@ use self::references::{MentionKey, References};
 use self::state::{ComposerState, image_refusal_label};
 use crate::ui::decisions::{DecisionCtx, decision_active, set_plan_gate};
 use crate::ui::field;
+use crate::ui::manage::ManageCtx;
+use crate::ui::manage::library::detail::CardDrag;
 use crate::ui::sidebar::SpaceDragPayload;
 use crate::ui::source::wire::{QueuedMessageRecord, SessionView};
 use crate::ui::theme::Theme;
 
 pub(crate) use inputs::Inputs;
+pub(crate) use rect::card_rect;
 pub(crate) use wire::decode_catalog;
 
 /// `fillComposerWithTemplate`: puts a suggestion into an empty composer and focuses it.
@@ -144,6 +149,8 @@ pub(crate) struct Composer {
     pub(crate) shell_focus: Option<FocusHandle>,
     /// The card's height as last drawn.
     height: Rc<Cell<f32>>,
+    /// Where a dropped library card attaches; the shell sets it once built.
+    pub(crate) manage: Option<ManageCtx>,
     _subscriptions: Vec<gpui::Subscription>,
 }
 
@@ -192,6 +199,7 @@ impl Composer {
             disabled: None,
             shell_focus: None,
             height: Rc::new(Cell::new(48.)),
+            manage: None,
             _subscriptions: subscriptions,
         }
     }
@@ -386,10 +394,14 @@ impl Composer {
                 .and_then(|p| p.state.as_deref()),
         );
         let body = self.body(window, cx);
-        let expanded = self.fold.engaged || self.fold.decision || self.fold.protected;
-        let mut card = ComposerCard::new("composer-card")
-            .expanded(expanded)
-            .large();
+        // `Boolean(scope || decision...) || presentation.expanded`: the dashboard's scoped
+        // composer (`draft_key`) is always unfolded, and is not `large` (`large={false}`).
+        let scoped = self.inputs.draft_key.is_some();
+        let expanded = scoped || self.fold.engaged || self.fold.decision || self.fold.protected;
+        let mut card = ComposerCard::new("composer-card").expanded(expanded);
+        if !scoped {
+            card = card.large();
+        }
         if file_drag_active(cx) {
             card = card.drop_active();
         }
@@ -413,12 +425,16 @@ impl Render for Composer {
         set_plan_gate(cx, self.controls.shown.plan_mode, &self.queue);
         let height = self.height.clone();
         let this = cx.entity().downgrade();
+        let shared = self.inputs.draft_key.is_none();
         let probe = canvas(
             move |b, window, cx| {
                 // The conversation keeps room for the card: a new height re-renders it (this
                 // view's ancestors) on the next frame.
                 let next = b.size.height.as_f32();
-                if height.replace(next) != next {
+                let resized = height.replace(next) != next;
+                // The new chat's wallpaper keeps clear of the card (`contentRect2`).
+                let moved = shared && rect::record(b, cx);
+                if resized || moved {
                     window.defer(cx, move |_, cx| {
                         let _ = this.update(cx, |_, cx| cx.notify());
                     });
@@ -434,9 +450,15 @@ impl Render for Composer {
         let column = butler_ds::ui::blocks::scope::conversation(cx).unwrap_or_default();
         let ds = butler_ds::ui::context::Ds::get(cx);
         let dropped = cx.entity().downgrade();
+        let tint = ds.color(butler_ds::tokens::Color::Selection);
         let surface = crate::ui::widgets::anchor(div(), "composer")
             .absolute()
-            .bottom(ds.len(butler_ds::tokens::Length::SpaceLg))
+            // `.floating` 22px; `.floating.large` (every conversation composer) 34px.
+            .bottom(px(if self.inputs.draft_key.is_some() {
+                22.
+            } else {
+                34.
+            }))
             .left(px(column.column_left))
             .w(px(column.column_width.max(0.)))
             .id("composer");
@@ -448,6 +470,8 @@ impl Render for Composer {
         .on_drop(cx.listener(|this, drag: &SpaceDragPayload, window, cx| {
             this.drop_session(drag, window, cx);
         }))
+        .on_drag_over::<CardDrag>(move |style, _, _, _| style.bg(tint))
+        .on_drop(cx.listener(|this, drag: &CardDrag, _, cx| this.drop_cards(drag, cx)))
         .child(probe)
         .child(card)
         .on_click(cx.listener(|this, _, window, cx| {

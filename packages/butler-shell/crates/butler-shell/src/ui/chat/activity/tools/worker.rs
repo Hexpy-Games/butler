@@ -2,11 +2,11 @@
 //! `workerActivityLocalization.ts`, `stewardPlanProgress`, `app/utils.ts` worker labels).
 use butler_ds::ui::button::{Button, Shape, Variant};
 use butler_ds::ui::context::Lang;
-use gpui::{AnyElement, IntoElement as _, ParentElement as _, SharedString, Styled as _, div};
+use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _, div};
 
 use super::copy::{find, text, worker_status_key};
 use super::labels::{format_interface_text, nonempty};
-use crate::ui::chat::TranscriptCtx;
+use crate::ui::chat::{AssistantHooks, TranscriptCtx};
 use crate::ui::source::wire::{
     InterfaceTextReference, ProgressRow, WorkerActivitySummary, WorkerActivitySummaryActivityKind,
 };
@@ -33,16 +33,30 @@ pub(super) fn capsule(row: &ProgressRow, t: &TranscriptCtx, lang: Lang) -> Optio
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" · ");
-    // The click opens the session observer (`openSessionObserver`); no route reaches it from the
-    // transcript context.
+    // The click opens the worker's session in the observer (`openSessionObserver`).
+    let session = worker
+        .session_id
+        .clone()
+        .unwrap_or_else(|| worker.worker_id.clone());
     let button = Button::new(SharedString::from(format!(
         "worker-call:{}",
         worker.worker_id
     )))
     .variant(Variant::Outline)
     .shape(Shape::Pill)
-    .text(label);
+    .text(label)
+    .on_click(move |_, _, cx| open_observer(&session, cx));
     Some(div().flex().child(button).into_any_element())
+}
+
+/// `openSessionObserver` through the shell's hook.
+fn open_observer(session: &str, cx: &mut App) {
+    let open = cx
+        .try_global::<AssistantHooks>()
+        .and_then(|hooks| hooks.open_observer.clone());
+    if let Some(open) = open {
+        open(session, cx);
+    }
 }
 
 /// stewardPlanProgress

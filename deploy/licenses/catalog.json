@@ -4,8 +4,8 @@
     "deploy/licenses/disclosure.py": "992c3d7f47a0944dc1c0ab0628e11a818b88f9ae7d5f62a5c5692715a175d859",
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
-    "deploy/licenses/refresh.py": "8e2a8344cb37cf6958f897937ee1d45709305bd92d4e7630a48cbaaf32544b32",
-    "packages/butler-agent/rust/Cargo.lock": "7154f8176d0c5c24545edf702b262eba9f1c8348a2bc7a9273930cee43c8a4f7",
+    "deploy/licenses/refresh.py": "00a4d6997b0e56a96f23604624480313583c114e1e5e2e8c6a55e524dccd39c5",
+    "packages/butler-agent/rust/Cargo.lock": "08df239bd7850e539beb8e0186b239503d651a10ccaf33015c0b81e4520540d2",
     "packages/butler-agent/rust/Cargo.toml": "f285ad63272b66159ce655ff34c66177287cf157785d8bf84a569929a991060c",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "5d8ff50c2c4b2c2d2ead256681c9a3cf2587668550d527def047df0300d0d7d5",
@@ -22,7 +22,7 @@
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "be3c98a025c2aa6f2d7eed44663c2f88294e10c22d4a4ddcd323f3e6b75b32a6",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "446f223fa76294ea8a5e8479a0a4f522610ad92d3fdaa863cc7f9acffae8f8e5",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "4b77d553748048cf25e3afa802de6ea44c27a4decf800a3d76e0f7e063520578",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "55d30a7a0ae50f76b830b22bf4c2ecc4ba0c58891b3031e8aaaac339e499d824",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "c11bf595617ff037807742ff86900d6f3d813df267d83aadcbaf2195683cf25d",
     "packages/butler-agent/rust/crates/butler-shell-client/Cargo.toml": "9ed22424cf1e67138968ea389eec752858c8b1a63b651c43a43d3ee7aa6b2ecd",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
@@ -14228,6 +14228,31 @@
       ]
     },
     {
+      "id": "rust:core-foundation@0.9.4",
+      "name": "core-foundation",
+      "version": "0.9.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/servo/core-foundation-rs/tree/795398aa3775bbdaf03419fcd2cc0dad7ebbc4dc",
+      "artifacts": [
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/servo/core-foundation-rs/blob/795398aa3775bbdaf03419fcd2cc0dad7ebbc4dc/core-foundation/LICENSE-APACHE",
+        "https://github.com/servo/core-foundation-rs/blob/795398aa3775bbdaf03419fcd2cc0dad7ebbc4dc/core-foundation/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2012-2013 Mozilla Foundation"
+      ]
+    },
+    {
       "id": "rust:core_detect@1.0.0",
       "name": "core_detect",
       "version": "1.0.0",
@@ -19246,6 +19271,33 @@
       ]
     },
     {
+      "id": "rust:if-addrs@0.10.2",
+      "name": "if-addrs",
+      "version": "0.10.2",
+      "license": "MIT OR BSD-3-Clause",
+      "source": "https://github.com/messense/if-addrs/tree/ffddd95740b9803e3074952547339e41236ea18e",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "588713c78138d7d6985b87275724f7047949a71a007b16b352d7745499976f7f",
+        "3990ddb78a5a2cfd64a5ffe5cebc3306f3298f6880c644afdf15043ef7d702d9"
+      ],
+      "files": [
+        "LICENSE-BSD",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/messense/if-addrs/blob/ffddd95740b9803e3074952547339e41236ea18e/LICENSE-BSD",
+        "https://github.com/messense/if-addrs/blob/ffddd95740b9803e3074952547339e41236ea18e/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2018 MaidSafe.net limited.",
+        "Copyright 2020 messense"
+      ]
+    },
+    {
       "id": "rust:if-addrs@0.15.0",
       "name": "if-addrs",
       "version": "0.15.0",
@@ -19269,6 +19321,33 @@
       "copyright": [
         "Copyright 2018 MaidSafe.net limited.",
         "Copyright 2020 messense"
+      ]
+    },
+    {
+      "id": "rust:if-watch@3.2.1",
+      "name": "if-watch",
+      "version": "3.2.1",
+      "license": "MIT",
+      "source": "https://crates.io/crates/if-watch/3.2.1",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "71e9fbe3bd507057f1b13410f040a19b5b4ba0b263d59d72f6c5545881cab454",
+        "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+      ],
+      "files": [
+        "Upstream MIT OR Apache-2.0 declaration (no copyright notice supplied)",
+        "Full MIT license (upstream omits text)"
+      ],
+      "links": [
+        "https://crates.io/crates/if-watch/3.2.1"
+      ],
+      "copyright": [
+        "Copyright (c) <year> <copyright holders>"
       ]
     },
     {
@@ -21844,6 +21923,126 @@
       ]
     },
     {
+      "id": "rust:netlink-packet-core@0.7.0",
+      "name": "netlink-packet-core",
+      "version": "0.7.0",
+      "license": "MIT",
+      "source": "https://github.com/rust-netlink/netlink-packet-core/tree/91e71b69fe8d94a8ae7e2748b0443272c6c3307c",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent"
+      ],
+      "evidenceSha256": [
+        "9cd18ebe3dd0ef7dd60b56f70933399d0fd1d0029f0e88c8e8e8b333d1dd15c2",
+        "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
+      ],
+      "files": [
+        ".github/workflows/license.yml",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/rust-netlink/netlink-packet-core/blob/91e71b69fe8d94a8ae7e2748b0443272c6c3307c/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/netlink-packet-core/blob/91e71b69fe8d94a8ae7e2748b0443272c6c3307c/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
+      "id": "rust:netlink-packet-route@0.17.1",
+      "name": "netlink-packet-route",
+      "version": "0.17.1",
+      "license": "MIT",
+      "source": "https://github.com/rust-netlink/netlink-packet-route/tree/3477b3700f8df49fcbc568f791d0c8f68845b9f6",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent"
+      ],
+      "evidenceSha256": [
+        "9cd18ebe3dd0ef7dd60b56f70933399d0fd1d0029f0e88c8e8e8b333d1dd15c2",
+        "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
+      ],
+      "files": [
+        ".github/workflows/license.yml",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/rust-netlink/netlink-packet-route/blob/3477b3700f8df49fcbc568f791d0c8f68845b9f6/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/netlink-packet-route/blob/3477b3700f8df49fcbc568f791d0c8f68845b9f6/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
+      "id": "rust:netlink-packet-utils@0.5.2",
+      "name": "netlink-packet-utils",
+      "version": "0.5.2",
+      "license": "MIT",
+      "source": "https://github.com/rust-netlink/netlink-packet-utils/tree/51ef4512ad03da863a0cb6dbc97186db24fdd267",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent"
+      ],
+      "evidenceSha256": [
+        "9cd18ebe3dd0ef7dd60b56f70933399d0fd1d0029f0e88c8e8e8b333d1dd15c2",
+        "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
+      ],
+      "files": [
+        ".github/workflows/license.yml",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/rust-netlink/netlink-packet-utils/blob/51ef4512ad03da863a0cb6dbc97186db24fdd267/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/netlink-packet-utils/blob/51ef4512ad03da863a0cb6dbc97186db24fdd267/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
+      "id": "rust:netlink-proto@0.11.5",
+      "name": "netlink-proto",
+      "version": "0.11.5",
+      "license": "MIT",
+      "source": "https://github.com/rust-netlink/netlink-proto/tree/7adac0358108e37fede5bbf5143d4a4b980b550c",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent"
+      ],
+      "evidenceSha256": [
+        "9cd18ebe3dd0ef7dd60b56f70933399d0fd1d0029f0e88c8e8e8b333d1dd15c2",
+        "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
+      ],
+      "files": [
+        ".github/workflows/license.yml",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/rust-netlink/netlink-proto/blob/7adac0358108e37fede5bbf5143d4a4b980b550c/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/netlink-proto/blob/7adac0358108e37fede5bbf5143d4a4b980b550c/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
+      "id": "rust:netlink-sys@0.8.8",
+      "name": "netlink-sys",
+      "version": "0.8.8",
+      "license": "MIT",
+      "source": "https://github.com/rust-netlink/netlink-sys/tree/7b2743a514f88127c76de2567fd4e6c7d89e00ff",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent"
+      ],
+      "evidenceSha256": [
+        "9cd18ebe3dd0ef7dd60b56f70933399d0fd1d0029f0e88c8e8e8b333d1dd15c2",
+        "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
+      ],
+      "files": [
+        ".github/workflows/license.yml",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/rust-netlink/netlink-sys/blob/7b2743a514f88127c76de2567fd4e6c7d89e00ff/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/netlink-sys/blob/7b2743a514f88127c76de2567fd4e6c7d89e00ff/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:new_debug_unreachable@1.0.6",
       "name": "new_debug_unreachable",
       "version": "1.0.6",
@@ -21866,6 +22065,29 @@
       ],
       "copyright": [
         "Copyright (c) 2015 Jonathan Reem"
+      ]
+    },
+    {
+      "id": "rust:nix@0.26.4",
+      "name": "nix",
+      "version": "0.26.4",
+      "license": "MIT",
+      "source": "https://github.com/nix-rust/nix/tree/08d8ba9fc3b5a0b9f6211bc286e6bf336b7c3463",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent"
+      ],
+      "evidenceSha256": [
+        "66e3ee1fa7f909ad3c612d556f2a0cdabcd809ad6e66f3b0605015ac64841b70"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/nix-rust/nix/blob/08d8ba9fc3b5a0b9f6211bc286e6bf336b7c3463/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2015 Carl Lerche + nix-rust Authors"
       ]
     },
     {
@@ -25203,6 +25425,30 @@
       "copyright": []
     },
     {
+      "id": "rust:rtnetlink@0.13.1",
+      "name": "rtnetlink",
+      "version": "0.13.1",
+      "license": "MIT",
+      "source": "https://github.com/rust-netlink/rtnetlink/tree/5e5c688159ed6a2c66755c1d9ed3f754338a02a6",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent"
+      ],
+      "evidenceSha256": [
+        "9cd18ebe3dd0ef7dd60b56f70933399d0fd1d0029f0e88c8e8e8b333d1dd15c2",
+        "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
+      ],
+      "files": [
+        ".github/workflows/license.yml",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/rust-netlink/rtnetlink/blob/5e5c688159ed6a2c66755c1d9ed3f754338a02a6/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/rtnetlink/blob/5e5c688159ed6a2c66755c1d9ed3f754338a02a6/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:rtoolbox@0.0.6",
       "name": "rtoolbox",
       "version": "0.0.6",
@@ -27341,6 +27587,56 @@
       ]
     },
     {
+      "id": "rust:system-configuration-sys@0.6.0",
+      "name": "system-configuration-sys",
+      "version": "0.6.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/mullvad/system-configuration-rs/tree/fd43df6f57de954878d824c14c08b57045e46e76",
+      "artifacts": [
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "000cbb5bea6f21829c8f0d9e1fe87410bd5ef0453412ffc017845982a3e19824"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/mullvad/system-configuration-rs/blob/fd43df6f57de954878d824c14c08b57045e46e76/system-configuration-sys/LICENSE-APACHE",
+        "https://github.com/mullvad/system-configuration-rs/blob/fd43df6f57de954878d824c14c08b57045e46e76/system-configuration-sys/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2024 Mullvad VPN AB"
+      ]
+    },
+    {
+      "id": "rust:system-configuration@0.6.1",
+      "name": "system-configuration",
+      "version": "0.6.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/mullvad/system-configuration-rs/tree/c7a1626d79410a2f35e0361de952b6076a33d95c",
+      "artifacts": [
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "000cbb5bea6f21829c8f0d9e1fe87410bd5ef0453412ffc017845982a3e19824"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/mullvad/system-configuration-rs/blob/c7a1626d79410a2f35e0361de952b6076a33d95c/system-configuration/LICENSE-APACHE",
+        "https://github.com/mullvad/system-configuration-rs/blob/c7a1626d79410a2f35e0361de952b6076a33d95c/system-configuration/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2024 Mullvad VPN AB"
+      ]
+    },
+    {
       "id": "rust:tagptr@0.2.0",
       "name": "tagptr",
       "version": "0.2.0",
@@ -27717,6 +28013,8 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/dtolnay/thiserror/tree/41938bd3a03a70d34ed8e53d99c89c770c7c9c41",
       "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
         "Unsigned Windows x64 Agent preview"
       ],
       "evidenceSha256": [
@@ -27766,6 +28064,8 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/dtolnay/thiserror/tree/41938bd3a03a70d34ed8e53d99c89c770c7c9c41",
       "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
         "Unsigned Windows x64 Agent preview"
       ],
       "evidenceSha256": [
@@ -29606,6 +29906,31 @@
       ]
     },
     {
+      "id": "rust:windows-core@0.53.0",
+      "name": "windows-core",
+      "version": "0.53.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/b1fadff390546098457f18d0da1da17ff3419688",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/b1fadff390546098457f18d0da1da17ff3419688/crates/libs/core/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/b1fadff390546098457f18d0da1da17ff3419688/crates/libs/core/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
       "id": "rust:windows-core@0.56.0",
       "name": "windows-core",
       "version": "0.56.0",
@@ -30132,6 +30457,31 @@
       ]
     },
     {
+      "id": "rust:windows-sys@0.48.0",
+      "name": "windows-sys",
+      "version": "0.48.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/406944152ef28d3273236edc958c2bfbf825775d",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/406944152ef28d3273236edc958c2bfbf825775d/crates/libs/sys/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/406944152ef28d3273236edc958c2bfbf825775d/crates/libs/sys/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
       "id": "rust:windows-sys@0.52.0",
       "name": "windows-sys",
       "version": "0.52.0",
@@ -30226,6 +30576,31 @@
       "links": [
         "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/sys/license-apache-2.0",
         "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/sys/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows-targets@0.48.5",
+      "name": "windows-targets",
+      "version": "0.48.5",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/b769fa7570f8eeaede0ed1995a7dbe1e9591a35b/crates/libs/targets/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/b769fa7570f8eeaede0ed1995a7dbe1e9591a35b/crates/libs/targets/license-mit"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."
@@ -30332,6 +30707,31 @@
       ]
     },
     {
+      "id": "rust:windows@0.53.0",
+      "name": "windows",
+      "version": "0.53.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/b1fadff390546098457f18d0da1da17ff3419688",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/b1fadff390546098457f18d0da1da17ff3419688/crates/libs/windows/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/b1fadff390546098457f18d0da1da17ff3419688/crates/libs/windows/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
       "id": "rust:windows@0.56.0",
       "name": "windows",
       "version": "0.56.0",
@@ -30401,6 +30801,31 @@
       "links": [
         "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/windows/license-apache-2.0",
         "https://github.com/microsoft/windows-rs/blob/32c3144490c016fe496a0aed769bce60987a2e9d/crates/libs/windows/license-mit"
+      ],
+      "copyright": [
+        "Copyright (c) Microsoft Corporation."
+      ]
+    },
+    {
+      "id": "rust:windows_x86_64_msvc@0.48.5",
+      "name": "windows_x86_64_msvc",
+      "version": "0.48.5",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/microsoft/windows-rs/tree/b769fa7570f8eeaede0ed1995a7dbe1e9591a35b",
+      "artifacts": [
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
+        "3d4ada4e04d153d74f5bc4e5e6aebd12ef20077716529c36089dc07f14fd0dcf"
+      ],
+      "files": [
+        "license-apache-2.0",
+        "license-mit"
+      ],
+      "links": [
+        "https://github.com/microsoft/windows-rs/blob/b769fa7570f8eeaede0ed1995a7dbe1e9591a35b/crates/targets/x86_64_msvc/license-apache-2.0",
+        "https://github.com/microsoft/windows-rs/blob/b769fa7570f8eeaede0ed1995a7dbe1e9591a35b/crates/targets/x86_64_msvc/license-mit"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."

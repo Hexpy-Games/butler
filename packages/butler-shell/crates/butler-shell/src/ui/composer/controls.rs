@@ -208,6 +208,7 @@ impl Composer {
         if !plan_available {
             controls.shown.plan_mode = false;
         }
+        self.publish_access_mode(cx);
         self.recompute(cx);
         cx.notify();
     }
@@ -271,9 +272,17 @@ impl Composer {
         .detach();
     }
 
+    /// The image editor reads the composer's access mode (`useComposerStore.accessMode`).
+    fn publish_access_mode(&self, cx: &mut Context<Self>) {
+        if let Some(mode) = access_wire(&self.controls.shown.access_mode) {
+            crate::ui::images::set_access_mode(mode, cx);
+        }
+    }
+
     /// `handleAccessModeChange`.
     pub(super) fn set_access_mode(&mut self, mode: &AccessMode, cx: &mut Context<Self>) {
         self.controls.shown.access_mode = mode.clone();
+        self.publish_access_mode(cx);
         self.persist(&json!({ "access_mode": access_wire(mode) }), cx);
         cx.notify();
     }

@@ -98,7 +98,7 @@ impl Composer {
     }
 
     /// `addProjectDocument`: a source reference joins the draft, any other document is uploaded.
-    pub(super) fn add_document(
+    pub(crate) fn add_document(
         &mut self,
         document: &ProjectDashboardDocument,
         cx: &mut Context<Self>,

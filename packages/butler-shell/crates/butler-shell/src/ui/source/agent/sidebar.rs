@@ -63,7 +63,6 @@ impl Agent {
                         .link_canon_conversation(&id, &serde_json::json!({}))
                         .await
                 }
-                Mutation::ApplyUpdate(body) => client.apply_update(&body).await,
                 Mutation::ResumeSubtask(id, parent) => {
                     client
                         .resume_steward(&id, &serde_json::json!({"parent_session_id":parent}))

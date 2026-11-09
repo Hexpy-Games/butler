@@ -4,6 +4,7 @@ mod composer_link;
 mod data;
 mod frame;
 pub(crate) mod image_viewer;
+mod manage_link;
 pub(crate) mod navigation;
 mod notifications;
 mod onboarding_link;
@@ -42,6 +43,7 @@ actions!(
         TextSizeDown,
         TextSizeReset,
         TogglePalette,
+        TitlebarBack,
         Quit
     ]
 );
@@ -55,6 +57,9 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
         KeyBinding::new("secondary-0", TextSizeReset, None),
         KeyBinding::new("secondary-q", Quit, None),
         KeyBinding::new("secondary-k", TogglePalette, None),
+        // `useTitlebarBack`: mod+[ anywhere, alt+← outside a text field.
+        KeyBinding::new("secondary-[", TitlebarBack, None),
+        KeyBinding::new("alt-left", TitlebarBack, Some("!EditableText")),
     ]
 }
 
@@ -87,6 +92,8 @@ pub(crate) struct Shell {
     rediscover: Option<tokio::sync::mpsc::UnboundedSender<crate::ui::source::agent::MonitorSignal>>,
     /// Whether the open chat's latest window is being read again.
     refresh: Refresh,
+    /// The management view, its page, the observer and the live topics.
+    manage: manage_link::Manage,
     /// The settings screen while it is open (it replaces the frame).
     settings_view: Option<Entity<crate::ui::settings::SettingsView>>,
     /// A settings page a hook without the window asked for; the next frame opens it.
@@ -150,31 +157,12 @@ impl Shell {
         let chat = cx.new(|_| Chat::new());
         let composer = cx.new(|cx| Composer::new(theme.clone(), window, cx));
         let focus = cx.focus_handle();
-        let mut subscriptions = vec![
-            cx.observe_window_activation(window, |this, window, cx| {
-                this.sidebar.attended = window.is_window_active();
-                this.sync_minute_clock(cx);
-                if this.sidebar.attended
-                    && let Some(id) = this.store.selected().map(|c| c.session.0.to_string())
-                {
-                    this.mark_sidebar_read(&id, cx);
-                }
-                cx.notify();
-                if !window.is_window_active() {
-                    butler_ds::ui::blocks::adaptive_shell::peek::window_blurred(window, cx);
-                }
-            }),
-            cx.subscribe_in(&composer, window, Self::on_composer),
-        ];
+        let mut subscriptions = Self::subscriptions(&composer, window, cx);
         let (panes, palette_events) = Self::new_panes(window, cx);
         subscriptions.push(palette_events);
+        let (manage, manage_events) = Self::new_manage(window, cx);
+        subscriptions.push(manage_events);
         let onboarding = onboarding_link::OnboardingState::new(options.source.is_some());
-        if let Some(runtime) = crate::lifecycle::runtime(cx) {
-            subscriptions.push(cx.observe(&runtime, |_, _, cx| cx.notify()));
-        }
-        // The update choice dialog and the sidebar's update row follow the App update.
-        let update = crate::lifecycle::app_update::entity(cx);
-        subscriptions.push(cx.observe(&update, |_, _, cx| cx.notify()));
         let composer_h = composer.read(cx).height_cell();
         let regions = region::Regions::new(&cx.entity(), cx);
         cx.set_window_appearance(options.dark.map(appearance));
@@ -202,6 +190,7 @@ impl Shell {
             connection_task: None,
             rediscover: None,
             refresh: Refresh::Idle,
+            manage,
             settings_view: None,
             pending_settings: None,
             settings_raw: None,
@@ -212,10 +201,57 @@ impl Shell {
         };
         Self::transcript_hooks(cx);
         Self::notification_responses(window, cx);
-        Self::install_composer(cx);
+        Self::install_composer(&shell.manage_ctx(), cx);
+        crate::ui::manage::library::detail::install(&shell.manage_ctx(), cx);
+        crate::ui::manage::install_window(&shell.manage_ctx(), cx);
+        let manage = shell.manage_ctx();
+        shell
+            .composer
+            .update(cx, |composer, _| composer.manage = Some(manage.clone()));
+        let weak = cx.entity().downgrade();
+        crate::ui::inspector::install_epic_host(cx, manage, move |session, cx| {
+            weak.upgrade()?.read(cx).sidebar.epic_of(session)
+        });
         shell.sync_composer(cx);
         shell.connect(cx);
         shell
+    }
+
+    /// What the shell follows: the window's activation, the composer's events, the Agent
+    /// runtime, and the App update (the update choice dialog and the sidebar's update row).
+    fn subscriptions(
+        composer: &Entity<Composer>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<Subscription> {
+        let mut subscriptions = vec![
+            cx.observe_window_activation(window, |this, window, cx| {
+                this.sidebar.attended = window.is_window_active();
+                this.sync_minute_clock(cx);
+                if this.sidebar.attended
+                    && let Some(id) = this.store.selected().map(|c| c.session.0.to_string())
+                {
+                    this.mark_sidebar_read(&id, cx);
+                }
+                cx.notify();
+                if !window.is_window_active() {
+                    butler_ds::ui::blocks::adaptive_shell::peek::window_blurred(window, cx);
+                }
+            }),
+            cx.subscribe_in(composer, window, Self::on_composer),
+        ];
+        if let Some(runtime) = crate::lifecycle::runtime(cx) {
+            subscriptions.push(cx.observe(&runtime, |_, _, cx| cx.notify()));
+        }
+        let update = crate::lifecycle::app_update::entity(cx);
+        subscriptions.push(cx.observe(&update, |_, _, cx| cx.notify()));
+        // `useLibraryNames()` in the titlebar: a renamed item or group retitles it.
+        subscriptions.push(
+            cx.observe_global::<crate::ui::manage::library::types::LibraryNames>(|_, cx| {
+                cx.notify();
+            }),
+        );
+        subscriptions
     }
 
     pub(crate) fn focus_handle(&self) -> FocusHandle {

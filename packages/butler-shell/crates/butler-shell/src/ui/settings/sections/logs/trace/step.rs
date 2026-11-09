@@ -1,6 +1,7 @@
 //! One step of the trace (`TraceStepRow.tsx`, `TraceStepDetail.tsx`).
 use butler_ds::ui::blocks::disclosure_row::{Affordance, DisclosureRow};
 use butler_ds::ui::blocks::key_value_row::{KeyValueRow, ValueSize};
+use butler_ds::ui::blocks::span_bar::{SpanBar, SpanIndent, SpanRow, SpanSegment, SpanTone};
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::tag::{Size as TagSize, Tag};
 use butler_ds::ui::typo::{Tone, Typo};
@@ -14,23 +15,44 @@ use super::model::{Step, TraceSpan, TraceView, attention, http_span, is_http};
 use super::text::{Field, format_ms, format_start, step_fields, step_tag, step_title};
 use crate::ui::settings::controls::raw_block;
 
-/// Rows indent at most this many levels; deeper rows show a depth cue instead
-/// (`SPAN_TEXT_INDENT_CAP`).
-const INDENT_CAP: u32 = 3;
+/// `stepTone`: the tone the record names; any other is an agent step.
+fn tone(step: &Step) -> SpanTone {
+    SpanTone::parse(&step.span.tone).unwrap_or(SpanTone::Agent)
+}
 
-/// One step: no chevron; a count and a problem dot by the title. A row with nothing to reveal
-/// is static.
-// CARVE-OUT(G-span): React draws a SpanBar on the shared SpanAxis under the row (the step's
-// offset and length on the trace, split into its children's pieces); the row keeps its start
-// and length as text.
+/// The step's bar on the shared axis, split over its direct children's pieces.
+fn bar(copy: &Words, id: &SharedString, steps: &[Step], index: usize, total: f64) -> SpanBar {
+    let step = &steps[index];
+    let pieces = step.children.iter().map(|child| SpanSegment {
+        offset: steps[*child].offset,
+        duration: steps[*child].duration,
+        tone: tone(&steps[*child]),
+    });
+    SpanBar::new(
+        SharedString::from(format!("{id}-bar")),
+        step.offset,
+        step.duration,
+        total,
+    )
+    .tone(tone(step))
+    .segments(pieces)
+    .label(copy.spoken(
+        &format_start(copy, step.offset),
+        &format_ms(copy, step.duration),
+    ))
+}
+
+/// One step: no chevron; a count and a problem dot by the title; a bar on the shared axis,
+/// split into its direct children's pieces. A row with nothing to reveal is static.
 pub(super) fn row(
     copy: &'static Words,
     trace: &TraceView,
     steps: &[Step],
     index: usize,
+    total: f64,
     open: bool,
     on_toggle: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> DisclosureRow {
+) -> SpanRow {
     let step = &steps[index];
     let id = SharedString::from(format!("trace-step-{}", step.span.span_id));
     let length = format_ms(copy, step.duration);
@@ -44,14 +66,19 @@ pub(super) fn row(
         .gap(Space::Xs)
         .children(tag)
         .child(Typo::caption(length).tone(Tone::Tertiary).tabular());
-    let cue = (step.depth > INDENT_CAP).then(|| SharedString::from(copy.depth(step.depth)));
-    let mut row = DisclosureRow::new(id, step_title(copy, step))
+    let span = SpanRow::new(SharedString::from(format!("{id}-row")))
+        .depth(step.depth)
+        .indent(SpanIndent::Text)
+        .depth_label(move |level| copy.depth(level).into());
+    let (level, cue) = span.text_indent();
+    let mut row = DisclosureRow::new(id.clone(), step_title(copy, step))
         .affordance(Affordance::None)
         .description(format_start(copy, step.offset))
         .meta_element(meta)
-        .indent(step.depth.min(INDENT_CAP), cue)
+        .indent(level, cue)
         .open(open)
-        .on_toggle(on_toggle);
+        .on_toggle(on_toggle)
+        .bar(bar(copy, &id, steps, index, total));
     if !step.children.is_empty() {
         row = row.count(u32::try_from(step.children.len()).unwrap_or(u32::MAX));
     }
@@ -59,8 +86,8 @@ pub(super) fn row(
         row = row.attention(attention);
     }
     match detail(copy, trace, step) {
-        Some(detail) => row.child(detail),
-        None => row,
+        Some(detail) => span.child(row.child(detail)),
+        None => span.child(row),
     }
 }
 

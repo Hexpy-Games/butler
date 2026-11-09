@@ -1,7 +1,7 @@
 //! The panes around the conversation: the command palette (`AppShell`), the session sections in
 //! the conversation aside and their titlebar actions (`Conversation.tsx`, `Titlebar.tsx`), the
-//! task graph dialog (`SessionInfoActions`), and the file viewer beside the chat
-//! (`ConversationBrowserFrame`).
+//! task graph dialog (`SessionInfoActions`), and the file viewer or the image editor beside the
+//! chat (`ConversationBrowserFrame`).
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -9,7 +9,6 @@ use butler_ds::ui::blocks::adaptive_shell::split::AdaptiveShellSplit;
 use butler_ds::ui::blocks::conversation_shell::AsideLayout;
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::dialog::{Dialog, DialogContent, DialogHeader, DialogTitle, Layout, Size};
-use butler_ds::ui::toast::{self, Toast};
 use gpui::{
     AnyElement, AppContext as _, Context, Entity, IntoElement, Subscription, Window, prelude::*,
 };
@@ -17,10 +16,12 @@ use gpui::{
 use super::navigation::Navigation;
 use super::region;
 use super::{Shell, TogglePalette};
+use crate::ui::images;
 use crate::ui::inspector::{
     InspectorCtx, InspectorPane, SessionActionHandler, SessionInfoActionsProps,
     SessionSectionsState, session_info_actions, session_sections_model, tasks_panel_in_dialog,
 };
+use crate::ui::manage::View;
 use crate::ui::palette::{CommandPalette, PaletteEvent};
 use crate::ui::source::wire::SessionView;
 use crate::ui::viewer;
@@ -70,7 +71,7 @@ impl Shell {
         (panes, subscription)
     }
 
-    pub(super) fn toggle_palette(
+    pub(crate) fn toggle_palette(
         &mut self,
         _: &TogglePalette,
         window: &mut Window,
@@ -110,9 +111,10 @@ impl Shell {
             PaletteEvent::OpenSettings(section) => self.open_settings(section, window, cx),
             // `openLatestLogTrace`: the latest turn's trace is not wired yet; the log list opens.
             PaletteEvent::OpenLogTrace => self.open_settings("logs", window, cx),
-            // Schedules land with the screen that owns them (P3); until then the palette says so.
-            PaletteEvent::OpenSchedule => {
-                toast::show(cx, Toast::message(self.theme.strings.not_yet));
+            // `navigateCommandResult` `automation:<id>`: the schedule's detail replaces Settings.
+            PaletteEvent::OpenSchedule(id) => {
+                self.settings_view = None;
+                self.set_view(View::AutomationDetail(id.clone().into()), window, cx);
             }
         }
     }
@@ -198,6 +200,11 @@ impl Shell {
         self.panes.split
     }
 
+    /// A management view has no split beside it.
+    pub(super) fn clear_split(&mut self) {
+        self.panes.split = None;
+    }
+
     /// `SessionInfoActions`' task graph dialog.
     pub(super) fn render_task_graph(
         &mut self,
@@ -233,18 +240,29 @@ impl Shell {
         Some(dialog.content(content, window, cx))
     }
 
-    /// The conversation with the file viewer beside it while the viewer holds the right slot.
+    /// The conversation with the file viewer beside it while the viewer holds the right slot, or
+    /// the image editor while it edits an image of this conversation (`splitOpen={paneOpen ||
+    /// editingImage}`); an editor of another conversation closes.
     pub(super) fn workspace(
         &mut self,
         conversation: AnyElement,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let Some(session) = self.store.selected().map(|c| c.session.0.to_string()) else {
             self.panes.split = None;
             return conversation;
         };
+        let editing = match images::editor_target(cx) {
+            Some(target) if target.session.as_ref() == session => true,
+            Some(_) => {
+                images::close_editor(cx);
+                false
+            }
+            None => false,
+        };
         let files = viewer::session_files(cx, &session);
-        let pane_open = viewer::right_slot_pane(None, &files).is_some();
+        let pane_open = editing || viewer::right_slot_pane(None, &files).is_some();
         self.panes.split = pane_open.then(|| {
             self.panes
                 .chat_width
@@ -263,7 +281,10 @@ impl Shell {
         if let Some(width) = self.panes.chat_width {
             split = split.chat_width(width);
         }
-        if pane_open {
+        let editor = editing.then(|| images::editor_pane(window, cx)).flatten();
+        if let Some(editor) = editor {
+            split = split.pane(editor);
+        } else if pane_open {
             split = split.pane(self.regions.viewer.clone().cached(region::fill()));
         }
         split.into_any_element()

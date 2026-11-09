@@ -1,4 +1,6 @@
 //! app/canonSidebarState.ts: build the conversation index when a sidebar read finishes.
+use gpui::SharedString;
+
 use super::SidebarState;
 use crate::ui::source::wire::{CanonSidebar, EpicCard};
 impl SidebarState {
@@ -16,6 +18,11 @@ impl SidebarState {
             }
         }
         self.canon.insert(sidebar.project_id.clone(), sidebar);
+    }
+    /// `useActiveCanonEpic`: the epic a conversation is the home of, as (project, epic).
+    pub(crate) fn epic_of(&self, session: &str) -> Option<(SharedString, SharedString)> {
+        let epic = self.canon_sessions.get(session)?.first()?;
+        Some((epic.project_id.clone().into(), epic.id.clone().into()))
     }
     pub(super) fn carries_session_state(&self, epic: &EpicCard) -> bool {
         let Some(shared) = epic

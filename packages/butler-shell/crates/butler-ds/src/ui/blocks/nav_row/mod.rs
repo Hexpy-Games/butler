@@ -386,14 +386,17 @@ impl RenderOnce for NavRow {
 /// How far the row `id` shows its swapped-in actions: its hover fade, or at once while a
 /// keyboard-focused row (or a control in it) holds focus.
 fn row_reveal(id: &ElementId, window: &mut Window, cx: &mut App) -> f32 {
-    let hover = window
+    // The hover flag, not the old frame-driven blend (`mix`): since the motion clock the row
+    // fill fades on the compositor and `mix` no longer moves.
+    // ANIM-MIGRATE(row actions fade in with the row hover, --motion-fast)
+    let hovered = window
         .use_keyed_state((id.clone(), "state"), cx, |_, _| Glide::default())
         .read(cx)
-        .mix;
+        .hovered;
     let handle = window
         .use_keyed_state((id.clone(), "focus"), cx, |_, cx| cx.focus_handle())
         .read(cx)
         .clone();
     let focused = handle.contains_focused(window, cx) && Ds::get(cx).modality().focus_visible();
-    if focused { 1. } else { hover }
+    if focused || hovered { 1. } else { 0. }
 }

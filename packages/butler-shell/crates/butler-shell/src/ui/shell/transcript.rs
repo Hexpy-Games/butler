@@ -47,6 +47,7 @@ impl Shell {
                 });
             })),
             open_trace: None,
+            open_observer: None,
         });
     }
 

@@ -12,6 +12,11 @@ const CONTENT_SHARE: f32 = 0.86; // DS: PromptSuggestionList.module.css:2
 /// `--prompt-title-icon-size`, wide and compact.
 const ICON_WIDE: f32 = 54.; // DS: PromptSuggestionList.module.css:3
 const ICON_COMPACT: f32 = 34.; // DS: PromptSuggestionList.module.css:302
+/// New chat's `--new-chat-title-icon-size: clamp(40px, 5.333vw, 54px)` and `-gap: 10px`
+/// (Conversation.tsx:101-104).
+const NEW_CHAT_ICON_MIN: f32 = 40.; // Conversation.tsx:102
+const NEW_CHAT_ICON_VW: f32 = 0.05333; // Conversation.tsx:102
+const NEW_CHAT_ICON_GAP: f32 = 10.; // Conversation.tsx:104
 /// `@container conversation (width <= ...)`.
 const MEDIUM: f32 = 900.; // DS: PromptSuggestionList.module.css:285
 const COMPACT: f32 = 640.; // DS: PromptSuggestionList.module.css:296
@@ -47,14 +52,14 @@ pub(super) struct Metrics {
 }
 
 impl Metrics {
-    pub(super) fn new(root_width: f32, ds: &Ds, cx: &App) -> Self {
+    pub(super) fn new(root_width: f32, new_chat_icon: bool, ds: &Ds, cx: &App) -> Self {
         let conversation = scope::conversation(cx);
         let container = conversation.as_ref().map_or(0., |vars| vars.width);
         let within = |limit: f32| container > 0. && container <= limit;
         let len = |token| f32::from(ds.len(token));
         let compact = within(COMPACT);
-        let icon_size = if compact { ICON_COMPACT } else { ICON_WIDE };
-        let icon_gap = len(Length::SpaceMd);
+        let (wide, icon_gap) = icon(new_chat_icon, ds);
+        let icon_size = if compact { ICON_COMPACT } else { wide };
         let content_width = if compact {
             root_width - 2. * len(Length::AdaptivePageGutter)
         } else {
@@ -67,6 +72,9 @@ impl Metrics {
         };
         let edge_gutter = if compact {
             len(Length::AdaptivePageGutter)
+        } else if new_chat_icon {
+            // Conversation.tsx:105-107: `--new-chat-title-edge-gutter` = size + size + gap.
+            2. * icon_size + icon_gap
         } else {
             icon_size + icon_gap
         };
@@ -120,5 +128,19 @@ impl Metrics {
             },
             height: (viewport > 0.).then(|| (viewport - reserve).max(0.)),
         }
+    }
+}
+
+/// The title mark's wide size and its gap: the new chat's `--new-chat-title-icon-size` /
+/// `-gap` (Conversation.tsx:101-104), else the block's own 54px and `--space-md`.
+fn icon(new_chat: bool, ds: &Ds) -> (f32, f32) {
+    if new_chat {
+        let vw = ds.tokens().viewport.0;
+        (
+            (NEW_CHAT_ICON_VW * vw).clamp(NEW_CHAT_ICON_MIN, ICON_WIDE),
+            NEW_CHAT_ICON_GAP,
+        )
+    } else {
+        (ICON_WIDE, f32::from(ds.len(Length::SpaceMd)))
     }
 }

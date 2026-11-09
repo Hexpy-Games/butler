@@ -46,6 +46,10 @@ export async function shots(binary: string, out: string, name: string, data: str
     // Like Electron's steps, each one first waits for its anchor (an answer may still be on its way).
     for (const command of [...start,
       ...steps.flatMap(step => {
+        if ("hover" in step) {
+          const port = anchors.find(item => item.anchor === step.hover)?.scroll;
+          return [`wait-anchor ${step.hover}`, ...(port ? [`reveal ${step.hover} ${port}`] : []), `hover ${step.hover}`];
+        }
         if (!("click" in step)) return [`wait-anchor ${step.expect}`];
         const port = anchors.find(item => item.anchor === step.click)?.scroll;
         return [`wait-anchor ${step.click}`, ...(port ? [`reveal ${step.click} ${port}`] : []), `click ${step.click}`];

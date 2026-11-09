@@ -1,10 +1,12 @@
-//! DS Wallpaper, the still-image subset (blocks/Wallpaper `still.ts`, `stillContext.ts`,
-//! `imageCache.ts`, `imageMath.ts` and WallpaperPicker `builtinPosters.ts`): a wallpaper source
-//! drawn from a bundled poster (a live module with its default params) or from an image. The
-//! WebGL engine (live modules with edited params, drift, crossfade) is P6. [`Wallpaper`] is the
-//! layer to hand to `WallpaperStage::wallpaper`; it fills its parent, which clips it.
+//! DS Wallpaper (blocks/Wallpaper `still.ts`, `stillContext.ts`, `imageCache.ts`, `imageMath.ts`,
+//! the engine's host side and WallpaperPicker `builtinPosters.ts`): a live module the renderer
+//! has shaders for (butler.riso-print) drawn as a static frame at its default params, any other
+//! live module from its bundled poster, or an image. Edited params, drift and crossfade are P6.
+//! [`Wallpaper`] is the layer to hand to `WallpaperStage::wallpaper`; it fills its parent, which
+//! clips it.
 mod image_cache;
 mod image_math;
+mod live;
 mod posters;
 mod still;
 
@@ -22,7 +24,9 @@ pub use image_math::{
 pub use posters::{POSTER_SIZE, builtin_poster, poster_modules};
 pub use still::{StillCache, StillSize, still_key};
 
+use self::live::{LiveFrame, STILL_DAY_PHASE};
 use crate::tokens::Color;
+use crate::ui::blocks::prompt_suggestion_list::ContentRect;
 use crate::ui::context::Ds;
 
 /// The theme a wallpaper draws for (`WallpaperTone`).
@@ -102,13 +106,16 @@ pub fn transition_key(source: &WallpaperSource) -> String {
     }
 }
 
-/// The wallpaper layer: a poster for a live module, the picture for an image source, nothing for
-/// `none`.
+/// The wallpaper layer: the module's frame (or its poster) for a live module, the picture for an
+/// image source, nothing for `none`.
 #[derive(IntoElement)]
 pub struct Wallpaper {
     source: WallpaperSource,
     tone: Option<WallpaperTone>,
     picture: Option<Arc<Image>>,
+    content_rect: Option<ContentRect>,
+    content_rect2: Option<ContentRect>,
+    day_phase: f32,
 }
 
 impl Wallpaper {
@@ -117,7 +124,28 @@ impl Wallpaper {
             source,
             tone: None,
             picture: None,
+            content_rect: None,
+            content_rect2: None,
+            day_phase: STILL_DAY_PHASE,
         }
+    }
+
+    /// The content a live module composes around (`contentRect`), in window px; none by default.
+    pub fn content_rect(mut self, rect: Option<ContentRect>) -> Self {
+        self.content_rect = rect;
+        self
+    }
+
+    /// The composer a live module keeps clear of (`contentRect2`), in window px; none by default.
+    pub fn content_rect2(mut self, rect: Option<ContentRect>) -> Self {
+        self.content_rect2 = rect;
+        self
+    }
+
+    /// Local time of day, 0..1 from midnight (`u_dayPhase`); a still's midday by default.
+    pub fn day_phase(mut self, phase: f32) -> Self {
+        self.day_phase = phase;
+        self
     }
 
     /// Draws for this tone; the DS theme's by default.
@@ -140,10 +168,21 @@ impl RenderOnce for Wallpaper {
         let layer = div().relative().size_full().overflow_hidden();
         match self.source {
             WallpaperSource::None => layer,
-            WallpaperSource::Live { module } => match builtin_poster(&module, tone) {
-                Some(poster) => layer.child(picture(poster, ObjectFit::Cover)),
-                None => layer,
-            },
+            WallpaperSource::Live { module } => {
+                let frame = LiveFrame {
+                    tone,
+                    day_phase: self.day_phase,
+                    content_rect: self.content_rect,
+                    content_rect2: self.content_rect2,
+                };
+                match live::layer(&module, frame) {
+                    Some(drawn) => layer.child(drawn),
+                    None => match builtin_poster(&module, tone) {
+                        Some(poster) => layer.child(picture(poster, ObjectFit::Cover)),
+                        None => layer,
+                    },
+                }
+            }
             WallpaperSource::Image { fit, dim, .. } => {
                 let Some(image) = self.picture else {
                     return layer;

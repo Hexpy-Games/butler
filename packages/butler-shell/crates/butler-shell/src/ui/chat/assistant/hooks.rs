@@ -1,5 +1,6 @@
-//! What the assistant body needs from the shell and the app: developer mode, opening a session
-//! and opening a log trace (`useDeveloperMode`, `openSession`, `openLogTrace`), and the turn
+//! What the assistant body needs from the shell and the app: developer mode, opening a session,
+//! its observer and a log trace (`useDeveloperMode`, `openSession`, `openSessionObserver`,
+//! `openLogTrace`), and the turn
 //! being retried (`store.retryingTurnId`). The shell installs [`AssistantHooks`] as a global.
 use std::rc::Rc;
 
@@ -38,6 +39,8 @@ pub(crate) struct AssistantHooks {
     /// Opens a session by id (after a branch is created, or for the branch source).
     pub(crate) open_session: Option<OpenSession>,
     pub(crate) open_trace: Option<OpenTrace>,
+    /// `openSessionObserver`: a worker's or a subtask's session over the open chat.
+    pub(crate) open_observer: Option<OpenSession>,
 }
 
 impl Global for AssistantHooks {}

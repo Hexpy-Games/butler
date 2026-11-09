@@ -159,6 +159,7 @@ impl Shell {
         }
         if let Some(event) = sidebar_event {
             self.sidebar_live_event(&event, cx);
+            self.manage_live_event(&event, cx);
         }
         if self.store.view_stale() {
             self.refresh_open_view(cx);
@@ -188,6 +189,7 @@ impl Shell {
             self.session_menu.summary = None;
         }
         self.store.open(chat);
+        self.chat_opened(cx);
         self.chat.update(cx, |c, _| c.set_new_chat(new_chat));
         if let Some(id) = self.store.selected().map(|c| c.session.0.to_string()) {
             self.mark_sidebar_read(&id, cx);
@@ -215,6 +217,7 @@ impl Shell {
         self.session_menu.rename = None;
         self.session_menu.summary = None;
         self.store.open(None);
+        self.chat_opened(cx);
         self.sidebar.new_chat_parent = parent;
         self.show_view(false, cx);
         self.composer.update(cx, |_, cx| cx.notify());
@@ -294,9 +297,10 @@ impl Shell {
         cx.notify();
     }
 
-    /// The composer follows the open chat: the agent, a running turn and its first request.
+    /// The composer follows the open chat: the agent, a running turn and its first request. On
+    /// the dashboard it writes a new project chat, which has no running turn.
     pub(crate) fn sync_composer(&mut self, cx: &mut Context<Self>) {
-        let streaming = self.store.running().is_some();
+        let streaming = self.store.running().is_some() && self.dashboard_project(cx).is_none();
         let disabled = self.disconnected();
         self.composer.update(cx, |c, cx| {
             c.streaming = streaming;

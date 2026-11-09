@@ -17,8 +17,8 @@ mod stage;
 mod wizard;
 
 use gpui::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    SharedString, Styled as _, Window, WindowControlArea, div,
+    AnyElement, App, Bounds, ElementId, Global, InteractiveElement as _, IntoElement,
+    ParentElement, Pixels, RenderOnce, SharedString, Styled as _, Window, WindowControlArea, div,
 };
 
 pub use content::{ContentWidth, SetupWizardContent, SetupWizardList};
@@ -26,6 +26,7 @@ pub use mark::SetupWizardMark;
 pub use progress::{SetupWizardProgress, SetupWizardStep};
 pub use stage::{SetupWizardIntro, SetupWizardStage};
 
+use super::prompt_suggestion_list::ContentRect;
 use super::wallpaper::{Wallpaper, WallpaperSource, WallpaperTone};
 use crate::tokens::{Color, Length};
 use crate::ui::context::Ds;
@@ -35,6 +36,29 @@ use crate::ui::strut;
 const SETUP_WALLPAPER: &str = "butler.riso-print";
 /// The window width at and below which the screen tightens. // DS: SetupWizardShell.module.css:259
 const NARROW_MAX: f32 = 560.;
+
+/// The solid card's window rect as last painted (`[data-setup-card]`, which setupIntro.ts:39-46
+/// measures for the intro clock; engine.ts:57 hands it to the wallpaper as `contentRect`). gpui
+/// knows a box's place only while painting, so the card records it here.
+#[derive(Default)]
+struct SetupCard(Option<ContentRect>);
+
+impl Global for SetupCard {}
+
+/// Stores the card's bounds; true when they changed.
+pub(super) fn record_card(bounds: Bounds<Pixels>, cx: &mut App) -> bool {
+    let next = Some(ContentRect {
+        x: f32::from(bounds.left()),
+        y: f32::from(bounds.top()),
+        width: f32::from(bounds.size.width),
+        height: f32::from(bounds.size.height),
+    });
+    if cx.try_global::<SetupCard>().and_then(|card| card.0) == next {
+        return false;
+    }
+    cx.set_global(SetupCard(next));
+    true
+}
 
 /// `Wizard`: title, stepper and a glass body. `Focus`: one centred column on the backdrop.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -68,6 +92,7 @@ pub struct SetupWizardShell {
     leaving: Option<AnyElement>,
     intro: Option<SetupWizardIntro>,
     intro_held: bool,
+    day_phase: Option<f32>,
     backdrop: Option<AnyElement>,
     children: Vec<AnyElement>,
 }
@@ -89,6 +114,7 @@ impl SetupWizardShell {
             leaving: None,
             intro: None,
             intro_held: false,
+            day_phase: None,
             backdrop: None,
             children: Vec::new(),
         }
@@ -158,6 +184,13 @@ impl SetupWizardShell {
         self
     }
 
+    /// Local time of day, 0..1 from midnight, for the riso print (`u_dayPhase`; engineDrift.ts:71
+    /// reads the clock). The wallpaper's still midday without it.
+    pub fn day_phase(mut self, phase: f32) -> Self {
+        self.day_phase = Some(phase);
+        self
+    }
+
     /// The layer behind the content, in place of the riso print still (the live wallpaper).
     pub fn backdrop(mut self, backdrop: impl IntoElement) -> Self {
         self.backdrop = Some(backdrop.into_any_element());
@@ -210,14 +243,26 @@ fn chrome(ds: &Ds, controls: Option<AnyElement>) -> (impl IntoElement, Option<im
 }
 
 impl SetupWizardShell {
-    /// The layer behind the content: the caller's backdrop, else the riso print still.
-    fn backdrop_layer(&mut self) -> impl IntoElement {
+    /// The layer behind the content: the caller's backdrop, else the riso print. With an intro
+    /// clock (focus with `intro`) the print keeps its ink off the solid card, as the clock's
+    /// card layout does in React (setupIntro.ts:39-46, engine.ts:57); without one it has no
+    /// keep-out. // DS: SetupWizardShell.tsx:83,94
+    fn backdrop_layer(&mut self, cx: &App) -> impl IntoElement {
+        let timed = self.variant == SetupWizardVariant::Focus && self.intro.is_some();
+        let card = timed
+            .then(|| cx.try_global::<SetupCard>().and_then(|card| card.0))
+            .flatten();
         let backdrop = self.backdrop.take().unwrap_or_else(|| {
-            Wallpaper::new(WallpaperSource::Live {
+            let wallpaper = Wallpaper::new(WallpaperSource::Live {
                 module: SETUP_WALLPAPER.into(),
             })
             .tone(self.tone)
-            .into_any_element()
+            .content_rect(card);
+            let wallpaper = match self.day_phase {
+                Some(phase) => wallpaper.day_phase(phase),
+                None => wallpaper,
+            };
+            wallpaper.into_any_element()
         });
         div()
             .absolute()
@@ -257,7 +302,7 @@ impl RenderOnce for SetupWizardShell {
             screen = screen.flex().items_center().justify_center().p(pad);
         }
         if !held {
-            screen = screen.child(self.backdrop_layer());
+            screen = screen.child(self.backdrop_layer(cx));
         }
         let (drag, controls) = chrome(ds, self.window_controls.take());
         let body = if focus {

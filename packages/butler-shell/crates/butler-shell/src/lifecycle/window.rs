@@ -5,8 +5,12 @@ use std::ffi::OsString;
 
 use gpui::{
     App, AppContext as _, Bounds, TitlebarOptions, WindowBackgroundAppearance, WindowBounds,
-    WindowOptions, px, size,
+    WindowOptions, point, px, size,
 };
+
+/// `macTrafficLightPosition` (Electron main.mjs:281): the close button's top-left inset, which
+/// centres the buttons on the title row. gpui re-applies it on resize and on leaving fullscreen.
+const TRAFFIC_LIGHTS: (f32, f32) = (20., 18.);
 
 use crate::ui::i18n::Locale;
 use crate::ui::shell::{Shell, ShellOptions};
@@ -22,7 +26,7 @@ pub(crate) fn open_window(cx: &mut App, args: &[OsString]) -> anyhow::Result<()>
         titlebar: Some(TitlebarOptions {
             title: Some(locale.strings().app_title.into()),
             appears_transparent: true,
-            traffic_light_position: None,
+            traffic_light_position: Some(point(px(TRAFFIC_LIGHTS.0), px(TRAFFIC_LIGHTS.1))),
         }),
         window_min_size: Some(size(px(320.), px(480.))),
         app_id: Some("butler-shell".into()),

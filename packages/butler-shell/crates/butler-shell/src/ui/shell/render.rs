@@ -6,21 +6,31 @@ use blocks::adaptive_shell::{
     peek::{self, CloseReason, SidebarPeek},
 };
 use blocks::{
-    conversation_shell::ConversationShell, responsive::ChromeEnvironment, scope::ShellFrame,
+    conversation_shell::{ConversationShell, Gutter},
+    responsive::ChromeEnvironment,
+    scope::ShellFrame,
 };
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::{blocks, context::Ds, focus, icon_button::IconButton, overlay, toast};
 use gpui::{AnyElement, Context, Entity, IntoElement, Render, Window, div, prelude::*};
 
 use super::{
-    Shell, TextSizeDown, TextSizeReset, TextSizeUp, ToggleSidebar, image_viewer, region,
-    system_dark,
+    Shell, TextSizeDown, TextSizeReset, TextSizeUp, TitlebarBack, ToggleSidebar, image_viewer,
+    region, system_dark,
 };
 use crate::ui::Icon;
 use crate::ui::lifecycle_view;
 use crate::ui::onboarding::{self, gate::Gate};
 use crate::ui::settings::SettingsView;
 use crate::ui::widgets::anchor;
+
+/// `Conversation.tsx`'s `contentGutter` while the new chat shows: the title icon
+/// (`clamp(40px, 5.333vw, 54px)`) twice plus its 10px gap, so the column, the composer and the
+/// prompt list share the new chat's narrower width.
+fn new_chat_gutter(ds: &Ds) -> Gutter {
+    let icon = (ds.tokens().viewport.0 * 0.053_33).clamp(40., 54.);
+    Gutter::Px(2. * icon + 10.)
+}
 
 impl Shell {
     pub(super) fn conversation(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -38,13 +48,12 @@ impl Shell {
                 .into_any_element()
         };
         let reserve = self.composer_h.get() + f32::from(Ds::get(cx).len(Length::SpaceLg)) * 2.;
-        // `LiveConnectionNotice` above the conversation (`AgentStatusNotice`).
-        let lang = self.theme.strings.locale.ds_lang();
-        let notice = crate::lifecycle::runtime(cx).and_then(|runtime| {
-            runtime.update(cx, |runtime, cx| {
-                lifecycle_view::agent_notice(runtime, lang, window, cx)
-            })
-        });
+        let gutter = if self.chat.read(cx).shows_empty() {
+            new_chat_gutter(Ds::get(cx))
+        } else {
+            Gutter::default()
+        };
+        let notice = self.live_notice(window, cx);
         anchor(div(), "chat-card")
             .size_full()
             .relative()
@@ -53,12 +62,64 @@ impl Shell {
             .children(notice)
             .child(
                 ShellCard::new().child(
-                    self.with_aside(ConversationShell::new("conversation", reserve))
-                        .child(content)
-                        .child(self.composer.clone()),
+                    self.with_aside(
+                        ConversationShell::new("conversation", reserve).content_gutter(gutter),
+                    )
+                    .child(content)
+                    .child(self.composer.clone()),
                 ),
             )
             .into_any_element()
+    }
+
+    /// `LiveConnectionNotice` (`AgentStatusNotice`): above the conversation, and at the top of a
+    /// management page's card.
+    fn live_notice(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let lang = self.theme.strings.locale.ds_lang();
+        crate::lifecycle::runtime(cx).and_then(|runtime| {
+            runtime.update(cx, |runtime, cx| {
+                lifecycle_view::agent_notice(runtime, lang, window, cx)
+            })
+        })
+    }
+
+    /// A management view's workspace (`AppShell.tsx:228-237`): the page in an
+    /// `AdaptiveShellCard` under the `LiveConnectionNotice`; `None` for the conversation.
+    fn manage_workspace(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let page = self.manage_page()?;
+        self.clear_split();
+        let notice = self.live_notice(window, cx);
+        Some(
+            // A column, so the card's `flex: auto` fills the workspace body as the
+            // conversation's card does.
+            anchor(div(), "manage-card")
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(
+                    ShellCard::new().child(
+                        div()
+                            .flex_auto()
+                            .min_h_0()
+                            .flex()
+                            .flex_col()
+                            .children(notice)
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_h_0()
+                                    // A column, so a page whose root takes `flex: 1` (a
+                                    // `ScrollArea::fill`) fills the slot.
+                                    .child(page.cached(region::fill().flex().flex_col())),
+                            ),
+                    ),
+                )
+                .into_any_element(),
+        )
     }
 
     /// The conversation's aside: the session sections while session info is open.
@@ -201,9 +262,12 @@ impl Shell {
         self.frame.open = open;
         let sidebar = self.regions.sidebar.clone().cached(region::fill());
         // The workspace first: the titlebar follows the split it builds.
-        let workspace = {
-            let conversation = self.regions.conversation.clone().cached(region::fill());
-            self.workspace(conversation.into_any_element(), cx)
+        let workspace = match self.manage_workspace(window, cx) {
+            Some(page) => page,
+            None => {
+                let conversation = self.regions.conversation.clone().cached(region::fill());
+                self.workspace(conversation.into_any_element(), window, cx)
+            }
         };
         let title = self.regions.titlebar.clone().cached(region::fill());
         let mut shell = AdaptiveShell::new("app-frame", input)
@@ -263,6 +327,7 @@ impl Render for Shell {
         let task_graph = self.render_task_graph(window, cx);
         let sidebar_dialog = self.space_dialogs(window, cx);
         let viewer = image_viewer::overlay(window, cx);
+        let observer = self.render_observer(window, cx);
         let lang = self.theme.strings.locale.ds_lang();
         let update_choice = lifecycle_view::update_choice(lang, window, cx);
         let ds = Ds::get(cx);
@@ -272,6 +337,7 @@ impl Render for Shell {
             .on_action(cx.listener(Self::toggle_sidebar))
             .on_action(cx.listener(Self::focus_composer))
             .on_action(cx.listener(Self::toggle_palette))
+            .on_action(cx.listener(|s, _: &TitlebarBack, w, cx| s.titlebar_back(w, cx)))
             .on_action(|_: &TextSizeUp, _, cx| Self::text_size(1, cx))
             .on_action(|_: &TextSizeDown, _, cx| Self::text_size(-1, cx))
             .on_action(|_: &TextSizeReset, _, cx| Self::text_size(0, cx))
@@ -290,9 +356,12 @@ impl Render for Shell {
             .children(viewer)
             .child(rename)
             .children(task_graph)
+            .children(observer)
             .children(update_choice)
             .child(self.palette())
             .child(sidebar_dialog)
+            .children(crate::ui::manage::library::detail::dialog_host(cx))
+            .child(self.manage.canon_trust.clone())
             .child(toast::Toaster::new().offset(ds.len(Length::TitlebarSafeAreaTop)));
         overlay::track(toast::track(focus::track_modality(div())))
             .id("shell-root")

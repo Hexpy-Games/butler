@@ -4,6 +4,7 @@
 //! The coordinator keeps Electron's states. A request reads the active work: with none it
 //! installs, with some it asks (`ChoiceRequired`); a deferred update installs once the work
 //! settles, woken by [`work_changed`] from the live events the shell already has.
+mod apply;
 mod copy;
 mod package;
 
@@ -16,6 +17,7 @@ use futures::channel::oneshot;
 use gpui::{App, AppContext as _, AsyncApp, Context, Entity, Global, SharedString, Task};
 use serde_json::{Value, json};
 
+pub(crate) use self::apply::apply;
 pub(crate) use self::copy::dialog_words;
 use self::copy::words;
 use self::package::{Helper, Package};

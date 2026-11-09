@@ -24,9 +24,12 @@ use gpui::{
 use self::display::{Mode, meta_line, preview_mode, revision_artifact};
 use self::files::{TextState, artifact_text, save_file};
 use super::FileViewerEntry;
-use super::frame::{FileViewerAction, FileViewerHeader, FileViewerPage, Run};
+use super::frame::{
+    FileViewerAction, FileViewerHeader, FileViewerPage, Run, file_viewer_close_button,
+};
 use crate::ui::i18n::artifact_viewer::ArtifactViewerCopy;
 use crate::ui::i18n::media::Media;
+use crate::ui::manage::documents;
 use crate::ui::shell::image_viewer::loader::{PictureId, is_pending, picture};
 use crate::ui::source::wire::SessionArtifactSummary;
 
@@ -43,25 +46,42 @@ pub(crate) fn artifact_viewer(
         FileViewerEntry::Artifact { artifact, .. } => {
             file_viewer_artifact(artifact, on_close, window, cx)
         }
-        // `FileViewerDocument` shows the page the documents feature renders; the shell has no
-        // such renderer, so the document shows its title row over an empty line.
-        FileViewerEntry::Document { title, .. } => Stack::new()
-            .fill()
-            .gap(Space::None)
-            .child(FileViewerHeader {
-                title: title.clone().into(),
-                meta: None,
-                leading: None,
-                actions: Vec::new(),
-                on_close,
-                on_back: None,
-            })
-            .child(
-                FileViewerPage::new(true)
-                    .child(EmptyLine::new(ArtifactViewerCopy::get(cx).unsupported)),
-            )
-            .into_any_element(),
+        FileViewerEntry::Document { id, title } => document_viewer(id, title, on_close, window, cx),
     }
+}
+
+/// `FileViewerDocument`: the documents feature's page, whose title row carries the close
+/// control; the viewer adds no header. Without the window's `ManageCtx` the title row and an
+/// empty line stand in.
+fn document_viewer(
+    id: &str,
+    title: &str,
+    on_close: Run,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let close = on_close.clone();
+    let trailing: documents::Slot =
+        Rc::new(move |_, cx| file_viewer_close_button(close.clone(), cx).into_any_element());
+    if let Some(page) = documents::viewer_page(id, (None, trailing), window, cx) {
+        return FileViewerPage::new(true).child(page).into_any_element();
+    }
+    Stack::new()
+        .fill()
+        .gap(Space::None)
+        .child(FileViewerHeader {
+            title: title.to_owned().into(),
+            meta: None,
+            leading: None,
+            actions: Vec::new(),
+            on_close,
+            on_back: None,
+        })
+        .child(
+            FileViewerPage::new(true)
+                .child(EmptyLine::new(ArtifactViewerCopy::get(cx).unsupported)),
+        )
+        .into_any_element()
 }
 
 /// `artifactPreviewMode(artifact) === "image"`, for the viewer's tab icons.

@@ -69,7 +69,7 @@ async function reset(app: App, scene: Scene) {
   for (const step of scene.reset ?? []) await app.gateway.api(step.path, { method: step.method, body: JSON.stringify(step.body) });
 }
 
-async function capture(app: App, scene: Scene, anchors: Scene["anchors"], size: string, theme: string) {
+async function capture(app: App, scene: Scene, anchors: Scene["anchors"], steps: Scene["steps"], size: string, theme: string) {
   const [width, height] = size.split("x").map(Number);
   const name = `${scene.name}-${size}-${theme}`;
   const cdp = <T>(method: string, params: unknown) => app.main<T>(`${app.win}.webContents.debugger.sendCommand(${JSON.stringify(method)},${JSON.stringify(params)})`);
@@ -81,13 +81,14 @@ async function capture(app: App, scene: Scene, anchors: Scene["anchors"], size: 
   await app.page.reload();
   if ("setup" in scene.open) await waitBrowser(() => app.page.expression(`Boolean(document.querySelector('[data-test-class="first-run-setup"]'))`), "first-run setup");
   else await openChat(app, scene.open);
-  for (const step of scene.steps ?? []) {
+  for (const step of steps ?? []) {
 
-    const anchor = "click" in step ? step.click : step.expect;
+    const anchor = "click" in step ? step.click : "hover" in step ? step.hover : step.expect;
     const selector = anchors.find(item => item.anchor === anchor)?.electron;
     if (!selector) throw new Error(`Scene ${scene.name} step uses unknown anchor ${anchor}`);
     await waitBrowser(() => app.page.expression(`Boolean(document.querySelector(${JSON.stringify(selector)}))`), `step anchor ${anchor}`);
     if ("click" in step) await app.page.clickSelector(selector);
+    else if ("hover" in step) await app.page.hoverSelector(selector);
   }
   await app.page.expression("document.fonts.ready.then(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))))");
   // Steady state: every timed animation (enter, exit, crossfade) has finished. Loops such as
@@ -130,11 +131,12 @@ async function runScene(scene: Scene) {
       return view.latest_turn?.state === "delivered" && Boolean(view.artifacts?.length);
     }, `scene ready: ${scene.ready}`);
     const anchors = await seeded.anchors();
+    const steps = seeded.steps();
     await app.main(`${app.win}.webContents.debugger.attach('1.3')`);
     for (const theme of themes) for (const size of sizes) {
-      const name = await capture(app, scene, anchors, size, theme);
+      const name = await capture(app, scene, anchors, steps, size, theme);
       await reset(app, scene);
-      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "setup" in scene.open ? "setup" : "chat" in scene.open ? seeded.chat : undefined, anchors, scene.steps);
+      await shots(shotsBinary, out, name, app.gateway.butlerData, scale, size, theme === "dark", "setup" in scene.open ? "setup" : "chat" in scene.open ? seeded.chat : undefined, anchors, steps);
     }
   } finally {
     releaseReply?.();

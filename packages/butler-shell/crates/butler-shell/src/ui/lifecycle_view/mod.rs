@@ -20,6 +20,7 @@ use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Cross, Justify, Space, Stack};
 use butler_ds::ui::motion;
 use butler_ds::ui::spinner::Spinner;
+use butler_ds::ui::toast::{self, Toast};
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{
     AnyElement, App, Context, IntoElement as _, ParentElement as _, Styled as _, Window, div,
@@ -140,6 +141,20 @@ pub(crate) fn quit(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement 
     page(card, cx)
 }
 
+/// `startAgent` with `notifyError(error, feedback.agentStartFailed)`: the failure toasts the
+/// fallback copy; success leaves the notice to `AgentRuntime::state`.
+fn start(failed: &'static str, cx: &mut App) {
+    let started = lifecycle::resume(cx);
+    cx.spawn(async move |cx| {
+        if started.await.is_err() {
+            cx.update(|cx| {
+                toast::show(cx, Toast::error(failed));
+            });
+        }
+    })
+    .detach();
+}
+
 /// The Agent stopped, restarting or failed, with Start or Retry.
 pub(crate) fn agent_notice(
     runtime: &AgentRuntime,
@@ -167,13 +182,16 @@ pub(crate) fn agent_notice(
     };
     let mut notice = Notice::new(tone, message).icon(lead);
     if !action.is_empty() {
-        notice = notice.action(
-            Button::new("agent-notice-action")
-                .variant(Variant::Outline)
-                .size(butler_ds::ui::button::Size::Sm)
-                .text(action)
-                .on_click(|_, _, cx| lifecycle::command(cx, Supervisor::resume)),
-        );
+        let failed = words.agent_start_failed;
+        let mut button = Button::new("agent-notice-action")
+            .variant(Variant::Outline)
+            .size(butler_ds::ui::button::Size::Sm)
+            .text(action)
+            .on_click(move |_, _, cx| start(failed, cx));
+        if runtime.resuming {
+            button = button.disabled();
+        }
+        notice = notice.action(button);
     }
     Some(
         div()

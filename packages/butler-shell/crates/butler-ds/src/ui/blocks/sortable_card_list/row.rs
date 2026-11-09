@@ -9,7 +9,7 @@ use gpui::{
 };
 
 use super::drag::{Drag, Lifted, recorder, step};
-use super::{Env, SortableCardItem, copy, sub};
+use super::{Env, Slot, SortableCardItem, copy, sub};
 use crate::tokens::Length;
 use crate::ui::Icon;
 use crate::ui::card::{Card, CardPadding};
@@ -58,9 +58,29 @@ pub(super) fn static_grip(ds: &Ds) -> AnyElement {
     grip_box(ds).child(slot).into_any_element()
 }
 
+/// The element slots of an item, built before the card (they need the window, the card only
+/// the theme).
+pub(super) struct Nodes {
+    title: Option<AnyElement>,
+    description: Option<AnyElement>,
+    actions: Option<AnyElement>,
+}
+
+impl Nodes {
+    pub(super) fn build(item: &SortableCardItem, window: &mut Window, cx: &mut App) -> Self {
+        let mut slot = |slot: &Option<Slot>| slot.as_ref().map(|slot| slot.build(window, cx));
+        Self {
+            title: slot(&item.title_element),
+            description: slot(&item.description_element),
+            actions: slot(&item.actions),
+        }
+    }
+}
+
 /// The card around `grip`, the item's content and an optional remove button.
 pub(super) fn card(
     item: &SortableCardItem,
+    nodes: Nodes,
     grip: AnyElement,
     remove: Option<AnyElement>,
     ds: &Ds,
@@ -81,12 +101,10 @@ pub(super) fn card(
         .items_center()
         .gap(gap)
         .min_w_0()
-        .child(
-            div()
-                .flex_auto()
-                .min_w_0()
-                .child(Typo::body(item.title.clone()).truncate()),
-        )
+        .child(div().flex_auto().min_w_0().child(match nodes.title {
+            Some(title) => title,
+            None => Typo::body(item.title.clone()).truncate().into_any_element(),
+        }))
         .children(item.meta.clone().map(|meta| {
             div()
                 .flex_none()
@@ -99,11 +117,14 @@ pub(super) fn card(
         .min_w_0()
         .gap(tight)
         .child(title_row)
-        .children(
-            item.description
-                .clone()
-                .map(|text| Typo::caption(text).tone(Tone::Secondary).truncate()),
-        );
+        .children(nodes.description.or_else(|| {
+            item.description.clone().map(|text| {
+                Typo::caption(text)
+                    .tone(Tone::Secondary)
+                    .truncate()
+                    .into_any_element()
+            })
+        }));
     let row = div()
         .flex()
         .items_start()
@@ -113,6 +134,11 @@ pub(super) fn card(
         .child(grip)
         .children(leading)
         .child(content)
+        .children(
+            nodes
+                .actions
+                .map(|actions| div().flex_none().child(actions)),
+        )
         .children(remove);
     let id = (gpui::ElementId::from(item.id.clone()), "card");
     Card::new(id)
@@ -199,6 +225,7 @@ pub(super) fn live(
             .map(|(_, after)| after);
         (session.active.as_ref() == Some(&item.id), line)
     };
+    let nodes = Nodes::build(item, window, cx);
     let ds = Ds::get(cx);
     let mut button =
         IconButton::new(grip_id, copy::reorder(env.lang, &label)).glyph(Icon::GripVertical);
@@ -229,7 +256,7 @@ pub(super) fn live(
     if dragging {
         wrap = wrap.opacity(DRAGGING);
     }
-    wrap.child(card(item, grip.into_any_element(), remove, ds))
+    wrap.child(card(item, nodes, grip.into_any_element(), remove, ds))
         .child(recorder(&env.hub, &item.id))
         .children(line.map(|after| indicator(after, ds)))
         .into_any_element()

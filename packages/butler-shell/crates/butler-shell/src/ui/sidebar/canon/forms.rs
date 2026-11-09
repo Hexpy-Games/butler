@@ -48,7 +48,7 @@ impl Shell {
                     Ok(CanonFormState {
                         project,
                         editing: None,
-                        plans: overview.plans,
+                        plans: overview.plans.into_iter().map(|cards| cards.plan).collect(),
                         selected_plan: plan,
                         assignee: Some("app-user".to_owned()),
                     })

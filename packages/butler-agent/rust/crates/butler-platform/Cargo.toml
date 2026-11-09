@@ -30,7 +30,9 @@ rusqlite.workspace = true
 thiserror.workspace = true
 # Shutdown requests (host stop signals) and the stdin lease are awaited on the
 # service's runtime.
-tokio = { workspace = true, features = ["io-std"] }
+tokio = { workspace = true, features = ["io-std", "rt"] }
+# Interface address changes (`network_status`):rtnetlink, SCDynamicStore, NotifyIpInterfaceChange.
+if-watch = { version = "=3.2.1", features = ["tokio"] }
 # The tray mark: PNG decoding (`tray`).
 png = "=0.17.16"
 

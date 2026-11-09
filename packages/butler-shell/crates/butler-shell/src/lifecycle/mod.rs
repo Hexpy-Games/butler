@@ -4,6 +4,7 @@
 //! whichever Agent is ready (our child, a CLI-started Agent or an external replacement).
 pub(crate) mod app_update;
 pub(crate) mod logs;
+pub(crate) mod network;
 pub(crate) mod reset;
 pub(crate) mod setup;
 pub(crate) mod supervisor;
@@ -15,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use futures::StreamExt as _;
 use futures::channel::oneshot;
-use gpui::{App, AppContext as _, Context, Entity, Global};
+use gpui::{App, AppContext as _, Context, Entity, Global, Task};
 
 use supervisor::{AgentState, AgentStatus, Requester, StopReason, Supervisor, SupervisorError};
 
@@ -55,6 +56,8 @@ pub(crate) struct AgentRuntime {
     pub(crate) error: Option<SupervisorError>,
     /// Quit is running: every window shows the quit card in place of its frame.
     pub(crate) quitting: bool,
+    /// `AgentStatusNotice`'s own Start is running ([`resume`]).
+    pub(crate) resuming: bool,
     pub(crate) data: PathBuf,
     pub(crate) legacy: bool,
     pub(crate) supervisor: Supervisor,
@@ -89,6 +92,7 @@ pub(crate) fn runtime(cx: &App) -> Option<Entity<AgentRuntime>> {
 /// [`start`], the last-window rule and the tray (not for a legacy data folder, whose only screen
 /// is the recovery notice).
 pub(crate) fn init(cx: &mut App, data: PathBuf, legacy: bool) {
+    network::init(cx);
     start(cx, data, legacy);
     cx.on_window_closed(|cx, _| window::closed(cx)).detach();
     if !legacy {
@@ -106,6 +110,7 @@ pub(crate) fn start(cx: &mut App, data: PathBuf, legacy: bool) {
         requested_by: None,
         error: None,
         quitting: false,
+        resuming: false,
         data,
         legacy,
         supervisor,
@@ -140,15 +145,25 @@ pub(crate) fn ensure_ready(cx: &mut App) {
 
 /// Runs a supervisor command (resume, restart, repair, ensure ready) and folds its answer into
 /// [`AgentRuntime::error`].
-pub(crate) fn command(cx: &mut App, run: impl FnOnce(&Supervisor) -> Answer) {
+pub(crate) fn command(cx: &mut App, command: impl FnOnce(&Supervisor) -> Answer) {
+    run(cx, command).detach();
+}
+
+/// A supervisor command whose answer the caller also needs. The answer is folded into
+/// [`AgentRuntime::error`] exactly as [`command`] does, and returned; a closed supervisor channel
+/// (or no runtime, the shot harness) answers `Err(SupervisorError::ShuttingDown)`.
+pub(crate) fn run(
+    cx: &mut App,
+    command: impl FnOnce(&Supervisor) -> Answer,
+) -> Task<Result<(), SupervisorError>> {
     let Some(entity) = runtime(cx) else {
-        return;
+        return Task::ready(Err(SupervisorError::ShuttingDown));
     };
-    let answer = run(&entity.read(cx).supervisor);
+    let answer = command(&entity.read(cx).supervisor);
     let weak = entity.downgrade();
     cx.spawn(async move |cx| {
         let Ok(result) = answer.await else {
-            return;
+            return Err(SupervisorError::ShuttingDown);
         };
         let error = result.err();
         let _ = weak.update(cx, |runtime, cx| {
@@ -157,8 +172,32 @@ pub(crate) fn command(cx: &mut App, run: impl FnOnce(&Supervisor) -> Answer) {
                 cx.notify();
             }
         });
+        result
     })
-    .detach();
+}
+
+/// `AgentStatusNotice`'s Start and Retry (`startAgent`): [`run`] of `Supervisor::resume`, with
+/// [`AgentRuntime::resuming`] set until it answers (windows re-render on both edges).
+pub(crate) fn resume(cx: &mut App) -> Task<Result<(), SupervisorError>> {
+    let Some(entity) = runtime(cx) else {
+        return Task::ready(Err(SupervisorError::ShuttingDown));
+    };
+    set_resuming(&entity, true, cx);
+    let answer = run(cx, Supervisor::resume);
+    cx.spawn(async move |cx| {
+        let result = answer.await;
+        cx.update(|cx| set_resuming(&entity, false, cx));
+        result
+    })
+}
+
+fn set_resuming(entity: &Entity<AgentRuntime>, resuming: bool, cx: &mut App) {
+    entity.update(cx, |runtime, cx| {
+        if runtime.resuming != resuming {
+            runtime.resuming = resuming;
+            cx.notify();
+        }
+    });
 }
 
 /// `before-quit` (main.mjs:2774-2816): every window shows the quit card, the child Agent stops

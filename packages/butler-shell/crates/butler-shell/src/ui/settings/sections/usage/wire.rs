@@ -165,6 +165,9 @@ pub(super) struct History {
     pub(super) longest_task: Option<LongestTask>,
     pub(super) longest_streak: Streak,
     pub(super) current_streak: Streak,
+    /// `[date, tokens]` per active day.
+    pub(super) days: Vec<(String, f64)>,
+    pub(super) prior_total: f64,
 }
 
 #[derive(Default, Deserialize)]

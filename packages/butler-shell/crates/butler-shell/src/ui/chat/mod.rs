@@ -2,7 +2,7 @@
 //! shows the session view the shell hands it through `list::transcript`; when the top row comes
 //! into view and older messages exist, it asks for them (never the whole chat at once).
 pub(crate) mod activity;
-mod answers;
+pub(crate) mod answers;
 mod assistant;
 mod content;
 pub(crate) mod empty;
@@ -181,6 +181,23 @@ impl Chat {
         self.view = view;
     }
 
+    /// `showEmptyState`: an unsent new chat, or a session with no messages, no turn and no
+    /// waiting question or approval (`showMessageList`). The shell narrows the column for it.
+    pub(crate) fn shows_empty(&self) -> bool {
+        let Some(shared) = self.view.as_deref() else {
+            return self.unsent;
+        };
+        let waiting = shared
+            .pending_questions
+            .as_ref()
+            .is_some_and(|q| !q.is_empty())
+            || shared
+                .authority_requests
+                .as_ref()
+                .is_some_and(|r| !r.is_empty());
+        shared.messages.is_empty() && shared.active_turn.is_none() && !waiting
+    }
+
     /// Shows the open session's queued follow-ups.
     pub(crate) fn set_queue(&mut self, queue: Option<Rc<SessionQueueView>>) {
         if let Some(queue) = &queue {
@@ -197,32 +214,23 @@ impl Chat {
 
 impl Render for Chat {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let Some(shared) = self.view.clone() else {
-            if self.unsent {
-                return empty::empty_state(empty::EmptyCtx::default(), window, cx);
-            }
-            return div().id("chat-list").size_full().into_any_element();
-        };
-        // `showMessageList`: a waiting question or approval keeps the transcript.
-        let waiting = shared
-            .pending_questions
-            .as_ref()
-            .is_some_and(|q| !q.is_empty())
-            || shared
-                .authority_requests
-                .as_ref()
-                .is_some_and(|r| !r.is_empty());
-        if shared.messages.is_empty() && shared.active_turn.is_none() && !waiting {
-            let ctx = empty::EmptyCtx {
-                project_id: shared.project_id.as_deref(),
-                epic_id: shared
-                    .epic_ids
-                    .as_ref()
-                    .and_then(|ids| ids.first())
-                    .map(String::as_str),
-            };
+        if self.shows_empty() {
+            let ctx = self
+                .view
+                .as_deref()
+                .map_or_else(empty::EmptyCtx::default, |shared| empty::EmptyCtx {
+                    project_id: shared.project_id.as_deref(),
+                    epic_id: shared
+                        .epic_ids
+                        .as_ref()
+                        .and_then(|ids| ids.first())
+                        .map(String::as_str),
+                });
             return empty::empty_state(ctx, window, cx);
         }
+        let Some(shared) = self.view.clone() else {
+            return div().id("chat-list").size_full().into_any_element();
+        };
         self.entering.retain(|_, (_, at)| at.elapsed() < ENTERING);
         let entering = self
             .entering

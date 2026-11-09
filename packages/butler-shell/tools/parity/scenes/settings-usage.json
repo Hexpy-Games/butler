@@ -50,6 +50,10 @@
     {
       "anchor": "settings-page-usage",
       "electron": "[data-test-class~=\"settings-view\"]:has([data-test-class=\"settings-sidebar\"] [aria-current=\"page\"][aria-label=\"사용량\"]) [data-test-class=\"settings-detail-scroll\"]"
+    },
+    {
+      "anchor": "usage-history",
+      "electron": "[data-test-class=\"usage-history\"]"
     }
   ]
 }

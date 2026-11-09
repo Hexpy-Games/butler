@@ -78,6 +78,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "url"
         | "size"
         | "click"
+        | "hover"
         | "drag"
         | "reveal"
         | "wait-anchor"

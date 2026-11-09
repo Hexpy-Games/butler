@@ -21,6 +21,9 @@ pub(super) struct TraceSpan {
     pub(super) duration_ms: Option<f64>,
     #[serde(default)]
     pub(super) status: String,
+    /// The tone the agent's span record names (`trace.rs` `tone`).
+    #[serde(default)]
+    pub(super) tone: String,
     #[serde(default)]
     pub(super) title: String,
     #[serde(default)]

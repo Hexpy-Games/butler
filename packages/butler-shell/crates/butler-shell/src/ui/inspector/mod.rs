@@ -2,6 +2,7 @@
 //! the task graph and the artifacts.
 mod artifacts;
 mod order;
+pub(crate) use order::install_epic_host;
 pub(crate) mod sections;
 mod session_misc;
 mod tasks;

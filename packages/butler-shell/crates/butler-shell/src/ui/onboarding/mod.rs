@@ -362,6 +362,7 @@ impl Render for Onboarding {
             .variant(SetupWizardVariant::Focus)
             .anchor(SetupWizardAnchor::Top)
             .tone(self.tone(window))
+            .day_phase(crate::ui::chat::empty::day_phase())
             .intro(self.intro)
             .step_key(key)
             .child(body);

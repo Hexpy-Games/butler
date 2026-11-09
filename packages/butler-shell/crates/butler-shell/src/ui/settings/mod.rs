@@ -86,6 +86,13 @@ impl SectionCtx {
             .update(cx, |_, cx| cx.emit(SettingsEvent::OpenSession(id)));
     }
 
+    /// `openHistory("settings")`: Settings closes and the browser history page shows, with
+    /// Settings › Browser as its parent.
+    pub(crate) fn open_history(&self, cx: &mut App) {
+        self.state
+            .update(cx, |_, cx| cx.emit(SettingsEvent::OpenHistory));
+    }
+
     /// `openRerun` (`RerunSetupField`): Settings closes and the setup shows again.
     pub(crate) fn rerun_setup(&self, cx: &mut App) {
         self.state

@@ -91,3 +91,18 @@ pub mod setup_wizard_step_card;
 pub mod tag_color_swatches;
 pub mod tag_field;
 pub mod token_input_control;
+
+pub mod activity_feed;
+pub mod activity_heatmap;
+pub mod activity_strip;
+pub mod automation_run_list;
+pub mod dashboard_header;
+pub mod document_editor;
+pub mod group_tile;
+pub mod history_row;
+pub mod kanban_board;
+pub mod library_card;
+pub mod management_page;
+pub mod mask_canvas;
+pub mod span_bar;
+pub mod version_history;

@@ -98,6 +98,7 @@ pub struct PromptSuggestionList {
     description: Option<SharedString>,
     moment: Option<SharedString>,
     title_icon: Option<TitleIcon>,
+    new_chat_icon: bool,
     wallpaper: Option<Wallpaper>,
     on_content_rect: Option<Report>,
 }
@@ -115,6 +116,7 @@ impl PromptSuggestionList {
             description: None,
             moment: None,
             title_icon: None,
+            new_chat_icon: false,
             wallpaper: None,
             on_content_rect: None,
         }
@@ -135,6 +137,13 @@ impl PromptSuggestionList {
     /// given.
     pub fn title_icon(mut self, icon: impl Fn(Pixels) -> AnyElement + 'static) -> Self {
         self.title_icon = Some(Rc::new(icon));
+        self
+    }
+
+    /// New chat's title icon geometry: size `clamp(40px, 5.333vw, 54px)`, gap 10px and an edge
+    /// gutter of two icons and the gap (Conversation.tsx sets these on the shell).
+    pub fn new_chat_icon(mut self) -> Self {
+        self.new_chat_icon = true;
         self
     }
 
@@ -171,7 +180,7 @@ impl RenderOnce for PromptSuggestionList {
             .then(content_rect::Recording::default);
         let rect_id = self.element_id("rect");
         let rect = content_rect::last(&rect_id, window, cx);
-        let m = Metrics::new(f32::from(size.width), Ds::get(cx), cx);
+        let m = Metrics::new(f32::from(size.width), self.new_chat_icon, Ds::get(cx), cx);
         let header = header::render(&self, &m, recording.as_ref(), cx);
         let rail = rail::render(&self, &m, recording.as_ref(), window, cx);
         let wallpaper = self.wallpaper.as_ref().map(|draw| {

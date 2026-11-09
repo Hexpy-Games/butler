@@ -29,6 +29,8 @@ pub(super) struct Words {
     pub(super) agent_start: &'static str,
     /// feedback.retry
     pub(super) notice_retry: &'static str,
+    /// feedback.agentStartFailed
+    pub(super) agent_start_failed: &'static str,
 }
 
 const KO: Words = Words {
@@ -45,6 +47,7 @@ const KO: Words = Words {
     agent_restart_failed: "에이전트 재시작 실패",
     agent_start: "시작",
     notice_retry: "다시 시도",
+    agent_start_failed: "에이전트를 시작하지 못했습니다.",
 };
 
 const EN: Words = Words {
@@ -61,6 +64,7 @@ const EN: Words = Words {
     agent_restart_failed: "Agent restart failed",
     agent_start: "Start",
     notice_retry: "Try again",
+    agent_start_failed: "Could not start the agent.",
 };
 
 pub(super) fn words(lang: Lang) -> &'static Words {
