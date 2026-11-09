@@ -370,13 +370,13 @@ pub(crate) fn turn_activity_panel(
 ) -> Option<AnyElement> {
     let projection = project_turn_activity(Ds::get(cx).lang(), rows, turn_id);
     if is_general_chat(Some(&t.view.session_id)) || !has_live_work(&projection) {
-        return current_turn_status(t, window, cx);
+        return current_turn_status(t, cx);
     }
     let work = match timeline(rows, turn_id, None, true, t, window, cx) {
         Some(timeline) => Some(timeline),
         None => live_turn_work(&projection, t, window, cx),
     };
-    let status = current_turn_status(t, window, cx);
+    let status = current_turn_status(t, cx);
     Some(
         Stack::new()
             .gap(Space::Md)
