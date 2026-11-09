@@ -48,13 +48,14 @@ pub(super) async fn prepare(
         ));
     }
     let (inputs, resolved) = load_inputs(client, ids, cancel).await?;
-    let (mask, region_hint) = load_mask(client, &args, &resolved, &inputs, cancel).await?;
+    let (mask, region_hint, opaque_source) =
+        load_mask(client, &args, &resolved, &inputs, cancel).await?;
     let mut request = ImageGenRequest {
         target,
         prompt,
         size,
         quality: Some(quality),
-        background,
+        background: background.or(opaque_source.then_some(Background::Opaque)),
         inputs,
         mask,
         region_hint,
@@ -192,26 +193,30 @@ async fn load_mask(
     resolved: &[String],
     inputs: &[InputImage],
     cancel: &CancellationToken,
-) -> Result<(Option<Vec<u8>>, Option<NormalizedRect>), ImageGenError> {
+) -> Result<(Option<Vec<u8>>, Option<NormalizedRect>, bool), ImageGenError> {
     Ok(match option(args, "mask")? {
         Some(id) => {
             let parent = resolved.first().ok_or_else(|| invalid("missing parent"))?;
             let (_, bytes) = load(client, &id, Some(parent), cancel).await?;
             let copy = bytes.clone();
             let source = inputs[0].bytes.clone();
-            let bounds = tokio::task::spawn_blocking(move || {
+            let (bounds, opaque) = tokio::task::spawn_blocking(move || {
                 let mask = image::load_from_memory(&copy).map_err(invalid)?.to_rgba8();
                 let source = image::load_from_memory(&source).map_err(invalid)?;
                 if mask.dimensions() != (source.width(), source.height()) {
                     return Err(invalid("dimensions"));
                 }
-                butler_gateway::gateway::mask_bounds(&mask)
-                    .ok_or_else(|| ImageGenError::new("mask_empty", "The mask has no edit region."))
+                let opaque =
+                    !source.color().has_alpha() || source.to_rgba8().pixels().all(|p| p[3] == 255);
+                let bounds = butler_gateway::gateway::mask_bounds(&mask).ok_or_else(|| {
+                    ImageGenError::new("mask_empty", "The mask has no edit region.")
+                })?;
+                Ok::<_, ImageGenError>((bounds, opaque))
             })
             .await
             .map_err(invalid)??;
-            (Some(bytes), Some(bounds))
+            (Some(bytes), Some(bounds), opaque)
         }
-        None => (None, None),
+        None => (None, None, false),
     })
 }
