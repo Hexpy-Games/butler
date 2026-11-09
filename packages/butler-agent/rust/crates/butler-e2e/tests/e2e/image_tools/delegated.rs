@@ -40,6 +40,19 @@ async fn steward_makes_an_image_and_its_id_reaches_the_parent() -> Result<(), Ha
             ),
         ],
     );
+    f.script(
+        "Delegated result",
+        vec![
+            call(
+                "show",
+                "answer_blocks",
+                &json!({"v":2,"blocks":[{"type":"gallery",
+                    "items":[{"img":"{{IMAGE}}","caption":"Kite"}]}]}),
+            ),
+            json!({"type":"message","id":"shown","role":"assistant","status":"completed",
+                "content":[{"type":"output_text","text":"Here is the kite.","annotations":[]}]}),
+        ],
+    );
     f.run(REQUEST).await?;
     let deadline = Instant::now() + Duration::from_secs(30);
     let relayed = loop {
@@ -68,11 +81,28 @@ async fn steward_makes_an_image_and_its_id_reaches_the_parent() -> Result<(), Ha
     assert!(offered, "the steward is offered generate_image");
     let output = f.output("steward-gen");
     assert_eq!(output["status"], "ok", "{output}");
-    let image = output["image"].as_str().unwrap();
+    let image = output["image"].as_str().unwrap().to_owned();
     assert!(
-        relayed.contains(image),
+        relayed.contains(&image),
         "the made image's id reaches the parent"
     );
+    // The parent shows the child's picture as an answer-block image tile.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let shown =
+            f.s.gw.messages("general").await?.iter().any(|m| {
+                m["role"] == "assistant" && m["answer_blocks"].to_string().contains(&image)
+            });
+        if shown {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the parent reply never showed the image\n{}",
+            f.s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     f.finish().await
 }
 
