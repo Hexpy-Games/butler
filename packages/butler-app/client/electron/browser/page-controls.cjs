@@ -129,7 +129,7 @@ window.addEventListener("dragend", event => {
   if (event.isTrusted) ipcRenderer.send("butler-browser:page-drag", "end");
 }, true);
 // Signed-in tabs only: a submitted sign-in may be offered for saving ("로그인 저장").
-// Main keeps it only for a conversation tab the user holds, and only in memory.
+// Main keeps it only for a tab the user holds, and only in memory.
 if (process.argv.includes("--butler-signin-capture")) {
   const capture = scope => {
     const root = scope?.querySelectorAll ? scope : document;

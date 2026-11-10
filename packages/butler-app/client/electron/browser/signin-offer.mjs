@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 
-/** "로그인 저장" after a takeover sign-in in a conversation's signed-in tab.
+/** "로그인 저장" after the user signs in in a signed-in tab they hold (their own tab,
+ * or a conversation tab they took over); not offered when the site already has this exact sign-in saved.
  * The page's own form values reach main only from signed-in tabs, are kept
  * in memory for at most two minutes, and leave main only to the keychain store. */
 const OFFER_MS = 120_000;
@@ -9,7 +10,7 @@ export function installSignInOffers(browser) {
   ipcMain.on("butler-browser:signin-candidate", async (event, input) => {
     const tab = [...browser.tabs.values()].find(item => item.view?.webContents === event.sender);
     const frame = event.senderFrame;
-    if (!tab || !frame || tab.owner === "mine" || tab.profile !== "signed_in" || tab.holder !== "user") return;
+    if (!tab || !frame || tab.profile !== "signed_in" || tab.holder !== "user") return;
     let origin;
     try { origin = new URL(tab.view.webContents.getURL()).origin; } catch { return; }
     // Only the top-level page's own origin, never a framed form.
@@ -17,8 +18,8 @@ export function installSignInOffers(browser) {
     const username = typeof input?.username === "string" ? input.username.slice(0, 256) : "";
     const password = typeof input?.password === "string" && input.password.length <= 1024 ? input.password : "";
     if (!username || !password) return;
-    // Without a password store there is nothing to save to, so nothing is offered.
-    if (!await browser.signInStoreAvailable?.().catch(() => false) || tab.closing || browser.tabs.get(tab.id) !== tab) return;
+    // The Agent checks store availability and whether this exact sign-in is already saved.
+    if (!await browser.signInOfferWanted?.({ origin, username, password }).catch(() => false) || tab.closing || browser.tabs.get(tab.id) !== tab) return;
     clearOffer(tab);
     tab.saveOffer = { origin, username, password, timer: setTimeout(() => { clearOffer(tab); browser.publish(); }, OFFER_MS) };
     browser.publish();

@@ -1991,7 +1991,7 @@ async function openMainWindow() {
       adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
     });
     userBrowser.saveSignIn = (payload) => signInRoute({ route: "saveSignIn", body: { payload } });
-    userBrowser.signInStoreAvailable = async () => (await signInRoute({ route: "listSignIns" }))?.data?.available === true;
+    userBrowser.signInOfferWanted = async (payload) => (await signInRoute({ route: "signInOffer", body: { payload } }))?.data?.offer === true;
     userBrowser.downloadRequest = async input => {
       const response = await appServerFetch("/internal/browser-host/downloads", { method: "POST",
         headers: { "content-type": "application/json", "x-butler-admin": await readAppLocalAdmin({ butlerData: butlerDataRoot }) }, body: JSON.stringify(input) });

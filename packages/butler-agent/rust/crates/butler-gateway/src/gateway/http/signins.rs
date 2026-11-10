@@ -5,6 +5,7 @@
 //! - `GET /security/signins`: availability and one row per site.
 //! - `POST /security/signins`: add `{site, username, password}` (or a takeover
 //!   save `{origin, username, password}`).
+//! - POST /security/signins/offer: {origin, username, password} → {offer}; never answers a secret.
 //! - `PATCH /security/signins/{id}`: `{policy}`.
 //! - `DELETE /security/signins/{id}`: delete the password and its entry.
 //! - `POST /security/signins/site`: `{site, all_conversations}` or `{site, revoke: true}`.
@@ -36,6 +37,7 @@ pub(super) async fn route(
         (&Method::GET, "/security/signins") => list(&state).await?,
         (&Method::POST, "/security/signins") => add(&state, body).await?,
         (&Method::POST, "/security/signins/site") => site(&state, &body).await?,
+        (&Method::POST, "/security/signins/offer") => offer(&state, body).await?,
         (&Method::PATCH, p) if p.starts_with("/security/signins/") => {
             let policy = body["policy"].as_str().unwrap_or("");
             if !matches!(policy, "always" | "ask" | "never") {
@@ -100,6 +102,41 @@ pub(super) fn login_origin(raw: &str) -> Option<(String, String)> {
     let site = butler_runtime::browser::site_of(url.as_str())?;
     site.contains('.')
         .then(|| (url.origin().ascii_serialization(), site))
+}
+
+async fn offer(state: &Arc<HttpState>, mut body: Value) -> Result<Value, HttpError> {
+    let password = match body.get_mut("password") {
+        Some(Value::String(value)) => Some(SecretText::new(std::mem::take(value))),
+        _ => None,
+    };
+    let Some(password) = password.filter(|p| !p.expose().is_empty() && p.expose().len() <= 1024)
+    else {
+        return Ok(json!({"offer": false}));
+    };
+    let username = body["username"].as_str().unwrap_or("");
+    let origin = body["origin"].as_str().unwrap_or("");
+    let Some((_, site)) = login_origin(origin) else {
+        return Ok(json!({"offer": false}));
+    };
+    if username.is_empty()
+        || username.chars().count() > 256
+        || !signin_secrets::available(state).await
+    {
+        return Ok(json!({"offer": false}));
+    }
+    let found = state
+        .application
+        .signins(AppSignInCommand::Lookup { site })
+        .await?;
+    let entry = &found["entry"];
+    let offer = if entry.is_null() || entry["username"].as_str() != Some(username) {
+        true
+    } else {
+        let id = entry["id"].as_str().unwrap_or("");
+        let stored = signin_secrets::get(state, id).await?;
+        stored.is_none_or(|stored| stored.expose() != password.expose())
+    };
+    Ok(json!({"offer": offer}))
 }
 
 async fn add(state: &Arc<HttpState>, mut body: Value) -> Result<Value, HttpError> {
