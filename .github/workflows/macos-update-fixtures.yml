@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-agent-setup
         with:
+          release-lto: 'false'
           native-deps: static-ort
           cache-key: native-darwin-arm64
           cache-workspace-crates: 'true'
