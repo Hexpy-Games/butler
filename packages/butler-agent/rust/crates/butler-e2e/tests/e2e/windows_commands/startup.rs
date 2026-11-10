@@ -14,7 +14,7 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Windows native shell"
     );
-    let setup = Setup::new("SHELL-STARTUP")?;
+    let mut setup = Setup::new("SHELL-STARTUP")?;
     // Keep the App's PSModulePath: module discovery cost is part of startup.
     let mut environment = tool_environment(&std::env::vars().collect::<HashMap<_, _>>());
     for (name, path) in [
@@ -125,6 +125,7 @@ async fn native_shell_startup_has_complete_unicode_output() -> Result<(), Harnes
         assert!(!long_directory.join("unicode marker.txt").exists());
         assert!(!long_directory.join("renamed marker.txt").exists());
         assert!(!long_directory.join("plain.txt").exists());
+        setup.sandbox.mark_success();
     }).await.map_err(|error| HarnessError(error.to_string()))?;
     Ok(())
 }
@@ -137,7 +138,7 @@ fn working_directory_of_259_units_starts_a_process() -> Result<(), HarnessError>
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Windows working-directory limit"
     );
-    let setup = Setup::new("CWD-259")?;
+    let mut setup = Setup::new("CWD-259")?;
     let units = |path: &std::path::Path| path.as_os_str().to_string_lossy().encode_utf16().count();
     let mut directory = setup.sandbox.root.clone();
     // Components longer than 8.3 names, so the folder has a shorter alias.
@@ -155,6 +156,7 @@ fn working_directory_of_259_units_starts_a_process() -> Result<(), HarnessError>
         .current_dir(working_directory(&directory)?)
         .status()?;
     assert!(status.success(), "{status:?}");
+    setup.sandbox.mark_success();
     Ok(())
 }
 
@@ -165,7 +167,7 @@ fn shell_phase_timings_require_invocation_opt_in() -> Result<(), HarnessError> {
         !butler_platform::command_sandbox::POSIX_SHELL,
         "Windows shell diagnostics"
     );
-    let setup = Setup::new("SHELL-TIMING-OUTPUT")?;
+    let mut setup = Setup::new("SHELL-TIMING-OUTPUT")?;
     for value in [None, Some(None), Some(Some("0")), Some(Some("1"))] {
         let mut environment = HashMap::new();
         if let Some(value) = value {
@@ -205,5 +207,6 @@ fn shell_phase_timings_require_invocation_opt_in() -> Result<(), HarnessError> {
             assert_eq!(stderr, "command-error");
         }
     }
+    setup.sandbox.mark_success();
     Ok(())
 }

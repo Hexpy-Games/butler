@@ -1,0 +1,12 @@
+---
+import { latestDownload, type Download } from "./latestRelease";
+
+interface Props {
+  file: Download;
+  checksum?: boolean;
+}
+
+const { file, checksum } = Astro.props;
+const { name, url } = await latestDownload(file, checksum);
+---
+<a href={url}><code>{name}</code></a>

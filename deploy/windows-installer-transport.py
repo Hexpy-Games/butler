@@ -9,7 +9,7 @@ import sys
 import tempfile
 import time
 
-NAMES = ('app-windows-first', 'app-windows', 'agent-first', 'installer-contracts')
+NAMES = ('app-windows-first', 'app-windows', 'agent-first')
 
 
 def digest(path):

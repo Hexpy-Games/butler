@@ -63,10 +63,10 @@ If a `code` in `errors` is `bundled_agent_version_missing`, the app could not re
   ]}
 >
   <TabPanel value="macos">
-    The Butler app is notarized by Apple, so it opens like other apps. If macOS asks whether to open an app downloaded from the internet, choose **Open**.
+    If macOS asks whether to open an app downloaded from the internet, choose **Open**.
   </TabPanel>
   <TabPanel value="windows">
-    Windows preview builds are unsigned. If SmartScreen appears, choose **More info**, then **Run anyway**, but only when you trust the source of the build. The installer is `ButlerSetup-<version>-x64.exe` on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases).
+    Windows preview builds are unsigned. If SmartScreen appears, choose **More info**, then **Run anyway**, but only when you trust the source of the build. The installer is <DownloadLink file="windows" />.
   </TabPanel>
   <TabPanel value="linux">
     Open Butler from your app list after installing the DEB or Arch package. If it does not start, check the service logs below.
@@ -78,8 +78,8 @@ If a `code` in `errors` is `bundled_agent_version_missing`, the app could not re
 ### The model list does not load
 
 - If **Couldn't finish connecting. Try again.** appears during first run, click **Try again**.
-- If **Model state error** appears in the composer's model picker, check the default model and the connection status in **Settings → Models**.
-- If **Selected model unavailable** appears, choose another model.
+- If a model in the composer's model picker cannot be used, check the default model and the connection status in **Settings → Models**.
+- If **That model is no longer available.** appears, choose another model.
 
 ### A response fails
 
@@ -218,12 +218,12 @@ These are common errors and how to fix them.
   <TabPanel value="macos">
     <Steps>
       1. Quit Butler.
-      2. Download the latest `butler-app-<version>-darwin-arm64.dmg` from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases).
+      2. Download <DownloadLink file="macos" />.
       3. Open the DMG and drag `Butler.app` into the Applications folder to replace the existing app.
     </Steps>
   </TabPanel>
   <TabPanel value="windows">
-    Quit Butler and copy `~/.butler`. Then download `ButlerSetup-<version>-x64.exe` from the newest preview on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and run it.
+    Quit Butler and copy `~/.butler`. Then download <DownloadLink file="windows" /> and run it.
   </TabPanel>
   <TabPanel value="linux">
     Download the latest DEB or Arch package and install it again with the commands in [Install](/en/help/getting-started/install/#download).
@@ -258,27 +258,27 @@ The Agent included in the app runs only while Butler is open. If you turn on **K
 
 ### Where is my data stored?
 
-In the data folder, `~/.butler`. Settings are in `butler.config.json`, and other secrets such as web search API keys are in `.env`. Cloud model API keys are stored in `auth/credential-store.json`, and the list of keys is in `auth/model-provider-credentials.json`. Builds signed with a Developer ID store API keys in the macOS Keychain. For the exact locations, see [Cloud models](/en/help/models/cloud/#where-credentials-are-stored).
+In the data folder, `~/.butler`. Settings are in `butler.config.json`, and other secrets such as web search API keys are in `.env`. Cloud model API keys are stored in `auth/credential-store.json`, and the list of keys is in `auth/model-provider-credentials.json`. Builds signed with a Developer ID store API keys in the macOS Keychain. With `secrets.store` set to `system`, Windows and Linux store them in the system store too. For the exact locations, see [Cloud models](/en/help/models/cloud/#where-credentials-are-stored).
 
 ### How do I replace or delete an API key?
 
-In the **API keys** section of **Settings → Models**, click **Replace** or **Delete** for the key. To delete the key the default model uses, first change the default model to another model. See [Cloud models](/en/help/models/cloud/#manage-api-keys).
+In **Settings → Security → API keys**, click **Replace** or **Delete** for the key. To delete the key the default model uses, first change the default model to another model. See [Cloud models](/en/help/models/cloud/#manage-api-keys).
 
 ### Are my conversations sent outside my computer?
 
-If you use [cloud models](/en/help/models/cloud/) or turn on [personal information analysis](/en/help/personalization/#learning), the prompt, context and profile candidate text a request needs may be sent to the model provider you set up. To keep processing on your device, connect a local model as a [Custom model](/en/help/models/custom/).
+If you use [cloud models](/en/help/models/cloud/) or turn on [Profile building](/en/help/personalization/#profile-building), the prompt, context and profile candidate text a request needs may be sent to the model provider you set up. To keep processing on your device, connect a local model as a [Custom model](/en/help/models/custom/).
 
 ### Butler asks for approval every time it edits a file or runs a command.
 
-The conversation is using the **Ask first** permission. A new Butler installation starts with this permission. To answer an approval request, see [Conversations and the composer](/en/help/basics/conversation/#answer-an-approval-request). To let Butler proceed without asking, choose **Full access** in the composer's **Permission** menu. Change the default for new conversations in **Access** under **Settings → Models → Permissions**.
+The conversation is using the **Ask first** permission. A new Butler installation starts with this permission. To answer an approval request, see [Conversations and the composer](/en/help/basics/conversation/#answer-an-approval-request). To be asked less, choose **Auto** in the composer's **Permission** menu; to let Butler proceed without asking, choose **Full access**. Change the default for new conversations in **New chats** under **Settings → General → Default permission**.
 
 ### New conversations still start with full access after an update.
 
-A Butler you have used since an earlier version keeps **Full access** if you have never saved **Access**. A saved **Access** value does not change when you update. To start with **Ask first**, choose **Ask first** in **Access** under **Settings → Models → Permissions**.
+A Butler you have used since an earlier version keeps **Full access** if you have never saved the default permission for new chats. A saved value does not change when you update. To start with **Ask first**, choose **Ask first** in **New chats** under **Settings → General → Default permission**.
 
 ### I allowed access, but no address is shown.
 
-If you turned on **Allow access from other computers** in **Settings → Security** and **No network address** appears, first check that this computer is connected to a network. If the port is in use, the address may not appear. In that case, quit the other program that uses the port, then turn **Allow access from other computers** off and on again. This problem is tracked in [#312](https://github.com/Hexpy-Games/butler/issues/312). For the pairing steps, see [Remote access](/en/help/advanced/remote-access/).
+If you turned on **Allow access from other computers** in **Settings → Security** and **No network address** appears, first check that this computer is connected to a network. If **Port in use**, **Port blocked**, **Address unavailable** or **Couldn't open address** appears instead of an address, the address could not be opened. For **Port in use**, quit the other program that uses the port, then turn **Allow access from other computers** off and on again. For the pairing steps, see [Remote access](/en/help/advanced/remote-access/).
 
 ### The other computer does not connect when I enter the code.
 

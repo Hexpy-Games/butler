@@ -83,8 +83,13 @@ pub(super) fn recheck_owner(
     op: &str,
     result: &mut Value,
 ) {
+    // Only a page the hub still holds under another owner has moved. A page it
+    // no longer knows (a detached host forgets every tab) keeps the call's outcome.
     if let Some(tab) = tab
-        && hub.tabs.check(session, tab, "tab.cancel") == Err("not_your_tab")
+        && hub
+            .tabs
+            .get(tab)
+            .is_some_and(|known| known["owner"] != format!("conversation:{session}"))
     {
         // A moved page's observation must not cross the new conversation boundary.
         if op == "tab.act" {

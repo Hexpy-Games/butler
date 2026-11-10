@@ -3,6 +3,16 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
   "ko-KR": {
     deletedTask: "삭제된 과제",
     deletion: { changeDelete: "과제 변경 및 삭제", changed: "과제 변경을 반영했습니다", addDelete: "과제 등록 및 삭제", action: "과제 삭제", title: title => `‘${title}’ 과제 삭제`, detail: "이 기기에서 삭제합니다. 연결된 대화는 남습니다.", running: "진행 중에는 삭제할 수 없습니다", deleted: "과제를 삭제했습니다", missing: "이미 삭제된 과제입니다" },
+    proposalCard: {
+      draft: "과제 초안 · 버틀러", changes: "변경 제안 · 버틀러", cancel: "취소", add: "등록", apply: "반영", cancelled: "취소함", superseded: "새 초안으로 바뀜", stale: "이전 내용 기준", open: "열기", name: "이름을 입력하세요",
+      currentPlan: "현재 계획", destinationPlan: "대상 계획", backlog: "백로그", order: "순서", project: "프로젝트", newProject: "새 프로젝트", closed: "닫힘", opened: "열림",
+      ops: { epicEdit: "과제 변경", epicMove: "과제 이동", planCreate: "계획 등록", planEdit: "계획 변경", planReorder: "순서 변경", specEdit: "명세 변경" },
+      receipt: {
+        epics: parts => `과제 ${parts}`, epicCreate: count => `${count}개 등록`, epicEdit: count => `${count}개 변경`, epicMove: count => `${count}개 이동`, epicDelete: count => `${count}개 삭제`,
+        planCreate: "계획 등록", planEdit: "계획 변경", planReorder: "순서 변경", specEdit: "명세 변경", projectCreate: "프로젝트 생성",
+      },
+      target: { newProject: name => `새 프로젝트 ‘${name}’ 만들고 과제 등록`, plan: plan => `‘${plan}’에 과제 등록`, backlog: "백로그에 과제 등록" },
+    },
     order: {
       chain: { user_message: "요청한 과제", schedule: "예약 작업", detach: "바로 시작한 과제" },
       status: { running: "진행 중", failed: "막힘", unfinished: "답 기다림", done: "완료" },
@@ -91,19 +101,29 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     },
   },
   "en-US": {
-    deletedTask: "Deleted task",
+    deletedTask: "Deleted Epic",
     deletion: { changeDelete: "Change and delete Epics", changed: "Epic changes applied", addDelete: "Add and delete Epics", action: "Delete Epic", title: title => `Delete Epic ‘${title}’`, detail: "Delete locally. Linked conversations stay.", running: "Cannot delete while running", deleted: "Epic deleted", missing: "Epic already deleted" },
+    proposalCard: {
+      draft: "Epic draft · Butler", changes: "Changes · Butler", cancel: "Cancel", add: "Add", apply: "Apply", cancelled: "Cancelled", superseded: "Replaced", stale: "Out of date", open: "Open", name: "Enter a name",
+      currentPlan: "Current plan", destinationPlan: "Destination plan", backlog: "Backlog", order: "Order", project: "Project", newProject: "New project", closed: "Closed", opened: "Open",
+      ops: { epicEdit: "Edit Epic", epicMove: "Move Epic", planCreate: "Add plan", planEdit: "Edit plan", planReorder: "Reorder", specEdit: "Edit spec" },
+      receipt: {
+        epics: parts => `Epics: ${parts}`, epicCreate: count => `${count} added`, epicEdit: count => `${count} changed`, epicMove: count => `${count} moved`, epicDelete: count => `${count} deleted`,
+        planCreate: "Plan added", planEdit: "Plan changed", planReorder: "Reordered", specEdit: "Spec changed", projectCreate: "Project created",
+      },
+      target: { newProject: name => `Create project ‘${name}’ and add Epic`, plan: plan => `Add Epic to ‘${plan}’`, backlog: "Add Epic to Backlog" },
+    },
     order: {
-      chain: { user_message: "Requested", schedule: "Schedule", detach: "Started now" },
+      chain: { user_message: "Requested Epic", schedule: "Schedule", detach: "Epic started now" },
       status: { running: "Running", failed: "Blocked", unfinished: "Needs reply", done: "Done" },
-      after: title => ({ word: "After:", name: `‘${title}’` }), heldBy: "Blocked earlier", join: "Run together", newStep: "New step",
+      after: title => ({ word: "After:", name: `‘${title}’` }), heldBy: "Earlier Epic blocked", join: "Run together", newStep: "New step",
       afterStack: (title, count) => ({ word: "After:", name: `‘${title}’ +${count} more` }),
       more: count => `+${count} more`, menu: title => `${title} menu`,
       startNow: "Start now", unstack: "Unstack", remove: "Delete",
       failed: "Couldn't change the order", changed: "Order changed; reloaded",
       drag: {
         instructions: "Press Space or Enter to pick it up. Use the up and down arrow keys to move it between steps or onto a step to run it together, Space to drop it, Escape to cancel.",
-        roleDescription: "draggable item",
+        roleDescription: "draggable Epic",
         grip: (item) => `Move ${item}`,
         stack: (front, count) => `${front} and ${count - 1} more`,
         lifted: (item, chain, step) => `Picked up ${item}. ${chain}, step ${step}.`,
@@ -116,10 +136,10 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
       deck: { expand: (count, front) => `${front} and ${count - 1} more. Show all.`, fold: item => `${item}. Stack the cards.` },
     },
     queue: {
-      stepEpic: epic => `Processing task ‘${epic}’.`,
+      stepEpic: epic => `Processing Epic ‘${epic}’.`,
       removed: "Deleted", continued: "Continuing", resolved: "Finished. Continuing", taken: "Continuing here",
-      step: (plan, epic) => `Processing task ‘${epic}’ from plan ‘${plan}’.`,
-      hold: epic => `‘${epic}’ is blocked. Later tasks are on hold.`,
+      step: (plan, epic) => `Processing Epic ‘${epic}’ from plan ‘${plan}’.`,
+      hold: epic => `‘${epic}’ is blocked. Later Epics are on hold.`,
       remove: "Delete", proceed: "Continue anyway", openOther: "Open that conversation", take: "Do it here",
     },
     criteriaCount: (confirmed, total) => `${confirmed}/${total} confirmed`,

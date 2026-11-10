@@ -111,7 +111,7 @@ async function settings(page: Page, width: number, theme: string, locale = "ko")
   assert(geometry.top >= 4 && Math.abs(geometry.top - geometry.bottom) <= 1, `symmetric hover inset: ${JSON.stringify(geometry)}`);
   assert.equal(geometry.paddingTop, geometry.paddingBottom);
   assert.notEqual(geometry.background, "rgba(0, 0, 0, 0)", "hover is highlighted");
-  assert.equal(await trigger.innerText(), locale === "ko" ? "기억 정리 모델과 작업자 설정" : "Memory cleanup model and worker settings");
+  assert.equal(await trigger.innerText(), locale === "ko" ? "작업자 설정" : "Worker settings");
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.screenshot({ path: join(output, `settings-${width}-${theme}-${locale}.png`) });
   await trigger.click();

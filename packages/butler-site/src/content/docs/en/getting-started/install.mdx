@@ -8,9 +8,9 @@ status: published
 
 ## Supported platforms
 
-Butler is in preview. Always download the newest preview from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) (the newest preview is at the top). The stable 0.1.0 release is still to come.
+Butler is in preview. The links below download the newest version. Earlier versions and all release files are on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases). The stable 0.1.0 release is still to come.
 
-- Apple silicon (M-series) Mac, macOS 12 or later
+- Apple silicon (M-series) Mac, macOS 13 or later
 - Linux x64 / arm64: DEB package
 - Arch Linux x64: Arch package
 - Windows x64: installer (`ButlerSetup`)
@@ -31,26 +31,27 @@ Butler is in preview. Always download the newest preview from [GitHub Releases](
 >
   <TabPanel value="macos">
     <Steps>
-      1. Open the newest preview (at the top) on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and expand **Assets**.
-      2. Download the macOS DMG (`butler-app-<version>-darwin-arm64.dmg`).
-      3. Open the DMG and drag `Butler.app` into the Applications folder.
-      4. Open Butler. Butler is notarized by Apple. If macOS asks whether to open an app downloaded from the internet, choose **Open**.
+      1. Download <DownloadLink file="macos" />.
+      2. Open the DMG and drag `Butler.app` into the Applications folder.
+      3. Open Butler. If macOS asks whether to open an app downloaded from the internet, choose **Open**.
     </Steps>
     <Notice tone="info" title="Verify the download (optional)">
-      Download the DMG and its `.sha256` file into the same folder, then run `shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256`. `OK` means the file matches the release.
+      Download <DownloadLink file="macos" checksum /> into the same folder, then run `shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256`. `OK` means the file matches the release.
     </Notice>
   </TabPanel>
   <TabPanel value="windows">
     <Steps>
-      1. Open the newest preview (at the top) on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and expand **Assets**.
-      2. Download the Windows installer (`ButlerSetup-<version>-x64.exe`).
-      3. Run it. If Windows SmartScreen shows "Windows protected your PC", choose **More info**, then **Run anyway**. Preview installers are not signed yet.
-      4. Open Butler from the Start menu.
+      1. Download <DownloadLink file="windows" />.
+      2. Run it. If Windows SmartScreen shows "Windows protected your PC", choose **More info**, then **Run anyway**. Preview installers are not signed yet.
+      3. Open Butler from the Start menu.
     </Steps>
   </TabPanel>
   <TabPanel value="linux">
     <Steps>
-      1. On the newest preview on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases), download the DEB (x64 or arm64) or Arch (x64) package from **Assets**.
+      1. Download the package for your distribution.
+         - Debian / Ubuntu x64: <DownloadLink file="deb-x64" />
+         - Debian / Ubuntu arm64: <DownloadLink file="deb-arm64" />
+         - Arch Linux x64: <DownloadLink file="arch-x64" />
       2. In the download folder, install it with the command for your distribution.
       3. Open Butler from your app list.
     </Steps>
@@ -68,11 +69,11 @@ Butler is in preview. Always download the newest preview from [GitHub Releases](
   Earlier releases may contain the TypeScript/Bun Agent, which is no longer used. Download a release that includes the native Agent.
 </Notice>
 
-Preview builds turn on **Receive preview versions** by default, so later previews arrive in **Settings → Updates**. Before you update, quit Butler and copy `~/.butler`. The first launch of a new version can rewrite the database. Run `butler --version` to see the exact version.
+Preview builds turn on **Receive preview versions** by default, so later previews arrive in **Settings → Updates**. The app updates itself on macOS, on Windows and from the Linux DEB package. On Windows, only an installation from the installer (`ButlerSetup`) updates in the app. For the portable zip (`butler-app-<version>-windows-x64-portable.zip`), download the new version yourself. To update the Arch package, download the new package and install it yourself. Before you update, quit Butler and copy `~/.butler`. The first launch of a new version can rewrite the database. Run `butler --version` to see the exact version.
 
 ## First-run setup
 
-The first time you run Butler, first-run setup starts in the app. On the welcome screen, choose the interface language, agree, then connect an AI. In the last step of the AI connection, choose the response language. For each step, see [First run](/en/help/getting-started/first-run/).
+The first time you run Butler, first-run setup starts in the app. On the welcome screen, choose the interface language and agree. Then choose how Butler remembers and connect an AI. In the last step of the AI connection, choose the response language. For each step, see [First run](/en/help/getting-started/first-run/).
 
 After setup, press <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span> to open the [command palette](/en/help/basics/command-palette/) and find conversations, projects, schedules and settings.
 
@@ -87,14 +88,14 @@ After setup, press <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K"
   ]}
 >
   <TabPanel value="macos">
-    The headless Agent supports Apple silicon macOS. Replace `<version>` with the newest preview, such as `0.1.0-preview.12`.
+    The headless Agent supports Apple silicon macOS. Replace `<version>` with the newest preview, such as `0.1.0-preview.14`.
 
     ```bash
     curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<version>/install.sh | sh -s -- --version <version>
     ```
   </TabPanel>
   <TabPanel value="windows">
-    The headless Agent supports Windows x64. In PowerShell, replace `<version>` with the newest preview, such as `0.1.0-preview.12`.
+    The headless Agent supports Windows x64. In PowerShell, replace `<version>` with the newest preview, such as `0.1.0-preview.14`.
 
     ```powershell
     $env:BUTLER_VERSION='<version>'; irm https://github.com/Hexpy-Games/butler/releases/download/v<version>/install.ps1 | iex

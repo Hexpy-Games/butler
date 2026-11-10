@@ -56,9 +56,11 @@ try {
    const result=lastResult(r);assert.equal(result.reason,"blocked_by");assert.equal(result.blocker.role,"li");assert.ok(result.blocker.controls.some((c:{role:string;name:string})=>c.role==="option"&&c.name==="중앙탑"));
    return observe(r);
   }, (r:StubModelRequest)=>{
-   const text=(latestBrowser(r,"obs").untrusted_content as {text:string}).text;
-   assert.match(text,/Visible editable fields, top to bottom \(2\):/u);
-   assert.match(text,/2\. textbox "도착지" \[[^\]]+\] value="" covered_by .* not actionable/u);
+   // The structured field list replaces its text copy in the observation.
+   const fields=(latestBrowser(r,"obs").untrusted_content as {fields:Array<{role:string;name:string;value:string;covered_by?:string;actionable?:boolean}>}).fields;
+   assert.equal(fields.length,2);
+   assert.deepEqual([fields[1].role,fields[1].name,fields[1].value],["textbox","도착지",""]);
+   assert.ok(fields[1].covered_by);assert.notEqual(fields[1].actionable,true);
    return act("option", "중앙탑")(r);
   }, observe,
   act("textbox", "도착지", "수주팔봉"), observe, act("option", "수주팔봉"), observe,
@@ -103,8 +105,7 @@ try {
   const geometry=result.output.image_geometry;
   assert.ok(geometry.width>0&&geometry.height>0&&geometry.cssWidth>0&&geometry.cssHeight>0,"actual screenshot coordinate space reaches the model with pixels");
   assert.ok(Array.isArray(fields));
-  const total=/Visible editable fields, top to bottom \((\d+)\):/u.exec(result.output.untrusted_content.text)?.[1];
-  assert.equal(fields.length,Number(total),"structured input state preserves covered fields and visible order");
+  assert.ok(fields.length>0&&fields.every((f:{frame:string;position:number},i:number)=>i===0||f.frame!==fields[i-1].frame||f.position===fields[i-1].position+1),"structured input state preserves covered fields and visible order");
   assert.ok(parts.some((p:{ type:string;image_url?:string })=>p.type==="input_image" && p.image_url?.startsWith("data:image/jpeg;base64,")), "every fresh observation reaches the model as actual image input");images++;
  }
  assert.equal(captures,1,"the reply crop is visually reviewable");

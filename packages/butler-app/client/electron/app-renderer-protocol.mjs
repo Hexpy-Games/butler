@@ -23,7 +23,9 @@ export const APP_RENDERER_SCHEME_PRIVILEGES = Object.freeze({
 // gateway origins: the web UI reaches the gateway on its own origin, but
 // app://butler loads message images, video, PDFs and output frames from
 // http://127.0.0.1 or localhost. blob: images are pictures the page draws
-// itself (image-edit previews).
+// itself (image-edit previews). The page also reads its own data: and blob:
+// images with fetch (page-pick crops, image actions); they are in memory and
+// reach no network.
 export const APP_RENDERER_CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
@@ -31,7 +33,7 @@ export const APP_RENDERER_CONTENT_SECURITY_POLICY = [
   "img-src 'self' data: blob: http://127.0.0.1:* http://localhost:*",
   "media-src 'self' http://127.0.0.1:* http://localhost:*",
   "font-src 'self' data:",
-  "connect-src 'self' http://127.0.0.1:* http://localhost:*",
+  "connect-src 'self' data: blob: http://127.0.0.1:* http://localhost:*",
   "frame-src 'self' http://127.0.0.1:* http://localhost:*",
   "object-src 'none'",
   "base-uri 'none'",

@@ -79,17 +79,18 @@ impl Companion {
         s: &butler_e2e::e2e::scenario::Scenario,
         server: &Server,
     ) -> Result<Self, HarnessError> {
-        let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_siwc_search"))
-            .arg(&s.sandbox.data)
-            .arg(format!("{}/v1", server.base))
-            .arg(format!("{}/search", server.base))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::from(std::fs::File::create(
-                s.sandbox.logs.join("siwc-search.stderr"),
-            )?))
-            .kill_on_drop(true)
-            .spawn()?;
+        let mut child =
+            tokio::process::Command::new(butler_e2e::e2e::binary::fixture_binary("siwc_search")?)
+                .arg(&s.sandbox.data)
+                .arg(format!("{}/v1", server.base))
+                .arg(format!("{}/search", server.base))
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::from(std::fs::File::create(
+                    s.sandbox.logs.join("siwc-search.stderr"),
+                )?))
+                .kill_on_drop(true)
+                .spawn()?;
         let input = child.stdin.take().unwrap();
         let output = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
         Ok(Self {

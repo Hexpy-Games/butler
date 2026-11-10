@@ -9,6 +9,7 @@ name: Butler Site
 # butler.hexpy.games); it becomes dist/CNAME and must match Settings → Pages → Custom domain.
 # Triggers cover every input of both builds (the whole client/ui package feeds the DS build).
 # Pull requests only check and build; pushes to main (and manual runs) also deploy.
+# Install links come from the Latest release at build time, so a release run or a release edit rebuilds.
 on:
   push:
     branches: [main]
@@ -22,6 +23,12 @@ on:
 
   workflow_dispatch:
 
+  workflow_run:
+    workflows: [Butler Release]
+    types: [completed]
+
+  release:
+
 permissions:
   contents: read
 
@@ -30,7 +37,20 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Release events run on the tag, which the github-pages environment does not deploy from.
+  rerun-on-main:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Run the site workflow on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run site.yml --repo "$GITHUB_REPOSITORY" --ref main
+
   build:
+    if: github.event_name != 'release'
     uses: ./.github/workflows/site-check.yml
     with:
       upload-pages: true
