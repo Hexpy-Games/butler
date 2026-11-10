@@ -59,8 +59,9 @@ translated, so English anchors differ from the Korean ones.
    "편리하게".
 7. **Terse and task-first.** Condition, then action: `~하면 ~합니다`,
    `~하려면 ~합니다`. Start with what the reader does, not what the page is.
-8. **Terms**: 예약 작업 (never 자동화). Butler in prose; 버틀러 only where a
-   bold label says so.
+8. **Terms**: 예약 작업 (never 자동화). Korean prose says 버틀러 (owner rule,
+   2026-10-08); Latin Butler stays only in code, paths, file names and
+   bold labels that say Butler.
 
 ## Core rules (prose)
 

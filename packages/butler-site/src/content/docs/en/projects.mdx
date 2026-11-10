@@ -6,12 +6,12 @@ order: 1
 status: published
 ---
 
-A project is a set of conversations that share a work folder. As Butler works in project conversations, it keeps Work, plans, Tasks, specifications and reports as project records, and the project dashboard gathers these records in one view.
+A project is a set of conversations that share a work folder. As Butler works in project conversations, it keeps Work, plans, Tasks, specifications and reports as project records, and the project dashboard gathers these records in one view. On the dashboard's **Board**, you create and manage the project's tasks and plans.
 
 ## Create a project
 
 <Steps>
-  1. In the sidebar, open the menu (⋯) next to the **Space** heading and choose **New project**.
+  1. In the sidebar, open the **Space menu** next to the **Space** heading and choose **New project**.
   2. In the **Create a project** dialog, enter a **Project name**.
   3. Click **Create**. The project is added to the space and a new project conversation opens.
 </Steps>
@@ -20,8 +20,8 @@ The project folder is created under the **Default project folder** in **Settings
 
 ## Start a project conversation
 
-- From the project row's menu in the sidebar, choose **New conversation**.
-- Click **New conversation** next to the project dashboard title.
+- From the project row's menu in the sidebar, choose **New chat**.
+- Click **New chat** next to the project dashboard title.
 - Send a message from the composer at the bottom of the project dashboard. The message starts a new project conversation.
 
 In a project that is a Git repository, you can choose **Local** or **Worktree** in the composer before you send the first message. If the project is not a Git repository, this choice does not appear. See [Workspace](/en/help/basics/conversation/#workspace).
@@ -36,7 +36,7 @@ Open it in one of these ways.
 - From the project row's menu, choose **Project dashboard**.
 - Click a project pinned to favorites.
 
-The top of the dashboard shows the project name and description, with the **Overview**, **Work**, **Materials**, **History** and **Statistics** tabs below. The dashboard refreshes automatically while it is open.
+The top of the dashboard shows the project name and description, with the **Overview**, **Board**, **Materials**, **History** and **Statistics** tabs below. The dashboard refreshes automatically while it is open.
 
 ### Project description
 
@@ -46,21 +46,62 @@ Click the **Edit description** button next to the description, write the project
 
 - **Project status** — Shows the current state, which Butler summarizes from a selection of the project records. Expand **View N source records** to open the documents the summary used. If the summary cannot be created, click **Try again**.
 - **Execution completed**, **Open work**, **Blocked work** — Show the number of work items registered in the project records.
-- **Remaining work** — Shows up to four unfinished Work items as cards. Click a card to open its document. Click the button below to go to the **Work** tab.
+- **Remaining work** — Shows up to four unfinished Work items as cards. Click a card to open its document. Click the button below to go to the **Board** tab.
 - **Important materials** — Shows pinned materials, and the plans, specifications and latest reports linked to remaining work.
 - **Worth exploring next** — Shows up to three next questions that Butler suggests. Click **Ask about this** to put the suggestion and its source documents into the dashboard composer.
 
-## Work
+## Board
 
-View the work registered in the project records as a board.
+The **Board** tab shows the project's tasks by plan. A task is one piece of work to handle with Butler, and a plan groups tasks. Tasks that are not in a plan collect in **Backlog**.
+
+- Plan selector — Choose the plan to view, or **Backlog**. Enter a name in **Search plans** to find one.
+- **Tag filter** — Shows only tasks with the tags you choose.
+- **New Epic**, **New Plan** — Create a task or a plan.
+
+Next to the plan name, the number of finished tasks appears, such as `3/8 done`, and the due date appears too if the plan has one, such as `Due Nov 20`. Edit a plan with the pencil **Edit** button.
+
+The columns are, in order, **Planned**, **In progress**, **In review**, **Blocked** and **Done**. A cancelled task sits in the **Done** column with a **Cancelled** tag. When the columns do not fit on screen, move with the **Previous lanes** and **Next lanes** buttons.
+
+A card shows the title, the assignee, the criteria confirmed such as `2/4 confirmed`, up to three tags, and the order and task progress such as `No. 1 · Tasks 2/3`.
+
+- Drag a card to another column to change the task's status. With the keyboard, press <Kbd keys={["Space"]} /> to pick it up, move it with the arrow keys, press <Kbd keys={["Space"]} /> to drop it, and press <Kbd keys={["Esc"]} label="Escape" /> to cancel.
+- A task whose work is in progress cannot move to **Done**.
+- Click a card to open the task detail pane.
+
+### Create tasks and plans
 
 <Steps>
-  1. At the top, choose the board type: **Work**, **Plan** or **Task**.
-  2. On the **Plan** or **Task** board, you can narrow the scope by choosing a parent Work in the **All Work** selector.
-  3. Click a card to open its document. Click the conversation name linked on a card to go to that conversation.
+  1. On the **Board** tab, click **New Epic**. You can also click the **New Epic** button in the **Planned** column.
+  2. Enter a **Title**. If you need to, set the **Description**, **Tags**, **Plan** and **Assignee**.
+  3. Click **Create**.
 </Steps>
 
-The columns are, in order, **Planned**, **Active**, **Review**, **Blocked work**, **Done** and **Other**. On the **Plan** board, **Active plan** appears in place of **Active**. Each card also shows the progress count of its child Tasks and plan steps, and **Show more** appears in a column that has more items to load.
+To create a plan, click **New Plan**, enter the **Title**, **Description** and **Due date**, then click **Create**.
+
+### Task details
+
+Edit a task in the task detail pane.
+
+- Title and description — Click to edit them in place. The description supports Markdown and attachments. Attachments can be up to 10 MB each, up to 20 files.
+- **Status**, **Assignee**, **Plan**, **Tags** — Changes save right away.
+- **Open conversation** — Goes to this task's conversation.
+- **Specs** — Shows the task's specs and criteria. You can mark each criterion as confirmed or not.
+
+Choose **Delete Epic** from the menu (⋯) at the top of the pane and confirm to delete the task from this device. Linked conversations stay. A task whose work is in progress cannot be deleted.
+
+### Plan overview
+
+In the sidebar, expand the project and choose **Plan overview** from a plan group's menu (⋯) to open a screen for that plan. It shows the plan title, due date, description, progress and the list of tasks.
+
+- Change each task's status, and choose **Open conversation**, **Change Plan** or **Delete Epic** from its menu (⋯).
+- Click **Edit plan** to edit the plan, or **New Epic** to add a task to this plan.
+
+### Work with tasks in a conversation
+
+- In a task's conversation, you talk about that task. The composer shows **Talk about this Epic**, and you can edit the task right away in **Epic** under [**Session info**](/en/help/basics/right-panel/).
+- When you ask Butler in a conversation to create or change tasks, it shows a proposal card. The card shows where the tasks go and what they contain. Click **Cancel** to leave things as they are. To create, click **Add**. To change or delete, click **Apply** or **Delete Epic**. An applied card turns into a summary of the result. Click **Open** or a task card to open that task on the board.
+- When you ask Butler to work through a plan's tasks in order, it handles them one at a time. The progress appears in **Run order** under **Session info**. Drag to change the order, or choose **Start now**, **Unstack** or **Delete** from the menu.
+- If an earlier task is blocked, the next ones wait, and a card with **Delete** and **Continue anyway** appears in the conversation. If another conversation owns the task, choose **Open that conversation** or **Do it here**.
 
 ## Materials
 
@@ -90,7 +131,7 @@ At the top, choose the period: **Last 7 days**, **Last 30 days** or **Last 90 da
 
 ## View a document
 
-Click a document or card on the dashboard to open a read-only document window.
+Click a document or a card on **Overview** to open a read-only document window.
 
 - The top of the document window shows **Document type**, **Document status**, **Last updated** and **Source location**.
 - Expand **Source details** to see identifying information such as the ID and revision.
@@ -113,7 +154,7 @@ From the project row's menu in the sidebar, you can do the following.
 </Notice>
 
 <Notice tone="info">
-  The dashboard only shows the project records. You cannot edit Work or documents on the dashboard. **Project status** and **Worth exploring next** are model summaries of selected records, and are not newly verified results. Creating a summary counts toward model usage.
+  You cannot edit the Work and documents in the project records on the dashboard. Create and edit tasks and plans on the **Board**. **Project status** and **Worth exploring next** are model summaries of selected records, and are not newly verified results. Creating a summary counts toward model usage.
 </Notice>
 
 ## Related pages

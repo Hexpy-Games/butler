@@ -1,91 +1,128 @@
 ---
-title: "Right panel"
-description: "Check the summary, context, artifacts, schedules and Worker details beside the conversation."
+title: "Session info and file viewer"
+description: "See a conversation's progress, results and schedules beside it, and open files beside the conversation."
 section: basics
 order: 4
 status: published
 ---
 
-The right panel shows the progress, results and linked schedules of the open conversation, beside the conversation. It has three tabs: **Summary**, **Artifacts** and **Schedules**.
+On the right of a conversation's title bar are the **Session info** and **View files** buttons. **Session info** collects the conversation's requests, subtasks, results and schedules beside the conversation. **View files** opens results and attached files beside the conversation.
 
-The **Context** tab, which shows context usage, and the **Workers** tab, which shows Worker activity, appear only in developer mode. Turn on **Developer mode** in **Settings → About**.
-
-## Open and close the panel
-
-The panel is closed at first.
+## Open and close session info
 
 <Steps>
   1. Open a conversation from the sidebar.
-  2. Click the **Show right panel** button on the right of the title bar.
-  3. Click a tab at the top of the panel to see the information you want.
-  4. To close the panel, click the **Hide right panel** button in the same place.
+  2. Click the **Session info** button on the right of the title bar.
+  3. To close it, click the same button again.
 </Steps>
 
-- When you click a result attached to a message, the panel opens on the **Artifacts** tab and shows a preview of that file.
-- Drag the left edge of the panel to change its width. With keyboard focus on the edge, you can also adjust it with <Kbd keys={["←"]} label="Left arrow" /> and <Kbd keys={["→"]} label="Right arrow" />.
-- When the window gets narrow, the panel closes automatically. When you widen the window again, it returns to its previous state.
+- The **Session info** button appears only when there is at least one section to show.
+- When a request is waiting for your answer, or a subtask is waiting for approval, the button shows a dot.
 
-## Summary
+## Session info sections
 
-Shows how far the conversation has progressed.
+Sections appear in this order, and only when they have content. A section with nothing to show is hidden.
 
-- **Progress** — Shows the steps of the latest request in order. Each step shows its state: in progress, done, failed or cancelled. If there is no record, **No session progress yet** appears.
+### Awaiting your answer
 
-In developer mode, the workspace state and the skills used appear too.
+Shows the approval requests and questions you have not answered yet, with a count. Each row shows **Approval** or **Question** and how long it has waited. A request you put off is marked **Deferred**. Click a row to go to the message with the request.
 
-- **Branch details**
-  - **Gateway** — Shows the app's current processing state.
-  - **Git branch** — Shows the current branch of the workspace. If the workspace is not a Git repository, **Not a Git workspace** appears.
-  - **Workspace** — Shows the kind of workspace this conversation uses, with a value such as **Worktree**, **Local** or **Project folder**.
-  - **Changes** — Shows whether the workspace has uncommitted changes, as **Dirty** / **Clean**.
-  - **Context** — Shows the context used and the limit in short form.
-- **Skills** — Lists the skills used in this conversation.
+### Subtasks
 
-## Context
+Shows the unfinished subtasks Butler handed off, with their state. Click a row to open that subtask's progress details.
 
-Appears only in developer mode. Shows in detail how much of the context sent to the model is in use.
+### Run order
 
-- **Context window** — Shows the share of the limit in use, the tokens used and the limit.
-- **Working context** — Shows working context usage, how much is left before automatic compaction, and the point where automatic compaction happens. It appears only in conversations that have this information.
-- Bar chart and item list — Show the tokens and share of each item that takes up context. The items that use the most come first.
+When Butler works through tasks in order, shows the order that remains.
 
-If the information is not received, **Context is unavailable** appears.
+### Browser
 
-## Artifacts
+Shows previews of the browser tabs Butler opened in this conversation. With more than three tabs, expand them with **Show N more tabs** and collapse them with **Show less**.
 
-Collects the files created or delivered in the conversation. Each item shows its type, size and when it was created.
+### Environment
 
-<Steps>
-  1. Click an artifact in the list to preview it in the panel.
-  2. To save it as a file, click **Save**.
-  3. To go back to the list, click **Artifact list**.
-</Steps>
+Shows the **Working folder** and Git **Branch** this conversation uses.
 
-The app can preview images, PDF, Markdown, text and code files. Other formats show **This artifact cannot be previewed in the app**, and you can save them to open them.
+### Epic
 
-## Schedules
+Shows the details of the task this conversation works on. You can edit them right here.
 
-Lists the [schedules](/en/help/scheduled-tasks/) that target this conversation. Each item shows its title and frequency. Click an item to open the schedule's detail screen. If there are no schedules, **No schedules for this chat** appears.
+### Context
 
-## Workers
+Shows how much of the context sent to the model is in use. Click it to expand a bar chart, the usage of each group (**Conversation**, **Memory & files**, **Rules & settings**, **Basics**, **Reserved**) and the point where automatic compaction happens. Click **Details** to see the items in each group, and **Less** to collapse them again.
 
-Appears only in developer mode. Shows the activity of the Workers that Butler delegated to in this conversation. A child Worker is indented under its parent Worker.
+### Results
 
-- **Details** — Expands the work steps the Worker went through and the tools it used. Click **Close** to collapse them.
-- **Request resume**, **Request cancel** — Appear only when the Worker supports them, and ask that Worker to resume or cancel.
+Shows the files Butler delivered in this conversation, with a count. Click a file to open it in the [file viewer](#view-files). To save it as a file, click **Save**.
 
-If there is no Worker record, **No worker history yet** appears.
+### Attachments
+
+Shows the files you attached to your messages. Click a file to open it in the file viewer.
+
+### Schedules
+
+Lists the [schedules](/en/help/scheduled-tasks/) that target this conversation. Each item shows its title and frequency. Click an item to open the schedule's detail screen.
+
+## View files
+
+Results, attached files and changed files open in the file viewer on the right of the conversation.
+
+- A file opens when you click a result in a reply, a file under **Results** or **Attachments** in **Session info**, or **Open** in a changed file's menu.
+- An editable document Butler made opens in the document editor.
+- Each file gets a tab. With two or more files, tabs appear at the top. Close a tab with its **Close file** button.
+- The **View files** button in the title bar appears while files are open. Click it to hide or show the file viewer without closing the files.
+- The browser and the file viewer share the same place. The one you opened last is in front.
+- Drag the edge between the conversation and the file viewer to change the conversation's width.
+- On a narrow screen such as a phone, the file viewer fills the screen. Click **Back to chat** to return to the conversation.
+
+### File viewer buttons
+
+These buttons appear above the file.
+
+- **Version** — Chooses which version to view, for a file with several versions.
+- **Open in Library** — Appears only for files Butler delivered. Finds this file under **Documents** in the [Library](/en/help/basics/library/).
+- **Save** — Saves the file to your computer. In the desktop app, a save dialog opens.
+- **Open in default app** — Appears only in the desktop app. Opens the file in your computer's default app for its type.
+- **Show in folder** — Appears instead of **Open in default app** for types that cannot open in the default app. Opens the folder that holds the file.
+- **Close** — Closes the file you are viewing.
+
+**Open in default app** works for PDF, Word (`docx`), Excel (`xlsx`), PowerPoint (`pptx`), Hangul (`hwp`, `hwpx`), images (`png`, `jpg`, `jpeg`, `gif`, `webp`), Markdown (`md`, `markdown`), `txt` and `csv`.
+
+The latest version of a file Butler delivered opens from the original place where Butler saved it. Edits you make in the other app stay in that file. An older version, or a file whose original is gone, opens as a stored copy. If **Show in folder** cannot find the original file, the **Original not found** notice appears.
+
+Web pages Butler made have these extra buttons.
+
+- **Open in Browser** — Opens the page in the browser as this conversation's tab.
+- **Reload** — Loads the page again.
+
+### Formats you can preview
+
+| Format | Shown as |
+| --- | --- |
+| Images (`png`, `jpg`, `jpeg`, `webp`, `gif`, `svg`) | Image |
+| PDF | Document view |
+| Markdown (`md`) | Formatted document |
+| Text and code files | Text |
+| HTML pages Butler made | The running page |
+| HTML files you attached | Source text |
+
+Other formats show **This artifact cannot be previewed in the app**. In the desktop app, an **Open in app** button appears with it. For a type that cannot open in another app, the button is disabled with the tooltip **This type can't open**. Save such a file with **Save** to open it.
 
 ## Notes
 
 <Notice tone="info">
-  The right panel is available only when a saved conversation is open. The **Show right panel** button does not appear in a new conversation before its first message, or on the project dashboard, schedules and Settings screens.
+  **Session info** is available only on a conversation screen. The button does not appear on the project dashboard, schedules or Settings screens. It also does not appear while the file viewer fills a narrow screen.
+</Notice>
+
+<Notice tone="info">
+  HTML pages Butler made run on the output host. If no host is set, **Set an output host in Security settings.** appears.
 </Notice>
 
 ## Related pages
 
 <CardGrid>
   <DocCard slug="basics/conversation" />
-  <DocCard slug="basics/sidebar-and-spaces" />
+  <DocCard slug="basics/library" />
+  <DocCard slug="basics/images" />
   <DocCard slug="scheduled-tasks" />
 </CardGrid>
