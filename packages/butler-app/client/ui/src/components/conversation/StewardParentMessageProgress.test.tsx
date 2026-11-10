@@ -22,7 +22,7 @@ test("a terminal child reads as done even when its status is a raw result status
   child.result = { ...(child.result ?? {}), status: "success" } as typeof child.result;
   for (const [status, expected] of [
     ["completed", "Completed"],
-    ["blocked", "Failed"],
+    ["blocked", "Completed"],
     ["active", "Completed"],
   ] as const) {
     (child as { status: string }).status = status;
@@ -30,6 +30,8 @@ test("a terminal child reads as done even when its status is a raw result status
   }
   child.result = { ...child.result!, status: "blocked" };
   (child as { status: string }).status = "active";
+  expect(stewardProgressStatus(child)).toContain("Completed");
+  child.result = { ...child.result!, status: "failed" };
   expect(stewardProgressStatus(child)).toContain("Failed");
 });
 test("two active Stewards attach to their own Butler messages", () => {

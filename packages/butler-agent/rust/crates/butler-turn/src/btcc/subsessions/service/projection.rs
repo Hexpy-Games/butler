@@ -403,14 +403,14 @@ fn continuing(result: Option<&Value>, latest: Option<&(String, String)>) -> bool
     }
 }
 
+/// A child that ended with its model's final answer is completed, whatever that answer reports; only a runtime failure is failed.
 fn projected_status(result: Option<&Value>, latest: Option<&(String, String)>) -> &'static str {
     match result
         .and_then(|value| value.get("status"))
         .and_then(Value::as_str)
     {
-        Some("success") => "completed",
+        Some("success" | "blocked") => "completed",
         Some("cancelled") => "cancelled",
-        Some("blocked") => "blocked",
         Some("failed") => "failed",
         _ if latest.is_some_and(|(_, state)| state == "admitted") => "active",
         _ => "waiting",
