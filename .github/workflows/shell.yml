@@ -15,14 +15,14 @@ concurrency:
 
 jobs:
   changes:
-    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/gpui-port'
     uses: ./.github/workflows/ci-changes.yml
     with:
       workflow: shell.yml
 
   shell:
     needs: changes
-    if: (github.event_name != 'push' || github.ref == 'refs/heads/main') && needs.changes.outputs.shell == 'true'
+    if: (github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/gpui-port') && needs.changes.outputs.shell == 'true'
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -88,8 +88,9 @@ jobs:
           workspaces: |
             packages/butler-shell -> ../../target/shell
             packages/butler-agent/rust -> ../../../target/source-check
-          key: shell-${{ matrix.platform }}-${{ hashFiles('packages/butler-shell/Cargo.lock', 'packages/butler-shell/rust-toolchain.toml') }}
-          cache-on-failure: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          key: shell-${{ matrix.platform }}
+          cache-on-failure: ${{ github.event_name == 'push' }}
+          save-if: ${{ github.event_name == 'push' }}
       - name: Formatting
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo fmt --all -- --check
       - name: Clippy
