@@ -8,7 +8,7 @@ status: published
 
 ## Supported platforms
 
-Butler is in preview. Always download the newest preview from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) (the newest preview is at the top). The stable 0.1.0 release is still to come.
+Butler is in preview. The links below download the newest version. Earlier versions and all release files are on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases). The stable 0.1.0 release is still to come.
 
 - Apple silicon (M-series) Mac, macOS 13 or later
 - Linux x64 / arm64: DEB package
@@ -31,26 +31,27 @@ Butler is in preview. Always download the newest preview from [GitHub Releases](
 >
   <TabPanel value="macos">
     <Steps>
-      1. Open the newest preview (at the top) on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and expand **Assets**.
-      2. Download the macOS DMG (`butler-app-<version>-darwin-arm64.dmg`).
-      3. Open the DMG and drag `Butler.app` into the Applications folder.
-      4. Open Butler. If macOS asks whether to open an app downloaded from the internet, choose **Open**.
+      1. Download <DownloadLink file="macos" />.
+      2. Open the DMG and drag `Butler.app` into the Applications folder.
+      3. Open Butler. If macOS asks whether to open an app downloaded from the internet, choose **Open**.
     </Steps>
     <Notice tone="info" title="Verify the download (optional)">
-      Download the DMG and its `.sha256` file into the same folder, then run `shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256`. `OK` means the file matches the release.
+      Download <DownloadLink file="macos" checksum /> into the same folder, then run `shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256`. `OK` means the file matches the release.
     </Notice>
   </TabPanel>
   <TabPanel value="windows">
     <Steps>
-      1. Open the newest preview (at the top) on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and expand **Assets**.
-      2. Download the Windows installer (`ButlerSetup-<version>-x64.exe`).
-      3. Run it. If Windows SmartScreen shows "Windows protected your PC", choose **More info**, then **Run anyway**. Preview installers are not signed yet.
-      4. Open Butler from the Start menu.
+      1. Download <DownloadLink file="windows" />.
+      2. Run it. If Windows SmartScreen shows "Windows protected your PC", choose **More info**, then **Run anyway**. Preview installers are not signed yet.
+      3. Open Butler from the Start menu.
     </Steps>
   </TabPanel>
   <TabPanel value="linux">
     <Steps>
-      1. On the newest preview on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases), download the DEB (x64 or arm64) or Arch (x64) package from **Assets**.
+      1. Download the package for your distribution.
+         - Debian / Ubuntu x64: <DownloadLink file="deb-x64" />
+         - Debian / Ubuntu arm64: <DownloadLink file="deb-arm64" />
+         - Arch Linux x64: <DownloadLink file="arch-x64" />
       2. In the download folder, install it with the command for your distribution.
       3. Open Butler from your app list.
     </Steps>

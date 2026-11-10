@@ -9,6 +9,7 @@ import CardGrid from "../ds/web/CardGrid/CardGrid.astro";
 import DocCard from "../ds/web/DocCard/DocCard.astro";
 import Steps from "../ds/web/Steps/Steps.astro";
 import { DocLink } from "./DocLink";
+import DownloadLink from "./DownloadLink.astro";
 import type { Locale } from "./sections";
 import { ui } from "./ui";
 
@@ -16,5 +17,5 @@ import { ui } from "./ui";
 export function mdxComponents(locale: Locale) {
   const copyLabel = ui(locale).page.copyCode;
   const pre = (props: ComponentProps<typeof CodePre>) => createElement(CodePre, { ...props, copyLabel });
-  return { a: DocLink, pre, table: TableFrame, CardGrid, DocCard, Kbd, Notice, Steps, TabPanel, Tabs };
+  return { a: DocLink, pre, table: TableFrame, CardGrid, DocCard, DownloadLink, Kbd, Notice, Steps, TabPanel, Tabs };
 }
