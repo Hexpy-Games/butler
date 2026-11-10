@@ -112,7 +112,7 @@ class ApprovedTiers(unittest.TestCase):
             output = selection(paths, event, workflow, labels)
             jobs = json.loads(output['jobs'])
             # 'hosted': GitHub-hosted build and shards; True: owner-PC native stub and shards.
-            self.assertEqual(jobs, {'build': False, 'release': False, 'stub': native is True,
+            self.assertEqual(jobs, {'build': False, 'release': False, 'installer': False, 'stub': native is True,
                                     'hosted-build': native == 'hosted', 'hosted': bool(native)})
             results = {'changes': {'result': 'success', 'outputs': output}}
             results.update({name: {'result': 'success' if enabled else 'skipped'} for name, enabled in jobs.items()})
@@ -121,7 +121,7 @@ class ApprovedTiers(unittest.TestCase):
             self.assertEqual(run.returncode, 0, run.stderr)
         integration = dict(package='true', windows='true', tier='integration')
         self.assertEqual(changes.windows_preview_jobs(integration, 'push'),
-                         {'build': True, 'stub': True, 'hosted-build': False, 'release': True, 'hosted': True})
+                         {'build': True, 'stub': True, 'hosted-build': False, 'release': True, 'installer': True, 'hosted': True})
         source = (ROOT.parent / 'workflows' / workflow).read_text()
         self.assertIn('branches: [main,', source)
         self.assertIn('gh workflow run windows-preview-smoke.yml --ref <head-branch>', source)
@@ -188,7 +188,6 @@ class ApprovedTiers(unittest.TestCase):
         dynamic = "${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')) && 'butler-win-release' || 'butler-win-shared' }}"
         expected = {
             ('e2e.yml', 'e2e-live'): 'butler-win-release',
-            ('windows-installer.yml', 'build'): 'butler-win-release',
             ('release.yml', 'agent-windows-build'): 'butler-win-release',
             ('release.yml', 'app-windows'): 'butler-win-release',
             ('windows-preview-smoke.yml', 'build'): 'butler-win-release',
@@ -336,7 +335,7 @@ class ApprovedTiers(unittest.TestCase):
             self.assertIn(f'/workflows/{workflow}/runs?', queries[0])
             output = dict(line.split('=', 1) for line in Path(env['GITHUB_OUTPUT']).read_text().splitlines())
             self.assertEqual(json.loads(output['jobs']),
-                             {'build': False, 'release': False, 'stub': True, 'hosted-build': False, 'hosted': True})
+                             {'build': False, 'release': False, 'installer': False, 'stub': True, 'hosted-build': False, 'hosted': True})
 
     # test-category: pure-logic
     def test_main_baseline_failure_selects_all_checks(self):

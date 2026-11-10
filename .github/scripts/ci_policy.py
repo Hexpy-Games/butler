@@ -50,4 +50,4 @@ def windows_preview_jobs(outputs, event):
     native = windows and (event != 'pull_request' or outputs.get('label') == 'true')
     installer = outputs['package'] == 'true' and outputs.get('tier') == 'integration'
     return {'build': installer, 'stub': native, 'hosted-build': windows and not native,
-            'release': installer and native, 'hosted': windows}
+            'release': installer and native, 'installer': installer, 'hosted': windows}

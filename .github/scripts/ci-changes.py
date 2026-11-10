@@ -301,7 +301,7 @@ ARTIFACTS = {
     'macos-updates': ['macos-update-agent-builds'],
     'install-x64': ['agent-linux-x64'], 'install-arm64': ['agent-linux-arm64'],
     'install-macos': ['agent-darwin-arm64'],
-    'build': ['agent-windows-x64'], 'stub': ['windows-e2e'],
+    'build': ['agent-windows-x64', 'windows-installer-preview'], 'stub': ['windows-e2e'],
     'release': ['windows-completed-installed'],
     'hosted': [f'windows-completed-{n}' for n in ('remote', 'recovery', 'data', 'basics', 'outputs')],
 }
@@ -319,8 +319,6 @@ def integration_inputs(workflow, current, candidate):
 
 
 def producer_artifacts(workflow, name):
-    if workflow == 'windows-installer.yml':
-        return ['windows-installer-preview'] if name == 'build' else []
     return ARTIFACTS.get(name, [])
 
 
