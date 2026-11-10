@@ -22,7 +22,7 @@ test("a terminal child reads as done even when its status is a raw result status
   child.result = { ...(child.result ?? {}), status: "success" } as typeof child.result;
   for (const [status, expected] of [
     ["completed", "Completed"],
-    ["blocked", "Failed"],
+    ["blocked", "Completed"],
     ["active", "Completed"],
   ] as const) {
     (child as { status: string }).status = status;
@@ -30,6 +30,8 @@ test("a terminal child reads as done even when its status is a raw result status
   }
   child.result = { ...child.result!, status: "blocked" };
   (child as { status: string }).status = "active";
+  expect(stewardProgressStatus(child)).toContain("Completed");
+  child.result = { ...child.result!, status: "failed" };
   expect(stewardProgressStatus(child)).toContain("Failed");
 });
 test("two active Stewards attach to their own Butler messages", () => {
@@ -131,4 +133,18 @@ test("missing, mismatched, and duplicate relation anchors fail closed", () => {
   expect(
     anchoredStewardProgressByMessageId(HARNESS_MESSAGES, duplicate),
   ).toHaveLength(0);
+});
+
+test("a hidden request anchors only a Butler-initiated parent", () => {
+  const summary = structuredClone(HARNESS_SS03_SUMMARY) as SessionSummaryView;
+  const anchorId = summary.steward_children![0]!.relation.anchor_message_id;
+  const hidden = HARNESS_MESSAGES.filter((message) => message.id !== anchorId);
+  expect(anchoredStewardProgressByMessageId(hidden, summary)).toHaveLength(0);
+
+  const initiated = hidden.map((message) =>
+    message.id === "m4"
+      ? { ...message, initiated: { kind: "schedule_report", quiet: false } }
+      : message,
+  );
+  expect([...anchoredStewardProgressByMessageId(initiated, summary).keys()]).toEqual(["m4"]);
 });

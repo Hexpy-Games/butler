@@ -447,6 +447,7 @@
 | Files Butler produced | `ArtifactList` | `AttachmentList` |
 | Files the user attached | `AttachmentList` | `ArtifactList` |
 | Files the user attached (composer tiles) or sent (message tiles) | `AttachmentList` |  |
+| Fill a docked viewer with a page, HTML file or PDF (surface="page" fill) | `ArtifactPreview` |  |
 | Filter a list in place (All, Recent, Running) | `SegmentedControl` |  |
 | Filtering a list by tags | `FilteredSelectPopover` | `TagField` |
 | Filtering a single list in place | `Input` | `CommandPanel` |
@@ -1230,12 +1231,12 @@ Layout item props (grow, shrink, basis, minWidth, alignSelf, span, invisible) th
 
 `import { PageContainer } from "@/butler-ds";` · beta · viewer: `?visual=design-system&page=components/PageContainer`
 
-Caps a page's width (narrow, default, document, full) with the adaptive gutter and optional start alignment.
+Caps a page's width (narrow, default, full) with the adaptive gutter and optional start alignment.
 
 - Use for: The outer frame of a settings, dashboard or document page
 - Not for: Spacing inside a page → `Stack`
 - Not for: A padded surface → `Box`
-- Tokens: `--page-max-width-reading`, `--page-max-width-wide`, `--page-max-width-document`, `--page-container-gutter`
+- Tokens: `--page-max-width-reading`, `--page-max-width-wide`, `--page-container-gutter`
 
 ### Section
 
@@ -1637,7 +1638,7 @@ The app frame: sidebar, workspace and inspector that become drawers over a scrim
 - Use for: The root layout of the app window (AppShell)
 - Not for: A page inside the workspace → `PageContainer`
 - Not for: A static preview of the chrome → `ChromeFrame`
-- Tokens: `--adaptive-drawer-width`, `--adaptive-inspector-width`, `--adaptive-panel-duration`, `--adaptive-scrim-bg`, `--sidebar-width`, `--browser-chat-width`, `--browser-chat-width-min`, `--browser-chat-width-max`, `--shell-bg`, `--shell-card-bg`, `--shell-card-inset`, `--shell-card-gap`, `--shell-card-radius`, `--shell-card-edge`, `--shell-card-shadow`, `--shell-sheet-tint`, `--shell-page-shadow`
+- Tokens: `--adaptive-drawer-width`, `--adaptive-inspector-width`, `--adaptive-panel-duration`, `--adaptive-scrim-bg`, `--sidebar-width`, `--browser-chat-width`, `--browser-chat-width-min`, `--browser-pane-width-min`, `--shell-bg`, `--shell-card-bg`, `--shell-card-inset`, `--shell-card-gap`, `--shell-card-radius`, `--shell-card-edge`, `--shell-card-shadow`, `--shell-sheet-tint`, `--shell-page-shadow`
 
 ### ChromeFrame
 
@@ -2932,6 +2933,7 @@ The artifact viewer body: exactly one of text, image or frame (PDF/HTML), or a l
 
 - Use for: Preview an artifact in the artifact viewer or a document dialog
 - Use for: Show a file as a reading page in a docked viewer (surface="page")
+- Use for: Fill a docked viewer with a page, HTML file or PDF (surface="page" fill)
 - Not for: Rendered markdown documents → `MarkdownContent`
 - Not for: Reading a spec with facts → `DocumentReader`
 - Tokens: `--surface`, `--radius-panel`, `--typo-code-size`

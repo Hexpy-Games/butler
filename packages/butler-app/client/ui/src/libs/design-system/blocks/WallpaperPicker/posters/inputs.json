@@ -82,7 +82,7 @@
   "modules/butler.riso-flow/shader.frag": "de8f082904649f53649b98117e2f34fdf7c34b36aece38e755cb7f1a9afa7c7d",
   "modules/butler.riso-flow/wallpaper.json": "3c8b89235e70d3f18e90fb65224732eac4ad51c2ac45c39244bf9e27f6238c38",
   "modules/butler.riso-print/density.frag": "906281fee61371cc3e3c92f9583b6e008908b2ec700d52474fc1440ebde43f90",
-  "modules/butler.riso-print/print.frag": "78ca35bb8c85a1b7b0481aa961b19ed6cadf4f78c70d7080d983d293c6fb9589",
+  "modules/butler.riso-print/print.frag": "7bdb23b8027b39fc3926a1fc1c1933a8cb8756bb332c9addce2f47f412f0964a",
   "modules/butler.riso-print/wallpaper.json": "3ed0f58bce653b502c031b957d460f06402cd241c6627799d36663df2c0c6c29",
   "modules/butler.shoreline/shader.frag": "16ce8901b2a30291e084107be75be59655f35cdfad8e71555dcedebb6cadee47",
   "modules/butler.shoreline/wallpaper.json": "8ba6f1f8af649981049463424cdfa1d8bddbebc2c9f5a54af3200524df1dc756",

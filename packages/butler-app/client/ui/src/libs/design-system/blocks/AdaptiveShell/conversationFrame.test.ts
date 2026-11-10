@@ -3,15 +3,15 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
-  BROWSER_CHAT_WIDTH, clampBrowserChatWidth, MIN_PAGE_WIDTH, sidebarAutoCollapses, toggleConversationSidePanel,
+  BROWSER_CHAT_WIDTH, BROWSER_PANE_MIN_WIDTH, clampBrowserChatWidth, MIN_PAGE_WIDTH, sidebarAutoCollapses, toggleConversationSidePanel,
 } from "./conversationFrame";
 
-test("the chat column clamps to 340–560 and matches the tokens", () => {
-  expect([clampBrowserChatWidth(200), clampBrowserChatWidth(400.4), clampBrowserChatWidth(900)]).toEqual([340, 400, 560]);
+test("the chat column keeps 340 and leaves the pane 375, matching the tokens", () => {
+  expect([clampBrowserChatWidth(200), clampBrowserChatWidth(400.4), clampBrowserChatWidth(900, 1136), clampBrowserChatWidth(500, 600)]).toEqual([340, 400, 761, 340]);
   const tokens = readFileSync(new URL("../../tokens.css", import.meta.url), "utf8");
   const px = (name: string) => Number(new RegExp(`${name}:\\s*(\\d+)px`, "u").exec(tokens)?.[1]);
-  expect({ min: px("--browser-chat-width-min"), default: px("--browser-chat-width"), max: px("--browser-chat-width-max") })
-    .toEqual({ ...BROWSER_CHAT_WIDTH });
+  expect({ min: px("--browser-chat-width-min"), default: px("--browser-chat-width") }).toEqual({ ...BROWSER_CHAT_WIDTH });
+  expect(px("--browser-pane-width-min")).toBe(BROWSER_PANE_MIN_WIDTH);
 });
 
 test("the browser pane and the inspector are mutually exclusive", () => {
@@ -22,7 +22,7 @@ test("the browser pane and the inspector are mutually exclusive", () => {
 });
 
 test("the sidebar steps aside below a 720px page and returns with a margin", () => {
-  const frame = { sidebarWidth: 304, chatWidth: 400 };
+  const frame = { sidebarWidth: 304 };
   expect(MIN_PAGE_WIDTH).toBe(720);
   expect(sidebarAutoCollapses({ ...frame, shellWidth: 1440, collapsed: false })).toBe(false);
   expect(sidebarAutoCollapses({ ...frame, shellWidth: 1400, collapsed: false })).toBe(true);

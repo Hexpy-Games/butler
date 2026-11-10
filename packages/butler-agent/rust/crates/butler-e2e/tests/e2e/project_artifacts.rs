@@ -206,9 +206,13 @@ async fn delivered_artifact_crosses_only_same_project_after_restart() -> Result<
         lookup(&scenario, &other, "Foreign").await?["error"],
         "source_unavailable"
     );
-    assert_eq!(
-        lookup(&scenario, "general", "General").await?["error"],
-        "no_project"
+    let (_, general) = scenario.turn("general", "General").await?;
+    assert_eq!(turn_state(&general), "delivered", "{general}");
+    let request = scenario.provider()?.requests().last().unwrap().clone();
+    assert!(
+        !butler_e2e::e2e::chatgpt_wire::functions(&request)
+            .any(|t| t["name"] == "project_artifacts"),
+        "a chat without a project is not offered project_artifacts"
     );
     assert_eq!(
         lookup(&scenario, &recall_chat, "Forged").await?["error"],

@@ -30,13 +30,23 @@ const vite = await createServer({ server: { host: "127.0.0.1", port: 0 }, logLev
   resolveId(id) { if (id === "/epic-reference.tsx") return id; }, load(id) { if (id === "/epic-reference.tsx") return reference; },
 }] });
 let browser: Awaited<ReturnType<typeof launchSmokeBrowser>> | undefined;
-let background = "plain", proposal = false, state: "ready" | "missing" | "error" = "ready";
+let background = "plain", state: "ready" | "missing" | "error" = "ready";
 const overview = structuredClone(epicOverview);
 let canonReads = 0, sharedReads = 0;
+let fixture: "answer" | "proposal" | "receipt" = "answer";
+const create = (id: string) => ({ op: "epic.create", id, title: id }), edit = (id: string) => ({ op: "epic.edit", id, title: id });
+const receipts = {
+  added: { proposals: { registration: ["release", "docs", "cancelled"].map(create) }, reply: ["docs", "release", "cancelled"], title: "과제 3개 등록" },
+  edited: { proposals: { renamed: ["docs", "release"].map(edit) }, reply: [], title: "과제 2개 변경" },
+  mixed: { proposals: { registration: [create("release")], renamed: [edit("docs")] }, reply: epicOrder, title: "과제 1개 등록, 1개 변경" },
+};
+let receipt: keyof typeof receipts = "added";
 let proposalState: "open" | "applied" = "applied";
 const errors: string[] = [];
 const message = (): MessageRecord => ({ id: "answer", chat_id: "butler-client", role: "assistant", status: "delivered", text: "요청한 과제를 확인했습니다.", created_at: "2026-11-02T08:00:00Z",
-  ...(proposal ? { canon_proposals: [{ proposal_id: "registration", turn_id: "turn", source_call_id: "create" }] } : { answer_blocks: [{ call_id: "epics", set_ids: [], spec: { v: 2, blocks: [{ type: "epics", project_id: "butler", ids: epicOrder }] } }] }) });
+  ...(fixture === "proposal" ? { canon_proposals: [{ proposal_id: "registration", turn_id: "turn", source_call_id: "create", epic_ids: [] }] } : {}),
+  ...(fixture === "receipt" ? { canon_proposals: Object.entries(receipts[receipt].proposals).map(([id, changes]) => ({ proposal_id: id, turn_id: "turn", source_call_id: id, epic_ids: changes.map(change => change.id) })) } : {}),
+  ...(fixture === "answer" || (fixture === "receipt" && receipts[receipt].reply.length) ? { answer_blocks: [{ call_id: "epics", set_ids: [], spec: { v: 2, blocks: [{ type: "epics", project_id: "butler", ids: fixture === "receipt" ? receipts[receipt].reply : epicOrder }] } }] } : {}) });
 async function open(page: Page, base: string, width: number, theme: string, wall: string) {
   background = wall;
   await page.setViewportSize({ width, height: 1100 });
@@ -85,13 +95,14 @@ async function captureCards(page: Page, theme: string) {
   const room = await first.evaluate(node => Number.parseFloat(getComputedStyle(node).getPropertyValue("--focus-ring-room")) || 4);
   await page.screenshot({ path: join(evidence, `chat-focus-${theme}.png`), clip: { x: box.x - room, y: box.y - room, width: box.width + room * 2, height: box.height + room * 2 } });
 }
-async function navigation(page: Page, keyboard: boolean) {
-  const card = page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item="docs"]').getByRole("button");
-  if (keyboard) { await card.focus(); await card.press("Enter"); } else await card.click();
+async function navigation(page: Page, open: () => Promise<void>, epicId: string) {
+  await open();
   await page.locator('[data-test-class="canon-epic-detail"]').waitFor();
+  await page.getByRole("tab", { name: "보드", selected: true }).waitFor();
+  await page.locator('[data-test-class="project-dashboard-view"] [role="tabpanel"] [data-kanban-item="' + epicId + '"]').waitFor();
   assert.deepEqual(await page.evaluate(async () => {
     const { useButlerStore } = await import(/* @vite-ignore */ String("/epic-reference.tsx")); return useButlerStore.getState().view;
-  }), { kind: "project-dashboard", projectId: "butler", epicId: "docs" });
+  }), { kind: "project-dashboard", projectId: "butler", epicId });
 }
 try {
   await vite.listen(); const base = vite.resolvedUrls!.local[0];
@@ -113,6 +124,7 @@ try {
       return ok(overview);
     }
     if (url.pathname === "/projects/butler/canon/sidebar") return ok({ project_id: "butler", groups: [] });
+    if (fixture === "receipt" && url.pathname.startsWith("/canon/proposals/")) { const id = url.pathname.split("/")[3]; return ok({ ...appliedProposal, proposal_id: id, changes: (receipts[receipt].proposals as Record<string, unknown[]>)[id] }); }
     if (url.pathname === "/canon/proposals/registration") {
       if (route.request().method() === "POST") { proposalState = "applied"; return ok({ ok: true }); }
       return ok({ ...appliedProposal, state: proposalState });
@@ -139,14 +151,35 @@ try {
     await grid.screenshot({ path: join(evidence, `chat-${width}-${theme}-${wall}.png`) });
     if (width === 1440 && wall === "plain") await captureCards(page, theme);
   }
-  await navigation(page, false);
-  await open(page, base, 1440, "light", "plain"); await navigation(page, true);
-  proposal = true;
+  const docsCard = () => page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item="docs"]').getByRole("button");
+  await navigation(page, () => docsCard().click(), "docs");
+  await open(page, base, 1440, "light", "plain");
+  await navigation(page, async () => { const card = docsCard(); await card.focus(); await card.press("Enter"); }, "docs");
+  fixture = "proposal";
   for (const theme of ["light", "dark"]) {
     await open(page, base, 1440, theme, "plain");
     await page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item="release"]').waitFor();
     await page.locator('[data-test-class="canon-proposal-card"]').locator("..").screenshot({ path: join(evidence, `proposal-applied-${theme}.png`) });
   }
+  fixture = "receipt";
+  for (const name of Object.keys(receipts) as (keyof typeof receipts)[]) for (const width of [1440, 390]) for (const theme of ["light", "dark"]) {
+    receipt = name;
+    const { proposals, reply, title } = receipts[name];
+    const owned = [...new Set(Object.values(proposals).flat().map(change => change.id))];
+    await open(page, base, width, theme, "plain");
+    const card = page.locator('[data-test-class="canon-proposal-card"]');
+    await card.getByText(title, { exact: true }).waitFor();
+    await card.locator("[data-kanban-item]").nth(owned.length - 1).waitFor();
+    assert.equal(await card.count(), 1, "a reply's applied proposals share one receipt");
+    assert.deepEqual(await card.locator("[data-kanban-item]").evaluateAll(nodes => nodes.map(node => node.getAttribute("data-kanban-item"))), owned, "the receipt holds every 과제 it touched");
+    for (const id of owned) assert.equal(await page.locator(`[data-kanban-item="${id}"]`).count(), 1, `${id} renders once`);
+    assert.equal(await page.locator('[data-answer-block="epics"]').count(), reply.some(id => !owned.includes(id)) ? 1 : 0, "the reply keeps only 과제 the receipt does not show");
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await card.locator('xpath=ancestor::*[contains(normalize-space(.), "요청한 과제를 확인했습니다.")][1]').screenshot({ path: join(evidence, `receipt-${name}-${width}-${theme}.png`) });
+  }
+  fixture = "proposal";
+  await open(page, base, 1440, "light", "plain");
+  await navigation(page, () => page.locator('[data-test-class="canon-proposal-card"]').getByRole("button", { name: "열기", exact: true }).click(), "release");
   proposalState = "open";
   await open(page, base, 1440, "light", "plain");
   await page.locator('[data-test-class="canon-proposal-card"][data-state="open"]').waitFor();
@@ -154,7 +187,7 @@ try {
   await page.getByRole("button", { name: "등록", exact: true }).click();
   await page.locator('[data-test-class="canon-proposal-card"][data-state="applied"]').waitFor();
   await page.locator('[data-test-class="chat-epic-cards"] [data-kanban-item="release"]').waitFor();
-  proposal = false;
+  fixture = "answer";
   await open(page, base, 1440, "light", "plain");
   await page.locator('[data-kanban-item="release"]').waitFor();
   await page.evaluate(async () => {
@@ -176,8 +209,8 @@ try {
   await open(page, base, 390, "light", "plain");
   await page.waitForFunction(() => [...document.querySelectorAll('[data-test-class="chat-epic-cards"] *')].filter(node => node.textContent === "삭제된 과제" && !node.children.length).length === 4);
   await page.goto(`${base}?visual=components&theme=light&locale=en`);
-  await page.getByText("Deleted task", { exact: true }).first().waitFor();
-  assert.equal(await page.getByText("Deleted task", { exact: true }).count(), 4);
+  await page.getByText("Deleted Epic", { exact: true }).first().waitFor();
+  assert.equal(await page.getByText("Deleted Epic", { exact: true }).count(), 4);
   state = "error";
   await open(page, base, 390, "dark", "plain");
   await page.locator('[data-test-class="chat-epic-cards"]').waitFor({ state: "detached" });

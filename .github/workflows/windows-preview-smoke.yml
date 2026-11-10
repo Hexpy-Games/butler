@@ -54,6 +54,7 @@ jobs:
       - uses: ./.github/actions/windows-preview-build
         with:
           native-cache: ${{ inputs.native-cache || 'windows-agent-v1' }}
+          version: ${{ needs.changes.outputs.candidate }}
 
   stub:
     permissions:
@@ -505,6 +506,113 @@ jobs:
             Remove-Item $env:WINDOWS_PREVIEW_TEMP_ROOT -Recurse -Force
           }
           Remove-Item $env:PREVIEW_ROOT -Recurse -Force
+  installer:
+    name: Verify Windows install update uninstall
+    needs: [changes, build, stub]
+    if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['installer'] && (needs.build.result == 'success' || (needs.build.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-installer-preview'))) && (needs.stub.result == 'success' || (needs.stub.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-e2e')))
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      BUTLER_E2E_TIER: stub
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-installer-preview
+          path: dist/release/installer-transport
+      - name: Reconstruct and verify every original fixture byte
+        shell: pwsh
+        working-directory: .
+        run: python .github/scripts/isolated.py python deploy/windows-installer-transport.py restore dist/release dist/release/installer-transport
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-e2e
+          path: ${{ runner.temp }}/windows-verify/artifacts
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run existing public update E2Es from built artifacts
+        shell: pwsh
+        working-directory: packages/butler-agent/rust
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
+          $zip = @(Get-ChildItem "$env:GITHUB_WORKSPACE/dist/release/agent-first/butler-agent-*-windows-x64.zip")
+          if ($zip.Count -ne 1) { throw 'Expected exact first Agent archive' }
+          Expand-Archive $zip[0].FullName "$root/agent-first"
+          $env:BUTLER_E2E_BIN = "$root/agent-first/butler-agent.exe"
+          $env:BUTLER_E2E_SKIP_BUILD = '1'
+          $env:BUTLER_E2E_WITHOUT_FIXTURES = '1'
+          $env:BUTLER_E2E_WORKSPACE_ROOT = "$env:GITHUB_WORKSPACE/packages/butler-agent/rust"
+          foreach ($test in @('updates','update_channels','process_names')) {
+            $env:HOME = Join-Path $root ([guid]::NewGuid())
+            $env:BUTLER_DATA = Join-Path $root ([guid]::NewGuid())
+            New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+            $ErrorActionPreference = 'Continue'
+            $listed = & "$root/artifacts/e2e.exe" "$test`::" --list
+            $ErrorActionPreference = 'Stop'
+            # libtest filters are substrings (updates:: also matches plugins::updates::), so select the top-level module explicitly.
+            $selected = @($listed | Where-Object { $_ -match ': test$' } | ForEach-Object { $_ -replace ': test$', '' } | Where-Object { $_.StartsWith("$test`::") })
+            if ($LASTEXITCODE -ne 0 -or $selected.Count -eq 0) { throw "Empty update E2E selection: $test" }
+            $ErrorActionPreference = 'Continue'
+            & "$root/artifacts/e2e.exe" --exact @selected --nocapture --test-threads=8
+            $ErrorActionPreference = 'Stop'
+            if ($LASTEXITCODE) { throw "Update E2E failed: $test" }
+          }
+      - name: Prove Squirrel ordering and real install/update/uninstall
+        shell: pwsh
+        working-directory: .
+        env:
+          BUTLER_WINDOWS_INSTALLER_EVIDENCE: ${{ runner.temp }}/windows-installer-evidence
+          BUTLER_WINDOWS_SMOKE_FROM: '0.1.0-preview.0'
+          BUTLER_WINDOWS_SMOKE_TO: ${{ needs.changes.outputs.candidate }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $profile | Out-Null
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            bun install --frozen-lockfile --ignore-scripts
+            if ($LASTEXITCODE) { throw 'Dependency installation failed' }
+            ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel packages/butler-app/client/electron/node_modules/electron-winstaller/vendor/Squirrel.exe
+            bun run packages/butler-app/scripts/windows/installer-smoke.ts dist/release/app-windows-first dist/release/app-windows
+            if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
+          } finally { . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $profile }
+      - name: Preserve Squirrel setup and update diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-diagnostics
+          path: |
+            ${{ runner.temp }}/windows-installer-evidence/
+            dist/startup-installer-evidence/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Prove legacy-data refusal and desktop recovery
+        shell: pwsh
+        working-directory: .
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $profile = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
+          New-Item -ItemType Directory $profile | Out-Null
+          $env:HOME = Join-Path $profile 'home'
+          $env:BUTLER_DATA = Join-Path $profile 'data'
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          try {
+            $archive = @(Get-ChildItem dist/release/app-windows-first/*-windows-x64-portable.zip)
+            if ($archive.Count -ne 1) { throw 'Expected one portable App archive' }
+            Expand-Archive $archive[0].FullName (Join-Path $profile 'portable')
+            $app = Join-Path $profile 'portable/Butler-win32-x64/Butler.exe'
+            bun run packages/butler-app/scripts/windows/legacy-data-smoke.ts $app
+            if ($LASTEXITCODE) { throw 'Legacy-data recovery smoke failed' }
+          } finally { . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $profile }
+      - name: Remove temporary verification profiles
+        if: always()
+        shell: pwsh
+        working-directory: .
+        run: Remove-Item (Join-Path $env:RUNNER_TEMP 'windows-verify') -Recurse -Force -ErrorAction SilentlyContinue
   hosted:
     name: Hosted Windows E2E (${{ matrix.shard }})
     if: always() && !cancelled() && needs.changes.result == 'success' && (needs.stub.result == 'success' || needs.hosted-build.result == 'success' || (needs.stub.result == 'skipped' && contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-e2e'))) && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted']) || (needs.changes.outputs.tier != 'integration' && fromJSON(needs.changes.outputs.jobs)['hosted'] && !inputs.native-loop))
@@ -579,7 +687,7 @@ jobs:
   gate:
     name: Complete Windows preview verification
     if: ${{ always() && !inputs.native-loop && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    needs: [changes, build, stub, hosted-build, release, hosted]
+    needs: [changes, build, stub, hosted-build, release, installer, hosted]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -590,7 +698,7 @@ jobs:
       - name: Require selected preview checks
         env:
           RESULTS: ${{ toJSON(needs) }}
-          CHECK_GROUPS: '{"build":"jobs","stub":"jobs","hosted-build":"jobs","release":"jobs","hosted":"jobs"}'
+          CHECK_GROUPS: '{"build":"jobs","stub":"jobs","hosted-build":"jobs","release":"jobs","installer":"jobs","hosted":"jobs"}'
         run: python3 .github/scripts/isolated.py python3 .github/scripts/ci-check-selected.py
       - uses: ./.github/actions/windows-preview-gate
         if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
@@ -601,7 +709,7 @@ jobs:
         uses: ./.github/actions/ci-input-receipt
         with:
           results: ${{ toJSON(needs) }}
-          groups: '{"package": ["build", "stub", "release", "hosted"]}'
+          groups: '{"package": ["build", "stub", "release", "installer", "hosted"]}'
           workflow: windows-preview-smoke.yml
   diagnostics:
     if: inputs.diagnose-powershell

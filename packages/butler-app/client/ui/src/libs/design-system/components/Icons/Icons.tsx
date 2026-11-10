@@ -6,7 +6,7 @@ import type { DsBaseProps } from "../../lib/dsProps";
  */
 
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { HugeiconsIconProps } from "@hugeicons/react";
+import type { HugeiconsIconProps, IconSvgElement } from "@hugeicons/react";
 import { createIcon } from "./iconBase";
 // Named imports keep the bundle to the glyphs mapped below.
 import {
@@ -21,10 +21,20 @@ import {
   Note01Icon, PaintBrush02Icon, PaintBrush04Icon, PanelLeftIcon, PanelLeftOpenIcon, PanelRightCloseIcon,
   PanelRightIcon, PencilEdit01Icon, PencilEdit02Icon, PinIcon, PlayIcon, ReloadIcon,
   Rocket01Icon, Search01Icon, SecurityCheckIcon, SecurityIcon, SentIcon, ServerStack01Icon,
-  Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SquareIcon, StarIcon, Sun03Icon, Tag01Icon, Task01Icon,
+  Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SquareIcon, StarIcon, Sun03Icon, Tag01Icon, Task01Icon, Ticket01Icon,
   TerminalIcon, Tick02Icon, Time03Icon, Undo02Icon, UserCircleIcon, ViewIcon, Wrench01Icon,
   ZoomInAreaIcon, ZoomOutAreaIcon,
 } from "@hugeicons/core-free-icons";
+
+/** Hugeicons free `TableOfContentsIcon` (core-free-icons 4.3.0+, MIT). The DS pins 4.1.4, so its path data is copied verbatim. */
+const TableOfContentsGlyph = [
+  ["path", { d: "M3.87891 5L15.8789 5", stroke: "currentColor", strokeLinecap: "round", strokeWidth: "1.5", key: "0" }],
+  ["path", { d: "M3.87891 12L15.8789 12", stroke: "currentColor", strokeLinecap: "round", strokeWidth: "1.5", key: "1" }],
+  ["path", { d: "M3.87891 19L15.8789 19", stroke: "currentColor", strokeLinecap: "round", strokeWidth: "1.5", key: "2" }],
+  ["path", { d: "M20.0039 5H19.8789M20.1289 5C20.1289 5.13807 20.017 5.25 19.8789 5.25C19.7408 5.25 19.6289 5.13807 19.6289 5C19.6289 4.86193 19.7408 4.75 19.8789 4.75C20.017 4.75 20.1289 4.86193 20.1289 5Z", stroke: "currentColor", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: "1.5", key: "3" }],
+  ["path", { d: "M20.0039 12H19.8789M20.1289 12C20.1289 12.1381 20.017 12.25 19.8789 12.25C19.7408 12.25 19.6289 12.1381 19.6289 12C19.6289 11.8619 19.7408 11.75 19.8789 11.75C20.017 11.75 20.1289 11.8619 20.1289 12Z", stroke: "currentColor", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: "1.5", key: "4" }],
+  ["path", { d: "M20.0039 19H19.8789M20.1289 19C20.1289 19.1381 20.017 19.25 19.8789 19.25C19.7408 19.25 19.6289 19.1381 19.6289 19C19.6289 18.8619 19.7408 18.75 19.8789 18.75C20.017 18.75 20.1289 18.8619 20.1289 19Z", stroke: "currentColor", strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: "1.5", key: "5" }],
+] as unknown as IconSvgElement;
 
 export { ICON_SIZE, type IconProps, type IconSize } from "./iconBase";
 export * from "./BrowserIcons";
@@ -126,6 +136,10 @@ export const SlidersHorizontal = createIcon(SlidersHorizontalIcon);
 export const Sparkles = createIcon(StarIcon);
 /** A tag (label) on a saved item; `Tag` is the pill component. */
 export const TagIcon = createIcon(Tag01Icon);
+/** A ticket: one 과제 (task) in a plan or backlog — not a conversation. */
+export const Ticket = createIcon(Ticket01Icon);
+/** Table of contents: the sidebar's 전체보기 (show all) view. */
+export const TableOfContents = createIcon(TableOfContentsGlyph);
 export const Square = createIcon(SquareIcon);
 export const Sun = createIcon(Sun03Icon);
 export const Terminal = createIcon(TerminalIcon);

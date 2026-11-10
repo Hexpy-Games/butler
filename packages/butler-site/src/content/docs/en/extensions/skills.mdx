@@ -12,16 +12,16 @@ A skill is a `SKILL.md` file that describes how Butler handles a particular kind
 
 <Steps>
   1. In the sidebar, open **Settings** and select **Skills**.
-  2. On the **Default** tab, check the skills used in every conversation.
-  3. On the **Project** tab, choose a project in the list on the left to see that project's skills.
+  2. In **Built-in skills** and **Your skills**, check the skills used in every conversation.
+  3. In **Project skills**, choose a project to see that project's skills.
 </Steps>
 
-The **Default** tab has two lists, **Core skills** and **User skills**. Each item shows the skill's name and description. If there is no description, the path of the `SKILL.md` file appears instead.
+The Skills screen has three sections: **Built-in skills**, **Your skills** and **Project skills**. Each item shows the skill's name and description. If there is no description, the path of the `SKILL.md` file appears instead.
 
 ## Skill types
 
-- **Core skills** — Skills included in the app. They are used in every conversation.
-- **User skills** — Skills you added yourself. They are used in every conversation.
+- **Built-in skills** — Skills included in the app. They are used in every conversation.
+- **Your skills** — Skills you added yourself. They are used in every conversation.
 - **Project skills** — Skills added to a specific project. They are used only in that project's conversations.
 
 Skills you add are stored as folders under the default data folder (`~/.butler`).
@@ -37,7 +37,7 @@ Skills you add are stored as folders under the default data folder (`~/.butler`)
 
 <Steps>
   1. Open **Settings → Skills**.
-  2. For a skill to use in every conversation, open the **Default** tab. For a skill to use in one project only, choose that project on the **Project** tab.
+  2. For a skill to use in every conversation, use **Your skills**. For a skill to use in one project only, choose that project in **Project skills**.
   3. Click **Import** and select a `.zip` file.
   4. When the import finishes, the list refreshes and the skill you added appears.
 </Steps>
@@ -61,9 +61,9 @@ my-skills.zip
 ### Create with chat
 
 <Steps>
-  1. In **Settings → Skills**, open the **Default** tab, or choose a project on the **Project** tab.
-  2. Click **Create with chat**.
-  3. Settings closes and a new conversation for creating the skill opens. If you clicked it on the Project tab, it opens as a conversation in that project.
+  1. In **Settings → Skills**, find **Your skills**, or choose a project in **Project skills**.
+  2. Click **Create with chat** in that section.
+  3. Settings closes and a new conversation for creating the skill opens. If you clicked it in **Project skills**, it opens as a conversation in that project.
 </Steps>
 
 ## SKILL.md format
@@ -126,7 +126,7 @@ Butler reads only as much of a skill as it needs.
 The app has no button for deleting a skill. To delete a skill you added, delete its folder.
 
 <Steps>
-  1. In your file manager or terminal, open `~/.butler/skills/default/` (user skills) or `~/.butler/skills/projects/<project ID>/` (project skills).
+  1. In your file manager or terminal, open `~/.butler/skills/default/` (your skills) or `~/.butler/skills/projects/<project ID>/` (project skills).
   2. Delete the whole folder of the skill you want to remove.
   3. Open **Settings → Skills** again and check that the skill is gone from the list.
 </Steps>
@@ -148,7 +148,7 @@ butler skills import <path to zip file> --project <project ID>
 
 <Notice tone="warning">
   - There is no setting to turn individual skills on or off. Delete the folder of a skill you do not want to use.
-  - Core skills are included in the app, so you cannot delete or edit them.
+  - Built-in skills are included in the app, so you cannot delete or edit them.
   - If you import a skill folder with the same name again, the existing folder is deleted and replaced with the new content.
 </Notice>
 

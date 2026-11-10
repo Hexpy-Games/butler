@@ -2,12 +2,12 @@ import { useId } from "react";
 import { Field, FieldLabel, Input, NativeSelect, NativeSelectOption } from "@/butler-ds";
 import { useButlerStore } from "@/app/store.ts";
 import { canonProposalCopy } from "./canonProposalCopy.ts";
-export function CanonProposalProject({ value, name, busy, ko, onSelect, onName }: {
-  value: string; name: string; busy: boolean; ko: boolean; onSelect: (id: string) => void; onName: (name: string) => void;
+export function CanonProposalProject({ value, name, busy, onSelect, onName }: {
+  value: string; name: string; busy: boolean; onSelect: (id: string) => void; onName: (name: string) => void;
 }) {
   const id = useId();
   const projects = useButlerStore(state => state.navigation.projects);
-  const copy = canonProposalCopy(ko);
+  const copy = canonProposalCopy();
   return <Field>
     <FieldLabel htmlFor={id}>{copy.project}</FieldLabel>
     <NativeSelect id={id} stretch value={value} disabled={busy} onChange={event => onSelect(event.target.value)}>

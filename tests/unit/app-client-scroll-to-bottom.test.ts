@@ -8,38 +8,20 @@ import {
     scrollConversationToBottom,
 } from "../../packages/butler-app/client/ui/src/components/conversation/conversationScrollUtils.ts";
 
-test("layout-driven active-row growth retains bottom lock until direct user scroll intent", () => {
-  expect(
-    conversationBottomLockAfterScroll({
-      wasPinned: true,
-      distanceFromBottom: 360,
-      userScrollIntent: false,
-    }),
-  ).toBe(true);
-  expect(
-    conversationBottomLockAfterScroll({
-      wasPinned: true,
-      distanceFromBottom: 360,
-      userScrollIntent: true,
-    }),
-  ).toBe(false);
+const lock = (wasPinned: boolean, distanceFromBottom: number, userScrollIntent: boolean, movedUp: boolean) =>
+  conversationBottomLockAfterScroll({ wasPinned, distanceFromBottom, userScrollIntent, movedUp });
+
+test("layout-driven growth keeps the bottom lock until the reader scrolls up, however near the end", () => {
+  expect(lock(true, 360, false, false)).toBe(true);
+  expect(lock(true, 360, true, true)).toBe(false);
+  expect(lock(true, 40, true, true)).toBe(false);
 });
 
-test("work-block measurements do not repin a conversation the user already moved upward", () => {
-  expect(
-    conversationBottomLockAfterScroll({
-      wasPinned: false,
-      distanceFromBottom: 360,
-      userScrollIntent: false,
-    }),
-  ).toBe(false);
-  expect(
-    conversationBottomLockAfterScroll({
-      wasPinned: false,
-      distanceFromBottom: 20,
-      userScrollIntent: false,
-    }),
-  ).toBe(true);
+test("only the reader returning to the end re-locks a conversation they moved upward", () => {
+  expect(lock(false, 360, false, false)).toBe(false);
+  expect(lock(false, 20, false, false)).toBe(false);
+  expect(lock(false, 20, true, false)).toBe(true);
+  expect(lock(false, 0, false, false)).toBe(true);
 });
 
 test("conversation scroll utility detects bottom distance and scrolls smoothly to the latest area", () => {

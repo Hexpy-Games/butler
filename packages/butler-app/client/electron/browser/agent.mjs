@@ -17,6 +17,7 @@ import { fillPay, inspectPay } from "./pay-fill.mjs";
 import { makeAgentRoom } from "./capacity.mjs";
 import { devtoolsRead, onLocalPage, watchDevtools } from "./devtools.mjs";
 import { attachView } from "./view-capture.mjs";
+import { loadOutsideNavigation } from "./settled-load.mjs";
 
 export function controlTab(browser, tab, holder, sticky = false) {
   if (!tab || tab.owner === "mine") return;
@@ -226,7 +227,7 @@ async function executeFrame(browser, frame) {
 /** Resolves once the page is parsed, or once a page dialog pauses parsing until it is answered. */
 function parsed(tab, url) {
   const contents = tab.view.webContents;
-  const loading = contents.loadURL(url);
+  const loading = loadOutsideNavigation(contents, url);
   const ready = new Promise(resolve => contents.once("dom-ready", resolve));
   const waiters = tab.dialogWaiters ??= new Set();
   let paused;

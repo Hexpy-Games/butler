@@ -106,7 +106,7 @@ For the following providers, the **API base URL** field also appears, filled in 
 
 ## Manage API keys
 
-The **API keys** section of **Settings → Models** lists your saved keys by provider. If you named a key, the name follows the provider, as in `OpenAI / work`. If no keys are saved, the **No saved API keys.** message appears.
+**Settings → Security → API keys** lists your saved keys by provider. If you named a key, the name follows the provider, as in `OpenAI / work`. If no keys are saved, the **No saved API keys.** message appears.
 
 Each key shows the following information.
 
@@ -114,12 +114,12 @@ Each key shows the following information.
 - Number of models that use the key
 - Storage location
 
-The app never shows a whole key, only its first three characters and its last character. If models use the key, a model count such as **2 models** appears. If none do, **Not in use** appears. The storage location appears as **Stored only on this computer** or **Stored in Keychain**. See [Where credentials are stored](#where-credentials-are-stored).
+The app never shows a whole key, only its first three characters and its last character. If models use the key, a model count such as **2 models** appears. If none do, **Not in use** appears. The storage location appears as **Stored only on this computer**, **Stored in Keychain**, **Stored in the system keyring** or **Stored in Credential Manager**. See [Where credentials are stored](#where-credentials-are-stored).
 
 ### Replace a key
 
 <Steps>
-  1. In the **API keys** section of **Settings → Models**, click **Replace** for the key you want to change.
+  1. In **Settings → Security → API keys**, click **Replace** for the key you want to change.
   2. Paste the key into the **New key** field.
   3. Click **Save**.
 </Steps>
@@ -132,7 +132,7 @@ The app never shows a whole key, only its first three characters and its last ch
 ### Delete a key
 
 <Steps>
-  1. In the **API keys** section of **Settings → Models**, click **Delete** for the key you want to remove.
+  1. In **Settings → Security → API keys**, click **Delete** for the key you want to remove.
   2. Click **Delete** in the confirmation dialog.
 </Steps>
 
@@ -151,9 +151,11 @@ Credentials are stored in the data folder (`~/.butler` by default). If you chang
 - ChatGPT sign-in data: `~/.butler/auth/chatgpt.json`
 - Registered model list: `~/.butler/butler.config.json`
 
-The current release stores API keys in a file on this computer. The file permissions are set so that only the owner can read and write it (`0600`). The app shows **Stored only on this computer**.
+By default, Windows and Linux releases store API keys in a file on this computer. The file permissions are set so that only the owner can read and write it (`0600`). The app shows **Stored only on this computer**.
 
-A release signed with a Developer ID stores API keys in the macOS Keychain, and the app shows **Stored in Keychain**. The first time you run a signed release, it moves the keys you already saved into the Keychain automatically.
+The macOS release stores API keys in the macOS Keychain, and the app shows **Stored in Keychain**. The first time it runs, it moves keys already saved in the file into the Keychain automatically.
+
+On Windows and Linux too, running `butler config set secrets.store system` stores API keys in the system store, shown as **Stored in Credential Manager** or **Stored in the system keyring**. Keys already in the file move to the system store.
 
 If keys saved by an earlier version remain in `model-provider-credentials.json`, Butler Agent moves them to the storage location when it starts.
 

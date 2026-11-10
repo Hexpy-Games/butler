@@ -1,5 +1,6 @@
 //! Image calls use stub chat, fake billed endpoints and the real gateway.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod delegated;
 mod edits;
 mod flows;
 mod transport;

@@ -44,7 +44,9 @@ async fn deleg_batch_01_batched_reads_take_fewer_rounds_with_the_same_content()
     // The steward is told to batch independent reads, and the search and
     // open results name the reads that can share the next round.
     assert!(
-        batched.instructions.contains("independent reads"),
+        batched
+            .instructions
+            .contains("Make independent tool calls together in one round"),
         "{}",
         batched.instructions
     );

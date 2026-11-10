@@ -190,6 +190,44 @@ async fn assert_bound(
     assert_eq!(sidebar["groups"][0]["rows"][0]["id"], id);
     Ok(())
 }
+/// The first 과제 row's first bound session, as the sidebar sends it.
+async fn sidebar_session(s: &Scenario, project: &str) -> Result<Value, HarnessError> {
+    let sidebar = data(
+        s.gw.get(&format!("/projects/{project}/canon/sidebar"))
+            .await?,
+        200,
+    );
+    Ok(sidebar["groups"][0]["rows"][0]["sessions"][0].clone())
+}
+fn work_calls(epic: &str) -> Vec<(&'static str, Value)> {
+    vec![
+        (
+            "replace_work_plan",
+            json!({"objective":"과제 확인","execution_mode":"direct","governing_refs":[format!("canon:epic/{epic}")],"actions":[{"action_key":"inspect","description":"과제 내용 확인"}],"checks":["등록 내용 일치"]}),
+        ),
+        (
+            "record_work_review",
+            json!({"subject":"plan","verdict":"accept","summary":"확인 범위 충족"}),
+        ),
+        ("canon_read", json!({"view":"epic","id":epic})),
+        (
+            "record_work_checkpoint",
+            json!({"action_updates":[{"action_key":"inspect","status":"done"}],"public_summary":"등록 내용 확인","next_step":"결과 검토"}),
+        ),
+        (
+            "record_work_review",
+            json!({"subject":"result","verdict":"accept","summary":"등록 내용 일치"}),
+        ),
+        (
+            "record_work_review",
+            json!({"subject":"completion","verdict":"accept","summary":"검증 완료"}),
+        ),
+        (
+            "record_work_disposition",
+            json!({"work_id":"$work","disposition":"completed","summary":"등록 내용 확인 완료","action_updates":[],"remaining_actions":[],"followups":[]}),
+        ),
+    ]
+}
 #[tokio::test]
 async fn cp_01_card_applies_chat_origin_binds_without_moving_and_links_work()
 -> Result<(), HarnessError> {
@@ -205,6 +243,12 @@ async fn cp_01_card_applies_chat_origin_binds_without_moving_and_links_work()
     assert_eq!(result["ok"], true, "{result}");
     let epic = epic_id(&result);
     assert_bound(&s, &chat, &project, &epic, "user").await?;
+    let registered = sidebar_session(&s, &project).await?;
+    assert_eq!(registered["session_id"], chat);
+    assert_eq!(
+        registered["worked"], 0,
+        "the registering chat is not nested: {registered}"
+    );
     live.wait_for(Duration::from_secs(10), |e| {
         e["type"] == "pending_asks.changed"
             && e["payload"]["proposal_id"] == id
@@ -212,26 +256,66 @@ async fn cp_01_card_applies_chat_origin_binds_without_moving_and_links_work()
     })
     .await?;
     assert_eq!(asks(&s, &chat).await?["open_count"], 0);
-    run(&s,&script,&chat,"이 과제의 내용을 확인하고 보고해",vec![
-        ("replace_work_plan",json!({"objective":"과제 확인","execution_mode":"direct","governing_refs":[format!("canon:epic/{epic}")],"actions":[{"action_key":"inspect","description":"과제 내용 확인"}],"checks":["등록 내용 일치"]})),
-        ("record_work_review",json!({"subject":"plan","verdict":"accept","summary":"확인 범위 충족"})),
-        ("canon_read",json!({"view":"epic","id":epic})),
-        ("record_work_checkpoint",json!({"action_updates":[{"action_key":"inspect","status":"done"}],"public_summary":"등록 내용 확인","next_step":"결과 검토"})),
-        ("record_work_review",json!({"subject":"result","verdict":"accept","summary":"등록 내용 일치"})),
-        ("record_work_review",json!({"subject":"completion","verdict":"accept","summary":"검증 완료"})),
-        ("record_work_disposition",json!({"work_id":"$work","disposition":"completed","summary":"등록 내용 확인 완료","action_updates":[],"remaining_actions":[],"followups":[]})),
-    ]).await?;
+    run(
+        &s,
+        &script,
+        &chat,
+        "이 과제의 내용을 확인하고 보고해",
+        work_calls(&epic),
+    )
+    .await?;
     let results = stub::results(&script);
     assert!(
         !results
             .iter()
             .any(|r| r["error"]["code"] == "canon_epic_not_bound")
     );
+    let worked = sidebar_session(&s, &project).await?;
+    assert_eq!(worked["session_id"], chat);
+    assert_eq!(
+        worked["worked"], 1,
+        "a chat that worked the 과제 is nested: {worked}"
+    );
     let progress = data(
         s.gw.get(&format!("/canon/epics/{epic}/progress")).await?,
         200,
     );
     assert_eq!(progress["counts"]["total"], 1, "{progress}");
+    let other = json!({"project_id":project,"summary":"화면 깜빡임","changes":[{"op":"epic.create","title":"화면 깜빡임","description":"재현 단계와 기대 동작"}]});
+    let second = draft(&s, &script, &chat, other).await?;
+    let second_epic = epic_id(&accept(&s, &second).await?);
+    run(
+        &s,
+        &script,
+        &chat,
+        "이 과제의 내용을 확인하고 보고해",
+        work_calls(&second_epic),
+    )
+    .await?;
+    let sidebar = data(
+        s.gw.get(&format!("/projects/{project}/canon/sidebar"))
+            .await?,
+        200,
+    );
+    for id in [&epic, &second_epic] {
+        let row = sidebar["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|g| g["rows"].as_array().unwrap())
+            .find(|r| r["id"] == *id)
+            .unwrap();
+        let session = row["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["session_id"] == chat)
+            .unwrap();
+        assert_eq!(
+            session["worked"], 0,
+            "a chat that worked two 과제 nests under neither: {session}"
+        );
+    }
     server.abort();
     s.finish().await
 }

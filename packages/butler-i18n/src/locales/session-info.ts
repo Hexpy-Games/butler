@@ -29,7 +29,7 @@ export const SESSION_INFO_COPY = {
     contextMore: "Details", contextLess: "Less", contextCompactAt: (value: string) => `Auto-compacts at ${value}`,
     contextGroups: { conversation: "Conversation", memory: "Memory & files", rules: "Rules & settings", base: "Basics", reserve: "Reserved" },
     contextGroupHints: { conversation: "Recent conversation and your latest message", memory: "Recalled memory and referenced files", rules: "EOL, persona, settings, rules", base: "Butler's role and session and project state", reserve: "Room kept for replies, tools and compaction. Not counted as used" },
-    contextItems: { static: ["Core instructions", "Butler's role and fixed runtime rules"], "live-config": ["Rules & settings", "EOL, persona, settings, rules, profile"], "runtime-state": ["Session state", "Session, project, worker and task state"],
+    contextItems: { static: ["Core instructions", "Butler's role and fixed runtime rules"], "live-config": ["Rules & settings", "EOL, persona, settings, rules, profile"], "runtime-state": ["Session state", "Session, project, worker and Epic state"],
       working: ["Recent conversation", "Recent conversation and this turn's work"], retrieved: ["Recalled memory", "Memory, project memory, latest compaction summary"], "current-input": ["Latest message", "Your message and attachment references"],
       references: ["Referenced files", "Local references"], "output-reserve": ["Reply reserve", "Room kept for the reply"], "tool-reserve": ["Tool reserve", "Room for tool calls and results"], "compaction-reserve": ["Compaction reserve", "Room to auto-compact before the limit"] } as Record<string, [string, string]>,
   },

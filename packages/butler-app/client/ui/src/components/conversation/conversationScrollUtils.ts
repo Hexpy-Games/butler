@@ -5,18 +5,21 @@ interface ConversationBottomLockInput {
   wasPinned: boolean;
   distanceFromBottom: number;
   userScrollIntent: boolean;
+  movedUp: boolean;
   threshold?: number;
 }
 
+/** The reader scrolling up releases the lock at once; only the reader returning to the end, or the list sitting at the end, re-locks it; other scrolls keep it while it is on. */
 export function conversationBottomLockAfterScroll({
   wasPinned,
   distanceFromBottom,
   userScrollIntent,
+  movedUp,
   threshold = BOTTOM_LOCK_THRESHOLD,
 }: ConversationBottomLockInput): boolean {
-  if (distanceFromBottom < threshold) return true;
-  if (!wasPinned) return false;
-  return !userScrollIntent;
+  if (userScrollIntent && movedUp) return false;
+  if (wasPinned) return true;
+  return distanceFromBottom < (userScrollIntent ? threshold : 1);
 }
 
 export interface ScrollToBottomOptions {

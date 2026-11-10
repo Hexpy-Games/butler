@@ -1,36 +1,37 @@
 ---
 title: "First run"
-description: "Start on the welcome screen, agree on the consent screen, then choose an AI to work with and connect it."
+description: "Start on the welcome screen, agree on the consent screen, choose how Butler remembers, then choose an AI to work with and connect it."
 section: getting-started
 order: 2
 status: published
 ---
 
-The first time you open Butler, first-run setup appears instead of the main screen. Start on the welcome screen, agree on the consent screen and connect one AI to work with. Then Butler is ready to use.
+The first time you open Butler, first-run setup appears instead of the main screen. Start on the welcome screen and agree on the consent screen. Choose how Butler remembers and connect one AI to work with. Then Butler is ready to use.
 
 ## Setup steps
 
 <Steps>
   1. On the welcome screen, choose the **Interface language**, then click **Get started**.
   2. Read the consent screen and click **Agree and continue**.
-  3. On the **Which AI should Butler use?** screen, choose an AI.
-  4. Sign in, paste an API key or choose a model to connect, then click **Next**.
-  5. On the **Which language should Butler reply in?** screen, choose the **Reply language** and click **Next**.
-  6. Import from other AI tools if you want to. You can skip this.
-  7. On the **You're all set** screen, click **Get started**. The new conversation screen opens.
+  3. On the **How should Butler remember?** screen, choose **Use memory model** or **Don't use it**, then click **Continue**.
+  4. On the **Which AI should Butler use?** screen, choose an AI.
+  5. Sign in, paste an API key or choose a model to connect, then click **Next**.
+  6. On the **Which language should Butler reply in?** screen, choose the **Reply language** and click **Next**.
+  7. Import from other AI tools if you want to. You can skip this.
+  8. On the **You're all set** screen, click **Get started**. The new conversation screen opens.
 </Steps>
 
 Meanwhile, Butler gets ready in the background. You can move on to the next screen without waiting for it to finish.
 
 ## Welcome screen
 
-The welcome screen shows a title, a description, the interface language picker and the **Get started** button. Click **Learn more** to open this page in your browser.
+The welcome screen shows a title, a description, the interface language picker and the **Get started** button. Click **More details** to open this page in your browser.
 
 ## Consent
 
 Click **Get started** to open the consent screen. It tells you that Butler is free and open source, that it changes files and runs commands, how AI providers handle data, and where data is stored locally. Butler is provided "as is", and what Butler does on your computer at your direction is your responsibility.
 
-Click **Agree and continue** to save the consent version and time and move to the [Choose an AI](#choose-an-ai) screen. Click **Decline** to return to the welcome screen without saving consent. You cannot use Butler without agreeing.
+Click **Agree and continue** to save the consent version and time and move to the [Memory](#memory) screen. Click **Decline** to return to the welcome screen without saving consent. You cannot use Butler without agreeing.
 
 <a id="ai-providers" />
 
@@ -44,7 +45,7 @@ When you use an AI provider, the conversation in your request and the context ne
 | Anthropic | [Privacy policy](https://www.anthropic.com/legal/privacy) · [Terms of use](https://www.anthropic.com/legal/consumer-terms) |
 | Google | [Privacy policy](https://policies.google.com/privacy) · [Terms of use](https://policies.google.com/terms) |
 
-When you use a local model that runs on this computer, model requests are processed on this computer. Butler itself stores conversations, memory and settings only in `~/.butler` on this computer. When you connect from a remote App, the storage location is the computer where Butler Agent runs, not the computer where the browser runs.
+When you use a local model that runs on this computer, model requests are processed on this computer. Butler itself stores conversations, memory and settings only in `~/.butler` on this computer. When you connect from a browser on another computer, data is stored on the computer where Butler runs, not on the one running the browser.
 
 ## Language
 
@@ -66,13 +67,22 @@ If Butler cannot get ready, the reason it stopped appears under the **Butler cou
 
 For an explanation of each reason, see [Troubleshooting](/en/help/troubleshooting/#butler-agent-does-not-get-ready).
 
+## Memory
+
+After consent, the **How should Butler remember?** screen opens. Choose how Butler remembers conversations.
+
+- **Use memory model** — Downloads the memory model so Butler finds conversations better.
+- **Don't use it** — Uses basic memory only, without downloading the memory model.
+
+**Continue** stays disabled until you choose one. It also stays disabled while Butler has not responded yet. Click **Continue** to move to the [Choose an AI](#choose-an-ai) screen. Click **Back** to return to the consent screen. You can change your choice later in **Settings → Memory**.
+
 ### Memory model
 
-While Butler gets ready, it also downloads the memory model that its memory features use. During the download, **Downloading memory model** and the progress appear under the preparation status. When the download finishes, **Verifying memory model** appears, and then the line disappears. The same line appears on the **Which AI should Butler use?** screen.
+If you choose **Use memory model** and click **Continue**, Butler downloads the memory model in the background. If you choose **Don't use it**, nothing is downloaded. During the download, **Downloading memory model** and the progress appear in the **Connect AI** step and on the finish screen. When the download finishes, **Verifying memory model** appears, and then the line disappears.
 
 - You can continue setup and converse while the memory model downloads. Search vectors are prepared in the background after the model is ready.
 - If the download fails, **Couldn't download the memory model** and the reason appear. Click **Retry** to download it again.
-- After setup, check the status in **Memory model** under **Settings → General**.
+- After setup, check the status in **Memory model** under **Settings → Memory**, and turn **Use memory model** on or off there.
 
 ## Choose an AI
 
@@ -100,7 +110,7 @@ Click **8 more services** to expand the remaining services. Once they are expand
 - Butler looks for servers running on the default ports (Ollama `11434`, LM Studio `1234`).
 - If a server is running, **Other (OpenAI-compatible)** appears in the top list with the number of models found and the server names.
 - If you are not connected to the internet, a notice appears and you can choose only **Other (OpenAI-compatible)**.
-- Click **Back** to return to the consent screen.
+- Click **Back** to return to the **How should Butler remember?** screen.
 
 If Butler is not ready yet, **Connects as soon as Butler is ready** appears. If you choose and connect an AI at this point, setup waits until Butler is ready and then continues.
 
@@ -209,7 +219,7 @@ After your first ChatGPT connection, **Butler's AI requests use your ChatGPT pla
 
 ## Default model
 
-The model you connect becomes Butler's default model, and Worker profiles use the same model.
+The model you connect becomes Butler's default model, and subtasks use the same model.
 
 - If you choose ChatGPT or a service that connects with an API key, Butler uses the model set for everyday work for that service. Reasoning effort is medium (**Medium**).
 - For **Other (OpenAI-compatible)**, Butler uses the model you chose.
@@ -235,7 +245,7 @@ You can go through the welcome screen and the AI connection again later. The mod
   4. Choose an AI and connect it. The AI you use now has the **In use** tag. When the connection finishes, check the [reply language](#reply-language), then click **Get started** on the **You're all set** screen.
 </Steps>
 
-- If you choose the AI you use now again, and it is ChatGPT or a service that connects with an API key, Butler keeps the model, reasoning effort and Worker profile settings.
+- If you choose the AI you use now again, and it is ChatGPT or a service that connects with an API key, Butler keeps the model, reasoning effort and subtask model settings.
 - If you choose a different AI, the [default model](#default-model) changes to the new AI's model.
 
 ## Notes
@@ -249,7 +259,7 @@ You can go through the welcome screen and the AI connection again later. The mod
 </Notice>
 
 <Notice tone="info">
-  On a newly installed Butler, new conversations start with the **Ask first** permission. Butler asks for approval before it edits files or runs commands. It saves your answers from the first-conversation onboarding without asking. If you switch to **Full access**, Butler reads and writes files and runs commands without asking. Change the default in **Access** under **Settings → Models**. See [Conversations and the composer](/en/help/basics/conversation/#permission).
+  On a newly installed Butler, new conversations start with the **Ask first** permission. Butler asks for approval before it edits files or runs commands. It saves your answers from the first-conversation onboarding without asking. If you switch to **Full access**, Butler reads and writes files and runs commands without asking. Choose from **Auto**, **Read only**, **Ask every time**, **Ask first** and **Full access**. Change the default in **New chats** under **Settings → General → Default permission**. See [Conversations and the composer](/en/help/basics/conversation/#permission).
 </Notice>
 
 ## Related pages

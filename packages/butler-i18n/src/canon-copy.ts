@@ -24,6 +24,17 @@ export interface CanonOrderCopy {
 export interface CanonCopy {
   deletedTask: string;
   deletion: { changeDelete: string; changed: string; addDelete: string; action: string; title: (title: string) => string; detail: string; running: string; deleted: string; missing: string };
+  proposalCard: {
+    draft: string; changes: string; cancel: string; add: string; apply: string; cancelled: string; superseded: string; stale: string; open: string; name: string;
+    currentPlan: string; destinationPlan: string; backlog: string; order: string; project: string; newProject: string; closed: string; opened: string;
+    ops: { epicEdit: string; epicMove: string; planCreate: string; planEdit: string; planReorder: string; specEdit: string };
+    receipt: {
+      epics: (parts: string) => string; epicCreate: (count: number) => string; epicEdit: (count: number) => string;
+      epicMove: (count: number) => string; epicDelete: (count: number) => string; planCreate: string; planEdit: string;
+      planReorder: string; specEdit: string; projectCreate: string;
+    };
+    target: { newProject: (name: string) => string; plan: (plan: string) => string; backlog: string };
+  };
   order: CanonOrderCopy;
   queue: {
     step: (plan: string, epic: string) => string;
@@ -53,7 +64,7 @@ export interface CanonCopy {
   noEpics: string; noDescription: string; conversationFailed: string; epicPlaceholder: string;
   newInGroup: (group: string) => string; epicCount: (n: number) => string;
   epicCaption: (group: string) => string;
-  newEpic: string; newPlan: string; backlog: string; backlogDescription: string;
+  newEpic: string; newPlan: string; backlog: string;
   epic: string; title: string; description: string; optional: string; plan: string; assignee: string;
   none: string; me: string; cancel: string; create: string; save: string; edit: string; editPlan: string; close: string; dueOn: string;
   titlePlaceholder: string; descriptionPlaceholder: string; titleRequired: string;
@@ -70,7 +81,6 @@ export interface CanonCopy {
   tasks: (done: number, total: number) => string;
   due: (date: string) => string;
   ordinal: (n: number) => string;
-  backlogCount: (n: number) => string;
   moved: (plan: string) => string;
   personLabel: (name: string, self: boolean) => string;
   cardStatusChanged: (title: string, status: string) => string;

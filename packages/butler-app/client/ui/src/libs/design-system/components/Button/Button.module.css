@@ -214,8 +214,7 @@
   padding: 0;
 }
 
-.icon,
-.text {
+.icon {
   display: inline-flex;
   min-width: 0;
   align-items: center;
@@ -227,6 +226,9 @@
 }
 
 .text {
+  display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1;
 }

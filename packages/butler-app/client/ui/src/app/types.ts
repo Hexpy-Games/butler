@@ -1192,7 +1192,7 @@ export interface StewardResultView {
   created_at: string;
 }
 
-export type SubtaskState = "working" | "paused" | "needs_approval";
+export type SubtaskState = "working" | "paused" | "needs_approval" | "waiting";
 
 /** One Worker of a subtask, finished ones included, in delegation order. */
 export interface SubtaskWorkerView {
@@ -2053,6 +2053,6 @@ export interface PendingUserQuestions {
 export interface UserQuestionAnswer { id: string; selected: string[]; custom: string | null; skipped: boolean }
 export type UserQuestionResponse = { status: "answered"; answers: UserQuestionAnswer[] } | { status: "deferred" };
 export interface AnsweredUserQuestions {
-  request_ref: string; source_turn_id: string; updated_at: string;
+  request_ref: string; followup_message_id: string; source_turn_id: string; updated_at: string;
   questions: { questions: UserQuestion[] }; response: UserQuestionResponse;
 }

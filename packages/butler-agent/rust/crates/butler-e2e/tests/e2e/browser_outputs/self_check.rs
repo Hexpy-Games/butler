@@ -120,6 +120,9 @@ async fn output_self_check_host_is_private_and_correlated() -> Result<(), Harnes
     s.finish().await
 }
 
+/// output_publish's allowance in the default provider schema.
+const OUTPUT_PUBLISH_SCHEMA_BYTES: usize = 711;
+
 #[tokio::test]
 async fn output_check_is_discoverable_bounded_and_absent_from_default_schema()
 -> Result<(), HarnessError> {
@@ -163,12 +166,16 @@ async fn output_check_is_discoverable_bounded_and_absent_from_default_schema()
             let before = serde_json::to_vec(&baseline).unwrap().len();
             let after = serde_json::to_vec(&tools).unwrap().len();
             eprintln!(
-                "default provider schema: baseline={before} current={after} delta={:.3}%",
-                100.0 * (after - before) as f64 / before as f64
+                "default provider schema: baseline={before} current={after} added={}",
+                after - before
             );
+            // Bound output_publish's own cost in bytes: 1% of the default
+            // schema it was measured against (71,113 bytes at ba03bb845). A
+            // share of the current schema fails whenever unrelated tools get
+            // shorter, with output_publish unchanged.
             assert!(
-                after * 1000 <= before * 1010,
-                "default schema grew more than 1.0%"
+                after - before <= OUTPUT_PUBLISH_SCHEMA_BYTES,
+                "output_publish adds more than {OUTPUT_PUBLISH_SCHEMA_BYTES} bytes to the default schema"
             );
         }
         assert!(

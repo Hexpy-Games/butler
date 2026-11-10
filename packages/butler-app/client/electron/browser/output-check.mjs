@@ -1,6 +1,7 @@
 import { configureWebSession } from "./identity.mjs";
 import { BrowserWindow, session } from "electron";
 import { checkScript } from "./page/check.mjs";
+import { loadOutsideNavigation } from "./settled-load.mjs";
 
 const MOBILE = { width: 390, height: 844 };
 const DESKTOP = { width: 1280, height: 800 };
@@ -110,7 +111,7 @@ export async function checkOutput(args, policy) {
     await new Promise(resolve => setTimeout(resolve, 0));
     await configureWebSession(partition);
     const started = performance.now();
-    await contents.loadURL(args.url);
+    await loadOutsideNavigation(contents, args.url);
     const load_ms = Math.round(performance.now() - started);
     // Electron 44 needs a loaded renderer before native device emulation.
     const desktop = await measure(contents, false);

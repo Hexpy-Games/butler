@@ -14,7 +14,7 @@ fn png(mask: bool) -> Vec<u8> {
                 },
             ])
         } else {
-            image::Rgba([11, 22, 33, 44])
+            image::Rgba([11, 22, 33, 255])
         }
     });
     let mut bytes = std::io::Cursor::new(Vec::new());
@@ -95,6 +95,12 @@ async fn editor_authorizes_once_and_composites_for_both_providers() -> Result<()
                     .parts
                     .iter()
                     .any(|(name, bytes)| name == "mask" && *bytes == png(true))
+            );
+            assert!(
+                request
+                    .parts
+                    .iter()
+                    .any(|(name, bytes)| name == "background" && *bytes == b"opaque".to_vec())
             );
             assert!(
                 !request

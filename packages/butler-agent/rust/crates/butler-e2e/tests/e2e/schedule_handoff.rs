@@ -19,7 +19,7 @@ use std::time::Duration;
 async fn missing_child_capability_returns_structurally_and_parent_completes()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (url, script, server) = stub::start().await?;
+    let (url, script, server) = stub::start(stub::Recovery::Runs).await?;
     let mut s = Setup::new("SCHEDULE-HANDOFF")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
@@ -58,7 +58,61 @@ async fn missing_child_capability_returns_structurally_and_parent_completes()
     // global full access), not the creating conversation's mode.
     assert_eq!(schedule["access_mode"], "full_access");
     assert_results(&s, &script, &turn).await?;
+    assert_eq!(stub::recovery_notices(&script), 1);
     migrate_legacy_results(&mut s).await?;
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
+#[tokio::test]
+async fn declined_capability_recovery_is_corrected_once_then_delivered() -> Result<(), HarnessError>
+{
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start(stub::Recovery::Declines).await?;
+    let s = Setup::new("SCHEDULE-HANDOFF-DECLINED")?
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .clock_after_daily_jobs("2026-09-27T12:00:00.000Z")?
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
+        .start()
+        .await?;
+    let (_, initial) = s.turn("general", stub::OWNER).await?;
+    assert_eq!(initial["state"], "delivered", "{initial}");
+    let found = tokio::time::timeout(Duration::from_secs(turn_timeout()), async {
+        loop {
+            let messages = s.gw.messages("general").await?;
+            if let Some(m) = messages
+                .iter()
+                .find(|m| m["role"] == "assistant" && m["text"] == stub::DECLINED)
+            {
+                return Ok::<_, HarnessError>(m["turn_id"].as_str().unwrap().to_owned());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await;
+    let turn =
+        found.unwrap_or_else(|_| panic!("declined reply never arrived: {}", s.agent.logs()))?;
+    let done =
+        s.gw.wait_terminal("general", &turn, Duration::from_secs(turn_timeout()))
+            .await?;
+    assert_eq!(done["state"], "delivered", "{done}");
+    let messages = s.gw.messages("general").await?;
+    assert!(
+        !messages
+            .iter()
+            .any(|m| m["text"] == "예약을 등록하지 못했습니다.")
+    );
+    let db =
+        butler_platform::sqlite::open(s.sandbox.data.join("agent-runtime/btcc.sqlite")).unwrap();
+    let count: i64 = db
+        .query_row(
+            "SELECT count(*) FROM btcc_guided_tool_calls WHERE tool_name='create_automation'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 0);
+    assert_eq!(stub::recovery_notices(&script), 1);
     s.finish().await?;
     server.abort();
     Ok(())
@@ -117,7 +171,19 @@ async fn assert_results(
         count, 1,
         "recovery must execute once in the same result Turn"
     );
+    let failure_key: Option<String> = db
+        .query_row("SELECT failure_key FROM btcc_steward_results", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(failure_key, None);
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(view.data()["steward_children"][0]["status"], "delivered");
+    assert_eq!(view.data()["subtasks"], json!([]));
     let requests = script.requests.lock().unwrap();
+    assert!(requests[0].to_string().contains(
+        "Delegate everything else with one delegate_to_steward call, even a single step"
+    ));
     let child: Vec<_> = requests
         .iter()
         .filter(|b| {

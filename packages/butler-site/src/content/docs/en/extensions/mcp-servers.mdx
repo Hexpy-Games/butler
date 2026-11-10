@@ -82,7 +82,7 @@ The server settings you register are stored in `~/.butler/config/mcp-servers.jso
 
 - During a conversation, Butler looks up the lists of tools and resources on the enabled servers, then calls the tools or reads the resources it needs.
 - Disabled servers are left out of the list and cannot be called.
-- If the conversation's permission is **Ask first**, Butler asks for your approval before it calls a tool. For permissions, see [Conversations and the composer](/en/help/basics/conversation/#permission).
+- Unless the conversation's permission is **Full access**, Butler asks for your approval before it calls a tool. With **Read only**, Butler does not call tools. For permissions, see [Conversations and the composer](/en/help/basics/conversation/#permission).
 - Butler opens a new connection to the server for each task and closes it when the task ends. A stdio server's process starts again for each task, so no server state remains between calls.
 
 ## Check the connection and fix problems
@@ -108,9 +108,9 @@ Check the following for each error message.
 <Notice tone="warning">
   - Of Butler Agent's environment variables, only `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM` and `USER` are passed to a stdio server. Add any other variable the server needs under **Environment variables**. If you add one of the same keys, it overrides the value that is passed.
   - Butler does not show a stdio server's error output (stderr). To find the cause, run the same command in a terminal.
-  - An environment reference looks up its value in the environment variables Butler Agent received when it started. A variable that is not found or a file that does not exist becomes an empty value, and that key is not passed.
+  - An **Environment reference** looks up its value in the environment variables Butler Agent received when it started. A variable that is not found or a file that does not exist becomes an empty value, and that key is not passed.
   - Changing **Server ID** in the edit form has no effect. To change the ID, add a new server and then delete the old one.
-  - Deletion takes effect right away, with no confirmation.
+  - Deleting asks for confirmation and also deletes the server's saved credentials.
   - OAuth sign-in is not supported. For a server that needs authentication, pass a token in a header.
 </Notice>
 
