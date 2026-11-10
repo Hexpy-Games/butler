@@ -2,7 +2,6 @@ import { apiErrorCode } from "@/app/api.ts";
 import { CanonProposalChanges } from "./CanonProposalChanges.tsx";
 import { useState } from "react";
 import { Box, Button, ButtonContainer, Card, Section, Stack, Tag, Tooltip, Typo } from "@/butler-ds";
-import { useAppLocale } from "@/app/copy.ts";
 import { openCanonEpic } from "./canonNavigation.ts";
 import { ChatEpicCards } from "./ChatEpicCards.tsx";
 import { useButlerStore } from "@/app/store.ts";
@@ -28,7 +27,7 @@ export function CanonProposalCards({ ids, sessionId, projectId }: { ids: readonl
 }
 const receiptOps = new Set(["epic.create", "epic.edit", "epic.move"]);
 function AppliedReceipt({ proposals }: { proposals: CanonProposal[] }) {
-  const copy = canonProposalCopy(useAppLocale().startsWith("ko"));
+  const copy = canonProposalCopy();
   const [first] = proposals;
   const project = projectOf(first);
   const changes = proposals.flatMap(p => p.changes);
@@ -44,8 +43,7 @@ function AppliedReceipt({ proposals }: { proposals: CanonProposal[] }) {
 function Proposal({ proposal: p, sessionId, projectId, refresh }: {
   proposal: CanonProposal; sessionId: string; projectId: string | null; refresh: () => Promise<void>;
 }) {
-  const ko = useAppLocale().startsWith("ko");
-  const copy = canonProposalCopy(ko);
+  const copy = canonProposalCopy();
   const [busy, setBusy] = useState(false);
   const [target, setTarget] = useState("new_name" in p.project ? "@new" : p.project.id ?? "@new");
   const [name, setName] = useState("new_name" in p.project ? p.project.new_name : "");
@@ -85,9 +83,9 @@ function Proposal({ proposal: p, sessionId, projectId, refresh }: {
             <MessageAttachments attachments={epic.attachments} sessionId={sessionId} />
           </Stack>;
         })}
-        <CanonProposalChanges changes={p.changes} ko={ko} />
+        <CanonProposalChanges changes={p.changes} />
       </Stack>
-      {chooseProject ? <CanonProposalProject value={target} name={name} busy={busy} ko={ko} onSelect={setTarget} onName={setName} />
+      {chooseProject ? <CanonProposalProject value={target} name={name} busy={busy} onSelect={setTarget} onName={setName} />
         : <CanonProposalFact label={copy.project} value={projectName} />}
       <ButtonContainer size="sm" justify="end">
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => void apply("declined")}>{copy.cancel}</Button>

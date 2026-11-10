@@ -1803,6 +1803,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       searchDefaultDepth: "Default search depth",
       butlerModel: "Model",
       butlerReasoning: "Reasoning",
+      recallMode: "Recall",
+      recallModel: "Recall model",
       consolidationModel: "Chat memory model",
       consolidationTime: "Time",
       localReasoningBudget: "Local reasoning budget",
@@ -1913,6 +1915,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       timezoneAll: "All",
       timezoneEmpty: "No matching time zones",
     },
+    recallOptions: { faster: "Faster", accurate: "More accurate", sameAsMemoryModel: "Same as memory model" },
+    composerDecorationThemes: { shoreline: "Shoreline", cherry: "Cherry blossom" },
+    openSourceLicenses: {
+      section: "Licenses", title: "Open source licenses", description: "Licenses and notices by component",
+      searchLabel: "Search components", searchPlaceholder: "Search", retry: "Retry", loading: "Loading", noResults: "No results", close: "Close",
+    },
     descriptions: {
       runtimeSupportedModelsOnly:
         "Only models from currently runnable providers are shown.",
@@ -1925,6 +1933,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
         "The time zone Butler uses to understand current time and schedule context.",
       consolidationModel:
         "The model used for chat memory consolidation and profile building.",
+      recallMode: "More accurate recall can take a few seconds longer.",
       consolidationTime: "Runs only while Butler is on.",
       consolidationModelDefault:
         "Use the current Butler default model setting.",
