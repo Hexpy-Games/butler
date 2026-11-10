@@ -285,10 +285,13 @@ async fn browser_still_shutdown_recovers_active_and_further_pending_stills()
     for (index, step) in after["steps"].as_array().unwrap().iter().enumerate() {
         assert_eq!(step["step"], index);
         assert_eq!(step["state"], "failed");
-        assert!(matches!(
-            step["reason"].as_str(),
-            Some("gateway_restarted" | "browser_host_lost")
-        ));
+        assert!(
+            matches!(
+                step["reason"].as_str(),
+                Some("gateway_restarted" | "browser_host_lost")
+            ),
+            "{step}"
+        );
     }
     s.finish().await
 }

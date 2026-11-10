@@ -84,6 +84,19 @@ async fn connect(s: &Scenario, fake: &FakeImap, password: &str) -> Result<String
     assert_eq!(r.status, 200, "{r:?}");
     let id = r.data()["account"].as_str().unwrap().to_owned();
     wait(|| async { Ok(fake.commands().iter().any(|l| l.ends_with(" IDLE"))) }).await?;
+    // The host reads the account's mailboxes on its own session before it
+    // reports the account connected; connection setup ends there.
+    wait(|| async {
+        let r = api(s, Method::GET, "/connectors", None).await?;
+        Ok(r.data()["connectors"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| c["accounts"].as_array())
+            .flatten()
+            .any(|a| a["id"] == id.as_str() && a["state"] == "connected"))
+    })
+    .await?;
     Ok(id)
 }
 async fn enabled(s: &Scenario, id: &str, enabled: bool) -> Result<(), HarnessError> {

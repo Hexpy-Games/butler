@@ -20,6 +20,8 @@ export interface ElectronPage {
   dragPointer(x: number, y: number): Promise<void>;
   pointerUp(x: number, y: number): Promise<void>;
   drag(from: {x:number;y:number}, to: {x:number;y:number}): Promise<void>;
+  /** Overrides CSS media features (CDP Emulation.setEmulatedMedia); `[]` restores the system's. */
+  emulateMedia(features: Array<{ name: string; value: string }>): Promise<void>;
   /** Polls `fn(arg)` in the page; `arg` crosses as JSON. */
   waitForFunction<T = undefined>(fn: (arg: T) => unknown, arg?: T): Promise<void>;
   reload(): Promise<void>;
@@ -155,6 +157,7 @@ async function connect(url: string): Promise<ElectronPage> {
     pointerDown: async (x,y) => { await send("Input.dispatchMouseEvent", {type:"mousePressed",x,y,button:"left",buttons:1,clickCount:1}); },
     dragPointer: async (x,y) => { await send("Input.dispatchMouseEvent", {type:"mouseMoved",x,y,button:"left",buttons:1}); },
     pointerUp: async (x,y) => { await send("Input.dispatchMouseEvent", {type:"mouseReleased",x,y,button:"left",buttons:0,clickCount:1}); },
+    emulateMedia: async features => { await send("Emulation.setEmulatedMedia", { features }); },
     drag: async (from,to) => {
       await send("Input.dispatchMouseEvent",{type:"mousePressed",...from,button:"left",buttons:1,clickCount:1});
       for(let step=1;step<=12;step++) {
