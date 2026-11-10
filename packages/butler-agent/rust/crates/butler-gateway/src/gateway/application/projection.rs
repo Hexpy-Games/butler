@@ -163,7 +163,7 @@ async fn project_boundary(
                 .reconcile_turn(work_outcome)
                 .await;
         }
-        context.finish_terminal_turn(turn).await?;
+        context.finish_terminal_turn(turn).await;
     }
     Ok(true)
 }
@@ -296,7 +296,7 @@ async fn settle_final(
             status_note: "Reconciled after delivered turn replay.".into(),
         })
         .await;
-    context.finish_terminal_turn(settled_turn).await?;
+    context.finish_terminal_turn(settled_turn).await;
     context.queue_wake.chat(settled_chat).await?;
     Ok(())
 }

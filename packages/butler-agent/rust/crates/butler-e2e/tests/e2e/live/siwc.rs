@@ -15,9 +15,12 @@ use serde_json::{Value, json};
 const ID: &str = "LIVE-SIWC";
 const PROMPT: &str = "Read the file notes.txt in your workspace and tell me the secret word.";
 
+/// The model this contract is about; it runs only when it is the live model.
+pub(super) const MODEL: &str = "openai/gpt-6-luna@low";
+
 pub(super) async fn check() -> Result<(), HarnessError> {
-    let choice = ModelChoice::parse("openai/gpt-6-luna@low")
-        .ok_or_else(|| harness_error("invalid LIVE-SIWC model"))?;
+    let choice =
+        ModelChoice::parse(MODEL).ok_or_else(|| harness_error("invalid LIVE-SIWC model"))?;
     let secret = nonce();
     let mut setup = Setup::new(ID)?
         .cassette(ID)

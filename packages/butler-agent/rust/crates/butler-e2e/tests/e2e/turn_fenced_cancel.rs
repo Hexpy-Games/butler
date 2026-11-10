@@ -163,10 +163,16 @@ async fn race(stop_first: bool, entry: &'static str) -> Result<(), HarnessError>
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             let processed = s.sandbox.data.join("runtime/inbound-events/processed");
+            // The agent prunes processed records, so one listed here can be gone by the read.
             if std::fs::read_dir(processed)?.any(|entry| {
-                let record: serde_json::Value =
-                    serde_json::from_slice(&std::fs::read(entry.unwrap().path()).unwrap()).unwrap();
-                record.pointer("/envelope/control/kind") == Some(&json!("cancel_turn"))
+                match std::fs::read(entry.unwrap().path()) {
+                    Ok(bytes) => {
+                        let record: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                        record.pointer("/envelope/control/kind") == Some(&json!("cancel_turn"))
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(error) => panic!("processed record unreadable: {error}"),
+                }
             }) {
                 break;
             }
