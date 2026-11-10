@@ -1807,6 +1807,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       searchDefaultDepth: "기본 검색 깊이",
       butlerModel: "모델",
       butlerReasoning: "추론",
+      recallMode: "회상 방식",
+      recallModel: "회상 모델",
       consolidationModel: "대화 기억 정리 모델",
       consolidationTime: "실행 시간",
       localReasoningBudget: "로컬 추론 예산",
@@ -1917,6 +1919,12 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       timezoneAll: "전체",
       timezoneEmpty: "일치하는 시간대가 없습니다",
     },
+    recallOptions: { faster: "빠르게", accurate: "정확하게", sameAsMemoryModel: "기억 모델과 동일" },
+    composerDecorationThemes: { shoreline: "해안선", cherry: "벚꽃" },
+    openSourceLicenses: {
+      section: "라이선스", title: "오픈소스 라이선스", description: "구성요소별 라이선스 및 고지",
+      searchLabel: "구성요소 검색", searchPlaceholder: "검색", retry: "다시 시도", loading: "불러오는 중", noResults: "검색 결과 없음", close: "닫기",
+    },
     descriptions: {
       runtimeSupportedModelsOnly:
         "현재 실행 가능한 제공자의 모델만 표시합니다.",
@@ -1929,6 +1937,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
         "버틀러가 현재 시간과 일정 맥락을 해석할 때 사용할 시간대입니다.",
       consolidationModel:
         "대화 기억 정리와 알아가기에서 사용할 모델입니다.",
+      recallMode: "정확하게 회상하면 몇 초 더 걸릴 수 있어요.",
       consolidationTime: "버틀러가 켜져 있을 때만 실행합니다.",
       consolidationModelDefault:
         "현재 버틀러 기본 모델 설정을 그대로 따릅니다.",

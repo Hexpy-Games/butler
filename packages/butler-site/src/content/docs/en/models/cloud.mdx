@@ -151,9 +151,9 @@ Credentials are stored in the data folder (`~/.butler` by default). If you chang
 - ChatGPT sign-in data: `~/.butler/auth/chatgpt.json`
 - Registered model list: `~/.butler/butler.config.json`
 
-By default, an unsigned release stores API keys in a file on this computer. The file permissions are set so that only the owner can read and write it (`0600`). The app shows **Stored only on this computer**.
+By default, Windows and Linux releases store API keys in a file on this computer. The file permissions are set so that only the owner can read and write it (`0600`). The app shows **Stored only on this computer**.
 
-A release signed with a Developer ID stores API keys in the macOS Keychain, and the app shows **Stored in Keychain**. The first time you run a signed release, it moves the keys you already saved into the Keychain automatically.
+The macOS release stores API keys in the macOS Keychain, and the app shows **Stored in Keychain**. The first time it runs, it moves keys already saved in the file into the Keychain automatically.
 
 On Windows and Linux too, running `butler config set secrets.store system` stores API keys in the system store, shown as **Stored in Credential Manager** or **Stored in the system keyring**. Keys already in the file move to the system store.
 

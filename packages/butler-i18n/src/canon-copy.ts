@@ -24,6 +24,17 @@ export interface CanonOrderCopy {
 export interface CanonCopy {
   deletedTask: string;
   deletion: { changeDelete: string; changed: string; addDelete: string; action: string; title: (title: string) => string; detail: string; running: string; deleted: string; missing: string };
+  proposalCard: {
+    draft: string; changes: string; cancel: string; add: string; apply: string; cancelled: string; superseded: string; stale: string; open: string; name: string;
+    currentPlan: string; destinationPlan: string; backlog: string; order: string; project: string; newProject: string; closed: string; opened: string;
+    ops: { epicEdit: string; epicMove: string; planCreate: string; planEdit: string; planReorder: string; specEdit: string };
+    receipt: {
+      epics: (parts: string) => string; epicCreate: (count: number) => string; epicEdit: (count: number) => string;
+      epicMove: (count: number) => string; epicDelete: (count: number) => string; planCreate: string; planEdit: string;
+      planReorder: string; specEdit: string; projectCreate: string;
+    };
+    target: { newProject: (name: string) => string; plan: (plan: string) => string; backlog: string };
+  };
   order: CanonOrderCopy;
   queue: {
     step: (plan: string, epic: string) => string;

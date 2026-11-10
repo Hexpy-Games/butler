@@ -92,7 +92,7 @@ it. When two strings fit, check which one the component renders.
 | 앱 | the app | Lowercase. "Butler app" where the Korean says Butler 앱 |
 | Agent, Butler Agent | the Agent, Butler Agent | Capitalized, as the Korean pages write it |
 | 하위 작업 | subtask | **Subtasks**. Never "Worker" or "Steward" in prose; **Worker settings** is a Settings label |
-| 과제, 계획 | Epic, Plan | Bold as `canon.ts` shows (**New Epic**, **New Plan**); "task" in prose |
+| 과제, 계획 | Epic, plan | **New Epic**, **New Plan**. 과제 is always "Epic", in prose too; "task" is 작업, a different thing |
 | 대화 | conversation | Labels vary: **New chat** (the sidebar and space button), **Chats** (sidebar section), **Target chat**, **Project chats**. Use the exact label in bold and "conversation" in prose |
 | 컴포저 | composer | The message box. Label: **Message composer** |
 | 사이드바 | sidebar | **Sidebar**, **Show sidebar**, **Hide sidebar** |
