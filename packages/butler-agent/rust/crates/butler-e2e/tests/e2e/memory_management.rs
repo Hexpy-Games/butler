@@ -295,7 +295,7 @@ async fn interrupted_trash_waits_for_an_explicit_cleanup_after_restart() -> Resu
 // A refused folder cannot expose any management API. The offline driver also
 // exercises both library entry points against this predicate without startup.
 fn legacy_management_is_unreachable() -> Result<(), HarnessError> {
-    let setup = Setup::new("MEM-MANAGE-LEGACY")?;
+    let mut setup = Setup::new("MEM-MANAGE-LEGACY")?;
     let data = &setup.sandbox.data;
     std::fs::create_dir_all(data.join("app-server"))?;
     let file = data.join("app-server/butler-client.sqlite");
@@ -310,6 +310,7 @@ fn legacy_management_is_unreachable() -> Result<(), HarnessError> {
     assert_eq!(std::fs::read(&file)?, b"legacy");
     assert_eq!(std::fs::read_dir(data)?.count(), 1);
     assert_eq!(std::fs::read_dir(data.join("app-server"))?.count(), 1);
+    setup.sandbox.mark_success();
     Ok(())
 }
 
