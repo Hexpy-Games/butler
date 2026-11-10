@@ -15,7 +15,7 @@ changes = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(changes)
 CRATES = 'packages/butler-agent/rust/crates/'
 WINDOWS = 'windows-preview-smoke.yml'
-NONE = dict.fromkeys(['build', 'stub', 'hosted-build', 'release', 'hosted'], False)
+NONE = dict.fromkeys(['build', 'stub', 'hosted-build', 'release', 'installer', 'hosted'], False)
 # PRs never use the owner-PC runner unless labeled; main and labeled PRs do.
 HOSTED = dict(NONE, **{'hosted-build': True, 'hosted': True})
 NATIVE = dict(NONE, stub=True, hosted=True)
