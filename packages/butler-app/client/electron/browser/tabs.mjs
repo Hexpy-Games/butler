@@ -66,7 +66,7 @@ class UserBrowser {
     for (const child of this.tabs.values()) if (child.popup && child.opener && !child.closing) popups.set(child.opener, { id: child.id, url: child.url });
     return { restored: this.opened, enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
       tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, preview: tab.preview, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab) || Boolean(tab.stillJobs?.size), paused: Boolean(tab.pausedTurns), agentAt: tab.lastAgentCall ?? undefined, privacyFrozen: this.live.sensitive(tab), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, stills: this.stillPreferences.get(tab.owner) !== false,
-        signinStep: tab.signinStep ?? undefined, payStep: tab.payStep ?? undefined, saveOffer: tab.saveOffer ? { username: tab.saveOffer.username, host: new URL(tab.saveOffer.origin).host } : undefined })) };
+        signinStep: tab.signinStep ?? undefined, payStep: tab.payStep ?? undefined, fillOffer: tab.fillOffer && tab.url === tab.fillOffer.url ? { host: new URL(tab.fillOffer.origin).host, accounts: tab.fillOffer.accounts } : undefined, saveOffer: tab.saveOffer ? { username: tab.saveOffer.username, host: new URL(tab.saveOffer.origin).host } : undefined })) };
   }
   publish() {
     this.live.sync();
@@ -265,6 +265,7 @@ class UserBrowser {
     tab.closing = true;
     this.live.unsubscribe(id);
     clearOffer(tab);
+    tab.fillOffer = null;
     this.downloads.cancelTab(id);
     closeUse(this, tab);
     void resolveDialog(this, tab, { accept: false }, "tab_closed");

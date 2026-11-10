@@ -62,6 +62,26 @@ try {
   assert.equal(same.body.data.offer, false, "the saved sign-in is not offered again");
   const changed = await agent("POST", "/security/signins/offer", { origin, username: "owner@fixture.test", password: CANARY + "x" });
   assert.equal(changed.body.data.offer, true, "a changed password is offered");
+  const second = await agent("POST", "/security/signins", { origin, username: "second@fixture.test", password: "second-pw" });
+  assert.equal(second.status, 200);
+  await app.call("navigate", { id: mine, value: fixtures.url("login.fixture-shop.test", "/login") });
+  await waitBrowser(() => page(mine, "Boolean(document.querySelector('[name=username]'))"), "login page again");
+  const point = await page<{ x: number; y: number }>(mine, "(()=>{const r=document.querySelector('[name=username]').getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()");
+  await app.main(`(()=>{const contents=${tabOf(mine)}.view.webContents;for(const type of ['mouseDown','mouseUp'])contents.sendInputEvent({type,button:'left',clickCount:1,x:${point.x},y:${point.y}});})()`);
+  const fillBand = "document.querySelector('[data-test-class=browser-fill-signin]')";
+  await waitBrowser(() => app.page.expression(`Boolean(${fillBand})`), "fill sign-in band");
+  const fillText = await app.page.expression<string>(`${fillBand}.innerText`);
+  assert.ok(fillText.includes(copy.savedSignIn));
+  assert.ok(fillText.includes("login.fixture-shop.test"));
+  writeFileSync(join(evidence, "fill-band.png"), await app.page.screenshot());
+  await app.page.clickText(copy.fillSignIn, "[data-test-class=browser-fill-signin] button");
+  await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[role=menuitem]'))"), "sign-in account menu");
+  writeFileSync(join(evidence, "fill-menu.png"), await app.page.screenshot());
+  await app.page.clickText("owner@fixture.test", "[role=menuitem]");
+  await waitBrowser(() => page(mine, `document.querySelector('[name=username]').value==='owner@fixture.test' && document.querySelector('[name=password]').value.length===${CANARY.length}`), "sign-in filled");
+  assert.ok(!JSON.stringify(await app.main("globalThis.browserAgentSubject.snapshot()")).includes(CANARY), "fill snapshot excludes the password");
+  await app.main(`(()=>{const view=${tabOf(mine)}.view;for(const type of ['keyDown','char','keyUp'])view.webContents.sendInputEvent({type,keyCode:'Enter'})})()`);
+  await waitBrowser(() => page(mine, "location.pathname==='/mfa'"), "filled sign-in accepted");
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true }));
 } catch (error) {
   writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), dom: await app.page.expression("document.body.innerText").catch(() => null) }, null, 2));

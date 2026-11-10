@@ -5,7 +5,9 @@
 //! - `GET /security/signins`: availability and one row per site.
 //! - `POST /security/signins`: add `{site, username, password}` (or a takeover
 //!   save `{origin, username, password}`).
-//! - POST /security/signins/offer: {origin, username, password} → {offer}; never answers a secret.
+//! - `POST /security/signins/offer`: `{origin, username, password}` → `{offer}`; never answers a secret.
+//! - `POST /security/signins/accounts`: `{origin}` → `{accounts}`.
+//! - `POST /security/signins/fill`: `{entry_id, origin}` → `{token}`.
 //! - `PATCH /security/signins/{id}`: `{policy}`.
 //! - `DELETE /security/signins/{id}`: delete the password and its entry.
 //! - `POST /security/signins/site`: `{site, all_conversations}` or `{site, revoke: true}`.
@@ -38,6 +40,8 @@ pub(super) async fn route(
         (&Method::POST, "/security/signins") => add(&state, body).await?,
         (&Method::POST, "/security/signins/site") => site(&state, &body).await?,
         (&Method::POST, "/security/signins/offer") => offer(&state, body).await?,
+        (&Method::POST, "/security/signins/accounts") => accounts(&state, &body).await?,
+        (&Method::POST, "/security/signins/fill") => fill(&state, &body).await?,
         (&Method::PATCH, p) if p.starts_with("/security/signins/") => {
             let policy = body["policy"].as_str().unwrap_or("");
             if !matches!(policy, "always" | "ask" | "never") {
@@ -126,15 +130,19 @@ async fn offer(state: &Arc<HttpState>, mut body: Value) -> Result<Value, HttpErr
     }
     let found = state
         .application
-        .signins(AppSignInCommand::Lookup { site })
+        .signins(AppSignInCommand::Entries { site })
         .await?;
-    let entry = &found["entry"];
-    let offer = if entry.is_null() || entry["username"].as_str() != Some(username) {
-        true
-    } else {
+    let entry = found["entries"].as_array().and_then(|entries| {
+        entries
+            .iter()
+            .find(|entry| entry["username"].as_str() == Some(username))
+    });
+    let offer = if let Some(entry) = entry {
         let id = entry["id"].as_str().unwrap_or("");
         let stored = signin_secrets::get(state, id).await?;
         stored.is_none_or(|stored| stored.expose() != password.expose())
+    } else {
+        true
     };
     Ok(json!({"offer": offer}))
 }
@@ -245,4 +253,61 @@ async fn site(state: &Arc<HttpState>, body: &Value) -> Result<Value, HttpError> 
         super::browser_host::signed_in::fence_site(state, site);
     }
     Ok(result)
+}
+
+async fn accounts(state: &Arc<HttpState>, body: &Value) -> Result<Value, HttpError> {
+    let origin = body["origin"].as_str().unwrap_or("");
+    let Some((_, site)) = login_origin(origin) else {
+        return Ok(json!({"accounts": []}));
+    };
+    if !signin_secrets::available(state).await {
+        return Ok(json!({"accounts": []}));
+    }
+    let entries = state
+        .application
+        .signins(AppSignInCommand::Entries { site })
+        .await?;
+    let accounts: Vec<Value> = entries["entries"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|entry| {
+            entry["origins"].as_array().is_some_and(|origins| {
+                origins
+                    .iter()
+                    .any(|allowed| allowed.as_str() == Some(origin))
+            })
+        })
+        .map(|entry| json!({"id": entry["id"], "username": entry["username"]}))
+        .collect();
+    Ok(json!({"accounts": accounts}))
+}
+
+async fn fill(state: &Arc<HttpState>, body: &Value) -> Result<Value, HttpError> {
+    let id = body["entry_id"].as_str().unwrap_or("");
+    let origin = body["origin"].as_str().unwrap_or("");
+    let entry = state
+        .application
+        .signins(AppSignInCommand::Entry { id: id.into() })
+        .await?;
+    let entry = &entry["entry"];
+    if entry.is_null() {
+        return Err(invalid("Unknown sign-in."));
+    }
+    let origins: Vec<String> = serde_json::from_value(entry["origins"].clone()).unwrap_or_default();
+    if !origins.iter().any(|allowed| allowed == origin) {
+        return Err(HttpError::public(
+            403,
+            "origin_mismatch",
+            "This sign-in is for another site.",
+        ));
+    }
+    if !signin_secrets::available(state).await {
+        return Err(HttpError::public(
+            409,
+            "signin_unavailable",
+            "Sign-ins need the system password store.",
+        ));
+    }
+    Ok(json!({"token": super::browser_host::fill::mint(state, id, origins)?}))
 }

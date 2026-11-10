@@ -24,6 +24,7 @@ export interface BrowserTab {
   signinStep?: string;
   payStep?: string;
   /** "로그인 저장" after a takeover sign-in; never carries the password. */
+  fillOffer?: { host: string; accounts: { id: string; username: string }[] };
   saveOffer?: { username: string; host: string };
 }
 export interface BrowserSnapshot {

@@ -317,6 +317,8 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/security/pairing/clock", Handler::Security),
     ("/security/signins", Handler::Security),
     ("/security/signins/site", Handler::Security),
+    ("/security/signins/accounts", Handler::Security),
+    ("/security/signins/fill", Handler::Security),
     ("/security/signins/offer", Handler::Security),
     ("/security/signins/{id}", Handler::Security),
     ("/security/vault", Handler::Security),

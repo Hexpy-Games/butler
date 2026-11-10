@@ -1991,6 +1991,8 @@ async function openMainWindow() {
       adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
     });
     userBrowser.saveSignIn = (payload) => signInRoute({ route: "saveSignIn", body: { payload } });
+    userBrowser.signInAccounts = async (origin) => (await signInRoute({ route: "signInAccounts", body: { payload: { origin } } }))?.data?.accounts ?? [];
+    userBrowser.signInFillToken = async (payload) => (await signInRoute({ route: "signInFillToken", body: { payload } }))?.data?.token;
     userBrowser.signInOfferWanted = async (payload) => (await signInRoute({ route: "signInOffer", body: { payload } }))?.data?.offer === true;
     userBrowser.downloadRequest = async input => {
       const response = await appServerFetch("/internal/browser-host/downloads", { method: "POST",

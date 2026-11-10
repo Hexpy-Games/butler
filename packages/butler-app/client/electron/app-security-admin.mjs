@@ -44,6 +44,8 @@ const SECURITY_ROUTES = Object.freeze({
   listSignIns: { method: "GET", path: "/security/signins" },
   addSignIn: { method: "POST", path: "/security/signins", payload: true },
   saveSignIn: { method: "POST", path: "/security/signins", payload: true },
+  signInAccounts: { method: "POST", path: "/security/signins/accounts", payload: true },
+  signInFillToken: { method: "POST", path: "/security/signins/fill", payload: true },
   signInOffer: { method: "POST", path: "/security/signins/offer", payload: true },
   updateSignIn: { method: "PATCH", path: "/security/signins", entry: true, payload: true },
   deleteSignIn: { method: "DELETE", path: "/security/signins", entry: true },

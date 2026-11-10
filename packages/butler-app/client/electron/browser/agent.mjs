@@ -164,7 +164,7 @@ async function executeFrame(browser, frame) {
   const { op, session, args = {} } = frame;
   if (!/^[a-zA-Z0-9_-]{1,128}$/u.test(session ?? "")) return { status: "refused", reason: "invalid_session" };
   const owner = `conversation:${session}`;
-  if (op === "tabs.list") return { tabs: browser.snapshot().tabs.filter(tab => tab.owner === owner).map(({ saveOffer: _offer, agentAt: _at, ...tab }) => tab) };
+  if (op === "tabs.list") return { tabs: browser.snapshot().tabs.filter(tab => tab.owner === owner).map(({ saveOffer: _offer, fillOffer: _fillOffer, agentAt: _at, ...tab }) => tab) };
   if (op === "owner.closed") {
     for (const tab of [...browser.tabs.values()]) if (tab.owner === owner) browser.close(tab.id);
     browser.events?.delete(owner); return { status: "ok" };

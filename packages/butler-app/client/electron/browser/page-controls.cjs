@@ -131,6 +131,7 @@ window.addEventListener("dragend", event => {
 // Signed-in tabs only: a submitted sign-in may be offered for saving ("로그인 저장").
 // Main keeps it only for a tab the user holds, and only in memory.
 if (process.argv.includes("--butler-signin-capture")) {
+  window.addEventListener("focusin", event => { const t = event.isTrusted && event.target; if (t?.tagName === "INPUT" && /^(password|text|email|tel|)$/u.test(t.type) && (t.type === "password" || (t.form ?? document).querySelector('input[type="password"]'))) ipcRenderer.send("butler-browser:signin-field"); }, true);
   const capture = scope => {
     const root = scope?.querySelectorAll ? scope : document;
     const password = [...root.querySelectorAll('input[type="password"]')].find(input => input.value);
