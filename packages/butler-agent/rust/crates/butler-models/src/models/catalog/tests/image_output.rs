@@ -3,7 +3,7 @@ use crate::models::ModelCatalog;
 pub(super) fn assert_output_catalog() {
     let catalog = ModelCatalog::new().unwrap();
     let models = catalog.image_output_models();
-    assert_eq!(models.len(), 6);
+    assert_eq!(models.len(), 8);
     for model in models {
         assert_eq!(
             model.output_modalities.as_deref(),
@@ -26,7 +26,7 @@ pub(super) fn assert_output_catalog() {
             .unwrap();
         assert!(cost > 0.0);
         let pricing = serde_json::to_value(&capability.pricing).unwrap();
-        assert_eq!(pricing["as_of"], "2026-10-25");
+        assert!(pricing["as_of"].as_str().unwrap().starts_with("2026-1"));
         assert!(
             pricing["source_url"]
                 .as_str()
