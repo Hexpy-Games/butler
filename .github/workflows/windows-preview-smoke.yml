@@ -539,15 +539,28 @@ jobs:
         working-directory: packages/butler-agent/rust
         run: |
           $root = Join-Path $env:RUNNER_TEMP 'windows-verify'
-          New-Item -ItemType Directory -Force "$root/logs" | Out-Null
-          $env:PREVIEW_ROOT = $root
-          $env:BUTLER_E2E_WORKSPACE_ROOT = "$env:GITHUB_WORKSPACE/packages/butler-agent/rust"
           $zip = @(Get-ChildItem "$env:GITHUB_WORKSPACE/dist/release/agent-first/butler-agent-*-windows-x64.zip")
           if ($zip.Count -ne 1) { throw 'Expected exact first Agent archive' }
           Expand-Archive $zip[0].FullName "$root/agent-first"
           $env:BUTLER_E2E_BIN = "$root/agent-first/butler-agent.exe"
-          ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests updates,update_channels,process_names -WithoutE2eFixtures
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:BUTLER_E2E_SKIP_BUILD = '1'
+          $env:BUTLER_E2E_WITHOUT_FIXTURES = '1'
+          $env:BUTLER_E2E_WORKSPACE_ROOT = "$env:GITHUB_WORKSPACE/packages/butler-agent/rust"
+          foreach ($test in @('updates','update_channels','process_names')) {
+            $env:HOME = Join-Path $root ([guid]::NewGuid())
+            $env:BUTLER_DATA = Join-Path $root ([guid]::NewGuid())
+            New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+            $ErrorActionPreference = 'Continue'
+            $listed = & "$root/artifacts/e2e.exe" "$test`::" --list
+            $ErrorActionPreference = 'Stop'
+            # libtest filters are substrings (updates:: also matches plugins::updates::), so select the top-level module explicitly.
+            $selected = @($listed | Where-Object { $_ -match ': test$' } | ForEach-Object { $_ -replace ': test$', '' } | Where-Object { $_.StartsWith("$test`::") })
+            if ($LASTEXITCODE -ne 0 -or $selected.Count -eq 0) { throw "Empty update E2E selection: $test" }
+            $ErrorActionPreference = 'Continue'
+            & "$root/artifacts/e2e.exe" --exact @selected --nocapture --test-threads=8
+            $ErrorActionPreference = 'Stop'
+            if ($LASTEXITCODE) { throw "Update E2E failed: $test" }
+          }
       - name: Prove Squirrel ordering and real install/update/uninstall
         shell: pwsh
         working-directory: .
