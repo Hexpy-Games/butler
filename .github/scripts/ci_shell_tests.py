@@ -29,8 +29,7 @@ class ShellSelection(unittest.TestCase):
             shell,
         )
         self.assertIn(
-            "cache-on-failure: ${{ github.event_name == 'push' && "
-            "github.ref == 'refs/heads/main' }}",
+            "cache-on-failure: ${{ github.event_name == 'push' }}",
             shell,
         )
 
