@@ -7,6 +7,10 @@ description: >-
   prebuilt binaries, including for the Windows compile check.
 
 inputs:
+  release-lto:
+    description: Link macOS release-profile builds with thin LTO and one codegen unit (shipped Agent and perf agent recipe)
+    required: false
+    default: 'true'
   restore-cargo-target:
     description: Restore Cargo compilation caches; archive-only consumers need none.
     default: 'true'
@@ -162,12 +166,12 @@ runs:
           echo 'CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1' >> "$GITHUB_ENV"
         fi
 
-    # The Windows release recipe also shrinks the macOS Agent (258 -> 189 MB).
-    # Every macOS release-profile build (release, packaging, perf and update
-    # fixtures) uses it; ci-fast keeps its own settings. Snapshot and
-    # provenance identities include both variables.
+    # The Windows release recipe also shrinks the shipped macOS Agent (258 -> 189 MB).
+    # Shipped and perf-agent builds use it; the perf test harness and update
+    # fixtures opt out (release-lto: 'false') because LTO on them only costs build
+    # time. Snapshot and provenance identities include both variables.
     - name: Configure macOS release link-time optimization
-      if: runner.os == 'macOS'
+      if: runner.os == 'macOS' && inputs.release-lto == 'true'
       shell: bash
       run: |
         echo 'CARGO_PROFILE_RELEASE_LTO=thin' >> "$GITHUB_ENV"

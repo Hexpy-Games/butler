@@ -56,7 +56,6 @@ export function useConversationDecision(isComposing: boolean, enabled: boolean) 
   const surface = {
     planDecision: requestSlot && !decision.plan?.editingInstruction ? undefined : decision.plan,
     authorityDecision: requestSlot && !decision.authority?.composingMessage ? undefined : decision.authority,
-    question: requestSlot ? undefined : decision.question,
   };
   return { decision, requestSlot, surface };
 }

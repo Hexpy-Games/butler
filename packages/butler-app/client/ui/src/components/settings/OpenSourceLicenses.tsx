@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import {
   Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
   DisclosureRow, Input, ScrollArea, Stack, Typo,
@@ -8,9 +8,7 @@ import {
 interface Notice { title: string; license: string; text: string; search: string }
 
 export function OpenSourceLicenses() {
-  const locale = useAppLocale();
-  const ko = locale === "ko-KR";
-  const title = ko ? "오픈소스 라이선스" : "Open source licenses";
+  const copy = appCopy.settings.openSourceLicenses;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -46,20 +44,20 @@ export function OpenSourceLicenses() {
   const filtered = notices?.filter((notice) => notice.search.includes(query.toLowerCase()));
   return (
     <>
-      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>{title}</Button>
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>{copy.title}</Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent size="lg" layout="scroll-body" closeLabel={ko ? "닫기" : "Close"}>
+        <DialogContent size="lg" layout="scroll-body" closeLabel={copy.close}>
           <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{ko ? "구성요소별 라이선스 및 고지" : "Licenses and notices by component"}</DialogDescription>
-            <Input aria-label={ko ? "구성요소 검색" : "Search components"}
-              placeholder={ko ? "검색" : "Search"} value={query} onChange={(event) => setQuery(event.target.value)} />
+            <DialogTitle>{copy.title}</DialogTitle>
+            <DialogDescription>{copy.description}</DialogDescription>
+            <Input aria-label={copy.searchLabel}
+              placeholder={copy.searchPlaceholder} value={query} onChange={(event) => setQuery(event.target.value)} />
           </DialogHeader>
           <ScrollArea fill dataTestClass="open-source-licenses">
             <Stack gap="sm">
               {failed ? <Button variant="ghost" onClick={() => setAttempt((value) => value + 1)}>
-                {ko ? "다시 시도" : "Retry"}
-              </Button> : !notices ? <Typo.Body>{ko ? "불러오는 중" : "Loading"}</Typo.Body> : null}
+                {copy.retry}
+              </Button> : !notices ? <Typo.Body>{copy.loading}</Typo.Body> : null}
               {filtered?.map((notice) => (
                 <DisclosureRow key={notice.title} title={notice.title} meta={notice.license}
                   open={expanded === notice.title} onToggle={() => setExpanded(expanded === notice.title ? null : notice.title)}>
@@ -68,7 +66,7 @@ export function OpenSourceLicenses() {
                   </Typo.Code>
                 </DisclosureRow>
               ))}
-              {notices && filtered?.length === 0 ? <Typo.Body>{ko ? "검색 결과 없음" : "No results"}</Typo.Body> : null}
+              {notices && filtered?.length === 0 ? <Typo.Body>{copy.noResults}</Typo.Body> : null}
             </Stack>
           </ScrollArea>
         </DialogContent>

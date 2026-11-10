@@ -14,18 +14,23 @@ pub enum SubtaskState {
     Paused,
     /// Waiting on the owner's decision somewhere in its subtree.
     NeedsApproval,
+    /// Not running: queued to start or idle.
+    Waiting,
 }
 
 impl SubtaskState {
-    /// A pending decision wins over an interruption: the owner acts on it first.
+    /// A pending decision wins over an interruption; otherwise the child's own activity decides, so an idle child never reads as working.
     #[must_use]
-    pub fn of(awaiting_decision: bool, recoverable: bool) -> Self {
+    pub fn of(awaiting_decision: bool, recoverable: bool, activity: &str) -> Self {
         if awaiting_decision {
             Self::NeedsApproval
         } else if recoverable {
             Self::Paused
         } else {
-            Self::Working
+            match activity {
+                "active" => Self::Working,
+                _ => Self::Waiting,
+            }
         }
     }
 }
@@ -68,6 +73,10 @@ impl SubsessionService {
             .map_err(BtccError::from)?;
         let mut subtasks = Vec::with_capacity(rows.len());
         for row in rows {
+            // A child idle after its final answer is finished work, not an open subtask.
+            if row.activity == "completed" {
+                continue;
+            }
             let relation = &row.relation;
             let recoverable = !row.awaiting_decision && self.child_recoverable(relation).await?;
             let latest = self
@@ -87,7 +96,7 @@ impl SubsessionService {
                     Some(&relation.safe_title),
                     &relation.packet.objective,
                 ),
-                state: SubtaskState::of(row.awaiting_decision, recoverable),
+                state: SubtaskState::of(row.awaiting_decision, recoverable, row.activity),
                 plan_completed: plan.map(|(_, _, completed)| completed),
                 plan_total: plan.map(|(_, total, _)| total),
                 started_at: relation.created_at.clone(),

@@ -5,7 +5,12 @@
     clippy::panic,
     reason = "test assertions"
 )]
-use butler_e2e::e2e::{HarnessError, media, scenario::Setup};
+use butler_e2e::e2e::{
+    HarnessError,
+    fake_servers::FakeServer,
+    media,
+    scenario::{Scenario, Setup},
+};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
@@ -166,5 +171,47 @@ async fn favicon_lru_evicts_old_hosts_without_writing_hits() -> Result<(), Harne
         255,
         "miss wrote a negative entry"
     );
+    s.finish().await
+}
+
+const BROWSER: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) \
+                       Chrome/152.0.0.0 Safari/537.36 Butler/0";
+
+async fn icon(s: &Scenario, host: &str, user_agent: &str) -> Result<u16, HarnessError> {
+    let reply =
+        s.gw.http()
+            .get(format!("{}/favicons?host={host}", s.gw.base))
+            .header("user-agent", user_agent)
+            .bearer_auth(&s.gw.token)
+            .send()
+            .await?;
+    Ok(reply.status().as_u16())
+}
+
+#[tokio::test]
+async fn favicon_fetch_sends_viewer_identity_and_remembers_refusals() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let site = FakeServer::favicons().await?;
+    let setup = Setup::new("FAVICON-03")?.env("BUTLER_E2E_FAVICON_ORIGIN", &site.base_url);
+    let root = setup.sandbox.data.join("cache/favicons");
+    let mut s = setup.start().await?;
+    assert_eq!(icon(&s, "viewer.invalid", BROWSER).await?, 200);
+    let seen = site.seen();
+    for (path, accept) in [
+        ("/", "text/html,application/xhtml+xml,*/*;q=0.8"),
+        ("/favicon.ico", "image/*"),
+    ] {
+        let request = seen.iter().find(|r| r.path == path).expect(path);
+        assert_eq!(request.headers["user-agent"], BROWSER, "{path}");
+        assert_eq!(request.headers["accept"], accept, "{path}");
+    }
+    assert_eq!(icon(&s, "refused.invalid", "fixture-bot/1").await?, 404);
+    let asked = site.seen().len();
+    let miss = root.join(format!("{:x}.miss", Sha256::digest(b"refused.invalid")));
+    assert_eq!(fs::metadata(&miss)?.len(), 0, "refusal remembered on disk");
+    s.restart().await?;
+    assert_eq!(icon(&s, "refused.invalid", "fixture-bot/1").await?, 404);
+    assert_eq!(site.seen().len(), asked, "restart asked the site again");
+    assert_eq!(icon(&s, "after-restart.invalid", BROWSER).await?, 200);
     s.finish().await
 }

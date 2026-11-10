@@ -7,7 +7,6 @@ import {
 } from "react";
 import type { RefObject } from "react";
 import {
-  BOTTOM_LOCK_THRESHOLD,
   conversationBottomLockAfterScroll,
   conversationDistanceFromBottom,
   scrollConversationToBottom,
@@ -170,15 +169,15 @@ export function useConversationAutoScroll({
       window.performance.now() - lastUserScrollIntentAtRef.current <=
         USER_SCROLL_INTENT_WINDOW_MS;
     const updatePinnedState = () => {
+      const movedUp = element.scrollTop < observedScrollTopRef.current;
       observedScrollTopRef.current = element.scrollTop;
       const distanceFromBottom = conversationDistanceFromBottom(element);
-      const pinned =
-        distanceFromBottom < BOTTOM_LOCK_THRESHOLD ||
-        conversationBottomLockAfterScroll({
-          wasPinned: pinnedToBottomRef.current,
-          distanceFromBottom,
-          userScrollIntent: recentUserScrollIntent(),
-        });
+      const pinned = conversationBottomLockAfterScroll({
+        wasPinned: pinnedToBottomRef.current,
+        distanceFromBottom,
+        userScrollIntent: recentUserScrollIntent(),
+        movedUp,
+      });
       pinnedToBottomRef.current = pinned;
       setIsAwayFromBottom(!pinned);
       if (pinned) {

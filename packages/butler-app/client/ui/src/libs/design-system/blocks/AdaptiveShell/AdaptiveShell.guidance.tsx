@@ -98,10 +98,10 @@ export const guidance: ShowcaseGuidance = {
   ],
   accessibility: [
     "The scrim is a button only while open; drawers keep focus order sidebar → workspace → inspector.",
-    "The split handle is a vertical separator with its value (340–560): arrows move 16px, Shift 48px, Home/End jump.",
+    "The split handle is a vertical separator with its value (340 up to what leaves the pane 375): arrows move 16px, Shift 48px, Home/End jump.",
   ],
   tokens: ["--adaptive-drawer-width", "--adaptive-inspector-width", "--adaptive-panel-duration", "--adaptive-scrim-bg", "--sidebar-width",
-    "--browser-chat-width", "--browser-chat-width-min", "--browser-chat-width-max",
+    "--browser-chat-width", "--browser-chat-width-min", "--browser-pane-width-min",
     "--shell-bg", "--shell-card-bg", "--shell-card-inset", "--shell-card-gap", "--shell-card-radius", "--shell-card-edge", "--shell-card-shadow",
     "--shell-sheet-tint", "--shell-page-shadow"],
 };

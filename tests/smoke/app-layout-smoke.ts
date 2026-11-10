@@ -1825,6 +1825,10 @@ try {
           contentRect && itemRect
             ? itemRect.left - contentRect.left
             : Number.NaN,
+        searchInset:
+          contentRect && searchRect
+            ? searchRect.left - contentRect.left
+            : Number.NaN,
         sectionTitleInset:
           contentRect && firstTitleRect
             ? firstTitleRect.left - contentRect.left
@@ -1852,8 +1856,9 @@ try {
       modelMenuLayout.contentPaddingLeft -
         permissionMenuLayout.contentPaddingLeft,
     ) <= 0.5 &&
-      modelMenuLayout.itemInset <= 6 &&
-      modelMenuLayout.sectionTitleInset <= 6 &&
+      // Panel spacing: rows and group titles share the search box's inset.
+      Math.abs(modelMenuLayout.itemInset - modelMenuLayout.searchInset) <= 0.5 &&
+      Math.abs(modelMenuLayout.sectionTitleInset - modelMenuLayout.searchInset) <= 0.5 &&
       modelMenuLayout.hasSearch &&
       modelMenuLayout.filterLabels.includes(appCopy.composer.allProviders) &&
       modelMenuLayout.groupTitles.length > 0 &&

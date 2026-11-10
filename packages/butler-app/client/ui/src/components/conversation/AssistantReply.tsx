@@ -11,7 +11,7 @@ export function AssistantReply({ message, refreshFileUrls }: { message: MessageR
   return <>
     <AssistantReplyText message={message} refreshFileUrls={refreshFileUrls} />
     <GeneratedImages message={message} />
-    <AnswerBlocks sets={message.answer_blocks} messageId={message.id} replyText={message.text} sessionId={message.chat_id} turnId={message.turn_id} />
+    <AnswerBlocks sets={message.answer_blocks} receipts={message.canon_proposals} messageId={message.id} replyText={message.text} sessionId={message.chat_id} turnId={message.turn_id} />
   </>;
 }
 

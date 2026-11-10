@@ -149,14 +149,6 @@ try {
   });
   page.on("request", request => { const url = new URL(request.url()); if (url.pathname === "/session-view") lastSession = url.searchParams.get("session_id"); });
   await server.signIn(page);
-  await page.route("**/settings/image-model", async route => {
-    const response = await route.fetch({ headers: { ...route.request().headers(), origin: new URL(base).origin } });
-    if (route.request().method() !== "GET") { await route.fulfill({ response }); return; }
-    const body = await response.json();
-    assert(response.ok() && Array.isArray(body.data?.models), `image settings HTTP ${response.status()}: ${body.error?.code ?? Object.keys(body).join(",")}`);
-    for (const model of body.data.models) if (model.provider_id === "openai") model.credentials.push({ id: "chatgpt_oauth", label: "ChatGPT", auth_type: "chatgpt_oauth", selectable: false, masked_value: "" });
-    await route.fulfill({ response, json: body });
-  });
   await page.goto(base);
   await page.locator('[contenteditable="true"]').waitFor();
   await openModels(page);
@@ -165,12 +157,6 @@ try {
     const select = section.getByRole("combobox");
     await select.nth(0).click();
     assert.equal(await page.getByRole("option").count(), settings.models.length + 1);
-    await page.keyboard.press("Escape");
-    await select.nth(1).click();
-    const signin = page.getByRole("option", { name: "ChatGPT", exact: true });
-    assert.equal(await signin.getAttribute("aria-disabled"), "true");
-    await signin.hover(); await page.getByRole("tooltip").filter({ hasText: "API 키 전용" }).waitFor();
-    await capture(page, "settings-credential-1280");
     await page.keyboard.press("Escape");
     await select.nth(2).click(); await page.getByRole("option", { name: "낮음", exact: true }).click();
     await page.reload(); await openModels(page); await section.waitFor();
@@ -201,6 +187,22 @@ try {
     console.log(`image tools (${theme}): inline card ${Math.round(bounds.width)}×${Math.round(bounds.height)}`);
     assert.equal(await picture.getAttribute("alt"), pictureTitle);
     await captureResponsive(page, "reply");
+    {
+      // Past the signature expiry, a layout change re-signs before the new src is used.
+      const expiresOf = async () => new URL((await picture.getAttribute("src"))!, base).searchParams.get("expires");
+      await page.waitForFunction(() => Number(new URL(document.querySelector('[data-test-class="generated-image-card"] img')!.getAttribute("src")!, location.href).searchParams.get("w")) > 500);
+      const signedBefore = await expiresOf();
+      assert(signedBefore, "generated image src is signed");
+      await page.evaluate(expires => { const real = Date.now; Object.assign(window, { realNow: real }); Date.now = () => Number(expires) * 1000 + 1000; }, signedBefore);
+      const resigned = page.waitForResponse(response => new URL(response.url()).pathname === `/message-assets/${image}/meta`);
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert((await resigned).ok(), "expired signature is re-signed through /meta");
+      await page.evaluate(() => { Date.now = (window as unknown as { realNow: () => number }).realNow; });
+      await page.waitForFunction(before => new URL(document.querySelector('[data-test-class="generated-image-card"] img')!.getAttribute("src")!, location.href).searchParams.get("expires") !== before, signedBefore);
+      await picture.evaluate((node: HTMLImageElement) => node.decode());
+      assert((await picture.evaluate((node: HTMLImageElement) => node.naturalWidth)) > 0, "re-signed image loads");
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
     await librarySave(page, image);
     const downloaded = page.waitForEvent("download"); await card.getByRole("button", { name: "다운로드", exact: true }).click();
     assert((await downloaded).suggestedFilename().startsWith(image));

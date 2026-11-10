@@ -1,4 +1,4 @@
-import { appCopy, useAppLocale } from "@/app/copy.ts";
+import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { SegmentedControl, SettingsField } from "@/butler-ds";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
@@ -8,7 +8,6 @@ import { SettingsSwitch } from "./SettingsFormComponents";
 type Setting = SettingsView["composer_decoration"];
 
 export function ComposerDecorationSettings() {
-  const locale = useAppLocale();
   const draft = useSettingsUIStore((state) => state.draft);
   const update = useSettingsUIStore((state) => state.update);
   const setSettings = useButlerStore((state) => state.setSettings);
@@ -29,8 +28,8 @@ export function ComposerDecorationSettings() {
         control={<SegmentedControl ariaLabel={copy.fields.composerDecoration} value={setting.theme}
           options={[
             { value: "none", label: copy.wallpaper.none },
-            { value: "shoreline", label: locale === "ko-KR" ? "해안선" : "Shoreline" },
-            { value: "cherry", label: locale === "ko-KR" ? "벚꽃" : "Cherry blossom" },
+            { value: "shoreline", label: copy.composerDecorationThemes.shoreline },
+            { value: "cherry", label: copy.composerDecorationThemes.cherry },
           ]}
           onValueChange={(theme) => save({ theme: theme as Setting["theme"] })} />}
       />

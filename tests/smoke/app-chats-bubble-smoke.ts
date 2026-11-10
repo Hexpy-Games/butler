@@ -73,6 +73,7 @@ try {
     }
   }
   await assertViewportResize();
+  await assertComposerKeepsReaderPlace();
   // While a reply runs, 대화 names the current tool in its status line, counted as its timeline group would.
   for (const [locale, sessionId, expected] of [["ko", "general", "웹 검색 중 · 3개"], ["en", "general", "Web search · 3"], ["ko", "butler-client", null]] as const) {
     for (const width of [1280, 375]) {
@@ -174,13 +175,12 @@ function transcript(sessionId: string): SessionView {
     kind: sessionId === "general" ? "chat" : "project", parent_session_id: undefined, relation: undefined, artifacts: [], authority_requests: [], pending_questions: [], steward_children: [], status: "idle" };
 }
 
-/** A running turn as the gateway projects it after three web searches, waiting on the next model round. */
+/** A running turn as the gateway projects it during its third web search; only a running tool names the status (#1789). */
 function liveTranscript(sessionId: string): SessionView {
   const start = Date.now() - 12_000, at = (second: number) => new Date(start + second * 1000).toISOString();
-  const search = (call: number) => ({ id: `search-${call}`, kind: "used_tool" as const, safe_label: "web_search", state: "delivered",
+  const search = (call: number, state: string) => ({ id: `search-${call}`, kind: "used_tool" as const, safe_label: "web_search", state,
     safe_tool_name: "web_search", tool_call_id: `call-${call}`, bridge_phase: "btcc_operation" as const, semantic_block_id: `tool-call-${call}`, created_at: at(call * 2) });
-  const rows = [search(1), search(2), search(3), { id: "round-3", kind: "message" as const, safe_label: "Generating", state: "running",
-    safe_tool_name: "model_round", tool_call_id: "btcc-model-round-3", bridge_phase: "model_round_waiting" as const, interface_label_key: "generating", created_at: at(8) }];
+  const rows = [search(1, "delivered"), search(2, "delivered"), search(3, "running")];
   const turn = { id: "live", state: "thinking", delivery_state: "running" as const, cancellable: true, retryable: false, limitations: [], limitation_codes: [],
     progress: { turn_id: "live", state: "thinking", delivery_state: "running" as const, updated_at: at(8), safe_progress_rows: rows }, created_at: at(0), updated_at: at(8) };
   const question: MessageRecord = { id: "question", chat_id: sessionId, role: "user", text: "날씨 알려 줘", status: "sent", cursor: 1, turn_id: "live", created_at: at(0) };
@@ -298,5 +298,47 @@ async function assertViewportResize() {
     assert.deepEqual(result.before.keys, ["0", "1", "2"], "both messages and the chat intro are rendered");
     assert.deepEqual(result.after.keys, result.before.keys, "resize keeps the virtual range");
     assert(Math.abs(result.after.gap - result.before.gap) < 1, "bottom alignment updates by the next frame after resize delivery");
+  } finally { await page.close(); }
+}
+
+async function assertComposerKeepsReaderPlace() {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, colorScheme: theme, reducedMotion: "reduce" });
+  try {
+    const base = { chat_id: "butler-client", created_at: "2026-10-25T09:00:00Z" };
+    const messages: MessageRecord[] = Array.from({ length: 30 }, (_, i) => [
+      { ...base, id: `u${i}`, role: "user" as const, text: `질문 ${i}`, status: "sent", cursor: 2 * i + 1, turn_id: `t${i}` },
+      { ...base, id: `a${i}`, role: "assistant" as const, text: `답변 ${i}\n\n${"긴 문단입니다. ".repeat(40)}`, status: "delivered",
+        cursor: 2 * i + 2, turn_id: `t${i}`, updated_at: base.created_at },
+    ]).flat() as MessageRecord[];
+    await installFixture(page, { ...transcript("butler-client"), messages });
+    await page.goto(`http://chats-bubble.localhost/?visual=components&theme=${theme}&locale=ko`);
+    await page.locator('[data-test-class~="message"]').first().waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(500);
+    const preview = page.locator('[data-slot="composer-compact-preview"]');
+    if (await preview.isVisible()) await preview.click();
+    await page.locator('[contenteditable="true"]').first().click();
+    const read = () => page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>('[data-test-class~="message-virtual-scroll"]')!;
+      return { top: el.scrollTop, fromBottom: el.scrollHeight - el.scrollTop - el.clientHeight };
+    });
+    const start = await read();
+    assert(start.fromBottom < 2, "the transcript starts at the end");
+    await page.mouse.move(640, 250);
+    for (let i = 0; i < 6; i++) { await page.mouse.wheel(0, -10); await page.waitForTimeout(16); }
+    await page.waitForTimeout(600);
+    const held = await read();
+    assert(held.fromBottom >= 30, "scrolling up with the composer open holds");
+    const wrap = page.locator('[data-test-class~="composer-wrap"]');
+    const heightBefore = (await wrap.boundingBox())!.height;
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("줄");
+    await page.waitForTimeout(600);
+    const heightAfter = (await wrap.boundingBox())!.height;
+    const after = await read();
+    console.log(JSON.stringify({ composerKeepsReaderPlace: { start, held, after, heightBefore, heightAfter }, theme }));
+    assert(heightAfter > heightBefore, "the composer grew");
+    assert(Math.abs(after.top - held.top) <= 1, "the composer growing leaves the reader's place");
   } finally { await page.close(); }
 }

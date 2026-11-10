@@ -256,6 +256,7 @@ async fn applied_proposal_exposes_created_ids_for_answer_cards() -> Result<(), H
         200,
     );
     let proposal = view["canon_proposals"][0]["proposal_id"].as_str().unwrap();
+    assert_eq!(view["canon_proposals"][0]["epic_ids"], json!([epic]));
     let proposal = data(
         s.gw.get(&format!("/canon/proposals/{proposal}")).await?,
         200,

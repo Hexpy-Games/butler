@@ -98,7 +98,7 @@ export function ConversationFrameDemo({ width, height, sidebar = "open", paneOpe
   const demo = BROWSER_DEMO_COPY[browser.locale];
   const [chatWidth, setChatWidth] = useState(400);
   const shell = useRef<HTMLDivElement | null>(null);
-  const collapsed = useSidebarAutoCollapse(shell, { enabled: paneOpen && autoCollapse, sidebarWidth: 304, chatWidth });
+  const collapsed = useSidebarAutoCollapse(shell, { enabled: paneOpen && autoCollapse, sidebarWidth: 304 });
   const leftOpen = sidebar === "open" && !collapsed;
   const peek = useSidebarPeek(shell, { enabled: sidebar === "live-peek" });
   const browsing = browser.holder === undefined || browser.holder === "butler";

@@ -251,7 +251,7 @@
   --browser-band-height: 40px;
   --browser-chat-width: 400px;
   --browser-chat-width-min: 340px;
-  --browser-chat-width-max: 560px;
+  --browser-pane-width-min: 375px;
   /* TabRail beside the conversation: full cards (208, 16:10 frame) from a
      960px conversation, compact thumbnails (128) from 720px, a shelf strip
      below. The column keeps --tab-rail-clearance from the rail. */
@@ -404,10 +404,8 @@
   --page-max-width-narrow: 38rem;
   --page-max-width-reading: 760px;
   --page-max-width-wide: 72rem;
-  --page-max-width-document: 1400px;
   --page-container-narrow: var(--page-max-width-reading);
   --page-container-default: var(--page-max-width-wide);
-  --page-container-document: var(--page-max-width-document);
   --page-container-gutter: clamp(var(--space-lg), 3vw, 40px);
 
   /* Source color literals. Semantic tokens below must reference these. */
@@ -798,7 +796,7 @@
   --conversation-bg: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.96),
-    rgba(250, 250, 248, 0.96)
+    color-mix(in srgb, var(--riso-paper-day) 96%, transparent)
   );
   --settings-bg: var(--color-surface-base);
   --settings-panel-bg: rgba(255, 255, 255, 0.78);
@@ -929,10 +927,11 @@
   --butler-ink-purple: rgb(96, 56, 156);
   --butler-ink-pink: rgb(255, 72, 176);
   /* Riso print paper (the default wallpaper, its paper overlay and the intro):
-     day = the lower stop of the light --conversation-bg, night = the night
-     stock; --riso-paper follows the theme. The print's inks are the Butler inks. */
+     each theme's --conversation-bg ends on it, so the print and the plain
+     background share one paper; --riso-paper follows the theme. The print's
+     inks are the Butler inks. */
   --riso-paper-day: rgb(250, 250, 248);
-  --riso-paper-night: rgb(25, 28, 36);
+  --riso-paper-night: rgb(22, 23, 25);
   --riso-paper: var(--riso-paper-day);
   /* The Butler mark's key ink (the plain logo; the intro's printed key). */
   --butler-mark-ink: rgb(10, 10, 11);
@@ -1266,7 +1265,7 @@
   --conversation-bg: linear-gradient(
     180deg,
     rgba(28, 29, 32, 0.96),
-    rgba(22, 23, 25, 0.96)
+    color-mix(in srgb, var(--riso-paper-night) 96%, transparent)
   );
   --settings-bg: rgba(28, 29, 31, 0.96);
   --settings-panel-bg: rgba(37, 38, 41, 0.78);
@@ -1495,7 +1494,7 @@
   --conversation-bg: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.96),
-    rgba(250, 250, 248, 0.96)
+    color-mix(in srgb, var(--riso-paper-day) 96%, transparent)
   );
   --settings-bg: var(--color-surface-base);
   --settings-panel-bg: rgba(255, 255, 255, 0.78);

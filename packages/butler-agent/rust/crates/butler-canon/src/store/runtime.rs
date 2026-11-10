@@ -5,7 +5,7 @@ pub mod queries;
 use super::*;
 pub use feed::{catch_up, prepare};
 pub(crate) use progress::{closing_summary, queue_outcome, step_unfinished};
-pub use progress::{enrich, progress, project_works};
+pub use progress::{enrich, ledger_owned, progress, project_works};
 pub fn epic_running(db: &Connection, epic: &str) -> Result<bool> {
     let works = rows(db, Query::Works.sql(), [epic])?;
     for (index, work) in works.iter().enumerate() {

@@ -100,7 +100,7 @@ function ShellDemo({ context }: { context: ShowcaseRenderContext }) {
 export const stories: ShowcaseStory[] = [
   { name: "Sidebar, workspace and inspector", states: ["open", "collapsed"], widths: ["375", "app", "wide"], render: (context) => <ShellDemo context={context} /> },
   {
-    // AdaptiveShellSplit: chat | browser pane in the workspace's second row; drag or arrow-key the boundary (340–560px).
+    // AdaptiveShellSplit: chat | browser pane in the workspace's second row; drag or arrow-key the boundary (340px up to what leaves the pane 375px).
     name: "Conversation frame: chat | browser pane (resizable)",
     widths: ["app", "wide"],
     render: ({ locale }) => <ConversationFrameDemo locale={locale} width={1440} height={900} />,

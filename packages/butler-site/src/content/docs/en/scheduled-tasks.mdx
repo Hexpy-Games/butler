@@ -10,11 +10,11 @@ A schedule sends a prompt to a conversation you choose at a set interval, or dai
 
 ## Open the Schedules screen
 
-- In the sidebar, open the menu (⋯) next to the **Space** heading and choose **Schedules**.
+- In the sidebar, click **Schedules**, below **New chat** and **Search**.
 - In the [command palette](/en/help/basics/command-palette/) (<span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span>), search for a schedule by its title to open it directly.
-- On the **Schedules** tab of a conversation's [right panel](/en/help/basics/right-panel/#schedules), click a schedule that targets that conversation.
+- In the **Schedules** section of a conversation's [session info](/en/help/basics/right-panel/#schedules), click a schedule that targets that conversation.
 
-The **Schedules** screen shows **N scheduled prompts** and the list of schedules. Each item shows a permission icon, the title and the target conversation, with its state, frequency, next run time and permission (for example, `On · Every 30 minutes · Next: Oct 2, 9:00 AM · Ask first`). The next run time appears only while the state is **On**.
+The **Schedules** screen shows **N scheduled prompts** and the list of schedules. Each item shows a permission icon, the title and the target conversation, with its state, frequency, next run time and permission (for example, `On · Every 30 minutes · Next: Oct 2, 9:00 AM · Auto`). The next run time appears only while the state is **On**.
 
 ## Create a schedule
 
@@ -22,22 +22,41 @@ The **Schedules** screen shows **N scheduled prompts** and the list of schedules
   1. On the **Schedules** screen, click **New schedule**.
   2. Enter a **Title** and a **Prompt**. Neither can be empty.
   3. Under **Details**, choose the conversation to send the prompt to in **Target chat**. A project conversation appears as `Project name / Conversation title`.
-  4. In **Permission**, below **Target chat**, choose the permission the schedule uses when it runs.
-  5. Choose a **Frequency** and set the interval or the time.
-  6. Click **Save**.
+  4. In **Model**, choose the model for the runs. **Model default** follows the target chat's model.
+  5. In **Permission**, choose the permission the schedule uses when it runs.
+  6. Choose a **Frequency** and set the interval or the time.
+  7. If a run needs to sign in or pay in the browser, turn on the switches under **Browser**.
+  8. Click **Save**.
 </Steps>
 
 The saved schedule appears in the **Schedules** list. If the frequency is **Interval**, the first run comes one interval after you save. Any other frequency first runs at the next occurrence of its time. To go back to the list, click the left arrow button (**Back to schedules**) or **Schedules** in the path at the top of the screen.
 
 ## Permission
 
-In **Permission**, choose the access that this schedule's runs use. The options are the same as in the composer's **Permission** menu: **Ask first**, **Full access** and **Read only**. For what each permission does, see [Conversations and the composer](/en/help/basics/conversation/#permission).
+In **Permission**, choose the access that this schedule's runs use. The options are the same as in the composer's **Permission** menu: **Auto**, **Read only**, **Ask every time**, **Ask first** and **Full access**. For what each permission does, see [Conversations and the composer](/en/help/basics/conversation/#permission).
 
-- A new schedule starts with the current permission of the **Target chat**. Until you choose a **Permission** yourself, changing the **Target chat** also changes the permission to that conversation's permission.
-- If the target conversation's permission cannot be read, **Ask first** is selected.
+- A new schedule starts with the permission set in **New schedules** under **Settings → General → Default permission**. The default is **Auto**.
 - When you edit a schedule, the saved permission is shown.
-- If you choose **Ask first**, the **With Ask first, runs wait for your approval while you're away.** hint appears.
 - The permission you choose applies only to this schedule's runs. The target conversation's permission does not change.
+
+Scheduled runs never wait for approval. Unless the permission is **Read only** or **Full access**, the **Scheduled runs skip steps that need approval and let you know.** hint appears.
+
+- A step that needs approval is skipped. The run is recorded in **Runs** as **Needs permission**.
+- In **Chats** in the sidebar, a **Needs your OK** line names the skipped action and the schedule's title. Click it to open the schedule.
+- If **Desktop notifications** is on in **Settings → General**, the **A schedule skipped a step that needs your permission.** notification also appears.
+
+## Model
+
+In **Model**, choose the model this schedule runs with. **Model default** follows the target chat's model. Choose a registered model to run with that model.
+
+## Browser
+
+**Browser** has two switches that decide whether a run can use what you saved for the [browser](/en/help/basics/browser/). Both are off at first.
+
+- **Use sign-in info** — When on, the run opens sites you allowed, signed in.
+- **Use payment info** — When on, the run pays on sites in **Pay without asking** under **Settings → Browser**. Without a system password store on this computer, you cannot turn it on, and **Unavailable on this computer** appears.
+
+If a run needs to sign in or pay while the switch is off, it skips that step. The run is recorded in **Runs** as **Sign-in info off** or **Payment info off**.
 
 ## Frequency
 
@@ -53,6 +72,7 @@ In **Frequency**, choose when the schedule runs. The default for a new schedule 
 - The default **Time** is 8:00 AM, and the default **Day** is Monday.
 - The time follows the time zone of the computer where you create the schedule.
 - The list and the detail screen show the frequency as `Every 30 minutes`, `Every day at 8:00 AM`, `Every weekday at 8:00 AM` or `Every Monday at 8:00 AM`.
+- A schedule Butler created in a conversation to run once shows **Once** as its frequency. You cannot choose **Once** for a new schedule.
 
 ### Interval
 
@@ -71,7 +91,7 @@ If you choose **Custom**, enter a number of minutes in the **Custom minutes** fi
 
 <Steps>
   1. In the **Schedules** list, click a schedule.
-  2. Change the **Title**, **Prompt**, **Target chat**, **Permission** or **Frequency**.
+  2. Change the **Title**, **Prompt**, **Target chat**, **Model**, **Permission**, **Frequency** or the **Browser** switches.
   3. Click **Save**.
 </Steps>
 
@@ -84,7 +104,16 @@ The top of the schedule detail screen has these buttons.
 - **Run now** — Runs the schedule once right away, regardless of its timing. You can run a paused schedule too. If the state is **On**, the next run time is also recalculated from this point.
 - **Pause** — Stops scheduled runs. **State** changes to **Off**.
 - **Resume** — Appears on a paused schedule. When you click it, **State** changes to **On**, and the next run time is recalculated from the time you resume.
-- **Delete** — Deletes the schedule and returns to the list.
+- **Delete** — Click **Delete** in the confirmation dialog to delete the schedule and return to the list.
+
+## Schedules that report to Chats
+
+When the **Target chat** is **Chats** in the sidebar, only Butler's reply appears; the prompt it sent is hidden.
+
+- A scheduled run waits while you are typing in the message box and during **Quiet hours**. Set **Quiet hours** in **What Butler noticed** under **Settings → Memory**. The default is 10:00 PM to 7:00 AM.
+- **Run now** waits only for a reply in progress to finish.
+- Runs held back during **Quiet hours** send one report, however many there were.
+- If you leave a scheduled report unopened 3 times in a row, Butler pauses the schedule and asks whether to keep it. Click **Sounds good** to turn it back on, or **No thanks** to leave it paused.
 
 ## Runs
 
@@ -95,21 +124,26 @@ The top of the schedule detail screen has these buttons.
 - **Succeeded** — The prompt was delivered to the target conversation.
 - **Failed** — The prompt could not be delivered.
 - **Target unavailable** — The target conversation could no longer be found while the run was waiting, so the run was skipped.
+- **Needs permission** — A step that needs approval was skipped.
+- **Sign-in info off** — **Use sign-in info** was off, so a step that needs a sign-in was skipped.
+- **Payment info off** — **Use payment info** was off, so a step that needs payment was skipped.
+- **Cancelled** — The run was cancelled.
+- **Not run yet** — The prompt has not been sent yet.
 
 If there are no runs, **No runs yet** appears.
 
 ## Notes
 
 <Notice tone="warning">
-  **Delete** applies immediately, without a confirmation dialog. **Succeeded** means the prompt was delivered to the conversation. It does not mean the requested work succeeded. Check the result in the target conversation.
+  **Succeeded** means the prompt was delivered to the conversation. It does not mean the requested work succeeded. Check the result in the target conversation.
 </Notice>
 
 <Notice tone="info">
-  When a schedule's **Permission** is **Ask first**, Butler asks in the target conversation before it edits a file or runs a command, and waits until you allow it. If you change the target conversation's permission after you save, the schedule's permission does not change.
+  Scheduled runs do not wait for approval; they skip steps that need it. To let a run do those steps, set its **Permission** to **Full access**. If you change the target conversation's permission after you save, the schedule's permission does not change.
 </Notice>
 
 <Notice tone="info">
-  Schedules work only while Butler Agent is running. If you use the Agent included in the app, Butler must be open. In the desktop app, turn on **Start at login** in **Settings → General** to open Butler when you log in to the computer. The schedule time is checked every 30 seconds, so a run can start a little late. Runs missed while Butler was off run only once when you turn it on again.
+  Schedules run only while Butler is running. With the app, Butler must be open. In the desktop app, turn on **Start at login** in **Settings → General** to open Butler when you log in to the computer. Runs missed while Butler was off run only once when you turn it on again.
 </Notice>
 
 ## Related pages
@@ -117,6 +151,7 @@ If there are no runs, **No runs yet** appears.
 <CardGrid>
   <DocCard slug="basics/right-panel" />
   <DocCard slug="basics/conversation" />
+  <DocCard slug="basics/browser" />
   <DocCard slug="basics/command-palette" />
   <DocCard slug="projects" />
 </CardGrid>

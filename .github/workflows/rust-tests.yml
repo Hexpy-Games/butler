@@ -59,6 +59,7 @@ jobs:
           BUTLER_SMOKE_ELECTRON_EXECUTABLE="$(node -p "require('./packages/butler-app/client/electron/node_modules/electron')")"
           export BUTLER_SMOKE_ELECTRON_EXECUTABLE
           python3 .github/scripts/isolated.py bun tests/smoke/app-legacy-data-smoke.ts
+          python3 .github/scripts/isolated.py bun tests/smoke/app-single-window-smoke.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/canvas"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-canvas-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/route"
@@ -91,6 +92,7 @@ jobs:
           python3 .github/scripts/isolated.py bun tests/smoke/browser-icons-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/split-motion"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-split-motion-electron.ts
+          python3 .github/scripts/isolated.py bun tests/smoke/browser-superseded-load-electron.ts
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -179,6 +181,7 @@ jobs:
               smoke sidebar-drag-scroll
               smoke sidebar-add-menu-smoke
               smoke settings-bugs-smoke
+              smoke settings-image-key-smoke
               smoke app-usage-subtask-share-smoke
               smoke app-delegated-work-smoke
               smoke answer-blocks-ui

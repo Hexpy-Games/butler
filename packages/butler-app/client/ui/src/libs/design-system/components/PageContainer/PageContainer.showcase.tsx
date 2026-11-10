@@ -22,7 +22,7 @@ function text({ locale }: ShowcaseRenderContext) {
   return labels[locale];
 }
 
-const widths: PageContainerWidth[] = ["narrow", "default", "document", "full"];
+const widths: PageContainerWidth[] = ["narrow", "default", "full"];
 
 export const stories: ShowcaseStory[] = [
   {

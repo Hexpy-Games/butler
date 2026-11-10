@@ -1,6 +1,7 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStateMatrix, ShowcaseStory } from "../../showcase";
 import { ButtonContainer } from "../ButtonContainer";
 import { Plus, Search, Trash2 } from "../Icons";
+import { Stack } from "../Stack";
 import { Button } from "./Button";
 
 export const meta: ShowcaseMeta = {
@@ -11,8 +12,8 @@ export const meta: ShowcaseMeta = {
 };
 
 const labels = {
-  "en-US": { create: "Create", search: "Search", more: "More", remove: "Delete", save: "Save changes", details: "Show details" },
-  "ko-KR": { create: "만들기", search: "검색", more: "더 보기", remove: "삭제", save: "변경 사항 저장", details: "자세히 보기" },
+  "en-US": { create: "Create", search: "Search", more: "More", remove: "Delete", save: "Save changes", details: "Show details", long: "Draft the report · 2/4 · Reading the source documents and noting key points" },
+  "ko-KR": { create: "만들기", search: "검색", more: "더 보기", remove: "삭제", save: "변경 사항 저장", details: "자세히 보기", long: "보고서 초안 작성 · 2/4 · 출처 문서를 읽고 핵심 내용을 정리하는 중" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
@@ -46,6 +47,16 @@ export const stories: ShowcaseStory[] = [
   {
     name: "Inline",
     render: (context) => <Button variant="inline" text={text(context).details} />,
+  },
+  {
+    name: "Long label",
+    render: (context) => (
+      <Stack align="row" gap="sm">
+        <Stack.Item maxWidth="1/2" minWidth="0">
+          <Button variant="outline" shape="pill" text={text(context).long} title={text(context).long} />
+        </Stack.Item>
+      </Stack>
+    ),
   },
   {
     name: "Disabled",

@@ -5,7 +5,7 @@ import {
   ButtonContainer,
   Clock3,
   IconButton,
-  ListFilter,
+  TableOfContents,
   NavSectionHeading,
   DropdownMenu,
   DropdownMenuContent,
@@ -40,7 +40,7 @@ export function SpaceBrowseHeader() {
           value={tab}
           onValueChange={(value) => setTab(value as typeof tab)}
           options={[
-            { value: "all", label: appCopy.space.all, icon: <ListFilter /> },
+            { value: "all", label: appCopy.space.all, icon: <TableOfContents /> },
             { value: "recent", label: appCopy.space.recent, icon: <Clock3 /> },
             { value: "running", label: appCopy.space.running, icon: <Activity /> },
           ]}

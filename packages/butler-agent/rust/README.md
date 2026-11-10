@@ -11,7 +11,7 @@ standalone and Desktop package paths, including bundled native readiness and own
 The real-model GPT-6 Sol campaign completed all 30 native tasks; it produced no valid paired
 performance comparisons because the Bun arm failed its accuracy conditions. This checkout's
 newer changes still require a final build and existing-DATA rehearsal before replacing the
-running Butler. Windows and Linux runtime releases and hosted CI have not been validated.
+running Butler. Windows and Linux Agent and App builds ship with every release.
 Electron and frontend code remain JavaScript.
 
 Installation resources resolve from the actual executable directory (or the Desktop bundle's

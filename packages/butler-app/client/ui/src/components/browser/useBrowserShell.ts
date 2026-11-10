@@ -13,7 +13,7 @@ export function useBrowserShell(root: RefObject<HTMLElement | null>, sidebarWidt
   const pane = useRightSlot(session);
   const paneOpen = pane !== null;
   const browserShown = pane === "browser";
-  const autoCollapsed = useSidebarAutoCollapse(root, { enabled: paneOpen, sidebarWidth, chatWidth });
+  const autoCollapsed = useSidebarAutoCollapse(root, { enabled: paneOpen, sidebarWidth });
   const [peek, setPeek] = useState(false);
   useEffect(() => { setPeek(false); }, [session, view, autoCollapsed]);
   useEffect(() => {

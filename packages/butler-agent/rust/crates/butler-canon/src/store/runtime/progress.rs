@@ -189,9 +189,19 @@ pub(super) fn reported(db: &Connection, work: &Value, views: &ProjectViews) -> R
     Ok(closeout::read(db, work, views)? == Closeout::Reported)
 }
 
+/// Whether the Project Ledger holds this Work's plan, progress and closeout.
+/// Project Works from before the Ledger have no `ledger_project_id`; their
+/// revisions are in the BTCC tables, like a session Work's.
+pub fn ledger_owned(work: &Value) -> bool {
+    work["scope_kind"] == "project"
+        && work["ledger_project_id"]
+            .as_str()
+            .is_some_and(|id| !id.trim().is_empty())
+}
+
 fn disposition(db: &Connection, work: &Value, views: &ProjectViews) -> Result<Value> {
     let id = text(work, "work_id")?;
-    if work["scope_kind"] == "project" {
+    if ledger_owned(work) {
         Ok(views
             .get(id)
             .map(|view| view["latestDisposition"].clone())
@@ -203,7 +213,7 @@ fn disposition(db: &Connection, work: &Value, views: &ProjectViews) -> Result<Va
 
 fn work_actions(db: &Connection, work: &Value, views: &ProjectViews) -> Result<Vec<Value>> {
     let id = text(work, "work_id")?;
-    if work["scope_kind"] != "project" {
+    if !ledger_owned(work) {
         return actions(db, id);
     }
     let Some(view) = views.get(id) else {
@@ -231,7 +241,7 @@ fn work_actions(db: &Connection, work: &Value, views: &ProjectViews) -> Result<V
 }
 
 fn checkpoints(db: &Connection, work: &Value, views: &ProjectViews) -> Result<Vec<Value>> {
-    if work["scope_kind"] != "project" {
+    if !ledger_owned(work) {
         return rows(db, Query::Checkpoints.sql(), [text(work, "work_id")?]);
     }
     project_history::read(db, work, views)

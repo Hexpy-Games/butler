@@ -182,7 +182,7 @@ fn select_policy(
         authorized_names: authorized.iter().map(|tool| tool.name.clone()).collect(),
         provider_tools: provider
             .iter()
-            .map(|tool| without_defaults(tool.definition.clone()))
+            .map(|tool| without_defaults(tool.definition_for(&policy.role)))
             .collect(),
         stable_instruction_prefix,
         stable_provider_cache_prefix,
@@ -217,7 +217,7 @@ fn select_legacy(
         authorized_names: authorized.iter().map(|tool| tool.name.clone()).collect(),
         provider_tools: provider
             .iter()
-            .map(|tool| tool.definition.clone())
+            .map(|tool| tool.definition_for(&policy.role))
             .collect(),
         stable_instruction_prefix: instructions::prefix(SurfaceMode::Legacy, phase, policy)?,
         stable_provider_cache_prefix: None,

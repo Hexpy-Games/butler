@@ -25,9 +25,9 @@ agent turn execution, cognition, scheduler, worker runtime, gateway session
 actors, or agent policy.
 
 The renderer copy follows the app settings language returned by the gateway.
-Installer language initializes both the app interface language and the agent
-response language, so a fresh English install must render English UI copy after
-settings load. The model catalog default returned by the gateway must also
+The first-run welcome screen sets the interface language and the AI connection
+step sets the reply language, so a fresh English setup must render English UI
+copy after settings load. The model catalog default returned by the gateway must also
 reflect the installed Butler model, including `local/<id>` models registered
 during install.
 
