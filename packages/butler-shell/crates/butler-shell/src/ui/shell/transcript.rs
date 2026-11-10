@@ -6,8 +6,10 @@ use std::time::Duration;
 use gpui::{App, Context};
 use serde_json::Value;
 
+use super::region::Touched;
 use super::{Shell, navigation::Navigation};
 use crate::ui::chat::{self, AssistantHooks, OlderRequest};
+use crate::ui::inspector::view_facts;
 use crate::ui::onboarding::gate::{self, Gate};
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::SessionQueueView;
@@ -52,8 +54,10 @@ impl Shell {
     }
 
     /// `useOnboardingGate`'s load on connect: `/settings` and `/model-catalog` together. The
-    /// settings apply app-wide ([`Shell::apply_settings`]); once both answer, the gate resolves
-    /// (never back from the workspace). While the gate is pending a failure retries every 2 s.
+    /// settings apply app-wide ([`Shell::apply_settings`]) as soon as they answer, and a
+    /// completed onboarding opens the workspace without waiting for the catalog, which only the
+    /// setup screens read. Otherwise the gate resolves once both answer (never back from the
+    /// workspace). While the gate is pending or the catalog is missing a failure retries every 2 s.
     pub(super) fn load_settings(&mut self, cx: &mut Context<Self>) {
         self.settings_task = Some(cx.spawn(async move |this, cx| {
             loop {
@@ -63,9 +67,9 @@ impl Shell {
                         Jobs::run(cx, |client| async move { client.get_model_catalog().await }),
                     )
                 });
-                let (settings, catalog) = futures::future::join(settings, catalog).await;
-                let settings = settings.and_then(Result::ok).map(Rc::new);
-                let catalog = catalog.and_then(Result::ok).map(Rc::new);
+                let settings = settings.await.and_then(Result::ok).map(Rc::new);
+                let _ = this.update(cx, |this, cx| this.settings_answered(settings.clone(), cx));
+                let catalog = catalog.await.and_then(Result::ok).map(Rc::new);
                 let retry = this.update(cx, |this, cx| this.settings_loaded(settings, catalog, cx));
                 if !matches!(retry, Ok(true)) {
                     return;
@@ -75,16 +79,24 @@ impl Shell {
         }));
     }
 
-    /// Applies what loaded; whether to read again (the gate is still pending).
+    /// `/settings` answered: apply it, and open the workspace at once when onboarding is done.
+    fn settings_answered(&mut self, settings: Option<Rc<Value>>, cx: &mut Context<Self>) {
+        let Some(raw) = settings else { return };
+        self.apply_settings(&raw, cx);
+        if self.onboarding.gate != Gate::Workspace && gate::resolve(&raw) == Gate::Workspace {
+            self.onboarding.gate = Gate::Workspace;
+            cx.notify();
+        }
+    }
+
+    /// Applies what loaded; whether to read again (the gate is still pending or the catalog
+    /// is missing).
     fn settings_loaded(
         &mut self,
         settings: Option<Rc<Value>>,
         catalog: Option<Rc<Value>>,
         cx: &mut Context<Self>,
     ) -> bool {
-        if let Some(raw) = &settings {
-            self.apply_settings(raw, cx);
-        }
         if let Some(catalog) = &catalog {
             self.catalog_raw = Some(catalog.clone());
         }
@@ -96,7 +108,7 @@ impl Shell {
                 }
                 false
             }
-            _ => self.onboarding.gate == Gate::Pending,
+            _ => self.onboarding.gate == Gate::Pending || self.catalog_raw.is_none(),
         }
     }
 
@@ -135,7 +147,9 @@ impl Shell {
     pub(crate) fn show_view(&mut self, live: bool, cx: &mut Context<Self>) {
         let view = self.store.shown_view().map(Rc::new);
         let decision_view = view.clone();
+        let before = self.panes.view.as_deref().map(view_facts);
         self.feed_panes(view.clone(), cx);
+        let after = self.panes.view.as_deref().map(view_facts);
         self.composer.update(cx, |c, cx| {
             c.set_decision_view(decision_view);
             cx.notify();
@@ -144,8 +158,13 @@ impl Shell {
             c.set_view(view, live, cx);
             cx.notify();
         });
-        // The titlebar's session actions and the aside read the view too.
-        cx.notify();
+        // The aside reads the view, and the titlebar's session actions read its facts.
+        let touched = Touched {
+            conversation: true,
+            titlebar: before != after,
+            sidebar: false,
+        };
+        self.regions.notify(touched, cx);
     }
 
     /// Reads the open chat's latest window again and merges it into the shown view.

@@ -66,6 +66,23 @@ pub(crate) struct SessionSectionsModel {
     pub(crate) indicator: bool,
 }
 
+/// What the view alone says to the titlebar: whether it has sections to open, and whether a
+/// subtask needs approval. The asks and unfinished steps (`data`) add to both.
+pub(crate) fn view_facts(view: &SessionView) -> (bool, bool) {
+    let has_ids = view.subtasks.as_ref().is_some_and(|s| !s.is_empty())
+        || environment_values(view).is_some()
+        || view.context.is_some()
+        || has_artifacts(view)
+        || has_attachments(view)
+        || !view.automations.is_empty();
+    let needs_approval = view
+        .subtasks
+        .iter()
+        .flatten()
+        .any(|s| s.state == SubtaskState::NeedsApproval);
+    (has_ids, needs_approval)
+}
+
 /// `useSessionSectionsModel`, as far as the titlebar needs it. The browser and epic sections
 /// have no data here yet (their entries are P5 and P4 stubs), so they do not count.
 pub(crate) fn session_sections_model(
@@ -74,21 +91,9 @@ pub(crate) fn session_sections_model(
     cx: &mut App,
 ) -> SessionSectionsModel {
     let data = data(ctx, state, cx);
-    let view = ctx.view;
-    let has_ids = data.asks.is_some()
-        || view.subtasks.as_ref().is_some_and(|s| !s.is_empty())
-        || data.not_done > 0
-        || environment_values(view).is_some()
-        || view.context.is_some()
-        || has_artifacts(view)
-        || has_attachments(view)
-        || !view.automations.is_empty();
-    let indicator = data.asks.is_some()
-        || view
-            .subtasks
-            .iter()
-            .flatten()
-            .any(|s| s.state == SubtaskState::NeedsApproval);
+    let (view_ids, view_approval) = view_facts(ctx.view);
+    let has_ids = data.asks.is_some() || data.not_done > 0 || view_ids;
+    let indicator = data.asks.is_some() || view_approval;
     SessionSectionsModel {
         data,
         has_ids,

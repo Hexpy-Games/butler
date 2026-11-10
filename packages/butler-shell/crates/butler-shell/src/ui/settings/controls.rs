@@ -263,7 +263,7 @@ impl RenderOnce for SettingsSelect {
         }
         let content = option_groups(self.options);
         let trigger_id = format!("{}-trigger", self.id);
-        let trigger = select.trigger(SelectTrigger::new(trigger_id), &content, cx);
+        let trigger = select.trigger(SelectTrigger::new(trigger_id.clone()), &content, cx);
         let trigger = match self.disabled_reason {
             Some(reason) => Tooltip::new(format!("{}-reason", self.id))
                 .label(reason)
@@ -273,7 +273,9 @@ impl RenderOnce for SettingsSelect {
             None => trigger,
         };
         let list = select.content(&content, window, cx);
-        let control = div().child(trigger).child(list);
+        let control = crate::ui::widgets::anchor(div(), &trigger_id)
+            .child(trigger)
+            .child(list);
         let control = match self.action {
             Some(action) => Inline::new()
                 .child(

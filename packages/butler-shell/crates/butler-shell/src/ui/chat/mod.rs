@@ -115,6 +115,7 @@ pub(crate) struct Chat {
     /// Ids shown as queued rows (`wasQueued`): the message that replaces one resolves in place.
     queued: HashSet<String>,
     footer_meta: Rc<HashMap<String, FooterMeta>>,
+    footer_metas: footer_meta::FooterMetas,
     /// The open transcript's smooth scroll, for wheel events caught over a dialog.
     wheel: Rc<RefCell<Option<SmoothScroll>>>,
     /// No chat is open: the new-chat screen shows (`showEmptyState`).
@@ -134,6 +135,7 @@ impl Chat {
             entering: HashMap::new(),
             queued: HashSet::new(),
             footer_meta: Rc::default(),
+            footer_metas: footer_meta::FooterMetas::default(),
             wheel: Rc::default(),
             unsent: true,
         }
@@ -173,11 +175,10 @@ impl Chat {
             }
         }
         let lang = Ds::get(cx).lang();
-        self.footer_meta = Rc::new(
-            view.as_ref()
-                .map(|view| footer_meta::footer_meta(&view.messages, lang))
-                .unwrap_or_default(),
-        );
+        let shown = view
+            .as_ref()
+            .map_or(&[][..], |view| view.messages.as_slice());
+        self.footer_meta = Rc::new(self.footer_metas.update(shown, lang));
         self.view = view;
     }
 

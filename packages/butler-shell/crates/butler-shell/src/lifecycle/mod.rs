@@ -9,6 +9,7 @@ pub(crate) mod reset;
 pub(crate) mod setup;
 pub(crate) mod supervisor;
 pub(crate) mod tray;
+pub(crate) mod ui_state;
 pub(crate) mod window;
 
 use std::ffi::OsString;

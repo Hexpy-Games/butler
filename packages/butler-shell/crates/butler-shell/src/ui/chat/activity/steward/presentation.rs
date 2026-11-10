@@ -1,5 +1,7 @@
 //! `stewardProgressPresentation.ts`, `stewardParentProgressProjection.ts`, and the work-block
 //! status lines (`workBlockLatestStatus.ts`, `workBlockTail.ts`) the card shows.
+use std::sync::Arc;
+
 use butler_ds::ui::context::Lang;
 
 use crate::ui::chat::activity::timeline::display_title;
@@ -25,7 +27,7 @@ pub(super) struct Anchored<'a> {
 
 /// The assistant message that owns a child's card: both durable relation anchors must hold.
 fn anchored_parent<'a>(
-    messages: &'a [MessageRecord],
+    messages: &'a [Arc<MessageRecord>],
     session_id: &str,
     child: &StewardSessionSummaryView,
 ) -> Option<&'a MessageRecord> {
@@ -52,7 +54,7 @@ fn anchored_parent<'a>(
         return None;
     }
     let parent = &messages[parent_index];
-    (!parent.id.is_empty() && parent.chat_id.as_deref() == Some(session_id)).then_some(parent)
+    (!parent.id.is_empty() && parent.chat_id.as_deref() == Some(session_id)).then_some(&**parent)
 }
 
 /// `anchoredStewardProgressByMessageId` for one message: the one child that is anchored to it;

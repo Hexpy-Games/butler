@@ -15,7 +15,7 @@ use gpui::{App, Context, Entity, IntoElement, Render, Window, div};
 
 use crate::ui::source::wire::{AppEventEnvelope, SessionView};
 
-pub(crate) use sections::{SessionSectionsState, session_sections_model};
+pub(crate) use sections::{SessionSectionsState, session_sections_model, view_facts};
 pub(crate) use session_misc::{
     SessionActionHandler, SessionInfoActionsProps, session_info_actions,
 };

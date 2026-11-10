@@ -54,6 +54,14 @@ impl Shell {
         let mut ds = Ds::new(tokens, ds_platform(options.platform));
         ds.detect_fonts(&cx.text_system().all_font_names());
         ds.set_lang(options.locale.ds_lang());
+        if let Some(scale) = options
+            .saved
+            .text_size
+            .as_deref()
+            .and_then(super::settings_link::text_scale)
+        {
+            ds.set_ui_scale(scale);
+        }
         ds.install(cx);
     }
 

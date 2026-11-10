@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use super::navigation::Navigation;
 use super::{Shell, appearance};
+use crate::lifecycle::ui_state::UiState;
 use crate::ui::chat::{self, AssistantHooks};
 use crate::ui::i18n::Locale;
 use crate::ui::manage::{HistoryFrom, View};
@@ -16,11 +17,20 @@ use crate::ui::settings::sections::normalize;
 use crate::ui::settings::{SettingsEvent, SettingsView};
 
 /// `textSizeFactor` (app/textSize.ts).
-fn text_scale(value: &str) -> Option<f32> {
+pub(super) fn text_scale(value: &str) -> Option<f32> {
     match value {
         "default" => Some(1.),
         "large" => Some(1.15),
         "larger" => Some(1.3),
+        _ => None,
+    }
+}
+
+/// `appearance_theme`: a forced light or dark, else the system's.
+pub(super) fn theme_override(theme: &str) -> Option<bool> {
+    match theme {
+        "light" => Some(false),
+        "dark" => Some(true),
         _ => None,
     }
 }
@@ -109,15 +119,16 @@ impl Shell {
         if !self.forced_theme
             && let Some(theme) = text("appearance_theme")
         {
-            self.theme_override = match theme {
-                "light" => Some(false),
-                "dark" => Some(true),
-                _ => None,
-            };
+            self.theme_override = theme_override(theme);
             cx.set_window_appearance(self.theme_override.map(appearance));
             if let Some(dark) = self.theme_override {
                 self.set_dark(dark, cx);
             }
+        }
+        let saved = UiState::from_settings(raw);
+        if saved != self.ui_state {
+            crate::lifecycle::ui_state::save(cx, &saved);
+            self.ui_state = saved;
         }
         self.settings_raw = Some(raw.clone());
         cx.notify();

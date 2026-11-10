@@ -2,6 +2,7 @@
 use crate::ui::source::wire::{AppEventEnvelope, MessageRecord, MessageRecordRole, SessionView};
 use chrono::DateTime;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// A reply still being written; mirrors `LIVE_MESSAGE_STATUSES`.
 const LIVE_MESSAGE_STATUSES: [&str; 4] = ["pending", "thinking", "streaming", "retrying"];
@@ -102,7 +103,7 @@ impl MessageCache {
                 if message.chat_id.as_deref() != Some(view.session_id.as_str()) {
                     return false;
                 }
-                merge_messages(&mut view.messages, vec![message])
+                merge_messages(&mut view.messages, vec![Arc::new(message)])
             }
             "message.deleted" => {
                 let payload = |key: &str| event.payload.get(key).and_then(|v| v.as_str());
@@ -125,7 +126,7 @@ impl MessageCache {
     }
 
     /// The shown messages, for the freeze of a finished turn's activity.
-    pub(crate) fn messages_mut(&mut self) -> &mut [MessageRecord] {
+    pub(crate) fn messages_mut(&mut self) -> &mut [Arc<MessageRecord>] {
         self.view
             .as_mut()
             .map_or(&mut [], |view| view.messages.as_mut_slice())
@@ -133,7 +134,10 @@ impl MessageCache {
 }
 
 /// `mergeMessages`: by id, the incoming record merged over the current one, in cursor order.
-fn merge_messages(current: &mut Vec<MessageRecord>, incoming: Vec<MessageRecord>) -> bool {
+fn merge_messages(
+    current: &mut Vec<Arc<MessageRecord>>,
+    incoming: Vec<Arc<MessageRecord>>,
+) -> bool {
     let mut index: HashMap<String, usize> = current
         .iter()
         .enumerate()
@@ -154,20 +158,20 @@ fn merge_messages(current: &mut Vec<MessageRecord>, incoming: Vec<MessageRecord>
         }
     }
     if changed {
-        current.sort_by_key(message_cursor);
+        current.sort_by_key(|message| message_cursor(message));
     }
     changed
 }
 
 /// `mergeMessageRecord`: keeps the settled record against an older copy and the work
 /// blocks and activity rows the incoming record lacks. Returns whether `previous` changed.
-fn replace_record(previous: &mut MessageRecord, incoming: MessageRecord) -> bool {
+fn replace_record(previous: &mut Arc<MessageRecord>, incoming: Arc<MessageRecord>) -> bool {
     if is_stale_message_record(previous, &incoming) {
         return false;
     }
-    let mut next = incoming;
+    let mut next = Arc::unwrap_or_clone(incoming);
     if next.work_blocks.is_none() && previous.work_blocks.as_ref().is_some_and(|b| !b.is_empty()) {
-        next.work_blocks = previous.work_blocks.take();
+        next.work_blocks.clone_from(&previous.work_blocks);
     }
     if next.turn_activity_rows.is_none()
         && previous
@@ -175,12 +179,13 @@ fn replace_record(previous: &mut MessageRecord, incoming: MessageRecord) -> bool
             .as_ref()
             .is_some_and(|r| !r.is_empty())
     {
-        next.turn_activity_rows = previous.turn_activity_rows.take();
+        next.turn_activity_rows
+            .clone_from(&previous.turn_activity_rows);
     }
-    if *previous == next {
+    if **previous == next {
         return false;
     }
-    *previous = next;
+    *previous = Arc::new(next);
     true
 }
 
