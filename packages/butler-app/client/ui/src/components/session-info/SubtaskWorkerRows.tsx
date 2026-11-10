@@ -4,7 +4,7 @@ import { Clickable, Separator, Stack, Tooltip, Typo } from "@/butler-ds";
 import { openSubtask } from "./subtasks.ts";
 import { useRowTitleTooltip } from "./useRowTitleTooltip.ts";
 
-const phases = { active: "executing", waiting: "waiting", completed: "complete", failed: "failed", blocked: "blocked", cancelled: "cancelled" } as const;
+const phases = { active: "executing", waiting: "waiting", completed: "complete", failed: "failed", blocked: "complete", cancelled: "cancelled" } as const;
 
 /** Worker children retain their server order, including finished sessions. */
 export function SubtaskWorkerRows({ parentId, subtask, workers }: { parentId: string; subtask: SubtaskView; workers: SubtaskWorkerView[] }) {

@@ -171,6 +171,15 @@ async fn assert_results(
         count, 1,
         "recovery must execute once in the same result Turn"
     );
+    let failure_key: Option<String> = db
+        .query_row("SELECT failure_key FROM btcc_steward_results", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(failure_key, None);
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(view.data()["steward_children"][0]["status"], "delivered");
+    assert_eq!(view.data()["subtasks"], json!([]));
     let requests = script.requests.lock().unwrap();
     assert!(requests[0].to_string().contains(
         "Delegate everything else with one delegate_to_steward call, even a single step"
