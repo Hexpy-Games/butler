@@ -94,7 +94,7 @@ fn command_directory_rejections_preserve_contained_scope()
 -> Result<(), butler_e2e::e2e::HarnessError> {
     butler_e2e::gate!();
     use butler_turn::workspace::{Commands, PathForm};
-    let setup = butler_e2e::e2e::scenario::Setup::new("CONTAINED-CWD")?;
+    let mut setup = butler_e2e::e2e::scenario::Setup::new("CONTAINED-CWD")?;
     let root = &setup.sandbox.workspace;
     let outside = setup.sandbox.home.to_string_lossy();
     let error = Commands::guarded_directory_in_scope(root, Some(&outside), PathForm::Contained)
@@ -110,6 +110,7 @@ fn command_directory_rejections_preserve_contained_scope()
         Commands::guarded_directory_in_scope(root, Some(&outside), PathForm::RelativeOrAbsolute)
             .unwrap();
     assert_eq!(allowed, setup.sandbox.home);
+    setup.sandbox.mark_success();
     Ok(())
 }
 

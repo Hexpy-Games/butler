@@ -38,7 +38,7 @@ async fn login(launch: &Launch, authority: &FakeChatGptAuthority) -> Result<(), 
 async fn siwc_07_cli_login_logout_and_status() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let authority = FakeChatGptAuthority::start().await?;
-    let setup = Setup::new("SIWC-07")?;
+    let mut setup = Setup::new("SIWC-07")?;
     let mut launch = Launch::new(&setup.sandbox)?;
     launch.set_env("BUTLER_CHATGPT_AUTH_ISSUER", &authority.issuer);
     launch.set_env(
@@ -106,5 +106,6 @@ async fn siwc_07_cli_login_logout_and_status() -> Result<(), HarnessError> {
     let cleared: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     assert!(cleared["access_token"].is_null() && cleared["refresh_token"].is_null());
     assert_eq!(cleared["client_id"], old["client_id"]);
+    setup.sandbox.mark_success();
     Ok(())
 }

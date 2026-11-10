@@ -52,7 +52,7 @@ async fn attach(s: &Scenario) -> Result<ShellClient, TestError> {
 #[tokio::test]
 async fn missing_stale_and_disabled_records_open_no_socket() -> Result<(), TestError> {
     butler_e2e::gate!();
-    let setup = Setup::new("SHELL-ABSENT")?;
+    let mut setup = Setup::new("SHELL-ABSENT")?;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let path = setup
         .sandbox
@@ -87,6 +87,7 @@ async fn missing_stale_and_disabled_records_open_no_socket() -> Result<(), TestE
             .await
             .is_err()
     );
+    setup.sandbox.mark_success();
     Ok(())
 }
 
