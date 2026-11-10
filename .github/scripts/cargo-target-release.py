@@ -117,7 +117,8 @@ def trusted(metadata, publishing=False):
     producer = metadata['producer_name']
     identity = metadata['identity']
     platform = identity['platform']
-    allowed = {'native': [f'Build native Agent ({platform})', 'Build unsigned Windows preview'],
+    allowed = {'native': [f'Build native Agent ({platform})', 'Build unsigned Windows preview',
+                          'Build both real macOS update-fixture versions'],
                'dev': [f'Build archives ({platform})', 'Platform contracts and debug stub chat'],
                'perf': [f'Build perf harness ({platform})']}[identity['kind']]
     if producer not in allowed or ('Windows' in producer or 'stub chat' in producer) and platform != 'windows-x64':
