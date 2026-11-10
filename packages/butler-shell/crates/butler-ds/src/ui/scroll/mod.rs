@@ -3,6 +3,7 @@
 mod area;
 pub(crate) mod bar;
 pub mod engine;
+mod linger;
 
 pub(crate) use area::overlay;
 pub use area::{Bleed, MaxHeight, MinHeight, ScrollArea};

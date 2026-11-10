@@ -325,6 +325,15 @@ pub fn delay(
 
 /// Wakes only the calling view after `after`, for example to unmount a completed exit.
 pub fn wake_after(window: &mut Window, cx: &mut App, after: Duration) {
+    wake_task(window, cx, after).detach();
+}
+
+/// [`wake_after`] that the caller holds: dropping the task cancels the wake, so a re-armed
+/// deadline replaces the earlier one.
+pub fn wake_task(window: &mut Window, cx: &mut App, after: Duration) -> gpui::Task<()> {
     let view = window.current_view();
-    delay(window, cx, after, move |_, cx| cx.notify(view));
+    window.spawn(cx, async move |cx| {
+        cx.background_executor().timer(after).await;
+        cx.update(|_, cx| cx.notify(view)).ok();
+    })
 }

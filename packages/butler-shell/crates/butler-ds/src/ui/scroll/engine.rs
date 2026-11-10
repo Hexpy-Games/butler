@@ -38,8 +38,6 @@ pub struct Flags {
 }
 
 const TOLERANCE: f32 = 1.;
-/// The scrollbar stays this long after the content last moved.
-pub(super) const LINGER_MS: u128 = 700;
 
 fn component(p: gpui::Point<Pixels>, axis: Axis) -> f32 {
     f32::from(match axis {
@@ -95,6 +93,7 @@ struct State {
     revealed: Option<FocusHandle>,
     last_position: f32,
     scrolled_at: Option<Instant>,
+    linger: super::linger::Linger,
 }
 
 /// The target ring's span against the band the scroller shows clear of its fades.
@@ -316,6 +315,7 @@ pub fn fade(
         revealed: None,
         last_position: 0.,
         scrolled_at: None,
+        linger: Default::default(),
     });
     if let Some(focus) = focus {
         state.update(cx, |s, _| s.focus = focus);
@@ -343,15 +343,13 @@ pub fn fade(
             window,
             cx,
         );
-        let lingering = s
-            .scrolled_at
-            .is_some_and(|at| now.saturating_duration_since(at).as_millis() < LINGER_MS);
+        let lingering = s.linger.update(s.scrolled_at, now, window, cx);
         (lengths, moving, s.host, lingering)
     });
     if host {
         focus::hand_off_ring(cx);
     }
-    if moving || lingering {
+    if moving {
         crate::ui::motion::input_frame(window);
     }
     let (axis, fade) = (cfg.axis, f32::from(cfg.size));
