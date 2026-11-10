@@ -33,6 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-agent-setup
         with:
+          release-lto: 'false'
           native-deps: protoc
           cache-key: perf-harness-${{ inputs.platform }}
           cache-workspace-crates: "true"

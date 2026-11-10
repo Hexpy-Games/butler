@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Select whole E2E scenario modules with budget helpers.
+"""Select whole E2E scenario modules that call budget helpers.
+
+Only calls count (assert_wall_clock_budget!( or assert_no_recurring_activity(), not mentions in comments or the helper definition.
 
 Whole modules preserve budgets hidden behind function calls. Pure perf tests
 are selected by name as well, including resource/throughput checks. Print the
@@ -10,13 +12,15 @@ import pathlib
 import re
 import sys
 
+BUDGET = re.compile(r"assert_wall_clock_budget!\s*\(|(?<!fn )\bassert_no_recurring_activity\s*\(")
+
 root = pathlib.Path(__file__).resolve().parents[2]
 tests = root / "packages/butler-agent/rust/crates/butler-e2e/tests/e2e"
 binaries = set()
 all_binaries = {source.stem for source in tests.glob("*.rs") if source.stem != "main"}
 for source in sorted(tests.rglob("*.rs")):
     text = source.read_text()
-    if "assert_wall_clock_budget!" not in text:
+    if not BUDGET.search(text):
         continue
     relative = source.relative_to(tests)
     binary = pathlib.Path(relative.parts[0]).stem
@@ -26,7 +30,7 @@ for source in sorted(tests.rglob("*.rs")):
         binaries.add(binary)
     else:
         binaries.update(all_binaries)
-    for match in re.finditer(r"assert_wall_clock_budget!\s*\(", text):
+    for match in BUDGET.finditer(text):
         line = text.count("\n", 0, match.start()) + 1
         print(f"PERF budget {relative}:{line} (binary {binary})", file=sys.stderr)
 
