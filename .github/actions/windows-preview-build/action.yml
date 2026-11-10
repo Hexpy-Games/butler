@@ -4,6 +4,10 @@ inputs:
   native-cache:
     description: Owner-runner Cargo cache namespace
     default: windows-agent-v1
+  version:
+    description: Release candidate version; non-empty also builds the update-test installers
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -15,6 +19,7 @@ runs:
         self-hosted-runner: 'true'
         profile: ci-fast
         cache-key: windows-preview
+        version: ${{ inputs.version }}
         artifact-base-url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
     - uses: actions/upload-artifact@v4
       with:
@@ -24,8 +29,56 @@ runs:
     - uses: ./.github/actions/publish-windows-target
       continue-on-error: true
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
-    - uses: ./.github/actions/prepare-windows-release-target
-      if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    - uses: ./.github/actions/package-windows-app
+      if: inputs.version != ''
+      with:
+        self-hosted-runner: 'true'
+        version: ${{ inputs.version }}
+    - name: Keep the candidate packages aside
+      if: inputs.version != ''
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      working-directory: .
+      run: |
+        Move-Item dist/release/app-windows dist/release/app-windows-candidate
+        Move-Item dist/release/agent dist/release/agent-candidate
+    - uses: ./.github/actions/build-windows-agent
+      if: inputs.version != ''
+      with:
+        self-hosted-runner: 'true'
+        profile: ci-fast
+        cache-key: windows-preview
+        version: '0.1.0-preview.0'
+        artifact-base-url: http://127.0.0.1/unused
+    - uses: ./.github/actions/package-windows-app
+      if: inputs.version != ''
+      with:
+        self-hosted-runner: 'true'
+        version: '0.1.0-preview.0'
+    - name: Arrange the first and candidate packages
+      if: inputs.version != ''
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      working-directory: .
+      run: |
+        Move-Item dist/release/app-windows dist/release/app-windows-first
+        Move-Item dist/release/agent dist/release/agent-first
+        Move-Item dist/release/app-windows-candidate dist/release/app-windows
+        Move-Item dist/release/agent-candidate dist/release/agent
+    - name: Pack every installer fixture with complete checksums
+      if: inputs.version != ''
+      working-directory: .
+      shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+      run: |
+        $ErrorActionPreference = 'Continue'
+        python .github/scripts/isolated.py python deploy/windows-installer-transport.py pack dist/release dist/release/installer-transport
+        $ErrorActionPreference = 'Stop'
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    - uses: actions/upload-artifact@v4
+      if: inputs.version != ''
+      with:
+        name: windows-installer-preview
+        path: dist/release/installer-transport/
+        if-no-files-found: error
+        compression-level: 0
     - name: Check runner registration and remove job profile
       if: always()
       working-directory: .

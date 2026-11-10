@@ -274,7 +274,7 @@ class Trust(unittest.TestCase):
         # PRs run hosted shards only for Windows agent crates or Windows inputs.
         rust, workflow = 'packages/butler-agent/rust/crates/butler-core/src/lib.rs', '.github/workflows/e2e.yml'
         pr = {'pull_request': {'number': 12, 'base': {'sha': 'base'}}}
-        none = dict.fromkeys(['build', 'stub', 'hosted-build', 'release', 'hosted'], False)
+        none = dict.fromkeys(['build', 'stub', 'hosted-build', 'release', 'installer', 'hosted'], False)
         hosted, native = dict(none, **{'hosted-build': True, 'hosted': True}), dict(none, stub=True, hosted=True)
         for event_name, ref, event, paths, expected in [
             ('pull_request', 'refs/pull/12/merge', pr, ['docs/notes.md', workflow], none),
@@ -283,7 +283,6 @@ class Trust(unittest.TestCase):
             ('pull_request', 'refs/pull/12/merge', pr, ['packages/butler-agent/rust/crates/butler-e2e/tests/e2e/new.rs'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-preview-smoke.yml'], hosted),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/actions/build-windows-agent/action.yml'], hosted),
-            ('pull_request', 'refs/pull/12/merge', pr, ['.github/workflows/windows-installer.yml'], hosted),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/scripts/ci-changes.py'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['.github/releases/v1.2.3.md'], none),
             ('pull_request', 'refs/pull/12/merge', pr, ['deploy/windows-preview-smoke.ps1'], hosted),
@@ -390,31 +389,30 @@ class Trust(unittest.TestCase):
 class WorkflowScheduling(unittest.TestCase):
     # test-category: pure-logic
     def test_installer_verify_condition_truth_table(self):
-        source = (ROOT.parent / 'workflows/windows-installer.yml').read_text()
-        verify = source.split('\n  verify:\n', 1)[1].split('\n  gate:', 1)[0]
-        expression = re.search(r'^    if: \$\{\{ (.*) \}\}$', verify, re.M)[1]
+        source = (ROOT.parent / 'workflows/windows-preview-smoke.yml').read_text()
+        verify = source.split('\n  installer:\n', 1)[1].split('\n  hosted:', 1)[0]
+        expression = re.search(r'^    if: (.*)$', verify, re.M)[1]
         results = ('success', 'failure', 'cancelled', 'skipped')
-        cases = itertools.product(results, ('smoke', 'integration'), (False, True),
-                                  ('', '123'), (False, True), results)
-        for build, tier, cancelled, reuse, selected, changes_result in cases:
-            with self.subTest(build=build, tier=tier, cancelled=cancelled,
-                              reuse=reuse, selected=selected, changes=changes_result):
+        cases = itertools.product(results, results, ('smoke', 'integration'), (False, True),
+                                  (False, True), (False, True), results)
+        for build, stub, tier, cancelled, restored, selected, changes_result in cases:
+            with self.subTest(build=build, stub=stub, tier=tier, cancelled=cancelled,
+                              restored=restored, selected=selected, changes=changes_result):
                 condition = expression
                 values = {'cancelled()': cancelled, 'always()': True,
                           'needs.changes.result': changes_result,
-                          'needs.build.result': build, 'inputs.reuse-run': reuse,
+                          'needs.build.result': build, 'needs.stub.result': stub,
                           'needs.changes.outputs.tier': tier,
-                          'fromJSON(needs.changes.outputs.jobs).verify': selected}
+                          "fromJSON(needs.changes.outputs.jobs)['installer']": selected,
+                          "contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-installer-preview')": restored,
+                          "contains(fromJSON(needs.changes.outputs.artifacts).*.name, 'windows-e2e')": restored}
                 for name, value in values.items():
                     condition = condition.replace(name, repr(value))
                 condition = re.sub(r'!(?!=)', 'not ', condition)
                 condition = condition.replace('&&', 'and').replace('||', 'or')
-                if cancelled or changes_result != 'success':
-                    expected = False
-                elif tier == 'integration':
-                    expected = selected and build in ('success', 'skipped')
-                else:
-                    expected = build == 'success' or bool(reuse)
+                expected = (not cancelled and changes_result == 'success' and tier == 'integration'
+                            and selected and (build == 'success' or (build == 'skipped' and restored))
+                            and (stub == 'success' or (stub == 'skipped' and restored)))
                 self.assertEqual(bool(eval(condition, {'__builtins__': {}})), expected)
 
     # test-category: format-pin
