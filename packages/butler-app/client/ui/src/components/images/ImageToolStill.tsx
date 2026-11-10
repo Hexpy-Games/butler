@@ -13,10 +13,10 @@ export function ImageToolStill({ turnId, row }: { turnId: string; row: ProgressR
   if (images.length === 0) return null;
   const alt = appCopy.conversation.answerBlocks.image;
   const shots: ViewerImage[] = images.map((asset) => ({ src: assetSource(asset), alt, asset, sessionId }));
-  return <Stack align="row" cross="start" data-test-class="image-tool-still"><Stack basis="md" shrink minWidth="0">
+  return <Stack align="row" cross="start" data-test-class="image-tool-still"><Stack basis="xs" shrink minWidth="0">
     {images.map((asset, index) => (
       <Clickable key={asset.id} variant="text" stretch aria-label={appCopy.conversation.imageViewer.viewImage(alt)} onClick={() => openImageViewer(shots, index)}>
-        <Stack grow minWidth="0"><MediaFrame src={assetSource(asset, 640)} alt={alt} aspect={imageAspect(asset.width, asset.height)} placeholder /></Stack>
+        <Stack grow minWidth="0"><MediaFrame src={assetSource(asset, 320)} alt={alt} aspect={imageAspect(asset.width, asset.height)} placeholder /></Stack>
       </Clickable>
     ))}
   </Stack></Stack>;
