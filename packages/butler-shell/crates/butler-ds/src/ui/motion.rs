@@ -169,12 +169,19 @@ impl Transition {
         if !self.moving(timing) {
             return self.to;
         }
-        let elapsed = animation_time_ms().wrapping_sub(self.start_ms);
+        let elapsed = self.elapsed().unwrap_or(0);
         self.from + (self.to - self.from) * timing.ease(elapsed as f32 / timing.ms() as f32)
     }
 
+    /// Running, or waiting for a start in the future (which holds `from`).
     pub fn moving(&self, timing: &Timing) -> bool {
-        animation_time_ms().wrapping_sub(self.start_ms) < timing.ms()
+        self.elapsed().is_none_or(|elapsed| elapsed < timing.ms())
+    }
+
+    /// Milliseconds since the start; `None` before a future start.
+    fn elapsed(&self) -> Option<u32> {
+        let elapsed = animation_time_ms().wrapping_sub(self.start_ms);
+        (elapsed < 1 << 31).then_some(elapsed)
     }
 
     pub fn apply<E: Styled>(&self, mut el: E, timing: &Timing, props: &Props) -> E {
