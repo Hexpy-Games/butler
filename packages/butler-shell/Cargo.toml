@@ -22,6 +22,11 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 debug = 0
 
+# Release builds link gpui, wgpu and Parley across crates, as the agent release build does.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
 [workspace.dependencies]
 gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d580948b0fe5ebf3b3457fbd6c8b21100f09b2ad", package = "gpui-ce" }
 gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d580948b0fe5ebf3b3457fbd6c8b21100f09b2ad", package = "gpui_ce_platform" }
