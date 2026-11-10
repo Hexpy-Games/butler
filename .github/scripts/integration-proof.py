@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Require complete release-branch integration evidence before tag builds."""
+import hashlib
 import importlib.util
 import json
 import os
@@ -106,6 +107,14 @@ def waived(repository, candidate, sha, workflow, job):
     return False
 
 
+def workflow_hashes(workflow, current):
+    """Mirror ci-changes.select(): Windows preview receipts fold Rust into the package hash."""
+    if workflow != 'windows-preview-smoke.yml':
+        return current
+    package = hashlib.sha256(json.dumps([current['package'], current['rust']]).encode()).hexdigest()
+    return dict(current, package=package)
+
+
 def check(repository, candidate, sha):
     branch = f'release/{candidate}'
     current = changes.hashes('tag')
@@ -117,7 +126,7 @@ def check(repository, candidate, sha):
         def gate_ok(run):
             jobs = pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100', 'jobs')
             return gate_passed(workflow, run, jobs)
-        inputs = changes.integration_inputs(workflow, current, candidate)
+        inputs = changes.integration_inputs(workflow, workflow_hashes(workflow, current), candidate)
         if workflow == 'e2e.yml':
             # Live E2E runs once per release push and must pass at this SHA.
             inputs = {'e2e-live': sha}
