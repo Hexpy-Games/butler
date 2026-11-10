@@ -1,7 +1,6 @@
 {
   ".github/workflows/rust-quality.yml": "active",
   ".github/workflows/windows-preview-smoke.yml": "active",
-  ".github/workflows/windows-installer.yml": "active",
   ".github/workflows/e2e.yml": "active",
   ".github/workflows/windows.yml": "disabled_manually"
 }
