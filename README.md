@@ -86,10 +86,6 @@ Release builds identify with their full tag, such as `0.1.0-preview.14`; develop
 
 On first launch, choose the interface language on the welcome screen, accept the safety notice, choose whether to use the memory model and connect an AI. Choose Butler's reply language at the end of the AI connection step; you can change it later in **Settings → Personalization**. See [Install](https://butler.hexpy.games/en/help/getting-started/install/) and [First run](https://butler.hexpy.games/en/help/getting-started/first-run/).
 
-### macOS first open
-
-macOS builds, previews included, are Developer ID signed and notarized by Apple, so Butler opens like any downloaded app: macOS asks once to confirm opening an app from the internet.
-
 ### Windows
 
 Run `ButlerSetup-<version>-x64.exe`. Preview installers are unsigned, so SmartScreen may warn on first run; choose **More info → Run anyway**.
@@ -128,7 +124,7 @@ Use `butler open` to open the App in your browser. For another computer on a tru
 
 ## Where your data lives
 
-The data folder is `~/.butler` by default. Saved API keys go to the system credential store on Developer ID-signed macOS builds, and otherwise to an owner-only file in that folder. Use a local model to keep inference on your machine too.
+The data folder is `~/.butler` by default. On macOS, saved API keys go to the Keychain; on Windows and Linux, to an owner-only file in that folder. Use a local model to keep inference on your machine too.
 
 ## Documentation
 

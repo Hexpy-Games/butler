@@ -191,7 +191,7 @@ regenerate after the app copy or the Korean pages change.
 | 동의하지 않음 | **Decline** | getting-started/first-run |
 | 동작 줄이기 | **Reduce motion** | settings |
 | 뒤로 | **Back** | basics/browser |
-| 등록 | **Registered** | projects |
+| 등록 | **Add** (`canon.proposalCard.add`)<br />**Registered** (`projectStatistics.labels.created`) | projects |
 | 등록된 모델 | **Registered models** | models/cloud, models/custom |
 | 등록된 예비 모델이 없습니다. | **No backup models are registered.** | models/backup |
 | 디버깅 | **Debug** | settings |
@@ -265,7 +265,7 @@ regenerate after the app copy or the Korean pages change.
 | 묻기 | **Ask** | basics/browser, settings |
 | 미리보기 버전 받기 | **Receive preview versions** | getting-started/install, settings, troubleshooting |
 | 반갑습니다. 당신을 모시게 되어 기쁩니다. | **Pleased to meet you. It will be my honor to serve.** | getting-started/first-run |
-| 반영 | **Apply** (`canon.mcp.apply`)<br />**Applied** (`settings.systemEventLabels.metrics.promoted_count`) | projects |
+| 반영 | **Apply** (`canon.proposalCard.apply`)<br />**Applied** (`settings.systemEventLabels.metrics.promoted_count`) | projects |
 | 방문 기록 | **History** | basics/browser, settings |
 | 방문 기록 검색 | **Search history** (`browser.history.search`)<br />**Search browsing history** (`guided.tools.browser_history_search`) | basics/browser |
 | 방문 기록 지우기 | **Clear browsing history** | basics/browser |
@@ -333,7 +333,7 @@ regenerate after the app copy or the Korean pages change.
 | 비밀번호 | **Password** (`browser.password`)<br />**passwords** (`settings.sectionAliases.browser[6]`)<br />**Passwords** (`settings.browserImport.passwords`) | settings |
 | 비우기 | **Clear** | basics/sidebar-and-spaces |
 | 비활성화 | **Disabled** (`settings.options.searchProviderDisabled`)<br />**Disable** (`settings.actions.disableMcpServer`) | extensions/mcp-servers, settings |
-| 빠르게 | **Quick** | settings |
+| 빠르게 | **Quick** (`settings.options.searchDepthQuick`)<br />**Faster** (`settings.recallOptions.faster`) | settings |
 | 사용 | **Enabled** | extensions/mcp-servers, settings |
 | 사용 기록 | **Activity** | settings |
 | 사용 안 함 | **Don't use it** (`firstRun.memoryChoice.off`)<br />**Off** (`conversation.imageTools.off`)<br />**Disabled** (`settings.hooks.disabled`)<br />**Not in use** (`settings.savedKeys.usedBy(0)`) | basics/images, getting-started/first-run, models/backup, models/cloud, settings |
@@ -465,7 +465,7 @@ regenerate after the app copy or the Korean pages change.
 | 연결을 마치지 못했습니다. 다시 시도하세요. | **Couldn't finish connecting. Try again.** | getting-started/first-run, troubleshooting |
 | 연속 사용 중 | **Current streak** | settings |
 | 열 수 없는 형식입니다 | **This type can't open** | basics/right-panel |
-| 열기 | **Open** (`taskGraph.detail.openDocument`)<br />**Manage** (`settings.memory.linkOpen`) | basics/right-panel, getting-started/install, personalization, projects, troubleshooting |
+| 열기 | **Open** (`canon.proposalCard.open`)<br />**Manage** (`settings.memory.linkOpen`) | basics/right-panel, getting-started/install, personalization, projects, troubleshooting |
 | 열어서 확인 | **Open to check** | basics/browser |
 | 영어 | **English** | personalization, settings |
 | 예비 모델 | **backup models** (`settings.sectionAliases.models[4]`)<br />**Backup models** (`settings.pageSections.backupModels`) | models/backup, settings, troubleshooting |
@@ -714,7 +714,7 @@ regenerate after the app copy or the Korean pages change.
 | 폴더에서 보기 | **Show in folder** | basics/right-panel |
 | 표시 이름 | **Display name** | extensions/mcp-servers, models/custom |
 | 품질 | **Quality** | basics/images |
-| 프로젝트 | **Project** (`briefing.projectMoment`)<br />**Projects** (`sidebar.projects`) | basics/command-palette, settings |
+| 프로젝트 | **Project** (`canon.proposalCard.project`)<br />**Projects** (`sidebar.projects`) | basics/command-palette, settings |
 | 프로젝트 기억 | **project memory** (`settings.sectionAliases.memory[3]`)<br />**Project memory** (`settings.pageSections.projectMemory`) | personalization, settings |
 | 프로젝트 기억 지우기 | **Erase project memory** | settings |
 | 프로젝트 대시보드 | **Project dashboard** | basics/sidebar-and-spaces, projects |

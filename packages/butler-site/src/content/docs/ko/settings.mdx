@@ -197,8 +197,8 @@ status: published
 
 **로그인**, **결제 수단**, **내 정보**와 비밀번호 가져오기는 시스템 암호 저장소가 있어야 쓸 수 있습니다. 저장소가 없으면 **추가**가 비활성화되고 **시스템 암호 저장소가 있어야 쓸 수 있어요** 안내가 표시됩니다.
 
-- Developer ID로 서명한 macOS 앱은 키체인을 씁니다.
-- Windows, Linux와 서명하지 않은 빌드에서는 같은 데이터 폴더를 쓰는 CLI에서 아래 명령으로 시스템 저장소를 켭니다. Windows는 자격 증명 관리자, Linux는 시스템 키링을 씁니다.
+- macOS 앱은 키체인을 씁니다.
+- Windows와 Linux에서는 같은 데이터 폴더를 쓰는 CLI에서 아래 명령으로 시스템 저장소를 켭니다. Windows는 자격 증명 관리자, Linux는 시스템 키링을 씁니다.
 
 ```bash
 butler config set secrets.store system

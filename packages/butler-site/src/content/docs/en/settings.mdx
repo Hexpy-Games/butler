@@ -197,8 +197,8 @@ Manage the history and site data of Butler's browser, and the sign-ins and payme
 
 **Sign-ins**, **Payment methods**, **My info** and password import need a system password store. Without one, **Add** is disabled and **Needs the system password store** appears.
 
-- A macOS app signed with a Developer ID uses the Keychain.
-- On Windows, on Linux and in unsigned builds, turn on the system store from the CLI with the same data folder, using the command below. Windows uses Credential Manager, and Linux uses the system keyring.
+- The macOS app uses the Keychain.
+- On Windows and Linux, turn on the system store from the CLI with the same data folder, using the command below. Windows uses Credential Manager, and Linux uses the system keyring.
 
 ```bash
 butler config set secrets.store system
