@@ -5,7 +5,6 @@
 mod request;
 mod turn;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -30,7 +29,6 @@ use super::queue::queued_rows;
 use super::row::message_row;
 use crate::ui::i18n::transcript as strings;
 use crate::ui::inspector::sections::asks::{pending_asks, request_source_message};
-use crate::ui::smooth_scroll::SmoothScroll;
 use crate::ui::source::wire::{
     MessageRecord, MessageRecordRole, ProgressRow, SessionQueueView, SessionView, SessionViewTurn,
 };
@@ -125,7 +123,6 @@ fn splice_changes(list: &ListState, old: &[Row], new: &[Row]) {
 struct State {
     session: String,
     list: ListState,
-    smooth: SmoothScroll,
     view: Option<Rc<SessionView>>,
     entering: Rc<HashMap<String, Entering>>,
     footer_meta: Rc<HashMap<String, FooterMeta>>,
@@ -170,7 +167,6 @@ impl State {
         });
         Self {
             session,
-            smooth: SmoothScroll::list(list.clone()),
             list,
             view: None,
             entering: Rc::default(),
@@ -320,7 +316,6 @@ impl State {
 
     /// `scrollToBottom`: follow the newest message again.
     fn scroll_to_bottom(&mut self) {
-        self.smooth.cancel();
         self.list.set_follow_mode(FollowMode::Tail);
         self.away = false;
         self.unread = false;
@@ -332,7 +327,6 @@ impl State {
 pub(crate) fn transcript(
     t: &TranscriptCtx,
     queue: Option<&SessionQueueView>,
-    wheel: &RefCell<Option<SmoothScroll>>,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -350,11 +344,10 @@ pub(crate) fn transcript(
         state.sync(t, queue, reserve, intro, source);
         StatusLineView::sync(&mut state.status_line, t.view, cx);
     });
-    let (list_state, smooth, away, unread) = {
+    let (list_state, away, unread) = {
         let s = state.read(cx);
-        (s.list.clone(), s.smooth.clone(), s.away, s.unread)
+        (s.list.clone(), s.away, s.unread)
     };
-    *wheel.borrow_mut() = Some(smooth.clone());
     // A decision's height changes with its own state (collapse, step, pending): measure it again.
     if let Some(ix) = state.read(cx).request_ix {
         list_state.remeasure_items(ix..ix + 1);
@@ -369,7 +362,6 @@ pub(crate) fn transcript(
         .id("transcript")
         .relative()
         .size_full()
-        .child(smooth.layer())
         .child(rows)
         .children(jump)
         .into_any_element()

@@ -15,7 +15,6 @@ mod queue;
 mod row;
 mod user;
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -28,7 +27,6 @@ use gpui::{
 };
 
 use self::assistant::FooterMeta;
-use crate::ui::smooth_scroll::SmoothScroll;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{QueuedMessageRecord, SessionQueueView, SessionView};
 
@@ -116,8 +114,6 @@ pub(crate) struct Chat {
     queued: HashSet<String>,
     footer_meta: Rc<HashMap<String, FooterMeta>>,
     footer_metas: footer_meta::FooterMetas,
-    /// The open transcript's smooth scroll, for wheel events caught over a dialog.
-    wheel: Rc<RefCell<Option<SmoothScroll>>>,
     /// No chat is open: the new-chat screen shows (`showEmptyState`).
     unsent: bool,
 }
@@ -136,7 +132,6 @@ impl Chat {
             queued: HashSet::new(),
             footer_meta: Rc::default(),
             footer_metas: footer_meta::FooterMetas::default(),
-            wheel: Rc::default(),
             unsent: true,
         }
     }
@@ -244,6 +239,6 @@ impl Render for Chat {
             Rc::new(entering),
             self.footer_meta.clone(),
         );
-        list::transcript(&t, self.queue.as_deref(), &self.wheel, window, cx)
+        list::transcript(&t, self.queue.as_deref(), window, cx)
     }
 }
