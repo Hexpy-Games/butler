@@ -25,6 +25,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "hover" => hover(h, arg),
         "reveal" => reveal(h, arg),
         "wait-anchor" => wait_anchor(h, arg),
+        "wait-theme" => wait_theme(h, arg),
         "expect-anchor" | "expect-no-anchor" => {
             settle(&mut h.cx, h.handle);
             ensure!(
@@ -65,6 +66,26 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
     }
 }
 
+/// `expect-fresh`: the frame drawn from notifications alone equals a full re-render. A region
+/// left stale by a missed notify differs once `window.refresh()` redraws everything; both
+/// frames are saved when they differ.
+pub(super) fn expect_fresh(h: &mut Harness, dir: &std::path::Path) -> anyhow::Result<()> {
+    for _ in 0..4 {
+        h.cx.advance_clock(std::time::Duration::from_millis(50));
+        h.cx.run_until_parked();
+    }
+    let notified = h.cx.capture_screenshot(h.handle)?;
+    h.cx.update_window(h.handle, |_, window, _| window.refresh())?;
+    h.cx.run_until_parked();
+    let refreshed = h.cx.capture_screenshot(h.handle)?;
+    if notified.as_raw() != refreshed.as_raw() {
+        notified.save(dir.join("stale-notified.png"))?;
+        refreshed.save(dir.join("stale-refreshed.png"))?;
+        anyhow::bail!("the notified frame differs from a full re-render");
+    }
+    Ok(())
+}
+
 /// `wait-anchor <anchor>`: real time passes until the anchor shows (it may wait on an agent
 /// answer), for at most 30 seconds (the Electron side's wait).
 fn wait_anchor(h: &mut Harness, anchor: &str) -> anyhow::Result<()> {
@@ -77,6 +98,23 @@ fn wait_anchor(h: &mut Harness, anchor: &str) -> anyhow::Result<()> {
         ensure!(
             std::time::Instant::now() < deadline,
             "anchor {anchor} did not show"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+/// `wait-theme <light|dark>`: real time passes until the shell shows that theme (a Settings
+/// save lands through the Agent), for at most 30 seconds.
+fn wait_theme(h: &mut Harness, theme: &str) -> anyhow::Result<()> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        settle(&mut h.cx, h.handle);
+        if h.cx.update(|cx| h.window.read(cx).map(|s| s.theme.dark))? == (theme == "dark") {
+            return Ok(());
+        }
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "theme {theme} did not show"
         );
         std::thread::sleep(std::time::Duration::from_millis(10));
     }

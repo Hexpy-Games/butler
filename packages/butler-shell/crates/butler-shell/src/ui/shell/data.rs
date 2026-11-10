@@ -5,6 +5,7 @@ use futures::StreamExt as _;
 use gpui::{Context, Window};
 
 use super::Shell;
+use super::region::Touched;
 use crate::ui::i18n::Locale;
 use crate::ui::source::agent::MonitorSignal;
 use crate::ui::source::{ChatRef, EventCursor, Fetch, SourceError};
@@ -150,16 +151,25 @@ impl Shell {
         if let crate::ui::source::LiveUpdate::Inspector(envelope) = &event.update {
             crate::ui::inspector::live_event(envelope, cx);
         }
+        let mut touched = Touched::default();
         match self.store.apply(epoch, event) {
             Applied::Store => {}
+            Applied::Chats => {
+                touched.sidebar = true;
+                touched.titlebar = true;
+            }
             Applied::Failed(error) => self.failed(&error, self.theme.strings.load_failed, cx),
             Applied::Transcript => self.show_view(true, cx),
-            Applied::Resync => self.connect(cx),
+            Applied::Resync => {
+                self.connect(cx);
+                cx.notify();
+            }
             Applied::Refresh => self.refresh_open_view(cx),
         }
         if let Some(event) = sidebar_event {
-            self.sidebar_live_event(&event, cx);
+            touched.sidebar |= self.sidebar_live_event(&event, cx);
             self.manage_live_event(&event, cx);
+            self.feed_sections_event(&event, cx);
         }
         if self.store.view_stale() {
             self.refresh_open_view(cx);
@@ -168,7 +178,7 @@ impl Shell {
             self.sync_attention(cx);
         }
         self.sync_composer(cx);
-        cx.notify();
+        self.regions.notify(touched, cx);
     }
 
     /// Opens `chat` from its latest messages (`None`: a new chat).
@@ -303,12 +313,15 @@ impl Shell {
         let streaming = self.store.running().is_some() && self.dashboard_project(cx).is_none();
         let disabled = self.disconnected();
         self.composer.update(cx, |c, cx| {
+            let changed = c.streaming != streaming || c.disabled != disabled;
             c.streaming = streaming;
             if disabled.is_some() {
                 c.fold();
             }
             c.disabled = disabled;
-            cx.notify();
+            if changed || c.disabled.is_some() {
+                cx.notify();
+            }
         });
     }
 

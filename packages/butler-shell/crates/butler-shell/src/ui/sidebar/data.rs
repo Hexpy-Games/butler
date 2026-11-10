@@ -74,14 +74,20 @@ impl Shell {
             self.reveal_sidebar(&id, false);
         }
     }
-    pub(crate) fn sidebar_live_event(&mut self, event: &AppEventEnvelope, cx: &mut Context<Self>) {
+    /// Starts the loads the event asks for; true when it changed what the sidebar shows at once.
+    pub(crate) fn sidebar_live_event(
+        &mut self,
+        event: &AppEventEnvelope,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let mut stored = false;
         if event.r#type == "updates.progress"
             && let Some(progress) = event
                 .payload
                 .get("progress")
                 .and_then(|value| serde_json::from_value::<UpdateProgressView>(value.clone()).ok())
         {
-            self.receive_sidebar_update(progress);
+            stored = self.receive_sidebar_update(progress);
         }
         let navigation = matches!(
             event.r#type.as_str(),
@@ -97,6 +103,7 @@ impl Shell {
         if self.sidebar.tab == Tab::Running {
             self.schedule_work_status(cx);
         }
+        stored
     }
     pub(crate) fn refresh_sidebar_update(&mut self, cx: &mut Context<Self>) {
         if self.sidebar.update_in_flight {
@@ -122,15 +129,16 @@ impl Shell {
             }
         });
     }
-    fn receive_sidebar_update(&mut self, progress: UpdateProgressView) {
-        if self
+    fn receive_sidebar_update(&mut self, progress: UpdateProgressView) -> bool {
+        let newer = self
             .sidebar
             .update
             .as_ref()
-            .is_none_or(|previous| progress.revision >= previous.revision)
-        {
+            .is_none_or(|previous| progress.revision >= previous.revision);
+        if newer {
             self.sidebar.update = Some(progress);
         }
+        newer
     }
     pub(super) fn mutate(&mut self, mutation: Mutation, cx: &mut Context<Self>) {
         if self.sidebar.pending {

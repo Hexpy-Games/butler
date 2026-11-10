@@ -23,7 +23,7 @@ use crate::ui::inspector::{
 };
 use crate::ui::manage::View;
 use crate::ui::palette::{CommandPalette, PaletteEvent};
-use crate::ui::source::wire::SessionView;
+use crate::ui::source::wire::{AppEventEnvelope, SessionView};
 use crate::ui::viewer;
 
 pub(super) struct Panes {
@@ -34,7 +34,7 @@ pub(super) struct Panes {
     /// Where the aside writes the layout the inspector pane draws.
     layout: Rc<Cell<AsideLayout>>,
     /// The open chat's view as last shown.
-    view: Option<Rc<SessionView>>,
+    pub(super) view: Option<Rc<SessionView>>,
     /// `sessionInfoOpen`.
     info_open: bool,
     /// `taskGraphEnabled`: a local UI preference (`appUiStateCache`) with no setter in the shell
@@ -117,6 +117,13 @@ impl Shell {
                 self.set_view(View::AutomationDetail(id.clone().into()), window, cx);
             }
         }
+    }
+
+    /// A live event goes to the session sections state (it reads the pending asks on some).
+    pub(super) fn feed_sections_event(&mut self, event: &AppEventEnvelope, cx: &mut Context<Self>) {
+        self.panes
+            .sections
+            .update(cx, |sections, cx| sections.live_event(event, cx));
     }
 
     /// The open view goes to the inspector pane too.

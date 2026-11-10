@@ -45,7 +45,7 @@ mod parse;
 mod scopes;
 mod text;
 
-pub use highlight::{Token, highlight, registered};
+pub use highlight::{Incremental, Token, highlight, registered};
 pub use model::{Align, Block, Inline, Item, Style, Table, plain};
 pub use parse::parse;
 pub use scopes::Role;

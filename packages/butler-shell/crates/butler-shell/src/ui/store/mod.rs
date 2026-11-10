@@ -32,6 +32,8 @@ pub(crate) struct ChatsLoad {
 pub(crate) enum Applied {
     /// Nothing visible beyond the store (or the event was stale or a duplicate).
     Store,
+    /// The chat list or the navigation tree changed.
+    Chats,
     Failed(crate::ui::source::SourceError),
     /// The open chat's messages or turn progress changed: show its view again.
     Transcript,
@@ -260,7 +262,9 @@ impl Store {
                 {
                     return Applied::Store;
                 }
-                self.navigation.apply_live_event(&event);
+                if self.navigation.apply_live_event(&event) {
+                    return Applied::Chats;
+                }
             }
             LiveUpdate::Failed(error) => return Applied::Failed(error),
             LiveUpdate::Event {
@@ -305,6 +309,7 @@ impl Store {
                     let at = self.chats.partition_point(|c| key(c) > key(&summary));
                     self.chats.insert(at, summary);
                 }
+                return Applied::Chats;
             }
             LiveUpdate::Resync => return Applied::Resync,
             LiveUpdate::Inspector(_) => {}

@@ -131,6 +131,9 @@ async fn run(binary: &Path, dir: &Path, dark: bool) -> anyhow::Result<()> {
             .data_folder_token()
             .access(Access::AskAlways)
             .env("BUTLER_APP_SERVER_PORT", "0")
+            // Start the App clock on the day the activity steps move it within, so the
+            // fixture's daily jobs count as already run and no briefing call starts.
+            .env("BUTLER_E2E_APP_NOW", "2026-10-29T00:00:00Z")
             .env("BUTLER_E2E_APP_CLOCK_ADDRESS", &clock)
             .stub_cassette(stub::cassette()?);
         let mut s = setup
@@ -176,6 +179,7 @@ async fn scenario(
     clock: &str,
 ) -> anyhow::Result<()> {
     seed_roles(s).await?;
+    complete_setup(s).await?;
     let proxy = proxy::Proxy::start(s.gw.base.clone()).await?;
     proxy.attach(&s.sandbox.data).await?;
     let mut h = Shots::start(binary, &s.sandbox.data, dir, dark).await?;
@@ -199,10 +203,6 @@ async fn scenario(
         h.command("shot activity-reordered").await?;
         h.command(&format!("exact {}", stub::ACTION)).await?;
         h.command("shot approval").await?;
-        h.command("modify").await?;
-        h.command("type Use a dry run first").await?;
-        h.command("shot modify").await?;
-        h.command("close").await?;
         h.command(decision).await?;
         if decision == "allow" {
             h.command("streaming shell answer").await?;
@@ -211,6 +211,7 @@ async fn scenario(
             proxy.burst()?;
             h.command("stable").await?;
             h.command("answer shell answer").await?;
+            h.command("expect-fresh").await?;
             if proxy.refused() < 3 { bail!("503 burst did not exceed the request retry budget"); }
             h.command("attached").await?;
             h.command("shot resumed-after-503").await?;
@@ -349,6 +350,33 @@ async fn diagnostics(s: &butler_e2e::e2e::scenario::Scenario, out: &Path) -> any
         }
     }
     tokio::fs::write(out.join("failure.json"), serde_json::to_vec_pretty(&views)?).await?;
+    Ok(())
+}
+
+/// Does what first-run onboarding does: registers the stub's plan model (the composer
+/// offers only registered, ready models), accepts the current consent and completes the
+/// first run, so the window opens on a sendable workspace.
+async fn complete_setup(s: &butler_e2e::e2e::scenario::Scenario) -> anyhow::Result<()> {
+    const AT: &str = "2026-10-29T00:00:00Z";
+    let answer =
+        s.gw.post(
+            "/model-catalog/registered-models",
+            serde_json::json!({"provider_id": s.model.provider(), "model_id": s.model.model,
+                               "auth_type": "chatgpt_oauth"}),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    anyhow::ensure!(answer.status == 201, "model registration: {}", answer.text);
+    for body in [
+        serde_json::json!({"onboarding": {"consent_version": 2, "accepted_at": AT}}),
+        serde_json::json!({"onboarding": {"completed_at": AT}}),
+    ] {
+        let answer =
+            s.gw.patch("/settings", body)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        anyhow::ensure!(answer.status == 200, "onboarding seed: {}", answer.text);
+    }
     Ok(())
 }
 

@@ -1,6 +1,7 @@
 //! `app/conversation-progress/terminal-activity.ts`: a settled turn's work blocks, kept on its
 //! assistant message.
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use chrono::DateTime;
 
@@ -31,7 +32,7 @@ fn parse_ms(value: Option<&str>) -> Option<f64> {
 /// `freezeConversationActivity`: freezes each message's activity from the turn snapshots;
 /// returns whether any message changed.
 pub(crate) fn freeze_conversation_activity(
-    messages: &mut [MessageRecord],
+    messages: &mut [Arc<MessageRecord>],
     turn_progress: &HashMap<String, TurnProgressSnapshot>,
 ) -> bool {
     let mut changed = false;
@@ -65,8 +66,8 @@ pub(crate) fn freeze_conversation_activity(
             segment
         });
         let frozen = freeze_message_activity(message, segment.as_ref());
-        if frozen != *message {
-            *message = frozen;
+        if frozen != **message {
+            *message = Arc::new(frozen);
             changed = true;
         }
     }

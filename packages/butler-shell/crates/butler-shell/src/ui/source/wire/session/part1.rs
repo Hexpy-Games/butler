@@ -120,7 +120,7 @@ pub(crate) struct SessionView {
     #[serde(default)]
     pub(crate) waiting_for_children: Option<bool>,
     #[serde(default)]
-    pub(crate) messages: Vec<MessageRecord>,
+    pub(crate) messages: Vec<std::sync::Arc<MessageRecord>>,
     #[serde(default)]
     pub(crate) activity_history: Option<Vec<SessionViewActivityHistoryItem>>,
     pub(crate) message_window: SessionViewMessageWindow,

@@ -105,34 +105,87 @@ pub fn registered(language: &str) -> bool {
 
 /// The tokens of `code` in `language`, or `None` for a language no grammar is registered for.
 pub fn highlight(code: &str, language: &str) -> Option<Vec<Token>> {
-    let grammar = grammar(language)?;
-    let set = syntaxes();
-    let syntax: &SyntaxReference = set.find_syntax_by_extension(grammar.extension)?;
-    let mut state = ParseState::new(syntax);
-    let mut stack = ScopeStack::new();
-    let mut tokens: Vec<Token> = Vec::new();
-    let mut offset = 0;
-    for line in LinesWithEndings::from(code) {
-        let ops = state.parse_line(line, set).ok()?;
-        for (range, op) in ScopeRangeIterator::new(&ops, line) {
-            stack.apply(op).ok()?;
-            let Some(role) = role(stack.as_slice()).filter(|_| !range.is_empty()) else {
-                continue;
-            };
-            let range = offset + range.start..offset + range.end;
-            match tokens.last_mut() {
-                Some(last) if last.role == role && last.range.end == range.start => {
-                    last.range.end = range.end;
+    Incremental::default().tokens(code, language)
+}
+
+/// Highlighting that advances over the complete lines appended since the last call.
+#[derive(Default)]
+pub struct Incremental {
+    language: String,
+    /// The complete lines already parsed.
+    parsed: String,
+    state: Option<(ParseState, ScopeStack)>,
+    /// The tokens of `parsed`.
+    tokens: Vec<Token>,
+}
+
+impl Incremental {
+    /// The tokens of `code`; parses only the lines after the ones parsed before, and starts over
+    /// when `code` is not an extension of them or `language` changed.
+    pub fn tokens(&mut self, code: &str, language: &str) -> Option<Vec<Token>> {
+        if self.language != language || self.state.is_none() || !code.starts_with(&self.parsed) {
+            self.reset(language)?;
+        }
+        let (state, stack) = self.state.as_mut()?;
+        let mut tail = None;
+        for line in LinesWithEndings::from(&code[self.parsed.len()..]) {
+            if line.ends_with('\n') {
+                let offset = self.parsed.len();
+                if parse_line(state, stack, line, offset, &mut self.tokens).is_none() {
+                    self.state = None;
+                    return None;
                 }
-                _ => tokens.push(Token { range, role }),
+                self.parsed.push_str(line);
+            } else {
+                tail = Some(line);
             }
         }
-        offset += line.len();
+        let mut tokens = self.tokens.clone();
+        if let Some(line) = tail {
+            let (mut state, mut stack) = (state.clone(), stack.clone());
+            parse_line(&mut state, &mut stack, line, self.parsed.len(), &mut tokens)?;
+        }
+        if TYPESCRIPT.contains(&language.to_ascii_lowercase().as_str()) {
+            tokens = typescript_words(code, tokens);
+        }
+        Some(tokens)
     }
-    if TYPESCRIPT.contains(&language.to_ascii_lowercase().as_str()) {
-        tokens = typescript_words(code, tokens);
+
+    fn reset(&mut self, language: &str) -> Option<()> {
+        language.clone_into(&mut self.language);
+        self.parsed.clear();
+        self.tokens.clear();
+        self.state = None;
+        let syntax: &SyntaxReference =
+            syntaxes().find_syntax_by_extension(grammar(language)?.extension)?;
+        self.state = Some((ParseState::new(syntax), ScopeStack::new()));
+        Some(())
     }
-    Some(tokens)
+}
+
+/// Parses `line`, which starts at byte `offset`, and merges its tokens onto `tokens`.
+fn parse_line(
+    state: &mut ParseState,
+    stack: &mut ScopeStack,
+    line: &str,
+    offset: usize,
+    tokens: &mut Vec<Token>,
+) -> Option<()> {
+    let ops = state.parse_line(line, syntaxes()).ok()?;
+    for (range, op) in ScopeRangeIterator::new(&ops, line) {
+        stack.apply(op).ok()?;
+        let Some(role) = role(stack.as_slice()).filter(|_| !range.is_empty()) else {
+            continue;
+        };
+        let range = offset + range.start..offset + range.end;
+        match tokens.last_mut() {
+            Some(last) if last.role == role && last.range.end == range.start => {
+                last.range.end = range.end;
+            }
+            _ => tokens.push(Token { range, role }),
+        }
+    }
+    Some(())
 }
 
 /// Words that are keywords in TypeScript only.

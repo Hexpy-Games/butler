@@ -5,6 +5,7 @@
 //! register a [`PlanBridge`] and the gate ([`set_plan_gate`]) once, and this file keeps the
 //! hook's own state (`pending`, `instructionPlanId`).
 use std::rc::Rc;
+use std::sync::Arc;
 
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::composer_decision_panel::{Action, ComposerDecisionPanel};
@@ -96,7 +97,7 @@ pub(crate) fn set_plan_gate(cx: &mut App, plan_mode: bool, queue: &[QueuedMessag
 }
 
 /// `latestActionablePlan`
-fn latest_actionable_plan(messages: &[MessageRecord]) -> Option<&PlanDocumentRecord> {
+fn latest_actionable_plan(messages: &[Arc<MessageRecord>]) -> Option<&PlanDocumentRecord> {
     let message = messages
         .iter()
         .rev()

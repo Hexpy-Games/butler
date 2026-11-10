@@ -15,15 +15,20 @@ struct Seen(Vec<AgentState>);
 
 impl Global for Seen {}
 
-/// `main.rs`'s startup before the window: the App's lifecycle, without the window and tray rules.
+/// `main.rs`'s startup before the window: the App's lifecycle and the Agent, without the window
+/// and tray rules.
 pub(super) fn start(cx: &mut App, data: &Path) {
-    lifecycle::start(cx, data.to_path_buf(), lifecycle::legacy_data(data));
+    let legacy = lifecycle::legacy_data(data);
+    lifecycle::start(cx, data.to_path_buf(), legacy);
     if let Some(runtime) = lifecycle::runtime(cx) {
         cx.observe(&runtime, |runtime, cx| {
             let state = runtime.read(cx).state;
             cx.default_global::<Seen>().0.push(state);
         })
         .detach();
+    }
+    if !legacy {
+        lifecycle::ensure_ready(cx);
     }
 }
 

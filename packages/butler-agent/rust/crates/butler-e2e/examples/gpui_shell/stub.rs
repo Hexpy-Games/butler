@@ -8,6 +8,13 @@ pub(super) const STREAM_CHUNK_DELAY: u64 = 1500;
 pub(super) const PROMPT: &str = "Review the command";
 pub(super) const ACTION: &str =
     "printf '%s\\n' --message-format-with-a-long-hyphenated-option-to-review-exactly";
+/// The streamed answer's deltas: a fenced block whose chunks end inside a line.
+const DELTAS: &[&str] = &[
+    "shell answer\n\n```rust\nfn ma",
+    "in() {\n    let total = 1 + ",
+    "2;\n    println!(\"{total}\");\n}\n``",
+    "`\n",
+];
 pub(super) fn cassette() -> Result<Cassette, HarnessError> {
     let mut cassette = Cassette::load("TOOL-01")?;
     let template = cassette.exchanges[0].clone();
@@ -23,7 +30,7 @@ pub(super) fn cassette() -> Result<Cassette, HarnessError> {
         let item = if step == 0 {
             json!({"type":"function_call","id":"fc_command","call_id":"call_command","name":"run_command","arguments":json!({"command":ACTION,"summary":"Print argument","state_effect":"mutation"}).to_string(),"status":"completed"})
         } else {
-            json!({"type":"message","id":"msg_reply","role":"assistant","phase":"final_answer","status":"completed","content":[{"type":"output_text","text":"shell answer","annotations":[]}]})
+            json!({"type":"message","id":"msg_reply","role":"assistant","phase":"final_answer","status":"completed","content":[{"type":"output_text","text":DELTAS.concat(),"annotations":[]}]})
         };
         exchange.response = response(&item, step == 1);
         cassette.exchanges.push(exchange);
@@ -36,7 +43,9 @@ fn response(item: &Value, text: bool) -> ResponseRecord {
         json!({"type":"response.output_item.added","output_index":0,"item":item}),
     ];
     if text {
-        events.push(json!({"type":"response.output_text.delta","item_id":"msg_reply","output_index":0,"content_index":0,"delta":"shell answer"}));
+        for delta in DELTAS {
+            events.push(json!({"type":"response.output_text.delta","item_id":"msg_reply","output_index":0,"content_index":0,"delta":delta}));
+        }
     }
     events.push(json!({"type":"response.output_item.done","output_index":0,"item":item}));
     events.push(json!({"type":"response.completed","response":{"id":"resp_shell","object":"response","status":"completed","model":"gpt-6-luna","output":[item],"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}));

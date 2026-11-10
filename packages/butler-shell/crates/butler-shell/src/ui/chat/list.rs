@@ -8,6 +8,7 @@ mod turn;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use butler_ds::tokens::Length;
 use butler_ds::ui::blocks::conversation_shell::ConversationScrollToBottomButton;
@@ -70,7 +71,7 @@ enum Row {
     /// `SessionBranchSeed`: what a branched session starts from.
     Seed,
     /// A message; the live one also carries the running turn it shows.
-    Message(Rc<MessageRecord>, Option<Rc<SessionViewTurn>>),
+    Message(Arc<MessageRecord>, Option<Rc<SessionViewTurn>>),
     /// The running turn's own row, when no message carries its activity.
     Activity(Rc<SessionViewTurn>),
     Queued(Rc<SessionQueueView>),
@@ -97,7 +98,7 @@ fn same(a: &Row, b: &Row) -> bool {
         | (Row::Request, Row::Request)
         | (Row::Reserve, Row::Reserve) => true,
         (Row::Message(a, x), Row::Message(b, y)) => {
-            Rc::ptr_eq(a, b) && same_turn(x.as_ref(), y.as_ref())
+            Arc::ptr_eq(a, b) && same_turn(x.as_ref(), y.as_ref())
         }
         (Row::Activity(a), Row::Activity(b)) => Rc::ptr_eq(a, b),
         (Row::Queued(a), Row::Queued(b)) => Rc::ptr_eq(a, b),
@@ -135,7 +136,7 @@ struct State {
     /// The chats intro shows.
     intro: bool,
     queue: Option<Rc<SessionQueueView>>,
-    messages: Vec<Rc<MessageRecord>>,
+    messages: Vec<Arc<MessageRecord>>,
     turn: Option<Rc<SessionViewTurn>>,
     live: Live,
     rows: Vec<Row>,
@@ -244,14 +245,17 @@ impl State {
         let Some(view) = self.view.clone() else {
             return;
         };
-        let previous: HashMap<String, Rc<MessageRecord>> = self
-            .messages
+        let old = std::mem::take(&mut self.messages);
+        let previous: HashMap<&str, &Arc<MessageRecord>> = old
             .iter()
-            .map(|message| (message.id.clone(), message.clone()))
+            .map(|message| (message.id.as_str(), message))
             .collect();
         self.messages = collapse_assistant_attempts(&view.messages)
             .into_iter()
-            .map(|message| reuse(previous.get(&message.id), message))
+            .map(|new| match previous.get(new.id.as_str()) {
+                Some(kept) if Arc::ptr_eq(kept, &new) || ***kept == *new => Arc::clone(kept),
+                _ => new,
+            })
             .collect();
         let turn = view
             .active_turn

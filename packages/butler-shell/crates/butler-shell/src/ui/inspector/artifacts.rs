@@ -1,5 +1,6 @@
 //! `ArtifactsPanel` and `AutomationTargetsPanel`.
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::Icon;
@@ -29,7 +30,7 @@ use crate::ui::widgets::anchor;
 /// One result per workspace path and content; keep its latest delivery (`sessionArtifacts`).
 fn session_artifacts(
     summary: &[SessionArtifactSummary],
-    messages: &[MessageRecord],
+    messages: &[Arc<MessageRecord>],
 ) -> Vec<SessionArtifactSummary> {
     let mut latest: HashMap<String, &SessionArtifactSummary> = HashMap::new();
     let from_messages = messages.iter().flat_map(|m| m.artifacts.iter().flatten());

@@ -82,6 +82,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         | "drag"
         | "reveal"
         | "wait-anchor"
+        | "wait-theme"
         | "expect-anchor"
         | "expect-no-anchor"
         | "expect-scale"
@@ -113,11 +114,12 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "type" => type_text(h, arg),
         "key" => press(h, Keystroke::parse(arg).map_err(|e| anyhow!("{e:?}"))?),
         "send" => h.update(|s, _, cx| s.send(arg.to_owned(), cx)),
+        // The text begins with `arg`: a command is one line, an answer may run on.
         "answer" | "streaming" => wait(h, |s, _| {
             s.store.shown_view().is_some_and(|view| {
                 view.messages.iter().any(|m| {
                     m.role == ui::source::wire::MessageRecordRole::Assistant
-                        && m.text == arg
+                        && m.text.starts_with(arg)
                         && (m.status.as_deref() == Some("streaming")) == (command == "streaming")
                 })
             })
@@ -140,6 +142,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             wait(h, |s, _| s.store.running().is_none())
         }
         "shot" => h.shot(dir, arg),
+        "expect-fresh" => super::frame::expect_fresh(h, dir),
         "layout" => h.layout(dir, arg),
         _ => Err(anyhow!("unknown live harness command")),
     }
@@ -152,16 +155,29 @@ pub(super) fn run(
     options: &super::Options,
 ) -> anyhow::Result<()> {
     std::fs::create_dir_all(dir)?;
-    let mut h = Harness::open(None, dark, options, |cx| {
+    // As the App: the theme follows the saved settings unless `--dark` forces it.
+    let (forced, saved) = if app {
+        (
+            dark.then_some(true),
+            super::lifecycle::ui_state::read(&data),
+        )
+    } else {
+        (Some(dark), Default::default())
+    };
+    let mut h = Harness::open(None, forced, saved, options, |cx| {
         if app {
             super::app::start(cx, &data);
         }
     })?;
+    if app {
+        // The first frame is seeded by the options alone: no `/settings` can have arrived yet.
+        let dark =
+            h.cx.update(|cx| h.window.read(cx).map(|shell| shell.theme.dark))?;
+        let first = serde_json::json!({ "dark": dark });
+        std::fs::write(dir.join("first-frame.json"), serde_json::to_vec(&first)?)?;
+    }
     let attachment = Attachment::start(Some(data));
     h.update(|s, _, cx| s.attach(attachment, cx))?;
-    if app {
-        h.cx.update(super::lifecycle::ensure_ready);
-    }
     println!("LIVE READY");
     io::stdout().flush()?;
     for line in io::stdin().lock().lines() {

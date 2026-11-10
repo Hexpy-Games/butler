@@ -87,7 +87,8 @@ impl Harness {
     /// `before` runs on the app before the window opens (the App's lifecycle, as `main.rs`).
     fn open(
         source: Option<Rc<dyn Source>>,
-        dark: bool,
+        dark: Option<bool>,
+        saved: lifecycle::ui_state::UiState,
         options: &Options,
         before: impl FnOnce(&mut gpui::App),
     ) -> anyhow::Result<Self> {
@@ -98,10 +99,11 @@ impl Harness {
             cx.open_window(size(px(options.width), px(options.height)), |window, cx| {
                 let options = ShellOptions {
                     source,
-                    dark: Some(dark),
+                    dark,
                     code_font,
                     locale: Locale::Ko,
                     platform: options.platform,
+                    saved,
                 };
                 cx.new(|cx| Shell::new(options, window, cx))
             })?;
@@ -240,7 +242,9 @@ fn open_chat(
 }
 
 fn connected(dir: &Path, dark: bool, theme: &str, options: &Options) -> anyhow::Result<()> {
-    let mut h = Harness::open(Some(Rc::new(fixture::Fixture)), dark, options, |_| {})?;
+    let state = lifecycle::ui_state::UiState::default();
+    let source = Some(Rc::new(fixture::Fixture) as Rc<dyn Source>);
+    let mut h = Harness::open(source, Some(dark), state, options, |_| {})?;
     h.update(|shell, window, cx| open_chat(shell, fixture::LONG, window, cx))?;
     h.shot(dir, &format!("w2-1x-{theme}-chat"))?;
     h.update(|shell, window, cx| open_chat(shell, fixture::APPROVAL, window, cx))?;
@@ -252,7 +256,8 @@ fn connected(dir: &Path, dark: bool, theme: &str, options: &Options) -> anyhow::
 }
 
 fn disconnected(dir: &Path, dark: bool, theme: &str, options: &Options) -> anyhow::Result<()> {
-    let mut h = Harness::open(None, dark, options, |_| {})?;
+    let state = lifecycle::ui_state::UiState::default();
+    let mut h = Harness::open(None, Some(dark), state, options, |_| {})?;
     h.shot(dir, &format!("w2-1x-{theme}-disconnected"))
 }
 

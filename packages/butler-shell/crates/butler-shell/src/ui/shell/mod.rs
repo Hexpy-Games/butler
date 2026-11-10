@@ -80,6 +80,8 @@ pub(crate) struct Shell {
     incompatible: bool,
     pub(crate) store: Store,
     theme_override: Option<bool>,
+    /// The last value of the first-frame settings cache, written or read.
+    ui_state: crate::lifecycle::ui_state::UiState,
     /// The composer card's measured height (the conversation keeps room for it).
     composer_h: Rc<Cell<f32>>,
     panes: panes::Panes,
@@ -142,11 +144,20 @@ pub(crate) struct ShellOptions {
     pub(crate) code_font: gpui::Font,
     pub(crate) locale: Locale,
     pub(crate) platform: crate::ui::theme::Platform,
+    /// The last settings this data folder showed; the Agent's `/settings` replaces them.
+    pub(crate) saved: crate::lifecycle::ui_state::UiState,
 }
 
 impl Shell {
     pub(crate) fn new(options: ShellOptions, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let dark = options.dark.unwrap_or_else(|| system_dark(window));
+        let theme_override = options.dark.or_else(|| {
+            options
+                .saved
+                .appearance_theme
+                .as_deref()
+                .and_then(settings_link::theme_override)
+        });
+        let dark = theme_override.unwrap_or_else(|| system_dark(window));
         Self::install_ds(&options, dark, window, cx);
         let theme = Theme::new(
             dark,
@@ -165,7 +176,7 @@ impl Shell {
         let onboarding = onboarding_link::OnboardingState::new(options.source.is_some());
         let composer_h = composer.read(cx).height_cell();
         let regions = region::Regions::new(&cx.entity(), cx);
-        cx.set_window_appearance(options.dark.map(appearance));
+        cx.set_window_appearance(theme_override.map(appearance));
         let mut shell = Self {
             theme,
             chat,
@@ -180,7 +191,8 @@ impl Shell {
             source: options.source,
             incompatible: false,
             store: Store::default(),
-            theme_override: options.dark,
+            theme_override,
+            ui_state: options.saved.clone(),
             composer_h,
             panes,
             regions,

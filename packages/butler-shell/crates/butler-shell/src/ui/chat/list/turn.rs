@@ -2,6 +2,7 @@
 //! whether the running turn shows its activity, and which message carries it.
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::ui::source::wire::{
     MessageRecord, MessageRecordRole, ProgressRow, QueuedMessageRecordState, SessionQueueView,
@@ -47,8 +48,10 @@ fn is_failure_notice(message: &MessageRecord) -> bool {
 
 /// `collapseAssistantAttempts` (app/utils.ts): one message per turn attempt, a failure notice
 /// folded into its partial answer.
-pub(super) fn collapse_assistant_attempts(messages: &[MessageRecord]) -> Vec<MessageRecord> {
-    let mut latest: HashMap<&str, &MessageRecord> = HashMap::new();
+pub(super) fn collapse_assistant_attempts(
+    messages: &[Arc<MessageRecord>],
+) -> Vec<Arc<MessageRecord>> {
+    let mut latest: HashMap<&str, &Arc<MessageRecord>> = HashMap::new();
     for message in messages {
         let Some(turn) = turn_of(message) else {
             continue;
@@ -63,7 +66,7 @@ pub(super) fn collapse_assistant_attempts(messages: &[MessageRecord]) -> Vec<Mes
             latest.insert(turn, message);
         }
     }
-    let mut partial: HashMap<&str, &MessageRecord> = HashMap::new();
+    let mut partial: HashMap<&str, &Arc<MessageRecord>> = HashMap::new();
     for message in messages {
         if let (MessageRecordRole::Assistant, Some(true), Some(turn)) =
             (&message.role, message.incomplete, turn_of(message))
@@ -92,10 +95,10 @@ pub(super) fn collapse_assistant_attempts(messages: &[MessageRecord]) -> Vec<Mes
                 .filter(|failure| is_failure_notice(failure));
             match (failure, turn_of(message).and_then(|turn| partial.get(turn))) {
                 (Some(failure), Some(partial)) if std::ptr::eq(*partial, message) => {
-                    MessageRecord {
-                        failure_notice: Some(Box::new((*failure).clone())),
-                        ..message.clone()
-                    }
+                    Arc::new(MessageRecord {
+                        failure_notice: Some(Box::new((***failure).clone())),
+                        ..(**message).clone()
+                    })
                 }
                 _ => message.clone(),
             }
@@ -164,7 +167,7 @@ fn is_live(message: &MessageRecord) -> bool {
 }
 
 fn last_turn_message<'a>(
-    messages: &'a [Rc<MessageRecord>],
+    messages: &'a [Arc<MessageRecord>],
     turn_id: Option<&str>,
 ) -> Option<(usize, &'a MessageRecord)> {
     messages.iter().enumerate().rev().find_map(|(ix, message)| {
@@ -185,7 +188,7 @@ impl Live {
     /// until the progress changes or detaches, so completion does not flicker.
     pub(super) fn message(
         &mut self,
-        messages: &[Rc<MessageRecord>],
+        messages: &[Arc<MessageRecord>],
         info: Option<&TurnInfo>,
     ) -> Option<usize> {
         let candidate = info.filter(|info| info.show).and_then(|info| {
@@ -233,7 +236,7 @@ pub(super) fn reuse<T: PartialEq>(previous: Option<&Rc<T>>, next: T) -> Rc<T> {
 /// a message of the transcript.
 pub(super) fn has_visible_queue(
     queue: &SessionQueueView,
-    messages: &[Rc<MessageRecord>],
+    messages: &[Arc<MessageRecord>],
     session: &str,
 ) -> bool {
     let shown = |id: &str| messages.iter().any(|message| message.id == id);
@@ -250,7 +253,7 @@ pub(super) fn has_visible_queue(
 }
 
 /// The last message's identity, cursor, status and length: the key a changed transcript bumps.
-pub(super) fn version(messages: &[Rc<MessageRecord>]) -> String {
+pub(super) fn version(messages: &[Arc<MessageRecord>]) -> String {
     messages.last().map_or_else(
         || "empty".to_owned(),
         |last| {

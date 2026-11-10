@@ -1,7 +1,7 @@
 //! The shell window's stable parts, each rendered as its own cached view, so an animation inside
 //! one (a spinner, a progress ring) rebuilds that part and not the whole window.
 use gpui::{
-    AnyElement, AppContext as _, Context, Entity, IntoElement, Render, StyleRefinement,
+    AnyElement, App, AppContext as _, Context, Entity, IntoElement, Render, StyleRefinement,
     Styled as _, Subscription, WeakEntity, Window, div,
 };
 
@@ -39,15 +39,29 @@ impl Render for Region {
     }
 }
 
-/// The regions the shell composes; each is embedded with [`fill`].
+/// The regions a live event touched; see [`Regions::notify`].
+#[derive(Clone, Copy, Default)]
+pub(super) struct Touched {
+    pub(super) sidebar: bool,
+    pub(super) titlebar: bool,
+    pub(super) conversation: bool,
+}
+
+/// The regions the shell composes; each is embedded with [`fill`]. A shell `cx.notify()` redraws
+/// all of them. The live path notifies only the regions whose inputs it changed, so each field
+/// lists its inputs: a new one that live events change must be flagged in [`Touched`].
 pub(super) struct Regions {
-    /// The sidebar slot's content.
+    /// The sidebar slot's content. Inputs: `store.navigation`, `store.selected`, `sidebar.*`;
+    /// live: navigation events that change the tree, `updates.progress`.
     pub(super) sidebar: Entity<Region>,
-    /// The title row.
+    /// The title row. Inputs: `store.summary(selected)`, `session_menu.summary`, the open view's
+    /// `view_facts`, `frame.open`; live: chat rows, a change in the view's facts.
     pub(super) titlebar: Entity<Region>,
-    /// The chat card with its composer and aside.
+    /// The chat card with its composer and aside. Inputs: `chat`, `composer`, `panes.view`,
+    /// `panes.info_open`, `composer_h`; live: `show_view`.
     pub(super) conversation: Entity<Region>,
-    /// The file viewer pane beside the chat.
+    /// The file viewer pane beside the chat. Inputs: `store.selected`, the file viewer state;
+    /// not on the live path.
     pub(super) viewer: Entity<Region>,
 }
 
@@ -63,6 +77,19 @@ impl Regions {
             }),
             conversation: region(|shell, window, cx| shell.conversation(window, cx)),
             viewer: region(Shell::render_viewer_pane),
+        }
+    }
+
+    /// Redraws the flagged regions only.
+    pub(super) fn notify(&self, touched: Touched, cx: &mut App) {
+        for (flag, region) in [
+            (touched.sidebar, &self.sidebar),
+            (touched.titlebar, &self.titlebar),
+            (touched.conversation, &self.conversation),
+        ] {
+            if flag {
+                region.update(cx, |_, cx| cx.notify());
+            }
         }
     }
 }

@@ -12,7 +12,7 @@ use gpui::{
 
 use crate::tokens::{Color, Length};
 use crate::ui::context::Ds;
-use crate::ui::markdown::{Role, Token, highlight};
+use crate::ui::markdown::{Incremental, Role, Token};
 use crate::ui::scroll::engine::{self, Axis, Config};
 
 /// The code frame alone: border, panel radius, raised surface (`CodeFrame.module.css`).
@@ -64,7 +64,13 @@ impl Global for Cache {}
 /// Entries kept: a chat shows a handful of blocks at once.
 const CACHE_LIMIT: usize = 64;
 
-fn tokens(code: &str, language: &str, cx: &mut App) -> Option<Rc<Vec<Token>>> {
+/// The cached tokens of a block, highlighted with `incremental` on a miss.
+fn tokens(
+    code: &str,
+    language: &str,
+    incremental: &mut Incremental,
+    cx: &mut App,
+) -> Option<Rc<Vec<Token>>> {
     let cache = cx.default_global::<Cache>();
     let key = (language.to_owned(), code.to_owned());
     if let Some(found) = cache.0.get(&key) {
@@ -73,7 +79,7 @@ fn tokens(code: &str, language: &str, cx: &mut App) -> Option<Rc<Vec<Token>>> {
     if cache.0.len() >= CACHE_LIMIT {
         cache.0.clear();
     }
-    let found = highlight(code, language).map(Rc::new);
+    let found = incremental.tokens(code, language).map(Rc::new);
     cache.0.insert(key, found.clone());
     found
 }
@@ -93,17 +99,15 @@ fn role_color(role: Role) -> Color {
     }
 }
 
-/// The text of a code block and its syntax colours (`data-syntax` spans): comments italic.
+/// The syntax colours of a code block's `shown` text (`data-syntax` spans): comments italic.
 fn code_highlights(
-    code: &str,
-    language: Option<&str>,
-    cx: &mut App,
-) -> (SharedString, Vec<(Range<usize>, HighlightStyle)>) {
-    let shown = code.strip_suffix('\n').unwrap_or(code);
-    let found = language.and_then(|language| tokens(code, language, cx));
+    shown: &str,
+    found: Option<&Rc<Vec<Token>>>,
+    cx: &App,
+) -> Vec<(Range<usize>, HighlightStyle)> {
     let ds = Ds::get(cx);
-    let highlights = found
-        .iter()
+    found
+        .into_iter()
         .flat_map(|tokens| tokens.iter())
         .filter(|token| token.range.start < shown.len())
         .map(|token| {
@@ -115,14 +119,62 @@ fn code_highlights(
             };
             (range, style)
         })
-        .collect();
-    (SharedString::from(shown.to_owned()), highlights)
+        .collect()
+}
+
+fn shown(code: &str) -> &str {
+    code.strip_suffix('\n').unwrap_or(code)
 }
 
 /// The text of a code block with its syntax colours.
 pub fn code_text(code: &str, language: Option<&str>, cx: &mut App) -> StyledText {
-    let (text, highlights) = code_highlights(code, language, cx);
-    StyledText::new(text).with_highlights(highlights)
+    let found =
+        language.and_then(|language| tokens(code, language, &mut Incremental::default(), cx));
+    let shown = shown(code);
+    StyledText::new(SharedString::from(shown.to_owned())).with_highlights(code_highlights(
+        shown,
+        found.as_ref(),
+        cx,
+    ))
+}
+
+/// What a code frame keeps between renders: the highlighting of the code it last saw.
+struct Highlighted {
+    code: SharedString,
+    language: Option<SharedString>,
+    shown: SharedString,
+    tokens: Option<Rc<Vec<Token>>>,
+    incremental: Incremental,
+}
+
+impl Highlighted {
+    /// A block that just appeared: its tokens come from the cache when it was seen before.
+    fn new(code: SharedString, language: Option<SharedString>, cx: &mut App) -> Self {
+        let mut incremental = Incremental::default();
+        let found = language
+            .as_deref()
+            .and_then(|language| tokens(&code, language, &mut incremental, cx));
+        Self {
+            shown: shown(&code).to_owned().into(),
+            tokens: found,
+            code,
+            language,
+            incremental,
+        }
+    }
+
+    /// Highlights only what was appended since the last call.
+    fn update(&mut self, code: &SharedString, language: Option<&SharedString>) {
+        if self.code == *code && self.language.as_ref() == language {
+            return;
+        }
+        self.tokens = language
+            .and_then(|language| self.incremental.tokens(code, language))
+            .map(Rc::new);
+        self.shown = shown(code).to_owned().into();
+        self.code.clone_from(code);
+        self.language = language.cloned();
+    }
 }
 
 /// A fenced code block: the frame, a header bar with the language and `actions`, and the code.
@@ -160,7 +212,18 @@ impl MarkdownCodeFrame {
 impl RenderOnce for MarkdownCodeFrame {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let language = self.language.clone();
-        let (text, highlights) = code_highlights(&self.code, language.as_deref(), cx);
+        let highlighted = window.use_keyed_state((self.id.clone(), "highlight"), cx, {
+            let (code, language) = (self.code.clone(), self.language.clone());
+            move |_, cx| Highlighted::new(code, language, cx)
+        });
+        highlighted.update(cx, |highlighted, _| {
+            highlighted.update(&self.code, self.language.as_ref());
+        });
+        let (text, found) = {
+            let highlighted = highlighted.read(cx);
+            (highlighted.shown.clone(), highlighted.tokens.clone())
+        };
+        let highlights = code_highlights(&text, found.as_ref(), cx);
         let body = crate::ui::selectable::selectable(
             (self.id.clone(), "select"),
             &text,

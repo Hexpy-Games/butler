@@ -188,7 +188,9 @@ fn assert_never_failed(report: &Value) {
 /// SHELL-APP-01 — On a fresh data folder the App starts the Agent and the first run goes
 /// welcome → consent → memory off → Claude with an API key (a loopback stand-in for the
 /// provider) → reply language → skip import → ready → the workspace. The Agent then holds the
-/// current consent and the completion.
+/// current consent and the completion. The user then picks the theme the system does not show;
+/// a second launch on the same data paints it on its first frame and, the onboarding being done,
+/// opens the workspace.
 #[tokio::test]
 async fn shell_app_01_first_run_reaches_the_workspace() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -199,6 +201,15 @@ async fn shell_app_01_first_run_reaches_the_workspace() -> Result<(), HarnessErr
     let api = format!("{}/v1", provider.base_url);
     let env = [("BUTLER_ANTHROPIC_BASE_URL", api)];
     let mut shell = Shell::start(&sandbox, &env).await?;
+    // The headless platform's appearance differs per OS: pick the opposite theme.
+    let system_dark = shell.report("first-frame")?["dark"]
+        .as_bool()
+        .expect("dark");
+    let (item, theme) = if system_dark {
+        ("theme-item-0-1", "light")
+    } else {
+        ("theme-item-0-2", "dark")
+    };
     let key = format!("type {GOOD_KEY}");
     shell
         .run(&[
@@ -234,19 +245,37 @@ async fn shell_app_01_first_run_reaches_the_workspace() -> Result<(), HarnessErr
     let _local = default_to_local_model(&gw, answer).await?;
     let onboarding = gw.settings().await?["onboarding"].clone();
     assert_eq!(onboarding["consent_version"], 2, "{onboarding}");
-    let completed = onboarding["completed_at"].as_str();
-    assert!(completed.is_some_and(|at| chrono::DateTime::parse_from_rfc3339(at).is_ok()));
-    shell.run(&["app-quit"]).await?;
+    assert!(
+        onboarding["completed_at"]
+            .as_str()
+            .is_some_and(|at| chrono::DateTime::parse_from_rfc3339(at).is_ok()),
+        "{onboarding}"
+    );
+    let (pick, wait) = (format!("click {item}"), format!("wait-theme {theme}"));
+    shell
+        .run(&[
+            "click sidebar-settings",
+            "wait-anchor settings-nav-appearance",
+            "click settings-nav-appearance",
+            "wait-anchor theme-trigger",
+            "click theme-trigger",
+            &pick,
+            &wait,
+            "app-quit",
+        ])
+        .await?;
     assert_never_failed(&shell.report("app-quit")?);
     shell.finish().await?;
 
-    // The second launch reads the new default model; a new chat takes it (the first run's chat
-    // keeps its own). Send from the composer.
+    // The second launch opens in the picked theme and reads the new default model; a new chat
+    // takes it (the first run's chat keeps its own). Send from the composer.
     let mut shell = Shell::start(&sandbox, &env).await?;
+    assert_eq!(shell.report("first-frame")?["dark"], !system_dark);
     let shown = format!("answer {answer}");
     let steps = [
         "agent running",
         "wait-anchor composer",
+        "expect-no-anchor first-run-setup",
         "new",
         "controls loaded",
         "compose",

@@ -106,6 +106,8 @@ pub const GATEWAY_CREDENTIAL_DIRS: &[&str] = &[LOCAL_AUTH_DIR, FOLDER_SECRET_DIR
 pub const APP_LOGS: &str = "app/logs";
 /// Electron composer draft files.
 pub const COMPOSER_DRAFTS: &str = "app/composer-drafts";
+/// The native App's first-frame settings cache.
+pub const APP_UI_STATE: &str = "app/ui-state.json";
 /// Legacy schedules reimported into App storage.
 pub const LEGACY_SCHEDULES: &str = "automations";
 /// Legacy memory namespace migration source.
@@ -175,6 +177,7 @@ pub const OWNED_PATHS: &[&str] = &[
     FOLDER_SECRET,
     APP_LOGS,
     COMPOSER_DRAFTS,
+    APP_UI_STATE,
 ];
 /// Adjacent lock files created by settings/document writers.
 pub const LOCKED_FILES: &[&str] = &[CONFIG, EOL];

@@ -19,7 +19,16 @@ use crate::ui::theme::Platform;
 /// Opens a window on the data folder and applies the navigation `args` carry
 /// (`--butler-new-chat`, `--butler-open-session=<id>`, `butler://…`).
 pub(crate) fn open_window(cx: &mut App, args: &[OsString]) -> anyhow::Result<()> {
-    let locale = Locale::from_tag(&sys_locale::get_locale().unwrap_or_default());
+    let data = super::runtime(cx).map(|runtime| runtime.read(cx).data.clone());
+    let saved = data
+        .as_deref()
+        .map(super::ui_state::read)
+        .unwrap_or_default();
+    let locale = saved
+        .language
+        .as_deref()
+        .map(Locale::from_language)
+        .unwrap_or_else(|| Locale::from_tag(&sys_locale::get_locale().unwrap_or_default()));
     let bounds = Bounds::centered(None, size(px(960.), px(710.)), cx);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -33,7 +42,6 @@ pub(crate) fn open_window(cx: &mut App, args: &[OsString]) -> anyhow::Result<()>
         ..Default::default()
     };
     let code_font = crate::ui::theme::code_font(&cx.text_system().all_font_names());
-    let data = super::runtime(cx).map(|runtime| runtime.read(cx).data.clone());
     let attachment = crate::ui::source::agent::Attachment::start(data);
     let window = cx.open_window(options, move |window, cx| {
         // Butler's Electron window uses the acrylic material; where the platform has none the
@@ -45,6 +53,7 @@ pub(crate) fn open_window(cx: &mut App, args: &[OsString]) -> anyhow::Result<()>
             code_font,
             locale,
             platform: Platform::host(),
+            saved,
         };
         cx.new(|cx| {
             let mut shell = Shell::new(options, window, cx);

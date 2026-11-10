@@ -23,6 +23,7 @@ const NON_TERMINAL_STATUSES: [&str; 10] = [
 ];
 
 /// `AssistantFooterMeta`: the worked-for duration and the finish time, already formatted.
+#[derive(Clone)]
 pub(crate) struct FooterMeta {
     pub(crate) duration_label: Option<String>,
     pub(crate) time_label: Option<String>,

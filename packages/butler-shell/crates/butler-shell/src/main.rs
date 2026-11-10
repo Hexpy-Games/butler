@@ -18,17 +18,18 @@ use ui::shell::{Quit, Shell};
 /// Electron's Windows AppUserModelID (main.mjs:203); a no-op elsewhere.
 const APP_ID: &str = "com.squirrel.butler-app.Butler";
 
-/// The startup order of `main.mjs`: the data folder, the lifecycle, the window, then the Agent.
+/// The startup order of `main.mjs`: the data folder, the lifecycle, the Agent, then the window.
 fn start(cx: &mut App, args: &[OsString]) -> anyhow::Result<()> {
     ui::init(cx)?;
     let data = lifecycle::data_root(args);
     let legacy = lifecycle::legacy_data(&data);
     lifecycle::init(cx, data, legacy);
-    cx.set_app_identity(APP_ID, "Butler");
-    lifecycle::window::open_window(cx, args)?;
+    // The Agent's boot is the long pole and needs no window; the first frame reads its state.
     if !legacy {
         lifecycle::ensure_ready(cx);
     }
+    cx.set_app_identity(APP_ID, "Butler");
+    lifecycle::window::open_window(cx, args)?;
     Ok(())
 }
 
