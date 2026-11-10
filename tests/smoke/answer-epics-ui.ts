@@ -209,8 +209,8 @@ try {
   await open(page, base, 390, "light", "plain");
   await page.waitForFunction(() => [...document.querySelectorAll('[data-test-class="chat-epic-cards"] *')].filter(node => node.textContent === "삭제된 과제" && !node.children.length).length === 4);
   await page.goto(`${base}?visual=components&theme=light&locale=en`);
-  await page.getByText("Deleted task", { exact: true }).first().waitFor();
-  assert.equal(await page.getByText("Deleted task", { exact: true }).count(), 4);
+  await page.getByText("Deleted Epic", { exact: true }).first().waitFor();
+  assert.equal(await page.getByText("Deleted Epic", { exact: true }).count(), 4);
   state = "error";
   await open(page, base, 390, "dark", "plain");
   await page.locator('[data-test-class="chat-epic-cards"]').waitFor({ state: "detached" });

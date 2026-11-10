@@ -159,7 +159,7 @@ async fn settings_instruction_routes_preserve_profile_separation_and_forget_in_n
 }
 
 fn refused_legacy() -> Result<(), HarnessError> {
-    let setup = Setup::new("MEM-INSTRUCTIONS-LEGACY")?;
+    let mut setup = Setup::new("MEM-INSTRUCTIONS-LEGACY")?;
     let data = &setup.sandbox.data;
     std::fs::create_dir_all(data.join("app-server"))?;
     let file = data.join("app-server/butler-client.sqlite");
@@ -172,5 +172,6 @@ fn refused_legacy() -> Result<(), HarnessError> {
     assert!(String::from_utf8_lossy(&output.stderr).contains("legacy data folder is unsupported"));
     assert_eq!(std::fs::read(&file)?, b"legacy");
     assert_eq!(std::fs::read_dir(data)?.count(), 1);
+    setup.sandbox.mark_success();
     Ok(())
 }

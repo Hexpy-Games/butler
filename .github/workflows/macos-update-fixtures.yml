@@ -4,10 +4,14 @@ on:
 permissions:
   contents: read
   actions: read
+  packages: write
 jobs:
   build:
     name: Build both real macOS update-fixture versions
     runs-on: macos-15
+    concurrency:
+      group: cargo-target-macos-update-fixtures-${{ github.event_name == 'push' && 'publisher' || github.run_id }}
+      cancel-in-progress: false
     timeout-minutes: 90
     env:
       BUTLER_MEMORY_IMPLEMENTATION_COMMIT: ${{ github.sha }}
@@ -19,6 +23,7 @@ jobs:
       - uses: ./.github/actions/rust-agent-setup
         with:
           release-lto: 'false'
+          snapshot-features: butler-agent/static-ort,butler-agent/e2e-fixtures
           native-deps: static-ort
           cache-key: native-darwin-arm64
           cache-workspace-crates: 'true'
@@ -51,3 +56,10 @@ jobs:
           retention-days: ${{ startsWith(github.ref, 'refs/heads/release/') && 30 || 1 }}
           compression-level: 0
           if-no-files-found: error
+      - uses: ./.github/actions/publish-cargo-target
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        with:
+          platform: darwin-arm64
+          mode: static-ort
+          kind: native
+          producer: Build both real macOS update-fixture versions

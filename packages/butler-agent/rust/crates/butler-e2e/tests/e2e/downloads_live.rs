@@ -225,7 +225,7 @@ async fn released_windows_folder_real_chat() -> Result<(), HarnessError> {
         return Ok(());
     };
     assert!(version.starts_with("0.1.0-preview."));
-    let setup = Setup::new("RELEASED-FOLDER-LIVE")?;
+    let mut setup = Setup::new("RELEASED-FOLDER-LIVE")?;
     let downloads = setup.sandbox.home.join("Downloads");
     std::fs::create_dir_all(downloads.join("reports"))?;
     for (name, content) in [
@@ -249,6 +249,7 @@ async fn released_windows_folder_real_chat() -> Result<(), HarnessError> {
         outcome.complete,
         "Released real chat must list the complete folder and request approval before moving files"
     );
+    setup.sandbox.mark_success();
     Ok(())
 }
 

@@ -52,7 +52,7 @@ async fn seven_turn_chat_scores_reasking_and_recall() -> Result<(), HarnessError
 #[tokio::test]
 async fn benchmark_fixture_scores_all_forty_rows() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let sandbox = Sandbox::new("HEDGE-V3-BENCH")?;
+    let mut sandbox = Sandbox::new("HEDGE-V3-BENCH")?;
     let root = sandbox.workspace.clone();
     let output = tokio::task::spawn_blocking(move || -> Result<_, HarnessError> {
         v2::files::reset(&root, "R1")?;
@@ -68,6 +68,7 @@ async fn benchmark_fixture_scores_all_forty_rows() -> Result<(), HarnessError> {
         String::from_utf8_lossy(&output.stdout),
         "a precision=0.875 recall=0.778 f1=0.824 p50_ms=41 cases=40\nb precision=0.842 recall=0.889 f1=0.865 p50_ms=43 cases=40\n"
     );
+    sandbox.mark_success();
     Ok(())
 }
 #[tokio::test]
@@ -140,13 +141,14 @@ async fn judgment_and_recall_scoring_preserves_required_facts() -> Result<(), Ha
 #[tokio::test]
 async fn report_gates_accept_improvements_and_reject_regressions() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let sandbox = Sandbox::new("HEDGE-V3-REPORT")?;
+    let mut sandbox = Sandbox::new("HEDGE-V3-REPORT")?;
+    let workspace = sandbox.workspace.clone();
     let script =
         butler_e2e::e2e::binary::crate_root().join("scripts/hedge_eval_v2_report_smoke.py");
     let output = tokio::task::spawn_blocking(move || {
         std::process::Command::new("python3")
             .arg(script)
-            .arg(sandbox.workspace)
+            .arg(workspace)
             .output()
     })
     .await
@@ -156,6 +158,7 @@ async fn report_gates_accept_improvements_and_reject_regressions() -> Result<(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    sandbox.mark_success();
     Ok(())
 }
 

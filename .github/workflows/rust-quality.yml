@@ -252,6 +252,10 @@ jobs:
       timeout-minutes: 150
 
   macos-updates:
+    permissions:
+      contents: read
+      actions: read
+      packages: write
     needs: changes
     if: always() && !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['macos-updates']
     uses: ./.github/workflows/macos-update-fixtures.yml

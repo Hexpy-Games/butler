@@ -1,0 +1,126 @@
+---
+title: "Create and edit images"
+description: "Have Butler make or change pictures in a conversation, and change only the part you paint in the image editor."
+section: basics
+order: 5
+status: published
+---
+
+Ask for a picture in a conversation, or ask Butler to change an existing one, and Butler handles it with an image model. In the image editor you can also change only the part you paint on a picture Butler made.
+
+## Choose an image model
+
+To create images, you need an image model and an API key for it. At first it is set to **Off**.
+
+<Steps>
+  1. Open **Settings → Models → Image model**.
+  2. Under **Model**, choose the model to use.
+  3. If you have saved an API key for that provider before, the key is selected automatically. If not, enter the key in **API key** and click **Add**.
+  4. If needed, choose a **Default quality**.
+</Steps>
+
+Changes save right away. Image models work only with an API key, not with a ChatGPT sign-in. For the models and qualities you can choose, see the [Settings reference](/en/help/settings/#image-model).
+
+To turn the image model off, choose **Off** under **Model**.
+
+## Create an image
+
+Describe the picture you want in a conversation. For example, send "Make three logo drafts for a cafe".
+
+- Butler decides the size and quality. If you want specific values, include them in the request. When no quality is set, Butler uses the **Default quality**.
+- Butler can use pictures from this conversation or attached images as references.
+- The finished picture appears as a card in Butler's reply.
+
+If the image model is **Off** or the conversation's permission is **Read only**, Butler does not create images.
+
+### Image card
+
+Click a picture to see it larger in the [image viewer](#image-viewer). The card has these buttons.
+
+- **Edit** — Opens the [image editor](#image-editor). It is disabled when the conversation's permission is **Read only** or no image model is set, and the tooltip shows **Read-only** or **No image model**.
+- **Save to library** — Saves the picture under **Scraps** in the [Library](/en/help/basics/library/). Once saved, it changes to **Saved to library**.
+- **Download** — Saves the picture as a file. In the desktop app, a save dialog opens.
+
+## Approval requests
+
+Whether Butler asks for approval each time it creates or edits an image depends on the conversation's [permission](/en/help/basics/conversation/#permission).
+
+| Permission | Behavior |
+| --- | --- |
+| **Full access**, **Auto** | Goes ahead without asking |
+| **Ask every time**, **Ask first** | Asks for approval on every request |
+| **Read only** | Does not create or edit images |
+
+The approval request is titled **Create image** or **Edit image**. It shows the **Model**, **Size**, **Quality**, the full **Prompt** and the reference pictures, and its risk is **High risk**. Answer with **Allow once** or **Deny**. **Always allow in this conversation** is not available for image requests.
+
+An edit you send from the image editor is approved by sending it, so no approval request appears for it.
+
+## Edit an image
+
+Tell Butler in the conversation which picture to change and how, and Butler edits it. You can edit both pictures made in this conversation and attached images. An edit made this way may change the whole picture. To change only part of it, use the image editor.
+
+### Image editor
+
+The image editor opens only for pictures Butler made.
+
+<Steps>
+  1. Click **Edit** on an image card or in the image viewer. The **Image editor** opens beside the conversation.
+  2. Paint the part to change with the **Brush**. Remove paint with the **Eraser**.
+  3. Enter the change in **What should change?**.
+  4. Click **Send**.
+</Steps>
+
+- If you send without painting anything, the whole picture is edited.
+- Change the brush width from 4 to 160 with the **Brush size** slider.
+- Undo the last stroke with **Undo**.
+- Press and hold **Original** to compare with the first picture.
+- While the edit runs, the painted area shimmers. When it finishes, the new picture appears and becomes the current version.
+- The **Versions** strip collects every version as **Version N**. Click a version to continue editing from it.
+- If an edit fails, the **Couldn't edit** notice appears.
+- To close the editor, click the **Close** button.
+
+On a narrow screen, the image editor fills the screen.
+
+Editor shortcuts:
+
+| Key | Action |
+| --- | --- |
+| <Kbd keys={["B"]} /> | Brush |
+| <Kbd keys={["E"]} /> | Eraser |
+| <Kbd keys={["["]} /> / <Kbd keys={["]"]} /> | Brush size down / up by 4 |
+| <span data-mod-key><Kbd keys={["⌘", "Z"]} label="Command Z" /></span> | Undo |
+| <Kbd keys={["Esc"]} label="Escape" /> | Close the editor |
+
+## Image viewer
+
+Click an image card, an image in the work activity or an image in a reply to open the image viewer.
+
+- Zoom up to 4x by double-clicking, pinching, scrolling while holding <span data-mod-key><Kbd keys={["⌘"]} label="Command" /></span>, or with the **Zoom in** and **Zoom out** buttons. While zoomed in, drag to move around.
+- With several pictures, move between them with **Previous image** and **Next image**, or <Kbd keys={["←"]} label="Left arrow" /> and <Kbd keys={["→"]} label="Right arrow" />.
+- Pictures Butler made have the same **Edit**, **Save to library** and **Download** buttons as the card.
+- Pictures from a web page have **Open source page**, **Save to library** and **Copy image** buttons.
+- If a picture cannot load, **Image unavailable** appears.
+- Close the viewer with **Close**.
+
+## Images in subtasks
+
+Subtasks Butler hands off also create and edit pictures, with the same image model and the same permission rules. In the work activity, an image tool record shows the resulting picture as a small tile. Click it to open the image viewer.
+
+## Notes
+
+<Notice tone="info">
+  Google models do not receive the shape you paint. They receive only the rectangle around the painted area, so unpainted parts inside that rectangle can change too. OpenAI models receive the painted shape as is.
+</Notice>
+
+<Notice tone="info">
+  See how many images were created and edited, and the estimated cost, in [**Settings → Usage**](/en/help/settings/#usage).
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="basics/conversation" />
+  <DocCard slug="basics/library" />
+  <DocCard slug="basics/right-panel" />
+  <DocCard slug="settings" />
+</CardGrid>

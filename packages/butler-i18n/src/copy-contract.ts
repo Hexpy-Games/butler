@@ -1575,6 +1575,8 @@ export interface AppCopy {
       searchDefaultDepth: string;
       butlerModel: string;
       butlerReasoning: string;
+      recallMode: string;
+      recallModel: string;
       consolidationModel: string;
       consolidationTime: string;
       localReasoningBudget: string;
@@ -1684,6 +1686,12 @@ export interface AppCopy {
       timezoneAll: string;
       timezoneEmpty: string;
     };
+    recallOptions: { faster: string; accurate: string; sameAsMemoryModel: string };
+    composerDecorationThemes: { shoreline: string; cherry: string };
+    openSourceLicenses: {
+      section: string; title: string; description: string; searchLabel: string; searchPlaceholder: string;
+      retry: string; loading: string; noResults: string; close: string;
+    };
     descriptions: {
       runtimeSupportedModelsOnly: string;
       chatAccess: string;
@@ -1693,6 +1701,7 @@ export interface AppCopy {
       language: string;
       timezone: string;
       consolidationModel: string;
+      recallMode: string;
       consolidationTime: string;
       consolidationModelDefault: string;
       localReasoningBudget: string;
