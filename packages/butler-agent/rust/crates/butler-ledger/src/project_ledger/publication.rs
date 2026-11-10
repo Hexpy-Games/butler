@@ -24,7 +24,6 @@ pub use generic::{LedgerEffectError, LedgerEffectReconciliation, LedgerEffectReq
 #[cfg(test)]
 pub(super) use init::process_may_be_alive;
 pub(super) use init::with_mutation_claim;
-pub(super) use transaction::claim::read_generation;
 #[cfg(test)]
 pub(super) use transaction::tests::interrupted_publications_recover_without_exposing_partial_records;
 
