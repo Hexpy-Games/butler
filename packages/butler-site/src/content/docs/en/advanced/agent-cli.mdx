@@ -15,12 +15,12 @@ Butler Agent CLI is a command-line tool that installs and runs the Butler runtim
 ## Supported platforms
 
 - Apple silicon Mac (`darwin-arm64`), Windows x64 and Linux x64 and arm64 (glibc) are supported.
-- Intel Macs and musl-based Linux such as Alpine do not run it. Windows x64 is supported too.
+- Intel Macs and musl-based Linux such as Alpine do not run it.
 - You need a release that publishes the native Agent archive (`butler-agent-<version>-<platform>.tar.gz`, or `.zip` on Windows).
 
 ## Install
 
-To use Butler without the app, for example on a server or a remote computer, run the one-line install script. Butler is in preview, so download the script from a preview release and pass the same version with `--version`. Replace `<version>` with the newest preview on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases), such as `0.1.0-preview.12`.
+To use Butler without the app, for example on a server or a remote computer, run the one-line install script. Butler is in preview, so download the script from a preview release and pass the same version with `--version`. Replace `<version>` with the newest preview on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases), such as `0.1.0-preview.14`.
 
 <Tabs
   label="Operating system"
@@ -36,7 +36,7 @@ To use Butler without the app, for example on a server or a remote computer, run
     ```
   </TabPanel>
   <TabPanel value="windows">
-    In PowerShell on Windows x64. Replace `<version>` with the newest preview, such as `0.1.0-preview.12`.
+    In PowerShell on Windows x64. Replace `<version>` with the newest preview, such as `0.1.0-preview.14`.
 
     ```powershell
     $env:BUTLER_VERSION='<version>'; irm https://github.com/Hexpy-Games/butler/releases/download/v<version>/install.ps1 | iex
@@ -115,7 +115,7 @@ If you cannot use the install script, extract the archive yourself. The archive 
 
 ```bash
 set -euo pipefail
-VERSION=<version> # The exact release version, including the preview suffix, such as 0.1.0-preview.12.
+VERSION=<version> # The exact release version, including the preview suffix, such as 0.1.0-preview.14.
 RELEASE="$VERSION" # The release tag without v.
 PLATFORM=darwin-arm64 # One of darwin-arm64, linux-x64 or linux-arm64.
 ARCHIVE="butler-agent-${VERSION}-${PLATFORM}.tar.gz"
@@ -173,11 +173,12 @@ Run `butler --help` or `butler help schedule` for help in Korean and English. `b
 | `startup enable\|disable\|status` | Manage start at login |
 | `auth login\|logout\|status` | Manage model account connections |
 | `model list\|status\|set MODEL` | View and choose models |
-| `logs [--follow]` | Service logs |
+| `logs [--service NAME] [--lines N] [--follow]` | Service logs |
 | `schedule list\|show\|create\|update\|run\|delete` | Manage schedules |
 | `mcp list\|add\|enable\|disable\|delete\|test` | Manage MCP server connections |
 | `skills list`, `skills import PATH` | List and import skills |
 | `config get KEY`, `config set KEY VALUE` | Read and change settings |
+| `folder show`, `folder set PATH` | Show and select the project folder |
 | `--version`, `-V` | Shows the release version and build ID. |
 | `help`, `version` | Help, version |
 
@@ -247,12 +248,6 @@ butler rollback --yes
 
 An update installs the new version in a separate folder and restarts the running service. `rollback` returns to the previous version. `uninstall --keep-data --yes` removes only the installation, and `--purge-data` also deletes the data.
 
-## Related pages
-
-- [MCP server](/en/help/advanced/mcp-server/)
-- [Remote access](/en/help/advanced/remote-access/)
-
-
 ## Project folder
 
 ```sh
@@ -261,3 +256,8 @@ butler folder set /srv/projects
 ```
 
 Select the folder Butler works in, separately from `--data` / `BUTLER_DATA`. Explicit selection grants the same consent as the App folder picker. The folder must exist, be a readable directory, and be outside DATA and protected home/system folders. Symlinks are resolved. A running gateway applies it to the next turn; a stopped service saves the same App database preference. Existing spaces keep their selected folders. `--data PATH` and `--json` are supported.
+
+## Related pages
+
+- [MCP server](/en/help/advanced/mcp-server/)
+- [Remote access](/en/help/advanced/remote-access/)

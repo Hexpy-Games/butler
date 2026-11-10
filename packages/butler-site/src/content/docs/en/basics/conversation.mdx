@@ -10,8 +10,8 @@ On the conversation screen, you send requests to Butler and get the results. In 
 
 ## Start a new conversation
 
-- Click **New conversation** at the top of the sidebar.
-- To start inside a project, open the project's menu in the sidebar and choose **New conversation**, or click **New conversation** on the project dashboard.
+- Click **New chat** at the top of the sidebar.
+- To start inside a project, open the project's menu in the sidebar and choose **New chat**, or click **New chat** on the project dashboard.
 - Choose a project in the command palette to open a new conversation in that project.
 
 The new conversation screen shows suggestions you can start from. When you click a suggestion, its text is sent right away or fills the composer so you can keep writing. If the composer already has text, the suggestion does not fill it. When you send the first message, the conversation is created and added to the sidebar.
@@ -55,21 +55,23 @@ Click the model button in the composer to open the model menu.
 
 Your choice applies only to this conversation. A new conversation starts with the model set in **Butler model** under **Settings → Models**. When you change the model and the new model does not support the current reasoning effort, the effort changes to that model's default.
 
-If the model button shows **Checking model**, **Selected model unavailable** or **Model state error**, you cannot send messages. Check the model to use in **Settings → Models**. To register a model and choose the default model, see [Cloud models](/en/help/models/cloud/).
+If the model button shows **Checking model** or **No model**, or a ChatGPT model shows the tooltip **Not in your ChatGPT plan** or **Sign in to ChatGPT again**, you can't send messages. Check the model in **Settings → Models**. To register a model and choose the default model, see [Cloud models](/en/help/models/cloud/).
 
 ## Permission
 
-In the **Permission** menu, choose the access for this conversation.
+In the **Permission** menu, choose the access for this conversation. The menu has five levels, and **Auto** is marked **Recommended**.
 
-- **Full access** — Butler can read and write files and run commands.
-- **Ask first** — Butler asks for approval before it edits files or runs commands.
+- **Auto** — Butler asks for approval only for risky actions.
 - **Read only** — Butler can only read files.
+- **Ask first** — Butler asks for approval before it edits files or runs commands.
+- **Ask every time** — Butler asks for approval before every action.
+- **Full access** — Butler reads and writes files and runs commands without asking.
 
-Your choice applies only to this conversation. A new conversation starts with the permission chosen in **Access** under **Settings → Models → Permissions**.
+Your choice applies only to this conversation. Set the permission for new conversations and new schedules in **New chats** and **New schedules** under [**Settings → General → Default permission**](/en/help/settings/#general). You can also choose a different one for each schedule in **Permission** in its editor.
 
-- On a newly installed Butler, the default is **Ask first**.
-- A Butler in use since an earlier version keeps **Full access** if **Access** has never been saved.
-- A saved **Access** setting does not change when you update.
+- On a newly installed Butler, new conversations default to **Ask first** and new schedules default to **Auto**.
+- A Butler in use since an earlier version keeps **Full access** if a permission has never been saved.
+- A saved permission does not change when you update.
 
 Even with **Ask first**, Butler does the following without asking for approval.
 
@@ -81,32 +83,35 @@ MCP server tools are not part of this exception. Even for a tool that analyzes i
 
 ### Answer an approval request
 
-With **Ask first**, when Butler is about to edit a file or run a command, the status shows the **Waiting for approval.** text and an approval request appears in place of the composer.
+With a permission that asks for approval, such as **Ask first**, when Butler is about to edit a file or run a command, the status shows the **Waiting for approval.** text and an approval request card appears in the conversation. You can keep writing in the composer while the request waits.
 
-The approval request shows what Butler is about to do as a one-sentence question.
+The approval request shows what Butler is about to do as a one-sentence question. If more requests are waiting, the card shows `+N`.
 
 - Question — Asks what Butler is about to do and where. For file edits and commands, it includes the name of the working folder.
 - Target — Shows up to three files to edit or commands to run, and the rest as **+N more**. Files appear as paths relative to the working folder, and commands appear exactly as they will run.
 - Risk — Appears as **Low risk**, **Medium risk** or **High risk**.
 
-If the targets take more than four lines, click **Show more** to expand the displayed details and **Show less** to collapse them. Commands remain complete beyond 200 characters. An example cut at the Agent safety limit (16 KiB of UTF-8 per example) is marked with `…`. Check the full action before deciding in that case.
+If the targets take more than four lines, click **Show more** to expand the displayed details and **Show less** to collapse them. Commands show in full even when long. Content cut at the size limit ends with `…`.
 
-The Agent classifies risk. Known simple read commands such as `ls`, `pwd` and `git status` are low risk; shell evaluation, redirection and unrecognized commands are high risk. File edits inside the workspace are medium risk; edits outside it and MCP tool calls are high risk. Missing or malformed classification also displays as high risk.
+Reads inside the working folder are usually low risk, edits inside it are medium, and edits outside it, shell redirection and MCP tools are high.
 
 These buttons answer the request.
 
 - **Allow once** — Runs this request only.
 - **Always allow in this conversation** — Click the arrow next to **Allow once** (**Choose permission scope**) to choose it. It runs the current request and also applies to this conversation's subtasks. The menu shows the scope that stays allowed.
 - **Deny** — Does not run the request.
-- **Decide later and compose a message** — Click the down arrow to the right of the request to put off the decision and write a message. **N pending approvals** stays above the input box, so you can return to the request.
+
+For a request that uses a site sign-in or payment, the main button is **Allow in this chat**, and the arrow menu has **Always allow this site** or **Always allow payments here**.
 
 Items you always allow appear on the **Permission** button as **N allowed**. To revoke one, click it under **Allowed in this conversation** in the **Permission** menu.
 
 ## Answer a question
 
-When Butler needs more information, an `ask_user` question form appears in the composer. Choose one or several options, or type an answer, depending on the question. If **Other…** is available, enter your own answer. A recommended option does not submit an answer automatically.
+When Butler needs more information, a question card appears in the conversation. Choose one or several options, or type an answer, depending on the question. If **Other…** is available, enter your own answer. A recommended option does not submit an answer automatically.
 
-For several questions, use **Next** and **Back**, review your answers, then click **Send**. Use **Skip** to leave an answer empty. **Answer later** collapses the form so you can compose a message; click the pending indicator to return. Submitted answers appear in the conversation and Butler continues the work. Answering a question and approving an action are separate decisions.
+For several questions, use **Next** and **Back**, review your answers, then click **Send**. Use **Skip** to leave an answer empty. A question you put off with **Answer later** stays under **Awaiting your answer** in [**Session info**](/en/help/basics/right-panel/). Submitted answers appear in the conversation and Butler continues the work. Answering a question and approving an action are separate decisions.
+
+Only one question card is open in a conversation at a time. While a card is open, Butler asks any other question in its reply text.
 
 ## Plan mode
 
@@ -114,7 +119,7 @@ In plan mode, Butler makes a plan first and shows it in the conversation before 
 
 <Steps>
   1. Click **More options** (+) and choose **Plan** in **Response mode**. The **Plan** indicator appears in the composer.
-  2. Send your request. When Butler posts the plan in the conversation, the plan decision appears in place of the composer.
+  2. Send your request. When Butler posts the plan in the conversation, a plan decision card appears below it.
   3. Review the plan and click **Accept**, **Reject** or **Write feedback**.
 </Steps>
 
@@ -122,7 +127,7 @@ In plan mode, Butler makes a plan first and shows it in the conversation before 
 - **Reject** — Rejects the plan and turns off plan mode.
 - **Write feedback** — Write what to change in the input box and send it. Plan mode stays on and Butler revises the plan.
 
-In the plan decision, click the plan title to go to the plan in the conversation. To turn off plan mode, click the X button on the **Plan** indicator or choose **Normal** in **Response mode**. To always start project conversations in plan mode, turn on **Use plan mode by default** in **Settings → Models**.
+In the plan decision, click the plan title to go to the plan in the conversation. To turn off plan mode, click the X button on the **Plan** indicator or choose **Normal** in **Response mode**. To always start project conversations in plan mode, turn on **Use plan mode by default** in **Conversation input** under **Settings → General**.
 
 ## Attach files
 
@@ -133,9 +138,11 @@ In the plan decision, click the plan title to go to the plan in the conversation
 
 To reference another conversation in a message, drag the conversation from the sidebar into the composer, or choose **Reference in message** from the conversation's menu.
 
+Type `@` in the composer to get a list of conversations and projects. Keep typing to filter, then press <Kbd keys={["Enter"]} /> or <Kbd keys={["Tab"]} /> to insert the reference.
+
 ## Workspace
 
-In a project confirmed as a Git repository, you can choose the **Workspace** before you send the first message of a new conversation. You can also choose it in the input box at the bottom of the project dashboard. It does not appear in general conversations or in projects that are not Git repositories.
+In a project confirmed as a Git repository, you can choose the **Workspace** before you send the first message of a new conversation. You can also choose it in the input box at the bottom of the project dashboard. It does not appear in conversations outside a project or in projects that are not Git repositories.
 
 - **Local** — This is the default.
 - **Worktree** — When the conversation is created, Butler prepares a Git worktree for this conversation only and works there.
@@ -151,9 +158,33 @@ To stop the work, leave the input box empty and click the **Stop** button that a
 Messages you send while work is in progress collect under **Queued messages** and are delivered in order.
 
 - A queued message shows **Queued** or its position, such as **Queued · 2 of 3**.
+- Click **Send now** on the first queued message to stop the current reply and send this message right away. While it sends, the message shows **Sending…**, and the other queued messages keep their order. If it cannot be sent, the **Couldn't send** notification appears.
 - Click **Edit queued message** to bring the message back into the composer and remove it from the queue.
 - Click **Delete queued message** to remove the message from the queue.
 - A message that could not be sent shows **Send failed**. Choose **Retry message** or **Delete failed message**.
+
+## Subtasks
+
+When Butler splits work into subtasks, the reply that started the work gets a work card. The card shows the subtask title and its status. Expand it to see the activity list.
+
+- **Working** — The subtask is in progress. If it has a plan, the step progress appears too, such as `Done 2/5 · Now: …`.
+- **Completed** — The subtask finished with its final answer. It shows **Completed** even if that answer reports that the work is blocked.
+- **Failed** — The subtask ended with a system error. If it has a plan, the name of the step where it stopped appears too.
+- **Stopped** — The subtask was stopped partway.
+- **Waiting** — The subtask is waiting to start.
+
+Each plan step shows **Pending**, **Running**, **Done**, **Blocked** or **Skipped**. **Blocked** appears only on steps, never as the status of a subtask itself.
+
+Click **View progress details** (the eye icon) on the card to open the work log, where you can **Stop** the subtask or **Resume** it. A subtask that was interrupted also shows a **Resume** button on the card.
+
+Work you hand over in **Chats** in the sidebar comes back as one reply when it finishes. Click **View work** in that reply to open the same work log. An action skipped in a run without you, such as a schedule, stays in the conversation marked **Needs your OK**.
+
+Unfinished subtasks also appear in two other places.
+
+- On the **All** tab of the sidebar, each one appears on its own line under its conversation. See [Sidebar and spaces](/en/help/basics/sidebar-and-spaces/#subtasks-in-the-sidebar).
+- Open [**Session info**](/en/help/basics/right-panel/) in the title bar to see them together in the **Subtasks** section.
+
+In both places, the status shows as **Working**, **Paused**, **Needs approval** or **Waiting**.
 
 ## Message actions
 
@@ -164,16 +195,28 @@ Messages you send while work is in progress collect under **Queued messages** an
 - Expand and collapse a long message with **Show more** and **Show less**.
 - If a request fails with an error that can be retried, choose **Retry original settings** or **Retry as new with current settings**. **Retry original settings** sends the request again with the settings it was first sent with. **Retry as new with current settings** sends it with the model and permission now selected in this conversation.
 - When you have scrolled up, the **Latest** button appears. It changes to **New messages** when a new message arrives.
+- While Butler prepares answer cards such as tables and charts, **Preparing answer cards** appears. Each card's **More** menu has **Save to library**, **Make a document** and **Copy**.
 
 ### Continue from a response in a new conversation
 
-In the sidebar's **General** conversations, a completed response has the **Start a new conversation** and **Start a new project** buttons under it. Butler summarizes the requests and decisions up to that response and continues in a new conversation or a new project. The original conversation stays as it is.
+In **Chats** in the sidebar and in project conversations, a completed response has the **Start a new conversation** and **Start a new project** icon buttons under it. Butler summarizes the requests and decisions up to that response and continues in a new conversation or a new project. The original conversation stays as it is.
 
 <Steps>
   1. Under the response, click **Start a new conversation** or **Start a new project**.
   2. Enter the **Conversation title** or the **Project name**.
   3. Click **Create**.
 </Steps>
+
+## Suggestions from Butler
+
+When Butler notices a habit in your conversations, it sends a schedule suggestion card to **Chats** in the sidebar. The card shows the frequency and content of the schedule it would create.
+
+- **Sounds good** — Creates that schedule.
+- **No thanks** — Does not create it.
+
+If you leave a schedule's results unopened several times in a row, a card asks whether to keep receiving them. Click **Sounds good** to keep receiving them, or **No thanks** to pause that schedule. A card you answered turns into a one-line result. If there is a schedule, click that line to open it.
+
+Suggestions do not arrive during **Quiet hours** in **Settings → Memory** or while you are typing. Set how often they come in **Reach out first** on the same screen.
 
 ## Notes
 

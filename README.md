@@ -16,10 +16,10 @@
   macOS (Apple silicon), Windows (x64) and Linux desktop releases, with hosted or local models.
 </p>
 
-0.1.0 is in preview. The current build is [`0.1.0-preview.12`](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.12).
+0.1.0 is in preview. The current build is [`0.1.0-preview.14`](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.14).
 
 <p align="center">
-  <a href="https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.12"><strong>Download</strong></a>
+  <a href="https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.14"><strong>Download</strong></a>
   &nbsp;·&nbsp;
   <a href="https://butler.hexpy.games/en/help/"><strong>Manual</strong></a>
   &nbsp;·&nbsp;
@@ -46,8 +46,13 @@ Use Butler through the App, on desktop or in a browser.
 
 ## Features
 
-- **Permissions.** Choose *Ask first*, *Read only* or *Full access*. Set a default in **Settings → Models**, change it for one conversation, and give each schedule its own. [Conversations](https://butler.hexpy.games/en/help/basics/conversation/)
+- **Permissions.** Choose *Read only*, *Ask every time*, *Ask first*, *Auto* or *Full access*. Set defaults for new chats and new schedules in **Settings → General → Default permission**, change it for one conversation, and give each schedule its own. [Conversations](https://butler.hexpy.games/en/help/basics/conversation/)
 - **Schedules.** Butler sends a prompt to a conversation at a fixed interval, or daily, on weekdays or weekly at a set time. [Schedules](https://butler.hexpy.games/en/help/scheduled-tasks/)
+- **Subtasks.** Butler hands longer work to background subtasks. They show under their chat in the sidebar and in the Session info pane beside the chat, and their usage counts toward the chat. [Conversations](https://butler.hexpy.games/en/help/basics/conversation/)
+- **Project board.** Each project has a Board: add Epics, group them into Plans and move them through Planned, In progress, In review, Blocked and Done. Epics and Plans also show under the project in the sidebar. [Projects](https://butler.hexpy.games/en/help/projects/)
+- **Images.** Butler makes and edits images with the image model you choose in **Settings → Models → Image model** (OpenAI or Google API key). In the Image editor, paint the area to change. [Images](https://butler.hexpy.games/en/help/basics/images/)
+- **Browser.** A built-in browser Butler can work in, including background tabs. You can watch, take over and hand back; when a site needs a sign-in, Butler asks first. [Browser](https://butler.hexpy.games/en/help/basics/browser/)
+- **Library.** Files and pages Butler delivers land in the Library and open in a viewer beside the chat. [Library](https://butler.hexpy.games/en/help/basics/library/)
 - **MCP servers.** Connect MCP servers for extra tools. [MCP servers](https://butler.hexpy.games/en/help/extensions/mcp-servers/)
 - **Skills.** A skill is a `SKILL.md` file that tells Butler how to handle one kind of request.
 - **Model providers.** Use OpenAI, Anthropic, Google and other hosted providers, or an OpenAI-compatible server such as Ollama, LM Studio or llama.cpp. Backup models take over on eligible provider failures when you enable them. [Cloud models](https://butler.hexpy.games/en/help/models/cloud/), [Custom models](https://butler.hexpy.games/en/help/models/custom/), [Backup models](https://butler.hexpy.games/en/help/models/backup/)
@@ -59,26 +64,27 @@ Use Butler through the App, on desktop or in a browser.
 
 ## Install
 
-Download Butler from the [0.1.0 preview.12 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.12).
+Download Butler from the [0.1.0 preview.14 release](https://github.com/Hexpy-Games/butler/releases/tag/v0.1.0-preview.14).
 
 | Platform | Download |
 | --- | --- |
-| macOS (Apple silicon) | [DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.12/butler-app-0.1.0-preview.12-darwin-arm64.dmg) |
-| Linux (x64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.12/butler-app-0.1.0-preview.12-linux-x64.deb) |
-| Linux (arm64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.12/butler-app-0.1.0-preview.12-linux-arm64.deb) |
-| Arch Linux (x64) | [Package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.12/butler-app-0.1.0-preview.12-archlinux-x64.pkg.tar.zst) |
-| Windows (x64) | [Installer](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.12/ButlerSetup-0.1.0-preview.12-x64.exe) |
+| macOS (Apple silicon) | [DMG](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.14/butler-app-0.1.0-preview.14-darwin-arm64.dmg) |
+| Linux (x64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.14/butler-app-0.1.0-preview.14-linux-x64.deb) |
+| Linux (arm64) | [DEB](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.14/butler-app-0.1.0-preview.14-linux-arm64.deb) |
+| Arch Linux (x64) | [Package](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.14/butler-app-0.1.0-preview.14-archlinux-x64.pkg.tar.zst) |
+| Windows (x64) | [Installer](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.14/ButlerSetup-0.1.0-preview.14-x64.exe) |
+| Windows (x64, portable) | [ZIP](https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.14/butler-app-0.1.0-preview.14-windows-x64-portable.zip) |
 
-Each file has a `.sha256` checksum, and `butler-0.1.0-preview.12-SHA256SUMS` lists them all.
+Each file has a `.sha256` checksum, and `butler-0.1.0-preview.14-SHA256SUMS` lists them all.
 
-On macOS and Linux, Settings → Updates installs the new App and bundled Agent, then relaunches with the same data directory.
+On macOS, Windows (Setup install) and Linux (DEB), Settings → Updates installs the new App and bundled Agent, then relaunches with the same data directory. Update the Arch package and the Windows portable zip by hand.
 **Receive preview versions** is ON by default in preview builds and OFF in stable builds. When it is on, you receive the newest stable or preview release.
-After installing `0.1.0-preview.12`, later previews arrive through Settings → Updates when **Receive preview versions** is on. `butler --version` shows the exact version.
-Before updating to `0.1.0-preview.12`, quit Butler and copy `~/.butler`; its first launch rewrites the database once.
+After installing `0.1.0-preview.14`, later previews arrive through Settings → Updates when **Receive preview versions** is on. `butler --version` shows the exact version.
+Before updating to `0.1.0-preview.14`, quit Butler and copy `~/.butler`; its first launch moves your data once, and you can't go back to `0.1.0-preview.13`.
 The CLI shares this preference: `butler config set update.previews true` (or `false`); `butler status` shows it.
-Release builds identify with their full tag, such as `0.1.0-preview.12`; development builds use `0.1.0-dev`.
+Release builds identify with their full tag, such as `0.1.0-preview.14`; development builds use `0.1.0-dev`.
 
-On first launch, choose the interface language on the welcome screen, accept the safety notice and connect an AI. Choose Butler's reply language at the end of the AI connection step; you can change it later in **Settings → Personalization**. See [Install](https://butler.hexpy.games/en/help/getting-started/install/) and [First run](https://butler.hexpy.games/en/help/getting-started/first-run/).
+On first launch, choose the interface language on the welcome screen, accept the safety notice, choose whether to use the memory model and connect an AI. Choose Butler's reply language at the end of the AI connection step; you can change it later in **Settings → Personalization**. See [Install](https://butler.hexpy.games/en/help/getting-started/install/) and [First run](https://butler.hexpy.games/en/help/getting-started/first-run/).
 
 ### macOS first open
 
@@ -99,7 +105,7 @@ Install the DEB package with `sudo apt install ./butler-app-<version>-linux-x64.
 On Apple silicon macOS:
 
 ```sh
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.12/install.sh | sh -s -- --version 0.1.0-preview.12
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.14/install.sh | sh -s -- --version 0.1.0-preview.14
 ```
 
 #### Windows
@@ -107,7 +113,7 @@ curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-previe
 In PowerShell on Windows x64:
 
 ```powershell
-$env:BUTLER_VERSION='0.1.0-preview.12'; irm https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.12/install.ps1 | iex
+$env:BUTLER_VERSION='0.1.0-preview.14'; irm https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.14/install.ps1 | iex
 ```
 
 #### Linux
@@ -115,7 +121,7 @@ $env:BUTLER_VERSION='0.1.0-preview.12'; irm https://github.com/Hexpy-Games/butle
 On Linux x64 / arm64 with glibc:
 
 ```sh
-curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.12/install.sh | sh -s -- --version 0.1.0-preview.12
+curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v0.1.0-preview.14/install.sh | sh -s -- --version 0.1.0-preview.14
 ```
 
 Use `butler open` to open the App in your browser. For another computer on a trusted network, enable access and generate a pairing code in **Settings → Security**, or use `butler remote enable` and `butler remote pair` on the host. Open the displayed address on the other computer and enter the 8-digit one-time pairing code. Remote access is off by default. [Remote access](https://butler.hexpy.games/en/help/advanced/remote-access/)
@@ -126,7 +132,7 @@ The data folder is `~/.butler` by default. Saved API keys go to the system crede
 
 ## Documentation
 
-The Butler manual covers setup, conversations, projects, schedules, models, MCP, settings and troubleshooting. Read it in [English](https://butler.hexpy.games/en/help/) or [Korean](https://butler.hexpy.games/help/).
+The Butler manual covers setup, conversations, projects, images, the browser, schedules, models, MCP, settings and troubleshooting. Read it in [English](https://butler.hexpy.games/en/help/) or [Korean](https://butler.hexpy.games/help/).
 
 ## Status
 

@@ -84,17 +84,16 @@ Prose terms. When the word is a label on screen, the bold form in
 `english-ui-labels.md` wins, even where `en.ts` is not consistent with the
 prose term (for example, the sidebar section is **Chats** while prose says
 "conversations"). A key that exists in `en.ts` is not proof the app shows
-it: `sidebar.newChat` ("New chat") is unused, and the sidebar button is
-**New conversation**. When two strings fit, check which one the component
-renders.
+it. When two strings fit, check which one the component renders.
 
 | Korean | English | Note |
 | --- | --- | --- |
 | 버틀러, Butler | Butler | Never "the Butler", never "Steward" |
 | 앱 | the app | Lowercase. "Butler app" where the Korean says Butler 앱 |
 | Agent, Butler Agent | the Agent, Butler Agent | Capitalized, as the Korean pages write it |
-| Worker | Worker | Capitalized. Tab label: **Workers** |
-| 대화 | conversation | Labels vary: **New conversation** (the sidebar and space button), **Chats** (sidebar section), **Target chat**, **Project chats**. Use the exact label in bold and "conversation" in prose |
+| 하위 작업 | subtask | **Subtasks**. Never "Worker" or "Steward" in prose; **Worker settings** is a Settings label |
+| 과제, 계획 | Epic, Plan | Bold as `canon.ts` shows (**New Epic**, **New Plan**); "task" in prose |
+| 대화 | conversation | Labels vary: **New chat** (the sidebar and space button), **Chats** (sidebar section), **Target chat**, **Project chats**. Use the exact label in bold and "conversation" in prose |
 | 컴포저 | composer | The message box. Label: **Message composer** |
 | 사이드바 | sidebar | **Sidebar**, **Show sidebar**, **Hide sidebar** |
 | 스페이스 | space | Label: **Space**. Lowercase in prose |
@@ -104,9 +103,9 @@ renders.
 | 예약 작업 | schedule, schedules | **Schedules** (section, tab), **Schedule** (palette kind), **New schedule**, **Runs** (실행 기록), **Run now**. Never "automation" or "scheduled task" |
 | 주기 | frequency | **Frequency**: **Interval**, **Daily**, **Weekdays**, **Weekly**; **Time**, **Day**. State: **On**, **Off**. Shown as `Every 30 minutes`, `Every day at 8:00 AM`, `Next: …` |
 | 명령 팔레트 | command palette | Label: **Command palette** |
-| 오른쪽 패널 | right panel | **Show right panel**, **Hide right panel**. Tabs: **Summary**, **Activity**, **Context**, **Artifacts**, **Schedules**, **Workers** |
-| 아티팩트 | artifact | **Artifacts** |
-| 권한 | permission | **Permission** (composer), **Permissions** (Settings), **Access** (접근 권한) |
+| 세션 정보 | Session info | The pane beside a chat. **Session info** |
+| 서랍 | Library | **Library** |
+| 권한 | permission | **Permission** (composer), **Default permission** (Settings → General) |
 | 먼저 확인 | **Ask first** | Permission mode |
 | 읽기 전용 | **Read only** | Permission mode. No hyphen |
 | 전체 권한 | **Full access** | Permission mode |

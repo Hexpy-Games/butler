@@ -1,0 +1,124 @@
+---
+title: "Browser"
+description: "Open the in-app browser, watch Butler work in its tabs, and let Butler handle sign-ins and payments or do them yourself."
+section: basics
+order: 7
+status: published
+---
+
+Butler has a browser inside the app. You can browse the web yourself, and Butler opens its own tabs for each conversation to read and act on pages.
+
+## Open the browser
+
+- Click **Browser** in the sidebar to open the browser screen with all your tabs.
+- In a conversation, click the globe button (**Show browser**) in the title bar to open that conversation's tabs beside the chat. Click it again (**Hide browser**) to close them.
+
+While Butler uses a conversation's tab, the globe button glows and its name changes with the state.
+
+- **View browser · Butler is using it**
+- **View browser · Needs you**
+- **View browser · Error**
+
+## Tabs
+
+Tabs are grouped. Tabs you open go into **My tabs**, and tabs Butler opens in a conversation go into that conversation's group.
+
+- Open a tab with **New tab** and close it with **Close tab**.
+- In the browser beside a conversation, click **Bring in a tab** to move a tab from **My tabs** into this conversation.
+- On the **Browser** screen from the sidebar, click **Move to a conversation** to move the current tab to a conversation you choose or to a **New chat**.
+- You can also drag a tab onto a conversation to move it.
+
+The address bar has **Back**, **Forward**, **Reload** and the **Search or enter URL** field. On the right are **Add bookmark**, **Pick elements**, **Bookmarks** and **More**. Drag the parts of a page you pick with **Pick elements** into a conversation to attach them, or save them to the [Library](/en/help/basics/library/).
+
+## Watch Butler work
+
+While Butler works in a tab, a **Butler is browsing** band appears above it. The band has these buttons.
+
+- **Take over** — Takes the tab so you can click and type yourself. The band changes to **You're in control**.
+- **Give back to Butler** — Ends your control and hands the tab back to Butler.
+- **Stop task** — Stops what Butler was doing.
+
+When Butler waits for approval, the band shows **Waiting for approval**; when it waits for a step only you can do, it shows **Butler is waiting**. A tab Butler handed to you shows **Returns to Butler when you leave**, and switching to another tab gives it back to Butler.
+
+When a page tries to open a pop-up, **Pop-up blocked** appears. If the pop-up is safe to open, click **Allow**.
+
+## Sign-ins
+
+Tabs you open use your own sign-ins. Tabs Butler opens start signed out.
+
+For Butler to use a site while signed in as you, it asks once per site with an approval card.
+
+- **Allow in this chat** — Uses the site signed in, in this conversation.
+- **Always allow this site** — Choose it from the menu next to the button. Uses the site signed in, in every conversation. To undo it, turn off **Use in all conversations** for that site in **Settings → Browser → Sign-ins**.
+- **Deny** — Does not use the site signed in.
+
+A conversation tab that uses your sign-in shows **Signed in** next to **More**.
+
+### Filling a saved sign-in
+
+When a site needs a sign-in and one is saved for it in **Sign-ins** under **Settings → Browser**, Butler fills it in. The username and password are never passed to the model. What happens depends on the **Butler signs in** value you set for each sign-in.
+
+| **Butler signs in** | What happens |
+| --- | --- |
+| **Always** | Fills it in without asking. |
+| **Ask** | Asks with an approval card before filling it in. |
+| **Never** | Does not fill it in. |
+
+### Sign-in steps only you can do
+
+When a step comes up that Butler cannot do, such as two-step verification, a passkey, a CAPTCHA or a security keypad, Butler hands the tab to you.
+
+<Steps>
+  1. Above the tab, **Sign-in needs you** appears with **Two-step verification**, **Passkey**, **CAPTCHA** or **Security keypad**. The conversation shows a **Finish in the tab, then give it back to Butler** card.
+  2. Click **Open to check** on the card to open the tab.
+  3. Finish the step in the tab.
+  4. Click **Give back to Butler**. Butler continues.
+</Steps>
+
+To give up, click **Stop task** on the card or above the tab.
+
+## Payments
+
+When a payment needs a card, Butler fills in a card saved in **Payment methods** under **Settings → Browser**. Butler sees only the card's nickname and the last four digits. Butler fills in the name, contact details and address saved in **My info** the same way.
+
+- Before filling in a card, an approval card shows the site and the amount. On the sites in the card's **Sites that fill without asking**, Butler fills it in without asking.
+- Butler also asks before it completes a payment. On the sites in **Pay without asking** under **Settings → Browser**, it does not ask.
+- When a step only you can do comes up, such as a security keypad or a card issuer check, **Payment needs you** appears above the tab. Finish the step in the tab and click **Give back to Butler**.
+
+## History
+
+<Steps>
+  1. In the browser's **More** menu, choose **History**. You can also click **View** next to **Visited pages** under **Settings → Browser**.
+  2. Enter a search term in **Search history**. Turn on **Visited by Butler** to show only the pages Butler visited.
+</Steps>
+
+To clear history, click **Clear browsing history**, choose a period from **Last hour**, **Today**, **Last 7 days** and **All time**, then click **Delete**. With **Visited by Butler** on, only Butler's visits are cleared.
+
+## Clear site data
+
+<Steps>
+  1. Open **Settings → Browser**.
+  2. Under **Site data**, click **Clear** next to **Cookies and cache**.
+  3. Click **Clear** in the confirmation dialog.
+</Steps>
+
+You are signed out of every site, and cached images and files are cleared. Saved sign-ins, payment methods, history and bookmarks stay.
+
+## Notes
+
+<Notice tone="info">
+  The browser is only in the desktop app. When you connect to Butler from a web browser on another computer, **Browser** in the sidebar and the globe button do not appear.
+</Notice>
+
+<Notice tone="info">
+  Saved sign-ins, payment methods and My info need a system password store. To turn it on, see the [Settings reference](/en/help/settings/#browser).
+</Notice>
+
+## Related pages
+
+<CardGrid>
+  <DocCard slug="settings" />
+  <DocCard slug="basics/library" />
+  <DocCard slug="scheduled-tasks" />
+  <DocCard slug="basics/conversation" />
+</CardGrid>

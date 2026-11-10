@@ -24,26 +24,29 @@ Sections fall into three groups.
 
 | Group | Sections |
 | --- | --- |
-| **Preferences** | General, Appearance, Personalization, Models |
-| **App and system** | Updates, Usage, Logs, Privacy, Security, System events, Archives, About |
-| **Advanced** | MCP, Skills, Server |
+| **Preferences** | General, Appearance, Personalization, Memory, Models |
+| **App and system** | Updates, Usage, Logs, Browser, Security, System events, Archives, About |
+| **Advanced** | MCP, Hooks, Skills, Server |
 
 ## General
 
-Set the defaults for language, time zone, conversation input, sidebar sorting, notifications and web search.
+Set the defaults for language, time zone, conversation input, sidebar sorting, default permission, notifications and web search.
 
 | Area | Item | Description |
 | --- | --- | --- |
 | **Language & region** | **Language** | The app's interface language. Choose **English** or **Korean**. |
 | | **Time zone** | The time zone Butler uses to interpret the current time and schedule context. Search the list and choose one. |
-| **Conversation input** | **Follow-up handling** | How Butler handles a message you send while it is working. Choose **Queue while busy** or **Steer current turn**. |
-| | **Message sending** | Choose **<span data-mod-key><Kbd keys={["⌘", "Enter"]} label="Command Enter" /></span> sends, Enter inserts a newline** or **Enter sends, Shift Enter inserts a newline**. See [Send keys](/en/help/basics/conversation/#send-keys). |
+| **Conversation input** | **Follow-up handling** | How Butler handles a message you send while it is working. **Queue while busy** puts the message in the queue and sends it when the current work finishes. |
+| | **Message sending** | Choose **<span data-mod-key><Kbd keys={["⌘", "Enter"]} label="Command Enter" /></span> sends, Enter inserts a newline** or **Enter sends, Shift Enter inserts newline**. See [Send keys](/en/help/basics/conversation/#send-keys). |
+| | **Use plan mode by default** | When on, new project conversations start in plan mode. |
 | **Sidebar** | **Smart groups** | Sorts new conversations into groups by topic automatically. Conversations you moved yourself stay where they are. |
+| **Default permission** | **New chats** | The permission a new conversation starts with. Change it in any conversation from the composer's **Permission** menu. See [Conversations and the composer](/en/help/basics/conversation/#permission). |
+| | **New schedules** | The permission new schedules run with. The default is **Auto**. See [Schedules](/en/help/scheduled-tasks/#permission). |
+| | **Command sandbox** | When on, commands that change files run in a sandbox while the permission is **Auto**. When off, Butler asks before running them. If this device cannot use it, you cannot change it and **Not available on this device** appears. |
 | **Notifications** | **Desktop notifications** | Sends an operating system notification for a new reply or a finished task while the app is in the background. |
 | | **AI message notifications** | Notifies you when a new reply arrives. The notification shows only a safe preview. |
 | | **Task completion notifications** | Notifies you when a task completes, fails or is canceled. |
 | **Notification permission** | **OS notification status** | The operating system's notification permission status. Click **Test** to send a test notification. Where the operating system's notification settings can be opened, a button that opens them also appears. |
-| **Memory model** | Preparation status | The status of the memory model that Butler's memory features use. When it is ready, **Ready** appears. If the download failed, click **Retry** to download it again. See [First run](/en/help/getting-started/first-run/#memory-model). |
 | **App behavior** | **Keep app available after closing the window** | When on, Butler keeps running after you close the window. Its menu opens a new or recent conversation. |
 | | **Start at login** | When on, Butler opens when you log in to the computer. Shown only in the desktop app. |
 | | **Run setup again** | Click **Run again** to go through the welcome screen and the AI connection again. Your registered models and conversations stay as they are. See [First run](/en/help/getting-started/first-run/#run-setup-again). |
@@ -52,6 +55,9 @@ Set the defaults for language, time zone, conversation input, sidebar sorting, n
 | **Search behavior** | **Page reader** | The reader that reads the full text of search results. The default, **Butler browser**, reads in the app's browser and uses the built-in headless browser only when the app is not installed. Choose **Butler browser**, **Lightweight reader**, **Auto**, **Lightpanda**, **Jina Hosted** or **Disabled**. |
 | | **Use smart search planning** | When on, Butler calls the model once before a search to plan the intent, depth, need for verification and query batches. |
 | | **Default search depth** | Shown only when **Use smart search planning** is on. Choose **Quick**, **Balanced** or **Deep**. |
+| **Reset everything** | **Erase all data** | Click **Reset** and type the confirmation phrase to erase chats, memory, schedules, settings and saved keys, then restart the app. Project folders and downloaded models stay. Only available in the desktop app. |
+
+On a new Butler installation, **New chats** defaults to **Ask first**. A Butler you have used since an earlier version keeps **Full access** if you have never saved this value. A saved value does not change when you update.
 
 ## Appearance
 
@@ -60,11 +66,13 @@ Set the app's theme, home screen and message box.
 | Area | Item | Description |
 | --- | --- | --- |
 | **Theme** | **Theme** | Choose **System**, **Light** or **Dark**. You cannot change it while a real-time wallpaper sets the brightness. |
+| | **Text size** | Choose **Default**, **Large** or **Larger**. |
 | | **Translucent sidebar** | Shows the sidebar semi-transparent. |
 | **Home screen** | **Wallpaper** | The background of the new chat screen. Choose a wallpaper from the list, or choose **None**. Click **Add image** to upload a JPEG, PNG or WebP image of up to 25 MB and use it as the background. |
 | | **Motion** | Shown when a wallpaper is chosen. When on, the background moves slowly. |
 | | **Pause on battery** | Shown when **Motion** is on. When on, the motion stops while the computer is unplugged. |
-| **Conversation** | **Conversation background** | Choose Plain, Riso Print, a wallpaper or a shared photo. **Overlay** is 0–95% for wallpapers and photos, saved independently of Home screen. |
+| **Conversation** | **Show thinking** | When on, the conversation shows what Butler thought before answering. |
+| | **Conversation background** | Choose Plain, Riso Print, a wallpaper or a shared photo. **Overlay** is 0–95% for wallpapers and photos, saved independently of Home screen. |
 | **Message box** | **Collapse message box** | Shortens the message box to one row when you're not typing. |
 | | **Message box background** | Art behind your text. |
 | | **Character** | A small companion sits above the message box. |
@@ -78,45 +86,65 @@ Manage the name, tone and personal information Butler uses. Unlike the other sec
 | --- | --- |
 | **Profile** | **Butler nickname**, **My name**, **Preferred address** |
 | **Response style** | **Response language**, **Persona preset**, **Persona**, **EOL** |
-| **Learning** | **Personal information analysis**, **Personal information analysis model**, **Reasoning** |
-| **Import** | **Import external AI memory** |
-| Bottom of the screen | **Delete profile data** |
+| **Profile building** | **Level**, **Profile-building model**, **Reasoning**, **Memory** |
+| **Import from other AI tools** | **Import memory** |
+
+## Memory
+
+View and manage what Butler remembers, by type.
+
+| Area | Description |
+| --- | --- |
+| **Instructions** | The instructions you added in chat. You can delete them one at a time. |
+| **What Butler noticed** | Habits Butler noticed in your conversations. **Reach out first** and **Quiet hours** are set here too. |
+| **Chat memory** | What Butler remembered on its own from your conversations. **Erase chat memory** erases it. |
+| **Memory consolidation** | Set the **Chat memory model**, **Reasoning** and **Time** for memory consolidation. **Run now** runs it right away. |
+| **Memory model** | Turn the memory model on or off with **Use memory model** and check its status. When it is ready, **Ready** appears. If the download failed, click **Retry** to download it again. See [First run](/en/help/getting-started/first-run/#memory-model). |
+| **Profile** | What Butler learned about you in conversations. **Erase profile** erases the entries and candidates. |
+| **Project memory** | Choose a project to see what Butler remembers about it. **Erase project memory** erases it. |
 
 ## Models
 
-Manage the models Butler and Workers use, backup models, saved API keys and permissions.
+Manage the models Butler and workers use, backup models and the image model.
 
 | Area | Items | Details |
 | --- | --- | --- |
 | **Butler model** | **Model**, **Manage models**, **Reasoning**, **Context limit**, **Local reasoning budget** | [Cloud models](/en/help/models/cloud/#choose-the-default-model), [Custom models](/en/help/models/custom/#local-reasoning-budget) |
 | **Backup models** | Backup model summary, **Edit**, **Use backup models**, **Add backup model** | [Backup models](/en/help/models/backup/) |
-| **API keys** | List of saved keys, **Replace**, **Delete** | [Cloud models](/en/help/models/cloud/#manage-api-keys) |
-| **Permissions** | **Access**, **Use plan mode by default** | [Conversations and the composer](/en/help/basics/conversation/#permission) |
-| **Advanced** | **Memory cleanup model and worker profiles** | The table below |
+| **Image model** | **Model**, **Saved credential**, **API key**, **Default quality** | [Image model](#image-model) |
+| **Advanced** | **Worker settings** | The table below |
+
+Manage saved API keys in **Settings → Security → API keys**, and the default permission for new chats and **Use plan mode by default** in **Settings → General**.
 
 **Settings → Models → Model management → Edit** for a ChatGPT model shows the sign-in state and account. Click **Use another account** to switch accounts, or **Sign out**. **Manage usage** opens ChatGPT usage settings.
 
 **Backup models** shows, on one line, the order in which backup models take over. Click **Edit** to expand the items for turning backup models on and choosing them.
 
-Under **Advanced**, **Memory cleanup model and worker profiles** starts collapsed. Click it to expand these two areas.
-
-| Area | Items | Details |
-| --- | --- | --- |
-| **Memory cleanup** | **Conversation memory model**, **Reasoning** | [Backup models](/en/help/models/backup/#conversation-memory-model) |
-| **Worker profiles** | **Max simultaneous Workers**, **Add Worker profile**, items for each profile | The table below |
-
-On a new Butler installation, **Access** defaults to **Ask first**. A Butler you have used since an earlier version keeps **Full access** if you have never saved **Access**. A saved value does not change when you update.
-
-**Worker profiles** defines the Workers Butler hands work to.
+Under **Advanced**, **Worker settings** starts collapsed. Click it to expand the items that define the workers Butler hands work to.
 
 | Item | Description |
 | --- | --- |
-| **Max simultaneous Workers** | The number of Workers that run at the same time. Enter a number from 1 to 10. |
-| **Add Worker profile** | Adds a profile. You can register up to 12. |
+| **Max workers per task** | The most workers one task can use. Enter a number from 1 to 10. |
+| **Add Worker profile** | Adds a worker profile. You can register up to 12. |
 | **Name**, **Enabled** | The profile's name and whether it is in use. The default profile cannot be turned off or deleted. |
 | **Job**, **Custom job** | Choose **Coding**, **Research**, **Debug**, **Review**, **Writing** or **Custom**. For **Custom**, enter the job yourself. |
-| **Domain**, **Worker prompt** | The field the profile covers and the instructions for the Worker. You can leave both empty. |
+| **Domain**, **Worker prompt** | The field the profile covers and the instructions for the worker. You can leave both empty. |
 | **Model**, **Reasoning** | The model and reasoning effort this profile uses. |
+
+### Image model
+
+In **Image model**, choose the model Butler uses to create and edit images. Changes are saved right away.
+
+- **Model** — The default is **Off**. Without an image model, Butler does not create images.
+- **Saved credential**, **API key** — If you already saved an API key for the chosen provider, that key is selected right away. Otherwise enter an **API key** and click **Add**.
+- **Default quality** — The quality Butler uses by default when it creates an image. You can change it after a key is chosen, and only the values the model supports appear.
+
+| Provider | Models |
+| --- | --- |
+| OpenAI | GPT Image 2.6 Sunburst, GPT Image 2.6 Flare, GPT Image 2.5 Sunburst, GPT Image 2.5 Flare, GPT Image 2 |
+| Google | Nano Banana 2.1, Nano Banana Pro, Nano Banana 2 Lite |
+
+An image model works only with an API key. A ChatGPT sign-in cannot be used for image models. Image models do not appear in the conversation's model list. Check their usage in **Image models** under [Usage](#usage).
 
 ## Updates
 
@@ -124,7 +152,7 @@ Check for a new version of Butler and install it.
 
 | Item | Description |
 | --- | --- |
-| **Receive preview versions** | When on, you also get versions before their stable release as updates. It is off at first. |
+| **Receive preview versions** | When on, you also get versions before their stable release as updates. Preview builds have it on from the start. |
 | **Check** | Checks whether a new version is available. It shows **Checking** while it checks. |
 | **Butler App** | Shows the current version and the version of Butler Agent included in the app. When a new version is available, it shows `current version -> new version`. |
 | **Update** | Click it when a new version is available. It downloads the new version, verifies the checksum, replaces the app and the Butler Agent included in it, then opens Butler again. It shows **Applying** while it works. When there is no new version, it shows **Up to date** and cannot be clicked. |
@@ -133,22 +161,16 @@ Check for a new version of Butler and install it.
   An update replaces only the app and leaves the data folder alone. On Linux, an app installed from the DEB package asks for administrator authentication when it applies an update.
 </Notice>
 
-Release versions retain the full preview suffix, such as `0.1.0-preview.12`; development builds show `0.1.0-dev`. With the same data folder, `butler config set update.previews true` enables preview updates from the CLI.
-
 ## Usage
 
-Review model tokens, prompt cache, web search and tool calls. Usage is tracked separately from context window capacity.
+Review model token usage, image model usage and remaining limits. Usage is tracked separately from context window capacity.
 
 | Item | Description |
 | --- | --- |
-| **Overview** | A summary of total usage. Choose a period, **24 hours**, **7 days** or **All**, and click **Refresh** to reload. |
-| **API provider usage** | Usage and remaining amount by provider. |
-| **Tokens by scope** | Token usage by scope. |
-| **Tokens by model** | Token usage by model. |
-| **Estimates by context section** | Estimated tokens by prompt section. Shows up to 12, largest first. |
-| **Calls by tool** | Number of calls by tool. Shows up to 8, most called first. |
-
-Ask Butler to separate conversation cost from background memory processing cost. The runtime usage response exposes `cost.byWork` with `conversation`, `memory` and `other`; the overall total includes all work. Costs are estimates from known model prices and are unavailable when pricing is unknown. This screen currently has no separate cost-by-work table.
+| **Recent usage** | Token usage and estimated cost over a period. Choose **24 hours**, **7 days** or **30 days**, and click **Refresh** to reload. |
+| **Activity** | **Lifetime tokens**, **Busiest day**, **Longest task**, **Longest streak**, **Current streak** and usage by date. |
+| **Image models** | The **Generated** and **Edited** counts, **Est. cost** and **Total** for each image model. Choose **7 days** or **30 days**. Appears only when an image model is chosen or there was image usage in the last 30 days. |
+| **Remaining limits** | The usage left with each provider. Appears only when a provider reports its limits. |
 
 ## Logs
 
@@ -158,23 +180,52 @@ Appears only in developer mode (**About → Developer mode**).
 - **Entries** — Newest first. Filter by text, level, source, category and period. **Live** adds entries as they arrive; **More** loads older ones. Open an entry for its fields, and for HTTP entries the **Request**, **Response** and **JSON** tabs.
 - **Storage** — Use, limit and retention per store. **Export…** saves a zip, with bodies if you choose; **Delete all…** removes stored logs.
 
+## Browser
+
+Manage the history and site data of Butler's browser, and the sign-ins and payment details Butler fills in. For how to use the browser, see [Browser](/en/help/basics/browser/).
+
+| Area | Item | Description |
+| --- | --- | --- |
+| **Browsing** | **Browsing agent** | The model Butler uses for work on web pages. The default is chosen automatically and shows as `Auto · <model>`. You can also choose **Off** or a registered model. |
+| **History** | **Visited pages** | Click **View** to open the history, or **Clear** to clear it. |
+| **Site data** | **Cookies and cache** | Click **Clear** and confirm to sign out of every site. Saved sign-ins, payment methods, history and bookmarks stay. Only available in the desktop app. |
+| **Sign-ins** | Saved sign-ins | Click **Add** to save a **Site**, **Username** and **Password**. For each sign-in, set **Butler signs in** (**Always**, **Ask**, **Never**) and **Use in all conversations**. Passwords are never shown. |
+| **Payment methods** | Saved cards | Click **Add** to save a card. For each card, set **Sites that fill without asking**. **Show number** shows the number for a moment after a check such as Touch ID or Windows Hello. |
+| **My info** | Saved profiles | Save details such as name, contact and address as a profile. For each profile, set **Sites that fill without asking**. |
+| **Pay without asking** | Site list | On the sites in this list, Butler does not ask again right before paying. When the list is empty, **Butler asks before every payment** appears. |
+| **Import from another browser** | **Browser data** | Click **Import from a browser** to bring in **Bookmarks**, **Passwords** and **History** from another browser. You can also choose **Import from a file** to import a bookmarks HTML file or a passwords CSV file. |
+
+**Sign-ins**, **Payment methods**, **My info** and password import need a system password store. Without one, **Add** is disabled and **Needs the system password store** appears.
+
+- A macOS app signed with a Developer ID uses the Keychain.
+- On Windows, on Linux and in unsigned builds, turn on the system store from the CLI with the same data folder, using the command below. Windows uses Credential Manager, and Linux uses the system keyring.
+
+```bash
+butler config set secrets.store system
+```
+
+With this setting on, API keys are also stored in the system store.
+
 ## Security
 
-Manage access from other devices and the connection code. This section works only on the host computer. If you open it from another computer, **Available only on the host computer.** appears. For the pairing steps, see [Remote access](/en/help/advanced/remote-access/#pair-a-device-in-the-app).
+Manage access from other devices, approved actions, API keys and connected accounts. The remote access items work only on the host computer. If you open them from another computer, **Available only on the host computer.** appears. For the pairing steps, see [Remote access](/en/help/advanced/remote-access/#pair-a-device-in-the-app).
 
 | Area | Item | Description |
 | --- | --- | --- |
 | **Remote access** | **Allow access from other computers** | When on, devices on the same network connect by entering the connection code. It is off at first. |
-| | **Addresses** | Appears when access is allowed. These are the addresses to open on another computer. Click **Copy address** to copy one. |
+| | **Addresses** | Appears when access is allowed. These are the addresses to open on another computer. Click **Copy address** to copy one. If an address cannot be opened, **Port in use**, **Port blocked**, **Address unavailable** or **Couldn't open address** appears. |
 | **Pair device** | **Code** | Appears when access is allowed. Click **Pair device** to show an 8-digit code and the time left. A code works once, within 60 seconds, and a new one is issued when it expires. |
 | **Paired devices** | Device list | Appears when access is allowed. Shows each paired device's name, IP address and last-seen time. Click **Disconnect** to disconnect one device, or **Disconnect all** to disconnect every device. When no device is paired, **No paired devices** appears. |
-| **Advanced** | **Allowed hosts for tunnels and proxies** | Click it to expand **Allowed hosts**. Enter the name a tunnel or proxy uses in **Host names** and click **Add**. |
+| **Approved actions** | Action list | Actions you allowed to run without asking. Filter with **Search approvals** and **Kind**, and click **Revoke** to take an approval back. |
+| **API keys** | List of saved keys | The API keys your models use. Click **Replace** or **Delete**. See [Cloud models](/en/help/models/cloud/#manage-api-keys). |
+| **Connected accounts** | ChatGPT sign-in | The ChatGPT account you signed in with. Click **Sign out** to delete the credential Butler saved. |
+| **Advanced** | **Allowed hosts for tunnels and proxies** | Click it to expand **Host names** and **Output host**. Enter the name a tunnel or proxy uses in **Host names**, and the tunnel hostname for opening outputs remotely in **Output host**, then click **Add**. |
 
 ## System events
 
-Review when and how regular consolidation, personal information analysis and maintenance work finished.
+Review when and how regular consolidation, profile building and maintenance work finished.
 
-- The event types are **Conversation memory consolidation**, **Personal information analysis**, **Conversation history sync**, **Context maintenance** and **Regular memory consolidation**.
+- The event types are **Chat memory consolidation**, **Profile building**, **Conversation history sync**, **Context maintenance** and **Regular memory consolidation**.
 - The status is one of **OK**, **Completed**, **Failed**, **Running**, **Not run yet** and **Needs status check**.
 - Click **Refresh** to reload, and **More** to load 20 more.
 
@@ -193,15 +244,25 @@ View the Butler version and app information.
 - **App info** — Shows **App name**, **Version**, **GitHub repository** and **Protocol**.
 - **Diagnostics** — **Export diagnostics** saves the logs as a zip, without chat content.
 - **Developer**
-  - **Developer mode** — Turns on Chrome DevTools in this app window, the [**Logs**](#logs) section, and the **Context** and **Workers** tabs in the [right panel](/en/help/basics/right-panel/).
+  - **Developer mode** — Turns on Chrome DevTools in this app window and the [**Logs**](#logs) section.
 
 ## MCP
 
 Manage external MCP servers and their connection settings. Click **Add MCP server** to register a server. Each server has **Test connection**, **Enable** / **Disable**, **Edit** and **Delete**. For each item, see [MCP servers](/en/help/extensions/mcp-servers/).
 
+## Hooks
+
+Register commands Butler runs at set points. In **Your hooks**, click **Add hook** to create a hook; each hook has **Edit**, **Test** and **Delete**. Only command hooks are supported.
+
+- **Event** — Choose `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop` or `SubagentStop`. **Tools** appears only for `PreToolUse` and `PostToolUse`.
+- **Command**, **Args (JSON)** — The command to run. Enter one of the two.
+- **Timeout (ms)** — The default is 30000.
+- **Block on error**, **Background**, **Enabled** — Whether a failed hook blocks the work, whether the hook runs without waiting, and whether the hook is in use.
+- **Recent runs** — The hooks' run history. Click **Refresh** to reload.
+
 ## Skills
 
-Manage built-in skills and project skills. View the skill lists in the **Default** and **Project** tabs, and add a skill with **Import** or **Create with chat**.
+Manage **Built-in skills**, **Your skills** and **Project skills**. In **Your skills** and **Project skills**, add a skill with **Import** or **Create with chat**. For each item, see [Skills](/en/help/extensions/skills/).
 
 ## Server
 
@@ -216,6 +277,7 @@ Set the Butler server connection and the folder for new projects.
 
 <Notice tone="warning">
   - Projects and conversations deleted from **Archives** cannot be restored.
+  - **Erase all data** cannot be undone.
   - At **Full**, logs include chat content; it turns off after 60 minutes.
   - If you turn off developer mode while viewing **Logs**, Settings moves to **About**.
   - Changes in **Personalization** are not saved until you click **Apply**.
@@ -226,6 +288,7 @@ Set the Butler server connection and the folder for new projects.
 
 <CardGrid>
   <DocCard slug="basics/command-palette" />
+  <DocCard slug="basics/browser" />
   <DocCard slug="advanced/remote-access" />
   <DocCard slug="troubleshooting" />
 </CardGrid>
