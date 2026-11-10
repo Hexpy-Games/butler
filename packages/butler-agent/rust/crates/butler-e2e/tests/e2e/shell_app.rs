@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::agent::Launch;
 use butler_e2e::e2e::config::nonempty;
-use butler_e2e::e2e::fake_servers::{FakeServer, GOOD_KEY};
+use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, GOOD_KEY, LOCAL_MODEL};
 use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::sandbox::Sandbox;
 use butler_e2e::e2e::stop_intent::{instance_record, read_intent};
@@ -148,6 +148,27 @@ impl Shell {
 }
 
 /// The gateway of the Agent the App started, with the token it created.
+/// Registers a local fake model answering `answer` and makes it the default model.
+async fn default_to_local_model(gw: &Gateway, answer: &str) -> Result<FakeServer, HarnessError> {
+    let local = FakeServer::local_models(ChatBehavior {
+        answer: answer.into(),
+        ..ChatBehavior::default()
+    })
+    .await?;
+    let model = json!({
+        "provider_id": "local", "api_type": "openai_compatible", "platform": "ollama",
+        "server_url": format!("{}/v1", local.base_url), "model_id": LOCAL_MODEL,
+        "display_name": LOCAL_MODEL, "api_key": "e2e-custom-private-placeholder",
+        "context_window_tokens": 131_072, "source": "discovered"
+    });
+    let reply = gw.post("/model-catalog/local-models", model).await?;
+    assert_eq!(reply.status, 201, "{}", reply.text);
+    let model_ref = reply.data()["model"]["model_ref"].clone();
+    let settings = gw.patch("/settings", json!({"model": model_ref})).await?;
+    assert_eq!(settings.status, 200, "{}", settings.text);
+    Ok(local)
+}
+
 fn gateway(launch: &Launch) -> Gateway {
     let record = instance_record(&launch.data).expect("no instance record");
     let token = launch.data_folder_token().expect("no data folder token");
@@ -176,7 +197,8 @@ async fn shell_app_01_first_run_reaches_the_workspace() -> Result<(), HarnessErr
     let provider = FakeServer::provider_models().await?;
     let mut sandbox = Sandbox::new("SHELL-APP-01")?;
     let api = format!("{}/v1", provider.base_url);
-    let mut shell = Shell::start(&sandbox, &[("BUTLER_ANTHROPIC_BASE_URL", api)]).await?;
+    let env = [("BUTLER_ANTHROPIC_BASE_URL", api)];
+    let mut shell = Shell::start(&sandbox, &env).await?;
     let key = format!("type {GOOD_KEY}");
     shell
         .run(&[
@@ -206,16 +228,46 @@ async fn shell_app_01_first_run_reaches_the_workspace() -> Result<(), HarnessErr
             "expect-no-anchor first-run-setup",
         ])
         .await?;
-    let onboarding = gateway(&shell.launch).settings().await?["onboarding"].clone();
+    // A local fake model answers the plain-text send of the second launch.
+    let answer = "Hello from the fake model.";
+    let gw = gateway(&shell.launch);
+    let _local = default_to_local_model(&gw, answer).await?;
+    let onboarding = gw.settings().await?["onboarding"].clone();
     assert_eq!(onboarding["consent_version"], 2, "{onboarding}");
-    assert!(
-        onboarding["completed_at"]
-            .as_str()
-            .is_some_and(|at| chrono::DateTime::parse_from_rfc3339(at).is_ok()),
-        "{onboarding}"
-    );
+    let completed = onboarding["completed_at"].as_str();
+    assert!(completed.is_some_and(|at| chrono::DateTime::parse_from_rfc3339(at).is_ok()));
     shell.run(&["app-quit"]).await?;
     assert_never_failed(&shell.report("app-quit")?);
+    shell.finish().await?;
+
+    // The second launch reads the new default model; a new chat takes it (the first run's chat
+    // keeps its own). Send from the composer.
+    let mut shell = Shell::start(&sandbox, &env).await?;
+    let shown = format!("answer {answer}");
+    let steps = [
+        "agent running",
+        "wait-anchor composer",
+        "new",
+        "controls loaded",
+        "compose",
+    ];
+    let send = ["type Hello butler", "key enter", shown.as_str()];
+    shell.run(&[&steps[..], &send[..]].concat()).await?;
+    let gw = gateway(&shell.launch);
+    let mut stored = Vec::new();
+    for chat in gw.get("/chats").await?.data().as_array().unwrap() {
+        stored.extend(gw.messages(chat["id"].as_str().unwrap()).await?);
+    }
+    let has = |role: &str, text: &str| {
+        stored
+            .iter()
+            .any(|m| m["role"] == role && m["text"] == text)
+    };
+    assert!(
+        has("user", "Hello butler") && has("assistant", answer),
+        "{stored:?}"
+    );
+    shell.run(&["app-quit"]).await?;
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())

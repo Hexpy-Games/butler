@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use butler_shell_client::{Error, ShellClient};
 use gpui::{App, Global};
+use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 use super::state::{ComposerAttachment, ComposerControls, ComposerState};
@@ -90,24 +91,41 @@ fn content_json(content: &MessageContent) -> Value {
     })
 }
 
+/// The body fields of a message: an unset control is left out, as `JSON.stringify` drops an
+/// `undefined` one (the gateway rejects a present `null`).
+#[derive(Serialize)]
+struct ControlsBody<'a> {
+    text: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_parts: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    access_mode: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plan_mode: Option<bool>,
+    attachments: Vec<Value>,
+}
+
 /// The body fields a message carries for its controls, queued or sent.
 pub(super) fn controls_body(text: &str, controls: &ComposerControls) -> Map<String, Value> {
-    let Value::Object(fields) = json!({
-        "text": text,
-        "model": controls.model,
-        "content_parts": controls.content_parts.as_ref().map(content_json),
-        "reasoning_effort": controls.reasoning_effort.as_ref().and_then(effort_wire),
-        "access_mode": controls.access_mode.as_ref().and_then(access_wire),
-        "plan_mode": controls.plan_mode,
-        "attachments": controls
-            .attachments
-            .iter()
+    let body = ControlsBody {
+        text,
+        model: controls.model.as_deref(),
+        content_parts: controls.content_parts.as_ref().map(content_json),
+        reasoning_effort: controls.reasoning_effort.as_ref().and_then(effort_wire),
+        access_mode: controls.access_mode.as_ref().and_then(access_wire),
+        plan_mode: controls.plan_mode,
+        attachments: (controls.attachments.iter())
             .map(|attachment| json!({ "file_id": attachment.file_id }))
-            .collect::<Vec<_>>(),
-    }) else {
-        return Map::new();
+            .collect(),
     };
-    fields
+    match serde_json::to_value(body) {
+        Ok(Value::Object(fields)) => fields,
+        _ => Map::new(),
+    }
 }
 
 /// The `POST /session-queue` body (`queueMessage`).
