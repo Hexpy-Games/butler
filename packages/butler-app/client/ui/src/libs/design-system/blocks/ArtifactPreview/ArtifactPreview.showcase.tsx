@@ -59,4 +59,10 @@ export const stories: ShowcaseStory[] = [
     widths: ["app", "wide"],
     render: ({ locale }) => <ShellFrameDemo locale={locale} frame="cards" view="file" file="image" width={1440} height={900} />,
   },
+  {
+    // fill: a page Butler made (or an HTML file, a PDF) takes the whole pane, edge to edge, and scrolls itself.
+    name: "Page surface fill: a page in a docked viewer",
+    widths: ["app", "wide"],
+    render: ({ locale }) => <ShellFrameDemo locale={locale} frame="cards" view="file" file="page" width={1440} height={900} />,
+  },
 ];

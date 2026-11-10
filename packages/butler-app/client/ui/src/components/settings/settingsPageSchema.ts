@@ -59,7 +59,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   models: [
     { id: "butler-model", kind: "form", fields: ["primary-model", "reasoning", "context-limit", "local-reasoning-budget"] },
     { id: "backup-models", kind: "form", fields: ["backup-models-summary", "backup-models-enabled", "backup-models"] },
-    { id: "image-models", kind: "form", fields: ["image-model", "image-credential", "image-quality", "image-key-save", "hosted-credential-select", "hosted-credential-label", "hosted-api-key"] },
+    { id: "image-models", kind: "form", fields: ["image-model", "hosted-credential-select", "hosted-api-key-masked", "hosted-credential-label", "hosted-api-key", "image-quality"] },
     { id: "advanced-models", kind: "form", fields: [] },
     { id: "worker-profiles", kind: "list", fields: ["worker-max-simultaneous", ...WORKER_PROFILE_FIELDS], optional: true },
   ],

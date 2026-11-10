@@ -38,7 +38,7 @@ pub(super) async fn views(
         let Some(id) = work["work_id"].as_str() else {
             continue;
         };
-        if work["scope_kind"] != "project" || views.contains_key(id) {
+        if !store::runtime::ledger_owned(&work) || views.contains_key(id) {
             continue;
         }
         let input = ProjectWorkPlanRead {

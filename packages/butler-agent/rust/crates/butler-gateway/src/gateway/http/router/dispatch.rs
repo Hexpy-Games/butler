@@ -54,7 +54,9 @@ pub(in crate::gateway::http) async fn route(
         Handler::Settings if request.method() == Method::GET => {
             settings::get(state, Some(client)).await
         }
-        Handler::Favicons if request.method() == Method::GET => favicons::get(state, &uri).await,
+        Handler::Favicons if request.method() == Method::GET => {
+            favicons::get(state, &uri, request.headers()).await
+        }
         Handler::Live if request.method() == Method::GET => {
             let scope = request
                 .extensions()

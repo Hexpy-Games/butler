@@ -122,9 +122,8 @@ pub(super) fn child_activity(
         .as_deref()
         .filter(|s| terminal || (*s == "blocked" && latest.as_deref() != Some("admitted")))
     {
-        Some("success") => "completed",
+        Some("success" | "blocked") => "completed",
         Some("cancelled") => "cancelled",
-        Some("blocked") => "blocked",
         Some("failed") => "failed",
         _ if latest.as_deref() == Some("admitted") => "active",
         _ => "waiting",

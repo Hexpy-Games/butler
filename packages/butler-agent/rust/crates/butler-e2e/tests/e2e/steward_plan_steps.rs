@@ -267,11 +267,7 @@ async fn wait_result(
     status: &str,
 ) -> Result<Value, HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(30);
-    let app_status = if status == "blocked" {
-        "failed"
-    } else {
-        "delivered"
-    };
+    let app_status = "delivered";
     let result_status = if status == "completed" {
         "success"
     } else {

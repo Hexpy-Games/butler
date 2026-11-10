@@ -10,7 +10,7 @@ status: published
 
 버틀러는 프리뷰 단계입니다. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 가장 최신 프리뷰(맨 위)를 내려받습니다. 정식 0.1.0은 출시 예정입니다.
 
-- Apple Silicon(M 시리즈 칩) Mac, macOS 12 이상
+- Apple Silicon(M 시리즈 칩) Mac, macOS 13 이상
 - Linux x64 / arm64: DEB 패키지
 - Arch Linux x64: Arch 패키지
 - Windows x64: 설치 파일(`ButlerSetup`)
@@ -34,7 +34,7 @@ status: published
       1. [GitHub Releases](https://github.com/Hexpy-Games/butler/releases)에서 가장 최신 프리뷰(맨 위)를 열고 **Assets**를 펼칩니다.
       2. macOS DMG(`butler-app-<버전>-darwin-arm64.dmg`)를 내려받습니다.
       3. DMG를 열고 `Butler.app`을 응용 프로그램 폴더로 끌어다 놓습니다.
-      4. 버틀러를 엽니다. 버틀러는 Apple 공증을 거쳤습니다. 인터넷에서 받은 앱을 열지 macOS가 물으면 **열기**를 선택합니다.
+      4. 버틀러를 엽니다. 인터넷에서 받은 앱을 열지 macOS가 물으면 **열기**를 선택합니다.
     </Steps>
     <Notice tone="info" title="파일 확인 (선택)">
       DMG와 `.sha256` 파일을 같은 폴더에 받은 뒤 `shasum -a 256 -c butler-app-*-darwin-arm64.dmg.sha256`를 실행합니다. `OK`가 나오면 파일이 릴리스에 올라온 것과 같습니다.
@@ -68,11 +68,11 @@ status: published
   이전 릴리스에는 지금은 쓰지 않는 TypeScript/Bun Agent가 들어 있을 수 있습니다. 네이티브 Agent가 포함된 릴리스를 받습니다.
 </Notice>
 
-프리뷰 빌드는 **미리보기 버전 받기**가 기본으로 켜져 있어서, 다음 프리뷰가 **설정 → 업데이트**에 나타납니다. 업데이트하기 전에 버틀러를 종료하고 `~/.butler`를 복사해 둡니다. 새 버전을 처음 실행하면 데이터베이스를 한 번 다시 쓸 수 있습니다. `butler --version`으로 정확한 버전을 확인합니다.
+프리뷰 빌드는 **미리보기 버전 받기**가 기본으로 켜져 있어서, 다음 프리뷰가 **설정 → 업데이트**에 나타납니다. macOS, Windows, Linux DEB 패키지는 앱 안에서 업데이트됩니다. Windows는 설치 파일(`ButlerSetup`)로 설치했을 때만 앱 안에서 업데이트되며, 포터블 zip(`butler-app-<버전>-windows-x64-portable.zip`)을 쓰면 새 버전을 직접 받습니다. Arch 패키지는 새 패키지를 내려받아 직접 설치합니다. 업데이트하기 전에 버틀러를 종료하고 `~/.butler`를 복사해 둡니다. 새 버전을 처음 실행하면 데이터베이스를 한 번 다시 쓸 수 있습니다. `butler --version`으로 정확한 버전을 확인합니다.
 
 ## 첫 실행 설정
 
-처음 실행하면 앱 안에서 첫 실행 설정이 진행됩니다. 환영 화면에서 인터페이스 언어를 고르고 동의한 뒤 AI를 연결합니다. AI 연결 마지막 단계에서 답변 언어를 선택합니다. 단계별 안내는 [첫 실행](/help/getting-started/first-run/)을 참고합니다.
+처음 실행하면 앱 안에서 첫 실행 설정이 진행됩니다. 환영 화면에서 인터페이스 언어를 고르고 동의한 뒤 기억 방식을 정하고 AI를 연결합니다. AI 연결 마지막 단계에서 답변 언어를 선택합니다. 단계별 안내는 [첫 실행](/help/getting-started/first-run/)을 참고합니다.
 
 설정을 마치면 <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span>로 [명령 팔레트](/help/basics/command-palette/)를 열어 대화, 프로젝트, 예약 작업, 설정을 찾을 수 있습니다.
 
@@ -87,14 +87,14 @@ status: published
   ]}
 >
   <TabPanel value="macos">
-    헤드리스 Agent는 Apple Silicon macOS를 지원합니다. `<버전>`은 가장 최신 프리뷰 버전(예: `0.1.0-preview.12`)으로 바꿉니다.
+    헤드리스 Agent는 Apple Silicon macOS를 지원합니다. `<버전>`은 가장 최신 프리뷰 버전(예: `0.1.0-preview.14`)으로 바꿉니다.
 
     ```bash
     curl -fsSL https://github.com/Hexpy-Games/butler/releases/download/v<버전>/install.sh | sh -s -- --version <버전>
     ```
   </TabPanel>
   <TabPanel value="windows">
-    헤드리스 Agent는 Windows x64를 지원합니다. PowerShell에서 실행하며, `<버전>`은 가장 최신 프리뷰 버전(예: `0.1.0-preview.12`)으로 바꿉니다.
+    헤드리스 Agent는 Windows x64를 지원합니다. PowerShell에서 실행하며, `<버전>`은 가장 최신 프리뷰 버전(예: `0.1.0-preview.14`)으로 바꿉니다.
 
     ```powershell
     $env:BUTLER_VERSION='<버전>'; irm https://github.com/Hexpy-Games/butler/releases/download/v<버전>/install.ps1 | iex

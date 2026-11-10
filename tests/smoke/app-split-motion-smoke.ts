@@ -138,7 +138,7 @@ try {
   await page.waitForFunction((chat) => document.querySelector(chat)!.getBoundingClientRect().width === 340, CHAT);
   assert.equal(await page.locator(CHAT).evaluate((node) => node.getAnimations().length), 0, "keyboard resize: the chat width does not animate");
   await page.locator(SEPARATOR).press("End");
-  await page.waitForFunction((chat) => document.querySelector(chat)!.getBoundingClientRect().width === 560, CHAT);
+  await page.waitForFunction(() => document.querySelector('[data-slot="adaptive-shell-split-pane"]')!.getBoundingClientRect().width === 375);
   await page.locator(SEPARATOR).press("Home");
   await page.waitForFunction((chat) => document.querySelector(chat)!.getBoundingClientRect().width === 340, CHAT);
 

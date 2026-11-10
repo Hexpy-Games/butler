@@ -23,6 +23,25 @@
   background: transparent;
 }
 
+/* fill (surface="page"): the preview takes its host's full height; a frame fills
+   it edge to edge and scrolls itself. Anything else keeps the reading inset. */
+.viewer[data-surface="page"][data-fill] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.viewer[data-fill] > .frame:not([data-intrinsic]) {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-radius: 0;
+}
+
+.viewer[data-fill] > :not(.frame) {
+  margin: calc(var(--space-2xl) * 2);
+}
+
 .pre {
   margin: 0;
   color: var(--text-primary);

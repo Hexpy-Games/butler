@@ -256,6 +256,7 @@ mod btcc_cutover;
 mod btcc_history;
 mod btcc_shipped_upgrade;
 mod btcc_startup_integrity;
+mod chat_routing;
 mod cli_project_folder;
 mod data_perf;
 mod delegate_followup;

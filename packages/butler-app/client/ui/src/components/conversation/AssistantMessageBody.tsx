@@ -1,4 +1,4 @@
-import { CanonProposalCard } from "../canon/CanonProposalCard.tsx";
+import { CanonProposalCards } from "../canon/CanonProposalCard.tsx";
 import { useButlerStore } from "@/app/store.ts";
 import { InitiatedApprovalLine } from "./InitiatedApprovalLine";
 import { InitiatedPanels } from "./InitiatedPanels";
@@ -56,7 +56,7 @@ export function AssistantMessageBody({ message, running, liveActivity, failureNo
           ) : null}
           {stewardProgress && <ErrorBoundary fallback={null}><StewardParentProgress progress={stewardProgress} /></ErrorBoundary>}
           <MessageBubbleAttachments>
-            {!failureNotice && <AnswerBlocks sets={message.answer_blocks} messageId={message.id} replyText={message.text}
+            {!failureNotice && <AnswerBlocks sets={message.answer_blocks} receipts={message.canon_proposals} messageId={message.id} replyText={message.text}
               sessionId={message.chat_id} turnId={message.turn_id} />}
             {attachments}
           </MessageBubbleAttachments>
@@ -94,7 +94,7 @@ function AssistantAttachments({ message, children }: { message: MessageRecord; c
   const projectId = useButlerStore(state => state.sessionViews[sessionId]?.project_id
     ?? (state.sessionView?.session_id === sessionId ? state.sessionView.project_id : null) ?? null);
   return <>
-    {message.canon_proposals?.map(proposal => <CanonProposalCard key={proposal.proposal_id} id={proposal.proposal_id} sessionId={sessionId} projectId={projectId} />)}
+    {message.canon_proposals?.length ? <CanonProposalCards ids={message.canon_proposals.map(p => p.proposal_id)} sessionId={sessionId} projectId={projectId} /> : null}
     {message.question_summary?.map(question => (
       <Stack key={question.id} gap="none" data-test-class="assistant-question-summary">
         <Typo.Caption tone="tertiary">{question.eyebrow}</Typo.Caption>

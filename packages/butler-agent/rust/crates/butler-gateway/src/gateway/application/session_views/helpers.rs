@@ -67,9 +67,9 @@ pub(super) fn child_status(projection: &Value) -> &'static str {
         return "failed";
     }
     match projection.get("status").and_then(Value::as_str) {
-        Some("completed" | "delivered") => "delivered",
+        Some("completed" | "delivered" | "blocked") => "delivered",
         Some("cancelled") => "cancelled",
-        Some("blocked" | "failed") => "failed",
+        Some("failed") => "failed",
         Some("active" | "waiting") => "active",
         _ => "idle",
     }

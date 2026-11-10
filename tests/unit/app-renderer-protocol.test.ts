@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  APP_RENDERER_CONTENT_SECURITY_POLICY,
   APP_RENDERER_ENTRY_URL,
   APP_RENDERER_HOST,
   APP_RENDERER_ORIGIN,
@@ -125,6 +126,7 @@ test("handler serves the entry document and assets with their MIME types", async
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("content-security-policy")).toBe(APP_RENDERER_CONTENT_SECURITY_POLICY);
     expect(await response.text()).toContain("<title>Butler</title>");
   }
   const script = await request("app://butler/assets/index-abc.js");

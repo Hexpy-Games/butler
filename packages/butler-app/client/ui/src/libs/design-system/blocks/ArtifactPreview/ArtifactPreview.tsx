@@ -19,16 +19,22 @@ export interface ArtifactPreviewProps extends DsBaseProps<HTMLAttributes<HTMLDiv
    * (a docked file viewer). The host gives the reading insets.
    */
   surface?: ArtifactPreviewSurface;
+  /**
+   * With `surface="page"`: take the host's full height. A frame inside fills it edge to edge (square corners, no
+   * minimum height) and scrolls itself; anything else (a loading line) keeps the 48px reading inset.
+   */
+  fill?: boolean;
 }
 
 export function ArtifactPreview({
   children,
   className,
   surface = "card",
+  fill = false,
   ...props
 }: ArtifactPreviewProps) {
   return (
-    <div className={cn(styles.viewer, className)} data-surface={surface === "page" ? "page" : undefined} {...props}>
+    <div className={cn(styles.viewer, className)} data-surface={surface === "page" ? "page" : undefined} data-fill={surface === "page" && fill ? "" : undefined} {...props}>
       {children}
     </div>
   );

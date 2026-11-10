@@ -250,7 +250,7 @@ async fn handle(state: Arc<State>, request: Request<Body>) -> Response<Body> {
         return mcp::response(&parts.method, &seen.body, tool);
     }
     if matches!(state.kind, Kind::Favicons) {
-        return favicons::response(seen.path.as_str());
+        return favicons::response(seen.path.as_str(), &seen.headers);
     }
     if matches!(state.kind, Kind::LocalModels)
         && let Some(response) =

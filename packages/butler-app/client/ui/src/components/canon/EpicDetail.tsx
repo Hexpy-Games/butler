@@ -53,7 +53,7 @@ export function EpicDetail({ epic, plans, tasks, busy, onWrite, onRefresh, title
       summary={<Stack align="row" cross="center" gap="xs"><CanonAvatar person={epic.assignee} agent={epic.agent} /><Typo.Caption tone="secondary">{copy.statuses[epic.canon_status]} · {plan?.title ?? copy.backlog}</Typo.Caption></Stack>} /></CanonInlineDraftProvider>
     {properties}
     <EpicSessionSummary epic={epic} tasks={tasks} />
-    {showConversation && epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="link"
+    {showConversation && epic.home_session_id && <ButtonContainer size="sm"><Button size="sm" variant="outline"
       onClick={() => { if (epic.home_session_id) void useButlerStore.getState().openSession(epic.home_session_id); }}>{copy.openConversation}</Button></ButtonContainer>}
     <SpecTree nodes={epic.specs} criteria={epic.criteria} onRefresh={onRefresh} compact={compact} />
     <EpicMcpProposals epic={epic} onRefresh={onRefresh} />

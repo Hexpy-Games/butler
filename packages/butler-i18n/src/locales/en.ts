@@ -482,6 +482,8 @@ export const enUsCopy: AppCopy = {
     fileTitle: (action, target) => `${action}: ${target}`, conceptionSummary: text => text ? `Confirmed the request goal and scope: ${text}` : "Confirmed the request goal and scope.", workInProgress: text => `Working on ${text}.`, toolsSummary: text => text ? `Checking the required information with ${text}.` : "Working with the required tools.",
   },
   serverErrors: {
+    provider_credential_save_failed: "Couldn't save the key.", image_model_credential_invalid: "This key was already deleted. Refresh the list.",
+    image_model_requires_api_key: "Only API keys work here.", image_model_unknown: "This image model isn't available.",
     output_transfer_pending: "Outputs are being moved. Please try again shortly.",
     model_not_in_chatgpt_plan: "That model isn't in your ChatGPT plan.",
     credential_in_use_by_default: "The default model uses this key. Change the default model first.", credential_in_use: "Models use this key. Delete them with the key.", credential_not_found: "This key was already deleted. Refresh the list.",
@@ -985,7 +987,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       },
     },
     imageTools: {
-      model: "Model", off: "Off", apiKey: "API key", apiKeyOnly: "API key only", defaultQuality: "Default quality",
+      model: "Model", off: "Off", defaultQuality: "Default quality",
       quality: { low: "Low", medium: "Medium", high: "High", xhigh: "Very high", max: "Max" },
       size: "Size", qualityLabel: "Quality", prompt: "Prompt", default: "Default", edit: "Edit", download: "Download",
       editor: "Image editor", brush: "Brush", eraser: "Eraser", brushSize: "Brush size", undo: "Undo",
@@ -1801,6 +1803,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       searchDefaultDepth: "Default search depth",
       butlerModel: "Model",
       butlerReasoning: "Reasoning",
+      recallMode: "Recall",
+      recallModel: "Recall model",
       consolidationModel: "Chat memory model",
       consolidationTime: "Time",
       localReasoningBudget: "Local reasoning budget",
@@ -1911,6 +1915,12 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       timezoneAll: "All",
       timezoneEmpty: "No matching time zones",
     },
+    recallOptions: { faster: "Faster", accurate: "More accurate", sameAsMemoryModel: "Same as memory model" },
+    composerDecorationThemes: { shoreline: "Shoreline", cherry: "Cherry blossom" },
+    openSourceLicenses: {
+      section: "Licenses", title: "Open source licenses", description: "Licenses and notices by component",
+      searchLabel: "Search components", searchPlaceholder: "Search", retry: "Retry", loading: "Loading", noResults: "No results", close: "Close",
+    },
     descriptions: {
       runtimeSupportedModelsOnly:
         "Only models from currently runnable providers are shown.",
@@ -1923,6 +1933,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
         "The time zone Butler uses to understand current time and schedule context.",
       consolidationModel:
         "The model used for chat memory consolidation and profile building.",
+      recallMode: "More accurate recall can take a few seconds longer.",
       consolidationTime: "Runs only while Butler is on.",
       consolidationModelDefault:
         "Use the current Butler default model setting.",

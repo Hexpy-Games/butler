@@ -32,7 +32,7 @@ export interface CanonWork {
   plan_id: string | null;
   home_session_id: string | null;
   session_ids: string[];
-  sessions: Array<{ session_id: string; bound_at: number; origin: "user" | "butler" }>;
+  sessions: Array<{ session_id: string; bound_at: number; origin: "user" | "butler"; worked: 0 | 1 }>;
   title: string;
   description: string;
   kind: string | null;

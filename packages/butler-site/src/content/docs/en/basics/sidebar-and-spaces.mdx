@@ -12,18 +12,33 @@ The sidebar is where you find and organize conversations and projects. The list 
 
 The sidebar has these items, from the top.
 
-- **New conversation** — Starts a new conversation.
+- **New chat** — Starts a new conversation.
 - **Search** — Opens the [command palette](/en/help/basics/command-palette/). You can also press <span data-mod-key><Kbd keys={["⌘", "K"]} label="Command K" /></span>.
+- **Schedules** — Opens the list of [schedules](/en/help/scheduled-tasks/).
+- **Browser** — Opens the [browser](/en/help/basics/browser/). Only in the desktop app.
+- **Library** — Opens the [library](/en/help/basics/library/).
 - **Favorites** — Shows up to two pinned conversations and projects. If there are more, click **Show all favorites**.
 - **All**, **Recent**, **Running** — Tabs that change how the list is shown.
 - **Space** — Shows conversations, projects and groups as a tree.
 - **Settings** — Sits at the bottom of the sidebar.
 
-**General**, at the top of the **All** tab, is the default conversation and is always there. You cannot move, rename, archive or pin it.
+**Chats**, at the top of the **All** tab, is the default conversation and is always there. You cannot move, rename, archive or pin it. Its menu has only **Reference in message** and **Clear chat**.
+
+### Clear chat
+
+Send the content of **Chats** to the archive and start fresh on an empty screen. Instructions and chat memory stay.
+
+<Steps>
+  1. On the **All** tab, open the menu of the **Chats** row.
+  2. Choose **Clear chat**.
+  3. In the confirmation dialog, click **Clear**.
+</Steps>
+
+The earlier content is archived with the title `Chats · date`, and you can restore it from [**Archives**](/en/help/settings/#archives). Click the **Manage memory ›** link in the dialog to open **Settings → Memory**. You cannot choose **Clear chat** while work, an approval request or a subtask is in progress.
 
 ### Switch list views
 
-- **All** — Shows the group and project structure as a tree. Dragging to organize works only on this tab.
+- **All** — Shows the group and project structure as a tree. Dragging to organize works only on this tab. Unfinished subtasks and project tasks also appear only on this tab.
 - **Recent** — Lists every conversation by last activity. Each conversation shows its location and the time of its last activity.
 - **Running** — Shows only conversations that are working now or need your attention. A **Work status** list follows below, where you can check each work stage and the number of steps done.
 
@@ -34,14 +49,16 @@ When the list is long, a **More** item appears at the end. The number in parenth
 A group is a folder that holds conversations and projects.
 
 <Steps>
-  1. On the **All** tab, click the **Create group** button (+) next to the **Space** heading.
-  2. Enter a **Group name**.
+  1. On the **All** tab, open the **Space menu** next to the **Space** heading and choose **New group**.
+  2. In the **Create group** dialog, enter a **Group name**.
   3. Click **Save**.
 </Steps>
 
 To create a group inside a group or project, choose **Create subgroup** from that row's menu.
 
 When you drag a conversation onto another conversation, **Group together** appears. Drop it there and enter a group name to create a group that holds both conversations. You can group only conversations in the same project, or conversations that are both outside a project.
+
+When **Smart groups** is on, Butler automatically organizes new conversations into groups by topic. Conversations you moved yourself stay where you put them. It is on by default. Turn it off in **Sidebar** under [**Settings → General**](/en/help/settings/#general).
 
 ## Move and reorder items
 
@@ -73,7 +90,8 @@ When you move a conversation to another project or out of a project, the **Chang
 Hover over a row to show the menu button (⋯). You can also right-click the row or press and hold it to open the same menu.
 
 - **Reference in message** — Adds this conversation to the composer as a reference. You can also drag the conversation row into the composer.
-- **Project dashboard**, **New conversation** — Only on project rows.
+- **New chat** — On group and project rows. Starts a new conversation inside that group or project.
+- **Project dashboard** — Only on project rows.
 - **Rename** — Renames the conversation, project or group.
 - **Move…** — Opens the dialog for choosing a location.
 - **Create subgroup** — On group and project rows.
@@ -81,6 +99,36 @@ Hover over a row to show the menu button (⋯). You can also right-click the row
 - **Archive** — Hides the conversation or project from the list and sends it to the archive. Groups do not have it.
 - **Delete project** — Only on project rows.
 - **Dissolve group** — Removes only the group and moves the items inside it to where the group was.
+
+## Subtasks in the sidebar
+
+When Butler splits work into [subtasks](/en/help/basics/conversation/#subtasks), the **All** tab shows each unfinished subtask on its own line under its conversation. Finished subtasks leave the list. They do not appear on the **Recent** and **Running** tabs or in **Favorites**.
+
+Depending on its state, the right side of the line shows one of these.
+
+- Step progress — While the subtask works, the current step appears, such as `3/5`.
+- **Resume** — Restarts a paused subtask.
+- Warning icon — The subtask is waiting for an approval.
+
+Click the line, or hover over it and click **View progress details**, to open the parent conversation with the work log.
+
+On a conversation row, the right side shows a progress indicator while it works, a **Needs attention** icon when something needs you, and a dot when it has an unread reply.
+
+## Epics in projects
+
+On the **All** tab, expand a project to see its [Epic](/en/help/projects/#board) groups above its conversations.
+
+- **Backlog** — Epics not in a plan.
+- Plan name — One group for each plan.
+
+A group lists only Epics that have a conversation or are assigned to **Me**. An Epic row shows its assignee. Click it to open the Epic's conversation. If the Epic has no conversation yet, one is created when you first open it. A conversation that worked on only one Epic leaves the project's conversation list and moves under that Epic's row.
+
+- Click **New Epic** (+) on a group heading to create an Epic in that group.
+- From the menu (⋯) on a group heading, open **Plan overview**. On a plan group, choose **Edit** to edit the plan.
+- Drag an Epic within its group to reorder it. Only your own sidebar order changes.
+- Drop an Epic on another group's heading to move it to that plan.
+
+An Epic row that has a conversation uses the same menu as a conversation row.
 
 ## Favorites
 
@@ -95,7 +143,7 @@ You cannot pin groups to favorites.
 
 <Steps>
   1. From the row menu, choose **Archive**. For an open conversation, you can also choose **Archive** from the menu (⋯) on the right of the title bar.
-  2. To see archived items, choose **Archive** from the menu (⋯) next to the **Space** heading. The [**Archives**](/en/help/settings/#archives) screen in Settings opens.
+  2. To see archived items, choose **Archive** from the **Space menu** next to the **Space** heading. When there are archived items, it shows as **Archive (N)**. The [**Archives**](/en/help/settings/#archives) screen in Settings opens.
   3. Click **Unarchive** to return an item to the sidebar list, or click **Delete** to delete it permanently after you confirm.
 </Steps>
 

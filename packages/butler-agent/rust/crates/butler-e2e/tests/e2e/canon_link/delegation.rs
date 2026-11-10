@@ -156,3 +156,56 @@ async fn cb_15_done_and_cancelled_stay_refused_until_steward_ends() -> Result<()
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn unreadable_steward_work_keeps_session_lists_available() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, _id, chat) = setup("CB-STEWARD-UNREADABLE", false, false).await?;
+    script
+        .delegate
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    s.gw.say(&chat, "Delegate the release verification").await?;
+    tokio::time::timeout(Duration::from_secs(30), script.wait_held())
+        .await
+        .expect("Worker reached its first model round");
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let (steward, work, ledger): (String, String, String) = db.query_row("SELECT r.child_session_id,w.work_id,w.ledger_project_id FROM btcc_subsession_delegations d JOIN btcc_session_relations r USING(relation_id) JOIN btcc_guided_works w ON w.session_id=r.child_session_id WHERE json_extract(d.packet_json,'$.child_role')='steward'", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+    drop(db);
+    let path = s
+        .sandbox
+        .data
+        .join("project-ledger/projects")
+        .join(ledger)
+        .join("work")
+        .join(work)
+        .join("work.md");
+    std::fs::write(path, "unreadable managed Work")?;
+    let navigation = data(s.gw.get("/navigation").await?, 200);
+    data(s.gw.get("/sessions").await?, 200);
+    data(
+        s.gw.get(&format!("/session-view?session_id={steward}"))
+            .await?,
+        200,
+    );
+    let row = navigation["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|p| p["sessions"].as_array().into_iter().flatten())
+        .find(|session| session["id"] == chat.as_str())
+        .unwrap();
+    let subtask = row["subtasks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["session_id"] == steward.as_str())
+        .unwrap();
+    assert!(
+        subtask.get("plan_total").is_none_or(Value::is_null),
+        "{subtask}"
+    );
+    script.release();
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}

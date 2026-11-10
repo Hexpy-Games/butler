@@ -109,6 +109,30 @@ async fn actual_config_reads_preserve_first_records_defaults_and_secret_boundari
     let admission = owner.snapshot(vec!["local/changed".into()]).await.unwrap();
     assert_eq!(admission.metadata[0].context_window_tokens, Some(16000.0));
     assert_eq!(admission.retry_ceiling, Some(3.0));
+
+    // A stored key is read, and masked in logs from then on, only when used.
+    let secret = format!("stored-key-{}", uuid::Uuid::new_v4().simple());
+    fixture.write(
+        "auth/model-provider-credentials.json",
+        &json!({"credentials":[{
+            "id":"stored", "provider_id":"openai", "auth_type":"api_key",
+            "storage":"fallback_file"
+        }]}),
+    );
+    fixture.write(
+        "auth/credential-store.json",
+        &json!({"version":1, "secrets":[{
+            "service":"com.hexpy.butler.model-credential", "account":"openai/stored",
+            "secret":secret
+        }]}),
+    );
+    let owner = fixture.owner(ModelConfigurationEnvironment::default());
+    let read = owner.read().await.unwrap();
+    assert_eq!(butler_log::redact_log_line(&secret), secret);
+    let record = read.credential("stored", "openai").unwrap();
+    let used = owner.credential_secret(&fixture.0, record).await.unwrap();
+    assert_eq!(used.expose(), secret);
+    assert_eq!(butler_log::redact_log_line(&secret), "[REDACTED]");
 }
 
 #[tokio::test]

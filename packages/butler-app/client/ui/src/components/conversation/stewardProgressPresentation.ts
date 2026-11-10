@@ -11,22 +11,23 @@ const TERMINAL_STEWARD_STATES = new Set([
 ]);
 
 /**
- * The child's settled status. A terminal child (durable result) is done no
- * matter what its status or progress say; gateways that report the raw
- * result statuses (`completed`, `blocked`) map onto the App statuses.
+ * The child's settled status. A child that ended with its model's final
+ * answer is delivered, whatever that answer reports (`blocked` included); only
+ * a runtime failure is failed. Gateways that report the raw result statuses
+ * (`completed`, `blocked`) map onto the App statuses.
  */
 export function effectiveStewardStatus(
   child: Pick<StewardSessionSummaryView, "status" | "terminal" | "result">,
 ): string {
   const status: string = child.status;
   if (status === "completed") return "delivered";
-  if (status === "blocked") return "failed";
+  if (status === "blocked") return "delivered";
   if (TERMINAL_STEWARD_STATES.has(status)) return status;
   if (!child.terminal) return status;
   switch (child.result?.status) {
-    case "success": return "delivered";
+    case "success":
+    case "blocked": return "delivered";
     case "cancelled": return "cancelled";
-    case "blocked":
     case "failed": return "failed";
     default: return "delivered";
   }

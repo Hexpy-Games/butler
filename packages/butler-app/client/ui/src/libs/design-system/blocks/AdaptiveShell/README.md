@@ -60,8 +60,10 @@ block. Do not use it as a generic card or nested panel.
 
 - `AdaptiveShellSplit` (inside `AdaptiveShellWorkspace`, under the titlebar):
   chat | browser pane. The chat column is its own `workspace` container,
-  340–560px (`--browser-chat-width*`, default 400) and resizable by pointer
-  or keyboard (`onChatWidthChange`, clamped). Pass `splitOpen` to
+  at least 340px (`--browser-chat-width*`, default 400); the pane keeps at
+  least 375px (`--browser-pane-width-min`), a phone's width. It is resizable
+  by pointer or keyboard (`onChatWidthChange`, clamped). A stored width that
+  no longer fits is clamped and reported through `onChatWidthChange`. Pass `splitOpen` to
   `AdaptiveShell` while the pane is open: the inspector then stays closed;
   `toggleConversationSidePanel` keeps the two mutually exclusive.
 - The pane opens and closes on one motion, whatever it holds (`--motion-slow`,
@@ -104,9 +106,10 @@ block. Do not use it as a generic card or nested panel.
 - Beside the pane the chat column contains its layers (`contain: paint`): the
   conversation's wallpaper and glass resolve against the chat column and never
   paint over the pane. Without the pane the wallpaper spans the workspace.
-- `useSidebarAutoCollapse(rootRef, { enabled, sidebarWidth, chatWidth })`:
-  true while the page would be narrower than 720px with the sidebar open
-  (`sidebarAutoCollapses`, with a 32px return margin). Pass
+- `useSidebarAutoCollapse(rootRef, { enabled, sidebarWidth })`:
+  true while the page would be narrower than 720px beside the default-width
+  chat with the sidebar open (`sidebarAutoCollapses`, with a 32px return
+  margin); only the window size moves it, a drag never does. Pass
   `leftOpen={open && !collapsed}`.
 - The pane enters with a transform; NativeViewSlot's tracker follows
   ancestors that move, so the native view tracks the page card.

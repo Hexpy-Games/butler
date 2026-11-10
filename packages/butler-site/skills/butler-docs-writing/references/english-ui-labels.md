@@ -14,263 +14,429 @@ regenerate after the app copy or the Korean pages change.
 | Korean label | English label | Pages |
 | --- | --- | --- |
 | 24시간 | **24 hours** | settings |
+| 2단계 인증 | **Two-step verification** | basics/browser |
+| 30일 | **30 days** | settings |
 | 7일 | **7 days** | settings |
+| 가끔 | **Sometimes** | personalization |
+| 가장 긴 작업 | **Longest task** | settings |
+| 가장 많이 쓴 날 | **Busiest day** | settings |
 | 가져오기 | **Import** (`firstRun.import.importAction`)<br />**import** (`settings.sectionAliases.browser[4]`) | extensions/skills, getting-started/first-run, personalization, settings |
 | 가져오기 프롬프트 | **Import prompt** | personalization |
 | 가져온 프로필 내용 | **Imported profile content** | personalization |
 | 가져올 AI 도구 없음 | **No AI tools to import** | getting-started/first-run |
 | 간격 | **Interval** | scheduled-tasks |
-| 개발자 | **Developer** | settings, troubleshooting |
-| 개발자 모드 | **Developer mode** | basics/right-panel, settings, troubleshooting |
-| 개요 | **Overview** | projects, settings |
-| 개인정보 | **Privacy** (`settings.sections.privacy`)<br />**personal data** (`settings.sectionAliases.privacy[1]`)<br />**privacy** (`settings.sectionAliases.security[11]`) | basics/right-panel, personalization, settings, troubleshooting |
-| 개인화 | **Personalization** | getting-started/first-run, personalization, settings |
+| 간단히 | **Less** | basics/right-panel |
+| 개발자 | **Developer** | settings |
+| 개발자 모드 | **developer mode** (`settings.sectionAliases.about[4]`)<br />**Developer mode** (`settings.fields.developerMode`) | settings, troubleshooting |
+| 개요 | **Overview** | projects |
+| 개인화 | **Personalization** | basics/command-palette, getting-started/first-run, personalization, settings |
 | 갱신 | **Updated** | projects |
-| 거절 | **Deny** (`interfaceDetails.deny`)<br />**Reject** (`composer.planReject`) | basics/conversation |
+| 거절 | **Deny** (`canon.mcp.deny`)<br />**Reject** (`composer.planReject`) | basics/browser, basics/conversation, basics/images |
 | 건너뛰기 | **Skip** | basics/conversation, getting-started/first-run |
-| 검색 | **Search** | basics/command-palette, basics/sidebar-and-spaces |
+| 건너뜀 | **Skipped** | basics/conversation |
+| 검색 | **Search** | basics/command-palette, basics/sidebar-and-spaces, scheduled-tasks |
 | 검색 공급자 | **Search provider** | settings |
 | 검색 동작 | **Search behavior** | settings |
+| 검색 또는 URL 입력 | **Search or enter URL** | basics/browser |
 | 검색 제공자 | **Search provider** | settings |
 | 검색하지 못했습니다. 연결을 확인하고 다시 시도해 주세요. | **Could not search. Check your connection and try again.** | basics/command-palette |
-| 검토 | **In review** (`projectStatistics.labels.review`)<br />**Review** (`interfaceDetails.questionPanel.review`) | projects |
 | 검토 기록 | **Review recorded** | projects |
-| 게이트웨이 | **Gateway** | basics/right-panel |
+| 검토 중 | **In review** (`canon.statuses.in_review`)<br />**Reviewing** (`guided.workerStatus.verifying`) | projects |
+| 결과물 | **Results** (`sessionInfo.artifacts`)<br />**Outputs** (`browser.outputs`) | basics/library, basics/right-panel |
+| 결과물 호스트 | **Output host** | advanced/remote-access, settings |
+| 결제 수단 | **Payment methods** | basics/browser, settings |
+| 결제 정보 꺼짐 | **Payment info off** | scheduled-tasks |
+| 결제 정보 사용 | **Use payment info** | scheduled-tasks |
+| 결제 확인 필요 | **Payment needs you** | basics/browser |
+| 결제할 때마다 확인해요 | **Butler asks before every payment** | settings |
 | 경량 리더 | **Lightweight reader** | settings |
-| 계획 | **Plans** (`projectStatistics.labels.plan`)<br />**Planning** (`interfaceStatus.planning`)<br />**Plan** (`composer.plan`) | basics/conversation, projects |
-| 계획됨 | **Planned** | projects |
-| 고급 | **Advanced** | models/backup, settings |
+| 계속 | **Continue** | getting-started/first-run |
+| 계획 | **Plan** (`canon.plan`)<br />**Planning** (`canon.stages.planning`)<br />**Plans** (`projectStatistics.labels.plan`) | basics/conversation, projects |
+| 계획 개요 | **Plan overview** | basics/sidebar-and-spaces, projects |
+| 계획 검색 | **Search plans** | projects |
+| 계획 고치기 | **Edit plan** | projects |
+| 계획 바꾸기 | **Change Plan** | projects |
+| 고급 | **Advanced** | settings |
 | 고정 해제 | **Unpin material** (`projectSignpost.unpin`)<br />**Unpin** (`sidebar.unpin`) | projects |
+| 고치기 | **Edit** | basics/sidebar-and-spaces, projects |
 | 공개 답변 | **Published reply** | projects |
 | 공개된 결과 자료 | **Published results** | projects |
+| 과제 | **Epic** | projects |
+| 과제 삭제 | **Delete Epic** | projects |
+| 괜찮아요 | **No thanks** | basics/conversation, scheduled-tasks |
 | 교체 | **Replace** | models/cloud, settings, troubleshooting |
+| 권장 | **Recommended** | basics/conversation |
 | 권한 | **Permission** (`composer.permission`)<br />**permissions** (`settings.sectionAliases.security[6]`)<br />**Permissions** (`settings.pageSections.permissions`) | basics/conversation, scheduled-tasks, settings, troubleshooting |
+| 권한 필요 | **Needs permission** | scheduled-tasks |
+| 규칙·설정 | **Rules & settings** | basics/right-panel |
 | 균형 | **Balanced** | settings |
+| 그 대화 열기 | **Open that conversation** | projects |
+| 그래도 진행 | **Continue anyway** | projects |
 | 그룹 만들기 | **Create group** | basics/sidebar-and-spaces |
 | 그룹 이름 | **Group name** | basics/sidebar-and-spaces |
 | 그룹 해제 | **Ungroup** (`library.groups.scrap.ungroup`)<br />**Dissolve group** (`space.dissolve`) | basics/sidebar-and-spaces |
 | 그룹으로 묶기 | **Group together** | basics/sidebar-and-spaces |
 | 근거 기록 N개 보기 | **View {0} source records** | projects |
 | 글쓰기 | **Writing** | settings |
+| 글자 크기 | **Text size** | settings |
+| 기간 | **Date** (`library.date`)<br />**Period** (`projectSignpost.period`) | basics/library |
 | 기기 연결 | **Pair device** | advanced/remote-access, settings, troubleshooting |
 | 기기를 연결했어요 | **Device paired** | advanced/remote-access |
-| 기록 | **History** | projects |
-| 기본 | **Default** (`interfaceDetails.default`)<br />**basics** (`settings.sectionAliases.general[0]`)<br />**Basic** (`settings.options.profilingBasic`) | extensions/skills, personalization, settings |
+| 기록 | **History** (`projectSignpost.history`)<br />**Recording** (`settings.logs.sections.level`) | projects, settings |
+| 기본 | **Default** (`interfaceDetails.default`)<br />**basics** (`settings.sectionAliases.general[0]`)<br />**Basic** (`settings.options.profilingBasic`)<br />**Standard** (`settings.logs.levels.standard`) | personalization, settings |
 | 기본 검색 깊이 | **Default search depth** | settings |
+| 기본 권한 | **default permission** (`settings.sectionAliases.general[5]`)<br />**Default permission** (`settings.pageSections.defaultPermission`) | basics/conversation, getting-started/first-run, scheduled-tasks, settings, troubleshooting |
 | 기본 모델을 먼저 바꾸세요 | **Change the default model first** | models/cloud |
+| 기본 스킬 | **Built-in skills** | extensions/skills, settings |
+| 기본 앱으로 열기 | **Open in default app** | basics/right-panel |
+| 기본 정보 | **Basics** | basics/right-panel |
+| 기본 품질 | **Default quality** | basics/images, settings |
 | 기본 프로젝트 폴더 | **Default project folder** | projects, settings |
 | 기본으로 계획 모드 사용 | **Use plan mode by default** | basics/conversation, settings |
-| 기억 정리 | **memory consolidation** (`settings.sectionAliases.system[1]`)<br />**Memory cleanup** (`settings.pageSections.memoryCleanup`) | models/backup, settings |
-| 기타 | **Other** | projects |
+| 기억 | **Memory** | basics/command-palette, basics/conversation, basics/sidebar-and-spaces, getting-started/first-run, models/backup, personalization, scheduled-tasks, settings |
+| 기억 가져오기 | **Import memory** | personalization, settings |
+| 기억 모델 | **Memory model** | getting-started/first-run, personalization, settings |
+| 기억 모델 받는 중 | **Downloading memory model** | getting-started/first-run |
+| 기억 모델 사용 | **Use memory model** | getting-started/first-run, settings |
+| 기억 모델 확인 중 | **Verifying memory model** | getting-started/first-run |
+| 기억 모델을 받지 못했습니다 | **Couldn't download the memory model** | getting-started/first-run |
+| 기억 정리 | **memory consolidation** (`settings.sectionAliases.system[1]`)<br />**Memory consolidation** (`settings.pageSections.memoryCleanup`) | models/backup, personalization, settings |
+| 기억·파일 | **Memory & files** | basics/right-panel |
 | 기타 (OpenAI 호환) | **Other (OpenAI-compatible)** | getting-started/first-run, models/custom |
 | 깊게 | **Deep** | personalization, settings |
 | 꺼짐 | **Off** | scheduled-tasks |
-| 끄기 | **Off** | personalization |
+| 끄기 | **Off** (`settings.memory.proactiveOff`)<br />**Turn off** (`settings.logs.turnOff`) | personalization, settings |
+| 나 | **Me** | basics/sidebar-and-spaces |
 | 나를 부를 호칭 | **Preferred address** | getting-started/first-run, personalization, settings |
-| 나중에 결정하고 메시지 작성 | **Decide later and compose a message** | basics/conversation |
 | 나중에 답하기 | **Answer later** | basics/conversation |
+| 나중에 답하기로 함 | **Deferred** | basics/right-panel |
 | 남아 있는 일 | **Remaining work** | projects |
 | 남은 일은 어디에 있나요 | **Where work remains** | projects |
 | 남은 작업 | **Open work** | projects |
+| 남은 한도 | **Remaining limits** | settings |
+| 내 스킬 | **Your skills** | extensions/skills, settings |
 | 내 이름 | **My name** | getting-started/first-run, personalization, settings |
+| 내 정보 | **My info** | basics/browser, settings |
+| 내 탭 | **My tabs** | basics/browser |
+| 내 탭 가져오기 | **Bring in a tab** | basics/browser |
+| 내 훅 | **Your hooks** | settings |
+| 내보내기… | **Export…** | settings |
 | 네트워크 주소 없음 | **No network address** | troubleshooting |
+| 누적 토큰 | **Lifetime tokens** | settings |
+| 다른 계정 사용 | **Use another account** | models/cloud, settings |
+| 다른 버틀러가 백그라운드 서비스를 쓰고 있습니다. | **Another Butler is using the background service.** | troubleshooting |
+| 다른 브라우저에서 가져오기 | **Import from another browser** | settings |
 | 다른 서비스 8개 | **{0} more services** | getting-started/first-run |
+| 다른 앱으로 열기 | **Open in app** | basics/right-panel |
 | 다른 컴퓨터에서 접속 허용 | **Allow access from other computers** | advanced/remote-access, settings, troubleshooting |
-| 다른 AI에서 가져오기 | **Import from other AI tools** | getting-started/first-run |
+| 다른 AI에서 가져오기 | **Import from other AI tools** | getting-started/first-run, personalization, settings |
 | 다른 AI에서 가져왔습니다 | **Imported from other AI tools** | getting-started/first-run |
 | 다시 살펴볼 일 | **Work to revisit** | projects |
 | 다시 시도 | **Try again** (`lifecycle.action.retry`)<br />**Retry** (`interfacePanels.retry`) | basics/command-palette, getting-started/first-run, projects, settings, troubleshooting |
 | 다시 실행 | **Run again** | getting-started/first-run, settings |
-| 다시 인증 | **Authenticate again** | models/cloud, troubleshooting |
 | 다시 작성 | **Retry message** | basics/conversation |
 | 다시 찾기 | **Check again** | getting-started/first-run |
+| 다운로드 | **Downloads** (`browser.downloads`)<br />**Download** (`conversation.imageTools.download`) | basics/images |
 | 다음 | **Next** | basics/conversation, getting-started/first-run |
+| 다음 열 | **Next lanes** | projects |
+| 다음 이미지 | **Next image** | basics/images |
 | 다음으로 살펴볼 만한 일 | **Worth exploring next** | projects |
 | 다크 | **Dark** | settings |
-| 닫기 | **Close** | basics/right-panel |
+| 닫기 | **Close** | basics/images, basics/right-panel |
+| 담당 | **Assignee** | projects |
 | 답변 실패 | **Response failed** | basics/conversation |
 | 답변 언어 | **Reply language** (`firstRun.summary.rowReply`)<br />**Response language** (`settings.fields.responseLanguage`) | getting-started/first-run, personalization, settings |
 | 답변 완료 | **Reply completed** (`projectStatistics.labels.delivered`)<br />**Response completed** (`interfaceDetails.answerDone`) | basics/conversation |
 | 답변 중지 | **Response stopped** | basics/conversation |
+| 답변 카드 준비 중 | **Preparing answer cards** | basics/conversation |
+| 답을 기다리는 요청 | **Awaiting your answer** | basics/conversation |
+| 대기 | **Pending** (`canon.actionStatuses.pending`)<br />**Waiting** (`canon.taskStatuses.draft`)<br />**Wait** (`settings.logs.trace.wait`) | basics/conversation |
 | 대기 메시지 삭제 | **Delete queued message** | basics/conversation |
 | 대기 메시지 수정 | **Edit queued message** | basics/conversation |
-| 대기 중 | **Waiting** (`interfaceStatus.idle`)<br />**Queued** (`composer.queuedMessageStatus`) | basics/conversation, scheduled-tasks |
+| 대기 중 | **Pending** (`canon.mcp.states.pending`)<br />**Waiting** (`interfaceStatus.idle`)<br />**Queued** (`composer.queuedMessageStatus`) | basics/conversation, scheduled-tasks |
 | 대기 중 · 3개 중 2번째 | **Queued · {0} of {1}** | basics/conversation |
 | 대기 중인 메시지 | **Queued messages** (`composer.queuedMessages`)<br />**Queued message** (`composer.queuedMessage`) | basics/conversation |
 | 대상 대화 | **Target chat** | scheduled-tasks |
 | 대상을 사용할 수 없음 | **Target unavailable** | scheduled-tasks |
-| 대화 | **Conversations** (`projectStatistics.labels.conversations`)<br />**Chats** (`sidebar.chats`)<br />**conversation** (`settings.sectionAliases.general[2]`)<br />**Chat** (`settings.grants.scope.conversation`) | basics/command-palette |
+| 대화 | **Conversation** (`sessionInfo.contextGroups.conversation`)<br />**Conversations** (`projectStatistics.labels.conversations`)<br />**Chats** (`space.general`)<br />**conversation** (`settings.sectionAliases.general[2]`)<br />**Chat** (`settings.grants.scope.conversation`) | basics/command-palette, basics/conversation, basics/right-panel, basics/sidebar-and-spaces, scheduled-tasks |
 | 대화 기록 반영 | **Conversation history sync** | settings |
+| 대화 기억 | **chat memory** (`settings.sectionAliases.memory[1]`)<br />**Chat memory** (`settings.pageSections.chatMemory`) | personalization, settings |
 | 대화 기억 정리 | **Chat memory consolidation** | settings |
 | 대화 기억 정리 모델 | **Chat memory model** | models/backup, settings |
+| 대화 기억 지우기 | **Erase chat memory** | settings |
+| 대화 비우기 | **Clear chat** | basics/sidebar-and-spaces |
+| 대화 열기 | **Open conversation** | projects |
 | 대화 입력 | **Conversation input** | basics/conversation, settings |
 | 대화 제목 | **Conversation title** | basics/conversation |
-| 대화 진행 내역이 없습니다 | **No session progress yet** | basics/right-panel |
+| 대화로 가져가기 | **Move to a conversation** | basics/browser |
+| 대화로 돌아가기 | **Back to chat** | basics/right-panel |
+| 대화로 이동 | **Go to chat** | basics/library |
+| 대화를 어떻게 기억할까요? | **How should Butler remember?** | getting-started/first-run |
 | 대화에 참조하기 | **Reference in conversation** | projects |
+| 대화에 첨부 | **Add to chat** (`browser.attachToChat`)<br />**Attach to chat** (`browser.attach`) | basics/library |
 | 대화의 작업 위치를 변경할까요? | **Change this conversation's workspace?** | basics/sidebar-and-spaces |
 | 대화창 | **conversation** (`settings.sectionAliases.appearance[5]`)<br />**Conversation** (`settings.pageSections.conversation`) | settings |
 | 대화창 배경 | **conversation background** (`settings.sectionAliases.appearance[6]`)<br />**Conversation background** (`settings.fields.conversationBackground`) | settings |
 | 대화해서 만들기 | **Create with chat** | extensions/skills, settings |
-| 더 보기 | **More** (`browser.more`)<br />**Load more** (`library.loadMore`)<br />**Show more** (`projectSignpost.loadMore`) | projects |
-| 더보기 | **More** (`firstRun.moreActions`)<br />**Show more** (`conversation.messageActions.showMore`) | basics/conversation, basics/sidebar-and-spaces, getting-started/first-run, settings, troubleshooting |
-| 데스크톱 알림 | **Desktop notifications** | settings |
+| 더 보기 | **More** (`canon.mcp.more`)<br />**Load more** (`library.loadMore`)<br />**Show more** (`projectSignpost.loadMore`) | basics/browser, basics/conversation, basics/library, projects |
+| 더보기 | **More actions** (`documents.moreActions`)<br />**More** (`firstRun.moreActions`)<br />**Show more** (`conversation.messageActions.showMore`) | basics/conversation, basics/sidebar-and-spaces, getting-started/first-run, settings, troubleshooting |
+| 데스크톱 알림 | **Desktop notifications** | scheduled-tasks, settings |
 | 데이터 폴더(~/.butler)에 쓸 수 없습니다. | **Butler can't write to its data folder (~/.butler).** | troubleshooting |
 | 데이터 폴더를 확인하는 데 너무 오래 걸렸습니다. | **Checking the data folder took too long.** | troubleshooting |
+| 도구 | **Tool** (`interfaceDetails.tool`)<br />**Tools** (`composer.usage.tools`) | settings |
 | 도구 결과 등록 | **Tool result registered** | projects |
-| 도구별 호출 | **Calls by tool** | settings |
 | 도메인 | **Domain** | settings |
 | 돌아가기 | **Back** | settings |
 | 동의하고 계속 | **Agree and continue** | getting-started/first-run |
 | 동의하지 않음 | **Decline** | getting-started/first-run |
 | 동작 줄이기 | **Reduce motion** | settings |
+| 뒤로 | **Back** | basics/browser |
+| 등록 | **Add** (`canon.proposalCard.add`)<br />**Registered** (`projectStatistics.labels.created`) | projects |
 | 등록된 모델 | **Registered models** | models/cloud, models/custom |
 | 등록된 예비 모델이 없습니다. | **No backup models are registered.** | models/backup |
 | 디버깅 | **Debug** | settings |
 | 라이트 | **Light** | settings |
-| 로그 | **Logs** | settings, troubleshooting |
+| 로그 | **Logs** | basics/command-palette, settings, troubleshooting |
+| 로그 열기 | **Open log** (`lifecycle.action.openLog`)<br />**Open logs** (`settings.logs.trace.openCommand`) | basics/command-palette |
+| 로그아웃 | **Sign out** | settings |
+| 로그인 | **Sign in** (`browser.signIn`)<br />**Sign-ins** (`browser.signIns`)<br />**signin** (`settings.sectionAliases.browser[2]`) | basics/browser, settings |
+| 로그인 다시 시작 | **Start sign-in again** | getting-started/first-run, models/cloud, troubleshooting |
+| 로그인 사용 | **Signed in** | basics/browser |
 | 로그인 시 시작 | **Start at login** | scheduled-tasks, settings |
-| 로그인이 취소되었습니다 | **Sign-in was cancelled** | getting-started/first-run |
-| 로그인하지 못했습니다 | **Couldn't sign in** | getting-started/first-run |
-| 로컬 | **Local** | basics/conversation, basics/right-panel, projects |
+| 로그인 시간이 지났습니다 | **Sign-in timed out** | getting-started/first-run, troubleshooting |
+| 로그인 정보 꺼짐 | **Sign-in info off** | scheduled-tasks |
+| 로그인 정보 사용 | **Use sign-in info** | scheduled-tasks |
+| 로그인 확인 필요 | **Sign-in needs you** | basics/browser |
+| 로그인됨 | **Signed in** | getting-started/first-run, models/cloud |
+| 로그인하지 못했습니다 | **Couldn't sign in** | getting-started/first-run, troubleshooting |
+| 로컬 | **Local** | basics/conversation, projects |
 | 로컬 추론 예산 | **Local reasoning budget** | models/custom, settings |
 | 리뷰 | **Review** | settings |
 | 리서치 | **Research** | settings |
 | 링크 복사 | **Copy link** | getting-started/first-run, models/cloud, troubleshooting |
+| 마감일 | **Due date** | projects |
 | 막힌 작업 | **Blocked work** | projects |
+| 막힘 | **Blocked** | basics/conversation, projects |
 | 만들기 | **Create** | basics/conversation, projects |
 | 매일 | **Daily** | scheduled-tasks |
 | 매주 | **Weekly** | scheduled-tasks |
-| 맥락 | **Context** | basics/right-panel, settings |
-| 먼저 확인 | **Ask first** | basics/conversation, extensions/mcp-servers, getting-started/first-run, scheduled-tasks, settings, troubleshooting |
-| 먼저 확인이면 자리를 비운 동안 승인을 기다립니다. | **With Ask first, runs wait for your approval while you're away.** | scheduled-tasks |
+| 먼저 말 걸기 | **Reach out first** | basics/conversation, personalization, settings |
+| 먼저 확인 | **Ask first** | basics/conversation, basics/images, getting-started/first-run, scheduled-tasks, settings, troubleshooting |
+| 먼저 ChatGPT에 로그인하세요 | **Sign in to ChatGPT first** | models/cloud |
+| 멈춤 | **Stopped** (`canon.taskStatuses.stopped`)<br />**Paused** (`sessionInfo.subtaskPaused`) | basics/conversation |
 | 메시지 보내기 | **Message sending** | basics/conversation, settings |
 | 메시지 복사 | **Copy message** | basics/conversation |
-| 메타데이터 | **Metadata** | settings, troubleshooting |
-| 명령 | **Command** | extensions/mcp-servers |
-| 모델 | **Model** (`taskGraph.detail.model`)<br />**Models** (`settings.sections.models`) | basics/conversation, getting-started/first-run, models/backup, models/cloud, models/custom, settings, troubleshooting |
+| 명령 | **Command** | extensions/mcp-servers, settings |
+| 명령 격리 | **Command sandbox** | settings |
+| 명세 | **Specs** (`canon.specs`)<br />**Specifications** (`projectStatistics.labels.spec`) | projects |
+| 모델 | **Model** (`taskGraph.detail.model`)<br />**Models** (`composer.usage.models`) | basics/command-palette, basics/conversation, basics/images, getting-started/first-run, models/backup, models/cloud, models/custom, scheduled-tasks, settings, troubleshooting |
 | 모델 2개 | **2 models** | models/cloud |
 | 모델 검색... | **Search models...** | basics/conversation |
 | 모델 관리 | **Model management** (`settings.modelManagement.title`)<br />**Manage models** (`settings.modelManagement.manageButton`) | models/backup, models/cloud, models/custom, settings, troubleshooting |
-| 모델 기본값 | **Model default** | models/backup, personalization |
+| 모델 기본값 | **Model default** | models/backup, personalization, scheduled-tasks |
 | 모델 등록 | **Register model** | models/custom |
 | 모델 사용량 | **Model usage** | projects |
-| 모델 상태 오류 | **Model state error** | basics/conversation, troubleshooting |
 | 모델 설정을 읽는 데 너무 오래 걸렸습니다. | **Reading the model settings took too long.** | troubleshooting |
 | 모델 설정을 읽을 수 없습니다. | **Butler can't read its model settings.** | troubleshooting |
+| 모델 없음 | **No model** | basics/conversation |
 | 모델 저장 | **Save model** | models/custom |
 | 모델 찾기 | **Discover models** | models/custom |
 | 모델 추가 | **Add model** | models/cloud, models/custom |
-| 모델 턴 | **Model turn** | settings |
 | 모델 확인 중 | **Checking model** | basics/conversation |
 | 모델 API 정보 | **Model API information** | models/custom |
 | 모델 ID | **Model ID** | models/custom |
-| 모델별 토큰 | **Tokens by model** | settings |
 | 모두 끊기 | **Disconnect all** | advanced/remote-access, settings |
-| 모든 Work | **All Work** | projects |
+| 모두 보기 | **View all** | basics/library |
+| 모두 삭제… | **Delete all…** | settings |
+| 모두 지우기 | **Clear all** | basics/library |
+| 모두 확인 | **Ask every time** | basics/conversation, basics/images, getting-started/first-run, scheduled-tasks |
+| 모든 대화에서 사용 | **Use in every chat** (`browser.standing`)<br />**Use in all conversations** (`settings.signIns.allConversations`) | basics/browser, settings |
+| 모든 데이터 지우기 | **Erase all data** | settings |
+| 모든 채팅 | **All chats** | personalization |
 | 모양 | **Appearance** | basics/command-palette |
+| 목록 | **List** (`documents.list`)<br />**Entries** (`settings.logs.sections.viewer`) | settings |
+| 무엇을 바꿀까요? | **What should change?** | basics/images |
+| 묶음 풀기 | **Unstack** | projects |
+| 문서 | **Documents** (`browser.documents`)<br />**Document** (`browser.document`) | basics/library, basics/right-panel |
 | 문서 상태 | **Document status** | projects |
 | 문서 종류 | **Document type** | projects |
+| 문서로 만들기 | **Make a document** | basics/conversation |
 | 문제 보고용 정보 복사 | **Copy info for a bug report** | getting-started/first-run, troubleshooting |
+| 묻기 | **Ask** | basics/browser, settings |
 | 미리보기 버전 받기 | **Receive preview versions** | getting-started/install, settings, troubleshooting |
 | 반갑습니다. 당신을 모시게 되어 기쁩니다. | **Pleased to meet you. It will be my honor to serve.** | getting-started/first-run |
+| 반영 | **Apply** (`canon.proposalCard.apply`)<br />**Applied** (`settings.systemEventLabels.metrics.promoted_count`) | projects |
+| 방문 기록 | **History** | basics/browser, settings |
+| 방문 기록 검색 | **Search history** (`browser.history.search`)<br />**Search browsing history** (`guided.tools.browser_history_search`) | basics/browser |
+| 방문 기록 지우기 | **Clear browsing history** | basics/browser |
+| 방문한 페이지 | **Visited pages** | basics/browser, settings |
 | 배경 불투명도 | **overlay** (`settings.sectionAliases.appearance[8]`)<br />**Overlay** (`settings.fields.conversationOverlay`) | settings |
 | 배터리 사용 시 멈춤 | **Pause on battery** | settings |
+| 백그라운드 | **Background** | settings |
 | 백그라운드 서비스 실행이 허용되지 않았습니다. | **The background service isn't allowed to run.** | troubleshooting |
 | 백그라운드 서비스가 멈췄습니다. | **The background service stopped.** | troubleshooting |
 | 백그라운드 서비스가 응답하지 않습니다. | **The background service didn't respond.** | troubleshooting |
-| 버전 | **Version** (`artifacts.revision`)<br />**version** (`settings.sectionAliases.about[0]`) | settings, troubleshooting |
-| 버틀러 | **Butler** (`browser.pointerButler`)<br />**Butler App** (`settings.updateComponents.app`) | settings, troubleshooting |
+| 백로그 | **Backlog** | basics/sidebar-and-spaces, projects |
+| 버전 | **Versions** (`conversation.imageTools.versions`)<br />**Version** (`artifacts.revision`)<br />**version** (`settings.sectionAliases.about[0]`) | basics/images, basics/library, basics/right-panel, settings, troubleshooting |
+| 버전 N | **Version {0}** | basics/images |
+| 버틀러 | **Butler** (`canon.mcp.butler`)<br />**Butler App** (`settings.updateComponents.app`) | settings, troubleshooting |
+| 버틀러 구성 요소가 없습니다. 다시 설치해 주세요. | **Part of Butler is missing. Reinstall Butler.** | troubleshooting |
 | 버틀러 닉네임 | **Butler nickname** | getting-started/first-run, personalization, settings |
+| 버틀러 로그인 | **Butler signs in** | basics/browser, settings |
 | 버틀러 모델 | **Butler model** | basics/conversation, getting-started/first-run, models/cloud, models/custom, settings |
 | 버틀러 브라우저 | **Butler browser** | settings |
 | 버틀러 요청 결과 | **Butler request outcomes** | projects |
+| 버틀러 준비 중 | **Getting Butler ready** | getting-started/first-run |
 | 버틀러 준비가 끝나면 바로 연결합니다 | **Connects as soon as Butler is ready** | getting-started/first-run |
 | 버틀러 화면에 오류가 발생했습니다. | **Butler UI crashed.** | troubleshooting |
+| 버틀러가 기다리는 중 | **Butler is waiting** | basics/browser |
+| 버틀러가 방문 | **Visited by Butler** | basics/browser |
+| 버틀러가 시작을 마치지 못했습니다. | **Butler didn't finish starting.** | troubleshooting |
+| 버틀러가 알아챈 것 | **What Butler noticed** | personalization, scheduled-tasks, settings |
+| 버틀러가 조작 중 | **Butler is browsing** | basics/browser |
+| 버틀러를 시작하는 데 너무 오래 걸렸습니다. | **Butler took too long to start.** | troubleshooting |
+| 버틀러를 시작하지 못했습니다. | **Butler couldn't start.** | getting-started/first-run, troubleshooting |
+| 버틀러에게 돌려주기 | **Give back to Butler** | basics/browser |
 | 버틀러와 알아가기 | **Get acquainted with Butler** | getting-started/first-run |
-| 변경 없음 | **Clean** | basics/right-panel |
-| 변경 있음 | **Dirty** | basics/right-panel |
+| 버틀러의 AI 요청에 ChatGPT 플랜이 쓰입니다. | **Butler's AI requests use your ChatGPT plan.** | getting-started/first-run |
+| 번호 보기 | **Show number** | settings |
+| 범위 | **Level** | personalization, settings |
 | 변경별 | **Changes** | projects |
-| 변경사항 | **Changes** | basics/right-panel |
 | 보관 | **Archive** (`space.archive`)<br />**saved chats** (`settings.sectionAliases.archives[0]`) | basics/sidebar-and-spaces, projects |
 | 보관하기 | **Archive** | basics/sidebar-and-spaces |
-| 보내기 | **Send** | basics/conversation |
-| 보안 | **Security** | advanced/remote-access, troubleshooting |
-| 브라우저 | **Browser** | getting-started/first-run |
-| 브라우저에서 열기 | **Open in Browser** (`browser.openOutput`)<br />**Open in browser** (`settings.modelManagement.oauthOpen`) | models/cloud |
-| 브랜치 상세 | **Branch details** | basics/right-panel |
+| 보기 | **View** | basics/browser, settings |
+| 보내기 | **Send** | basics/conversation, basics/images |
+| 보내는 중… | **Sending…** | basics/conversation |
+| 보내지 못했습니다 | **Couldn't send** | basics/conversation |
+| 보드 | **Board** | projects |
+| 보안 | **Security** | advanced/remote-access, basics/command-palette, models/cloud, settings, troubleshooting |
+| 보안 설정에서 결과물 호스트를 지정해 주세요. | **Set an output host in Security settings.** | basics/right-panel |
+| 보안 키패드 | **Security keypad** | basics/browser |
+| 복사 | **Copy** | basics/conversation |
+| 북마크 | **Bookmarks** (`browser.bookmarks`)<br />**bookmarks** (`settings.sectionAliases.browser[5]`) | basics/browser, basics/library, settings |
+| 북마크 추가 | **Add bookmark** | basics/browser |
+| 분류별 수준 | **Category levels** | settings |
+| 브라우저 | **Browser** | basics/browser, basics/command-palette, basics/sidebar-and-spaces, getting-started/first-run, scheduled-tasks |
+| 브라우저 가져오기 | **Import from a browser** | settings |
+| 브라우저 닫기 | **Hide browser** | basics/browser |
+| 브라우저 데이터 | **Browser data** | settings |
+| 브라우저 보기 · 버틀러가 사용 중 | **View browser · Butler is using it** | basics/browser |
+| 브라우저 보기 · 오류 | **View browser · Error** | basics/browser |
+| 브라우저 보기 · 직접 확인 필요 | **View browser · Needs you** | basics/browser |
+| 브라우저 열기 | **Show browser** | basics/browser |
+| 브라우저에서 열기 | **Open in browser** (`chatgptSignIn.open`)<br />**Open in Browser** (`browser.openOutput`) | basics/right-panel, getting-started/first-run, models/cloud, troubleshooting |
+| 브라우징 | **Browsing** | settings |
+| 브라우징 에이전트 | **Browsing agent** | settings |
+| 브랜치 | **Branch** | basics/right-panel |
+| 브러시 | **Brush** | basics/images |
+| 브러시 크기 | **Brush size** | basics/images |
+| 비밀번호 | **Password** (`browser.password`)<br />**passwords** (`settings.sectionAliases.browser[6]`)<br />**Passwords** (`settings.browserImport.passwords`) | settings |
+| 비우기 | **Clear** | basics/sidebar-and-spaces |
 | 비활성화 | **Disabled** (`settings.options.searchProviderDisabled`)<br />**Disable** (`settings.actions.disableMcpServer`) | extensions/mcp-servers, settings |
-| 빠르게 | **Quick** | settings |
+| 빠르게 | **Quick** (`settings.options.searchDepthQuick`)<br />**Faster** (`settings.recallOptions.faster`) | settings |
 | 사용 | **Enabled** | extensions/mcp-servers, settings |
-| 사용 안 함 | **Don't use it** (`firstRun.memoryChoice.off`)<br />**Disabled** (`settings.hooks.disabled`)<br />**Off** (`settings.backupModels.off`)<br />**Not in use** (`settings.savedKeys.usedBy(0)`) | models/backup, models/cloud |
+| 사용 기록 | **Activity** | settings |
+| 사용 안 함 | **Don't use it** (`firstRun.memoryChoice.off`)<br />**Off** (`conversation.imageTools.off`)<br />**Disabled** (`settings.hooks.disabled`)<br />**Not in use** (`settings.savedKeys.usedBy(0)`) | basics/images, getting-started/first-run, models/backup, models/cloud, settings |
 | 사용 중 | **In use** (`firstRun.tagCurrent`)<br />**Enabled** (`settings.mcpEnabled`)<br />**Another task is running** (`settings.memory.inUse`) | getting-started/first-run |
-| 사용량 | **Usage** (`settings.sections.usage`)<br />**telemetry** (`settings.sectionAliases.usage[1]`) | basics/conversation, projects |
+| 사용 한도 도달 | **Usage limit reached** | troubleshooting |
+| 사용량 | **Usage** (`settings.sections.usage`)<br />**telemetry** (`settings.sectionAliases.usage[1]`) | basics/command-palette, basics/conversation, basics/images, projects |
+| 사용량 관리 | **Manage usage** | getting-started/first-run, models/cloud, settings, troubleshooting |
 | 사용자 지정 | **Custom** | settings |
+| 사용자 지정 모델 검색 실패 | **Failed to discover Custom models** | models/custom |
 | 사용자 지정 분 | **Custom minutes** | scheduled-tasks |
 | 사용자 지정 작업 | **Custom job** | settings |
-| 사용자 추가 스킬 | **User skills** | extensions/skills |
-| 사이드바 | **Sidebar** (`sidebar.regionLabel`)<br />**sidebar** (`settings.sectionAliases.general[4]`) | settings |
+| 사용자 지정 OpenAI 호환 | **Custom OpenAI-compatible** | models/custom |
+| 사이드바 | **Sidebar** (`sidebar.regionLabel`)<br />**sidebar** (`settings.sectionAliases.general[4]`) | basics/sidebar-and-spaces, settings |
 | 사이드바 보기 | **Show sidebar** | basics/sidebar-and-spaces |
 | 사이드바 숨기기 | **Hide sidebar** | basics/sidebar-and-spaces |
-| 삭제 | **Delete** | basics/sidebar-and-spaces, extensions/mcp-servers, models/cloud, models/custom, projects, scheduled-tasks, settings, troubleshooting |
-| 상세 | **Details** | basics/right-panel |
-| 상태 | **Status** (`taskGraph.detail.status`)<br />**State** (`automations.fields.state`) | scheduled-tasks |
+| 사이트 | **Sites** (`library.sites`)<br />**Site** (`settings.signIns.site`) | basics/library, settings |
+| 사이트 데이터 | **Site data** | basics/browser, settings |
+| 삭제 | **Delete** | basics/browser, basics/library, basics/sidebar-and-spaces, extensions/mcp-servers, models/cloud, models/custom, projects, scheduled-tasks, settings, troubleshooting |
+| 상태 | **Status** (`canon.status`)<br />**State** (`automations.fields.state`) | projects, scheduled-tasks |
 | 상태 판정 기록 | **Disposition recorded** | projects |
 | 상태 확인 필요 | **Needs status check** | settings |
-| 새 대화 | **New conversation** (`browser.newConversation`)<br />**New chat** (`interfaceFeedback.newChat`)<br />**New chats** (`settings.fields.chatAccess`) | basics/conversation, basics/sidebar-and-spaces, projects |
+| 새 계획 | **New Plan** | projects |
+| 새 과제 | **New Epic** | basics/sidebar-and-spaces, projects |
+| 새 그룹 | **New group** | basics/sidebar-and-spaces |
+| 새 대화 | **New chat** (`browser.newConversation`)<br />**New chats** (`settings.fields.chatAccess`) | basics/browser, basics/conversation, basics/sidebar-and-spaces, getting-started/first-run, projects, scheduled-tasks, settings, troubleshooting |
 | 새 메시지 | **New messages** | basics/conversation |
-| 새 예약 작업 | **New schedule** | scheduled-tasks |
+| 새 예약 작업 | **New schedule** (`automations.new`)<br />**New schedules** (`settings.fields.scheduleAccess`) | basics/conversation, scheduled-tasks, settings |
 | 새 주제대화 시작 | **Start a new conversation** | basics/conversation |
 | 새 키 | **New key** | models/cloud |
+| 새 탭 | **New tab** | basics/browser |
 | 새 프로젝트 | **New project** | projects |
 | 새 프로젝트 만들기 | **Create a project** | projects |
 | 새 프로젝트 시작 | **Start a new project** | basics/conversation |
 | 새로 작성 | **New credential** | models/cloud |
-| 새로고침 | **Reload** (`browser.reload`)<br />**Refresh** (`common.refresh`) | settings |
-| 생성 | **Created** | projects |
-| 서버 | **Server** | basics/command-palette, projects |
+| 새로고침 | **Reload** (`browser.reload`)<br />**Refresh** (`common.refresh`) | basics/browser, basics/right-panel, settings |
+| 생각 내용 표시 | **Show thinking** | settings |
+| 생성 | **Created** (`projectSignpost.created`)<br />**Generated** (`composer.usage.imagesGenerated`) | projects, settings |
+| 서랍 | **Library** | basics/library, basics/sidebar-and-spaces |
+| 서랍 검색 | **Search the library** (`browser.librarySearch`)<br />**Search Library** (`guided.tools.library_search`) | basics/library |
+| 서랍에 저장 | **Save to library** | basics/conversation, basics/images, basics/library |
+| 서랍에 저장했어요 | **Saved to library** | basics/images |
+| 서랍에서 열기 | **Open in Library** | basics/library, basics/right-panel |
+| 서버 | **Server** (`settings.sections.server`)<br />**Servers** (`settings.pageSections.mcpServers`) | basics/command-palette, projects |
 | 서버 주소 | **Server address** | getting-started/first-run |
 | 서버 ID | **Server ID** | extensions/mcp-servers |
 | 서버 URL | **Server URL** | settings |
-| 선택한 모델 사용 불가 | **Selected model unavailable** | basics/conversation, troubleshooting |
-| 설정 | **Settings** | advanced/remote-access, basics/command-palette, basics/conversation, basics/right-panel, basics/sidebar-and-spaces, extensions/mcp-servers, extensions/skills, getting-started/first-run, getting-started/install, models/backup, models/cloud, models/custom, personalization, projects, scheduled-tasks, settings, troubleshooting |
+| 선택한 모델을 더 이상 사용할 수 없습니다. | **That model is no longer available.** | troubleshooting |
+| 설명 | **Description** | projects |
+| 설정 | **Settings** | advanced/remote-access, basics/browser, basics/command-palette, basics/conversation, basics/images, basics/sidebar-and-spaces, extensions/mcp-servers, extensions/skills, getting-started/first-run, getting-started/install, models/backup, models/cloud, models/custom, personalization, projects, scheduled-tasks, settings, troubleshooting |
 | 설정 검색 | **Settings search** (`settings.searchLabel`)<br />**Search settings** (`settings.searchPlaceholder`) | settings |
 | 설정 다시 실행 | **Run setup again** | getting-started/first-run, settings |
 | 설정 더보기 | **Show advanced settings** | models/custom |
 | 성공 | **Successes** (`interfaceDetails.success`)<br />**Succeeded** (`automations.runs.succeeded`)<br />**OK** (`settings.systemEventLabels.statuses.ok`) | scheduled-tasks, settings |
 | 세부 정보 | **Details** | scheduled-tasks |
+| 세션 정보 | **Session info** | basics/conversation, basics/right-panel, projects |
 | 소개 편집 | **Edit description** | projects |
 | 수락 | **Accept** | basics/conversation |
 | 수정 | **Updated** (`projectStatistics.labels.updated`)<br />**Edit file** (`guided.tools.edit_file`)<br />**Edit** (`settings.actions.editMcpServer`) | extensions/mcp-servers, settings |
 | 스마트 검색계획 사용 | **Use smart search planning** | settings |
-| 스마트 그룹 | **Smart groups** (`interfaceDetails.smartGroups`)<br />**smart groups** (`settings.sectionAliases.general[3]`) | settings |
-| 스코프별 토큰 | **Tokens by scope** | settings |
-| 스킬 | **Skills** | basics/right-panel, extensions/skills |
-| 스페이스 | **Space** | basics/command-palette, basics/sidebar-and-spaces, projects, scheduled-tasks |
+| 스마트 그룹 | **Smart groups** (`interfaceDetails.smartGroups`)<br />**smart groups** (`settings.sectionAliases.general[3]`) | basics/sidebar-and-spaces, settings |
+| 스크랩 | **Scrap** (`browser.scrap`)<br />**Scraps** (`browser.scraps`) | basics/images, basics/library |
+| 스킬 | **Skills** | basics/command-palette, extensions/skills |
+| 스페이스 | **Space** | basics/command-palette, basics/sidebar-and-spaces, projects |
+| 스페이스 메뉴 | **Space menu** | basics/sidebar-and-spaces, projects |
 | 스페이스 최상위 | **Space root** | basics/sidebar-and-spaces |
 | 스페이스 최상위로 이동 | **Move to space root** | basics/sidebar-and-spaces |
+| 승인 | **Approval** | basics/right-panel |
+| 승인 대기 | **Waiting for approval** | basics/browser |
 | 시간 | **Time** | scheduled-tasks |
 | 시간대 | **Time zone** | settings |
 | 시스템 | **System** | settings |
-| 시스템 설정 | **System settings** | getting-started/install, troubleshooting |
+| 시스템 암호 저장소가 있어야 쓸 수 있어요 | **Needs the system password store** | settings |
 | 시스템 이벤트 | **System events** | basics/command-palette, personalization |
+| 시스템 키링에 저장 | **Stored in the system keyring** | models/cloud |
 | 시작하기 | **Getting started** (`briefing.onboardingMoment`)<br />**Get started** (`firstRun.start`) | getting-started/first-run |
+| 실시간 | **Live** | settings, troubleshooting |
 | 실시간 연결 복구 중 | **Reconnecting to live updates** | basics/conversation |
 | 실시간 연결이 끊겨 다시 연결하고 있습니다. 표시된 작업 상태는 최신이 아닐 수 있습니다. | **Live connection lost. Reconnecting automatically. The displayed work status may be out of date.** | troubleshooting |
-| 실패 | **Failed** (`taskGraph.status.failed`)<br />**Failures** (`interfaceDetails.failures`) | scheduled-tasks, settings |
+| 실패 | **Failed** (`canon.taskStatuses.failed`)<br />**Failures** (`interfaceDetails.failures`) | scheduled-tasks, settings |
 | 실패 메시지 삭제 | **Delete failed message** | basics/conversation |
 | 실패가 반복돼 새 코드를 발급했어요 | **Repeated failures issued a new code** | advanced/remote-access |
-| 실패한 모델 턴 | **Failed model turn** | settings, troubleshooting |
+| 실패함 | **Failed** | basics/conversation |
+| 실행 | **Execution** | getting-started/install, troubleshooting |
 | 실행 기록 | **Runs** | scheduled-tasks |
+| 실행 시간 | **Time** | models/backup, settings |
 | 실행 완료 | **Execution completed** | projects |
+| 실행 전 | **Not run yet** | scheduled-tasks |
 | 실행 중 | **Executing** (`interfaceFeedback.executing`)<br />**Running** (`automations.runs.running`) | scheduled-tasks, settings |
+| 실행 취소 | **Undo** | basics/images |
+| 아이디 | **Username** | settings |
+| 아주 크게 | **Larger** | settings |
 | 아직 실행 기록이 없습니다 | **No runs yet** | scheduled-tasks |
 | 아직 실행 전 | **Not run yet** | settings |
 | 아카이브 | **Archive** (`space.archives`)<br />**Archives** (`settings.sections.archives`)<br />**archive** (`settings.sectionAliases.archives[1]`) | basics/command-palette, basics/sidebar-and-spaces, projects, settings |
+| 아카이브 (N) | **Archive ({0})** | basics/sidebar-and-spaces |
 | 아카이브 취소 | **Unarchive** | basics/sidebar-and-spaces, settings |
-| 아티팩트 | **Artifacts** | basics/right-panel |
-| 아티팩트 목록 | **Artifact list** | basics/right-panel |
+| 안 함 | **Never** | basics/browser, settings |
 | 알림 | **Notifications** | settings |
 | 알림 권한 | **Notification permission** | settings, troubleshooting |
+| 알아가기 | **Get to know you** (`guided.tools.summarize_user_profile`)<br />**Update your profile** (`guided.tools.update_onboarding_profile`)<br />**Profile building** (`settings.pageSections.learning`) | personalization, settings |
+| 알아가기 모델 | **Profile-building model** | personalization, settings |
+| 알아서 진행 | **Auto** | basics/conversation, basics/images, getting-started/first-run, scheduled-tasks, settings, troubleshooting |
+| 앞으로 | **Forward** | basics/browser |
 | 앱 동작 | **App behavior** | getting-started/first-run, settings |
 | 앱 및 시스템 | **App and system** | settings, troubleshooting |
 | 앱 안에서 미리 볼 수 없는 아티팩트입니다 | **This artifact cannot be previewed in the app** | basics/right-panel |
@@ -282,95 +448,133 @@ regenerate after the app copy or the Korean pages change.
 | 어떤 AI와 일할까요? | **Which AI should Butler use?** | getting-started/first-run |
 | 언어 | **Language** | getting-started/first-run, settings |
 | 언어 및 지역 | **Language & region** | settings |
-| 업데이트 | **Updates** (`settings.sections.updates`)<br />**Update** (`settings.actions.updateComponent`) | getting-started/install, settings, troubleshooting |
+| 얼 | **EOL** | personalization, settings |
+| 업데이트 | **Updates** (`settings.sections.updates`)<br />**Update** (`settings.actions.updateComponent`) | basics/command-palette, getting-started/install, settings, troubleshooting |
 | 업데이트 적용 실패 | **Failed to apply update** | troubleshooting |
 | 업데이트 확인 실패 | **Failed to check updates** | troubleshooting |
 | 없음 | **None** | settings |
+| 여기서 하기 | **Do it here** | projects |
 | 연결 | **Connect** (`firstRun.customConnect`)<br />**connection** (`settings.sectionAliases.server[0]`)<br />**Connection** (`settings.pageSections.connection`) | getting-started/first-run, settings |
 | 연결 끊기 | **Disconnect** | advanced/remote-access, settings |
 | 연결 방식 | **Transport** | extensions/mcp-servers |
 | 연결 확인 | **Test connection** | extensions/mcp-servers, settings |
 | 연결되었습니다 | **Connected** | getting-started/first-run |
+| 연결된 계정 | **Connected accounts** | settings |
 | 연결된 기기 | **Paired devices** | advanced/remote-access, settings |
 | 연결된 기기 없음 | **No paired devices** | settings |
 | 연결을 마치지 못했습니다. 다시 시도하세요. | **Couldn't finish connecting. Try again.** | getting-started/first-run, troubleshooting |
-| 열기 | **Open** (`taskGraph.detail.openDocument`)<br />**Manage** (`settings.memory.linkOpen`) | getting-started/install, troubleshooting |
+| 연속 사용 중 | **Current streak** | settings |
+| 열 수 없는 형식입니다 | **This type can't open** | basics/right-panel |
+| 열기 | **Open** (`canon.proposalCard.open`)<br />**Manage** (`settings.memory.linkOpen`) | basics/right-panel, getting-started/install, personalization, projects, troubleshooting |
+| 열어서 확인 | **Open to check** | basics/browser |
 | 영어 | **English** | personalization, settings |
-| 예비 모델 | **backup models** (`settings.sectionAliases.models[2]`)<br />**Backup models** (`settings.pageSections.backupModels`) | models/backup, settings, troubleshooting |
+| 예비 모델 | **backup models** (`settings.sectionAliases.models[4]`)<br />**Backup models** (`settings.pageSections.backupModels`) | models/backup, settings, troubleshooting |
 | 예비 모델 사용 | **Use backup models** | models/backup, settings, troubleshooting |
 | 예비 모델 선택 | **Choose a backup model** | models/backup |
 | 예비 모델 추가 | **Add backup model** | models/backup, settings, troubleshooting |
-| 예약 작업 | **Schedules** (`space.automations`)<br />**Schedule** (`commandPalette.kindLabels.automation`) | basics/command-palette, basics/right-panel, scheduled-tasks |
+| 예약 | **Reserved** | basics/right-panel |
+| 예약 실행 중 확인이 필요한 단계는 건너뛰고 알려 드립니다. | **Scheduled runs skip steps that need approval and let you know.** | scheduled-tasks |
+| 예약 작업 | **Schedule** (`canon.order.chain.schedule`)<br />**Schedules** (`space.automations`) | basics/command-palette, basics/sidebar-and-spaces, scheduled-tasks |
 | 예약 작업 목록으로 돌아가기 | **Back to schedules** | scheduled-tasks |
+| 예약 작업이 권한이 필요한 단계를 건너뛰었습니다. | **A schedule skipped a step that needs your permission.** | scheduled-tasks |
 | 예약된 프롬프트 N개 | **{0} scheduled prompts** | scheduled-tasks |
-| 오른쪽 패널 보기 | **Show right panel** | basics/right-panel |
-| 오른쪽 패널 숨기기 | **Hide right panel** | basics/right-panel |
-| 완료 | **Done** (`taskGraph.status.done`)<br />**Completed** (`projectDocumentMetadata.statuses.completed`)<br />**Complete** (`guided.workerStatus.complete`) | models/backup, projects, settings |
+| 예정 | **Planned** | projects |
+| 오늘 | **Today** | basics/browser |
+| 오류 시 차단 | **Block on error** | settings |
+| 완료 | **Done** (`canon.order.status.done`)<br />**Completed** (`projectDocumentMetadata.statuses.completed`)<br />**Complete** (`guided.workerStatus.complete`) | basics/conversation, models/backup, projects, settings |
 | 완료 기록 | **Completion recorded** | projects |
+| 완료됨 | **Completed** | basics/conversation |
 | 외 N개 | **+{0} more** | basics/conversation |
-| 요약 | **Summary** | basics/right-panel |
+| 요소 선택 | **Pick elements** | basics/browser |
 | 요일 | **Day** | scheduled-tasks |
-| 요청 | **Requests** (`interfaceDetails.requestsLabel`)<br />**Request** (`settings.developerLogViewer.tabs.request`) | settings, troubleshooting |
+| 요청 | **Requests** (`interfaceDetails.requests`)<br />**Request** (`settings.logs.tabs.request`) | settings, troubleshooting |
 | 요청 처리에 걸린 시간 | **Request elapsed time** | projects |
 | 움직임 | **Motion** | settings |
-| 워크트리 | **Worktree** | basics/conversation, basics/right-panel, projects |
+| 워크트리 | **Worktree** | basics/conversation, projects |
 | 원격 접속 | **remote access** (`settings.sectionAliases.security[0]`)<br />**Remote access** (`settings.pageSections.remoteAccess`) | settings |
 | 원래 설정으로 다시 시도 | **Retry original settings** | basics/conversation, troubleshooting |
+| 원본 | **Source** (`library.source`)<br />**Original** (`conversation.imageTools.original`) | basics/images |
 | 원본 식별 정보 | **Source details** | projects |
+| 원본 열기 | **Open source** | basics/library |
 | 원본 위치 | **Source location** | projects |
+| 원본 페이지 열기 | **Open source page** | basics/images |
+| 원본을 찾지 못했습니다 | **Original not found** | basics/right-panel |
 | 월페이퍼 | **Wallpaper** | settings |
 | 위험 낮음 | **Low risk** | basics/conversation |
-| 위험 높음 | **High risk** | basics/conversation |
+| 위험 높음 | **High risk** | basics/conversation, basics/images |
 | 위험 보통 | **Medium risk** | basics/conversation |
-| 유효한 계획 | **Active plan** | projects |
 | 응답 | **Response** | settings, troubleshooting |
 | 응답 방식 | **Response mode** | basics/conversation |
 | 응답 생성 중 | **Generating response** | basics/conversation |
 | 응답 스타일 | **Response style** | personalization, settings |
 | 응답 처리 중 문제가 발생했습니다. | **Butler could not complete the request.** | troubleshooting |
+| 이 과제에 대해 말해 보세요 | **Talk about this Epic** | projects |
+| 이 기기에서는 사용할 수 없습니다 | **Not available on this device** | settings |
 | 이 내용으로 질문하기 | **Ask about this** | projects |
-| 이 대화에서 계속 허용 | **Always allow in this conversation** | basics/conversation |
+| 이 대화에서 계속 허용 | **Always allow in this conversation** | basics/conversation, basics/images |
+| 이 대화에서 허용 | **Allow in this chat** | basics/browser, basics/conversation |
 | 이 대화에서 허용 중 | **Allowed in this conversation** | basics/conversation |
-| 이 대화의 예약 작업이 없습니다 | **No schedules for this chat** | basics/right-panel |
+| 이 사이트 결제는 항상 허용 | **Always allow payments here** | basics/conversation |
+| 이 사이트는 항상 허용 | **Always allow this site** | basics/browser, basics/conversation |
+| 이 채팅에서만 | **This chat only** | personalization |
 | 이 컴퓨터에만 저장 | **Stored only on this computer** | models/cloud |
+| 이 컴퓨터에서 사용 불가 | **Unavailable on this computer** | scheduled-tasks |
 | 이동 | **Move** | basics/sidebar-and-spaces |
 | 이동… | **Move…** | basics/sidebar-and-spaces |
 | 이동할 위치 | **Move to** | basics/sidebar-and-spaces |
 | 이름 | **Name** (`library.name`)<br />**Given name** (`settings.vault.givenName`) | settings |
-| 이름 변경 | **Rename** | basics/sidebar-and-spaces, projects |
+| 이름 변경 | **Rename** | basics/library, basics/sidebar-and-spaces, projects |
+| 이미지 만들기 | **Create image** | basics/images |
+| 이미지 모델 | **Image models** (`composer.usage.imagesTitle`)<br />**Image model** (`settings.pageSections.imageModels`) | basics/images, settings |
+| 이미지 모델 없음 | **No image model** | basics/images |
+| 이미지 복사 | **Copy image** | basics/images |
 | 이미지 추가 | **Add image** | settings |
-| 이번만 허용 | **Allow once** | basics/conversation |
+| 이미지 편집 | **Edit image** (`guided.tools.edit_image`)<br />**Image editor** (`conversation.imageTools.editor`) | basics/images |
+| 이미지를 불러오지 못했어요 | **Image unavailable** | basics/images |
+| 이번만 허용 | **Allow once** | basics/conversation, basics/images |
+| 이벤트 | **Event** | settings |
+| 이어서 진행 | **Resume** | basics/conversation, basics/sidebar-and-spaces |
 | 이전 | **Back** (`firstRun.back`)<br />**Was** (`conversation.answerBlocks.previousValue`) | basics/conversation, getting-started/first-run |
+| 이전 열 | **Previous lanes** | projects |
+| 이전 이미지 | **Previous image** | basics/images |
+| 인수 (JSON) | **Args (JSON)** | settings |
 | 인자 | **Arguments** | extensions/mcp-servers |
 | 인증 방식 | **Auth method** | models/cloud |
-| 인증 완료 확인 | **Check completion** | models/cloud, troubleshooting |
 | 인증 이름 | **Credential name** | models/cloud |
 | 인터페이스 언어 | **Interface language** | getting-started/first-run |
-| 일반 | **General** (`space.general`)<br />**Normal** (`composer.normal`) | basics/command-palette, basics/conversation, basics/sidebar-and-spaces, getting-started/first-run, personalization, scheduled-tasks, troubleshooting |
-| 일시정지 | **Paused** (`taskGraph.status.paused`)<br />**Pause** (`automations.pause`) | scheduled-tasks |
-| 읽기 전용 | **Read only** | basics/conversation, scheduled-tasks |
+| 일반 | **General** (`interfaceStatus.generalCategory`)<br />**Normal** (`composer.normal`) | basics/command-palette, basics/conversation, basics/sidebar-and-spaces, getting-started/first-run, scheduled-tasks, settings, troubleshooting |
+| 일시정지 | **Paused** (`canon.taskStatuses.paused`)<br />**Pause** (`automations.pause`) | scheduled-tasks |
+| 읽기 전용 | **Read-only** (`conversation.imageTools.readOnly`)<br />**Read only** (`permissions.readOnly`) | basics/conversation, basics/images, extensions/mcp-servers, getting-started/first-run, scheduled-tasks |
 | 입력창 | **message box** (`settings.sectionAliases.appearance[3]`)<br />**Message box** (`settings.pageSections.messageBox`) | settings |
 | 입력창 배경 | **Message box background** | settings |
 | 입력창 접기 | **Collapse message box** | settings |
+| 자격 증명 관리자에 저장 | **Stored in Credential Manager** | models/cloud |
 | 자동 | **Auto** | settings |
+| 자동입력 방지 | **CAPTCHA** | basics/browser |
 | 자료 | **Materials** | projects |
 | 자료와 결과물의 변화 | **Materials and results** | projects |
-| 자세히 | **More details** (`firstRun.learnMore`)<br />**Details** (`composer.usage.details`) | basics/conversation, getting-started/first-run |
+| 자세히 | **Details** (`sessionInfo.contextMore`)<br />**More details** (`firstRun.learnMore`)<br />**Detailed** (`settings.logs.levels.detailed`) | basics/conversation, basics/right-panel, getting-started/first-run, settings |
+| 자주 | **Often** | personalization |
 | 작성 중인 메시지에 참조 | **Reference in message** | basics/conversation, basics/sidebar-and-spaces |
-| 작업 | **Tasks** (`taskGraph.tab`)<br />**Work** (`projectSignpost.work`)<br />**Task** (`interfaceStatus.task`)<br />**Job** (`settings.fields.job`) | projects, settings |
+| 작업 | **Tasks** (`sessionInfo.work`)<br />**Work** (`projectSignpost.work`)<br />**Job** (`settings.fields.job`) | settings |
+| 작업 보기 | **View work** | basics/conversation |
 | 작업 상태 | **Work status** | basics/sidebar-and-spaces |
 | 작업 완료 알림 | **Task completion notifications** | settings |
 | 작업 위치 | **Workspace** | basics/conversation |
+| 작업 중 | **Working** | basics/conversation |
 | 작업 중이면 대기열에 추가 | **Queue while busy** | settings |
-| 작업 컨텍스트 | **Working context** | basics/right-panel |
-| 작업 폴더 | **Working folder** | extensions/mcp-servers |
+| 작업 중지 | **Stop task** | basics/browser |
+| 작업 폴더 | **Working folder** | basics/right-panel, extensions/mcp-servers |
 | 작업 현황 | **Work overview** | projects |
-| 작업공간 | **Workspace** | basics/right-panel |
+| 작업당 최대 작업자 수 | **Max workers per task** | settings |
 | 작업이 어떻게 달라졌나요 | **How work changed** | projects |
+| 작업자 설정 | **Worker profiles** (`settings.pageSections.workerProfiles`)<br />**Worker settings** (`settings.modelsAdvanced.contents`) | settings |
+| 작업자 추가 | **Add Worker profile** | settings |
+| 작업자 프롬프트 | **Worker prompt** | settings |
 | 재개 | **Resume** | scheduled-tasks |
-| 재개 요청 | **Request resume** | basics/right-panel |
-| 저장 | **Saved** (`library.saved`)<br />**Save** (`library.save`) | basics/sidebar-and-spaces, extensions/mcp-servers, models/cloud, projects, scheduled-tasks, settings |
-| 저장된 인증 | **Saved credential** | models/cloud |
+| 저장 | **Save** (`canon.save`)<br />**Saved** (`library.saved`) | basics/sidebar-and-spaces, extensions/mcp-servers, models/cloud, projects, scheduled-tasks, settings |
+| 저장 공간 | **storage** (`settings.sectionAliases.memory[6]`)<br />**Storage** (`settings.memory.storageLabel`) | settings |
+| 저장된 인증 | **Saved credential** | models/cloud, settings |
 | 저장된 API 키가 없습니다. | **No saved API keys.** | models/cloud |
 | 저장됨 | **Saved** | settings |
 | 저장하기 | **Save** | basics/right-panel |
@@ -379,25 +583,34 @@ regenerate after the app copy or the Korean pages change.
 | 적용 중 | **Applying** | settings |
 | 전송 | **Send** | basics/conversation |
 | 전송 실패 | **Send failed** | basics/conversation |
-| 전체 | **All time** (`browser.history.all`)<br />**All** (`browser.all`) | basics/conversation, settings |
-| 전체 권한 | **Full access** | basics/conversation, getting-started/first-run, scheduled-tasks, settings, troubleshooting |
+| 전체 | **All time** (`browser.history.all`)<br />**All** (`browser.all`)<br />**Full** (`settings.logs.levels.full`) | basics/browser, basics/conversation, basics/library, settings, troubleshooting |
+| 전체 권한 | **Full access** | basics/conversation, basics/images, extensions/mcp-servers, getting-started/first-run, scheduled-tasks, settings, troubleshooting |
+| 전체 초기화 | **reset everything** (`settings.sectionAliases.general[6]`)<br />**Reset everything** (`settings.pageSections.fullReset`) | settings |
 | 전체 출처 적용 | **Apply source to all** | extensions/mcp-servers |
-| 전체보기 | **All** | basics/sidebar-and-spaces |
+| 전체보기 | **All** | basics/conversation, basics/sidebar-and-spaces |
 | 접근성 | **Accessibility** | settings |
-| 접기 | **Show less** (`firstRun.showLess`)<br />**Collapse** (`space.collapse`) | basics/conversation, getting-started/first-run |
+| 접기 | **Show less** (`sessionInfo.browserLess`)<br />**Collapse** (`space.collapse`) | basics/conversation, basics/right-panel, getting-started/first-run |
 | 접속 주소 | **Addresses** | advanced/remote-access, settings |
 | 정기 기억 정리 | **Regular memory consolidation** | settings |
-| 정보 | **About** | basics/right-panel, settings, troubleshooting |
+| 정렬 | **Sort** | basics/library |
+| 정보 | **About** (`settings.sections.about`)<br />**Info** (`settings.logs.severity.info`) | basics/command-palette, personalization, settings, troubleshooting |
 | 제공자 | **Provider** | models/cloud, models/custom |
-| 제목 | **Title** | scheduled-tasks |
+| 제목 | **Title** (`canon.title`)<br />**Heading** (`documents.heading`) | projects, scheduled-tasks |
+| 제한 시간 (ms) | **Timeout (ms)** | settings |
+| 조용한 시간 | **Quiet hours** | basics/conversation, personalization, scheduled-tasks, settings |
 | 종료 | **Quit** | getting-started/first-run, troubleshooting |
+| 종류 | **Kind** | settings |
 | 종류별 | **By type** | projects |
+| 좋아요 | **Sounds good** | basics/conversation, scheduled-tasks |
 | 주기 | **Frequency** | scheduled-tasks |
 | 주소 복사 | **Copy address** | settings |
+| 주소 사용 불가 | **Address unavailable** | settings, troubleshooting |
+| 주소 열기 실패 | **Couldn't open address** | settings, troubleshooting |
 | 주요 자료로 고정 | **Pin material** | projects |
 | 준비되었습니다 | **Ready** | settings |
 | 준비됨 | **Ready** | getting-started/first-run |
 | 준비를 마쳤습니다 | **You're all set** | getting-started/first-run |
+| 중단됨 | **Stopped** | basics/conversation |
 | 중요한 자료 | **Important materials** | projects |
 | 중지 | **Stop** | basics/conversation |
 | 중지됨 | **Stopped** | basics/conversation |
@@ -405,142 +618,192 @@ regenerate after the app copy or the Korean pages change.
 | 즐겨찾기 모두 보기 | **Show all favorites** | basics/sidebar-and-spaces |
 | 즐겨찾기 해제 | **Unpin** | basics/sidebar-and-spaces, projects |
 | 즐겨찾기에 추가 | **Pin** | basics/sidebar-and-spaces, projects |
-| 지금 실행 | **Run now** | scheduled-tasks |
+| 지금 보내기 | **Send now** | basics/conversation |
+| 지금 시작 | **Start now** | projects |
+| 지금 실행 | **Run now** | scheduled-tasks, settings |
+| 지난 1시간 | **Last hour** | basics/browser |
+| 지난 7일 | **Last 7 days** | basics/browser |
+| 지우개 | **Eraser** | basics/images |
+| 지우기 | **Delete** (`canon.mcp.remove`)<br />**Clear** (`browser.siteData.clear`) | basics/browser, settings |
+| 지침 | **Instructions** (`firstRun.import.itemInstructions`)<br />**instructions** (`settings.sectionAliases.memory[0]`) | personalization, settings |
+| 지침·기억 관리 › | **Manage memory ›** | basics/sidebar-and-spaces |
 | 직접 서버 입력 | **Your own server** | getting-started/first-run |
 | 직접 입력 | **Write feedback** | basics/conversation |
 | 직접 입력… | **Other…** | basics/conversation |
+| 직접 조작 | **Take over** | basics/browser |
+| 직접 조작 중 | **You're in control** | basics/browser |
 | 직접 지정 | **Custom** | scheduled-tasks |
 | 직접 편집 | **Custom** | personalization |
 | 직접값 | **Literal value** | extensions/mcp-servers |
-| 진단 | **diagnostics** (`settings.sectionAliases.privacy[0]`)<br />**Diagnostics** (`settings.pageSections.diagnostics`) | basics/command-palette, basics/right-panel, personalization, settings, troubleshooting |
-| 진행 상황 | **Project status** (`projectSignpost.position`)<br />**Progress** (`interfacePanels.progress`) | basics/right-panel, projects |
-| 진행 중 | **Running** (`taskGraph.status.running`)<br />**Active** (`projectDocumentMetadata.active`)<br />**In progress** (`projectDocumentMetadata.statuses.in_progress`)<br />**Working** (`interfaceDetails.questionPanel.working`) | projects |
+| 진단 | **diagnostics** (`settings.sectionAliases.privacy[0]`)<br />**Diagnostics** (`settings.pageSections.diagnostics`) | settings |
+| 진단 내보내기 | **export diagnostics** (`settings.sectionAliases.about[3]`)<br />**Export diagnostics** (`settings.logs.diagnosticsExport`) | personalization, settings, troubleshooting |
+| 진행 상세 보기 | **View progress details** | basics/conversation, basics/sidebar-and-spaces |
+| 진행 상황 | **Project status** (`projectSignpost.position`)<br />**Progress** (`interfacePanels.progress`) | projects |
+| 진행 순서 | **Run order** | projects |
+| 진행 중 | **Running** (`canon.order.status.running`)<br />**In progress** (`canon.actionStatuses.active`)<br />**Active** (`projectDocumentMetadata.active`)<br />**Working** (`interfaceDetails.questionPanel.working`)<br />**Now** (`composer.usage.now`) | basics/conversation, projects |
 | 진행중 | **Running** | basics/sidebar-and-spaces |
+| 질문 | **Question** | basics/right-panel |
 | 창을 닫아도 앱 아이콘 표시 | **Keep app available after closing the window** | settings, troubleshooting |
 | 찾은 모델 | **Discovered model** | models/custom |
+| 첨부 | **Attachments** | basics/right-panel |
+| 초기화 | **reset** (`settings.sectionAliases.memory[4]`)<br />**Reset** (`settings.memory.reset`) | personalization, settings |
 | 초기화 후 다시 시작 | **Reset and restart** | getting-started/first-run, troubleshooting |
-| 최근 30일 | **Last {0} days** | projects |
-| 최근 7일 | **Last {0} days** | projects |
+| 최근 30일 | **Last 30 days** | projects |
+| 최근 7일 | **Last 7 days** | projects |
 | 최근 90일 | **Last {0} days** | projects |
+| 최근 사용량 | **Recent usage** | settings |
 | 최근 수정 | **Last updated** | projects |
-| 최대 동시 Worker 수 | **Max simultaneous Workers** | settings |
+| 최근 실행 | **Recent runs** | settings |
 | 최대 컨텍스트 | **Max context** | models/custom |
+| 최소 | **Minimal** | settings |
 | 최신 | **Recent** (`space.recent`)<br />**Up to date** (`settings.actions.upToDate`) | basics/sidebar-and-spaces, settings |
 | 최신으로 이동 | **Latest** | basics/conversation |
-| 추가 | **Add** | advanced/remote-access, models/cloud, settings |
+| 최장 연속 사용 | **Longest streak** | settings |
+| 추가 | **Add** | advanced/remote-access, basics/images, models/cloud, settings |
 | 추가 기능 | **More options** | basics/conversation |
 | 추론 | **Reasoning** | basics/conversation, models/backup, models/cloud, personalization, settings |
-| 취소 | **Cancel** | getting-started/first-run, models/cloud |
-| 취소 요청 | **Request cancel** | basics/right-panel |
+| 추정 비용 | **Est. cost** (`composer.usage.imagesCost`)<br />**Estimated cost** (`composer.usage.estimatedCost`) | settings |
+| 축소 | **Zoom out** | basics/images |
+| 취소 | **Cancel** | getting-started/first-run, models/cloud, projects |
+| 취소됨 | **Cancelled** | projects, scheduled-tasks |
 | 캐릭터 | **Character** | settings |
-| 컨텍스트 | **Context** | basics/right-panel, settings, troubleshooting |
-| 컨텍스트 섹션별 추정 | **Estimates by context section** | settings |
 | 컨텍스트 정리 | **Context maintenance** | settings |
-| 컨텍스트 창 | **Context window** | basics/right-panel |
 | 컨텍스트 한도 | **Context limit** | models/cloud, settings |
-| 컨텍스트를 확인할 수 없습니다 | **Context is unavailable** | basics/right-panel |
+| 켜기 | **Turn on** | getting-started/first-run, troubleshooting |
 | 켜짐 | **On** | scheduled-tasks |
 | 코드 | **Code** | advanced/remote-access, settings |
 | 코드 복사 | **Copy code** | basics/conversation |
 | 코딩 | **Coding** | settings |
-| 코어 기본 스킬 | **Core skills** | extensions/skills |
+| 쿠키 및 캐시 | **Cookies and cache** | basics/browser, settings |
+| 크게 | **Large** | settings |
+| 크기 | **Size** | basics/images |
 | 키 발급받기 | **Get a key** | getting-started/first-run |
 | 키 입력 필요 | **Needs a key** | getting-started/first-run |
 | 키 입력 필요 1개 — 설정 › MCP | **1 needs a key — Settings › MCP** | getting-started/first-run |
 | 키체인에 저장 | **Stored in Keychain** | models/cloud |
+| 태그 | **Tags** | basics/library, projects |
+| 태그 편집… | **Edit tags…** | basics/library |
+| 태그 필터 | **Tag filter** | projects |
+| 탭 닫기 | **Close tab** | basics/browser |
+| 탭 N개 더 보기 | **Show {0} more tabs** | basics/right-panel |
+| 탭에서 마친 뒤 버틀러에게 돌려주세요 | **Finish in the tab, then give it back to Butler** | basics/browser |
+| 탭을 떠나면 버틀러에게 돌아감 | **Returns to Butler when you leave** | basics/browser |
 | 터널·프록시용 허용 호스트 | **Allowed hosts for tunnels and proxies** | advanced/remote-access, settings |
 | 테마 | **theme** (`settings.sectionAliases.appearance[0]`)<br />**Theme** (`settings.pageSections.theme`) | settings |
 | 테스트 | **Test** | settings, troubleshooting |
 | 통계 | **Statistics** | projects |
 | 투명 사이드바 | **Translucent sidebar** | settings |
-| 파일 | **File** | extensions/mcp-servers |
+| 파일 | **Files** (`fileViewer.files`)<br />**File** (`interfaceStatus.file`) | extensions/mcp-servers |
+| 파일 닫기 | **Close file** | basics/right-panel |
 | 파일 변경 | **File changes** | basics/conversation |
+| 파일 보기 | **View files** | basics/right-panel |
 | 파일 첨부 | **Attach file** | basics/conversation |
+| 파일에서 가져오기 | **Import from a file** | settings |
 | 파일이 첨부 가능한 크기를 초과했습니다. | **The file exceeds the attachment size limit.** | basics/conversation |
+| 팝업 차단됨 | **Pop-up blocked** | basics/browser |
+| 패스키 | **Passkey** | basics/browser |
 | 페르소나 | **persona** (`settings.sectionAliases.personalization[1]`)<br />**Persona** (`settings.fields.persona`) | personalization, settings |
 | 페르소나 프리셋 | **Persona preset** | getting-started/first-run, personalization, settings |
 | 페이지 읽기 | **Read page** (`guided.tools.browser_observe`)<br />**Page reader** (`settings.fields.searchReaderBackend`) | settings |
-| 편집 | **Edit** | models/backup, models/cloud, models/custom, settings, troubleshooting |
+| 편집 | **Edit** (`interfaceStatus.edit`)<br />**Edited** (`composer.usage.imagesEdited`) | basics/images, models/backup, models/cloud, models/custom, settings, troubleshooting |
+| 편집하지 못했어요 | **Couldn't edit** | basics/images |
 | 평일 | **Weekdays** | scheduled-tasks |
+| 포트 권한 없음 | **Port blocked** | settings, troubleshooting |
+| 포트 사용 중 | **Port in use** | settings, troubleshooting |
 | 폴더 선택 | **Choose folder** | settings |
+| 폴더에서 보기 | **Show in folder** | basics/right-panel |
 | 표시 이름 | **Display name** | extensions/mcp-servers, models/custom |
-| 프로젝트 | **Project** (`briefing.projectMoment`)<br />**Projects** (`sidebar.projects`) | basics/command-palette, extensions/skills, settings |
+| 품질 | **Quality** | basics/images |
+| 프로젝트 | **Project** (`canon.proposalCard.project`)<br />**Projects** (`sidebar.projects`) | basics/command-palette, settings |
+| 프로젝트 기억 | **project memory** (`settings.sectionAliases.memory[3]`)<br />**Project memory** (`settings.pageSections.projectMemory`) | personalization, settings |
+| 프로젝트 기억 지우기 | **Erase project memory** | settings |
 | 프로젝트 대시보드 | **Project dashboard** | basics/sidebar-and-spaces, projects |
 | 프로젝트 대화 | **Project chat** (`interfaceFeedback.projectChat`)<br />**Project chats** (`interfacePanels.projectChats`) | basics/command-palette |
 | 프로젝트 문서 | **Project documents** | basics/conversation, projects |
 | 프로젝트 삭제 | **Delete project** | basics/sidebar-and-spaces, projects |
-| 프로젝트 스킬 | **Project skills** | extensions/skills |
+| 프로젝트 스킬 | **Project skills** | extensions/skills, settings |
 | 프로젝트 이름 | **Project name** | basics/conversation, projects |
 | 프로젝트 이름 바꾸기 | **Rename project** | projects |
-| 프로젝트 폴더 | **Project folder** (`interfacePanels.projectFolder`)<br />**project folder** (`settings.sectionAliases.server[1]`) | basics/right-panel |
 | 프로젝트 활동 | **Project activity** | projects |
 | 프로토콜 | **Protocol** | settings |
 | 프로필 | **profile** (`settings.sectionAliases.memory[2]`)<br />**Profile** (`settings.pageSections.profileMemory`) | personalization, settings |
 | 프로필 가져오기 | **Import profile** | personalization |
-| 프롬프트 | **Prompt** | scheduled-tasks |
+| 프로필 지우기 | **Erase profile** | personalization, settings |
+| 프로필을 초기화할까요? | **Reset profile?** | personalization |
+| 프롬프트 | **Prompt** | basics/images, scheduled-tasks |
 | 프롬프트 복사 | **Copy prompt** | personalization |
+| 플랜 사용 꺼짐 | **Plan use is off** | troubleshooting |
+| 플랜 사용이 꺼져 있습니다 | **Plan use is off** | getting-started/first-run |
 | 플랫폼 힌트 | **Platform hint** | models/custom |
 | 하위 그룹 만들기 | **Create subgroup** | basics/sidebar-and-spaces |
+| 하위 작업 | **Subtasks** (`sessionInfo.subtasks`)<br />**Child Tasks** (`projectSignpost.tasks`)<br />**Task** (`interfaceStatus.task`) | basics/conversation |
+| 한 번 | **Once** | scheduled-tasks |
 | 한국어 | **Korean** | getting-started/first-run, personalization, settings |
-| 허용 대기 N개 | **{0} pending approvals** | basics/conversation |
+| 합계 | **Total** | settings |
+| 항상 | **Always** | basics/browser, settings |
+| 허용 | **Allow** | basics/browser |
+| 허용 대기 | **Needs approval** | basics/conversation |
 | 허용 범위 선택 | **Choose permission scope** | basics/conversation |
 | 허용 여부를 기다리고 있습니다. | **Waiting for your approval.** (`guided.workerStatus.waiting_for_form`)<br />**Waiting for approval.** (`interfaceStatus.approvalWaiting`) | basics/conversation |
-| 허용 호스트 | **allowed hosts** (`settings.sectionAliases.security[4]`)<br />**Allowed hosts** (`settings.pageSections.allowedHosts`) | settings |
+| 허용 해제 | **Revoke** | settings |
 | 허용 N개 | **{0} allowed** | basics/conversation |
+| 허용한 작업 | **approvals** (`settings.sectionAliases.security[7]`)<br />**Approved actions** (`settings.pageSections.grants`) | settings |
+| 허용한 작업 검색 | **Search approvals** | settings |
 | 헤더 | **Headers** | extensions/mcp-servers |
 | 헤더 추가 | **Add header** | extensions/mcp-servers |
 | 현재 설정으로 새로 시도 | **Retry as new with current settings** | basics/conversation, troubleshooting |
-| 현재 작업 방향 조정 | **Steer current turn** | settings |
 | 호스트 이름 | **Host names** | advanced/remote-access, settings |
 | 호스트 컴퓨터에서만 사용할 수 있습니다. | **Available only on the host computer.** | advanced/remote-access, settings |
 | 홈 화면 | **Home screen** | settings |
+| 확대 | **Zoom in** | basics/images |
 | 확인 | **OK** (`browser.ok`)<br />**Confirm** (`common.confirm`)<br />**Check** (`settings.actions.checkUpdates`) | settings, troubleshooting |
+| 확인 없이 결제 | **Pay without asking** | basics/browser, scheduled-tasks, settings |
+| 확인 없이 입력할 사이트 | **Sites that fill without asking** | basics/browser, settings |
 | 확인 중 | **Inspecting** (`interfaceFeedback.inspecting`)<br />**Checking** (`interfaceStatus.checking`) | models/cloud, settings |
+| 확인 필요 | **Needs you** (`browser.rail.needsCheck`)<br />**Needs attention** (`space.attention`)<br />**Needs your OK** (`conversation.initiated.needsApproval`) | basics/conversation, basics/sidebar-and-spaces, scheduled-tasks |
 | 환경 변수 | **Environment variables** | extensions/mcp-servers |
+| 환경 변수 참조 | **Environment reference** | extensions/mcp-servers |
 | 환경 변수 추가 | **Add environment variable** | extensions/mcp-servers |
 | 환경 설정 | **Preferences** | settings |
 | 활성화 | **Enable** | extensions/mcp-servers, settings |
 | 후속 요청 처리 | **Follow-up handling** | settings |
+| 훅 | **Hooks** (`settings.sections.hooks`)<br />**훅** (`settings.sectionAliases.hooks[1]`) | basics/command-palette |
+| 훅 추가 | **Add hook** | settings |
 | AI 메시지 알림 | **AI message notifications** | settings |
 | AI 연결 | **Connect AI** | getting-started/first-run |
 | API 기본 URL | **API base URL** | models/cloud, models/custom |
 | API 유형 | **API type** | models/custom |
-| API 키 | **API key** (`firstRun.keyLabel`)<br />**api keys** (`settings.sectionAliases.models[3]`)<br />**API keys** (`settings.sectionAliases.security[8]`) | getting-started/first-run, models/cloud, settings, troubleshooting |
+| API 키 | **API key** (`firstRun.keyLabel`)<br />**api keys** (`settings.sectionAliases.models[5]`)<br />**API keys** (`settings.sectionAliases.security[8]`) | basics/images, getting-started/first-run, models/cloud, settings, troubleshooting |
 | API 키 (선택) | **API key (optional)** | getting-started/first-run, models/custom |
 | API 키 제거 | **Remove API key** | models/custom |
-| API 프로바이더 사용량 | **API provider usage** | settings |
 | Brave Search | **Brave Search** | settings |
 | ChatGPT | **ChatGPT** | getting-started/first-run |
+| ChatGPT 로그인 방식이 바뀌었습니다. 다시 로그인하세요. | **ChatGPT sign-in changed. Sign in again.** | troubleshooting |
+| ChatGPT 플랜 | **ChatGPT plan** | models/cloud |
+| ChatGPT 플랜 검색 | **ChatGPT plan search** | settings |
+| ChatGPT 플랜에 없는 모델 | **Not in your ChatGPT plan** | basics/conversation |
+| ChatGPT로 계속하기 | **Continue with ChatGPT** | getting-started/first-run, models/cloud, troubleshooting |
+| ChatGPT에 다시 로그인하세요 | **Sign in to ChatGPT again** | basics/conversation |
+| ChatGPT에 로그인하세요 | **Sign in to ChatGPT** | getting-started/first-run |
 | Claude | **Claude** | getting-started/first-run |
-| Codex 구독 검색 | **Codex subscription search** | settings |
-| Custom | **Custom** | models/custom |
-| Custom 모델 검색 실패 | **Failed to discover Custom models** | models/custom |
-| Custom OpenAI 호환 | **Custom OpenAI-compatible** | models/custom |
 | DuckDuckGo HTML | **DuckDuckGo HTML** | settings |
 | Enter 전송, Shift Enter 줄바꿈 | **Enter sends, Shift Enter inserts newline** | basics/conversation, settings |
-| ENV 참조 | **Environment reference** | extensions/mcp-servers |
-| EOL | **EOL** | personalization, settings |
 | Gemini | **Gemini** | getting-started/first-run |
-| Git 브랜치 | **Git branch** | basics/right-panel |
 | Git 설치 안내 | **Install Git** | troubleshooting |
-| Git 작업공간이 아닙니다 | **Not a Git workspace** | basics/right-panel |
 | Git이 설치되어 있지 않습니다 | **Git is not installed** | troubleshooting |
 | GitHub 저장소 | **GitHub repository** | settings, troubleshooting |
 | Grok | **Grok** | getting-started/first-run |
-| Jina Hosted | **Jina Hosted** | settings |
+| Jina 호스팅 | **Jina Hosted** | settings |
+| JSON | **JSON** | settings, troubleshooting |
 | Kimi | **Kimi** | getting-started/first-run |
 | Lightpanda | **Lightpanda** | settings |
-| MCP | **MCP** | extensions/mcp-servers, getting-started/first-run |
+| MCP | **MCP** | basics/command-palette, extensions/mcp-servers, getting-started/first-run |
 | MCP 서버 추가 | **Add MCP server** | extensions/mcp-servers, settings |
 | N 동안 작업 | **Worked for {0}** | basics/conversation |
-| OAuth | **OAuth** | models/cloud |
-| OAuth 링크 | **OAuth link** | models/cloud |
-| OAuth 인증 완료 | **OAuth complete** | models/cloud |
-| OAuth 인증이 완료되지 않았습니다. | **OAuth did not complete.** | troubleshooting |
 | Ollama나 LM Studio를 켜면 나타납니다 | **Start Ollama or LM Studio to use it** | getting-started/first-run |
+| OpenAI 웹 검색 | **OpenAI Web Search** | settings |
 | OpenAI 호환 서버 | **OpenAI-compatible server** | getting-started/first-run |
 | OpenAI API | **OpenAI API** | getting-started/first-run |
-| OpenAI Web Search | **OpenAI Web Search** | settings |
 | OpenCode Go | **OpenCode Go** | getting-started/first-run, models/cloud |
 | OS 알림 상태 | **OS notification status** | settings, troubleshooting |
 | Qwen | **Qwen** | getting-started/first-run |
@@ -549,10 +812,6 @@ regenerate after the app copy or the Korean pages change.
 | Streamable HTTP | **Streamable HTTP** | extensions/mcp-servers |
 | Tavily | **Tavily** | settings |
 | URL | **URL** | extensions/mcp-servers |
-| Work | **Work** | projects |
-| Worker | **Workers** (`inspector.tabs.workers`)<br />**workers** (`settings.sectionAliases.models[1]`) | basics/right-panel, settings |
-| Worker 내역이 없습니다 | **No worker history yet** | basics/right-panel |
-| Worker 프롬프트 | **Worker prompt** | settings |
 | Z.AI 코딩 플랜 | **Z.AI Coding Plan** | getting-started/first-run |
 | Z.AI API | **Z.AI API** | getting-started/first-run, models/cloud |
 
@@ -567,41 +826,27 @@ same key from `en.ts`.
 | Korean bold text | Pages |
 | --- | --- |
 | <span data-mod-key><Kbd keys={["⌘", "Enter"]} label="Command Enter" /></span> 전송, Enter 줄바꿈 | settings |
-| 개인정보 및 데이터 | basics/command-palette |
-| 기억 정리 모델과 Worker 프로필 | models/backup, settings |
-| 다른 Butler가 백그라운드 서비스를 쓰고 있습니다. | troubleshooting |
-| 메모리 모델 | getting-started/first-run, settings |
-| 메모리 모델 받는 중 | getting-started/first-run |
-| 메모리 모델 확인 중 | getting-started/first-run |
-| 메모리 모델을 받지 못했습니다 | getting-started/first-run |
-| 모델 및 접근 권한 | basics/command-palette |
-| 사용자 정보 분석 | personalization, settings |
-| 사용자 정보 분석 모델 | personalization, settings |
-| 삭제 예정 | personalization |
-| 외부 AI 기억 가져오기 | personalization, settings |
-| 접근 권한 | basics/conversation, getting-started/first-run, settings, troubleshooting |
-| 프로필 데이터 삭제 | personalization, settings |
-| 학습 | personalization, settings |
+| 그룹으로 이동… | basics/library |
+| 추가 정보 | getting-started/install, troubleshooting |
+| 폴더로 이동… | basics/library |
 | Anthropic | models/cloud |
-| Butler 구성 요소가 없습니다. 다시 설치해 주세요. | troubleshooting |
-| Butler 준비 중 | getting-started/first-run |
-| Butler가 시작을 마치지 못했습니다. | troubleshooting |
-| Butler를 시작하는 데 너무 오래 걸렸습니다. | troubleshooting |
-| Butler를 시작하지 못했습니다. | getting-started/first-run, troubleshooting |
-| ChatGPT에 로그인하세요 | getting-started/first-run |
+| Assets | getting-started/install |
 | ChatGPT에 연결했습니다 | getting-started/first-run |
 | Claude 연결 | getting-started/first-run |
 | Codex · 1/2 | getting-started/first-run |
 | Codex에서 가져올 내용 | getting-started/first-run |
+| Custom | models/custom |
+| DeepSeek | models/cloud |
 | English | getting-started/first-run |
 | Google | models/cloud |
 | Medium | getting-started/first-run |
 | Moonshot / Kimi | models/cloud |
+| Motif | models/cloud |
 | OpenAI | models/cloud |
 | OpenAI 키를 삭제할까요? 이 키를 쓰는 모델 2개도 함께 삭제됩니다. | models/cloud |
 | Qwen Cloud | models/cloud |
 | Task | projects |
-| Worker 프로필 | settings |
-| Worker 프로필 추가 | settings |
+| Upstage | models/cloud |
+| Work | projects |
 | xAI / Grok | models/cloud |
 | Z.AI Coding Plan | models/cloud |

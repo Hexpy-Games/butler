@@ -100,6 +100,11 @@ export function artifactPreviewMode(
   return "unsupported";
 }
 
+/** A page Butler made, an HTML file or a PDF shows in a frame that scrolls itself. */
+export function previewIsFrame(mode: ArtifactPreviewMode): boolean {
+  return mode === "web" || mode === "html" || mode === "pdf";
+}
+
 function artifactExtension(value: string | undefined): string {
   const name = value?.trim().toLocaleLowerCase("en-US").split(/[/\\]/u).pop() ?? "";
   const index = name.lastIndexOf(".");

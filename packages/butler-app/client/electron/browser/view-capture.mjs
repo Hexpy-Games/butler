@@ -30,8 +30,10 @@ export function capturePage(tab, rect, options = { stayHidden: true }, contents 
   const timer = setTimeout(() => { fail("capture_surface_stalled"); tab.onCaptureStalled?.(); }, READBACK_STALL_MS);
   let raw;
   try { raw = contents.capturePage(rect, options); } catch (error) { raw = Promise.reject(error); }
-  // Only a completed readback or renderer destruction releases the native layout barrier.
-  raw.then(settled, settled);
+  // Only a completed readback or renderer destruction releases the native layout barrier. Electron settles the
+  // capture's promise before it ends that capture in Chromium (OnCapturePageDone), and a view attached in between
+  // keeps its page hidden after it is shown: the barrier opens on the next task, once the capture has ended.
+  raw.then(() => setImmediate(settled), () => setImmediate(settled));
   return Promise.race([raw, ended]);
 }
 

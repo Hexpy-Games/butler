@@ -55,6 +55,8 @@ Status shows whether remote access is on, the bind addresses, LAN URLs, bind err
 
 If WSL port forwarding, a tunnel or a reverse proxy uses a different Host, register its name or IP. In the app, expand **Allowed hosts for tunnels and proxies** in **Settings → Security**, enter the name in **Host names** and click **Add**.
 
+To open outputs Butler made from another computer, enter the tunnel hostname for outputs in **Output host** in the same place. **Output host** can be set only in the app.
+
 ```bash
 butler remote hosts add 192.0.2.10
 butler remote hosts remove 192.0.2.10

@@ -1,18 +1,18 @@
 ---
 title: "Personalization"
-description: "Set your profile, response style, learning scope and memory import."
+description: "Set your profile, response style, profile building and memory import."
 section: personalization
 order: 1
 status: published
 ---
 
-Personalization sets Butler's name and tone, the response language, and how much Butler learns about you from conversations. Change it in **Settings → Personalization**.
+Personalization sets Butler's name and tone, the response language, and how much Butler gets to know you from conversations. Change it in **Settings → Personalization**.
 
 ## Change the settings
 
 <Steps>
   1. In the sidebar, open **Settings** and select **Personalization**.
-  2. Change the items in the **Profile**, **Response style** and **Learning** sections.
+  2. Change the items in the **Profile**, **Response style** and **Profile building** sections.
   3. Click **Apply** at the bottom of the screen.
 </Steps>
 
@@ -33,36 +33,46 @@ Personalization settings are saved only when you click **Apply**.
 
 Persona and EOL are each saved up to 32,000 characters.
 
-## Learning
+## Profile building
 
-**Personal information analysis** sets how much Butler learns about you from local conversations. The default is **Off**.
+**Level** sets how much Butler gets to know you from local conversations. The default is **Off**.
 
-- **Off** — Butler does not analyze personal information. It uses only the current settings the feature needs.
+- **Off** — Butler doesn't build a profile. It uses only the settings it needs to work.
 - **Basic** — Butler uses your preferences for tone, explanation style and way of working in personalized replies.
 - **Deep** — Butler also uses recent interests, meaningful context and value judgments in personalized replies.
 
-If you choose **Basic** or **Deep** and click **Apply**, Butler records that you consented to the analysis.
+If you choose **Basic** or **Deep** and click **Apply**, Butler records that you consented to profile building.
 
-- **Personal information analysis model** — The model that extracts the information personalization needs. If you choose **Model default**, it follows the current Butler default model settings. To register a model, see [Cloud models](/en/help/models/cloud/).
-- **Reasoning** — The reasoning effort of the analysis model.
+- **Profile-building model** — The model that extracts the information personalization needs. If you choose **Model default**, it follows the current Butler default model settings. To register a model, see [Cloud models](/en/help/models/cloud/).
+- **Reasoning** — The reasoning effort of the profile-building model.
+- **Memory** — Click **Manage** to open **Settings → Memory**.
 
-To see when and how an analysis finished, check the **Personal information analysis** entries in [**Settings → System events**](/en/help/settings/#system-events).
+To see when and how profile building finished, check the **Profile building** entries in [**Settings → System events**](/en/help/settings/#system-events).
 
 ## Conversation memory
 
-On a fresh installation, you can ask Butler to remember something and ask about it later. Explicit requests to remember information are saved even when personal information analysis is off. Personal information analysis has its own consent setting, separate from conversation memory.
+On a fresh installation, you can ask Butler to remember something and ask about it later. Explicit requests to remember information are saved even when profile building is off. Profile building has its own consent setting, separate from conversation memory.
 
-Conversation records remain as sources. Memory consolidation and search vector generation run in the background. Vector search can take longer to become ready while the memory model downloads. Check preparation in **Settings → General**.
+Manage what Butler remembers, by kind, in [**Settings → Memory**](/en/help/settings/#memory).
 
-Frequently needed memories are kept in a hot cache, which refreshes as new memories are projected. Every past conversation is not included in every request. Ask for the source of an older decision and check whether it still applies.
+- **Instructions** — Rules you set in chat. Add and change them in chat, and delete them one by one on this screen. Each applies to **All chats**, a project or **This chat only**. If one has a time limit, it shows as `Expires in 3 hours`.
+- **What Butler noticed** — Habits Butler noticed in your conversations. Delete one and Butler won't suggest it again.
+- **Reach out first** — How readily Butler suggests things after memory consolidation. Choose **Off**, **Sometimes** or **Often**.
+- **Quiet hours** — Butler won't reach out during these hours.
+- **Chat memory** — What Butler picked up from your conversations on its own, including project conversations.
+- **Memory consolidation** — Settings for merging and tidying the memories collected from conversations.
+- **Profile** — What Butler knows about you from profile building. It shows the number of entries and candidates.
+- **Project memory** — What Butler remembers about one project.
 
-## Import external AI memory
+Conversation records remain as sources, and memory consolidation runs in the background. Memory search can take longer to become ready while the memory model downloads. Check preparation in **Memory model** under **Settings → Memory**. Ask for the source of an older decision and check whether it still applies.
+
+## Import memory
 
 Move the memories another AI service has stored into your Butler profile.
 
 <Steps>
-  1. Set **Personal information analysis** to **Basic** or **Deep** and click **Apply**.
-  2. In the **Import** section, click **Import** for **Import external AI memory**.
+  1. Set **Level** to **Basic** or **Deep** and click **Apply**.
+  2. In the **Import from other AI tools** section, click **Import** for **Import memory**.
   3. Click **Copy prompt** under **Import prompt**, then send the copied prompt to the other AI service.
   4. Paste what that service returns into **Imported profile content**.
   5. Click **Import profile**. The import runs on this screen right away and the result appears.
@@ -79,37 +89,39 @@ Personalization data is stored in the data folder (`~/.butler` by default).
 - Profile: `~/.butler/personalization/profile.json`
 - Persona: `~/.butler/personas/active.md`
 - EOL: `~/.butler/eol.md`
-- Learned personal information: `~/.butler/cognition/profile/profile.sqlite`
+- Personal information Butler learned: `~/.butler/cognition/profile/profile.sqlite`
 
-Learned personal information accumulates only when **Personal information analysis** is on.
+Personal information accumulates only when profile building is on.
 
 When you change the persona or the EOL, the previous text is backed up to `~/.butler/personalization/backups/`. Butler keeps the 20 most recent backups of each.
 
 While Butler is running, it runs regular memory consolidation once a day, after 4 a.m. in this computer's time zone. Check the result in **Settings → System events**.
 
-## Delete learned information
+## Erase the profile
 
 <Steps>
-  1. At the bottom of **Settings → Personalization**, click **Delete profile data**. The button changes to **Delete queued**.
-  2. Click **Apply**.
+  1. Open **Settings → Memory**.
+  2. In the **Profile** section, click **Reset** for **Erase profile**.
+  3. In the **Reset profile?** dialog, check what will be removed and what stays, then click **Reset**.
 </Steps>
 
-- The candidates collected by analysis, the stored profile and the summary used in replies are deleted.
-- The values in the **Profile** section, the persona and the EOL are not deleted. To clear them, empty the fields and click **Apply**.
-- Changing **Personal information analysis** to **Off** deletes the summary used in replies, but the candidates already collected and the stored profile remain. To delete everything, also run **Delete profile data**.
+- The entries and candidates Butler learned are deleted. This cannot be undone.
+- Your chats, instructions, chat memory, project memory, the values in the **Profile** section, the persona and the EOL are not deleted.
+- If profile building is on, Butler starts learning again from new conversations.
+- Changing **Level** to **Off** deletes the summary used in replies, but the candidates already collected and the stored profile remain. To delete everything, also run **Erase profile**.
 
 ## Notes
 
-<Notice tone="info" title="The app does not show learned information item by item">
-  Learned personal information is not shown as raw text in the app. To delete it, use **Delete profile data**, which deletes all of it at once.
+<Notice tone="info" title="The app does not show learned entries one by one">
+  **Profile** in **Settings → Memory** shows only the number of entries and candidates. To delete them, use **Erase profile**, which deletes all of them at once.
 </Notice>
 
-<Notice tone="warning" title="Conversation content is sent to the analysis model">
-  Personal information analysis and memory import call the **Personal information analysis model**. If you choose a cloud model, the content to analyze is sent to that provider.
+<Notice tone="warning" title="Conversation content is sent to the profile-building model">
+  Profile building and memory import call the **Profile-building model**. If you choose a cloud model, the content to analyze is sent to that provider.
 </Notice>
 
 <Notice tone="info">
-  If **Personal information analysis** is off, imported memories are not applied to the profile.
+  If **Level** is **Off**, imported memories are not applied to the profile.
 </Notice>
 
 To send logs with a bug report, use **Export diagnostics** in [**Settings → About**](/en/help/settings/#about).

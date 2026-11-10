@@ -1,5 +1,4 @@
 import { faviconSrc } from "@/app/favicons.ts";
-import { useAppLocale } from "@/app/copy.ts";
 import { useEffect, useId, useState } from "react";
 import { api, setDeveloperMode } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
@@ -12,7 +11,6 @@ import { OpenSourceLicenses } from "./OpenSourceLicenses";
 import { DiagnosticsExportField } from "./DiagnosticsExportField";
 
 export function AboutSettings() {
-  const locale = useAppLocale();
   const taskGraphEnabled = useButlerStore(state => state.taskGraphEnabled);
   const [info, setInfo] = useState<AppInfoView | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -108,7 +106,7 @@ export function AboutSettings() {
           control={<Switch id="task-graph-enabled" checked={taskGraphEnabled}
             onCheckedChange={enabled => useButlerStore.setState({ taskGraphEnabled: enabled })} />} />
       </SettingsSection>
-      <SettingsSection id="open-source" kind="info" title={locale === "ko-KR" ? "라이선스" : "Licenses"}>
+      <SettingsSection id="open-source" kind="info" title={settingsCopy.openSourceLicenses.section}>
         <OpenSourceLicenses />
       </SettingsSection>
       <SettingsSection id="diagnostics" kind="form" title={sections.diagnostics}>

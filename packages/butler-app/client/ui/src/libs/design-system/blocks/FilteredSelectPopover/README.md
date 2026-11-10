@@ -28,6 +28,11 @@ Keep filtering state in the product container. Pass `searchValue`, filter
 options, grouped result items, and footer options into this block. The block
 does not import stores, domain models, or app copy.
 
+A chooser that needs no filter chips passes `filters={[]}`, and a flat list
+leaves its group's `title` out; neither leaves an empty row. Put it in
+`PopoverContent data-menu-size="fit"` with `width="fixed"`, so the popover is
+exactly the block's width.
+
 ## Who Can Use This Component
 
 Any Butler UI agent or developer building a searchable chooser popover.
@@ -42,9 +47,18 @@ macOS. Search inputs should expose a clear button when populated, and filter chi
 should have enough breathing room to read as a separate control row.
 The result region should keep a stable fixed height around 200px and scroll
 internally, including when search has no matches.
-Rows keep the results ScrollArea's focus-ring inset, so they line up with the
-search box and group labels, and the scrollbar sits in the ScrollArea's lane
-beside them. Do not reset the results content padding.
+Panel spacing: inside a menu popover (`data-menu-size`, --space-xs inset) the
+block adds --space-sm, so the title, search box, filter chips, result rows and
+footer all sit --space-md from the popover edge and share one left and right
+edge. Regions are --space-sm apart, and each divider is a hairline with that
+--space-sm gap above and below it. Boxes (search field, filter and footer
+chips, row highlights) sit on that edge; all text (title, typed text, chip
+labels, group labels, row labels, footer title) starts on one column
+--space-sm inside it. On touch screens chips keep their wider --space-md
+padding (short labels stay pills, not circles), so their labels sit
+--space-xs past that column.
+Rows keep the results ScrollArea's focus-ring inset, and the scrollbar sits in
+the ScrollArea's lane beside them.
 When the popover opens, the selected row is scrolled into view inside the
 results region. The selected row shows a trailing check mark and exposes
 `aria-current="true"`.

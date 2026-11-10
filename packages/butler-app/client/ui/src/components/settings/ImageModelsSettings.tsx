@@ -40,12 +40,8 @@ export function ImageModelsSettings() {
       options={[{ value: "off", label: copy.off }, ...(settings?.models ?? []).map(m => ({ value: m.model_ref,
         label: m.display_name, icon: <ProviderMark providerId={m.provider_id} />, group: m.provider_label }))]} />
     {model && <>
-      <SettingsSelect settingId="image-credential" label={copy.apiKey} value={selected?.credential_id ?? ""} disabled={busy}
-        onChange={id => void save({ model_ref: modelRef, credential_id: id, default_quality: selected?.default_quality ?? model.default_quality })}
-        options={model.credentials.map(c => ({ value: c.id, label: c.label, description: c.masked_value || undefined,
-          disabled: !c.selectable, disabledReason: c.selectable ? undefined : copy.apiKeyOnly }))} />
-      {!model.credentials.some(c => c.selectable) && <ImageCredentialForm key={model.provider_id} providerId={model.provider_id}
-        onSaved={async id => { await save({ model_ref: modelRef, credential_id: id, default_quality: model.default_quality }); }} />}
+      <ImageCredentialForm key={model.model_ref} providerId={model.provider_id} credentialId={selected?.credential_id ?? null} disabled={busy}
+        onSelect={id => save({ model_ref: modelRef, credential_id: id, default_quality: selected?.default_quality ?? model.default_quality })} />
       <SettingsSelect settingId="image-quality" label={copy.defaultQuality} value={selected?.default_quality ?? model.default_quality}
         disabled={busy || !selected?.credential_id} onChange={quality => void save({ model_ref: modelRef,
           credential_id: selected!.credential_id, default_quality: quality })}

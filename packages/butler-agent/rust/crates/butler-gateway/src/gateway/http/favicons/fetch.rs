@@ -1,8 +1,15 @@
-//! Site-only HTTPS fetches with pinned DNS and bounded reads.
+//! Same-site HTTPS fetches with pinned DNS and bounded reads.
 use super::{Icon, policy};
 use butler_log::http::RedirectPolicy as Policy;
-use reqwest::{Response, Url};
-use std::time::Duration;
+use butler_runtime::browser::site_of_host;
+use reqwest::{
+    Response, Url,
+    header::{ACCEPT, HeaderValue, USER_AGENT},
+};
+use std::{
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
+};
 
 #[cfg(feature = "e2e-fixtures")]
 mod fixtures;
@@ -10,70 +17,97 @@ mod fixtures;
 pub(super) const ICON_LIMIT: usize = 100 * 1024;
 const HEAD_LIMIT: usize = 512 * 1024;
 
-pub(super) async fn fetch(host: &str) -> Option<Icon> {
-    tokio::time::timeout(Duration::from_millis(3500), fetch_site(host))
-        .await
-        .ok()
-        .flatten()
+pub(super) enum Fetched {
+    Icon(Icon),
+    /// The site answered without a usable icon.
+    Missing,
+    /// No answer at all, e.g. offline or a DNS failure.
+    Unreachable,
 }
 
-async fn fetch_site(host: &str) -> Option<Icon> {
-    let root = Url::parse(&format!("https://{host}/")).ok()?;
-    #[cfg(feature = "e2e-fixtures")]
-    let root = fixtures::root().unwrap_or(root);
-    if let Some((head, final_url)) = request(root.clone(), host, HEAD_LIMIT, true).await {
-        for url in declared_icons(&head, &final_url) {
-            if let Some(icon) = fetch_icon(url, host).await {
-                return Some(icon);
+/// One site's icon lookup, sent with the viewer's browser User-Agent.
+struct Lookup<'a> {
+    site: &'a str,
+    user_agent: Option<&'a HeaderValue>,
+    answered: AtomicBool,
+}
+
+pub(super) async fn fetch(site: &str, user_agent: Option<&HeaderValue>) -> Fetched {
+    let lookup = Lookup {
+        site,
+        user_agent,
+        answered: AtomicBool::new(false),
+    };
+    match tokio::time::timeout(Duration::from_millis(3500), lookup.icon()).await {
+        Ok(Some(icon)) => Fetched::Icon(icon),
+        _ if lookup.answered.load(Ordering::Relaxed) => Fetched::Missing,
+        _ => Fetched::Unreachable,
+    }
+}
+
+impl Lookup<'_> {
+    async fn icon(&self) -> Option<Icon> {
+        let root = Url::parse(&format!("https://{}/", self.site)).ok()?;
+        #[cfg(feature = "e2e-fixtures")]
+        let root = fixtures::root().unwrap_or(root);
+        if let Some((head, final_url)) = self.request(root.clone(), HEAD_LIMIT, true).await {
+            for url in declared_icons(&head, &final_url) {
+                if let Some(icon) = self.fetch_icon(url).await {
+                    return Some(icon);
+                }
             }
         }
+        self.fetch_icon(root.join("/favicon.ico").ok()?).await
     }
-    fetch_icon(root.join("/favicon.ico").ok()?, host).await
-}
 
-async fn fetch_icon(url: Url, host: &str) -> Option<Icon> {
-    let (bytes, _) = request(url, host, ICON_LIMIT, false).await?;
-    Icon::new(bytes)
-}
+    async fn fetch_icon(&self, url: Url) -> Option<Icon> {
+        let (bytes, _) = self.request(url, ICON_LIMIT, false).await?;
+        Icon::new(bytes)
+    }
 
-async fn request(mut url: Url, site: &str, cap: usize, head: bool) -> Option<(Vec<u8>, Url)> {
-    for hop in 0..=3 {
-        let addresses = addresses(&url, site).await?;
-        let host = url.host_str()?.to_owned();
-        // Native trust-store loading may read files; keep it off Tokio workers.
-        let client = tokio::task::spawn_blocking(move || {
-            butler_log::http::external(butler_log::http::Purpose::new("favicon"))
-                .no_proxy()
-                .redirect(Policy::none())
-                .connect_timeout(Duration::from_secs(2))
-                .user_agent("Mozilla/5.0")
-                .resolve_to_addrs(&host, &addresses)
-                .build()
-        })
-        .await
-        .ok()?
-        .ok()?;
-        let response = client
-            .get(url.clone())
-            .header("Accept", "image/*")
-            .send()
+    async fn request(&self, mut url: Url, cap: usize, head: bool) -> Option<(Vec<u8>, Url)> {
+        let accept = if head {
+            "text/html,application/xhtml+xml,*/*;q=0.8"
+        } else {
+            "image/*"
+        };
+        for hop in 0..=3 {
+            let addresses = addresses(&url, self.site).await?;
+            let host = url.host_str()?.to_owned();
+            // Native trust-store loading may read files; keep it off Tokio workers.
+            let client = tokio::task::spawn_blocking(move || {
+                butler_log::http::external(butler_log::http::Purpose::new("favicon"))
+                    .no_proxy()
+                    .redirect(Policy::none())
+                    .connect_timeout(Duration::from_secs(2))
+                    .resolve_to_addrs(&host, &addresses)
+                    .build()
+            })
             .await
+            .ok()?
             .ok()?;
-        if response.status().is_redirection() {
-            if hop == 3 {
+            let mut request = client.get(url.clone()).header(ACCEPT, accept);
+            if let Some(user_agent) = self.user_agent {
+                request = request.header(USER_AGENT, user_agent.clone());
+            }
+            let response = request.send().await.ok()?;
+            self.answered.store(true, Ordering::Relaxed);
+            if response.status().is_redirection() {
+                if hop == 3 {
+                    return None;
+                }
+                url = url
+                    .join(response.headers().get("location")?.to_str().ok()?)
+                    .ok()?;
+                continue;
+            }
+            if !response.status().is_success() {
                 return None;
             }
-            url = url
-                .join(response.headers().get("location")?.to_str().ok()?)
-                .ok()?;
-            continue;
+            return Some((read(response, cap, head).await?, url));
         }
-        if !response.status().is_success() {
-            return None;
-        }
-        return Some((read(response, cap, head).await?, url));
+        None
     }
-    None
 }
 
 async fn addresses(url: &Url, site: &str) -> Option<Vec<std::net::SocketAddr>> {
@@ -84,7 +118,7 @@ async fn addresses(url: &Url, site: &str) -> Option<Vec<std::net::SocketAddr>> {
     let host = url.host_str()?;
     // Icons, pages and redirects cannot send browsing history to another site.
     if url.scheme() != "https"
-        || host != site
+        || site_of_host(host) != site_of_host(site)
         || !policy::valid_host(host)
         || !url.username().is_empty()
         || url.password().is_some()

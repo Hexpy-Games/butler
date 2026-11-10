@@ -238,6 +238,9 @@ impl PrincipalAuthority {
                 }
                 return projection::admission(&record, &collation);
             }
+            if repo.has_open_question(&binding.owner_session_id)? {
+                return Err(AuthorityError::policy("question_card_open"));
+            }
             let mut record = question_record(binding, questions, sha, now, &collation)?;
             if !wait {
                 record.decision = RequestDecision::Modified;

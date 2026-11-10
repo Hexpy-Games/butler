@@ -41,7 +41,7 @@ pub(super) fn read(db: &Connection, work: &Value, views: &ProjectViews) -> Resul
     }
     // A Steward closes a delegated parent early: Butler's report is its reporting checkpoint.
     let id = text(work, "work_id")?;
-    let checkpoint = if work["scope_kind"] == "project" {
+    let checkpoint = if ledger_owned(work) {
         views
             .get(id)
             .map_or(Value::Null, |view| view["latestCheckpoint"].clone())
@@ -74,7 +74,7 @@ fn delivered(db: &Connection, record: &Value) -> Result<bool> {
 /// A review that asked for changes stands until a later review accepts.
 fn reviews_accept(db: &Connection, work: &Value, views: &ProjectViews) -> Result<bool> {
     let id = text(work, "work_id")?;
-    if work["scope_kind"] != "project" {
+    if !ledger_owned(work) {
         return Ok(rows(db, Query::CloseoutReview.sql(), [id])?
             .first()
             .is_none_or(|review| review["verdict"] == "accept"));
@@ -94,7 +94,7 @@ fn reviews_accept(db: &Connection, work: &Value, views: &ProjectViews) -> Result
 /// in prose is: answering leaves no tool result behind.
 fn nothing_done(db: &Connection, work: &Value, views: &ProjectViews) -> Result<bool> {
     let id = text(work, "work_id")?;
-    let results = if work["scope_kind"] == "project" {
+    let results = if ledger_owned(work) {
         views
             .get(id)
             .and_then(|view| view["resultRefs"].as_array())
@@ -113,7 +113,7 @@ fn nothing_done(db: &Connection, work: &Value, views: &ProjectViews) -> Result<b
 /// A delegated parent's closeout belongs to its Steward's terminal result.
 fn delegation(db: &Connection, work: &Value, views: &ProjectViews) -> Result<Delegation> {
     let id = text(work, "work_id")?;
-    let plan = if work["scope_kind"] == "project" {
+    let plan = if ledger_owned(work) {
         views
             .get(id)
             .and_then(|view| view.get("currentPlan"))

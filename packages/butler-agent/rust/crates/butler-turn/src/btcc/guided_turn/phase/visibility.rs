@@ -75,11 +75,7 @@ pub(super) fn legacy_authorized<'a>(
     if policy.access_mode != AccessMode::ReadOnly && scope.ledger && scope.has_project {
         names.extend(catalog.managed_ledger_effects.iter().cloned());
     }
-    if signals.project_sources {
-        names.insert("read_project_source".into());
-    } else {
-        names.remove("read_project_source");
-    }
+    authorize_project_reads(&mut names, scope, signals);
     // Moving the working folder goes wherever commands may run.
     if names.contains("run_command") {
         names.insert("switch_folder".into());
@@ -113,6 +109,24 @@ fn authorize_canon(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) 
         names.remove("canon_read");
         names.remove("canon_propose");
         names.remove("canon_queue");
+    }
+}
+
+/// Project reads need what they read: artifact discovery reads the chat's
+/// project, so every call fails without one; source reads need the context's
+/// project sources.
+fn authorize_project_reads(
+    names: &mut HashSet<String>,
+    scope: AuthorizationScope,
+    signals: ProjectSignals,
+) {
+    if !scope.has_project {
+        names.remove("project_artifacts");
+    }
+    if signals.project_sources {
+        names.insert("read_project_source".into());
+    } else {
+        names.remove("read_project_source");
     }
 }
 
@@ -246,11 +260,15 @@ fn apply_access_mode(
 /// Stewards and workers report to their parent instead of answering the
 /// user, so they never show answer blocks: a child's blocks would be accepted
 /// but never reach the conversation.
+/// Their turns start bound to their relation's Work, so they never start Work.
 fn apply_role(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
     authorize_canon(names, policy);
     if matches!(policy.role, PolicyRole::Steward | PolicyRole::Worker) {
         names.remove("answer_blocks");
         names.remove("resolve_ask");
+        // A child turn is bound to its relation's Work before its first round,
+        // and start_work refuses a bound turn.
+        names.remove("start_work");
     }
     for (role, tools) in [("butler", STEWARD_PARENT), ("steward", WORKER_DELEGATION)] {
         if policy.role.as_str() == role {
@@ -425,14 +443,12 @@ pub(super) fn turn_admits_zai_image_tool(policy: &GuidedExecutionPolicy) -> bool
             .any(|name| name == ToolName::AnalyzeAttachedImage)
 }
 
+/// Image calls follow the access mode for every role; a child's images reach its parent with its result.
 fn image_calls(names: &mut HashSet<String>, policy: &GuidedExecutionPolicy) {
-    if policy.role == PolicyRole::Butler
-        && policy.subsession.is_none()
-        && policy.access_mode != AccessMode::ReadOnly
-    {
-        names.extend(["generate_image".into(), "edit_image".into()]);
-    } else {
+    if policy.access_mode == AccessMode::ReadOnly {
         names.remove("generate_image");
         names.remove("edit_image");
+    } else {
+        names.extend(["generate_image".into(), "edit_image".into()]);
     }
 }

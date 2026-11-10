@@ -129,13 +129,14 @@ pub(super) fn resolve_message(
 ) -> Result<super::settings::ResolvedControls, super::storage::AppStorageError> {
     let mut resolution =
         super::settings::resolve_for_message_send(db, subscribers, chat, request, facts, now)?;
-    if request
+    if let Some(reference) = request
         .client_message_id
         .as_ref()
         .and_then(Value::as_str)
-        .is_some_and(|id| id.starts_with("question-followup-"))
+        .and_then(|id| id.strip_prefix(super::question_followup::CLIENT_ID_PREFIX))
     {
         resolution.persisted["message_origin"] = "question_followup".into();
+        resolution.persisted["question_ref"] = reference.into();
     }
     if let Some(id) = request.client_message_id.as_ref().and_then(Value::as_str) {
         let connected: bool = db
