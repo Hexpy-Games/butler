@@ -14,8 +14,6 @@ pub enum SubtaskState {
     Paused,
     /// Waiting on the owner's decision somewhere in its subtree.
     NeedsApproval,
-    /// Idle after a blocked result, waiting for the owner's direction.
-    Blocked,
     /// Not running: queued to start or idle.
     Waiting,
 }
@@ -31,7 +29,6 @@ impl SubtaskState {
         } else {
             match activity {
                 "active" => Self::Working,
-                "blocked" => Self::Blocked,
                 _ => Self::Waiting,
             }
         }
@@ -76,6 +73,10 @@ impl SubsessionService {
             .map_err(BtccError::from)?;
         let mut subtasks = Vec::with_capacity(rows.len());
         for row in rows {
+            // A child idle after its final answer is finished work, not an open subtask.
+            if row.activity == "completed" {
+                continue;
+            }
             let relation = &row.relation;
             let recoverable = !row.awaiting_decision && self.child_recoverable(relation).await?;
             let latest = self

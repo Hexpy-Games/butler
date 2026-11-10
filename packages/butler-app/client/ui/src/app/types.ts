@@ -1192,7 +1192,7 @@ export interface StewardResultView {
   created_at: string;
 }
 
-export type SubtaskState = "working" | "paused" | "needs_approval" | "blocked" | "waiting";
+export type SubtaskState = "working" | "paused" | "needs_approval" | "waiting";
 
 /** One Worker of a subtask, finished ones included, in delegation order. */
 export interface SubtaskWorkerView {

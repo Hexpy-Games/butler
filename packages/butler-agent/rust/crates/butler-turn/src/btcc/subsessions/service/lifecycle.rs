@@ -173,8 +173,14 @@ impl SubsessionService {
         let blocked = disposition
             .as_ref()
             .filter(|value| value.disposition == crate::btcc::DispositionStatus::Blocked);
+        let handoff = disposition
+            .as_ref()
+            .filter(|value| value.disposition == crate::btcc::DispositionStatus::Blocked)
+            .and_then(|value| value.next_condition.as_deref())
+            .and_then(crate::btcc::CapabilityHandoff::from_condition);
         let failure_reason = failure_code.clone().or_else(|| {
             blocked
+                .filter(|_| handoff.is_none())
                 .map(|value| {
                     value
                         .next_condition
@@ -188,11 +194,6 @@ impl SubsessionService {
         } else {
             status
         };
-        let handoff = disposition
-            .as_ref()
-            .filter(|value| value.disposition == crate::btcc::DispositionStatus::Blocked)
-            .and_then(|value| value.next_condition.as_deref())
-            .and_then(crate::btcc::CapabilityHandoff::from_condition);
         let mut evidence_refs = disposition
             .map(|disposition| disposition.evidence_snapshot)
             .unwrap_or_default();
