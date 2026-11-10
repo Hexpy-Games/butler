@@ -61,7 +61,7 @@ jobs:
       contents: read
       actions: read
       packages: write
-    needs: [changes, build]
+    needs: changes
     name: Platform contracts and debug stub chat
     if: always() && !cancelled() && needs.changes.result == 'success' && ((needs.changes.outputs.tier == 'integration' && fromJSON(needs.changes.outputs.jobs)['stub']) || (needs.changes.outputs.tier != 'integration' && (fromJSON(needs.changes.outputs.jobs)['stub'] && !inputs.diagnose-powershell && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))))
     runs-on: [self-hosted, butler-win, "${{ (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/')) && 'butler-win-release' || 'butler-win-shared' }}"]
