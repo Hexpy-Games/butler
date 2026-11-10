@@ -1,6 +1,6 @@
 # The experimental gpui desktop shell (실험). A separate workspace from
 # packages/butler-agent/rust: it pins gpui to the Butler fork of gpui-ce (branch
-# feat/butler-port-gaps, rev d4e3761) and adapts the UI-independent agent client.
+# butler/lens, by the rev below) and adapts the UI-independent agent client.
 [workspace]
 members = ["crates/*", "tools/ds-tokens", "tools/parity-diff"]
 resolver = "3"
@@ -23,10 +23,10 @@ debug = "line-tables-only"
 debug = 0
 
 [workspace.dependencies]
-gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "f31a074cf278d7303fef05e676f2f98b44bf053d", package = "gpui-ce" }
-gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "f31a074cf278d7303fef05e676f2f98b44bf053d", package = "gpui_ce_platform" }
-gpui_wgpu = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "f31a074cf278d7303fef05e676f2f98b44bf053d", package = "gpui_ce_wgpu" }
-gpui_elements = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "f31a074cf278d7303fef05e676f2f98b44bf053d", package = "gpui_ce_elements" }
+gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d580948b0fe5ebf3b3457fbd6c8b21100f09b2ad", package = "gpui-ce" }
+gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d580948b0fe5ebf3b3457fbd6c8b21100f09b2ad", package = "gpui_ce_platform" }
+gpui_wgpu = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d580948b0fe5ebf3b3457fbd6c8b21100f09b2ad", package = "gpui_ce_wgpu" }
+gpui_elements = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "d580948b0fe5ebf3b3457fbd6c8b21100f09b2ad", package = "gpui_ce_elements" }
 anyhow = "1"
 futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
 sys-locale = "0.3"
