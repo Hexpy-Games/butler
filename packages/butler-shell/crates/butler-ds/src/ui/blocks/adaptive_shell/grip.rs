@@ -6,10 +6,10 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AnyElement, App, CursorStyle, DispatchPhase, ElementId, Entity, InteractiveElement as _,
-    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,
-    Window, canvas, div, px,
+    AnyElement, App, AppContext as _, CursorStyle, DispatchPhase, ElementId, Entity,
+    InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, ParentElement as _, RenderOnce, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, canvas, div, px,
 };
 
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
@@ -334,6 +334,7 @@ impl RenderOnce for ResizeHandle {
             });
         let (hover, bounds_state) = (pointer.clone(), pointer);
         let (on_drag, on_key) = (self.on_drag.clone(), self.on_key.clone());
+        let view = window.current_view();
         let mut el = div()
             .id(self.id.clone())
             .relative()
@@ -352,7 +353,7 @@ impl RenderOnce for ResizeHandle {
                 });
                 if *on {
                     let after = hint_delay(Ds::get(cx));
-                    crate::ui::motion::wake_after(window, cx, after);
+                    crate::ui::motion::delay(window, cx, after, move |_, cx| cx.notify(view));
                 }
                 window.refresh();
             })
