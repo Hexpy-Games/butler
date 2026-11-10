@@ -298,8 +298,9 @@ impl Control {
             let (hover, moving) = s.sample(now, duration, &ease);
             (hover, moving, s.pressed, s.hovered)
         });
-        if moving {
-            // The foreground is arbitrary children; it re-renders for the fade's duration only.
+        // The foreground is arbitrary children; it re-renders for the fade's duration, and only
+        // when the fade changes it (the fill is a retained transition that needs no frames).
+        if moving && (self.fg.rest != self.fg.hover || self.underline == Underline::OnHover) {
             crate::ui::motion::input_frame(window);
         }
         let ds = Ds::get(cx);

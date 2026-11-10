@@ -10,10 +10,10 @@
 use std::time::Instant;
 
 use gpui::{
-    AnyElement, App, Bounds, ContentMask, Div, Edges, Element, ElementId, Entity, FocusHandle,
-    GlobalElementId, InspectorElementId, InteractiveElement as _, IntoElement, LayoutId,
-    ParentElement as _, Pixels, ScrollHandle, StatefulInteractiveElement as _, Styled as _, Window,
-    canvas, point, px,
+    AnyElement, App, AppContext as _, Bounds, ContentMask, Div, Edges, Element, ElementId, Entity,
+    FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement as _, IntoElement,
+    LayoutId, ParentElement as _, Pixels, ScrollHandle, StatefulInteractiveElement as _,
+    Styled as _, Window, canvas, point, px,
 };
 
 use crate::tokens::{Duration as DsDuration, Easing};
@@ -39,7 +39,7 @@ pub struct Flags {
 
 const TOLERANCE: f32 = 1.;
 /// The scrollbar stays this long after the content last moved.
-pub(super) const LINGER_MS: u128 = 700;
+pub(super) const LINGER: std::time::Duration = std::time::Duration::from_millis(700);
 
 fn component(p: gpui::Point<Pixels>, axis: Axis) -> f32 {
     f32::from(match axis {
@@ -95,6 +95,8 @@ struct State {
     revealed: Option<FocusHandle>,
     last_position: f32,
     scrolled_at: Option<Instant>,
+    /// The one wake that ends the current linger, armed for this `scrolled_at`.
+    linger_wake: Option<(Instant, gpui::Task<()>)>,
 }
 
 /// The target ring's span against the band the scroller shows clear of its fades.
@@ -316,6 +318,7 @@ pub fn fade(
         revealed: None,
         last_position: 0.,
         scrolled_at: None,
+        linger_wake: None,
     });
     if let Some(focus) = focus {
         state.update(cx, |s, _| s.focus = focus);
@@ -335,7 +338,7 @@ pub fn fade(
         (state.handle.clone(), state.focus.clone())
     };
     let ring_inside = keyboard && focus_handle.contains_focused(window, cx);
-    let (lengths, moving, host, lingering) = state.update(cx, |s, cx| {
+    let (lengths, moving, host, linger) = state.update(cx, |s, cx| {
         let (lengths, moving) = s.lengths(
             cfg,
             (timing, instant),
@@ -343,17 +346,35 @@ pub fn fade(
             window,
             cx,
         );
-        let lingering = s
-            .scrolled_at
-            .is_some_and(|at| now.saturating_duration_since(at).as_millis() < LINGER_MS);
-        (lengths, moving, s.host, lingering)
+        let linger = s.scrolled_at.and_then(|at| {
+            let left = LINGER.checked_sub(now.saturating_duration_since(at))?;
+            (!left.is_zero()).then_some((at, left))
+        });
+        (lengths, moving, s.host, linger)
     });
     if host {
         focus::hand_off_ring(cx);
     }
-    if moving || lingering {
+    if moving {
         crate::ui::motion::input_frame(window);
     }
+    // Hiding the scrollbar needs one frame at the linger end, not a frame per frame until then.
+    // A later move re-arms it; replacing the task cancels the earlier wake.
+    if let Some((at, left)) = linger
+        && state
+            .read(cx)
+            .linger_wake
+            .as_ref()
+            .is_none_or(|(armed, _)| *armed != at)
+    {
+        let view = window.current_view();
+        let wake = window.spawn(cx, async move |cx| {
+            cx.background_executor().timer(left).await;
+            cx.update(|_, cx| cx.notify(view)).ok();
+        });
+        state.update(cx, |s, _| s.linger_wake = Some((at, wake)));
+    }
+    let lingering = linger.is_some();
     let (axis, fade) = (cfg.axis, f32::from(cfg.size));
     let watch = {
         let state = state.clone();
