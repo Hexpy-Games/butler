@@ -74,6 +74,17 @@ pub(super) struct CreatePlan {
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(super) struct EditPlan {
+    pub(super) plan_id: String,
+    pub(super) expected_revision: i64,
+    pub(super) title: Option<String>,
+    pub(super) description: Option<String>,
+    /// Due date in YYYY-MM-DD format; null clears it.
+    #[serde(default, deserialize_with = "nullable")]
+    pub(super) due_on: Option<Option<String>>,
+}
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Edit {
     pub(super) epic_id: String,
     pub(super) expected_revision: i64,

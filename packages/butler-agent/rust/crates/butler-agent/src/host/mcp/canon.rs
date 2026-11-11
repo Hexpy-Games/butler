@@ -200,6 +200,46 @@ impl McpServer {
         }.await)
     }
     #[tool(
+        name = "canon_edit_plan",
+        description = "Edit a canon plan's title, description or due date using its current revision."
+    )]
+    async fn canon_edit_plan(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(args): Parameters<args::EditPlan>,
+    ) -> CallToolResult {
+        result(
+            async {
+                let mut body = json!({"expected_revision":args.expected_revision});
+                for (key, value) in [("title", args.title), ("description", args.description)] {
+                    if let Some(value) = value {
+                        body[key] = json!(value);
+                    }
+                }
+                if let Some(due_on) = args.due_on {
+                    body["due_on"] = json!(due_on);
+                }
+                if body.as_object().is_none_or(|body| body.len() == 1) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "변경할 내용을 지정해 주세요.",
+                    ));
+                }
+                let client = Client::local(self, &context).await?;
+                decode::<CanonPlan>(
+                    client
+                        .request(
+                            reqwest::Method::PATCH,
+                            &format!("/canon/plans/{}", component(&args.plan_id)),
+                            Some(body),
+                        )
+                        .await?,
+                )
+            }
+            .await,
+        )
+    }
+    #[tool(
         name = "canon_edit_epic",
         description = "Edit or move a canon epic using its current revision."
     )]
