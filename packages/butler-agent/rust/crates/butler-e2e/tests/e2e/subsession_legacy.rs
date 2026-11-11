@@ -12,6 +12,8 @@ use butler_platform::sqlite;
 use serde_json::{Value, json};
 #[path = "subsession_legacy/activity.rs"]
 mod activity;
+#[path = "subsession_legacy/closeout.rs"]
+mod closeout;
 #[path = "subsession_legacy/presentation.rs"]
 mod presentation;
 

@@ -97,13 +97,15 @@ impl SubsessionService {
             },
         };
         let replaces = request.replaces_relation_id.clone();
+        let title =
+            super::helpers::delegation_title(request.safe_title.as_deref(), &packet.objective);
         let input = ids.create(
             delegation::Parent {
                 session_id: request.parent_session_id,
                 turn_id: request.parent_turn_id,
                 anchor_message_id: request.anchor_message_id,
             },
-            request.safe_title.unwrap_or_else(|| "Worker task".into()),
+            title,
             packet,
             intent,
             now,

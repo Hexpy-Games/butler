@@ -80,6 +80,8 @@ fn channel_frames() -> usize {
 #[derive(Default)]
 struct Inner {
     host: Option<mpsc::Sender<Value>>,
+    /// The App that last attached or asked to (pid, process start); kept across detaches.
+    app: Option<(u32, String)>,
     pending: HashMap<String, PendingReply>,
     tabs: butler_runtime::browser::TabRegistry,
     uses: HashMap<String, usage::Use>,
@@ -185,8 +187,7 @@ pub(super) async fn route(
     let path = request.uri().path().to_owned();
     match (request.method(), path.as_str()) {
         (&Method::GET, "/internal/browser-host") => {
-            let launch = hidden::launch_of(request.headers());
-            attach(state, client.keys.live_streams(), launch.as_deref()).await
+            attach(state, client.keys.live_streams(), request.headers()).await
         }
         (&Method::POST, "/internal/browser-host/downloads") => {
             downloads::handle(state, read_json(request).await?).await
@@ -246,10 +247,12 @@ pub(super) async fn route(
 async fn attach(
     state: Arc<HttpState>,
     rotated: tokio_util::sync::CancellationToken,
-    launch: Option<&str>,
+    headers: &axum::http::HeaderMap,
 ) -> Result<Response, HttpError> {
+    let launch = hidden::launch_of(headers);
+    let launch = launch.as_deref();
     let (sender, receiver) = mpsc::channel(channel_frames());
-    let generation = register_host(&state, sender, launch).await?;
+    let generation = register_host(&state, sender, launch, hidden::app_pid_of(headers)).await?;
     if launch.is_some() {
         hidden::watch(&state, generation);
     }
@@ -440,10 +443,19 @@ async fn register_host(
     state: &HttpState,
     sender: mpsc::Sender<Value>,
     launch: Option<&str>,
+    app_pid: Option<u32>,
 ) -> Result<u64, HttpError> {
+    let app = if launch.is_none() {
+        app_pid.and_then(hidden::identify)
+    } else {
+        None
+    };
     let _attach = state.browser.5.lock().await;
     {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        if app.is_some() {
+            hub.app = app;
+        }
         hidden::admit(state, &mut hub, launch)?;
     }
     loop {
@@ -472,5 +484,6 @@ async fn register_host(
         hub.generation += 1;
         hub.generation
     };
+    state.browser.2.notify_waiters();
     Ok(generation)
 }

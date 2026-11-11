@@ -85,6 +85,15 @@ impl SubsessionService {
             }
             self.deliver_child_result(&session, &status).await?;
         }
+        // Older builds saved some results without closing their cards.
+        for (session, turn) in self
+            .repository
+            .close_saved_results((self.now)())
+            .await
+            .map_err(BtccError::from)?
+        {
+            self.stop_closed_turn(&session, &turn).await?;
+        }
         Ok(())
     }
 }
