@@ -58,8 +58,10 @@ jobs:
       - name: Share browser assets with isolated checks
         run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/playwright" >> "$GITHUB_ENV"
 
+      # Browser only: the hosted image already has Chromium's system libraries
+      # (it ships Chrome and Chromium) and the smoke uses only bundled fonts.
       - name: Install Playwright Chromium
-        run: bunx playwright install --with-deps chromium
+        run: bunx playwright install chromium
 
       - name: Smoke (overview + deep links, no foreign requests)
         timeout-minutes: 5
