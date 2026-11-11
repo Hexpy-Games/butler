@@ -65,7 +65,7 @@ export function wireTab(tab, actions) {
     win.webContents.send("butler-browser:pointer", point);
   });
   contents.on("before-input-event", (event, input) => {
-    if (actions.shortcut(input)) event.preventDefault();
+    if (actions.suggestKey(input) || actions.shortcut(input)) event.preventDefault();
   });
   contents.on("context-menu", async (_event, params) => {
     const win = tab.popupWindow ?? actions.window();

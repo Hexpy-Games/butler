@@ -89,20 +89,7 @@ pub(super) async fn prepare(
         .await?;
     let origins: Vec<String> =
         serde_json::from_value(entry["entry"]["origins"].clone()).unwrap_or_default();
-    let token = uuid::Uuid::new_v4().simple().to_string();
-    {
-        let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-        let now = Instant::now();
-        hub.fills.retain(|_, fill| fill.expires > now);
-        hub.fills.insert(
-            token.clone(),
-            Fill {
-                entry: id.into(),
-                origins: origins.clone(),
-                expires: now + TOKEN_TTL,
-            },
-        );
-    }
+    let token = mint(state, id, origins.clone())?;
     frame["args"] = json!({
         "entry_id": id, "username": entry["entry"]["username"], "origins": origins,
         "fill_token": token, "policy": frame["args"]["policy"],
@@ -204,4 +191,26 @@ pub(super) async fn credentials(
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok(response)
+}
+
+pub(in crate::gateway::http) fn mint(
+    state: &Arc<HttpState>,
+    entry: &str,
+    origins: Vec<String>,
+) -> Result<String, HttpError> {
+    let token = uuid::Uuid::new_v4().simple().to_string();
+    {
+        let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        let now = Instant::now();
+        hub.fills.retain(|_, fill| fill.expires > now);
+        hub.fills.insert(
+            token.clone(),
+            Fill {
+                entry: entry.into(),
+                origins,
+                expires: now + TOKEN_TTL,
+            },
+        );
+    }
+    Ok(token)
 }
