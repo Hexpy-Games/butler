@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -10,9 +11,19 @@ import { appCopy, setAppCopyLanguage } from "../../packages/butler-app/client/ui
 
 setAppCopyLanguage("ko");
 const scratch = mkdtempSync(join(tmpdir(), "mail-account-smoke-"));
+// The connector keeps its password in the system store: a throwaway keychain on macOS
+// (as signin-handoff-smoke.ts), the test-support file store elsewhere.
+const agentHome = join(scratch, "home");
+mkdirSync(join(agentHome, "Library/Keychains"), { recursive: true }); mkdirSync(join(agentHome, "Library/Preferences"));
+if (process.platform === "darwin") {
+  const keychain = join(agentHome, "Library/Keychains/butler-test.keychain-db");
+  for (const args of [["create-keychain", "-p", "butler-test"], ["default-keychain", "-d", "user", "-s"], ["unlock-keychain", "-p", "butler-test"]]) {
+    assert.equal(spawnSync("/usr/bin/security", [...args, keychain], { env: { ...process.env, HOME: agentHome } }).status, 0, `test keychain ${args[0]}`);
+  }
+}
 const server = await createNativeAppServer({
   uiRoot: resolve("packages/butler-app/client/ui/dist"),
-  env: { BUTLER_TEST_SECRET_STORE: join(scratch, "secrets.json") },
+  env: process.platform === "darwin" ? { HOME: agentHome } : { BUTLER_TEST_SECRET_STORE: join(scratch, "secrets.json") },
 });
 const { secret } = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8"));
 const adminHeaders = { ...server.authHeaders, "x-butler-admin": secret };
@@ -89,6 +100,9 @@ try {
   process.exitCode = 1;
 } finally {
   await browser.close();
+  // Uninstall through the Agent: the installed plugin store is read-only on disk.
+  const plugins = await server.api<{ revision: number; plugins: Array<{ id: string }> }>("/plugins", { headers: adminHeaders }).catch(() => null);
+  if (plugins?.plugins.some(plugin => plugin.id === "mail")) await server.api(`/plugins/mail?revision=${plugins.revision}`, { method: "DELETE", headers: adminHeaders });
   await server.stop();
   rmSync(scratch, { recursive: true, force: true });
 }
