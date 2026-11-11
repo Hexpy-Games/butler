@@ -408,7 +408,9 @@ impl Typo {
                 .text_ellipsis();
         }
         if let Some(lines) = self.line_clamp {
-            el = el.min_w_0().line_clamp(lines);
+            // `-webkit-line-clamp`: the last kept line ends in an ellipsis (gpui truncates only
+            // with a text overflow set; without it the last line runs on and is clipped).
+            el = el.min_w_0().line_clamp(lines).text_ellipsis();
         }
         el = match self.wrap {
             Wrap::Normal | Wrap::Anywhere => el,
