@@ -187,15 +187,7 @@ pub(super) async fn route(
     let path = request.uri().path().to_owned();
     match (request.method(), path.as_str()) {
         (&Method::GET, "/internal/browser-host") => {
-            let launch = hidden::launch_of(request.headers());
-            let app_pid = hidden::app_pid_of(request.headers());
-            attach(
-                state,
-                client.keys.live_streams(),
-                launch.as_deref(),
-                app_pid,
-            )
-            .await
+            attach(state, client.keys.live_streams(), request.headers()).await
         }
         (&Method::POST, "/internal/browser-host/downloads") => {
             downloads::handle(state, read_json(request).await?).await
@@ -255,11 +247,12 @@ pub(super) async fn route(
 async fn attach(
     state: Arc<HttpState>,
     rotated: tokio_util::sync::CancellationToken,
-    launch: Option<&str>,
-    app_pid: Option<u32>,
+    headers: &axum::http::HeaderMap,
 ) -> Result<Response, HttpError> {
+    let launch = hidden::launch_of(headers);
+    let launch = launch.as_deref();
     let (sender, receiver) = mpsc::channel(channel_frames());
-    let generation = register_host(&state, sender, launch, app_pid).await?;
+    let generation = register_host(&state, sender, launch, hidden::app_pid_of(headers)).await?;
     if launch.is_some() {
         hidden::watch(&state, generation);
     }
