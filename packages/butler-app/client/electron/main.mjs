@@ -1948,7 +1948,7 @@ const browserHost = legacyDataBlocked ? null : createBrowserHost({
   stillDirectory: join(butlerDataRoot, "app", "browser-still-outbox"),
   replayDirectories: [join(butlerDataRoot, "state", "browser", "app-host", "still-outbox")],
   onStillDelivered: receipt => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("butler-browser:still-delivered", receipt); },
-  fetch: (path, init) => appServerFetch(path, init),
+  fetch: (path, init = {}) => appServerFetch(path, { ...init, headers: { ...init.headers, "x-butler-app-pid": String(process.pid) } }),
   adminCredential: () => readAppLocalAdmin({ butlerData: butlerDataRoot }),
   executeBrowser: frame => userBrowser?.execute(frame),
   resetBrowser: () => userBrowser?.resetUse(),
