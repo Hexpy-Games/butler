@@ -86,6 +86,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         | "expect-anchor"
         | "expect-no-anchor"
         | "expect-scale"
+        | "expect-toasts"
         | "expect-session"
         | "expect-composer-focus"
         | "wait" => super::frame::command(h, command, arg),

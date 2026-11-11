@@ -44,8 +44,10 @@ enum Decision {
     Deny,
 }
 
-/// `CanonTrustDialog`: reads the pending grants again when `Topic::CanonTrust` moves
-/// (`canon.trust_requested`, `canon.trust_changed`, `stream.reconcile_required`).
+/// `CanonTrustDialog`: reads the pending grants when `Topic::CanonTrust` moves: the shell
+/// connecting to the agent, `canon.trust_requested`, `canon.trust_changed`,
+/// `stream.reconcile_required`. It is built with the window, before any agent is attached, so
+/// it has nothing to read until the first connect (React's request waits for the agent).
 pub(crate) struct CanonTrustDialog {
     grants: Vec<Grant>,
     busy: bool,
@@ -63,13 +65,11 @@ impl CanonTrustDialog {
             }
         })
         .detach();
-        let dialog = Self {
+        Self {
             grants: Vec::new(),
             busy: false,
             seen,
-        };
-        Self::refresh(cx);
-        dialog
+        }
     }
 
     /// `useCanonGrants(true).refresh`: the pending grants, oldest first (revoked ones left out).

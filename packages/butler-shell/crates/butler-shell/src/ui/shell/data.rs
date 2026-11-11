@@ -7,6 +7,7 @@ use gpui::{Context, Window};
 use super::Shell;
 use super::region::Touched;
 use crate::ui::i18n::Locale;
+use crate::ui::manage::Topic;
 use crate::ui::source::agent::MonitorSignal;
 use crate::ui::source::{ChatRef, EventCursor, Fetch, SourceError};
 use crate::ui::store::{Applied, ChatsLoad};
@@ -72,6 +73,8 @@ impl Shell {
             self.load_chats(load, cx);
             self.refresh_sidebar(cx);
             self.refresh_sidebar_update(cx);
+            // Reads that need the agent run once it is attached (the trust dialog's grants).
+            self.bump_topic(Topic::CanonTrust, cx);
             // `watchAppLogging` / `watchAppUserWork` on (re)connect.
             crate::lifecycle::logs::refresh(cx);
             crate::lifecycle::app_update::work_changed(cx);

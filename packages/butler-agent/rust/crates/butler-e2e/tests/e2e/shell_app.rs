@@ -272,7 +272,9 @@ async fn shell_app_01_first_run_reaches_the_workspace() -> Result<(), HarnessErr
     let mut shell = Shell::start(&sandbox, &env).await?;
     assert_eq!(shell.report("first-frame")?["dark"], !system_dark);
     let shown = format!("answer {answer}");
+    // No toast before the agent is attached: reads wait for it (none fails for want of one).
     let steps = [
+        "expect-toasts 0",
         "agent running",
         "wait-anchor composer",
         "expect-no-anchor first-run-setup",
