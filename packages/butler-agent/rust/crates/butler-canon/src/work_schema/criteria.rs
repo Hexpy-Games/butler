@@ -6,7 +6,7 @@ pub(super) fn upgrade(db: &Connection) -> rusqlite::Result<()> {
         [],
         |r| r.get(0),
     )?;
-    if definition.contains("'criterion_confirmed'") {
+    if definition.contains("'moved'") {
         return Ok(());
     }
     let indexes = db.prepare("SELECT sql FROM sqlite_schema WHERE type='index' AND tbl_name='canon_activity' AND sql IS NOT NULL")?

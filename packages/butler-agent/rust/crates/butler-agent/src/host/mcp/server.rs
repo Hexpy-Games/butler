@@ -345,10 +345,13 @@ impl ServerHandler for McpServer {
     fn list_tools(
         &self,
         _request: Option<rmcp::model::PaginatedRequestParams>,
-        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
     ) -> impl std::future::Future<Output = Result<rmcp::model::ListToolsResult, rmcp::ErrorData>>
     {
         let mut tools = (Self::tool_router() + Self::canon_router()).list_all();
+        let cache_hints = context
+            .protocol_version()
+            .is_some_and(|version| version >= rmcp::model::ProtocolVersion::V_2026_07_28);
         let result = butler_models::models::ModelCatalog::new()
             .map(|catalog| {
                 for tool in &mut tools {
@@ -358,6 +361,8 @@ impl ServerHandler for McpServer {
                 }
                 rmcp::model::ListToolsResult {
                     tools,
+                    ttl_ms: cache_hints.then_some(0),
+                    cache_scope: cache_hints.then_some(rmcp::model::CacheScope::Public),
                     ..Default::default()
                 }
             })

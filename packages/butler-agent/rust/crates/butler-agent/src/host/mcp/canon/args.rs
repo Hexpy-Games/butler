@@ -52,6 +52,7 @@ pub(super) struct Create {
     pub(super) title: String,
     pub(super) description: Option<String>,
     pub(super) assign_to_me: Option<bool>,
+    pub(super) plan_id: Option<String>,
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -60,4 +61,28 @@ pub(super) struct Propose {
     pub(super) base_revision: i64,
     pub(super) body: String,
     pub(super) summary: String,
+}
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CreatePlan {
+    pub(super) project: String,
+    #[schemars(length(min = 1, max = 256))]
+    pub(super) title: String,
+    pub(super) description: Option<String>,
+    /// Due date in YYYY-MM-DD format.
+    pub(super) due_on: Option<String>,
+}
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Edit {
+    pub(super) epic_id: String,
+    pub(super) expected_revision: i64,
+    pub(super) title: Option<String>,
+    pub(super) description: Option<String>,
+    #[serde(default, deserialize_with = "nullable")]
+    pub(super) plan_id: Option<Option<String>>,
+    pub(super) before_id: Option<String>,
+}
+fn nullable<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<String>>, D::Error> {
+    Option::<String>::deserialize(d).map(Some)
 }

@@ -59,7 +59,7 @@ async fn cn_10_gateway_sanitizes_identity_and_keeps_allowed_capabilities_while_p
     );
     let grant = pending(&s).await?;
     assert_eq!(grant["allowed"], json!(["canon.read"]));
-    assert_eq!(grant["requested"].as_array().unwrap().len(), 5);
+    assert_eq!(grant["requested"].as_array().unwrap().len(), 7);
     assert_eq!(delegated(&s, "/canon/list", "Connector").await?.0, 200);
     read_while_writer_held(&s).await?;
     s.finish().await

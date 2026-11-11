@@ -130,3 +130,78 @@ async fn cn_11_mcp_updates_comments_creates_and_proposes() -> Result<(), Harness
     );
     s.finish().await
 }
+
+#[tokio::test]
+async fn cn_12_mcp_creates_plans_edits_and_moves_epics() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("CN-12")?.data_folder_token().start().await?;
+    let project = project(&s).await?;
+    trust(&s).await?;
+    let plan = call(
+        &s,
+        "canon_create_plan",
+        json!({"project":"Canon MCP","title":"External plan"}),
+    )
+    .await?;
+    let first = call(
+        &s,
+        "canon_create_epic",
+        json!({"project":project,"title":"First epic","plan_id":plan["id"]}),
+    )
+    .await?;
+    assert_eq!(first["plan"]["id"], plan["id"]);
+    let second = call(
+        &s,
+        "canon_create_epic",
+        json!({"project":project,"title":"Backlog epic"}),
+    )
+    .await?;
+    assert!(second["plan"].is_null());
+    let id = second["id"].as_str().unwrap();
+    let edited = call(&s, "canon_edit_epic", json!({"epic_id":id,"expected_revision":second["revision"],"title":"Edited epic","description":"Updated description","plan_id":plan["id"],"before_id":first["id"]})).await?;
+    assert_eq!(edited["title"], "Edited epic");
+    assert_eq!(edited["description"], "Updated description");
+    let page = call(
+        &s,
+        "canon_list",
+        json!({"project":project,"plan_id":plan["id"]}),
+    )
+    .await?;
+    let mut order: Vec<_> = page["epics"].as_array().unwrap().iter().collect();
+    order.sort_by_key(|epic| epic["order"].as_str().unwrap().to_owned());
+    let order: Vec<_> = order.iter().map(|epic| &epic["id"]).collect();
+    assert_eq!(order, [&json!(id), &first["id"]]);
+    let updated = call(
+        &s,
+        "canon_update_epic_status",
+        json!({"epic_id":id,"expected_revision":edited["revision"],"status":"in_progress"}),
+    )
+    .await?;
+    assert_eq!(updated["status"], "in_progress");
+    let returned = call(
+        &s,
+        "canon_edit_epic",
+        json!({"epic_id":id,"expected_revision":updated["revision"],"plan_id":null}),
+    )
+    .await?;
+    assert!(returned["error"].is_null(), "{returned}");
+    assert!(returned["plan"].is_null());
+    let app = s.gw.get(&format!("/canon/epics/{id}")).await?;
+    let activity = app.data()["activity"].as_array().unwrap();
+    assert_eq!(activity.len(), 5);
+    for kind in ["created", "edited", "status"] {
+        assert_eq!(activity.iter().filter(|row| row["kind"] == kind).count(), 1);
+    }
+    let moves: Vec<_> = activity
+        .iter()
+        .filter(|row| row["kind"] == "moved")
+        .collect();
+    assert_eq!(moves.len(), 2);
+    assert!(moves.iter().any(|row| row["summary"] == "External plan"));
+    assert!(moves.iter().any(|row| row["summary"] == ""));
+    for row in activity {
+        assert_eq!(row["actor"]["via"], "Claude Code");
+        assert_eq!(row["actor"]["origin"], "mcp");
+    }
+    s.finish().await
+}
