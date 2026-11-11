@@ -283,20 +283,16 @@ impl Shell {
         );
     }
 
-    /// The agent went away: back to the disconnected state.
+    /// The agent went away: back to the disconnected state. It asks for no rediscovery: a new
+    /// attachment comes from the watcher already, and a failed request asks in `failed`.
     fn lost(&mut self, cx: &mut Context<Self>) {
         self.live_task = None;
-        if self.source.is_some() {
+        if self.source.take().is_some() {
             butler_ds::ui::toast::show(
                 cx,
                 butler_ds::ui::toast::Toast::message(self.copy("Connection lost", "연결 끊김")),
             );
             self.attention.disconnected = true;
-        }
-        if self.source.take().is_some()
-            && let Some(retry) = &self.rediscover
-        {
-            let _ = retry.send(MonitorSignal::Retry);
         }
         self.store.lost();
         self.store.navigation.in_flight = false;
@@ -360,7 +356,14 @@ impl Shell {
     ) {
         butler_ds::ui::toast::show(cx, butler_ds::ui::toast::Toast::error(toast));
         match error {
-            SourceError::Disconnected => self.lost(cx),
+            SourceError::Disconnected => {
+                // A request found the agent gone while its record may still name it: look again.
+                let attached = self.source.is_some();
+                self.lost(cx);
+                if attached && let Some(retry) = &self.rediscover {
+                    let _ = retry.send(MonitorSignal::Retry);
+                }
+            }
             SourceError::Incompatible => {
                 self.live_task = None;
                 self.source = None;

@@ -15,7 +15,8 @@ pub(super) async fn run(binary: &Path, dir: &Path) -> anyhow::Result<()> {
     let setup = butler_e2e::e2e::scenario::Setup::new("GPUI-REPLAY")?;
     let reads = Arc::new(AtomicUsize::new(0));
     let authority = Arc::new(AtomicUsize::new(0));
-    // The first listed chat disappears before its controls are read.
+    // The chat disappears before its controls are read (the shell starts on a new chat, so it
+    // reads them when the chat is opened).
     let controls_status = Arc::new(AtomicUsize::new(404));
     let row = json!({"id":"replay","title":"Replay","created_at":"2026-10-29T00:00:00Z","updated_at":"2026-10-29T00:00:01Z","pinned":false,"archived":false});
     let app = Router::new()
@@ -32,7 +33,7 @@ pub(super) async fn run(binary: &Path, dir: &Path) -> anyhow::Result<()> {
                     return Response::builder().status(u16::try_from(status).unwrap_or(500))
                         .body(Body::from(json!({"error":{"code":"session_not_found"}}).to_string())).unwrap_or_default();
                 }
-                Response::new(Body::from(json!({"data":{"controls":{"access_mode":"future_permission","model":"stub","reasoning_effort":"none"}}}).to_string()))
+                Response::new(Body::from(json!({"data":{"session_id":"replay","controls":{"access_mode":"future_permission","model":"stub","reasoning_effort":"none","plan_mode":false},"revision":1,"catalog_generation":"replay"}}).to_string()))
             }}
         }))
         .route("/session-view", get(|| async {
@@ -114,9 +115,11 @@ async fn drive(
             )?,
         )
         .await?;
+        h.command("open replay").await?;
         h.command("controls unavailable").await?;
         h.command("attached").await?;
         controls_status.store(0, Ordering::SeqCst);
+        h.command("new").await?;
         h.command("open replay").await?;
         h.command("controls loaded").await?;
         h.command("new").await?;
