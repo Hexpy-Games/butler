@@ -8,9 +8,8 @@ async fn ss11_model_rule_files_existing_folder_digests_and_records_returned_sign
     butler_e2e::gate!();
     let fake = FakeImap::start().await?;
     let setup = setup("SS11-MAIL")?;
-    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s, &root).await?;
+    install(&s).await?;
     s.provider()?.set_chat_responder(stub::run);
     let id = connect(&s, &fake, "mail-password").await?;
     for i in 0..20 {

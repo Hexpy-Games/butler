@@ -63,6 +63,7 @@ pub(super) async fn open(
         paths.data_root.clone(),
         std::env::args_os().any(|s| s == "--safe-mode"),
         writes.clone(),
+        paths.resource_root.join("plugins"),
     )
     .await
     .map_err(super::boundary::setup)?;

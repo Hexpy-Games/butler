@@ -97,6 +97,9 @@ def fetch_text(url):
 def license_files(directory):
     files = sorted(p for p in directory.rglob("*") if p.is_file()
                    and re.match(r"^(licen[cs]e|copying|notice|copyright)([._-]|$)", p.name, re.I))
+    if not files and (directory / "LICENSES").is_dir():
+        # REUSE layout: one LICENSES/<SPDX-id>.txt per declared license.
+        files = sorted(p for p in (directory / "LICENSES").iterdir() if p.is_file())
     result = []
     for file in files:
         text = file.read_text(encoding="utf-8")
@@ -186,6 +189,14 @@ def crate_evidence(package):
         source = "https://crates.io/crates/windows-permissions/0.2.4"
         files = [("Upstream MIT declaration (no copyright notice supplied)", (directory / "Cargo.toml.orig").read_text(encoding="utf-8")),
                  ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
+    if not files and package["name"] == "stop-token" and package["version"] == "0.7.0" and license_id == "MIT OR Apache-2.0":
+        # The published package and pinned upstream declare MIT OR Apache-2.0
+        # but ship no license text or copyright notice. Elect MIT; preserve the
+        # declaration verbatim without inventing a copyright attribution.
+        license_id = "MIT"
+        source = "https://crates.io/crates/stop-token/0.7.0"
+        files = [("Upstream MIT OR Apache-2.0 declaration (no copyright notice supplied)", (directory / "Cargo.toml.orig").read_text(encoding="utf-8")),
+                 ("Full MIT license (elected from upstream MIT / Apache-2.0; upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
     if (package.get("source") or "").startswith("git+"):
         checkout = next((parent for parent in directory.parents if (parent / ".git").exists()), None)
         if checkout:

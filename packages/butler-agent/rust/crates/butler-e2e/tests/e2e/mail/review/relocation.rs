@@ -147,9 +147,8 @@ async fn review_archive_declares_relocation_so_read_happens_first() -> Result<()
     butler_e2e::gate!();
     let fake = FakeImap::start().await?;
     let setup = setup("MAIL-ARCHIVE-ORDER")?;
-    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s, &root).await?;
+    install(&s).await?;
     connect(&s, &fake, "password").await?;
     invoke(&s, "connector_rule_set", json!({"id":"archive-order","connector":"mail/mail","title":"File updates","reason":"Keep updates read","match":[{"field":"attributes.List-Id","op":"equals","value":"<archive.example.test>"}],"actions":[{"type":"organize","tool":"mail/archive","arguments":{}},{"type":"organize","tool":"mail/mark_read","arguments":{}},{"type":"skip_model"}]})).await?;
     fake.deliver(

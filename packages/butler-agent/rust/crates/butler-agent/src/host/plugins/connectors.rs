@@ -75,6 +75,7 @@ impl Connectors {
     }
     fn status(&self, id: &str, state: &'static str, error: Option<&'static str>) {
         let mut states = self.states.lock();
+        let changed = states.get(id).is_none_or(|s| s.state != state);
         let s = states.entry(id.into()).or_insert(Status {
             state,
             error,
@@ -82,6 +83,13 @@ impl Connectors {
         });
         s.state = state;
         s.error = error;
+        if changed && let Some(store) = self.store.get() {
+            let store = store.clone();
+            let input = json!({"account": id, "state": state});
+            tokio::spawn(async move {
+                let _ = store.execute("status".into(), input).await;
+            });
+        }
     }
     fn definition(&self, plugin: &str, connector: &str) -> Result<Connector> {
         self.owner()?
