@@ -9,6 +9,7 @@
     "packages/butler-agent/rust/crates/butler-gateway",
     "packages/butler-agent/rust/crates/butler-ledger",
     "packages/butler-agent/rust/crates/butler-log",
+    "packages/butler-agent/rust/crates/butler-mail-connector",
     "packages/butler-agent/rust/crates/butler-memory",
     "packages/butler-agent/rust/crates/butler-models",
     "packages/butler-agent/rust/crates/butler-platform",
