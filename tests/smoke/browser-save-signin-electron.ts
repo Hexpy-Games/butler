@@ -41,6 +41,8 @@ try {
   const mine = await app.call<string>("create", { url: fixtures.url("login.fixture-shop.test", "/login") });
   await app.click("브라우저");
   await waitBrowser(() => page(mine, "Boolean(document.querySelector('input[type=password]'))"), "login page");
+  // A user's click gives the page native focus; without it, synthetic keys can be dropped.
+  await app.main(`${tabOf(mine)}.view.webContents.focus()`);
   await page(mine, "document.querySelector('[name=username]').focus()");
   await app.main(`${tabOf(mine)}.view.webContents.insertText("owner@fixture.test")`);
   await page(mine, "document.querySelector('[name=password]').focus()");
@@ -72,11 +74,19 @@ try {
   await waitBrowser(() => app.main(`Boolean(${suggest} && ${suggest}.webContents.getURL().endsWith('#signin'))`), "sign-in suggestions shown");
   await waitBrowser(async () => await app.main(`${suggest}.webContents.executeJavaScript("document.querySelectorAll('[role=option]').length")`) === 2, "two sign-in suggestions");
   const input = await page<{ x: number; y: number; height: number }>(mine, "(()=>{const {x,y,height}=document.querySelector('[name=username]').getBoundingClientRect();return {x,y,height}})()");
-  const geometry = await app.main<{ x: number; y: number; page: { x: number; y: number }; zoom: number }>(`({...${suggest}.getBounds(),page:${tabOf(mine)}.view.getBounds(),zoom:${tabOf(mine)}.view.webContents.getZoomFactor()})`);
-  assert.ok(geometry.y >= geometry.page.y + (input.y + input.height) * geometry.zoom, "suggestions below the input");
-  assert.ok(Math.abs(geometry.x - geometry.page.x - input.x * geometry.zoom) <= 1, "suggestions aligned with the input");
-  await app.shot("fill-suggest", true);
-  await app.main(`(()=>{const contents=${tabOf(mine)}.view.webContents;for(const keyCode of ['ArrowDown','Enter'])for(const type of ['keyDown','keyUp'])contents.sendInputEvent({type,keyCode});})()`);
+  await waitBrowser(async () => {
+    const at = await app.main<{ x: number; y: number; page: { x: number; y: number }; zoom: number; height: number; list: { x: number; y: number; bottom: number; surface: number } }>(`(async()=>({...${suggest}.getBounds(),page:${tabOf(mine)}.view.getBounds(),zoom:${tabOf(mine)}.view.webContents.getZoomFactor(),
+      list:await ${suggest}.webContents.executeJavaScript("(()=>{const {x,y,bottom}=document.querySelector('[data-slot=suggestion-list]').getBoundingClientRect();return {x,y,bottom,surface:document.querySelector('[data-popover-density=list]').getBoundingClientRect().bottom}})()")}))()`);
+    return at.y + at.list.y >= at.page.y + (input.y + input.height) * at.zoom && Math.abs(at.x + at.list.x - at.page.x - input.x * at.zoom) <= 8 && at.list.bottom <= at.list.surface && at.list.surface <= at.height;
+  }, "whole suggestion list under the input, at its left edge");
+  // app.shot focuses the App window, which correctly closes the list; capture the window as it is.
+  const source = await app.main<string>(`${app.win}.getMediaSourceId()`);
+  assert.equal(Bun.spawnSync([process.env.BUTLER_WINDOW_CAPTURE_EXECUTABLE!, source.split(":")[1]!, join(evidence, "fill-suggest.png")]).exitCode, 0);
+  await app.main(`(()=>{const contents=${tabOf(mine)}.view.webContents;for(const type of ['keyDown','keyUp'])contents.sendInputEvent({type,keyCode:'Down'});})()`);
+  await waitBrowser(async () => await app.main(`${suggest}.webContents.executeJavaScript("document.querySelector('[role=option]').getAttribute('aria-selected')")`) === "true", "arrow key highlights the first sign-in");
+  // A real click moves native focus to the list before the click lands.
+  const row = await app.main<{ x: number; y: number }>(`${suggest}.webContents.executeJavaScript("(()=>{const r=[...document.querySelectorAll('[role=option]')].find(e=>e.textContent.includes('owner@fixture.test')).getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}})()")`);
+  await app.main(`(()=>{const contents=${suggest}.webContents;contents.focus();for(const type of ['mouseDown','mouseUp'])contents.sendInputEvent({type,button:'left',clickCount:1,x:${row.x},y:${row.y}});})()`);
   await waitBrowser(() => page(mine, `document.querySelector('[name=username]').value==='owner@fixture.test' && document.querySelector('[name=password]').value.length===${CANARY.length}`), "sign-in filled");
   assert.ok(!JSON.stringify(await app.main("globalThis.browserAgentSubject.snapshot()")).includes(CANARY), "fill snapshot excludes the password");
   await app.main(`(()=>{const view=${tabOf(mine)}.view;for(const type of ['keyDown','char','keyUp'])view.webContents.sendInputEvent({type,keyCode:'Enter'})})()`);

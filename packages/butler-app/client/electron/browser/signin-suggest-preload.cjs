@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld("butlerSignInSuggest", {
   },
   pick: entryId => ipcRenderer.send("butler-browser:signin-suggest-pick", entryId),
   size: height => ipcRenderer.send("butler-browser:signin-suggest-size", height),
+  outside: (x, y) => ipcRenderer.send("butler-browser:signin-suggest-outside", x, y),
 });

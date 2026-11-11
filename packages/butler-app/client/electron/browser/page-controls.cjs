@@ -131,16 +131,21 @@ window.addEventListener("dragend", event => {
 // Signed-in tabs only: a submitted sign-in may be offered for saving ("로그인 저장").
 // Main keeps it only for a tab the user holds, and only in memory.
 if (process.argv.includes("--butler-signin-capture")) {
-  const loginInput = event => { const t = event.isTrusted && event.target; return t?.tagName === "INPUT" && /^(password|text|email|tel|)$/u.test(t.type) && (t.type === "password" || (t.form ?? document).querySelector('input[type="password"]')) ? t : null; };
-  window.addEventListener("focusin", event => {
-    const input = loginInput(event); if (!input) return;
-    const { x, y, width, height } = input.getBoundingClientRect();
-    ipcRenderer.send("butler-browser:signin-field", { x, y, width, height });
+  const loginInput = t => t?.tagName === "INPUT" && /^(password|text|email|tel|)$/u.test(t.type) && (t.type === "password" || (t.form ?? document).querySelector('input[type="password"]')) ? t : null;
+  const sendField = (input, moved) => { const { x, y, width, height } = input.getBoundingClientRect(); ipcRenderer.send("butler-browser:signin-field", { x, y, width, height, moved }); };
+  window.addEventListener("focusin", event => { const input = event.isTrusted && loginInput(event.target); if (input) sendField(input, false); }, true);
+  // Focus leaving the page (to the suggestion list or the App) is main's call; here only a move to another page element closes it.
+  window.addEventListener("focusout", event => {
+    if (loginInput(event.target)) setTimeout(() => { if (document.hasFocus() && !loginInput(document.activeElement)) ipcRenderer.send("butler-browser:signin-field-gone"); });
   }, true);
-  const gone = () => ipcRenderer.send("butler-browser:signin-field-gone");
-  window.addEventListener("focusout", event => { if (loginInput(event)) gone(); }, true);
-  window.addEventListener("scroll", gone, { capture: true, passive: true });
-  window.addEventListener("resize", gone, true);
+  let following = false;
+  const follow = () => {
+    if (following) return;
+    following = true;
+    requestAnimationFrame(() => { following = false; const input = loginInput(document.activeElement); if (input) sendField(input, true); });
+  };
+  window.addEventListener("scroll", follow, { capture: true, passive: true });
+  window.addEventListener("resize", follow, true);
   const capture = scope => {
     const root = scope?.querySelectorAll ? scope : document;
     const password = [...root.querySelectorAll('input[type="password"]')].find(input => input.value);
