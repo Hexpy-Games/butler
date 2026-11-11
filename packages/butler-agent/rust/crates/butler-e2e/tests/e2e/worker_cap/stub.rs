@@ -311,7 +311,7 @@ pub(super) fn steward(step: usize, group: &str, count: usize, body: &Value) -> V
             let objective = format!("Verify {group}-{index}");
             call(
                 "delegate_to_worker",
-                json!({"action_key":format!("check-{index}"),"objective":objective,"acceptance_criteria":["Evidence verified"],"implementation_brief":objective,"safe_title":objective}),
+                json!({"action_key":format!("check-{index}"),"objective":objective,"acceptance_criteria":["Evidence verified"],"implementation_brief":objective}),
             )
         }
         n if n == count + 2 => call("wait_for_worker", json!({})),

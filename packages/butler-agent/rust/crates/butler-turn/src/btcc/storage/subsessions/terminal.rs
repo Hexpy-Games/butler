@@ -176,3 +176,44 @@ pub(super) fn invariant(db: &Connection, session: &str) -> Result<bool, StorageE
     }
     Ok(true)
 }
+
+/// Open cards whose child already saved its result on its latest Turn; older
+/// builds saved such results without running the card closeout.
+const SAVED_RESULT_OPEN_CARDS: &str = "SELECT r.child_session_id,x.status
+    FROM btcc_session_relations r INDEXED BY idx_btcc_activity_open_page
+    JOIN btcc_steward_results x ON x.relation_id=r.relation_id
+     AND x.child_turn_id=(SELECT t.turn_id FROM btcc_turns t
+         WHERE t.session_id=r.child_session_id ORDER BY t.rowid DESC LIMIT 1)
+    WHERE r.activity_terminal=0
+      AND NOT EXISTS(SELECT 1 FROM btcc_subsession_endings e WHERE e.session_id=r.child_session_id)
+    ORDER BY r.created_at,r.relation_id";
+
+impl SqliteSubsessionRepository {
+    /// Closes those cards as a result commit does today; `close_if_ended`
+    /// keeps blocked results and pending directions open.
+    pub(crate) async fn close_saved_results(
+        &self,
+        now: String,
+    ) -> Result<Vec<(String, String)>, StorageError> {
+        self.storage
+            .execute(move |db| {
+                let tx = db.transaction().map_err(StorageError::sqlite)?;
+                let saved = tx
+                    .prepare_cached(SAVED_RESULT_OPEN_CARDS)
+                    .map_err(StorageError::sqlite)?
+                    .query_map([], |row| {
+                        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                    })
+                    .map_err(StorageError::sqlite)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(StorageError::sqlite)?;
+                let mut stopped = Vec::new();
+                for (session, status) in saved {
+                    stopped.extend(close_if_ended(&tx, &session, &status, &now)?);
+                }
+                tx.commit().map_err(StorageError::sqlite)?;
+                Ok(stopped)
+            })
+            .await
+    }
+}
