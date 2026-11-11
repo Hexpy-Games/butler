@@ -28,11 +28,14 @@ use crate::ui::viewer::{self, FileViewerEntry};
 use crate::ui::widgets::anchor;
 
 /// One result per workspace path and content; keep its latest delivery (`sessionArtifacts`).
+/// The order is React's: a key keeps the place it was first seen at (a `Map`), then a stable
+/// sort by delivery time, so results delivered together keep that order on every render.
 fn session_artifacts(
     summary: &[SessionArtifactSummary],
     messages: &[Arc<MessageRecord>],
 ) -> Vec<SessionArtifactSummary> {
-    let mut latest: HashMap<String, &SessionArtifactSummary> = HashMap::new();
+    let mut slots: HashMap<String, usize> = HashMap::new();
+    let mut latest: Vec<&SessionArtifactSummary> = Vec::new();
     let from_messages = messages.iter().flat_map(|m| m.artifacts.iter().flatten());
     for artifact in summary.iter().chain(from_messages) {
         if artifact.deliverable != Some(true) {
@@ -44,14 +47,18 @@ fn session_artifacts(
             }
             _ => artifact.id.clone(),
         };
-        if latest
-            .get(&key)
-            .is_none_or(|previous| artifact.created_at >= previous.created_at)
-        {
-            latest.insert(key, artifact);
+        match slots.get(&key) {
+            Some(&slot) if artifact.created_at >= latest[slot].created_at => {
+                latest[slot] = artifact;
+            }
+            Some(_) => {}
+            None => {
+                slots.insert(key, latest.len());
+                latest.push(artifact);
+            }
         }
     }
-    let mut all: Vec<SessionArtifactSummary> = latest.into_values().cloned().collect();
+    let mut all: Vec<SessionArtifactSummary> = latest.into_iter().cloned().collect();
     all.sort_by(|a, b| a.created_at.cmp(&b.created_at));
     all
 }
