@@ -6,6 +6,7 @@ import { wireHistory } from "./history.mjs";
 import { isHistoryShortcut } from "../butler-platform/browser-shortcuts.mjs";
 import { BrowserDownloads } from "./downloads.mjs";
 import { BrowserSelection } from "./selection.mjs";
+import { SignInSuggest } from "./signin-suggest.mjs";
 import { BrowserPointer } from "./pointer.mjs";
 import { tabInUse, resetUse, closeUse } from "./usage.mjs";
 import { WebContentsView } from "electron";
@@ -51,6 +52,7 @@ class UserBrowser {
     this.live = new BrowserLiveFrames(this);
     this.getLanguage = getLanguage;
     this.pointer = new BrowserPointer(this, controlTab);
+    this.signinSuggest = new SignInSuggest(this);
     this.selection = new BrowserSelection(this);
     this.downloads = new BrowserDownloads(this, join(app.getPath("userData"), "browser-downloads"));
     this.breaker = createLossBreaker(() => this.trip());
@@ -66,11 +68,12 @@ class UserBrowser {
     for (const child of this.tabs.values()) if (child.popup && child.opener && !child.closing) popups.set(child.opener, { id: child.id, url: child.url });
     return { restored: this.opened, enabled: this.enabled(), blocked: this.breaker.tripped, activeId: this.activeId, nativeCovered: this.nativeCovers > 0, focusRequest: this.focusRequest,
       tabs: [...this.tabs.values()].filter(tab => !tab.popup).map(tab => ({ id: tab.id, owner: tab.owner, opener: tab.opener, preview: tab.preview, popup: popups.get(tab.id), dialog: publicDialog(tab), blockedPopup: tab.blockedPopup, url: tab.url, title: tab.title, favicon: tab.favicon, status: tab.status, canBack: tab.canBack, canForward: tab.canForward, agent: tab.agent, driven: tab.driven, profile: tab.profile, epoch: tab.epoch, holder: tab.holder, sticky: tab.sticky, waiting: tab.waiting, busy: tab.busy, inUse: tabInUse(this, tab) || Boolean(tab.stillJobs?.size), paused: Boolean(tab.pausedTurns), agentAt: tab.lastAgentCall ?? undefined, privacyFrozen: this.live.sensitive(tab), picking: tab.picking === true, selectionCount: tab.selections?.length ?? 0, stills: this.stillPreferences.get(tab.owner) !== false,
-        signinStep: tab.signinStep ?? undefined, payStep: tab.payStep ?? undefined, fillOffer: tab.fillOffer && tab.url === tab.fillOffer.url ? { host: new URL(tab.fillOffer.origin).host, accounts: tab.fillOffer.accounts } : undefined, saveOffer: tab.saveOffer ? { username: tab.saveOffer.username, host: new URL(tab.saveOffer.origin).host } : undefined })) };
+        signinStep: tab.signinStep ?? undefined, payStep: tab.payStep ?? undefined, saveOffer: tab.saveOffer ? { username: tab.saveOffer.username, host: new URL(tab.saveOffer.origin).host } : undefined })) };
   }
   publish() {
     this.live.sync();
     this.pointer.sync(this.tabs.get(this.activeId));
+    this.signinSuggest.sync(this.tabs.get(this.activeId));
     this.onState?.(this.snapshot());
     const win = this.getWindow();
     this.viewRecovery.bind(win);
@@ -126,7 +129,7 @@ class UserBrowser {
       const left = Math.round(x), top = Math.round(y);
       tab.view.setBounds({ x: left, y: top, width: Math.round(x + width) - left, height: Math.round(y + height) - top });
       tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
-      emulation(tab); this.pointer.sync(tab);
+      emulation(tab); this.pointer.sync(tab); this.signinSuggest.sync(tab);
     }, () => { if (this.tabs.get(tab.id) === tab) this.sync(tab); });
   }
   async capture(tab) {
@@ -191,6 +194,7 @@ class UserBrowser {
       fail: (item, reason) => failTab(this, item, reason), recover: (item) => recoverTab(this, item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
       linkMenu: (url) => linkMenuItems(this, url, tab), language: this.getLanguage,
+      suggestKey: (input) => this.signinSuggest.key(tab, input),
       window: this.getWindow, shortcut: (input) => {
         if (tab.popupWindow && input.type === "keyDown" && (input.meta || input.control) && input.key.toLowerCase() === "w") { tab.popupWindow.close(); return true; }
         return this.shortcut(input, true);
@@ -265,7 +269,7 @@ class UserBrowser {
     tab.closing = true;
     this.live.unsubscribe(id);
     clearOffer(tab);
-    tab.fillOffer = null;
+    this.signinSuggest.close(tab);
     this.downloads.cancelTab(id);
     closeUse(this, tab);
     void resolveDialog(this, tab, { accept: false }, "tab_closed");

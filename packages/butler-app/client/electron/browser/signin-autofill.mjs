@@ -1,21 +1,4 @@
-import { ipcMain } from "electron";
 import { detectSource, evaluate, type, typePulled } from "./signin-fill.mjs";
-
-export function installSignInFills(browser) {
-  ipcMain.on("butler-browser:signin-field", async event => {
-    const tab = [...browser.tabs.values()].find(item => item.view?.webContents === event.sender);
-    const frame = event.senderFrame;
-    if (!tab || !frame || tab.profile !== "signed_in" || tab.holder !== "user" || tab.saveOffer) return;
-    const url = tab.view.webContents.getURL();
-    let origin;
-    try { origin = new URL(url).origin; } catch { return; }
-    if (frame.origin !== origin || tab.fillDismissed === url || tab.fillOffer?.url === url) return;
-    const accounts = await browser.signInAccounts?.(origin).catch(() => []);
-    if (!accounts?.length || browser.tabs.get(tab.id) !== tab || tab.view.webContents.getURL() !== url) return;
-    tab.fillOffer = { url, origin, accounts };
-    browser.publish();
-  });
-}
 
 export async function fillOffer(browser, id, entryId) {
   const tab = browser.tabs.get(id), offer = tab?.fillOffer;
@@ -36,12 +19,4 @@ export async function fillOffer(browser, id, entryId) {
     return { ok: true };
   }
   return { ok: false, error: { code: typed.reason ?? typed.status } };
-}
-
-export function dismissFill(browser, id) {
-  const tab = browser.tabs.get(id);
-  if (!tab) return;
-  tab.fillDismissed = tab.fillOffer?.url;
-  tab.fillOffer = null;
-  browser.publish();
 }

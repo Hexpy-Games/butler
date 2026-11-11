@@ -1,6 +1,6 @@
 import { appCopy } from "@/app/copy";
 import { stopBrowserTurn } from "./stopBrowserTurn";
-import { ButlerThinkingMark, Button, ButtonContainer, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Typo, Key, PageBand, Pick, Popup, Square, type PageCardHolder } from "@/butler-ds";
+import { ButlerThinkingMark, Button, ButtonContainer, Key, PageBand, Pick, Popup, Square, type PageCardHolder } from "@/butler-ds";
 import { notifyError, notifyStatus } from "@/app/notifications";
 import { browserCall, type BrowserTab } from "./browserBridge";
 import { popupNotice } from "./browserPopupNotice";
@@ -34,29 +34,6 @@ function SaveSignInBand({ tab }: { tab: BrowserTab }) {
     </ButtonContainer>} />;
 }
 
-async function fill(tab: BrowserTab, entry: string) {
-  const result = await browserCall("fill-signin", { id: tab.id, entry }) as { ok?: boolean } | undefined;
-  if (!result?.ok) notifyError(result, appCopy.browser.signinFillFailed);
-}
-
-function FillSignInBand({ tab }: { tab: BrowserTab }) {
-  const copy = appCopy.browser;
-  const { host, accounts } = tab.fillOffer!;
-  return <PageBand data-test-class="browser-fill-signin" tone="info" icon={<Key size="sm" />} label={copy.savedSignIn}
-    detail={accounts.length === 1 ? `${accounts[0].username} · ${host}` : host}
-    actions={<ButtonContainer size="xs">
-      <Button size="xs" variant="outline" onClick={() => void browserCall("dismiss-fill", { id: tab.id })}>{copy.later}</Button>
-      {accounts.length === 1 ? <Button size="xs" onClick={() => void fill(tab, accounts[0].id)}>{copy.fillSignIn}</Button> :
-        <DropdownMenu><DropdownMenuTrigger asChild><Button size="xs">{copy.fillSignIn}</Button></DropdownMenuTrigger>
-          <DropdownMenuContent align="end">{accounts.map(account => <DropdownMenuItem key={account.id} onSelect={() => void fill(tab, account.id)}>
-            <Typo.Label truncate basis="sm">{account.username}</Typo.Label>
-          </DropdownMenuItem>)}</DropdownMenuContent>
-        </DropdownMenu>}
-      {browserHoldable(tab) && tab.holder === "user" && <Button size="xs" variant="outline"
-        onClick={() => void browserCall("control", { id: tab.id, holder: "agent", sticky: false })}>{copy.giveBack}</Button>}
-    </ButtonContainer>} />;
-}
-
 export function browserHolder(tab?: BrowserTab): PageCardHolder {
   if (!tab || !browserHoldable(tab) || !tab.url) return "none";
   if (tab.waiting) return "waiting";
@@ -75,7 +52,6 @@ export function AgentControl({ tab }: { tab?: BrowserTab }) {
     actions={<ButtonContainer size="xs">{popup?.action}<Button size="xs" variant="outline"
       onClick={() => void browserCall("pick", { id: tab.id, value: false })}>{copy.finish}</Button></ButtonContainer>} />;
   if (tab?.saveOffer) return <SaveSignInBand tab={tab} />;
-  if (tab?.fillOffer) return <FillSignInBand tab={tab} />;
   const holder = browserHolder(tab);
   if (tab && holder !== "none") {
     const human = tab.holder === "user";

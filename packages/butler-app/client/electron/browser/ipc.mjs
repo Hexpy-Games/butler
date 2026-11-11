@@ -7,7 +7,6 @@ import { ipcMain, session } from "electron";
 import { createUserBrowser } from "./tabs.mjs";
 import { installQuitClose } from "./quit.mjs";
 import { clearOffer, installSignInOffers, saveOffer } from "./signin-offer.mjs";
-import { installSignInFills, fillOffer, dismissFill } from "./signin-autofill.mjs";
 import { clearSiteData } from "./site-data.mjs";
 
 /** "이 사이트 로그아웃": the site's cookies and storage leave the signed-in profile. */
@@ -23,7 +22,6 @@ async function signOutSite(site) {
 export function installUserBrowser(app, getWindow, getLanguage) {
   const browser = createUserBrowser(app, getWindow, getLanguage);
   installSignInOffers(browser);
-  installSignInFills(browser);
   ipcMain.handle("butler-browser:call", (event, op, input = {}) => {
     const win = getWindow();
     if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error("browser_forbidden");
@@ -56,8 +54,6 @@ export function installUserBrowser(app, getWindow, getLanguage) {
       case "control": return browser.control(input.id, input.holder, input.sticky === true);
       case "stills": return browser.setStills(input.id, input.value);
       case "move": return browser.move(input);
-      case "fill-signin": return fillOffer(browser, input.id, input.entry);
-      case "dismiss-fill": return dismissFill(browser, input.id);
       case "save-signin": return saveOffer(browser, input.id);
       case "dismiss-signin": { clearOffer(browser.tabs.get(input.id)); browser.publish(); return; }
       case "signout": return signOutSite(input.site);
