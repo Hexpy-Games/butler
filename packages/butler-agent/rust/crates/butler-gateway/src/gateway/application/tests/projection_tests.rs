@@ -433,4 +433,11 @@ async fn cancelled_posting_releases_claim(app: &AppApplication) {
     })
     .await
     .unwrap();
+    // The release wrote the retry deadline, so the row is not claimable before its backoff.
+    assert!(
+        initiated::posting::Reservation::claim(app, "cancelled-result".into())
+            .await
+            .unwrap()
+            .is_none()
+    );
 }

@@ -46,7 +46,12 @@ export function createBrowserHost({ fetch, adminCredential, executeBrowser, rese
           const data = event.split("\n").find(line => line.startsWith("data:"));
           if (data) {
             const frame = JSON.parse(data.slice(5));
-            if (frame.op?.startsWith("use.")) { await executeBrowser?.(frame); await flushState(); }
+            if (frame.op?.startsWith("use.")) {
+              // One frame's failure is that frame's: it must not drop the channel and every tab's state with it.
+              try { await executeBrowser?.(frame); }
+              catch (error) { console.error(`[browser] ${frame.op} failed:`, error?.stack ?? String(error)); }
+              await flushState();
+            }
             else void execute(frame).catch(() => {});
           }
         }
