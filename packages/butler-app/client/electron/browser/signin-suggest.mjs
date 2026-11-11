@@ -60,7 +60,15 @@ export class SignInSuggest {
     entry.pathname = "/browser-overlay.html"; entry.search = ""; entry.hash = "signin";
     void contents.loadURL(entry.href).catch(() => { this.ready = false; });
   }
+  /** Like the pointer overlay: a failure hides the list and never breaks the caller's publish or tab sync. */
   sync(tab) {
+    try { this.draw(tab); }
+    catch (error) {
+      this.hide();
+      if (!this.syncWarning) { this.syncWarning = true; console.error("[signin-suggest] sync failed:", error?.stack ?? String(error)); }
+    }
+  }
+  draw(tab) {
     const browser = this.browser, win = browser.getWindow(), offer = tab?.fillOffer;
     const visible = offer && tab.url === offer.url && tab.id === browser.activeId && tab.attached === win &&
       browser.areaVisible && tab.slot?.visible && !tab.covered && !tab.dialog && browser.nativeCovers === 0 && tab.holder === "user";
