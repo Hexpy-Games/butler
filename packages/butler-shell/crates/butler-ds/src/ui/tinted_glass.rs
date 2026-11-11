@@ -221,13 +221,8 @@ impl RenderOnce for TintedGlass {
             GlassPadding::Md => ds.len(Length::Space3),
             GlassPadding::Lg => ds.len(Length::Space4),
         };
-        let (paint, content) = Paint::new(
-            ds,
-            radius,
-            (self.square_top, self.square_bottom),
-            presence,
-            self.composer,
-        );
+        let square = (self.square_top, self.square_bottom);
+        let (paint, content) = Paint::new(ds, radius, square, presence, self.composer);
         let layer = canvas(
             |_, _, _| (),
             move |bounds, (), window, _| paint.paint(bounds, window),
