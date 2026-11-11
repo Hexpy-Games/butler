@@ -36,6 +36,8 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run site:check
 
       - name: Build /, /help/ and /ds/
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run site:build
 
       - name: Leak check (/ds/)

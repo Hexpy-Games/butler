@@ -38,9 +38,11 @@ async function pageStayed(label: string, held: boolean) {
   assert.equal(shown.gone.length, 0, `${label}: the page stays on screen during the held drag (${shown.gone.length} of ${shown.samples} samples gone)`);
 }
 async function drag(selector: string, screenshot?: string) {
+  let peeked = false;
   if (!selector.includes("composer-card")) {
     await showPickSidebar(app);
     await nativeAligned(app);
+    peeked = await app.page.expression<boolean>("document.querySelector('[data-test-class=mac-window]').dataset.leftPeek==='true'");
   }
   const point = await app.page.expression<{ x: number; y: number }>(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
   const origin = await app.main<{ x:number;y:number }>(`${subject(tab)}.view.webContents.executeJavaScript('(()=>{const r=document.querySelector("h1").getBoundingClientRect();return {x:r.x+24,y:r.y+r.height/2}})()')`);
@@ -55,6 +57,12 @@ async function drag(selector: string, screenshot?: string) {
     const page = await app.main<{ x: number; y: number; width: number; height: number }>(`${subject(tab)}.view.getBounds()`);
     await app.page.dragPointer(page.x + page.width * 0.6, page.y + page.height * 0.6);
     await new Promise(done => setTimeout(done, 400));
+    // A narrow window shows the sidebar only as a peek, and leaving it for the page closed it:
+    // come back by the left edge, as a user does.
+    if (peeked) {
+      await app.page.dragPointer(2, point.y);
+      await waitBrowser(() => app.page.expression("document.querySelector('[data-test-class=mac-window]').dataset.leftPeek==='true'"), "the peek reopens mid-drag");
+    }
   }
   await app.page.dragPointer(point.x, point.y);
   await dragPreview(app, false);
@@ -114,12 +122,16 @@ try {
   await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-slot=element-chip]').length===2"), "other conversation draft has chips");
   await app.page.reload(); await shellReady(app, "en");
   await app.page.expression("window.dropPointerProof=[];window.addEventListener('pointerup',e=>window.dropPointerProof.push({x:e.clientX,y:e.clientY,hit:document.elementFromPoint(e.clientX,e.clientY)?.outerHTML?.slice(0,400),invalid:document.querySelector('[data-slot=drag-preview]')?.dataset.invalid}),true);window.selectionDragProof=[];window.butlerBrowser.onElementDrag(e=>window.selectionDragProof.push({phase:e.phase,count:e.elements?.length,x:e.x,y:e.y}));");
+  // A narrow window reloads with the sidebar folded away: open or peek it, as before the first drop.
+  await showPickSidebar(app);
   await app.click("Pick destination");
   await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-slot=element-chip]').length===2"), "destination chips survive reload");
   await waitBrowser(() => app.page.expression("(()=>{const images=[...document.querySelectorAll('[data-slot=element-chip] img')];return images.length===2 && images.every(img=>img.complete && img.naturalWidth>0)})()"), "restored chip images loaded");
   await app.click(getAppCopy("en-US").space.general); await app.call("activate", { id: tab }); await nativeAligned(app);
   await drag('[data-test-class="library-entry"]');
   await waitBrowser(async () => (await app.gateway.api<{ items: unknown[] }>("/library?kind=scrap")).items.length === 2, "Library drop saves scraps");
+  // The drop offers grouping in a popover, which in a narrow window lies over the page: dismiss it as a user would.
+  await app.page.press("Escape");
   await drag('[data-test-class="composer-card"]');
   await waitBrowser(() => app.page.expression("document.querySelectorAll('[data-slot=element-chip]').length===2"), "composer accepts elements");
   await sendBrowserCaptures(app, tab);

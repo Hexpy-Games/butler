@@ -306,7 +306,7 @@ async fn browser_host_detach_preserves_delivered_answer() -> Result<(), HarnessE
 }
 
 #[tokio::test]
-async fn browser_host_detach_refuses_unanswered_call() -> Result<(), HarnessError> {
+async fn browser_host_detach_reports_unanswered_call_lost() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     detach_with_pending_call(false).await
 }
@@ -375,7 +375,7 @@ async fn detach_with_pending_call(answer: bool) -> Result<(), HarnessError> {
     } else {
         assert_eq!(
             result.body,
-            json!({"status":"not_dispatched","reason":"owner_changed"})
+            json!({"status":"unknown","reason":"browser_host_lost"})
         );
     }
     s.finish().await

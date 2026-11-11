@@ -26,9 +26,10 @@ async fn live_browse_shop_off_auto_five_each() -> Result<(), HarnessError> {
                 .map(|record| record[key].as_u64().unwrap())
                 .sum::<u64>()
         };
-        let cost: f64 = records
+        // A model without a published list price has no USD total.
+        let cost: Option<f64> = records
             .iter()
-            .map(|record| record["list_price_cost"]["usd"].as_f64().unwrap())
+            .map(|record| record["list_price_cost"]["usd"].as_f64())
             .sum();
         live::report(
             "LIVE-BROWSE-SHOP",
@@ -36,7 +37,7 @@ async fn live_browse_shop_off_auto_five_each() -> Result<(), HarnessError> {
             "runs":records.len(),"successes":successes[mode],
             "success_rate":successes[mode] as f64 / records.len() as f64,
             "rounds":sum("rounds"),"input_tokens":sum("input_tokens"),
-            "output_tokens":sum("output_tokens"),"list_price_cost":{"available":true,"usd":cost}})
+            "output_tokens":sum("output_tokens"),"list_price_cost":{"available":cost.is_some(),"usd":cost}})
             .to_string(),
         );
     }
@@ -50,6 +51,7 @@ async fn run_shop(
     run: usize,
 ) -> Result<Value, HarnessError> {
     live::spend_turn()?;
+    let priced = published_price(&provider.choice.model);
     let s = Setup::new("LIVE-BROWSE-SHOP")?
         .live(provider)
         .access(Access::AskExceptReads)
@@ -96,14 +98,17 @@ async fn run_shop(
         "list_price_cost":usage["cost"]});
     assert!(usage["input_tokens"].as_u64().is_some_and(|n| n > 0));
     assert!(usage["output_tokens"].as_u64().is_some_and(|n| n > 0));
-    assert_eq!(
-        usage["cost"]["available"], true,
-        "list-price usage required"
-    );
-    assert!(
-        usage["cost"]["usd"].as_f64().is_some(),
-        "list-price USD required"
-    );
+    // A subscription plan has no list price; require it where the catalog publishes one.
+    if priced {
+        assert_eq!(
+            usage["cost"]["available"], true,
+            "list-price usage required"
+        );
+        assert!(
+            usage["cost"]["usd"].as_f64().is_some(),
+            "list-price USD required"
+        );
+    }
     // Never allow a card: scenario teardown cancels the pending turn.
     s.finish().await?;
     Ok(record)
@@ -153,4 +158,17 @@ fn rounds(s: &Scenario, turn: &str) -> Result<u64, HarnessError> {
         [turn],
         |r| r.get(0),
     )?)
+}
+
+/// Whether the catalog publishes a list price for `model` (`provider/model`).
+fn published_price(model: &str) -> bool {
+    let catalog: Value = serde_json::from_str(include_str!(
+        "../../../../butler-models/src/models/catalog/static-catalog.json"
+    ))
+    .unwrap();
+    catalog["models"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|m| m["model_ref"] == model && m["pricing"]["status"] == "published")
 }
