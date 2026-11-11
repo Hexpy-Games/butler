@@ -111,7 +111,9 @@ fn atoms(
             }
             Inline::Code(code) => out.push(chip(code, cx, window)),
             Inline::Break => out.push(div().w_full().h(px(0.)).into_any_element()),
-            Inline::Image { src, alt } => out.push(super::image::inline(src, alt, env, cx)),
+            Inline::Image { src, alt } => {
+                out.push(super::image::inline(src, alt, env, window, cx));
+            }
             Inline::Link { href, children } if super::link::is_external(href) => {
                 let label = plain(children);
                 let mut reference = InlineReference::external(SharedString::from(id), href.clone());
