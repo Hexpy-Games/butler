@@ -217,9 +217,7 @@ impl Setup {
         self
     }
 
-    async fn start_or_refusal(
-        self,
-    ) -> Result<Result<Scenario, (HarnessError, Sandbox)>, HarnessError> {
+    pub async fn start(self) -> Result<Scenario, HarnessError> {
         let Self {
             id,
             sandbox,
@@ -305,10 +303,7 @@ impl Setup {
             Fixture::Empty => {}
         }
         let wire = super::chatgpt_wire::Scope::new(&launch.env);
-        let (agent, gw) = match Agent::start(launch).await {
-            Ok(started) => started,
-            Err(error) => return Ok(Err((error, sandbox))),
-        };
+        let (agent, gw) = Agent::start(launch).await?;
         let scenario = Scenario {
             id,
             gw,
@@ -331,7 +326,7 @@ impl Setup {
                 .patch_settings(settings, &scenario.model.label())
                 .await?;
         }
-        Ok(Ok(scenario))
+        Ok(scenario)
     }
 }
 

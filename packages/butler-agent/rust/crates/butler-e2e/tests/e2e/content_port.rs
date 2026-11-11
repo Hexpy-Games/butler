@@ -403,13 +403,20 @@ async fn trusted_hosts_cannot_be_patched_onto_content_port() -> Result<(), Harne
 }
 
 async fn assert_startup_rejected(setup: Setup, expected: &str) -> Result<(), HarnessError> {
-    let (error, mut sandbox) = setup
+    match setup
         .stub_cassette(super::browser_outputs::stub::cassette()?)
-        .start_refused()
-        .await?;
-    let message = error.0;
-    assert!(message.starts_with("agent exited ("), "{message}");
-    assert!(message.contains(expected), "{message}");
-    sandbox.mark_success();
+        .start()
+        .await
+    {
+        Ok(scenario) => {
+            scenario.finish().await?;
+            panic!("startup accepted invalid content configuration");
+        }
+        Err(error) => {
+            let message = error.0;
+            assert!(message.starts_with("agent exited ("), "{message}");
+            assert!(message.contains(expected), "{message}");
+        }
+    }
     Ok(())
 }
