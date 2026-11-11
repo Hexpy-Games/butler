@@ -787,6 +787,8 @@
   --radius-control: calc(8px / var(--ui-scale));
   --radius-panel: calc(10px / var(--ui-scale));
   --radius-popover: calc(12px / var(--ui-scale));
+  /* Buttons and fields at the 44px touch size (--control-hit-target). */
+  --radius-control-touch: calc(12px / var(--ui-scale));
   --radius-composer: calc(22px / var(--ui-scale));
   --radius-pill: calc(999px / var(--ui-scale));
   --surface: rgba(255, 255, 255, 0.9);
