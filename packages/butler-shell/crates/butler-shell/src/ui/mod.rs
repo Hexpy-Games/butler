@@ -16,7 +16,6 @@ pub(crate) mod palette;
 pub(crate) mod settings;
 pub(crate) mod shell;
 pub(crate) mod sidebar;
-pub(crate) mod smooth_scroll;
 pub(crate) mod source;
 pub(crate) mod store;
 pub(crate) mod theme;

@@ -127,6 +127,7 @@ impl Ds {
 
     pub fn install(self, cx: &mut App) {
         cx.set_global(self);
+        cx.set_global(gpui::WheelSmoothing(!cx.global::<Self>().reduced_motion()));
     }
 
     pub fn get(cx: &App) -> &Self {
@@ -136,6 +137,7 @@ impl Ds {
     /// Mutates the global; the caller refreshes its windows.
     pub fn update(cx: &mut App, change: impl FnOnce(&mut Self)) {
         cx.update_global::<Self, _>(|ds, _| change(ds));
+        cx.set_global(gpui::WheelSmoothing(!cx.global::<Self>().reduced_motion()));
     }
 
     pub fn tokens(&self) -> &TokenContext {
