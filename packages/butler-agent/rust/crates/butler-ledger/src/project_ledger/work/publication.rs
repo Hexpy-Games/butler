@@ -79,13 +79,13 @@ impl ProjectWorkRepository {
         identity: &ProjectWorkOperationIdentity,
     ) -> Result<(), BtccError> {
         for _attempt in 1..=3 {
-            let before = self.source_version(Some(ids.clone())).await?;
+            let before = self.source_version(ids.clone()).await?;
             let mut affected = Vec::with_capacity(ids.len());
             for id in &ids {
                 affected.push(self.require_current(id).await?);
             }
             let heads = self.session_heads(&affected).await?;
-            let after = self.source_version(Some(ids.clone())).await?;
+            let after = self.source_version(ids.clone()).await?;
             if before != after {
                 continue;
             }
