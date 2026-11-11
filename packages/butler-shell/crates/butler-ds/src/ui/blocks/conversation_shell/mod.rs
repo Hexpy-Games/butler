@@ -16,8 +16,8 @@ use gpui::{
 pub use aside::{AsideContent, AsideLayout, DOCK_MIN as ASIDE_DOCK_MIN, next_layout, shown};
 pub use column::Gutter;
 pub use scroll::{
-    ConversationScroll, ConversationScrollToBottomButton, MessageListSurface, scroll_handle,
-    scroll_to_bottom,
+    ConversationScroll, ConversationScrollToBottomButton, MessageListSurface, composer_edge,
+    scroll_handle, scroll_to_bottom,
 };
 
 use super::measure;

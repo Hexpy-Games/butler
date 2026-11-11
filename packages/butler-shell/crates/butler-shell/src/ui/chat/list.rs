@@ -11,7 +11,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use butler_ds::tokens::Length;
-use butler_ds::ui::blocks::conversation_shell::ConversationScrollToBottomButton;
+use butler_ds::ui::blocks::conversation_shell::{ConversationScrollToBottomButton, composer_edge};
 use butler_ds::ui::blocks::message_row::{Entering, MessageRow, Role};
 use butler_ds::ui::blocks::scope;
 use butler_ds::ui::context::Ds;
@@ -370,7 +370,13 @@ pub(crate) fn transcript(
         .relative()
         .size_full()
         .child(smooth.layer())
-        .child(rows)
+        .child(composer_edge(
+            "transcript-edge",
+            away,
+            rows.into_any_element(),
+            window,
+            cx,
+        ))
         .children(jump)
         .into_any_element()
 }

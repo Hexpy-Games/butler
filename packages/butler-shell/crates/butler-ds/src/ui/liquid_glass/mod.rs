@@ -10,7 +10,7 @@ use gpui::{Bounds, Corners, Pixels, Window, px};
 
 pub use material::Place;
 use material::Settings;
-pub use presence::{Presence, presence, with_presence, without_presence};
+pub use presence::{Presence, on_glass, presence, with_presence, without_presence};
 
 use crate::ui::context::Ds;
 
