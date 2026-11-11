@@ -194,6 +194,12 @@ pub async fn main(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode
     if args.len() == 1 && args[0] == "--private-embedding-worker" {
         return crate::host::embedding::worker::run().await;
     }
+    // Internal child mode: the bundled mail plugin runs `${BUTLER_AGENT} --mail-connector`.
+    if args.len() == 1 && args[0] == "--mail-connector" {
+        return ExitCode::from(
+            u8::try_from(butler_mail_connector::run_process().await).unwrap_or(1),
+        );
+    }
     // Fixture builds answer this probe so the E2E harness can refuse a binary
     // whose test hooks, the pinned App clock among them, are compiled out.
     #[cfg(feature = "e2e-fixtures")]

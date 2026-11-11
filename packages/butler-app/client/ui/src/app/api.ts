@@ -535,6 +535,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     const action = method === "GET" ? "listPairedDevices" : "revokeAllPairedDevices";
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, action));
   }
+  const connectors = connectorBridgeCall(method, `${url.pathname}${url.search}`, options.body);
+  if (connectors) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, connectors.action, connectors.input));
   const signIns = signInBridgeCall(method, url.pathname, options.body);
   if (signIns) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, signIns.action, signIns.input));
   const deviceMatch = url.pathname.match(/^\/security\/devices\/([^/]+)$/u);
@@ -1133,6 +1135,27 @@ const CODED_SETTINGS_METHODS = new Set([
   "listMcpServers", "createMcpServer", "probeMcpServer", "updateMcpServer", "deleteMcpServer",
   "importSkill", "discoverLocalModels", "registerLocalModel", "updateLocalModel",
 ]);
+
+/** Settings → Connections: main adds the admin credential. */
+function connectorBridgeCall(method: string, path: string, body: ApiOptions["body"]): { action: string; input?: unknown } | null {
+  const payload = () => parseBody(body);
+  if (path === "/plugins" && method === "GET") return { action: "listPlugins" };
+  if (path === "/plugins/inspect" && method === "POST") return { action: "inspectBundledPlugin", input: payload() };
+  if (path === "/plugins/install" && method === "POST") return { action: "installPlugin", input: payload() };
+  const plugin = path.match(/^\/plugins\/([^/]+)\/(check|update)$/u);
+  if (plugin && method === "POST") return { action: plugin[2] === "check" ? "checkPlugin" : "updatePlugin", input: { plugin: plugin[1], payload: payload() } };
+  if (path === "/connectors" && method === "GET") return { action: "listConnectors" };
+  const account = path.match(/^\/connectors\/([^/]+\/[^/]+)\/accounts(?:\/([^/?]+)(\/retry)?)?(?:\?revision=(\d+))?$/u);
+  if (account) {
+    const input = { connector: account[1], account: account[2] };
+    if (method === "POST") return { action: account[2] ? "retryConnectorAccount" : "addConnectorAccount", input: { ...input, payload: payload() } };
+    if (method === "DELETE") return { action: "removeConnectorAccount", input: { ...input, revision: Number(account[4]) } };
+  }
+  if (path === "/connector-rules" && method === "GET") return { action: "listConnectorRules" };
+  const rule = path.match(/^\/connector-rules\/([^/]+)$/u)?.[1];
+  if (rule && method === "DELETE") return { action: "deleteConnectorRule", input: { rule } };
+  return null;
+}
 
 /** Settings → Browser → Sign-ins and browser import: main adds the admin credential. */
 function signInBridgeCall(method: string, path: string, body: ApiOptions["body"]): { action: string; input?: unknown } | null {

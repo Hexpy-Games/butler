@@ -6,7 +6,14 @@ use std::{
 };
 
 pub(super) fn expand(value: &str, root: &Path, data: &Path) -> String {
+    static AGENT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let agent = AGENT.get_or_init(|| {
+        butler_platform::process_names::current_exe()
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    });
     value
+        .replace("${BUTLER_AGENT}", agent)
         .replace("${BUTLER_PLUGIN_ROOT}", &root.to_string_lossy())
         .replace("${CLAUDE_PLUGIN_ROOT}", &root.to_string_lossy())
         .replace("${BUTLER_PLUGIN_DATA}", &data.to_string_lossy())

@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "mcpServers": {
     "mail": {
-      "command": "${BUTLER_PLUGIN_ROOT}/bin/butler-mail-connector"
+      "command": "${BUTLER_AGENT}",
+      "args": ["--mail-connector"]
     }
   },
   "extensions": {

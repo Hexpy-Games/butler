@@ -47,6 +47,7 @@ pub(crate) struct Plugins {
     connectors: Arc<connectors::Connectors>,
     authority: std::sync::OnceLock<Arc<butler_turn::btcc::PrincipalAuthority>>,
     root: PathBuf,
+    bundled: PathBuf,
     safe_mode: bool,
     state: Mutex<State>,
     mutation: Mutex<()>,
@@ -57,6 +58,7 @@ impl Plugins {
         data: PathBuf,
         safe_mode: bool,
         writes: Arc<ConfigurationWrites>,
+        bundled: PathBuf,
     ) -> Result<Arc<Self>> {
         tokio::task::spawn_blocking(move || {
             let safe_mode = safe_mode::take(&data)? || safe_mode;
@@ -80,6 +82,7 @@ impl Plugins {
                 connectors: connectors::Connectors::new(weak.clone()),
                 authority: std::sync::OnceLock::new(),
                 root,
+                bundled,
                 safe_mode,
                 mutation: Mutex::new(()),
                 state: Mutex::new(State {

@@ -40,6 +40,18 @@ const SECURITY_ROUTES = Object.freeze({
   // PATCH /settings only when it carries `security`; other settings go
   // through the preload as before.
   updateSecuritySettings: { method: "PATCH", path: "/settings" },
+  // Connections: the mail password passes through main to the Agent's keychain store only.
+  listPlugins: { method: "GET", path: "/plugins" },
+  inspectBundledPlugin: { method: "POST", path: "/plugins/inspect", payload: true, bundled: true },
+  installPlugin: { method: "POST", path: "/plugins/install", payload: true },
+  checkPlugin: { method: "POST", path: "/plugins", plugin: true, suffix: "/check", payload: true },
+  updatePlugin: { method: "POST", path: "/plugins", plugin: true, suffix: "/update", payload: true },
+  listConnectors: { method: "GET", path: "/connectors" },
+  addConnectorAccount: { method: "POST", path: "/connectors", connector: true, payload: true },
+  retryConnectorAccount: { method: "POST", path: "/connectors", connector: true, account: true, suffix: "/retry", payload: true },
+  removeConnectorAccount: { method: "DELETE", path: "/connectors", connector: true, account: true, revision: true },
+  listConnectorRules: { method: "GET", path: "/connector-rules" },
+  deleteConnectorRule: { method: "DELETE", path: "/connector-rules", rule: true },
   // Sign-ins: passwords pass through main to the Agent's keychain store only.
   listSignIns: { method: "GET", path: "/security/signins" },
   addSignIn: { method: "POST", path: "/security/signins", payload: true },
@@ -141,7 +153,14 @@ export async function requestSecurityRoute(
   if (route?.credential && (typeof credentialId !== "string" || !/^[a-z0-9_-]{1,128}$/iu.test(credentialId))) return failure("invalid_request");
   const payload = input?.body?.payload;
   if (route?.payload && (typeof payload !== "object" || payload === null)) return failure("invalid_request");
-  const path = route?.credential ? `${route.path}/${encodeURIComponent(credentialId)}` : route?.hook ? `${route.path}/${hookId}/test` : route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.entry ? `${route.path}/${entryId}${route.suffix ?? ""}` : route?.path;
+  const plugin = input?.body?.plugin, connector = input?.body?.connector, account = input?.body?.account, revision = input?.body?.revision, rule = input?.body?.rule;
+  if (route?.bundled && (Object.keys(payload).length !== 1 || typeof payload.bundled !== "string" || !/^[a-z0-9-]{1,64}$/u.test(payload.bundled))) return failure("invalid_request");
+  if (route?.plugin && (typeof plugin !== "string" || !/^[a-z0-9-]{1,64}$/u.test(plugin))) return failure("invalid_request");
+  if (route?.connector && (typeof connector !== "string" || !/^[a-z0-9_-]{1,64}\/[a-z0-9_-]{1,64}$/u.test(connector))) return failure("invalid_request");
+  if (route?.account && (typeof account !== "string" || !/^acct-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(account))) return failure("invalid_request");
+  if (route?.revision && (!Number.isSafeInteger(revision) || revision < 0)) return failure("invalid_request");
+  if (route?.rule && (typeof rule !== "string" || !/^rule-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(rule))) return failure("invalid_request");
+  const path = route?.connector ? `${route.path}/${connector}/accounts${route.account ? `/${account}${route.suffix ?? ""}` : ""}${route.revision ? `?revision=${revision}` : ""}` : route?.plugin ? `${route.path}/${plugin}${route.suffix}` : route?.rule ? `${route.path}/${rule}` : route?.credential ? `${route.path}/${encodeURIComponent(credentialId)}` : route?.hook ? `${route.path}/${hookId}/test` : route?.device ? `${route.path}/${encodeURIComponent(deviceId)}` : route?.entry ? `${route.path}/${entryId}${route.suffix ?? ""}` : route?.path;
   const security = input?.body?.security;
   const needsBody = input?.route === "updateSecuritySettings" || input?.route === "saveHooks" || route?.hook || route?.payload;
   if (!route || (input?.route === "updateSecuritySettings" && (typeof security !== "object" || security === null))) {

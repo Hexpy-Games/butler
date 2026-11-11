@@ -43,6 +43,7 @@ impl Plugins {
             let package = manifest::read(&stage)?;
             if input
                 .get("name")
+                .or_else(|| input.get("bundled"))
                 .and_then(Value::as_str)
                 .is_some_and(|n| n != package.name)
             {
@@ -104,12 +105,29 @@ impl Plugins {
         input: &Value,
         work: &std::path::Path,
     ) -> Result<ResolvedSource> {
-        let kinds = ["path", "git", "registry"]
+        let kinds = ["path", "git", "registry", "bundled"]
             .iter()
             .filter(|k| input.get(**k).is_some())
             .count();
         if kinds != 1 {
             return Err(error("plugin_source_invalid"));
+        }
+        if let Some(value) = input.get("bundled") {
+            let name = value
+                .as_str()
+                .filter(|name| {
+                    !name.is_empty()
+                        && name
+                            .bytes()
+                            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+                })
+                .ok_or_else(|| error("plugin_source_invalid"))?;
+            return Ok((
+                self.local_source(&self.bundled.join(name).to_string_lossy())?,
+                None,
+                None,
+                None,
+            ));
         }
         if let Some(path) = input.get("path").and_then(Value::as_str) {
             let source = self.local_source(path)?;
