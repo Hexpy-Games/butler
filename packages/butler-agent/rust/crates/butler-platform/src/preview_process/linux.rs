@@ -67,7 +67,14 @@ fn snapshot_member(pid: i32, group: i32) -> io::Result<bool> {
     // Filter using procfs first; getpgid below rechecks membership after pinning.
     let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
         Ok(stat) => stat,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        // A process that exits mid-scan is not a member: its procfs entry is gone
+        // (NotFound) or the task ended after the file was opened (ESRCH).
+        Err(error)
+            if error.kind() == io::ErrorKind::NotFound
+                || error.raw_os_error() == Some(Errno::SRCH.raw_os_error()) =>
+        {
+            return Ok(false);
+        }
         Err(error) => return Err(error),
     };
     // comm is parenthesized and can itself contain spaces and parentheses.
