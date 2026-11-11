@@ -297,12 +297,6 @@ impl Fade {
     }
 }
 
-/// `child` under a content mask inset by `inset` and fading over `fade` at its edges: the fade
-/// and guard of a scroller that tracks its edges itself (a gpui `list`).
-pub fn masked(child: AnyElement, fade: Edges<Pixels>, inset: Edges<Pixels>) -> AnyElement {
-    Masked::new(child, Lengths { fade, inset }).into_any_element()
-}
-
 /// Starts a fading scroller. `focus` is the handle of an element that scrolls itself and takes
 /// focus (`None`: the scroller makes its own). `text_field` shows ring-aware fades on any focus,
 /// as a text field's ring does.

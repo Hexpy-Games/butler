@@ -2,16 +2,15 @@
 //! ConversationScrollToBottomButton.tsx): the transcript's scroller with its edge fade, the
 //! column the message rows flow in, and the chip that jumps back to the newest message.
 use gpui::{
-    AnyElement, App, Edges, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
     RenderOnce, ScrollHandle, SharedString, Styled as _, Window, div, px,
 };
 
-use crate::tokens::{Color, Duration, Easing, Length};
+use crate::tokens::{Color, Length};
 use crate::ui::Icon;
 use crate::ui::blocks::scope;
 use crate::ui::context::Ds;
 use crate::ui::icon::{IconSize, icon};
-use crate::ui::motion::{Timing, input_frame, transition};
 use crate::ui::pill_button::{PillButton, Surface};
 use crate::ui::scroll::engine::{self, Axis, Config};
 use crate::ui::{convert, strut};
@@ -47,45 +46,6 @@ pub fn scroll_handle(id: impl Into<ElementId>, window: &mut Window, cx: &mut App
 /// Scrolls the transcript to its newest message.
 pub fn scroll_to_bottom(handle: &ScrollHandle) {
     handle.scroll_to_bottom();
-}
-
-/// The transcript under the floating composer (LG research, Composer: a soft scroll edge effect
-/// under it): nothing paints under the composer reserve, and while the reader is `away` from the
-/// newest message the rows fade over `--scroll-fade-size` just above it, easing like the
-/// scroll-edge fade.
-pub fn composer_edge(
-    id: impl Into<ElementId>,
-    away: bool,
-    child: AnyElement,
-    window: &mut Window,
-    cx: &mut App,
-) -> AnyElement {
-    let ds = Ds::get(cx);
-    let reserve = scope::conversation(cx).map_or(0., |vars| vars.composer_reserve);
-    let size = f32::from(ds.len(Length::ScrollFadeSize));
-    let timing = Timing::token(ds, Duration::MotionBase, Easing::MotionEaseDecelerate);
-    let instant = ds.reduced_motion();
-    let fade = transition(
-        id,
-        (if away { size } else { 0. }, instant),
-        &timing,
-        window,
-        cx,
-    );
-    if fade.moving(&timing) {
-        input_frame(window);
-    }
-    engine::masked(
-        child,
-        Edges {
-            bottom: px(fade.value(&timing)),
-            ..Edges::default()
-        },
-        Edges {
-            bottom: px(reserve),
-            ..Edges::default()
-        },
-    )
 }
 
 #[derive(IntoElement)]
