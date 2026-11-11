@@ -84,6 +84,8 @@ jobs:
           python3 .github/scripts/isolated.py bun tests/smoke/browser-handback-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/site-data"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-site-data-electron.ts
+          export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/save-signin"
+          python3 .github/scripts/isolated.py bun tests/smoke/browser-save-signin-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/agent-mute"
           python3 .github/scripts/isolated.py bun tests/smoke/browser-agent-mute-electron.ts
           export BUTLER_BROWSER_EVIDENCE="$RUNNER_TEMP/browser-fixtures/paint"
