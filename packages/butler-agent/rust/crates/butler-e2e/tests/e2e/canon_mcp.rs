@@ -172,7 +172,7 @@ fn store_error(error: &butler_canon::store::Error) -> HarnessError {
 }
 
 #[tokio::test]
-async fn cn_15_stateless_clients_list_tools_with_cache_hints() -> Result<(), HarnessError> {
+async fn cn_15_stateless_clients_list_tools_and_call_canon() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("CN-15-STATELESS")?
         .data_folder_token()
@@ -201,5 +201,18 @@ async fn cn_15_stateless_clients_list_tools_with_cache_hints() -> Result<(), Har
             .iter()
             .any(|tool| tool["name"] == "canon_edit_epic")
     );
+    let reply = butler_e2e::e2e::mcp::exchange(
+        &s.agent.launch,
+        &s.sandbox.logs.join("stateless-call.log"),
+        &[
+            json!({"jsonrpc":"2.0","id":"discover","method":"server/discover","params":{"_meta":meta}}),
+            json!({"jsonrpc":"2.0","id":"call","method":"tools/call","params":{"_meta":meta,"name":"canon_list","arguments":{}}}),
+        ],
+    )
+    .await?;
+    let value: Value =
+        serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap())?;
+    assert_eq!(value["error"]["code"], "trust_pending", "{reply}");
+    assert_eq!(pending(&s).await?["client_title"], "Claude Code");
     Ok(())
 }
