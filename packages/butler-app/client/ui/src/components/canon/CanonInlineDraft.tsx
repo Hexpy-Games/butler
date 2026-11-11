@@ -9,11 +9,17 @@ type UploadState = { pendingFile: File | null; files: MessageFileRef[] };
 const UploadContext = createContext<[UploadState, Dispatch<SetStateAction<UploadState>>] | null>(null);
 const DraftContext = createContext<DraftState | null>(null);
 
-/** ConversationShell remounts its aside on a layout flip; the conversation keeps the draft. */
-export function CanonInlineDraftProvider({ children }: { children: ReactNode }) {
+/** ConversationShell remounts its aside on a layout flip; the conversation keeps the draft. Another `scope` starts empty. */
+export function CanonInlineDraftProvider({ children, scope }: { children: ReactNode; scope?: string }) {
   const parent = useContext(DraftContext);
   const state = useState<InlineDraft | null>(null);
   const uploads = useState<UploadState>({ pendingFile: null, files: [] });
+  const [shownScope, setShownScope] = useState(scope);
+  if (shownScope !== scope) {
+    setShownScope(scope);
+    state[1](null);
+    uploads[1]({ pendingFile: null, files: [] });
+  }
   if (parent) return children;
   return <DraftContext.Provider value={state}><UploadContext.Provider value={uploads}>{children}</UploadContext.Provider></DraftContext.Provider>;
 }

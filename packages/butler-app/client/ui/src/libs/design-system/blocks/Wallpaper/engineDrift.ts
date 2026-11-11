@@ -58,7 +58,13 @@ export function createEngineDrift(options: EngineDriftOptions): EngineDrift {
   let contentRect2: WallpaperContentRect | null = null;
   let scene = false;
   const looks = createDriftLooks();
-  const keepOut = createDriftKeepOut(options.contentRect);
+  // A content keep-out that goes stays drawn until another replaces it: between screens the print never shows bare
+  // (behind a conversation the column's masses take over).
+  let content: WallpaperContentRect | null = null;
+  const keepOut = createDriftKeepOut(() => {
+    content = options.contentRect() ?? content;
+    return content;
+  });
   // A moving setup keep-out keeps live frames coming like a look tween does.
   const tweens = { ...looks, tweening: () => looks.tweening() || keepOut.moving() };
   const watchdog = createEngineWatchdog({ onDegrade: options.onDegrade, onRetry: options.onRetry, slowFrames: WALLPAPER_DRIFT_SLOW_KEYFRAMES });
