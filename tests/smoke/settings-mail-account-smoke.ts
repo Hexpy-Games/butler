@@ -84,7 +84,7 @@ try {
   await section(page, "mail").getByRole("button", { name: copy.connect, exact: true }).click();
   await page.getByText(copy.connectedToast, { exact: true }).waitFor();
   await section(page, "mail").getByText("smoke@example.test", { exact: true }).waitFor();
-  await section(page, "mail").getByText(`${copy.disconnected} · ${copy.checkAccount}`, { exact: true }).waitFor();
+  await section(page, "mail").getByText(copy.checkAccount, { exact: true }).waitFor();
   await section(page, "mail").getByRole("button", { name: copy.retry, exact: true }).waitFor();
   assert(!(await page.locator("body").innerHTML()).includes(canary), "password cleared from markup");
   await verifyLayouts(page);

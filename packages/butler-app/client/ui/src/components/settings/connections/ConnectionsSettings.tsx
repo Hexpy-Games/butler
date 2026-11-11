@@ -19,7 +19,7 @@ export function ConnectionsSettings() {
         onSave={async input => { const saved = await connections.add(input); if (saved) setAdding(false); return saved; }} />}
       {accounts.map(account => <CardListItem key={account.id} title={account.fields.address}
         description={account.state === "connected" ? copy.connected : ["connecting", "reconnecting"].includes(account.state) ? copy.connecting
-          : account.state === "crashed" ? `${copy.disconnected} · ${copy.checkAccount}` : copy.disconnected}
+          : account.state === "crashed" ? copy.checkAccount : copy.disconnected}
         actions={<ButtonContainer size="sm">
           {account.state === "crashed" && <Button size="sm" variant="outline" disabled={connections.busy} onClick={() => void connections.retry(account.id)}>{copy.retry}</Button>}
           <Tooltip label={copy.remove}><IconButton label={copy.remove} disabled={connections.busy} onClick={() => void connections.remove(account.id)}><X size="sm" /></IconButton></Tooltip>
