@@ -5,7 +5,7 @@ mod patterns;
 mod unicode_text;
 pub use unicode_text::{decode_unicode_text, is_unicode_text};
 mod title;
-pub use title::{names_internal_role, public_title};
+pub use title::{delegation_title, names_internal_role, public_title};
 mod source_regex;
 
 use std::borrow::Cow;
