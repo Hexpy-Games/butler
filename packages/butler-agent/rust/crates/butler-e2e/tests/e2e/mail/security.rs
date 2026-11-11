@@ -16,6 +16,7 @@ async fn security_mail_secret_redaction_destination_refusal_and_remote_plaintext
     let mut config: Value = serde_json::from_slice(&fs::read(&config_path)?)?;
     config["secrets"]["store"] = json!("system");
     fs::write(config_path, serde_json::to_vec_pretty(&config)?)?;
+    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
     let mut settings =
         json!({"model":s.model.model.clone(),"access_mode":Access::AskExceptReads.as_str()});
@@ -23,7 +24,7 @@ async fn security_mail_secret_redaction_destination_refusal_and_remote_plaintext
         settings["reasoning_effort"] = json!(effort);
     }
     s.patch_settings(settings, "MAIL-SECURITY").await?;
-    install(&s).await?;
+    install(&s, &root).await?;
     s.provider()?.set_chat_responder(stub::run);
     let password = format!("mail-canary-{}", uuid::Uuid::new_v4());
     let id = connect(&s, &fake, &password).await?;
@@ -46,9 +47,7 @@ async fn security_mail_secret_redaction_destination_refusal_and_remote_plaintext
     let direct = direct::Direct::open(&s, &fake, &id, &password).await?;
     let mut advertised = direct.tools().await?;
     advertised.sort();
-    let manifest: Value = serde_json::from_slice(&fs::read(
-        butler_e2e::e2e::binary::resource_source().join("plugins/mail/plugin.json"),
-    )?)?;
+    let manifest: Value = serde_json::from_slice(&fs::read(root.join("plugin.json"))?)?;
     let connector = &manifest["extensions"]["io.github.hexpy-games.butler"]["connectors"][0];
     let mut declared = connector["actions"]
         .as_array()
@@ -164,8 +163,9 @@ async fn safe_copy_move_requires_uidplus_and_smtp_sends_only_on_explicit_call()
     butler_e2e::gate!();
     let fake = FakeImap::start().await?;
     let setup = setup("MAIL-MOVE-SMTP")?;
+    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s).await?;
+    install(&s, &root).await?;
     s.provider()?.set_chat_responder(stub::run);
     let id = connect(&s, &fake, "mail-password").await?;
     fake.deliver(

@@ -2871,12 +2871,6 @@ Copyright 2020 Yoshua Wuyts
 Copyright (c) 2020 Yoshua Wuyts
 
 =====
-async-channel 1.9.0
-Apache-2.0 OR MIT
-License: https://github.com/smol-rs/async-channel/blob/3d6cd8f6be74a9608f7e695c6f47990b1693d772/LICENSE-APACHE
-License: https://github.com/smol-rs/async-channel/blob/3d6cd8f6be74a9608f7e695c6f47990b1693d772/LICENSE-MIT
-
-=====
 async-channel 2.5.0
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/async-channel/blob/35a63c456aaa1906015f5a825e7e35505a749afa/LICENSE-APACHE
@@ -2894,13 +2888,6 @@ async-executor 1.14.0
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/async-executor/blob/543403e773ec4941a6272e29c2ff649bfd01a4f8/LICENSE-APACHE
 License: https://github.com/smol-rs/async-executor/blob/543403e773ec4941a6272e29c2ff649bfd01a4f8/LICENSE-MIT
-
-=====
-async-imap 0.11.3
-MIT OR Apache-2.0
-License: https://github.com/async-email/async-imap/blob/24b5aa39d4865f10e6665267f56113bab94ee257/LICENSE-APACHE
-License: https://github.com/async-email/async-imap/blob/24b5aa39d4865f10e6665267f56113bab94ee257/LICENSE-MIT
-Copyright (c) 2019
 
 =====
 async-io 2.6.0
@@ -3960,12 +3947,6 @@ License: https://github.com/smol-rs/event-listener-strategy/blob/f533c437e8a6561
 License: https://github.com/smol-rs/event-listener-strategy/blob/f533c437e8a6561e9b625c3ee036a8ea7d19375c/LICENSE-MIT
 
 =====
-event-listener 2.5.3
-Apache-2.0 OR MIT
-License: https://github.com/smol-rs/event-listener/blob/a38fcb4955911d4e54a2f6a79630544f9edf29a3/LICENSE-APACHE
-License: https://github.com/smol-rs/event-listener/blob/a38fcb4955911d4e54a2f6a79630544f9edf29a3/LICENSE-MIT
-
-=====
 event-listener 5.4.2
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/event-listener/blob/77004ac77dcef7884bf71a99c276a50f83a7fa4e/LICENSE-APACHE
@@ -4211,11 +4192,6 @@ License: https://github.com/fizyk20/generic-array/blob/1397d2bb40c406901b7827161
 Copyright (c) 2015 Bartłomiej Kamiński
 
 =====
-gethostname 1.1.0
-Apache-2.0
-License: https://crates.io/crates/gethostname/1.1.0
-
-=====
 getrandom 0.2.17
 MIT OR Apache-2.0
 License: https://github.com/rust-random/getrandom/blob/b625985d852600a3eeb68556811e59e7c9a6a098/LICENSE-APACHE
@@ -4312,12 +4288,6 @@ MIT OR Apache-2.0
 License: https://github.com/rust-lang/hashbrown/blob/c62a63a61b7caf2de8f9ecb7b06a66b0ab6bdf3d/LICENSE-APACHE
 License: https://github.com/rust-lang/hashbrown/blob/c62a63a61b7caf2de8f9ecb7b06a66b0ab6bdf3d/LICENSE-MIT
 Copyright (c) 2016 Amanieu d'Antras
-
-=====
-hashify 0.2.9
-Apache-2.0 OR MIT
-License: https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/Apache-2.0.txt
-License: https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/MIT.txt
 
 =====
 hashlink 0.10.0
@@ -4647,13 +4617,6 @@ imagesize 0.15.0
 MIT
 License: https://github.com/Roughsketch/imagesize/blob/7dba0c7ae38ee1b90024f82cbb8fab12d6b1b4eb/LICENSE
 Copyright (c) 2017 Maiddog
-
-=====
-imap-proto 0.16.7
-MIT OR Apache-2.0
-License: https://github.com/djc/tokio-imap/blob/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-MIT
-License: https://github.com/djc/tokio-imap/blob/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-APACHE
-Copyright (c) 2017 Dirkjan Ochtman
 
 =====
 indexmap 2.14.2
@@ -5077,27 +5040,6 @@ License: https://github.com/danielhenrymantilla/macro_rules_attribute-rs/blob/ec
 License: https://github.com/danielhenrymantilla/macro_rules_attribute-rs/blob/ecc27fb03c53d885036a4fa053db65a889991e0d/LICENSE-ZLIB
 Copyright 2019 Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>
 Copyright (c) 2019 Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>
-
-=====
-mail-builder 0.5.0
-Apache-2.0 OR MIT
-License: https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/Apache-2.0.txt
-License: https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/MIT.txt
-
-=====
-mail-parser 0.11.8
-Apache-2.0 OR MIT
-License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/legacy/COPYING
-License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/malformed/COPYING
-License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/thirdparty/COPYING
-These test files are Copyright © 2010 Hunny Software, Inc.
-These test files are Copyright (c) 2003-2018 Dovecot authors, licensed under MIT.
-
-=====
-mail-send 0.6.2
-Apache-2.0 OR MIT
-License: https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/Apache-2.0.txt
-License: https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/MIT.txt
 
 =====
 markup5ever 0.39.0
@@ -5698,14 +5640,6 @@ License: https://github.com/taiki-e/pin-project/blob/c3b6b85f7e1674602c0ed693da9
 License: https://github.com/taiki-e/pin-project/blob/c3b6b85f7e1674602c0ed693da985b33b2452c3c/LICENSE-MIT
 
 =====
-pin-utils 0.1.1
-MIT OR Apache-2.0
-License: https://github.com/rust-lang/pin-utils/blob/1c8fe452e3f22c76cb35f4b171f090bf2d50890c/LICENSE-APACHE
-License: https://github.com/rust-lang/pin-utils/blob/1c8fe452e3f22c76cb35f4b171f090bf2d50890c/LICENSE-MIT
-Copyright 2018 The pin-utils authors
-Copyright (c) 2018 The pin-utils authors
-
-=====
 piper 0.2.5
 MIT OR Apache-2.0
 License: https://github.com/smol-rs/piper/blob/85da45edce0b9262f00d79d9a42ce0372fb42a10/LICENSE-APACHE
@@ -6198,13 +6132,6 @@ Copyright 2023 Dirkjan Ochtman
 Copyright (c) 2023 Dirkjan Ochtman <dirkjan@ochtman.nl>
 
 =====
-rustls-platform-verifier 0.7.1
-MIT OR Apache-2.0
-License: https://github.com/rustls/rustls-platform-verifier/blob/252e25161a91af476cbea620e29d277592d27ec7/rustls-platform-verifier/LICENSE-APACHE
-License: https://github.com/rustls/rustls-platform-verifier/blob/252e25161a91af476cbea620e29d277592d27ec7/rustls-platform-verifier/LICENSE-MIT
-Copyright (c) 2022 1Password
-
-=====
 rustls-webpki 0.103.15
 ISC
 License: https://github.com/rustls/webpki/blob/c14836d8de33c0ad0ac7dcb28fe9aade20831a4d/LICENSE
@@ -6301,16 +6228,6 @@ Copyright (c) 2015 Steven Fackler
 selectors 0.38.0
 MPL-2.0
 License: https://crates.io/crates/selectors/0.38.0
-
-=====
-self_cell 1.3.0
-Apache-2.0 OR GPL-2.0-only
-License: https://github.com/Voultapher/self_cell/blob/93cb06e430e7516ac9b436029a15127782b6c2b6/LICENSE-APACHE
-License: https://github.com/Voultapher/self_cell/blob/93cb06e430e7516ac9b436029a15127782b6c2b6/LICENSE-GPLv2
-Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
-51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
-Copyright (C) <year>  <name of author>
-Gnomovision version 69, Copyright (C) year name of author
 
 =====
 semver 1.0.28
@@ -6499,12 +6416,6 @@ License: https://github.com/servo/rust-smallvec/blob/700e1c3ff899cda7799b18e0804
 Copyright (c) 2018 The Servo Project Developers
 
 =====
-smtp-proto 0.2.5
-Apache-2.0 OR MIT
-License: https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/Apache-2.0.txt
-License: https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/MIT.txt
-
-=====
 snafu-derive 0.8.9
 MIT OR Apache-2.0
 License: https://github.com/shepmaster/snafu/blob/fd06040704379e9a76a9d35e34488d6f48849237/snafu-derive/LICENSE-APACHE
@@ -6598,12 +6509,6 @@ License: https://github.com/vitiral/stfu8/blob/06dfc823a86fb7f8b51e52fa4be937ca8
 License: https://github.com/vitiral/stfu8/blob/06dfc823a86fb7f8b51e52fa4be937ca870771cd/LICENSE-MIT
 Copyright 2017 Garrett Berg, vitiral@gmail.com
 Copyright (c) 2017 Garrett Berg, vitiral@gmail.com
-
-=====
-stop-token 0.7.0
-MIT
-License: https://crates.io/crates/stop-token/0.7.0
-Copyright (c) <year> <copyright holders>
 
 =====
 strict-num 0.1.1

@@ -101,10 +101,6 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "logs-storage", kind: "status", fields: ["logs-export", "logs-clear"] },
     { id: "developer-context-estimates", kind: "list", fields: [] },
   ],
-  connections: [
-    { id: "mail", kind: "list", fields: ["mail-address", "mail-password", "mail-imap", "mail-smtp", "mail-handling"] },
-    { id: "connector-rules", kind: "list", fields: [] },
-  ],
   browser: [
     { id: "browsing-agent", kind: "form", fields: ["browsing-agent"] },
     { id: "browser-history", kind: "form", fields: ["browser-history"] },

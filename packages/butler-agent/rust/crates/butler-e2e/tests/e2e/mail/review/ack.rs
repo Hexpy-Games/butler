@@ -102,8 +102,9 @@ async fn review_host_kill_before_ack_replays_once_to_real_host() -> Result<(), H
     butler_e2e::gate!();
     let fake = FakeImap::start().await?;
     let setup = setup("MAIL-HOST-ACK")?;
+    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s).await?;
+    install(&s, &root).await?;
     let account = connect(&s, &fake, "password").await?;
     enabled(&s, &account, false).await?;
     let direct = Direct::open(&s, &fake, &account, "password").await?;

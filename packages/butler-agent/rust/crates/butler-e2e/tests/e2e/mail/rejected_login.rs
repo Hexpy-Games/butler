@@ -8,8 +8,9 @@ async fn rejected_login_crashes_account_after_three_attempts_without_leaking_pas
     let fake = FakeImap::start().await?;
     fake.reject_login(true);
     let setup = setup("MAIL-REJECTED-LOGIN")?;
+    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s).await?;
+    install(&s, &root).await?;
     let password = format!("mail-auth-canary-{}", uuid::Uuid::new_v4());
     let response = api(
         &s,

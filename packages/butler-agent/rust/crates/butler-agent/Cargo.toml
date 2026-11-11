@@ -28,7 +28,6 @@ static-ort = ["butler-memory/static-ort"]
 [dependencies]
 butler-canon = { path = "../butler-canon" }
 butler-log = { path = "../butler-log" }
-butler-mail-connector = { path = "../butler-mail-connector" }
 butler-test-support = { path = "../butler-test-support", optional = true }
 butler-gateway = { path = "../butler-gateway" }
 butler-memory = { path = "../butler-memory", default-features = false }

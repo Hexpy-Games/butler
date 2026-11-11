@@ -1,5 +1,4 @@
 import type { SettingsSectionId } from "@/app/types.ts";
-import { ConnectionsSettings } from "./connections/ConnectionsSettings";
 import { AboutSettings } from "./AboutSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { ArchivesSettings } from "./ArchivesSettings";
@@ -29,7 +28,6 @@ export function SettingsDetailContent({
     <>
       {activeSection === "memory" && <MemorySettings />}
       {activeSection === "general" && <GeneralSettings />}
-      {activeSection === "connections" && <ConnectionsSettings />}
       {activeSection === "models" && <ModelsSettings />}
       {activeSection === "appearance" && <AppearanceSettings />}
       {activeSection === "server" && <ServerSettings />}

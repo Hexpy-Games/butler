@@ -72,9 +72,6 @@ This routine requires Ledger access and publication authorization. Codex workers
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
-- **2026-11-11: A slice is done only when every spec acceptance item is met; deferred scope goes to the Ledger before merge.** A PR that leaves spec scope undone records each deferred item as a Ledger item before it merges; merged PRs alone never close a slice.
-  - What happened: the mail connector slice was marked done when its PRs (#1621, #1623) merged. The account UI, preinstall and rule narrowing lived only in the #1623 body and were lost until the owner found the feature unusable.
-
 - **2026-10-28: Fix it or don't file it.** An issue for a main failure exists only while its fix is under way; the fix PR closes it with `Fixes #<n>`.
   - What happened: sessions filed an issue for each main failure to unlock a CI re-run, merged their own work and moved on. Nobody started the fixes, PRs that did fix them never closed them, and open issues went from 17 to 46 in eight days.
 

@@ -35,6 +35,17 @@ fn setup(name: &str) -> Result<Setup, HarnessError> {
     butler_platform::secrets::prepare_system_keychain_for_test(&setup.sandbox.home)?;
     Ok(setup)
 }
+fn package(home: &Path) -> Result<PathBuf, HarnessError> {
+    let root = home.join("mail-package");
+    fs::create_dir_all(root.join("bin"))?;
+    let source = butler_e2e::e2e::binary::workspace_root().join("../plugins/mail");
+    fs::copy(source.join("plugin.json"), root.join("plugin.json"))?;
+    fs::copy(
+        butler_e2e::e2e::binary::fixture_binary("e2e-mail-connector")?,
+        root.join("bin/butler-mail-connector"),
+    )?;
+    Ok(root)
+}
 async fn api(
     s: &Scenario,
     method: Method,
@@ -52,12 +63,12 @@ async fn revision(s: &Scenario) -> Result<u64, HarnessError> {
             .unwrap(),
     )
 }
-async fn install(s: &Scenario) -> Result<(), HarnessError> {
+async fn install(s: &Scenario, root: &Path) -> Result<(), HarnessError> {
     let i = api(
         s,
         Method::POST,
         "/plugins/inspect",
-        Some(json!({"bundled":"mail"})),
+        Some(json!({"path":root})),
     )
     .await?;
     assert_eq!(i.status, 200, "{i:?}");

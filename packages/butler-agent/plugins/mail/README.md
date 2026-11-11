@@ -1,6 +1,9 @@
 # 메일
 
-First-party IMAP IDLE and SMTP connector. Runs inside the Butler agent binary (`butler-agent --mail-connector`). It ships in the agent resources and installs when the user first connects an account in Settings → 연결.
+First-party IMAP IDLE and SMTP connector. Build `butler-mail-connector` from
+`rust/crates/butler-mail-connector`, then place the executable at
+`bin/butler-mail-connector` next to `plugin.json`. App bundle installation is
+separate from this package.
 
 Account settings use `BUTLER_CONNECTOR_FIELDS`. Empty optional port, security,
 and username fields select the defaults: implicit TLS on 993/465 and the account

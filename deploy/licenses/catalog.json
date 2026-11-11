@@ -4,11 +4,11 @@
     "deploy/licenses/disclosure.py": "992c3d7f47a0944dc1c0ab0628e11a818b88f9ae7d5f62a5c5692715a175d859",
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
-    "deploy/licenses/refresh.py": "c64736251dc44a6eba79850ad7e51991999c7f748c1d65c3d0fb2c3c4f4fce5a",
-    "packages/butler-agent/rust/Cargo.lock": "28f4d11c334aecb0a81558c3f62b72b05719bcc3f28126b0369a31b5bbcbe97a",
+    "deploy/licenses/refresh.py": "9949f1b408013b4350f973aa9b01a693b3f6815c8f1f94f9a63203d13e6aedfb",
+    "packages/butler-agent/rust/Cargo.lock": "c23c3f2cbb528a962086a22a36f7fe52d41d866a0f329bdc223d6ea7eede2d72",
     "packages/butler-agent/rust/Cargo.toml": "f285ad63272b66159ce655ff34c66177287cf157785d8bf84a569929a991060c",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
-    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "b7d164c017bffeb648606727130ce4dc70883539ec2dec82d6824da9d39ac76a",
+    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "5d8ff50c2c4b2c2d2ead256681c9a3cf2587668550d527def047df0300d0d7d5",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
     "packages/butler-agent/rust/crates/butler-canon/Cargo.toml": "6fbaad62c0bdd80654f846a11dffff9538849d496374a0486bb93f973056d92b",
@@ -12399,32 +12399,6 @@
       ]
     },
     {
-      "id": "rust:async-channel@1.9.0",
-      "name": "async-channel",
-      "version": "1.9.0",
-      "license": "Apache-2.0 OR MIT",
-      "source": "https://github.com/smol-rs/async-channel/tree/3d6cd8f6be74a9608f7e695c6f47990b1693d772",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/smol-rs/async-channel/blob/3d6cd8f6be74a9608f7e695c6f47990b1693d772/LICENSE-APACHE",
-        "https://github.com/smol-rs/async-channel/blob/3d6cd8f6be74a9608f7e695c6f47990b1693d772/LICENSE-MIT"
-      ],
-      "copyright": []
-    },
-    {
       "id": "rust:async-channel@2.5.0",
       "name": "async-channel",
       "version": "2.5.0",
@@ -12501,34 +12475,6 @@
         "https://github.com/smol-rs/async-executor/blob/543403e773ec4941a6272e29c2ff649bfd01a4f8/LICENSE-MIT"
       ],
       "copyright": []
-    },
-    {
-      "id": "rust:async-imap@0.11.3",
-      "name": "async-imap",
-      "version": "0.11.3",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/async-email/async-imap/tree/24b5aa39d4865f10e6665267f56113bab94ee257",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "4e0ec88980aac272d80e61a33cb695cf40dbb8768a5973e6c077be73912bd9f0"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/async-email/async-imap/blob/24b5aa39d4865f10e6665267f56113bab94ee257/LICENSE-APACHE",
-        "https://github.com/async-email/async-imap/blob/24b5aa39d4865f10e6665267f56113bab94ee257/LICENSE-MIT"
-      ],
-      "copyright": [
-        "Copyright (c) 2019"
-      ]
     },
     {
       "id": "rust:async-io@2.6.0",
@@ -16738,32 +16684,6 @@
       "copyright": []
     },
     {
-      "id": "rust:event-listener@2.5.3",
-      "name": "event-listener",
-      "version": "2.5.3",
-      "license": "Apache-2.0 OR MIT",
-      "source": "https://github.com/smol-rs/event-listener/tree/a38fcb4955911d4e54a2f6a79630544f9edf29a3",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/smol-rs/event-listener/blob/a38fcb4955911d4e54a2f6a79630544f9edf29a3/LICENSE-APACHE",
-        "https://github.com/smol-rs/event-listener/blob/a38fcb4955911d4e54a2f6a79630544f9edf29a3/LICENSE-MIT"
-      ],
-      "copyright": []
-    },
-    {
       "id": "rust:event-listener@5.4.2",
       "name": "event-listener",
       "version": "5.4.2",
@@ -17734,29 +17654,6 @@
       ]
     },
     {
-      "id": "rust:gethostname@1.1.0",
-      "name": "gethostname",
-      "version": "1.1.0",
-      "license": "Apache-2.0",
-      "source": "https://codeberg.org/swsnr/gethostname.rs.git",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4"
-      ],
-      "files": [
-        "LICENSE"
-      ],
-      "links": [
-        "https://crates.io/crates/gethostname/1.1.0"
-      ],
-      "copyright": []
-    },
-    {
       "id": "rust:getrandom@0.2.17",
       "name": "getrandom",
       "version": "0.2.17",
@@ -18137,32 +18034,6 @@
       "copyright": [
         "Copyright (c) 2016 Amanieu d'Antras"
       ]
-    },
-    {
-      "id": "rust:hashify@0.2.9",
-      "name": "hashify",
-      "version": "0.2.9",
-      "license": "Apache-2.0 OR MIT",
-      "source": "https://github.com/stalwartlabs/hashify/tree/74bd8a251dff8a514039e035a6437eabf1b9fd57",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
-      ],
-      "files": [
-        "LICENSES/Apache-2.0.txt",
-        "LICENSES/MIT.txt"
-      ],
-      "links": [
-        "https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/Apache-2.0.txt",
-        "https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/MIT.txt"
-      ],
-      "copyright": []
     },
     {
       "id": "rust:hashlink@0.10.0",
@@ -19421,34 +19292,6 @@
       ],
       "copyright": [
         "Copyright (c) 2017 Maiddog"
-      ]
-    },
-    {
-      "id": "rust:imap-proto@0.16.7",
-      "name": "imap-proto",
-      "version": "0.16.7",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/djc/tokio-imap/tree/6593414bd66f93b3caa5b5f7f24241e53c3d7da4",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "d8ab53f67f8b31421c425bcebd9f78b689bec5712c83b43fad60a997fd7ac61e",
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4"
-      ],
-      "files": [
-        "https://github.com/djc/tokio-imap/tree/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-MIT",
-        "https://github.com/djc/tokio-imap/tree/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-APACHE"
-      ],
-      "links": [
-        "https://github.com/djc/tokio-imap/blob/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-MIT",
-        "https://github.com/djc/tokio-imap/blob/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-APACHE"
-      ],
-      "copyright": [
-        "Copyright (c) 2017 Dirkjan Ochtman"
       ]
     },
     {
@@ -21088,90 +20931,6 @@
         "Copyright 2019 Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>",
         "Copyright (c) 2019 Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>"
       ]
-    },
-    {
-      "id": "rust:mail-builder@0.5.0",
-      "name": "mail-builder",
-      "version": "0.5.0",
-      "license": "Apache-2.0 OR MIT",
-      "source": "https://github.com/stalwartlabs/mail-builder/tree/1f667e2d81b3621184d798120267a144aad4124a",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
-      ],
-      "files": [
-        "LICENSES/Apache-2.0.txt",
-        "LICENSES/MIT.txt"
-      ],
-      "links": [
-        "https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/Apache-2.0.txt",
-        "https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/MIT.txt"
-      ],
-      "copyright": []
-    },
-    {
-      "id": "rust:mail-parser@0.11.8",
-      "name": "mail-parser",
-      "version": "0.11.8",
-      "license": "Apache-2.0 OR MIT",
-      "source": "https://github.com/stalwartlabs/mail-parser/tree/499ae0f2ff649af84c921af4b008f7c617b0bf87",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "03d62bfaa4460b4cedf92dd88c0f74420ed754ada53481d00e69007da4366ec2",
-        "6960a0bc3c17417633742a6f03aa1aa5fd06b67c4516a59f0815b4bd4b67cd93",
-        "6960a0bc3c17417633742a6f03aa1aa5fd06b67c4516a59f0815b4bd4b67cd93"
-      ],
-      "files": [
-        "resources/eml/legacy/COPYING",
-        "resources/eml/malformed/COPYING",
-        "resources/eml/thirdparty/COPYING"
-      ],
-      "links": [
-        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/legacy/COPYING",
-        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/malformed/COPYING",
-        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/thirdparty/COPYING"
-      ],
-      "copyright": [
-        "These test files are Copyright © 2010 Hunny Software, Inc.",
-        "These test files are Copyright (c) 2003-2018 Dovecot authors, licensed under MIT."
-      ]
-    },
-    {
-      "id": "rust:mail-send@0.6.2",
-      "name": "mail-send",
-      "version": "0.6.2",
-      "license": "Apache-2.0 OR MIT",
-      "source": "https://github.com/stalwartlabs/mail-send/tree/5256793258f2ee11ce4bdc033ce4a01d1307b50b",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
-      ],
-      "files": [
-        "LICENSES/Apache-2.0.txt",
-        "LICENSES/MIT.txt"
-      ],
-      "links": [
-        "https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/Apache-2.0.txt",
-        "https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/MIT.txt"
-      ],
-      "copyright": []
     },
     {
       "id": "rust:markup5ever@0.39.0",
@@ -23516,35 +23275,6 @@
       "copyright": []
     },
     {
-      "id": "rust:pin-utils@0.1.1",
-      "name": "pin-utils",
-      "version": "0.1.1",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/rust-lang/pin-utils/tree/1c8fe452e3f22c76cb35f4b171f090bf2d50890c",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "a16d29d68b56354ed97692422fa0ae34cd22c142b624e7e9876011ec0c19365c",
-        "28802412d2bfbafe432b305634413b41a984d30fba0df41d30aa2c8a2077c5b1"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/rust-lang/pin-utils/blob/1c8fe452e3f22c76cb35f4b171f090bf2d50890c/LICENSE-APACHE",
-        "https://github.com/rust-lang/pin-utils/blob/1c8fe452e3f22c76cb35f4b171f090bf2d50890c/LICENSE-MIT"
-      ],
-      "copyright": [
-        "Copyright 2018 The pin-utils authors",
-        "Copyright (c) 2018 The pin-utils authors"
-      ]
-    },
-    {
       "id": "rust:piper@0.2.5",
       "name": "piper",
       "version": "0.2.5",
@@ -25448,34 +25178,6 @@
       ]
     },
     {
-      "id": "rust:rustls-platform-verifier@0.7.1",
-      "name": "rustls-platform-verifier",
-      "version": "0.7.1",
-      "license": "MIT OR Apache-2.0",
-      "source": "https://github.com/rustls/rustls-platform-verifier/tree/252e25161a91af476cbea620e29d277592d27ec7",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a",
-        "1c7cf76689c837a68ed8d704994e52a0f2940c087958f860d17f3186afbdcc0c"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-MIT"
-      ],
-      "links": [
-        "https://github.com/rustls/rustls-platform-verifier/blob/252e25161a91af476cbea620e29d277592d27ec7/rustls-platform-verifier/LICENSE-APACHE",
-        "https://github.com/rustls/rustls-platform-verifier/blob/252e25161a91af476cbea620e29d277592d27ec7/rustls-platform-verifier/LICENSE-MIT"
-      ],
-      "copyright": [
-        "Copyright (c) 2022 1Password"
-      ]
-    },
-    {
       "id": "rust:rustls-webpki@0.103.15",
       "name": "rustls-webpki",
       "version": "0.103.15",
@@ -25864,37 +25566,6 @@
         "https://crates.io/crates/selectors/0.38.0"
       ],
       "copyright": []
-    },
-    {
-      "id": "rust:self_cell@1.3.0",
-      "name": "self_cell",
-      "version": "1.3.0",
-      "license": "Apache-2.0 OR GPL-2.0-only",
-      "source": "https://github.com/Voultapher/self_cell/tree/93cb06e430e7516ac9b436029a15127782b6c2b6",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a",
-        "b90ed8150a6d371c84b7dbaa680cd0e9893ef7c2558765e1e00930513efcfe3b"
-      ],
-      "files": [
-        "LICENSE-APACHE",
-        "LICENSE-GPLv2"
-      ],
-      "links": [
-        "https://github.com/Voultapher/self_cell/blob/93cb06e430e7516ac9b436029a15127782b6c2b6/LICENSE-APACHE",
-        "https://github.com/Voultapher/self_cell/blob/93cb06e430e7516ac9b436029a15127782b6c2b6/LICENSE-GPLv2"
-      ],
-      "copyright": [
-        "Copyright (C) 1989, 1991 Free Software Foundation, Inc.,",
-        "51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA",
-        "Copyright (C) <year>  <name of author>",
-        "Gnomovision version 69, Copyright (C) year name of author"
-      ]
     },
     {
       "id": "rust:semver@1.0.28",
@@ -26644,32 +26315,6 @@
       ]
     },
     {
-      "id": "rust:smtp-proto@0.2.5",
-      "name": "smtp-proto",
-      "version": "0.2.5",
-      "license": "Apache-2.0 OR MIT",
-      "source": "https://github.com/stalwartlabs/smtp-proto/tree/f9c4edfbda406615ed70bfb073f7eb1e5a157197",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
-      ],
-      "files": [
-        "LICENSES/Apache-2.0.txt",
-        "LICENSES/MIT.txt"
-      ],
-      "links": [
-        "https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/Apache-2.0.txt",
-        "https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/MIT.txt"
-      ],
-      "copyright": []
-    },
-    {
       "id": "rust:snafu-derive@0.8.9",
       "name": "snafu-derive",
       "version": "0.8.9",
@@ -27043,33 +26688,6 @@
       "copyright": [
         "Copyright 2017 Garrett Berg, vitiral@gmail.com",
         "Copyright (c) 2017 Garrett Berg, vitiral@gmail.com"
-      ]
-    },
-    {
-      "id": "rust:stop-token@0.7.0",
-      "name": "stop-token",
-      "version": "0.7.0",
-      "license": "MIT",
-      "source": "https://crates.io/crates/stop-token/0.7.0",
-      "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
-      ],
-      "evidenceSha256": [
-        "fc4c38b6e134c0fe1748f2761018c52d9ed591c6ddd53cc6d85735f125982fb8",
-        "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
-      ],
-      "files": [
-        "Upstream MIT OR Apache-2.0 declaration (no copyright notice supplied)",
-        "Full MIT license (elected from upstream MIT / Apache-2.0; upstream omits text)"
-      ],
-      "links": [
-        "https://crates.io/crates/stop-token/0.7.0"
-      ],
-      "copyright": [
-        "Copyright (c) <year> <copyright holders>"
       ]
     },
     {
@@ -27809,10 +27427,7 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/dtolnay/thiserror/tree/41938bd3a03a70d34ed8e53d99c89c770c7c9c41",
       "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
+        "Unsigned Windows x64 Agent preview"
       ],
       "evidenceSha256": [
         "b30df9a48463d1c99c6a66cdee623b1b0832c3811d58a80b338268d71cea190e",
@@ -27861,10 +27476,7 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/dtolnay/thiserror/tree/41938bd3a03a70d34ed8e53d99c89c770c7c9c41",
       "artifacts": [
-        "Linux arm64 DEB/Agent",
-        "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview",
-        "macOS App/Agent"
+        "Unsigned Windows x64 Agent preview"
       ],
       "evidenceSha256": [
         "b30df9a48463d1c99c6a66cdee623b1b0832c3811d58a80b338268d71cea190e",

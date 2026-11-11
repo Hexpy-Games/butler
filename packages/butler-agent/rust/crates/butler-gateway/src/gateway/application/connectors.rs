@@ -30,7 +30,6 @@ impl ConnectorStore for Store {
             let subscribers = app.subscribers.clone();
             app.storage.execute(move |db|{
                 match operation.as_str() {
-                    "status"=>{events::append(db,&subscribers,"connectors.changed",None,input.as_object().cloned().unwrap_or_default(),&now)?;Ok(json!({"ok":true}))},
                     "insert"=>rows::insert(db,input,&now),
                     "batch"=>rows::batch(db,&input,&now),
                     "ready"=>rows::ready(db,&input),

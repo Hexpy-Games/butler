@@ -1,6 +1,5 @@
 import {
   AiChip,
-  Blocks,
   Notebook,
   Archive,
   Activity,
@@ -54,7 +53,6 @@ function createSettingsSectionMap(
     usage: section("usage", settingsCopy.sections.usage, <Database />),
     logs: section("logs", settingsCopy.sections.logs, <Terminal />),
     personalization: section("personalization", settingsCopy.sections.personalization, <UserRound />),
-    connections: section("connections", settingsCopy.sections.connections, <Blocks />),
     browser: section("browser", settingsCopy.sections.browser, <Globe2 />),
     security: section("security", settingsCopy.sections.security, <Lock />),
     system: section("system", settingsCopy.sections.system, <Activity />),
@@ -81,7 +79,7 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
   {
     id: "general",
     label: "preferences",
-    sectionIds: ["general", "appearance", "personalization", "memory", "models", "connections"],
+    sectionIds: ["general", "appearance", "personalization", "memory", "models"],
   },
   {
     id: "app-and-system",

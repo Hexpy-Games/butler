@@ -5,8 +5,9 @@ async fn review_host_unsubscribe_card_contains_exact_target_and_rejects_mismatch
     butler_e2e::gate!();
     let fake = FakeImap::start().await?;
     let setup = setup("MAIL-UNSUBSCRIBE")?;
+    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s).await?;
+    install(&s, &root).await?;
     let account = connect(&s, &fake, "password").await?;
     let url = "https://lists.example.test/leave?subscription=exact";
     let uid = fake.deliver("INBOX", &rfc822("unsubscribe", "List", "owner@example.test", "Body", &format!("List-Unsubscribe: <{url}>, <mailto:leave@example.test>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n")));

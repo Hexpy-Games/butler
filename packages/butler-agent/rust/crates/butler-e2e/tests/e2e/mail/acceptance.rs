@@ -5,8 +5,9 @@ async fn ss7_all_mail_is_data_and_model_triages_with_exact_draft_card() -> Resul
     butler_e2e::gate!();
     let fake = FakeImap::start().await?;
     let setup = setup("SS7-MAIL")?;
+    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s).await?;
+    install(&s, &root).await?;
     s.provider()?.set_chat_responder(stub::run);
     connect(&s, &fake, "mail-password").await?;
     fake.deliver(
@@ -126,8 +127,9 @@ async fn ss8_injected_send_requires_card_and_unattended_step_never_sends()
     butler_e2e::gate!();
     let fake = FakeImap::start().await?;
     let setup = setup("SS8-MAIL")?;
+    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s).await?;
+    install(&s, &root).await?;
     s.provider()?.set_chat_responder(stub::send);
     connect(&s, &fake, "mail-password").await?;
     fake.deliver(
@@ -187,8 +189,9 @@ async fn ss9_idle_60_seconds_has_no_mailbox_polls_or_butler_writes() -> Result<(
     butler_e2e::gate!();
     let fake = FakeImap::start().await?;
     let setup = setup("SS9-MAIL")?;
+    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s).await?;
+    install(&s, &root).await?;
     connect(&s, &fake, "mail-password").await?;
     let mut writes =
         super::super::idle_resources::writes::Watch::open_after_quiet(&s.sandbox.data).await?;
@@ -228,8 +231,9 @@ async fn wake_catches_up_once_and_uidvalidity_resets_without_flood() -> Result<(
         &rfc822("old", "Existing", "owner@example.test", "Old", ""),
     );
     let setup = setup("MAIL-WAKE")?;
+    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s).await?;
+    install(&s, &root).await?;
     s.provider()?.set_chat_responder(stub::run);
     let id = connect(&s, &fake, "mail-password").await?;
     count(&s, "SELECT count(*) FROM app_connector_events", 0).await?;
@@ -295,33 +299,5 @@ async fn wake_catches_up_once_and_uidvalidity_resets_without_flood() -> Result<(
         "new-validity-new"
     );
     fake.assert_no_forbidden_destinations();
-    s.finish().await
-}
-
-#[tokio::test]
-async fn bundled_mail_installs_by_name_and_publishes_status_changes() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let fake = FakeImap::start().await?;
-    let s = setup("MAIL-BUNDLED")?.start().await?;
-    for name in ["../mail", "Mail", ""] {
-        let response = api(
-            &s,
-            Method::POST,
-            "/plugins/inspect",
-            Some(json!({"bundled":name})),
-        )
-        .await?;
-        assert_eq!(response.status, 400, "{response:?}");
-        assert_eq!(response.error_code(), Some("plugin_source_invalid"));
-    }
-    install(&s).await?;
-    let id = connect(&s, &fake, "mail-password").await?;
-    wait(|| async {
-        let count: i64 = db(&s).query_row(
-            "SELECT count(*) FROM events WHERE type='connectors.changed' AND json_extract(payload_json,'$.account')=?1 AND json_extract(payload_json,'$.state')='connected'",
-            [&id], |row| row.get(0),
-        )?;
-        Ok(count > 0)
-    }).await?;
     s.finish().await
 }

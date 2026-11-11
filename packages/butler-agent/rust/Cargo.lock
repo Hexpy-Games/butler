@@ -1143,7 +1143,6 @@ dependencies = [
  "butler-gateway",
  "butler-ledger",
  "butler-log",
- "butler-mail-connector",
  "butler-memory",
  "butler-models",
  "butler-platform",

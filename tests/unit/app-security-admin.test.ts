@@ -89,17 +89,6 @@ test("the admin credential file is read from the data folder; a missing or inval
 // test-category: security
 test("the security routes carry the admin header next to the bearer token", async () => {
   const routes: Array<[unknown, string, string]> = [
-    [{ "route": "listPlugins" }, "GET", "/plugins"],
-    [{ "route": "inspectBundledPlugin", "body": { "payload": { "bundled": "mail" } } }, "POST", "/plugins/inspect"],
-    [{ "route": "installPlugin", "body": { "payload": {} } }, "POST", "/plugins/install"],
-    [{ "route": "checkPlugin", "body": { "plugin": "mail", "payload": {} } }, "POST", "/plugins/mail/check"],
-    [{ "route": "updatePlugin", "body": { "plugin": "mail", "payload": {} } }, "POST", "/plugins/mail/update"],
-    [{ "route": "listConnectors" }, "GET", "/connectors"],
-    [{ "route": "addConnectorAccount", "body": { "connector": "mail/mail", "payload": {} } }, "POST", "/connectors/mail/mail/accounts"],
-    [{ "route": "retryConnectorAccount", "body": { "connector": "mail/mail", "account": "acct-00000000-0000-0000-0000-000000000000", "payload": {} } }, "POST", "/connectors/mail/mail/accounts/acct-00000000-0000-0000-0000-000000000000/retry"],
-    [{ "route": "removeConnectorAccount", "body": { "connector": "mail/mail", "account": "acct-00000000-0000-0000-0000-000000000000", "revision": 0 } }, "DELETE", "/connectors/mail/mail/accounts/acct-00000000-0000-0000-0000-000000000000?revision=0"],
-    [{ "route": "listConnectorRules" }, "GET", "/connector-rules"],
-    [{ "route": "deleteConnectorRule", "body": { "rule": "rule-00000000-0000-0000-0000-000000000000" } }, "DELETE", "/connector-rules/rule-00000000-0000-0000-0000-000000000000"],
     [{ route: "getSecurity" }, "GET", "/security"],
     [{ route: "listOauthCredentials" }, "GET", "/security/oauth"],
     [{ route: "removeOauthCredential", body: { id: "account-credential_2" } }, "DELETE", "/security/oauth/account-credential_2"],
