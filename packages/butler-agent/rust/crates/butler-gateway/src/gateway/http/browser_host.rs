@@ -3,7 +3,7 @@ pub(super) mod agent_calls;
 mod backend;
 mod devtools;
 pub(super) mod downloads;
-mod fill;
+pub(super) mod fill;
 mod hand_back;
 pub(super) mod hidden;
 mod pay;

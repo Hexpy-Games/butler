@@ -10,7 +10,7 @@ import { signedInPlace } from "./signed-in.mjs";
 const WORLD = 9002;
 
 /** Visible sign-in controls of the page and its same-origin frames, by kind. */
-function detectSource(markers) {
+export function detectSource(markers) {
   return `(()=>{const markers=${JSON.stringify(markers)};
   const refs=globalThis.__butlerSignIn=new Map();let next=0;const keep=e=>{const id='s'+(++next);refs.set(id,new WeakRef(e));return id};
   const docs=[document];for(let i=0;i<docs.length;i++)for(const f of docs[i].querySelectorAll('iframe,frame')){try{if(f.contentDocument)docs.push(f.contentDocument)}catch{}}
@@ -38,14 +38,14 @@ const focusSource = (id, password) => `(()=>{const e=globalThis.__butlerSignIn?.
 const filledSource = id => `(()=>{const e=globalThis.__butlerSignIn?.get(${JSON.stringify(id)})?.deref();return Boolean(e?.isConnected&&e.value.length>0)})()`;
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
-async function evaluate(tab, code) { return tab.view.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code }]); }
+export async function evaluate(tab, code) { return tab.view.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code }]); }
 async function settled(tab, maxMs) {
   const deadline = Date.now() + maxMs, contents = tab.view.webContents;
   await pause(150);
   while (contents.isLoading() && Date.now() < deadline) await pause(100);
   await pause(250);
 }
-async function type(tab, id, text, password) {
+export async function type(tab, id, text, password) {
   if (!await evaluate(tab, focusSource(id, password))) return false;
   tab.expectedInputs = [];
   await tab.view.webContents.insertText(text);
@@ -104,7 +104,7 @@ async function typeSecret(browser, tab, field, args, origin) {
   return await evaluate(tab, filledSource(field)) ? true : { status: "user_required", reason: "unknown_form", tab: tab.id };
 }
 /** The password's only reference in main lives in this frame and ends with it. */
-async function typePulled(browser, tab, field, token, origin) {
+export async function typePulled(browser, tab, field, token, origin) {
   const pulled = await browser.pullCredential?.(token, origin);
   if (pulled?.error === "origin_mismatch") return { status: "origin_mismatch", tab: tab.id };
   if (typeof pulled?.password !== "string") return { status: "not_dispatched", reason: "credential_unavailable", tab: tab.id };
