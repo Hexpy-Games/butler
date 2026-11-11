@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
+import { SignInSuggestions } from "./SignInSuggestions";
 import { createRoot } from "react-dom/client";
 import { AgentPointer, Copy, ImageIcon, MessageSquarePlus, PickOutline, Scrap, SelectionBar, Stack, setReducedMotionOverride, type PickOutlineProps, type AgentPointerProps } from "@/butler-ds";
 import { getAppCopy, type AppLocale } from "../../../../../../butler-i18n/src/index";
@@ -39,4 +40,4 @@ function BrowserPointerOverlay() {
       ]} /></Stack>}
   </>;
 }
-createRoot(document.getElementById("root")!).render(<BrowserPointerOverlay />);
+createRoot(document.getElementById("root")!).render(location.hash === "#signin" ? <SignInSuggestions /> : <BrowserPointerOverlay />);

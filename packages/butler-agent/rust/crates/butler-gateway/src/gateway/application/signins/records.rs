@@ -16,6 +16,7 @@ pub(super) fn read(db: &Connection, command: AppSignInCommand) -> Result<Value> 
         AppSignInCommand::List => list(db),
         AppSignInCommand::ImportAdditions { run_id } => imports::additions(db, &run_id),
         AppSignInCommand::Lookup { site } => Ok(json!({"entry": entry_where(db, "site", &site)?})),
+        AppSignInCommand::Entries { site } => Ok(json!({"entries": site_entries(db, &site)?})),
         AppSignInCommand::Entry { id } => Ok(json!({"entry": entry_where(db, "id", &id)?})),
         AppSignInCommand::Grants { session, turn } => grants(db, &session, turn.as_deref()),
         _ => Ok(Value::Null),
@@ -85,6 +86,7 @@ pub(super) fn write(
         }
         AppSignInCommand::List
         | AppSignInCommand::Lookup { .. }
+        | AppSignInCommand::Entries { .. }
         | AppSignInCommand::Entry { .. }
         | AppSignInCommand::Grants { .. } => read(db, command),
         other => record(db, other, now),
@@ -334,12 +336,7 @@ fn list(db: &Connection) -> Result<Value> {
     let mut rows = Vec::with_capacity(sites.len());
     for site in sites {
         let base = site_row(db, &site)?;
-        let mut entries = db.prepare(&format!("SELECT {ENTRY_COLUMNS} FROM browser_signin_entries WHERE site=?1 ORDER BY created_at,id")).map_err(sql)?;
-        let entries = entries
-            .query_map([&site], entry_row)
-            .map_err(sql)?
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(sql)?;
+        let entries = site_entries(db, &site)?;
         if entries.is_empty() {
             rows.push(base);
             continue;
@@ -390,4 +387,14 @@ fn site_row(db: &Connection, site: &str) -> Result<Value> {
     Ok(
         json!({"site": site, "entry": entry, "conversations": conversations, "all_conversations": all, "uses": uses}),
     )
+}
+
+fn site_entries(db: &Connection, site: &str) -> Result<Vec<Value>> {
+    let mut entries = db.prepare(&format!("SELECT {ENTRY_COLUMNS} FROM browser_signin_entries WHERE site=?1 ORDER BY created_at,id")).map_err(sql)?;
+    let entries = entries
+        .query_map([site], entry_row)
+        .map_err(sql)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(sql)?;
+    Ok(entries)
 }

@@ -54,7 +54,7 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
     media: imageApprovalMedia(request) ?? media,
     ...(handoff ? { handoff: { canOpenTab, signIn: handoff.signIn,
       onOpenTab: () => media?.onOpen ? media.onOpen() : void openHandoffTab(sessionId),
-      onStop: () => void useButlerStore.getState().cancelActiveTurn() } } : {}),
+      onStop: () => void stopRequest(request) } } : {}),
     title: handoff?.title ?? view.title, details: handoff?.details ?? view.details, risk: view.risk, actionKind: view.actionKind,
     pathDetails: view.pathDetails,
     conversationScope: view.conversationScope, scope: request.approval?.operation?.allow_conversation === false ? undefined : request.scope, pending: pending.has(key),
@@ -78,4 +78,11 @@ export function useComposerAuthorityDecision(): ComposerAuthorityDecision | unde
         useButlerStore.getState().openSessionObserver(request.sourceSessionId, request.sourceTurnId);
     },
   };
+}
+
+/** Stop ends the work that raised the request: a delegated task's waiting turn, or this conversation's own. */
+function stopRequest(request: AuthorityApprovalCard) {
+  const store = useButlerStore.getState();
+  const child = store.sessionView?.steward_children?.find((item) => item.session_id === request.sourceSessionId);
+  return child ? store.cancelObservedSteward(child.relation.relation_id) : store.cancelActiveTurn();
 }

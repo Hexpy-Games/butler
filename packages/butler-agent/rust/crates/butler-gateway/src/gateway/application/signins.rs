@@ -27,6 +27,10 @@ pub enum AppSignInCommand {
     Lookup {
         site: String,
     },
+    /// Every entry of a site, for the user's account picker.
+    Entries {
+        site: String,
+    },
     Entry {
         id: String,
     },
@@ -141,6 +145,7 @@ impl AppApplication {
                 command,
                 AppSignInCommand::List
                     | AppSignInCommand::Lookup { .. }
+                    | AppSignInCommand::Entries { .. }
                     | AppSignInCommand::Entry { .. }
                     | AppSignInCommand::Grants { .. }
                     | AppSignInCommand::ImportAdditions { .. }
