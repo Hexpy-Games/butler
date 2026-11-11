@@ -34,6 +34,13 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             );
             Ok(())
         }
+        "expect-toasts" => {
+            settle(&mut h.cx, h.handle);
+            let expected: usize = arg.parse()?;
+            let shown = h.cx.update(|cx| butler_ds::ui::toast::mounted(cx));
+            ensure!(shown == expected, "{shown} toasts, expected {expected}");
+            Ok(())
+        }
         "expect-scale" => {
             let scale: f32 = arg.parse()?;
             let actual =
