@@ -7,7 +7,8 @@ export function installSignInFills(browser) {
     const frame = event.senderFrame;
     if (!tab || !frame || tab.profile !== "signed_in" || tab.holder !== "user" || tab.saveOffer) return;
     const url = tab.view.webContents.getURL();
-    const origin = new URL(url).origin;
+    let origin;
+    try { origin = new URL(url).origin; } catch { return; }
     if (frame.origin !== origin || tab.fillDismissed === url || tab.fillOffer?.url === url) return;
     const accounts = await browser.signInAccounts?.(origin).catch(() => []);
     if (!accounts?.length || browser.tabs.get(tab.id) !== tab || tab.view.webContents.getURL() !== url) return;
@@ -23,9 +24,10 @@ export async function fillOffer(browser, id, entryId) {
   const origin = new URL(tab.view.webContents.getURL()).origin;
   const account = offer.accounts.find(account => account.id === entryId);
   if (origin !== offer.origin || !account) return unavailable;
-  const token = await browser.signInFillToken?.({ entry_id: entryId, origin });
   const state = await evaluate(tab, detectSource(tab.policy?.secure_keypads ?? []));
-  if (!state.password) return unavailable;
+  if (!state?.password) return unavailable;
+  const token = await browser.signInFillToken?.({ entry_id: entryId, origin }).catch(() => undefined);
+  if (!token) return unavailable;
   if (state.username) await type(tab, state.username, account.username, false);
   const typed = await typePulled(browser, tab, state.password, token, origin);
   if (typed === true) {

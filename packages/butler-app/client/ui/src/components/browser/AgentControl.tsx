@@ -52,6 +52,8 @@ function FillSignInBand({ tab }: { tab: BrowserTab }) {
             <Typo.Label truncate basis="sm">{account.username}</Typo.Label>
           </DropdownMenuItem>)}</DropdownMenuContent>
         </DropdownMenu>}
+      {browserHoldable(tab) && tab.holder === "user" && <Button size="xs" variant="outline"
+        onClick={() => void browserCall("control", { id: tab.id, holder: "agent", sticky: false })}>{copy.giveBack}</Button>}
     </ButtonContainer>} />;
 }
 

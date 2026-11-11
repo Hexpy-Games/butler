@@ -53,7 +53,7 @@ try {
   assert.ok(text.includes(copy.saveSignIn));
   assert.ok(!text.includes(copy.giveBack));
   assert.ok(!JSON.stringify(await app.main("globalThis.browserAgentSubject.snapshot()")).includes(CANARY), "snapshot excludes the password");
-  writeFileSync(join(evidence, "band.png"), await app.page.screenshot());
+  await app.shot("band");
   await app.page.clickText(copy.saveSignIn, "[data-test-class=browser-save-signin] button");
   await waitBrowser(() => app.page.expression(`!${band}`), "sign-in saved");
   await waitBrowser(async () => (await agent("GET", "/security/signins")).body.data.sites.some((row: { site: string; entry?: { username: string } }) => row.site === "fixture-shop.test" && row.entry?.username === "owner@fixture.test"), "saved entry");
@@ -73,10 +73,10 @@ try {
   const fillText = await app.page.expression<string>(`${fillBand}.innerText`);
   assert.ok(fillText.includes(copy.savedSignIn));
   assert.ok(fillText.includes("login.fixture-shop.test"));
-  writeFileSync(join(evidence, "fill-band.png"), await app.page.screenshot());
+  await app.shot("fill-band");
   await app.page.clickText(copy.fillSignIn, "[data-test-class=browser-fill-signin] button");
   await waitBrowser(() => app.page.expression("Boolean(document.querySelector('[role=menuitem]'))"), "sign-in account menu");
-  writeFileSync(join(evidence, "fill-menu.png"), await app.page.screenshot());
+  await app.shot("fill-menu", true);
   await app.page.clickText("owner@fixture.test", "[role=menuitem]");
   await waitBrowser(() => page(mine, `document.querySelector('[name=username]').value==='owner@fixture.test' && document.querySelector('[name=password]').value.length===${CANARY.length}`), "sign-in filled");
   assert.ok(!JSON.stringify(await app.main("globalThis.browserAgentSubject.snapshot()")).includes(CANARY), "fill snapshot excludes the password");
