@@ -52,6 +52,7 @@ pub struct TintedGlass {
     column: Option<Pixels>,
     height: Option<Pixels>,
     presence: Option<Presence>,
+    composer: bool,
     children: Vec<AnyElement>,
 }
 
@@ -65,6 +66,7 @@ impl TintedGlass {
             column: None,
             height: None,
             presence: None,
+            composer: false,
             children: Vec::new(),
         }
     }
@@ -113,6 +115,12 @@ impl TintedGlass {
         self.height = Some(height);
         self
     }
+
+    /// The composer card's glass: the owner's composer tuning instead of the native material.
+    pub fn composer(mut self) -> Self {
+        self.composer = true;
+        self
+    }
 }
 
 impl Default for TintedGlass {
@@ -128,8 +136,19 @@ impl ParentElement for TintedGlass {
 }
 
 impl Paint {
-    fn new(ds: &Ds, radius: Pixels, square: (bool, bool), presence: Presence) -> (Self, gpui::Div) {
-        let mut glass = LiquidGlass::over_content().adapt(ds);
+    fn new(
+        ds: &Ds,
+        radius: Pixels,
+        square: (bool, bool),
+        presence: Presence,
+        composer: bool,
+    ) -> (Self, gpui::Div) {
+        let mut glass = if composer {
+            LiquidGlass::composer()
+        } else {
+            LiquidGlass::over_content()
+        }
+        .adapt(ds);
         glass.materialize = presence;
         let content = match presence {
             Presence::Static(t) => div().min_w_0().overflow_hidden().opacity(t),
@@ -202,8 +221,8 @@ impl RenderOnce for TintedGlass {
             GlassPadding::Md => ds.len(Length::Space3),
             GlassPadding::Lg => ds.len(Length::Space4),
         };
-        let (paint, content) =
-            Paint::new(ds, radius, (self.square_top, self.square_bottom), presence);
+        let square = (self.square_top, self.square_bottom);
+        let (paint, content) = Paint::new(ds, radius, square, presence, self.composer);
         let layer = canvas(
             |_, _, _| (),
             move |bounds, (), window, _| paint.paint(bounds, window),

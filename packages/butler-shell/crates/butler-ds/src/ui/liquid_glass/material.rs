@@ -14,7 +14,7 @@
 use gpui::{BackdropLens, Bounds, BoxShadow, Corners, Filter, Hsla, Pixels, Rgba, point, px, size};
 
 /// sRGB 0..255 plus alpha as an `Hsla`.
-fn rgba(r: u8, g: u8, b: u8, a: f32) -> Hsla {
+pub(super) fn rgba(r: u8, g: u8, b: u8, a: f32) -> Hsla {
     gpui::rgb_to_hsla(Rgba::new(
         f32::from(r) / 255.,
         f32::from(g) / 255.,

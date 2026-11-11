@@ -3,6 +3,7 @@
 //! replaces the tinted-glass look (a saturated blur under an opaque tint).
 //!
 //! Children painted after a glass layer stay sharp above it.
+mod composer;
 mod material;
 pub mod presence;
 
@@ -10,9 +11,18 @@ use gpui::{Bounds, Corners, Pixels, Window, px};
 
 pub use material::Place;
 use material::Settings;
-pub use presence::{Presence, presence, with_presence, without_presence};
+pub use presence::{Presence, on_glass, presence, with_presence, without_presence};
 
 use crate::ui::context::Ds;
+
+/// Which tuning a glass paints with.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Profile {
+    /// The native-matched material ([`material`]).
+    Native,
+    /// The owner's composer tuning ([`composer`]).
+    Composer,
+}
 
 /// How a native glass element sits and responds.
 #[derive(Clone, Copy)]
@@ -25,6 +35,8 @@ pub struct LiquidGlass {
     /// 0..=1: how far the glass has materialized (LG research §5 Appear/disappear): the lens
     /// ramps from identity instead of the glass fading. 1 is the full material.
     pub materialize: Presence,
+    /// Which tuning paints the glass.
+    profile: Profile,
     reduce_transparency: bool,
     increase_contrast: bool,
     reduce_motion: bool,
@@ -37,6 +49,7 @@ impl LiquidGlass {
             lift: 0.,
             grow: 0.,
             materialize: Presence::Static(1.),
+            profile: Profile::Native,
             reduce_transparency: false,
             increase_contrast: false,
             reduce_motion: false,
@@ -49,9 +62,18 @@ impl LiquidGlass {
             lift,
             grow,
             materialize: Presence::Static(1.),
+            profile: Profile::Native,
             reduce_transparency: false,
             increase_contrast: false,
             reduce_motion: false,
+        }
+    }
+
+    /// The composer card's glass: the owner's composer tuning ([`composer`]).
+    pub fn composer() -> Self {
+        Self {
+            profile: Profile::Composer,
+            ..Self::over_content()
         }
     }
 
@@ -84,6 +106,10 @@ pub fn paint(
         return;
     }
     let radii = radii.map(|r| px(r.as_f32().min(w / 2.).min(h / 2.)));
+    if glass.profile == Profile::Composer {
+        composer::paint(bounds, radii, dark, window);
+        return;
+    }
     let r = radii.max().as_f32();
     let circle = (w - h).abs() < 0.5 && r >= w / 2. - 0.5;
     let presence = if glass.reduce_motion {

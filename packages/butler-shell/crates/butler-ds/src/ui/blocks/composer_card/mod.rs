@@ -135,7 +135,8 @@ impl ComposerCard {
     fn glass(&mut self, radius: gpui::Pixels) -> TintedGlass {
         let mut glass = TintedGlass::new()
             .radius(GlassRadius::Composer)
-            .padding(GlassPadding::None);
+            .padding(GlassPadding::None)
+            .composer();
         if let Some(decoration) = self.decoration.take() {
             glass = glass.child(
                 div()

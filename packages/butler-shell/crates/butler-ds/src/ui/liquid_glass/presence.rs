@@ -33,6 +33,14 @@ pub fn presence(cx: &App) -> Option<Presence> {
         .and_then(|stack| stack.0.last().copied().flatten())
 }
 
+/// Whether the caller paints inside a glass's content ([`without_presence`]): a glass there is a
+/// glass on glass (LG research §4.2).
+pub fn on_glass(cx: &App) -> bool {
+    cx.try_global::<Presences>()
+        .and_then(|stack| stack.0.last())
+        .is_some_and(Option::is_none)
+}
+
 pub struct WithPresence {
     value: Option<Presence>,
     child: Option<AnyElement>,

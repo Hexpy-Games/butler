@@ -198,9 +198,9 @@ impl PillButton {
         control
     }
 
-    /// The glass capsule: Liquid Glass on the composer card's glass (`on_glass`: its own rim and
-    /// hairline, no shadow). The lens draws the fill, border and shadow, so none is set here; the
-    /// 1px the border took stays in the padding.
+    /// The glass capsule: Liquid Glass placed by what is under it ([`liquid_glass::on_glass`]).
+    /// The lens draws the fill, border and shadow, so none is set here; the 1px the border took
+    /// stays in the padding.
     fn glass(control: &mut Control, ds: &Ds) {
         let (left, top, right, bottom) = (
             control.padding[0],
@@ -212,10 +212,7 @@ impl PillButton {
         control.fill = Blend::flat(gpui::transparent_black());
         control.fg = Blend::flat(ds.color(Color::TextPrimary));
         control.text_size = ds.len(Length::FontSize2);
-        let glass = LiquidGlass::on_glass(0., 0.).adapt(ds);
-        control
-            .overlay
-            .push(glass_layer(glass, ds.dark(), control.radius));
+        control.overlay.push(glass_layer(control.radius));
         let floor = ds.len(Length::Space4) * 2.;
         control.min_height = Some(if ds.compact() {
             ds.len(Length::ControlHitTarget)
@@ -225,13 +222,20 @@ impl PillButton {
     }
 }
 
-/// The Liquid Glass lens over the pill's box, under its content.
-fn glass_layer(glass: LiquidGlass, dark: bool, radius: gpui::Pixels) -> AnyElement {
+/// The Liquid Glass lens over the pill's box, under its content: a glass on glass inside a
+/// glass's content, over content anywhere else.
+fn glass_layer(radius: gpui::Pixels) -> AnyElement {
     gpui::canvas(
         |_, _, _| (),
-        move |bounds, (), window, _| {
-            let radii = gpui::Corners::all(radius);
-            liquid_glass::paint(bounds, radii, dark, glass, window);
+        move |bounds, (), window, cx| {
+            let ds = Ds::get(cx);
+            let glass = if liquid_glass::on_glass(cx) {
+                LiquidGlass::on_glass(0., 0.)
+            } else {
+                LiquidGlass::over_content()
+            }
+            .adapt(ds);
+            liquid_glass::paint(bounds, gpui::Corners::all(radius), ds.dark(), glass, window);
         },
     )
     .absolute()
