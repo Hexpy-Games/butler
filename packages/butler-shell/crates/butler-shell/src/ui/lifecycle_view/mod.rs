@@ -14,14 +14,15 @@ use std::time::Duration;
 
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::blocks::notice::{Notice, NoticeTone};
-use butler_ds::ui::button::{Button, Variant};
+use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Cross, Justify, Space, Stack};
 use butler_ds::ui::motion;
 use butler_ds::ui::spinner::Spinner;
+use butler_ds::ui::thinking_mark::{ButlerThinkingMark, MarkState, MarkTheme};
 use butler_ds::ui::toast::{self, Toast};
-use butler_ds::ui::typo::{Tone, Typo};
+use butler_ds::ui::typo::{TextAlign, Tone, Typo};
 use gpui::{
     AnyElement, App, Context, IntoElement as _, ParentElement as _, Styled as _, Window, div,
 };
@@ -34,10 +35,13 @@ use crate::ui::Icon;
 /// `lifecycle-assets/copy.json` slow hint: shown once the quit has run this long.
 const SLOW_AFTER: Duration = Duration::from_secs(4);
 
-/// The window-filling page the boot and quit cards sit on.
+/// The window-filling page the boot and quit cards sit on, centred: a flex column, since the
+/// card's `fill` grows only inside one.
 fn page(content: impl gpui::IntoElement, cx: &App) -> AnyElement {
     div()
         .size_full()
+        .flex()
+        .flex_col()
         .bg(Ds::get(cx).color(Color::Background))
         .child(
             Stack::new()
@@ -50,7 +54,42 @@ fn page(content: impl gpui::IntoElement, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// Starting, failed (Try again, Open log), or a plain spinner.
+/// `lifecycle.html`'s card: the mark, then the title and its line. The mark runs while the Agent
+/// starts and rests once it failed.
+fn card(working: bool, title: &'static str, line: &'static str, cx: &App) -> Stack {
+    let theme = if Ds::get(cx).dark() {
+        MarkTheme::Dark
+    } else {
+        MarkTheme::Light
+    };
+    let state = if working {
+        MarkState::Working
+    } else {
+        MarkState::Idle
+    };
+    Stack::new()
+        .gap(Space::Md)
+        .cross(Cross::Center)
+        .child(
+            ButlerThinkingMark::new("boot-mark")
+                .size(IconSize::Xxxl)
+                .theme(theme)
+                .state(state),
+        )
+        .child(
+            Stack::new()
+                .gap(Space::Xs)
+                .cross(Cross::Center)
+                .child(Typo::app_title(title).align(TextAlign::Center))
+                .child(
+                    Typo::body(line)
+                        .tone(Tone::Secondary)
+                        .align(TextAlign::Center),
+                ),
+        )
+}
+
+/// Starting, failed (Open log, Try again), or a plain spinner (`AppBootState`).
 pub(crate) fn boot(
     runtime: &AgentRuntime,
     lang: Lang,
@@ -68,8 +107,17 @@ pub(crate) fn boot(
         let log = runtime.data.join("logs");
         let actions = Stack::row()
             .gap(Space::Sm)
+            .justify(Justify::Center)
+            .child(
+                Button::new("boot-open-log")
+                    .variant(Variant::Secondary)
+                    .size(Size::Sm)
+                    .text(words.open_log)
+                    .on_click(move |_, _, cx| cx.open_with_system(&log)),
+            )
             .child(
                 Button::new("boot-retry")
+                    .size(Size::Sm)
                     .text(words.retry)
                     .on_click(move |_, _, cx| {
                         if stopped {
@@ -78,31 +126,14 @@ pub(crate) fn boot(
                             lifecycle::ensure_ready(cx);
                         }
                     }),
-            )
-            .child(
-                Button::new("boot-open-log")
-                    .variant(Variant::Outline)
-                    .text(words.open_log)
-                    .on_click(move |_, _, cx| cx.open_with_system(&log)),
             );
-        let card = Stack::new()
-            .gap(Space::Md)
-            .cross(Cross::Center)
-            .child(Typo::label(words.failed))
-            .child(Typo::body(words.failed_reason).tone(Tone::Secondary))
-            .child(actions);
-        return page(card, cx);
+        let failed = card(false, words.failed, words.failed_reason, cx).child(actions);
+        return page(failed, cx);
     }
-    let mut card = Stack::new()
-        .gap(Space::Md)
-        .cross(Cross::Center)
-        .child(Spinner::new("boot-spinner"));
     if matches!(runtime.state, AgentState::Starting | AgentState::Restarting) {
-        card = card
-            .child(Typo::label(words.starting))
-            .child(Typo::body(words.starting_stage).tone(Tone::Secondary));
+        return page(card(true, words.starting, words.starting_stage, cx), cx);
     }
-    page(card, cx)
+    page(Spinner::new("boot-spinner"), cx)
 }
 
 /// The one-shot timer behind the quit card's slow hint.
