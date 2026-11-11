@@ -35,3 +35,21 @@ pub fn names_internal_role(text: &str) -> bool {
             .split(|character: char| !character.is_alphanumeric())
             .any(|word| word == "Steward")
 }
+
+/// A delegated task's title: the model's safe title, else the request's first line.
+pub fn delegation_title(safe_title: Option<&str>, request: &str) -> String {
+    if let Some(title) = safe_title
+        .map(|title| public_title(title, request))
+        .filter(|title| !title.trim().is_empty() && !names_internal_role(title))
+    {
+        return title;
+    }
+    let first = request.lines().find(|line| !line.trim().is_empty());
+    let first = first.unwrap_or("").split_whitespace().collect::<Vec<_>>();
+    let title = first.join(" ");
+    if title.chars().count() > 64 {
+        format!("{}…", title.chars().take(63).collect::<String>())
+    } else {
+        title
+    }
+}
