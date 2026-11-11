@@ -277,3 +277,86 @@ async fn hidden_outbox_backlog_blocks_retirement_until_drained() -> Result<(), H
     drop(stream);
     s.finish().await
 }
+
+#[tokio::test]
+async fn app_reconnect_keeps_one_tab_set() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let not_electron = butler_e2e::e2e::binary::mcp_fixture_binary()?;
+    let s = setup("BROWSER-APP-RECONNECT")?
+        .env(
+            "BUTLER_BROWSER_APP",
+            not_electron.to_string_lossy().into_owned(),
+        )
+        .env(
+            "BUTLER_BROWSER_CACHE_DIR",
+            no_chrome_cache("BROWSER-APP-RECONNECT")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .env("BUTLER_BROWSER_DOWNLOAD_BASE", "http://127.0.0.1:9/")
+        .start()
+        .await?;
+    let admin = admin(&s);
+    let url = publish(&s).await?;
+    let attach = || {
+        reqwest::Client::new()
+            .get(format!("{}/internal/browser-host", admin.gw.base))
+            .bearer_auth(&admin.gw.token)
+            .header("x-butler-admin", &admin.admin)
+            .header("x-butler-app-pid", std::process::id().to_string())
+            .send()
+    };
+    let first = attach().await?;
+    assert_eq!(first.status(), 200);
+    let ops = Arc::new(Mutex::new(Vec::new()));
+    let app = tokio::spawn(serve_app(admin.clone(), first, ops.clone()));
+    assert_eq!(open(&admin, "general", &url).await?["tab"], "app-tab");
+
+    app.abort();
+    let _ = app.await;
+    let _ = call(
+        &admin,
+        "general",
+        "tab.observe",
+        &json!("app-tab"),
+        json!({}),
+    )
+    .await;
+    let next = {
+        let admin = admin.clone();
+        let url = url.clone();
+        tokio::spawn(async move {
+            call(
+                &admin,
+                "general",
+                "tab.open",
+                &Value::Null,
+                json!({"url":url}),
+            )
+            .await
+        })
+    };
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let again = attach().await?;
+    assert_eq!(again.status(), 200, "the App reattaches without 409");
+    let app = tokio::spawn(serve_app(admin.clone(), again, ops.clone()));
+    let next = next.await.unwrap()?;
+    assert_eq!(
+        next["tab"], "app-tab",
+        "the waiting call is served by the App: {next}"
+    );
+    // The tab list is the App's own: the reattached App answers it.
+    call(&admin, "general", "tabs.list", &Value::Null, json!({})).await?;
+    assert_eq!(profiles(&s), 0, "no hidden host started");
+    assert_eq!(
+        *ops.lock().unwrap(),
+        vec![
+            "tab.open".to_owned(),
+            "tab.open".to_owned(),
+            "tabs.list".to_owned()
+        ]
+    );
+    app.abort();
+    s.finish().await
+}
