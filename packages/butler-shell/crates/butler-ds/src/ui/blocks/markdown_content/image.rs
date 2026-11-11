@@ -3,8 +3,9 @@
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, App, Image, ImageFormat, ImageSource, IntoElement as _, ObjectFit,
-    ParentElement as _, Styled as _, StyledImage as _, div, img, px, relative,
+    AnyElement, App, ElementId, Image, ImageFormat, ImageSource, IntoElement as _, ObjectFit,
+    ParentElement as _, SharedString, Styled as _, StyledImage as _, Window, div, img, px,
+    relative,
 };
 
 use super::Env;
@@ -61,13 +62,44 @@ fn natural(src: &str) -> Option<(f32, f32)> {
     Some((attr("width")?, attr("height")?))
 }
 
-/// An inline image: `inline-block`, so a badge stays in its sentence.
-pub(super) fn inline(src: &str, _alt: &str, env: &Env, cx: &App) -> AnyElement {
+/// A decoded picture's own size (`<img>` intrinsic size): one px per image pixel, as gpui's
+/// `img` lays it out. `None` until it has loaded.
+fn decoded(
+    src: &str,
+    picture: &ImageSource,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<(f32, f32)> {
+    let key = ElementId::from(SharedString::from(format!("markdown-image:{src}")));
+    match crate::ui::media_frame::resolve(&key, picture, window, cx) {
+        crate::ui::media_frame::Load::Ready(data) => {
+            let size = data.size(0);
+            Some((size.width.0 as f32, size.height.0 as f32))
+        }
+        _ => None,
+    }
+}
+
+/// An inline image: `inline-block`, so a badge stays in its sentence. `max-width: 100%;
+/// height: auto`: the frame takes the picture's own size, capped by the column, at its shape.
+pub(super) fn inline(
+    src: &str,
+    _alt: &str,
+    env: &Env,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let picture = env
+        .image
+        .as_ref()
+        .and_then(|resolve| resolve(src))
+        .unwrap_or_else(|| source(src));
+    let size = natural(src).or_else(|| decoded(src, &picture, window, cx));
     let ds = Ds::get(cx);
     let height = (env.viewport_height * MAX_SHARE).min(MAX_HEIGHT);
     let mut frame = div().relative().flex_none().self_center();
     let mut height = height;
-    if let Some((width, tall)) = natural(src) {
+    if let Some((width, tall)) = size {
         height = height.min(tall);
         frame = frame
             .w(relative(1.))
@@ -79,16 +111,14 @@ pub(super) fn inline(src: &str, _alt: &str, env: &Env, cx: &App) -> AnyElement {
         .rounded(ds.len(Length::RadiusPanel))
         .overflow_hidden()
         .bg(ds.color(Color::SurfaceRaised))
-        .child(
-            img(env
-                .image
-                .as_ref()
-                .and_then(|resolve| resolve(src))
-                .unwrap_or_else(|| source(src)))
-            .object_fit(ObjectFit::Contain)
-            .max_w(relative(1.))
-            .max_h(px(height)),
-        )
+        .child(match size {
+            // The frame has the picture's shape: the picture fills it.
+            Some(_) => img(picture).object_fit(ObjectFit::Contain).size_full(),
+            None => img(picture)
+                .object_fit(ObjectFit::Contain)
+                .max_w(relative(1.))
+                .max_h(px(height)),
+        })
         .child(
             div()
                 .absolute()
