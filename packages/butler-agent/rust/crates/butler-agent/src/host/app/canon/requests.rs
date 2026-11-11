@@ -1,5 +1,5 @@
 use super::*;
-use butler_gateway::gateway::{APP_PERSON_ID, AppCanonDelegate};
+use butler_gateway::gateway::{APP_PERSON_ID, AppCanonDelegate, delegate_capability};
 fn context(delegate: Option<AppCanonDelegate>) -> store::Context {
     store::Context {
         now: chrono::Utc::now().timestamp_millis(),
@@ -52,7 +52,7 @@ pub(super) fn execute(
             let ctx = context(delegate);
             storage
                 .canon_write(move |tx| {
-                    require(tx, &ctx, resource)?;
+                    require(tx, &ctx, resource, Some(&input))?;
                     let value = store::write_api(tx, &ctx, store_resource(resource), &id, input)?;
                     project(tx, resource, value, delegated)
                 })
@@ -89,6 +89,11 @@ fn project(
             &value, db,
         )?)?);
     }
+    if delegated && resource == AppCanonResource::CreatePlan {
+        return Ok(serde_json::to_value(serde_json::from_value::<
+            store::public::Plan,
+        >(value)?)?);
+    }
     Ok(value)
 }
 
@@ -96,23 +101,12 @@ fn require(
     db: &rusqlite::Connection,
     ctx: &store::Context,
     resource: AppCanonResource,
+    input: Option<&Value>,
 ) -> store::Result<()> {
     if ctx.actor["origin"] != "mcp" {
         return Ok(());
     }
-    if matches!(
-        resource,
-        AppCanonResource::CheckCriterion | AppCanonResource::DeleteEpic
-    ) {
-        return Err(store::Error::Permission);
-    }
-    let capability = match resource {
-        AppCanonResource::EditEpic => "canon.epic.status",
-        AppCanonResource::Comment => "canon.epic.comment",
-        AppCanonResource::CreateEpic => "canon.epic.create",
-        AppCanonResource::ProposeSpec => "canon.spec.propose",
-        _ => "canon.read",
-    };
+    let capability = delegate_capability(resource, input).ok_or(store::Error::Permission)?;
     store::grants::require(db, ctx, capability)
 }
 
@@ -124,7 +118,7 @@ fn read(
     ctx: &store::Context,
 ) -> store::Result<Value> {
     let delegated = ctx.actor["origin"] == "mcp";
-    require(db, ctx, resource)?;
+    require(db, ctx, resource, input.as_ref())?;
     if delegated && resource == AppCanonResource::Activity {
         return store::activity::mcp_page(
             db,

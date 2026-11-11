@@ -190,9 +190,31 @@ pub(super) fn edit_epic(
             .map(|v| v.as_deref())
             .unwrap_or(old["plan_id"].as_str());
         position(tx, ctx, id, dest, input.before_id.as_deref())?;
+        if dest != old["plan_id"].as_str() {
+            let summary = dest.map(|id| read_plan(tx, id)).transpose()?;
+            activity::append(
+                tx,
+                ctx,
+                id,
+                "moved",
+                summary
+                    .as_ref()
+                    .map(|p| text(p, "title"))
+                    .transpose()?
+                    .unwrap_or(""),
+                None,
+            )?;
+        }
     }
     let row = read_work(tx, id)?;
     edit_fields(tx, ctx, id, &row, &input)?;
+    let edited = read_work(tx, id)?;
+    if ["title", "description", "assignee"]
+        .iter()
+        .any(|key| edited[key] != old[key])
+    {
+        activity::append(tx, ctx, id, "edited", text(&edited, "title")?, None)?;
+    }
     if let Some(status) = input.status {
         let row = read_work(tx, id)?;
         set_label(tx, ctx, id, revision(&row)?, status, &person(ctx)?)?;

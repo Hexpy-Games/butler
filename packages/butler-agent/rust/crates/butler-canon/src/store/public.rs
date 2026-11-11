@@ -88,6 +88,7 @@ pub struct EpicSummary {
     pub plan: Option<PlanRef>,
     pub tags: Vec<Tag>,
     pub assignee: Option<String>,
+    pub order: Option<String>,
     pub updated_at: i64,
 }
 #[derive(Debug, Serialize, Deserialize)]

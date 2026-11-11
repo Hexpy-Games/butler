@@ -1,12 +1,14 @@
 //! Durable admission. The caller owns the BTCC IMMEDIATE transaction.
 use super::*;
 use rusqlite::params;
-pub const CAPABILITIES: [&str; 5] = [
+pub const CAPABILITIES: [&str; 7] = [
     "canon.read",
     "canon.epic.status",
     "canon.epic.comment",
     "canon.epic.create",
     "canon.spec.propose",
+    "canon.plan.create",
+    "canon.epic.edit",
 ];
 
 /// Display text is never an identity table or an authorization decision.

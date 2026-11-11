@@ -3,7 +3,7 @@ import { api } from "@/app/api.ts";
 import type { CanonActivity, CanonActivityPage, EpicDetail } from "@/app/canonApi.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
-import { Activity, ActivityFeed, ArrowRight, Button, ButtonContainer, CheckIcon, Circle, FileText, MessageSquare, Plus, Stack, Typo, XIcon } from "@/butler-ds";
+import { Activity, ActivityFeed, ArrowRight, Button, ButtonContainer, CheckIcon, Circle, FileText, Flag, MessageSquare, Pencil, Plus, Stack, Typo, XIcon } from "@/butler-ds";
 import { canonActorLabel } from "./canonActorLabel.ts";
 import { useCanonPersonName } from "./useCanonPersonName.ts";
 export function EpicActivity({ epic }: { epic: EpicDetail }) {
@@ -59,6 +59,8 @@ function activityDescription(row: CanonActivity): string {
     case "status": return row.from && row.to ? `${copy.statuses[row.from]} → ${copy.statuses[row.to]}` : row.summary;
     case "criterion_confirmed": return copy.criterionActivity(row.summary, true);
     case "criterion_unconfirmed": return copy.criterionActivity(row.summary, false);
+    case "edited": return copy.mcp.editedActivity;
+    case "moved": return `${copy.plan} → ${row.summary || copy.backlog}`;
     case "created": return copy.mcp.createdActivity;
     case "comment": return row.body ?? row.summary;
     case "proposal_opened": return `${copy.mcp.proposal} · ${row.summary}`;
@@ -69,7 +71,7 @@ function activityDescription(row: CanonActivity): string {
 }
 
 function activityIcon(kind: string) {
-  const icons: Record<string, typeof Activity> = { comment: MessageSquare, status: ArrowRight, created: Plus,
+  const icons: Record<string, typeof Activity> = { comment: MessageSquare, status: ArrowRight, created: Plus, edited: Pencil, moved: Flag,
     criterion_confirmed: CheckIcon, criterion_unconfirmed: Circle, proposal_opened: FileText, proposal_applied: CheckIcon, proposal_declined: XIcon };
   const Icon = icons[kind] ?? Activity;
   return <Icon size="md" aria-hidden="true" />;

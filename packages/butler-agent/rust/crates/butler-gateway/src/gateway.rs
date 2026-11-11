@@ -56,7 +56,7 @@ pub use application::{
     APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppImageUsageCommand,
     AppProfileInput, AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand,
     AppSignInUpsert, AppVaultCommand, GatewaySignIns, GeneratedAssetKind, ImageUsageOperation,
-    ImageUsageRecord, composite, mask_bounds,
+    ImageUsageRecord, composite, delegate_capability, mask_bounds,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,

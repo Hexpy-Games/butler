@@ -6,23 +6,16 @@ pub(super) async fn prepare(
     app: &AppApplication,
     request: &mut AppCanonRequest,
 ) -> Result<(), GatewayApplicationError> {
-    use AppCanonResource::{
-        Activity, Canon, Comment, CreateEpic, EditEpic, Epic, List, Plan, ProposeSpec, Spec,
-    };
+    use crate::gateway::delegate_capability;
+    use AppCanonResource::{CreateEpic, CreatePlan, List};
     if let Some(delegate) = &mut request.delegate {
         delegate.name = sanitize(&delegate.name);
         delegate.title = sanitize(&delegate.title);
         if delegate.name.is_empty() || delegate.title.is_empty() {
             return Err(public(400, "invalid_delegate", "Client identity required."));
         }
-        let capability = match request.resource {
-            Canon | List | Plan | Epic | Spec | Activity => "canon.read",
-            EditEpic if status_only(request.input.as_ref()) => "canon.epic.status",
-            Comment => "canon.epic.comment",
-            CreateEpic => "canon.epic.create",
-            ProposeSpec => "canon.spec.propose",
-            _ => return Err(public(403, "permission", "허용되지 않은 작업입니다.")),
-        };
+        let capability = delegate_capability(request.resource, request.input.as_ref())
+            .ok_or_else(|| public(403, "permission", "허용되지 않은 작업입니다."))?;
         let result = app
             .dependencies
             .canon
@@ -41,7 +34,8 @@ pub(super) async fn prepare(
             ));
         }
     }
-    if (request.resource == List || (request.resource == CreateEpic && request.delegate.is_some()))
+    if (request.resource == List
+        || (matches!(request.resource, CreateEpic | CreatePlan) && request.delegate.is_some()))
         && !request.id.is_empty()
     {
         request.id = resolve_project(app, request.id.clone()).await?;
@@ -105,13 +99,6 @@ async fn resolve_project(
             "프로젝트 ID를 지정해 주세요.",
         )),
     }
-}
-fn status_only(input: Option<&Value>) -> bool {
-    input.and_then(Value::as_object).is_some_and(|o| {
-        o.contains_key("status")
-            && o.keys()
-                .all(|k| matches!(k.as_str(), "status" | "expected_revision"))
-    })
 }
 fn public(status: u16, code: &str, message: &str) -> GatewayApplicationError {
     GatewayApplicationError::Public {
