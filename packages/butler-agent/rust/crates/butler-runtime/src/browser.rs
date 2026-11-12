@@ -37,6 +37,8 @@ pub struct TabRegistry {
     tabs: HashMap<String, Value>,
 }
 impl TabRegistry {
+    /// Records the App's tab snapshot. The App enforces popup site policy with
+    /// the policy Rust sends; one popup's site never rejects the snapshot.
     pub fn replace(&mut self, tabs: &[Value]) -> Result<(), &'static str> {
         if tabs.len() > capacity::MAX_TABS {
             return Err("tab_budget_exhausted");
@@ -61,14 +63,6 @@ impl TabRegistry {
                 .ok_or("invalid_opener")?;
             if tab["owner"] != parent["owner"] || tab["profile"] != parent["profile"] {
                 return Err("invalid_popup_owner");
-            }
-            if tab["holder"] == "agent"
-                && !popup_permitted(
-                    parent["url"].as_str().unwrap_or(""),
-                    tab["url"].as_str().unwrap_or(""),
-                )
-            {
-                return Err("popup_policy");
             }
         }
         self.tabs = next;
@@ -295,26 +289,4 @@ pub fn navigation_policy(content_origin: &str, raw: &str) -> Value {
     let popup_site = site.strip_prefix("browser:signed_out:").unwrap_or("");
     serde_json::json!({"content_origin":content_origin,"secure_keypads":SECURE_KEYPAD_MARKERS,
         "sites":[site],"popup_sites":[popup_site],"popup_hosts":POPUP_HOSTS,"payment_sites":PAYMENT_SITES})
-}
-
-pub fn popup_permitted(parent: &str, target: &str) -> bool {
-    if target.is_empty() || target == "about:blank" {
-        return url::Url::parse(parent).is_ok_and(|url| {
-            matches!(url.scheme(), "http" | "https")
-                && url.username().is_empty()
-                && url.password().is_none()
-        });
-    }
-    let Ok(url) = url::Url::parse(target) else {
-        return false;
-    };
-    let Some(host) = url.host_str() else {
-        return false;
-    };
-    matches!(url.scheme(), "http" | "https")
-        && url.username().is_empty()
-        && url.password().is_none()
-        && (site_scope(parent).ok() == site_scope(target).ok()
-            || POPUP_HOSTS.contains(&host)
-            || payment_host(host))
 }
