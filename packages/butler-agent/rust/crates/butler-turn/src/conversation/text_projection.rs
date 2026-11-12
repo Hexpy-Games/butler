@@ -47,6 +47,9 @@ pub fn text_for_part(part: &ConversationPart) -> Option<String> {
                     serde_json::to_string(&title).ok()?
                 ));
             }
+            if object_string(object, "kind").as_deref() == Some("image") {
+                return Some(format!("[image:{}]", object_string(object, "id")?));
+            }
             let file_name =
                 object_string(object, "fileName").or_else(|| object_string(object, "filename"));
             let id = object_string(object, "id");

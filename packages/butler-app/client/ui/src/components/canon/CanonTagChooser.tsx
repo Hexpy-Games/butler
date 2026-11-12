@@ -17,7 +17,6 @@ export function CanonTagChooser({ tags, value, onChange, onCreate, onManage, dis
   const found = tags.filter(tag => tag.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   const items = found.map(tag => ({ id: tag.id, label: <Tag tone={tag.color}>{tag.name}</Tag>, selected: value.includes(tag.id),
     onSelect: () => { if (!disabled) onChange(value.includes(tag.id) ? value.filter(id => id !== tag.id) : [...value, tag.id]); },
-    // Management lives in the editable tag field only; the board filter passes no onManage.
     actions: onManage && <DropdownMenu>
       <DropdownMenuTrigger asChild><IconButton label={copy.menu(tag.name)} disabled={disabled}><Pencil size="sm" /></IconButton></DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={8}>

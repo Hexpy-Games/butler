@@ -16,7 +16,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use indexmap::{IndexMap, IndexSet};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use tokio::sync::Mutex;
 
 use super::types::*;
@@ -117,7 +117,7 @@ pub struct ConversationAdmissionTurnInput {
 
 #[derive(Default)]
 struct AdmissionState {
-    documents: IndexMap<String, String>,
+    deliverables: IndexMap<String, Value>,
     known_tool_call_ids: HashSet<String>,
     evidence_refs: IndexSet<String>,
     tool_message_id: Option<String>,
@@ -206,13 +206,19 @@ impl ConversationAdmissionTurn {
                 .into_iter()
                 .flatten()
             {
-                if item.get("kind").and_then(Value::as_str) == Some("doc")
-                    && let (Some(id), Some(title)) = (
-                        item.get("id").and_then(Value::as_str),
-                        item.get("title").and_then(Value::as_str),
-                    )
-                {
-                    state.documents.insert(id.to_owned(), title.to_owned());
+                let Some(id) = item.get("id").and_then(Value::as_str) else {
+                    continue;
+                };
+                let content = match item.get("kind").and_then(Value::as_str) {
+                    Some("doc") => item
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .map(|title| json!({"kind":"doc","id":id,"title":title})),
+                    Some("image") => Some(json!({"kind":"image","id":id})),
+                    _ => None,
+                };
+                if let Some(content) = content {
+                    state.deliverables.insert(id.to_owned(), content);
                 }
             }
         }
