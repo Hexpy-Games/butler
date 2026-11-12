@@ -2,7 +2,9 @@
 mod args;
 mod client;
 use super::server::McpServer;
-use butler_canon::store::{CanonActivity, CanonEpic, CanonPage, CanonPlan, CanonSpecBody};
+use butler_canon::store::{
+    CanonActivity, CanonEpic, CanonPage, CanonPlan, CanonSpecBody, CanonTag,
+};
 use client::{Client, Error, component};
 use rmcp::{
     RoleServer,
@@ -177,7 +179,7 @@ impl McpServer {
             if !(1..=256).contains(&args.title.chars().count()) {return Err(Error::new("invalid_arguments","제목은 1~256자로 입력해 주세요."));}
             let client=Client::local(self,&context).await?;
             decode::<CanonEpic>(client.request(reqwest::Method::POST,&format!("/projects/{}/canon/epics",component(&args.project)),
-                Some(json!({"title":args.title,"description":args.description.unwrap_or_default(),"plan_id":args.plan_id,"assignee":args.assign_to_me.unwrap_or(false).then_some(butler_gateway::gateway::APP_PERSON_ID)}))).await?)
+                Some(json!({"title":args.title,"description":args.description.unwrap_or_default(),"plan_id":args.plan_id,"tags":args.tag_ids.unwrap_or_default(),"assignee":args.assign_to_me.unwrap_or(false).then_some(butler_gateway::gateway::APP_PERSON_ID)}))).await?)
         }.await)
     }
     #[tool(
@@ -198,6 +200,56 @@ impl McpServer {
                 &format!("/projects/{}/canon/plans", component(&args.project)),
                 Some(json!({"title":args.title,"description":args.description.unwrap_or_default(),"due_on":args.due_on}))).await?)
         }.await)
+    }
+    #[tool(
+        name = "canon_list_tags",
+        description = "List a project's canon tags (id, name, color)."
+    )]
+    async fn canon_list_tags(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(args): Parameters<args::Tags>,
+    ) -> CallToolResult {
+        result(
+            async {
+                let client = Client::local(self, &context).await?;
+                let tags: Vec<CanonTag> = decode(
+                    client
+                        .get(&format!(
+                            "/projects/{}/canon/tags",
+                            component(&args.project)
+                        ))
+                        .await?,
+                )?;
+                Ok(json!({"tags": tags}))
+            }
+            .await,
+        )
+    }
+    #[tool(
+        name = "canon_create_tag",
+        description = "Create a canon tag in a project. Names are unique per project, ignoring case."
+    )]
+    async fn canon_create_tag(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(args): Parameters<args::CreateTag>,
+    ) -> CallToolResult {
+        result(
+            async {
+                let client = Client::local(self, &context).await?;
+                decode::<CanonTag>(
+                    client
+                        .request(
+                            reqwest::Method::POST,
+                            &format!("/projects/{}/canon/tags", component(&args.project)),
+                            Some(json!({"name": args.name, "color": args.color})),
+                        )
+                        .await?,
+                )
+            }
+            .await,
+        )
     }
     #[tool(
         name = "canon_edit_plan",
@@ -262,6 +314,9 @@ impl McpServer {
                 }
                 if let Some(plan) = args.plan_id {
                     body["plan_id"] = json!(plan);
+                }
+                if let Some(tags) = args.tag_ids {
+                    body["tags"] = json!(tags);
                 }
                 if body.as_object().is_none_or(|body| body.len() == 1) {
                     return Err(Error::new(
