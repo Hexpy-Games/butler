@@ -82,6 +82,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         | "drag"
         | "reveal"
         | "wait-anchor"
+        | "wait-no-anchor"
         | "wait-theme"
         | "expect-anchor"
         | "expect-no-anchor"
