@@ -134,7 +134,7 @@ async fn persist(
         ));
     }
     Ok(
-        json!({"schema":"butler.image.v1","status":"ok","image":id,"parent":parent,"width":stored["width"],"height":stored["height"],"model":model.display_name,"model_ref":model.model_ref,"size":size,"quality":quality,"url":stored["signed_url"]}),
+        json!({"schema":"butler.image.v1","status":"ok","image":id,"parent":parent,"width":stored["width"],"height":stored["height"],"model":model.display_name,"model_ref":model.model_ref,"size":size,"quality":quality,"url":stored["signed_url"],"deliverables":[{"kind":"image","id":id}]}),
     )
 }
 fn invalid(_: impl std::fmt::Display) -> ImageGenError {
