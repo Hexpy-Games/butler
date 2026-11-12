@@ -1,5 +1,4 @@
 import { releaseTurnEvents } from "./events.mjs";
-import { controlTab } from "./agent.mjs";
 // Calls fence dispatched input; holds span the owning turn/run. Neither is persisted.
 export function startUse(browser, frame) {
   const use = { id: frame.id, session: frame.session, turn: frame.turn_id, tab: frame.tab };
@@ -57,6 +56,7 @@ export function endUse(browser, id, abort = false) {
 export function finishUse(browser, session, turn, closeReadTabs = false) {
   releaseTurnEvents(browser, session, turn);
   const affected = new Set();
+  const released = [];
   for (const [id, holds] of browser.holds) {
     if (holds.get(turn) === session) { holds.delete(turn); affected.add(id); }
     if (!holds.size) browser.holds.delete(id);
@@ -65,16 +65,17 @@ export function finishUse(browser, session, turn, closeReadTabs = false) {
     affected.add(use.tab); endUse(browser, use.id, true);
   }
   for (const tab of browser.tabs.values()) if (tab.owner === `conversation:${session}`) {
-    // The finished turn no longer waits: its hold ends and the tab returns to Butler; the user's next input takes it again.
+    // The finished turn no longer waits: its hold ends (the caller returns the tab to Butler); the user's next input takes it again.
     if (tab.waitingTurn === turn) {
       tab.waiting = Boolean(tab.dialog); tab.waitingTurn = null; tab.signinStep = null; affected.add(tab.id);
-      if (tab.holder === "user" && tab.sticky) controlTab(browser, tab, "agent");
+      if (tab.holder === "user" && tab.sticky) released.push(tab);
     }
     if (tab.pausedTurns?.delete(turn) && !tab.pausedTurns.size) tab.pausedTurns = null;
     if (affected.has(tab.id) && !tabInUse(browser, tab)) tab.pointer = null;
   }
   if (closeReadTabs) for (const tab of [...browser.tabs.values()]) if (readOnlyTab(browser, tab, session, turn)) browser.close(tab.id);
   browser.publish();
+  return released;
 }
 /** An agent tab the finished turn opened and only read: no step acted in it or
  * handed it over, nobody has viewed it, and nothing else holds it. */

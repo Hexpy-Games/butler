@@ -142,7 +142,7 @@ export async function executeBrowser(browser, frame) {
     return;
   }
   if (frame.op === "use.signin_revoked") { if (typeof frame.args?.site === "string") revokeSignedInSite(browser, frame.args.site, controlTab); return; }
-  if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id, frame.args?.close_read_tabs === true); return; }
+  if (frame.op === "use.finished") { for (const tab of finishUse(browser, frame.session, frame.turn_id, frame.args?.close_read_tabs === true)) controlTab(browser, tab, "agent"); return; }
   const tracked = ["tab.open", "tab.observe", "tab.read", "tab.zoom", "tab.screenshot", "tab.image_collect", "tab.devtools", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
