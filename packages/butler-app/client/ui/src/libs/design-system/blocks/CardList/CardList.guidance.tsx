@@ -51,7 +51,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: [
     "Titles are identifiers as configured; descriptions say what the item does.",
-    "Row actions (a menu, buttons, the row's own toggle) sit at the line end and center on the title's line.",
+    "Row actions (a menu, buttons, the row's own toggle) sit at the line end and center on the title's line. On phones and touch screens (44px actions) they center on the whole row and the description wraps instead of truncating.",
     "A labelled switch inside an item's description uses the row switch field (Field orientation=\"horizontal\").",
     "Inside a settings section, leave title and empty unset: the section title names the list and its empty state is the only one.",
   ],

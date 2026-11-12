@@ -86,3 +86,19 @@
     min-height: var(--control-hit-target);
   }
 }
+
+/* Touch size: the trigger's leading side and radius follow the 44px button;
+   the trailing side keeps the chevron's room. */
+@media (width <= 640px) {
+  .trigger:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+    padding-left: var(--space-md);
+    border-radius: var(--radius-control-touch);
+  }
+}
+
+@media (pointer: coarse) {
+  .trigger {
+    padding-left: var(--space-md);
+    border-radius: var(--radius-control-touch);
+  }
+}

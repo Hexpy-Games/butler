@@ -31,7 +31,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "A title inside the card blurs where sections start.", render: () => <SettingsFieldScopeProvider><SurfacePanel><Typo.PanelTitle>Search</Typo.PanelTitle><SettingsField id="p2" label="Search provider" control={<Input id="p2" defaultValue="Tavily" />} /></SurfacePanel></SettingsFieldScopeProvider> },
     },
   ],
-  content: ["Every section has a title: a noun for what the card holds, never the page title again (that throws in dev builds). Descriptions are one sentence, never repeating the page description."],
+  content: ["Every section has a title: a noun for what the card holds, never the page title again (that throws in dev builds). Descriptions are one sentence, never repeating the page description.", "On phones and touch screens header actions stay on the title's row, centered on it, and wrap under the copy only when the copy would be narrower than 10rem."],
   accessibility: ["The title is a heading for the section; the card is not a separate landmark."],
   tokens: ["--settings-section-header-gap", "--settings-section-padding", "--settings-field-gap", "--settings-section-gap"],
 };

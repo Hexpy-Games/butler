@@ -100,3 +100,22 @@
     min-height: var(--control-hit-target);
   }
 }
+
+/* Touch size: the field's sides and radius follow the 44px button. */
+@media (width <= 640px) {
+  .input:not(
+    [data-variant="underline"],
+    [data-viewport="desktop"],
+    [data-viewport="desktop"] *
+  ) {
+    padding-inline: var(--space-md);
+    border-radius: var(--radius-control-touch);
+  }
+}
+
+@media (pointer: coarse) {
+  .input:not([data-variant="underline"]) {
+    padding-inline: var(--space-md);
+    border-radius: var(--radius-control-touch);
+  }
+}
