@@ -60,7 +60,7 @@ export function TranscriptRows({ list, layout, queue, request, anchored, enterin
     if (!message) return null;
     return (
       <MessageItem
-        key={message.role === "assistant" && message.turn_id ? `answer-${message.turn_id}:${virtualRow.index}` : message.id ?? `${message.role}-${message.text}`}
+        key={virtualRow.key}
         message={message}
         virtualRow={virtualRow}
         topOffset={topOffset}

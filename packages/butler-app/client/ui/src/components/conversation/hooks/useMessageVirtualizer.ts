@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { observeElementRect, useVirtualizer, type VirtualItem, type Virtualizer } from "@tanstack/react-virtual";
 import type { MessageRecord } from "@/app/types.ts";
 import { MESSAGE_LIST_TOP_PADDING } from "../conversationUtils";
@@ -25,15 +25,15 @@ export function useMessageVirtualizer({
 }: UseMessageVirtualizerOptions) {
   const queuedStart = visibleMessages.length + (showTurnActivity ? 1 : 0);
   const getScrollElement = useCallback(() => scrollRef.current, [scrollRef]);
+  const messageKeys = useMemo(() => messageRowKeys(visibleMessages), [visibleMessages]);
   const getItemKey = useCallback(
     (index: number) =>
       index >= queuedStart
         ? `queued-${queuedKeys[index - queuedStart] ?? index}`
         : showTurnActivity && index === visibleMessages.length
         ? "active-turn-activity"
-        : (visibleMessages[index]?.role === "assistant" && visibleMessages[index]?.turn_id
-          ? `answer-${visibleMessages[index].turn_id}:${index}` : visibleMessages[index]?.id ?? `message-${index}`),
-    [queuedKeys, queuedStart, showTurnActivity, visibleMessages],
+        : messageKeys[index] ?? `message-${index}`,
+    [messageKeys, queuedKeys, queuedStart, showTurnActivity, visibleMessages.length],
   );
   const estimateSize = useCallback(
     (index: number) =>
@@ -154,4 +154,15 @@ function useMessageViewport() {
     [],
   );
   return { viewportHeight, observeViewportRect };
+}
+
+/** A row keeps its key when older messages load above it: an answer is its turn plus its place within that turn. */
+function messageRowKeys(messages: MessageRecord[]): string[] {
+  const answersPerTurn = new Map<string, number>();
+  return messages.map((message, index) => {
+    if (message.role !== "assistant" || !message.turn_id) return message.id ?? `message-${index}`;
+    const place = answersPerTurn.get(message.turn_id) ?? 0;
+    answersPerTurn.set(message.turn_id, place + 1);
+    return `answer-${message.turn_id}:${place}`;
+  });
 }
