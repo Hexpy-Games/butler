@@ -4,7 +4,7 @@ use butler_core::json::JsonDocument;
 use butler_platform::secure_fs;
 use butler_turn::btcc::{ModelRoundToolCall, ToolExecutionError};
 use serde_json::{Value, json};
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 
 const MAX_BYTES: u64 = 10 * 1024 * 1024;
 const UNAVAILABLE: &str = "Deliver an existing regular file of at most 10 MB inside the active workspace, or an artifacts/ label from a tool result.";
@@ -63,13 +63,15 @@ fn collect(
     }
     json!({"ok":true,"delivered":delivered,"artifacts":artifacts})
 }
-fn checked(
+/// A regular file of at most 10 MB inside the active workspace (or an
+/// `artifacts/` label under Butler data), opened without following links:
+/// its full path, its workspace-relative label, the open file and its size.
+pub(super) fn contained(
     workspace: &Path,
     data: &Path,
-    turn: &str,
     label: &str,
     inventory: &secure_fs::SecretInventory,
-) -> Option<Value> {
+) -> Option<(PathBuf, String, std::fs::File, u64)> {
     let label = label.replace('\\', "/");
     let artifact = label.starts_with("artifacts/");
     let raw_root = if artifact { data } else { workspace };
@@ -96,11 +98,20 @@ fn checked(
     if !metadata.is_file() || metadata.len() > MAX_BYTES {
         return None;
     }
-    let original = root.join(relative);
-    let target = secure_fs::stage_file(data, turn, &original, file, MAX_BYTES).ok()?;
     let source = relative.to_str()?.replace('\\', "/");
+    Some((root.join(relative), source, file, metadata.len()))
+}
+fn checked(
+    workspace: &Path,
+    data: &Path,
+    turn: &str,
+    label: &str,
+    inventory: &secure_fs::SecretInventory,
+) -> Option<Value> {
+    let (original, source, file, size) = contained(workspace, data, label, inventory)?;
+    let target = secure_fs::stage_file(data, turn, &original, file, MAX_BYTES).ok()?;
     Some(
         json!({"path":source,"staged_path":target.to_str()?.to_owned(),"origin_path":original.to_str()?.to_owned(),
-        "source":source,"deliverable":true,"size_bytes":metadata.len(),"mime_type":super::super::journal::mime_for(&label)}),
+        "source":source,"deliverable":true,"size_bytes":size,"mime_type":super::super::journal::mime_for(label)}),
     )
 }

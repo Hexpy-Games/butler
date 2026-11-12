@@ -264,3 +264,45 @@ async fn drawer_image_from_another_chat_is_found_and_edited() -> Result<(), Harn
     assert_eq!(edited["parent"], image);
     f.finish().await
 }
+
+#[tokio::test]
+async fn work_folder_image_is_edited_by_path() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let f = Fixture::start(Access::Auto, "openai").await?;
+    let bytes = png(false);
+    // The general chat works in the data folder.
+    let folder = f.s.sandbox.data.join("art");
+    std::fs::create_dir_all(&folder)?;
+    std::fs::write(folder.join("reina.png"), &bytes)?;
+    // A picture outside the work folder stays out of reach.
+    let outside = f.s.sandbox.root.join("outside.png");
+    std::fs::write(&outside, &bytes)?;
+    f.script(
+        "Edit the reina picture",
+        vec![
+            call(
+                "outside",
+                "edit_image",
+                &json!({"image":outside.display().to_string(),"prompt":"Paint it gold"}),
+            ),
+            call(
+                "folder",
+                "edit_image",
+                &json!({"image":"art/reina.png","prompt":"Paint it gold"}),
+            ),
+        ],
+    );
+    f.run("Edit the reina picture").await?;
+    assert_eq!(f.output("outside")["error"]["code"], "image_not_in_chat");
+    let output = f.output("folder");
+    assert_eq!(output["status"], "ok", "{output}");
+    // The folder file became this chat's original, like an attachment.
+    let parent = output["parent"].as_str().unwrap();
+    let meta =
+        f.s.gw
+            .get(&format!("/message-assets/{parent}/meta"))
+            .await?;
+    assert_eq!(meta.data()["kind"], "original");
+    assert_eq!(f.raw(&format!("/message-assets/{parent}")).await?, bytes);
+    f.finish().await
+}

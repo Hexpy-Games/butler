@@ -47,7 +47,7 @@ pub(super) async fn prepare(
             ),
         ));
     }
-    let (inputs, resolved) = load_inputs(client, ids, cancel).await?;
+    let (inputs, resolved) = load_inputs(owner, client, ids, cancel).await?;
     let (mask, region_hint, opaque_source) =
         load_mask(client, &args, &resolved, &inputs, cancel).await?;
     let mut request = ImageGenRequest {
@@ -106,8 +106,50 @@ async fn load(
     let bytes = value["data"]
         .as_str()
         .and_then(|s| STANDARD.decode(s).ok())
-        .ok_or_else(|| ImageGenError::new("image_not_in_chat", "Image is not in this chat."))?;
+        .ok_or_else(|| {
+            ImageGenError::new(
+                "image_not_in_chat",
+                "Image is not in this chat, the 서랍 or the work folder.",
+            )
+        })?;
     Ok((value, bytes))
+}
+/// An image file in the active work folder, read like `deliver_files`
+/// reads it and registered as this chat's original, like an attachment.
+async fn folder(
+    owner: &GuidedTools,
+    client: &Client,
+    path: &str,
+    cancel: &CancellationToken,
+) -> Option<(Value, Vec<u8>)> {
+    let workspace = owner.active_workspace_path();
+    let data = owner.binding.butler_data.clone();
+    let inventory = owner
+        .binding
+        .workspace_reference
+        .as_ref()
+        .and_then(butler_turn::workspace::WorkspaceReference::read_inventory);
+    let label = path.to_owned();
+    let bytes = tokio::task::spawn_blocking(move || {
+        let inventory =
+            inventory.unwrap_or_else(|| butler_platform::secure_fs::SecretInventory::cached(&data));
+        let (_, _, mut file, _) =
+            super::super::deliver::contained(&workspace, &data, &label, &inventory)?;
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut file, &mut bytes).ok()?;
+        Some(bytes)
+    })
+    .await
+    .ok()??;
+    let stored = client
+        .call(
+            "images.store",
+            &Value::Null,
+            &json!({"data":STANDARD.encode(&bytes),"kind":"original"}),
+            cancel,
+        )
+        .await;
+    Some((json!({"id":stored["id"].as_str()?}), bytes))
 }
 pub(super) fn facts(call: &ModelRoundToolCall, request: &(ImageGenRequest, Vec<String>)) -> Value {
     let r = &request.0;
@@ -160,6 +202,7 @@ fn input_ids(call: &ModelRoundToolCall, args: &Value) -> Result<Vec<String>, Ima
     })
 }
 async fn load_inputs(
+    owner: &GuidedTools,
     client: &Client,
     ids: Vec<String>,
     cancel: &CancellationToken,
@@ -167,7 +210,10 @@ async fn load_inputs(
     let mut inputs = Vec::new();
     let mut resolved = Vec::new();
     for id in ids {
-        let (value, bytes) = load(client, &id, None, cancel).await?;
+        let (value, bytes) = match load(client, &id, None, cancel).await {
+            Ok(found) => found,
+            Err(error) => folder(owner, client, &id, cancel).await.ok_or(error)?,
+        };
         resolved.push(
             value["id"]
                 .as_str()
