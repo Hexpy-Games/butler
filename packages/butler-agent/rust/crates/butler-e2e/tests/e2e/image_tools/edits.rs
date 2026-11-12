@@ -202,3 +202,65 @@ async fn attached_images_import_losslessly_as_original_parents() -> Result<(), H
     assert_eq!(f.raw(&format!("/message-assets/{parent}")).await?, bytes);
     f.finish().await
 }
+#[tokio::test]
+async fn drawer_image_from_another_chat_is_found_and_edited() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let f = Fixture::start(Access::Auto, "openai").await?;
+    // The picture was made in another chat and saved to the 서랍.
+    let chat =
+        f.s.gw
+            .post("/sessions", json!({"kind":"chat","title":"Pictures"}))
+            .await?;
+    assert_eq!(chat.status, 201, "{}", chat.text);
+    let session = chat.data()["session"]["id"].as_str().unwrap().to_owned();
+    let made =
+        f.s.gw
+            .post(
+                "/internal/e2e/images/generated",
+                json!({"session":session,"data":STANDARD.encode(png(false)),"model_ref":MODEL}),
+            )
+            .await?;
+    assert_eq!(made.status, 200, "{}", made.text);
+    let image = made.data()["id"].as_str().unwrap().to_owned();
+    let saved =
+        f.s.gw
+            .post(
+                "/library",
+                json!({"id":"sheet","kind":"scrap","title":"Character sheet","url":"","asset":image,
+                    "text":"","session":session,"capturedAt":"2026-11-12T12:14:25Z"}),
+            )
+            .await?;
+    assert_eq!(saved.status, 200, "{}", saved.text);
+    f.script(
+        "Edit the character sheet in my drawer",
+        vec![
+            call(
+                "find",
+                "library_search",
+                &json!({"query":"character sheet"}),
+            ),
+            call(
+                "edit",
+                "edit_image",
+                &json!({"image":image,"prompt":"Paint it gold"}),
+            ),
+        ],
+    );
+    f.run("Edit the character sheet in my drawer").await?;
+    // The 서랍 search is offered directly and finds the picture by its image id.
+    assert!(
+        butler_e2e::e2e::chatgpt_wire::functions(
+            &f.script
+                .requests_for("Edit the character sheet in my drawer")[0]
+        )
+        .any(|t| t["name"] == "library_search"),
+        "the 서랍 search must be offered without tool_search"
+    );
+    let found = f.output("find");
+    assert_eq!(found["items"][0]["img"], image, "{found}");
+    // The picture saved from another chat is usable here.
+    let edited = f.output("edit");
+    assert_eq!(edited["status"], "ok", "{edited}");
+    assert_eq!(edited["parent"], image);
+    f.finish().await
+}

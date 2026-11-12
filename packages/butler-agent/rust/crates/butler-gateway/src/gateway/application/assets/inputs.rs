@@ -12,7 +12,7 @@ impl AppApplication {
         let chat = session.clone();
         if id.starts_with("img_") {
             let meta=self.storage.read(move|db|{
-                let owned=db.query_row("SELECT 1 FROM app_asset_refs WHERE asset_id=?1 AND owner_kind='chat' AND owner_id=?2",params![key,chat],|_|Ok(())).optional().map_err(super::super::AppStorageError::sqlite)?.is_some();
+                let owned=db.query_row("SELECT 1 FROM app_asset_refs WHERE asset_id=?1 AND (owner_kind='chat' AND owner_id=?2 OR owner_kind='library') LIMIT 1",params![key,chat],|_|Ok(())).optional().map_err(super::super::AppStorageError::sqlite)?.is_some();
                 if !owned { return Err(store::failed("image_not_in_chat")); }
                 generated::meta(db,&key)
             }).await.map_err(|_|not_in_chat())?;
