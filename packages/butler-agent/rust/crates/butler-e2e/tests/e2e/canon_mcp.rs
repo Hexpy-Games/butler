@@ -118,7 +118,7 @@ async fn cn_10_first_canon_call_asks_trust_then_lists() -> Result<(), HarnessErr
     let grant = pending(&s).await?;
     assert_eq!(grant["client_title"], "Claude Code");
     assert_eq!(grant["person"], "app-user");
-    assert_eq!(grant["requested"].as_array().unwrap().len(), 8);
+    assert_eq!(grant["requested"].as_array().unwrap().len(), 9);
     let grant_id = grant["id"].as_str().unwrap();
     stream
         .wait_for(Duration::from_secs(10), |e| {

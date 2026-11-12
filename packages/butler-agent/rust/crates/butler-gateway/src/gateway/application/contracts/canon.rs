@@ -36,11 +36,11 @@ pub fn delegate_capability(
     input: Option<&Value>,
 ) -> Option<&'static str> {
     use AppCanonResource::{
-        Activity, Canon, Comment, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, List, Plan,
-        ProposeSpec, Spec,
+        Activity, Canon, Comment, CreateEpic, CreatePlan, CreateTag, EditEpic, EditPlan, Epic,
+        List, Plan, ProposeSpec, Spec, Tags,
     };
     match resource {
-        Canon | List | Plan | Epic | Spec | Activity => Some("canon.read"),
+        Canon | List | Plan | Epic | Spec | Activity | Tags => Some("canon.read"),
         EditEpic => {
             let keys = input?.as_object()?;
             if keys.contains_key("status")
@@ -52,12 +52,17 @@ pub fn delegate_capability(
             } else if keys.keys().all(|key| {
                 matches!(
                     key.as_str(),
-                    "expected_revision" | "title" | "description" | "plan_id" | "before_id"
+                    "expected_revision"
+                        | "title"
+                        | "description"
+                        | "plan_id"
+                        | "before_id"
+                        | "tags"
                 )
             }) && keys.keys().any(|key| {
                 matches!(
                     key.as_str(),
-                    "title" | "description" | "plan_id" | "before_id"
+                    "title" | "description" | "plan_id" | "before_id" | "tags"
                 )
             }) {
                 Some("canon.epic.edit")
@@ -80,6 +85,7 @@ pub fn delegate_capability(
         Comment => Some("canon.epic.comment"),
         CreateEpic => Some("canon.epic.create"),
         CreatePlan => Some("canon.plan.create"),
+        CreateTag => Some("canon.tag.create"),
         ProposeSpec => Some("canon.spec.propose"),
         _ => None,
     }
