@@ -9,7 +9,7 @@ pub mod grants;
 pub use grants::sanitize as sanitize_mcp_client;
 pub use public::{
     Activity as CanonActivity, Epic as CanonEpic, Page as CanonPage, Plan as CanonPlan,
-    SpecBody as CanonSpecBody,
+    SpecBody as CanonSpecBody, Tag as CanonTag,
 };
 pub mod mcp_proposals;
 pub mod page;

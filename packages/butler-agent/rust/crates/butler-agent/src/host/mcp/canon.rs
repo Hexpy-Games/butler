@@ -2,8 +2,9 @@
 mod args;
 mod client;
 use super::server::McpServer;
-use butler_canon::store::public::Tag;
-use butler_canon::store::{CanonActivity, CanonEpic, CanonPage, CanonPlan, CanonSpecBody};
+use butler_canon::store::{
+    CanonActivity, CanonEpic, CanonPage, CanonPlan, CanonSpecBody, CanonTag,
+};
 use client::{Client, Error, component};
 use rmcp::{
     RoleServer,
@@ -212,7 +213,7 @@ impl McpServer {
         result(
             async {
                 let client = Client::local(self, &context).await?;
-                let tags: Vec<Tag> = decode(
+                let tags: Vec<CanonTag> = decode(
                     client
                         .get(&format!(
                             "/projects/{}/canon/tags",
@@ -237,7 +238,7 @@ impl McpServer {
         result(
             async {
                 let client = Client::local(self, &context).await?;
-                decode::<Tag>(
+                decode::<CanonTag>(
                     client
                         .request(
                             reqwest::Method::POST,
