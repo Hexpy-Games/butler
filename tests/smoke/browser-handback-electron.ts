@@ -1,6 +1,6 @@
 // test-category: race
-/** Large text; a delegated task asks the user to sign in; the user opens the tab, hands it back,
- * and the task continues in the same tab; Stop on the next hand-off card ends the delegated task's wait. */
+/** Large text; a delegated task asks the user to sign in; the user opens the tab, the hold survives leaving it, they hand it back,
+ * and the task continues in the same tab; Stop on the next hand-off card ends the wait and returns the tab to Butler. */
 import { strict as assert } from "node:assert";
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -49,6 +49,15 @@ try {
   await app.click("Open to check");
   await waitBrowser(() => app.main<boolean>(`${subject()}.attached===${app.win} && !${subject()}.covered`), "the handed-over tab is shown");
   assert.equal(await app.main(`${subject()}.holder`), "user");
+  assert.equal(await app.main(`${subject()}.sticky`), true, "opening the hand-off keeps the wait's hold");
+  assert.equal(await app.main(`${subject()}.waiting`), true, "opening the hand-off keeps the wait");
+  // Leaving the tab (the pane hides) never hands it back; only Give back does.
+  await app.main("globalThis.browserAgentSubject.hide()");
+  await new Promise(resolve => setTimeout(resolve, 500));
+  assert.equal(await app.main(`${subject()}.holder`), "user", "hiding the pane keeps the user's hold");
+  assert.equal(await app.main(`${subject()}.waiting`), true, "the wait did not end before Give back");
+  await app.click("Open to check");
+  await waitBrowser(() => app.main<boolean>(`${subject()}.attached===${app.win} && !${subject()}.covered`), "the handed-over tab is shown again");
   assert.equal(await app.main("globalThis.browserAgentSubject.activeId"), tab);
   assert.ok(!Number.isInteger(await app.main<number>(`${subject()}.bounds.radius`)), "large text gives the pane a fractional radius");
   await app.click("Give back to Butler");
@@ -64,6 +73,7 @@ try {
   const view = await app.gateway.api<any>("/session-view?session_id=general");
   assert.equal(view.steward_children[0].active_turn, null);
   assert.equal(view.steward_children[0].latest_turn?.state, "cancelled");
+  assert.equal(await app.main(`${subject()}.holder`), "agent", "Stop returns the wait's tab to Butler");
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, tab }, null, 2));
 } catch (error) {
   writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error),

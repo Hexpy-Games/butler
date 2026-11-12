@@ -179,9 +179,9 @@ async function executeFrame(browser, frame) {
   if (tab.profile === "signed_in" && !["tab.cancel", "tab.wait", "tab.waiting"].includes(op) && !applySignedInPolicy(tab, args.policy))
     return { status: "not_dispatched", reason: args.policy?.mode === "signed_in" ? "navigation_denied" : "signed_in_unavailable" };
   if (op === "tab.cancel") { if (tab.callId === args.call_id) tab.cancelled = true; return { status: "ok" }; }
-  // A durable wait hands the tab to the user (as a sign-in step does); only their hand-back resumes it.
+  // A durable wait hands the tab to the user (as a sign-in step does) with a sticky hold; only their hand-back resumes it.
   if (op === "tab.wait") {
-    if (!tab.dialog && tab.holder !== "user") controlTab(browser, tab, "user", true);
+    if (!tab.dialog) { if (tab.holder === "user") tab.sticky = true; else controlTab(browser, tab, "user", true); }
     tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || tab.holder === "user"; browser.publish();
     return { status: tab.holder === "user" ? "user_control" : "ready", tab: tab.id, epoch: tab.epoch };
   }

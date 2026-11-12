@@ -1,4 +1,5 @@
 import { releaseTurnEvents } from "./events.mjs";
+import { controlTab } from "./agent.mjs";
 // Calls fence dispatched input; holds span the owning turn/run. Neither is persisted.
 export function startUse(browser, frame) {
   const use = { id: frame.id, session: frame.session, turn: frame.turn_id, tab: frame.tab };
@@ -64,8 +65,11 @@ export function finishUse(browser, session, turn, closeReadTabs = false) {
     affected.add(use.tab); endUse(browser, use.id, true);
   }
   for (const tab of browser.tabs.values()) if (tab.owner === `conversation:${session}`) {
-    // The finished turn no longer waits on a sign-in step; the user keeps the tab.
-    if (tab.waitingTurn === turn) { tab.waiting = Boolean(tab.dialog); tab.waitingTurn = null; tab.signinStep = null; affected.add(tab.id); }
+    // The finished turn no longer waits: its hold ends and the tab returns to Butler; the user's next input takes it again.
+    if (tab.waitingTurn === turn) {
+      tab.waiting = Boolean(tab.dialog); tab.waitingTurn = null; tab.signinStep = null; affected.add(tab.id);
+      if (tab.holder === "user" && tab.sticky) controlTab(browser, tab, "agent");
+    }
     if (tab.pausedTurns?.delete(turn) && !tab.pausedTurns.size) tab.pausedTurns = null;
     if (affected.has(tab.id) && !tabInUse(browser, tab)) tab.pointer = null;
   }
