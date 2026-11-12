@@ -232,3 +232,164 @@
   text-overflow: ellipsis;
   line-height: 1;
 }
+
+/* Touch size: where --control-hit-target makes a button 44px tall, its
+   insides scale with it. The label steps up the type ramp at medium weight,
+   with --space-lg sides, an --space-sm icon gap, 1em icons and the touch
+   radius. Icon-only buttons draw an --icon-size-lg glyph. */
+@media (width <= 640px) {
+  .button:not(
+    .variantLink,
+    .variantInline,
+    .sizeIcon,
+    .sizeIconXs,
+    .sizeIconSm,
+    .sizeIconLg,
+    [data-viewport="desktop"],
+    [data-viewport="desktop"] *
+  ) {
+    gap: var(--space-sm);
+    padding-inline: var(--space-lg);
+    font-size: var(--font-size-4);
+    line-height: var(--typo-app-title-line-height);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .button[data-has-icon-text="true"][data-icon-layout="start"]:not(
+      .variantLink,
+      .variantInline,
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    padding-inline: var(--space-md) var(--space-lg);
+  }
+
+  .button[data-has-icon-text="true"][data-icon-layout="end"]:not(
+      .variantLink,
+      .variantInline,
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    ) {
+    padding-inline: var(--space-lg) var(--space-md);
+  }
+
+  .button:not(
+    .variantLink,
+    .variantInline,
+    .shapePill,
+    .sizeIcon,
+    .sizeIconXs,
+    .sizeIconSm,
+    .sizeIconLg,
+    [data-viewport="desktop"],
+    [data-viewport="desktop"] *
+  ) {
+    border-radius: var(--radius-control-touch);
+  }
+
+  .button:not(
+      .variantLink,
+      .variantInline,
+      .sizeIcon,
+      .sizeIconXs,
+      .sizeIconSm,
+      .sizeIconLg,
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    )
+    > svg,
+  .button:not(
+      .variantLink,
+      .variantInline,
+      .sizeIcon,
+      .sizeIconXs,
+      .sizeIconSm,
+      .sizeIconLg,
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    )
+    > .icon
+    > svg {
+    width: 1em;
+    height: 1em;
+  }
+
+  :where(.sizeIcon, .sizeIconXs, .sizeIconSm, .sizeIconLg):where(
+      :not([data-viewport="desktop"], [data-viewport="desktop"] *)
+    )
+    > svg {
+    width: var(--icon-size-lg);
+    height: var(--icon-size-lg);
+  }
+}
+
+@media (pointer: coarse) {
+  .button:not(
+    .variantLink,
+    .variantInline,
+    .sizeIcon,
+    .sizeIconXs,
+    .sizeIconSm,
+    .sizeIconLg
+  ) {
+    gap: var(--space-sm);
+    padding-inline: var(--space-lg);
+    font-size: var(--font-size-4);
+    line-height: var(--typo-app-title-line-height);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .button[data-has-icon-text="true"][data-icon-layout="start"]:not(
+      .variantLink,
+      .variantInline
+    ) {
+    padding-inline: var(--space-md) var(--space-lg);
+  }
+
+  .button[data-has-icon-text="true"][data-icon-layout="end"]:not(
+      .variantLink,
+      .variantInline
+    ) {
+    padding-inline: var(--space-lg) var(--space-md);
+  }
+
+  .button:not(
+    .variantLink,
+    .variantInline,
+    .shapePill,
+    .sizeIcon,
+    .sizeIconXs,
+    .sizeIconSm,
+    .sizeIconLg
+  ) {
+    border-radius: var(--radius-control-touch);
+  }
+
+  .button:not(
+      .variantLink,
+      .variantInline,
+      .sizeIcon,
+      .sizeIconXs,
+      .sizeIconSm,
+      .sizeIconLg
+    )
+    > svg,
+  .button:not(
+      .variantLink,
+      .variantInline,
+      .sizeIcon,
+      .sizeIconXs,
+      .sizeIconSm,
+      .sizeIconLg
+    )
+    > .icon
+    > svg {
+    width: 1em;
+    height: 1em;
+  }
+
+  :where(.sizeIcon, .sizeIconXs, .sizeIconSm, .sizeIconLg) > svg {
+    width: var(--icon-size-lg);
+    height: var(--icon-size-lg);
+  }
+}

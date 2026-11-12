@@ -132,7 +132,7 @@ async fn cn_11_mcp_updates_comments_creates_and_proposes() -> Result<(), Harness
 }
 
 #[tokio::test]
-async fn cn_12_mcp_creates_plans_edits_and_moves_epics() -> Result<(), HarnessError> {
+async fn cn_12_mcp_creates_and_edits_plans_and_epics() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("CN-12")?.data_folder_token().start().await?;
     let project = project(&s).await?;
@@ -203,5 +203,28 @@ async fn cn_12_mcp_creates_plans_edits_and_moves_epics() -> Result<(), HarnessEr
         assert_eq!(row["actor"]["via"], "Claude Code");
         assert_eq!(row["actor"]["origin"], "mcp");
     }
+    let listed = call(&s, "canon_list", json!({"project":project})).await?;
+    let current = listed["plans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == plan["id"])
+        .unwrap()["revision"]
+        .as_i64()
+        .unwrap();
+    let renamed = call(&s, "canon_edit_plan", json!({"plan_id":plan["id"],"expected_revision":current,"title":"Renamed plan","description":"Plan notes","due_on":"2026-12-01"})).await?;
+    assert_eq!(renamed["title"], "Renamed plan");
+    assert_eq!(renamed["description"], "Plan notes");
+    assert_eq!(renamed["revision"], current + 1);
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let (actor, due): (String, Option<String>) = db.query_row(
+        "SELECT a.actor_json, p.due_on FROM canon_audit a JOIN canon_plans p ON p.id=a.entity_id WHERE a.entity_kind='plan' AND a.op='edit' AND a.entity_id=?1",
+        [plan["id"].as_str().unwrap()],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let actor: Value = serde_json::from_str(&actor)?;
+    assert_eq!(actor["via"], "Claude Code");
+    assert_eq!(actor["origin"], "mcp");
+    assert_eq!(due.as_deref(), Some("2026-12-01"));
     s.finish().await
 }

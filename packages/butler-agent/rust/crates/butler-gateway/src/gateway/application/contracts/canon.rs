@@ -36,8 +36,8 @@ pub fn delegate_capability(
     input: Option<&Value>,
 ) -> Option<&'static str> {
     use AppCanonResource::{
-        Activity, Canon, Comment, CreateEpic, CreatePlan, EditEpic, Epic, List, Plan, ProposeSpec,
-        Spec,
+        Activity, Canon, Comment, CreateEpic, CreatePlan, EditEpic, EditPlan, Epic, List, Plan,
+        ProposeSpec, Spec,
     };
     match resource {
         Canon | List | Plan | Epic | Spec | Activity => Some("canon.read"),
@@ -64,6 +64,18 @@ pub fn delegate_capability(
             } else {
                 None
             }
+        }
+        EditPlan => {
+            let keys = input?.as_object()?;
+            (keys.keys().all(|key| {
+                matches!(
+                    key.as_str(),
+                    "expected_revision" | "title" | "description" | "due_on"
+                )
+            }) && keys
+                .keys()
+                .any(|key| matches!(key.as_str(), "title" | "description" | "due_on")))
+            .then_some("canon.plan.edit")
         }
         Comment => Some("canon.epic.comment"),
         CreateEpic => Some("canon.epic.create"),
