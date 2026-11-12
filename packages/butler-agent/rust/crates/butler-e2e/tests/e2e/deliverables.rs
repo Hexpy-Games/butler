@@ -284,3 +284,49 @@ async fn command_declaration_and_missing_file_use_explicit_intent_only() -> Resu
     server.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn drawer_document_from_another_chat_is_read_by_library_id() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (url, script, server) = stub::start().await?;
+    let setup = Setup::new("DELIVERABLE-DRAWER-READ")?
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
+    *script.steps.lock().unwrap() = [
+        write("notes/plan.md", "Launch plan: ship on Friday."),
+        deliver("notes/plan.md", "Launch plan"),
+        done(),
+    ]
+    .into();
+    let s = setup.start().await?;
+    let (_, turn) = run_turn(&s, &script, "Write the plan.").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let id = documents(&s).await?[0]["id"].as_str().unwrap().to_owned();
+    // Another chat reads the saved document through the 서랍.
+    let chat =
+        s.gw.post("/sessions", json!({"kind":"chat","title":"Later"}))
+            .await?;
+    assert_eq!(chat.status, 201, "{}", chat.text);
+    let other = chat.data()["session"]["id"].as_str().unwrap().to_owned();
+    *script.steps.lock().unwrap() = [call("library_search", json!({"read":id})), done()].into();
+    *script.prompt.lock().unwrap() = "What did the plan say?".to_owned();
+    let (_, turn) = s.turn(&other, "What did the plan say?").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let output: Value = script
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .rev()
+        .flat_map(|r| r["input"].as_array().into_iter().flatten())
+        .find(|i| i["type"] == "function_call_output")
+        .and_then(|i| i["output"].as_str())
+        .map(|text| serde_json::from_str(text).unwrap())
+        .expect("model receives the read");
+    let output = output.get("output").cloned().unwrap_or(output);
+    assert_eq!(output["text"], "Launch plan: ship on Friday.", "{output}");
+    assert_eq!(output["title"], "Launch plan");
+    s.finish().await?;
+    server.abort();
+    Ok(())
+}
