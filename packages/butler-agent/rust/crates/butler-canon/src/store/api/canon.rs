@@ -173,6 +173,7 @@ pub(super) fn edit_epic(
 ) -> Result<Value> {
     let input: EpicInput = input(value)?;
     let old = canon_row(read_work(tx, id)?)?;
+    let old_tags = rows(tx, sql::EPIC_TAGS, [id])?;
     cas(
         &old,
         "revision",
@@ -212,6 +213,7 @@ pub(super) fn edit_epic(
     if ["title", "description", "assignee"]
         .iter()
         .any(|key| edited[key] != old[key])
+        || rows(tx, sql::EPIC_TAGS, [id])? != old_tags
     {
         activity::append(tx, ctx, id, "edited", text(&edited, "title")?, None)?;
     }

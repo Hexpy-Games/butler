@@ -132,7 +132,7 @@ async fn cn_11_mcp_updates_comments_creates_and_proposes() -> Result<(), Harness
 }
 
 #[tokio::test]
-async fn cn_12_mcp_creates_and_edits_plans_and_epics() -> Result<(), HarnessError> {
+async fn cn_12_mcp_creates_and_edits_plans_epics_and_tags() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let s = Setup::new("CN-12")?.data_folder_token().start().await?;
     let project = project(&s).await?;
@@ -150,13 +150,21 @@ async fn cn_12_mcp_creates_and_edits_plans_and_epics() -> Result<(), HarnessErro
     )
     .await?;
     assert_eq!(first["plan"]["id"], plan["id"]);
+    let tag = call(
+        &s,
+        "canon_create_tag",
+        json!({"project":project,"name":"Bug","color":"red"}),
+    )
+    .await?;
+    assert_eq!(tag["name"], "Bug");
     let second = call(
         &s,
         "canon_create_epic",
-        json!({"project":project,"title":"Backlog epic"}),
+        json!({"project":project,"title":"Backlog epic","tag_ids":[tag["id"]]}),
     )
     .await?;
     assert!(second["plan"].is_null());
+    assert_eq!(second["tags"][0]["id"], tag["id"]);
     let id = second["id"].as_str().unwrap();
     let edited = call(&s, "canon_edit_epic", json!({"epic_id":id,"expected_revision":second["revision"],"title":"Edited epic","description":"Updated description","plan_id":plan["id"],"before_id":first["id"]})).await?;
     assert_eq!(edited["title"], "Edited epic");
@@ -226,5 +234,27 @@ async fn cn_12_mcp_creates_and_edits_plans_and_epics() -> Result<(), HarnessErro
     assert_eq!(actor["via"], "Claude Code");
     assert_eq!(actor["origin"], "mcp");
     assert_eq!(due.as_deref(), Some("2026-12-01"));
+    let current =
+        call(&s, "canon_get_epic", json!({"epic_id":first["id"]})).await?["revision"].clone();
+    let tagged = call(
+        &s,
+        "canon_edit_epic",
+        json!({"epic_id":first["id"],"expected_revision":current,"tag_ids":[tag["id"]]}),
+    )
+    .await?;
+    assert_eq!(tagged["tags"][0]["id"], tag["id"], "{tagged}");
+    let app =
+        s.gw.get(&format!("/canon/epics/{}", first["id"].as_str().unwrap()))
+            .await?;
+    let edited: Vec<_> = app.data()["activity"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["kind"] == "edited")
+        .collect();
+    assert_eq!(edited.len(), 1);
+    assert_eq!(edited[0]["actor"]["via"], "Claude Code");
+    let tags = call(&s, "canon_list_tags", json!({"project":project})).await?;
+    assert_eq!(tags["tags"].as_array().unwrap().len(), 1);
     s.finish().await
 }
