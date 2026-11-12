@@ -78,7 +78,7 @@ try {
   await page.getByText("59번째 브리핑", { exact: true }).waitFor();
   const lastAnswer = page.locator('[data-test-class~="message"][data-test-class~="assistant"]').last();
   assert.equal(await lastAnswer.locator("time").count(), 0, "no bare footer before the card");
-  assert.equal(await page.locator('[data-test-class~="steward-parent-progress-card"]').count(), 0, "no bare footer before the card");
+  assert.equal(await page.locator('[data-test-class~="steward-parent-progress-card"]').count(), 0, "the card waits for the session view");
   await page.evaluate(() => { (window as unknown as { __frames: Frame[] }).__frames.length = 0; });
   const newest = () => [...document.querySelectorAll('[data-test-class~="message"]')].find(node => node.textContent?.includes("59번째 브리핑"));
   await page.evaluate(`window.__newest = (${newest})()`);
