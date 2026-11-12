@@ -109,6 +109,24 @@ async fn steward_makes_an_image_and_its_activity_carries_it() -> Result<(), Harn
         .any(|r| functions(r).any(|t| t["name"] == "generate_image"));
     assert!(offered, "the steward is offered generate_image");
     assert_image(&content);
+    let value: Value = serde_json::from_str(&content).unwrap();
+    let id = value.get("output").unwrap_or(&value)["image"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // The parent's result turn names the image the steward made.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !f.script.requests.lock().unwrap().iter().any(|r| {
+        let text = r.to_string();
+        text.contains("Delegated result") && text.contains(&id)
+    }) {
+        assert!(
+            Instant::now() < deadline,
+            "the parent must receive the steward's image id\n{}",
+            f.s.agent.logs()
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     f.finish().await
 }
 

@@ -41,7 +41,15 @@ async fn auto_and_full_access_generate_losslessly_and_record_cost() -> Result<()
                 &json!({"image":id,"prompt":"Make it brighter"}),
             )],
         );
+        let sent = f.script.requests.lock().unwrap().len();
         f.run("Make this picture brighter").await?;
+        // The next turn's history names the image the previous turn made.
+        assert!(
+            f.script.requests.lock().unwrap()[sent..]
+                .iter()
+                .any(|r| r.to_string().contains(&format!("[image:{id}]"))),
+            "the next turn must see the generated image id"
+        );
         let edited = f.output("same-bytes-edit");
         assert_eq!(edited["parent"], id);
         assert_ne!(
