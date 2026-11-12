@@ -46,49 +46,35 @@ export function cacheSnapshotBytes<T extends CacheMessageSnapshot>(
 /**
  * Trim only completed message rows. The caller is responsible for excluding
  * active progress and unsent composer state before invoking this helper.
+ * Keeps the newest rows that fit. Each row is sized once, so trimming costs
+ * one pass over the snapshot however many rows are dropped.
  */
 export function trimCacheSnapshot<T extends CacheMessageSnapshot>(
   snapshot: T,
 ): T | null {
-  let messages = snapshot.messages.slice(-APP_CACHE_BUDGET.maxMessages);
-  const retainedIds = new Set(
-    messages
-      .map((message) => {
-        const record = message as Record<string, unknown>;
-        return typeof record.turn_id === "string" ? record.turn_id : null;
-      })
-      .filter((turnId): turnId is string => Boolean(turnId)),
-  );
-  let turnProgress = Object.fromEntries(
-    Object.entries(snapshot.turn_progress ?? {}).filter(([turnId]) =>
-      retainedIds.has(turnId),
-    ),
-  );
-  let candidate = { ...snapshot, messages, turn_progress: turnProgress } as T;
-  while (
-    messages.length > 0 &&
-    cacheSnapshotBytes(candidate) > APP_CACHE_BUDGET.maxSnapshotBytes
-  ) {
-    messages = messages.slice(1);
-    const nextIds = new Set(
-      messages
-        .map((message) => {
-          const record = message as Record<string, unknown>;
-          return typeof record.turn_id === "string" ? record.turn_id : null;
-        })
-        .filter((turnId): turnId is string => Boolean(turnId)),
-    );
-    turnProgress = Object.fromEntries(
-      Object.entries(turnProgress).filter(([turnId]) => nextIds.has(turnId)),
-    );
-    candidate = { ...snapshot, messages, turn_progress: turnProgress } as T;
+  const progress = snapshot.turn_progress ?? {};
+  const recent = snapshot.messages.slice(-APP_CACHE_BUDGET.maxMessages);
+  const turns = new Set<string>();
+  // Each row also counts one separator, so the sum never undercounts the snapshot.
+  let bytes = cacheSnapshotBytes({ ...snapshot, messages: [], turn_progress: {} });
+  let start = recent.length;
+  while (start > 0) {
+    const record = recent[start - 1] as Record<string, unknown>;
+    const turnId = typeof record.turn_id === "string" ? record.turn_id : null;
+    const turnBytes = turnId && !turns.has(turnId) && turnId in progress
+      ? cacheEntryBytes({ [turnId]: progress[turnId] })
+      : 0;
+    const next = bytes + cacheEntryBytes(record) + 1 + turnBytes;
+    if (next > APP_CACHE_BUDGET.maxSnapshotBytes) break;
+    bytes = next;
+    start -= 1;
+    if (turnId) turns.add(turnId);
   }
-  return (
-    messages.length > 0 &&
-    cacheSnapshotBytes(candidate) <= APP_CACHE_BUDGET.maxSnapshotBytes
-  )
-    ? candidate
-    : null;
+  if (start === recent.length) return null;
+  const turnProgress = Object.fromEntries(
+    Object.entries(progress).filter(([turnId]) => turns.has(turnId)),
+  );
+  return { ...snapshot, messages: recent.slice(start), turn_progress: turnProgress } as T;
 }
 
 export function cacheEntryBytes(value: unknown): number {
