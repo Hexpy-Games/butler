@@ -24,7 +24,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "click" | "drag" => pointer(h, command, arg),
         "hover" => hover(h, arg),
         "reveal" => reveal(h, arg),
-        "wait-anchor" => wait_anchor(h, arg),
+        "wait-anchor" | "wait-no-anchor" => wait_anchor(h, arg, command == "wait-anchor"),
         "wait-theme" => wait_theme(h, arg),
         "expect-anchor" | "expect-no-anchor" => {
             settle(&mut h.cx, h.handle);
@@ -93,18 +93,19 @@ pub(super) fn expect_fresh(h: &mut Harness, dir: &std::path::Path) -> anyhow::Re
     Ok(())
 }
 
-/// `wait-anchor <anchor>`: real time passes until the anchor shows (it may wait on an agent
-/// answer), for at most 30 seconds (the Electron side's wait).
-fn wait_anchor(h: &mut Harness, anchor: &str) -> anyhow::Result<()> {
+/// `wait-anchor <anchor>` / `wait-no-anchor <anchor>`: real time passes until the anchor shows
+/// or goes (it may wait on an agent answer), for at most 30 seconds (the Electron side's wait).
+fn wait_anchor(h: &mut Harness, anchor: &str, shown: bool) -> anyhow::Result<()> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
         settle(&mut h.cx, h.handle);
-        if h.cx.debug_bounds(h.handle, anchor)?.is_some() {
+        if h.cx.debug_bounds(h.handle, anchor)?.is_some() == shown {
             return Ok(());
         }
         ensure!(
             std::time::Instant::now() < deadline,
-            "anchor {anchor} did not show"
+            "anchor {anchor} did not {}",
+            if shown { "show" } else { "go" }
         );
         std::thread::sleep(std::time::Duration::from_millis(10));
     }

@@ -89,11 +89,7 @@ impl Shell {
         {
             stored = self.receive_sidebar_update(progress);
         }
-        let navigation = matches!(
-            event.r#type.as_str(),
-            "session.created" | "session.updated" | "session.permanently_deleted"
-        ) || event.r#type.starts_with("space.")
-            || event.r#type.starts_with("project.");
+        let navigation = reconciles_navigation(event);
         if navigation || self.store.navigation.retry_pending {
             self.refresh_sidebar(cx);
         }
@@ -306,4 +302,42 @@ impl Shell {
             },
         );
     }
+}
+
+/// `useLiveSessionEvents`: the events after which Electron reconciles navigation, so a row's
+/// activity (working, attention) follows turns, questions, approvals and workers as they change.
+fn reconciles_navigation(event: &AppEventEnvelope) -> bool {
+    let kind = event.r#type.as_str();
+    matches!(
+        kind,
+        "session.created"
+            | "session.updated"
+            | "session.permanently_deleted"
+            | "turn.state_changed"
+            | "subsession.changed"
+            | "session_queue.changed"
+            | "session.queue.changed"
+    ) || [
+        "space.",
+        "project.",
+        "question.",
+        "authority.",
+        "worker.",
+        "worker_",
+    ]
+    .iter()
+    .any(|prefix| kind.starts_with(prefix))
+        || delivered_assistant(event)
+}
+
+/// `isDeliveredAssistantMessage`: an assistant message that is no longer pending, streaming or
+/// retrying.
+fn delivered_assistant(event: &AppEventEnvelope) -> bool {
+    if !matches!(event.r#type.as_str(), "message.created" | "message.updated") {
+        return false;
+    }
+    let message = event.payload.get("message");
+    let field = |key: &str| message.and_then(|m| m.get(key)).and_then(Value::as_str);
+    field("role") == Some("assistant")
+        && !matches!(field("status"), Some("pending" | "streaming" | "retrying"))
 }
