@@ -195,7 +195,11 @@ pub(super) async fn image(
                     bytes: STANDARD
                         .decode(args["data"].as_str().ok_or(HttpError::Internal)?)
                         .map_err(|_| HttpError::invalid_json())?,
-                    kind: GeneratedAssetKind::Generated,
+                    kind: if args["kind"] == "original" {
+                        GeneratedAssetKind::Original
+                    } else {
+                        GeneratedAssetKind::Generated
+                    },
                     parent_id: args["parent_id"].as_str().map(str::to_owned),
                     model_ref: args["model_ref"].as_str().map(str::to_owned),
                 })
