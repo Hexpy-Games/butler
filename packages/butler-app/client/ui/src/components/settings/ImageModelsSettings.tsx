@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/app/api";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { notifyError } from "@/app/notifications";
-import { Button, ButtonContainer, SettingsFieldGroup } from "@/butler-ds";
+import { Button, ButtonContainer, SettingsFieldGroup, Trash2 } from "@/butler-ds";
 import { type ImageSelection, type ImageSettings } from "../images/imageApi";
 import { refreshImageSettings, useImageSettingsState } from "../images/imageSettingsState";
 import { CustomImageModelForm } from "./CustomImageModelForm";
@@ -54,7 +54,7 @@ export function ImageModelsSettings() {
     }} />}
     {model && <>
       {model.provider_id === "custom-image" ? <ButtonContainer size="default" justify="end">
-        <Button type="button" disabled={busy} onClick={() => void remove()}>{copy.deleteModel}</Button>
+        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void remove()}><Trash2 size="sm" /> {copy.deleteModel}</Button>
       </ButtonContainer> : <ImageCredentialForm key={model.model_ref} providerId={model.provider_id} credentialId={selected?.credential_id ?? null} disabled={busy}
         onSelect={id => save({ model_ref: modelRef, credential_id: id, default_quality: selected?.default_quality ?? model.default_quality })} />}
       {model.qualities.length > 0 && <SettingsSelect settingId="image-quality" label={copy.defaultQuality} value={selected?.default_quality ?? model.default_quality ?? ""}
