@@ -38,7 +38,7 @@ impl RootPage {
         cx: &mut Context<Self>,
     ) -> Self {
         cx.observe(&ctx.state, |_, _, cx| cx.notify()).detach();
-        let image = cx.new(|cx| ImageModels::new(ctx.clone(), window, cx));
+        let image = cx.new(|cx| ImageModels::new(ctx.clone(), navigate.clone(), window, cx));
         let workers = cx.new(|cx| WorkerProfiles::new(ctx.clone(), cx));
         cx.observe(&workers, |_, _, cx| cx.notify()).detach();
         Self {

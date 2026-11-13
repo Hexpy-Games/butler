@@ -23,6 +23,8 @@ use crate::ui::settings::sections::SectionId;
 #[derive(Clone, Copy, PartialEq)]
 enum Page {
     Management,
+    ImageManagement,
+    ImageAdd,
     Add,
     Edit,
 }
@@ -31,7 +33,8 @@ impl Page {
     /// `backModelRoute`: add and edit go back to management, management to the root.
     fn parent(self) -> ModelRoute {
         match self {
-            Self::Management => ModelRoute::Root,
+            Self::Management | Self::ImageManagement => ModelRoute::Root,
+            Self::ImageAdd => ModelRoute::ImageManagement,
             Self::Add | Self::Edit => ModelRoute::Management,
         }
     }
@@ -44,6 +47,8 @@ pub(super) fn subpage(route: &ModelRoute, navigate: Navigate) -> Subpage {
     let (page, hidden) = match route {
         ModelRoute::Root => (Page::Add, true),
         ModelRoute::Management => (Page::Management, false),
+        ModelRoute::ImageManagement => (Page::ImageManagement, false),
+        ModelRoute::ImageAdd => (Page::ImageAdd, false),
         ModelRoute::Add => (Page::Add, false),
         ModelRoute::Edit(_) => (Page::Edit, false),
     };
@@ -74,8 +79,9 @@ fn trail(page: Page, hidden: bool, navigate: &Navigate, cx: &App) -> AnyElement 
     let models = SectionId::Models.copy(lang).label;
     let title = match page {
         Page::Management => words.management_title,
+        Page::ImageManagement => super::manage::image_title(lang),
         Page::Edit => words.edit_title,
-        Page::Add => words.add_title,
+        Page::Add | Page::ImageAdd => words.add_title,
     };
     let back = {
         let navigate = navigate.clone();
@@ -89,11 +95,15 @@ fn trail(page: Page, hidden: bool, navigate: &Navigate, cx: &App) -> AnyElement 
         ModelRoute::Root,
         navigate,
     ));
-    if page != Page::Management {
+    if !matches!(page, Page::Management | Page::ImageManagement) {
         list = list.child(BreadcrumbSeparator::new()).child(step(
             "models-crumb-management",
-            words.management_title,
-            ModelRoute::Management,
+            if page == Page::ImageAdd {
+                super::manage::image_title(lang)
+            } else {
+                words.management_title
+            },
+            page.parent(),
             navigate,
         ));
     }

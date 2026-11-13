@@ -12,12 +12,15 @@ use butler_ds::ui::tag::Tag;
 use butler_ds::ui::toast::{Toast, ToastId};
 use butler_ds::ui::typo::Typo;
 use butler_shell_client::Error;
-use gpui::{AnyElement, Context, IntoElement, ParentElement as _, Render, SharedString, Window};
+use gpui::{
+    AnyElement, Context, Entity, IntoElement, ParentElement as _, Render, SharedString, Window,
+};
 use serde_json::Value;
 
 use super::super::{ModelRoute, Navigate};
 use super::catalog::{CHATGPT_OAUTH, Catalog, CatalogModel, LOCAL_PROVIDER_ID};
 use super::copy::{Words, words};
+use super::image_state::{ImageSettings, ImageSettingsState};
 use super::notify;
 use crate::ui::Icon;
 use crate::ui::composer::menus::token_window_label;
@@ -27,9 +30,18 @@ use crate::ui::settings::confirm::Request;
 use crate::ui::settings::controls::provider_mark;
 use crate::ui::settings::state::fetch;
 
+/// `ModelManagementPage.tsx`: chat keeps edit and token captions; image omits both.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Kind {
+    Chat,
+    Image,
+}
+
 /// `ModelManagementPage`
 pub(crate) struct ManagementPage {
     ctx: SectionCtx,
+    kind: Kind,
+    images: Entity<ImageSettingsState>,
     navigate: Navigate,
     /// `busyModelRef`: the model being deleted.
     busy: Option<String>,
@@ -40,12 +52,17 @@ impl ManagementPage {
     pub(crate) fn new(
         ctx: SectionCtx,
         navigate: Navigate,
+        kind: Kind,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         cx.observe(&ctx.state, |_, _, cx| cx.notify()).detach();
+        let images = ImageSettingsState::shared(cx);
+        cx.observe(&images, |_, _, cx| cx.notify()).detach();
         Self {
             ctx,
+            kind,
+            images,
             navigate,
             busy: None,
             toast: None,
@@ -72,11 +89,14 @@ impl ManagementPage {
         cx.notify();
         let model_ref = model.model_ref.clone();
         let local = model.provider_id == LOCAL_PROVIDER_ID;
+        let image = self.kind == Kind::Image;
         let name = model.name().to_owned();
         fetch(
             cx,
             move |client| async move {
-                if local {
+                if image {
+                    client.unregister_image_model(&model_ref).await
+                } else if local {
                     client.delete_local_model(&model_ref).await
                 } else {
                     client.delete_hosted_model(&model_ref).await
@@ -86,8 +106,20 @@ impl ManagementPage {
                 this.busy = None;
                 let copy = words(Ds::get(cx).lang());
                 match result {
-                    Ok(_) => {
-                        this.ctx.reload_catalog(cx);
+                    Ok(value) => {
+                        if image {
+                            match serde_json::from_value::<ImageSettings>(value) {
+                                Ok(settings) => {
+                                    this.images.update(cx, |state, cx| state.set(settings, cx));
+                                }
+                                Err(_) => {
+                                    notify(&mut this.toast, Toast::error(copy.error_delete), cx);
+                                    return;
+                                }
+                            }
+                        } else {
+                            this.ctx.reload_catalog(cx);
+                        }
                         let text = (copy.deleted_status)(&name);
                         notify(&mut this.toast, Toast::success(text), cx);
                     }
@@ -129,20 +161,24 @@ impl ManagementPage {
             edit = edit.disabled();
             delete = delete.disabled();
         }
-        let actions = button::container(Size::Sm).child(edit).child(delete);
+        let mut actions = button::container(Size::Sm);
+        if self.kind == Kind::Chat {
+            actions = actions.child(edit);
+        }
+        let actions = actions.child(delete);
         Stack::row()
             .justify(Justify::Between)
             .cross(Cross::Center)
             .gap(Space::Md)
             .wrap(true)
-            .child(summary(model, lang))
+            .child(summary(model, lang, self.kind == Kind::Chat))
             .child(actions)
             .into_any_element()
     }
 }
 
 /// The mark, the title and the context window and auth tag under it.
-fn summary(model: &CatalogModel, lang: Lang) -> AnyElement {
+fn summary(model: &CatalogModel, lang: Lang, show_token_caption: bool) -> AnyElement {
     let copy = words(lang);
     let mark = IconSlot::new()
         .size(SlotSize::Lg)
@@ -153,13 +189,14 @@ fn summary(model: &CatalogModel, lang: Lang) -> AnyElement {
             false,
         ));
     let title = Typo::panel_section_title(format!("{} / {}", model.provider_label, model.name()));
-    let details = Stack::new()
-        .gap(Space::Xs)
-        .child(Typo::caption(token_window_label(
+    let mut details = Stack::new().gap(Space::Xs);
+    if show_token_caption {
+        details = details.child(Typo::caption(token_window_label(
             model.context_window_tokens,
             menus_copy(lang),
-        )))
-        .children(auth_tag(model, copy));
+        )));
+    }
+    let details = details.children(auth_tag(model, copy));
     Stack::row()
         .cross(Cross::Start)
         .gap(Space::Md)
@@ -196,19 +233,37 @@ impl Render for ManagementPage {
         let copy = words(lang);
         let page = SettingsPage::new().labels(SectionCtx::labels(cx));
         let catalog = Catalog::read(self.ctx.state.read(cx));
-        let models = catalog.as_ref().map(|c| c.registered_models.as_slice());
+        let image_models = self.images.read(cx).settings.as_ref().map(|settings| {
+            settings
+                .models
+                .iter()
+                .filter(|m| settings.registered.contains(&m.model_ref))
+                .map(|m| m.summary(copy))
+                .collect::<Vec<_>>()
+        });
+        let models = if self.kind == Kind::Image {
+            image_models.as_deref()
+        } else {
+            catalog.as_ref().map(|c| c.registered_models.as_slice())
+        };
         let state = match models {
             None => SettingsSectionState::Loading,
             Some([]) => SettingsSectionState::Empty,
             Some(_) => SettingsSectionState::Ready,
         };
         let navigate = self.navigate.clone();
+        let image = self.kind == Kind::Image;
+        let add_route = if image {
+            ModelRoute::ImageAdd
+        } else {
+            ModelRoute::Add
+        };
         let add = Button::new("model-add")
             .size(Size::Sm)
             .variant(Variant::Outline)
             .icon_start(icon(Icon::Plus, IconSize::Sm, Ds::get(cx)))
             .text(copy.add_button)
-            .on_click(move |_, window, cx| navigate(ModelRoute::Add, window, cx));
+            .on_click(move |_, window, cx| navigate(add_route.clone(), window, cx));
         let rows: Vec<AnyElement> = models
             .unwrap_or_default()
             .iter()
@@ -216,9 +271,17 @@ impl Render for ManagementPage {
             .collect();
         page.section(
             SettingsSection::new(
-                "registered-models",
+                if image {
+                    "registered-image-models"
+                } else {
+                    "registered-models"
+                },
                 SettingsSectionKind::List,
-                copy.registered_title,
+                if image {
+                    copy.image_title
+                } else {
+                    copy.registered_title
+                },
             )
             .state(state)
             .empty_message(copy.empty_registered)

@@ -75,6 +75,7 @@ pub(super) struct Credential {
     provider_id: String,
     pub(super) label: String,
     pub(super) masked_value: String,
+    auth_type: String,
 }
 
 /// `ModelCatalogView`
@@ -95,6 +96,13 @@ impl Catalog {
     /// The catalog the settings hold; `None` until `/model-catalog` lands.
     pub(super) fn read(state: &SettingsState) -> Option<Self> {
         Self::deserialize(state.catalog()?).ok()
+    }
+
+    /// `HostedImageModelForm` in `ImageModelAddPage.tsx` uses only saved API keys.
+    pub(super) fn api_key_only(mut self) -> Self {
+        self.provider_credentials
+            .retain(|credential| credential.auth_type == API_KEY);
+        self
     }
 
     /// `providerAuthMethods`

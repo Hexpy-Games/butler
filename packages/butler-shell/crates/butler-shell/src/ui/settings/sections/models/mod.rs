@@ -16,7 +16,7 @@ use gpui::{
 };
 
 use crate::ui::settings::SectionCtx;
-use manage::{AddEditPage, ManagementPage};
+use manage::{AddEditPage, ImageAddPage, ManagementKind, ManagementPage};
 use root::RootPage;
 
 /// `SettingsModelRoute`: the models page, management, add, or edit of one model.
@@ -24,6 +24,8 @@ use root::RootPage;
 pub(crate) enum ModelRoute {
     Root,
     Management,
+    ImageManagement,
+    ImageAdd,
     Add,
     Edit(SharedString),
 }
@@ -36,6 +38,8 @@ enum Body {
     Root,
     Management(Entity<ManagementPage>),
     AddEdit(Entity<AddEditPage>),
+    ImageManagement(Entity<ManagementPage>),
+    ImageAdd(Entity<ImageAddPage>),
 }
 
 /// `ModelsSettings`: the root page lives as long as the section (its Advanced disclosure keeps
@@ -71,8 +75,16 @@ impl ModelsPage {
         let (ctx, navigate) = (self.ctx.clone(), self.navigate.clone());
         self.body = match route {
             ModelRoute::Root => Body::Root,
-            ModelRoute::Management => {
-                Body::Management(cx.new(|cx| ManagementPage::new(ctx, navigate, window, cx)))
+            ModelRoute::Management => Body::Management(
+                cx.new(|cx| ManagementPage::new(ctx, navigate, ManagementKind::Chat, window, cx)),
+            ),
+            ModelRoute::ImageManagement => {
+                Body::ImageManagement(cx.new(|cx| {
+                    ManagementPage::new(ctx, navigate, ManagementKind::Image, window, cx)
+                }))
+            }
+            ModelRoute::ImageAdd => {
+                Body::ImageAdd(cx.new(|cx| ImageAddPage::new(ctx, navigate, cx)))
             }
             ModelRoute::Add => {
                 Body::AddEdit(cx.new(|cx| AddEditPage::new(ctx, None, navigate, window, cx)))
@@ -93,7 +105,10 @@ impl Render for ModelsPage {
         let page = div();
         match &self.body {
             Body::Root => page.child(self.root.clone()),
-            Body::Management(management) => page.child(management.clone()),
+            Body::ImageAdd(add) => page.child(add.clone()),
+            Body::Management(management) | Body::ImageManagement(management) => {
+                page.child(management.clone())
+            }
             Body::AddEdit(add_edit) => page.child(add_edit.clone()),
         }
     }
