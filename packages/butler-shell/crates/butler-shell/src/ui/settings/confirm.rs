@@ -192,7 +192,7 @@ fn details(pending: &Pending, state: &Entity<SettingsState>) -> Option<AnyElemen
 }
 
 /// The pending request's dialog, while there is one.
-pub(super) fn dialog(
+pub(crate) fn dialog(
     state: &Entity<SettingsState>,
     window: &mut Window,
     cx: &mut App,
@@ -268,4 +268,12 @@ pub(super) fn dialog(
             }
         });
     Some(dialog.content(content.footer(footer), window, cx))
+}
+
+/// A root confirmation host for Electron `AppDialogs.tsx` and `FirstRunVault.tsx`.
+pub(crate) fn host(cx: &mut App) -> super::SectionCtx {
+    use gpui::AppContext as _;
+    super::SectionCtx {
+        state: cx.new(|_| SettingsState::new(None)),
+    }
 }

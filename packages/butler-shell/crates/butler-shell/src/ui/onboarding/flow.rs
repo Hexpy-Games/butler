@@ -18,6 +18,7 @@ pub(crate) enum Screen {
     Welcome,
     Consent,
     Memory,
+    Vault,
     Connect,
 }
 
@@ -27,6 +28,7 @@ pub(crate) enum Step {
     Welcome,
     Consent,
     Memory,
+    Vault,
     Import,
     Connect,
     Ready,
@@ -38,6 +40,7 @@ impl Step {
             Self::Welcome => "welcome",
             Self::Consent => "consent",
             Self::Memory => "memory",
+            Self::Vault => "vault",
             Self::Import => "import",
             Self::Connect => "connect",
             Self::Ready => "ready",
@@ -119,6 +122,7 @@ impl Onboarding {
                 Screen::Welcome => Step::Welcome,
                 Screen::Consent => Step::Consent,
                 Screen::Memory => Step::Memory,
+                Screen::Vault => Step::Vault,
                 Screen::Connect => Step::Connect,
             };
         }
@@ -189,7 +193,11 @@ impl Onboarding {
     /// The first run returns to the memory step; renewal and rerun to consent.
     pub(crate) fn back_from_connect(&mut self, cx: &mut Context<Self>) {
         self.screen = if self.mode == Mode::FirstRun {
-            Screen::Memory
+            if self.vault_offered == Some(true) {
+                Screen::Vault
+            } else {
+                Screen::Memory
+            }
         } else {
             Screen::Consent
         };

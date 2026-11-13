@@ -27,6 +27,7 @@ use crate::ui::settings::state::fetch;
 struct SecurityPage {
     ctx: SectionCtx,
     authority: Entity<SecurityAuthority>,
+    vault: Entity<crate::ui::shell::vault::Vault>,
     access: remote::Access,
     view: Option<remote::View>,
     /// `busy !== null`: a toggle or host save is running.
@@ -47,6 +48,8 @@ pub(crate) fn page(ctx: SectionCtx, window: &mut Window, cx: &mut App) -> AnyVie
 
 impl SecurityPage {
     fn new(ctx: SectionCtx, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let vault = cx.new(crate::ui::shell::vault::Vault::new);
+        cx.observe(&vault, |_, _, cx| cx.notify()).detach();
         let authority = cx.new(|cx| SecurityAuthority::new(ctx.clone(), window, cx));
         let subscriptions = vec![
             cx.observe(&ctx.state, |_, _, cx| cx.notify()),
@@ -55,6 +58,7 @@ impl SecurityPage {
         let page = Self {
             ctx,
             authority,
+            vault,
             access: remote::Access::Loading,
             view: None,
             busy: false,
@@ -122,7 +126,11 @@ impl Render for SecurityPage {
             self.access,
             remote::Access::AdminRequired | remote::Access::Failed
         );
-        let mut leading: Vec<SettingsSection> = vec![self.remote_section(copy, cx)];
+        let mut leading: Vec<SettingsSection> =
+            crate::ui::shell::vault::Vault::section(&self.vault, cx)
+                .into_iter()
+                .collect();
+        leading.push(self.remote_section(copy, cx));
         if !refused && self.view.as_ref().is_some_and(|v| v.remote_access_enabled) {
             leading.push(self.pairing_section(copy, cx));
             leading.push(self.devices_section(copy, cx));
