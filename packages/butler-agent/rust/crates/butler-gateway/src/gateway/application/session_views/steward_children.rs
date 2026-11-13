@@ -4,9 +4,8 @@
 //! App contract (`steward_children[]` of `/session-view` and
 //! `/session-summary`) also carries per-turn `progress` (with
 //! `safe_progress_rows`), `delivery_state`, `cancellable`, `retryable`,
-//! limitations, the child's activity rows, artifacts and changed files, and an
-//! App `status`. Missing fields are filled with empty values so clients never
-//! see a partial turn. Public child events use the ordinary App progress mapper.
+//! limitations and an App `status`. Missing fields are filled with empty values
+//! so clients never see a partial turn. Public child events use the ordinary App progress mapper.
 
 use serde_json::{Map, Value, json};
 
@@ -80,17 +79,24 @@ fn complete_child(child: &mut Map<String, Value>, now_ms: i64) {
         let latest = child.get("latest_turn").cloned().unwrap_or(Value::Null);
         child.insert("active_turn".into(), latest);
     }
-    let changed_files = child
-        .get("result")
-        .and_then(|result| result.get("changed_files"))
-        .cloned()
-        .unwrap_or_else(|| json!([]));
-    child.entry("activity_rows").or_insert_with(|| json!([]));
-    child.entry("artifacts").or_insert_with(|| json!([]));
-    child.entry("changed_files").or_insert(changed_files);
+    if let Some(result) = child.get_mut("result").and_then(Value::as_object_mut) {
+        result.retain(|key, _| {
+            matches!(
+                key.as_str(),
+                "result_id"
+                    | "child_turn_id"
+                    | "status"
+                    | "work_status"
+                    | "task_id"
+                    | "relation_id"
+                    | "child_session_id"
+                    | "created_at"
+            )
+        });
+    }
 }
 
-pub(super) fn project_progress(child: &mut Map<String, Value>) {
+pub(super) fn project_progress(child: &mut Map<String, Value>) -> Vec<Value> {
     let events = child
         .remove("public_progress_events")
         .unwrap_or_else(|| json!([]));
@@ -135,7 +141,7 @@ pub(super) fn project_progress(child: &mut Map<String, Value>) {
             }
         }
     }
-    child.insert("activity_rows".into(), json!(rows));
+    rows
 }
 
 /// A child without a result whose latest turn settled (or stayed finalizing)

@@ -190,11 +190,11 @@ impl AppApplication {
             .projection(session_id.clone(), Some(page))
             .await?;
         let mut projection = projection;
-        steward_children::project_progress(
+        projection["activity_rows"] = json!(steward_children::project_progress(
             projection
                 .as_object_mut()
                 .ok_or(GatewayApplicationError::internal())?,
-        );
+        ));
         require_relation(&projection)?;
         let messages = projection
             .get("messages")
@@ -276,11 +276,11 @@ impl AppApplication {
             )
             .await?;
         let mut projection = projection;
-        steward_children::project_progress(
+        projection["activity_rows"] = json!(steward_children::project_progress(
             projection
                 .as_object_mut()
                 .ok_or(GatewayApplicationError::internal())?,
-        );
+        ));
         require_relation(&projection)?;
         let mut latest = projection
             .get("latest_turn")
