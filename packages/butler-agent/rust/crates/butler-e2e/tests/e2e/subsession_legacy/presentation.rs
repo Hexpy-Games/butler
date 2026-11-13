@@ -32,7 +32,12 @@ pub(super) fn assert_child(child: &Value) {
     assert_eq!(progress["safe_progress_rows"].as_array().unwrap().len(), 3);
     assert_eq!(progress["summary"], "Checking the result");
     assert_eq!(progress["safe_status_label"], progress["summary"]);
-    assert_eq!(child["activity_rows"], progress["safe_progress_rows"]);
+    for field in ["activity_rows", "artifacts", "changed_files"] {
+        assert!(child.get(field).is_none(), "{field}: {child}");
+    }
+    if !child["result"].is_null() {
+        assert!(child["result"].get("summary").is_none(), "{child}");
+    }
     assert!(!child.to_string().contains("PRIVATE-DIRECTION"));
     assert!(child.get("public_progress_events").is_none());
 }
@@ -62,6 +67,10 @@ pub(super) async fn assert_waiting_children(
         s.gw.get("/session-view?session_id=steward-legacy-b")
             .await?;
     assert_eq!(own.data()["waiting_for_children"], true);
+    assert_eq!(
+        own.data()["activity_rows"],
+        own.data()["latest_turn"]["progress"]["safe_progress_rows"]
+    );
     s.agent.terminate().await?;
     {
         let db =
