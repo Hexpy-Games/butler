@@ -3,6 +3,7 @@
 //! host does the work behind [`AppSetupPort`]; the App API exposes it, and
 //! readiness changes become the live event `setup.readiness_changed`.
 
+use butler_platform::secrets::SecretText;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -156,8 +157,13 @@ pub struct ChatGptSignOutView {
 pub struct ButlerVaultView {
     /// `protected` (in use and open), `off` (not turned on, or declined), `locked` (in use, the keychain key did not open).
     pub state: &'static str,
-    /// The vault key can live in this host's system store (`vault_uses_system_store`).
+    /// The vault opens unattended on this host (keychain or sealed); when false
+    /// only the master password can open it.
     pub available: bool,
+    /// How the vault in use opens: `keychain`, `sealed` or `password`.
+    pub unlock: Option<&'static str>,
+    /// A master password is set.
+    pub has_password: bool,
     /// The user chose "사용 안 함".
     pub declined: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -267,7 +273,16 @@ pub trait AppSetupPort: Send + Sync + 'static {
         id: String,
     ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::RemovedOauthCredential>;
     fn butler_vault(&self) -> ApplicationFuture<ButlerVaultView>;
-    fn enable_butler_vault(&self) -> ApplicationFuture<ButlerVaultView>;
+    fn enable_butler_vault(
+        &self,
+        password: Option<SecretText>,
+    ) -> ApplicationFuture<ButlerVaultView>;
+    fn unlock_butler_vault(&self, password: SecretText) -> ApplicationFuture<ButlerVaultView>;
+    fn change_butler_vault_password(
+        &self,
+        current: SecretText,
+        new: SecretText,
+    ) -> ApplicationFuture<ButlerVaultView>;
     fn decline_butler_vault(&self) -> ApplicationFuture<ButlerVaultView>;
     fn chatgpt_sign_out(&self) -> ApplicationFuture<ChatGptSignOutView>;
     fn start_oauth(&self, input: AppOauthStartInput) -> ApplicationFuture<OauthFlowView>;
@@ -420,7 +435,17 @@ pub(crate) fn test_setup_port() -> Arc<dyn AppSetupPort> {
         fn butler_vault(&self) -> ApplicationFuture<ButlerVaultView> {
             unsupported()
         }
-        fn enable_butler_vault(&self) -> ApplicationFuture<ButlerVaultView> {
+        fn enable_butler_vault(&self, _: Option<SecretText>) -> ApplicationFuture<ButlerVaultView> {
+            unsupported()
+        }
+        fn unlock_butler_vault(&self, _: SecretText) -> ApplicationFuture<ButlerVaultView> {
+            unsupported()
+        }
+        fn change_butler_vault_password(
+            &self,
+            _: SecretText,
+            _: SecretText,
+        ) -> ApplicationFuture<ButlerVaultView> {
             unsupported()
         }
         fn decline_butler_vault(&self) -> ApplicationFuture<ButlerVaultView> {

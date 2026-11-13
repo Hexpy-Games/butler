@@ -786,8 +786,14 @@ const butlerApp = Object.freeze({
     method: "POST", body: "{}",
   }),
   getButlerVault: () => requestBridgeResult("/setup/butler-vault"),
-  enableButlerVault: () => requestBridgeResult("/setup/butler-vault/enable", {
-    method: "POST", body: "{}",
+  enableButlerVault: (request) => requestBridgeResult("/setup/butler-vault/enable", {
+    method: "POST", body: JSON.stringify(request ?? {}),
+  }),
+  unlockButlerVault: (request) => requestBridgeResult("/setup/butler-vault/unlock", {
+    method: "POST", body: JSON.stringify(request ?? {}),
+  }),
+  changeButlerVaultPassword: (request) => requestBridgeResult("/setup/butler-vault/password", {
+    method: "POST", body: JSON.stringify(request ?? {}),
   }),
   declineButlerVault: () => requestBridgeResult("/setup/butler-vault/decline", {
     method: "POST", body: "{}",

@@ -116,9 +116,14 @@ impl ProviderSecrets {
     ) -> Result<Option<Arc<ProductVault>>, CredentialStoreError> {
         let vault = shared(root);
         let owned = vault.clone();
-        self.vault_call(move || owned.active())
-            .await
-            .map(|active| active.then_some(vault))
+        self.vault_call(move || {
+            if !owned.unattended() {
+                return Ok(false);
+            }
+            owned.active()
+        })
+        .await
+        .map(|active| active.then_some(vault))
     }
 
     pub(super) async fn vault_call<T: Send + 'static>(

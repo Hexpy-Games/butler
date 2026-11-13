@@ -229,11 +229,10 @@ impl ModelConfiguration {
     async fn read_from(&self, root: &Path) -> Result<ModelConfigurationRead, ModelCatalogError> {
         let config_path = root.join("butler.config.json");
         let credential_path = root.join(CREDENTIALS_FILE);
-        let local_credential_path = root.join("auth/custom-model-credentials.json");
         let (config, credential_file, local_credentials) = tokio::join!(
             read_object(&config_path),
             read_object(&credential_path),
-            local_credentials::read(&local_credential_path),
+            local_credentials::read(root),
         );
         let local_credentials = local_credentials?;
         let local = self.local_models(&config);
@@ -405,9 +404,7 @@ impl ModelConfiguration {
                 .into_iter()
                 .find(|model| model.model_ref == model_ref && model.api_base_url == api_base_url);
             if let Some(saved) = saved {
-                let mut secrets =
-                    local_credentials::read(&root.join("auth/custom-model-credentials.json"))
-                        .await?;
+                let mut secrets = local_credentials::read(root).await?;
                 secrets.remove(&saved.model_ref)
             } else {
                 None
