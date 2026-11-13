@@ -9,17 +9,6 @@ use crate::ui::source::wire::{
     SessionView,
 };
 
-/// `ACTIVE_TURN_STATES` (app/constants.ts).
-const ACTIVE_TURN_STATES: [&str; 7] = [
-    "accepted",
-    "thinking",
-    "streaming",
-    "waiting_for_form",
-    "waiting_for_tool",
-    "cancelling",
-    "retrying",
-];
-
 /// `isTerminalProgressState` (app/utils.ts).
 pub(super) fn is_terminal(state: &str) -> bool {
     matches!(
@@ -132,7 +121,9 @@ pub(super) fn turn_info(view: &SessionView) -> Option<TurnInfo> {
     let state = snapshot
         .and_then(|snapshot| snapshot.state.as_deref())
         .unwrap_or(&turn.state);
-    if !ACTIVE_TURN_STATES.contains(&state) {
+    // `isActiveTurnProgressSnapshot`: the turn runs until its state is terminal (a running
+    // tool leaves it `running`).
+    if is_terminal(state) {
         return None;
     }
     let rows: &[ProgressRow] = snapshot.map_or(&[], |snapshot| &snapshot.safe_progress_rows);
