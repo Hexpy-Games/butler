@@ -59,7 +59,9 @@ gap. See "Running activity", "Completed activity" and "Completed turns".
 
 Bubble rows (대화 / Chats only): pass `bubble` with `role="assistant"`. The
 row aligns left; `MessageBubble` holds the answer text with the user bubble's
-shape, padding, fill (`--user-message-bg`) and max width (`min(440px, 68%)`).
+shape, padding and fill (`--user-message-bg`); its max width is
+`min(440px, 90%)` of the column, wider than the user bubble's
+`min(440px, 68%)`, so a reply uses most of a phone screen.
 One answer is one bubble. `MessageBubbleAttachments` holds files, answer
 blocks and panels under it: they align to the bubble's left edge and are no
 wider than its max width. A panel that keeps its own width (the background-work
