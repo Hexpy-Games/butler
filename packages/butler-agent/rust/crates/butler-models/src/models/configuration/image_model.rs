@@ -11,7 +11,7 @@ const CHATGPT_IMAGE_CREDENTIAL: &str = "chatgpt_oauth";
 #[serde(deny_unknown_fields)]
 pub struct ImageModelSelection {
     pub model_ref: String,
-    pub credential_id: String,
+    pub credential_id: Option<String>,
     pub default_quality: Option<String>,
 }
 
@@ -20,10 +20,10 @@ pub struct ImageModelSelection {
 pub struct ImageModelError {
     pub code: &'static str,
 }
-fn invalid(code: &'static str) -> ImageModelError {
+pub(super) fn invalid(code: &'static str) -> ImageModelError {
     ImageModelError { code }
 }
-fn storage(_: impl std::fmt::Display) -> ImageModelError {
+pub(super) fn storage(_: impl std::fmt::Display) -> ImageModelError {
     invalid("image_model_store_failed")
 }
 
@@ -31,20 +31,25 @@ fn storage(_: impl std::fmt::Display) -> ImageModelError {
 pub struct ResolvedImageModel {
     pub metadata: ModelProviderMetadata,
     pub image_output: ImageOutputCapability,
-    pub credential_id: String,
-    pub default_quality: String,
+    pub credential_id: Option<String>,
+    pub default_quality: Option<String>,
     pub api_key: zeroize::Zeroizing<String>,
 }
 
 impl ModelConfiguration {
     pub async fn image_model_settings(&self) -> Result<Value, ImageModelError> {
         let read = self.read().await.map_err(storage)?;
-        let credentials = &read.catalog.view().provider_credentials;
+        let credentials = read
+            .credentials
+            .iter()
+            .map(super::credentials::CredentialRecord::view)
+            .collect::<Vec<_>>();
         let account = self.chatgpt_account().await.map_err(storage)?;
         let has_account = account.status != super::chatgpt::ChatGptAccountStatus::SignedOut;
-        let models = read.catalog.image_output_models().into_iter().filter_map(|model| {
+        let available = super::custom_image_models::models(&read)?;
+        let models = available.iter().filter_map(|model| {
             let capability = model.image_output.as_ref()?;
-            let mut keys = credentials.iter().filter(|key| key.provider_id == model.provider_id)
+            let mut keys = credentials.iter().filter(|key| key.provider_id == model.provider_id && (model.provider_id != "custom-image" || model.credential_id.as_deref() == Some(key.id.as_str())))
                 .map(|key| json!({"id":key.id,"label":key.label,"masked_value":key.masked_value,
                     "auth_type":key.auth_type,"selectable":key.auth_type == ProviderAuthMethod::ApiKey,"reason":null}))
                 .collect::<Vec<_>>();
@@ -68,10 +73,10 @@ impl ModelConfiguration {
         let selected = read.config.pointer("/user/imageModel").cloned()
             .and_then(|v| serde_json::from_value::<ImageModelSelection>(v).ok())
             .and_then(|selection| {
-                let model = read.catalog.image_output_models().into_iter()
+                let model = available.iter()
                     .find(|model| model.model_ref == selection.model_ref)?;
-                let quality = selection.default_quality.or_else(|| model.image_output.as_ref().map(|c| c.default_quality.clone()));
-                let credential = credentials.iter().find(|key| key.id == selection.credential_id
+                let quality = selection.default_quality.or_else(|| model.image_output.as_ref().and_then(|c| c.default_quality.clone()));
+                let credential = credentials.iter().find(|key| Some(key.id.as_str()) == selection.credential_id.as_deref()
                     && key.provider_id == model.provider_id && key.auth_type == ProviderAuthMethod::ApiKey);
                 Some(json!({"model_ref":model.model_ref,"display_name":model.display_name,
                     "provider_id":model.provider_id,"credential_id":credential.map(|key| &key.id),"default_quality":quality}))
@@ -90,34 +95,37 @@ impl ModelConfiguration {
             let mut selection: ImageModelSelection =
                 serde_json::from_value(input).map_err(|_| invalid("image_model_unknown"))?;
             let read = self.read().await.map_err(storage)?;
-            let model = read
-                .catalog
-                .image_output_models()
+            let model = super::custom_image_models::models(&read)?
                 .into_iter()
                 .find(|model| model.model_ref == selection.model_ref)
                 .ok_or_else(|| invalid("image_model_unknown"))?;
             let capability = model
                 .image_output
                 .ok_or_else(|| invalid("image_model_unknown"))?;
-            if selection.credential_id == CHATGPT_IMAGE_CREDENTIAL {
-                return Err(invalid("image_model_requires_api_key"));
+            if model.provider_id == "custom-image" {
+                selection.credential_id = model.credential_id;
+            } else {
+                if selection.credential_id.as_deref() == Some(CHATGPT_IMAGE_CREDENTIAL) {
+                    return Err(invalid("image_model_requires_api_key"));
+                }
+                let key = read
+                    .catalog
+                    .view()
+                    .provider_credentials
+                    .iter()
+                    .find(|key| {
+                        Some(key.id.as_str()) == selection.credential_id.as_deref()
+                            && key.provider_id == model.provider_id
+                    })
+                    .ok_or_else(|| invalid("image_model_credential_invalid"))?;
+                if key.auth_type != ProviderAuthMethod::ApiKey {
+                    return Err(invalid("image_model_requires_api_key"));
+                }
             }
-            let key = read
-                .catalog
-                .view()
-                .provider_credentials
-                .iter()
-                .find(|key| {
-                    key.id == selection.credential_id && key.provider_id == model.provider_id
-                })
-                .ok_or_else(|| invalid("image_model_credential_invalid"))?;
-            if key.auth_type != ProviderAuthMethod::ApiKey {
-                return Err(invalid("image_model_requires_api_key"));
-            }
-            let quality = selection
+            selection.default_quality = selection
                 .default_quality
-                .get_or_insert(capability.default_quality);
-            if !capability.qualities.contains(quality) {
+                .or(capability.default_quality.clone());
+            if !capability.valid_quality(selection.default_quality.as_deref()) {
                 return Err(invalid("image_model_quality_invalid"));
             }
             Some(selection)
@@ -146,9 +154,7 @@ impl ModelConfiguration {
         let selection: ImageModelSelection =
             serde_json::from_value(value.clone()).map_err(storage)?;
         let read = self.read().await.map_err(storage)?;
-        let metadata = read
-            .catalog
-            .image_output_models()
+        let metadata = super::custom_image_models::models(&read)?
             .into_iter()
             .find(|m| m.model_ref == selection.model_ref)
             .ok_or_else(|| invalid("image_model_unknown"))?;
@@ -156,25 +162,31 @@ impl ModelConfiguration {
             .image_output
             .clone()
             .ok_or_else(|| invalid("image_model_unknown"))?;
-        if selection.credential_id == CHATGPT_IMAGE_CREDENTIAL {
+        if selection.credential_id.as_deref() == Some(CHATGPT_IMAGE_CREDENTIAL) {
             return Err(invalid("image_model_requires_api_key"));
         }
-        let record = read
-            .credentials
-            .iter()
-            .find(|key| {
-                key.id == selection.credential_id && key.provider_id == metadata.provider_id
-            })
-            .ok_or_else(|| invalid("image_model_credential_invalid"))?;
-        if !read
-            .catalog
-            .view()
-            .provider_credentials
-            .iter()
-            .any(|c| c.id == record.id && c.auth_type == ProviderAuthMethod::ApiKey)
-        {
-            return Err(invalid("image_model_requires_api_key"));
-        }
+        let credential_id = if metadata.provider_id == "custom-image" {
+            metadata.credential_id.clone()
+        } else {
+            selection.credential_id.clone()
+        };
+        let api_key = match credential_id.as_deref() {
+            Some(id) => {
+                let record = read
+                    .credentials
+                    .iter()
+                    .find(|key| key.id == id && key.provider_id == metadata.provider_id)
+                    .ok_or_else(|| invalid("image_model_credential_invalid"))?;
+                self.credential_secret(&self.data_root, record)
+                    .await
+                    .map_err(storage)?
+                    .into_zeroizing()
+            }
+            None if metadata.provider_id == "custom-image" => {
+                zeroize::Zeroizing::new(String::new())
+            }
+            None => return Err(invalid("image_model_credential_invalid")),
+        };
         let mut metadata = metadata;
         let override_url = if metadata.provider_id == "openai" {
             self.environment.openai_base_url.as_ref()
@@ -186,21 +198,21 @@ impl ModelConfiguration {
         if let Some(url) = override_url {
             metadata.api_base_url = Some(url.clone());
         }
+        if metadata.api_base_url.is_none() {
+            metadata.api_base_url =
+                crate::models::default_hosted_provider_api_base_url(&metadata.provider_id)
+                    .map(str::to_owned);
+        }
         let default_quality = selection
             .default_quality
-            .unwrap_or_else(|| image_output.default_quality.clone());
-        if !image_output.qualities.contains(&default_quality) {
+            .or_else(|| image_output.default_quality.clone());
+        if !image_output.valid_quality(default_quality.as_deref()) {
             return Err(invalid("image_model_quality_invalid"));
         }
-        let api_key = self
-            .credential_secret(&self.data_root, record)
-            .await
-            .map_err(storage)?
-            .into_zeroizing();
         Ok(Some(ResolvedImageModel {
             metadata,
             image_output,
-            credential_id: selection.credential_id,
+            credential_id,
             default_quality,
             api_key,
         }))

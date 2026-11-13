@@ -6,10 +6,10 @@ export interface ImageAsset {
   id: string; img: string; width: number; height: number; image_url: string;
   parent_id?: string | null; mime?: string;
 }
-export interface ImageSelection { model_ref: string; credential_id: string | null; default_quality: string }
+export interface ImageSelection { model_ref: string; credential_id: string | null; default_quality: string | null }
 export interface ImageModel {
   model_ref: string; display_name: string; provider_id: string; provider_label: string;
-  qualities: string[]; default_quality: string;
+  qualities: string[]; default_quality: string | null;
   credentials: Array<{ id: string; label: string; masked_value: string; selectable: boolean; auth_type: string }>;
 }
 export interface ImageSettings { selected: ImageSelection | null; models: ImageModel[] }

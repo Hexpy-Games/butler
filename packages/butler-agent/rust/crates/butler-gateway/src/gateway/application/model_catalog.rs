@@ -9,6 +9,8 @@ pub enum AppModelCatalogCommand {
     Read,
     ReadImageModel,
     SetImageModel(Value),
+    AddCustomImageModel(Value),
+    DeleteCustomImageModel(String),
     UpsertCredential(Value),
     RegisterHosted(Value),
     DeleteHosted(String),

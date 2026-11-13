@@ -3,7 +3,7 @@ use crate::models::ModelCatalog;
 pub(super) fn assert_output_catalog() {
     let catalog = ModelCatalog::new().unwrap();
     let models = catalog.image_output_models();
-    assert_eq!(models.len(), 8);
+    assert_eq!(models.len(), 11);
     for model in models {
         assert_eq!(
             model.output_modalities.as_deref(),
@@ -16,11 +16,13 @@ pub(super) fn assert_output_catalog() {
         assert!(capability.max_input_images > 0);
         let cost = capability
             .pricing
+            .as_ref()
+            .unwrap()
             .estimated_cost(
                 Some(1000),
                 Some(2000),
                 Some(3000),
-                Some(&capability.default_quality),
+                capability.default_quality.as_deref(),
                 2,
             )
             .unwrap();
@@ -33,7 +35,7 @@ pub(super) fn assert_output_catalog() {
                 .unwrap()
                 .starts_with("https://")
         );
-        capability.default_quality = "absent".into();
+        capability.default_quality = Some("absent".into());
         assert!(capability.validate().is_err());
     }
 }

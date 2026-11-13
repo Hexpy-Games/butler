@@ -984,6 +984,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       },
     },
     imageTools: {
+      custom: "커스텀", addCustom: "커스텀 모델 추가", name: "이름", endpointUrl: "엔드포인트 URL", modelId: "모델 ID", optionalApiKey: "API 키 (선택)", deleteModel: "삭제",
       model: "모델", off: "사용 안 함", defaultQuality: "기본 품질",
       quality: { low: "낮음", medium: "보통", high: "높음", xhigh: "매우 높음", max: "최고" },
       size: "크기", qualityLabel: "품질", prompt: "프롬프트", default: "기본", edit: "편집", download: "다운로드",

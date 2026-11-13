@@ -43,6 +43,27 @@ try {
   assert(key && selected?.credential_id === key.id, "saved key is the selected credential");
   assert.equal(await section.getByText("API 키", { exact: true }).filter({ visible: true }).count(), 1);
   assert.equal(server.stubModelCalls.length, 0);
-  console.log("image key save: selected and persisted");
+  await section.getByRole("combobox").first().click();
+  await page.getByRole("option", { name: "커스텀 모델 추가", exact: true }).click();
+  await page.locator("#custom-image-name").fill("Custom smoke");
+  await page.locator("#custom-image-endpoint").fill("http://127.0.0.1:9999/v1");
+  await page.locator("#custom-image-model").fill("smoke-image");
+  await page.locator("#custom-image-key").fill("custom-smoke-key");
+  const added = page.waitForResponse(r => r.url().endsWith("/settings/image-model/custom") && r.request().method() === "POST");
+  await section.getByRole("button", { name: "저장", exact: true }).click();
+  assert((await added).ok());
+  await section.getByRole("button", { name: "삭제", exact: true }).waitFor();
+  assert((await section.getByRole("combobox").first().innerText()).includes("Custom smoke"));
+  await section.getByRole("combobox").first().click();
+  await page.getByRole("group", { name: "커스텀", exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  assert((await server.api<ImageSettings>("/settings/image-model")).selected?.model_ref.startsWith("custom-image/"));
+  const deleted = page.waitForResponse(r => r.url().includes("/settings/image-model/custom/") && r.request().method() === "DELETE");
+  await section.getByRole("button", { name: "삭제", exact: true }).click();
+  assert((await deleted).ok());
+  await page.waitForFunction(() => !document.querySelector("#custom-image-name"));
+  assert.equal((await server.api<ImageSettings>("/settings/image-model")).selected, null);
+  assert.equal(server.stubModelCalls.length, 0);
+  console.log("image key and custom model: selected, persisted and deleted");
 } finally { await browser?.close(); await server.stop(); }
 process.exit(0);

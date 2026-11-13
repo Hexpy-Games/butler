@@ -11,24 +11,25 @@ pub(super) async fn route(
     let uri = request.uri().clone();
     let data = match (request.method(), uri.path()) {
         (&Method::GET, "/settings/image-model") => {
-            state
-                .application
-                .model_catalog(
-                    AppModelCatalogCommand::ReadImageModel,
-                    state.shutdown.child_token(),
-                )
-                .await?
+            catalog(&state, AppModelCatalogCommand::ReadImageModel).await?
         }
         (&Method::PUT, "/settings/image-model") => {
             let bytes = read_body_with_limit(request.into_body(), 64 * 1024).await?;
             let input = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-            state
-                .application
-                .model_catalog(
-                    AppModelCatalogCommand::SetImageModel(input),
-                    state.shutdown.child_token(),
-                )
-                .await?
+            catalog(&state, AppModelCatalogCommand::SetImageModel(input)).await?
+        }
+        (&Method::POST, "/settings/image-model/custom") => {
+            let bytes = read_body_with_limit(request.into_body(), 64 * 1024).await?;
+            let input = serde_json::from_slice(&bytes).map_err(|_| {
+                HttpError::public(400, "image_model_custom_invalid", "Invalid image model.")
+            })?;
+            catalog(&state, AppModelCatalogCommand::AddCustomImageModel(input)).await?
+        }
+        (&Method::DELETE, path) if path.starts_with("/settings/image-model/custom/") => {
+            let id = path
+                .trim_start_matches("/settings/image-model/custom/")
+                .to_owned();
+            catalog(&state, AppModelCatalogCommand::DeleteCustomImageModel(id)).await?
         }
         (&Method::GET, "/usage/images") => {
             let days = params::query(&uri)
@@ -59,6 +60,14 @@ pub(super) async fn route(
             data,
         },
     )
+}
+
+async fn catalog(state: &HttpState, command: AppModelCatalogCommand) -> Result<Value, HttpError> {
+    state
+        .application
+        .model_catalog(command, state.shutdown.child_token())
+        .await
+        .map_err(HttpError::from)
 }
 
 async fn store_mask(state: &HttpState, request: Request<Body>) -> Result<Value, HttpError> {

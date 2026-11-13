@@ -1,8 +1,10 @@
 //! Image calls use stub chat, fake billed endpoints and the real gateway.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
+mod custom;
 mod delegated;
 mod edits;
 mod flows;
+mod providers;
 mod transport;
 use super::access_tiers::{approve, delivered, paused, stub};
 use butler_e2e::e2e::{
@@ -29,7 +31,12 @@ impl Fixture {
             .stub_cassette(Cassette::load("TOOL-01")?)
             .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
             .env("OPENAI_BASE_URL", format!("{}/v1", image.base))
-            .env("BUTLER_GOOGLE_BASE_URL", &image.base);
+            .env("BUTLER_GOOGLE_BASE_URL", &image.base)
+            .env("BUTLER_XAI_BASE_URL", format!("{}/v1", image.base))
+            .env(
+                "BUTLER_QWEN_BASE_URL",
+                format!("{}/compatible-mode/v1", image.base),
+            );
         let mut s = setup.start().await?;
         s.agent.terminate().await?;
         let path = s.sandbox.data.join("app-server/butler-client.sqlite");

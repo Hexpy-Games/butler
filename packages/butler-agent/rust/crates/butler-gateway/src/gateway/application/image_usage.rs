@@ -52,7 +52,7 @@ impl AppApplication {
             .iter()
             .find(|m| m.model_ref == row.model_ref && m.provider_id == row.provider_id)
             .and_then(|m| m.image_output.as_ref())
-            .map(|c| c.pricing.clone());
+            .and_then(|c| c.pricing.clone());
         self.storage
             .execute(move |db| record(db, &row, pricing.as_ref()))
             .await
