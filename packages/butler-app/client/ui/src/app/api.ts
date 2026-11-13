@@ -387,7 +387,13 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getButlerVault"));
   }
   if (method === "POST" && url.pathname === "/setup/butler-vault/enable") {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "enableButlerVault"));
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "enableButlerVault", parseBody(options.body)));
+  }
+  if (method === "POST" && url.pathname === "/setup/butler-vault/unlock") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "unlockButlerVault", parseBody(options.body)));
+  }
+  if (method === "POST" && url.pathname === "/setup/butler-vault/password") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "changeButlerVaultPassword", parseBody(options.body)));
   }
   if (method === "POST" && url.pathname === "/setup/butler-vault/decline") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "declineButlerVault"));

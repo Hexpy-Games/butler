@@ -87,10 +87,14 @@ impl ProductVault {
         if self.unlock_failed.load(Ordering::Relaxed) {
             return Err(VaultError::Locked);
         }
-        let unlocked = SecretStore::system()
-            .map_err(VaultError::Store)
-            .and_then(|store| KeychainSlot::new(store, &self.data_root))
-            .and_then(|slot| self.vault.unlock_with_keychain(&slot));
+        let slot = match self.unlock_kind() {
+            Some("password") => return Err(VaultError::Locked),
+            Some("sealed") => KeychainSlot::sealed(&self.data_root),
+            _ => SecretStore::system()
+                .map_err(VaultError::Store)
+                .and_then(|store| KeychainSlot::new(store, &self.data_root)),
+        };
+        let unlocked = slot.and_then(|slot| self.vault.unlock_with_keychain(&slot));
         if unlocked.is_err() {
             self.unlock_failed.store(true, Ordering::Relaxed);
         }
@@ -103,15 +107,38 @@ impl ProductVault {
     /// next start copies again.
     pub fn switch(
         &self,
-        store: &SecretStore,
+        slot: &KeychainSlot,
+        unlock: &'static str,
+        store: Option<&SecretStore>,
         items: impl FnOnce() -> io::Result<Vec<LegacyItem>>,
     ) -> Result<SwitchReport, VaultError> {
-        let slot = KeychainSlot::new(store.clone(), &self.data_root)?;
         match self.vault.state()? {
-            VaultState::Absent => self.vault.create_with_keychain(&slot)?,
-            VaultState::Locked => self.vault.unlock_with_keychain(&slot)?,
+            VaultState::Absent => self.vault.create_with_keychain(slot)?,
+            VaultState::Locked => self.vault.unlock_with_keychain(slot)?,
             VaultState::Unlocked => (),
         }
+        self.copy_legacy(unlock, store, items)
+    }
+
+    pub fn switch_with_password(
+        &self,
+        password: &SecretText,
+        store: Option<&SecretStore>,
+        items: impl FnOnce() -> io::Result<Vec<LegacyItem>>,
+    ) -> Result<SwitchReport, VaultError> {
+        match self.vault.state()? {
+            VaultState::Absent => self.vault.create_with_password(password)?,
+            VaultState::Locked | VaultState::Unlocked => return Err(VaultError::AlreadyExists),
+        }
+        self.copy_legacy("password", store, items)
+    }
+
+    fn copy_legacy(
+        &self,
+        unlock: &'static str,
+        store: Option<&SecretStore>,
+        items: impl FnOnce() -> io::Result<Vec<LegacyItem>>,
+    ) -> Result<SwitchReport, VaultError> {
         if self.data_root.join(MIGRATION_MARKER).is_file() {
             return Ok(SwitchReport {
                 already: true,
@@ -125,7 +152,11 @@ impl ProductVault {
             let mut value = None;
             for source in item.sources {
                 value = match source {
-                    LegacySource::System(key) => store.get(&key).map_err(VaultError::Store)?,
+                    LegacySource::System(key) => store
+                        .map(|store| store.get(&key))
+                        .transpose()
+                        .map_err(VaultError::Store)?
+                        .flatten(),
                     LegacySource::Value(value) => Some(value),
                 };
                 if value.is_some() {
@@ -156,21 +187,62 @@ impl ProductVault {
                 return Err(VaultError::CopyMismatch);
             }
         }
-        let migrated_at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |elapsed| elapsed.as_millis());
-        let marker = serde_json::json!({"format": 1, "items": copied, "migrated_at": migrated_at});
-        secure_fs::replace_private(
-            &self.data_root.join(MIGRATION_MARKER),
-            |file| file.write_all(marker.to_string().as_bytes()),
-            std::convert::identity,
-        )
-        .map_err(VaultError::Io)?;
+        self.write_marker(unlock, copied)?;
         Ok(SwitchReport {
             already: false,
             copied,
             missing,
         })
+    }
+
+    fn write_marker(&self, unlock: &'static str, copied: usize) -> Result<(), VaultError> {
+        let migrated_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_millis());
+        let marker = serde_json::json!({"format": 1, "unlock": unlock, "items": copied, "migrated_at": migrated_at});
+        secure_fs::replace_private(
+            &self.data_root.join(MIGRATION_MARKER),
+            |file| file.write_all(marker.to_string().as_bytes()),
+            std::convert::identity,
+        )
+        .map_err(VaultError::Io)
+    }
+
+    pub fn unlock_kind(&self) -> Option<&'static str> {
+        let bytes = std::fs::read(self.data_root.join(MIGRATION_MARKER)).ok()?;
+        let marker: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+        match marker.get("unlock").and_then(serde_json::Value::as_str) {
+            None | Some("keychain") => Some("keychain"),
+            Some("sealed") => Some("sealed"),
+            Some("password") => Some("password"),
+            _ => None,
+        }
+    }
+
+    pub fn unattended(&self) -> bool {
+        matches!(self.unlock_kind(), Some("keychain" | "sealed"))
+    }
+
+    pub fn unlock_with_password(&self, password: &SecretText) -> Result<(), VaultError> {
+        self.vault.unlock_with_password(password)?;
+        self.unlock_failed.store(false, Ordering::Relaxed);
+        Ok(())
+    }
+
+    pub fn change_password(
+        &self,
+        current: &SecretText,
+        new: &SecretText,
+    ) -> Result<(), VaultError> {
+        if self.unlock_kind() != Some("password") {
+            return Err(VaultError::LastUnlockPath);
+        }
+        self.vault.unlock_with_password(current)?;
+        self.vault.set_password(new)
+    }
+
+    pub fn has_password(&self) -> bool {
+        self.vault.has_password().unwrap_or(false)
     }
 
     pub fn items_with_prefix(&self, prefix: &str) -> Result<Vec<(String, SecretText)>, VaultError> {

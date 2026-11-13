@@ -12,7 +12,11 @@ pub(super) enum Secrets {
 impl Secrets {
     pub(super) fn open(data_root: &Path) -> Result<Self> {
         let vault = shared(data_root);
-        match vault.active() {
+        match if vault.unattended() {
+            vault.active()
+        } else {
+            Ok(false)
+        } {
             Ok(true) => Ok(Self::Vault(vault)),
             Ok(false) => SecretStore::system()
                 .map(Self::System)

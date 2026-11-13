@@ -8,6 +8,7 @@ mod credentials;
 mod oauth;
 mod readiness;
 
+use butler_platform::secrets::SecretText;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -227,8 +228,24 @@ impl AppSetupPort for AppSetup {
     fn butler_vault(&self) -> ApplicationFuture<butler_gateway::gateway::ButlerVaultView> {
         butler_vault::view(self.0.data_root.clone())
     }
-    fn enable_butler_vault(&self) -> ApplicationFuture<butler_gateway::gateway::ButlerVaultView> {
-        butler_vault::enable(self.0.data_root.clone(), self.0.plugins.clone())
+    fn enable_butler_vault(
+        &self,
+        password: Option<SecretText>,
+    ) -> ApplicationFuture<butler_gateway::gateway::ButlerVaultView> {
+        butler_vault::enable(self.0.data_root.clone(), self.0.plugins.clone(), password)
+    }
+    fn unlock_butler_vault(
+        &self,
+        password: SecretText,
+    ) -> ApplicationFuture<butler_gateway::gateway::ButlerVaultView> {
+        butler_vault::unlock(self.0.data_root.clone(), password)
+    }
+    fn change_butler_vault_password(
+        &self,
+        current: SecretText,
+        new: SecretText,
+    ) -> ApplicationFuture<butler_gateway::gateway::ButlerVaultView> {
+        butler_vault::password(self.0.data_root.clone(), current, new)
     }
     fn decline_butler_vault(&self) -> ApplicationFuture<butler_gateway::gateway::ButlerVaultView> {
         butler_vault::decline(self.0.data_root.clone())

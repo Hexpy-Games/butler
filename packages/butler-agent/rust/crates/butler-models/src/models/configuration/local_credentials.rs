@@ -20,6 +20,9 @@ pub(super) async fn read(root: &Path) -> Result<HashMap<String, String>, ModelCa
 
 fn vault(root: &Path) -> Result<Option<Arc<ProductVault>>, ModelCatalogError> {
     let vault = shared(root);
+    if !vault.unattended() {
+        return Ok(None);
+    }
     match vault.active() {
         Ok(true) => Ok(Some(vault)),
         Ok(false) => Ok(None),
