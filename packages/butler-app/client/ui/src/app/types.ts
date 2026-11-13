@@ -1181,13 +1181,6 @@ export interface StewardResultView {
   child_session_id: string;
   child_turn_id: string;
   status: "success" | "blocked" | "failed" | "cancelled";
-  code:
-    | "delegation_context_incomplete"
-    | "steward_execution_failed"
-    | "steward_cancelled"
-    | null;
-  changed_artifacts: string[];
-  changed_files?: ChangedFileDetail[];
   created_at: string;
 }
 
