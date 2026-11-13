@@ -12,14 +12,17 @@ mod ready;
 use gpui::AppContext as _;
 use std::rc::Rc;
 
-use butler_ds::ui::layout::{Space, Stack};
+use butler_ds::ui::context::Ds;
+use butler_ds::ui::layout::{Basis, Cross, MinWidth, Space, Stack, WithItem as _};
 use gpui::{
-    AnyElement, App, Entity, Global, IntoElement as _, ParentElement as _, SharedString, Window,
+    AnyElement, App, Entity, Global, InteractiveElement as _, IntoElement as _, ParentElement as _,
+    SharedString, Window, div,
 };
 use serde::Deserialize;
 
 use self::editor::ImageEditor;
 use crate::ui::manage::live::ManageLive;
+use crate::ui::widgets::anchor;
 
 /// `ImageAsset` (imageApi.ts): `/message-assets/{id}/meta`.
 #[allow(dead_code, reason = "wire shape of imageApi.ts ImageAsset")]
@@ -76,6 +79,47 @@ pub(crate) fn generated_images(
         Stack::new()
             .gap(Space::Md)
             .children(cards)
+            .into_any_element(),
+    )
+}
+
+/// Electron `ImageToolStill.tsx`: the image tool's output tiles open their set in the viewer.
+pub(crate) fn image_tool_still(
+    turn: &str,
+    row: ImageToolRow,
+    session: &str,
+    cx: &mut App,
+) -> Option<AnyElement> {
+    let key = format!("image-tool-still-{turn}-{}-{}", row.call_id, row.result_id);
+    let read = outputs::read(Some(turn), &[row], "", cx);
+    if read.images.is_empty() {
+        return None;
+    }
+    let name = copy::words(Ds::get(cx).lang()).image;
+    let tiles: Vec<AnyElement> = (0..read.images.len())
+        .map(|index| {
+            card::tile(
+                &read.images,
+                index,
+                session,
+                name,
+                (&format!("{key}-{index}"), true),
+                cx,
+            )
+            .into_any_element()
+        })
+        .collect();
+    Some(
+        anchor(div().id(SharedString::from(key)), "image-tool-still")
+            .child(
+                Stack::row().cross(Cross::Start).child(
+                    Stack::new()
+                        .basis(Basis::Xs)
+                        .shrink(true)
+                        .min_width(MinWidth::Zero)
+                        .children(tiles),
+                ),
+            )
             .into_any_element(),
     )
 }

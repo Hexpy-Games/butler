@@ -28,12 +28,11 @@ pub(crate) struct SessionSections {
     pub(crate) resume: &'static str,
     /// interfaceFeedback.stewardResumeFailed
     pub(crate) resume_failed: &'static str,
-    /// guided.workerStatus: executing, waiting, complete, failed, blocked, cancelled
+    /// guided.workerStatus: executing, waiting, complete, failed, cancelled
     pub(crate) worker_executing: &'static str,
     pub(crate) worker_waiting: &'static str,
     pub(crate) worker_complete: &'static str,
     pub(crate) worker_failed: &'static str,
-    pub(crate) worker_blocked: &'static str,
     pub(crate) worker_cancelled: &'static str,
 }
 
@@ -59,7 +58,6 @@ const KO: SessionSections = SessionSections {
     worker_waiting: "대기",
     worker_complete: "완료",
     worker_failed: "실패",
-    worker_blocked: "진행이 막힘",
     worker_cancelled: "취소됨",
 };
 
@@ -85,7 +83,6 @@ const EN: SessionSections = SessionSections {
     worker_waiting: "Waiting",
     worker_complete: "Complete",
     worker_failed: "Failed",
-    worker_blocked: "Blocked",
     worker_cancelled: "Cancelled",
 };
 

@@ -48,6 +48,7 @@ fn state_label(state: &SubtaskState, copy: &SessionSections) -> &'static str {
     match state {
         SubtaskState::Paused => copy.subtask_paused,
         SubtaskState::NeedsApproval => copy.subtask_needs_approval,
+        SubtaskState::Waiting => copy.worker_waiting,
         _ => copy.working,
     }
 }
@@ -230,9 +231,11 @@ fn worker_rows(workers: &[SubtaskWorkerView], cx: &mut App) -> AnyElement {
 fn worker_row(worker: &SubtaskWorkerView, copy: &SessionSections) -> AnyElement {
     let (state, failed) = match worker.status {
         SubtaskWorkerViewStatus::Waiting => (copy.worker_waiting, false),
-        SubtaskWorkerViewStatus::Completed => (copy.worker_complete, false),
+        // A worker that ended with its final answer is done, `blocked` included.
+        SubtaskWorkerViewStatus::Completed | SubtaskWorkerViewStatus::Blocked => {
+            (copy.worker_complete, false)
+        }
         SubtaskWorkerViewStatus::Failed => (copy.worker_failed, true),
-        SubtaskWorkerViewStatus::Blocked => (copy.worker_blocked, false),
         SubtaskWorkerViewStatus::Cancelled => (copy.worker_cancelled, false),
         _ => (copy.worker_executing, false),
     };
