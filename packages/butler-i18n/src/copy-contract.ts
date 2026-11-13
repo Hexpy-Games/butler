@@ -694,6 +694,21 @@ export interface AppCopy {
 
   };
   butlerVault: {
+    passwordIntro: string;
+    masterPassword: string;
+    confirmPassword: string;
+    currentPassword: string;
+    newPassword: string;
+    passwordHint: string;
+    mismatch: string;
+    weak: string;
+    wrongPassword: string;
+    lockedPassword: string;
+    unlockHint: string;
+    unlock: string;
+    change: string;
+    cancel: string;
+    passwordChanged: string;
     name: string;
     intro: string;
     done: string;

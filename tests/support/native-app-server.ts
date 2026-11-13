@@ -291,6 +291,8 @@ async function completeAppOnboarding(url: string, token: string): Promise<void> 
     headers,
     body: JSON.stringify(onboardingCompletedPatch(onboarding, now, now)),
   });
+  // An existing user has answered the Butler Vault offer, so its dialog stays closed.
+  await fetch(`${url}setup/butler-vault/decline`, { method: "POST", headers }).catch(() => null);
 }
 
 export async function startStubModel(

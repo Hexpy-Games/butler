@@ -149,6 +149,8 @@ export type CredentialStorage =
   | "legacy_plaintext";
 
 export interface ButlerVaultView {
+  unlock?: "keychain" | "sealed" | "password";
+  has_password: boolean;
   state: "protected" | "off" | "locked";
   available: boolean;
   declined: boolean;

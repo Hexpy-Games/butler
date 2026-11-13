@@ -75,7 +75,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   // Decided once, when the view first loads: turning the vault on keeps its step.
   const offered = useRef<boolean | null>(null);
   if (offered.current === null && vault.state !== "loading") {
-    offered.current = Boolean(vault.view?.available && vault.view.state === "off" && !vault.view.declined);
+    offered.current = Boolean(vault.view?.state === "off" && !vault.view.declined);
   }
   const vaultOffered = offered.current ?? false;
   const navigation = useConsentScreen(mode, vaultOffered);

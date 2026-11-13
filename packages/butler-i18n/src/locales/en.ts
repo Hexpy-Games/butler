@@ -68,6 +68,21 @@ const onboardingFallback: BriefingFallbackCopy = {
   };
 
 const butlerVault: AppCopy["butlerVault"] = {
+  passwordIntro: "This computer has no keychain, so a master password locks the vault.",
+  masterPassword: "Master password",
+  confirmPassword: "Confirm password",
+  currentPassword: "Current password",
+  newPassword: "New password",
+  passwordHint: "At least 12 characters",
+  mismatch: "The passwords don't match",
+  weak: "Use at least 12 characters with 6 different ones",
+  wrongPassword: "That password is wrong",
+  lockedPassword: "Locked",
+  unlockHint: "Sign-ins and cards are unavailable until you open it",
+  unlock: "Open",
+  change: "Change",
+  cancel: "Cancel",
+  passwordChanged: "Password changed",
   name: "Butler Vault",
   intro: "Keeps passwords, cards and API keys together in an encrypted vault, secured with your system's keychain.",
   done: "Butler Vault is set up. Your information is kept safe from now on.",
