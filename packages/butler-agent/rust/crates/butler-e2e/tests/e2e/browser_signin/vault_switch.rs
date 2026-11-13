@@ -157,3 +157,52 @@ async fn keychain_secrets_move_into_the_vault_when_turned_on_and_open_with_one_k
     drop(cleanup);
     s.finish().await
 }
+
+#[tokio::test]
+async fn custom_model_keys_move_into_the_vault_when_turned_on() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        fill::keychain_opt_in(),
+        "system keychain check needs BUTLER_PLATFORM_SYSTEM_SECRETS=1"
+    );
+    let chat = FakeServer::local_models(ChatBehavior::default()).await?;
+    let closed = format!("http://127.0.0.1:{}", butler_e2e::e2e::agent::free_port()?);
+    let setup = Setup::new("VAULT-CUSTOM-MODEL-KEYS")?
+        .fixture(Fixture::Empty)
+        .env("BUTLER_SECRET_STORE", "")
+        .env("BUTLER_OLLAMA_BASE_URL", chat.base_url.clone())
+        .env("BUTLER_LM_STUDIO_BASE_URL", closed);
+    let data = setup.sandbox.data.clone();
+    fill::link_keychains(&setup.sandbox.home)?;
+    fixtures::onboarding_complete(&data)?;
+    fixtures::scheduler_ran_today(&data, fixtures::FIXTURE_TIME)?;
+    let mut s = setup.start().await?;
+    let config_path = data.join("butler.config.json");
+    let mut config: Value = std::fs::read(&config_path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_else(|| json!({}));
+    config["secrets"] = json!({"store": "system"});
+    std::fs::write(&config_path, serde_json::to_vec_pretty(&config)?)?;
+    crate::setup_local_models::use_local_model(&s, &chat.base_url).await?;
+    let enabled = s.gw.post("/setup/butler-vault/enable", json!({})).await?;
+    assert_eq!(enabled.status, 200, "{}", enabled.text);
+    assert_eq!(enabled.data()["state"], "protected");
+    assert_eq!(enabled.data()["counts"]["api_key"], 1);
+    std::fs::write(data.join("auth/custom-model-credentials.json"), b"{}")?;
+    s.restart().await?;
+    make_system_keychain_unavailable_for_test(&s.sandbox.home)?;
+    let (_, turn) = s.turn("general", "Which key do you use?").await?;
+    assert_eq!(turn_state(&turn), "delivered", "{turn}");
+    let seen = chat.seen();
+    let request = seen
+        .iter()
+        .rev()
+        .find(|request| request.path.ends_with("/chat/completions"))
+        .expect("the turn asked the custom model");
+    assert_eq!(
+        request.headers["authorization"].to_str().unwrap(),
+        "Bearer e2e-custom-private-placeholder"
+    );
+    s.finish().await
+}
