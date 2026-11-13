@@ -157,9 +157,15 @@ pub(crate) struct SessionRelationView {
     pub(crate) created_at: String,
 }
 
-/// TS: packages/butler-app/client/ui/src/app/types.ts:1243 StewardSessionSummaryView
+/// Child summary for both `steward_children` and `workers`, from butler-turn `project_child`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub(crate) struct StewardSessionSummaryView {
+    #[serde(default)]
+    pub(crate) action_key: Option<String>,
+    #[serde(default)]
+    pub(crate) parent_turn_id: Option<String>,
+    #[serde(default)]
+    pub(crate) source_tool_call_id: Option<String>,
     #[serde(default)]
     pub(crate) plan: Option<WorkPlan>,
     pub(crate) relation: SessionRelationView,
