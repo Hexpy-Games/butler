@@ -37,8 +37,30 @@ pub(crate) async fn wait_nothing_runs(s: &Scenario) -> Result<(), HarnessError> 
     }
 }
 
-fn model_calls(script: &crate::canon_link::stub::Script) -> usize {
-    script.requests.lock().unwrap().len()
+/// The requests Turns made, by user request. Background extraction shares the
+/// endpoint but offers no function tools, so it is not a Turn calling again.
+fn turn_calls(script: &crate::canon_link::stub::Script) -> Vec<String> {
+    let placeholders = butler_e2e::e2e::sanitize::Placeholders::default();
+    script
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|body| {
+            butler_e2e::e2e::chatgpt_wire::functions(body)
+                .next()
+                .is_some()
+        })
+        .map(|body| {
+            butler_e2e::e2e::matching::key("/codex/responses", body, &placeholders).user_request
+        })
+        .collect()
+}
+
+/// Asserts no Turn called the model after `calls`, naming any that did.
+fn assert_no_turn_calls_after(script: &crate::canon_link::stub::Script, calls: usize, what: &str) {
+    let after = turn_calls(script);
+    assert_eq!(after.len(), calls, "{what}: {:?}", after.get(calls..));
 }
 
 async fn run_plan(s: &Scenario, chat: &str, plan: &str) -> Result<(), HarnessError> {
@@ -93,12 +115,12 @@ where
     let (plan, _) = plan(&s, &script, &first).await?;
     run_plan(&s, &chat, &plan).await?;
     script.wait_held().await;
-    let calls = model_calls(&script);
+    let calls = turn_calls(&script).len();
     remove(&s, &chat, &project).await?;
     wait_nothing_runs(&s).await?;
     script.release();
     wait_nothing_runs(&s).await?;
-    assert_eq!(model_calls(&script), calls, "the model was called again");
+    assert_no_turn_calls_after(&script, calls, "the model was called again");
     assert_eq!(
         completed_works(&s)?,
         0,
@@ -165,16 +187,12 @@ async fn deleting_chat_stops_its_whole_delegated_subtree() -> Result<(), Harness
     script.delegate.store(true, Ordering::SeqCst);
     run_plan(&s, &chat, &plan).await?;
     script.wait_held().await;
-    let calls = model_calls(&script);
+    let calls = turn_calls(&script).len();
     delete_chat(&s, &chat).await?;
     wait_nothing_runs(&s).await?;
     script.release();
     wait_nothing_runs(&s).await?;
-    assert_eq!(
-        model_calls(&script),
-        calls,
-        "the Worker kept calling the model"
-    );
+    assert_no_turn_calls_after(&script, calls, "the Worker kept calling the model");
     s.finish().await?;
     server.abort();
     Ok(())
@@ -190,12 +208,12 @@ async fn archiving_chat_holds_its_delegated_step() -> Result<(), HarnessError> {
     script.delegate.store(true, Ordering::SeqCst);
     run_plan(&s, &chat, &plan).await?;
     script.wait_held().await;
-    let calls = model_calls(&script);
+    let calls = turn_calls(&script).len();
     archive_chat(&s, &chat).await?;
     wait_nothing_runs(&s).await?;
     script.release();
     wait_nothing_runs(&s).await?;
-    assert_eq!(model_calls(&script), calls, "the subtree kept running");
+    assert_no_turn_calls_after(&script, calls, "the subtree kept running");
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     wait_step_held(&db, &epics[0]).await?;
     drop(db);
@@ -248,14 +266,10 @@ async fn archive_then_delete_settles_step_waiting_for_approval() -> Result<(), H
     *script.path.lock().unwrap() = outside.to_string_lossy().into_owned();
     run_plan(&s, &chat, &plan).await?;
     wait_approval(&s, &chat).await?;
-    let calls = model_calls(&script);
+    let calls = turn_calls(&script).len();
     archive_chat(&s, &chat).await?;
     wait_nothing_runs(&s).await?;
-    assert_eq!(
-        model_calls(&script),
-        calls,
-        "archiving left the step running"
-    );
+    assert_no_turn_calls_after(&script, calls, "archiving left the step running");
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     wait_step_held(&db, &epics[0]).await?;
     let row = data(s.gw.get(&format!("/canon/epics/{}", epics[0])).await?, 200);
@@ -268,11 +282,7 @@ async fn archive_then_delete_settles_step_waiting_for_approval() -> Result<(), H
     delete_chat(&s, &chat).await?;
     script.release();
     wait_nothing_runs(&s).await?;
-    assert_eq!(
-        model_calls(&script),
-        calls,
-        "the model was called after the delete"
-    );
+    assert_no_turn_calls_after(&script, calls, "the model was called after the delete");
     let left: i64 = db.query_row("SELECT count(*) FROM canon_session_queue", [], |r| r.get(0))?;
     assert_eq!(left, 0, "the deleted chat kept queue rows");
     drop(db);

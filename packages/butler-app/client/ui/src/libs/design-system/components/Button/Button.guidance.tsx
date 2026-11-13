@@ -55,6 +55,7 @@ export const guidance: ShowcaseGuidance = {
     "It renders a real <button>; pass type=\"submit\" only inside forms.",
     "Disabled buttons use the disabled tone and never scale on press. Use aria-disabled to retain focus after an operation; activation is blocked.",
     "Focus draws the shared --focus-ring.",
+    "On phones and touch screens the button is --control-hit-target (44px) tall and its insides scale with it: the label steps up to --font-size-4 at medium weight, sides --space-lg, icon gap --space-sm, 1em icons, --radius-control-touch corners. Icon-only sizes draw an --icon-size-lg glyph.",
   ],
-  tokens: ["--control-height-md", "--radius-control", "--send-bg", "--focus-ring", "--motion-scale-press"],
+  tokens: ["--control-height-md", "--radius-control", "--send-bg", "--focus-ring", "--motion-scale-press", "--control-hit-target", "--radius-control-touch", "--font-size-4"],
 };

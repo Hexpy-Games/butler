@@ -158,7 +158,8 @@ try {
     await page.locator('[data-test-class="queued-message"]').getByText("검토 결과 정리", { exact: true }).waitFor();
     await toggle.waitFor({ state: "detached" });
     assert.equal(await toggle.count(), 0);
-    assert.equal(await page.locator('[data-slot="conversation-aside"]').count(), 0);
+    // The shell stays mounted across chats, so the pane closes with its exit fade.
+    await page.locator('[data-slot="conversation-aside"]').waitFor({ state: "detached" });
     await capture("no-task-no-asks");
     assert.equal(await toggle.locator('[data-slot="icon-button-indicator"]').count(), 0);
     console.log(JSON.stringify({ sectionTitles: titles, hiddenSections: 7, layouts: ["docked", "floating", "browser-floating"] }));

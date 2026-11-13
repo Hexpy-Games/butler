@@ -35,17 +35,6 @@ fn setup(name: &str) -> Result<Setup, HarnessError> {
     butler_platform::secrets::prepare_system_keychain_for_test(&setup.sandbox.home)?;
     Ok(setup)
 }
-fn package(home: &Path) -> Result<PathBuf, HarnessError> {
-    let root = home.join("mail-package");
-    fs::create_dir_all(root.join("bin"))?;
-    let source = butler_e2e::e2e::binary::workspace_root().join("../plugins/mail");
-    fs::copy(source.join("plugin.json"), root.join("plugin.json"))?;
-    fs::copy(
-        butler_e2e::e2e::binary::fixture_binary("e2e-mail-connector")?,
-        root.join("bin/butler-mail-connector"),
-    )?;
-    Ok(root)
-}
 async fn api(
     s: &Scenario,
     method: Method,
@@ -63,12 +52,12 @@ async fn revision(s: &Scenario) -> Result<u64, HarnessError> {
             .unwrap(),
     )
 }
-async fn install(s: &Scenario, root: &Path) -> Result<(), HarnessError> {
+async fn install(s: &Scenario) -> Result<(), HarnessError> {
     let i = api(
         s,
         Method::POST,
         "/plugins/inspect",
-        Some(json!({"path":root})),
+        Some(json!({"bundled":"mail"})),
     )
     .await?;
     assert_eq!(i.status, 200, "{i:?}");
@@ -84,6 +73,19 @@ async fn connect(s: &Scenario, fake: &FakeImap, password: &str) -> Result<String
     assert_eq!(r.status, 200, "{r:?}");
     let id = r.data()["account"].as_str().unwrap().to_owned();
     wait(|| async { Ok(fake.commands().iter().any(|l| l.ends_with(" IDLE"))) }).await?;
+    // The host reads the account's mailboxes on its own session before it
+    // reports the account connected; connection setup ends there.
+    wait(|| async {
+        let r = api(s, Method::GET, "/connectors", None).await?;
+        Ok(r.data()["connectors"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|c| c["accounts"].as_array())
+            .flatten()
+            .any(|a| a["id"] == id.as_str() && a["state"] == "connected"))
+    })
+    .await?;
     Ok(id)
 }
 async fn enabled(s: &Scenario, id: &str, enabled: bool) -> Result<(), HarnessError> {

@@ -66,7 +66,7 @@ If a `code` in `errors` is `bundled_agent_version_missing`, the app could not re
     If macOS asks whether to open an app downloaded from the internet, choose **Open**.
   </TabPanel>
   <TabPanel value="windows">
-    Windows preview builds are unsigned. If SmartScreen appears, choose **More info**, then **Run anyway**, but only when you trust the source of the build. The installer is `ButlerSetup-<version>-x64.exe` on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases).
+    Windows preview builds are unsigned. If SmartScreen appears, choose **More info**, then **Run anyway**, but only when you trust the source of the build. The installer is <DownloadLink file="windows" />.
   </TabPanel>
   <TabPanel value="linux">
     Open Butler from your app list after installing the DEB or Arch package. If it does not start, check the service logs below.
@@ -218,12 +218,12 @@ These are common errors and how to fix them.
   <TabPanel value="macos">
     <Steps>
       1. Quit Butler.
-      2. Download the latest `butler-app-<version>-darwin-arm64.dmg` from [GitHub Releases](https://github.com/Hexpy-Games/butler/releases).
+      2. Download <DownloadLink file="macos" />.
       3. Open the DMG and drag `Butler.app` into the Applications folder to replace the existing app.
     </Steps>
   </TabPanel>
   <TabPanel value="windows">
-    Quit Butler and copy `~/.butler`. Then download `ButlerSetup-<version>-x64.exe` from the newest preview on [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) and run it.
+    Quit Butler and copy `~/.butler`. Then download <DownloadLink file="windows" /> and run it.
   </TabPanel>
   <TabPanel value="linux">
     Download the latest DEB or Arch package and install it again with the commands in [Install](/en/help/getting-started/install/#download).

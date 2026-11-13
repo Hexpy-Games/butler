@@ -8,6 +8,7 @@ prompts, persona templates, templates, and bundled skills.
 - `prompts/`: core Butler, Steward, and Worker prompt material.
 - `personas/templates/{en,ko}/`: persona presets localized by
   user language.
+- `plugins/`: first-party plugins installed on demand by name.
 - `skills/`: bundled strategy skills.
 - `templates/`: generated user-facing template sources.
 - `eol.md`: bundled baseline operating guidance.

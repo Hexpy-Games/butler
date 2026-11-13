@@ -144,7 +144,15 @@ export class BrowserPointer {
       tab.view.webContents.sendInputEvent(input);
     }
   }
+  /** The overlay is presentation only: a failure hides it and never breaks the caller's publish, tab sync or event. */
   sync(tab) {
+    try { this.draw(tab); }
+    catch (error) {
+      this.hide(); this.lastFrame = null;
+      if (!this.syncWarning) { this.syncWarning = true; console.error("[browser-pointer] overlay sync failed:", error?.stack ?? String(error)); }
+    }
+  }
+  draw(tab) {
     const win = this.browser.getWindow();
     if (this.nativeDrag === tab?.id && tab?.holder === "user" && !tab.picking) return;
     if (this.captures(tab?.id) && this.attached === win && !this.browser.nativeCovers) return;
@@ -154,7 +162,7 @@ export class BrowserPointer {
     this.create();
     // The native input guard must exist even before the presenter has loaded.
     if (this.attached !== win) { this.hide(); win.contentView.addChildView(this.view); this.attached = win; }
-    const bounds = tab.view.getBounds(); this.view.setBounds(bounds); this.view.setBorderRadius(tab.bounds.radius ?? 0);
+    const bounds = tab.view.getBounds(); this.view.setBounds(bounds); this.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
     if (!this.ready) return;
     const scale = tab.bounds.scale ?? 1, point = (p) => ({ x: p.x * scale, y: p.y * scale });
     const parked = tab.holder === "user" || tab.waiting;

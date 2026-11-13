@@ -6,7 +6,13 @@ pub(super) async fn request(
     client: &butler_log::http::Client,
     r: &ImageGenRequest,
 ) -> Result<butler_log::http::RequestBuilder, ImageGenError> {
-    let base = base(r, "https://api.openai.com");
+    let base = versioned_base(
+        r.target
+            .metadata
+            .api_base_url
+            .as_deref()
+            .unwrap_or("https://api.openai.com/v1"),
+    );
     let mut body =
         json!({"model":r.target.metadata.model_id,"prompt":r.prompt,"n":1,"output_format":"png"});
     if let Some(size) = &r.size {
@@ -22,10 +28,7 @@ pub(super) async fn request(
         body["background"] = json!(background.as_str());
     }
     if r.inputs.is_empty() {
-        return Ok(client
-            .post(format!("{base}/v1/images/generations"))
-            .bearer_auth(r.target.api_key.as_str())
-            .json(&body));
+        return Ok(authorize(client.post(format!("{base}/images/generations")), r).json(&body));
     }
     let inputs = r.inputs.iter().map(|i| i.bytes.clone()).collect::<Vec<_>>();
     let inputs = tokio::task::spawn_blocking(move || {
@@ -54,9 +57,7 @@ pub(super) async fn request(
         part(&mut bytes, &boundary, "mask", Some("mask.png"), mask);
     }
     bytes.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
-    Ok(client
-        .post(format!("{base}/v1/images/edits"))
-        .bearer_auth(r.target.api_key.as_str())
+    Ok(authorize(client.post(format!("{base}/images/edits")), r)
         .header(
             "content-type",
             format!("multipart/form-data; boundary={boundary}"),
@@ -86,7 +87,10 @@ fn png(bytes: Vec<u8>) -> Result<Vec<u8>, ImageGenError> {
         .map_err(|_| ImageGenError::new("image_invalid", "Invalid input image."))?;
     Ok(out.into_inner())
 }
-pub(super) fn response(value: &Value) -> Result<ImageGenResult, ImageGenError> {
+pub(super) async fn response(
+    client: &butler_log::http::Client,
+    value: &Value,
+) -> Result<ImageGenResult, ImageGenError> {
     let u = &value["usage"];
     let usage = ImageUsage {
         input_text_tokens: u
@@ -103,11 +107,15 @@ pub(super) fn response(value: &Value) -> Result<ImageGenResult, ImageGenError> {
             .pointer("/output_tokens_details/text_tokens")
             .and_then(Value::as_u64),
     };
-    decode(
-        value
-            .pointer("/data/0/b64_json")
-            .and_then(Value::as_str)
-            .ok_or_else(|| ImageGenError::new("image_not_returned", "No image returned."))?,
-        usage,
-    )
+    openai_image(client, value, usage).await
+}
+fn authorize(
+    builder: butler_log::http::RequestBuilder,
+    r: &ImageGenRequest,
+) -> butler_log::http::RequestBuilder {
+    if r.target.api_key.is_empty() {
+        builder
+    } else {
+        builder.bearer_auth(r.target.api_key.as_str())
+    }
 }

@@ -38,7 +38,7 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     assert_eq!(child["approved_plan_total"], 2, "{child}");
     assert_eq!(child["approved_plan_completed"], 1, "{child}");
     assert!(
-        child["activity_rows"]
+        child["latest_turn"]["progress"]["safe_progress_rows"]
             .as_array()
             .unwrap()
             .iter()
@@ -73,11 +73,14 @@ async fn steward_card_and_followup_continue_the_same_assignment() -> Result<(), 
     assert_eq!(complete["session_id"], child_id);
     assert_eq!(complete["result"]["status"], "success", "{complete}");
     assert_eq!(complete["approved_plan_completed"], 2);
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let summary: String = db.query_row(
+        "SELECT summary FROM btcc_steward_results WHERE relation_id=?1 ORDER BY created_at DESC LIMIT 1",
+        [relation.as_str()],
+        |row| row.get(0),
+    )?;
     assert!(
-        complete["result"]["summary"]
-            .as_str()
-            .unwrap()
-            .contains("키센스.txt"),
+        summary.contains("키센스.txt"),
         "Delivery must preserve decomposed filename bytes: {complete}"
     );
     intent::assert_intent_carried(&script.requests.lock().unwrap());

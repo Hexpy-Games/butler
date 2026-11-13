@@ -75,7 +75,10 @@ impl Connectors {
             .cloned()
             .ok_or_else(|| error("connector_account_not_found"))?;
         let keys = self.secret_keys(&account)?;
-        Ok(super::super::secret_cleanup::system(&keys))
+        Ok(super::super::secret_cleanup::system(
+            owner.data_root(),
+            &keys,
+        ))
     }
     fn change_account(&self, action: &str, id: Option<String>, input: &Value) -> Result<Value> {
         let owner = self.owner()?;
@@ -153,7 +156,7 @@ impl Connectors {
             return Err(error("connector_fields_invalid"));
         }
         let handling = handling(input.get("handling"))?;
-        let secrets = credentials::store()?;
+        let secrets = credentials::store(self.owner()?.data_root())?;
         for field in &definition.account.secrets {
             let value = input["secrets"][&field.key]
                 .as_str()
@@ -165,7 +168,7 @@ impl Connectors {
                     &credentials::key(plugin, connector, account_id, &field.key)?,
                     value,
                 )
-                .map_err(|_| error("connector_secret_store_unavailable"))?;
+                .map_err(|()| error("connector_secret_store_unavailable"))?;
         }
         Ok(Account {
             id: account_id.into(),
@@ -204,7 +207,7 @@ impl Connectors {
             .ok_or_else(|| error("connector_config_invalid"))?;
         env.push(json!({"key":"BUTLER_CONNECTOR_ACCOUNT","source":"literal","value":account.id}));
         env.push(json!({"key":"BUTLER_CONNECTOR_FIELDS","source":"literal","value":serde_json::to_string(&account.fields).map_err(|_|error("connector_fields_invalid"))?}));
-        let secrets = credentials::store()?;
+        let secrets = credentials::store(self.owner()?.data_root())?;
         for field in &definition.account.secrets {
             let secret = secrets
                 .get(&credentials::key(
@@ -213,7 +216,7 @@ impl Connectors {
                     &account.id,
                     &field.key,
                 )?)
-                .map_err(|_| error("connector_secret_store_unavailable"))?
+                .map_err(|()| error("connector_secret_store_unavailable"))?
                 .ok_or_else(|| error("connector_secret_store_unavailable"))?;
             butler_log::register_secret(secret.expose());
             env.push(json!({"key":field.key,"source":"literal","value":secret.expose()}));

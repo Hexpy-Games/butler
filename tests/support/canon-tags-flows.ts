@@ -187,7 +187,6 @@ async function filterFlow(page: Page, server: NativeAppServerHandle, projectId: 
     await board.getByRole("combobox", { name: "태그 필터", exact: true }).click();
     const popover = page.locator('[data-slot="filtered-select-popover"]');
     await popover.getByRole("button", { name: tags[0]!.name, exact: true }).waitFor();
-    assert.equal(await popover.locator('[data-slot="filtered-select-item-actions"]').count(), 0, "The board filter has no tag management");
     for (const tag of tags.slice(0, 2)) await popover.getByRole("button", { name: tag.name, exact: true }).click();
     await page.keyboard.press("Escape");
     const expected = all.filter(epic => epic.tags.some(tag => tags.slice(0, 2).some(selected => selected.id === tag.id)));
@@ -198,6 +197,36 @@ async function filterFlow(page: Page, server: NativeAppServerHandle, projectId: 
     assert.equal(await board.locator('[data-kanban-item]').count(), all.length);
   }
   await selectBoardPlan(page, "백로그");
+}
+/** The board filter creates and deletes tags like the 과제 picker: creating leaves the filter as it is, deleting a filtered tag shows every 과제 again. */
+async function filterManageFlow(page: Page, server: NativeAppServerHandle, projectId: string) {
+  const board = page.locator(boardSelector), cards = `${boardSelector} [data-kanban-item]`;
+  const filter = board.getByRole("combobox", { name: "태그 필터", exact: true });
+  const popover = page.locator('[data-slot="filtered-select-popover"]');
+  const search = async () => { await filter.click(); await popover.getByRole("textbox", { name: "태그 검색", exact: true }).fill("필터 태그"); };
+  const all = await page.locator(cards).count();
+  assert(all > 0);
+  await search();
+  const response = await tagRequest(page, "POST", `/projects/${projectId}/canon/tags`,
+    () => popover.getByRole("button", { name: "‘필터 태그’ 만들기", exact: true }).click(), 201);
+  const tag = (await response.json()).data as CanonTag;
+  const colors = page.getByRole("dialog", { name: "색 바꾸기", exact: true });
+  await colors.getByRole("radio", { name: "보라", exact: true }).click();
+  await tagRequest(page, "PATCH", `/canon/tags/${tag.id}`, () => colors.getByRole("button", { name: "저장", exact: true }).click());
+  assert((await server.api<CanonTag[]>(`/projects/${projectId}/canon/tags`)).some(item => item.id === tag.id && item.color === "purple"));
+  assert.equal(await page.locator(cards).count(), all, "Creating a tag leaves the filter as it is");
+  await search();
+  await popover.getByRole("button", { name: "필터 태그", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(selector => document.querySelectorAll(selector).length === 0, cards);
+  await search();
+  await popover.getByRole("button", { name: "필터 태그 태그 메뉴", exact: true }).click();
+  await page.getByRole("menuitem", { name: "삭제", exact: true }).click();
+  const remove = page.getByRole("dialog", { name: "‘필터 태그’ 태그를 지울까요?", exact: true });
+  await remove.getByText("과제 0개에서 빠집니다", { exact: true }).waitFor();
+  await tagRequest(page, "DELETE", `/canon/tags/${tag.id}`, () => remove.getByRole("button", { name: "삭제", exact: true }).click());
+  assert(!(await server.api<CanonTag[]>(`/projects/${projectId}/canon/tags`)).some(item => item.id === tag.id));
+  await page.waitForFunction(([selector, count]) => document.querySelectorAll(selector).length === count, [cards, all] as const);
 }
 async function conflictFlow(page: Page, server: NativeAppServerHandle, epic: EpicDetail, tag: CanonTag) {
   for (const deleted of [false, true]) {
@@ -230,6 +259,7 @@ export async function verifyTagFlows(page: Page, server: NativeAppServerHandle, 
   await duplicateFlow(page, server, projectId);
   await deleteFlow(page, server, projectId);
   await filterFlow(page, server, projectId, tags, "프리뷰 14");
+  await filterManageFlow(page, server, projectId);
   const conflictTag = await server.api<CanonTag>(`/projects/${projectId}/canon/tags`, post({ name: "충돌 태그", color: "teal" }));
   await conflictFlow(page, server, epic, conflictTag);
 }

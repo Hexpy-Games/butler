@@ -139,6 +139,7 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
                     vec![
                         "assignee",
                         "id",
+                        "order",
                         "plan",
                         "revision",
                         "status",

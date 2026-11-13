@@ -3,6 +3,7 @@ mod correction_schema;
 mod monitoring;
 mod startup_indexes;
 mod subsession;
+mod titles;
 
 use rusqlite::{Connection, TransactionBehavior, params};
 
@@ -93,6 +94,7 @@ pub(super) fn apply_transaction(connection: &mut Connection) -> rusqlite::Result
     transaction.execute_batch("DROP TRIGGER IF EXISTS work_task_owner_stop;")?;
     transaction.execute_batch(super::schema::work_tasks::SCHEMA)?;
     transaction.execute_batch(super::schema::pending_asks::SCHEMA)?;
+    titles::retitle_placeholder_cards(&transaction)?;
     // Keep the Work rebuild last: it validates all FKs before restoring deferral,
     // so no later migration can accidentally rely on deferred constraints.
     butler_canon::work_schema::ensure(&transaction)?;

@@ -179,12 +179,12 @@ impl Plugins {
         if caps.secrets.is_empty() {
             return Ok(values);
         }
-        let secrets = storage::secret_store()?;
+        let secrets = storage::secret_store(self.data_root())?;
         for secret in &caps.secrets {
             if !values.get(&secret.key).is_some_and(Value::is_string)
                 && secrets
                     .get(&storage::key(id, &secret.key)?)
-                    .map_err(|_| error("plugin_secret_store_unavailable"))?
+                    .map_err(|()| error("plugin_secret_store_unavailable"))?
                     .is_none()
             {
                 return Err(error("plugin_secret_fields_invalid"));

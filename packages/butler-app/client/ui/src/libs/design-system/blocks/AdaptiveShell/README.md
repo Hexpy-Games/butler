@@ -20,7 +20,9 @@ exclusive open-panel state.
   workspace is FLIP-translated (and clipped) in step. Closing collapses the
   track at once; opening keeps the collapsed track until the slide ends, so
   the workspace reflows once. Reduced motion commits at once and the sidebar
-  only fades. The docked right inspector (`useInspectorTrackMotion`) keeps
+  only fades. A closing sidebar takes no clicks while it slides away (a peek
+  takes them again), as a closing inspector turns inert (`useInspectorInert`).
+  The docked right inspector (`useInspectorTrackMotion`) keeps
   its full width at the right edge and slides with a transform, while the
   right track's width animates on the same tokens (slow, emphasized): the
   workspace narrows as the panel opens and widens as it closes, in lockstep.

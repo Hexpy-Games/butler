@@ -6,7 +6,14 @@ use std::{
 };
 
 pub(super) fn expand(value: &str, root: &Path, data: &Path) -> String {
+    static AGENT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let agent = AGENT.get_or_init(|| {
+        butler_platform::process_names::current_exe()
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    });
     value
+        .replace("${BUTLER_AGENT}", agent)
         .replace("${BUTLER_PLUGIN_ROOT}", &root.to_string_lossy())
         .replace("${CLAUDE_PLUGIN_ROOT}", &root.to_string_lossy())
         .replace("${BUTLER_PLUGIN_DATA}", &data.to_string_lossy())
@@ -206,7 +213,7 @@ impl Plugins {
         if plugin.approval.capabilities.secrets.is_empty() {
             return Ok(BTreeMap::new());
         }
-        let secrets = super::storage::secret_store()?;
+        let secrets = super::storage::secret_store(self.data_root())?;
         plugin
             .approval
             .capabilities
@@ -215,7 +222,7 @@ impl Plugins {
             .map(|s| {
                 let value = secrets
                     .get(&super::storage::key(&plugin.package.name, &s.key)?)
-                    .map_err(|_| error("plugin_secret_unavailable"))?
+                    .map_err(|()| error("plugin_secret_unavailable"))?
                     .ok_or_else(|| error("plugin_secret_unavailable"))?;
                 butler_log::register_secret(value.expose());
                 Ok((s.key.clone(), value.expose().to_owned()))

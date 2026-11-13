@@ -57,6 +57,7 @@ export const guidance: ShowcaseGuidance = {
     "Underline keyboard focus is the bottom line only (--focus-ring-width, --focus-ring-color), with no outline or shadow. The focus foundation allows a shape-specific indicator: retain token thickness and at least 3:1 contrast against the adjacent surface; reserve space inside clipping containers.",
     "Values use the default text color; placeholders are muted (--placeholder).",
     "aria-invalid=\"true\" draws the danger border; describe the error next to it.",
+    "On phones and touch screens the field is 44px tall with --space-md sides and --radius-control-touch corners, matching the button beside it.",
   ],
-  tokens: ["--line-strong", "--border-hairline", "--focus-ring-width", "--focus-ring-color", "--line", "--radius-control", "--placeholder", "--focus-ring", "--color-disabled-bg", "--color-danger-border"],
+  tokens: ["--line-strong", "--border-hairline", "--focus-ring-width", "--focus-ring-color", "--line", "--radius-control", "--placeholder", "--focus-ring", "--color-disabled-bg", "--color-danger-border", "--radius-control-touch"],
 };

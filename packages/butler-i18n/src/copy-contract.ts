@@ -12,7 +12,7 @@ interface FirstRunCopy {
   welcomeTitle: string;
   welcomeLede: string;
   start: string;
-  steps: { welcome: string; consent: string; memory: string; connect: string; ready: string };
+  steps: { welcome: string; consent: string; memory: string; vault: string; connect: string; ready: string };
   consentTitle: string;
   consentItems: Array<{ body: string; caption?: string }>;
   consentProviderLink: string;
@@ -302,6 +302,7 @@ interface ConversationCopy {
     };
   };
   imageTools: {
+    custom: string; name: string; endpointUrl: string; modelId: string; optionalApiKey: string;
     model: string; off: string; defaultQuality: string;
     quality: Record<"low" | "medium" | "high" | "xhigh" | "max", string>;
     size: string; qualityLabel: string; prompt: string; default: string; edit: string; download: string;
@@ -370,7 +371,7 @@ export interface BrowserCopy {
   newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
   bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
   zoom: string; print: string; openExternal: string; settings: string; secure: string; notSecure: string; butlerOutput: string; preview: string;
-  signedIn: string; signinRequired: string; captcha: string; signinForm: string; saveSignIn: string; signinSaved: string; signinSaveFailed: string; later: string;
+  signedIn: string; signinRequired: string; captcha: string; signinForm: string; savedSignIn: string; signinFillFailed: string; saveSignIn: string; signinSaved: string; signinSaveFailed: string; later: string;
   agentUsing: string; takeOver: string; userControl: string; butlerWaits: string; giveBack: string; autoGiveBack: string;
   stopTask: string; stopped: string; waiting: string; review: string; needYou: string; keypad: string; mfa: string; passkey: string; paymentRequired: string;
   typeYourself: string; chooseFile: string; printer: string; noPrinters: string; popupBlocked: string; allow: string; popupOpened: string; showPopup: string; newTabOpened: string; downloaded: string;
@@ -691,6 +692,26 @@ export interface AppCopy {
     notificationCancelled: string;
     notificationUpdated: string;
 
+  };
+  butlerVault: {
+    name: string;
+    intro: string;
+    done: string;
+    failed: string;
+    skip: string;
+    continue: string;
+    declineTitle: string;
+    declineNote: string;
+    risks: string[];
+    declineConfirm: string;
+    protected: string;
+    off: string;
+    turnOnLabel: string;
+    turnOn: string;
+    turnedOn: string;
+    locked: string;
+    stored: string;
+    kinds: (counts: { api_key: number; signin: number; card: number; profile: number; plugin: number }) => string;
   };
   firstRun: FirstRunCopy;
   interfaceDetails: {
@@ -1367,6 +1388,7 @@ export interface AppCopy {
       personalization: string;
       memory: string;
       privacy: string;
+      connections: string;
       browser: string;
       security: string;
       system: string;
@@ -1387,6 +1409,7 @@ export interface AppCopy {
       personalization: string;
       memory: string;
       privacy: string;
+      connections: string;
       browser: string;
       security: string;
       system: string;
@@ -1407,6 +1430,7 @@ export interface AppCopy {
       personalization: string[];
       memory: string[];
       privacy: string[];
+      connections: string[];
       browser: string[];
       security: string[];
       system: string[];
@@ -1422,7 +1446,7 @@ export interface AppCopy {
       downloadMeta: string; downloadedBytes: string; cancelled: string;
     };
     updateErrors: Record<"download" | "damaged" | "incompatible" | "storage" | "apply" | "generic", string>;
-    pageSections: Record<"noticedPatterns" | "instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "imageModels" | "savedKeys" | "connectedAccounts" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites" | "hooks" | "mcpServers" | "updateVersions" | "updateChannel" | "browsing" | "systemEvents" | "archived" | "modelProvider" | "coreSkills" | "userSkills" | "projectSkills", string>;
+    pageSections: Record<"mail" | "connectorRules" | "noticedPatterns" | "instructions" | "chatMemory" | "profileMemory" | "projectMemory" | "fullReset" | "languageRegion" | "conversationInput" | "notifications" | "notificationPermission" | "appBehavior" | "searchProvider" | "searchBehavior" | "theme" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "accessibility" | "profile" | "responseStyle" | "learning" | "import" | "butlerModel" | "backupModels" | "imageModels" | "savedKeys" | "connectedAccounts" | "memoryCleanup" | "permissions" | "defaultPermission" | "workerProfiles" | "connection" | "projects" | "diagnostics" | "appInfo" | "developer" | "remoteAccess" | "allowedHosts" | "grants" | "signIns" | "browserImport" | "agentImport" | "paymentMethods" | "profiles" | "purchaseSites" | "hooks" | "mcpServers" | "updateVersions" | "updateChannel" | "browsing" | "systemEvents" | "archived" | "modelProvider" | "coreSkills" | "userSkills" | "projectSkills", string>;
     pageSectionDescriptions: Record<"noticedPatterns" | "instructions" | "chatMemory" | "memoryCleanup" | "profileMemory" | "projectMemory" | "notificationPermission" | "searchProvider" | "searchBehavior" | "sidebar" | "homeScreen" | "conversation" | "messageBox" | "learning" | "grants", string>;
     /** The Models page's Advanced section: its header and the disclosure row that reveals its settings. */
     grants: {
@@ -2022,6 +2046,7 @@ export interface AppCopy {
       };
     };
     modelManagement: {
+      imageTitle: string;
       title: string;
       addTitle: string;
       editTitle: string;
@@ -2076,7 +2101,7 @@ export interface AppCopy {
       /** Registered models that use the key; 0 reads as not in use. */
       usedBy: (count: number) => string;
       /** Where the key is kept: this computer's data folder, or the system store. */
-      storage: { local: string; keychain: string; secretService: string; credentialManager: string };
+      storage: { vault: string; local: string; keychain: string; secretService: string; credentialManager: string };
       replace: string;
       replaceLabel: (name: string) => string;
       newKey: string;
@@ -2093,6 +2118,30 @@ export interface AppCopy {
       deleteConfirmModels: (name: string, count: number) => string;
       deletedStatus: (name: string) => string;
       errors: { delete: string };
+    };
+    connections: {
+      add: string;
+      address: string;
+      password: string;
+      incoming: string;
+      outgoing: string;
+      handling: string;
+      everyTenMinutes: string;
+      immediate: string;
+      connect: string;
+      cancel: string;
+      connected: string;
+      connecting: string;
+      disconnected: string;
+      retry: string;
+      checkAccount: string;
+      remove: string;
+      connectedToast: string;
+      failed: string;
+      actionFailed: string;
+      empty: string;
+      noRules: string;
+      fillAll: string;
     };
     /** Settings → Browser → Sign-ins. Passwords are never shown. */
     signIns: {

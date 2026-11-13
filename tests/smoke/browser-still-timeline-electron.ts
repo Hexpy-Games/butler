@@ -38,11 +38,16 @@ try {
   await send("Open steps");
   const tabs = await app.call<{ tabs: { id: string; agent: boolean }[] }>("state");
   const id = tabs.tabs.find(tab => tab.agent)!.id;
+  // Holds the last step's captured still before its upload, so the gateway keeps that step pending.
+  // (A held readback would be a stalled capture, which the host fails after 5 s.)
   await app.main(`(()=>{
-    const tab=globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}),contents=tab.view.webContents;
-    const capture=contents.capturePage.bind(contents);let index=0;
-    contents.capturePage=async(...args)=>{if(tab.stillJobs?.size && ++index===2)await new Promise(done=>{globalThis.releaseTimelineStill=done});return capture(...args)};
-    globalThis.restoreTimelineCapture=()=>{contents.capturePage=capture};
+    const browser=globalThis.browserAgentSubject,execute=browser.execute;
+    browser.execute=function(frame){
+      if(!frame.deliverStill)return execute.call(this,frame);
+      const deliver=frame.deliverStill;
+      return execute.call(this,{...frame,deliverStill:async value=>{if(value.step===1&&value.still)await new Promise(done=>{globalThis.releaseTimelineStill=done});return deliver(value)}});
+    };
+    globalThis.restoreTimelineDelivery=()=>{browser.execute=execute};
   })()`);
   stub.set([describeBrowser, () => bridgeBrowser("browser_observe", { tab: id }), request => {
     const observation = latestBrowser(request, "obs");
@@ -88,7 +93,7 @@ try {
     }
     if (phase === "attached") {
       const priorSource = await app.page.expression("document.querySelector('[data-test-class=browser-step-still] img')?.src");
-      await app.main("globalThis.releaseTimelineStill?.();globalThis.restoreTimelineCapture?.()");
+      await app.main("globalThis.releaseTimelineStill?.();globalThis.restoreTimelineDelivery?.()");
       await waitBrowser(() => app.page.expression(`document.querySelectorAll('[data-test-class=browser-step-still] img').length>=${baseline ? 1 : 2}${baseline ? ` && document.querySelector('[data-test-class=browser-step-still] img')?.src!==${JSON.stringify(priorSource)}` : ''}`), "all step images attached");
       if (!baseline) assert.ok(await app.main<number>("globalThis.timelineReads") > settledReads, "arrival refreshes a settled row");
     }
@@ -106,4 +111,4 @@ try {
     }
   }
   writeFileSync(join(evidence, "timeline-states.json"), JSON.stringify(facts, null, 2));
-} finally { await app.main("globalThis.releaseTimelineStill?.();globalThis.restoreTimelineCapture?.();globalThis.stopTimelineReads?.()").catch(() => {}); await app.stop(); }
+} finally { await app.main("globalThis.releaseTimelineStill?.();globalThis.restoreTimelineDelivery?.();globalThis.stopTimelineReads?.()").catch(() => {}); await app.stop(); }

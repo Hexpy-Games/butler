@@ -200,6 +200,7 @@ fn result_text(
         delegation,
     )?;
     text.push_str(&super::assets::delivery_assets(tx, &completion.turn)?);
+    text.push_str(&super::assets::delivery_made(tx, &completion.turn)?);
     text.push_str(&delivery_artifacts(
         tx,
         &completion.turn,

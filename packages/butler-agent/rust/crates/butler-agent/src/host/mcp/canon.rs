@@ -2,7 +2,9 @@
 mod args;
 mod client;
 use super::server::McpServer;
-use butler_canon::store::{CanonActivity, CanonEpic, CanonPage, CanonSpecBody};
+use butler_canon::store::{
+    CanonActivity, CanonEpic, CanonPage, CanonPlan, CanonSpecBody, CanonTag,
+};
 use client::{Client, Error, component};
 use rmcp::{
     RoleServer,
@@ -166,7 +168,7 @@ impl McpServer {
     }
     #[tool(
         name = "canon_create_epic",
-        description = "Create a canon epic in a project backlog."
+        description = "Create a canon epic in a plan or the project backlog."
     )]
     async fn canon_create_epic(
         &self,
@@ -177,8 +179,164 @@ impl McpServer {
             if !(1..=256).contains(&args.title.chars().count()) {return Err(Error::new("invalid_arguments","제목은 1~256자로 입력해 주세요."));}
             let client=Client::local(self,&context).await?;
             decode::<CanonEpic>(client.request(reqwest::Method::POST,&format!("/projects/{}/canon/epics",component(&args.project)),
-                Some(json!({"title":args.title,"description":args.description.unwrap_or_default(),"assignee":args.assign_to_me.unwrap_or(false).then_some(butler_gateway::gateway::APP_PERSON_ID)}))).await?)
+                Some(json!({"title":args.title,"description":args.description.unwrap_or_default(),"plan_id":args.plan_id,"tags":args.tag_ids.unwrap_or_default(),"assignee":args.assign_to_me.unwrap_or(false).then_some(butler_gateway::gateway::APP_PERSON_ID)}))).await?)
         }.await)
+    }
+    #[tool(
+        name = "canon_create_plan",
+        description = "Create a canon plan in a project."
+    )]
+    async fn canon_create_plan(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(args): Parameters<args::CreatePlan>,
+    ) -> CallToolResult {
+        result(async {
+            if !(1..=256).contains(&args.title.chars().count()) {
+                return Err(Error::new("invalid_arguments", "제목은 1~256자로 입력해 주세요."));
+            }
+            let client = Client::local(self, &context).await?;
+            decode::<CanonPlan>(client.request(reqwest::Method::POST,
+                &format!("/projects/{}/canon/plans", component(&args.project)),
+                Some(json!({"title":args.title,"description":args.description.unwrap_or_default(),"due_on":args.due_on}))).await?)
+        }.await)
+    }
+    #[tool(
+        name = "canon_list_tags",
+        description = "List a project's canon tags (id, name, color)."
+    )]
+    async fn canon_list_tags(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(args): Parameters<args::Tags>,
+    ) -> CallToolResult {
+        result(
+            async {
+                let client = Client::local(self, &context).await?;
+                let tags: Vec<CanonTag> = decode(
+                    client
+                        .get(&format!(
+                            "/projects/{}/canon/tags",
+                            component(&args.project)
+                        ))
+                        .await?,
+                )?;
+                Ok(json!({"tags": tags}))
+            }
+            .await,
+        )
+    }
+    #[tool(
+        name = "canon_create_tag",
+        description = "Create a canon tag in a project. Names are unique per project, ignoring case."
+    )]
+    async fn canon_create_tag(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(args): Parameters<args::CreateTag>,
+    ) -> CallToolResult {
+        result(
+            async {
+                let client = Client::local(self, &context).await?;
+                decode::<CanonTag>(
+                    client
+                        .request(
+                            reqwest::Method::POST,
+                            &format!("/projects/{}/canon/tags", component(&args.project)),
+                            Some(json!({"name": args.name, "color": args.color})),
+                        )
+                        .await?,
+                )
+            }
+            .await,
+        )
+    }
+    #[tool(
+        name = "canon_edit_plan",
+        description = "Edit a canon plan's title, description or due date using its current revision."
+    )]
+    async fn canon_edit_plan(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(args): Parameters<args::EditPlan>,
+    ) -> CallToolResult {
+        result(
+            async {
+                let mut body = json!({"expected_revision":args.expected_revision});
+                for (key, value) in [("title", args.title), ("description", args.description)] {
+                    if let Some(value) = value {
+                        body[key] = json!(value);
+                    }
+                }
+                if let Some(due_on) = args.due_on {
+                    body["due_on"] = json!(due_on);
+                }
+                if body.as_object().is_none_or(|body| body.len() == 1) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "변경할 내용을 지정해 주세요.",
+                    ));
+                }
+                let client = Client::local(self, &context).await?;
+                decode::<CanonPlan>(
+                    client
+                        .request(
+                            reqwest::Method::PATCH,
+                            &format!("/canon/plans/{}", component(&args.plan_id)),
+                            Some(body),
+                        )
+                        .await?,
+                )
+            }
+            .await,
+        )
+    }
+    #[tool(
+        name = "canon_edit_epic",
+        description = "Edit or move a canon epic using its current revision."
+    )]
+    async fn canon_edit_epic(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(args): Parameters<args::Edit>,
+    ) -> CallToolResult {
+        result(
+            async {
+                let mut body = json!({"expected_revision":args.expected_revision});
+                for (key, value) in [
+                    ("title", args.title),
+                    ("description", args.description),
+                    ("before_id", args.before_id),
+                ] {
+                    if let Some(value) = value {
+                        body[key] = json!(value);
+                    }
+                }
+                if let Some(plan) = args.plan_id {
+                    body["plan_id"] = json!(plan);
+                }
+                if let Some(tags) = args.tag_ids {
+                    body["tags"] = json!(tags);
+                }
+                if body.as_object().is_none_or(|body| body.len() == 1) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "변경할 내용을 지정해 주세요.",
+                    ));
+                }
+                let client = Client::local(self, &context).await?;
+                decode::<CanonEpic>(
+                    client
+                        .request(
+                            reqwest::Method::PATCH,
+                            &format!("/canon/epics/{}", component(&args.epic_id)),
+                            Some(body),
+                        )
+                        .await?,
+                )
+            }
+            .await,
+        )
     }
     #[tool(
         name = "canon_propose_spec_change",

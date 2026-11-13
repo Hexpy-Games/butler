@@ -28,7 +28,8 @@ def summarize(lines, output):
 
 
 if __name__ == '__main__':
-    sys.stdout.reconfigure(errors='backslashreplace')
+    # Runner logs are UTF-8 whatever the console code page is.
+    sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
     # Native cmd redirection preserves UTF-8; also accept older PowerShell UTF-16 logs.
     path = Path(sys.argv[1])
     with path.open('rb') as source:

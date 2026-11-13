@@ -6,6 +6,7 @@ import { wireHistory } from "./history.mjs";
 import { isHistoryShortcut } from "../butler-platform/browser-shortcuts.mjs";
 import { BrowserDownloads } from "./downloads.mjs";
 import { BrowserSelection } from "./selection.mjs";
+import { SignInSuggest } from "./signin-suggest.mjs";
 import { BrowserPointer } from "./pointer.mjs";
 import { tabInUse, resetUse, closeUse } from "./usage.mjs";
 import { WebContentsView } from "electron";
@@ -51,6 +52,7 @@ class UserBrowser {
     this.live = new BrowserLiveFrames(this);
     this.getLanguage = getLanguage;
     this.pointer = new BrowserPointer(this, controlTab);
+    this.signinSuggest = new SignInSuggest(this);
     this.selection = new BrowserSelection(this);
     this.downloads = new BrowserDownloads(this, join(app.getPath("userData"), "browser-downloads"));
     this.breaker = createLossBreaker(() => this.trip());
@@ -71,6 +73,7 @@ class UserBrowser {
   publish() {
     this.live.sync();
     this.pointer.sync(this.tabs.get(this.activeId));
+    this.signinSuggest.sync(this.tabs.get(this.activeId));
     this.onState?.(this.snapshot());
     const win = this.getWindow();
     this.viewRecovery.bind(win);
@@ -126,7 +129,7 @@ class UserBrowser {
       const left = Math.round(x), top = Math.round(y);
       tab.view.setBounds({ x: left, y: top, width: Math.round(x + width) - left, height: Math.round(y + height) - top });
       tab.view.setBorderRadius(Math.max(0, Math.round(tab.bounds.radius ?? 0)));
-      emulation(tab); this.pointer.sync(tab);
+      emulation(tab); this.pointer.sync(tab); this.signinSuggest.sync(tab);
     }, () => { if (this.tabs.get(tab.id) === tab) this.sync(tab); });
   }
   async capture(tab) {
@@ -191,6 +194,7 @@ class UserBrowser {
       fail: (item, reason) => failTab(this, item, reason), recover: (item) => recoverTab(this, item),
       detach: (item) => this.detach(item), publish: () => this.publish(), nativeCover: () => this.nativeCover(),
       linkMenu: (url) => linkMenuItems(this, url, tab), language: this.getLanguage,
+      suggestKey: (input) => this.signinSuggest.key(tab, input),
       window: this.getWindow, shortcut: (input) => {
         if (tab.popupWindow && input.type === "keyDown" && (input.meta || input.control) && input.key.toLowerCase() === "w") { tab.popupWindow.close(); return true; }
         return this.shortcut(input, true);
@@ -247,7 +251,8 @@ class UserBrowser {
       if (previous?.holder === "user" && !previous.sticky) controlTab(this, previous, "agent");
       this.detach(previous); backgroundTab(this, previous ?? {});
     }
-    if (tab.waiting && !tab.dialog) controlTab(this, tab, "user");
+    // Opening a tab Butler waits on hands it to the user until they give it back; a hold they have stays as it is.
+    if (tab.waiting && !tab.dialog && tab.holder !== "user") controlTab(this, tab, "user", true);
     tab.viewed = true; clearTimeout(tab.expiry);
     this.activeId = id;
     this.materialize(tab);
@@ -265,6 +270,7 @@ class UserBrowser {
     tab.closing = true;
     this.live.unsubscribe(id);
     clearOffer(tab);
+    this.signinSuggest.close(tab);
     this.downloads.cancelTab(id);
     closeUse(this, tab);
     void resolveDialog(this, tab, { accept: false }, "tab_closed");

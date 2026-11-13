@@ -1,3 +1,4 @@
+import { ButlerVaultSection } from "./ButlerVaultSection";
 import { securityAuthoritySections } from "./SecurityAuthoritySections";
 import { useConnectedAccounts } from "./hooks/useConnectedAccounts";
 import { useSavedKeys } from "./hooks/useSavedKeys";
@@ -30,6 +31,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
   if (load === "host-only" || load === "admin-required" || load === "error") {
     return (
       <SettingsPage>
+        <ButlerVaultSection />
         <SettingsSection
           id="remote-access"
           kind="form"
@@ -47,6 +49,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
   const state = view ? "ready" : "loading";
   return (
     <SettingsPage>
+      <ButlerVaultSection />
       <SettingsSection id="remote-access" kind="form" title={sections.remoteAccess} state={state}>
         {view && (
           <SecurityRemoteAccessFields

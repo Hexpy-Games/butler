@@ -1948,7 +1948,7 @@ const browserHost = legacyDataBlocked ? null : createBrowserHost({
   stillDirectory: join(butlerDataRoot, "app", "browser-still-outbox"),
   replayDirectories: [join(butlerDataRoot, "state", "browser", "app-host", "still-outbox")],
   onStillDelivered: receipt => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("butler-browser:still-delivered", receipt); },
-  fetch: (path, init) => appServerFetch(path, init),
+  fetch: (path, init = {}) => appServerFetch(path, { ...init, headers: { ...init.headers, "x-butler-app-pid": String(process.pid) } }),
   adminCredential: () => readAppLocalAdmin({ butlerData: butlerDataRoot }),
   executeBrowser: frame => userBrowser?.execute(frame),
   resetBrowser: () => userBrowser?.resetUse(),
@@ -1991,7 +1991,9 @@ async function openMainWindow() {
       adminCredential: readAppLocalAdmin({ butlerData: butlerDataRoot }),
     });
     userBrowser.saveSignIn = (payload) => signInRoute({ route: "saveSignIn", body: { payload } });
-    userBrowser.signInStoreAvailable = async () => (await signInRoute({ route: "listSignIns" }))?.data?.available === true;
+    userBrowser.signInAccounts = async (origin) => (await signInRoute({ route: "signInAccounts", body: { payload: { origin } } }))?.data?.accounts ?? [];
+    userBrowser.signInFillToken = async (payload) => (await signInRoute({ route: "signInFillToken", body: { payload } }))?.data?.token;
+    userBrowser.signInOfferWanted = async (payload) => (await signInRoute({ route: "signInOffer", body: { payload } }))?.data?.offer === true;
     userBrowser.downloadRequest = async input => {
       const response = await appServerFetch("/internal/browser-host/downloads", { method: "POST",
         headers: { "content-type": "application/json", "x-butler-admin": await readAppLocalAdmin({ butlerData: butlerDataRoot }) }, body: JSON.stringify(input) });

@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use butler_e2e::e2e::config::{Credential, LiveProvider};
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
-use butler_e2e::e2e::scenario::{Scenario, Setup};
+use butler_e2e::e2e::scenario::{Scenario, Setup, turn_timeout};
 use butler_e2e::e2e::{HarnessError, live, nonce};
 use serde_json::{Value, json};
 
@@ -57,9 +57,80 @@ async fn answer(s: &Scenario, chat: &str, turn_id: &str) -> Result<String, Harne
         .join("\n"))
 }
 
+/// Polls `check` until it holds or the live turn timeout passes. A sidebar
+/// chat may finish the work in a delegated child after its own turn ends.
+async fn eventually<F, Fut>(what: &str, mut check: F) -> Result<(), HarnessError>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<bool, HarnessError>>,
+{
+    let deadline = std::time::Instant::now() + Duration::from_secs(turn_timeout());
+    while !check().await? {
+        if std::time::Instant::now() >= deadline {
+            return Err(butler_e2e::e2e::harness_error(format!("{what} timed out")));
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    Ok(())
+}
+
+/// Every assistant message in the chat, in order.
+async fn chat_text(s: &Scenario, chat: &str) -> Result<String, HarnessError> {
+    Ok(s.gw
+        .messages(chat)
+        .await?
+        .iter()
+        .filter(|m| m["role"] == "assistant")
+        .filter_map(|m| m["text"].as_str())
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
+/// Files named `name` under `root` whose text contains `needle`.
+fn find_named(
+    root: &std::path::Path,
+    name: &str,
+    needle: &str,
+) -> Result<Vec<std::path::PathBuf>, HarnessError> {
+    let mut found = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in fs::read_dir(&dir)? {
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            if kind.is_dir() {
+                pending.push(entry.path());
+            } else if kind.is_file()
+                && entry.file_name() == name
+                && fs::read_to_string(entry.path()).is_ok_and(|t| t.contains(needle))
+            {
+                found.push(entry.path());
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// Whether the catalog declares image input for `model` (`provider/model`).
+fn reads_images(catalog: &Value, model: &str) -> bool {
+    catalog["models"].as_array().into_iter().flatten().any(|m| {
+        m["provider_id"]
+            .as_str()
+            .zip(m["model_id"].as_str())
+            .is_some_and(|(p, id)| format!("{p}/{id}") == model)
+            && m["image_input_support"] == "supported"
+    })
+}
+
 fn done(id: &str) -> Result<(), HarnessError> {
     butler_e2e::gate!();
     live::report(id, "PASSED");
+    Ok(())
+}
+
+/// A scenario whose model or capability the configured live model lacks.
+fn not_applicable(id: &str, why: &str) -> Result<(), HarnessError> {
+    live::report(id, &format!("NOT APPLICABLE ({why})"));
     Ok(())
 }
 
@@ -137,19 +208,19 @@ async fn live_03_tool_read() -> Result<(), HarnessError> {
     };
     let n = nonce();
     fs::write(s.sandbox.data.join("notes.txt"), format!("secret: {n}\n"))?;
-    let (turn_id, turn) = live_turn(
+    let (_, turn) = live_turn(
         &s,
         "general",
         "Read notes.txt in your workspace and tell me the secret.",
     )
     .await?;
     assert_eq!(turn_state(&turn), "delivered");
-    let rows = tool_rows(&s.gw.messages("general").await?, &turn_id);
-    assert!(
-        rows.iter().any(|row| row["safe_tool_name"] == "read_file"),
-        "{rows:?}"
-    );
-    assert!(answer(&s, "general", &turn_id).await?.contains(&n));
+    // The secret exists only in the file, so it reaching the chat proves the
+    // read, whether Butler read it or a delegated Worker did.
+    eventually("secret in chat", || async {
+        Ok(chat_text(&s, "general").await?.contains(&n))
+    })
+    .await?;
     s.finish().await?;
     done("LIVE-03")
 }
@@ -170,7 +241,17 @@ async fn live_04_tool_write() -> Result<(), HarnessError> {
     )
     .await?;
     assert_eq!(turn_state(&turn), "delivered");
-    assert!(fs::read_to_string(s.sandbox.data.join("hello.txt"))?.contains(&n));
+    // A delegated Worker writes in its own task folder, so the file may sit
+    // anywhere under the data folder.
+    let data = s.sandbox.data.clone();
+    eventually("hello.txt written", || {
+        let data = data.clone();
+        let n = n.clone();
+        async move { Ok(!find_named(&data, "hello.txt", &n)?.is_empty()) }
+    })
+    .await?;
+    let found = find_named(&s.sandbox.data, "hello.txt", &n)?;
+    live::report("LIVE-04", &format!("wrote {found:?}"));
     s.finish().await?;
     done("LIVE-04")
 }
@@ -218,9 +299,19 @@ async fn live_05_cross_session_recall() -> Result<(), HarnessError> {
 #[ignore = "LIVE tier"]
 async fn live_06_image_reaches_provider() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let Some((s, _)) = start("LIVE-06").await? else {
+    let Some((s, provider)) = start("LIVE-06").await? else {
         return Ok(());
     };
+    // Butler refuses images for a model whose catalog entry does not declare
+    // image input, so the scenario applies only to such a model.
+    let catalog = s.gw.get("/model-catalog").await?;
+    if !reads_images(catalog.data(), &provider.choice.model) {
+        s.finish().await?;
+        return not_applicable(
+            "LIVE-06",
+            &format!("{} does not read images", provider.choice.model),
+        );
+    }
     use super::image_only::proof;
 
     super::outbound_http::logging(&s, "full").await?;
@@ -359,8 +450,19 @@ async fn live_10_subscription_token_refresh() -> Result<(), HarnessError> {
 #[ignore = "LIVE tier"]
 async fn live_siwc_chatgpt_plan_contract() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    if live::gate("LIVE-SIWC")?.is_none() {
+    let Some(provider) = live::gate("LIVE-SIWC")? else {
         return Ok(());
+    };
+    let wanted = butler_e2e::e2e::config::ModelChoice::parse(siwc::MODEL)
+        .ok_or_else(|| butler_e2e::e2e::harness_error("invalid LIVE-SIWC model"))?;
+    if provider.choice.model != wanted.model {
+        return not_applicable(
+            "LIVE-SIWC",
+            &format!(
+                "needs {}; live model is {}",
+                wanted.model, provider.choice.model
+            ),
+        );
     }
     siwc::check().await?;
     done("LIVE-SIWC")

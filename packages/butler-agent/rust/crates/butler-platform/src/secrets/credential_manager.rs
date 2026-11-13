@@ -6,6 +6,8 @@ use std::sync::Arc;
 
 use super::{SecretBackend, SecretError};
 
+pub(super) const CHECKS_SIGNATURE: bool = false;
+
 pub(super) const BACKEND: SecretBackend = SecretBackend::CredentialManager;
 
 pub(super) fn open() -> Result<Arc<keyring_core::CredentialStore>, SecretError> {

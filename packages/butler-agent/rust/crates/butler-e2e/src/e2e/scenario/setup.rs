@@ -1,6 +1,7 @@
 //! Allocate independent scenario state with private or shared immutable binaries.
 use super::{
-    Access, Fixture, HarnessError, LaunchMode, Placeholders, Sandbox, Setup, Source, fixtures,
+    Access, Fixture, HarnessError, LaunchMode, Placeholders, Sandbox, Scenario, Setup, Source,
+    fixtures, harness_error,
 };
 
 impl Setup {
@@ -67,6 +68,23 @@ impl Setup {
             extends: None,
             record_budget: None,
             unset_env: Vec::new(),
+        }
+    }
+
+    pub async fn start(self) -> Result<Scenario, HarnessError> {
+        // An unexpected refusal drops the sandbox unmarked, so it is kept.
+        self.start_or_refusal().await?.map_err(|(error, _)| error)
+    }
+
+    /// Starts an agent that must refuse this setup: returns its exit error with
+    /// the sandbox, which the caller marks after asserting on the error.
+    pub async fn start_refused(self) -> Result<(HarnessError, Sandbox), HarnessError> {
+        match self.start_or_refusal().await? {
+            Ok(scenario) => {
+                scenario.finish().await?;
+                Err(harness_error("startup accepted a setup it must refuse"))
+            }
+            Err(refused) => Ok(refused),
         }
     }
 }

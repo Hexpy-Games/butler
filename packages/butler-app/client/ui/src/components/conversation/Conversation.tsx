@@ -107,19 +107,19 @@ export function Conversation() {
     : undefined;
   const markTheme = resolveButlerMarkTheme(appearanceTheme);
   return (
-    <ConversationRequestProvider key={activeChatId}><CanonInlineDraftProvider><ConversationShell
+    <CanonInlineDraftProvider scope={activeChatId}><ConversationShell
       asideLabel={appCopy.sessionInfo.title}
       asideFloatOpen={infoShown}
       aside={infoShown ? layout => <SessionSections key={activeChatId} layout={layout} /> : undefined}
       railView={activeChatId}
-      rail={window.butlerBrowser && !browserOpen && !viewerShown && !infoShown ? <AgentTabRail session={activeChatId} /> : undefined}
+      rail={window.butlerBrowser && !browserOpen && !viewerShown && !infoShown ? <AgentTabRail key={activeChatId} session={activeChatId} /> : undefined}
       background={wallpaper.background}
       composerReserve={composerReserve}
       contentGutter={newChatTitleIconGutter}
       titleIconGap={newChatTitleIconGap}
       titleIconSize={newChatTitleIconSize}
     >
-      {showMessageList ? (
+      <ConversationRequestProvider key={activeChatId}>{showMessageList ? (
         <BranchProjectContext.Provider value={branchProjectId}>
           <ErrorBoundary key={activeChatId} scope="messages">
             <MessageList
@@ -151,7 +151,7 @@ export function Conversation() {
           onReserveChange={updateComposerReserve}
           large={composerLarge}
         />
-      </ErrorBoundary>
-    </ConversationShell></CanonInlineDraftProvider></ConversationRequestProvider>
+      </ErrorBoundary></ConversationRequestProvider>
+    </ConversationShell></CanonInlineDraftProvider>
   );
 }

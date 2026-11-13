@@ -150,14 +150,14 @@ fn epics_page(
     after: &str,
     limit: usize,
 ) -> Result<Vec<Value>> {
-    let sql = format!("SELECT e.project_id,e.id,e.title,e.canon_status AS status,e.revision,e.assignee,e.updated_at,p.id AS plan_id,p.title AS plan_title
+    let sql = format!("SELECT e.project_id,e.id,e.title,e.canon_status AS status,e.revision,e.assignee,e.plan_rank AS [order],e.updated_at,p.id AS plan_id,p.title AS plan_title
         FROM canon_epics e LEFT JOIN canon_plans p ON p.id=e.plan_id
         WHERE {predicate} e.id>?2 {status} ORDER BY e.id LIMIT ?3");
     rows(db, &sql, params![value, after, limit])
 }
 
 /// Each project gets a bounded index seek; archived projects are never visited.
-pub const UNSCOPED_EPICS_PAGE: &str = "SELECT e.project_id,e.id,e.title,e.canon_status AS status,e.revision,e.assignee,e.updated_at,p.id AS plan_id,p.title AS plan_title
+pub const UNSCOPED_EPICS_PAGE: &str = "SELECT e.project_id,e.id,e.title,e.canon_status AS status,e.revision,e.assignee,e.plan_rank AS [order],e.updated_at,p.id AS plan_id,p.title AS plan_title
     FROM canon_epics e LEFT JOIN canon_plans p ON p.id=e.plan_id
     WHERE e.project_id=?1 AND e.id>?2 AND (?3 OR e.canon_status!='done')
     ORDER BY e.project_id,e.id LIMIT ?4";

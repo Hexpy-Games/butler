@@ -19,7 +19,12 @@ pub(super) enum Backend {
 
 /// Tab ops go where the tab lives; new tabs follow the turn's pin, then the
 /// conversation's live tabs, then the attached App, then headless.
-pub(super) fn select(state: &HttpState, hub: &mut Inner, frame: &Value) -> Backend {
+pub(super) fn select(
+    state: &HttpState,
+    hub: &mut Inner,
+    frame: &Value,
+    app_alive: bool,
+) -> Backend {
     let Some(headless) = state
         .headless
         .as_ref()
@@ -41,7 +46,11 @@ pub(super) fn select(state: &HttpState, hub: &mut Inner, frame: &Value) -> Backe
         if !hub.tabs.contains(tab) && headless.tab(tab).is_some() {
             return Backend::Headless;
         }
-        if !hub.tabs.contains(tab) && hub.host.is_none() && hub.tabs.owned(session).is_empty() {
+        if !hub.tabs.contains(tab)
+            && hub.host.is_none()
+            && hub.tabs.owned(session).is_empty()
+            && !app_alive
+        {
             return Backend::Headless;
         }
         return Backend::App;
@@ -54,7 +63,7 @@ pub(super) fn select(state: &HttpState, hub: &mut Inner, frame: &Value) -> Backe
     }
     let backend = if !headless.owned(session).is_empty() {
         Backend::Headless
-    } else if !hub.tabs.owned(session).is_empty() || hub.host.is_some() {
+    } else if !hub.tabs.owned(session).is_empty() || hub.host.is_some() || app_alive {
         Backend::App
     } else {
         Backend::Headless
@@ -92,9 +101,11 @@ pub(super) async fn route(
     if op == "tab.open" {
         super::hidden::ensure(state, Some(&frame)).await;
     }
+    super::hidden::await_app(state, Duration::from_millis(deadline(op, &frame["args"]))).await;
+    let app_alive = super::hidden::app_alive(state);
     let backend = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-        select(state, &mut hub, &frame)
+        select(state, &mut hub, &frame, app_alive)
     };
     if backend == Backend::Headless {
         return headless_call(state.clone(), frame, op, session, count)

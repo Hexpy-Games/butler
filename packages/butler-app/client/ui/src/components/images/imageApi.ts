@@ -6,13 +6,14 @@ export interface ImageAsset {
   id: string; img: string; width: number; height: number; image_url: string;
   parent_id?: string | null; mime?: string;
 }
-export interface ImageSelection { model_ref: string; credential_id: string | null; default_quality: string }
+export interface ImageSelection { model_ref: string; credential_id: string | null; default_quality: string | null }
 export interface ImageModel {
   model_ref: string; display_name: string; provider_id: string; provider_label: string;
-  qualities: string[]; default_quality: string;
+  credential_id: string | null;
+  qualities: string[]; default_quality: string | null;
   credentials: Array<{ id: string; label: string; masked_value: string; selectable: boolean; auth_type: string }>;
 }
-export interface ImageSettings { selected: ImageSelection | null; models: ImageModel[] }
+export interface ImageSettings { selected: ImageSelection | null; models: ImageModel[]; registered: string[] }
 export const getImageSettings = () => api<ImageSettings>("/settings/image-model");
 export const getImageMeta = (id: string, signal?: AbortSignal) => api<ImageAsset>(`/message-assets/${encodeURIComponent(id)}/meta`, { signal });
 export const getImageVersions = (id: string, signal?: AbortSignal) => api<ImageAsset[]>(`/message-assets/${encodeURIComponent(id)}/versions`, { signal });

@@ -142,7 +142,7 @@ export async function executeBrowser(browser, frame) {
     return;
   }
   if (frame.op === "use.signin_revoked") { if (typeof frame.args?.site === "string") revokeSignedInSite(browser, frame.args.site, controlTab); return; }
-  if (frame.op === "use.finished") { finishUse(browser, frame.session, frame.turn_id, frame.args?.close_read_tabs === true); return; }
+  if (frame.op === "use.finished") { for (const tab of finishUse(browser, frame.session, frame.turn_id, frame.args?.close_read_tabs === true)) controlTab(browser, tab, "agent"); return; }
   const tracked = ["tab.open", "tab.observe", "tab.read", "tab.zoom", "tab.screenshot", "tab.image_collect", "tab.devtools", "tab.prepare", "tab.act", "tab.dialog", "tab.close", "signin.fill", "pay.inspect", "pay.fill", "autofill.fill"].includes(frame.op);
   // Direct main-only harness calls have no gateway id, but use the same lifetime.
   if (tracked && !frame.id) { frame = { ...frame, id: randomUUID() }; startUse(browser, frame); }
@@ -179,9 +179,9 @@ async function executeFrame(browser, frame) {
   if (tab.profile === "signed_in" && !["tab.cancel", "tab.wait", "tab.waiting"].includes(op) && !applySignedInPolicy(tab, args.policy))
     return { status: "not_dispatched", reason: args.policy?.mode === "signed_in" ? "navigation_denied" : "signed_in_unavailable" };
   if (op === "tab.cancel") { if (tab.callId === args.call_id) tab.cancelled = true; return { status: "ok" }; }
-  // A durable wait hands the tab to the user (as a sign-in step does); only their hand-back resumes it.
+  // A durable wait hands the tab to the user (as a sign-in step does) with a sticky hold; only their hand-back resumes it.
   if (op === "tab.wait") {
-    if (!tab.dialog && tab.holder !== "user") controlTab(browser, tab, "user", true);
+    if (!tab.dialog) { if (tab.holder === "user") tab.sticky = true; else controlTab(browser, tab, "user", true); }
     tab.waitingTurn = frame.turn_id; tab.waiting = Boolean(tab.dialog) || tab.holder === "user"; browser.publish();
     return { status: tab.holder === "user" ? "user_control" : "ready", tab: tab.id, epoch: tab.epoch };
   }

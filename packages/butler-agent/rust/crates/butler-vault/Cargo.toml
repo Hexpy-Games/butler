@@ -1,6 +1,6 @@
 [package]
 name = "butler-vault"
-description = "One encrypted file for every secret. Nothing in the product calls it yet."
+description = "One encrypted file for every secret. The product's secrets once a data folder switched to it."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

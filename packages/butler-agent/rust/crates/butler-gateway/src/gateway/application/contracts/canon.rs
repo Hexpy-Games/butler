@@ -31,6 +31,66 @@ pub enum AppCanonResource {
     DeleteTag,
 }
 
+pub fn delegate_capability(
+    resource: AppCanonResource,
+    input: Option<&Value>,
+) -> Option<&'static str> {
+    use AppCanonResource::{
+        Activity, Canon, Comment, CreateEpic, CreatePlan, CreateTag, EditEpic, EditPlan, Epic,
+        List, Plan, ProposeSpec, Spec, Tags,
+    };
+    match resource {
+        Canon | List | Plan | Epic | Spec | Activity | Tags => Some("canon.read"),
+        EditEpic => {
+            let keys = input?.as_object()?;
+            if keys.contains_key("status")
+                && keys
+                    .keys()
+                    .all(|key| matches!(key.as_str(), "status" | "expected_revision"))
+            {
+                Some("canon.epic.status")
+            } else if keys.keys().all(|key| {
+                matches!(
+                    key.as_str(),
+                    "expected_revision"
+                        | "title"
+                        | "description"
+                        | "plan_id"
+                        | "before_id"
+                        | "tags"
+                )
+            }) && keys.keys().any(|key| {
+                matches!(
+                    key.as_str(),
+                    "title" | "description" | "plan_id" | "before_id" | "tags"
+                )
+            }) {
+                Some("canon.epic.edit")
+            } else {
+                None
+            }
+        }
+        EditPlan => {
+            let keys = input?.as_object()?;
+            (keys.keys().all(|key| {
+                matches!(
+                    key.as_str(),
+                    "expected_revision" | "title" | "description" | "due_on"
+                )
+            }) && keys
+                .keys()
+                .any(|key| matches!(key.as_str(), "title" | "description" | "due_on")))
+            .then_some("canon.plan.edit")
+        }
+        Comment => Some("canon.epic.comment"),
+        CreateEpic => Some("canon.epic.create"),
+        CreatePlan => Some("canon.plan.create"),
+        CreateTag => Some("canon.tag.create"),
+        ProposeSpec => Some("canon.spec.propose"),
+        _ => None,
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct AppCanonRequest {
     pub resource: AppCanonResource,

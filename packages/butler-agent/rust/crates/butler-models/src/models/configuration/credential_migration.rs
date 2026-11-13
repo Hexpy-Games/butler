@@ -350,6 +350,7 @@ fn catalog_error(error: CredentialError) -> ModelCatalogError {
 
 fn credential_storage_name(storage: CredentialStorage) -> &'static str {
     match storage {
+        CredentialStorage::Vault => "vault",
         CredentialStorage::Keychain => "keychain",
         CredentialStorage::SecretService => "secret_service",
         CredentialStorage::CredentialManager => "credential_manager",

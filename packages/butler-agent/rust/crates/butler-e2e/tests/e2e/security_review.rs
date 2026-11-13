@@ -251,7 +251,7 @@ async fn appimage_failed_launch_restores_and_relaunches_previous_image() -> Resu
     );
     use butler_e2e::e2e::{agent::Launch, executable, sandbox::Sandbox};
     use std::{io::Write, process::Stdio};
-    let sandbox = Sandbox::new("REVIEW-APPIMAGE-ROLLBACK")?;
+    let mut sandbox = Sandbox::new("REVIEW-APPIMAGE-ROLLBACK")?;
     let launch = Launch::new(&sandbox)?;
     let image = sandbox.root.join("Butler.AppImage");
     let artifact = sandbox.root.join("candidate.AppImage");
@@ -305,6 +305,7 @@ async fn appimage_failed_launch_restores_and_relaunches_previous_image() -> Resu
             "activation left a temporary image"
         );
     }
+    sandbox.mark_success();
     Ok(())
 }
 

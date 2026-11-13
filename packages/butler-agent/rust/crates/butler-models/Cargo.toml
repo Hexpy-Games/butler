@@ -7,6 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+butler-vault = { path = "../butler-vault" }
 ring.workspace = true
 sse-stream = "0.2.4"
 pin-project-lite = "0.2"

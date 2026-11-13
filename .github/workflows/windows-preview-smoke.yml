@@ -350,6 +350,23 @@ jobs:
           cargo build --locked --features butler-agent/e2e-fixtures,butler-platform/test-support --target x86_64-pc-windows-msvc -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox
           $ErrorActionPreference = 'Stop'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Butler Vault switch-over and Credential Manager on Windows
+        # Hosted, disposable VM only: the contract test writes and deletes one
+        # throwaway Credential Manager item. Never the self-hosted owner PC.
+        env:
+          BUTLER_E2E_TIER: stub
+          BUTLER_PLATFORM_SYSTEM_SECRETS: '1'
+        run: |
+          $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          $env:BUTLER_DATA = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
+          New-Item -ItemType Directory $env:HOME,$env:BUTLER_DATA | Out-Null
+          $env:BUTLER_E2E_BIN = "$env:CARGO_TARGET_DIR/x86_64-pc-windows-msvc/debug/butler-agent.exe"
+          $ErrorActionPreference = 'Continue'
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-platform --test contract secrets
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --target x86_64-pc-windows-msvc -p butler-e2e --test e2e browser_signin::vault_switch:: -- --test-threads=1
+          $ErrorActionPreference = 'Stop'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Export compiled verification harnesses
         run: ../../../deploy/windows-e2e-artifacts.ps1 -Mode Export
       - uses: actions/upload-artifact@v4
@@ -445,8 +462,10 @@ jobs:
             if ($code -ne 0) { throw "Composer permission smoke failed: $code" }
           } finally { Remove-Item $profile -Recurse -Force }
       - name: Pure Task Scheduler XML from compiled harness
+        if: ${{ !cancelled() }}
         run: ../../../deploy/windows-e2e-artifacts.ps1 -Mode Run -Tests windows_startup_xml
       - name: Installed release stub chat
+        if: ${{ !cancelled() }}
         run: ../../../deploy/windows-installed-e2e.ps1 -Tests installed_preview
       - name: Installed release native command regression matrix
         if: ${{ !cancelled() }}

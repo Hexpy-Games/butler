@@ -1,5 +1,5 @@
 import { CanonTagChooser } from "./CanonTagChooser.tsx";
-import { useCanonTags } from "./useCanonTags.ts";
+import { useCanonTagEditor } from "./useCanonTagEditor.tsx";
 import { CanonBoardPlanSelect } from "./CanonBoardPlanSelect.tsx";
 import { useCanonPlanSelection } from "./useCanonPlanSelection.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -22,7 +22,8 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
   const selectionDetail = useCanonSelection(projectId);
   const [create, setCreate] = useState<{ planId: string | null } | null>(null);
   const [planForm, setPlanForm] = useState<{ plan?: CanonPlan } | null>(null);
-  const { tags } = useCanonTags(projectId);
+  // The filter manages tags like the 과제 picker; creating a tag leaves the filter as it is.
+  const tagEditor = useCanonTagEditor(projectId), tags = tagEditor.tags;
   const [filterState, setFilterState] = useState<{ projectId: string; ids: string[] }>({ projectId, ids: [] });
   // A deleted tag drops out of the filter instead of leaving the board empty.
   const tagFilter = (filterState.projectId === projectId ? filterState.ids : []).filter(id => tags.some(tag => tag.id === id));
@@ -47,7 +48,7 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
     {disconnected && <Typo.Caption role="status">{appCopy.projectSignpost.disconnected}</Typo.Caption>}
     <Stack align="row" cross="center" justify="between" gap="sm" wrap>
     <Stack align="row" cross="center" gap="sm" minWidth="0" shrink wrap><Box minWidth="0" shrink><CanonBoardPlanSelect plans={canon?.plans ?? []} value={selection.id} bottomInset={bottomInset} onChange={id => { selection.select(id); selectionDetail.select(null); }} /></Box>
-      <Box minWidth="0" shrink><CanonTagChooser filter tags={tags} value={tagFilter} onChange={setTagFilter} /></Box></Stack>
+      <Box minWidth="0" shrink><CanonTagChooser filter tags={tags} value={tagFilter} onChange={setTagFilter} disabled={tagEditor.busy} onCreate={tagEditor.onCreate} onManage={tagEditor.onManage} /></Box></Stack>
     <ButtonContainer size="sm" justify="end">
       <Button size="sm" variant="outline" onClick={() => setCreate({ planId: selection.id })}><Plus size="sm" />{copy.newEpic}</Button>
       <Button size="sm" onClick={() => setPlanForm({})}><Plus size="sm" />{copy.newPlan}</Button>
@@ -72,6 +73,7 @@ export function CanonBoard({ projectId, bottomInset }: { projectId: string; bott
     {create && <EpicCreateDialog projectId={projectId} plans={canon?.plans ?? []} defaultPlanId={create.planId} onClose={() => setCreate(null)}
       onRefresh={board.refresh} onCreated={epic => { selectionDetail.select(epic.id); }} />}
     {planForm && <PlanFormDialog projectId={projectId} plan={planForm.plan} onCreated={id => { selection.select(id); selectionDetail.select(null); }} onClose={() => setPlanForm(null)} onRefresh={board.refresh} />}
+    {tagEditor.dialog}
   </Stack>;
 }
 function planCaption(plan: { works: Array<{ canon_status: string }>; due_on: string | null }, locale: string): string {

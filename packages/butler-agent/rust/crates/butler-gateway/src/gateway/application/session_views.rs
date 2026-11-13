@@ -67,7 +67,7 @@ impl AppApplication {
         view.insert("pending_questions".into(), pending);
         view.insert("authority_requests".into(), approvals);
         view.insert("question_answers".into(), answers);
-        canon_proposals::insert(self, &messages.messages, &mut view).await?;
+        canon_proposals::insert(self, &messages.messages, latest, &mut view).await?;
         insert_turns(
             &mut view,
             active_turn_view.as_ref(),
@@ -190,11 +190,11 @@ impl AppApplication {
             .projection(session_id.clone(), Some(page))
             .await?;
         let mut projection = projection;
-        steward_children::project_progress(
+        projection["activity_rows"] = json!(steward_children::project_progress(
             projection
                 .as_object_mut()
                 .ok_or(GatewayApplicationError::internal())?,
-        );
+        ));
         require_relation(&projection)?;
         let messages = projection
             .get("messages")
@@ -276,11 +276,11 @@ impl AppApplication {
             )
             .await?;
         let mut projection = projection;
-        steward_children::project_progress(
+        projection["activity_rows"] = json!(steward_children::project_progress(
             projection
                 .as_object_mut()
                 .ok_or(GatewayApplicationError::internal())?,
-        );
+        ));
         require_relation(&projection)?;
         let mut latest = projection
             .get("latest_turn")
