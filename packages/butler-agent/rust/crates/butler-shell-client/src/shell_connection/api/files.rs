@@ -102,6 +102,36 @@ impl ShellClient {
         self.json(Method::PUT, &["settings", "image-model"], &[], Some(body))
             .await
     }
+    /// POST /settings/image-model/custom
+    pub async fn add_custom_image_model(&self, body: &Value) -> Result<Value, Error> {
+        self.json(
+            Method::POST,
+            &["settings", "image-model", "custom"],
+            &[],
+            Some(body),
+        )
+        .await
+    }
+    /// POST /settings/image-model/registered
+    pub async fn register_image_model(&self, body: &Value) -> Result<Value, Error> {
+        self.json(
+            Method::POST,
+            &["settings", "image-model", "registered"],
+            &[],
+            Some(body),
+        )
+        .await
+    }
+    /// DELETE /settings/image-model/registered/{model_ref}; json encodes each path segment.
+    pub async fn unregister_image_model(&self, model_ref: &str) -> Result<Value, Error> {
+        self.json(
+            Method::DELETE,
+            &["settings", "image-model", "registered", model_ref],
+            &[],
+            None,
+        )
+        .await
+    }
     /// POST /message-files (multipart: file, session_id).
     pub async fn upload_message_file(
         &self,

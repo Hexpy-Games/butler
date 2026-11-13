@@ -13,8 +13,8 @@ use butler_ds::ui::toast::{Toast, ToastId};
 use butler_ds::ui::tooltip::Tooltip;
 use butler_shell_client::Error;
 use gpui::{
-    AnyElement, AppContext as _, Context, Entity, EventEmitter, IntoElement as _,
-    ParentElement as _, SharedString,
+    AnyElement, App, AppContext as _, Context, Entity, EventEmitter, IntoElement as _,
+    ParentElement as _, SharedString, Window,
 };
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -219,23 +219,11 @@ impl HostedForm {
 
     /// `HostedModelSelectFields`: the model.
     fn model_select(&self, derived: &Derived, cx: &mut Context<Self>) -> AnyElement {
-        let lang = Ds::get(cx).lang();
-        let options = derived
-            .models
-            .iter()
-            .map(|model| SettingsOption::new(model.model_ref.clone(), model.option_label(lang)))
-            .collect();
-        SettingsSelect::new(
-            "hosted-model-select",
-            words(lang).model,
-            self.model_ref.clone(),
-        )
-        .options(options)
-        .on_change(cx.listener(|this, value: &SharedString, _, cx| {
+        let on_change = cx.listener(|this, value: &SharedString, _, cx| {
             this.model_ref = value.to_string();
             cx.notify();
-        }))
-        .into_any_element()
+        });
+        model_select(&derived.models, &self.model_ref, true, cx, on_change).into_any_element()
     }
 
     /// `HostedModelSaveButton`: busy shows "Saving"; a disabled ChatGPT add says why.
@@ -316,4 +304,33 @@ impl HostedForm {
             },
         );
     }
+}
+
+/// `HostedModelSelectFields.tsx`: image models opt out of the token caption.
+pub(super) fn model_select(
+    models: &[&CatalogModel],
+    model_ref: &str,
+    show_token_caption: bool,
+    cx: &App,
+    on_change: impl Fn(&SharedString, &mut Window, &mut App) + 'static,
+) -> SettingsSelect {
+    let lang = Ds::get(cx).lang();
+    let options = models
+        .iter()
+        .map(|model| {
+            let label = if show_token_caption {
+                model.option_label(lang)
+            } else {
+                model.name().to_owned()
+            };
+            SettingsOption::new(model.model_ref.clone(), label)
+        })
+        .collect();
+    SettingsSelect::new(
+        "hosted-model-select",
+        words(lang).model,
+        model_ref.to_owned(),
+    )
+    .options(options)
+    .on_change(on_change)
 }

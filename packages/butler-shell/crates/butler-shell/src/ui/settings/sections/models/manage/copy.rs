@@ -3,6 +3,25 @@
 use butler_ds::ui::context::Lang;
 
 pub(super) struct Words {
+    /// conversation.imageTools.custom
+    pub(super) custom: &'static str,
+    /// conversation.imageTools.name
+    pub(super) name: &'static str,
+    /// conversation.imageTools.endpointUrl
+    pub(super) endpoint_url: &'static str,
+    /// conversation.imageTools.modelId
+    pub(super) model_id: &'static str,
+    /// conversation.imageTools.optionalApiKey
+    pub(super) optional_api_key: &'static str,
+    /// settings.modelManagement.imageTitle
+    pub(super) image_title: &'static str,
+    /// settings.modelManagement.manageButton
+    pub(super) manage_button: &'static str,
+    /// common.cancel
+    pub(super) cancel: &'static str,
+    /// common.save
+    pub(super) save: &'static str,
+
     /// settings.modelManagement.addTitle
     pub(super) add_title: &'static str,
     /// settings.modelManagement.editTitle
@@ -103,8 +122,6 @@ pub(super) struct Words {
     pub(super) discovery_offline: &'static str,
     /// conversation.imageTools.off
     pub(super) image_off: &'static str,
-    /// conversation.imageTools.apiKeyOnly
-    pub(super) api_key_only: &'static str,
     /// conversation.imageTools.defaultQuality
     pub(super) default_quality: &'static str,
     /// conversation.imageTools.quality: low, medium, high, xhigh, max
@@ -112,6 +129,16 @@ pub(super) struct Words {
 }
 
 static KO: Words = Words {
+    custom: "커스텀",
+    name: "이름",
+    endpoint_url: "엔드포인트 URL",
+    model_id: "모델 ID",
+    optional_api_key: "API 키 (선택)",
+    image_title: "이미지 모델 관리",
+    manage_button: "모델 관리",
+    cancel: "취소",
+    save: "저장",
+
     add_title: "모델 추가",
     edit_title: "모델 편집",
     add_button: "모델 추가",
@@ -162,7 +189,6 @@ static KO: Words = Words {
     account_mismatch: "다른 ChatGPT 계정입니다",
     discovery_offline: "ChatGPT에 연결할 수 없습니다. 연결을 확인하세요.",
     image_off: "사용 안 함",
-    api_key_only: "API 키 전용",
     default_quality: "기본 품질",
     qualities: [
         ("low", "낮음"),
@@ -174,6 +200,16 @@ static KO: Words = Words {
 };
 
 static EN: Words = Words {
+    custom: "Custom",
+    name: "Name",
+    endpoint_url: "Endpoint URL",
+    model_id: "Model ID",
+    optional_api_key: "API key (optional)",
+    image_title: "Image model management",
+    manage_button: "Manage models",
+    cancel: "Cancel",
+    save: "Save",
+
     add_title: "Add model",
     edit_title: "Edit model",
     add_button: "Add model",
@@ -224,7 +260,6 @@ static EN: Words = Words {
     account_mismatch: "That's a different ChatGPT account",
     discovery_offline: "Can't reach ChatGPT. Check your connection.",
     image_off: "Off",
-    api_key_only: "API key only",
     default_quality: "Default quality",
     qualities: [
         ("low", "Low"),
