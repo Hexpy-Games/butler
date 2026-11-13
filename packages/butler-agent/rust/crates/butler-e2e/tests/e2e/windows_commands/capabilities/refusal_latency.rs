@@ -11,14 +11,14 @@ mod startup;
 const SAMPLES: usize = 20;
 
 #[tokio::test]
-async fn ask_always_lexical_refusals_keep_complete_results_without_shell_work()
+async fn perf_ask_always_lexical_refusals_keep_complete_results_without_shell_work()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     sample(Access::AskAlways).await
 }
 
 #[tokio::test]
-async fn full_access_lexical_refusals_keep_complete_results_without_shell_work()
+async fn perf_full_access_lexical_refusals_keep_complete_results_without_shell_work()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     sample(Access::FullAccess).await

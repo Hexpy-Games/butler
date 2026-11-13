@@ -20,6 +20,7 @@ pub(super) mod startup_trace;
 pub(super) mod storage_bootstrap;
 pub(super) mod stores;
 mod subsession_queue;
+pub(crate) mod vault_switch;
 mod web_owner;
 mod work_ports;
 use super::{AcceptedPlanProducer, CognitionPrompt, ConversationObserver};

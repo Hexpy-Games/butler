@@ -38,14 +38,11 @@ impl Client {
         let info = context
             .peer
             .peer_info()
+            .map(|info| info.client_info.clone())
+            .or_else(|| context.meta.client_info())
             .ok_or_else(|| Error::new("permission", "Client identity required."))?;
-        let name = sanitize(&info.client_info.name);
-        let title = sanitize(
-            info.client_info
-                .title
-                .as_deref()
-                .unwrap_or(&info.client_info.name),
-        );
+        let name = sanitize(&info.name);
+        let title = sanitize(info.title.as_deref().unwrap_or(&info.name));
         if name.is_empty() || title.is_empty() {
             return Err(Error::new("permission", "Client identity required."));
         }

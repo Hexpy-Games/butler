@@ -66,9 +66,9 @@ impl ProjectWorkRepository {
         hints: Option<Vec<String>>,
     ) -> Result<Relation, BtccError> {
         for _attempt in 0..3 {
-            let before = self.source_version(hints.clone()).await?;
+            let before = self.session_version(session_id, hints.as_deref()).await?;
             let (works, skipped) = self.session_works(session_id, hints.as_deref()).await?;
-            let after = self.source_version(hints.clone()).await?;
+            let after = self.session_version(session_id, hints.as_deref()).await?;
             if before != after {
                 continue;
             }
@@ -295,16 +295,26 @@ impl ProjectWorkRepository {
             .map_err(snapshot::read_error)
     }
 
-    pub(super) async fn source_version(
-        &self,
-        ids: Option<Vec<String>>,
-    ) -> Result<String, BtccError> {
+    pub(super) async fn source_version(&self, ids: Vec<String>) -> Result<String, BtccError> {
         let scope = self.scope.clone();
         self.shared
             .ledger
-            .run(move |_, _| source_version(&scope, ids.as_deref()))
+            .run(move |_, _| source_version(&scope, &ids))
             .await
             .map_err(snapshot::read_error)
+    }
+
+    /// The fingerprint of `ids`, or of every Work of `session_id` when none are given.
+    async fn session_version(
+        &self,
+        session_id: &str,
+        ids: Option<&[String]>,
+    ) -> Result<String, BtccError> {
+        let ids = match ids {
+            Some(ids) => ids.to_vec(),
+            None => self.ids_for_session(session_id).await?,
+        };
+        self.source_version(ids).await
     }
 }
 
@@ -424,23 +434,15 @@ fn locate_ids(
 
 fn source_version(
     scope: &ResolvedProjectWorkScope,
-    ids: Option<&[String]>,
+    ids: &[String],
 ) -> Result<String, ProjectLedgerReadError> {
     let _phase =
         crate::project_ledger::publication::timing::Phase::new("publication_source_version");
-    // Claimed mutations advance the fence; selected raw records also detect
-    // direct edits without enumerating unrelated Work directories.
-    let generation =
-        super::super::publication::read_generation(&scope.ledger_root).map_err(|source| {
-            ProjectLedgerReadError::record_show("project_ledger_generation_io_error")
-                .with_source(source)
-        })?;
-    let version = committed::publication_version(&scope.ledger_root)?;
-    let selected = work_paths(scope, ids)?;
+    let selected = work_paths(scope, Some(ids))?;
     let records = selected.iter().map(|path| {
         Ok(serde_json::json!({"path": path, "raw": committed::read_selected(&scope.ledger_root, path)?}))
     }).collect::<Result<Vec<_>, ProjectLedgerReadError>>()?;
-    let source = serde_json::json!([generation, version, records]);
+    let source = serde_json::json!(records);
     let bytes = butler_core::json::stringify(&source).map_err(|source| {
         ProjectLedgerReadError::record_show("project_work_managed_record_invalid")
             .with_source(source)

@@ -29,7 +29,7 @@ function SaveSignInBand({ tab }: { tab: BrowserTab }) {
     actions={<ButtonContainer size="xs">
       <Button size="xs" variant="outline" onClick={() => void browserCall("dismiss-signin", { id: tab.id })}>{copy.later}</Button>
       <Button size="xs" onClick={() => void saveSignIn(tab)}>{copy.saveSignIn}</Button>
-      {tab.holder === "user" && <Button size="xs" variant="outline"
+      {browserHoldable(tab) && tab.holder === "user" && <Button size="xs" variant="outline"
         onClick={() => void browserCall("control", { id: tab.id, holder: "agent", sticky: false })}>{copy.giveBack}</Button>}
     </ButtonContainer>} />;
 }

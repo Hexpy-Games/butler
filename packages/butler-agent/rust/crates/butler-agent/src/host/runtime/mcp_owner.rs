@@ -63,10 +63,13 @@ pub(super) async fn open(
         paths.data_root.clone(),
         std::env::args_os().any(|s| s == "--safe-mode"),
         writes.clone(),
+        paths.resource_root.join("plugins"),
     )
     .await
     .map_err(super::boundary::setup)?;
     startup.phase("plugins_registry");
+    super::vault_switch::open_at_start(&paths.data_root).await;
+    startup.phase("vault_open");
     let mcp = for_runtime(paths, env, writes.clone(), plugins.clone());
     Ok((plugins, mcp))
 }

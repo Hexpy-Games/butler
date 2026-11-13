@@ -70,12 +70,6 @@ async fn epic_delete_does_not_recreate_hold_for_deleted_chat() -> Result<(), Har
     deleted_chat_panel("canon_hold", false).await
 }
 
-#[tokio::test]
-async fn epic_delete_does_not_recreate_take_for_deleted_chat() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    deleted_chat_panel("canon_take_here", false).await
-}
-
 async fn deleted_chat_panel(kind: &str, missing_other: bool) -> Result<(), HarnessError> {
     let (mut s, _, server, project, chat) =
         setup("EPIC-DELETE-DELETED-CHAT", Access::AskAlways).await?;

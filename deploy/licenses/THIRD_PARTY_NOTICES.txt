@@ -2503,6 +2503,20 @@ Copyright (c) 2018-2024 The RustCrypto Project Developers
 Copyright (c) 2018 Artyom Pavlov
 
 =====
+age-core 0.12.0
+MIT OR Apache-2.0
+License: https://github.com/str4d/rage/blob/f6383f367e9aa514a3b5fbce7feede08a425d647/LICENSE-MIT
+License: https://github.com/str4d/rage/blob/f6383f367e9aa514a3b5fbce7feede08a425d647/LICENSE-APACHE
+Copyright (c) 2019 Jack Grigg
+
+=====
+age 0.12.1
+MIT OR Apache-2.0
+License: https://github.com/str4d/rage/blob/7a854c9c8c02dab2ebea19e02e6693a5730a8b2a/LICENSE-MIT
+License: https://github.com/str4d/rage/blob/7a854c9c8c02dab2ebea19e02e6693a5730a8b2a/LICENSE-APACHE
+Copyright (c) 2019 Jack Grigg
+
+=====
 ahash 0.8.12
 MIT OR Apache-2.0
 License: https://github.com/tkaitchuck/ahash/blob/9aa1ba20f05ed582eda04ea625d5658c92195a57/LICENSE-APACHE
@@ -2872,6 +2886,12 @@ Copyright 2020 Yoshua Wuyts
 Copyright (c) 2020 Yoshua Wuyts
 
 =====
+async-channel 1.9.0
+Apache-2.0 OR MIT
+License: https://github.com/smol-rs/async-channel/blob/3d6cd8f6be74a9608f7e695c6f47990b1693d772/LICENSE-APACHE
+License: https://github.com/smol-rs/async-channel/blob/3d6cd8f6be74a9608f7e695c6f47990b1693d772/LICENSE-MIT
+
+=====
 async-channel 2.5.0
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/async-channel/blob/35a63c456aaa1906015f5a825e7e35505a749afa/LICENSE-APACHE
@@ -2889,6 +2909,13 @@ async-executor 1.14.0
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/async-executor/blob/543403e773ec4941a6272e29c2ff649bfd01a4f8/LICENSE-APACHE
 License: https://github.com/smol-rs/async-executor/blob/543403e773ec4941a6272e29c2ff649bfd01a4f8/LICENSE-MIT
+
+=====
+async-imap 0.11.3
+MIT OR Apache-2.0
+License: https://github.com/async-email/async-imap/blob/24b5aa39d4865f10e6665267f56113bab94ee257/LICENSE-APACHE
+License: https://github.com/async-email/async-imap/blob/24b5aa39d4865f10e6665267f56113bab94ee257/LICENSE-MIT
+Copyright (c) 2019
 
 =====
 async-io 2.6.0
@@ -2972,6 +2999,14 @@ License: https://github.com/tokio-rs/axum/blob/c59208c86fded335cd85e388030ad5934
 Copyright (c) 2019 axum Contributors
 
 =====
+base16ct 0.2.0
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/formats/blob/1987929403b544d4632121aacff3d28aa09a0771/base16ct/LICENSE-APACHE
+License: https://github.com/RustCrypto/formats/blob/1987929403b544d4632121aacff3d28aa09a0771/base16ct/LICENSE-MIT
+Copyright (c) 2014 Steve "Sc00bz" Thomas (steve at tobtu dot com)
+Copyright (c) 2022 The RustCrypto Project Developers
+
+=====
 base64 0.13.1
 MIT OR Apache-2.0
 License: https://github.com/marshallpierce/rust-base64/blob/efb0b531c79581978aec5c410d0ae866b21f8aac/LICENSE-APACHE
@@ -2991,6 +3026,18 @@ MIT OR Apache-2.0
 License: https://github.com/marshallpierce/rust-base64/blob/069bf7067b949f5c0a92b6ceb82492920502f2c2/LICENSE-APACHE
 License: https://github.com/marshallpierce/rust-base64/blob/069bf7067b949f5c0a92b6ceb82492920502f2c2/LICENSE-MIT
 Copyright (c) 2025 Alice Maz, Marshall Pierce
+
+=====
+basic-toml 0.1.10
+MIT OR Apache-2.0
+License: https://github.com/dtolnay/basic-toml/blob/c54c9bd3ade1a609f5da6e31cf6ee72d6c7552fb/LICENSE-APACHE
+License: https://github.com/dtolnay/basic-toml/blob/c54c9bd3ade1a609f5da6e31cf6ee72d6c7552fb/LICENSE-MIT
+
+=====
+bech32 0.11.1
+MIT
+License: https://crates.io/crates/bech32/0.11.1
+Copyright (c) 2017 Clark Moody
 
 =====
 bigdecimal 0.4.10
@@ -3224,6 +3271,20 @@ License: https://github.com/RustCrypto/stream-ciphers/blob/6b236b758a0279f64d777
 Copyright (c) 2019-2026 The RustCrypto Project Developers
 
 =====
+chacha20 0.9.1
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/stream-ciphers/blob/b5d39c45c45df97335f4b6effb853cde97810de1/chacha20/LICENSE-APACHE
+License: https://github.com/RustCrypto/stream-ciphers/blob/b5d39c45c45df97335f4b6effb853cde97810de1/chacha20/LICENSE-MIT
+Copyright (c) 2019-2023 The RustCrypto Project Developers
+
+=====
+chacha20poly1305 0.10.1
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/AEADs/blob/746f70a5f6c7371e723dc64e04f2115b56f24d27/chacha20poly1305/LICENSE-APACHE
+License: https://github.com/RustCrypto/AEADs/blob/746f70a5f6c7371e723dc64e04f2115b56f24d27/chacha20poly1305/LICENSE-MIT
+Copyright (c) 2019 The RustCrypto Project Developers
+
+=====
 chrono-tz 0.10.4
 MIT OR Apache-2.0
 License: https://github.com/chronotope/chrono-tz/blob/e15d1f308a1ac2fdf3f1bf19c325dc202d418081/chrono-tz/LICENSE
@@ -3311,11 +3372,24 @@ License: https://github.com/RustCrypto/formats/blob/385ef739bcec785472c7c971c57f
 Copyright (c) 2020-2026 The RustCrypto Project Developers
 
 =====
+const-oid 0.9.6
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/formats/blob/4432bcc0b2b721865740517e609e166e01726ccc/const-oid/LICENSE-APACHE
+License: https://github.com/RustCrypto/formats/blob/4432bcc0b2b721865740517e609e166e01726ccc/const-oid/LICENSE-MIT
+Copyright (c) 2020-2022 The RustCrypto Project Developers
+
+=====
 constant_time_eq 0.4.2
 CC0-1.0 OR MIT-0 OR Apache-2.0
 License: https://github.com/cesarb/constant_time_eq/blob/86f38ed9ad4d0500c5472bb8cb2ddc4fe5ac7143/LICENSE-APACHE
 License: https://github.com/cesarb/constant_time_eq/blob/86f38ed9ad4d0500c5472bb8cb2ddc4fe5ac7143/LICENSE-CC0
 License: https://github.com/cesarb/constant_time_eq/blob/86f38ed9ad4d0500c5472bb8cb2ddc4fe5ac7143/LICENSE-MIT0
+
+=====
+cookie-factory 0.3.3
+MIT
+License: https://crates.io/crates/cookie-factory/0.3.3
+Copyright (c) <year> <copyright holders>
 
 =====
 core-foundation-sys 0.8.7
@@ -3425,6 +3499,13 @@ License: https://github.com/eira-fransham/crunchy/blob/ba7b86cea6ba89ccfc72ccb24
 Copyright 2017-2023 Eira Fransham.
 
 =====
+crypto-bigint 0.5.5
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/crypto-bigint/blob/98f29002552211cbd37dd09d354d1514d84158c4/LICENSE-APACHE
+License: https://github.com/RustCrypto/crypto-bigint/blob/98f29002552211cbd37dd09d354d1514d84158c4/LICENSE-MIT
+Copyright (c) 2021 The RustCrypto Project Developers
+
+=====
 crypto-common 0.1.7
 MIT OR Apache-2.0
 License: https://github.com/RustCrypto/traits/blob/66a997ccf5776ce873da5a48e2885a9908e940f6/crypto-common/LICENSE-APACHE
@@ -3478,6 +3559,20 @@ Apache-2.0 OR MIT
 License: https://github.com/RustCrypto/utils/blob/53f7fc3fa806e6d4e9650675e7b97d3621cff340/ctutils/LICENSE-APACHE
 License: https://github.com/RustCrypto/utils/blob/53f7fc3fa806e6d4e9650675e7b97d3621cff340/ctutils/LICENSE-MIT
 Copyright (c) 2025-2026 The RustCrypto Project Developers
+
+=====
+curve25519-dalek-derive 0.1.1
+MIT OR Apache-2.0
+License: https://github.com/dalek-cryptography/curve25519-dalek/blob/72761ca6b4772af985f969db53faf7accbad9b36/curve25519-dalek-derive/LICENSE-APACHE
+License: https://github.com/dalek-cryptography/curve25519-dalek/blob/72761ca6b4772af985f969db53faf7accbad9b36/curve25519-dalek-derive/LICENSE-MIT
+
+=====
+curve25519-dalek 4.1.3
+BSD-3-Clause
+License: https://github.com/dalek-cryptography/curve25519-dalek/blob/5312a0311ec40df95be953eacfa8a11b9a34bc54/curve25519-dalek/LICENSE
+Copyright (c) 2016-2021 isis agora lovecruft. All rights reserved.
+Copyright (c) 2016-2021 Henry de Valence. All rights reserved.
+Copyright (c) 2012 The Go Authors. All rights reserved.
 
 =====
 darling 0.20.11
@@ -3757,6 +3852,13 @@ License: https://crates.io/crates/deepsize_derive/0.1.2
 Copyright (c) 2019 Aeledfyr
 
 =====
+der 0.7.10
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/formats/blob/b7a60edfc7cb0d657e6b3d7b4f7fb0ceeed2e4e6/der/LICENSE-APACHE
+License: https://github.com/RustCrypto/formats/blob/b7a60edfc7cb0d657e6b3d7b4f7fb0ceeed2e4e6/der/LICENSE-MIT
+Copyright (c) 2020-2023 The RustCrypto Project Developers
+
+=====
 deranged 0.5.8
 MIT OR Apache-2.0
 License: https://github.com/jhpratt/deranged/blob/7d0c671e8c806b96d582af197df3c620e09cb33b/deranged/LICENSE-Apache
@@ -3910,6 +4012,13 @@ License: https://github.com/rayon-rs/either/blob/ce6f07fc3d56d6a56ecfc32256d2c33
 Copyright (c) 2015
 
 =====
+elliptic-curve 0.13.8
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/traits/blob/5ddf0f52f07f65f319ffd423c52e696406924d90/elliptic-curve/LICENSE-APACHE
+License: https://github.com/RustCrypto/traits/blob/5ddf0f52f07f65f319ffd423c52e696406924d90/elliptic-curve/LICENSE-MIT
+Copyright (c) 2020-2022 RustCrypto Developers
+
+=====
 encoding_rs 0.8.41
 (Apache-2.0 OR MIT) AND BSD-3-Clause
 License: https://github.com/hsivonen/encoding_rs/blob/08604915e6f1a3b7a93398aec0bb92d7a6611a6a/COPYRIGHT
@@ -3973,6 +4082,12 @@ License: https://github.com/smol-rs/event-listener-strategy/blob/f533c437e8a6561
 License: https://github.com/smol-rs/event-listener-strategy/blob/f533c437e8a6561e9b625c3ee036a8ea7d19375c/LICENSE-MIT
 
 =====
+event-listener 2.5.3
+Apache-2.0 OR MIT
+License: https://github.com/smol-rs/event-listener/blob/a38fcb4955911d4e54a2f6a79630544f9edf29a3/LICENSE-APACHE
+License: https://github.com/smol-rs/event-listener/blob/a38fcb4955911d4e54a2f6a79630544f9edf29a3/LICENSE-MIT
+
+=====
 event-listener 5.4.2
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/event-listener/blob/77004ac77dcef7884bf71a99c276a50f83a7fa4e/LICENSE-APACHE
@@ -4023,6 +4138,13 @@ License: https://github.com/image-rs/fdeflate/blob/c365c7e6ffa81feb2e1fb762eed72
 License: https://github.com/image-rs/fdeflate/blob/c365c7e6ffa81feb2e1fb762eed7299f05c9b0ca/LICENSE-MIT
 
 =====
+ff 0.13.1
+MIT OR Apache-2.0
+License: https://github.com/zkcrypto/ff/blob/851b0f61bbcf9a5b61027307144d8bd1f9b756ba/LICENSE-APACHE
+License: https://github.com/zkcrypto/ff/blob/851b0f61bbcf9a5b61027307144d8bd1f9b756ba/LICENSE-MIT
+Copyright (c) 2017 Sean Bowe
+
+=====
 filedescriptor 0.8.3
 MIT
 License: https://github.com/wezterm/wezterm/blob/4c619a44dc07ad611d28a8af0416f25462d6b3ad/filedescriptor/LICENSE.md
@@ -4034,6 +4156,12 @@ MIT OR Apache-2.0
 License: https://github.com/alexcrichton/filetime/blob/ab5ee65b5e4fe2de19dbe7d4fe08bc31e945949c/LICENSE-APACHE
 License: https://github.com/alexcrichton/filetime/blob/ab5ee65b5e4fe2de19dbe7d4fe08bc31e945949c/LICENSE-MIT
 Copyright (c) 2014 Alex Crichton
+
+=====
+find-crate 0.6.3
+Apache-2.0 OR MIT
+License: https://github.com/taiki-e/find-crate/blob/16f57b46d92b7458a4cab2f83e4e2284435673a2/LICENSE-APACHE
+License: https://github.com/taiki-e/find-crate/blob/16f57b46d92b7458a4cab2f83e4e2284435673a2/LICENSE-MIT
 
 =====
 fixedbitset 0.5.7
@@ -4064,6 +4192,34 @@ float-cmp 0.9.0
 MIT
 License: https://github.com/mikedilger/float-cmp/blob/4844daf1ad47c9363a96ba8954d3c30d6a008591/LICENSE
 Copyright (c) 2014-2020 Optimal Computing (NZ) Ltd
+
+=====
+fluent-bundle 0.16.0
+Apache-2.0 OR MIT
+License: https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/fluent-bundle/LICENSE-APACHE
+License: https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/fluent-bundle/LICENSE-MIT
+Copyright 2017 Mozilla
+
+=====
+fluent-langneg 0.13.1
+Apache-2.0 OR MIT
+License: https://github.com/projectfluent/fluent-langneg-rs/blob/7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-MIT
+License: https://github.com/projectfluent/fluent-langneg-rs/blob/7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-APACHE
+Copyright Mozilla Foundation
+
+=====
+fluent-syntax 0.12.0
+Apache-2.0 OR MIT
+License: https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/fluent-syntax/LICENSE-APACHE
+License: https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/fluent-syntax/LICENSE-MIT
+Copyright 2017 Mozilla
+
+=====
+fluent 0.17.0
+Apache-2.0 OR MIT
+License: https://github.com/projectfluent/fluent-rs/blob/83e9a4517a1de90b7715b0446a2e13acf67af4e1/fluent/LICENSE-APACHE
+License: https://github.com/projectfluent/fluent-rs/blob/83e9a4517a1de90b7715b0446a2e13acf67af4e1/fluent/LICENSE-MIT
+Copyright 2017 Mozilla
 
 =====
 fnv 1.0.7
@@ -4219,6 +4375,11 @@ License: https://github.com/fizyk20/generic-array/blob/1397d2bb40c406901b7827161
 Copyright (c) 2015 Bartłomiej Kamiński
 
 =====
+gethostname 1.1.0
+Apache-2.0
+License: https://crates.io/crates/gethostname/1.1.0
+
+=====
 getrandom 0.2.17
 MIT OR Apache-2.0
 License: https://github.com/rust-random/getrandom/blob/b625985d852600a3eeb68556811e59e7c9a6a098/LICENSE-APACHE
@@ -4270,6 +4431,13 @@ License: https://github.com/rust-lang/glob/blob/cfa2a58f2e44373573f657ec25b3621e
 Copyright (c) 2014 The Rust Project Developers
 
 =====
+group 0.13.0
+MIT OR Apache-2.0
+License: https://github.com/zkcrypto/group/blob/090a7ec2f2fca9b4ddec05e39123e57dc0d73a2f/COPYRIGHT
+License: https://github.com/zkcrypto/group/blob/090a7ec2f2fca9b4ddec05e39123e57dc0d73a2f/LICENSE-APACHE
+License: https://github.com/zkcrypto/group/blob/090a7ec2f2fca9b4ddec05e39123e57dc0d73a2f/LICENSE-MIT
+
+=====
 h2 0.4.19
 MIT
 License: https://github.com/hyperium/h2/blob/d57d1b852fec9dda6d42d3454502006d52104da8/LICENSE
@@ -4317,6 +4485,12 @@ License: https://github.com/rust-lang/hashbrown/blob/c62a63a61b7caf2de8f9ecb7b06
 Copyright (c) 2016 Amanieu d'Antras
 
 =====
+hashify 0.2.9
+Apache-2.0 OR MIT
+License: https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/Apache-2.0.txt
+License: https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/MIT.txt
+
+=====
 hashlink 0.10.0
 MIT OR Apache-2.0
 License: https://github.com/kyren/hashlink/blob/11088cb368f93e1f61fc42e696b4ab89158ae70d/LICENSE-APACHE
@@ -4340,6 +4514,14 @@ Copyright (c) 2013-2014 The Rust Project Developers.
 Copyright (c) 2015-2020 The rust-hex Developers
 
 =====
+hkdf 0.12.4
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/KDFs/blob/1ac16e8b9d4ee7a67613c9396c6cc1327652eaba/hkdf/LICENSE-APACHE
+License: https://github.com/RustCrypto/KDFs/blob/1ac16e8b9d4ee7a67613c9396c6cc1327652eaba/hkdf/LICENSE-MIT
+Copyright (c) 2015-2018 Vlad Filippov
+Copyright (c) 2018-2021 RustCrypto Developers
+
+=====
 hkdf 0.13.0
 MIT OR Apache-2.0
 License: https://github.com/RustCrypto/KDFs/blob/bfb3b209abeeaa02277935b167e06bac320b2773/hkdf/LICENSE-APACHE
@@ -4360,6 +4542,14 @@ MIT OR Apache-2.0
 License: https://github.com/RustCrypto/MACs/blob/0236c8eb50098dd7f277a71ab89caaeb1e7314df/hmac/LICENSE-APACHE
 License: https://github.com/RustCrypto/MACs/blob/0236c8eb50098dd7f277a71ab89caaeb1e7314df/hmac/LICENSE-MIT
 Copyright (c) 2017 Artyom Pavlov
+
+=====
+hpke 0.12.0
+MIT OR Apache-2.0
+License: https://github.com/rozbb/rust-hpke/blob/8c676674def8dc0c9c063f1c8a3bb965434c93f8/LICENSE-APACHE
+License: https://github.com/rozbb/rust-hpke/blob/8c676674def8dc0c9c063f1c8a3bb965434c93f8/LICENSE-MIT
+Copyright 2020 Michael Rosenberg
+Copyright (c) 2020 Michael Rosenberg
 
 =====
 html-escape 0.2.15
@@ -4423,6 +4613,13 @@ Copyright (c) 2016 Pyfisch
 Copyright © 2005-2013 Rich Felker
 
 =====
+hybrid-array 0.2.3
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/hybrid-array/blob/ca1240b002d8f72e3f8ca1eb03b98b3bcb6205e1/LICENSE-APACHE
+License: https://github.com/RustCrypto/hybrid-array/blob/ca1240b002d8f72e3f8ca1eb03b98b3bcb6205e1/LICENSE-MIT
+Copyright (c) 2022-2024 The RustCrypto Project Developers
+
+=====
 hybrid-array 0.4.15
 MIT OR Apache-2.0
 License: https://github.com/RustCrypto/hybrid-array/blob/09310c55b75e2cd408951c7e2e86dba16c63fc68/LICENSE-APACHE
@@ -4455,6 +4652,34 @@ hyperloglogplus 0.4.1
 MIT
 License: https://github.com/tabac/hyperloglog.rs/blob/27b24016e4b6aa71c7a41182b85e28ea6b2052b3/LICENSE
 Copyright (c) 2020 Anastasios Bakogiannis
+
+=====
+i18n-config 0.4.8
+MIT
+License: https://github.com/kellpossible/cargo-i18n/blob/ae88dc79fda061e1bbf96b8d8e8fe8d23f1e52e7/i18n-config/LICENSE.txt
+Copyright 2020 Luke Frisken
+© 2020 Luke Frisken
+
+=====
+i18n-embed-fl 0.10.1
+MIT
+License: https://github.com/kellpossible/cargo-i18n/blob/d3c20dcc62967abd3d7a8129d6c8a957e2c14173/i18n-embed-fl/LICENSE.txt
+Copyright 2020 Luke Frisken
+© 2020 Luke Frisken
+
+=====
+i18n-embed-impl 0.8.4
+MIT
+License: https://github.com/kellpossible/cargo-i18n/blob/b3a58bc1321c6c3c8e032026e79228385639d0c4/i18n-embed/i18n-embed-impl/LICENSE.txt
+Copyright 2020 Luke Frisken
+© 2020 Luke Frisken
+
+=====
+i18n-embed 0.16.0
+MIT
+License: https://github.com/kellpossible/cargo-i18n/blob/7c53d3e58c98a265a2535fb6cf71f58d40e42ae4/i18n-embed/LICENSE.txt
+Copyright 2020 Luke Frisken
+© 2020 Luke Frisken
 
 =====
 iana-time-zone 0.1.65
@@ -4660,6 +4885,13 @@ License: https://github.com/Roughsketch/imagesize/blob/7dba0c7ae38ee1b90024f82cb
 Copyright (c) 2017 Maiddog
 
 =====
+imap-proto 0.16.7
+MIT OR Apache-2.0
+License: https://github.com/djc/tokio-imap/blob/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-MIT
+License: https://github.com/djc/tokio-imap/blob/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-APACHE
+Copyright (c) 2017 Dirkjan Ochtman
+
+=====
 indexmap 2.14.2
 Apache-2.0 OR MIT
 License: https://github.com/indexmap-rs/indexmap/blob/41a870887c4c77adf665886e63df08f406bfe37a/LICENSE-APACHE
@@ -4693,6 +4925,25 @@ License: https://github.com/RustCrypto/utils/blob/2d5eac49c253b19a064b33fc1f9ca7
 License: https://github.com/RustCrypto/utils/blob/2d5eac49c253b19a064b33fc1f9ca7839732cb30/inout/LICENSE-MIT
 Copyright (c) 2022-2025 The RustCrypto Project Developers
 Copyright (c) 2022 Artyom Pavlov
+
+=====
+intl-memoizer 0.5.3
+Apache-2.0 OR MIT
+License: https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/intl-memoizer/LICENSE-APACHE
+License: https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/intl-memoizer/LICENSE-MIT
+Copyright 2017 Mozilla
+
+=====
+intl_pluralrules 7.0.2
+Apache-2.0 OR MIT
+License: https://github.com/zbraniecki/pluralrules/blob/d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-APACHE
+License: https://github.com/zbraniecki/pluralrules/blob/d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-MIT
+
+=====
+io_tee 0.1.1
+MIT
+License: https://crates.io/crates/io_tee/0.1.1
+Copyright (c) <year> <copyright holders>
 
 =====
 ipnet 2.12.2
@@ -4757,6 +5008,21 @@ Copyright (c) 2015 Andrew Gallant
 jsonb 0.5.6
 Apache-2.0
 License: https://github.com/databendlabs/jsonb/blob/c39b24aaea2c27edf6e596874d3a08b8e7806e60/LICENSE
+
+=====
+keccak 0.1.6
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/sponges/blob/a8936d9662ca92fd177d289580066ceabb937b0c/keccak/LICENSE-APACHE
+License: https://github.com/RustCrypto/sponges/blob/a8936d9662ca92fd177d289580066ceabb937b0c/keccak/LICENSE-MIT
+Copyright (c) 2018-2022 RustCrypto Developers
+
+=====
+kem 0.3.0-pre.0
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/traits/blob/f785c95b9e08db25eba1240dabd3ec28efe32da1/kem/LICENSE-APACHE
+License: https://github.com/RustCrypto/traits/blob/f785c95b9e08db25eba1240dabd3ec28efe32da1/kem/LICENSE-MIT
+Copyright 2021 RustCrypto Developers
+Copyright (c) 2021-2022 RustCrypto Developers
 
 =====
 keyboard-types 0.7.0
@@ -5099,6 +5365,27 @@ Copyright 2019 Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>
 Copyright (c) 2019 Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>
 
 =====
+mail-builder 0.5.0
+Apache-2.0 OR MIT
+License: https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/Apache-2.0.txt
+License: https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/MIT.txt
+
+=====
+mail-parser 0.11.8
+Apache-2.0 OR MIT
+License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/legacy/COPYING
+License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/malformed/COPYING
+License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/thirdparty/COPYING
+These test files are Copyright © 2010 Hunny Software, Inc.
+These test files are Copyright (c) 2003-2018 Dovecot authors, licensed under MIT.
+
+=====
+mail-send 0.6.2
+Apache-2.0 OR MIT
+License: https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/Apache-2.0.txt
+License: https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/MIT.txt
+
+=====
 markup5ever 0.39.0
 MIT OR Apache-2.0
 License: https://github.com/servo/html5ever/blob/ce64836c685025a5fef0860fa2e9c80b2683e8d0/markup5ever/LICENSE-APACHE
@@ -5221,6 +5508,13 @@ mio 1.2.3
 MIT
 License: https://github.com/tokio-rs/mio/blob/da425f909dd6b86d887da9eaefcb158099b5b165/LICENSE
 Copyright (c) 2014 Carl Lerche and other MIO contributors
+
+=====
+ml-kem 0.2.3
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/KEMs/blob/72dbb072b7efb790d6a158053ad352c364e51f6a/ml-kem/LICENSE-APACHE
+License: https://github.com/RustCrypto/KEMs/blob/72dbb072b7efb790d6a158053ad352c364e51f6a/ml-kem/LICENSE-MIT
+Copyright (c) 2024 RustCrypto Developers
 
 =====
 mock_instant 0.6.1
@@ -5629,6 +5923,13 @@ License: https://github.com/OxideAV/oxideav-heif/blob/3f9908c2f7f8225265eb710ad8
 Copyright (c) 2026 Karpelès Lab Inc.
 
 =====
+p256 0.13.2
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/elliptic-curves/blob/d21a81b2be325db940502fdc5299094b79b450f0/p256/LICENSE-APACHE
+License: https://github.com/RustCrypto/elliptic-curves/blob/d21a81b2be325db940502fdc5299094b79b450f0/p256/LICENSE-MIT
+Copyright (c) 2020-2023 RustCrypto Developers
+
+=====
 parking 2.2.1
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/parking/blob/0ece32dbfd6cd1bc1510ede6ed56acb772edf83f/LICENSE-APACHE
@@ -5763,6 +6064,14 @@ License: https://github.com/taiki-e/pin-project/blob/c3b6b85f7e1674602c0ed693da9
 License: https://github.com/taiki-e/pin-project/blob/c3b6b85f7e1674602c0ed693da985b33b2452c3c/LICENSE-MIT
 
 =====
+pin-utils 0.1.1
+MIT OR Apache-2.0
+License: https://github.com/rust-lang/pin-utils/blob/1c8fe452e3f22c76cb35f4b171f090bf2d50890c/LICENSE-APACHE
+License: https://github.com/rust-lang/pin-utils/blob/1c8fe452e3f22c76cb35f4b171f090bf2d50890c/LICENSE-MIT
+Copyright 2018 The pin-utils authors
+Copyright (c) 2018 The pin-utils authors
+
+=====
 piper 0.2.5
 MIT OR Apache-2.0
 License: https://github.com/smol-rs/piper/blob/85da45edce0b9262f00d79d9a42ce0372fb42a10/LICENSE-APACHE
@@ -5787,6 +6096,13 @@ polling 3.11.0
 Apache-2.0 OR MIT
 License: https://github.com/smol-rs/polling/blob/f404d08dd2a61994ac5fe0ed663bc051bd94c053/LICENSE-APACHE
 License: https://github.com/smol-rs/polling/blob/f404d08dd2a61994ac5fe0ed663bc051bd94c053/LICENSE-MIT
+
+=====
+poly1305 0.8.0
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/universal-hashes/blob/47a72962e8898fc70ab79d4ab40949efe61a23d2/poly1305/LICENSE-APACHE
+License: https://github.com/RustCrypto/universal-hashes/blob/47a72962e8898fc70ab79d4ab40949efe61a23d2/poly1305/LICENSE-MIT
+Copyright (c) 2015-2019 RustCrypto Developers
 
 =====
 polycool 0.4.0
@@ -5844,10 +6160,35 @@ License: https://github.com/dtolnay/prettyplease/blob/49e50897b580a5b7591ead6ef7
 License: https://github.com/dtolnay/prettyplease/blob/49e50897b580a5b7591ead6ef73f3fe09e76d896/LICENSE-MIT
 
 =====
+primeorder 0.13.6
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/elliptic-curves/blob/bfd7b49d080270e4b260a6707a603c6ce8c66116/primeorder/LICENSE-APACHE
+License: https://github.com/RustCrypto/elliptic-curves/blob/bfd7b49d080270e4b260a6707a603c6ce8c66116/primeorder/LICENSE-MIT
+Copyright (c) 2020-2023 RustCrypto Developers
+
+=====
 proc-macro-crate 3.5.0
 MIT OR Apache-2.0
 License: https://github.com/bkchr/proc-macro-crate/blob/8f3d8b04539f732e09c07907f138a248c8d0eed9/LICENSE-APACHE
 License: https://github.com/bkchr/proc-macro-crate/blob/8f3d8b04539f732e09c07907f138a248c8d0eed9/LICENSE-MIT
+
+=====
+proc-macro-error-attr3 3.1.1
+MIT OR Apache-2.0
+License: https://github.com/gamma0987/proc-macro-error3/blob/0f0e21bb2a46509c923b87459c6be314bc0cabb5/proc-macro-error-attr/LICENSE-APACHE
+License: https://github.com/gamma0987/proc-macro-error3/blob/0f0e21bb2a46509c923b87459c6be314bc0cabb5/proc-macro-error-attr/LICENSE-MIT
+Copyright 2019-2020 CreepySkeleton <creepy-skeleton@yandex.ru>
+Copyright (c) 2019-2020 CreepySkeleton
+
+=====
+proc-macro-error3 3.1.1
+MIT OR Apache-2.0
+License: https://github.com/gamma0987/proc-macro-error3/blob/0f0e21bb2a46509c923b87459c6be314bc0cabb5/LICENSE-APACHE
+License: https://github.com/gamma0987/proc-macro-error3/blob/0f0e21bb2a46509c923b87459c6be314bc0cabb5/LICENSE-MIT
+Copyright 2019-2020 CreepySkeleton <creepy-skeleton@yandex.ru>
+Copyright 2026 gamma0987 <gamma0987@posteo.de>
+Copyright (c) 2019-2020 CreepySkeleton
+Copyright (c) 2026 gamma0987 <gamma0987@posteo.de>
 
 =====
 proc-macro2 1.0.107
@@ -6214,6 +6555,24 @@ License: https://github.com/rusqlite/rusqlite/blob/44e0ef965580b94d59c5dfe8874b5
 Copyright (c) 2014 The rusqlite developers
 
 =====
+rust-embed-impl 8.13.0
+MIT
+License: https://crates.io/crates/rust-embed-impl/8.13.0
+Copyright (c) 2018 pyros2097
+
+=====
+rust-embed-utils 8.13.0
+MIT
+License: https://crates.io/crates/rust-embed-utils/8.13.0
+Copyright (c) 2018 pyros2097
+
+=====
+rust-embed 8.13.0
+MIT
+License: https://crates.io/crates/rust-embed/8.13.0
+Copyright (c) 2018 pyros2097
+
+=====
 rust-stemmers 1.2.0
 MIT OR BSD-3-Clause
 License: https://github.com/CurrySoftware/rust-stemmers/blob/af9d47d5a52eaaded088145bc7432403dbf706a5/LICENSE
@@ -6268,6 +6627,13 @@ Copyright 2023 Dirkjan Ochtman
 Copyright (c) 2023 Dirkjan Ochtman <dirkjan@ochtman.nl>
 
 =====
+rustls-platform-verifier 0.7.1
+MIT OR Apache-2.0
+License: https://github.com/rustls/rustls-platform-verifier/blob/252e25161a91af476cbea620e29d277592d27ec7/rustls-platform-verifier/LICENSE-APACHE
+License: https://github.com/rustls/rustls-platform-verifier/blob/252e25161a91af476cbea620e29d277592d27ec7/rustls-platform-verifier/LICENSE-MIT
+Copyright (c) 2022 1Password
+
+=====
 rustls-webpki 0.103.15
 ISC
 License: https://github.com/rustls/webpki/blob/c14836d8de33c0ad0ac7dcb28fe9aade20831a4d/LICENSE
@@ -6299,6 +6665,13 @@ ryu 1.0.23
 Apache-2.0 OR BSL-1.0
 License: https://github.com/dtolnay/ryu/blob/f0b52bb194befe6fd242154f2182fafd43a819b8/LICENSE-APACHE
 License: https://github.com/dtolnay/ryu/blob/f0b52bb194befe6fd242154f2182fafd43a819b8/LICENSE-BOOST
+
+=====
+salsa20 0.10.2
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/stream-ciphers/blob/d5a03c09eb1a0326809d766686f51fbbd86ddb8b/salsa20/LICENSE-APACHE
+License: https://github.com/RustCrypto/stream-ciphers/blob/d5a03c09eb1a0326809d766686f51fbbd86ddb8b/salsa20/LICENSE-MIT
+Copyright (c) 2019 Eric McCorkle
 
 =====
 same-file 1.0.6
@@ -6334,11 +6707,32 @@ License: https://github.com/bluss/scopeguard/blob/bb988222848d39b0b9037b29da3a3a
 Copyright (c) 2016-2019 Ulrik Sverdrup "bluss" and scopeguard developers
 
 =====
+scrypt 0.11.0
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/password-hashes/blob/7e84684d711846230b265c45da0da0bb40513fea/scrypt/LICENSE-APACHE
+License: https://github.com/RustCrypto/password-hashes/blob/7e84684d711846230b265c45da0da0bb40513fea/scrypt/LICENSE-MIT
+Copyright (c) 2021-2023 The RustCrypto Project Developers
+
+=====
+sec1 0.7.3
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/formats/blob/c07eecfb9565ae5268ae484f9d6f5e913959c301/sec1/LICENSE-APACHE
+License: https://github.com/RustCrypto/formats/blob/c07eecfb9565ae5268ae484f9d6f5e913959c301/sec1/LICENSE-MIT
+Copyright (c) 2021-2022 The RustCrypto Project Developers
+
+=====
 seccompiler 0.5.0
 Apache-2.0 OR BSD-3-Clause
 License: https://github.com/rust-vmm/seccompiler/blob/c3cf77d65815037931ae5bc2fca010713defdc8c/LICENSE-APACHE
 License: https://github.com/rust-vmm/seccompiler/blob/c3cf77d65815037931ae5bc2fca010713defdc8c/LICENSE-BSD-3-Clause
 Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+=====
+secrecy 0.10.3
+Apache-2.0 OR MIT
+License: https://github.com/iqlusioninc/crates/blob/70eaa76ea3f4bacd67f3027c4a52948485a67d32/secrecy/LICENSE-APACHE
+License: https://github.com/iqlusioninc/crates/blob/70eaa76ea3f4bacd67f3027c4a52948485a67d32/secrecy/LICENSE-MIT
+Copyright (c) 2019-2024 iqlusion
 
 =====
 secret-service 5.2.0
@@ -6365,6 +6759,16 @@ Copyright (c) 2015 Steven Fackler
 selectors 0.38.0
 MPL-2.0
 License: https://crates.io/crates/selectors/0.38.0
+
+=====
+self_cell 1.3.0
+Apache-2.0 OR GPL-2.0-only
+License: https://github.com/Voultapher/self_cell/blob/93cb06e430e7516ac9b436029a15127782b6c2b6/LICENSE-APACHE
+License: https://github.com/Voultapher/self_cell/blob/93cb06e430e7516ac9b436029a15127782b6c2b6/LICENSE-GPLv2
+Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+Copyright (C) <year>  <name of author>
+Gnomovision version 69, Copyright (C) year name of author
 
 =====
 semver 1.0.28
@@ -6476,6 +6880,16 @@ Copyright (c) 2009-2013 Mozilla Foundation
 Copyright (c) 2006-2009 Graydon Hoare
 
 =====
+sha3 0.10.9
+MIT OR Apache-2.0
+License: https://github.com/RustCrypto/hashes/blob/1637e892b5658941d04a4d895165b66780c7d7ab/sha3/LICENSE-APACHE
+License: https://github.com/RustCrypto/hashes/blob/1637e892b5658941d04a4d895165b66780c7d7ab/sha3/LICENSE-MIT
+Copyright (c) 2006-2009 Graydon Hoare
+Copyright (c) 2009-2013 Mozilla Foundation
+Copyright (c) 2014 Sébastien Martini
+Copyright (c) 2016-2023 Artyom Pavlov, Marek Kotewicz
+
+=====
 sharded-slab 0.1.7
 MIT
 License: https://github.com/hawkw/sharded-slab/blob/40579b92debe2ef283a455eb379945e023080ff3/LICENSE
@@ -6557,6 +6971,12 @@ smappservice-rs 0.1.3
 MIT
 License: https://github.com/gethopp/smappservice-rs/blob/61454a3b814ad71b52d749edb51e6adcdfc5028e/LICENSE.md
 Copyright (c) 2025 iparaskev
+
+=====
+smtp-proto 0.2.5
+Apache-2.0 OR MIT
+License: https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/Apache-2.0.txt
+License: https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/MIT.txt
 
 =====
 snafu-derive 0.8.9
@@ -6652,6 +7072,12 @@ License: https://github.com/vitiral/stfu8/blob/06dfc823a86fb7f8b51e52fa4be937ca8
 License: https://github.com/vitiral/stfu8/blob/06dfc823a86fb7f8b51e52fa4be937ca870771cd/LICENSE-MIT
 Copyright 2017 Garrett Berg, vitiral@gmail.com
 Copyright (c) 2017 Garrett Berg, vitiral@gmail.com
+
+=====
+stop-token 0.7.0
+MIT
+License: https://crates.io/crates/stop-token/0.7.0
+Copyright (c) <year> <copyright holders>
 
 =====
 strict-num 0.1.1
@@ -6981,6 +7407,13 @@ License: https://github.com/tokio-rs/tokio/blob/75fef53d0a8590c2d1dbb63672aa7b7d
 Copyright (c) Tokio Contributors
 
 =====
+toml 0.5.11
+MIT OR Apache-2.0
+License: https://github.com/toml-rs/toml/blob/0c2004aaa5d273075809428d8d7e3fc595141ef5/crates/toml/LICENSE-APACHE
+License: https://github.com/toml-rs/toml/blob/0c2004aaa5d273075809428d8d7e3fc595141ef5/crates/toml/LICENSE-MIT
+Copyright (c) 2014 Alex Crichton
+
+=====
 toml_datetime 1.1.1+spec-1.1.0
 MIT OR Apache-2.0
 License: https://github.com/toml-rs/toml/blob/9db8aad6eafbc62f6b9d1950117649cc41eaf695/crates/toml_datetime/LICENSE-APACHE
@@ -7086,6 +7519,15 @@ License: https://github.com/shepmaster/twox-hash/blob/6f866bffe73900c63df2650be4
 Copyright (c) 2015 Jake Goulding
 
 =====
+type-map 0.5.1
+MIT OR Apache-2.0
+License: https://github.com/kardeiz/type-map/blob/d3ab3e642736d87f3fa8b1e6c8f13a93fcfb72e1/LICENSE-APACHE
+License: https://github.com/kardeiz/type-map/blob/d3ab3e642736d87f3fa8b1e6c8f13a93fcfb72e1/LICENSE-MIT
+Copyright 2017-NOW Actix Team
+Copyright (c) 2022 Jacob Brown
+Copyright (c) 2017-NOW Actix Team
+
+=====
 typenum 1.20.1
 MIT OR Apache-2.0
 License: https://github.com/paholg/typenum/blob/0db9a0f731981f29266b63586c29fa07e4477b1a/LICENSE
@@ -7100,6 +7542,18 @@ MIT OR Apache-2.0
 License: https://github.com/x-hgg-x/tz-rs/blob/9f26398ae57cf638c6a9b1ae3e925e476ac9b991/LICENSE-Apache
 License: https://github.com/x-hgg-x/tz-rs/blob/9f26398ae57cf638c6a9b1ae3e925e476ac9b991/LICENSE-MIT
 Copyright (c) 2022 x-hgg-x
+
+=====
+unic-langid-impl 0.9.6
+MIT OR Apache-2.0
+License: https://github.com/zbraniecki/unic-locale/blob/4f37b35b55ab2354319abe11db6e84fe83abe895/unic-langid-impl/LICENSE-APACHE
+License: https://github.com/zbraniecki/unic-locale/blob/4f37b35b55ab2354319abe11db6e84fe83abe895/unic-langid-impl/LICENSE-MIT
+
+=====
+unic-langid 0.9.6
+MIT OR Apache-2.0
+License: https://github.com/zbraniecki/unic-locale/blob/4f37b35b55ab2354319abe11db6e84fe83abe895/unic-langid/LICENSE-APACHE
+License: https://github.com/zbraniecki/unic-locale/blob/4f37b35b55ab2354319abe11db6e84fe83abe895/unic-langid/LICENSE-MIT
 
 =====
 unicase 2.9.0
@@ -7655,6 +8109,13 @@ License: https://github.com/myrrlyn/wyz/blob/83f076970d745dc1706b46126d5700aa072
 Copyright (c) 2018 myrrlyn (Alexander Payne)
 
 =====
+x25519-dalek 2.0.1
+BSD-3-Clause
+License: https://github.com/dalek-cryptography/curve25519-dalek/blob/4ac84dd0668b1d2e51654fcdffe4ae6a687bef00/x25519-dalek/LICENSE
+Copyright (c) 2017-2021 isis agora lovecruft. All rights reserved.
+Copyright (c) 2019-2021 DebugSteven. All rights reserved.
+
+=====
 xmlwriter 0.1.0
 MIT
 License: https://github.com/RazrFalcon/xmlwriter/blob/5fdcff47da7d71896b55a1bc0e4b561171e232d6/LICENSE
@@ -7763,6 +8224,13 @@ Apache-2.0 OR MIT
 License: https://github.com/RustCrypto/utils/blob/0b715735a660a8566ccd240bf42489fe2ed98efb/zeroize/LICENSE-APACHE
 License: https://github.com/RustCrypto/utils/blob/0b715735a660a8566ccd240bf42489fe2ed98efb/zeroize/LICENSE-MIT
 Copyright (c) 2018-2026 The RustCrypto Project Developers
+
+=====
+zeroize_derive 1.5.0
+Apache-2.0 OR MIT
+License: https://github.com/RustCrypto/utils/blob/1ea42bb68f560a2909c856b20aa3c62901f6305c/zeroize_derive/LICENSE-APACHE
+License: https://github.com/RustCrypto/utils/blob/1ea42bb68f560a2909c856b20aa3c62901f6305c/zeroize_derive/LICENSE-MIT
+Copyright (c) 2019-2026 The RustCrypto Project Developers
 
 =====
 zerotrie 0.2.5

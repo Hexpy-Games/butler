@@ -282,21 +282,7 @@ pub(crate) enum StewardResultViewStatus {
     Unknown,
 }
 
-/// TS: packages/butler-app/client/ui/src/app/types.ts:1183 StewardResultView (inline StewardResultViewCode).
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum StewardResultViewCode {
-    #[serde(rename = "delegation_context_incomplete")]
-    DelegationContextIncomplete,
-    #[serde(rename = "steward_execution_failed")]
-    StewardExecutionFailed,
-    #[serde(rename = "steward_cancelled")]
-    StewardCancelled,
-    #[serde(other)]
-    Unknown,
-}
-
-/// TS: packages/butler-app/client/ui/src/app/types.ts:1176 StewardResultView
+/// TS: packages/butler-app/client/ui/src/app/types.ts:1185 StewardResultView
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub(crate) struct StewardResultView {
     pub(crate) result_id: String,
@@ -305,15 +291,6 @@ pub(crate) struct StewardResultView {
     pub(crate) child_session_id: String,
     pub(crate) child_turn_id: String,
     pub(crate) status: StewardResultViewStatus,
-    #[serde(default)]
-    pub(crate) code: Option<StewardResultViewCode>,
-    pub(crate) summary: String,
-    #[serde(default)]
-    pub(crate) acceptance_evidence: Vec<String>,
-    #[serde(default)]
-    pub(crate) changed_artifacts: Vec<String>,
-    #[serde(default)]
-    pub(crate) changed_files: Option<Vec<ChangedFileDetail>>,
     pub(crate) created_at: String,
 }
 

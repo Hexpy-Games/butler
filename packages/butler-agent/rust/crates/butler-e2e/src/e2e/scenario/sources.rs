@@ -3,7 +3,7 @@
 
 use super::super::agent::Launch;
 use super::super::cassette::{Cassette, Meta};
-use super::super::config::{Credential, LiveProvider, ModelChoice};
+use super::super::config::{Credential, LiveProvider, ModelChoice, flag};
 use super::super::fixtures;
 use super::super::live;
 use super::super::provider::Provider;
@@ -14,7 +14,12 @@ use super::SANITIZATION;
 /// A provider source plus the credential the agent runs with.
 type SourceSetup = (Option<Provider>, ModelChoice, Option<(String, Credential)>);
 
+/// The App clock fixtures assume. A shipped binary ignores `BUTLER_E2E_APP_NOW`
+/// and runs on the real clock, so its fixtures are written for now.
 pub(super) fn fixture_app_now(env: &[(String, String)]) -> String {
+    if flag("BUTLER_E2E_WITHOUT_FIXTURES") {
+        return chrono::Utc::now().to_rfc3339();
+    }
     env.iter()
         .rev()
         .find(|(key, _)| key == "BUTLER_E2E_APP_NOW")

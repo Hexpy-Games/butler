@@ -180,7 +180,7 @@ impl ConversationAdmissionTurn {
             return parts;
         }
         let state = self.state.lock().await;
-        if state.documents.is_empty() {
+        if state.deliverables.is_empty() {
             return parts;
         }
         let entries = parts.get_or_insert_with(|| {
@@ -193,9 +193,9 @@ impl ConversationAdmissionTurn {
                 status: None,
             }]
         });
-        entries.extend(state.documents.iter().map(|(id, title)| MessagePartInput {
+        entries.extend(state.deliverables.values().map(|content| MessagePartInput {
             kind: ConversationPartKind::AttachmentRef,
-            content_json: json!({"kind":"doc","id":id,"title":title}),
+            content_json: content.clone(),
             tool_call_id: None,
             parent_tool_call_id: None,
             provider_shape: None,

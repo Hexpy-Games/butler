@@ -24,6 +24,8 @@ use zeroize::Zeroizing;
 use crate::secure_fs;
 
 mod file;
+mod sealed;
+pub use sealed::{seal_secret, sealed_available, unseal_secret};
 #[cfg(all(not(target_os = "macos"), feature = "test-support"))]
 mod test_file;
 #[cfg(feature = "test-support")]
@@ -60,6 +62,10 @@ const PROBE_SERVICE: &str = "com.hexpy.butler.store-probe";
 
 /// The system store of this operating system.
 pub const SYSTEM_BACKEND: SecretBackend = sys::BACKEND;
+
+/// Whether the system store trusts a program by its code signature (macOS Keychain),
+/// so an unsigned build is asked again after every update.
+pub const SYSTEM_STORE_CHECKS_SIGNATURE: bool = sys::CHECKS_SIGNATURE;
 
 /// Which store a caller uses.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

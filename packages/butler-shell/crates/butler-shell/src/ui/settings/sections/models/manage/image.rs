@@ -31,7 +31,7 @@ type OnSaved = Rc<dyn Fn(String, &mut App)>;
 struct Selection {
     model_ref: String,
     credential_id: Option<String>,
-    default_quality: String,
+    default_quality: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -50,7 +50,7 @@ struct ImageModel {
     provider_id: String,
     provider_label: String,
     qualities: Vec<String>,
-    default_quality: String,
+    default_quality: Option<String>,
     credentials: Vec<ImageCredential>,
 }
 
@@ -149,7 +149,11 @@ impl ImageModels {
         cx.notify();
         if let Some(id) = key {
             self.save(
-                Some(selection(model_ref, Some(id.as_str()), &default_quality)),
+                Some(selection(
+                    model_ref,
+                    Some(id.as_str()),
+                    default_quality.as_deref(),
+                )),
                 cx,
             );
         }
@@ -165,7 +169,7 @@ impl ImageModels {
             let value = selection(
                 &model.model_ref,
                 Some(credential_id),
-                &model.default_quality,
+                model.default_quality.as_deref(),
             );
             self.save(Some(value), cx);
         }
@@ -251,32 +255,41 @@ impl ImageModels {
             .options(keys)
             .disabled(self.busy)
             .on_change(cx.listener(move |this, id: &SharedString, _, cx| {
-                this.save(Some(selection(&key_model, Some(&**id), &key_quality)), cx);
-            }));
-        let qualities = model
-            .qualities
-            .iter()
-            .map(|q| SettingsOption::new(q.clone(), quality_label(q, copy)))
-            .collect();
-        let (quality_model, quality_key) = (model.model_ref.clone(), credential.clone());
-        let pick_quality = SettingsSelect::new("image-quality", copy.default_quality, quality)
-            .options(qualities)
-            .disabled(self.busy || credential.is_empty())
-            .on_change(cx.listener(move |this, value: &SharedString, _, cx| {
-                let next = selection(&quality_model, Some(quality_key.as_str()), value);
-                this.save(Some(next), cx);
+                this.save(
+                    Some(selection(&key_model, Some(&**id), key_quality.as_deref())),
+                    cx,
+                );
             }));
         let mut fields = vec![pick_key.into_any_element()];
         if !model.credentials.iter().any(|c| c.selectable) {
             fields.push(self.key_form_for(&model.provider_id, cx).into_any_element());
         }
-        fields.push(pick_quality.into_any_element());
+        if !model.qualities.is_empty() {
+            let qualities = model
+                .qualities
+                .iter()
+                .map(|q| SettingsOption::new(q.clone(), quality_label(q, copy)))
+                .collect();
+            let (quality_model, quality_key) = (model.model_ref.clone(), credential.clone());
+            let pick_quality = SettingsSelect::new(
+                "image-quality",
+                copy.default_quality,
+                quality.clone().unwrap_or_default(),
+            )
+            .options(qualities)
+            .disabled(self.busy || credential.is_empty())
+            .on_change(cx.listener(move |this, value: &SharedString, _, cx| {
+                let next = selection(&quality_model, Some(quality_key.as_str()), Some(&**value));
+                this.save(Some(next), cx);
+            }));
+            fields.push(pick_quality.into_any_element());
+        }
         fields
     }
 }
 
 /// `{model_ref, credential_id, default_quality}`
-fn selection(model_ref: &str, credential_id: Option<&str>, quality: &str) -> Value {
+fn selection(model_ref: &str, credential_id: Option<&str>, quality: Option<&str>) -> Value {
     json!({ "model_ref": model_ref, "credential_id": credential_id, "default_quality": quality })
 }
 

@@ -3,6 +3,7 @@
 //! host does the work behind [`AppSetupPort`]; the App API exposes it, and
 //! readiness changes become the live event `setup.readiness_changed`.
 
+use butler_platform::secrets::SecretText;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -151,6 +152,32 @@ pub struct ChatGptSignOutView {
     pub account: butler_models::models::chatgpt::ChatGptAccountState,
 }
 
+/// `GET /setup/butler-vault`, and the answer of enable/decline.
+#[derive(Clone, Debug, Serialize)]
+pub struct ButlerVaultView {
+    /// `protected` (in use and open), `off` (not turned on, or declined), `locked` (in use, the keychain key did not open).
+    pub state: &'static str,
+    /// The vault opens unattended on this host (keychain or sealed); when false
+    /// only the master password can open it.
+    pub available: bool,
+    /// How the vault in use opens: `keychain`, `sealed` or `password`.
+    pub unlock: Option<&'static str>,
+    /// A master password is set.
+    pub has_password: bool,
+    /// The user chose "사용 안 함".
+    pub declined: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counts: Option<ButlerVaultCounts>,
+}
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct ButlerVaultCounts {
+    pub api_key: usize,
+    pub signin: usize,
+    pub card: usize,
+    pub profile: usize,
+    pub plugin: usize,
+}
+
 /// A ChatGPT sign-in flow.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct OauthFlowView {
@@ -245,6 +272,18 @@ pub trait AppSetupPort: Send + Sync + 'static {
         &self,
         id: String,
     ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::RemovedOauthCredential>;
+    fn butler_vault(&self) -> ApplicationFuture<ButlerVaultView>;
+    fn enable_butler_vault(
+        &self,
+        password: Option<SecretText>,
+    ) -> ApplicationFuture<ButlerVaultView>;
+    fn unlock_butler_vault(&self, password: SecretText) -> ApplicationFuture<ButlerVaultView>;
+    fn change_butler_vault_password(
+        &self,
+        current: SecretText,
+        new: SecretText,
+    ) -> ApplicationFuture<ButlerVaultView>;
+    fn decline_butler_vault(&self) -> ApplicationFuture<ButlerVaultView>;
     fn chatgpt_sign_out(&self) -> ApplicationFuture<ChatGptSignOutView>;
     fn start_oauth(&self, input: AppOauthStartInput) -> ApplicationFuture<OauthFlowView>;
     fn oauth_flow(&self, flow_id: String) -> ApplicationFuture<OauthFlowView>;
@@ -391,6 +430,25 @@ pub(crate) fn test_setup_port() -> Arc<dyn AppSetupPort> {
             _: String,
         ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::RemovedOauthCredential>
         {
+            unsupported()
+        }
+        fn butler_vault(&self) -> ApplicationFuture<ButlerVaultView> {
+            unsupported()
+        }
+        fn enable_butler_vault(&self, _: Option<SecretText>) -> ApplicationFuture<ButlerVaultView> {
+            unsupported()
+        }
+        fn unlock_butler_vault(&self, _: SecretText) -> ApplicationFuture<ButlerVaultView> {
+            unsupported()
+        }
+        fn change_butler_vault_password(
+            &self,
+            _: SecretText,
+            _: SecretText,
+        ) -> ApplicationFuture<ButlerVaultView> {
+            unsupported()
+        }
+        fn decline_butler_vault(&self) -> ApplicationFuture<ButlerVaultView> {
             unsupported()
         }
         fn chatgpt_sign_out(&self) -> ApplicationFuture<ChatGptSignOutView> {

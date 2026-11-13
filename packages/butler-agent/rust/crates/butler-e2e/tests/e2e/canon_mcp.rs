@@ -118,7 +118,7 @@ async fn cn_10_first_canon_call_asks_trust_then_lists() -> Result<(), HarnessErr
     let grant = pending(&s).await?;
     assert_eq!(grant["client_title"], "Claude Code");
     assert_eq!(grant["person"], "app-user");
-    assert_eq!(grant["requested"].as_array().unwrap().len(), 5);
+    assert_eq!(grant["requested"].as_array().unwrap().len(), 9);
     let grant_id = grant["id"].as_str().unwrap();
     stream
         .wait_for(Duration::from_secs(10), |e| {
@@ -169,4 +169,50 @@ async fn cn_10_first_canon_call_asks_trust_then_lists() -> Result<(), HarnessErr
 
 fn store_error(error: &butler_canon::store::Error) -> HarnessError {
     butler_e2e::e2e::harness_error(error.to_string())
+}
+
+#[tokio::test]
+async fn cn_15_stateless_clients_list_tools_and_call_canon() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("CN-15-STATELESS")?
+        .data_folder_token()
+        .start()
+        .await?;
+    let meta = json!({"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"claude-code","title":"Claude Code","version":"0"},"io.modelcontextprotocol/clientCapabilities":{}});
+    let reply = butler_e2e::e2e::mcp::exchange(
+        &s.agent.launch,
+        &s.sandbox.logs.join("stateless.log"),
+        &[
+            json!({"jsonrpc":"2.0","id":"discover","method":"server/discover","params":{"_meta":meta}}),
+            json!({"jsonrpc":"2.0","id":"list","method":"tools/list","params":{"_meta":meta}}),
+        ],
+    )
+    .await?;
+    let result = &reply["result"];
+    assert!(result["ttlMs"].is_u64(), "{reply}");
+    assert!(
+        ["public", "private"].contains(&result["cacheScope"].as_str().unwrap_or_default()),
+        "{reply}"
+    );
+    assert!(
+        result["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "canon_edit_epic")
+    );
+    let reply = butler_e2e::e2e::mcp::exchange(
+        &s.agent.launch,
+        &s.sandbox.logs.join("stateless-call.log"),
+        &[
+            json!({"jsonrpc":"2.0","id":"discover","method":"server/discover","params":{"_meta":meta}}),
+            json!({"jsonrpc":"2.0","id":"call","method":"tools/call","params":{"_meta":meta,"name":"canon_list","arguments":{}}}),
+        ],
+    )
+    .await?;
+    let value: Value =
+        serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap())?;
+    assert_eq!(value["error"]["code"], "trust_pending", "{reply}");
+    assert_eq!(pending(&s).await?["client_title"], "Claude Code");
+    Ok(())
 }

@@ -4,30 +4,30 @@
     "deploy/licenses/disclosure.py": "992c3d7f47a0944dc1c0ab0628e11a818b88f9ae7d5f62a5c5692715a175d859",
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
-    "deploy/licenses/refresh.py": "00a4d6997b0e56a96f23604624480313583c114e1e5e2e8c6a55e524dccd39c5",
-    "packages/butler-agent/rust/Cargo.lock": "08df239bd7850e539beb8e0186b239503d651a10ccaf33015c0b81e4520540d2",
+    "deploy/licenses/refresh.py": "366d9bc0c943b70f3504886f0a57d001b8b92123aef0919bbb192fb6241425a5",
+    "packages/butler-agent/rust/Cargo.lock": "357775e195e2171aa2a4b5875185e939546666ee086f3ed3d85544b3ca571413",
     "packages/butler-agent/rust/Cargo.toml": "f285ad63272b66159ce655ff34c66177287cf157785d8bf84a569929a991060c",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
-    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "5d8ff50c2c4b2c2d2ead256681c9a3cf2587668550d527def047df0300d0d7d5",
+    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "b3589ba17a65604df6144e220b521377035f63b121fc792284805c5399431e9a",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
     "packages/butler-agent/rust/crates/butler-canon/Cargo.toml": "6fbaad62c0bdd80654f846a11dffff9538849d496374a0486bb93f973056d92b",
     "packages/butler-agent/rust/crates/butler-core/Cargo.toml": "8980355c6fd1165999243382e2529b44c8e1f4a734b7dfe3b11d6840a87b0b9e",
     "packages/butler-agent/rust/crates/butler-core/src/js_date/parse/LICENSE.txt": "a0af5aa0d38e4c35e56c8e42a43a4b1e462619a26332e43249bb0772ad06a3e2",
     "packages/butler-agent/rust/crates/butler-e2e/Cargo.toml": "3120cb96a533da18e47e0d1e74a099941fcf3eb0639d746f72c9ac6d98708f79",
-    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "0251d8087538d52e020d5824208c64dd8654b3b2fa3b8d4ff05c1b8a740e3372",
+    "packages/butler-agent/rust/crates/butler-gateway/Cargo.toml": "73ae84e79bf53c8fd8d95c479b665a4c47e6771bf37e32e255d46e624e119339",
     "packages/butler-agent/rust/crates/butler-ledger/Cargo.toml": "ccc46a2a8bb225eebcdf7858d73f5bddd3742ea57477e0208ca3c16464815b54",
     "packages/butler-agent/rust/crates/butler-log/Cargo.toml": "0f3523ba15e21a586f5c9d8bd883dce4100c7d1e7f95c0064da9af990c20f0bc",
     "packages/butler-agent/rust/crates/butler-mail-connector/Cargo.toml": "d39c21cf1e751b767f37cd97b1ec040361457f37e8f19abca449778284a794aa",
     "packages/butler-agent/rust/crates/butler-memory/Cargo.toml": "be3c98a025c2aa6f2d7eed44663c2f88294e10c22d4a4ddcd323f3e6b75b32a6",
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
-    "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "446f223fa76294ea8a5e8479a0a4f522610ad92d3fdaa863cc7f9acffae8f8e5",
-    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "55d30a7a0ae50f76b830b22bf4c2ecc4ba0c58891b3031e8aaaac339e499d824",
+    "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "b044aab318310a2ab2e7637bf76812615971a00e0f50928e4bbad1dd3c89f3a2",
+    "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "75351815db78c53cfb8dd5678a5ee479427d9642a50d49095932ee48a3456d97",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "c11bf595617ff037807742ff86900d6f3d813df267d83aadcbaf2195683cf25d",
     "packages/butler-agent/rust/crates/butler-shell-client/Cargo.toml": "9ed22424cf1e67138968ea389eec752858c8b1a63b651c43a43d3ee7aa6b2ecd",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "dcca4fca5aed2792030ede69f05b208b4cc72f9e4a0e63da51122f9d1d704b68",
-    "packages/butler-agent/rust/crates/butler-vault/Cargo.toml": "cf1aec3dfad18543e87917e0aae1f3859c57e650992159ba5954c8c47ffc0d9f",
+    "packages/butler-agent/rust/crates/butler-vault/Cargo.toml": "ce79975e3622cf965b249bd46af5b321510a04ccd4ba877ed72345581f9ac0e3",
     "packages/butler-agent/rust/rust-toolchain.toml": "2ad6f15416572b4836585087f1d4abc53b8fa2dbd616f8dacfaa587ed6714228",
     "packages/butler-agent/rust/scripts/static-ort.lock.json": "a1aee730fc0773ca02d23bad8da95c0efe56a07ded67dc36d251f475a90369b2",
     "packages/butler-agent/rust/tools/source-check/Cargo.toml": "e50cffe7e1c5a79f1fe76bf689eb65fb682a29cd8425ae3609c35cfa1f56603c",
@@ -11417,7 +11417,10 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/RustCrypto/traits/tree/1ae238c527c204dd9590e3abc406cfbb342d46ea",
       "artifacts": [
-        "Unsigned Windows x64 Agent preview"
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
@@ -11443,7 +11446,10 @@
       "license": "Apache-2.0 OR MIT",
       "source": "https://github.com/RustCrypto/AEADs/tree/fa8197f11d79a079fcb1f6ef67fa9119ce6939b9",
       "artifacts": [
-        "Unsigned Windows x64 Agent preview"
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
@@ -11516,6 +11522,62 @@
       "copyright": [
         "Copyright (c) 2018-2024 The RustCrypto Project Developers",
         "Copyright (c) 2018 Artyom Pavlov"
+      ]
+    },
+    {
+      "id": "rust:age-core@0.12.0",
+      "name": "age-core",
+      "version": "0.12.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/str4d/rage/tree/f6383f367e9aa514a3b5fbce7feede08a425d647",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "fe56c030c2d8c3404a37fe711cebb27ebea13d0aacf7e3524db4198335ad8cd1",
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4"
+      ],
+      "files": [
+        "https://github.com/str4d/rage/tree/f6383f367e9aa514a3b5fbce7feede08a425d647/LICENSE-MIT",
+        "https://github.com/str4d/rage/tree/f6383f367e9aa514a3b5fbce7feede08a425d647/LICENSE-APACHE"
+      ],
+      "links": [
+        "https://github.com/str4d/rage/blob/f6383f367e9aa514a3b5fbce7feede08a425d647/LICENSE-MIT",
+        "https://github.com/str4d/rage/blob/f6383f367e9aa514a3b5fbce7feede08a425d647/LICENSE-APACHE"
+      ],
+      "copyright": [
+        "Copyright (c) 2019 Jack Grigg"
+      ]
+    },
+    {
+      "id": "rust:age@0.12.1",
+      "name": "age",
+      "version": "0.12.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/str4d/rage/tree/7a854c9c8c02dab2ebea19e02e6693a5730a8b2a",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "fe56c030c2d8c3404a37fe711cebb27ebea13d0aacf7e3524db4198335ad8cd1",
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4"
+      ],
+      "files": [
+        "https://github.com/str4d/rage/tree/7a854c9c8c02dab2ebea19e02e6693a5730a8b2a/LICENSE-MIT",
+        "https://github.com/str4d/rage/tree/7a854c9c8c02dab2ebea19e02e6693a5730a8b2a/LICENSE-APACHE"
+      ],
+      "links": [
+        "https://github.com/str4d/rage/blob/7a854c9c8c02dab2ebea19e02e6693a5730a8b2a/LICENSE-MIT",
+        "https://github.com/str4d/rage/blob/7a854c9c8c02dab2ebea19e02e6693a5730a8b2a/LICENSE-APACHE"
+      ],
+      "copyright": [
+        "Copyright (c) 2019 Jack Grigg"
       ]
     },
     {
@@ -12402,6 +12464,32 @@
       ]
     },
     {
+      "id": "rust:async-channel@1.9.0",
+      "name": "async-channel",
+      "version": "1.9.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/smol-rs/async-channel/tree/3d6cd8f6be74a9608f7e695c6f47990b1693d772",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/smol-rs/async-channel/blob/3d6cd8f6be74a9608f7e695c6f47990b1693d772/LICENSE-APACHE",
+        "https://github.com/smol-rs/async-channel/blob/3d6cd8f6be74a9608f7e695c6f47990b1693d772/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:async-channel@2.5.0",
       "name": "async-channel",
       "version": "2.5.0",
@@ -12478,6 +12566,34 @@
         "https://github.com/smol-rs/async-executor/blob/543403e773ec4941a6272e29c2ff649bfd01a4f8/LICENSE-MIT"
       ],
       "copyright": []
+    },
+    {
+      "id": "rust:async-imap@0.11.3",
+      "name": "async-imap",
+      "version": "0.11.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/async-email/async-imap/tree/24b5aa39d4865f10e6665267f56113bab94ee257",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "4e0ec88980aac272d80e61a33cb695cf40dbb8768a5973e6c077be73912bd9f0"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/async-email/async-imap/blob/24b5aa39d4865f10e6665267f56113bab94ee257/LICENSE-APACHE",
+        "https://github.com/async-email/async-imap/blob/24b5aa39d4865f10e6665267f56113bab94ee257/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2019"
+      ]
     },
     {
       "id": "rust:async-io@2.6.0",
@@ -12808,6 +12924,35 @@
       ]
     },
     {
+      "id": "rust:base16ct@0.2.0",
+      "name": "base16ct",
+      "version": "0.2.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/formats/tree/1987929403b544d4632121aacff3d28aa09a0771",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "0aa8963e105e8b6e02f634484145d4e5b0f42d0a6dd05c16f8148f033383adef"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/formats/blob/1987929403b544d4632121aacff3d28aa09a0771/base16ct/LICENSE-APACHE",
+        "https://github.com/RustCrypto/formats/blob/1987929403b544d4632121aacff3d28aa09a0771/base16ct/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2014 Steve \"Sc00bz\" Thomas (steve at tobtu dot com)",
+        "Copyright (c) 2022 The RustCrypto Project Developers"
+      ]
+    },
+    {
       "id": "rust:base64@0.13.1",
       "name": "base64",
       "version": "0.13.1",
@@ -12889,6 +13034,57 @@
       ],
       "copyright": [
         "Copyright (c) 2025 Alice Maz, Marshall Pierce"
+      ]
+    },
+    {
+      "id": "rust:basic-toml@0.1.10",
+      "name": "basic-toml",
+      "version": "0.1.10",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/dtolnay/basic-toml/tree/c54c9bd3ade1a609f5da6e31cf6ee72d6c7552fb",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "b30df9a48463d1c99c6a66cdee623b1b0832c3811d58a80b338268d71cea190e",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/dtolnay/basic-toml/blob/c54c9bd3ade1a609f5da6e31cf6ee72d6c7552fb/LICENSE-APACHE",
+        "https://github.com/dtolnay/basic-toml/blob/c54c9bd3ade1a609f5da6e31cf6ee72d6c7552fb/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
+      "id": "rust:bech32@0.11.1",
+      "name": "bech32",
+      "version": "0.11.1",
+      "license": "MIT",
+      "source": "https://github.com/rust-bitcoin/rust-bech32/tree/0.11.1",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "9877c7b48cde1462f4e8688263aa96f3f1bd9717250718d3d2d9ebb031414fb9"
+      ],
+      "files": [
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://crates.io/crates/bech32/0.11.1"
+      ],
+      "copyright": [
+        "Copyright (c) 2017 Clark Moody"
       ]
     },
     {
@@ -13805,6 +14001,62 @@
       ]
     },
     {
+      "id": "rust:chacha20@0.9.1",
+      "name": "chacha20",
+      "version": "0.9.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/stream-ciphers/tree/b5d39c45c45df97335f4b6effb853cde97810de1",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "b6f6f01b03ee7e93c0ae96d62ed39527e98a120fb951afc9de456a741ef3f204"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/stream-ciphers/blob/b5d39c45c45df97335f4b6effb853cde97810de1/chacha20/LICENSE-APACHE",
+        "https://github.com/RustCrypto/stream-ciphers/blob/b5d39c45c45df97335f4b6effb853cde97810de1/chacha20/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2019-2023 The RustCrypto Project Developers"
+      ]
+    },
+    {
+      "id": "rust:chacha20poly1305@0.10.1",
+      "name": "chacha20poly1305",
+      "version": "0.10.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/AEADs/tree/746f70a5f6c7371e723dc64e04f2115b56f24d27",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "3c0dfa33fd2e6976038555b52095699452653b1fcabe113074f14e0848a6b11e"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/AEADs/blob/746f70a5f6c7371e723dc64e04f2115b56f24d27/chacha20poly1305/LICENSE-APACHE",
+        "https://github.com/RustCrypto/AEADs/blob/746f70a5f6c7371e723dc64e04f2115b56f24d27/chacha20poly1305/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2019 The RustCrypto Project Developers"
+      ]
+    },
+    {
       "id": "rust:chrono-tz@0.10.4",
       "name": "chrono-tz",
       "version": "0.10.4",
@@ -14149,6 +14401,34 @@
       ]
     },
     {
+      "id": "rust:const-oid@0.9.6",
+      "name": "const-oid",
+      "version": "0.9.6",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/formats/tree/4432bcc0b2b721865740517e609e166e01726ccc",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "bada9e7ed8dc00d63502053c455d7c8d7575dfb7e8277a2a832531844d900682"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/formats/blob/4432bcc0b2b721865740517e609e166e01726ccc/const-oid/LICENSE-APACHE",
+        "https://github.com/RustCrypto/formats/blob/4432bcc0b2b721865740517e609e166e01726ccc/const-oid/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2020-2022 The RustCrypto Project Developers"
+      ]
+    },
+    {
       "id": "rust:constant_time_eq@0.4.2",
       "name": "constant_time_eq",
       "version": "0.4.2",
@@ -14176,6 +14456,33 @@
         "https://github.com/cesarb/constant_time_eq/blob/86f38ed9ad4d0500c5472bb8cb2ddc4fe5ac7143/LICENSE-MIT0"
       ],
       "copyright": []
+    },
+    {
+      "id": "rust:cookie-factory@0.3.3",
+      "name": "cookie-factory",
+      "version": "0.3.3",
+      "license": "MIT",
+      "source": "https://crates.io/crates/cookie-factory/0.3.3",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "b513c5d8db79914a73eae526d8d59d96197a665dd378e8186f52dbe84653d504",
+        "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+      ],
+      "files": [
+        "Upstream MIT declaration (no copyright notice supplied)",
+        "Full MIT license (upstream omits text)"
+      ],
+      "links": [
+        "https://crates.io/crates/cookie-factory/0.3.3"
+      ],
+      "copyright": [
+        "Copyright (c) <year> <copyright holders>"
+      ]
     },
     {
       "id": "rust:core-foundation-sys@0.8.7",
@@ -14589,6 +14896,34 @@
       ]
     },
     {
+      "id": "rust:crypto-bigint@0.5.5",
+      "name": "crypto-bigint",
+      "version": "0.5.5",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/crypto-bigint/tree/98f29002552211cbd37dd09d354d1514d84158c4",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "90c503b61dee04e1449c323ec34c229dfb68d7adcb96c7e140ee55f70fce2d8e"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/crypto-bigint/blob/98f29002552211cbd37dd09d354d1514d84158c4/LICENSE-APACHE",
+        "https://github.com/RustCrypto/crypto-bigint/blob/98f29002552211cbd37dd09d354d1514d84158c4/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2021 The RustCrypto Project Developers"
+      ]
+    },
+    {
       "id": "rust:crypto-common@0.1.7",
       "name": "crypto-common",
       "version": "0.1.7",
@@ -14759,7 +15094,10 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/RustCrypto/block-modes/tree/65320945adb1b6f7290e61b033f9e04ccdb2581b",
       "artifacts": [
-        "Unsigned Windows x64 Agent preview"
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
@@ -14802,6 +15140,57 @@
       ],
       "copyright": [
         "Copyright (c) 2025-2026 The RustCrypto Project Developers"
+      ]
+    },
+    {
+      "id": "rust:curve25519-dalek-derive@0.1.1",
+      "name": "curve25519-dalek-derive",
+      "version": "0.1.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/dalek-cryptography/curve25519-dalek/tree/72761ca6b4772af985f969db53faf7accbad9b36",
+      "artifacts": [
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/dalek-cryptography/curve25519-dalek/blob/72761ca6b4772af985f969db53faf7accbad9b36/curve25519-dalek-derive/LICENSE-APACHE",
+        "https://github.com/dalek-cryptography/curve25519-dalek/blob/72761ca6b4772af985f969db53faf7accbad9b36/curve25519-dalek-derive/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
+      "id": "rust:curve25519-dalek@4.1.3",
+      "name": "curve25519-dalek",
+      "version": "4.1.3",
+      "license": "BSD-3-Clause",
+      "source": "https://github.com/dalek-cryptography/curve25519-dalek/tree/5312a0311ec40df95be953eacfa8a11b9a34bc54",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "cca0bd3c4fcdba74145ef9d49c62337e2c9fbf9368288f11d0547f1b0273219f"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/dalek-cryptography/curve25519-dalek/blob/5312a0311ec40df95be953eacfa8a11b9a34bc54/curve25519-dalek/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2016-2021 isis agora lovecruft. All rights reserved.",
+        "Copyright (c) 2016-2021 Henry de Valence. All rights reserved.",
+        "Copyright (c) 2012 The Go Authors. All rights reserved."
       ]
     },
     {
@@ -15924,6 +16313,34 @@
       ]
     },
     {
+      "id": "rust:der@0.7.10",
+      "name": "der",
+      "version": "0.7.10",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/formats/tree/b7a60edfc7cb0d657e6b3d7b4f7fb0ceeed2e4e6",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "ad64fcb9589f162720f3cc5010ad76ca6ad3764e11861f9192c489df176bb71d"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/formats/blob/b7a60edfc7cb0d657e6b3d7b4f7fb0ceeed2e4e6/der/LICENSE-APACHE",
+        "https://github.com/RustCrypto/formats/blob/b7a60edfc7cb0d657e6b3d7b4f7fb0ceeed2e4e6/der/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2020-2023 The RustCrypto Project Developers"
+      ]
+    },
+    {
       "id": "rust:deranged@0.5.8",
       "name": "deranged",
       "version": "0.5.8",
@@ -16518,6 +16935,34 @@
       ]
     },
     {
+      "id": "rust:elliptic-curve@0.13.8",
+      "name": "elliptic-curve",
+      "version": "0.13.8",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/traits/tree/5ddf0f52f07f65f319ffd423c52e696406924d90",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "d27687b51f2874822c1530976b7e837eac4f308d94bf3dd42047011b7d437b47"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/traits/blob/5ddf0f52f07f65f319ffd423c52e696406924d90/elliptic-curve/LICENSE-APACHE",
+        "https://github.com/RustCrypto/traits/blob/5ddf0f52f07f65f319ffd423c52e696406924d90/elliptic-curve/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2020-2022 RustCrypto Developers"
+      ]
+    },
+    {
       "id": "rust:encoding_rs@0.8.41",
       "name": "encoding_rs",
       "version": "0.8.41",
@@ -16760,6 +17205,32 @@
       "copyright": []
     },
     {
+      "id": "rust:event-listener@2.5.3",
+      "name": "event-listener",
+      "version": "2.5.3",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/smol-rs/event-listener/tree/a38fcb4955911d4e54a2f6a79630544f9edf29a3",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/smol-rs/event-listener/blob/a38fcb4955911d4e54a2f6a79630544f9edf29a3/LICENSE-APACHE",
+        "https://github.com/smol-rs/event-listener/blob/a38fcb4955911d4e54a2f6a79630544f9edf29a3/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:event-listener@5.4.2",
       "name": "event-listener",
       "version": "5.4.2",
@@ -16971,6 +17442,34 @@
       "copyright": []
     },
     {
+      "id": "rust:ff@0.13.1",
+      "name": "ff",
+      "version": "0.13.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/zkcrypto/ff/tree/851b0f61bbcf9a5b61027307144d8bd1f9b756ba",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "8d0c1d1d4b2bebf5b9211f0e883d5a482b7808f3ed31320da14ddee95811f4ef"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/zkcrypto/ff/blob/851b0f61bbcf9a5b61027307144d8bd1f9b756ba/LICENSE-APACHE",
+        "https://github.com/zkcrypto/ff/blob/851b0f61bbcf9a5b61027307144d8bd1f9b756ba/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2017 Sean Bowe"
+      ]
+    },
+    {
       "id": "rust:filedescriptor@0.8.3",
       "name": "filedescriptor",
       "version": "0.8.3",
@@ -17019,6 +17518,32 @@
       "copyright": [
         "Copyright (c) 2014 Alex Crichton"
       ]
+    },
+    {
+      "id": "rust:find-crate@0.6.3",
+      "name": "find-crate",
+      "version": "0.6.3",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/taiki-e/find-crate/tree/16f57b46d92b7458a4cab2f83e4e2284435673a2",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "bb28c48e3e078166e91cfc2b6db7ffebb8a0973b9e23b3df060561292d8d69ec",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/taiki-e/find-crate/blob/16f57b46d92b7458a4cab2f83e4e2284435673a2/LICENSE-APACHE",
+        "https://github.com/taiki-e/find-crate/blob/16f57b46d92b7458a4cab2f83e4e2284435673a2/LICENSE-MIT"
+      ],
+      "copyright": []
     },
     {
       "id": "rust:fixedbitset@0.5.7",
@@ -17145,6 +17670,118 @@
       ],
       "copyright": [
         "Copyright (c) 2014-2020 Optimal Computing (NZ) Ltd"
+      ]
+    },
+    {
+      "id": "rust:fluent-bundle@0.16.0",
+      "name": "fluent-bundle",
+      "version": "0.16.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/projectfluent/fluent-rs/tree/f22da4ea48328b4c617b7666c482634c49fbe0a7",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "8a5119d39ab16b8104fdcc022b02ebe958c2c00bc42996d93f5b5caf90667477",
+        "49c0b000c03731d9e3970dc059ad4ca345d773681f4a612b0024435b663e0220"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/fluent-bundle/LICENSE-APACHE",
+        "https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/fluent-bundle/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2017 Mozilla"
+      ]
+    },
+    {
+      "id": "rust:fluent-langneg@0.13.1",
+      "name": "fluent-langneg",
+      "version": "0.13.1",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/projectfluent/fluent-langneg-rs/tree/7fdc590466ea63ca2367ac10fb1b881fe561f1a8",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "016fcc02048817d628b04b140c54db290fd9d29a5e8a55b77871194e810716ac",
+        "a8ad31b1c3f40dca5a84119351b8fa8ddc868edd77fad8a8ebf6d8f2d16fa4ae"
+      ],
+      "files": [
+        "https://github.com/projectfluent/fluent-langneg-rs/tree/7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-MIT",
+        "https://github.com/projectfluent/fluent-langneg-rs/tree/7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-APACHE"
+      ],
+      "links": [
+        "https://github.com/projectfluent/fluent-langneg-rs/blob/7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-MIT",
+        "https://github.com/projectfluent/fluent-langneg-rs/blob/7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-APACHE"
+      ],
+      "copyright": [
+        "Copyright Mozilla Foundation"
+      ]
+    },
+    {
+      "id": "rust:fluent-syntax@0.12.0",
+      "name": "fluent-syntax",
+      "version": "0.12.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/projectfluent/fluent-rs/tree/f22da4ea48328b4c617b7666c482634c49fbe0a7",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "8a5119d39ab16b8104fdcc022b02ebe958c2c00bc42996d93f5b5caf90667477",
+        "49c0b000c03731d9e3970dc059ad4ca345d773681f4a612b0024435b663e0220"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/fluent-syntax/LICENSE-APACHE",
+        "https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/fluent-syntax/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2017 Mozilla"
+      ]
+    },
+    {
+      "id": "rust:fluent@0.17.0",
+      "name": "fluent",
+      "version": "0.17.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/projectfluent/fluent-rs/tree/83e9a4517a1de90b7715b0446a2e13acf67af4e1",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "8a5119d39ab16b8104fdcc022b02ebe958c2c00bc42996d93f5b5caf90667477",
+        "49c0b000c03731d9e3970dc059ad4ca345d773681f4a612b0024435b663e0220"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/projectfluent/fluent-rs/blob/83e9a4517a1de90b7715b0446a2e13acf67af4e1/fluent/LICENSE-APACHE",
+        "https://github.com/projectfluent/fluent-rs/blob/83e9a4517a1de90b7715b0446a2e13acf67af4e1/fluent/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2017 Mozilla"
       ]
     },
     {
@@ -17733,6 +18370,29 @@
       ]
     },
     {
+      "id": "rust:gethostname@1.1.0",
+      "name": "gethostname",
+      "version": "1.1.0",
+      "license": "Apache-2.0",
+      "source": "https://codeberg.org/swsnr/gethostname.rs.git",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://crates.io/crates/gethostname/1.1.0"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:getrandom@0.2.17",
       "name": "getrandom",
       "version": "0.2.17",
@@ -17826,7 +18486,10 @@
       "license": "Apache-2.0 OR MIT",
       "source": "https://github.com/RustCrypto/universal-hashes/tree/655c6cbef85b0faa7ff24c0686986cf2c27b2c6d",
       "artifacts": [
-        "Unsigned Windows x64 Agent preview"
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
@@ -17924,6 +18587,35 @@
       "copyright": [
         "Copyright (c) 2014 The Rust Project Developers"
       ]
+    },
+    {
+      "id": "rust:group@0.13.0",
+      "name": "group",
+      "version": "0.13.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/zkcrypto/group/tree/090a7ec2f2fca9b4ddec05e39123e57dc0d73a2f",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "7429802d3e67e3308471b91fbea341e484c4e0a23d0fb230a8636c38184cec79",
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "COPYRIGHT",
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/zkcrypto/group/blob/090a7ec2f2fca9b4ddec05e39123e57dc0d73a2f/COPYRIGHT",
+        "https://github.com/zkcrypto/group/blob/090a7ec2f2fca9b4ddec05e39123e57dc0d73a2f/LICENSE-APACHE",
+        "https://github.com/zkcrypto/group/blob/090a7ec2f2fca9b4ddec05e39123e57dc0d73a2f/LICENSE-MIT"
+      ],
+      "copyright": []
     },
     {
       "id": "rust:h2@0.4.19",
@@ -18115,6 +18807,32 @@
       ]
     },
     {
+      "id": "rust:hashify@0.2.9",
+      "name": "hashify",
+      "version": "0.2.9",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/stalwartlabs/hashify/tree/74bd8a251dff8a514039e035a6437eabf1b9fd57",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSES/Apache-2.0.txt",
+        "LICENSES/MIT.txt"
+      ],
+      "links": [
+        "https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/Apache-2.0.txt",
+        "https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/MIT.txt"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:hashlink@0.10.0",
       "name": "hashlink",
       "version": "0.10.0",
@@ -18201,6 +18919,35 @@
       ]
     },
     {
+      "id": "rust:hkdf@0.12.4",
+      "name": "hkdf",
+      "version": "0.12.4",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/KDFs/tree/1ac16e8b9d4ee7a67613c9396c6cc1327652eaba",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "d288f9c9b4590446ec18c22ead8f8b5a12a3d4025b68f62dc9015063eb9cca69"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/KDFs/blob/1ac16e8b9d4ee7a67613c9396c6cc1327652eaba/hkdf/LICENSE-APACHE",
+        "https://github.com/RustCrypto/KDFs/blob/1ac16e8b9d4ee7a67613c9396c6cc1327652eaba/hkdf/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2015-2018 Vlad Filippov",
+        "Copyright (c) 2018-2021 RustCrypto Developers"
+      ]
+    },
+    {
       "id": "rust:hkdf@0.13.0",
       "name": "hkdf",
       "version": "0.13.0",
@@ -18279,6 +19026,35 @@
       ],
       "copyright": [
         "Copyright (c) 2017 Artyom Pavlov"
+      ]
+    },
+    {
+      "id": "rust:hpke@0.12.0",
+      "name": "hpke",
+      "version": "0.12.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/rozbb/rust-hpke/tree/8c676674def8dc0c9c063f1c8a3bb965434c93f8",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "a84d077b0e89c9322485227b8ab5b3c7b7733add58d53124212013865d30b025",
+        "0967d697f9129783cb9393d02db2840182e24adf100f34f74f13d4c30f482be9"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/rozbb/rust-hpke/blob/8c676674def8dc0c9c063f1c8a3bb965434c93f8/LICENSE-APACHE",
+        "https://github.com/rozbb/rust-hpke/blob/8c676674def8dc0c9c063f1c8a3bb965434c93f8/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2020 Michael Rosenberg",
+        "Copyright (c) 2020 Michael Rosenberg"
       ]
     },
     {
@@ -18525,6 +19301,34 @@
       ]
     },
     {
+      "id": "rust:hybrid-array@0.2.3",
+      "name": "hybrid-array",
+      "version": "0.2.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/hybrid-array/tree/ca1240b002d8f72e3f8ca1eb03b98b3bcb6205e1",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "086ed857073f4a67947c2722d6e769ccfbe1c8d8863bcd5c9b3d8bb25d3a1eab"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/hybrid-array/blob/ca1240b002d8f72e3f8ca1eb03b98b3bcb6205e1/LICENSE-APACHE",
+        "https://github.com/RustCrypto/hybrid-array/blob/ca1240b002d8f72e3f8ca1eb03b98b3bcb6205e1/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2022-2024 The RustCrypto Project Developers"
+      ]
+    },
+    {
       "id": "rust:hybrid-array@0.4.15",
       "name": "hybrid-array",
       "version": "0.4.15",
@@ -18657,6 +19461,110 @@
       ],
       "copyright": [
         "Copyright (c) 2020 Anastasios Bakogiannis"
+      ]
+    },
+    {
+      "id": "rust:i18n-config@0.4.8",
+      "name": "i18n-config",
+      "version": "0.4.8",
+      "license": "MIT",
+      "source": "https://github.com/kellpossible/cargo-i18n/tree/ae88dc79fda061e1bbf96b8d8e8fe8d23f1e52e7",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "58fb6a6162e28b69aeea6ddaea124b8b721ed0ac51512dceb45b157a3fcd4843"
+      ],
+      "files": [
+        "LICENSE.txt"
+      ],
+      "links": [
+        "https://github.com/kellpossible/cargo-i18n/blob/ae88dc79fda061e1bbf96b8d8e8fe8d23f1e52e7/i18n-config/LICENSE.txt"
+      ],
+      "copyright": [
+        "Copyright 2020 Luke Frisken",
+        "© 2020 Luke Frisken"
+      ]
+    },
+    {
+      "id": "rust:i18n-embed-fl@0.10.1",
+      "name": "i18n-embed-fl",
+      "version": "0.10.1",
+      "license": "MIT",
+      "source": "https://github.com/kellpossible/cargo-i18n/tree/d3c20dcc62967abd3d7a8129d6c8a957e2c14173",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "58fb6a6162e28b69aeea6ddaea124b8b721ed0ac51512dceb45b157a3fcd4843"
+      ],
+      "files": [
+        "LICENSE.txt"
+      ],
+      "links": [
+        "https://github.com/kellpossible/cargo-i18n/blob/d3c20dcc62967abd3d7a8129d6c8a957e2c14173/i18n-embed-fl/LICENSE.txt"
+      ],
+      "copyright": [
+        "Copyright 2020 Luke Frisken",
+        "© 2020 Luke Frisken"
+      ]
+    },
+    {
+      "id": "rust:i18n-embed-impl@0.8.4",
+      "name": "i18n-embed-impl",
+      "version": "0.8.4",
+      "license": "MIT",
+      "source": "https://github.com/kellpossible/cargo-i18n/tree/b3a58bc1321c6c3c8e032026e79228385639d0c4",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "58fb6a6162e28b69aeea6ddaea124b8b721ed0ac51512dceb45b157a3fcd4843"
+      ],
+      "files": [
+        "LICENSE.txt"
+      ],
+      "links": [
+        "https://github.com/kellpossible/cargo-i18n/blob/b3a58bc1321c6c3c8e032026e79228385639d0c4/i18n-embed/i18n-embed-impl/LICENSE.txt"
+      ],
+      "copyright": [
+        "Copyright 2020 Luke Frisken",
+        "© 2020 Luke Frisken"
+      ]
+    },
+    {
+      "id": "rust:i18n-embed@0.16.0",
+      "name": "i18n-embed",
+      "version": "0.16.0",
+      "license": "MIT",
+      "source": "https://github.com/kellpossible/cargo-i18n/tree/7c53d3e58c98a265a2535fb6cf71f58d40e42ae4",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "58fb6a6162e28b69aeea6ddaea124b8b721ed0ac51512dceb45b157a3fcd4843"
+      ],
+      "files": [
+        "LICENSE.txt"
+      ],
+      "links": [
+        "https://github.com/kellpossible/cargo-i18n/blob/7c53d3e58c98a265a2535fb6cf71f58d40e42ae4/i18n-embed/LICENSE.txt"
+      ],
+      "copyright": [
+        "Copyright 2020 Luke Frisken",
+        "© 2020 Luke Frisken"
       ]
     },
     {
@@ -19428,6 +20336,34 @@
       ]
     },
     {
+      "id": "rust:imap-proto@0.16.7",
+      "name": "imap-proto",
+      "version": "0.16.7",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/djc/tokio-imap/tree/6593414bd66f93b3caa5b5f7f24241e53c3d7da4",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "d8ab53f67f8b31421c425bcebd9f78b689bec5712c83b43fad60a997fd7ac61e",
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4"
+      ],
+      "files": [
+        "https://github.com/djc/tokio-imap/tree/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-MIT",
+        "https://github.com/djc/tokio-imap/tree/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-APACHE"
+      ],
+      "links": [
+        "https://github.com/djc/tokio-imap/blob/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-MIT",
+        "https://github.com/djc/tokio-imap/blob/6593414bd66f93b3caa5b5f7f24241e53c3d7da4/LICENSE-APACHE"
+      ],
+      "copyright": [
+        "Copyright (c) 2017 Dirkjan Ochtman"
+      ]
+    },
+    {
       "id": "rust:indexmap@2.14.2",
       "name": "indexmap",
       "version": "2.14.2",
@@ -19557,6 +20493,87 @@
       "copyright": [
         "Copyright (c) 2022-2025 The RustCrypto Project Developers",
         "Copyright (c) 2022 Artyom Pavlov"
+      ]
+    },
+    {
+      "id": "rust:intl-memoizer@0.5.3",
+      "name": "intl-memoizer",
+      "version": "0.5.3",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/projectfluent/fluent-rs/tree/f22da4ea48328b4c617b7666c482634c49fbe0a7",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "8a5119d39ab16b8104fdcc022b02ebe958c2c00bc42996d93f5b5caf90667477",
+        "49c0b000c03731d9e3970dc059ad4ca345d773681f4a612b0024435b663e0220"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/intl-memoizer/LICENSE-APACHE",
+        "https://github.com/projectfluent/fluent-rs/blob/f22da4ea48328b4c617b7666c482634c49fbe0a7/intl-memoizer/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2017 Mozilla"
+      ]
+    },
+    {
+      "id": "rust:intl_pluralrules@7.0.2",
+      "name": "intl_pluralrules",
+      "version": "7.0.2",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/zbraniecki/pluralrules/tree/d0715d5b7cca72e228d6e6c4de154bd30dfdd06a",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "b30df9a48463d1c99c6a66cdee623b1b0832c3811d58a80b338268d71cea190e",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "https://github.com/zbraniecki/pluralrules/tree/d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-APACHE",
+        "https://github.com/zbraniecki/pluralrules/tree/d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/zbraniecki/pluralrules/blob/d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-APACHE",
+        "https://github.com/zbraniecki/pluralrules/blob/d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
+      "id": "rust:io_tee@0.1.1",
+      "name": "io_tee",
+      "version": "0.1.1",
+      "license": "MIT",
+      "source": "https://crates.io/crates/io_tee/0.1.1",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "9556395f55b7c67a6041f84553c7c27b3ab3fe5505769f4f1003a7b0988f2586",
+        "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+      ],
+      "files": [
+        "Upstream MIT OR Apache-2.0 declaration (no copyright notice supplied)",
+        "Full MIT license (elected from upstream MIT / Apache-2.0; upstream omits text)"
+      ],
+      "links": [
+        "https://crates.io/crates/io_tee/0.1.1"
+      ],
+      "copyright": [
+        "Copyright (c) <year> <copyright holders>"
       ]
     },
     {
@@ -19809,6 +20826,63 @@
         "https://github.com/databendlabs/jsonb/blob/c39b24aaea2c27edf6e596874d3a08b8e7806e60/LICENSE"
       ],
       "copyright": []
+    },
+    {
+      "id": "rust:keccak@0.1.6",
+      "name": "keccak",
+      "version": "0.1.6",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/sponges/tree/a8936d9662ca92fd177d289580066ceabb937b0c",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "bdebaf9156a298f8fdab56dd26cb5144673de522d80f4c0d88e0039145f147f9"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/sponges/blob/a8936d9662ca92fd177d289580066ceabb937b0c/keccak/LICENSE-APACHE",
+        "https://github.com/RustCrypto/sponges/blob/a8936d9662ca92fd177d289580066ceabb937b0c/keccak/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2018-2022 RustCrypto Developers"
+      ]
+    },
+    {
+      "id": "rust:kem@0.3.0-pre.0",
+      "name": "kem",
+      "version": "0.3.0-pre.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/traits/tree/f785c95b9e08db25eba1240dabd3ec28efe32da1",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "f25e815326bb6e7efb7baf7eeca7f096cd05bc1af9bb7c408984db61bd69e304",
+        "17f0e4abca848e78b7148718eb46346abf4a6664573e913928d1a1ed81e14d95"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/traits/blob/f785c95b9e08db25eba1240dabd3ec28efe32da1/kem/LICENSE-APACHE",
+        "https://github.com/RustCrypto/traits/blob/f785c95b9e08db25eba1240dabd3ec28efe32da1/kem/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2021 RustCrypto Developers",
+        "Copyright (c) 2021-2022 RustCrypto Developers"
+      ]
     },
     {
       "id": "rust:keyboard-types@0.7.0",
@@ -21125,6 +22199,90 @@
       ]
     },
     {
+      "id": "rust:mail-builder@0.5.0",
+      "name": "mail-builder",
+      "version": "0.5.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/stalwartlabs/mail-builder/tree/1f667e2d81b3621184d798120267a144aad4124a",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSES/Apache-2.0.txt",
+        "LICENSES/MIT.txt"
+      ],
+      "links": [
+        "https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/Apache-2.0.txt",
+        "https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/MIT.txt"
+      ],
+      "copyright": []
+    },
+    {
+      "id": "rust:mail-parser@0.11.8",
+      "name": "mail-parser",
+      "version": "0.11.8",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/stalwartlabs/mail-parser/tree/499ae0f2ff649af84c921af4b008f7c617b0bf87",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "03d62bfaa4460b4cedf92dd88c0f74420ed754ada53481d00e69007da4366ec2",
+        "6960a0bc3c17417633742a6f03aa1aa5fd06b67c4516a59f0815b4bd4b67cd93",
+        "6960a0bc3c17417633742a6f03aa1aa5fd06b67c4516a59f0815b4bd4b67cd93"
+      ],
+      "files": [
+        "resources/eml/legacy/COPYING",
+        "resources/eml/malformed/COPYING",
+        "resources/eml/thirdparty/COPYING"
+      ],
+      "links": [
+        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/legacy/COPYING",
+        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/malformed/COPYING",
+        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/thirdparty/COPYING"
+      ],
+      "copyright": [
+        "These test files are Copyright © 2010 Hunny Software, Inc.",
+        "These test files are Copyright (c) 2003-2018 Dovecot authors, licensed under MIT."
+      ]
+    },
+    {
+      "id": "rust:mail-send@0.6.2",
+      "name": "mail-send",
+      "version": "0.6.2",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/stalwartlabs/mail-send/tree/5256793258f2ee11ce4bdc033ce4a01d1307b50b",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSES/Apache-2.0.txt",
+        "LICENSES/MIT.txt"
+      ],
+      "links": [
+        "https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/Apache-2.0.txt",
+        "https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/MIT.txt"
+      ],
+      "copyright": []
+    },
+    {
       "id": "rust:markup5ever@0.39.0",
       "name": "markup5ever",
       "version": "0.39.0",
@@ -21565,6 +22723,34 @@
       ],
       "copyright": [
         "Copyright (c) 2014 Carl Lerche and other MIO contributors"
+      ]
+    },
+    {
+      "id": "rust:ml-kem@0.2.3",
+      "name": "ml-kem",
+      "version": "0.2.3",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/KEMs/tree/72dbb072b7efb790d6a158053ad352c364e51f6a",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "a7e3b55af7a711768727f3f4a39fed2559c0c996d476908d888715ffb29e4cfe"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/KEMs/blob/72dbb072b7efb790d6a158053ad352c364e51f6a/ml-kem/LICENSE-APACHE",
+        "https://github.com/RustCrypto/KEMs/blob/72dbb072b7efb790d6a158053ad352c364e51f6a/ml-kem/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2024 RustCrypto Developers"
       ]
     },
     {
@@ -22890,7 +24076,10 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/RustCrypto/utils/tree/dd4adddf8b716bb51eb8ccb8c73e47bff1e358aa",
       "artifacts": [
-        "Unsigned Windows x64 Agent preview"
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
@@ -23187,6 +24376,34 @@
       ],
       "copyright": [
         "Copyright (c) 2026 Karpelès Lab Inc."
+      ]
+    },
+    {
+      "id": "rust:p256@0.13.2",
+      "name": "p256",
+      "version": "0.13.2",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/elliptic-curves/tree/d21a81b2be325db940502fdc5299094b79b450f0",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "233b95ccbf90dc67e32f3e8995c489f6312d9191ebd141a931c3b684f1e3be6d"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/elliptic-curves/blob/d21a81b2be325db940502fdc5299094b79b450f0/p256/LICENSE-APACHE",
+        "https://github.com/RustCrypto/elliptic-curves/blob/d21a81b2be325db940502fdc5299094b79b450f0/p256/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2020-2023 RustCrypto Developers"
       ]
     },
     {
@@ -23731,6 +24948,35 @@
       "copyright": []
     },
     {
+      "id": "rust:pin-utils@0.1.1",
+      "name": "pin-utils",
+      "version": "0.1.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/rust-lang/pin-utils/tree/1c8fe452e3f22c76cb35f4b171f090bf2d50890c",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "a16d29d68b56354ed97692422fa0ae34cd22c142b624e7e9876011ec0c19365c",
+        "28802412d2bfbafe432b305634413b41a984d30fba0df41d30aa2c8a2077c5b1"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/rust-lang/pin-utils/blob/1c8fe452e3f22c76cb35f4b171f090bf2d50890c/LICENSE-APACHE",
+        "https://github.com/rust-lang/pin-utils/blob/1c8fe452e3f22c76cb35f4b171f090bf2d50890c/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2018 The pin-utils authors",
+        "Copyright (c) 2018 The pin-utils authors"
+      ]
+    },
+    {
       "id": "rust:piper@0.2.5",
       "name": "piper",
       "version": "0.2.5",
@@ -23835,6 +25081,34 @@
       "copyright": []
     },
     {
+      "id": "rust:poly1305@0.8.0",
+      "name": "poly1305",
+      "version": "0.8.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/universal-hashes/tree/47a72962e8898fc70ab79d4ab40949efe61a23d2",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "6d99fffea918d1f7dfe567029c7bd21d6fcaf310ad28c44e6511a0e1f68c79ea"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/universal-hashes/blob/47a72962e8898fc70ab79d4ab40949efe61a23d2/poly1305/LICENSE-APACHE",
+        "https://github.com/RustCrypto/universal-hashes/blob/47a72962e8898fc70ab79d4ab40949efe61a23d2/poly1305/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2015-2019 RustCrypto Developers"
+      ]
+    },
+    {
       "id": "rust:polycool@0.4.0",
       "name": "polycool",
       "version": "0.4.0",
@@ -23869,7 +25143,10 @@
       "license": "Apache-2.0 OR MIT",
       "source": "https://github.com/RustCrypto/universal-hashes/tree/4e7d04f7c8e44f634ada8c673c8cb1672a64d374",
       "artifacts": [
-        "Unsigned Windows x64 Agent preview"
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
@@ -24049,6 +25326,34 @@
       "copyright": []
     },
     {
+      "id": "rust:primeorder@0.13.6",
+      "name": "primeorder",
+      "version": "0.13.6",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/elliptic-curves/tree/bfd7b49d080270e4b260a6707a603c6ce8c66116",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "233b95ccbf90dc67e32f3e8995c489f6312d9191ebd141a931c3b684f1e3be6d"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/elliptic-curves/blob/bfd7b49d080270e4b260a6707a603c6ce8c66116/primeorder/LICENSE-APACHE",
+        "https://github.com/RustCrypto/elliptic-curves/blob/bfd7b49d080270e4b260a6707a603c6ce8c66116/primeorder/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2020-2023 RustCrypto Developers"
+      ]
+    },
+    {
       "id": "rust:proc-macro-crate@3.5.0",
       "name": "proc-macro-crate",
       "version": "3.5.0",
@@ -24071,6 +25376,66 @@
         "https://github.com/bkchr/proc-macro-crate/blob/8f3d8b04539f732e09c07907f138a248c8d0eed9/LICENSE-MIT"
       ],
       "copyright": []
+    },
+    {
+      "id": "rust:proc-macro-error-attr3@3.1.1",
+      "name": "proc-macro-error-attr3",
+      "version": "3.1.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/gamma0987/proc-macro-error3/tree/0f0e21bb2a46509c923b87459c6be314bc0cabb5",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "7ae853285b1a4f088b47e71f966e0a263f7d362aae50c544cdfd0578dd0517a6",
+        "544b3aed1fd723d0cadea567affdcfe0431e43e18d997a718f9d67256b814fde"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/gamma0987/proc-macro-error3/blob/0f0e21bb2a46509c923b87459c6be314bc0cabb5/proc-macro-error-attr/LICENSE-APACHE",
+        "https://github.com/gamma0987/proc-macro-error3/blob/0f0e21bb2a46509c923b87459c6be314bc0cabb5/proc-macro-error-attr/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2019-2020 CreepySkeleton <creepy-skeleton@yandex.ru>",
+        "Copyright (c) 2019-2020 CreepySkeleton"
+      ]
+    },
+    {
+      "id": "rust:proc-macro-error3@3.1.1",
+      "name": "proc-macro-error3",
+      "version": "3.1.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/gamma0987/proc-macro-error3/tree/0f0e21bb2a46509c923b87459c6be314bc0cabb5",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "b355df512118e0367bab0ab5a7d2a729dfcbe9f6d774fd0c18a0c2c9794d0f9b",
+        "4d6bf8cef395998be2de2da71eb023ca62603efbd8618b485bb3d1381d011d4b"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/gamma0987/proc-macro-error3/blob/0f0e21bb2a46509c923b87459c6be314bc0cabb5/LICENSE-APACHE",
+        "https://github.com/gamma0987/proc-macro-error3/blob/0f0e21bb2a46509c923b87459c6be314bc0cabb5/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2019-2020 CreepySkeleton <creepy-skeleton@yandex.ru>",
+        "Copyright 2026 gamma0987 <gamma0987@posteo.de>",
+        "Copyright (c) 2019-2020 CreepySkeleton",
+        "Copyright (c) 2026 gamma0987 <gamma0987@posteo.de>"
+      ]
     },
     {
       "id": "rust:proc-macro2@1.0.107",
@@ -25497,6 +26862,81 @@
       ]
     },
     {
+      "id": "rust:rust-embed-impl@8.13.0",
+      "name": "rust-embed-impl",
+      "version": "8.13.0",
+      "license": "MIT",
+      "source": "https://pyrossh.dev/repos/rust-embed",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "57f956f285663050aa43e3261a68e40d69ac37bf2821247c21d292dbfe44e72c"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://crates.io/crates/rust-embed-impl/8.13.0"
+      ],
+      "copyright": [
+        "Copyright (c) 2018 pyros2097"
+      ]
+    },
+    {
+      "id": "rust:rust-embed-utils@8.13.0",
+      "name": "rust-embed-utils",
+      "version": "8.13.0",
+      "license": "MIT",
+      "source": "https://pyrossh.dev/repos/rust-embed",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "57f956f285663050aa43e3261a68e40d69ac37bf2821247c21d292dbfe44e72c"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://crates.io/crates/rust-embed-utils/8.13.0"
+      ],
+      "copyright": [
+        "Copyright (c) 2018 pyros2097"
+      ]
+    },
+    {
+      "id": "rust:rust-embed@8.13.0",
+      "name": "rust-embed",
+      "version": "8.13.0",
+      "license": "MIT",
+      "source": "https://pyrossh.dev/repos/rust-embed",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "57f956f285663050aa43e3261a68e40d69ac37bf2821247c21d292dbfe44e72c"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://crates.io/crates/rust-embed/8.13.0"
+      ],
+      "copyright": [
+        "Copyright (c) 2018 pyros2097"
+      ]
+    },
+    {
       "id": "rust:rust-stemmers@1.2.0",
       "name": "rust-stemmers",
       "version": "1.2.0",
@@ -25686,6 +27126,34 @@
       ]
     },
     {
+      "id": "rust:rustls-platform-verifier@0.7.1",
+      "name": "rustls-platform-verifier",
+      "version": "0.7.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/rustls/rustls-platform-verifier/tree/252e25161a91af476cbea620e29d277592d27ec7",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a",
+        "1c7cf76689c837a68ed8d704994e52a0f2940c087958f860d17f3186afbdcc0c"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/rustls/rustls-platform-verifier/blob/252e25161a91af476cbea620e29d277592d27ec7/rustls-platform-verifier/LICENSE-APACHE",
+        "https://github.com/rustls/rustls-platform-verifier/blob/252e25161a91af476cbea620e29d277592d27ec7/rustls-platform-verifier/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2022 1Password"
+      ]
+    },
+    {
       "id": "rust:rustls-webpki@0.103.15",
       "name": "rustls-webpki",
       "version": "0.103.15",
@@ -25821,6 +27289,34 @@
       "copyright": []
     },
     {
+      "id": "rust:salsa20@0.10.2",
+      "name": "salsa20",
+      "version": "0.10.2",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/stream-ciphers/tree/d5a03c09eb1a0326809d766686f51fbbd86ddb8b",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "5f48cbaa21c857be3080d8e7bca0f55633a09c5fb7ba1ab3aa1360345a2bf525"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/stream-ciphers/blob/d5a03c09eb1a0326809d766686f51fbbd86ddb8b/salsa20/LICENSE-APACHE",
+        "https://github.com/RustCrypto/stream-ciphers/blob/d5a03c09eb1a0326809d766686f51fbbd86ddb8b/salsa20/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2019 Eric McCorkle"
+      ]
+    },
+    {
       "id": "rust:same-file@1.0.6",
       "name": "same-file",
       "version": "1.0.6",
@@ -25952,6 +27448,62 @@
       ]
     },
     {
+      "id": "rust:scrypt@0.11.0",
+      "name": "scrypt",
+      "version": "0.11.0",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/password-hashes/tree/7e84684d711846230b265c45da0da0bb40513fea",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "c995204cc6bad2ed67dd41f7d89bb9f1a9d48e0edd745732b30640d7912089a4"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/password-hashes/blob/7e84684d711846230b265c45da0da0bb40513fea/scrypt/LICENSE-APACHE",
+        "https://github.com/RustCrypto/password-hashes/blob/7e84684d711846230b265c45da0da0bb40513fea/scrypt/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2021-2023 The RustCrypto Project Developers"
+      ]
+    },
+    {
+      "id": "rust:sec1@0.7.3",
+      "name": "sec1",
+      "version": "0.7.3",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/formats/tree/c07eecfb9565ae5268ae484f9d6f5e913959c301",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "4a883ecc3bb1010faed542bf63d53e530fea5e5e12cf676aed588784298ba929"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/formats/blob/c07eecfb9565ae5268ae484f9d6f5e913959c301/sec1/LICENSE-APACHE",
+        "https://github.com/RustCrypto/formats/blob/c07eecfb9565ae5268ae484f9d6f5e913959c301/sec1/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2021-2022 The RustCrypto Project Developers"
+      ]
+    },
+    {
       "id": "rust:seccompiler@0.5.0",
       "name": "seccompiler",
       "version": "0.5.0",
@@ -25975,6 +27527,34 @@
       ],
       "copyright": [
         "Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved."
+      ]
+    },
+    {
+      "id": "rust:secrecy@0.10.3",
+      "name": "secrecy",
+      "version": "0.10.3",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/iqlusioninc/crates/tree/70eaa76ea3f4bacd67f3027c4a52948485a67d32",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a",
+        "1264c45618bccf48df48b9e9beefdc704dc094ddedccf5ddef0243a031b9e114"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/iqlusioninc/crates/blob/70eaa76ea3f4bacd67f3027c4a52948485a67d32/secrecy/LICENSE-APACHE",
+        "https://github.com/iqlusioninc/crates/blob/70eaa76ea3f4bacd67f3027c4a52948485a67d32/secrecy/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2019-2024 iqlusion"
       ]
     },
     {
@@ -26077,6 +27657,37 @@
         "https://crates.io/crates/selectors/0.38.0"
       ],
       "copyright": []
+    },
+    {
+      "id": "rust:self_cell@1.3.0",
+      "name": "self_cell",
+      "version": "1.3.0",
+      "license": "Apache-2.0 OR GPL-2.0-only",
+      "source": "https://github.com/Voultapher/self_cell/tree/93cb06e430e7516ac9b436029a15127782b6c2b6",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a",
+        "b90ed8150a6d371c84b7dbaa680cd0e9893ef7c2558765e1e00930513efcfe3b"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-GPLv2"
+      ],
+      "links": [
+        "https://github.com/Voultapher/self_cell/blob/93cb06e430e7516ac9b436029a15127782b6c2b6/LICENSE-APACHE",
+        "https://github.com/Voultapher/self_cell/blob/93cb06e430e7516ac9b436029a15127782b6c2b6/LICENSE-GPLv2"
+      ],
+      "copyright": [
+        "Copyright (C) 1989, 1991 Free Software Foundation, Inc.,",
+        "51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA",
+        "Copyright (C) <year>  <name of author>",
+        "Gnomovision version 69, Copyright (C) year name of author"
+      ]
     },
     {
       "id": "rust:semver@1.0.28",
@@ -26514,6 +28125,37 @@
       ]
     },
     {
+      "id": "rust:sha3@0.10.9",
+      "name": "sha3",
+      "version": "0.10.9",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/RustCrypto/hashes/tree/1637e892b5658941d04a4d895165b66780c7d7ab",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
+        "f18f6229547ab07f0b7b3e1f83acad8bb436f5f4c95a8a98b44f876caa00f04e"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/hashes/blob/1637e892b5658941d04a4d895165b66780c7d7ab/sha3/LICENSE-APACHE",
+        "https://github.com/RustCrypto/hashes/blob/1637e892b5658941d04a4d895165b66780c7d7ab/sha3/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2006-2009 Graydon Hoare",
+        "Copyright (c) 2009-2013 Mozilla Foundation",
+        "Copyright (c) 2014 Sébastien Martini",
+        "Copyright (c) 2016-2023 Artyom Pavlov, Marek Kotewicz"
+      ]
+    },
+    {
       "id": "rust:sharded-slab@0.1.7",
       "name": "sharded-slab",
       "version": "0.1.7",
@@ -26846,6 +28488,32 @@
       "copyright": [
         "Copyright (c) 2025 iparaskev"
       ]
+    },
+    {
+      "id": "rust:smtp-proto@0.2.5",
+      "name": "smtp-proto",
+      "version": "0.2.5",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/stalwartlabs/smtp-proto/tree/f9c4edfbda406615ed70bfb073f7eb1e5a157197",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSES/Apache-2.0.txt",
+        "LICENSES/MIT.txt"
+      ],
+      "links": [
+        "https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/Apache-2.0.txt",
+        "https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/MIT.txt"
+      ],
+      "copyright": []
     },
     {
       "id": "rust:snafu-derive@0.8.9",
@@ -27221,6 +28889,33 @@
       "copyright": [
         "Copyright 2017 Garrett Berg, vitiral@gmail.com",
         "Copyright (c) 2017 Garrett Berg, vitiral@gmail.com"
+      ]
+    },
+    {
+      "id": "rust:stop-token@0.7.0",
+      "name": "stop-token",
+      "version": "0.7.0",
+      "license": "MIT",
+      "source": "https://crates.io/crates/stop-token/0.7.0",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "fc4c38b6e134c0fe1748f2761018c52d9ed591c6ddd53cc6d85735f125982fb8",
+        "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+      ],
+      "files": [
+        "Upstream MIT OR Apache-2.0 declaration (no copyright notice supplied)",
+        "Full MIT license (elected from upstream MIT / Apache-2.0; upstream omits text)"
+      ],
+      "links": [
+        "https://crates.io/crates/stop-token/0.7.0"
+      ],
+      "copyright": [
+        "Copyright (c) <year> <copyright holders>"
       ]
     },
     {
@@ -28015,7 +29710,8 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview"
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "b30df9a48463d1c99c6a66cdee623b1b0832c3811d58a80b338268d71cea190e",
@@ -28066,7 +29762,8 @@
       "artifacts": [
         "Linux arm64 DEB/Agent",
         "Linux x64 DEB/Arch/Agent",
-        "Unsigned Windows x64 Agent preview"
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "b30df9a48463d1c99c6a66cdee623b1b0832c3811d58a80b338268d71cea190e",
@@ -28534,6 +30231,34 @@
       ]
     },
     {
+      "id": "rust:toml@0.5.11",
+      "name": "toml",
+      "version": "0.5.11",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/toml-rs/toml/tree/0c2004aaa5d273075809428d8d7e3fc595141ef5",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/toml-rs/toml/blob/0c2004aaa5d273075809428d8d7e3fc595141ef5/crates/toml/LICENSE-APACHE",
+        "https://github.com/toml-rs/toml/blob/0c2004aaa5d273075809428d8d7e3fc595141ef5/crates/toml/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2014 Alex Crichton"
+      ]
+    },
+    {
       "id": "rust:toml_datetime@1.1.1+spec-1.1.0",
       "name": "toml_datetime",
       "version": "1.1.1+spec-1.1.0",
@@ -28947,6 +30672,36 @@
       ]
     },
     {
+      "id": "rust:type-map@0.5.1",
+      "name": "type-map",
+      "version": "0.5.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/kardeiz/type-map/tree/d3ab3e642736d87f3fa8b1e6c8f13a93fcfb72e1",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "2ce11c42d594ff12365ffb4bb13a5f994964795a102c60911454822368c07ebb",
+        "1e932f2af080ff34117d4090bf0b873ed6339f5db932fd0aef2595501915c21e"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/kardeiz/type-map/blob/d3ab3e642736d87f3fa8b1e6c8f13a93fcfb72e1/LICENSE-APACHE",
+        "https://github.com/kardeiz/type-map/blob/d3ab3e642736d87f3fa8b1e6c8f13a93fcfb72e1/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright 2017-NOW Actix Team",
+        "Copyright (c) 2022 Jacob Brown",
+        "Copyright (c) 2017-NOW Actix Team"
+      ]
+    },
+    {
       "id": "rust:typenum@1.20.1",
       "name": "typenum",
       "version": "1.20.1",
@@ -29005,6 +30760,58 @@
       "copyright": [
         "Copyright (c) 2022 x-hgg-x"
       ]
+    },
+    {
+      "id": "rust:unic-langid-impl@0.9.6",
+      "name": "unic-langid-impl",
+      "version": "0.9.6",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/zbraniecki/unic-locale/tree/4f37b35b55ab2354319abe11db6e84fe83abe895",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/zbraniecki/unic-locale/blob/4f37b35b55ab2354319abe11db6e84fe83abe895/unic-langid-impl/LICENSE-APACHE",
+        "https://github.com/zbraniecki/unic-locale/blob/4f37b35b55ab2354319abe11db6e84fe83abe895/unic-langid-impl/LICENSE-MIT"
+      ],
+      "copyright": []
+    },
+    {
+      "id": "rust:unic-langid@0.9.6",
+      "name": "unic-langid",
+      "version": "0.9.6",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/zbraniecki/unic-locale/tree/4f37b35b55ab2354319abe11db6e84fe83abe895",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/zbraniecki/unic-locale/blob/4f37b35b55ab2354319abe11db6e84fe83abe895/unic-langid/LICENSE-APACHE",
+        "https://github.com/zbraniecki/unic-locale/blob/4f37b35b55ab2354319abe11db6e84fe83abe895/unic-langid/LICENSE-MIT"
+      ],
+      "copyright": []
     },
     {
       "id": "rust:unicase@2.9.0",
@@ -29363,7 +31170,10 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/RustCrypto/traits/tree/742af86f821d7f79e76962d302c819b14622a485",
       "artifacts": [
-        "Unsigned Windows x64 Agent preview"
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "6aed14a79871456730ce9c74d0e927e9097e63b4085c4395af363d431ede5c8f",
@@ -31057,6 +32867,32 @@
       ]
     },
     {
+      "id": "rust:x25519-dalek@2.0.1",
+      "name": "x25519-dalek",
+      "version": "2.0.1",
+      "license": "BSD-3-Clause",
+      "source": "https://github.com/dalek-cryptography/curve25519-dalek/tree/4ac84dd0668b1d2e51654fcdffe4ae6a687bef00",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "6fe6d6a54d0190972a733d1292ac9a8679fc76e6899cbe871b85ce38c2f887f4"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "links": [
+        "https://github.com/dalek-cryptography/curve25519-dalek/blob/4ac84dd0668b1d2e51654fcdffe4ae6a687bef00/x25519-dalek/LICENSE"
+      ],
+      "copyright": [
+        "Copyright (c) 2017-2021 isis agora lovecruft. All rights reserved.",
+        "Copyright (c) 2019-2021 DebugSteven. All rights reserved."
+      ]
+    },
+    {
       "id": "rust:xmlwriter@0.1.0",
       "name": "xmlwriter",
       "version": "0.1.0",
@@ -31469,6 +33305,34 @@
       ],
       "copyright": [
         "Copyright (c) 2018-2026 The RustCrypto Project Developers"
+      ]
+    },
+    {
+      "id": "rust:zeroize_derive@1.5.0",
+      "name": "zeroize_derive",
+      "version": "1.5.0",
+      "license": "Apache-2.0 OR MIT",
+      "source": "https://github.com/RustCrypto/utils/tree/1ea42bb68f560a2909c856b20aa3c62901f6305c",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a",
+        "b8c6939380a400f53e11923d50fcc4dd2fa1ba8339fd9d04cda38a0251b6c9b0"
+      ],
+      "files": [
+        "LICENSE-APACHE",
+        "LICENSE-MIT"
+      ],
+      "links": [
+        "https://github.com/RustCrypto/utils/blob/1ea42bb68f560a2909c856b20aa3c62901f6305c/zeroize_derive/LICENSE-APACHE",
+        "https://github.com/RustCrypto/utils/blob/1ea42bb68f560a2909c856b20aa3c62901f6305c/zeroize_derive/LICENSE-MIT"
+      ],
+      "copyright": [
+        "Copyright (c) 2019-2026 The RustCrypto Project Developers"
       ]
     },
     {

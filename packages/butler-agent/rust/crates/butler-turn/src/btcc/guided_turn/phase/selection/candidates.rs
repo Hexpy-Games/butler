@@ -18,7 +18,7 @@ const BROWSER_CORE: [&str; 5] = [
 /// Names of the tools the provider surface offers: initial tools of the
 /// always-on and required profiles, memory startup tools, required tools,
 /// bridges, the authorized core browser tools, Work tools where Work is
-/// tracked, and the role's delegation tools.
+/// tracked, the role's delegation tools, and the 서랍 search.
 pub(super) fn provider_candidates(
     catalog: &GuidedCatalogSnapshot,
     authorized: &[&GuidedCatalogTool],
@@ -68,6 +68,13 @@ pub(super) fn provider_candidates(
         .any(|tool| tool.name == ToolName::ProjectArtifacts)
     {
         names.insert("project_artifacts".into());
+    }
+    // The 서랍 holds what the user saved in any chat; it is always findable.
+    if authorized
+        .iter()
+        .any(|tool| tool.name == ToolName::LibrarySearch)
+    {
+        names.insert("library_search".into());
     }
     if browse {
         names.retain(|name| !deferred_browser(name));

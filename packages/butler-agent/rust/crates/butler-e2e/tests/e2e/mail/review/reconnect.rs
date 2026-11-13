@@ -5,9 +5,8 @@ async fn review_host_no_idle_crashes_after_at_most_three_logins() -> Result<(), 
     let fake = FakeImap::start().await?;
     fake.idle_supported(false);
     let setup = setup("MAIL-NO-IDLE")?;
-    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s, &root).await?;
+    install(&s).await?;
     let response = api(&s, Method::POST, "/connectors/mail/mail/accounts", Some(json!({"fields":fields(&fake),"secrets":{"IMAP_PASSWORD":"password"},"revision":revision(&s).await?}))).await?;
     assert_eq!(response.status, 200);
     wait(|| async {

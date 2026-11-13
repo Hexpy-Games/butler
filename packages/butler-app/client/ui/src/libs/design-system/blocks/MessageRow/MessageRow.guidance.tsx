@@ -61,7 +61,7 @@ export const guidance: ShowcaseGuidance = {
       dont: { caption: "Answers in cards look like attachments, not conversation.", render: () => <Card><Typo.Body>The header block now ends with a divider.</Typo.Body></Card> },
     },
   ],
-  content: ["Virtualized rows position themselves with offsetY (translateY); nothing else styles a row.", "Status labels are short (Response completed / 응답 완료); times are local clock times.", "Bubbles (user and Butler) share one shape: --radius-popover (12px), --user-message-bg, max width min(440px, 68%)."],
+  content: ["Virtualized rows position themselves with offsetY (translateY); nothing else styles a row.", "Status labels are short (Response completed / 응답 완료); times are local clock times.", "Bubbles (user and Butler) share one shape: --radius-popover (12px), --user-message-bg. Max width: user min(440px, 68%), Butler min(440px, 90%)."],
   accessibility: ["Messages are articles in reading order; footers are toolbars of labelled buttons; shimmer is decorative."],
   tokens: ["--space-lg", "--user-message-bg", "--radius-popover", "--page-max-width-reading", "--motion-base", "--motion-distance-sm", "--shimmer-duration"],
 };

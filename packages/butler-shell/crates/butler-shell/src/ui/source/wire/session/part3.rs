@@ -1,9 +1,8 @@
 //! Typed renderer wire contracts; field names follow their TypeScript sources.
 use crate::ui::source::wire::{
-    AccessMode, CalendarSchedule, ChangedFileDetail, InterfaceTextReference, MessageFileRef,
-    ProgressRow, ReasoningEffort, RuntimeDeliveryState, SessionArtifactSummary, SessionViewStatus,
-    SessionViewTurn, StewardResultView, SubtaskState, SubtaskWorkerView, WorkBlockView, WorkPlan,
-    WorkerActivityPhase,
+    AccessMode, CalendarSchedule, InterfaceTextReference, MessageFileRef, ProgressRow,
+    ReasoningEffort, RuntimeDeliveryState, SessionViewStatus, SessionViewTurn, StewardResultView,
+    SubtaskState, SubtaskWorkerView, WorkBlockView, WorkPlan, WorkerActivityPhase,
 };
 use serde::Deserialize;
 
@@ -174,17 +173,11 @@ pub(crate) struct StewardSessionSummaryView {
     #[serde(default)]
     pub(crate) waiting_for_children: Option<bool>,
     #[serde(default)]
-    pub(crate) activity_rows: Vec<ProgressRow>,
-    #[serde(default)]
     pub(crate) approved_plan_revision: Option<i64>,
     #[serde(default)]
     pub(crate) approved_plan_total: Option<i64>,
     #[serde(default)]
     pub(crate) approved_plan_completed: Option<i64>,
-    #[serde(default)]
-    pub(crate) artifacts: Vec<SessionArtifactSummary>,
-    #[serde(default)]
-    pub(crate) changed_files: Vec<ChangedFileDetail>,
     #[serde(default)]
     pub(crate) result: Option<StewardResultView>,
     pub(crate) updated_at: String,

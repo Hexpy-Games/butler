@@ -84,6 +84,9 @@ pub(super) async fn route(
             let input = body(request).await?;
             envelope(StatusCode::OK, setup.chatgpt_notice(input).await?)
         }
+        (_, path) if path == "/setup/butler-vault" || path.starts_with("/setup/butler-vault/") => {
+            vault_route(&setup, request, uri.path()).await
+        }
         (&Method::POST, "/setup/chatgpt-account/sign-out") => {
             envelope(StatusCode::OK, setup.chatgpt_sign_out().await?)
         }
@@ -92,6 +95,54 @@ pub(super) async fn route(
         }
         _ => oauth_flow_route(&setup, &method, uri.path()).await,
     }
+}
+
+#[derive(Default, serde::Deserialize)]
+struct VaultPassword {
+    password: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct VaultPasswordChange {
+    current: String,
+    new: String,
+}
+
+fn secret(value: String) -> butler_platform::secrets::SecretText {
+    butler_log::register_secret(&value);
+    butler_platform::secrets::SecretText::new(value)
+}
+
+async fn vault_route(
+    setup: &Arc<dyn crate::gateway::AppSetupPort>,
+    request: Request<Body>,
+    path: &str,
+) -> Result<Response, HttpError> {
+    let view = match (request.method(), path) {
+        (&Method::GET, "/setup/butler-vault") => setup.butler_vault().await?,
+        (&Method::POST, "/setup/butler-vault/enable") => {
+            let input: VaultPassword = optional_body(request).await?;
+            setup
+                .enable_butler_vault(input.password.map(secret))
+                .await?
+        }
+        (&Method::POST, "/setup/butler-vault/unlock") => {
+            let input: VaultPassword = body(request).await?;
+            let password = input.password.ok_or_else(|| {
+                HttpError::public(400, "invalid_request", "A password is required.")
+            })?;
+            setup.unlock_butler_vault(secret(password)).await?
+        }
+        (&Method::POST, "/setup/butler-vault/password") => {
+            let input: VaultPasswordChange = body(request).await?;
+            setup
+                .change_butler_vault_password(secret(input.current), secret(input.new))
+                .await?
+        }
+        (&Method::POST, "/setup/butler-vault/decline") => setup.decline_butler_vault().await?,
+        _ => return Err(not_found()),
+    };
+    envelope(StatusCode::OK, view)
 }
 
 #[derive(serde::Deserialize)]

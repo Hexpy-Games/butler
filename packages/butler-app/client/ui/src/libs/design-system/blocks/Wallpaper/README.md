@@ -84,8 +84,11 @@ buffer serves rest and events: DPR ≤ 1.5 within 2.4MP (touch: 1.2MP).
   its width below its top, only a faint tail enters). A column change eases
   over 300 ms (instantly under reduced motion, low power or while hidden).
   A keep-out that moves (a scrolling suggestion rail) is picked up at the
-  next keyframe, so scrolling never redraws the print; one that appears or
-  goes redraws at once.
+  next keyframe, so scrolling never redraws the print; one that appears
+  redraws at once. A `contentRect` that goes stays drawn until another
+  replaces it, so a screen switch never shows the print bare; a column that
+  arrives fades in over it (a first column snaps only onto a bare print, at
+  first paint).
 - Drift modules are not dimmed under reduced motion; their paper follows the
   theme (`--riso-paper`: the lower stop of that theme's `--conversation-bg`,
   so riso and the plain background share one paper).

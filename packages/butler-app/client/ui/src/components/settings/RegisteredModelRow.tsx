@@ -17,7 +17,8 @@ import type { AppModelSummary } from "@/app/types.ts";
 interface RegisteredModelRowProps {
   model: AppModelSummary;
   busy: boolean;
-  onEdit: () => void;
+  showTokenCaption?: boolean;
+  onEdit?: () => void;
   onDelete: () => void;
 }
 
@@ -26,6 +27,7 @@ export function RegisteredModelRow({
   busy,
   onEdit,
   onDelete,
+  showTokenCaption = true,
 }: RegisteredModelRowProps) {
   useAppLocale();
   const copy = appCopy.settings.modelManagement;
@@ -40,15 +42,15 @@ export function RegisteredModelRow({
               {model.provider_label} / {name}
             </Typo.PanelSectionTitle>
             <Stack gap="xs">
-              <Typo.Caption>
+              {showTokenCaption && <Typo.Caption>
                 {tokenWindowLabel(model.context_window_tokens)}
-              </Typo.Caption>
+              </Typo.Caption>}
               <ModelAuthTag model={model} />
             </Stack>
           </div>
         </Stack>
         <ButtonContainer size="sm">
-          <Button
+          {onEdit && <Button
             type="button"
             variant="outline"
             size="sm"
@@ -57,7 +59,7 @@ export function RegisteredModelRow({
             aria-label={copy.editLabel(name)}
           >
             <Pencil size="sm" /> {copy.edit}
-          </Button>
+          </Button>}
           <Button
             type="button"
             variant="outline"

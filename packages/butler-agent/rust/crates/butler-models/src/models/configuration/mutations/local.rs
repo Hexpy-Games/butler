@@ -39,9 +39,7 @@ impl ModelConfiguration {
         let _change = super::lock_config(root).await?;
         let mut config = super::super::read_object(&root.join("butler.config.json")).await;
         let current = self.local_models(&config);
-        let mut credentials =
-            super::super::local_credentials::read(&root.join("auth/custom-model-credentials.json"))
-                .await?;
+        let mut credentials = super::super::local_credentials::read(root).await?;
         let (_, api_base_url) = super::super::discovery::normalize_server(&input.server_url)?;
         let model_id = butler_core::public_text::trim_js_whitespace(&input.model_id);
         let previous = if let Some(lookup) = lookup {
@@ -102,9 +100,7 @@ impl ModelConfiguration {
     ) -> Result<Option<crate::models::LocalImageDiscovery>, ModelCatalogError> {
         let config = super::super::read_object(&root.join("butler.config.json")).await;
         let current = self.local_models(&config);
-        let credentials =
-            super::super::local_credentials::read(&root.join("auth/custom-model-credentials.json"))
-                .await?;
+        let credentials = super::super::local_credentials::read(root).await?;
         let (_, api_base_url) = super::super::discovery::normalize_server(&input.server_url)?;
         let model_id = butler_core::public_text::trim_js_whitespace(&input.model_id);
         let previous = if let Some(lookup) = lookup {
@@ -146,9 +142,7 @@ impl ModelConfiguration {
         let _change = super::lock_config(root).await?;
         let mut config = read_object_sync(&root.join("butler.config.json"));
         let current = self.local_models(&config);
-        let mut credentials = super::super::local_credentials::read_sync(
-            &root.join("auth/custom-model-credentials.json"),
-        )?;
+        let mut credentials = super::super::local_credentials::read_sync(root)?;
         let previous = find_local(&current, lookup)
             .cloned()
             .ok_or_else(|| super::error("Local model is not registered."))?;
@@ -162,10 +156,7 @@ impl ModelConfiguration {
             "local",
             serde_json::to_value(next).map_err(super::json_error)?,
         );
-        super::super::local_credentials::write(
-            &root.join("auth/custom-model-credentials.json"),
-            &credentials,
-        )?;
+        super::super::local_credentials::write(root, &credentials)?;
         super::write_json(&root.join("butler.config.json"), &config)?;
         Ok(previous)
     }
@@ -303,10 +294,7 @@ async fn persist(
     credentials: HashMap<String, String>,
 ) -> Result<(), ModelCatalogError> {
     tokio::task::spawn_blocking(move || {
-        super::super::local_credentials::write(
-            &root.join("auth/custom-model-credentials.json"),
-            &credentials,
-        )?;
+        super::super::local_credentials::write(&root, &credentials)?;
         super::write_json(&root.join("butler.config.json"), &config)
     })
     .await

@@ -19,6 +19,7 @@ const baseRadius = (value: string) => /^calc\((\S+) \/ var\(--ui-scale\)\)$/u.ex
 /** The surface each radius belongs to, drawn at that surface's proportions. */
 const SHAPES: Record<string, { label: string; shape: string }> = {
   "--radius-control": { label: "Buttons, fields, rows", shape: "control" },
+  "--radius-control-touch": { label: "Buttons and fields at the 44px touch size", shape: "control" },
   "--radius-panel": { label: "Cards and panels", shape: "panel" },
   "--radius-popover": { label: "Menus, popovers, dialogs, column-wide cards, message bubbles and in-chat cards", shape: "popover" },
   "--radius-composer": { label: "Composer and glass", shape: "composer" },

@@ -797,7 +797,7 @@ Runs one action from a text label; the primary way to commit, cancel or start so
 - Not for: A whole row or card should be clickable → `Clickable`
 - Not for: A primary action with related alternatives → `SplitButton`
 - Not for: A rounded chip in the composer toolbar → `PillButton`
-- Tokens: `--control-height-md`, `--radius-control`, `--send-bg`, `--focus-ring`, `--motion-scale-press`
+- Tokens: `--control-height-md`, `--radius-control`, `--send-bg`, `--focus-ring`, `--motion-scale-press`, `--control-hit-target`, `--radius-control-touch`, `--font-size-4`
 
 ### ButtonContainer
 
@@ -928,7 +928,7 @@ A single-line field for names, IDs, URLs, numbers and secrets. Use variant=defau
 - Not for: Choosing from a fixed list → `Select`
 - Not for: A token budget with a slider → `TokenInputControl`
 - Not for: A percentage with a slider → `PercentInputControl`
-- Tokens: `--line-strong`, `--border-hairline`, `--focus-ring-width`, `--focus-ring-color`, `--line`, `--radius-control`, `--placeholder`, `--focus-ring`, `--color-disabled-bg`, `--color-danger-border`
+- Tokens: `--line-strong`, `--border-hairline`, `--focus-ring-width`, `--focus-ring-color`, `--line`, `--radius-control`, `--placeholder`, `--focus-ring`, `--color-disabled-bg`, `--color-danger-border`, `--radius-control-touch`
 
 ### Label
 
@@ -953,7 +953,7 @@ A styled native <select>: the platform picker, with the Butler trigger look.
 - Not for: Options need icons, descriptions or custom rendering → `Select`
 - Not for: Searching a long list → `FilteredSelectPopover`
 - Not for: Two to four visible choices → `SegmentedControl`
-- Tokens: `--control-height-md`, `--radius-control`, `--line`, `--focus-ring`
+- Tokens: `--control-height-md`, `--radius-control`, `--line`, `--focus-ring`, `--radius-control-touch`
 
 ### SegmentedControl
 
@@ -980,7 +980,7 @@ A Radix select with the Butler trigger and menu, for one value from a list.
 - Not for: Plain options in a dense form or on phones → `NativeSelect`
 - Not for: A searchable list with filters → `FilteredSelectPopover`
 - Not for: A trigger that opens a custom popover → `SelectButton`
-- Tokens: `--control-height-md`, `--menu-item-height`, `--radius-popover`, `--motion-enter-menu`, `--motion-scale-menu`, `--icon-size-md`
+- Tokens: `--control-height-md`, `--menu-item-height`, `--radius-popover`, `--motion-enter-menu`, `--motion-scale-menu`, `--icon-size-md`, `--radius-control-touch`
 
 ### Slider
 

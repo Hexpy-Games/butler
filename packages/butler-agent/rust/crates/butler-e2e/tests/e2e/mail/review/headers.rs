@@ -5,9 +5,8 @@ async fn review_host_large_headers_delivered_with_utf8_safe_attribute_caps()
     butler_e2e::gate!();
     let fake = FakeImap::start().await?;
     let setup = setup("MAIL-HEADERS")?;
-    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s, &root).await?;
+    install(&s).await?;
     let direct = Direct::open(&s, &fake, "headers", "password").await?;
     direct.subscribe().await?;
     wait(|| async {

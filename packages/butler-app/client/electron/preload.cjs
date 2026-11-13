@@ -724,6 +724,9 @@ const butlerApp = Object.freeze({
     if (!["GET", "PUT"].includes(method)) throw new Error("invalid_image_settings_method");
     return requestBridgeResult("/settings/image-model", { method, ...(method === "PUT" ? { body: JSON.stringify(body) } : {}) });
   },
+  addCustomImageModel: (body) => requestBridgeResult("/settings/image-model/custom", { method: "POST", body: JSON.stringify(body) }),
+  registerImageModel: (body) => requestBridgeResult("/settings/image-model/registered", { method: "POST", body: JSON.stringify(body) }),
+  unregisterImageModel: (ref) => requestBridgeResult(`/settings/image-model/registered/${encodeURIComponent(ref)}`, { method: "DELETE" }),
   imageAssetInfo: ({ path }) => {
     if (!/^\/message-assets\/img_[a-z0-9]{10}(?:[a-z0-9]{2})?\/(meta|versions)$/u.test(path)) throw new Error("invalid_image_asset_route");
     return requestBridgeResult(path);
@@ -780,6 +783,19 @@ const butlerApp = Object.freeze({
     method: "POST", body: JSON.stringify(request ?? {}),
   }),
   signOutChatGpt: () => requestBridgeResult("/setup/chatgpt-account/sign-out", {
+    method: "POST", body: "{}",
+  }),
+  getButlerVault: () => requestBridgeResult("/setup/butler-vault"),
+  enableButlerVault: (request) => requestBridgeResult("/setup/butler-vault/enable", {
+    method: "POST", body: JSON.stringify(request ?? {}),
+  }),
+  unlockButlerVault: (request) => requestBridgeResult("/setup/butler-vault/unlock", {
+    method: "POST", body: JSON.stringify(request ?? {}),
+  }),
+  changeButlerVaultPassword: (request) => requestBridgeResult("/setup/butler-vault/password", {
+    method: "POST", body: JSON.stringify(request ?? {}),
+  }),
+  declineButlerVault: () => requestBridgeResult("/setup/butler-vault/decline", {
     method: "POST", body: "{}",
   }),
   startSetupOAuth: (request) => requestBridgeResult("/setup/oauth/start", {
@@ -1404,6 +1420,17 @@ const butlerApp = Object.freeze({
   revokeAllPairedDevices: () => requestSecurity("revokeAllPairedDevices"),
   // Sign-ins and browser import (host only). A password typed here goes to main,
   // then to the Agent's keychain store; no route ever answers one.
+  listPlugins: () => requestSecurity("listPlugins"),
+  inspectBundledPlugin: (payload) => requestSecurity("inspectBundledPlugin", { payload }),
+  installPlugin: (payload) => requestSecurity("installPlugin", { payload }),
+  checkPlugin: (body) => requestSecurity("checkPlugin", body),
+  updatePlugin: (body) => requestSecurity("updatePlugin", body),
+  listConnectors: () => requestSecurity("listConnectors"),
+  addConnectorAccount: (body) => requestSecurity("addConnectorAccount", body),
+  retryConnectorAccount: (body) => requestSecurity("retryConnectorAccount", body),
+  removeConnectorAccount: (body) => requestSecurity("removeConnectorAccount", body),
+  listConnectorRules: () => requestSecurity("listConnectorRules"),
+  deleteConnectorRule: (body) => requestSecurity("deleteConnectorRule", body),
   listSignIns: () => requestSecurity("listSignIns"),
   addSignIn: (payload) => requestSecurity("addSignIn", { payload }),
   updateSignIn: ({ id, payload } = {}) => requestSecurity("updateSignIn", { id, payload }),

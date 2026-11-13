@@ -1,6 +1,7 @@
 //! `browser_wait_for_user` with a stub model: the user holds the tab for a
 //! secure field; the hand-off text names the site and why (never the tab id),
-//! another tab's changes never resume it, and the hand-back does.
+//! another tab's changes never resume it, and the hand-back does, also for a
+//! popup now on another site than its opener.
 use super::host::{admin, attach, snapshot, tab};
 use super::tool::waiting_card;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, gateway::turn_state, scenario::Setup};
@@ -8,6 +9,7 @@ use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 
 const CHECKOUT: &str = "https://www.fixture-shop.test/checkout";
+const LANDING: &str = "https://www.fixture-landing.test/";
 const ASK: &str = "Help me enter the card number";
 
 #[tokio::test]
@@ -31,12 +33,12 @@ async fn wait_for_user_card_names_the_site_and_resumes_on_hand_back() -> Result<
         }),
     )
     .await?;
-    // The user took the tab over; Butler holds another tab in the conversation.
+    // The user took over a popup Butler's tab t2 opened; the popup is now on
+    // another site than its opener, as after a sign-in redirect.
     let tabs = |holder: &str| {
-        json!([
-            tab("t1", "conversation:general", CHECKOUT, holder),
-            tab("t2", "conversation:general", CHECKOUT, "agent")
-        ])
+        let mut popup = tab("t1", "conversation:general", CHECKOUT, holder);
+        popup["opener"] = json!("t2");
+        json!([popup, tab("t2", "conversation:general", LANDING, "agent")])
     };
     snapshot(&admin, tabs("user")).await?;
 

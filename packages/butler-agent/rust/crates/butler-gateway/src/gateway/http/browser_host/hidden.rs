@@ -3,8 +3,8 @@
 //! so the App path serves its calls with the App's own executor.
 //!
 //! Here it is started on the first browser need while no host is attached,
-//! handed over when the App itself attaches (at once when idle, otherwise
-//! after its current task), kept from what needs the user at the App, and
+//! handed over when the App itself attaches (once its in-flight call and uploads finish),
+//! kept from what needs the user at the App, and
 //! reaped by the headless rule: 60 s after its last tab.
 use super::{HttpError, HttpState, Inner, backend::Backend, error};
 use axum::http::HeaderMap;
@@ -16,6 +16,7 @@ use std::{
 
 /// The launch id a hidden host attaches with; the App sends none.
 const LAUNCH_HEADER: &str = "x-butler-browser-host";
+const APP_PID_HEADER: &str = "x-butler-app-pid";
 const REAP_AFTER: Duration = Duration::from_secs(60);
 
 pub(super) fn launch_of(headers: &HeaderMap) -> Option<String> {
@@ -23,6 +24,55 @@ pub(super) fn launch_of(headers: &HeaderMap) -> Option<String> {
         .get(LAUNCH_HEADER)
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned)
+}
+
+pub(super) fn app_pid_of(headers: &HeaderMap) -> Option<u32> {
+    headers
+        .get(APP_PID_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+}
+
+/// The App process's identity: its pid and start, so a reused pid never counts.
+pub(super) fn identify(pid: u32) -> Option<(u32, String)> {
+    butler_platform::instance::process_start(pid)
+        .ok()
+        .flatten()
+        .map(|start| (pid, start))
+}
+
+/// Whether the App that last attached still runs. While it does, its channel is
+/// the only browser: no hidden host starts and no call falls back to headless.
+pub(super) fn app_alive(state: &HttpState) -> bool {
+    let app = state.browser.0.lock().ok().and_then(|hub| hub.app.clone());
+    app.is_some_and(|(pid, start)| identify(pid).is_some_and(|(_, now)| now == start))
+}
+
+/// While the App lives and its channel is away (or is being reclaimed from the
+/// hidden host), a call waits up to `within` for the App to attach.
+pub(super) async fn await_app(state: &HttpState, within: Duration) {
+    if !app_alive(state) {
+        return;
+    }
+    let until = tokio::time::Instant::now() + within;
+    loop {
+        let changed = state.browser.2.notified();
+        tokio::pin!(changed);
+        changed.as_mut().enable();
+        let away = state
+            .browser
+            .0
+            .lock()
+            .is_ok_and(|hub| hub.host.is_none() || hub.hidden && hub.app_waiting);
+        if !away || tokio::time::timeout_at(until, changed).await.is_err() {
+            return;
+        }
+    }
+}
+
+/// The hidden host still owes a result: a call in flight or step images to upload.
+fn serving(hub: &Inner) -> bool {
+    hub.still_backlog > 0 || !hub.pending.is_empty()
 }
 
 /// Whether the attached hidden host still serves a task: a call in flight or
@@ -65,7 +115,7 @@ pub(super) fn admit(
     if !hub.hidden {
         return Err(error(409, "browser_host_exists"));
     }
-    if busy(hub) {
+    if serving(hub) {
         hub.app_waiting = true;
         return Err(error(409, "browser_host_busy"));
     }
@@ -109,7 +159,7 @@ pub(super) fn detached(state: &HttpState, hub: &mut Inner) {
 
 /// Hands the channel to a waiting App once the hidden host's task ended.
 pub(super) fn hand_over(state: &HttpState, hub: &mut Inner) {
-    if hub.hidden && hub.app_waiting && !busy(hub) {
+    if hub.hidden && hub.app_waiting && !serving(hub) {
         retire(state, hub);
     }
 }
@@ -139,6 +189,9 @@ pub(super) async fn ensure(state: &Arc<HttpState>, frame: Option<&Value>) {
     let (Some(app_host), Some(headless)) = (state.app_host.clone(), state.headless.as_ref()) else {
         return;
     };
+    if app_alive(state) {
+        return;
+    }
     if let Some(frame) = frame {
         let session = frame["session"].as_str().unwrap_or("");
         let signed_in =

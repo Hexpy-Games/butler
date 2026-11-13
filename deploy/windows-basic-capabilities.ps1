@@ -42,7 +42,7 @@ try {
     $after = Get-Content "$root/after.json" -Raw
     foreach ($key in $keys) { [Environment]::SetEnvironmentVariable($key, $saved[$key]) }
     $ErrorActionPreference = 'Continue'
-    python -c "import shutil,sys; shutil.rmtree(chr(92)*2+'?'+chr(92)+sys.argv[1])" $root
+    python -c "import shutil,sys,os,stat;shutil.rmtree(chr(92)*2+'?'+chr(92)+sys.argv[1],onexc=lambda f,p,e:(os.chmod(p,stat.S_IWRITE),f(p)))" $root
     $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) { throw 'Could not remove isolated test profiles' }
     if ($before -cne $after) { throw 'Runner protocol registration changed' }

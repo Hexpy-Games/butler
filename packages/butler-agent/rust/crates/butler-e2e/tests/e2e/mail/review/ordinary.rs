@@ -70,9 +70,8 @@ async fn review_host_refuses_destinations_without_special_use() -> Result<(), Ha
     // Unknown roles require neither the capability nor special-use attributes.
     fake.special_use(false, true);
     let setup = setup("MAIL-HOST-UNKNOWN-ROLES")?;
-    let root = package(&setup.sandbox.home)?;
     let s = setup.start().await?;
-    install(&s, &root).await?;
+    install(&s).await?;
     connect(&s, &fake, "password").await?;
     for destination in ["Filed", "INBOX", "Archive"] {
         invoke(&s, "connector_rule_set", json!({"id":"unknown-roles","connector":"mail/mail","title":"File mail","reason":"Organize mail","match":[{"field":"subject","op":"equals","value":"Update"}],"actions":[{"type":"organize","tool":"mail/move","arguments":{"destination":destination}}]})).await?;

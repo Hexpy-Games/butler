@@ -51,7 +51,8 @@ try {
         assert.equal(measured.bubble!.background, measured.user.background);
         assert.equal(measured.bubble!.padding, measured.user.padding);
         assert(Math.abs(measured.bubble!.left - measured.body.left) < 1, "Butler aligns left");
-        assert(measured.bubble!.width <= measured.maxWidth + 0.5, "bubble respects 440px / 68% cap");
+        assert(measured.bubble!.width <= measured.maxWidth + 0.5, "bubble respects 440px / 90% cap");
+        if (width === 375) assert(Math.abs(measured.bubble!.width - measured.maxWidth) < 1, "a long reply fills the 90% cap on a phone");
         assert.equal(measured.document!.radius, "12px");
         assert.equal(measured.document!.top - measured.bubble!.bottom, 16, "the wrapper owns the lg gap");
         assert(Math.abs(measured.document!.left - measured.bubble!.left) < 1, "document aligns to bubble");
@@ -240,7 +241,7 @@ async function measure(page: Page) {
       actionLayout,
       body: geometry(body), user: geometry(user), bubble: bubble ? geometry(bubble) : null, document: card ? geometry(card) : null,
       bubbles: assistant.querySelectorAll('[data-test-class="assistant-bubble"]').length,
-      maxWidth: Math.min(440, assistant.getBoundingClientRect().width * 0.68),
+      maxWidth: Math.min(440, assistant.getBoundingClientRect().width * 0.9),
       answerWidth: assistant.querySelector('[data-test-class="turn-result-section"]')!.getBoundingClientRect().width,
       terminalCount: assistant.querySelectorAll('[data-test-class="assistant-terminal-status-row"]').length,
       completedLabel: /답변 완료|Response completed/u.test(assistant.textContent ?? ""),

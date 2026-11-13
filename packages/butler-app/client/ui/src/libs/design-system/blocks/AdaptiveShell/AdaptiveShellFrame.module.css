@@ -114,6 +114,7 @@
   opacity: 1;
   transform: none;
   visibility: visible;
+  pointer-events: auto;
   animation: peek-in var(--motion-base) var(--motion-ease-standard);
   transition: none;
 }

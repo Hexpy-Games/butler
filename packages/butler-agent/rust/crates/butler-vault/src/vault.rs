@@ -29,6 +29,7 @@ mod error;
 mod format;
 mod keychain;
 mod merge;
+mod product;
 mod store;
 mod transfer;
 mod unlock;
@@ -36,6 +37,9 @@ mod unlock;
 pub use cipher::{MIN_PASSWORD_CHARS, MIN_PASSWORD_DISTINCT_CHARS};
 pub use error::VaultError;
 pub use format::{FORMAT, Item, ItemKind, Payload, SecretValue, TOMBSTONE_RETENTION_MS, Tombstone};
-pub use keychain::{KEYCHAIN_SERVICE, KeychainSlot};
+pub use keychain::{KEYCHAIN_SERVICE, KeychainSlot, keychain_key};
 pub use merge::merge;
+pub use product::{
+    DECLINED_MARKER, LegacyItem, LegacySource, MIGRATION_MARKER, ProductVault, SwitchReport, shared,
+};
 pub use store::{NewItem, Vault, VaultPaths, VaultState};

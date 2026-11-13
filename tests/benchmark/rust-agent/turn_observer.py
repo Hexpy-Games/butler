@@ -61,12 +61,17 @@ def observe_delegated_result(client: AppClient, *, parent_session_id: str,
                         result.get("child_turn_id"), result.get("status"))
                 ):
                     raise AppProtocolError("delegated_result_incomplete")
+                messages = client.session_view(child["session_id"]).data.get("messages", [])
+                final = next((row for row in reversed(messages)
+                              if row.get("turn_id") == result["child_turn_id"] and row.get("role") == "assistant"
+                              and row.get("status") in {"delivered", "failed", "cancelled"}), None)
                 return DelegatedObservation(
                     relation_id=relation["relation_id"],
                     child_session_id=child["session_id"],
                     child_turn_id=result["child_turn_id"],
                     status=result["status"], final_ns=response.response_ns,
-                    final_text=result.get("summary") if isinstance(result.get("summary"), str) else None,
+                    final_text=(final.get("text") if isinstance(final.get("text"), str)
+                                else None) if final is not None else None,
                 )
         time.sleep(0.15)
     raise AppProtocolError("delegated_result_timeout")

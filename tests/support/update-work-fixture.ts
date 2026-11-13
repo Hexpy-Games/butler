@@ -29,12 +29,22 @@ async function dispatchedUpdateTurn(page: ElectronPage, chat: string, accepted: 
   throw new Error("The accepted update fixture work was not dispatched.");
 }
 
+const messageText = (content: unknown) => typeof content === "string" ? content
+  : Array.isArray(content) ? content.map(part => part?.text ?? "").join("\n") : "";
+
+/** The smart-group round's input: the App's JSON of a new conversation's opening message and sidebar candidates. */
+function isSmartGroupRound(messages: Array<{ role?: string; content?: unknown }> = []) {
+  const users = messages.filter(message => message.role === "user");
+  if (users.length !== 1) return false;
+  try {
+    const input = JSON.parse(messageText(users[0]!.content));
+    return typeof input?.message === "string" && Array.isArray(input.candidates);
+  } catch { return false; }
+}
+
 /** Matches the canonical current request, excluding later user-role context updates. */
 export function updateFixtureWord(messages: Array<{ role?: string; content?: unknown }> = []) {
-  const texts = messages.filter(message => message.role === "user").map(message => {
-    if (typeof message.content === "string") return message.content;
-    return Array.isArray(message.content) ? message.content.map(part => part?.text ?? "").join("\n") : "";
-  });
+  const texts = messages.filter(message => message.role === "user").map(message => messageText(message.content));
   const headings = ["## Current request\n", "User request:"];
   const requestStart = (text: string) => Math.max(-1, ...headings.map(heading => {
     const start = text.lastIndexOf(heading);
@@ -57,6 +67,9 @@ export function updateFixtureResponse(body: {
     // synthetic one-word exchanges contain no durable facts to extract.
     return { word: null, content: JSON.stringify({ status: "processed", entities: [], items: [], attributes: [] }) };
   }
+  // Same contract as the Rust E2E smart-group stub: the background classification files nothing
+  // and is not one of the scripted turns.
+  if (isSmartGroupRound(body.messages)) return { word: null, content: JSON.stringify({ topic: null, action: "none", target: null }) };
   assert.ok(!schema, `Unhandled fixture schema: ${schema?.name}`);
   const word = updateFixtureWord(body.messages);
   return { word, content: word ?? "stub" };

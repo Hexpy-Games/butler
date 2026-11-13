@@ -151,7 +151,11 @@ impl ModelConfiguration {
         &self,
         root: &Path,
     ) -> Result<CredentialList, CredentialError> {
-        let records = self.saved_credentials(root);
+        let records = self
+            .saved_credentials(root)
+            .into_iter()
+            .filter(|record| crate::models::catalog::hosted_provider(&record.provider_id).is_some())
+            .collect::<Vec<_>>();
         let config = read_object_sync(&root.join("butler.config.json"));
         let registered = normalized_registered(&config, self, &self.clock.now_iso());
         let mut store = self.store_view(root).await;
@@ -159,13 +163,20 @@ impl ModelConfiguration {
             .iter()
             .filter(|record| matches!(record.home, SecretHome::Plaintext(_)))
             .count();
+        let vault_active = matches!(self.secrets.vault(root).await, Ok(Some(_)));
         let credentials = records
             .iter()
-            .map(|record| CredentialListItem {
-                credential: record.view(),
-                model_refs: users(&registered, record)
-                    .map(|model| model.model_ref.clone())
-                    .collect(),
+            .map(|record| {
+                let mut credential = record.view();
+                if vault_active && matches!(record.home, SecretHome::Store(_)) {
+                    credential.storage = CredentialStorage::Vault;
+                }
+                CredentialListItem {
+                    credential,
+                    model_refs: users(&registered, record)
+                        .map(|model| model.model_ref.clone())
+                        .collect(),
+                }
             })
             .collect();
         Ok(CredentialList { credentials, store })
@@ -185,6 +196,10 @@ impl ModelConfiguration {
             override_ignored,
             legacy_plaintext: 0,
         };
+        if matches!(self.secrets.vault(root).await, Ok(Some(_))) {
+            view.backend = CredentialStorage::Vault;
+            return view;
+        }
         if choice.mode == SecretStoreMode::System {
             match self.secrets.target(root).await {
                 Ok(target) => {

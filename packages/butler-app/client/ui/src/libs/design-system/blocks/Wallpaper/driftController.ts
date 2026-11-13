@@ -115,7 +115,9 @@ export function createDriftController(deps: DriftDeps): DriftController {
       const state = deps.looks.state;
       // Nothing to slide from: only fade the zone in.
       if (state.colOn === 0) [state.colL, state.colR, state.colT] = next;
-      if (!animate || !previous || core.mode === "off" || core.host === "still" || core.hidden) {
+      // A first column snaps onto a bare print (first paint) and fades in over a content keep-out (a screen switch).
+      const bare = !previous && deps.geometry().keep.length === 0;
+      if (!animate || bare || core.mode === "off" || core.host === "still" || core.hidden) {
         deps.looks.snapZone(next);
         refresh();
         return core.mode !== "off";

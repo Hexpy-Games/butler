@@ -9,6 +9,7 @@ import { FirstRunAgentStep } from "./FirstRunAgentStep";
 import { useSetupScene } from "./useSetupSceneReady";
 import { FirstRunConsent } from "./FirstRunConsent";
 import { FirstRunConnect } from "./FirstRunConnect";
+import { FirstRunVault } from "./FirstRunVault";
 import { FirstRunMemory } from "./FirstRunMemory";
 import { FirstRunWelcome } from "./FirstRunWelcome";
 import { FirstRunReady } from "./FirstRunReady";
@@ -59,6 +60,7 @@ export function FirstRunSetup({ mode, onComplete, onCancel }: FirstRunSetupProps
       {flow.step === "welcome" ? <FirstRunWelcome flow={flow} />
         : flow.step === "consent" ? <FirstRunConsent flow={flow} />
           : flow.step === "memory" ? <FirstRunMemory flow={flow} />
+          : flow.step === "vault" ? <FirstRunVault flow={flow} />
           : flow.step === "import" ? <FirstRunAgentStep flow={flow} />
           : flow.step === "ready" ? <FirstRunReady flow={flow} /> : <FirstRunConnect flow={flow} />}
     </SetupWizardShell>

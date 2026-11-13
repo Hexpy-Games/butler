@@ -11,6 +11,7 @@ export type StatusTone = "ok" | "muted" | "error";
 export type SettingsSectionId =
   | "general"
   | "models"
+  | "connections"
   | "appearance"
   | "server"
   | "updates"
@@ -140,11 +141,19 @@ export type ProviderAuthMethod = "api_key" | "chatgpt_oauth";
 
 /** Where a saved API key is kept (#217). */
 export type CredentialStorage =
+  | "vault"
   | "keychain"
   | "secret_service"
   | "credential_manager"
   | "fallback_file"
   | "legacy_plaintext";
+
+export interface ButlerVaultView {
+  state: "protected" | "off" | "locked";
+  available: boolean;
+  declined: boolean;
+  counts?: { api_key: number; signin: number; card: number; profile: number; plugin: number };
+}
 
 export interface ProviderCredentialView {
   id: string;
@@ -1180,15 +1189,6 @@ export interface StewardResultView {
   child_session_id: string;
   child_turn_id: string;
   status: "success" | "blocked" | "failed" | "cancelled";
-  code:
-    | "delegation_context_incomplete"
-    | "steward_execution_failed"
-    | "steward_cancelled"
-    | null;
-  summary: string;
-  acceptance_evidence: string[];
-  changed_artifacts: string[];
-  changed_files?: ChangedFileDetail[];
   created_at: string;
 }
 
@@ -1249,12 +1249,9 @@ export interface StewardSessionSummaryView {
   active_turn: SessionViewTurn | null;
   latest_turn: SessionViewTurn | null;
   waiting_for_children?: boolean;
-  activity_rows: ProgressRow[];
   approved_plan_revision?: number;
   approved_plan_total?: number;
   approved_plan_completed?: number;
-  artifacts: SessionArtifactSummary[];
-  changed_files: ChangedFileDetail[];
   result: StewardResultView | null;
   updated_at: string;
   terminal: boolean;

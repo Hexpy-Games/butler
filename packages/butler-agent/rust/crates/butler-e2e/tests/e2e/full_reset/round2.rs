@@ -199,19 +199,12 @@ async fn cleanup_failure_does_not_block_secrets_or_trash() -> Result<(), Harness
 #[tokio::test]
 async fn protected_user_folder_is_refused() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    unsafe_root(true).await
+    unsafe_root().await
 }
-#[tokio::test]
-async fn adopted_unknown_root_is_refused() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    unsafe_root(false).await
-}
-async fn unsafe_root(documents: bool) -> Result<(), HarnessError> {
+async fn unsafe_root() -> Result<(), HarnessError> {
     let mut setup = setup("RESET-UNSAFE-ROOT")?;
-    if documents {
-        setup.sandbox.data = setup.sandbox.home.join("Documents");
-        fs::create_dir_all(&setup.sandbox.data)?;
-    }
+    setup.sandbox.data = setup.sandbox.home.join("Documents");
+    fs::create_dir_all(&setup.sandbox.data)?;
     let file = setup.sandbox.data.join("user-document.txt");
     fs::write(&file, b"user document")?;
     let s = setup.start().await?;

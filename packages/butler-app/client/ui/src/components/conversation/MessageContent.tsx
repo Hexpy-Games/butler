@@ -50,6 +50,9 @@ function MessageContentComponent({
   const refreshFileUrls = useCallback(() => refreshSessionFileUrls(sessionId, { cursor }), [cursor, sessionId]);
   const running = Boolean(liveActivity) || message.status === "streaming" || message.status === "pending";
   const failureNotice = isAssistantFailureNoticeMessage(message);
+  // In 대화 a reply with no text is its Steward work card; its footer waits for the card.
+  const awaitingWorkCard = isGeneralChat(message.chat_id) && !message.text.trim() && !stewardProgress &&
+    Boolean(message.work_blocks?.some(block => block.rows.some(row => row.safe_tool_name === "delegate_to_steward")));
   const openImage = useCallback((key: string) => openMessageImage(message, key), [message]);
   return (
     <MessageImageContext.Provider value={openImage}>
@@ -70,7 +73,7 @@ function MessageContentComponent({
         <MessageAttachments attachments={message.attachments ?? []} attachmentMetadata={message.content_parts?.attachment_metadata} sessionId={sessionId} refreshFileUrls={refreshFileUrls} />
       )}
       {message.role === "assistant" && running && <AnswerDraftFooter turnId={message.turn_id} />}
-      {message.role === "assistant" && !running && onCopyAssistantMessage && (
+      {message.role === "assistant" && !running && !awaitingWorkCard && onCopyAssistantMessage && (
         <AssistantResponseFooter
           bubble={isGeneralChat(message.chat_id)}
           timeOnly={message.initiated?.kind === "approval_needed" || message.initiated?.kind === "work_failed"}

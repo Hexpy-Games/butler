@@ -16,6 +16,14 @@ async fn offered_choices_follow_the_selected_image_model() -> Result<(), Harness
                     json!({"provider_id":provider,"api_key":"schema-stub-key"}),
                 )
                 .await?;
+        let registered =
+            f.s.gw
+                .post(
+                    "/settings/image-model/registered",
+                    json!({"model_ref":model,"credential_id":key.data()["credential"]["id"]}),
+                )
+                .await?;
+        assert_eq!(registered.status, 200, "{}", registered.text);
         let settings =
             f.s.gw
                 .send(

@@ -17,7 +17,7 @@ export async function captureActivitySample(page: Page, server: NativeAppServerH
     const older = await server.api<CanonActivityPage>(`/canon/epics/${epicId}/activity?before=${cursor}`);
     history.push(...older.activity); cursor = older.activity_before;
   }
-  const activity = ["comment", "status", "created", "proposal_opened"].map(kind => {
+  const activity = ["comment", "status", "created", "edited", "moved", "proposal_opened"].map(kind => {
     const row = history.find(row => row.kind === kind); assert(row, `Missing ${kind} capture fixture`); return row;
   }).sort((a, b) => b.seq - a.seq);
   assert(snapshot.activity_before != null, "Real history has more pages");
@@ -34,6 +34,8 @@ export async function captureActivitySample(page: Page, server: NativeAppServerH
     await region.getByRole("button", { name: "더 보기", exact: true }).waitFor();
     await region.getByText("예정 → 진행 중", { exact: true }).waitFor();
     await region.getByText("과제를 만들었습니다", { exact: true }).waitFor();
+    await region.getByText("과제를 고쳤습니다", { exact: true }).waitFor();
+    await region.getByText("계획 → 백로그", { exact: true }).waitFor();
     await region.getByText("명세 변경 제안 · 검토 기준 보강", { exact: true }).waitFor();
     assert.doesNotMatch(await region.innerText(), /in_progress|planned/u);
     await assertActivityTimes(region);

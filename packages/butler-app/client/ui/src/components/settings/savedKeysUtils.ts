@@ -9,6 +9,7 @@ type StorageLabels = AppCopy["settings"]["savedKeys"]["storage"];
  * stores are named (Keychain, Secret Service, Credential Manager).
  */
 export function credentialStorageLabel(storage: CredentialStorage | undefined, labels: StorageLabels): string {
+  if (storage === "vault") return labels.vault;
   if (storage === "keychain") return labels.keychain;
   if (storage === "secret_service") return labels.secretService;
   if (storage === "credential_manager") return labels.credentialManager;

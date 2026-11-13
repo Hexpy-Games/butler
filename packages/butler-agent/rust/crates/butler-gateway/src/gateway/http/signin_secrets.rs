@@ -1,8 +1,12 @@
-//! Sign-in passwords in the OS credential store only. The module is off when
-//! the store policy picks the owner-only file or the system store is missing.
+//! Sign-in passwords, cards and profiles: in Butler Vault once this data
+//! folder switched to it, else in the OS credential store. Without the vault
+//! the module is off when the store policy picks the owner-only file or the
+//! system store is missing.
 //! Secrets are `SecretText` (wiped on drop) and never enter logs or results.
+use super::browser_import::password_undo::BACKUP_PREFIX;
 use super::{HttpError, HttpState};
 use butler_platform::secrets::{SecretKey, SecretStore, SecretText};
+use butler_vault::vault::{ItemKind, ProductVault, shared};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -45,10 +49,6 @@ pub(super) const AUTOFILL_SERVICE: &str = "com.hexpy.butler.autofill";
 /// The autofill vault's service before the traveler migration.
 pub(super) const LEGACY_TRAVELER_SERVICE: &str = "com.hexpy.butler.traveler";
 
-fn service(root: &Path) -> String {
-    service_in(root, SERVICE)
-}
-
 #[allow(
     clippy::disallowed_methods,
     reason = "saved keychain services hash this spelling; another form would orphan them"
@@ -74,7 +74,11 @@ fn root(state: &HttpState) -> Option<PathBuf> {
 
 /// Whether passwords can be kept: the policy picks the system store and it answers.
 pub(super) async fn available(state: &Arc<HttpState>) -> bool {
-    store(state).await.is_ok()
+    match vault(state).await {
+        Ok(Some(_)) => true,
+        Err(_) => false,
+        Ok(None) => store(state).await.is_ok(),
+    }
 }
 
 async fn store(state: &Arc<HttpState>) -> Result<SecretStore, HttpError> {
@@ -92,9 +96,9 @@ async fn store(state: &Arc<HttpState>) -> Result<SecretStore, HttpError> {
     Ok(opened)
 }
 
-async fn blocking<T: Send + 'static>(
+async fn blocking<T: Send + 'static, E: Send + 'static>(
     state: &Arc<HttpState>,
-    work: impl FnOnce() -> Result<T, butler_platform::secrets::SecretError> + Send + 'static,
+    work: impl FnOnce() -> Result<T, E> + Send + 'static,
 ) -> Result<T, HttpError> {
     let _permit = state
         .signin_secrets
@@ -117,9 +121,38 @@ async fn blocking<T: Send + 'static>(
     }
 }
 
-fn key(state: &HttpState, entry: &str) -> Result<SecretKey, HttpError> {
+fn vault_item(base: &str, entry: &str) -> (String, ItemKind) {
+    match base {
+        SERVICE => (
+            format!("signin/{entry}"),
+            if entry.starts_with(BACKUP_PREFIX) {
+                ItemKind::ImportBackup
+            } else {
+                ItemKind::Signin
+            },
+        ),
+        PAYMENT_SERVICE => (format!("card/{entry}"), ItemKind::Card),
+        _ => (format!("profile/{entry}"), ItemKind::Profile),
+    }
+}
+
+async fn vault(state: &Arc<HttpState>) -> Result<Option<Arc<ProductVault>>, HttpError> {
     let root = root(state).ok_or_else(unavailable)?;
-    SecretKey::new(&service(&root), entry).map_err(|_| unavailable())
+    let vault = shared(&root);
+    let owned = vault.clone();
+    match tokio::time::timeout(
+        STORE_TIMEOUT,
+        tokio::task::spawn_blocking(move || owned.active()),
+    )
+    .await
+    {
+        Ok(Ok(Ok(active))) => Ok(active.then_some(vault)),
+        _ => Err(HttpError::public(
+            409,
+            "vault_locked",
+            "Butler Vault is locked.",
+        )),
+    }
 }
 
 fn key_in(state: &HttpState, base: &str, entry: &str) -> Result<SecretKey, HttpError> {
@@ -133,6 +166,10 @@ pub(super) async fn get_in(
     base: &str,
     entry: &str,
 ) -> Result<Option<SecretText>, HttpError> {
+    if let Some(vault) = vault(state).await? {
+        let (id, _) = vault_item(base, entry);
+        return blocking(state, move || vault.get(&id)).await;
+    }
     let store = store(state).await?;
     let key = key_in(state, base, entry)?;
     if base == AUTOFILL_SERVICE {
@@ -178,6 +215,10 @@ pub(super) async fn set_in(
     entry: &str,
     secret: SecretText,
 ) -> Result<(), HttpError> {
+    if let Some(vault) = vault(state).await? {
+        let (id, kind) = vault_item(base, entry);
+        return blocking(state, move || vault.put(&id, kind, secret)).await;
+    }
     let store = store(state).await?;
     let key = key_in(state, base, entry)?;
     blocking(state, move || store.set(&key, secret.expose())).await
@@ -188,6 +229,10 @@ pub(super) async fn delete_in(
     base: &str,
     entry: &str,
 ) -> Result<bool, HttpError> {
+    if let Some(vault) = vault(state).await? {
+        let (id, _) = vault_item(base, entry);
+        return blocking(state, move || vault.delete(&id)).await;
+    }
     if base == AUTOFILL_SERVICE {
         get_in(state, base, entry).await?;
     }
@@ -200,9 +245,7 @@ pub(super) async fn get(
     state: &Arc<HttpState>,
     entry: &str,
 ) -> Result<Option<SecretText>, HttpError> {
-    let store = store(state).await?;
-    let key = key(state, entry)?;
-    blocking(state, move || store.get(&key)).await
+    get_in(state, SERVICE, entry).await
 }
 
 pub(super) async fn set(
@@ -210,19 +253,18 @@ pub(super) async fn set(
     entry: &str,
     secret: SecretText,
 ) -> Result<(), HttpError> {
-    let store = store(state).await?;
-    let key = key(state, entry)?;
-    blocking(state, move || store.set(&key, secret.expose())).await
+    set_in(state, SERVICE, entry, secret).await
 }
 
 pub(super) async fn delete(state: &Arc<HttpState>, entry: &str) -> Result<bool, HttpError> {
-    let store = store(state).await?;
-    let key = key(state, entry)?;
-    blocking(state, move || store.delete(&key)).await
+    delete_in(state, SERVICE, entry).await
 }
 
 /// Run once for each existing profile, also before a user deletes an unused item.
 pub(super) async fn migrate_profile(state: &Arc<HttpState>, id: &str) -> Result<(), HttpError> {
+    if vault(state).await?.is_some() {
+        return Ok(());
+    }
     let done = state
         .signin_secrets
         .migrated

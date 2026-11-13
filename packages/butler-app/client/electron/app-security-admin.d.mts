@@ -5,6 +5,17 @@ export const APP_LOCAL_ADMIN_MIN_LENGTH: number;
 export const APP_ADMIN_HEADER: string;
 
 export type SecurityBridgeRoute =
+  | "listPlugins"
+  | "inspectBundledPlugin"
+  | "installPlugin"
+  | "checkPlugin"
+  | "updatePlugin"
+  | "listConnectors"
+  | "addConnectorAccount"
+  | "retryConnectorAccount"
+  | "removeConnectorAccount"
+  | "listConnectorRules"
+  | "deleteConnectorRule"
   | "getSecurity"
   | "revealConnectionCode"
   | "rotateConnectionCode"

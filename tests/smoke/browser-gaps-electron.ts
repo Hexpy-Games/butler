@@ -21,10 +21,22 @@ async function send(text: string) {
   await waitBrowser(async () => { const v = await view(); return v.latest_turn?.id !== prior.latest_turn?.id && v.latest_turn?.state === "delivered"; }, `${text} delivered`);
 }
 const observation = (r: StubModelRequest) => latestBrowser(r, "obs");
-const text = (r: StubModelRequest) => (observation(r).untrusted_content as { text: string }).text;
+/** Each observation's text and, for a change list (delta_of, 0614e1cec), the observation it reads against. */
+const pages = new Map<string, { text: string; base?: string }>();
+const text = (r: StubModelRequest) => {
+  const o = observation(r), own = (o.untrusted_content as { text: string }).text;
+  pages.set(String(o.obs), { text: own, base: o.delta_of as string | undefined });
+  return own;
+};
 const ref = (r: StubModelRequest, label: string) => {
-  const found = new RegExp(`(?:button|link|element|textbox) "${label}" \\[([^\\]]+)\\]`, "u").exec(text(r))?.[1];
-  assert.ok(found, `${label} in ${text(r)}`); return found;
+  const pattern = new RegExp(`(?:button|link|element|textbox) "${label}" \\[([^\\]]+)\\]`, "u");
+  text(r);
+  // Refs stay stable within a page epoch, so one a change list leaves out reads from its base.
+  for (let page = pages.get(String(observation(r).obs)); page; page = page.base ? pages.get(page.base) : undefined) {
+    const found = pattern.exec(page.text)?.[1];
+    if (found) return found;
+  }
+  assert.fail(`${label} in ${text(r)}`);
 };
 const canvasCenter = (r: StubModelRequest) => {
   assert.ok(observation(r).image_geometry, "canvas points require screenshot geometry");

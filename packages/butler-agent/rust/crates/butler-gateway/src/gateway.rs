@@ -52,11 +52,12 @@ pub use application::settings::{
     browsing_agent_setting, command_sandbox_enabled, diagnostics_enabled_readonly,
     producer_log_config, startup_log_config, stored_ui_language_readonly,
 };
+pub use application::setup::{ButlerVaultCounts, ButlerVaultView};
 pub use application::{
     APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppImageUsageCommand,
     AppProfileInput, AppSessionTopicClassifier, AppSessionTopicInput, AppSignInCommand,
     AppSignInUpsert, AppVaultCommand, GatewaySignIns, GeneratedAssetKind, ImageUsageOperation,
-    ImageUsageRecord, composite, mask_bounds,
+    ImageUsageRecord, composite, delegate_capability, mask_bounds,
 };
 pub use application::{
     AppAdmissionAuthority, AppApplication, AppApplicationConfig, AppApplicationDependencies,
@@ -192,6 +193,6 @@ pub fn http_route_templates() -> Vec<&'static str> {
     http::route_templates()
 }
 
-pub use http::reset_browser_secret_keys;
+pub use http::{reset_browser_secret_keys, vault_legacy_items};
 
 pub use protocol::ImageEditRequest;

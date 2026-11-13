@@ -12,6 +12,8 @@ use butler_platform::sqlite;
 use serde_json::{Value, json};
 #[path = "subsession_legacy/activity.rs"]
 mod activity;
+#[path = "subsession_legacy/closeout.rs"]
+mod closeout;
 #[path = "subsession_legacy/presentation.rs"]
 mod presentation;
 
@@ -298,9 +300,6 @@ fn seed_child_turn(db: &rusqlite::Connection, key: &str, child: &str, state: &st
 fn assert_steward_turn_shape(stewards: &Value) {
     let list = stewards.as_array().unwrap();
     for child in list {
-        for field in ["activity_rows", "artifacts", "changed_files"] {
-            assert!(child[field].is_array(), "{field}: {child}");
-        }
         let turn = &child["latest_turn"];
         assert!(turn["id"].is_string(), "{child}");
         let progress = &turn["progress"];

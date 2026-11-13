@@ -254,7 +254,12 @@ pub(super) fn build_view(
         providers: provider_views(&models, static_data),
         models,
         registered_models: registered,
-        provider_credentials: input.credential_views.clone(),
+        provider_credentials: input
+            .credential_views
+            .iter()
+            .filter(|credential| super::hosted_provider(&credential.provider_id).is_some())
+            .cloned()
+            .collect(),
         worker_model_presets: static_data.presets.clone(),
     })
 }

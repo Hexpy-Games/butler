@@ -217,14 +217,14 @@ async fn delegated_batch(fault: bool) -> Result<(), HarnessError> {
                 "{child}"
             );
             if fault {
-                assert!(
-                    child["result"]["summary"]
-                        .as_str()
-                        .unwrap()
-                        .contains("provider_api_error")
-                );
                 let db =
                     rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+                let summary: String = db.query_row(
+                    "SELECT summary FROM btcc_steward_results WHERE relation_id=?1 ORDER BY created_at DESC LIMIT 1",
+                    [child["relation"]["relation_id"].as_str().unwrap()],
+                    |row| row.get(0),
+                )?;
+                assert!(summary.contains("provider_api_error"));
                 let code: String = db.query_row(
                     "SELECT code FROM btcc_steward_results WHERE relation_id=?1",
                     [child["relation"]["relation_id"].as_str().unwrap()],

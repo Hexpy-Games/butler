@@ -6,6 +6,17 @@ use rusqlite::params;
 // 1,2,4,...,256,300 seconds: the tenth failure reaches the cap.
 pub(super) const CAPPED_ATTEMPTS: u32 = 10;
 
+/// When a delivery that has already failed `attempts` times may run again.
+pub(super) fn retry_at(now: &str, attempts: u32) -> Result<String, super::super::AppStorageError> {
+    let time = chrono::DateTime::parse_from_rfc3339(now)
+        .map_err(|_| super::super::automations::timing::invalid())?;
+    Ok(
+        (time + chrono::Duration::seconds((1_i64 << attempts.min(9)).min(300)))
+            .with_timezone(&chrono::Utc)
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    )
+}
+
 impl AppApplication {
     pub(super) async fn initiated_failure(
         &self,
@@ -27,9 +38,7 @@ impl AppApplication {
             let (attempts, kind): (u32, String) = tx.query_row("SELECT attempts,kind FROM app_initiated_messages WHERE id=?1", [&id], |r| Ok((r.get(0)?, r.get(1)?)))
                 .map_err(super::super::AppStorageError::sqlite)?;
             let permanent = permanent || (kind == "canon_step" && reason == "session_model_unavailable");
-            let time = chrono::DateTime::parse_from_rfc3339(&now).map_err(|_| super::super::automations::timing::invalid())?;
-            let next = (time + chrono::Duration::seconds((1_i64 << attempts.min(9)).min(300)))
-                .with_timezone(&chrono::Utc).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            let next = retry_at(&now, attempts)?;
             let changed = tx.execute("UPDATE app_initiated_messages SET state=?1,posting=0,reason=?2,attempts=attempts+1,next_attempt_at=?3 WHERE id=?4 AND state='held'",
                 params![if permanent {"failed"} else {"held"},reason,if permanent || reason == "session_model_unavailable" {None} else {Some(next)},&id])
                 .map_err(super::super::AppStorageError::sqlite)?;

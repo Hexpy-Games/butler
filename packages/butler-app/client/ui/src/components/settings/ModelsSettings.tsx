@@ -8,6 +8,11 @@ import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { BackupModelsSummary } from "./BackupModelsSummary";
 import { ButlerModelFields } from "./ButlerModelFields";
 import { ModelAddEditPage } from "./ModelAddEditPage";
+import { ImageModelManagementPage } from "./ImageModelManagementPage";
+import { ImageModelAddPage } from "./ImageModelAddPage";
+import { useButlerStore } from "@/app/store";
+import { registeredModels } from "./modelManagementUtils";
+import { deleteRegisteredModel } from "./modelManagementApi";
 import { ModelManagementPage } from "./ModelManagementPage";
 import { WorkerMaxSimultaneousField, WorkerProfileAddButton } from "./WorkerProfileControls";
 import { WorkerProfileEditor } from "./WorkerProfileEditor";
@@ -25,12 +30,24 @@ export function ModelsSettings() {
 
   if (!draft) return null;
 
-  if (modelRoute.page === "management") return <ModelManagementPage />;
+  if (modelRoute.page === "management") return <ChatModelManagementPage />;
+  if (modelRoute.page === "imageManagement") return <ImageModelManagementPage />;
+  if (modelRoute.page === "imageAdd") return <ImageModelAddPage />;
   if (modelRoute.page === "add") return <ModelAddEditPage />;
   if (modelRoute.page === "edit") {
     return <ModelAddEditPage modelRef={modelRoute.modelRef} />;
   }
   return <ModelsRootPage advancedOpen={advancedOpen} onToggleAdvanced={() => setAdvancedOpen(!advancedOpen)} />;
+}
+
+function ChatModelManagementPage() {
+  const catalog = useButlerStore(s => s.modelCatalog);
+  const setCatalog = useButlerStore(s => s.setModelCatalog);
+  const openAdd = useSettingsUIStore(s => s.openModelAdd);
+  const openEdit = useSettingsUIStore(s => s.openModelEdit);
+  return <ModelManagementPage models={registeredModels(catalog)} onAdd={openAdd} onEdit={openEdit}
+    onDelete={async model => { const result = await deleteRegisteredModel(model); setCatalog(result.catalog); }}
+    sectionId="registered-models" title={appCopy.settings.modelManagement.title} />;
 }
 
 /** Main model controls and the existing Advanced disclosure. */
