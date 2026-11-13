@@ -4,13 +4,11 @@ use std::rc::Rc;
 use butler_ds::ui::blocks::kanban_board::KanbanDragLabels;
 use butler_ds::ui::context::Lang;
 
-use crate::ui::source::wire::{CanonStatus, PlanCards};
+use crate::ui::source::wire::{CanonStatus, EpicCard};
 
 pub(super) struct Words {
     /// canon.backlog
     pub(super) backlog: &'static str,
-    /// canon.backlogDescription
-    pub(super) backlog_description: &'static str,
     /// canon.newEpic
     pub(super) new_epic: &'static str,
     /// canon.newPlan
@@ -43,8 +41,6 @@ pub(super) struct Words {
     pub(super) request_failed: &'static str,
     /// canon.statuses: planned, in_progress, in_review, blocked, done, cancelled
     statuses: [&'static str; 6],
-    /// canon.backlogCount
-    backlog_count: fn(usize) -> String,
     /// canon.done
     done: fn(usize, usize) -> String,
     /// canon.due
@@ -62,7 +58,6 @@ pub(super) struct Words {
 
 static KO: Words = Words {
     backlog: "백로그",
-    backlog_description: "계획이 정해지지 않은 과제입니다.",
     new_epic: "새 과제",
     new_plan: "새 계획",
     plan: "계획",
@@ -79,7 +74,6 @@ static KO: Words = Words {
     retry: "다시 시도",
     request_failed: "요청을 처리하지 못했습니다.",
     statuses: ["예정", "진행 중", "검토 중", "막힘", "완료", "취소됨"],
-    backlog_count: |n| format!("{n}개 · 계획 없음"),
     done: |done, total| format!("{done}/{total} 완료"),
     due: |date| format!("{date}까지"),
     tasks: |done, total| format!("작업 {done}/{total}"),
@@ -91,7 +85,6 @@ static KO: Words = Words {
 
 static EN: Words = Words {
     backlog: "Backlog",
-    backlog_description: "Epics without a Plan.",
     new_epic: "New Epic",
     new_plan: "New Plan",
     plan: "Plan",
@@ -115,7 +108,6 @@ static EN: Words = Words {
         "Done",
         "Cancelled",
     ],
-    backlog_count: |n| format!("{n} · No Plan"),
     done: |done, total| format!("{done}/{total} done"),
     due: |date| format!("Due {date}"),
     tasks: |done, total| format!("Tasks {done}/{total}"),
@@ -146,10 +138,6 @@ impl Words {
         }
     }
 
-    pub(super) fn backlog_count(&self, n: usize) -> String {
-        (self.backlog_count)(n)
-    }
-
     pub(super) fn tasks(&self, done: i64, total: i64) -> String {
         (self.tasks)(done, total)
     }
@@ -176,14 +164,13 @@ impl Words {
     }
 
     /// `planCaption`: "done/total", and the due date when the plan has one.
-    pub(super) fn plan_caption(&self, plan: &PlanCards) -> String {
-        let done = plan
-            .works
+    pub(super) fn plan_caption(&self, works: &[EpicCard], due_on: Option<&str>) -> String {
+        let done = works
             .iter()
             .filter(|epic| epic.canon_status == CanonStatus::Done)
             .count();
-        let progress = (self.done)(done, plan.works.len());
-        match plan.plan.due_on.as_deref() {
+        let progress = (self.done)(done, works.len());
+        match due_on {
             Some(due_on) => format!("{progress} · {}", (self.due)(&self.due_date(due_on))),
             None => progress,
         }

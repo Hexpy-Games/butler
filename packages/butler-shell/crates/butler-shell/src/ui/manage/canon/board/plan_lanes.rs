@@ -1,6 +1,6 @@
 //! `CanonPlanLanes.tsx` and the backlog lane of `CanonBoard.tsx`.
 use butler_ds::tokens::Length;
-use butler_ds::ui::blocks::kanban_board::{KanbanBoard, KanbanLane, LaneHeight, LaneLayout};
+use butler_ds::ui::blocks::kanban_board::{KanbanBoard, KanbanLane, LaneHeight};
 use butler_ds::ui::button::{self, Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
@@ -19,7 +19,7 @@ use super::copy::{Words, words};
 use super::lanes::{CANON_LANES, canon_lane_id, lane_status};
 use crate::ui::Icon;
 use crate::ui::manage::Pick;
-use crate::ui::source::wire::{CanonOverview, CanonPlan, CanonStatus, EpicCard, PlanCards};
+use crate::ui::source::wire::{CanonPlan, CanonStatus, EpicCard};
 
 /// What the board hands every lane.
 pub(super) struct Lanes<'a> {
@@ -59,59 +59,46 @@ impl Lanes<'_> {
             .size(Size::Xs)
             .icon_start(icon(Icon::Plus, IconSize::Xs, Ds::get(cx)))
             .text(words(Ds::get(cx).lang()).new_epic)
-            .on_click(move |_, window, cx| on_create(plan.clone(), window, cx))
+            .on_click(move |_, window, cx| {
+                on_create(plan.clone(), window, cx);
+            })
             .into_any_element()
     }
 }
 
-/// The backlog lane (`CanonBoard.tsx` `data-canon-backlog`).
-pub(super) fn backlog_lane(canon: &CanonOverview, lanes: &Lanes, cx: &App) -> AnyElement {
-    let words = words(Ds::get(cx).lang());
-    // CARVE-OUT(G-ds): `KanbanLane` takes a text title; React's is the title with a caption.
-    let title = format!(
-        "{} · {}",
-        words.backlog,
-        words.backlog_count(canon.backlog.len())
-    );
-    let mut lane = KanbanLane::new("canon-backlog", title)
-        .lane_id("backlog")
-        .label(words.backlog)
-        .height(LaneHeight::Content)
-        .layout(LaneLayout::Grid);
-    for epic in canon.backlog.iter().filter(|epic| lanes.shows(epic)) {
-        lane = lane.child(lanes.card(epic, None, cx));
-    }
-    if canon.backlog.is_empty() && canon.plans.is_empty() {
-        lane = lane.child(Typo::caption(words.backlog_description).tone(Tone::Secondary));
-    }
-    lane.child(lanes.new_epic("canon-new-epic-backlog".into(), None, cx))
-        .into_any_element()
+/// What `CanonPlanLanes` shows: a plan, or the backlog (`id` none, no plan to edit).
+pub(super) struct Container<'a> {
+    pub(super) id: Option<&'a str>,
+    pub(super) title: &'a str,
+    pub(super) works: &'a [EpicCard],
+    pub(super) caption: String,
+    pub(super) edit: Option<&'a CanonPlan>,
 }
 
-/// `CanonPlanLanes`: the plan's title and progress above its five status lanes.
+/// `CanonPlanLanes`: the container's title and progress above its five status lanes.
 pub(super) fn plan_lanes(
-    plan: &PlanCards,
-    caption: String,
+    container: Container<'_>,
     lanes: &Lanes,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
+    let Container {
+        id,
+        title,
+        works,
+        caption,
+        edit,
+    } = container;
     let words = words(Ds::get(cx).lang());
-    let title = Stack::row()
+    let heading = Stack::row()
         .cross(Cross::Baseline)
         .gap(Space::Sm)
         .wrap(true)
-        .child(Typo::h3(plan.plan.title.clone()))
+        .child(Typo::h3(title.to_owned()))
         .child(Typo::caption(caption).tone(Tone::Secondary));
-    let board_id = SharedString::from(format!("canon-plan-lanes-{}", plan.plan.id));
+    let board_id = SharedString::from(format!("canon-plan-lanes-{}", id.unwrap_or("backlog")));
     let handle = lanes_handle(&board_id, window, cx);
-    let (on_edit, edited) = (lanes.on_edit.clone(), plan.plan.clone());
-    let edit = IconButton::new(
-        SharedString::from(format!("canon-plan-edit-{}", plan.plan.id)),
-        words.edit,
-    )
-    .glyph(Icon::Pencil)
-    .on_click(move |_, window, cx| on_edit(edited.clone(), window, cx));
+    let edit = edit.map(|plan| edit_button(plan, lanes, cx));
     let mut actions = button::container(Size::Sm);
     // `edges.overflow`: the arrows show only while the lanes overflow the board.
     let edges = read(&handle, Axis::X);
@@ -120,12 +107,11 @@ pub(super) fn plan_lanes(
             .child(lanes_arrow(&board_id, &handle, -1., edges.at_start, words))
             .child(lanes_arrow(&board_id, &handle, 1., edges.at_end, words));
     }
-    let actions = actions.child(edit);
+    let actions = actions.children(edit);
     let mut board = KanbanBoard::new(board_id).scroll(true);
     for status in CANON_LANES {
-        let lane_id = canon_lane_id(Some(&plan.plan.id), status);
-        let cards: Vec<(usize, &EpicCard)> = plan
-            .works
+        let lane_id = canon_lane_id(id, status);
+        let cards: Vec<(usize, &EpicCard)> = works
             .iter()
             .enumerate()
             .filter(|(_, epic)| lanes.shows(epic) && lane_status(epic.canon_status) == status)
@@ -136,23 +122,38 @@ pub(super) fn plan_lanes(
             format!("{name} · {}", cards.len()),
         )
         .lane_id(lane_id.clone())
-        .label(format!("{} · {name}", plan.plan.title))
+        .label(format!("{title} · {name}"))
         .height(LaneHeight::Content);
         for (index, epic) in cards {
             lane = lane.child(lanes.card(epic, Some(index + 1), cx));
         }
         if status == CanonStatus::Planned {
-            let id = format!("canon-new-epic-{}", plan.plan.id);
-            let plan_id = Some(SharedString::from(plan.plan.id.clone()));
-            lane = lane.child(lanes.new_epic(id, plan_id, cx));
+            let button_id = format!("canon-new-epic-{}", id.unwrap_or("backlog"));
+            lane = lane.child(lanes.new_epic(button_id, id.map(SharedString::from), cx));
         }
         board = board.child(lane);
     }
-    Section::new(SharedString::from(format!("canon-plan-{}", plan.plan.id)))
-        .title_element(title)
-        .actions(actions)
-        .child(board)
-        .into_any_element()
+    Section::new(SharedString::from(format!(
+        "canon-plan-{}",
+        id.unwrap_or("backlog")
+    )))
+    .title_element(heading)
+    .actions(actions)
+    .child(board)
+    .into_any_element()
+}
+
+/// Electron `CanonPlanLanes.tsx`: only a saved plan has an edit pencil.
+fn edit_button(plan: &CanonPlan, lanes: &Lanes, cx: &App) -> IconButton {
+    let (on_edit, edited) = (lanes.on_edit.clone(), plan.clone());
+    IconButton::new(
+        SharedString::from(format!("canon-plan-edit-{}", plan.id)),
+        words(Ds::get(cx).lang()).edit,
+    )
+    .glyph(Icon::Pencil)
+    .on_click(move |_, window, cx| {
+        on_edit(edited.clone(), window, cx);
+    })
 }
 
 /// The sideways scroller of a `KanbanBoard::scroll` board, which owns its handle (read by the

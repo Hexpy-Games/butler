@@ -2,9 +2,9 @@
 //! the board shows, and the picker for it.
 use std::collections::HashMap;
 
-use butler_ds::ui::blocks::filtered_select_popover::{FilteredSelectPopover, Group, Item};
+use butler_ds::ui::blocks::filtered_select_popover::{FilteredSelectPopover, Group, Item, Width};
 use butler_ds::ui::context::Ds;
-use butler_ds::ui::popover::{Density, Popover, PopoverContent};
+use butler_ds::ui::popover::{MenuSize, Popover, PopoverContent};
 use butler_ds::ui::select_button::{SelectButton, Size};
 use butler_ds::ui::tooltip::Align;
 use gpui::{
@@ -15,7 +15,7 @@ use gpui::{
 use super::CanonBoard;
 use super::copy::{Words, words};
 use crate::ui::manage::canon::aside::{select_epic, selected_epic};
-use crate::ui::source::wire::PlanCards;
+use crate::ui::source::wire::{CanonOverview, PlanCards};
 
 /// `butler:canon-plan:<project>` in React's `localStorage`; the shell has no such store yet, so
 /// the choice lives for this run (it still survives the board being rebuilt).
@@ -23,6 +23,32 @@ use crate::ui::source::wire::PlanCards;
 struct PlanChoices(HashMap<SharedString, Option<SharedString>>);
 
 impl Global for PlanChoices {}
+
+/// Where the board holds a 과제.
+pub(super) enum EpicPlace {
+    Backlog,
+    Plan(SharedString),
+}
+
+/// `canonEpicPlan` (canonPlanSelection.ts): the board plan holding this task, the backlog, or
+/// `None` when the board does not have it.
+pub(super) fn canon_epic_plan(canon: &CanonOverview, epic: &str) -> Option<EpicPlace> {
+    if canon.backlog.iter().any(|card| card.id == epic) {
+        return Some(EpicPlace::Backlog);
+    }
+    canon
+        .plans
+        .iter()
+        .find(|plan| plan.works.iter().any(|card| card.id == epic))
+        .map(|plan| EpicPlace::Plan(SharedString::from(plan.plan.id.clone())))
+}
+
+/// `selection.select` in Electron's `CanonBoard.tsx`, preserving task selection.
+pub(super) fn store_plan_choice(project: &SharedString, plan: Option<SharedString>, cx: &mut App) {
+    cx.default_global::<PlanChoices>()
+        .0
+        .insert(project.clone(), plan);
+}
 
 /// The picker's own state (`open`, `search`).
 #[derive(Default)]
@@ -108,9 +134,7 @@ impl CanonBoard {
 
     /// `selection.select(id); selectionDetail.select(null)`
     pub(super) fn choose_plan(&mut self, id: Option<SharedString>, cx: &mut Context<Self>) {
-        cx.default_global::<PlanChoices>()
-            .0
-            .insert(self.project.clone(), id);
+        store_plan_choice(&self.project, id, cx);
         self.picker.open = false;
         self.picker.query = SharedString::default();
         if selected_epic(&self.ctx, &self.project, cx).is_some() {
@@ -178,13 +202,13 @@ impl CanonBoard {
             });
         })
         .groups(vec![Group::new("plans", "", items)])
-        .results_max_rows(7.);
+        .width(Width::Fixed);
         // CARVE-OUT(G-ds): React keeps the popover clear of the composer footer with
         // `collisionPadding.bottom = bottomInset + 8`; `PopoverContent` has no collision padding.
         let content = popover.content(
             PopoverContent::new()
                 .align(Align::Start)
-                .density(Density::List)
+                .menu_size(MenuSize::Fit)
                 .child(body),
             window,
             cx,

@@ -51,8 +51,10 @@ pub(super) fn search(
         control
     });
     div()
-        .px(ds.len(Length::Space1))
-        .child(div().relative().min_w_0().child(input).children(clear))
+        .relative()
+        .min_w_0()
+        .child(input)
+        .children(clear)
         .into_any_element()
 }
 
@@ -98,10 +100,8 @@ pub(super) fn chips(id: &ElementId, chips: Vec<Chip>, ds: &Ds) -> AnyElement {
         .flex()
         .min_w_0()
         .gap(ds.len(Length::SpaceXs))
-        .mt(ds.len(Length::SpaceXs) - room)
-        .pt(room)
-        .px(ds.len(Length::Space1))
-        .pb(ds.len(Length::Space1))
+        .m(-room)
+        .p(room)
         .children(row)
         .into_any_element()
 }
