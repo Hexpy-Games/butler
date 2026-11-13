@@ -11,7 +11,7 @@ use super::queue::{access_wire, controls_body, effort_wire, queue_message};
 use super::references::MentionKey;
 use super::state::{ComposerState, QueuePolicy, Submission, SubmitInput};
 use super::{Composer, ComposerEvent, Submit, SubmitWithModifier};
-use crate::ui::decisions::{DecisionCtx, plan_instruction, submit_plan_instruction};
+use crate::ui::decisions::{DecisionCtx, plan_instruction, send_blocked, submit_plan_instruction};
 use crate::ui::i18n::composer::words;
 use crate::ui::source::agent::Jobs;
 
@@ -82,6 +82,13 @@ impl Composer {
 
     fn send_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.disabled.is_some() || self.composing(window, cx) {
+            return;
+        }
+        if self
+            .decision_view
+            .as_ref()
+            .is_some_and(|view| send_blocked(DecisionCtx { view }))
+        {
             return;
         }
         self.on_text_changed(window, cx);

@@ -32,7 +32,7 @@ pub(crate) struct DecisionCtx<'a> {
 }
 
 /// `ConversationRequestPortal`: the decision of the open session, in `placement`; `None` when
-/// this session has nothing for it. The question panel shows in every state, collapsed too.
+/// this session has nothing for it. The question panel stays open in every state.
 pub(crate) fn decision_surface(
     ctx: DecisionCtx<'_>,
     placement: Placement,
@@ -43,7 +43,7 @@ pub(crate) fn decision_surface(
     browser::browser_surface(ctx, placement, window, cx)
         .or_else(|| authority::authority_surface(ctx, placement, window, cx))
         .or_else(|| question::question_surface(ctx, placement, window, cx))
-        // The plan surface yields while a question exists, collapsed or not.
+        // The plan surface yields while a question exists.
         .or_else(|| {
             if question::question_pending(ctx) {
                 None
@@ -56,4 +56,9 @@ pub(crate) fn decision_surface(
 /// `useConversationDecision`'s `active`: a decision waits, so the composer stays expanded.
 pub(crate) fn decision_active(ctx: DecisionCtx<'_>, cx: &App) -> bool {
     authority::has_request(ctx.view) || question::question_pending(ctx) || plan::waiting(ctx, cx)
+}
+
+/// `useComposerDecision.ts`: Send waits for authority or the first pending question.
+pub(crate) fn send_blocked(ctx: DecisionCtx<'_>) -> bool {
+    authority::has_request(ctx.view) || question::question_waiting(ctx)
 }

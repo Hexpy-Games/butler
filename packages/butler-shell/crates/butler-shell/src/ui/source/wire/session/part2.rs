@@ -29,6 +29,8 @@ pub(crate) struct AnsweredUserQuestionsQuestions {
 /// TS: packages/butler-app/client/ui/src/app/types.ts:2055 AnsweredUserQuestions
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub(crate) struct AnsweredUserQuestions {
+    #[serde(default)]
+    pub(crate) followup_message_id: String,
     pub(crate) request_ref: String,
     pub(crate) source_turn_id: String,
     pub(crate) updated_at: String,

@@ -160,7 +160,7 @@ pub(super) type Draft = Rc<dyn Fn(&[Answer], usize, &mut App)>;
 pub(super) struct Callbacks {
     pub(super) submit: Submit,
     pub(super) skip: Run,
-    pub(super) collapse: Run,
+    pub(super) collapse: Option<Run>,
     pub(super) draft: Option<Draft>,
 }
 

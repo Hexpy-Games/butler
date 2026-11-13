@@ -2,6 +2,7 @@
 //! (`useMessageList`, `useMessageListLayout`, `useLiveMessageId`, `useConversationAutoScroll`).
 //! The rows are gpui `list` items laid in the ConversationShell column; the list follows the
 //! newest message until the reader scrolls away, and a jump button brings it back.
+mod answers;
 mod request;
 mod turn;
 
@@ -246,13 +247,16 @@ impl State {
             .iter()
             .map(|message| (message.id.as_str(), message))
             .collect();
-        self.messages = collapse_assistant_attempts(&view.messages)
-            .into_iter()
-            .map(|new| match previous.get(new.id.as_str()) {
-                Some(kept) if Arc::ptr_eq(kept, &new) || ***kept == *new => Arc::clone(kept),
-                _ => new,
-            })
-            .collect();
+        self.messages = collapse_assistant_attempts(&answers::with_question_answers(
+            &view.messages,
+            view.question_answers.as_deref().unwrap_or_default(),
+        ))
+        .into_iter()
+        .map(|new| match previous.get(new.id.as_str()) {
+            Some(kept) if Arc::ptr_eq(kept, &new) || ***kept == *new => Arc::clone(kept),
+            _ => new,
+        })
+        .collect();
         let turn = view
             .active_turn
             .clone()
