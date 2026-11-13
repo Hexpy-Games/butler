@@ -196,9 +196,15 @@ try {
       await page.evaluate(expires => { const real = Date.now; Object.assign(window, { realNow: real }); Date.now = () => Number(expires) * 1000 + 1000; }, signedBefore);
       const resigned = page.waitForResponse(response => new URL(response.url()).pathname === `/message-assets/${image}/meta`);
       await page.setViewportSize({ width: 390, height: 844 });
-      assert((await resigned).ok(), "expired signature is re-signed through /meta");
+      const meta = await resigned;
+      assert(meta.ok(), "expired signature is re-signed through /meta");
+      const resignedUrl: string = (await meta.json()).data.image_url;
       await page.evaluate(() => { Date.now = (window as unknown as { realNow: () => number }).realNow; });
-      await page.waitForFunction(before => new URL(document.querySelector('[data-test-class="generated-image-card"] img')!.getAttribute("src")!, location.href).searchParams.get("expires") !== before, signedBefore);
+      // The narrow src is set only after the re-sign; it may equal the old URL when signed within the same second.
+      await page.waitForFunction(signed => {
+        const src = new URL(document.querySelector('[data-test-class="generated-image-card"] img')!.getAttribute("src")!, location.href);
+        return src.searchParams.get("signature") === new URL(signed, location.href).searchParams.get("signature") && Number(src.searchParams.get("w")) < 500;
+      }, resignedUrl);
       await picture.evaluate((node: HTMLImageElement) => node.decode());
       assert((await picture.evaluate((node: HTMLImageElement) => node.naturalWidth)) > 0, "re-signed image loads");
       await page.setViewportSize({ width: 1280, height: 900 });
