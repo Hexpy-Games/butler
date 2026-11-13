@@ -1,6 +1,6 @@
 //! DS Input (shadcn/ui/input.tsx): one line of text in the default box, the quiet box that
 //! fills in on focus, or the underline for in-place entry.
-use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
+use gpui::{App, ElementId, IntoElement, Pixels, RenderOnce, SharedString, Window};
 
 use super::TextSize;
 use std::rc::Rc;
@@ -27,6 +27,7 @@ pub struct Input {
     id: ElementId,
     variant: Variant,
     compact: bool,
+    padding_inline: Option<(Pixels, Pixels)>,
     text_size: TextSize,
     placeholder: Option<SharedString>,
     default_value: SharedString,
@@ -45,6 +46,7 @@ impl Input {
             id: id.into(),
             variant: Variant::Default,
             compact: false,
+            padding_inline: None,
             text_size: TextSize::Inherit,
             placeholder: None,
             default_value: SharedString::default(),
@@ -66,6 +68,12 @@ impl Input {
     /// A short inline field (numbers in a toolbar): content width, small control height.
     pub fn compact(mut self) -> Self {
         self.compact = true;
+        self
+    }
+
+    /// CSS `padding-inline` of the text box (the border is outside it). Unset keeps the field's own padding.
+    pub fn padding_inline(mut self, start: Pixels, end: Pixels) -> Self {
+        self.padding_inline = Some((start, end));
         self
     }
 
@@ -144,6 +152,7 @@ impl RenderOnce for Input {
                 text_size: self.text_size,
                 shape: Shape::Line {
                     compact: self.compact && look != Look::Underline,
+                    padding_inline: self.padding_inline,
                 },
                 placeholder: self.placeholder,
                 initial: self.default_value,

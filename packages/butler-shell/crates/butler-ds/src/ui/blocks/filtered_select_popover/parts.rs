@@ -23,6 +23,7 @@ pub(super) type Change = Rc<dyn Fn(&str, &mut Window, &mut App)>;
 pub(super) type Chip = (SharedString, bool, Rc<dyn Fn(&mut Window, &mut App)>);
 
 /// The search field; a clear button shows while it holds text.
+/// The typed text starts on the panel's text column, --space-sm inside the box, like row, label and chip text.
 pub(super) fn search(
     id: &ElementId,
     placeholder: &SharedString,
@@ -32,6 +33,10 @@ pub(super) fn search(
 ) -> AnyElement {
     let change = on_change.clone();
     let input = Input::new((id.clone(), "search"))
+        .padding_inline(
+            ds.len(Length::SpaceSm) - ds.len(Length::BorderHairline),
+            px(32.),
+        )
         .placeholder(placeholder.clone())
         .value(value.clone())
         .on_change(move |text, window, cx| change(text, window, cx));

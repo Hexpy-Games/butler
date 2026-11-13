@@ -25,10 +25,13 @@ pub(super) enum Look {
     Bare,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum Shape {
     /// One line; `compact` is the short inline field.
-    Line { compact: bool },
+    Line {
+        compact: bool,
+        padding_inline: Option<(Pixels, Pixels)>,
+    },
     /// Several lines. `rows` sets a taller fixed box, `grow` sizes it to the text up to the cap.
     Area { rows: Option<u32>, grow: bool },
 }

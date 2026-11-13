@@ -35,7 +35,13 @@ pub(super) fn build(
         (Look::Underline, Shape::Line { .. }) => underline_line(p, hover, cx),
         (Look::Underline, Shape::Area { .. }) => underline_area(p, window, cx),
         (Look::Bare, Shape::Area { rows, .. }) => bare_area(p, rows, cx),
-        (_, Shape::Line { compact }) => boxed_line(p, compact, window, cx),
+        (
+            _,
+            Shape::Line {
+                compact,
+                padding_inline,
+            },
+        ) => boxed_line(p, compact, padding_inline, window, cx),
         (_, Shape::Area { rows, grow }) => boxed_area(p, rows, grow, cx),
     }
 }
@@ -232,7 +238,13 @@ fn boxed(p: &Parts, frame: Div, editor: AnyElement, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn boxed_line(p: &Parts, compact: bool, window: &Window, cx: &App) -> AnyElement {
+fn boxed_line(
+    p: &Parts,
+    compact: bool,
+    padding_inline: Option<(Pixels, Pixels)>,
+    window: &Window,
+    cx: &App,
+) -> AnyElement {
     let ds = Ds::get(cx);
     let hit = ds.len(Length::ControlHitTarget);
     let (floor, pad_x, pad_y) = if compact {
@@ -255,8 +267,11 @@ fn boxed_line(p: &Parts, compact: bool, window: &Window, cx: &App) -> AnyElement
         } else {
             pad_x
         };
+    let (start, end) = padding_inline.map_or((side, side), |(start, end)| {
+        (p.m.border + start, p.m.border + end)
+    });
     let sizing = Sizing {
-        pad: [side, vertical, side, vertical],
+        pad: [start, vertical, end, vertical],
         fill_height: true,
         ..Sizing::default()
     };

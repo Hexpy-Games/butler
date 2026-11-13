@@ -1,8 +1,10 @@
 //! Input.showcase.tsx.
+use butler_ds::tokens::Length;
+use butler_ds::ui::context::Ds;
 use butler_ds::ui::field::{Field, FieldDescription, FieldLabel};
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::text::{Input, InputVariant, TextSize};
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
+use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window, px};
 
 use super::Story;
 use crate::copy::Lang;
@@ -18,6 +20,7 @@ struct Copy {
     invalid: &'static str,
     max_workers: &'static str,
     search: &'static str,
+    inline_padding: &'static str,
     name: &'static str,
 }
 
@@ -34,6 +37,7 @@ fn copy(lang: Lang) -> Copy {
             invalid: "Must be a number",
             max_workers: "Max simultaneous Workers",
             search: "Search settings",
+            inline_padding: "Inline padding",
             name: "GitHub",
         },
         Copy {
@@ -47,6 +51,7 @@ fn copy(lang: Lang) -> Copy {
             invalid: "숫자를 입력하세요",
             max_workers: "최대 동시 Worker 수",
             search: "설정 검색",
+            inline_padding: "안쪽 여백",
             name: "깃허브",
         },
     )
@@ -77,6 +82,10 @@ pub(super) fn stories() -> Vec<Story> {
         Story {
             name: "Underline · in-place entry",
             render: underline,
+        },
+        Story {
+            name: "Inline padding",
+            render: inline_padding,
         },
         Story {
             name: "Quiet · sidebar search",
@@ -200,4 +209,20 @@ fn quiet(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         .placeholder(search)
         .probe("input-quiet")
         .into_any_element()
+}
+
+fn inline_padding(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
+    let c = copy(lang);
+    let ds = Ds::get(cx);
+    labelled(
+        "input-field-inline-padding",
+        c.inline_padding,
+        Input::new("input-inline-padding")
+            .padding_inline(
+                ds.len(Length::SpaceSm) - ds.len(Length::BorderHairline),
+                px(32.),
+            )
+            .placeholder(c.search),
+    )
+    .into_any_element()
 }
