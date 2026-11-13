@@ -25,6 +25,7 @@ use crate::ui::settings::state::Load;
 /// Where the key is kept, as the agent reports it: an index into `Words::storage`.
 fn storage_index(storage: Option<&str>) -> usize {
     match storage {
+        Some("vault") => 4,
         Some("keychain") => 1,
         Some("secret_service") => 2,
         Some("credential_manager") => 3,

@@ -15,6 +15,7 @@ mod session_menu;
 mod settings_link;
 mod titlebar;
 mod transcript;
+pub(crate) mod vault;
 
 pub(crate) use titlebar::window_controls;
 
@@ -107,6 +108,7 @@ pub(crate) struct Shell {
     forced_theme: bool,
     /// The onboarding gate, Run setup again and the setup view.
     onboarding: onboarding_link::OnboardingState,
+    vault_prompt: Entity<vault::Prompt>,
     /// The last `/model-catalog`; the onboarding opens with it.
     catalog_raw: Option<Rc<serde_json::Value>>,
     /// The `/settings` and `/model-catalog` read, retried while the gate is pending.
@@ -174,6 +176,7 @@ impl Shell {
         let (manage, manage_events) = Self::new_manage(window, cx);
         subscriptions.push(manage_events);
         let onboarding = onboarding_link::OnboardingState::new(options.source.is_some());
+        let vault_prompt = Self::new_vault_prompt(&mut subscriptions, cx);
         let composer_h = composer.read(cx).height_cell();
         let regions = region::Regions::new(&cx.entity(), cx);
         cx.set_window_appearance(theme_override.map(appearance));
@@ -208,25 +211,29 @@ impl Shell {
             settings_raw: None,
             forced_theme: options.dark.is_some(),
             onboarding,
+            vault_prompt,
             catalog_raw: None,
             settings_task: None,
         };
+        shell.install_hooks(window, cx);
+        shell.sync_composer(cx);
+        shell.connect(cx);
+        shell
+    }
+
+    fn install_hooks(&self, window: &mut Window, cx: &mut Context<Self>) {
         Self::transcript_hooks(cx);
         Self::notification_responses(window, cx);
-        Self::install_composer(&shell.manage_ctx(), cx);
-        crate::ui::manage::library::detail::install(&shell.manage_ctx(), cx);
-        crate::ui::manage::install_window(&shell.manage_ctx(), cx);
-        let manage = shell.manage_ctx();
-        shell
-            .composer
+        Self::install_composer(&self.manage_ctx(), cx);
+        crate::ui::manage::library::detail::install(&self.manage_ctx(), cx);
+        crate::ui::manage::install_window(&self.manage_ctx(), cx);
+        let manage = self.manage_ctx();
+        self.composer
             .update(cx, |composer, _| composer.manage = Some(manage.clone()));
         let weak = cx.entity().downgrade();
         crate::ui::inspector::install_epic_host(cx, manage, move |session, cx| {
             weak.upgrade()?.read(cx).sidebar.epic_of(session)
         });
-        shell.sync_composer(cx);
-        shell.connect(cx);
-        shell
     }
 
     /// What the shell follows: the window's activation, the composer's events, the Agent

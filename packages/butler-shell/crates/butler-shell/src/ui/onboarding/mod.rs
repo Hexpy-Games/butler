@@ -18,6 +18,7 @@ pub(crate) mod readiness;
 pub(crate) mod ready;
 pub(crate) mod sign_in;
 mod steps;
+mod vault;
 pub(crate) mod welcome;
 
 use std::rc::Rc;
@@ -91,6 +92,10 @@ pub(crate) struct Onboarding {
     /// The step card's title: focused when the card changes.
     pub(crate) title: FocusHandle,
     intro: SetupWizardIntro,
+    pub(crate) vault: Entity<crate::ui::shell::vault::Vault>,
+    pub(crate) vault_offered: Option<bool>,
+    pub(crate) vault_result: &'static str,
+    pub(crate) vault_confirm: crate::ui::settings::SectionCtx,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -158,6 +163,8 @@ impl Onboarding {
         cx: &mut Context<Self>,
     ) -> Self {
         let _ = window;
+        let vault = cx.new(crate::ui::shell::vault::Vault::new);
+        let vault_confirm = crate::ui::settings::confirm::host(cx);
         let consent = cx.new(welcome::Consent::new);
         let readiness = cx.new(readiness::Readiness::new);
         let memory = cx.new(memory::MemoryChoice::new);
@@ -167,6 +174,8 @@ impl Onboarding {
         let reply = cx.new(commit::Reply::new);
         let imports = cx.new(import::Imports::new);
         let subscriptions = vec![
+            cx.observe(&vault, |this, _, cx| this.sync(cx)),
+            cx.observe(&vault_confirm.state, |_, _, cx| cx.notify()),
             cx.observe(&consent, |this, _, cx| this.sync(cx)),
             cx.observe(&readiness, |this, _, cx| this.sync(cx)),
             cx.observe(&memory, |_, _, cx| cx.notify()),
@@ -181,6 +190,10 @@ impl Onboarding {
             cx.subscribe(&reply, Self::on_reply),
         ];
         Self {
+            vault,
+            vault_confirm,
+            vault_offered: None,
+            vault_result: "intro",
             mode,
             lang: if mode == Mode::FirstRun {
                 os_lang()
@@ -216,6 +229,11 @@ impl Onboarding {
     /// The effects React's hooks run on each change: the commit effect, the import sources once
     /// the reply is saved and Butler is ready, the local servers while the AI step shows.
     pub(crate) fn sync(&mut self, cx: &mut Context<Self>) {
+        if self.vault_offered.is_none()
+            && self.vault.read(cx).state != crate::ui::shell::vault::State::Loading
+        {
+            self.vault_offered = Some(self.vault.read(cx).offered());
+        }
         let status = self.readiness.read(cx).view().status;
         let accepted_at = self.consent.read(cx).accepted_at();
         let lang = self.lang;
@@ -262,7 +280,11 @@ impl Onboarding {
         _: &MemoryEvent,
         cx: &mut Context<Self>,
     ) {
-        self.screen = Screen::Connect;
+        self.screen = if self.vault_offered == Some(true) {
+            Screen::Vault
+        } else {
+            Screen::Connect
+        };
         self.sync(cx);
     }
 
@@ -328,6 +350,7 @@ impl Onboarding {
             Step::Welcome => return welcome::screen(self, window, cx),
             Step::Consent => welcome::consent_screen(self, window, cx),
             Step::Memory => memory::screen(self, window, cx),
+            Step::Vault => vault::screen(self, window, cx),
             Step::Import => import::screen(self, window, cx),
             Step::Ready => ready::screen(self, window, cx),
             Step::Connect => match (self.ai_stage(cx), &self.stages.view) {
@@ -353,6 +376,8 @@ impl Render for Onboarding {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let key = self.stage_key(cx);
         let body = self.body(window, cx);
+        let confirmation =
+            crate::ui::settings::confirm::dialog(&self.vault_confirm.state, window, cx);
         let lang = self.lang;
         // ANIM-MIGRATE(setup card morph between steps): requires measured surface edges and
         // retained old content; motion Props cannot animate layout bounds without scaling text.
@@ -372,5 +397,6 @@ impl Render for Onboarding {
         crate::ui::widgets::anchor(div(), "first-run-setup")
             .size_full()
             .child(shell)
+            .children(confirmation)
     }
 }

@@ -6,8 +6,17 @@ use super::copy::{Words, words};
 use super::{Mode, Onboarding, Step};
 
 /// `firstRunStepIds`.
-fn ids(mode: Mode) -> &'static [Step] {
+fn ids(mode: Mode, offered: bool) -> &'static [Step] {
     match mode {
+        Mode::FirstRun if offered => &[
+            Step::Welcome,
+            Step::Consent,
+            Step::Memory,
+            Step::Vault,
+            Step::Connect,
+            Step::Import,
+            Step::Ready,
+        ],
         Mode::FirstRun => &[
             Step::Welcome,
             Step::Consent,
@@ -20,11 +29,12 @@ fn ids(mode: Mode) -> &'static [Step] {
     }
 }
 
-fn label(step: Step, copy: &Words) -> &'static str {
+fn label(step: Step, copy: &Words, lang: butler_ds::ui::context::Lang) -> &'static str {
     match step {
         Step::Welcome => copy.steps[0],
         Step::Consent => copy.steps[1],
         Step::Memory => copy.steps[2],
+        Step::Vault => crate::ui::shell::vault::copy::words(lang).name,
         Step::Connect => copy.steps[3],
         Step::Ready => copy.steps[4],
         Step::Import => copy.import,
@@ -39,17 +49,19 @@ pub(super) fn progress(view: &Onboarding, cx: &App) -> Option<SetupWizardProgres
     let copy = words(view.lang);
     let step = view.step(cx);
     let substep = view.substep(cx);
-    let steps = ids(view.mode).iter().map(|id| {
-        let label = label(*id, copy);
-        // CARVE-OUT(G-step-caption): React sets the count as a tertiary tabular caption after
-        // the label; the DS step label is plain text.
-        let label: SharedString = match substep {
-            Some((index, total)) if *id == step => format!("{label} {index}/{total}").into(),
-            _ => label.into(),
-        };
-        SetupWizardStep::new(id.id(), label)
-    });
-    let active = ids(view.mode)
+    let steps = ids(view.mode, view.vault_offered == Some(true))
+        .iter()
+        .map(|id| {
+            let label = label(*id, copy, view.lang);
+            // CARVE-OUT(G-step-caption): React sets the count as a tertiary tabular caption after
+            // the label; the DS step label is plain text.
+            let label: SharedString = match substep {
+                Some((index, total)) if *id == step => format!("{label} {index}/{total}").into(),
+                _ => label.into(),
+            };
+            SetupWizardStep::new(id.id(), label)
+        });
+    let active = ids(view.mode, view.vault_offered == Some(true))
         .iter()
         .position(|id| *id == step)
         .unwrap_or(0);

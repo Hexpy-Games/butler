@@ -50,8 +50,8 @@ pub(super) struct Words {
     pub(super) keys_empty: &'static str,
     /// savedKeys.usedBy for 0, 1 and more models
     pub(super) used_by: [&'static str; 3],
-    /// savedKeys.storage.local, keychain, secretService, credentialManager
-    pub(super) storage: [&'static str; 4],
+    /// savedKeys.storage.local, keychain, secretService, credentialManager, vault
+    pub(super) storage: [&'static str; 5],
     /// savedKeys.replace
     pub(super) replace: &'static str,
     /// savedKeys.newKey
@@ -138,6 +138,7 @@ static KO: Words = Words {
         "키체인에 저장",
         "시스템 키링에 저장",
         "자격 증명 관리자에 저장",
+        "버틀러 금고에 저장",
     ],
     replace: "교체",
     new_key: "새 키",
@@ -201,6 +202,7 @@ static EN: Words = Words {
         "Stored in Keychain",
         "Stored in the system keyring",
         "Stored in Credential Manager",
+        "Stored in Butler Vault",
     ],
     replace: "Replace",
     new_key: "New key",

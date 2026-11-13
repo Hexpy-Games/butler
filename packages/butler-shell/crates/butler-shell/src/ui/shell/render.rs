@@ -322,6 +322,7 @@ impl Render for Shell {
         if let Some(section) = self.pending_settings.take() {
             self.open_settings(&section, window, cx);
         }
+        let (vault_prompt, vault_confirm) = self.vault_dialogs(window, cx);
         let frame = self.frame(window, cx);
         let rename = self.render_rename(window, cx);
         let task_graph = self.render_task_graph(window, cx);
@@ -362,6 +363,8 @@ impl Render for Shell {
             .child(sidebar_dialog)
             .children(crate::ui::manage::library::detail::dialog_host(cx))
             .child(self.manage.canon_trust.clone())
+            .children(vault_prompt)
+            .children(vault_confirm)
             .child(toast::Toaster::new().offset(ds.len(Length::TitlebarSafeAreaTop)));
         overlay::track(toast::track(focus::track_modality(div())))
             .id("shell-root")

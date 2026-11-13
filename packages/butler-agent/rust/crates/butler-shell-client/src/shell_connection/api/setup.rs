@@ -3,6 +3,32 @@ use reqwest::Method;
 use serde_json::Value;
 
 impl ShellClient {
+    /// Electron `butlerVaultApi.ts`: GET /setup/butler-vault
+    pub async fn butler_vault(&self) -> Result<Value, Error> {
+        self.json(Method::GET, &["setup", "butler-vault"], &[], None)
+            .await
+    }
+    /// Electron `butlerVaultApi.ts`: POST /setup/butler-vault/enable
+    pub async fn enable_butler_vault(&self) -> Result<Value, Error> {
+        self.json(
+            Method::POST,
+            &["setup", "butler-vault", "enable"],
+            &[],
+            Some(&serde_json::json!({})),
+        )
+        .await
+    }
+    /// Electron `butlerVaultApi.ts`: POST /setup/butler-vault/decline
+    pub async fn decline_butler_vault(&self) -> Result<Value, Error> {
+        self.json(
+            Method::POST,
+            &["setup", "butler-vault", "decline"],
+            &[],
+            Some(&serde_json::json!({})),
+        )
+        .await
+    }
+
     /// GET /setup/readiness
     pub async fn get_setup_readiness(&self) -> Result<Value, Error> {
         self.json(Method::GET, &["setup", "readiness"], &[], None)
