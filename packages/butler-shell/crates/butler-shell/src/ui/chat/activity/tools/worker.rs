@@ -41,7 +41,7 @@ pub(super) fn capsule(row: &ProgressRow, t: &TranscriptCtx) -> Option<AnyElement
 }
 
 /// `openSessionObserver` through the shell's hook.
-fn open_observer(session: &str, cx: &mut App) {
+pub(crate) fn open_observer(session: &str, cx: &mut App) {
     let open = cx
         .try_global::<AssistantHooks>()
         .and_then(|hooks| hooks.open_observer.clone());
@@ -58,4 +58,65 @@ fn plan_progress(total: Option<i64>, completed: Option<i64>) -> Option<String> {
     }
     let completed = completed.clamp(0, total);
     Some(format!("{}/{total}", (completed + 1).min(total)))
+}
+
+/// `StepWorkerCapsule.tsx`: a worker's live state comes from its own session view.
+pub(in crate::ui::chat::activity) fn step_capsule(
+    worker: &crate::ui::source::wire::StewardSessionSummaryView,
+    cx: &mut App,
+) -> AnyElement {
+    use crate::ui::chat::activity::{child_views, steward::presentation};
+    use butler_ds::ui::context::Ds;
+    let mut child = worker.clone();
+    if let Some(view) = child_views::view(&worker.session_id, cx) {
+        child.status.clone_from(&view.status);
+        child.active_turn.clone_from(&view.active_turn);
+        child.waiting_for_children = view.waiting_for_children;
+        child.approved_plan_total = view.approved_plan_total.or(worker.approved_plan_total);
+        child.approved_plan_completed = view
+            .approved_plan_completed
+            .or(worker.approved_plan_completed);
+    }
+    let lang = Ds::get(cx).lang();
+    let live = child.active_turn.is_some() || child.waiting_for_children == Some(true);
+    let activity = if live {
+        presentation::worker_activity_title(
+            lang,
+            &presentation::current_activity_title(lang, &child),
+            &child.title,
+        )
+    } else {
+        presentation::progress_status(lang, &child)
+    };
+    let progress = if live {
+        presentation::plan_progress(&child)
+    } else {
+        None
+    };
+    let label = [child.title, progress.unwrap_or_default(), activity.clone()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let session = worker.session_id.clone();
+    let button = Button::new(SharedString::from(format!("step-worker:{session}")))
+        .variant(Variant::Outline)
+        .shape(Shape::Pill)
+        .text(label)
+        .on_click(move |_, _, cx| {
+            open_observer(&session, cx);
+        });
+    // `title={activity}`: hovering shows the worker's current activity.
+    let pill = if activity.is_empty() {
+        button.into_any_element()
+    } else {
+        butler_ds::ui::tooltip::Tooltip::new(SharedString::from(format!(
+            "step-worker-hint:{}",
+            worker.session_id
+        )))
+        .label(activity)
+        .child(button)
+        .into_any_element()
+    };
+    crate::ui::widgets::anchor(div().flex().child(pill), "step-worker-capsule").into_any_element()
 }

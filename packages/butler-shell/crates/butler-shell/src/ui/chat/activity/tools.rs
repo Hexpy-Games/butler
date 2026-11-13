@@ -2,7 +2,7 @@
 pub(in crate::ui::chat::activity) mod copy;
 mod labels;
 mod thinking;
-mod worker;
+pub(super) mod worker;
 
 use butler_ds::tokens::Length;
 use butler_ds::ui::Icon;

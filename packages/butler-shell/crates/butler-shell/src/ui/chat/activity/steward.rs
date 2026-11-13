@@ -1,5 +1,6 @@
 //! `StewardParentProgress` and its presentation/projection.
-mod presentation;
+pub(super) mod presentation;
+mod steps;
 
 use butler_ds::tokens::Length;
 use butler_ds::ui::blocks::measure;
@@ -81,11 +82,8 @@ fn progress_card(
     if live {
         disclosure = disclosure.live();
     }
-    if expanded {
-        let turn_id = Some(progress.turn.id.as_str());
-        if let Some(work) = timeline(progress.rows, turn_id, None, live, t, window, cx) {
-            disclosure = disclosure.child(work);
-        }
+    if expanded && let Some(work) = details(progress, live, t, window, cx) {
+        disclosure = disclosure.child(work);
     }
     let header = Stack::row()
         .gap(Space::Sm)
@@ -96,4 +94,31 @@ fn progress_card(
         .child(Stack::new().gap(Space::Sm).child(header).child(disclosure))
         .child(recorder)
         .into_any_element()
+}
+
+/// `WorkBlockDetails.tsx`: subscribe only while expanded; retain the legacy no-plan body.
+fn details(
+    progress: &Anchored,
+    live: bool,
+    t: &TranscriptCtx,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<AnyElement> {
+    let view = super::child_views::view(&progress.child.session_id, cx);
+    if let Some((view, plan)) = view
+        .as_ref()
+        .and_then(|view| view.plan.as_ref().map(|plan| (view, plan)))
+    {
+        Some(steps::timeline(view, plan, t, window, cx))
+    } else {
+        timeline(
+            progress.rows,
+            Some(&progress.turn.id),
+            None,
+            live,
+            t,
+            window,
+            cx,
+        )
+    }
 }

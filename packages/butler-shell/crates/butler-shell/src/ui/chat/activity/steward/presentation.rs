@@ -105,7 +105,9 @@ pub(super) fn effective_steward_status(child: &StewardSessionSummaryView) -> &'s
 }
 
 /// `stewardPlanProgress`: the step the child is on, as `n/total`.
-fn plan_progress(child: &StewardSessionSummaryView) -> Option<String> {
+pub(in crate::ui::chat::activity) fn plan_progress(
+    child: &StewardSessionSummaryView,
+) -> Option<String> {
     let (total, completed) = (child.approved_plan_total?, child.approved_plan_completed?);
     if total < 1 {
         return None;
@@ -115,7 +117,10 @@ fn plan_progress(child: &StewardSessionSummaryView) -> Option<String> {
 }
 
 /// `stewardProgressStatus`.
-fn progress_status(lang: Lang, child: &StewardSessionSummaryView) -> String {
+pub(in crate::ui::chat::activity) fn progress_status(
+    lang: Lang,
+    child: &StewardSessionSummaryView,
+) -> String {
     let copy = copy(lang);
     match effective_steward_status(child) {
         "delivered" => copy.delivered.to_string(),
@@ -179,7 +184,10 @@ fn is_model_authored_phase(row: &ProgressRow) -> bool {
 }
 
 /// `stewardCurrentActivityTitle`.
-pub(super) fn current_activity_title(lang: Lang, child: &StewardSessionSummaryView) -> String {
+pub(in crate::ui::chat::activity) fn current_activity_title(
+    lang: Lang,
+    child: &StewardSessionSummaryView,
+) -> String {
     let copy = copy(lang);
     if child.waiting_for_children == Some(true) && child.active_turn.is_none() {
         return copy.pending_waiting_for_children.to_string();
@@ -272,7 +280,11 @@ fn is_useful_worker_title(lang: Lang, value: &str) -> bool {
 }
 
 /// `workerActivityTitle`.
-pub(super) fn worker_activity_title(lang: Lang, current: &str, task_title: &str) -> String {
+pub(in crate::ui::chat::activity) fn worker_activity_title(
+    lang: Lang,
+    current: &str,
+    task_title: &str,
+) -> String {
     let current = current.trim();
     if is_useful_worker_title(lang, current) {
         return current.to_string();
@@ -368,4 +380,80 @@ pub(super) fn tail(lang: Lang, rows: &[ProgressRow], turn_id: &str) -> (Option<S
         .checked_sub(2)
         .map(|at| display_title(&activities[at], lang));
     (previous, activities.len().saturating_sub(1))
+}
+
+/// `workPlanPresentation.ts`: local clock, using the same chrono locale rules as the timeline.
+pub(super) fn plan_time(value: &str) -> String {
+    crate::ui::chat::activity::timeline::clock_time(value, false)
+}
+
+/// `workPlanPresentation.ts` drops the end's shared day period from a completed range.
+pub(super) fn plan_status_time(
+    lang: Lang,
+    action: &crate::ui::source::wire::WorkPlanAction,
+) -> String {
+    let ko = lang == Lang::Ko;
+    let status = match (&action.status, ko) {
+        (WorkPlanActionStatus::Pending, false) => "Pending",
+        (WorkPlanActionStatus::Active, false) => "Running",
+        (WorkPlanActionStatus::Done, false) => "Done",
+        (WorkPlanActionStatus::Blocked, false) => "Blocked",
+        (WorkPlanActionStatus::Skipped, false) => "Skipped",
+        (WorkPlanActionStatus::Pending, true) => "대기 중",
+        (WorkPlanActionStatus::Active, true) => "진행 중",
+        (WorkPlanActionStatus::Done, true) => "완료",
+        (WorkPlanActionStatus::Blocked, true) => "막힘",
+        (WorkPlanActionStatus::Skipped, true) => "건너뜀",
+        _ => "",
+    };
+    let period = match (&action.status, &action.started_at, &action.finished_at) {
+        (WorkPlanActionStatus::Done, Some(start), Some(end)) => {
+            let start = plan_time(start);
+            let mut end = plan_time(end);
+            for period in ["오전", "오후", "AM", "PM"] {
+                if start.contains(period) && end.contains(period) {
+                    end = String::from(end.replace(period, "").trim());
+                    break;
+                }
+            }
+            format!("{start}–{end}")
+        }
+        (WorkPlanActionStatus::Active, Some(start), _) => {
+            let time = plan_time(start);
+            if ko {
+                format!("{time}부터")
+            } else {
+                format!("since {time}")
+            }
+        }
+        _ => String::new(),
+    };
+    [status.to_owned(), period]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+/// `SessionObserverStepTimeline.tsx` RevisionRow copy.
+pub(super) fn revision_title(lang: Lang, added: usize, removed: usize) -> String {
+    let mut changes = Vec::new();
+    if lang == Lang::Ko {
+        if added > 0 {
+            changes.push(format!("{added}개 추가"));
+        }
+        if removed > 0 {
+            changes.push(format!("{removed}개 제외"));
+        }
+        format!("계획 수정 · 단계 {}", changes.join(", "))
+    } else {
+        let step = |n| if n == 1 { "step" } else { "steps" };
+        if added > 0 {
+            changes.push(format!("{added} {} added", step(added)));
+        }
+        if removed > 0 {
+            changes.push(format!("{removed} {} removed", step(removed)));
+        }
+        format!("Plan revised · {}", changes.join(", "))
+    }
 }

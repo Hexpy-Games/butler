@@ -169,7 +169,7 @@ fn browser_timeline_still(
 }
 
 /// `workActivityToolsFromRows` of a phase activity: its operations' tool rows.
-fn activity_tools(
+pub(super) fn activity_tools(
     activity: &PhaseActivity,
     t: &TranscriptCtx,
     window: &mut Window,
@@ -196,7 +196,7 @@ fn activity_view(
 }
 
 /// `ActivityBlock` of TurnActivityBlock.tsx without its toolchain.
-fn activity_block(
+pub(super) fn activity_block(
     activity: &PhaseActivity,
     connected: bool,
     live: bool,
@@ -297,17 +297,22 @@ fn quoted(text: &str) -> Option<&str> {
 /// `formatActivityTime`: `Intl.DateTimeFormat(undefined, {hour, minute, second: "2-digit"})`,
 /// the local time in the OS locale; the timestamp itself when it is not one.
 fn activity_time(value: &str) -> String {
+    clock_time(value, true)
+}
+
+/// Shared local clock for `workPlanPresentation.ts` and `formatActivityTime`.
+pub(super) fn clock_time(value: &str, seconds: bool) -> String {
     let Ok(at) = chrono::DateTime::parse_from_rfc3339(value) else {
         return value.to_string();
     };
     let at = at.with_timezone(&chrono::Local);
     let locale = sys_locale::get_locale().unwrap_or_default().to_lowercase();
     let format = if locale.starts_with("ko") {
-        "%p %I:%M:%S"
+        if seconds { "%p %I:%M:%S" } else { "%p %I:%M" }
     } else if locale.starts_with("en-us") || locale == "en" {
-        "%I:%M:%S %p"
+        if seconds { "%I:%M:%S %p" } else { "%I:%M %p" }
     } else {
-        "%H:%M:%S"
+        if seconds { "%H:%M:%S" } else { "%H:%M" }
     };
     let text = at.format(format).to_string();
     if locale.starts_with("ko") {
