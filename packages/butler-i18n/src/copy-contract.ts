@@ -12,7 +12,7 @@ interface FirstRunCopy {
   welcomeTitle: string;
   welcomeLede: string;
   start: string;
-  steps: { welcome: string; consent: string; memory: string; connect: string; ready: string };
+  steps: { welcome: string; consent: string; memory: string; vault: string; connect: string; ready: string };
   consentTitle: string;
   consentItems: Array<{ body: string; caption?: string }>;
   consentProviderLink: string;
@@ -691,6 +691,26 @@ export interface AppCopy {
     notificationCancelled: string;
     notificationUpdated: string;
 
+  };
+  butlerVault: {
+    name: string;
+    intro: string;
+    done: string;
+    failed: string;
+    skip: string;
+    continue: string;
+    declineTitle: string;
+    declineNote: string;
+    risks: string[];
+    declineConfirm: string;
+    protected: string;
+    off: string;
+    turnOnLabel: string;
+    turnOn: string;
+    turnedOn: string;
+    locked: string;
+    stored: string;
+    kinds: (counts: { api_key: number; signin: number; card: number; profile: number; plugin: number }) => string;
   };
   firstRun: FirstRunCopy;
   interfaceDetails: {
@@ -2079,7 +2099,7 @@ export interface AppCopy {
       /** Registered models that use the key; 0 reads as not in use. */
       usedBy: (count: number) => string;
       /** Where the key is kept: this computer's data folder, or the system store. */
-      storage: { local: string; keychain: string; secretService: string; credentialManager: string };
+      storage: { vault: string; local: string; keychain: string; secretService: string; credentialManager: string };
       replace: string;
       replaceLabel: (name: string) => string;
       newKey: string;

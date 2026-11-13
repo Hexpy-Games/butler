@@ -159,13 +159,20 @@ impl ModelConfiguration {
             .iter()
             .filter(|record| matches!(record.home, SecretHome::Plaintext(_)))
             .count();
+        let vault_active = matches!(self.secrets.vault(root).await, Ok(Some(_)));
         let credentials = records
             .iter()
-            .map(|record| CredentialListItem {
-                credential: record.view(),
-                model_refs: users(&registered, record)
-                    .map(|model| model.model_ref.clone())
-                    .collect(),
+            .map(|record| {
+                let mut credential = record.view();
+                if vault_active && matches!(record.home, SecretHome::Store(_)) {
+                    credential.storage = CredentialStorage::Vault;
+                }
+                CredentialListItem {
+                    credential,
+                    model_refs: users(&registered, record)
+                        .map(|model| model.model_ref.clone())
+                        .collect(),
+                }
             })
             .collect();
         Ok(CredentialList { credentials, store })
@@ -185,6 +192,10 @@ impl ModelConfiguration {
             override_ignored,
             legacy_plaintext: 0,
         };
+        if matches!(self.secrets.vault(root).await, Ok(Some(_))) {
+            view.backend = CredentialStorage::Vault;
+            return view;
+        }
         if choice.mode == SecretStoreMode::System {
             match self.secrets.target(root).await {
                 Ok(target) => {

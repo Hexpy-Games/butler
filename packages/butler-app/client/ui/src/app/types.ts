@@ -141,11 +141,19 @@ export type ProviderAuthMethod = "api_key" | "chatgpt_oauth";
 
 /** Where a saved API key is kept (#217). */
 export type CredentialStorage =
+  | "vault"
   | "keychain"
   | "secret_service"
   | "credential_manager"
   | "fallback_file"
   | "legacy_plaintext";
+
+export interface ButlerVaultView {
+  state: "protected" | "off" | "locked";
+  available: boolean;
+  declined: boolean;
+  counts?: { api_key: number; signin: number; card: number; profile: number; plugin: number };
+}
 
 export interface ProviderCredentialView {
   id: string;

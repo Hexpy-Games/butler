@@ -1,5 +1,6 @@
+import { useButlerVault } from "../vault/useButlerVault";
 import { useChatGptAccount } from "../chatgpt/useChatGptAccount";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { setAppCopyLanguage } from "@/app/copy.ts";
 import { detectFirstRunLanguage, firstRunCopy, type FirstRunLanguage } from "@/app/firstRunSetup.ts";
 import { connectionCardId, type FirstRunProviderCardId, type LocalModelOption } from "@/app/setupProviders.ts";
@@ -45,8 +46,8 @@ function initialLanguage(mode: FirstRunMode): FirstRunLanguage {
 }
 
 /** Navigation stays local; declining never changes durable onboarding. */
-function useConsentScreen(mode: FirstRunMode) {
-  const [screen, setScreen] = useState<"welcome" | "consent" | "memory" | "connect">(mode === "consent" ? "consent" : "welcome");
+function useConsentScreen(mode: FirstRunMode, vaultOffered: boolean) {
+  const [screen, setScreen] = useState<"welcome" | "consent" | "memory" | "vault" | "connect">(mode === "consent" ? "consent" : "welcome");
   const [focusStart, setFocusStart] = useState(false);
   return {
     screen, setScreen, focusStart,
@@ -54,7 +55,7 @@ function useConsentScreen(mode: FirstRunMode) {
     backToWelcome: () => { setFocusStart(true); setScreen("welcome"); },
     backToConsent: () => setScreen("consent"),
     /** First run returns to the memory step; renewal and rerun to consent. */
-    backFromConnect: () => setScreen(mode === "first-run" ? "memory" : "consent"),
+    backFromConnect: () => setScreen(mode === "first-run" ? vaultOffered ? "vault" : "memory" : "consent"),
     decline: (clearAcceptance: () => void) => {
       clearAcceptance();
       setFocusStart(true);
@@ -70,7 +71,14 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   onCancel?: () => void;
 }) {
   const [language, setLanguage] = useState<FirstRunLanguage>(() => initialLanguage(mode));
-  const navigation = useConsentScreen(mode);
+  const vault = useButlerVault();
+  // Decided once, when the view first loads: turning the vault on keeps its step.
+  const offered = useRef<boolean | null>(null);
+  if (offered.current === null && vault.state !== "loading") {
+    offered.current = Boolean(vault.view?.available && vault.view.state === "off" && !vault.view.declined);
+  }
+  const vaultOffered = offered.current ?? false;
+  const navigation = useConsentScreen(mode, vaultOffered);
   const { screen, setScreen, focusStart } = navigation;
   const stages = useFirstRunStages(mode);
   const { view, importDone, authDone, replyDone, advanceOnConnect, setAuthDone, setReplyDone, setAdvanceOnConnect } = stages;
@@ -79,7 +87,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
     language, onAgree: () => setScreen(mode === "first-run" ? "memory" : "connect"),
   });
   const setup = useSetupReadiness();
-  const memory = useMemoryChoice({ setup, saveFailed: copy.memoryChoice.saveFailed, onSaved: () => setScreen("connect") });
+  const memory = useMemoryChoice({ setup, saveFailed: copy.memoryChoice.saveFailed, onSaved: () => setScreen(vaultOffered ? "vault" : "connect") });
   const online = useOnlineStatus();
   const current = useButlerStore((state) => currentCardId(mode, state.settings.model, state.modelCatalog));
   const commit = useConnectionCommit({
@@ -127,7 +135,7 @@ export function useFirstRunFlow({ mode, onComplete, onCancel }: {
   const substep = step === "connect" ? { index: ["pick", "auth", "reply"].indexOf(aiStage) + 1, total: 3 } : undefined;
 
   return {
-    mode, copy, language, setLanguage, online, screen, step, focusStart, view, savingConsent, local, signIn, chatgpt, connectChatGpt, commit, reply, memory,
+    mode, copy, language, setLanguage, online, screen, setScreen, step, vault, vaultOffered, focusStart, view, savingConsent, local, signIn, chatgpt, connectChatGpt, commit, reply, memory,
     currentCardId: commit.connected?.cardId ?? current,
     readiness: setup.readiness,
     retryPreparation: setup.retry,

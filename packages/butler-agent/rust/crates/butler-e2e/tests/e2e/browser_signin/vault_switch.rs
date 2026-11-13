@@ -102,7 +102,8 @@ async fn keychain_secrets_move_into_the_vault_when_turned_on_and_open_with_one_k
     assert!(marker_path.is_file());
     let marker = std::fs::read(&marker_path)?;
     assert_eq!(serde_json::from_slice::<Value>(&marker)?["items"], 2);
-    let root = butler_platform::secure_fs::canonicalize(&data)?;
+    // The product hashes the std spelling (Windows keeps the \\?\ prefix).
+    let root = std::fs::canonicalize(&data)?;
     let hash = format!("{:x}", Sha256::digest(root.to_string_lossy().as_bytes()));
     for (service, account) in [
         (
@@ -142,6 +143,17 @@ async fn keychain_secrets_move_into_the_vault_when_turned_on_and_open_with_one_k
         .await?;
     assert_eq!(offered.status, 200, "{}", offered.text);
     assert_eq!(offered.data()["offer"], false);
+    let credentials = s.gw.get("/credentials").await?;
+    assert_eq!(credentials.status, 200, "{}", credentials.text);
+    let credentials = credentials.data();
+    let kimi = credentials["credentials"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|credential| credential["id"] == "cred_kimi")
+        .unwrap();
+    assert_eq!(kimi["storage"], "vault");
+    assert_eq!(credentials["store"]["backend"], "vault");
     drop(cleanup);
     s.finish().await
 }

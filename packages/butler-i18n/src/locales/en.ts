@@ -67,12 +67,39 @@ const onboardingFallback: BriefingFallbackCopy = {
     ],
   };
 
+const butlerVault: AppCopy["butlerVault"] = {
+  name: "Butler Vault",
+  intro: "Keeps passwords, cards and API keys together in one encrypted vault, secured with your system's keychain.",
+  done: "Butler Vault is set up. Your information is kept safe from now on.",
+  failed: "Couldn't add it to the keychain. Press Continue to try again, or choose Don't use.",
+  skip: "Don't use",
+  continue: "Continue",
+  declineTitle: "Don't use Butler Vault?",
+  declineNote: "You can turn it on later in Settings → Security.",
+  risks: ["Passwords and cards are stored separately, without the vault", "No encrypted backup", "No sync to other devices later"],
+  declineConfirm: "Don't use",
+  protected: "Your data is protected.",
+  off: "Off",
+  turnOnLabel: "Turn on Butler Vault",
+  turnOn: "Turn on",
+  turnedOn: "Butler Vault is on",
+  locked: "Locked: the keychain did not open.",
+  stored: "Stored",
+  kinds: (counts) => [
+    counts.api_key ? `API keys ${counts.api_key}` : "",
+    counts.signin ? `Sign-ins ${counts.signin}` : "",
+    counts.card ? `Cards ${counts.card}` : "",
+    counts.profile ? `My info ${counts.profile}` : "",
+    counts.plugin ? `Plugins ${counts.plugin}` : "",
+  ].filter(Boolean).join(" · "),
+};
+
 const firstRun = {
     product: "Butler",
     welcomeTitle: "Welcome to Butler",
     welcomeLede: "Butler works for you on this computer. It organizes files, runs commands and keeps your schedules.",
     start: "Get started",
-    steps: { welcome: "Welcome", consent: "Consent", memory: "Memory", connect: "Connect AI", ready: "Finish" },
+    steps: { welcome: "Welcome", consent: "Consent", memory: "Memory", vault: butlerVault.name, connect: "Connect AI", ready: "Finish" },
     consentTitle: "Before you start",
     consentItems: [
       { body: "Butler is free, open-source software." },
@@ -665,6 +692,7 @@ export const enUsCopy: AppCopy = {
     notificationNewMessage: "A new message arrived.", notificationCompleted: "Work completed.", notificationFailed: "Work failed.", notificationCancelled: "Work cancelled.", notificationUpdated: "Work status updated.",
 
   },
+  butlerVault,
   firstRun: firstRun,
   interfaceDetails: {
     documentConversation: "Start a conversation with this document",
@@ -2429,6 +2457,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       usedBy: (count) => count === 0 ? "Not in use" : count === 1 ? "1 model" : `${count} models`,
       // Keys are a local file until the build is signed (#243); say Keychain only when the agent reports it.
       storage: {
+        vault: "Stored in Butler Vault",
         local: "Stored only on this computer",
         keychain: "Stored in Keychain",
         secretService: "Stored in the system keyring",
