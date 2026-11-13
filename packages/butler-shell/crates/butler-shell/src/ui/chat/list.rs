@@ -4,6 +4,7 @@
 //! newest message until the reader scrolls away, and a jump button brings it back.
 mod answers;
 mod request;
+mod scroll;
 mod turn;
 
 use std::collections::HashMap;
@@ -17,8 +18,8 @@ use butler_ds::ui::blocks::scope;
 use butler_ds::ui::context::Ds;
 use gpui::{
     AnyElement, App, Entity, FollowMode, Global, InteractiveElement as _, IntoElement as _,
-    ListAlignment, ListState, ParentElement as _, SharedString, Styled as _, WeakEntity, Window,
-    div, list, px, relative,
+    ListAlignment, ListState, ParentElement as _, Pixels, SharedString, Styled as _, WeakEntity,
+    Window, div, list, px, relative,
 };
 
 use super::TranscriptCtx;
@@ -146,8 +147,10 @@ struct State {
     request_source: Option<String>,
     /// The decision's row, while it shows something.
     request_ix: Option<usize>,
-    /// The reader scrolled away from the newest message.
-    away: bool,
+    /// The previous scroll offset (`movedUp`).
+    last_offset: Pixels,
+    /// `wasPinned`: the list keeps to the newest message; the reader scrolled away when not.
+    pinned: bool,
     unread: bool,
     seen: Option<String>,
     version: String,
@@ -157,11 +160,18 @@ impl State {
     fn new(session: String, weak: WeakEntity<Self>) -> Self {
         let list = ListState::new(0, ListAlignment::Bottom, px(600.));
         list.set_follow_mode(FollowMode::Tail);
+        let scroll_list = list.clone();
         list.set_scroll_handler(move |event, window, cx| {
-            let away = !event.is_following_tail;
             let _ = weak.update(cx, |state, _| {
-                if state.away != away {
-                    state.away = away;
+                let following = event.is_following_tail;
+                let pinned = scroll::after(
+                    &scroll_list,
+                    &mut state.last_offset,
+                    state.pinned,
+                    following,
+                );
+                if state.pinned != pinned {
+                    state.pinned = pinned;
                     window.refresh();
                 }
             });
@@ -186,7 +196,8 @@ impl State {
             reserve: DEFAULT_RESERVE,
             request_source: None,
             request_ix: None,
-            away: false,
+            last_offset: px(0.),
+            pinned: true,
             unread: false,
             seen: None,
             version: String::new(),
@@ -230,7 +241,7 @@ impl State {
             let last = self.rows.len().saturating_sub(1);
             self.list.splice(last..last + 1, 1);
         }
-        if self.seen.is_none() || !self.away {
+        if self.seen.is_none() || self.pinned {
             self.seen = Some(self.version.clone());
             self.unread = false;
         } else if self.seen.as_deref() != Some(self.version.as_str()) {
@@ -243,7 +254,7 @@ impl State {
             return;
         };
         let old = std::mem::take(&mut self.messages);
-        let previous: HashMap<&str, &Arc<MessageRecord>> = old
+        let previous: HashMap<_, _> = old
             .iter()
             .map(|message| (message.id.as_str(), message))
             .collect();
@@ -257,11 +268,10 @@ impl State {
             _ => new,
         })
         .collect();
-        let turn = view
+        self.turn = view
             .active_turn
             .clone()
             .map(|turn| reuse(self.turn.as_ref(), turn));
-        self.turn = turn;
         let info = turn_info(&view);
         let live = self.live.message(&self.messages, info.as_ref());
         self.live_id = live
@@ -282,21 +292,15 @@ impl State {
                 && self.request_source.as_deref() == Some(message.id.as_str())
         });
         for (ix, message) in self.messages.iter().enumerate() {
-            let carried = if live == Some(ix) {
-                self.turn.clone()
-            } else {
-                None
-            };
+            let carried = live.filter(|live| *live == ix).and(self.turn.clone());
             rows.push(Row::Message(message.clone(), carried));
             // `ConversationRequestAnchor`: the decision sits under the message it was asked in.
             if anchored == Some(ix) {
                 rows.push(Row::Request);
             }
         }
-        if let (true, Some(turn)) = (
-            info.is_some_and(|info| info.show) && live.is_none(),
-            &self.turn,
-        ) {
+        let show_activity = info.is_some_and(|info| info.show) && live.is_none();
+        if let (true, Some(turn)) = (show_activity, &self.turn) {
             rows.push(Row::Activity(turn.clone()));
         }
         if let Some(queue) = self
@@ -314,6 +318,9 @@ impl State {
         }
         rows.push(Row::Reserve);
         splice_changes(&self.list, &self.rows, &rows);
+        if self.pinned && !self.list.is_following_tail() {
+            self.list.set_follow_mode(FollowMode::Tail);
+        }
         self.rows = rows;
         self.version = version(&self.messages);
     }
@@ -321,7 +328,7 @@ impl State {
     /// `scrollToBottom`: follow the newest message again.
     fn scroll_to_bottom(&mut self) {
         self.list.set_follow_mode(FollowMode::Tail);
-        self.away = false;
+        self.pinned = true;
         self.unread = false;
         self.seen = Some(self.version.clone());
     }
@@ -350,7 +357,7 @@ pub(crate) fn transcript(
     });
     let (list_state, away, unread) = {
         let s = state.read(cx);
-        (s.list.clone(), s.away, s.unread)
+        (s.list.clone(), !s.pinned, s.unread)
     };
     // A decision's height changes with its own state (collapse, step, pending): measure it again.
     if let Some(ix) = state.read(cx).request_ix {
