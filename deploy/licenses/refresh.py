@@ -189,6 +189,21 @@ def crate_evidence(package):
         source = "https://crates.io/crates/windows-permissions/0.2.4"
         files = [("Upstream MIT declaration (no copyright notice supplied)", (directory / "Cargo.toml.orig").read_text(encoding="utf-8")),
                  ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
+    if not files and package["name"] == "cookie-factory" and package["version"] == "0.3.3" and license_id == "MIT":
+        # The published package declares MIT but ships no license text or
+        # copyright notice. Preserve the declaration verbatim; provide the
+        # standard text without inventing a copyright attribution.
+        source = "https://crates.io/crates/cookie-factory/0.3.3"
+        files = [("Upstream MIT declaration (no copyright notice supplied)", (directory / "Cargo.toml.orig").read_text(encoding="utf-8")),
+                 ("Full MIT license (upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
+    if not files and package["name"] == "io_tee" and package["version"] == "0.1.1" and license_id == "MIT OR Apache-2.0":
+        # The published package declares MIT OR Apache-2.0 but ships no license
+        # text or copyright notice. Elect MIT; preserve the declaration verbatim
+        # without inventing a copyright attribution.
+        license_id = "MIT"
+        source = "https://crates.io/crates/io_tee/0.1.1"
+        files = [("Upstream MIT OR Apache-2.0 declaration (no copyright notice supplied)", (directory / "Cargo.toml.orig").read_text(encoding="utf-8")),
+                 ("Full MIT license (elected from upstream MIT / Apache-2.0; upstream omits text)", fetch("https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt"))]
     if not files and package["name"] == "stop-token" and package["version"] == "0.7.0" and license_id == "MIT OR Apache-2.0":
         # The published package and pinned upstream declare MIT OR Apache-2.0
         # but ship no license text or copyright notice. Elect MIT; preserve the

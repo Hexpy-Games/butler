@@ -15,6 +15,16 @@ pub(crate) fn snapshot(root: &Path, db: &Path) -> io::Result<(Vec<SecretId>, Vec
         .into_iter()
         .map(|(service, account)| SecretId { service, account })
         .collect::<Vec<_>>();
+    // The vault key is cleaned up only where a vault was created.
+    let vault = butler_vault::vault::VaultPaths::in_data_root(root);
+    if vault.file().is_file()
+        && let Ok(key) = butler_vault::vault::keychain_key(root)
+    {
+        keys.push(SecretId {
+            service: key.service().to_owned(),
+            account: key.account().to_owned(),
+        });
+    }
     let db =
         sqlite::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(io::Error::other)?;
     for (service, account) in butler_gateway::gateway::reset_browser_secret_keys(root, &db)? {

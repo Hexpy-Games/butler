@@ -1,6 +1,6 @@
 mod data_reset;
 mod reset_secrets;
-pub use reset_secrets::reset_browser_secret_keys;
+pub use reset_secrets::{reset_browser_secret_keys, vault_legacy_items};
 mod assets;
 mod authority;
 mod authority_permissions;

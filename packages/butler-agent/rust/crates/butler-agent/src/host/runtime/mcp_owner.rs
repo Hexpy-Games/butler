@@ -68,6 +68,8 @@ pub(super) async fn open(
     .await
     .map_err(super::boundary::setup)?;
     startup.phase("plugins_registry");
+    super::vault_switch::open_at_start(&paths.data_root).await;
+    startup.phase("vault_open");
     let mcp = for_runtime(paths, env, writes.clone(), plugins.clone());
     Ok((plugins, mcp))
 }

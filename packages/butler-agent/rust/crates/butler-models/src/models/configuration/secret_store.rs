@@ -29,6 +29,9 @@ use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, Semaphore};
 
+use butler_vault::vault::VaultError;
+use butler_vault::vault::{ProductVault, shared};
+
 use super::read_object_sync;
 use super::store_policy::{SecretStoreFacts, StoreChoice, choose};
 use crate::models::CredentialStorage;
@@ -50,6 +53,8 @@ const STORE_TIMEOUT: Duration = Duration::from_secs(30);
 /// Why a key could not be read from or written to its store.
 #[derive(Debug, thiserror::Error)]
 pub enum CredentialStoreError {
+    #[error("the Butler vault could not be used")]
+    Vault(#[from] VaultError),
     /// The key is in a system store this host does not have (a data folder
     /// copied from another operating system).
     #[error("the API key is kept in a credential store this system does not have")]
@@ -72,6 +77,7 @@ impl CredentialStoreError {
     /// A stable code for reports and logs.
     pub fn code(&self) -> &'static str {
         match self {
+            Self::Vault(_) => "credential_vault_unavailable",
             Self::Store(SecretError::Unavailable(_)) => "credential_store_unavailable",
             Self::ForeignStore => "credential_store_foreign",
             Self::Store(SecretError::AccessDenied(_)) => "credential_store_access_denied",
@@ -104,6 +110,28 @@ pub(super) struct ProviderSecrets {
 }
 
 impl ProviderSecrets {
+    pub(super) async fn vault(
+        &self,
+        root: &Path,
+    ) -> Result<Option<Arc<ProductVault>>, CredentialStoreError> {
+        let vault = shared(root);
+        let owned = vault.clone();
+        self.vault_call(move || owned.active())
+            .await
+            .map(|active| active.then_some(vault))
+    }
+
+    pub(super) async fn vault_call<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> Result<T, VaultError> + Send + 'static,
+    ) -> Result<T, CredentialStoreError> {
+        match tokio::time::timeout(STORE_TIMEOUT, tokio::task::spawn_blocking(work)).await {
+            Ok(Ok(result)) => result.map_err(CredentialStoreError::Vault),
+            Ok(Err(error)) => Err(CredentialStoreError::Interrupted(error)),
+            Err(_) => Err(CredentialStoreError::TimedOut),
+        }
+    }
+
     pub(super) fn new(facts: SecretStoreFacts) -> Self {
         Self {
             facts,
@@ -259,6 +287,10 @@ impl ProviderSecrets {
             Err(_) => Err(CredentialStoreError::TimedOut),
         }
     }
+}
+
+pub(super) fn vault_id(provider_id: &str, credential_id: &str) -> String {
+    format!("api_key/{provider_id}/{credential_id}")
 }
 
 /// The owner-only fallback file of `root`.

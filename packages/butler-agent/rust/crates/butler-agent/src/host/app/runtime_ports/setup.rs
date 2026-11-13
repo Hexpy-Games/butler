@@ -2,6 +2,7 @@
 //! local model servers, API keys and the ChatGPT sign-in flow, behind the
 //! gateway's [`AppSetupPort`].
 
+mod butler_vault;
 mod chatgpt_account;
 mod credentials;
 mod oauth;
@@ -33,6 +34,7 @@ const LOCAL_PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 
 /// Everything first-run setup needs from the process.
 pub(crate) struct AppSetupParts {
+    pub(crate) plugins: Arc<crate::host::plugins::Plugins>,
     pub(crate) configuration: Arc<ModelConfiguration>,
     pub(crate) settings: Arc<AppSettingsFactsAdapter>,
     pub(crate) installation: ResolvedInstallation,
@@ -46,6 +48,7 @@ pub(crate) struct AppSetupParts {
 pub(crate) struct AppSetup(Arc<SetupInner>);
 
 struct SetupInner {
+    plugins: Arc<crate::host::plugins::Plugins>,
     configuration: Arc<ModelConfiguration>,
     settings: Arc<AppSettingsFactsAdapter>,
     installation: ResolvedInstallation,
@@ -71,6 +74,7 @@ impl AppSetup {
         Self(Arc::new(SetupInner {
             oauth: OauthFlows::new(parts.configuration.clone()),
             configuration: parts.configuration,
+            plugins: parts.plugins,
             settings: parts.settings,
             installation: parts.installation,
             data_root: parts.data_root,
@@ -219,6 +223,15 @@ impl AppSetupPort for AppSetup {
     ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::RemovedOauthCredential>
     {
         chatgpt_account::remove_credential(self.0.configuration.clone(), id)
+    }
+    fn butler_vault(&self) -> ApplicationFuture<butler_gateway::gateway::ButlerVaultView> {
+        butler_vault::view(self.0.data_root.clone())
+    }
+    fn enable_butler_vault(&self) -> ApplicationFuture<butler_gateway::gateway::ButlerVaultView> {
+        butler_vault::enable(self.0.data_root.clone(), self.0.plugins.clone())
+    }
+    fn decline_butler_vault(&self) -> ApplicationFuture<butler_gateway::gateway::ButlerVaultView> {
+        butler_vault::decline(self.0.data_root.clone())
     }
     fn chatgpt_sign_out(&self) -> ApplicationFuture<butler_gateway::gateway::ChatGptSignOutView> {
         chatgpt_account::sign_out(self.0.configuration.clone())

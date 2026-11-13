@@ -53,6 +53,8 @@ pub enum VaultError {
     /// An export would sit among the vault's own files, or replace one.
     #[error("an export cannot go in the vault's folder")]
     ExportInsideVault,
+    #[error("a copied secret read back differently")]
+    CopyMismatch,
     #[error("the credential store failed")]
     Store(#[source] SecretError),
     #[error("the vault file could not be read or written")]

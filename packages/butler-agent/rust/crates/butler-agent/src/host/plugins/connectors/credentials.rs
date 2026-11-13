@@ -1,7 +1,9 @@
+use super::super::secrets::Secrets;
 use super::*;
-use butler_platform::secrets::{SecretKey, SecretStore};
-pub(super) fn store() -> Result<SecretStore> {
-    SecretStore::system().map_err(|_| error("connector_secret_store_unavailable"))
+use butler_platform::secrets::SecretKey;
+use std::path::Path;
+pub(super) fn store(data_root: &Path) -> Result<Secrets> {
+    Secrets::open(data_root).map_err(|_| error("connector_secret_store_unavailable"))
 }
 pub(super) fn key(plugin: &str, connector: &str, account: &str, field: &str) -> Result<SecretKey> {
     SecretKey::new(

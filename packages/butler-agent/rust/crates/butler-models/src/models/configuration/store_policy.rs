@@ -157,3 +157,14 @@ pub fn credential_store_policy(data_root: &Path, facts: SecretStoreFacts) -> Cre
         override_ignored: facts.file_override == FileOverride::IgnoredForDefaultDataRoot,
     }
 }
+
+/// Whether this data folder's vault key may live in the system store.
+pub fn vault_uses_system_store(root: &Path, facts: SecretStoreFacts) -> bool {
+    let choice = choose(facts, &read_object_sync(&root.join("butler.config.json")));
+    match choice.reason {
+        StoreReason::TestOverride => false,
+        StoreReason::Config => choice.mode == SecretStoreMode::System,
+        StoreReason::SignedBuild => true,
+        StoreReason::UnsignedBuild => !butler_platform::secrets::SYSTEM_STORE_CHECKS_SIGNATURE,
+    }
+}

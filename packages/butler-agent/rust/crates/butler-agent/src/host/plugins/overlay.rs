@@ -213,7 +213,7 @@ impl Plugins {
         if plugin.approval.capabilities.secrets.is_empty() {
             return Ok(BTreeMap::new());
         }
-        let secrets = super::storage::secret_store()?;
+        let secrets = super::storage::secret_store(self.data_root())?;
         plugin
             .approval
             .capabilities
@@ -222,7 +222,7 @@ impl Plugins {
             .map(|s| {
                 let value = secrets
                     .get(&super::storage::key(&plugin.package.name, &s.key)?)
-                    .map_err(|_| error("plugin_secret_unavailable"))?
+                    .map_err(|()| error("plugin_secret_unavailable"))?
                     .ok_or_else(|| error("plugin_secret_unavailable"))?;
                 butler_log::register_secret(value.expose());
                 Ok((s.key.clone(), value.expose().to_owned()))

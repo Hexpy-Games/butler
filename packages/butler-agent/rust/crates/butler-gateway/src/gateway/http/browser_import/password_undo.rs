@@ -4,8 +4,9 @@ use crate::gateway::AppSignInCommand;
 use butler_platform::secrets::SecretText;
 use serde_json::{Value, json};
 use std::sync::Arc;
-fn backup(run: &str, id: &str) -> String {
-    format!("import:{run}:{id}")
+pub(in crate::gateway::http) const BACKUP_PREFIX: &str = "import:";
+pub(in crate::gateway::http) fn backup(run: &str, id: &str) -> String {
+    format!("{BACKUP_PREFIX}{run}:{id}")
 }
 
 pub(in crate::gateway::http) async fn replace(

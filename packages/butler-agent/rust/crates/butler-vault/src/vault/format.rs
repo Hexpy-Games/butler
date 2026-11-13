@@ -25,6 +25,7 @@ pub enum ItemKind {
     Profile,
     ImportBackup,
     ApiKey,
+    PluginSecret,
 }
 
 /// An item's secret: the exact text its module stores. Wiped when dropped,
