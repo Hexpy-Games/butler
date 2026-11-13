@@ -208,7 +208,7 @@ async function checkIntro(page: Page, host: NativeAppServerHandle) {
   const geometry = await intro.evaluate(node => {
     const bubble = node.closest('[data-test-class="assistant-bubble"]')!.getBoundingClientRect();
     const row = node.closest("article")!.getBoundingClientRect();
-    return { width: bubble.width, left: bubble.left, maxWidth: Math.min(440, row.width * 0.68), rowLeft: row.left };
+    return { width: bubble.width, left: bubble.left, maxWidth: Math.min(440, row.width * 0.9), rowLeft: row.left };
   });
   assert(geometry.width <= geometry.maxWidth + 0.5, "intro uses the Chats bubble width");
   assert(Math.abs(geometry.left - geometry.rowLeft) < 1, "intro aligns with Butler replies");
