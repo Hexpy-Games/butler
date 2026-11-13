@@ -4,6 +4,7 @@ mod automations;
 mod browser_import;
 mod canon;
 mod canon_queue;
+mod connectors;
 mod credentials;
 mod dashboard;
 mod data_reset;

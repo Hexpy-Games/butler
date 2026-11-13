@@ -6,6 +6,7 @@ mod about;
 mod appearance;
 mod archives;
 mod browser;
+mod connections;
 mod general;
 mod hooks;
 mod logs;
@@ -35,6 +36,7 @@ pub(crate) enum SectionId {
     Personalization,
     Memory,
     Models,
+    Connections,
     Updates,
     Usage,
     Logs,
@@ -50,12 +52,13 @@ pub(crate) enum SectionId {
 }
 
 /// `BASE_SETTINGS_SECTION_IDS` (settingsSectionIds.ts:4): logs is not in it.
-const BASE: [SectionId; 16] = [
+const BASE: [SectionId; 17] = [
     SectionId::General,
     SectionId::Appearance,
     SectionId::Personalization,
     SectionId::Memory,
     SectionId::Models,
+    SectionId::Connections,
     SectionId::Updates,
     SectionId::Usage,
     SectionId::Browser,
@@ -100,6 +103,7 @@ impl SectionId {
             Self::Personalization => Icon::UserRound,
             Self::Memory => Icon::Notebook,
             Self::Models => Icon::AiChip,
+            Self::Connections => Icon::Blocks,
             Self::Updates => Icon::RefreshCcw,
             Self::Usage => Icon::Database,
             Self::Logs | Self::Hooks => Icon::Terminal,
@@ -170,6 +174,7 @@ pub(crate) const GROUPS: [(Group, &[SectionId]); 3] = [
             SectionId::Personalization,
             SectionId::Memory,
             SectionId::Models,
+            SectionId::Connections,
         ],
     ),
     (
@@ -238,9 +243,10 @@ pub(crate) fn groups(developer: bool, query: &str, lang: Lang) -> Vec<(Group, Ve
 }
 
 /// `normalizeSettingsSectionId`, in its order: exact names, then substrings.
-const RULES: [(&[&str], &[&str], SectionId); 19] = [
+const RULES: [(&[&str], &[&str], SectionId); 20] = [
     (&["memory"], &[], SectionId::Memory),
     (&["updates"], &[], SectionId::Updates),
+    (&["connections"], &[], SectionId::Connections),
     (
         &[],
         &["default-permission", "access-mode", "기본 권한"],
@@ -312,6 +318,7 @@ pub(crate) fn page(id: SectionId, ctx: SectionCtx, window: &mut Window, cx: &mut
         SectionId::Personalization => personalization::page(ctx, window, cx),
         SectionId::Memory => memory::page(ctx, window, cx),
         SectionId::Models => models::page(ctx, window, cx),
+        SectionId::Connections => connections::page(ctx, window, cx),
         SectionId::Updates => updates::page(ctx, window, cx),
         SectionId::Usage => usage::page(ctx, window, cx),
         SectionId::Logs => logs::page(ctx, window, cx),
