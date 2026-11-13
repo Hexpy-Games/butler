@@ -214,7 +214,7 @@ fn tool_row(
             disclosure.into_any_element()
         }
     };
-    let after = worker::capsule(row, t, lang)
+    let after = worker::capsule(row, t)
         .or_else(|| latest_browser.then(|| row_still(row, window, cx)).flatten());
     match after {
         Some(after) => Stack::new()

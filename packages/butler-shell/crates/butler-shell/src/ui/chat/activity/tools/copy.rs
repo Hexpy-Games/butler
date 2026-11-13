@@ -41,18 +41,6 @@ pub(in crate::ui::chat::activity) fn text(lang: Lang, key: &str) -> &'static str
     find(lang, key).unwrap_or_default()
 }
 
-/// The first `ws.` worker status key whose text, in either locale, is `value`.
-pub(in crate::ui::chat::activity) fn worker_status_key(value: &str) -> Option<&'static str> {
-    [Lang::En, Lang::Ko].into_iter().find_map(|lang| {
-        CATALOG.lines().find_map(|line| {
-            let mut cells = line.split('\t');
-            let key = cells.next()?.strip_prefix("ws.")?;
-            let row = (cells.next()?, cells.next()?);
-            (pick(lang, row) == value).then_some(key)
-        })
-    })
-}
-
 fn ko(lang: Lang) -> bool {
     lang == Lang::Ko
 }

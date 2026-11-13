@@ -125,7 +125,7 @@ pub(crate) struct SessionView {
     pub(crate) activity_history: Option<Vec<SessionViewActivityHistoryItem>>,
     pub(crate) message_window: SessionViewMessageWindow,
     #[serde(default)]
-    pub(crate) workers: Vec<WorkerActivitySummary>,
+    pub(crate) workers: Vec<StewardSessionSummaryView>,
     #[serde(default)]
     pub(crate) work_streams: Vec<WorkStreamSummary>,
     #[serde(default)]
