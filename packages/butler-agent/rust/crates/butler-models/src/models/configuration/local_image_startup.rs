@@ -7,10 +7,7 @@ impl ModelConfiguration {
     pub async fn discover_missing_local_images(self: Arc<Self>) -> Result<(), ModelCatalogError> {
         let config = read_object(&self.data_root.join("butler.config.json")).await;
         let models = self.local_models(&config);
-        let credentials = super::local_credentials::read(
-            &self.data_root.join("auth/custom-model-credentials.json"),
-        )
-        .await?;
+        let credentials = super::local_credentials::read(&self.data_root).await?;
         // Sequential probes bound concurrency to one, and never recur while idle.
         for model in models
             .into_iter()

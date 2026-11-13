@@ -173,6 +173,17 @@ impl ProductVault {
         })
     }
 
+    pub fn items_with_prefix(&self, prefix: &str) -> Result<Vec<(String, SecretText)>, VaultError> {
+        Ok(self
+            .vault
+            .read()?
+            .items
+            .iter()
+            .filter(|item| item.id.starts_with(prefix))
+            .map(|item| (item.id.clone(), item.value.to_secret_text()))
+            .collect())
+    }
+
     pub fn item_kinds(&self) -> Result<Vec<ItemKind>, VaultError> {
         Ok(self
             .vault

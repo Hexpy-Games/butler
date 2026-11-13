@@ -1,7 +1,7 @@
 //! Legacy API keys copied when this data folder switches to the vault.
 use super::{
     credentials::{CREDENTIALS_FILE, CredentialsFile},
-    secret_store,
+    local_credentials, secret_store,
 };
 use butler_platform::secrets::{SecretBackend, SecretText};
 use butler_vault::vault::{ItemKind, LegacyItem, LegacySource};
@@ -47,6 +47,15 @@ pub fn vault_legacy_items(root: &Path) -> io::Result<Vec<LegacyItem>> {
             kind: ItemKind::ApiKey,
             sources,
         });
+    }
+    for (model_ref, secret) in local_credentials::read_file(root).map_err(io::Error::other)? {
+        if !secret.is_empty() {
+            items.push(LegacyItem {
+                id: format!("custom_model/{model_ref}"),
+                kind: ItemKind::ApiKey,
+                sources: vec![LegacySource::Value(SecretText::new(secret))],
+            });
+        }
     }
     Ok(items)
 }
