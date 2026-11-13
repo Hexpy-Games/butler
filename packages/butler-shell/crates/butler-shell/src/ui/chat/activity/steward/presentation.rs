@@ -83,7 +83,9 @@ pub(super) fn anchored_progress<'a>(
     })
 }
 
-/// `effectiveStewardStatus`: a terminal child (durable result) is done whatever its status says.
+/// Electron `stewardProgressPresentation.ts` (`effectiveStewardStatus`): a child that ended
+/// with its model's final answer is delivered, whatever that answer reports (`blocked`
+/// included); only a runtime failure is failed.
 pub(super) fn effective_steward_status(child: &StewardSessionSummaryView) -> &'static str {
     match &child.status {
         SessionViewStatus::Delivered => "delivered",
@@ -96,7 +98,7 @@ pub(super) fn effective_steward_status(child: &StewardSessionSummaryView) -> &'s
         },
         _ => match child.result.as_ref().map(|result| &result.status) {
             Some(StewardResultViewStatus::Cancelled) => "cancelled",
-            Some(StewardResultViewStatus::Blocked | StewardResultViewStatus::Failed) => "failed",
+            Some(StewardResultViewStatus::Failed) => "failed",
             _ => "delivered",
         },
     }

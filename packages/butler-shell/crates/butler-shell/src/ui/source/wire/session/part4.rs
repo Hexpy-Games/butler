@@ -304,6 +304,8 @@ pub(crate) enum SubtaskState {
     Paused,
     #[serde(rename = "needs_approval")]
     NeedsApproval,
+    #[serde(rename = "waiting")]
+    Waiting,
     #[serde(other)]
     Unknown,
 }

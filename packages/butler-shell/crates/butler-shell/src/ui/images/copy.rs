@@ -3,6 +3,8 @@
 use butler_ds::ui::context::Lang;
 
 pub(super) struct Words {
+    /// conversation.answerBlocks.image
+    pub(super) image: &'static str,
     /// conversation.imageTools.edit
     pub(super) edit: &'static str,
     /// conversation.imageTools.download
@@ -42,6 +44,7 @@ pub(super) struct Words {
 }
 
 static KO: Words = Words {
+    image: "이미지",
     edit: "편집",
     download: "다운로드",
     editor: "이미지 편집",
@@ -63,6 +66,7 @@ static KO: Words = Words {
 };
 
 static EN: Words = Words {
+    image: "Image",
     edit: "Edit",
     download: "Download",
     editor: "Image editor",

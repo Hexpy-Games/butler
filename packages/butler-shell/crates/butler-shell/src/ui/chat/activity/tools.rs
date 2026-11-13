@@ -22,6 +22,7 @@ use self::labels::{activity_icon, detail_text, nonempty, summary_label};
 use super::operation::{Ids, output_details};
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::decisions::browser_step_still;
+use crate::ui::images::{self, ImageToolRow};
 use crate::ui::source::wire::ProgressRow;
 use crate::ui::store::progress::terminal::is_visible_tool_activity;
 
@@ -165,6 +166,22 @@ fn row_still(row: &ProgressRow, window: &mut Window, cx: &mut App) -> Option<Any
     browser_step_still(turn, call, result, None, window, cx)
 }
 
+/// Electron `toolchainAfter.tsx`: image tools with stored results show their output tiles.
+fn image_still(row: &ProgressRow, session: &str, cx: &mut App) -> Option<AnyElement> {
+    let tool = row.safe_tool_name.as_deref()?;
+    if !matches!(tool, "generate_image" | "edit_image") {
+        return None;
+    }
+    let turn = nonempty(row.turn_id.as_deref())?;
+    let image_row = ImageToolRow {
+        call_id: nonempty(row.tool_call_id.as_deref())?.to_owned().into(),
+        result_id: nonempty(row.tool_result_id.as_deref())?.to_owned().into(),
+        tool: tool.to_owned().into(),
+        failed: false,
+    };
+    images::image_tool_still(turn, image_row, session, cx)
+}
+
 /// One tool/thinking/worker row of a turn's activity; `latest_browser` marks the row that
 /// shows the step's still.
 fn tool_row(
@@ -215,6 +232,7 @@ fn tool_row(
         }
     };
     let after = worker::capsule(row, t)
+        .or_else(|| image_still(row, &t.view.session_id, cx))
         .or_else(|| latest_browser.then(|| row_still(row, window, cx)).flatten());
     match after {
         Some(after) => Stack::new()
