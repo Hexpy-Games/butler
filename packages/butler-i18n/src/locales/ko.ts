@@ -73,12 +73,39 @@ const onboardingFallback: BriefingFallbackCopy = {
     ],
   };
 
+const butlerVault: AppCopy["butlerVault"] = {
+  name: "버틀러 금고",
+  intro: "비밀번호, 카드, API 키를 암호화한 금고에 모으고, 운영체제의 키체인을 사용해서 안전하게 보관합니다.",
+  done: "버틀러 금고 설정이 완료되었습니다. 앞으로 사용자의 정보를 안전하게 보관합니다.",
+  failed: "키체인에 등록하지 못했어요. 계속을 눌러 다시 시도하거나 사용 안 함을 고르세요.",
+  skip: "사용 안 함",
+  continue: "계속",
+  declineTitle: "버틀러 금고를 쓰지 않을까요?",
+  declineNote: "나중에 설정 → 보안에서 켤 수 있어요.",
+  risks: ["비밀번호와 카드가 금고 없이 따로 저장돼요", "암호화한 백업을 만들 수 없어요", "나중에 다른 기기와 동기화할 수 없어요"],
+  declineConfirm: "사용 안 함",
+  protected: "사용자 데이터를 안전하게 보호하고 있어요",
+  off: "꺼져 있어요",
+  turnOnLabel: "버틀러 금고 켜기",
+  turnOn: "켜기",
+  turnedOn: "버틀러 금고를 켰어요",
+  locked: "키체인을 열 수 없어 잠겨 있어요",
+  stored: "보관 중",
+  kinds: (counts) => [
+    counts.api_key ? `API 키 ${counts.api_key}` : "",
+    counts.signin ? `사이트 로그인 ${counts.signin}` : "",
+    counts.card ? `카드 ${counts.card}` : "",
+    counts.profile ? `내 정보 ${counts.profile}` : "",
+    counts.plugin ? `플러그인 ${counts.plugin}` : "",
+  ].filter(Boolean).join(" · "),
+};
+
 const firstRun = {
     product: "버틀러",
     welcomeTitle: "반갑습니다",
     welcomeLede: "버틀러는 이 컴퓨터에서 파일을 정리하고, 명령을 실행하고, 예약 작업을 챙기며 일을 대신합니다.",
     start: "시작하기",
-    steps: { welcome: "환영", consent: "동의", memory: "기억 방식", connect: "AI 연결", ready: "마무리" },
+    steps: { welcome: "환영", consent: "동의", memory: "기억 방식", vault: butlerVault.name, connect: "AI 연결", ready: "마무리" },
     consentTitle: "시작하기 전에 확인해 주세요",
     consentItems: [
       { body: "버틀러는 무료로 제공되는 오픈소스 소프트웨어입니다." },
@@ -662,6 +689,7 @@ export const koKrCopy: AppCopy = {
     notificationNewMessage: "새 메시지가 도착했습니다.", notificationCompleted: "작업이 완료되었습니다.", notificationFailed: "작업이 실패했습니다.", notificationCancelled: "작업이 취소되었습니다.", notificationUpdated: "작업 상태가 업데이트되었습니다.",
 
   },
+  butlerVault,
   firstRun: firstRun,
   interfaceDetails: {
     documentConversation: "이 문서로 대화 시작하기",
@@ -2435,6 +2463,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       usedBy: (count) => count === 0 ? "사용 안 함" : `모델 ${count}개`,
       // Keys are a local file until the build is signed (#243); say Keychain only when the agent reports it.
       storage: {
+        vault: "버틀러 금고에 저장",
         local: "이 컴퓨터에만 저장",
         keychain: "키체인에 저장",
         secretService: "시스템 키링에 저장",

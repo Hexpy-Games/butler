@@ -383,6 +383,15 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "POST" && url.pathname === "/setup/chatgpt-account/sign-out") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "signOutChatGpt"));
   }
+  if (method === "GET" && url.pathname === "/setup/butler-vault") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getButlerVault"));
+  }
+  if (method === "POST" && url.pathname === "/setup/butler-vault/enable") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "enableButlerVault"));
+  }
+  if (method === "POST" && url.pathname === "/setup/butler-vault/decline") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "declineButlerVault"));
+  }
   if (method === "POST" && url.pathname === "/setup/oauth/start") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "startSetupOAuth", parseBody(options.body)));
   }

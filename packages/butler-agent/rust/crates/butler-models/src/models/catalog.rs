@@ -225,6 +225,8 @@ pub struct CredentialView {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CredentialStorage {
+    /// The encrypted Butler Vault.
+    Vault,
     /// The macOS login Keychain.
     Keychain,
     /// The Linux Secret Service (GNOME Keyring, KWallet).
