@@ -3,7 +3,9 @@ import { confirmAction } from "@/app/confirmation.ts";
 import { appCopy } from "@/app/copy.ts";
 import { isMissingRoute } from "@/app/setupConnection.ts";
 import type { ButlerVaultView } from "@/app/types.ts";
-import { declineButlerVault, enableButlerVault, fetchButlerVault } from "./butlerVaultApi";
+import { changeButlerVaultPassword, declineButlerVault, enableButlerVault, fetchButlerVault, unlockButlerVault } from "./butlerVaultApi";
+
+type VaultResult = { ok: true } | { ok: false; code: "vault_wrong_password" | "vault_weak_password" | "failed" };
 
 export function useButlerVault() {
   const [state, setState] = useState<"loading" | "ready" | "unsupported" | "error">("loading");
@@ -23,14 +25,15 @@ export function useButlerVault() {
     return () => { mounted.current = false; };
   }, []);
 
-  async function enable(): Promise<boolean> {
+  async function update(operation: () => Promise<ButlerVaultView>): Promise<VaultResult> {
     setBusy(true);
     try {
-      const result = await enableButlerVault();
+      const result = await operation();
       if (mounted.current) setView(result);
-      return true;
-    } catch {
-      return false;
+      return { ok: true };
+    } catch (error: unknown) {
+      const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+      return { ok: false, code: code === "vault_wrong_password" || code === "vault_weak_password" ? code : "failed" };
     } finally {
       if (mounted.current) setBusy(false);
     }
@@ -54,5 +57,9 @@ export function useButlerVault() {
     }
   }
 
-  return { state, view, busy, enable, decline };
+  return { state, view, busy, decline,
+    enable: (password?: string) => update(() => enableButlerVault(password)),
+    unlock: (password: string) => update(() => unlockButlerVault(password)),
+    changePassword: (current: string, next: string) => update(() => changeButlerVaultPassword(current, next)),
+  };
 }

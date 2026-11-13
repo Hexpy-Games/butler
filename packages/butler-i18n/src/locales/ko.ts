@@ -74,6 +74,21 @@ const onboardingFallback: BriefingFallbackCopy = {
   };
 
 const butlerVault: AppCopy["butlerVault"] = {
+  passwordIntro: "이 컴퓨터는 키체인이 없어 마스터 비밀번호로 금고를 잠급니다.",
+  masterPassword: "마스터 비밀번호",
+  confirmPassword: "비밀번호 확인",
+  currentPassword: "지금 비밀번호",
+  newPassword: "새 비밀번호",
+  passwordHint: "12자 이상",
+  mismatch: "비밀번호가 서로 달라요",
+  weak: "12자 이상, 서로 다른 글자 6개 이상으로 만들어 주세요",
+  wrongPassword: "비밀번호가 맞지 않아요",
+  lockedPassword: "잠겨 있어요",
+  unlockHint: "열기 전에는 사이트 로그인과 카드를 쓸 수 없어요",
+  unlock: "열기",
+  change: "변경",
+  cancel: "취소",
+  passwordChanged: "비밀번호를 바꿨어요",
   name: "버틀러 금고",
   intro: "비밀번호, 카드, API 키를 암호화한 금고에 모으고, 운영체제의 키체인을 사용해서 안전하게 보관합니다.",
   done: "버틀러 금고 설정이 완료되었습니다. 앞으로 사용자의 정보를 안전하게 보관합니다.",
