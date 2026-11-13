@@ -24,7 +24,7 @@ impl Shell {
         let tabs = SegmentedControl::new("sidebar-tabs", strings.space, self.sidebar.tab.value())
             .stretch()
             .options([
-                Choice::new("all", strings.all).icon(Icon::ListFilter),
+                Choice::new("all", strings.all).icon(Icon::TableOfContents),
                 Choice::new("recent", strings.recent).icon(Icon::Clock3),
                 Choice::new("running", strings.running).icon(Icon::Activity),
             ])

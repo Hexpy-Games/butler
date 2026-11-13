@@ -1,7 +1,7 @@
 //! CanonSidebarGroups / useCanonSidebar: read on expansion, refresh on changes.
 pub(super) mod forms;
 mod group_menu;
-use super::Shell;
+use super::{Shell, canon_state::nests_under};
 use crate::ui::{
     Icon,
     source::{
@@ -244,10 +244,16 @@ impl Shell {
     }
     fn canon_bound_chats(&mut self, epic: &EpicCard, cx: &mut Context<Self>) -> AnyElement {
         let rows: Vec<_> = epic
-            .session_ids
+            .sessions
             .iter()
-            .filter(|id| Some(id.as_str()) != epic.home_session_id.as_deref())
-            .filter_map(|id| self.store.navigation.rows.get(&format!("s:{id}")).cloned())
+            .filter(|session| nests_under(epic, session))
+            .filter_map(|session| {
+                self.store
+                    .navigation
+                    .rows
+                    .get(&format!("s:{}", session.session_id))
+                    .cloned()
+            })
             .collect();
         let mut list = div()
             .flex()
@@ -272,7 +278,7 @@ impl Shell {
             SharedString::from(format!("epic-{}", epic.id)),
             epic.title.clone(),
         )
-        .glyph(Icon::Notebook)
+        .glyph(Icon::Ticket)
         .on_click(cx.listener(move |s, _, w, cx| {
             if s.sidebar.take_long_press(&click_instance) {
                 return;
@@ -313,14 +319,16 @@ impl Shell {
             } else {
                 self.space_activity(&row, false, cx)
             };
-            nav = nav.icon(self.space_identity(&row, cx)).actions(
-                butler_ds::ui::blocks::nav_row::NavRowSwap::new(
-                    SharedString::from(format!("epic-menu-{}", epic.id)),
-                    menu,
-                )
-                .rest(rest)
-                .open(self.sidebar.menus.contains(&instance)),
-            );
+            nav = nav
+                .icon(self.space_identity(&row, Some(Icon::Ticket), cx))
+                .actions(
+                    butler_ds::ui::blocks::nav_row::NavRowSwap::new(
+                        SharedString::from(format!("epic-menu-{}", epic.id)),
+                        menu,
+                    )
+                    .rest(rest)
+                    .open(self.sidebar.menus.contains(&instance)),
+                );
         } else if epic
             .queue
             .as_ref()

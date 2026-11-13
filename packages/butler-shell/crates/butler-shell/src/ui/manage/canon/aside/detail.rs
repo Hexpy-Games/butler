@@ -342,7 +342,7 @@ impl EpicInspector {
                 button::container(Size::Sm).child(
                     Button::new("canon-open-conversation")
                         .size(Size::Sm)
-                        .variant(Variant::Link)
+                        .variant(Variant::Outline)
                         .text(words.open_conversation)
                         .on_click(move |_, _, cx| ctx.open_session(session.clone().into(), cx)),
                 )
