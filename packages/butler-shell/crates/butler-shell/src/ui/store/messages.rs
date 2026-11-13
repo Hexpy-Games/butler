@@ -1,7 +1,9 @@
 //! `messageCache`, `sessionViewWindow`: the open session's view and its message window.
-use crate::ui::source::wire::{AppEventEnvelope, MessageRecord, MessageRecordRole, SessionView};
+use crate::ui::source::wire::{
+    AnsweredUserQuestions, AppEventEnvelope, MessageRecord, MessageRecordRole, SessionView,
+};
 use chrono::DateTime;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// A reply still being written; mirrors `LIVE_MESSAGE_STATUSES`.
@@ -33,6 +35,11 @@ impl MessageCache {
         let mut messages = std::mem::take(&mut view.messages);
         merge_messages(&mut messages, std::mem::take(&mut latest.messages));
         latest.messages = messages;
+        latest.question_answers = merge_answers(
+            view.question_answers.take(),
+            latest.question_answers.take(),
+            &latest.messages,
+        );
         let paged_further = match (
             view.message_window.previous_cursor,
             latest.message_window.previous_cursor,
@@ -70,6 +77,11 @@ impl MessageCache {
             return;
         }
         merge_messages(&mut view.messages, older.messages);
+        view.question_answers = merge_answers(
+            view.question_answers.take(),
+            older.question_answers,
+            &view.messages,
+        );
         if let Some(entries) = older.activity_history {
             let history = view.activity_history.get_or_insert_with(Vec::new);
             for entry in entries {
@@ -131,6 +143,47 @@ impl MessageCache {
             .as_mut()
             .map_or(&mut [], |view| view.messages.as_mut_slice())
     }
+}
+
+/// ```ts
+/// const retained = [...loaded, ...view.messages];
+/// const turns = new Set(retained.map(m => m.turn_id));
+/// const messageIds = new Set(retained.map(m => m.id));
+/// const answers = new Map([...previous?.question_answers ?? [], ...view.question_answers ?? []].map(a => [a.request_ref, a]));
+/// view = { ...view, question_answers: [...answers.values()].filter(a => turns.has(a.source_turn_id) || messageIds.has(a.followup_message_id)) };
+/// ```
+fn merge_answers(
+    previous: Option<Vec<AnsweredUserQuestions>>,
+    incoming: Option<Vec<AnsweredUserQuestions>>,
+    messages: &[Arc<MessageRecord>],
+) -> Option<Vec<AnsweredUserQuestions>> {
+    if previous.is_none() && incoming.is_none() {
+        return None;
+    }
+    let turns: HashSet<_> = messages
+        .iter()
+        .filter_map(|m| m.turn_id.as_deref())
+        .collect();
+    let message_ids: HashSet<_> = messages.iter().map(|m| m.id.as_str()).collect();
+    let mut answers = Vec::new();
+    let mut index = HashMap::new();
+    for answer in previous
+        .into_iter()
+        .flatten()
+        .chain(incoming.into_iter().flatten())
+    {
+        if let Some(&at) = index.get(&answer.request_ref) {
+            answers[at] = answer;
+        } else {
+            index.insert(answer.request_ref.clone(), answers.len());
+            answers.push(answer);
+        }
+    }
+    answers.retain(|answer| {
+        turns.contains(answer.source_turn_id.as_str())
+            || message_ids.contains(answer.followup_message_id.as_str())
+    });
+    Some(answers)
 }
 
 /// `mergeMessages`: by id, the incoming record merged over the current one, in cursor order.
