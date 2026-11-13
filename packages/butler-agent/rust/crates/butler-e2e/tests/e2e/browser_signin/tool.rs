@@ -103,8 +103,15 @@ async fn sign_in_asks_hands_mfa_to_the_user_and_resumes() -> Result<(), HarnessE
         json!(["fixture-shop.test"])
     );
     assert_eq!(card["approval"]["operation"]["sign_in_step"], "mfa");
-    let shown = card["approval"]["operation"].to_string();
-    assert!(!shown.contains("\"t1\""), "no tab id on the card: {card}");
+    let operation = &card["approval"]["operation"];
+    assert_eq!(operation["browser_tab"], "t1", "exact hand-off tab binding");
+    // The card shows the site and the step; browser_tab is internal metadata
+    // for the App's thumbnail/open action.
+    let shown = json!([operation["targets"], operation["sign_in_step"]]);
+    assert!(
+        !shown.to_string().contains("t1"),
+        "no tab id in visible hand-off text: {card}"
+    );
     // The wait holds while the user has the tab, also when Butler's other
     // tab changes; only this tab's hand-back resumes it.
     snapshot(
