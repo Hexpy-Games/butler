@@ -62,6 +62,8 @@ pub fn keep_words<E: gpui::Styled>(el: E) -> E {
 struct DisplaySettings {
     reduce_transparency: bool,
     increase_contrast: bool,
+    /// The DS viewer's touch-size preview (the app never sets it).
+    touch_preview: bool,
 }
 
 /// Token context plus the app-level inputs that are not tokens.
@@ -232,10 +234,16 @@ impl Ds {
         self.modality = modality;
     }
 
+    /// The DS viewer's touch-size preview: the compact ramp on a wide window. The app never sets it.
+    pub fn set_touch_preview(&mut self, on: bool) {
+        self.display.touch_preview = on;
+        self.tokens.compact = self.tokens.viewport.0 <= COMPACT_MAX_WIDTH || on;
+    }
+
     /// The window's content size: it drives the mobile ramp and viewport-relative lengths.
     pub fn set_viewport(&mut self, width: f32, height: f32) {
         self.tokens.viewport = (width, height);
-        self.tokens.compact = width <= COMPACT_MAX_WIDTH;
+        self.tokens.compact = width <= COMPACT_MAX_WIDTH || self.display.touch_preview;
     }
 
     /// Reduced motion is the OS setting or the app setting.

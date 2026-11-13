@@ -48,6 +48,7 @@ pub(crate) struct DsView {
     pages: Vec<Page>,
     page: usize,
     pub(crate) lang: Lang,
+    touch_preview: bool,
     /// The page's scroll position, for a headless shot of a page taller than a texture.
     pub(crate) scroll: gpui::ScrollHandle,
 }
@@ -60,6 +61,7 @@ impl DsView {
             pages: pages::all(),
             page: 0,
             lang: Lang::Ko,
+            touch_preview: false,
             scroll: gpui::ScrollHandle::new(),
         }
     }
@@ -81,6 +83,27 @@ impl DsView {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    fn touch_control(&self, cx: &Context<Self>) -> AnyElement {
+        let view = cx.entity().downgrade();
+        div()
+            .flex()
+            .items_center()
+            .gap(Ds::get(cx).len(Length::SpaceSm))
+            .child(Typo::label(self.lang.pick("Touch size", "터치 크기")))
+            .child(
+                butler_ds::ui::switch::Switch::new("touch-size")
+                    .checked(self.touch_preview)
+                    .on_checked_change(move |on, _, cx| {
+                        let _ = view.update(cx, |view, cx| {
+                            view.touch_preview = on;
+                            Ds::update(cx, |ds| ds.set_touch_preview(on));
+                            cx.notify();
+                        });
+                    }),
+            )
+            .into_any_element()
     }
 
     fn sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -119,6 +142,7 @@ impl DsView {
             .border_r(ds.len(Length::BorderHairline))
             .border_color(ds.color(Color::Line))
             .bg(ds.color(Color::Surface))
+            .child(self.touch_control(cx))
             .children(items)
             .into_any_element()
     }

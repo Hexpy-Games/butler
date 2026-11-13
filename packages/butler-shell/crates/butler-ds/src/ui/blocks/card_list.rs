@@ -13,7 +13,8 @@
 //! text), and the native scrollbar of the capped list (the edge fade shows that it scrolls).
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
-    LayoutId, ParentElement, Pixels, RenderOnce, SharedString, Styled as _, Window, div, px,
+    LayoutId, ParentElement, Pixels, RenderOnce, SharedString, Styled as _, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 
 use crate::tokens::{Color, Length};
@@ -290,7 +291,14 @@ fn content(
         .min_w_0()
         .gap(tight)
         .child(title_row)
-        .children(description.map(|text| Typo::caption(text).tone(Tone::Secondary).truncate()))
+        .children(description.map(|text| {
+            let caption = Typo::caption(text).tone(Tone::Secondary);
+            if ds.compact() {
+                caption
+            } else {
+                caption.truncate()
+            }
+        }))
 }
 
 impl RenderOnce for CardListItem {
@@ -317,12 +325,14 @@ impl RenderOnce for CardListItem {
                 .flex()
                 .flex_none()
                 .items_center()
-                .h(line)
+                .when(ds.compact(), gpui::Styled::self_center)
+                .when(!ds.compact(), |actions| actions.h(line))
                 .child(actions)
         });
         let row = div()
             .flex()
-            .items_start()
+            .when(ds.compact(), gpui::Styled::items_center)
+            .when(!ds.compact(), gpui::Styled::items_start)
             .w_full()
             .min_w_0()
             .gap(gap)

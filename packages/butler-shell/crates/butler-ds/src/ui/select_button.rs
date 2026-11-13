@@ -104,7 +104,12 @@ const PADDING: f32 = 9.;
 
 /// Where the value starts inside the trigger: its border and padding.
 pub(crate) fn value_inset(ds: &Ds) -> f32 {
-    PADDING + f32::from(ds.len(Length::BorderHairline))
+    let padding = if ds.compact() {
+        ds.len(Length::SpaceMd)
+    } else {
+        px(PADDING)
+    };
+    f32::from(padding + ds.len(Length::BorderHairline))
 }
 
 impl RenderOnce for SelectButton {
@@ -118,25 +123,7 @@ impl RenderOnce for SelectButton {
         let ds = Ds::get(cx);
         let ring = focused && focus::visible(ds, true, false) && !focus::ring_handed_off(cx);
         let active = self.count.is_some_and(|count| count > 0);
-        let radius = ds.len(Length::RadiusControl);
-        let line = ds.color(Color::Line);
-        let accent = ds.color(Color::Accent);
-        let border = if active {
-            convert::mix(accent, line, 0.4)
-        } else if focused {
-            convert::mix(accent, line, 0.52)
-        } else {
-            line
-        };
-        let height = match self.size {
-            Size::Default => ds.len(Length::ControlHeightLg),
-            Size::Sm => ds.len(Length::ControlHeightMd),
-        };
-        let height = if ds.compact() {
-            ds.len(Length::ControlHitTarget)
-        } else {
-            height
-        };
+        let (radius, border, height) = geometry(self.size, active, focused, ds);
         let surface = surface(border, ds);
         let badge = self.count.filter(|_| active).map(|count| badge(count, ds));
         let value = div()
@@ -155,8 +142,8 @@ impl RenderOnce for SelectButton {
             .justify_between()
             .w_full()
             .min_h(height)
-            .pl(px(PADDING) + ds.len(Length::BorderHairline))
-            .pr(px(PADDING) + ds.len(Length::BorderHairline))
+            .pl(px(value_inset(ds)))
+            .pr(px(value_inset(ds)))
             .gap(ds.len(Length::SpaceSm))
             .text_color(if active {
                 ds.color(Color::AccentText)
@@ -189,6 +176,38 @@ impl RenderOnce for SelectButton {
     }
 }
 
+fn geometry(
+    size: Size,
+    active: bool,
+    focused: bool,
+    ds: &Ds,
+) -> (gpui::Pixels, gpui::Hsla, gpui::Pixels) {
+    let radius = ds.len(if ds.compact() {
+        Length::RadiusControlTouch
+    } else {
+        Length::RadiusControl
+    });
+    let line = ds.color(Color::Line);
+    let accent = ds.color(Color::Accent);
+    let border = if active {
+        convert::mix(accent, line, 0.4)
+    } else if focused {
+        convert::mix(accent, line, 0.52)
+    } else {
+        line
+    };
+    let height = match size {
+        Size::Default => ds.len(Length::ControlHeightLg),
+        Size::Sm => ds.len(Length::ControlHeightMd),
+    };
+    let height = if ds.compact() {
+        ds.len(Length::ControlHitTarget)
+    } else {
+        height
+    };
+    (radius, border, height)
+}
+
 /// The box: the raised fill and the border.
 fn surface(border: gpui::Hsla, ds: &Ds) -> gpui::Div {
     div()
@@ -196,7 +215,11 @@ fn surface(border: gpui::Hsla, ds: &Ds) -> gpui::Div {
         .top_0()
         .left_0()
         .size_full()
-        .rounded(ds.len(Length::RadiusControl))
+        .rounded(ds.len(if ds.compact() {
+            Length::RadiusControlTouch
+        } else {
+            Length::RadiusControl
+        }))
         .bg(convert::with_alpha(ds.color(Color::SurfaceRaised), 0.92))
         .border(ds.len(Length::BorderHairline))
         .border_color(border)

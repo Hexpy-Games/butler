@@ -422,11 +422,15 @@ fn field(
     ring: bool,
 ) -> gpui::Div {
     let line = ds.color(Color::Line);
-    let radius = match select.size {
-        Size::Default => ds.len(Length::RadiusControl),
-        Size::Sm => ds
-            .len(Length::RadiusControl)
-            .min(ds.len(Length::RadiusPanel)),
+    let radius = if ds.compact() {
+        ds.len(Length::RadiusControlTouch)
+    } else {
+        match select.size {
+            Size::Default => ds.len(Length::RadiusControl),
+            Size::Sm => ds
+                .len(Length::RadiusControl)
+                .min(ds.len(Length::RadiusPanel)),
+        }
     };
     let border = if focused {
         convert::mix(ds.color(Color::Accent), line, 0.52)
@@ -459,7 +463,11 @@ fn field(
         .items_center()
         .w_full()
         .min_h(height)
-        .pl(px(PAD_START) + ds.len(Length::BorderHairline))
+        .pl(if ds.compact() {
+            ds.len(Length::SpaceMd)
+        } else {
+            px(PAD_START)
+        } + ds.len(Length::BorderHairline))
         .pr(px(PAD_END) + ds.len(Length::BorderHairline))
         .gap(ds.len(Length::Space2))
         .text_color(ds.color(Color::TextPrimary))

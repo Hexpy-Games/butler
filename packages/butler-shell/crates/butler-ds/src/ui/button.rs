@@ -7,10 +7,11 @@ use gpui::{
     Styled as _, Window, div, px,
 };
 
+use super::blocks::scope::{self, Spec};
 use super::context::Ds;
 use super::control::{Blend, Control, Disabled, Underline, Width};
 use super::convert;
-use crate::tokens::{Color, Length};
+use crate::tokens::{Color, Length, Number};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Variant {
@@ -285,8 +286,40 @@ impl Button {
         if self.stretch {
             control.width = Width::Full;
         }
+        self.touch_layout(&mut control, ds, border_width);
         control.children = self.content(ds);
         control
+    }
+
+    fn touch_layout(&self, control: &mut Control, ds: &Ds, border: gpui::Pixels) {
+        if !ds.compact()
+            || self.size.icon()
+            || matches!(self.variant, Variant::Link | Variant::Inline)
+        {
+            return;
+        }
+        control.gap = ds.len(Length::SpaceSm);
+        control.text_size = ds.len(Length::FontSize4);
+        control.line_height = Some(ds.len(Length::TypoAppTitleLineHeight));
+        control.weight = ds.number(Number::FontWeightMedium);
+        if self.shape != Shape::Pill {
+            control.radius = ds.len(Length::RadiusControlTouch);
+        }
+        let (mut left, mut right) = (Length::SpaceLg, Length::SpaceLg);
+        let has_text = self.text.is_some() || !self.children.is_empty();
+        if has_text {
+            match (self.icon_start.is_some(), self.icon_end.is_some()) {
+                (true, false) => left = Length::SpaceMd,
+                (false, true) => right = Length::SpaceMd,
+                _ => {}
+            }
+        }
+        control.padding = [
+            ds.len(left) + border,
+            border,
+            ds.len(right) + border,
+            border,
+        ];
     }
 
     /// Height or square size, raised to the hit target on mobile.
@@ -307,13 +340,18 @@ impl Button {
     }
 
     fn content(&mut self, ds: &Ds) -> Vec<AnyElement> {
+        let touch_label = ds.compact()
+            && !self.size.icon()
+            && !matches!(self.variant, Variant::Link | Variant::Inline);
+        let size = self.size;
+        let sized_icon = |element| touch_icon(element, size, touch_label, ds);
         let slot = |element: AnyElement| {
             div()
                 .flex()
                 .flex_none()
                 .items_center()
                 .justify_center()
-                .child(element)
+                .child(sized_icon(element))
                 .into_any_element()
         };
         // `hasStructuredContent` (button.tsx): only `text` or an icon puts the content in spans
@@ -322,7 +360,9 @@ impl Button {
             self.text.is_some() || self.icon_start.is_some() || self.icon_end.is_some();
         let mut out = Vec::new();
         out.extend(self.icon_start.take().map(slot));
-        let line = ds.len(if self.size == Size::Xs {
+        let line = ds.len(if touch_label {
+            Length::FontSize4
+        } else if self.size == Size::Xs {
             Length::FontSize2
         } else {
             Length::FontSize3
@@ -336,7 +376,7 @@ impl Button {
                 .whitespace_nowrap()
                 .text_ellipsis()
                 .line_height(line) // `line-height: 1` of the text span
-                .child(content)
+                .child(sized_icon(content))
                 .into_any_element()
         };
         if let Some(text) = self.text.take() {
@@ -347,11 +387,29 @@ impl Button {
             out.extend(children.into_iter().map(label));
         } else {
             // Plain children are the button's own content, at the inherited line height.
-            out.extend(children);
+            out.extend(children.into_iter().map(sized_icon));
         }
         out.extend(self.icon_end.take().map(slot));
         out
     }
+}
+
+fn touch_icon(element: AnyElement, size: Size, label: bool, ds: &Ds) -> AnyElement {
+    let token = if ds.compact() && size.icon() {
+        Length::IconSizeLg
+    } else if label {
+        Length::FontSize4
+    } else {
+        return element;
+    };
+    scope::scoped(
+        Spec {
+            svg_size: Some(f32::from(ds.len(token))),
+            ..Spec::default()
+        },
+        element,
+    )
+    .into_any_element()
 }
 
 impl RenderOnce for Button {
