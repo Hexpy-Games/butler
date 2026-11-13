@@ -97,7 +97,16 @@ impl Metrics {
             size,
             lh,
             weight,
-            radius: ds.len(Length::RadiusControl),
+            radius: ds.len(
+                if ds.compact()
+                    && spec.look != Look::Underline
+                    && matches!(spec.shape, Shape::Line { .. })
+                {
+                    Length::RadiusControlTouch
+                } else {
+                    Length::RadiusControl
+                },
+            ),
             border: ds.len(Length::BorderHairline),
             ring: ds.len(Length::FocusRingWidth),
         }

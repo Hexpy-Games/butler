@@ -249,7 +249,12 @@ fn boxed_line(p: &Parts, compact: bool, window: &Window, cx: &App) -> AnyElement
     let natural = p.m.lh + (p.m.border + pad_y) * 2.;
     let height = if compact { natural.max(floor) } else { floor };
     let vertical = ((height - p.m.lh) / 2.).max(p.m.border + pad_y);
-    let side = p.m.border + pad_x;
+    let side = p.m.border
+        + if ds.compact() {
+            ds.len(Length::SpaceMd)
+        } else {
+            pad_x
+        };
     let sizing = Sizing {
         pad: [side, vertical, side, vertical],
         fill_height: true,

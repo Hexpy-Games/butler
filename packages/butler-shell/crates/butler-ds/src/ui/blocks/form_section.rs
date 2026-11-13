@@ -105,7 +105,7 @@ impl FormSection {
         let copy = div()
             .flex()
             .flex_col()
-            .flex_basis(px(COPY_BASIS))
+            .flex_basis(px(if ds.compact() { 160. } else { COPY_BASIS }))
             .flex_grow_1()
             .flex_shrink_1()
             .min_w_0()
@@ -133,7 +133,11 @@ impl FormSection {
         Stack::row()
             .wrap(true)
             .justify(Justify::Between)
-            .cross(Cross::End)
+            .cross(if ds.compact() {
+                Cross::Center
+            } else {
+                Cross::End
+            })
             .child(copy)
             .children(actions)
     }
