@@ -1,21 +1,23 @@
 //! Cleanup follows registry commit and session stop; only key names leave this module.
+use super::secrets::Secrets;
 use super::{Result, error};
-use butler_platform::secrets::{SecretKey, SecretStore};
+use butler_platform::secrets::SecretKey;
 use serde_json::{Value, json};
+use std::path::Path;
 
-pub(super) fn remove(keys: &[SecretKey], store: &Result<SecretStore>) -> Vec<Value> {
+pub(super) fn remove(keys: &[SecretKey], store: &Result<Secrets>) -> Vec<Value> {
     keys.iter()
         .filter(|key| store.as_ref().ok().is_none_or(|s| s.delete(key).is_err()))
         .map(|key| json!({"key":key.account()}))
         .collect()
 }
-pub(super) fn system(keys: &[SecretKey]) -> Vec<Value> {
+pub(super) fn system(data_root: &Path, keys: &[SecretKey]) -> Vec<Value> {
     if keys.is_empty() {
         return Vec::new();
     }
     remove(
         keys,
-        &SecretStore::system().map_err(|_| error("connector_secret_store_unavailable")),
+        &Secrets::open(data_root).map_err(|_| error("connector_secret_store_unavailable")),
     )
 }
 pub(super) fn report(response: &mut Value, leftovers: &[Value]) {

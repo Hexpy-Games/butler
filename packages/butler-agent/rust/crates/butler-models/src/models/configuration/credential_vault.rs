@@ -5,7 +5,8 @@
 
 use std::path::Path;
 
-use butler_platform::secrets::{SecretBackend, SecretText};
+use butler_platform::secrets::{SYSTEM_BACKEND, SecretBackend, SecretText};
+use butler_vault::vault::ItemKind;
 
 use super::ModelConfiguration;
 use super::credential_admin::{CredentialDraft, CredentialError};
@@ -32,11 +33,27 @@ impl ModelConfiguration {
             &format!("credential:{}:{}", draft.provider_id, draft.id),
             secret,
         );
-        let target = self.secrets.target(root).await?;
-        let backend = target.store.backend();
+        let vault = self.secrets.vault(root).await?;
+        let target = if vault.is_none() {
+            Some(self.secrets.target(root).await?)
+        } else {
+            None
+        };
+        let backend = target
+            .as_ref()
+            .map_or(SYSTEM_BACKEND, |target| target.store.backend());
         let key = secret_store::key(root, backend, &draft.provider_id, &draft.id)
             .map_err(|error| CredentialError::Store(error.into()))?;
-        self.secrets.put(&target.store, &key, secret).await?;
+        let vault_id = secret_store::vault_id(&draft.provider_id, &draft.id);
+        if let Some(vault) = vault.clone() {
+            let id = vault_id.clone();
+            let value = SecretText::new(secret.to_owned());
+            self.secrets
+                .vault_call(move || vault.put(&id, ItemKind::ApiKey, value))
+                .await?;
+        } else if let Some(target) = &target {
+            self.secrets.put(&target.store, &key, secret).await?;
+        }
         let record = CredentialRecord {
             fingerprint: secret_store::fingerprint(root, &draft.provider_id, secret),
             masked_value: credentials::mask(secret),
@@ -60,7 +77,14 @@ impl ModelConfiguration {
         let path = root.join(CREDENTIALS_FILE);
         if let Err(error) = file.save(&path) {
             if previous.is_none() {
-                let _ = self.secrets.remove(&target.store, &key).await;
+                if let Some(vault) = vault {
+                    let _ = self
+                        .secrets
+                        .vault_call(move || vault.delete(&vault_id))
+                        .await;
+                } else if let Some(target) = &target {
+                    let _ = self.secrets.remove(&target.store, &key).await;
+                }
             }
             return Err(error.into());
         }
@@ -84,14 +108,16 @@ impl ModelConfiguration {
             }
             SecretHome::Store(backend) => *backend,
         };
-        let store = self.secrets.holding(root, backend).await?;
-        let key = secret_store::key(root, backend, &record.provider_id, &record.id)
-            .map_err(|error| CredentialError::Store(error.into()))?;
-        let secret = self
-            .secrets
-            .get(&store, &key)
-            .await?
-            .ok_or(CredentialError::SecretMissing)?;
+        let secret = if let Some(vault) = self.secrets.vault(root).await? {
+            let id = secret_store::vault_id(&record.provider_id, &record.id);
+            self.secrets.vault_call(move || vault.get(&id)).await?
+        } else {
+            let store = self.secrets.holding(root, backend).await?;
+            let key = secret_store::key(root, backend, &record.provider_id, &record.id)
+                .map_err(|error| CredentialError::Store(error.into()))?;
+            self.secrets.get(&store, &key).await?
+        }
+        .ok_or(CredentialError::SecretMissing)?;
         butler_log::register_secret_for(
             &format!("credential:{}:{}", record.provider_id, record.id),
             secret.expose(),
@@ -116,7 +142,10 @@ impl ModelConfiguration {
                     && record.provider_id == removal.provider_id
                     && stored_in(record, removal.backend)
             });
-            if in_use || self.remove_secret(root, removal).await {
+            let drop_vault_item = !records
+                .iter()
+                .any(|record| record.id == removal.id && record.provider_id == removal.provider_id);
+            if in_use || self.remove_secret(root, removal, drop_vault_item).await {
                 done.push(removal.clone());
             }
         }
@@ -130,7 +159,29 @@ impl ModelConfiguration {
     }
 
     /// Removes one store entry; true when it is gone (or never was).
-    async fn remove_secret(&self, root: &Path, removal: &PendingRemoval) -> bool {
+    async fn remove_secret(
+        &self,
+        root: &Path,
+        removal: &PendingRemoval,
+        drop_vault_item: bool,
+    ) -> bool {
+        if drop_vault_item {
+            match self.secrets.vault(root).await {
+                Ok(Some(vault)) => {
+                    let id = secret_store::vault_id(&removal.provider_id, &removal.id);
+                    if self
+                        .secrets
+                        .vault_call(move || vault.delete(&id))
+                        .await
+                        .is_err()
+                    {
+                        return false;
+                    }
+                }
+                Ok(None) => (),
+                Err(_) => return false,
+            }
+        }
         let Ok(key) = secret_store::key(root, removal.backend, &removal.provider_id, &removal.id)
         else {
             return true;

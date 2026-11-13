@@ -45,9 +45,8 @@ pub(super) fn recover(root: &Path, registry: &Registry) -> Result<()> {
     }
     Ok(())
 }
-pub(super) fn secret_store() -> Result<butler_platform::secrets::SecretStore> {
-    butler_platform::secrets::SecretStore::system()
-        .map_err(|_| error("plugin_secret_store_unavailable"))
+pub(super) fn secret_store(data_root: &Path) -> Result<super::secrets::Secrets> {
+    super::secrets::Secrets::open(data_root)
 }
 pub(super) fn key(id: &str, field: &str) -> Result<SecretKey> {
     SecretKey::new(
@@ -158,14 +157,14 @@ impl Plugins {
         if values.is_empty() {
             return Ok(Vec::new());
         }
-        let secrets = secret_store()?;
+        let secrets = secret_store(self.data_root())?;
         let saved = values
             .keys()
             .map(|field| {
                 let key = key(id, field)?;
                 let old = secrets
                     .get(&key)
-                    .map_err(|_| error("plugin_secret_store_unavailable"))?;
+                    .map_err(|()| error("plugin_secret_store_unavailable"))?;
                 Ok((key, old))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -192,7 +191,7 @@ impl Plugins {
         if saved.is_empty() {
             return;
         }
-        let Ok(secrets) = secret_store() else {
+        let Ok(secrets) = secret_store(self.data_root()) else {
             return;
         };
         for (key, value) in saved {
@@ -266,7 +265,7 @@ impl Plugins {
         .map_err(|_| error("plugin_store_cleanup_failed"))?;
         self.cleanup_removed(&mut state, &plugin)?;
         *self.state.lock() = state.clone();
-        let mut leftovers = super::secret_cleanup::system(&connector_keys);
+        let mut leftovers = super::secret_cleanup::system(self.data_root(), &connector_keys);
         if input.get("data") == Some(&Value::Bool(true)) {
             let data = self.root.join("data").join(id);
             if data.exists() {
@@ -279,7 +278,7 @@ impl Plugins {
                 .iter()
                 .map(|field| key(id, &field.key))
                 .collect::<Result<Vec<_>>>()?;
-            leftovers.extend(super::secret_cleanup::system(&keys));
+            leftovers.extend(super::secret_cleanup::system(self.data_root(), &keys));
         }
         let mut response = json!({"id":id,"revision":state.registry.revision});
         super::secret_cleanup::report(&mut response, &leftovers);

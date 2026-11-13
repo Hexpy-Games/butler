@@ -26,6 +26,7 @@ prebuilt-ort = ["butler-memory/prebuilt-ort"]
 static-ort = ["butler-memory/static-ort"]
 
 [dependencies]
+butler-vault = { path = "../butler-vault" }
 butler-canon = { path = "../butler-canon" }
 butler-log = { path = "../butler-log" }
 butler-mail-connector = { path = "../butler-mail-connector" }

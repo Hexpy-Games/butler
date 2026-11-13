@@ -11,6 +11,7 @@ mod overlay;
 mod registries;
 pub(crate) mod safe_mode;
 mod secret_cleanup;
+mod secrets;
 mod source_work;
 mod sources;
 mod storage;
@@ -47,6 +48,7 @@ pub(crate) struct Plugins {
     connectors: Arc<connectors::Connectors>,
     authority: std::sync::OnceLock<Arc<butler_turn::btcc::PrincipalAuthority>>,
     root: PathBuf,
+    data: PathBuf,
     bundled: PathBuf,
     safe_mode: bool,
     state: Mutex<State>,
@@ -54,6 +56,10 @@ pub(crate) struct Plugins {
     writes: Arc<ConfigurationWrites>,
 }
 impl Plugins {
+    pub(crate) fn data_root(&self) -> &std::path::Path {
+        &self.data
+    }
+
     pub(crate) async fn open(
         data: PathBuf,
         safe_mode: bool,
@@ -82,6 +88,7 @@ impl Plugins {
                 connectors: connectors::Connectors::new(weak.clone()),
                 authority: std::sync::OnceLock::new(),
                 root,
+                data,
                 bundled,
                 safe_mode,
                 mutation: Mutex::new(()),

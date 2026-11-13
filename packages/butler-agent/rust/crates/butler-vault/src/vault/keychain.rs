@@ -27,7 +27,7 @@ impl KeychainSlot {
         if !store.backend().is_system() {
             return Err(VaultError::NotSystemStore);
         }
-        let key = SecretKey::new(&service(data_root)?, ACCOUNT).map_err(VaultError::Store)?;
+        let key = keychain_key(data_root)?;
         Ok(Self { store, key })
     }
 
@@ -59,6 +59,11 @@ impl KeychainSlot {
             .map(|_| ())
             .map_err(VaultError::Store)
     }
+}
+
+/// What a data folder's vault key is stored under (for cleanup by full reset).
+pub fn keychain_key(data_root: &Path) -> Result<SecretKey, VaultError> {
+    SecretKey::new(&service(data_root)?, ACCOUNT).map_err(VaultError::Store)
 }
 
 #[allow(

@@ -84,6 +84,15 @@ pub(super) async fn route(
             let input = body(request).await?;
             envelope(StatusCode::OK, setup.chatgpt_notice(input).await?)
         }
+        (&Method::GET, "/setup/butler-vault") => {
+            envelope(StatusCode::OK, setup.butler_vault().await?)
+        }
+        (&Method::POST, "/setup/butler-vault/enable") => {
+            envelope(StatusCode::OK, setup.enable_butler_vault().await?)
+        }
+        (&Method::POST, "/setup/butler-vault/decline") => {
+            envelope(StatusCode::OK, setup.decline_butler_vault().await?)
+        }
         (&Method::POST, "/setup/chatgpt-account/sign-out") => {
             envelope(StatusCode::OK, setup.chatgpt_sign_out().await?)
         }

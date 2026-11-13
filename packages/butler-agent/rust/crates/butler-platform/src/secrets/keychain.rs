@@ -10,6 +10,8 @@ use security_framework::os::macos::code_signing::{Flags, SecCode, SecRequirement
 
 use super::{SecretBackend, SecretError};
 
+pub(super) const CHECKS_SIGNATURE: bool = true;
+
 pub(super) const BACKEND: SecretBackend = SecretBackend::Keychain;
 
 /// Apple's code requirement for a Developer ID Application signature: the

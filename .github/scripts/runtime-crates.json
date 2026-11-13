@@ -15,6 +15,7 @@
     "packages/butler-agent/rust/crates/butler-platform",
     "packages/butler-agent/rust/crates/butler-runtime",
     "packages/butler-agent/rust/crates/butler-turn",
+    "packages/butler-agent/rust/crates/butler-vault",
     "third_party/notify-windows-ledger"
   ]
 }

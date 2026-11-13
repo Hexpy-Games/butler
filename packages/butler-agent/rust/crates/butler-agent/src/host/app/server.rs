@@ -386,6 +386,7 @@ impl AppServerOwners {
         data_root: &std::path::Path,
     ) -> AppSetup {
         AppSetup::start(AppSetupParts {
+            plugins: runtime.plugins.clone(),
             configuration: runtime.models.configuration.clone(),
             settings,
             installation: installation.clone(),
