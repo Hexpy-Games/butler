@@ -75,7 +75,7 @@ const onboardingFallback: BriefingFallbackCopy = {
 
 const butlerVault: AppCopy["butlerVault"] = {
   name: "버틀러 금고",
-  intro: "비밀번호, 카드, API 키를 암호화한 금고 하나에 모으고, 운영체제의 키체인을 사용해서 안전하게 보관합니다.",
+  intro: "비밀번호, 카드, API 키를 암호화한 금고에 모으고, 운영체제의 키체인을 사용해서 안전하게 보관합니다.",
   done: "버틀러 금고 설정이 완료되었습니다. 앞으로 사용자의 정보를 안전하게 보관합니다.",
   failed: "키체인에 등록하지 못했어요. 계속을 눌러 다시 시도하거나 사용 안 함을 고르세요.",
   skip: "사용 안 함",

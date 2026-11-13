@@ -69,7 +69,7 @@ const onboardingFallback: BriefingFallbackCopy = {
 
 const butlerVault: AppCopy["butlerVault"] = {
   name: "Butler Vault",
-  intro: "Keeps passwords, cards and API keys together in one encrypted vault, secured with your system's keychain.",
+  intro: "Keeps passwords, cards and API keys together in an encrypted vault, secured with your system's keychain.",
   done: "Butler Vault is set up. Your information is kept safe from now on.",
   failed: "Couldn't add it to the keychain. Press Continue to try again, or choose Don't use.",
   skip: "Don't use",
