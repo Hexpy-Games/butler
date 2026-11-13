@@ -9,6 +9,8 @@ use std::collections::BTreeMap;
 pub enum ImageOutputEndpoint {
     OpenaiImages,
     GeminiInteractions,
+    XaiImages,
+    DashscopeImages,
 }
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -30,10 +32,10 @@ pub struct ImageOutputCapability {
     pub size_kind: ImageSizeKind,
     pub sizes: Vec<String>,
     pub qualities: Vec<String>,
-    pub default_quality: String,
+    pub default_quality: Option<String>,
     pub transparent_background: bool,
     pub max_input_images: u32,
-    pub pricing: ImageOutputPricing,
+    pub pricing: Option<ImageOutputPricing>,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -46,6 +48,9 @@ pub enum ImageOutputPricing {
         as_of: String,
     },
     PerImage {
+        #[serde(default)]
+        usd: Option<f64>,
+        #[serde(default)]
         usd_by_quality: BTreeMap<String, f64>,
         source_url: String,
         as_of: String,
@@ -61,8 +66,14 @@ impl ModelProviderMetadata {
     }
 }
 impl ImageOutputCapability {
+    pub(crate) fn valid_quality(&self, quality: Option<&str>) -> bool {
+        match quality {
+            Some(q) => self.qualities.iter().any(|value| value == q),
+            None => self.qualities.is_empty(),
+        }
+    }
     pub(super) fn validate(&self) -> Result<(), ModelCatalogError> {
-        if !self.qualities.contains(&self.default_quality) {
+        if !self.valid_quality(self.default_quality.as_deref()) {
             return Err(ModelCatalogError::rejected(
                 "Image default quality is unavailable.",
             ));
@@ -96,8 +107,14 @@ impl ImageOutputPricing {
                         / 1e6,
                 )
             }
-            Self::PerImage { usd_by_quality, .. } => usd_by_quality
-                .get(quality?)
+            Self::PerImage {
+                usd_by_quality,
+                usd,
+                ..
+            } => quality
+                .and_then(|q| usd_by_quality.get(q))
+                .copied()
+                .or(*usd)
                 .map(|cost| cost * f64::from(images)),
         }
     }
