@@ -1,8 +1,9 @@
 //! app/canonSidebarState.ts: build the conversation index when a sidebar read finishes.
 use gpui::SharedString;
+use std::collections::HashSet;
 
 use super::SidebarState;
-use crate::ui::source::wire::{CanonSidebar, EpicCard};
+use crate::ui::source::wire::{CanonSessionBinding, CanonSidebar, EpicCard};
 impl SidebarState {
     pub(super) fn remember_sidebar(&mut self, sidebar: CanonSidebar) {
         for matches in self.canon_sessions.values_mut() {
@@ -56,4 +57,25 @@ impl SidebarState {
             working.iter().any(|e| e.id == epic.id)
         }
     }
+}
+
+/// Electron app/canonSidebarState.ts: A 과제 nests the one chat that worked only on it;
+/// the project list then leaves that chat out.
+pub(super) fn nests_under(epic: &EpicCard, session: &CanonSessionBinding) -> bool {
+    session.worked == 1 && Some(session.session_id.as_str()) != epic.home_session_id.as_deref()
+}
+
+/// Electron app/canonSidebarState.ts: collect the chats nested under 과제 rows.
+pub(super) fn nested_chat_ids(sidebar: Option<&CanonSidebar>) -> HashSet<String> {
+    sidebar
+        .into_iter()
+        .flat_map(|sidebar| &sidebar.groups)
+        .flat_map(|group| &group.rows)
+        .flat_map(|epic| {
+            epic.sessions
+                .iter()
+                .filter(|session| nests_under(epic, session))
+                .map(|session| session.session_id.clone())
+        })
+        .collect()
 }

@@ -91,6 +91,8 @@ pub(crate) const FILES: &[(&str, &[u8])] = &[
     icon!("sliders-horizontal"),
     icon!("sparkles"),
     icon!("tag-icon"),
+    icon!("ticket"),
+    icon!("table-of-contents"),
     icon!("square"),
     icon!("sun"),
     icon!("terminal"),

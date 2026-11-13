@@ -1,7 +1,7 @@
 //! SpaceRow, branch, identity and unfinished subtask lines use DS rows.
 mod status;
 mod subtasks;
-use super::Shell;
+use super::{Shell, canon_state::nested_chat_ids};
 use crate::ui::{Icon, source::wire::SpaceNodeKind, store::navigation::SpaceRowData};
 use butler_ds::ui::{
     blocks::{
@@ -217,7 +217,7 @@ impl Shell {
         if row.node.kind != SpaceNodeKind::Session && !shortcut {
             self.space_row_branch(row, actions, instance, pin, cx)
         } else {
-            let identity = self.space_identity(row, cx);
+            let identity = self.space_identity(row, None, cx);
             let id = row.node.entityId.clone();
             let click_instance = instance.to_owned();
             let mut nav = NavRow::new(
@@ -282,7 +282,10 @@ impl Shell {
         if let Some(pin) = pin {
             group = group.sticky(pin.scroll, pin.depth);
         }
+        let mut children = self.store.navigation.children(Some(&row.node.key));
         if let Some(project) = &row.project {
+            let nested = nested_chat_ids(self.sidebar.canon.get(&project.id));
+            children.retain(|child| !nested.contains(&child.node.entityId));
             if expanded {
                 self.sidebar.canon_visible.insert(project.id.clone());
                 if !self.sidebar.canon_previous.contains(&project.id) {
@@ -295,7 +298,6 @@ impl Shell {
             });
             group = group.child(self.canon_sidebar_groups(&project.id, canon_pin, cx));
         }
-        let children = self.store.navigation.children(Some(&row.node.key));
         let visible = self
             .sidebar
             .branch_counts
@@ -328,13 +330,15 @@ impl Shell {
         }
         group.into_any_element()
     }
+    /// Electron SpaceIdentity: an optional glyph preserves the pin toggle.
     pub(super) fn space_identity(
         &mut self,
         row: &SpaceRowData,
+        glyph: Option<Icon>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let glyph = IconSlot::new().size(SlotSize::Sidebar).child(icon(
-            space_glyph(row),
+            glyph.unwrap_or_else(|| space_glyph(row)),
             IconSize::Sm,
             Ds::get(cx),
         ));

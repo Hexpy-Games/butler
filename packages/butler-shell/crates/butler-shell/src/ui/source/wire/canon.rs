@@ -174,6 +174,9 @@ pub(crate) struct CriteriaCount {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub(crate) struct CanonSessionBinding {
     pub(crate) session_id: String,
+    /// Electron shared/canon-contracts.ts: 0 | 1.
+    #[serde(default)]
+    pub(crate) worked: u8,
     pub(crate) bound_at: i64,
     /// "user" | "butler"
     pub(crate) origin: String,
