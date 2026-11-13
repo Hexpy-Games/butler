@@ -223,6 +223,7 @@ impl Shell {
 
     fn install_hooks(&self, window: &mut Window, cx: &mut Context<Self>) {
         Self::transcript_hooks(cx);
+        crate::ui::chat::activity::child_views::install(self.manage_ctx().live, cx);
         Self::notification_responses(window, cx);
         Self::install_composer(&self.manage_ctx(), cx);
         crate::ui::manage::library::detail::install(&self.manage_ctx(), cx);
