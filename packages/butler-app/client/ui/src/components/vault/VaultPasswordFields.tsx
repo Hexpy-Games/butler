@@ -46,8 +46,8 @@ export function VaultPasswordFields({ variant, password, onPasswordChange, confi
         error={field.error || undefined} control={input} controlWidth="full" />
       : <Field key={fieldId} data-invalid={field.error ? true : undefined}>
         <FieldLabel htmlFor={fieldId}>{field.label}</FieldLabel>
-        {input}
         {field.hint && <FieldDescription>{field.hint}</FieldDescription>}
+        {input}
         {field.error && <FieldError errors={[{ message: field.error }]} />}
       </Field>;
   });
