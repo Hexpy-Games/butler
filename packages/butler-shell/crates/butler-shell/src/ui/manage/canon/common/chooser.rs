@@ -16,12 +16,13 @@ use butler_ds::ui::popover::{Density, MenuSize, Popover, PopoverContent};
 use butler_ds::ui::select_button::{SelectButton, Size as ButtonSize};
 use butler_ds::ui::tooltip::Align;
 use gpui::{
-    AnyElement, App, Context, ElementId, Entity, IntoElement as _, ParentElement as _, Render,
-    SharedString, Subscription, Window, div,
+    AnyElement, App, AppContext as _, Context, ElementId, Entity, IntoElement as _,
+    ParentElement as _, Render, SharedString, Subscription, Window, div,
 };
 
 use super::OnTags;
 use super::copy::{Tags, words};
+use super::editor::TagEditor;
 use super::manage::TagAction;
 use super::tags::chip;
 use crate::ui::manage::Pick;
@@ -283,10 +284,12 @@ fn row_menu(
         .into_any_element()
 }
 
-/// `CanonTagChooser` on its own (the board's tag filter): the project's tags to choose from,
-/// with no create and no management.
+/// `CanonTagChooser` on its own (the board's tag filter): the project's tags to choose from.
+/// The filter manages tags like the 과제 picker; creating a tag leaves the filter as it is.
 pub(crate) struct TagChooser {
     tags: Entity<super::CanonTags>,
+    editor: Entity<TagEditor>,
+    _editor: Subscription,
     value: Vec<SharedString>,
     on_change: OnTags,
     filter: bool,
@@ -303,7 +306,11 @@ impl TagChooser {
         cx: &mut Context<Self>,
     ) -> Self {
         let subscription = cx.observe(&tags, |_, _, cx| cx.notify());
+        let editor = cx.new(|_| TagEditor::new(tags.clone()));
+        let observe = cx.observe(&editor, |_, _, cx| cx.notify());
         Self {
+            editor,
+            _editor: observe,
             tags,
             value,
             on_change,
@@ -337,13 +344,28 @@ impl Render for TagChooser {
             tags: self.tags.read(cx).tags().to_vec(),
             value: self.value.clone(),
             on_change,
-            on_create: None,
-            on_manage: None,
-            disabled: false,
+            on_create: Some({
+                let editor = self.editor.clone();
+                Rc::new(move |name, window, cx| {
+                    editor.update(cx, |editor, cx| editor.create(&name, window, cx));
+                })
+            }),
+            on_manage: Some({
+                let editor = self.editor.clone();
+                Rc::new(move |(tag, action), window, cx| {
+                    editor.update(cx, |editor, cx| editor.open(tag, action, window, cx));
+                })
+            }),
+            disabled: self.editor.read(cx).busy(),
             filter: self.filter,
             chips: None,
             end: false,
         };
-        chooser(props, window, cx)
+        div()
+            .flex()
+            .min_w_0()
+            .child(chooser(props, window, cx))
+            .children(self.editor.read(cx).dialog())
+            .into_any_element()
     }
 }

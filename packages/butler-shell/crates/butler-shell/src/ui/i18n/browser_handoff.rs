@@ -15,6 +15,8 @@ pub(crate) struct BrowserHandoff {
     pub(crate) still: &'static str,
     pub(crate) still_pending: &'static str,
     pub(crate) still_unavailable: &'static str,
+    /// interfaceFeedback.stewardStopFailed
+    pub(crate) steward_stop_failed: &'static str,
     /// shell: the stop request failed (`stop_failed`)
     pub(crate) stop_failed: &'static str,
 }
@@ -28,6 +30,7 @@ const KO: BrowserHandoff = BrowserHandoff {
     still: "브라우저 단계",
     still_pending: "이미지 저장 중",
     still_unavailable: "이미지 없음",
+    steward_stop_failed: "하위 작업 중지 실패",
     stop_failed: "중지하지 못했습니다",
 };
 
@@ -40,6 +43,7 @@ const EN: BrowserHandoff = BrowserHandoff {
     still: "Browser step",
     still_pending: "Saving image",
     still_unavailable: "Image unavailable",
+    steward_stop_failed: "Subtask stop failed",
     stop_failed: "Couldn't stop",
 };
 

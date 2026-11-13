@@ -132,7 +132,13 @@ fn sidebar(shell: &mut AdaptiveShell, (ctx, ds): (&Ctx, &Ds), width: f32) -> Opt
         nav_fills: Some(NAV_FILLS),
         ..Spec::default()
     };
-    Some(drawer_panel(false, width, (ctx, ds), scope::scoped(spec, content)).into_any_element())
+    // A closing sidebar takes no clicks while it slides away (`.sidebar[data-open=false]`); gpui has no
+    // `pointer-events: none`, so a cover takes them.
+    Some(
+        drawer_panel(false, width, (ctx, ds), scope::scoped(spec, content))
+            .children((!shell.left_open).then(|| div().absolute().inset_0().occlude()))
+            .into_any_element(),
+    )
 }
 
 /// A drawer: `position: fixed` at one window edge on the panel surface; it slides in from its

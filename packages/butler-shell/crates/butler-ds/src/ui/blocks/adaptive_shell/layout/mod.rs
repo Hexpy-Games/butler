@@ -429,7 +429,10 @@ fn sidebar_layer(
         .w(px(ctx.left_w))
         .pt(px(top))
         .overflow_hidden()
-        .child(scope::scoped(tones, content));
+        .child(scope::scoped(tones, content))
+        // A closing sidebar takes no clicks while it slides away (`.sidebar[data-open=false]`); gpui has no
+        // `pointer-events: none`, so a cover takes them.
+        .children((!shell.left_open).then(|| div().absolute().inset_0().occlude()));
     Some(
         if reduced {
             t.left_fade.apply(
