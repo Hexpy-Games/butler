@@ -4,12 +4,10 @@ use butler_ds::ui::context::{Ds, Lang};
 use gpui::App;
 
 pub(crate) struct CanonProposalCopy {
-    /// canon.deletion: addDelete, changeDelete, changed, action, deleted, detail
+    /// canon.deletion: addDelete, changeDelete, action, detail
     pub(crate) add_delete: &'static str,
     pub(crate) change_delete: &'static str,
-    pub(crate) changed: &'static str,
     pub(crate) delete_epic: &'static str,
-    pub(crate) deleted: &'static str,
     pub(crate) delete_detail: &'static str,
     /// canon.deletion.missing, canon.conflict, interfaceFeedback.requestFailed
     pub(crate) missing: &'static str,
@@ -21,12 +19,9 @@ pub(crate) struct CanonProposalCopy {
     pub(crate) cancel: &'static str,
     pub(crate) add: &'static str,
     pub(crate) apply: &'static str,
-    pub(crate) added: &'static str,
-    pub(crate) chat: &'static str,
     pub(crate) cancelled: &'static str,
     pub(crate) superseded: &'static str,
     pub(crate) stale: &'static str,
-    pub(crate) record: &'static str,
     pub(crate) name: &'static str,
     pub(crate) current_plan: &'static str,
     pub(crate) project: &'static str,
@@ -42,6 +37,8 @@ pub(crate) struct CanonProposalCopy {
     pub(crate) order: &'static str,
     pub(crate) closed: &'static str,
     pub(crate) open: &'static str,
+    /// canon.proposalCard.open
+    pub(crate) open_action: &'static str,
     /// canon: status, assignee, dueOn, me, none
     pub(crate) status: &'static str,
     pub(crate) assignee: &'static str,
@@ -60,9 +57,7 @@ pub(crate) struct CanonProposalCopy {
 const KO: CanonProposalCopy = CanonProposalCopy {
     add_delete: "과제 등록 및 삭제",
     change_delete: "과제 변경 및 삭제",
-    changed: "과제 변경을 반영했습니다",
     delete_epic: "과제 삭제",
-    deleted: "과제를 삭제했습니다",
     delete_detail: "이 기기에서 삭제합니다. 연결된 대화는 남습니다.",
     missing: "이미 삭제된 과제입니다",
     conflict: "다른 사람이 먼저 고쳤습니다",
@@ -72,12 +67,9 @@ const KO: CanonProposalCopy = CanonProposalCopy {
     cancel: "취소",
     add: "등록",
     apply: "반영",
-    added: "등록함",
-    chat: "대화로 등록함",
     cancelled: "취소함",
     superseded: "새 초안으로 바뀜",
     stale: "이전 내용 기준",
-    record: "과제 등록함 · 버틀러",
     name: "이름을 입력하세요",
     current_plan: "현재 계획",
     project: "프로젝트",
@@ -92,6 +84,7 @@ const KO: CanonProposalCopy = CanonProposalCopy {
     order: "순서",
     closed: "닫힘",
     open: "열림",
+    open_action: "열기",
     status: "상태",
     assignee: "담당",
     due_on: "마감일",
@@ -108,9 +101,7 @@ const KO: CanonProposalCopy = CanonProposalCopy {
 const EN: CanonProposalCopy = CanonProposalCopy {
     add_delete: "Add and delete Epics",
     change_delete: "Change and delete Epics",
-    changed: "Epic changes applied",
     delete_epic: "Delete Epic",
-    deleted: "Epic deleted",
     delete_detail: "Delete locally. Linked conversations stay.",
     missing: "Epic already deleted",
     conflict: "Someone else edited this first",
@@ -120,12 +111,9 @@ const EN: CanonProposalCopy = CanonProposalCopy {
     cancel: "Cancel",
     add: "Add",
     apply: "Apply",
-    added: "Added",
-    chat: "Added in chat",
     cancelled: "Cancelled",
     superseded: "Replaced",
     stale: "Out of date",
-    record: "Epic added · Butler",
     name: "Enter a name",
     current_plan: "Current plan",
     project: "Project",
@@ -140,6 +128,7 @@ const EN: CanonProposalCopy = CanonProposalCopy {
     order: "Order",
     closed: "Closed",
     open: "Open",
+    open_action: "Open",
     status: "Status",
     assignee: "Assignee",
     due_on: "Due date",
@@ -176,4 +165,50 @@ impl CanonProposalCopy {
             (Lang::En, None, None) => "Add Epic to Backlog".to_owned(),
         }
     }
+}
+
+/// Electron `canonProposalCopy.ts::receipt`: operation counts, then unique non-epic changes.
+pub(crate) fn receipt(
+    lang: Lang,
+    changes: &[crate::ui::source::wire::CanonProposalChange],
+) -> String {
+    let ko = lang == Lang::Ko;
+    let epics: Vec<String> = [
+        ("epic.create", "등록", "added"),
+        ("epic.edit", "변경", "changed"),
+        ("epic.move", "이동", "moved"),
+        ("epic.delete", "삭제", "deleted"),
+    ]
+    .into_iter()
+    .filter_map(|(op, korean, english)| {
+        let count = changes.iter().filter(|change| change.op == op).count();
+        (count > 0).then(|| {
+            if ko {
+                format!("{count}개 {korean}")
+            } else {
+                format!("{count} {english}")
+            }
+        })
+    })
+    .collect();
+    let mut parts = Vec::new();
+    if !epics.is_empty() {
+        parts.push(format!(
+            "{}{}",
+            if ko { "과제 " } else { "Epics: " },
+            epics.join(", ")
+        ));
+    }
+    for (op, korean, english) in [
+        ("plan.create", "계획 등록", "Plan added"),
+        ("plan.edit", "계획 변경", "Plan changed"),
+        ("plan.reorder", "순서 변경", "Reordered"),
+        ("spec.edit", "명세 변경", "Spec changed"),
+        ("project.create", "프로젝트 생성", "Project created"),
+    ] {
+        if changes.iter().any(|change| change.op == op) {
+            parts.push(if ko { korean } else { english }.to_owned());
+        }
+    }
+    parts.join(" · ")
 }

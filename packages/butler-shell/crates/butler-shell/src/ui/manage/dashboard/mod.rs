@@ -71,3 +71,18 @@ pub(crate) fn page(ctx: ManageCtx, window: &mut Window, cx: &mut App) -> AnyView
     cx.new(|cx| state::DashboardPage::new(ctx, window, cx))
         .into()
 }
+
+/// Electron `canonNavigation.ts::openCanonEpic`: use the shell's management navigation.
+pub(crate) fn open_canon_epic(project: &str, epic: Option<&str>, cx: &mut App) {
+    let Some(ctx) = crate::ui::manage::window_ctx(cx) else {
+        return;
+    };
+    state::open_work(project, cx);
+    ctx.open_project_dashboard(project.to_owned().into(), cx);
+    crate::ui::manage::canon::aside::select_epic(
+        &ctx,
+        project.to_owned().into(),
+        epic.map(|id| id.to_owned().into()),
+        cx,
+    );
+}

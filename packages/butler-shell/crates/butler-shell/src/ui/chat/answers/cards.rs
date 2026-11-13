@@ -37,9 +37,46 @@ const COLLAPSED: usize = 6;
 const MIN_CARD: f32 = 168.;
 const STACK_BELOW: f32 = 560.;
 
-/// Renders one block of this family (cards). Epics have no DS pieces yet and show nothing.
-pub(super) fn render(block: &AnswerBlock, path: &str) -> AnyElement {
+/// Electron `AnswerBlocks.tsx`: cards and framed epic grids.
+pub(super) fn render(
+    block: &AnswerBlock,
+    path: &str,
+    message: Option<&str>,
+    streaming: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     match block {
+        AnswerBlock::Epics { project_id, ids } => {
+            use butler_ds::ui::skeleton::{Height, Skeleton, Width};
+            let (entry, owned_path, message) =
+                (block.clone(), path.to_owned(), message.map(str::to_owned));
+            let wrap = std::rc::Rc::new(move |cards: AnyElement, cx: &App| {
+                let mut body = Stack::new().gap(Space::Sm).child(cards);
+                if streaming {
+                    body = body.child(
+                        Skeleton::new(SharedString::from(format!("epics-stream-{owned_path}")))
+                            .height(Height::Row)
+                            .width(Width::Full),
+                    );
+                }
+                super::frame::frame(
+                    body.into_any_element(),
+                    &entry,
+                    &owned_path,
+                    message.as_deref(),
+                    cx,
+                )
+            });
+            crate::ui::manage::canon::chat_cards::chat_epic_cards(
+                path,
+                project_id,
+                ids,
+                Some(wrap),
+                window,
+                cx,
+            )
+        }
         AnswerBlock::Cards { media, items, .. } => AnswerCards {
             id: ElementId::Name(format!("answer-cards-{path}").into()),
             media: aspect(media.as_ref()),

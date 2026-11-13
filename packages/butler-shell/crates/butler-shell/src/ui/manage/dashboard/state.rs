@@ -82,6 +82,15 @@ struct Remembered {
 
 impl Global for Memory {}
 
+/// Electron `canonNavigation.ts`: remember Work before opening the dashboard.
+pub(super) fn open_work(project: &str, cx: &mut App) {
+    cx.default_global::<Memory>()
+        .0
+        .entry(project.to_owned().into())
+        .or_default()
+        .tab = Some(DashboardTab::Work);
+}
+
 pub(super) struct DashboardPage {
     pub(super) ctx: ManageCtx,
     pub(super) project: SharedString,
@@ -188,7 +197,18 @@ impl DashboardPage {
     /// What redraws or refreshes the page: the shell's state, the dashboard topic (debounced),
     /// the window coming forward, and the page going away (the scroll is kept).
     fn follow(ctx: &ManageCtx, window: &mut Window, cx: &mut Context<Self>) {
-        cx.observe(&ctx.state, |_, _, cx| cx.notify()).detach();
+        cx.observe(&ctx.state, |this, _, cx| {
+            let tab = cx
+                .default_global::<Memory>()
+                .0
+                .get(&this.project)
+                .and_then(|saved| saved.tab);
+            if let Some(tab) = tab {
+                this.set_tab(tab, cx);
+            }
+            cx.notify();
+        })
+        .detach();
         cx.observe(&ctx.live, |this, live, cx| {
             let topic = Topic::Dashboard(this.project.clone());
             let revision = live.read(cx).revision(&topic);

@@ -44,6 +44,7 @@ impl Lanes<'_> {
 
     fn card(&self, epic: &EpicCard, ordinal: Option<usize>, cx: &App) -> AnyElement {
         let opts = Opts {
+            show_status: false,
             ordinal,
             selected: self.selected == Some(epic.id.as_str()),
             on_select: Some(self.on_select.clone()),

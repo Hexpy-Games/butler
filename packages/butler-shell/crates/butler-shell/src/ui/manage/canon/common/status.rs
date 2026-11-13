@@ -12,15 +12,19 @@ use crate::ui::widgets::anchor;
 
 /// `CanonStatusGlyph`
 pub(crate) fn status_glyph(status: CanonStatus, cx: &App) -> AnyElement {
-    let glyph = match status {
+    icon(status_icon(status), IconSize::Sm, Ds::get(cx)).into_any_element()
+}
+
+/// Electron `CanonStatusGlyph.tsx`: the shared status icon.
+fn status_icon(status: CanonStatus) -> Icon {
+    match status {
         CanonStatus::InProgress => Icon::Play,
         CanonStatus::Done => Icon::CheckCircle2,
         CanonStatus::InReview => Icon::Eye,
         CanonStatus::Blocked => Icon::AlertCircle,
         CanonStatus::Cancelled => Icon::CircleX,
         CanonStatus::Planned | CanonStatus::Unknown => Icon::Circle,
-    };
-    icon(glyph, IconSize::Sm, Ds::get(cx)).into_any_element()
+    }
 }
 
 fn spinner(epic: &EpicCard) -> Spinner {
@@ -80,4 +84,23 @@ pub(crate) fn criteria_progress(
             .child(meter)
             .into_any_element(),
     )
+}
+
+/// Electron `EpicCard.tsx`: status tone and glyph outside board lanes.
+pub(crate) fn status_tag(
+    id: SharedString,
+    status: CanonStatus,
+    label: &str,
+) -> butler_ds::ui::tag::Tag {
+    use butler_ds::ui::tag::{Tag, Tone};
+    let tone = match status {
+        CanonStatus::InProgress => Tone::Accent,
+        CanonStatus::InReview => Tone::Warning,
+        CanonStatus::Blocked => Tone::Danger,
+        CanonStatus::Done => Tone::Success,
+        _ => Tone::Neutral,
+    };
+    Tag::new(id, label.to_owned())
+        .tone(tone)
+        .icon(status_icon(status))
 }

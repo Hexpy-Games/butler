@@ -209,6 +209,8 @@ pub(crate) struct SubtaskView {
 /// TS: packages/butler-app/client/shared/canon-proposal-contracts.ts:3 CanonProposalAnchor
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub(crate) struct CanonProposalAnchor {
+    #[serde(default)]
+    pub(crate) epic_ids: Vec<String>,
     pub(crate) proposal_id: String,
     pub(crate) turn_id: String,
     pub(crate) source_call_id: String,

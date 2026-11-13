@@ -17,7 +17,7 @@ mod field;
 mod form;
 mod manage;
 mod people;
-mod status;
+pub(crate) mod status;
 mod tags;
 
 pub(crate) use chooser::TagChooser;

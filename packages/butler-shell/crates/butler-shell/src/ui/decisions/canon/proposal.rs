@@ -9,7 +9,6 @@ use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Window};
 use serde_json::{Value, json};
 
-use crate::ui::decisions::DecisionCtx;
 use crate::ui::i18n::canon_proposal::CanonProposalCopy;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{
@@ -30,8 +29,8 @@ const NEW_PROJECT: &str = "@new";
 
 /// `useCanonProposal` and the card's `target`, `name` and `busy` state.
 #[derive(Default)]
-struct ProposalState {
-    proposal: Option<CanonProposalView>,
+pub(super) struct ProposalState {
+    pub(super) proposal: Option<CanonProposalView>,
     projects: Vec<CanonProposalProjectOption>,
     requested: bool,
     latest: u64,
@@ -41,12 +40,11 @@ struct ProposalState {
 }
 
 /// One canon proposal card.
-pub(crate) fn canon_proposal_card(
-    ctx: DecisionCtx<'_>,
+pub(super) fn load(
     anchor: &CanonProposalAnchor,
     window: &mut Window,
     cx: &mut App,
-) -> AnyElement {
+) -> Entity<ProposalState> {
     let id = anchor.proposal_id.as_str();
     let state = window.use_keyed_state(
         SharedString::from(format!("canon-proposal-{id}")),
@@ -57,13 +55,7 @@ pub(crate) fn canon_proposal_card(
         refresh(&state, id, cx);
         load_projects(&state, cx);
     }
-    let Some(proposal) = state.read(cx).proposal.clone() else {
-        return gpui::Empty.into_any_element();
-    };
-    if proposal.proposal_id != id {
-        return gpui::Empty.into_any_element();
-    }
-    proposal_card(&proposal, ctx.view.project_id.as_deref(), &state, cx)
+    state
 }
 
 /// `refresh`: reads the proposal; only the newest request lands.
@@ -131,7 +123,7 @@ fn load_projects(state: &Entity<ProposalState>, cx: &mut App) {
 }
 
 /// `Proposal`
-fn proposal_card(
+pub(super) fn proposal_card(
     p: &CanonProposalView,
     project_id: Option<&str>,
     state: &Entity<ProposalState>,
@@ -141,7 +133,7 @@ fn proposal_card(
     let deletes = p.changes.iter().any(|change| change.op == "epic.delete");
     let mixed_delete = deletes && p.changes.iter().any(|change| change.op != "epic.delete");
     if p.state != CanonProposalState::Open {
-        return resolved_card(p, copy, deletes, mixed_delete);
+        return resolved_card(p, copy);
     }
     let creates = p.changes.iter().any(|change| change.op == "epic.create");
     let (target, name, busy, projects) = {
@@ -152,33 +144,7 @@ fn proposal_card(
         (&p.project, project_id),
         (CanonProposalProject::Existing { id: Some(id), .. }, Some(open)) if id == open
     );
-    let lang = Ds::get(cx).lang();
-    let epics = p
-        .epics
-        .iter()
-        .enumerate()
-        .map(|(i, epic)| epic_block(&p.proposal_id, i, epic));
-    let head = Stack::new()
-        .gap(Space::Md)
-        .child(
-            Typo::caption(if creates && !deletes {
-                copy.draft
-            } else {
-                copy.changes
-            })
-            .tone(Tone::Tertiary),
-        )
-        .child(Typo::caption(if creates {
-            CanonProposalCopy::target(
-                lang,
-                p.plan.as_ref().map(|plan| plan.title.as_str()),
-                (target == NEW_PROJECT && !name.is_empty()).then_some(name.as_str()),
-            )
-        } else {
-            p.target_label.clone()
-        }))
-        .children(epics)
-        .children(changes_block(&p.proposal_id, &p.changes, copy));
+    let head = proposal_head(p, &target, &name, creates, deletes, copy, cx);
     let project = if choose_project {
         project_field(&p.proposal_id, &target, &name, busy, &projects, state, copy)
     } else {
@@ -209,6 +175,45 @@ fn proposal_card(
     .into_any_element()
 }
 
+/// Electron `CanonProposalCard.tsx::Proposal`: draft heading and proposed changes.
+fn proposal_head(
+    p: &CanonProposalView,
+    target: &str,
+    name: &str,
+    creates: bool,
+    deletes: bool,
+    copy: &CanonProposalCopy,
+    cx: &App,
+) -> Stack {
+    let lang = Ds::get(cx).lang();
+    let epics = p
+        .epics
+        .iter()
+        .enumerate()
+        .map(|(i, epic)| epic_block(&p.proposal_id, i, epic));
+    Stack::new()
+        .gap(Space::Md)
+        .child(
+            Typo::caption(if creates && !deletes {
+                copy.draft
+            } else {
+                copy.changes
+            })
+            .tone(Tone::Tertiary),
+        )
+        .child(Typo::caption(if creates {
+            CanonProposalCopy::target(
+                lang,
+                p.plan.as_ref().map(|plan| plan.title.as_str()),
+                (target == NEW_PROJECT && !name.is_empty()).then_some(name),
+            )
+        } else {
+            p.target_label.clone()
+        }))
+        .children(epics)
+        .children(changes_block(&p.proposal_id, &p.changes, copy))
+}
+
 /// The name shown for the fixed project: the chosen one, else the proposal's own.
 fn project_name(
     p: &CanonProposalView,
@@ -231,25 +236,8 @@ fn project_name(
 }
 
 /// The card of a resolved proposal: one caption.
-fn resolved_card(
-    p: &CanonProposalView,
-    copy: &CanonProposalCopy,
-    deletes: bool,
-    mixed_delete: bool,
-) -> AnyElement {
+fn resolved_card(p: &CanonProposalView, copy: &CanonProposalCopy) -> AnyElement {
     let text = match p.state {
-        CanonProposalState::Applied if deletes => {
-            if mixed_delete {
-                copy.changed
-            } else {
-                copy.deleted
-            }
-        }
-        CanonProposalState::Applied => match p.resolved_by.as_deref() {
-            None => copy.record,
-            Some("chat") => copy.chat,
-            Some(_) => copy.added,
-        },
         CanonProposalState::Cancelled => copy.cancelled,
         CanonProposalState::Superseded => copy.superseded,
         _ => copy.stale,
