@@ -2,8 +2,7 @@
 //! board as a move would leave it.
 use std::collections::HashMap;
 
-use butler_ds::ui::blocks::kanban_board::{KanbanMove, apply_kanban_move};
-use gpui::SharedString;
+use butler_ds::ui::blocks::kanban_board::KanbanMove;
 
 use crate::ui::source::wire::{CanonOverview, CanonStatus, EpicCard};
 
@@ -39,33 +38,24 @@ pub(super) fn lane_status(status: CanonStatus) -> CanonStatus {
 
 /// `canonLaneId`
 pub(super) fn canon_lane_id(plan: Option<&str>, status: CanonStatus) -> String {
-    match plan {
-        Some(plan) => format!("{plan}:{}", status_name(status)),
-        None => "backlog".to_owned(),
-    }
+    format!("{}:{}", plan.unwrap_or("backlog"), status_name(status))
 }
 
 /// `parseCanonLane`
 pub(super) struct Lane {
     pub(super) plan: Option<String>,
-    pub(super) status: Option<CanonStatus>,
+    pub(super) status: CanonStatus,
 }
 
 pub(super) fn parse_canon_lane(id: &str) -> Option<Lane> {
-    if id == "backlog" {
-        return Some(Lane {
-            plan: None,
-            status: None,
-        });
-    }
     let separator = id.rfind(':').filter(|at| *at >= 1)?;
     let name = &id[separator + 1..];
     let status = CANON_LANES
         .into_iter()
         .find(|status| status_name(*status) == name)?;
     Some(Lane {
-        plan: Some(id[..separator].to_owned()),
-        status: Some(status),
+        plan: (&id[..separator] != "backlog").then(|| id[..separator].to_owned()),
+        status,
     })
 }
 
@@ -111,22 +101,15 @@ pub(super) fn moved_canon_order(cards: &[EpicCard], spec: &Spec) -> Option<Vec<S
         Some(before) => ids.iter().position(|id| id == before),
         None => {
             let status = parse_canon_lane(&spec.to)?.status;
-            let last = cards.iter().rfind(|card| {
-                card.id != spec.item
-                    && status.is_none_or(|status| lane_status(card.canon_status) == status)
-            });
+            let last = cards
+                .iter()
+                .rfind(|card| card.id != spec.item && lane_status(card.canon_status) == status);
             let after = last.and_then(|last| ids.iter().position(|id| *id == last.id));
             Some(after.map_or(ids.len(), |at| at + 1))
         }
     };
     ids.insert(at.unwrap_or(ids.len()), spec.item.clone());
     Some(ids)
-}
-
-fn lane_ids<'a>(cards: impl Iterator<Item = &'a EpicCard>) -> Vec<SharedString> {
-    cards
-        .map(|card| SharedString::from(card.id.clone()))
-        .collect()
 }
 
 /// `optimisticCanonMove`: the board as the move leaves it.
@@ -137,27 +120,10 @@ pub(super) fn optimistic_canon_move(
     let spec = Spec::of(mv);
     let epic = find_card(canon, &spec.item)?;
     let target = parse_canon_lane(&spec.to)?;
-    let mut lanes = vec![(
-        SharedString::from("backlog"),
-        lane_ids(canon.backlog.iter()),
-    )];
-    for plan in &canon.plans {
-        for status in CANON_LANES {
-            let id = canon_lane_id(Some(&plan.plan.id), status);
-            let cards = plan
-                .works
-                .iter()
-                .filter(|card| lane_status(card.canon_status) == status);
-            lanes.push((id.into(), lane_ids(cards)));
-        }
-    }
-    let moved = apply_kanban_move(&lanes, mv);
     let mut updated = epic.clone();
     updated.plan_id.clone_from(&target.plan);
-    if let Some(status) = target.status
-        && status != lane_status(epic.canon_status)
-    {
-        updated.canon_status = status;
+    if target.status != lane_status(epic.canon_status) {
+        updated.canon_status = target.status;
     }
     let by_id: HashMap<String, EpicCard> = canon_cards(canon)
         .map(|card| {
@@ -165,27 +131,28 @@ pub(super) fn optimistic_canon_move(
             (card.id.clone(), card.clone())
         })
         .collect();
-    let cards_of = |ids: Vec<String>| -> Vec<EpicCard> {
-        ids.iter().filter_map(|id| by_id.get(id).cloned()).collect()
+    let place = |works: &[EpicCard], plan: Option<&str>| -> Option<Vec<EpicCard>> {
+        if plan == target.plan.as_deref() {
+            Some(
+                moved_canon_order(works, &spec)?
+                    .iter()
+                    .filter_map(|id| by_id.get(id).cloned())
+                    .collect(),
+            )
+        } else {
+            Some(
+                works
+                    .iter()
+                    .filter(|card| card.id != spec.item)
+                    .cloned()
+                    .collect(),
+            )
+        }
     };
     let mut next = canon.clone();
-    let backlog = moved.iter().find(|(id, _)| &**id == "backlog");
-    next.backlog = cards_of(
-        backlog
-            .map(|(_, ids)| ids.iter().map(ToString::to_string).collect())
-            .unwrap_or_default(),
-    );
-    for (plan, source) in next.plans.iter_mut().zip(&canon.plans) {
-        plan.works = if target.plan.as_deref() == Some(plan.plan.id.as_str()) {
-            cards_of(moved_canon_order(&source.works, &spec)?)
-        } else {
-            source
-                .works
-                .iter()
-                .filter(|card| card.id != spec.item)
-                .cloned()
-                .collect()
-        };
+    next.backlog = place(&canon.backlog, None)?;
+    for plan in &mut next.plans {
+        plan.works = place(&plan.works, Some(&plan.plan.id))?;
     }
     Some(next)
 }
@@ -201,7 +168,7 @@ pub(super) fn can_complete(card: Option<&EpicCard>, to_lane: &str) -> bool {
         return false;
     };
     match parse_canon_lane(to_lane) {
-        Some(lane) => lane.status != Some(CanonStatus::Done) || can_finish(card),
+        Some(lane) => lane.status != CanonStatus::Done || can_finish(card),
         None => false,
     }
 }

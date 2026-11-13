@@ -98,7 +98,7 @@ impl Item {
     }
 }
 
-/// A titled group of rows.
+/// Electron `FilteredSelectPopover.tsx`: rows with an optional title (empty omits it).
 pub struct Group {
     id: SharedString,
     title: SharedString,
@@ -248,12 +248,17 @@ fn root(width: Width, room: f32, ds: &Ds) -> gpui::Div {
     let root = div()
         .flex()
         .flex_col()
-        .gap(ds.len(Length::Space1))
+        .gap(ds.len(Length::SpaceSm))
+        .p(ds.len(Length::SpaceSm))
         .min_w_0()
         .text_color(ds.color(Color::TextPrimary));
+    if ds.compact() {
+        return root.w_auto();
+    }
     match width {
         Width::Fixed => root.w(px(320_f32.min(room))), // DS: FilteredSelectPopover.module.css:15
         Width::Default => root
+            .w_full()
             .min_w(px(280_f32.min(room)))
             .max_w(px(520_f32.min(room))),
     }
@@ -263,9 +268,7 @@ fn root(width: Width, room: f32, ds: &Ds) -> gpui::Div {
 fn heading(title: SharedString, ds: &Ds) -> gpui::Div {
     div()
         .min_w_0()
-        .pt(px(3.)) // DS: FilteredSelectPopover.module.css:28
-        .px(ds.len(Length::Space2))
-        .pb(ds.len(Length::SpaceXs))
+        .px(ds.len(Length::SpaceSm))
         .text_size(ds.len(Length::FontSize2))
         .line_height(ds.len(Length::TypoLabelLineHeight))
         .font_weight(gpui::FontWeight(ds.number(Number::FontWeightSemibold)))
@@ -299,7 +302,7 @@ fn results_content(
             .flex_col()
             .gap(px(2.))
             .min_w_0()
-            .child(group_title(group.title, ds))
+            .children((!group.title.is_empty()).then(|| group_title(group.title, ds)))
             .child(div().flex().flex_col().gap(px(2.)).min_w_0().children(
                 group.items.into_iter().map(|item| {
                     let row_id: ElementId =
@@ -338,6 +341,14 @@ fn footer(
     })
 }
 
+/// Hairline region separator from Electron `FilteredSelectPopover.module.css`.
+fn divider(ds: &Ds) -> gpui::Div {
+    div()
+        .min_w_0()
+        .border_t(ds.len(Length::BorderHairline))
+        .border_color(ds.color(Color::Line))
+}
+
 impl RenderOnce for FilteredSelectPopover {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
@@ -350,7 +361,8 @@ impl RenderOnce for FilteredSelectPopover {
             &self.on_search_change,
             ds,
         );
-        let filters = parts::filters(&self.id, self.filters, &self.active_filter, ds);
+        let filters = (!self.filters.is_empty())
+            .then(|| parts::filters(&self.id, self.filters, &self.active_filter, ds));
         let rows = self.results_max_rows.unwrap_or(6.65); // DS: FilteredSelectPopover.module.css:158
         let height = (rows * 30.).min(f32::from(viewport.height) * 0.42);
         let content = results_content(self.groups, &self.id, self.empty_label, ds);
@@ -359,20 +371,32 @@ impl RenderOnce for FilteredSelectPopover {
             .flex_col()
             .h(px(height))
             .min_w_0()
-            .border_t(ds.len(Length::BorderHairline))
-            .border_b(ds.len(Length::BorderHairline))
-            .border_color(ds.color(Color::Line))
+            .mt(-ds.len(Length::SpaceSm))
             .child(
                 ScrollArea::new((self.id.clone(), "results"))
                     .fill()
+                    .content_padding(
+                        ds.len(Length::SpaceSm),
+                        ds.len(Length::SpaceSm),
+                        ds.len(Length::FocusRingRoom),
+                    )
                     .child(content),
             );
         let footer = footer(&self.id, self.footer_title, self.footer_options, ds);
         root(self.width, room, ds)
             .child(heading(self.title, ds))
             .child(search)
-            .child(filters)
+            .children(filters)
+            .child(divider(ds))
             .child(results)
-            .children(footer)
+            .children(footer.map(|footer| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(ds.len(Length::SpaceSm))
+                    .mt(-ds.len(Length::SpaceSm))
+                    .child(divider(ds))
+                    .child(footer)
+            }))
     }
 }

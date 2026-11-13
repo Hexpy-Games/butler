@@ -68,9 +68,7 @@ pub(super) fn persist_move(
     let moved_plan = from.plan != to.plan;
     let mut input = EpicInput {
         expected_revision: Some(epic.revision),
-        status: to
-            .status
-            .filter(|status| *status != lane_status(epic.canon_status)),
+        status: (to.status != lane_status(epic.canon_status)).then_some(to.status),
         ..EpicInput::default()
     };
     if moved_plan {
@@ -80,7 +78,7 @@ pub(super) fn persist_move(
     let message = if moved_plan {
         words.moved(plan.map_or(words.backlog, |plan| plan.plan.title.as_str()))
     } else {
-        let status = to.status.map_or("", |status| words.lane_label(status));
+        let status = words.lane_label(to.status);
         words.card_status_changed(&epic.title, status)
     };
     let write = Write::Epic {

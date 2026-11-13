@@ -23,7 +23,7 @@ use gpui::{
 
 use copy::{drag_labels, words};
 use lanes::{can_complete, find_card};
-use plan_lanes::{Lanes, backlog_lane, plan_lanes};
+use plan_lanes::{Container, Lanes, plan_lanes};
 use plan_select::Picker;
 
 use crate::ui::Icon;
@@ -55,6 +55,8 @@ pub(crate) struct CanonBoard {
     /// `tagFilter`: tag ids.
     tag_filter: Vec<SharedString>,
     picker: Picker,
+    /// `shownFor` in Electron's `CanonBoard.tsx`.
+    shown_for: Option<SharedString>,
     /// `create`: the new-epic dialog.
     create: Option<Entity<EpicCreateDialog>>,
     /// `planForm`: the new-plan or edit-plan dialog.
@@ -99,11 +101,35 @@ impl CanonBoard {
             tag_chooser,
             tag_filter: Vec::new(),
             picker: Picker::default(),
+            shown_for: None,
             create: None,
             plan_form: None,
         };
         this.refresh(cx);
         this
+    }
+
+    /// Electron `CanonBoard.tsx`: a newly selected task brings its container on screen.
+    fn follow_selection(&mut self, canon: Option<&CanonOverview>, cx: &mut Context<Self>) {
+        let Some(epic) = selected_epic(&self.ctx, &self.project, cx) else {
+            self.shown_for = None;
+            return;
+        };
+        let Some(canon) = canon else {
+            return;
+        };
+        if self.shown_for.as_ref() == Some(&epic) {
+            return;
+        }
+        self.shown_for = Some(epic.clone());
+        let plan = match plan_select::canon_epic_plan(canon, &epic) {
+            Some(plan_select::EpicPlace::Backlog) => None,
+            Some(plan_select::EpicPlace::Plan(plan)) => Some(plan),
+            None => return,
+        };
+        if plan != self.plan_id(Some(&canon.plans), cx) {
+            plan_select::store_plan_choice(&self.project, plan, cx);
+        }
     }
 
     /// `tagFilter` without the tags that were deleted, so a deleted tag does not leave the board
@@ -282,14 +308,26 @@ impl CanonBoard {
             .plans
             .iter()
             .find(|plan| Some(plan.plan.id.as_str()) == plan_id);
-        let mut content = Stack::new().gap(Space::Xl);
-        match plan {
-            None => content = content.child(backlog_lane(canon, &lanes, cx)),
-            Some(plan) => {
-                let caption = words.plan_caption(plan);
-                content = content.child(plan_lanes(plan, caption, &lanes, window, cx));
-            }
-        }
+        let (id, title, works, due, edit) = match plan {
+            Some(plan) => (
+                Some(plan.plan.id.as_str()),
+                plan.plan.title.as_str(),
+                plan.works.as_slice(),
+                plan.plan.due_on.as_deref(),
+                Some(&plan.plan),
+            ),
+            None => (None, words.backlog, canon.backlog.as_slice(), None, None),
+        };
+        let container = Container {
+            id,
+            title,
+            works,
+            caption: words.plan_caption(works, due),
+            edit,
+        };
+        let content = Stack::new()
+            .gap(Space::Xl)
+            .child(plan_lanes(container, &lanes, window, cx));
         let for_drop = canon.clone();
         KanbanDragScope::new("canon-drag")
             .on_move(move |mv, _, cx| {
@@ -310,6 +348,7 @@ impl Render for CanonBoard {
             .canon
             .clone()
             .filter(|canon| canon.project_id.as_str() == &*self.project);
+        self.follow_selection(canon.as_deref(), cx);
         let plans = canon
             .as_ref()
             .map_or(&[][..], |canon| canon.plans.as_slice());
