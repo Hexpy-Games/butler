@@ -353,9 +353,116 @@ pub(crate) fn canon_proposal_cards(
         .canon_proposals
         .as_deref()
         .filter(|anchors| !anchors.is_empty())?;
-    let cards: Vec<AnyElement> = anchors
+    let loaded: Vec<_> = anchors
         .iter()
-        .map(|anchor| proposal::canon_proposal_card(ctx, anchor, window, cx))
+        .filter_map(|anchor| {
+            let state = proposal::load(anchor, window, cx);
+            let p = state.read(cx).proposal.clone()?;
+            (p.proposal_id == anchor.proposal_id).then_some((p, state))
+        })
         .collect();
+    let mut seen = std::collections::HashSet::new();
+    let mut cards = Vec::new();
+    for (p, state) in &loaded {
+        if p.state != crate::ui::source::wire::CanonProposalState::Applied {
+            cards.push(proposal::proposal_card(
+                p,
+                ctx.view.project_id.as_deref(),
+                state,
+                cx,
+            ));
+            continue;
+        }
+        let project = project_of(p);
+        if !seen.insert(project) {
+            continue;
+        }
+        let group: Vec<_> = loaded
+            .iter()
+            .map(|(p, _)| p)
+            .filter(|other| {
+                other.state == crate::ui::source::wire::CanonProposalState::Applied
+                    && project_of(other) == project
+            })
+            .collect();
+        cards.push(applied_receipt(&group, window, cx));
+    }
     Some(div().flex().flex_col().children(cards).into_any_element())
+}
+
+/// Electron `CanonProposalCard.tsx::projectOf`.
+fn project_of(p: &crate::ui::source::wire::CanonProposalView) -> Option<&str> {
+    match &p.project {
+        crate::ui::source::wire::CanonProposalProject::Existing { id, .. } => id.as_deref(),
+        crate::ui::source::wire::CanonProposalProject::New { .. } => None,
+    }
+}
+
+/// Electron `CanonProposalCard.tsx::AppliedReceipt`: one receipt per project in anchor order.
+fn applied_receipt(
+    group: &[&crate::ui::source::wire::CanonProposalView],
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    use crate::ui::i18n::canon_proposal::{CanonProposalCopy, receipt};
+    use crate::ui::manage::canon::chat_cards::chat_epic_cards;
+    use crate::ui::manage::dashboard::open_canon_epic;
+    use butler_ds::ui::button::{Button, Size};
+    use butler_ds::ui::context::Ds;
+    use butler_ds::ui::layout::{Border, Box, Radius, Space, Surface};
+    use butler_ds::ui::section::Section;
+    let first = group[0];
+    let project = project_of(first);
+    let changes: Vec<_> = group
+        .iter()
+        .flat_map(|p| p.changes.iter().cloned())
+        .collect();
+    let mut seen = std::collections::HashSet::new();
+    let ids: Vec<_> = changes
+        .iter()
+        .filter(|change| {
+            matches!(
+                change.op.as_str(),
+                "epic.create" | "epic.edit" | "epic.move"
+            )
+        })
+        .filter_map(|change| change.id.as_ref())
+        .filter(|id| !id.is_empty() && seen.insert((*id).clone()))
+        .cloned()
+        .collect();
+    let (target, epic) = (project.map(str::to_owned), ids.first().cloned());
+    let open = Button::new(SharedString::from(format!(
+        "receipt-open-{}",
+        first.proposal_id
+    )))
+    .size(Size::Sm)
+    .variant(Variant::Outline)
+    .text(CanonProposalCopy::get(cx).open_action)
+    .on_click(move |_, _, cx| {
+        if let Some(project) = &target {
+            open_canon_epic(project, epic.as_deref(), cx);
+        }
+    });
+    let mut section = Section::new(SharedString::from(format!("receipt-{}", first.proposal_id)))
+        .title(receipt(Ds::get(cx).lang(), &changes))
+        .actions(butler_ds::ui::button::container(Size::Sm).child(open));
+    if let Some(project) = project.filter(|_| !ids.is_empty()) {
+        section = section.child(chat_epic_cards(
+            &first.proposal_id,
+            project,
+            &ids,
+            None,
+            window,
+            cx,
+        ));
+    }
+    let receipt = Box::new()
+        .surface(Surface::Muted)
+        .border(Border::Hairline)
+        .radius(Radius::Panel)
+        .padding(Space::Md)
+        .child(section);
+    crate::ui::widgets::anchor(div(), "canon-proposal-card")
+        .child(crate::ui::widgets::anchor(div(), "canon-proposal-state-applied").child(receipt))
+        .into_any_element()
 }

@@ -1,6 +1,6 @@
 //! The canon board, the dashboard's work tab (`canon/CanonBoard.tsx`, `useCanonBoard.ts`,
 //! `CanonPlanLanes.tsx`, `EpicCard.tsx`, `useCanonMove.ts`).
-mod card;
+pub(crate) mod card;
 mod copy;
 mod data;
 mod lanes;

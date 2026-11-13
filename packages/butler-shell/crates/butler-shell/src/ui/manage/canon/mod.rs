@@ -4,3 +4,5 @@ pub(crate) mod aside;
 pub(crate) mod board;
 pub(crate) mod common;
 pub(crate) mod plan;
+
+pub(crate) mod chat_cards;

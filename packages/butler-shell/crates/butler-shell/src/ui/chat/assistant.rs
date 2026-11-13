@@ -324,7 +324,14 @@ fn blocks(
         .answer_blocks
         .as_deref()
         .filter(|sets| !sets.is_empty())?;
-    answer_blocks(sets, t, window, cx)
+    answer_blocks(
+        sets,
+        t,
+        msg.canon_proposals.as_deref().unwrap_or_default(),
+        msg.status.as_deref() == Some("streaming"),
+        window,
+        cx,
+    )
 }
 
 /// `AssistantReplyText`: the work-failure line, else the message's markdown.
