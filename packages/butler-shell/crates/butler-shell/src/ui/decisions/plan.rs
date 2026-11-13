@@ -32,17 +32,7 @@ use crate::ui::source::wire::{
     MessageRecord, MessageRecordRole, PlanDecisionResultView, PlanDocumentRecord,
     QueuedMessageRecord, QueuedMessageRecordState, SessionView,
 };
-
-/// `ACTIVE_TURN_STATES` (app/constants.ts).
-const ACTIVE_TURN_STATES: [&str; 7] = [
-    "accepted",
-    "thinking",
-    "streaming",
-    "waiting_for_form",
-    "waiting_for_tool",
-    "cancelling",
-    "retrying",
-];
+use crate::ui::store::progress::row_ops::is_terminal_state;
 
 type OpenPlan = Rc<dyn Fn(&str, &mut App)>;
 type Decided = Rc<dyn Fn(&PlanDecisionResultView, &mut App)>;
@@ -110,10 +100,11 @@ fn latest_actionable_plan(messages: &[Arc<MessageRecord>]) -> Option<&PlanDocume
         .then_some(plan)
 }
 
+/// The open chat's turn still runs: its state is not terminal.
 fn active_turn(view: &SessionView) -> bool {
     view.active_turn
         .as_ref()
-        .is_some_and(|turn| ACTIVE_TURN_STATES.contains(&turn.state.as_str()))
+        .is_some_and(|turn| !is_terminal_state(&turn.state))
 }
 
 /// `useComposerPlanDecision`'s gate: the plan that waits for a decision.

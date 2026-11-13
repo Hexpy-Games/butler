@@ -17,7 +17,9 @@ use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::agent::Launch;
 use butler_e2e::e2e::config::nonempty;
-use butler_e2e::e2e::fake_servers::{ChatBehavior, FakeServer, GOOD_KEY, LOCAL_MODEL};
+use butler_e2e::e2e::fake_servers::{
+    ChatBehavior, FakeServer, GOOD_KEY, LOCAL_MODEL, LocalCapabilities,
+};
 use butler_e2e::e2e::gateway::Gateway;
 use butler_e2e::e2e::sandbox::Sandbox;
 use butler_e2e::e2e::stop_intent::{instance_record, read_intent};
@@ -25,6 +27,8 @@ use butler_e2e::e2e::{HarnessError, harness_error};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
 use tokio::process::{Child, ChildStdin};
+
+mod live_turns;
 
 const SHOTS: &str = "BUTLER_SHELL_SHOTS_EXECUTABLE";
 /// The App's port for these runs (never the owner's 18765 or the demo's 19765).
@@ -356,71 +360,6 @@ async fn shell_app_02_restart_and_quit_through_the_supervisor() -> Result<(), Ha
     assert_eq!(intent["reason"], "stop", "{intent}");
     assert_eq!(intent["instance_id"], second["nonce"], "{intent}");
     assert_eq!(intent["pid"], second["pid"], "{intent}");
-    shell.finish().await?;
-    sandbox.mark_success();
-    Ok(())
-}
-
-/// SHELL-APP-03 — A sidebar row follows its chat's turn live: the working spinner shows while a
-/// turn runs and goes when the turn ends (Electron reconciles navigation on turn changes).
-#[tokio::test]
-async fn shell_app_03_sidebar_row_follows_a_live_turn() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
-    let _serial = SERIAL.lock().await;
-    let mut sandbox = Sandbox::new("SHELL-APP-03")?;
-    // First launch: finish the onboarding through the Agent (`onboardingCompletedPatch`) and
-    // make a slow local model the default; the second launch then opens the workspace.
-    let mut shell = Shell::start(&sandbox, &[]).await?;
-    shell.run(&["agent running"]).await?;
-    let gw = gateway(&shell.launch);
-    let now = "2026-01-01T00:00:00Z";
-    let mut onboarding = gw.settings().await?["onboarding"].clone();
-    onboarding["consent_version"] = json!(2);
-    onboarding["accepted_at"] = json!(now);
-    onboarding["completed_at"] = json!(now);
-    let done = gw
-        .patch("/settings", json!({"onboarding": onboarding}))
-        .await?;
-    assert_eq!(done.status, 200, "{}", done.text);
-    // A streamed answer slow enough (about 3 s) for the row to show its turn.
-    let behavior = ChatBehavior {
-        answer: "The row shows this turn while these words stream in one by one. ".repeat(3),
-        chunk_delay: Duration::from_millis(100),
-        ..ChatBehavior::default()
-    };
-    let _model = default_to_local_model(&gw, behavior).await?;
-    shell.run(&["app-quit"]).await?;
-    shell.finish().await?;
-
-    let mut shell = Shell::start(&sandbox, &[]).await?;
-    shell
-        .run(&["agent running", "wait-anchor composer"])
-        .await?;
-    let gw = gateway(&shell.launch);
-    let created = gw
-        .post("/sessions", json!({"kind": "chat", "title": "Live row"}))
-        .await?;
-    assert_eq!(created.status, 201, "{}", created.text);
-    let id = created.data()["session"]["id"]
-        .as_str()
-        .expect("session id")
-        .to_owned();
-    let sent = gw
-        .post(
-            "/messages",
-            json!({"chat_id": id, "text": "Hello", "client_message_id": "shell-app-03"}),
-        )
-        .await?;
-    assert_eq!(sent.status, 202, "{}", sent.text);
-    let running = format!("sidebar-running-{id}");
-    shell
-        .run(&[
-            &format!("wait-anchor {running}"),
-            &format!("wait-no-anchor {running}"),
-            "app-quit",
-        ])
-        .await?;
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())

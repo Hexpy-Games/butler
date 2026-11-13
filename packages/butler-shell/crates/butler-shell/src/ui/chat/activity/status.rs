@@ -86,7 +86,12 @@ pub(crate) fn current_turn_status(t: &TranscriptCtx, cx: &App) -> Option<AnyElem
     let style = StyleRefinement::default()
         .h(Ds::get(cx).len(Length::TypoBodyLineHeight))
         .min_w_0();
-    Some(AnyView::from(entity).cached(style).into_any_element())
+    Some(
+        crate::ui::widgets::anchor(gpui::div(), "turn-status")
+            .min_w_0()
+            .child(AnyView::from(entity).cached(style))
+            .into_any_element(),
+    )
 }
 
 fn status_data(view: &SessionView, lang: Lang) -> Option<(Status, ElementId)> {
