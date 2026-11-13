@@ -724,6 +724,9 @@ const butlerApp = Object.freeze({
     if (!["GET", "PUT"].includes(method)) throw new Error("invalid_image_settings_method");
     return requestBridgeResult("/settings/image-model", { method, ...(method === "PUT" ? { body: JSON.stringify(body) } : {}) });
   },
+  addCustomImageModel: (body) => requestBridgeResult("/settings/image-model/custom", { method: "POST", body: JSON.stringify(body) }),
+  registerImageModel: (body) => requestBridgeResult("/settings/image-model/registered", { method: "POST", body: JSON.stringify(body) }),
+  unregisterImageModel: (ref) => requestBridgeResult(`/settings/image-model/registered/${encodeURIComponent(ref)}`, { method: "DELETE" }),
   imageAssetInfo: ({ path }) => {
     if (!/^\/message-assets\/img_[a-z0-9]{10}(?:[a-z0-9]{2})?\/(meta|versions)$/u.test(path)) throw new Error("invalid_image_asset_route");
     return requestBridgeResult(path);

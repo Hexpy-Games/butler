@@ -345,6 +345,12 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (url.pathname.startsWith("/library/") && method === "DELETE") return callBridge<T>(bridge,"deleteLibrary",decodeURIComponent(url.pathname.slice(9)));
   if (url.pathname === "/settings/image-model" && (method === "GET" || method === "PUT"))
     return unwrapBridgeResult<T>(await callBridge(bridge, "imageModelSettings", { method, body: method === "PUT" ? parseBody(options.body) : undefined }));
+  if (url.pathname === "/settings/image-model/custom" && method === "POST")
+    return unwrapBridgeResult<T>(await callBridge(bridge, "addCustomImageModel", parseBody(options.body)));
+  if (url.pathname === "/settings/image-model/registered" && method === "POST")
+    return unwrapBridgeResult<T>(await callBridge(bridge, "registerImageModel", parseBody(options.body)));
+  if (url.pathname.startsWith("/settings/image-model/registered/") && method === "DELETE")
+    return unwrapBridgeResult<T>(await callBridge(bridge, "unregisterImageModel", decodeURIComponent(url.pathname.slice("/settings/image-model/registered/".length))));
   if (method === "GET" && /^\/message-assets\/img_[a-z0-9]+\/(meta|versions)$/u.test(url.pathname))
     return unwrapBridgeResult<T>(await callBridge(bridge, "imageAssetInfo", { path: url.pathname }));
   const asks = pendingAsksBridgeInput(url, method);
