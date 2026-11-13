@@ -24,6 +24,13 @@ pub(super) fn open(path: &Path) -> Result<SecretStore, SecretError> {
     if same_path(&parent, &temporary) || !is_within(&parent, &temporary) {
         return Err(invalid_path());
     }
+    // Like a system store that cannot be reached, refuse at open (not at the
+    // first read) once the scenario made this store unavailable.
+    if !parent.is_dir() {
+        return Err(SecretError::File(std::io::Error::other(
+            "test secret store is unavailable",
+        )));
+    }
     Ok(SecretStore {
         // Exercise the system-store policies while replacing only persistence.
         backend: super::SYSTEM_BACKEND,
