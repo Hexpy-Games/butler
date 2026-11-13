@@ -100,7 +100,8 @@ pub use configuration::{
     CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,
     CredentialStorePolicy, CredentialStoreView, DeletedCredential, FileOverride, SecretBackend,
     SecretStoreFacts, SecretStoreMode, StoreReason, credential_file_summary,
-    credential_store_policy, fallback_file, reset_secret_keys,
+    credential_store_policy, fallback_file, reset_secret_keys, vault_legacy_items,
+    vault_uses_system_store,
 };
 pub use configuration::{
     DiscoveredLocalModel, HostedModelMutation, ImageModelError, ImageModelSelection,

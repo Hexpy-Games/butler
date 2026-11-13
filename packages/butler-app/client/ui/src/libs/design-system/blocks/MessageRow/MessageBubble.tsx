@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import styles from "./MessageRow.module.css";
 
-/** The answer text of a bubble row: the user bubble's shape, fill and width, aligned left. */
+/** The answer text of a bubble row: the user bubble's shape and fill, aligned left, up to min(440px, 90%) wide. */
 export function MessageBubble({ children, dataTestClass = "assistant-bubble" }: { children: ReactNode; dataTestClass?: string }) {
   return <div className={styles.bubble} data-test-class={dataTestClass}>{children}</div>;
 }

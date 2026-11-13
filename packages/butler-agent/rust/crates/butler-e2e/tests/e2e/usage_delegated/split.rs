@@ -95,13 +95,19 @@ async fn deleg_use_06_conversation_and_subtasks_add_up() -> Result<(), HarnessEr
     }
 
     let rows = fs::read_to_string(s.sandbox.data.join("metrics/prompt-cache-usage.jsonl"))?;
-    for row in rows
+    let rows: Vec<Value> = rows
         .lines()
-        .map(|line| serde_json::from_str::<Value>(line).unwrap())
-    {
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(rows.len(), calls.len());
+    for row in rows {
         assert_eq!(
             row["rootSessionId"], ROOT,
             "not attributed to the chat: {row}"
+        );
+        assert!(
+            ["main", "steward", "worker"].contains(&row["role"].as_str().unwrap()),
+            "{row}"
         );
     }
     let (n, input, output) = totals(&calls, |_| true);

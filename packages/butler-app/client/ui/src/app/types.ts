@@ -1181,15 +1181,6 @@ export interface StewardResultView {
   child_session_id: string;
   child_turn_id: string;
   status: "success" | "blocked" | "failed" | "cancelled";
-  code:
-    | "delegation_context_incomplete"
-    | "steward_execution_failed"
-    | "steward_cancelled"
-    | null;
-  summary: string;
-  acceptance_evidence: string[];
-  changed_artifacts: string[];
-  changed_files?: ChangedFileDetail[];
   created_at: string;
 }
 
@@ -1250,12 +1241,9 @@ export interface StewardSessionSummaryView {
   active_turn: SessionViewTurn | null;
   latest_turn: SessionViewTurn | null;
   waiting_for_children?: boolean;
-  activity_rows: ProgressRow[];
   approved_plan_revision?: number;
   approved_plan_total?: number;
   approved_plan_completed?: number;
-  artifacts: SessionArtifactSummary[];
-  changed_files: ChangedFileDetail[];
   result: StewardResultView | null;
   updated_at: string;
   terminal: boolean;

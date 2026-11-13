@@ -91,7 +91,7 @@ mod session_titles;
 mod session_views;
 mod sessions;
 pub(super) mod settings;
-mod setup;
+pub(super) mod setup;
 mod setup_events;
 mod skill_settings;
 mod smart_groups;

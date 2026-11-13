@@ -12,6 +12,7 @@ e2e-fixtures = ["butler-log/e2e-fixtures"]
 test-support = []
 
 [dependencies]
+butler-vault = { path = "../butler-vault" }
 butler-log = { path = "../butler-log" }
 butler-canon = { path = "../butler-canon" }
 butler-core = { path = "../butler-core" }

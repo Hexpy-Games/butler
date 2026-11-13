@@ -1,5 +1,5 @@
 .row {
-  /* One width for the user bubble, the Butler bubble and what sits under it. */
+  /* The user bubble's width; a Butler bubble row widens it (below). */
   --message-bubble-max-width: min(440px, 68%);
 
   display: grid;
@@ -66,6 +66,12 @@
   padding: 2px 0 var(--space-xs);
   color: var(--text-primary);
   white-space: normal;
+}
+
+/* Butler's bubble and what sits under it may use 90% of the column; wide
+   columns keep the 440px cap. */
+.bubbleRow {
+  --message-bubble-max-width: min(440px, 90%);
 }
 
 /* Bubble row (대화): the answer bubble mirrors the user bubble on the left;

@@ -1,5 +1,7 @@
 //! Fresh filesystem facts and request-owned snapshots of shared catalog construction.
 
+mod vault_items;
+pub use vault_items::vault_legacy_items;
 mod reset_secrets;
 pub use reset_secrets::reset_secret_keys;
 mod metadata;
@@ -56,6 +58,7 @@ pub use settings::SettingsError;
 pub use setup::{ProviderKeySaveError, SavedProviderKey};
 pub use store_policy::{
     CredentialStorePolicy, FileOverride, SecretStoreFacts, StoreReason, credential_store_policy,
+    vault_uses_system_store,
 };
 
 use std::{
