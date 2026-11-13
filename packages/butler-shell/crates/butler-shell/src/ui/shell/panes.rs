@@ -124,6 +124,9 @@ impl Shell {
         self.panes
             .sections
             .update(cx, |sections, cx| sections.live_event(event, cx));
+        if let Some(settings) = &self.settings_view {
+            settings.update(cx, |settings, cx| settings.live_event(event, cx));
+        }
     }
 
     /// The open view goes to the inspector pane too.

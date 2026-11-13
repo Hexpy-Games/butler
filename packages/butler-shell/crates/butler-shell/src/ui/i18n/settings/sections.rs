@@ -43,7 +43,7 @@ const fn copy(
     }
 }
 
-pub(crate) static SETTINGS_SECTIONS: [SectionCopy; 17] = [
+pub(crate) static SETTINGS_SECTIONS: [SectionCopy; 18] = [
     row(
         "general",
         copy(
@@ -173,6 +173,19 @@ pub(crate) static SETTINGS_SECTIONS: [SectionCopy; 17] = [
                 "backup models",
                 "api keys",
             ],
+        ),
+    ),
+    row(
+        "connections",
+        copy(
+            "연결",
+            "메일 계정을 연결합니다.",
+            &["mail", "메일", "connections", "연결"],
+        ),
+        copy(
+            "Connections",
+            "Connect a mail account.",
+            &["mail", "메일", "connections", "연결"],
         ),
     ),
     row(

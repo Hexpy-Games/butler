@@ -51,6 +51,7 @@ fn merged(base: Option<&Value>, patch: &Value) -> Value {
 }
 
 pub(crate) struct SettingsState {
+    pub(super) connector_version: u64,
     /// GET /settings; replaced by each save's merged result.
     settings: Option<Rc<Value>>,
     /// GET /model-catalog
@@ -67,6 +68,7 @@ impl EventEmitter<SettingsEvent> for SettingsState {}
 impl SettingsState {
     pub(super) fn new(settings: Option<Rc<Value>>) -> Self {
         Self {
+            connector_version: 0,
             settings,
             catalog: None,
             saving: false,

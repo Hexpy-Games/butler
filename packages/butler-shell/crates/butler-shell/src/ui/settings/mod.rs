@@ -177,6 +177,20 @@ impl SettingsView {
         view
     }
 
+    /// Electron `connectorEvents.ts`: only the connections page observes these events.
+    pub(crate) fn live_event(
+        &mut self,
+        event: &crate::ui::source::wire::AppEventEnvelope,
+        cx: &mut Context<Self>,
+    ) {
+        if event.r#type == "connectors.changed" {
+            self.state.update(cx, |state, cx| {
+                state.connector_version = state.connector_version.wrapping_add(1);
+                cx.notify();
+            });
+        }
+    }
+
     /// Takes the keyboard back (Escape closes the screen), as after the command palette.
     pub(crate) fn focus(&self, window: &mut Window, cx: &mut App) {
         self.focus.focus(window, cx);
