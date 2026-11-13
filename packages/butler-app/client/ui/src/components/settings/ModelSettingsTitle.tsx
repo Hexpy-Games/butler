@@ -29,7 +29,6 @@ export function ModelSettingsTitle({
   useAppLocale();
   const copy = appCopy.settings;
   const pageTitle =
-    modelRoute.page === "imageManagement" ? copy.modelManagement.imageTitle :
     modelRoute.page === "management"
       ? copy.modelManagement.title
       : modelRoute.page === "edit"
@@ -54,11 +53,11 @@ export function ModelSettingsTitle({
           <BreadcrumbItem>
             <BreadcrumbButton onClick={onRoot}>{copy.sections.models}</BreadcrumbButton>
           </BreadcrumbItem>
-          {modelRoute.page === "add" || modelRoute.page === "edit" || modelRoute.page === "imageAdd" ? (
+          {modelRoute.page === "add" || modelRoute.page === "edit" ? (
             <>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbButton onClick={onManagement}>{modelRoute.page === "imageAdd" ? copy.modelManagement.imageTitle : copy.modelManagement.title}</BreadcrumbButton>
+                <BreadcrumbButton onClick={onManagement}>{copy.modelManagement.title}</BreadcrumbButton>
               </BreadcrumbItem>
             </>
           ) : null}

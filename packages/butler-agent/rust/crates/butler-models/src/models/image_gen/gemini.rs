@@ -4,7 +4,11 @@ pub(super) async fn request(
     client: &butler_log::http::Client,
     r: &ImageGenRequest,
 ) -> Result<butler_log::http::RequestBuilder, ImageGenError> {
-    let mut input = vec![json!({"type":"text","text":r.prompt})];
+    let mut text = r.prompt.clone();
+    if let Some(b) = r.region_hint {
+        text.push_str(&format!("\nChange only the region from {:.0}% to {:.0}% across and {:.0}% to {:.0}% down (the rest of the image must stay identical).",b.x0*100.,b.x1*100.,b.y0*100.,b.y1*100.));
+    }
+    let mut input = vec![json!({"type":"text","text":text})];
     input.extend(
         r.inputs
             .iter()

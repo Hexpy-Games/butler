@@ -1,5 +1,3 @@
-mod image_models;
-
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -48,15 +46,6 @@ impl AppModelCatalog {
         match command {
             AppModelCatalogCommand::ReadImageModel => self.image_model(None).await,
             AppModelCatalogCommand::SetImageModel(value) => self.image_model(Some(value)).await,
-            AppModelCatalogCommand::AddCustomImageModel(value) => {
-                self.add_custom_image_model(value).await
-            }
-            AppModelCatalogCommand::RegisterImageModel(value) => {
-                self.register_image_model(value).await
-            }
-            AppModelCatalogCommand::UnregisterImageModel(id) => {
-                self.unregister_image_model(id).await
-            }
             AppModelCatalogCommand::Read => {
                 self.validate_model_files()?;
                 let read = self.read_catalog().await?;
@@ -196,6 +185,22 @@ impl AppModelCatalog {
         Ok(json!({"model":model,"catalog":catalog}))
     }
 
+    async fn image_model(&self, value: Option<Value>) -> Result<Value, GatewayApplicationError> {
+        self.validate_model_files()?;
+        self.validated_root()?;
+        match value {
+            Some(value) => self
+                .configuration
+                .set_image_model(value)
+                .await
+                .map_err(image_model_error),
+            None => self
+                .configuration
+                .image_model_settings()
+                .await
+                .map_err(image_model_error),
+        }
+    }
     async fn upsert_credential(&self, value: Value) -> Result<Value, GatewayApplicationError> {
         self.validate_model_files()?;
         let input: CredentialInput = decode(value)?;
@@ -456,5 +461,19 @@ fn unsafe_model_path() -> GatewayApplicationError {
         code: "unsafe_configuration_path".into(),
         message: "Model configuration is outside the selected DATA directory.".into(),
         source: None,
+    }
+}
+
+fn image_model_error(error: butler_models::models::ImageModelError) -> GatewayApplicationError {
+    let status = if error.code == "image_model_store_failed" {
+        500
+    } else {
+        400
+    };
+    GatewayApplicationError::Public {
+        status,
+        code: error.code.into(),
+        message: "Image model setting could not be applied.".into(),
+        source: Some(Arc::new(error)),
     }
 }

@@ -1,8 +1,6 @@
 //! One billed image per request; no provider or model fallback.
-mod dashscope;
 mod gemini;
 mod openai;
-mod xai;
 use crate::models::{ImageOutputEndpoint, ResolvedImageModel};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
@@ -86,23 +84,15 @@ pub async fn generate(
             result.map_err(|_| ImageGenError::new("image_timeout", "Image request timed out."))?,
     }
 }
-async fn execute(mut request: ImageGenRequest) -> Result<ImageGenResult, ImageGenError> {
+async fn execute(request: ImageGenRequest) -> Result<ImageGenResult, ImageGenError> {
     let client = tokio::task::spawn_blocking(crate::models::provider_http_client)
         .await
         .map_err(|_| ImageGenError::new("image_transport", "Image transport unavailable."))?
         .map_err(|_| ImageGenError::new("image_transport", "Image transport unavailable."))?;
-    if request.target.image_output.mask == crate::models::ImageMask::None
-        && request.mask.take().is_some()
-        && let Some(b) = request.region_hint
-    {
-        request.prompt.push_str(&format!("\nChange only the region from {:.0}% to {:.0}% across and {:.0}% to {:.0}% down (the rest of the image must stay identical).",b.x0*100.,b.x1*100.,b.y0*100.,b.y1*100.));
-    }
     let provider = request.target.metadata.provider_id.clone();
     let endpoint = request.target.image_output.endpoint;
     let builder = match endpoint {
         ImageOutputEndpoint::OpenaiImages => openai::request(&client, &request).await?,
-        ImageOutputEndpoint::XaiImages => xai::request(&client, &request)?,
-        ImageOutputEndpoint::DashscopeImages => dashscope::request(&client, &request)?,
         ImageOutputEndpoint::GeminiInteractions => gemini::request(&client, &request).await?,
     }
     .purpose(butler_log::http::Purpose::provider(&provider, "image"))
@@ -132,9 +122,7 @@ async fn execute(mut request: ImageGenRequest) -> Result<ImageGenResult, ImageGe
         return Err(error);
     }
     let result = match endpoint {
-        ImageOutputEndpoint::OpenaiImages
-        | ImageOutputEndpoint::XaiImages
-        | ImageOutputEndpoint::DashscopeImages => openai::response(&client, &value).await,
+        ImageOutputEndpoint::OpenaiImages => openai::response(&value),
         ImageOutputEndpoint::GeminiInteractions => gemini::response(&value),
     };
     result.map_err(|e| safe_error(&e.code, &e.message, &request.target.api_key))
@@ -154,9 +142,6 @@ fn decode(data: &str, usage: ImageUsage) -> Result<ImageGenResult, ImageGenError
     let bytes = STANDARD
         .decode(data)
         .map_err(|_| ImageGenError::new("image_response_invalid", "Invalid image data."))?;
-    image_result(bytes, usage)
-}
-fn image_result(bytes: Vec<u8>, usage: ImageUsage) -> Result<ImageGenResult, ImageGenError> {
     let mime = match image::guess_format(&bytes) {
         Ok(image::ImageFormat::Png) => "image/png",
         Ok(image::ImageFormat::Jpeg) => "image/jpeg",
@@ -193,51 +178,6 @@ fn base(request: &ImageGenRequest, default: &str) -> String {
 pub async fn effective_size(request: &ImageGenRequest) -> Result<Option<String>, ImageGenError> {
     match request.target.image_output.endpoint {
         ImageOutputEndpoint::GeminiInteractions => gemini::size(request).await,
-        ImageOutputEndpoint::OpenaiImages
-        | ImageOutputEndpoint::DashscopeImages
-        | ImageOutputEndpoint::XaiImages => Ok(request.size.clone()),
+        ImageOutputEndpoint::OpenaiImages => Ok(request.size.clone()),
     }
-}
-
-fn versioned_base(url: &str) -> String {
-    let url = url.trim_end_matches('/');
-    let segment = url.rsplit('/').next().unwrap_or_default();
-    let version = segment.strip_prefix('v').is_some_and(|suffix| {
-        let digits = suffix.bytes().take_while(u8::is_ascii_digit).count();
-        digits > 0 && suffix[digits..].bytes().all(|b| b.is_ascii_lowercase())
-    });
-    if version {
-        url.into()
-    } else {
-        format!("{url}/v1")
-    }
-}
-async fn openai_image(
-    client: &butler_log::http::Client,
-    value: &Value,
-    usage: ImageUsage,
-) -> Result<ImageGenResult, ImageGenError> {
-    if let Some(data) = value.pointer("/data/0/b64_json").and_then(Value::as_str) {
-        return decode(data, usage);
-    }
-    let url = value
-        .pointer("/data/0/url")
-        .and_then(Value::as_str)
-        .ok_or_else(|| ImageGenError::new("image_not_returned", "No image returned."))?;
-    let response = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|_| ImageGenError::new("image_transport", "Image download failed."))?;
-    if !response.status().is_success() {
-        return Err(ImageGenError::new(
-            "image_transport",
-            "Image download failed.",
-        ));
-    }
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|_| ImageGenError::new("image_transport", "Image download interrupted."))?;
-    image_result(bytes.to_vec(), usage)
 }

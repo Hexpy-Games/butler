@@ -7,7 +7,6 @@ pub use reset_secrets::reset_secret_keys;
 mod metadata;
 pub use metadata::ModelContextMetadataRead;
 
-mod custom_image_models;
 mod image_model;
 pub use image_model::{ImageModelError, ImageModelSelection, ResolvedImageModel};
 mod admission;

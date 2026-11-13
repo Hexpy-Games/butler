@@ -5,7 +5,6 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 #[derive(Clone)]
 pub struct ImageRequest {
     pub path: String,
-    pub authorization: Option<String>,
     pub json: Value,
     pub parts: Vec<(String, Vec<u8>)>,
 }
@@ -78,23 +77,6 @@ async fn image_reply(
     request: Request<Body>,
 ) -> Response<Body> {
     let path = request.uri().path().to_owned();
-    if request.method() == axum::http::Method::GET && path.starts_with("/files/") {
-        return Response::builder()
-            .header("content-type", "image/png")
-            .body(Body::from(state.png.clone()))
-            .expect("fixture PNG response");
-    }
-    let authority = request
-        .headers()
-        .get("host")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default()
-        .to_owned();
-    let authorization = request
-        .headers()
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_owned);
     let content_type = request
         .headers()
         .get("content-type")
@@ -111,7 +93,6 @@ async fn image_reply(
         .unwrap_or_default();
     lock(&state.requests).push(ImageRequest {
         path: path.clone(),
-        authorization,
         json,
         parts,
     });
@@ -128,8 +109,6 @@ async fn image_reply(
     let data = STANDARD.encode(&state.png);
     let body = if path.ends_with("interactions") {
         json!({"steps":[{"type":"model_output","content":[{"type":"text","text":"Ready"},{"type":"image","data":data}]}],"usage":{"total_input_tokens":30,"total_output_tokens":40,"input_tokens_by_modality":[{"modality":"text","tokens":10},{"modality":"image","tokens":20}],"output_tokens_by_modality":[{"modality":"image","tokens":40}]}})
-    } else if path.contains("compatible-mode") {
-        json!({"data":[{"url":format!("http://{authority}/files/result.png")} ]})
     } else {
         json!({"data":[{"b64_json":data}],"usage":{"input_tokens":30,"input_tokens_details":{"text_tokens":10,"image_tokens":20},"output_tokens":40}})
     };

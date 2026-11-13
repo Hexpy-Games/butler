@@ -11,7 +11,6 @@ interface HostedModelSelectFieldsProps {
   providerId: string;
   providers: ModelCatalogView["providers"];
   showProviderSelect: boolean;
-  showTokenCaption?: boolean;
   onModelRefChange: (modelRef: string) => void;
   onProviderIdChange: (providerId: string) => void;
 }
@@ -22,7 +21,6 @@ export function HostedModelSelectFields({
   providerId,
   providers,
   showProviderSelect,
-  showTokenCaption = true,
   onModelRefChange,
   onProviderIdChange,
 }: HostedModelSelectFieldsProps) {
@@ -51,7 +49,7 @@ export function HostedModelSelectFields({
         onChange={onModelRefChange}
         options={modelOptions.map((model) => ({
           value: model.model_ref,
-          label: showTokenCaption ? modelOptionLabel(model) : model.display_name,
+          label: modelOptionLabel(model),
         }))}
       />
     </>

@@ -33,8 +33,6 @@ import type {
 export type SettingsModelRoute =
   | { page: "root" }
   | { page: "management" }
-  | { page: "imageManagement" }
-  | { page: "imageAdd" }
   | { page: "add" }
   | { page: "edit"; modelRef: string };
 
@@ -64,8 +62,6 @@ interface SettingsUIStore {
   modelRouteLeaveGuard: (() => boolean | Promise<boolean>) | null;
   openModelManagement: () => void;
   openModelAdd: () => void;
-  openImageModelManagement: () => void;
-  openImageModelAdd: () => void;
   openModelEdit: (modelRef: string) => void;
   backModelRoute: () => Promise<void>;
   resetModelRoute: () => Promise<void>;
@@ -172,8 +168,6 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
       modelRoute: { page: "add" },
       modelRouteDirection: "forward",
     }),
-  openImageModelManagement: () => set({ modelRoute: { page: "imageManagement" }, modelRouteDirection: "forward" }),
-  openImageModelAdd: () => set({ modelRoute: { page: "imageAdd" }, modelRouteDirection: "forward" }),
   openModelEdit: (modelRef) =>
     set({
       modelRoute: { page: "edit", modelRef },
@@ -184,7 +178,6 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
     if (!await canLeaveModelRoute(state.modelRouteLeaveGuard)) return;
     set({
         modelRoute:
-          state.modelRoute.page === "imageAdd" ? { page: "imageManagement" } :
           state.modelRoute.page === "add" || state.modelRoute.page === "edit"
             ? { page: "management" }
             : { page: "root" },

@@ -151,11 +151,7 @@ impl ModelConfiguration {
         &self,
         root: &Path,
     ) -> Result<CredentialList, CredentialError> {
-        let records = self
-            .saved_credentials(root)
-            .into_iter()
-            .filter(|record| crate::models::catalog::hosted_provider(&record.provider_id).is_some())
-            .collect::<Vec<_>>();
+        let records = self.saved_credentials(root);
         let config = read_object_sync(&root.join("butler.config.json"));
         let registered = normalized_registered(&config, self, &self.clock.now_iso());
         let mut store = self.store_view(root).await;

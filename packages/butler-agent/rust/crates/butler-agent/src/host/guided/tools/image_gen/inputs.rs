@@ -27,13 +27,9 @@ pub(super) async fn prepare(
         .ok_or_else(|| ImageGenError::new("image_prompt_required", "A prompt is required."))?
         .to_owned();
     let size = option(&args, "size")?;
-    let quality = option(&args, "quality")?.or_else(|| target.default_quality.clone());
+    let quality = option(&args, "quality")?.unwrap_or_else(|| target.default_quality.clone());
     validate_choice("size", size.as_deref(), &target.image_output.sizes)?;
-    validate_choice(
-        "quality",
-        quality.as_deref(),
-        &target.image_output.qualities,
-    )?;
+    validate_choice("quality", Some(&quality), &target.image_output.qualities)?;
     if call.name == "edit_image" && !target.image_output.edit {
         return Err(ImageGenError::new(
             "image_edit_unsupported",
@@ -58,7 +54,7 @@ pub(super) async fn prepare(
         target,
         prompt,
         size,
-        quality,
+        quality: Some(quality),
         background: background.or(opaque_source.then_some(Background::Opaque)),
         inputs,
         mask,

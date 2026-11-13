@@ -74,15 +74,6 @@ pub(super) fn with_image_model_choices(
             continue;
         }
         for (key, choices) in [("size", "sizes"), ("quality", "qualities")] {
-            if key == "quality" && capability[choices].as_array().is_some_and(Vec::is_empty) {
-                if let Some(properties) = tool["parameters"]["properties"].as_object_mut() {
-                    properties.remove(key);
-                }
-                if let Some(required) = tool["parameters"]["required"].as_array_mut() {
-                    required.retain(|v| v != key);
-                }
-                continue;
-            }
             let property = &mut tool["parameters"]["properties"][key];
             property["enum"] = capability[choices].clone();
         }

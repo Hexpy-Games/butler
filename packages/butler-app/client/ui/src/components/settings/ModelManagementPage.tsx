@@ -4,23 +4,30 @@ import { Button, Plus } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { modelDisplayName } from "@/app/utils.ts";
+import { useButlerStore } from "@/app/store.ts";
+import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { SettingsSection } from "./SettingsFormComponents";
 import { ModelRouteFrame } from "./ModelRouteFrame";
 import { RegisteredModelRow } from "./RegisteredModelRow";
+import { deleteRegisteredModel } from "./modelManagementApi";
+import { registeredModels } from "./modelManagementUtils";
 import type { AppModelSummary } from "@/app/types.ts";
 
-export function ModelManagementPage({ models, onAdd, onEdit, onDelete, sectionId, title, showTokenCaption = true }: {
-  models: AppModelSummary[]; onAdd: () => void; onEdit?: (modelRef: string) => void;
-  onDelete: (model: AppModelSummary) => Promise<void>; sectionId: string; title: string; showTokenCaption?: boolean;
-}) {
+export function ModelManagementPage() {
   useAppLocale();
+  const modelCatalog = useButlerStore((state) => state.modelCatalog);
+  const setModelCatalog = useButlerStore((state) => state.setModelCatalog);
+  const openAdd = useSettingsUIStore((state) => state.openModelAdd);
+  const openEdit = useSettingsUIStore((state) => state.openModelEdit);
   const [busyModelRef, setBusyModelRef] = useState("");
   const copy = appCopy.settings.modelManagement;
+  const models = registeredModels(modelCatalog);
 
   async function remove(model: AppModelSummary) {
     setBusyModelRef(model.model_ref);
     try {
-      await onDelete(model);
+      const result = await deleteRegisteredModel(model);
+      setModelCatalog(result.catalog);
       notifyStatus(copy.deletedStatus(modelDisplayName(model)), {
         id: "model-delete",
         tone: "ok",
@@ -35,15 +42,15 @@ export function ModelManagementPage({ models, onAdd, onEdit, onDelete, sectionId
   }
 
   return (
-    <ModelRouteFrame title={title}>
+    <ModelRouteFrame title={copy.title}>
       <SettingsSection
-        id={sectionId}
+        id="registered-models"
         kind="list"
         title={copy.registeredTitle}
         state={models.length === 0 ? "empty" : "ready"}
         emptyMessage={copy.emptyRegistered}
         actions={
-          <Button type="button" onClick={onAdd} size="sm" variant="outline">
+          <Button type="button" onClick={openAdd} size="sm" variant="outline">
             <Plus size="md" /> {copy.addButton}
           </Button>
         }
@@ -52,9 +59,8 @@ export function ModelManagementPage({ models, onAdd, onEdit, onDelete, sectionId
           <RegisteredModelRow
             key={model.model_ref}
             model={model}
-            showTokenCaption={showTokenCaption}
             busy={busyModelRef === model.model_ref}
-            onEdit={onEdit ? () => onEdit(model.model_ref) : undefined}
+            onEdit={() => openEdit(model.model_ref)}
             onDelete={() => void remove(model)}
           />
         ))}

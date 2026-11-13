@@ -136,12 +136,7 @@ pub(super) fn record(
     catalog: &ModelCatalogSnapshot,
     clock: &dyn ModelConfigurationClock,
 ) -> Option<CredentialRecord> {
-    let provider = value.get("provider_id")?.as_str()?;
-    let provider_id = if provider == "custom-image" {
-        provider.to_owned()
-    } else {
-        hosted_provider(provider)?
-    };
+    let provider_id = hosted_provider(value.get("provider_id")?.as_str()?)?;
     if value.get("auth_type").and_then(Value::as_str) != Some("api_key") {
         return None;
     }
