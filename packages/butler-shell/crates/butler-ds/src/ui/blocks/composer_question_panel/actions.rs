@@ -185,6 +185,7 @@ impl View<'_> {
     pub(super) fn key_handler(&self) -> KeyHandler {
         let (model, ctx, leave) = (self.model.clone(), self.ctx.clone(), self.leave.clone());
         let run = self.ctx.callbacks.collapse.clone();
+        let placement = self.placement;
         Rc::new(move |event, _own, window, cx| {
             let modifiers = event.keystroke.modifiers;
             if ctx.busy || event.is_held || modifiers.alt || modifiers.control || modifiers.platform
@@ -194,7 +195,13 @@ impl View<'_> {
             let key = event.keystroke.key.as_str();
             if key == "escape" {
                 cx.stop_propagation();
-                leave_then(&leave, &run, cx);
+                if let Some(run) = &run {
+                    if placement == composer_panel::Placement::Conversation {
+                        run(window, cx);
+                    } else {
+                        leave_then(&leave, run, cx);
+                    }
+                }
                 return;
             }
             model.update(cx, |model, cx| {

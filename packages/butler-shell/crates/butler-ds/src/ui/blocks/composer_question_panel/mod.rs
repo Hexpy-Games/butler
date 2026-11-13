@@ -40,7 +40,7 @@ pub struct ComposerQuestionPanel {
     step: usize,
     on_submit: Submit,
     on_skip: Run,
-    on_collapse: Run,
+    on_collapse: Option<Run>,
     on_expand: Option<Run>,
     on_draft: Option<Draft>,
 }
@@ -63,7 +63,7 @@ impl ComposerQuestionPanel {
             step: 0,
             on_submit: Rc::new(on_submit),
             on_skip: Rc::new(|_, _| {}),
-            on_collapse: Rc::new(|_, _| {}),
+            on_collapse: None,
             on_expand: None,
             on_draft: None,
         }
@@ -105,9 +105,11 @@ impl ComposerQuestionPanel {
         self
     }
 
-    /// Answer later: runs after the panel has left.
+    /// Answer later. Unset: no Later button, Escape does nothing. In
+    /// `Placement::Conversation` the panel never collapses: Later runs at once
+    /// (no exit motion) and the caller keeps the panel open (ComposerQuestionPanel.tsx).
     pub fn on_collapse(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
-        self.on_collapse = Rc::new(handler);
+        self.on_collapse = Some(Rc::new(handler));
         self
     }
 
@@ -294,16 +296,23 @@ impl View<'_> {
         many: bool,
         ds: &Ds,
     ) -> AnyElement {
-        let later = {
-            let (leave, run) = (self.leave.clone(), self.ctx.callbacks.collapse.clone());
+        let later = self.ctx.callbacks.collapse.clone().map(|run| {
+            let leave = self.leave.clone();
+            let placement = self.placement;
             let mut button = IconButton::new((self.id.clone(), "later"), self.labels.later.clone())
                 .icon(icon(Icon::Clock3, IconSize::Md, ds))
-                .on_click(move |_, _, cx| leave_then(&leave, &run, cx));
+                .on_click(move |_, window, cx| {
+                    if placement == Placement::Conversation {
+                        run(window, cx);
+                    } else {
+                        leave_then(&leave, &run, cx);
+                    }
+                });
             if self.ctx.busy {
                 button = button.disabled();
             }
-            button
-        };
+            button.into_any_element()
+        });
         composer_panel::header(
             Subject {
                 icon: icon(Icon::ListChecks, IconSize::Sm, ds).into_any_element(),
@@ -312,7 +321,7 @@ impl View<'_> {
                     .weight(Weight::Medium)
                     .wrap(Wrap::Anywhere)
                     .into_any_element(),
-                aside: Some(later.into_any_element()),
+                aside: later,
                 tabbed: many,
                 has_body: true,
             },

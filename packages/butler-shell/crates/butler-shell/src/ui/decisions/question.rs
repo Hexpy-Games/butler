@@ -22,7 +22,6 @@ use crate::ui::source::wire::{
 /// The hook's `useState` / `useRef` values.
 #[derive(Default)]
 struct QuestionState {
-    collapsed: Option<String>,
     pending: Option<String>,
     failed: Option<String>,
     draft: Option<(String, Vec<Answer>, usize)>,
@@ -200,16 +199,9 @@ impl Request {
         let answers = answer_wire(&self.questions, answers);
         self.submit(QuestionAnswerBody::Answered { answers }, window, cx);
     }
-
-    fn set_collapsed(&self, value: String, cx: &mut App) {
-        self.state.update(cx, |state, cx| {
-            state.collapsed = Some(value);
-            cx.notify();
-        });
-    }
 }
 
-/// A question is waiting in this session, collapsed or not.
+/// `useComposerQuestion`: a question exists in this session.
 pub(super) fn question_pending(ctx: DecisionCtx<'_>) -> bool {
     ctx.view
         .pending_questions
@@ -217,8 +209,19 @@ pub(super) fn question_pending(ctx: DecisionCtx<'_>) -> bool {
         .is_some_and(|questions| !questions.is_empty())
 }
 
+/// `useComposerDecision.ts`: only the first request can block Send.
+pub(super) fn question_waiting(ctx: DecisionCtx<'_>) -> bool {
+    ctx.view
+        .pending_questions
+        .as_ref()
+        .and_then(|questions| questions.first())
+        .is_some_and(|question| {
+            question.question_state == PendingUserQuestionsQuestionState::Pending
+        })
+}
+
 /// The question panel (useComposerQuestion) in `placement`, in every state: `ConversationRequestPortal`
-/// shows it collapsed too. `None` when this session has nothing for it.
+/// keeps it open. `None` when this session has nothing for it.
 pub(crate) fn question_surface(
     ctx: DecisionCtx<'_>,
     placement: Placement,
@@ -233,7 +236,6 @@ pub(crate) fn question_surface(
     let key = format!("{session}:{}", pending.request_ref);
     let questions = &pending.questions.questions;
     let copy = QuestionCopy::get(cx);
-    let deferred = pending.question_state == PendingUserQuestionsQuestionState::Deferred;
     let request = Request {
         state: state.clone(),
         session,
@@ -241,51 +243,32 @@ pub(crate) fn question_surface(
         key: key.clone(),
         questions: Rc::new(questions.clone()),
     };
-    let current = state.read(cx);
-    let failed = current.failed.as_ref() == Some(&key);
-    let collapsed = current.collapsed.as_ref() == Some(&key)
-        || (deferred && current.collapsed.as_deref() != Some(format!("expanded:{key}").as_str()));
-    let panel_state = if current.pending.as_ref() == Some(&key) {
-        PanelState::Submitting
-    } else if failed {
-        PanelState::Error
-    } else if collapsed {
-        PanelState::Collapsed
-    } else {
-        PanelState::Open
-    };
-    let draft = current
-        .draft
-        .as_ref()
-        .filter(|(draft_key, _, _)| *draft_key == key)
-        .map(|(_, answers, step)| (answers.clone(), *step));
-    let (submit, skip, collapse, expand, track) = (
-        request.clone(),
-        request.clone(),
-        request.clone(),
-        request.clone(),
-        request,
-    );
+    let (panel_state, draft) = panel_snapshot(state.read(cx), &key);
+    let failed = panel_state == PanelState::Error;
+    let (submit, skip, collapse, track) =
+        (request.clone(), request.clone(), request.clone(), request);
     let mut panel = ComposerQuestionPanel::new(
         ElementId::from(SharedString::from(key.clone())),
         question_props(questions),
-        move |answers, window, cx| submit.answered(answers, window, cx),
+        move |answers, window, cx| {
+            submit.answered(answers, window, cx);
+        },
     )
     .placement(placement)
     .labels(copy.labels())
     .state(panel_state)
-    .on_skip(move |window, cx| skip.answered(&[], window, cx))
-    .on_collapse(move |window, cx| {
-        collapse.set_collapsed(collapse.key.clone(), cx);
-        if !deferred {
-            collapse.submit(QuestionAnswerBody::Deferred {}, window, cx);
-        }
+    .on_skip(move |window, cx| {
+        skip.answered(&[], window, cx);
     })
-    .on_expand(move |_, cx| expand.set_collapsed(format!("expanded:{}", expand.key), cx))
     .on_draft_change(move |answers, step, cx| {
         let draft = (track.key.clone(), answers.to_vec(), step);
         track.state.update(cx, |state, _| state.draft = Some(draft));
     });
+    if pending.question_state == PendingUserQuestionsQuestionState::Pending {
+        panel = panel.on_collapse(move |window, cx| {
+            collapse.submit(QuestionAnswerBody::Deferred {}, window, cx);
+        });
+    }
     if failed {
         panel = panel.error(copy.decision_failed);
     }
@@ -297,4 +280,21 @@ pub(crate) fn question_surface(
             .child(panel)
             .into_any_element(),
     )
+}
+
+/// `useComposerQuestion`: delivery state and the draft for this request.
+fn panel_snapshot(state: &QuestionState, key: &str) -> (PanelState, Option<(Vec<Answer>, usize)>) {
+    let panel_state = if state.pending.as_deref() == Some(key) {
+        PanelState::Submitting
+    } else if state.failed.as_deref() == Some(key) {
+        PanelState::Error
+    } else {
+        PanelState::Open
+    };
+    let draft = state
+        .draft
+        .as_ref()
+        .filter(|(draft_key, _, _)| draft_key == key)
+        .map(|(_, answers, step)| (answers.clone(), *step));
+    (panel_state, draft)
 }
