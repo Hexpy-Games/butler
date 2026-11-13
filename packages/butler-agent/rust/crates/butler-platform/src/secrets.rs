@@ -24,6 +24,8 @@ use zeroize::Zeroizing;
 use crate::secure_fs;
 
 mod file;
+mod sealed;
+pub use sealed::{seal_secret, sealed_available, unseal_secret};
 #[cfg(all(not(target_os = "macos"), feature = "test-support"))]
 mod test_file;
 #[cfg(feature = "test-support")]

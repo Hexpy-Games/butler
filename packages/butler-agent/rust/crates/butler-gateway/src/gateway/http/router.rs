@@ -362,6 +362,8 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/setup/chatgpt-account/sign-out", Handler::Setup),
     ("/setup/butler-vault", Handler::Setup),
     ("/setup/butler-vault/enable", Handler::Setup),
+    ("/setup/butler-vault/unlock", Handler::Setup),
+    ("/setup/butler-vault/password", Handler::Setup),
     ("/setup/butler-vault/decline", Handler::Setup),
     ("/setup/oauth/start", Handler::Setup),
     ("/setup/oauth/{id}", Handler::Setup),
