@@ -987,7 +987,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       },
     },
     imageTools: {
-      custom: "Custom", addCustom: "Add custom model", name: "Name", endpointUrl: "Endpoint URL", modelId: "Model ID", optionalApiKey: "API key (optional)", deleteModel: "Delete",
+      custom: "Custom", name: "Name", endpointUrl: "Endpoint URL", modelId: "Model ID", optionalApiKey: "API key (optional)",
       model: "Model", off: "Off", defaultQuality: "Default quality",
       quality: { low: "Low", medium: "Medium", high: "High", xhigh: "Very high", max: "Max" },
       size: "Size", qualityLabel: "Quality", prompt: "Prompt", default: "Default", edit: "Edit", download: "Download",
@@ -2376,6 +2376,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       },
     },
     modelManagement: {
+      imageTitle: "Image model management",
       title: "Model management",
       addTitle: "Add model",
       editTitle: "Edit model",

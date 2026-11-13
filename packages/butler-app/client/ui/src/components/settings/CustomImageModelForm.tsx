@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "@/app/api";
 import { appCopy } from "@/app/copy";
-import { notifyError } from "@/app/notifications";
+import { notifyError, notifyStatus } from "@/app/notifications";
 import { Button, ButtonContainer, Input, SettingsField } from "@/butler-ds";
 import type { ImageSettings } from "../images/imageApi";
 
@@ -20,7 +20,9 @@ export function CustomImageModelForm({ onCancel, onSaved }: {
       const settings = await api<ImageSettings>("/settings/image-model/custom", { method: "POST", body: JSON.stringify({
         display_name: name, api_base_url: endpoint, model_id: model, ...(key.trim() ? { api_key: key } : {}),
       }) });
-      setKey(""); onSaved(settings);
+      setKey("");
+      notifyStatus(appCopy.settings.modelManagement.registeredStatus(name), { tone: "ok" });
+      onSaved(settings);
     } catch (error) { notifyError(error, appCopy.settings.errors.saveFailed); }
     finally { setBusy(false); }
   };

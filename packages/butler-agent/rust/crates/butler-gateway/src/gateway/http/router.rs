@@ -238,7 +238,11 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/message-assets/masks", Handler::ImageModels),
     ("/settings/image-model", Handler::ImageModels),
     ("/settings/image-model/custom", Handler::ImageModels),
-    ("/settings/image-model/custom/{id}", Handler::ImageModels),
+    ("/settings/image-model/registered", Handler::ImageModels),
+    (
+        "/settings/image-model/registered/{model_ref}",
+        Handler::ImageModels,
+    ),
     ("/usage/images", Handler::ImageModels),
     ("/message-files", Handler::MessageUpload),
     ("/message-files/{id}", Handler::MessageFiles),

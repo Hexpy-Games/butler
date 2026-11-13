@@ -16,6 +16,14 @@ async fn xai_and_qwen_generate_and_edit_with_provider_wires() -> Result<(), Harn
                 )
                 .await?;
         assert_eq!(key.status, 201, "{}", key.text);
+        let registered =
+            f.s.gw
+                .post(
+                    "/settings/image-model/registered",
+                    json!({"model_ref":model,"credential_id":key.data()["credential"]["id"]}),
+                )
+                .await?;
+        assert_eq!(registered.status, 200, "{}", registered.text);
         let selected =
             f.s.gw
                 .send(
@@ -90,4 +98,94 @@ async fn xai_and_qwen_generate_and_edit_with_provider_wires() -> Result<(), Harn
         f.finish().await?;
     }
     Ok(())
+}
+
+#[tokio::test]
+async fn legacy_image_selection_is_registered_without_rewrite() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let image = ImageServer::start().await?;
+    let (url, script, chat) = stub::start().await?;
+    let mut s = Setup::new("IMAGE-LEGACY")?
+        .access(Access::Auto)
+        .stub_cassette(Cassette::load("TOOL-01")?)
+        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
+        .env("OPENAI_BASE_URL", format!("{}/v1", image.base))
+        .start()
+        .await?;
+    let key =
+        s.gw.post(
+            "/credentials",
+            json!({"provider_id":"openai","api_key":"legacy-image-key"}),
+        )
+        .await?;
+    assert_eq!(key.status, 201, "{}", key.text);
+    s.agent.terminate().await?;
+    let path = s.sandbox.data.join("butler.config.json");
+    let credential = key.data()["credential"]["id"].clone();
+    let before = tokio::task::spawn_blocking(move || {
+        let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
+        config["user"]["imageModel"] =
+            json!({"model_ref":"openai/gpt-image-2","credential_id":credential});
+        config["user"]
+            .as_object_mut()
+            .unwrap()
+            .remove("imageModels");
+        let bytes = serde_json::to_vec(&config)?;
+        std::fs::write(&path, &bytes)?;
+        Ok::<_, HarnessError>((path, bytes))
+    })
+    .await
+    .map_err(|e| HarnessError(e.to_string()))??;
+    s.gw = s.agent.start_again().await?;
+    let f = Fixture {
+        s,
+        script,
+        image,
+        chat,
+    };
+    let settings = f.s.gw.get("/settings/image-model").await?;
+    assert_eq!(settings.status, 200, "{}", settings.text);
+    assert_eq!(settings.data()["registered"], json!(["openai/gpt-image-2"]));
+    assert_eq!(
+        settings.data()["selected"]["model_ref"],
+        "openai/gpt-image-2"
+    );
+    assert_eq!(
+        settings.data()["selected"]["credential_id"],
+        key.data()["credential"]["id"]
+    );
+    assert_eq!(std::fs::read(before.0)?, before.1);
+    f.script(
+        "Legacy image",
+        vec![call(
+            "legacy-gen",
+            "generate_image",
+            &json!({"prompt":"A red kite"}),
+        )],
+    );
+    f.run("Legacy image").await?;
+    let generated = f.output("legacy-gen");
+    assert_eq!(generated["status"], "ok", "{generated}");
+    assert_eq!(
+        f.raw(&format!(
+            "/message-assets/{}",
+            generated["image"].as_str().unwrap()
+        ))
+        .await?,
+        f.image.bytes()
+    );
+    let cleared =
+        f.s.gw
+            .send(
+                reqwest::Method::PUT,
+                "/settings/image-model",
+                Some(json!({"selected":null}).to_string()),
+            )
+            .await?;
+    assert_eq!(cleared.status, 200, "{}", cleared.text);
+    let settings = f.s.gw.get("/settings/image-model").await?;
+    assert_eq!(settings.status, 200, "{}", settings.text);
+    assert!(settings.data()["selected"].is_null());
+    assert_eq!(settings.data()["registered"], json!(["openai/gpt-image-2"]));
+    f.finish().await
 }

@@ -16,10 +16,25 @@ async fn custom_openai_image_model_uses_vault_and_deletes_selection() -> Result<
             )
             .await?;
     assert_eq!(added.status, 200, "{}", added.text);
-    let model_ref = added.data()["selected"]["model_ref"]
+    assert_eq!(added.data()["selected"]["model_ref"], MODEL);
+    let model_ref = added.data()["registered"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r.as_str().is_some_and(|s| s.starts_with("custom-image/")))
+        .unwrap()
         .as_str()
         .unwrap()
         .to_owned();
+    let selected =
+        f.s.gw
+            .send(
+                reqwest::Method::PUT,
+                "/settings/image-model",
+                Some(json!({"model_ref":model_ref}).to_string()),
+            )
+            .await?;
+    assert_eq!(selected.status, 200, "{}", selected.text);
     f.script(
         "Draw custom kite",
         vec![call(
@@ -58,11 +73,17 @@ async fn custom_openai_image_model_uses_vault_and_deletes_selection() -> Result<
         f.s.gw
             .send(
                 reqwest::Method::DELETE,
-                &format!("/settings/image-model/custom/{id}"),
+                &format!("/settings/image-model/registered/custom-image%2F{id}"),
                 None,
             )
             .await?;
     assert_eq!(deleted.status, 200, "{}", deleted.text);
     assert!(deleted.data()["selected"].is_null());
+    assert!(
+        !deleted.data()["registered"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(model_ref))
+    );
     f.finish().await
 }

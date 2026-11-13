@@ -36,6 +36,62 @@ pub struct ResolvedImageModel {
     pub api_key: zeroize::Zeroizing<String>,
 }
 
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ImageModelRegistration {
+    model_ref: String,
+    credential_id: Option<String>,
+}
+
+pub(super) fn registered_image_models(
+    config: &Value,
+    catalog: &crate::models::ModelCatalogSnapshot,
+) -> Result<Vec<ImageModelRegistration>, ImageModelError> {
+    let mut entries: Vec<ImageModelRegistration> = config
+        .pointer("/user/imageModels")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(storage)?
+        .unwrap_or_default();
+    if let Some(selection) = config
+        .pointer("/user/imageModel")
+        .cloned()
+        .and_then(|v| serde_json::from_value::<ImageModelSelection>(v).ok())
+        && catalog
+            .image_output_models()
+            .iter()
+            .any(|m| m.model_ref == selection.model_ref)
+        && !entries.iter().any(|e| e.model_ref == selection.model_ref)
+    {
+        entries.push(ImageModelRegistration {
+            model_ref: selection.model_ref,
+            credential_id: selection.credential_id,
+        });
+    }
+    Ok(entries)
+}
+
+fn validate_credential(
+    read: &super::ModelConfigurationRead,
+    provider: &str,
+    id: Option<&str>,
+) -> Result<(), ImageModelError> {
+    if id == Some(CHATGPT_IMAGE_CREDENTIAL) {
+        return Err(invalid("image_model_requires_api_key"));
+    }
+    let view = read.catalog.view();
+    let key = view
+        .provider_credentials
+        .iter()
+        .find(|key| Some(key.id.as_str()) == id && key.provider_id == provider)
+        .ok_or_else(|| invalid("image_model_credential_invalid"))?;
+    if key.auth_type != ProviderAuthMethod::ApiKey {
+        return Err(invalid("image_model_requires_api_key"));
+    }
+    Ok(())
+}
+
 impl ModelConfiguration {
     pub async fn image_model_settings(&self) -> Result<Value, ImageModelError> {
         let read = self.read().await.map_err(storage)?;
@@ -47,6 +103,15 @@ impl ModelConfiguration {
         let account = self.chatgpt_account().await.map_err(storage)?;
         let has_account = account.status != super::chatgpt::ChatGptAccountStatus::SignedOut;
         let available = super::custom_image_models::models(&read)?;
+        let registrations = registered_image_models(&read.config, &read.catalog)?;
+        let registered = available
+            .iter()
+            .filter(|model| {
+                model.provider_id == "custom-image"
+                    || registrations.iter().any(|e| e.model_ref == model.model_ref)
+            })
+            .map(|model| &model.model_ref)
+            .collect::<Vec<_>>();
         let models = available.iter().filter_map(|model| {
             let capability = model.image_output.as_ref()?;
             let mut keys = credentials.iter().filter(|key| key.provider_id == model.provider_id && (model.provider_id != "custom-image" || model.credential_id.as_deref() == Some(key.id.as_str())))
@@ -68,6 +133,7 @@ impl ModelConfiguration {
             object.insert("provider_label".into(), json!(model.provider_label));
             object.insert("display_name".into(), json!(model.display_name));
             object.insert("credentials".into(), json!(keys));
+            object.insert("credential_id".into(), json!(registrations.iter().find(|e| e.model_ref == model.model_ref).and_then(|e| e.credential_id.as_ref()).or(model.credential_id.as_ref())));
             Some(value)
         }).collect::<Vec<_>>();
         let selected = read.config.pointer("/user/imageModel").cloned()
@@ -81,11 +147,12 @@ impl ModelConfiguration {
                 Some(json!({"model_ref":model.model_ref,"display_name":model.display_name,
                     "provider_id":model.provider_id,"credential_id":credential.map(|key| &key.id),"default_quality":quality}))
             });
-        Ok(json!({"selected":selected,"models":models}))
+        Ok(json!({"selected":selected,"models":models,"registered":registered}))
     }
 
     pub async fn set_image_model(&self, input: Value) -> Result<Value, ImageModelError> {
         let guard = self.configuration_writes.acquire_owned().await;
+        let read = self.read().await.map_err(storage)?;
         let selection = if input
             .as_object()
             .is_some_and(|o| o.len() == 1 && o.get("selected") == Some(&Value::Null))
@@ -94,7 +161,6 @@ impl ModelConfiguration {
         } else {
             let mut selection: ImageModelSelection =
                 serde_json::from_value(input).map_err(|_| invalid("image_model_unknown"))?;
-            let read = self.read().await.map_err(storage)?;
             let model = super::custom_image_models::models(&read)?
                 .into_iter()
                 .find(|model| model.model_ref == selection.model_ref)
@@ -105,22 +171,17 @@ impl ModelConfiguration {
             if model.provider_id == "custom-image" {
                 selection.credential_id = model.credential_id;
             } else {
-                if selection.credential_id.as_deref() == Some(CHATGPT_IMAGE_CREDENTIAL) {
-                    return Err(invalid("image_model_requires_api_key"));
-                }
-                let key = read
-                    .catalog
-                    .view()
-                    .provider_credentials
+                if !registered_image_models(&read.config, &read.catalog)?
                     .iter()
-                    .find(|key| {
-                        Some(key.id.as_str()) == selection.credential_id.as_deref()
-                            && key.provider_id == model.provider_id
-                    })
-                    .ok_or_else(|| invalid("image_model_credential_invalid"))?;
-                if key.auth_type != ProviderAuthMethod::ApiKey {
-                    return Err(invalid("image_model_requires_api_key"));
+                    .any(|e| e.model_ref == selection.model_ref)
+                {
+                    return Err(invalid("image_model_unknown"));
                 }
+                validate_credential(
+                    &read,
+                    &model.provider_id,
+                    selection.credential_id.as_deref(),
+                )?;
             }
             selection.default_quality = selection
                 .default_quality
@@ -136,9 +197,83 @@ impl ModelConfiguration {
             let _change = butler_core::configuration::lock_file(&path).map_err(storage)?;
             let mut config =
                 butler_core::configuration::read_json_object(&path).map_err(storage)?;
-            let object = butler_core::json::object_mut(&mut config);
-            butler_core::json::object_field_mut(object, "user")
-                .insert("imageModel".into(), json!(selection));
+            let registrations = registered_image_models(&config, &read.catalog)?;
+            let user = butler_core::json::object_field_mut(
+                butler_core::json::object_mut(&mut config),
+                "user",
+            );
+            user.insert("imageModels".into(), json!(registrations));
+            user.insert("imageModel".into(), json!(selection));
+            butler_core::configuration::write_json_atomic(&path, &config).map_err(storage)
+        })
+        .await
+        .map_err(storage)??;
+        self.image_model_settings().await
+    }
+
+    pub async fn register_image_model(&self, input: Value) -> Result<Value, ImageModelError> {
+        let registration: ImageModelRegistration =
+            serde_json::from_value(input).map_err(|_| invalid("image_model_unknown"))?;
+        let guard = self.configuration_writes.acquire_owned().await;
+        let read = self.read().await.map_err(storage)?;
+        let model = read
+            .catalog
+            .image_output_models()
+            .into_iter()
+            .find(|m| m.model_ref == registration.model_ref)
+            .ok_or_else(|| invalid("image_model_unknown"))?;
+        validate_credential(
+            &read,
+            &model.provider_id,
+            registration.credential_id.as_deref(),
+        )?;
+        let path = self.data_root.join("butler.config.json");
+        tokio::task::spawn_blocking(move || {
+            let _guard = guard;
+            let _lock = butler_core::configuration::lock_file(&path).map_err(storage)?;
+            let mut config =
+                butler_core::configuration::read_json_object(&path).map_err(storage)?;
+            let mut entries = registered_image_models(&config, &read.catalog)?;
+            entries.retain(|e| e.model_ref != registration.model_ref);
+            entries.push(registration);
+            butler_core::json::object_field_mut(butler_core::json::object_mut(&mut config), "user")
+                .insert("imageModels".into(), json!(entries));
+            butler_core::configuration::write_json_atomic(&path, &config).map_err(storage)
+        })
+        .await
+        .map_err(storage)??;
+        self.image_model_settings().await
+    }
+
+    pub async fn unregister_image_model(
+        &self,
+        model_ref: String,
+    ) -> Result<Value, ImageModelError> {
+        if let Some(id) = model_ref.strip_prefix("custom-image/") {
+            return self.delete_custom_image_model(id.to_owned()).await;
+        }
+        let guard = self.configuration_writes.acquire_owned().await;
+        let read = self.read().await.map_err(storage)?;
+        let path = self.data_root.join("butler.config.json");
+        tokio::task::spawn_blocking(move || {
+            let _guard = guard;
+            let _lock = butler_core::configuration::lock_file(&path).map_err(storage)?;
+            let mut config =
+                butler_core::configuration::read_json_object(&path).map_err(storage)?;
+            let mut entries = registered_image_models(&config, &read.catalog)?;
+            entries.retain(|e| e.model_ref != model_ref);
+            let selected = config
+                .pointer("/user/imageModel/model_ref")
+                .and_then(Value::as_str)
+                == Some(model_ref.as_str());
+            let user = butler_core::json::object_field_mut(
+                butler_core::json::object_mut(&mut config),
+                "user",
+            );
+            user.insert("imageModels".into(), json!(entries));
+            if selected {
+                user.insert("imageModel".into(), Value::Null);
+            }
             butler_core::configuration::write_json_atomic(&path, &config).map_err(storage)
         })
         .await

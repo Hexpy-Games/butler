@@ -37,14 +37,26 @@ impl AppModelCatalog {
             .map_err(image_model_error)
     }
 
-    pub(super) async fn delete_custom_image_model(
+    pub(super) async fn register_image_model(
+        &self,
+        value: Value,
+    ) -> Result<Value, GatewayApplicationError> {
+        self.validate_model_files()?;
+        self.validated_root()?;
+        self.configuration
+            .register_image_model(value)
+            .await
+            .map_err(image_model_error)
+    }
+
+    pub(super) async fn unregister_image_model(
         &self,
         id: String,
     ) -> Result<Value, GatewayApplicationError> {
         self.validate_model_files()?;
         self.validated_root()?;
         self.configuration
-            .delete_custom_image_model(id)
+            .unregister_image_model(id)
             .await
             .map_err(image_model_error)
     }

@@ -142,13 +142,8 @@ impl ModelConfiguration {
                 butler_core::configuration::read_json_object(&path).map_err(storage)?;
             let mut models = entries(&config)?;
             let selection = if let Some(entry) = entry {
-                let selected = json!({
-                    "model_ref": format!("custom-image/{}", entry.id),
-                    "credential_id": entry.credential_id,
-                    "default_quality": null,
-                });
                 models.push(entry);
-                Some(selected)
+                None
             } else {
                 models.retain(|entry| entry.id != id);
                 (config

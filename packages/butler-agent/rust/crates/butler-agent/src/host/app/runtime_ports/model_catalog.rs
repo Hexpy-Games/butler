@@ -51,8 +51,11 @@ impl AppModelCatalog {
             AppModelCatalogCommand::AddCustomImageModel(value) => {
                 self.add_custom_image_model(value).await
             }
-            AppModelCatalogCommand::DeleteCustomImageModel(id) => {
-                self.delete_custom_image_model(id).await
+            AppModelCatalogCommand::RegisterImageModel(value) => {
+                self.register_image_model(value).await
+            }
+            AppModelCatalogCommand::UnregisterImageModel(id) => {
+                self.unregister_image_model(id).await
             }
             AppModelCatalogCommand::Read => {
                 self.validate_model_files()?;

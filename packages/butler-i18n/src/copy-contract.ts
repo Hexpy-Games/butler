@@ -302,7 +302,7 @@ interface ConversationCopy {
     };
   };
   imageTools: {
-    custom: string; addCustom: string; name: string; endpointUrl: string; modelId: string; optionalApiKey: string; deleteModel: string;
+    custom: string; name: string; endpointUrl: string; modelId: string; optionalApiKey: string;
     model: string; off: string; defaultQuality: string;
     quality: Record<"low" | "medium" | "high" | "xhigh" | "max", string>;
     size: string; qualityLabel: string; prompt: string; default: string; edit: string; download: string;
@@ -2026,6 +2026,7 @@ export interface AppCopy {
       };
     };
     modelManagement: {
+      imageTitle: string;
       title: string;
       addTitle: string;
       editTitle: string;

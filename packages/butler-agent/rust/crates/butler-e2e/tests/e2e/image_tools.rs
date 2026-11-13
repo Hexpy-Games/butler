@@ -59,6 +59,13 @@ impl Fixture {
         } else {
             MODEL
         };
+        let registered =
+            s.gw.post(
+                "/settings/image-model/registered",
+                json!({"model_ref":model,"credential_id":key.data()["credential"]["id"]}),
+            )
+            .await?;
+        assert_eq!(registered.status, 200, "{}", registered.text);
         let selected =
             s.gw.send(
                 reqwest::Method::PUT,

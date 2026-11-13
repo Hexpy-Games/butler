@@ -25,11 +25,16 @@ pub(super) async fn route(
             })?;
             catalog(&state, AppModelCatalogCommand::AddCustomImageModel(input)).await?
         }
-        (&Method::DELETE, path) if path.starts_with("/settings/image-model/custom/") => {
-            let id = path
-                .trim_start_matches("/settings/image-model/custom/")
-                .to_owned();
-            catalog(&state, AppModelCatalogCommand::DeleteCustomImageModel(id)).await?
+        (&Method::POST, "/settings/image-model/registered") => {
+            let bytes = read_body_with_limit(request.into_body(), 64 * 1024).await?;
+            let input = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+            catalog(&state, AppModelCatalogCommand::RegisterImageModel(input)).await?
+        }
+        (&Method::DELETE, path) if path.starts_with("/settings/image-model/registered/") => {
+            let id = subsessions::decode_component(
+                path.trim_start_matches("/settings/image-model/registered/"),
+            )?;
+            catalog(&state, AppModelCatalogCommand::UnregisterImageModel(id)).await?
         }
         (&Method::GET, "/usage/images") => {
             let days = params::query(&uri)
