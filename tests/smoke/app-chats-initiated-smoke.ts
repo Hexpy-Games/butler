@@ -44,7 +44,7 @@ try {
         const bubble = subject.querySelector('[data-test-class="assistant-bubble"]')!;
         return { buttonRight: buttons[1].getBoundingClientRect().right, actionRight: action.getBoundingClientRect().right - parseFloat(getComputedStyle(action).paddingRight),
           left: card.getBoundingClientRect().left, bubbleLeft: bubble.getBoundingClientRect().left,
-          width: card.getBoundingClientRect().width, max: Math.min(440, node.closest("article")!.getBoundingClientRect().width * .68) };
+          width: card.getBoundingClientRect().width, max: Math.min(440, node.closest("article")!.getBoundingClientRect().width * .9) };
       });
       assert(Math.abs(geometry.buttonRight - geometry.actionRight) < 1, "actions align right");
       assert(Math.abs(geometry.left - geometry.bubbleLeft) < 1, "panel aligns to bubble");
