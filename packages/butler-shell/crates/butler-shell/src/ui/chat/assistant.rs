@@ -73,7 +73,17 @@ pub(crate) fn assistant_message(
     let mut parts = vec![body];
     let running = t.live_message == Some(msg.id.as_str())
         || matches!(msg.status.as_deref(), Some("streaming" | "pending"));
-    if !running {
+    // In 대화 a reply with no text is its Steward work card; its footer waits for the card.
+    let awaiting_work_card = is_general_chat(msg.chat_id.as_deref())
+        && msg.text.trim().is_empty()
+        && !steward
+        && msg.work_blocks.iter().flatten().any(|block| {
+            block
+                .rows
+                .iter()
+                .any(|row| row.safe_tool_name.as_deref() == Some("delegate_to_steward"))
+        });
+    if !running && !awaiting_work_card {
         parts.extend(response_footer(msg, t, steward, window, cx));
     }
     parts

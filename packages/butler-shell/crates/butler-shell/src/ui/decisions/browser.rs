@@ -10,7 +10,7 @@ use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::toast::{self, Toast};
 use butler_ds::ui::typo::Typo;
 use gpui::{AnyElement, App, IntoElement as _, SharedString, Window};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::DecisionCtx;
 use crate::ui::i18n::browser_handoff::BrowserHandoff;
@@ -77,14 +77,29 @@ fn handoff_view(request: &Value, lang: Lang, copy: &BrowserHandoff) -> Option<Ha
     }
 }
 
-/// `handoff.onStop` (`cancelActiveTurn`): cancels the session's running turn.
-fn stop(turn: Option<String>, cx: &mut App) {
-    let Some(turn) = turn else {
-        return;
+#[derive(Clone)]
+enum Stop {
+    Child { relation: String, parent: String },
+    Turn(Option<String>),
+}
+
+/// Stop ends the work that raised the request: a delegated task's waiting turn, or this conversation's own.
+fn stop(target: Stop, cx: &mut App) {
+    let copy = BrowserHandoff::get(cx);
+    let failed = match &target {
+        Stop::Child { .. } => copy.steward_stop_failed,
+        Stop::Turn(None) => return,
+        Stop::Turn(Some(_)) => copy.stop_failed,
     };
-    let failed = BrowserHandoff::get(cx).stop_failed;
     let done = Jobs::run(cx, move |client| async move {
-        client.cancel_turn(&turn).await.is_ok()
+        match target {
+            Stop::Child { relation, parent } => client
+                .cancel_steward(&relation, &json!({"parent_session_id": parent}))
+                .await
+                .is_ok(),
+            Stop::Turn(Some(turn)) => client.cancel_turn(&turn).await.is_ok(),
+            Stop::Turn(None) => false,
+        }
     });
     cx.spawn(async move |cx| {
         if !done.await.unwrap_or(false) {
@@ -106,6 +121,20 @@ pub(crate) fn browser_surface(
     let copy = BrowserHandoff::get(cx);
     let handoff = handoff_view(request, Ds::get(cx).lang(), copy)?;
     let turn = ctx.view.active_turn.as_ref().map(|turn| turn.id.clone());
+    let target = request
+        .get("source_session_id")
+        .and_then(Value::as_str)
+        .and_then(|source| {
+            ctx.view
+                .steward_children
+                .iter()
+                .flatten()
+                .find(|child| child.session_id == source)
+        })
+        .map_or(Stop::Turn(turn), |child| Stop::Child {
+            relation: child.relation.relation_id.clone(),
+            parent: ctx.view.session_id.clone(),
+        });
     let reference = request
         .get("request_ref")
         .and_then(Value::as_str)
@@ -125,7 +154,7 @@ pub(crate) fn browser_surface(
     .details(handoff.details.into_iter().map(Detail::line))
     .action(
         Action::new(copy.stop, Variant::Secondary, move |_, cx| {
-            stop(turn.clone(), cx);
+            stop(target.clone(), cx);
         })
         .icon(Icon::Square),
     );

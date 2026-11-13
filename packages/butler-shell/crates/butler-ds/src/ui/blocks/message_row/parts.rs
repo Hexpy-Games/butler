@@ -354,7 +354,7 @@ impl RenderOnce for MessageBubble {
             .text_color(ds.color(Color::TextPrimary))
             .font_weight(gpui::FontWeight(ds.number(Number::FontWeightRegular)))
             .children(self.children);
-        super::bubble_cap(bubble, false, false)
+        super::bubble_cap(bubble, super::BUTLER_BUBBLE_SHARE, false, false)
     }
 }
 
@@ -392,7 +392,7 @@ impl RenderOnce for MessageBubbleAttachments {
             .gap(Ds::get(cx).len(Length::SpaceLg))
             .min_w_0()
             .children(self.children);
-        super::bubble_cap(column, true, false)
+        super::bubble_cap(column, super::BUTLER_BUBBLE_SHARE, true, false)
     }
 }
 

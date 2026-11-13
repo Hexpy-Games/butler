@@ -9,7 +9,7 @@ use gpui::{
     RenderOnce, SharedString, Styled as _, Window, div, point, px,
 };
 
-use super::message_row::{bubble_cap, enter};
+use super::message_row::{USER_BUBBLE_SHARE, bubble_cap, enter};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
 use crate::ui::Icon;
 use crate::ui::blocks::measure;
@@ -251,7 +251,7 @@ impl RenderOnce for QueuedMessage {
             .gap(ds.len(Length::Space1))
             .pb(ds.len(Length::SpaceLg))
             .child(status)
-            .child(bubble_cap(bubble, false, true))
+            .child(bubble_cap(bubble, USER_BUBBLE_SHARE, false, true))
             .child(controls);
         match progress {
             Some((value, timing)) => value

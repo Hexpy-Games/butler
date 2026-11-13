@@ -74,7 +74,7 @@ pub(super) struct Words {
     /// canon.mcp.trustNotice
     pub(super) trust_notice: fn(&str) -> String,
     /// canon.mcp.capabilities
-    pub(super) capabilities: [(&'static str, &'static str); 5],
+    pub(super) capabilities: [(&'static str, &'static str); 9],
     /// canon.mcp.allow
     pub(super) allow: &'static str,
     /// canon.mcp.deny
@@ -146,7 +146,11 @@ static KO: Words = Words {
         ("canon.read", "계획·과제·명세 읽기"),
         ("canon.epic.status", "과제 상태 바꾸기"),
         ("canon.epic.comment", "과제에 댓글 달기"),
-        ("canon.epic.create", "백로그에 과제 만들기"),
+        ("canon.epic.create", "과제 만들기"),
+        ("canon.plan.create", "계획 만들기"),
+        ("canon.epic.edit", "과제 내용·태그 고치기, 옮기기"),
+        ("canon.plan.edit", "계획 고치기"),
+        ("canon.tag.create", "태그 만들기"),
         ("canon.spec.propose", "명세 변경 제안"),
     ],
     allow: "허용",
@@ -218,7 +222,11 @@ static EN: Words = Words {
         ("canon.read", "Read Plans, Epics and Specs"),
         ("canon.epic.status", "Change Epic status"),
         ("canon.epic.comment", "Comment on Epics"),
-        ("canon.epic.create", "Create backlog Epics"),
+        ("canon.epic.create", "Create Epics"),
+        ("canon.plan.create", "Create Plans"),
+        ("canon.epic.edit", "Edit, tag and move Epics"),
+        ("canon.plan.edit", "Edit Plans"),
+        ("canon.tag.create", "Create Tags"),
         ("canon.spec.propose", "Propose Spec changes"),
     ],
     allow: "Allow",

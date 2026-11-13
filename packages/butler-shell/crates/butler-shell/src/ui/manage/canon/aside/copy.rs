@@ -80,6 +80,8 @@ pub(super) struct Words {
     pub(super) deny: &'static str,
     /// canon.mcp.createdActivity
     pub(super) created_activity: &'static str,
+    /// canon.mcp.editedActivity
+    pub(super) edited_activity: &'static str,
     /// canon.mcp.appliedActivity
     pub(super) applied_activity: &'static str,
     /// canon.mcp.declinedActivity
@@ -232,6 +234,7 @@ static KO: Words = Words {
     apply: "반영",
     deny: "거절",
     created_activity: "과제를 만들었습니다",
+    edited_activity: "과제를 고쳤습니다",
     applied_activity: "명세 변경 반영",
     declined_activity: "명세 변경 거절",
     delete: "과제 삭제",
@@ -305,6 +308,7 @@ static EN: Words = Words {
     apply: "Apply",
     deny: "Deny",
     created_activity: "Epic created",
+    edited_activity: "Epic edited",
     applied_activity: "Spec change applied",
     declined_activity: "Spec change declined",
     delete: "Delete Epic",

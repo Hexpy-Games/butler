@@ -89,6 +89,16 @@ fn describe(row: &CanonActivity, words: &Words) -> String {
         "criterion_confirmed" => (words.criterion_activity)(&row.summary, true),
         "criterion_unconfirmed" => (words.criterion_activity)(&row.summary, false),
         "created" => words.created_activity.to_owned(),
+        "edited" => words.edited_activity.to_owned(),
+        "moved" => format!(
+            "{} → {}",
+            words.plan,
+            if row.summary.is_empty() {
+                words.backlog
+            } else {
+                &row.summary
+            }
+        ),
         "comment" => row.body.clone().unwrap_or_else(|| row.summary.clone()),
         "proposal_opened" => format!("{} · {}", words.proposal, row.summary),
         "proposal_applied" => words.applied_activity.to_owned(),
@@ -103,6 +113,8 @@ fn glyph(kind: &str) -> Icon {
         "comment" => Icon::MessageSquare,
         "status" => Icon::ArrowRight,
         "created" => Icon::Plus,
+        "edited" => Icon::Pencil,
+        "moved" => Icon::Flag,
         "criterion_confirmed" | "proposal_applied" => Icon::CheckIcon,
         "criterion_unconfirmed" => Icon::Circle,
         "proposal_opened" => Icon::FileText,

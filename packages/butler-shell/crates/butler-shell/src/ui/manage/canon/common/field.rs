@@ -4,17 +4,18 @@ use butler_ds::ui::field::{Field, FieldLabel};
 use butler_ds::ui::layout::{Space, Stack};
 use gpui::AppContext as _;
 use gpui::{
-    AnyWindowHandle, Context, Entity, IntoElement, ParentElement as _, Render, SharedString,
-    Styled as _, Subscription, Window, div,
+    Context, Entity, IntoElement, ParentElement as _, Render, SharedString, Styled as _,
+    Subscription, Window, div,
 };
 
 use super::chooser::{Props, chooser};
 use super::copy::words;
-use super::manage::{TagAction, TagManage, TagManageEvent};
+use super::editor::{TagEditor, TagEditorEvent};
+use super::manage::TagAction;
 use super::tags::tag_list;
 use super::{CanonTags, OnTags, RemoveTag};
 use crate::ui::manage::{ManageCtx, Pick};
-use crate::ui::source::wire::{CanonTag, CanonTagColor, CanonTagCreateInput, EpicTag};
+use crate::ui::source::wire::{CanonTag, EpicTag};
 use crate::ui::widgets::anchor;
 
 /// `CanonTagsField`. `value` holds tag ids; a field built with `row` is a property row, whose
@@ -25,8 +26,9 @@ pub(crate) struct TagsField {
     disabled: bool,
     row: bool,
     tags: Entity<CanonTags>,
-    busy: bool,
-    manage: Option<(Entity<TagManage>, Subscription)>,
+    editor: Entity<TagEditor>,
+    _editor: Subscription,
+    _events: Subscription,
     _tags: Subscription,
 }
 
@@ -39,19 +41,45 @@ impl TagsField {
         on_change: OnTags,
         disabled: bool,
         row: bool,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let tags = cx.new(|cx| CanonTags::new(project, &ctx.live, cx));
         let subscription = cx.observe(&tags, |_, _, cx| cx.notify());
+        let editor = cx.new(|_| TagEditor::new(tags.clone()));
+        let observe = cx.observe(&editor, |_, _, cx| cx.notify());
+        let events = cx.subscribe_in(&editor, window, |this, _, event, window, cx| match event {
+            TagEditorEvent::Created(tag) => {
+                let id = SharedString::from(tag.tag.id.clone());
+                let mut ids: Vec<_> = this
+                    .value
+                    .iter()
+                    .filter(|item| **item != id)
+                    .cloned()
+                    .collect();
+                ids.push(id);
+                this.change(ids, window, cx);
+            }
+            TagEditorEvent::Deleted(id) if !this.row => {
+                let ids = this
+                    .value
+                    .iter()
+                    .filter(|item| *item != id)
+                    .cloned()
+                    .collect();
+                this.change(ids, window, cx);
+            }
+            TagEditorEvent::Deleted(_) => {}
+        });
         Self {
             value,
             on_change,
             disabled,
             row,
             tags,
-            busy: false,
-            manage: None,
+            editor,
+            _editor: observe,
+            _events: events,
             _tags: subscription,
         }
     }
@@ -78,88 +106,6 @@ impl TagsField {
         (self.on_change)(ids, window, cx);
     }
 
-    /// `create`: a new tag starts blue and is chosen; one that is new then opens its colour
-    /// swatches. An existing tag with the same name is chosen as it is.
-    fn create(&mut self, name: &SharedString, window: &mut Window, cx: &mut Context<Self>) {
-        if self.busy || self.disabled {
-            return;
-        }
-        self.busy = true;
-        cx.notify();
-        let (me, handle): (_, AnyWindowHandle) = (cx.entity().downgrade(), window.window_handle());
-        let input = CanonTagCreateInput {
-            name: name.to_string(),
-            color: CanonTagColor::Blue,
-        };
-        self.tags.update(cx, |tags, cx| {
-            tags.create(
-                input,
-                Box::new(move |tag, cx| {
-                    let _ = handle.update(cx, |_, window, cx| {
-                        let _ = me.update(cx, |this, cx| this.created(tag, window, cx));
-                    });
-                }),
-                cx,
-            );
-        });
-    }
-
-    /// The create answered. A tag the list did not hold yet is new (the list is read again
-    /// after a create, so it is not in it before that read lands).
-    fn created(&mut self, tag: Option<CanonTag>, window: &mut Window, cx: &mut Context<Self>) {
-        self.busy = false;
-        cx.notify();
-        let Some(tag) = tag else { return };
-        let new = !self
-            .tags
-            .read(cx)
-            .tags()
-            .iter()
-            .any(|item| item.tag.id == tag.tag.id);
-        let id = SharedString::from(tag.tag.id.clone());
-        let mut ids: Vec<SharedString> = self
-            .value
-            .iter()
-            .filter(|item| **item != id)
-            .cloned()
-            .collect();
-        ids.push(id);
-        self.change(ids, window, cx);
-        if new {
-            self.open(tag, TagAction::Color, window, cx);
-        }
-    }
-
-    fn open(
-        &mut self,
-        tag: CanonTag,
-        action: TagAction,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let tags = self.tags.clone();
-        let dialog = cx.new(|cx| TagManage::new(tags, tag, action, cx));
-        let subscription = cx.subscribe_in(&dialog, window, |this, _, event, window, cx| {
-            match event {
-                TagManageEvent::Closed => this.manage = None,
-                TagManageEvent::Deleted(id) => {
-                    if !this.row {
-                        let ids = this
-                            .value
-                            .iter()
-                            .filter(|item| *item != id)
-                            .cloned()
-                            .collect();
-                        this.change(ids, window, cx);
-                    }
-                }
-            }
-            cx.notify();
-        });
-        self.manage = Some((dialog, subscription));
-        cx.notify();
-    }
-
     /// The chooser's callbacks: change, create and manage.
     fn handlers(cx: &Context<Self>) -> (OnTags, Pick<SharedString>, Pick<(CanonTag, TagAction)>) {
         let me = cx.entity().downgrade();
@@ -172,12 +118,20 @@ impl TagsField {
         let on_create: Pick<SharedString> = {
             let me = me.clone();
             std::rc::Rc::new(move |name, window, cx| {
-                let _ = me.update(cx, |this, cx| this.create(&name, window, cx));
+                let _ = me.update(cx, |this, cx| {
+                    if !this.disabled {
+                        this.editor
+                            .update(cx, |editor, cx| editor.create(&name, window, cx));
+                    }
+                });
             })
         };
         let on_manage: Pick<(CanonTag, TagAction)> =
             std::rc::Rc::new(move |(tag, action), window, cx| {
-                let _ = me.update(cx, |this, cx| this.open(tag, action, window, cx));
+                let _ = me.update(cx, |this, cx| {
+                    this.editor
+                        .update(cx, |editor, cx| editor.open(tag, action, window, cx));
+                });
             });
         (on_change, on_create, on_manage)
     }
@@ -217,7 +171,7 @@ impl Render for TagsField {
         let copy = words(Ds::get(cx).lang());
         let selected = self.selected(cx);
         let (on_change, on_create, on_manage) = Self::handlers(cx);
-        let busy = self.disabled || self.busy;
+        let busy = self.disabled || self.editor.read(cx).busy();
         let chips = self.row.then(|| {
             if selected.is_empty() {
                 div().child(copy.none).into_any_element()
@@ -238,7 +192,7 @@ impl Render for TagsField {
             end: self.row,
         };
         let picker = chooser(props, window, cx);
-        let dialog = self.manage.as_ref().map(|(dialog, _)| dialog.clone());
+        let dialog = self.editor.read(cx).dialog();
         if self.row {
             return anchor(div(), "canon-tags-field")
                 .min_w_0()

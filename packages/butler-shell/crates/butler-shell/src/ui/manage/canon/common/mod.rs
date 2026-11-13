@@ -12,6 +12,7 @@ use crate::ui::source::wire::CanonTag;
 
 mod chooser;
 mod copy;
+mod editor;
 mod field;
 mod form;
 mod manage;

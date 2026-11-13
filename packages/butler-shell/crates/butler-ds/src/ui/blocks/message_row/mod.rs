@@ -19,10 +19,11 @@ use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
 use crate::ui::context::{Ds, Lang, keep_words};
 use crate::ui::motion::Props;
 
-/// The widest a user or answer bubble gets: `min(440px, 68%)` of the row
+/// The widest bubbles get: user `min(440px, 68%)`, Butler `min(440px, 90%)` of the row
 /// (`--message-bubble-max-width`).
 const BUBBLE_MAX: f32 = 440.;
-const BUBBLE_SHARE: f32 = 0.68;
+pub(crate) const USER_BUBBLE_SHARE: f32 = 0.68;
+const BUTLER_BUBBLE_SHARE: f32 = 0.90;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {
@@ -52,15 +53,15 @@ pub enum Entering {
     Delivered,
 }
 
-/// `child` capped at `min(440px, 68%)` of its container: `wide` makes it that wide, else it
-/// shrinks to its content up to the cap; `end` puts it against the end edge when the cap leaves
-/// room. (CSS takes the minimum of a length and a percentage; gpui has one maximum per box, so
-/// two nested boxes cap by the share and by the length.)
-pub(crate) fn bubble_cap(child: impl IntoElement, wide: bool, end: bool) -> AnyElement {
-    let mut outer = div().flex().min_w_0().max_w(relative(BUBBLE_SHARE));
+/// `child` capped at `min(440px, share)` of its container (user 68%, Butler 90%): `wide` makes
+/// it that wide, else it shrinks to its content up to the cap; `end` puts it against the end
+/// edge when the cap leaves room. (CSS takes the minimum of a length and a percentage; gpui has
+/// one maximum per box, so two nested boxes cap by the share and by the length.)
+pub(crate) fn bubble_cap(child: impl IntoElement, share: f32, wide: bool, end: bool) -> AnyElement {
+    let mut outer = div().flex().min_w_0().max_w(relative(share));
     let mut inner = div().min_w_0().max_w(px(BUBBLE_MAX));
     if wide {
-        outer = outer.w(relative(BUBBLE_SHARE));
+        outer = outer.w(relative(share));
         inner = inner.w_full();
     }
     if end {
@@ -191,7 +192,7 @@ impl MessageRow {
         match self.role {
             Role::User => {
                 let bubble = self.user_bubble(children, window, cx);
-                bubble_cap(bubble, false, true)
+                bubble_cap(bubble, USER_BUBBLE_SHARE, false, true)
             }
             Role::Assistant => {
                 let top = if self.activity || self.grouped {
