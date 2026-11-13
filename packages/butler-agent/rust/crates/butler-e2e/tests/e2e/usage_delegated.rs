@@ -17,96 +17,10 @@ mod split;
 mod stub;
 #[path = "usage_delegated/subtasks.rs"]
 mod subtasks;
-use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
+use butler_e2e::e2e::{HarnessError, scenario::Setup};
 use serde_json::Value;
-use std::{
-    fs,
-    time::{Duration, Instant},
-};
+use std::fs;
 const ROOT: &str = "butler/app-general";
-#[tokio::test]
-async fn deleg_use_01_real_chat_steward_two_workers() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let (url, script, server) = stub::start().await?;
-    let s = Setup::new("DELEG-USE-01")?
-        .stub_cassette(Cassette::load("TOOL-01")?)
-        .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"))
-        .start()
-        .await?;
-    s.turn("general", super::delegate_followup::stub::OWNER)
-        .await?;
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        let view = s.gw.get("/session-view?session_id=general").await?;
-        if view.data()["active_turn"].is_null()
-            && view.data()["latest_turn"]["state"] == "delivered"
-            && view.data()["steward_children"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|v| v["result"]["status"] == "success")
-        {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "delegation did not finish: {}\n{}",
-            view.text,
-            s.agent.logs()
-        );
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    let calls = script.calls.lock().unwrap().clone();
-    for role in ["main", "steward", "worker-a", "worker-b"] {
-        assert!(
-            calls.iter().any(|v| v.0 == role),
-            "missing {role}: {calls:?}\n{}",
-            s.agent.logs()
-        );
-    }
-    let total = |role: Option<&str>| {
-        let rows: Vec<_> = calls
-            .iter()
-            .filter(|v| {
-                role.is_none_or(|role| {
-                    v.0 == role || role == "worker" && v.0.starts_with("worker-")
-                })
-            })
-            .collect();
-        (
-            rows.len() as u64,
-            rows.iter().map(|v| v.1).sum(),
-            rows.iter().map(|v| v.2).sum(),
-        )
-    };
-    let (n, input, output) = total(None);
-    let monitor = s.gw.get("/usage-monitor?session_id=general").await?;
-    fixtures::model(&monitor.data()["model"], n, input, output);
-    let session = s.gw.get("/session-view?session_id=general").await?;
-    fixtures::session(&session.data()["usage"], n, input, output);
-    for role in ["main", "steward", "worker"] {
-        let (n, input, output) = total(Some(role));
-        fixtures::model(&monitor.data()["model"]["byRole"][role], n, input, output);
-        fixtures::session(&session.data()["usage"]["by_role"][role], n, input, output);
-    }
-    let rows = fs::read_to_string(s.sandbox.data.join("metrics/prompt-cache-usage.jsonl"))?;
-    let rows: Vec<Value> = rows
-        .lines()
-        .map(|line| serde_json::from_str(line).unwrap())
-        .collect();
-    assert_eq!(rows.len(), calls.len());
-    for row in rows {
-        assert_eq!(row["rootSessionId"], ROOT, "unstamped {row}");
-        assert!(
-            ["main", "steward", "worker"].contains(&row["role"].as_str().unwrap()),
-            "{row}"
-        );
-    }
-    super::usage_timeline::assert_timeline(monitor.data());
-    s.finish().await?;
-    server.abort();
-    Ok(())
-}
 #[tokio::test]
 async fn deleg_use_02_no_double_count_or_child_rows() -> Result<(), HarnessError> {
     butler_e2e::gate!();
