@@ -17,7 +17,7 @@ use crate::ui::settings::sections::normalize;
 use crate::ui::settings::{SettingsEvent, SettingsView};
 
 /// `textSizeFactor` (app/textSize.ts).
-pub(super) fn text_scale(value: &str) -> Option<f32> {
+pub(crate) fn text_scale(value: &str) -> Option<f32> {
     match value {
         "default" => Some(1.),
         "large" => Some(1.15),
@@ -96,6 +96,47 @@ impl Shell {
             }
             SettingsEvent::Open(_) => {}
         }
+    }
+
+    fn merge_text_settings(&mut self, patch: &Value, cx: &mut Context<Self>) {
+        let mut merged = self
+            .settings_raw
+            .as_deref()
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        if let (Some(base), Some(patch)) = (merged.as_object_mut(), patch.as_object()) {
+            base.extend(patch.clone());
+        }
+        self.apply_settings(&Rc::new(merged), cx);
+    }
+
+    pub(super) fn save_text_size(&mut self, patch: Value, cx: &mut Context<Self>) {
+        let previous = self.settings_raw.clone();
+        let previous_scale = Ds::get(cx).tokens().ui_scale;
+        self.merge_text_settings(&patch, cx);
+        crate::ui::source::fetch::fetch(
+            cx,
+            move |client| async move { client.update_settings(&patch).await },
+            move |this: &mut Self, result: Result<Value, butler_shell_client::Error>, cx| {
+                match result {
+                    Ok(saved) => this.merge_text_settings(&saved, cx),
+                    Err(_) => {
+                        let raw = previous
+                            .clone()
+                            .unwrap_or_else(|| Rc::new(serde_json::json!({})));
+                        this.apply_settings(&raw, cx);
+                        this.settings_raw = previous;
+                        Ds::update(cx, |ds| ds.set_ui_scale(previous_scale));
+                        cx.refresh_windows();
+                        let copy = crate::ui::i18n::settings::words(Ds::get(cx).lang());
+                        butler_ds::ui::toast::show(
+                            cx,
+                            butler_ds::ui::toast::Toast::error(copy.save_failed),
+                        );
+                    }
+                }
+            },
+        );
     }
 
     /// What the app does with new settings: the copy follows `language`
