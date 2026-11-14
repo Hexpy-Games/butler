@@ -13,7 +13,6 @@ use butler_ds::{
         },
         button::{Button, Size, Variant},
         context::Ds,
-        toast::{self, Toast},
         typo::{Tone, Typo},
     },
 };
@@ -100,13 +99,21 @@ impl Shell {
         if matches!(view, View::Automations | View::AutomationDetail(_)) {
             schedules = schedules.active();
         }
-        // CARVE-OUT(G-cef): `BrowserEntry` opens the in-app browser, which lands in P5; until then
-        // the row (always shown: the browser is always on) answers with the coming-soon toast.
-        let browser = NavRow::new("p-browser", self.copy("Browser", "브라우저"))
-            .glyph(Icon::Globe2)
-            .on_click(cx.listener(|s, _, _, cx| {
-                toast::show(cx, Toast::message(s.theme.strings.not_yet));
-            }));
+        let mut browser = NavRow::new(
+            "p-browser",
+            crate::ui::i18n::browser::BrowserStrings::get(cx).title,
+        )
+        .glyph(Icon::Globe2)
+        .on_click(cx.listener(|s, _, w, cx| s.set_view(View::Browser, w, cx)));
+        if view == View::Browser {
+            browser = browser.active();
+        }
+        if !cx
+            .global::<crate::ui::browser::model::BrowserState>()
+            .enabled()
+        {
+            browser = browser.disabled();
+        }
         // CARVE-OUT(G-cef): `LibraryEntry`'s `onDwell={beginDwell}` serves the in-app browser's
         // element drags; it lands with the browser (`library::detail::drop_dwell`).
         let mut library = NavRow::new("p-library", s.library)

@@ -20,7 +20,7 @@ pub(crate) enum Parent {
 }
 
 /// `parentView`: the screen one level up from a nested one; top-level screens have none. The
-/// browser (History's parent when opened there) is P5 (G-cef).
+/// browser is History's parent when opened there.
 pub(crate) fn parent(view: &View) -> Option<Parent> {
     match view {
         View::History {
@@ -32,12 +32,10 @@ pub(crate) fn parent(view: &View) -> Option<Parent> {
             epic: None,
         })),
         View::AutomationDetail(_) => Some(Parent::View(View::Automations)),
-        View::Session
-        | View::History {
+        View::History {
             from: HistoryFrom::Browser,
-        }
-        | View::Automations
-        | View::ProjectDashboard { .. } => None,
+        } => Some(Parent::View(View::Browser)),
+        View::Session | View::Browser | View::Automations | View::ProjectDashboard { .. } => None,
     }
 }
 
@@ -45,6 +43,11 @@ pub(crate) fn parent(view: &View) -> Option<Parent> {
 pub(crate) fn nested_title(parent: &Parent, lang: Lang, cx: &App) -> Option<SharedString> {
     let copy = words(lang);
     match parent {
+        Parent::View(View::Browser) => Some(
+            crate::ui::i18n::browser::BrowserStrings::words(lang)
+                .title
+                .into(),
+        ),
         Parent::View(View::History { .. }) => Some(copy.history_title.into()),
         Parent::View(View::Library(library)) => Some(library_title(library, lang, cx)),
         Parent::View(View::Automations) => Some(copy.automations_title.into()),
@@ -57,6 +60,11 @@ pub(crate) fn active_title(view: &View, lang: Lang, cx: &App) -> Option<SharedSt
     let copy = words(lang);
     match view {
         View::Session => None,
+        View::Browser => Some(
+            crate::ui::i18n::browser::BrowserStrings::words(lang)
+                .title
+                .into(),
+        ),
         View::History { .. } => Some(copy.history_title.into()),
         // The titlebar shows `libraryTitle(view)` for a library view (Titlebar.tsx).
         View::Library(library) => Some(library_title(library, lang, cx)),

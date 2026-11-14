@@ -152,6 +152,7 @@ fn control(place: &Place, scope: &Scope, narrow: (bool, bool), ds: &Ds) -> Contr
     let strong = ds.color(Color::SelectionStrong);
     let show_close = tab.closable && (active || !narrow.0);
     let mut control = Control::new(id.clone(), ds);
+    control.debug.clone_from(&tab.anchor);
     control.radius = ds.len(Length::RadiusPill);
     control.width = Width::Full;
     control.inline = false;

@@ -3,6 +3,7 @@
 //! and the same text; `shell.*` fields are new to this app. Product terms follow AGENTS.md.
 pub(crate) mod artifact_viewer;
 pub(crate) mod authority;
+pub(crate) mod browser;
 pub(crate) mod browser_handoff;
 pub(crate) mod canon_order;
 pub(crate) mod canon_proposal;

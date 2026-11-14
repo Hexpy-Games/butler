@@ -87,6 +87,20 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        if self.view(cx) == crate::ui::manage::View::Browser {
+            self.clear_split();
+            use butler_ds::ui::layout::{Space, Stack};
+            let notice = self.live_notice(window, cx);
+            let area = crate::ui::browser::area::browser_area(None, window, cx);
+            return Some(
+                Stack::new()
+                    .fill()
+                    .gap(Space::None)
+                    .children(notice)
+                    .child(area)
+                    .into_any_element(),
+            );
+        }
         let page = self.manage_page()?;
         self.clear_split();
         let notice = self.live_notice(window, cx);
@@ -332,6 +346,11 @@ impl Render for Shell {
         let root = div()
             .track_focus(&self.focus)
             .key_context("Shell")
+            .on_action(cx.listener(Self::browser_focus_address))
+            .on_action(cx.listener(Self::browser_new_tab))
+            .on_action(cx.listener(Self::browser_close_tab))
+            .on_action(cx.listener(Self::browser_back))
+            .on_action(cx.listener(Self::browser_forward))
             .on_action(cx.listener(Self::toggle_sidebar))
             .on_action(cx.listener(Self::focus_composer))
             .on_action(cx.listener(Self::toggle_palette))
