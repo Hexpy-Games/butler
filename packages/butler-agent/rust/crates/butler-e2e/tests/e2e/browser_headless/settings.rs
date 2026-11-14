@@ -5,7 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
-use super::support::{admin, browser_processes, call, publish, setup};
+use super::support::{admin, browser_processes, call, cef, publish, setup};
 use butler_e2e::e2e::HarnessError;
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -93,7 +93,11 @@ async fn browser_config_and_environment_remain_operator_controls() -> Result<(),
         json!({"url":url}),
     )
     .await?;
-    assert_eq!(opened["reason"], "browser_download_failed", "{opened}");
+    if cef() {
+        assert_eq!(opened["status"], "ok", "{opened}");
+    } else {
+        assert_eq!(opened["reason"], "browser_download_failed", "{opened}");
+    }
     let persisted: Value = serde_json::from_slice(&std::fs::read(path)?)?;
     assert_eq!(persisted["config"]["headlessBrowser"], false);
     s.finish().await

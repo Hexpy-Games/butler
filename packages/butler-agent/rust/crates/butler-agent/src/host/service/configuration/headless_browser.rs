@@ -7,6 +7,7 @@
 //! `BUTLER_BROWSER_APP`: `off`, or an Electron executable to run instead
 //! of the installed App's (with `BUTLER_BROWSER_APP_DIR`, the App directory a
 //! development Electron loads).
+//! `BUTLER_BROWSER_CEF_HOST`: a staged CEF host the headless backend launches instead of Chrome for Testing.
 use butler_gateway::gateway::HeadlessBrowserConfig;
 use butler_platform::app_browser::AppElectron;
 use butler_runtime::browser::{AppHostSource, InstallSource};
@@ -37,6 +38,7 @@ pub(super) fn headless_browser(
             cache_root: env_value("BUTLER_BROWSER_CACHE_DIR")
                 .map_or_else(|| data_root.join("cache/browser"), Into::into),
             base_url: env_value("BUTLER_BROWSER_DOWNLOAD_BASE"),
+            cef_host: env_value("BUTLER_BROWSER_CEF_HOST").map(Into::into),
         },
     })
 }

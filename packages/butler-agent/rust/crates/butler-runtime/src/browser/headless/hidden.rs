@@ -10,7 +10,11 @@ use super::{
 };
 use crate::browser::egress::guard_url;
 use serde_json::{Value, json};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 
 const MAX_SHOWN: usize = 1024;
 
@@ -30,9 +34,12 @@ pub(crate) struct Diagnostics {
     pub total: usize,
     pub shown: Vec<String>,
     pub denied: bool,
-    pub root_absolute: bool,
+    root_requests: HashSet<String>,
     pub status: Option<u16>,
     urls: HashMap<String, String>,
+    /// Requests neither the document nor its scripts made (Chrome's runtime fetches the
+    /// favicon itself): never a page error.
+    browser_own: HashSet<String>,
 }
 
 /// JavaScript's `String(value).slice(0, 100)` without a split surrogate.
@@ -44,6 +51,13 @@ fn compact(value: &str) -> String {
 }
 
 impl Diagnostics {
+    /// Root-absolute subresource requests the page made (the browser's own are excluded at read time).
+    pub(crate) fn root_absolute(&self) -> bool {
+        self.root_requests
+            .iter()
+            .any(|id| !self.browser_own.contains(id))
+    }
+
     fn add(&mut self, message: &str) {
         if self.shown.len() < MAX_SHOWN {
             self.shown.push(compact(message));
@@ -63,6 +77,9 @@ impl Diagnostics {
         match method {
             "Network.requestWillBeSent" => {
                 let id = params["requestId"].as_str().unwrap_or("").to_owned();
+                if params["type"] == "Other" && params["initiator"]["type"] == "other" {
+                    self.browser_own.insert(id.clone());
+                }
                 self.urls.insert(
                     id,
                     params["request"]["url"].as_str().unwrap_or("").to_owned(),
@@ -73,12 +90,22 @@ impl Diagnostics {
                 if params["type"] == "Document" && params["frameId"] == main_frame {
                     self.status = u16::try_from(status).ok();
                 }
-                if status >= 400 {
+                if status >= 400
+                    && !self
+                        .browser_own
+                        .contains(params["requestId"].as_str().unwrap_or(""))
+                {
                     let path = self.path(params["requestId"].as_str().unwrap_or(""));
                     self.add(&format!("request: HTTP {status} {path}"));
                 }
             }
             "Network.loadingFailed" => {
+                if self
+                    .browser_own
+                    .contains(params["requestId"].as_str().unwrap_or(""))
+                {
+                    return;
+                }
                 let path = self.path(params["requestId"].as_str().unwrap_or(""));
                 self.add(&format!(
                     "request: {} {path}",
@@ -272,7 +299,10 @@ pub(crate) async fn admit(browser: &Browser, tab: &str, purpose: &Purpose, param
             browser.shared.with_tab(tab, |t| {
                 if let Some(d) = t.diagnostics.as_mut() {
                     d.denied |= frame && !ok;
-                    d.root_absolute |= root;
+                    if root {
+                        d.root_requests
+                            .insert(params["networkId"].as_str().unwrap_or("").to_owned());
+                    }
                 }
             });
             ok

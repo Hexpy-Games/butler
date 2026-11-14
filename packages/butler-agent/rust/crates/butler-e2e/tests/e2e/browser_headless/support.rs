@@ -21,8 +21,10 @@ use std::{path::PathBuf, time::Duration};
 /// Testing (the first run downloads the pinned build into a temp cache);
 /// `=hidden-app` runs them on the hidden App host: the in-worktree Electron
 /// named by `BUTLER_E2E_ELECTRON` with the App's own executor, no Chrome.
+/// `=cef` runs the scenarios on the headless backend driving the staged CEF host
+/// named by `BUTLER_E2E_CEF_HOST` (no Chrome, no Electron).
 pub(crate) fn selected() -> bool {
-    matches!(backend().as_deref(), Ok("headless" | "hidden-app"))
+    matches!(backend().as_deref(), Ok("headless" | "hidden-app" | "cef"))
 }
 
 fn backend() -> Result<String, std::env::VarError> {
@@ -32,6 +34,18 @@ fn backend() -> Result<String, std::env::VarError> {
 /// Whether the scenarios run on the hidden App host (Electron).
 pub(crate) fn hidden_app() -> bool {
     backend().as_deref() == Ok("hidden-app")
+}
+
+/// Selects the staged host so CEF scenarios cannot fall back to Chrome.
+pub(crate) fn cef() -> bool {
+    backend().as_deref() == Ok("cef")
+}
+
+/// Requires an explicitly staged host because CEF is never downloaded.
+pub(crate) fn cef_host() -> PathBuf {
+    std::env::var_os("BUTLER_E2E_CEF_HOST")
+        .map(PathBuf::from)
+        .expect("BUTLER_E2E_CEF_HOST names the staged CEF host")
 }
 
 /// The in-worktree Electron and the App directory it loads.
@@ -74,6 +88,19 @@ pub(crate) fn setup(id: &str) -> Result<Setup, HarnessError> {
         .access(Access::FullAccess)
         .env("BUTLER_BROWSER_HEADLESS", "on")
         .stub_cassette(cassette()?);
+    if cef() {
+        return Ok(setup
+            .env("BUTLER_BROWSER_APP", "off")
+            .env(
+                "BUTLER_BROWSER_CEF_HOST",
+                cef_host().to_string_lossy().into_owned(),
+            )
+            .env(
+                "BUTLER_BROWSER_CACHE_DIR",
+                no_chrome_cache(id).to_string_lossy().into_owned(),
+            )
+            .env("BUTLER_BROWSER_DOWNLOAD_BASE", "http://127.0.0.1:9/"));
+    }
     if !hidden_app() {
         return Ok(setup.env(
             "BUTLER_BROWSER_CACHE_DIR",
@@ -205,9 +232,15 @@ pub(crate) async fn publish_in(
 }
 
 /// The selected browser's processes whose command line names `marker`
-/// (`chrome-headless-shell`, or the Electron of the hidden App host).
+/// (`chrome-headless-shell`, the staged CEF host, or the hidden App's Electron).
 pub(crate) fn browser_processes(marker: &str) -> Vec<String> {
-    let executable = if hidden_app() {
+    let executable = if cef() {
+        cef_host()
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()
+    } else if hidden_app() {
         // Its helpers (`Electron Helper …`) name the profile as user data dir.
         let main = electron().0;
         main.file_stem().unwrap().to_string_lossy().into_owned()

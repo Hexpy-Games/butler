@@ -236,7 +236,7 @@ async fn run(
         .unwrap_or("")
         .to_owned();
     let (denied, root, total, shown) = hidden
-        .diagnostics(|d| (d.denied, d.root_absolute, d.total, d.shown.clone()))
+        .diagnostics(|d| (d.denied, d.root_absolute(), d.total, d.shown.clone()))
         .unwrap_or_default();
     if denied || !allowed(&current_url, origin) {
         return Err(json!({"status":"navigation_denied"}));
