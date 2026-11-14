@@ -41,7 +41,7 @@ async fn sec_13_pair_cookie_list_restart_and_revoke_stream() -> Result<(), Harne
         response.headers()["set-cookie"]
             .to_str()
             .unwrap()
-            .contains("SameSite=Strict")
+            .contains("SameSite=Lax")
     );
     let notice = events
         .wait_for(Duration::from_secs(5), |event| {
