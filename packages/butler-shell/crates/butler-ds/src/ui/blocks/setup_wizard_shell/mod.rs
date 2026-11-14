@@ -27,7 +27,7 @@ pub use progress::{SetupWizardProgress, SetupWizardStep};
 pub use stage::{SetupWizardIntro, SetupWizardStage};
 
 use super::prompt_suggestion_list::ContentRect;
-use super::wallpaper::{Wallpaper, WallpaperSource, WallpaperTone};
+use super::wallpaper::{Wallpaper, WallpaperSource, WallpaperTone, intro_print};
 use crate::tokens::{Color, Length};
 use crate::ui::context::Ds;
 use crate::ui::strut;
@@ -247,12 +247,21 @@ impl SetupWizardShell {
     /// clock (focus with `intro`) the print keeps its ink off the solid card, as the clock's
     /// card layout does in React (setupIntro.ts:39-46, engine.ts:57); without one it has no
     /// keep-out. // DS: SetupWizardShell.tsx:83,94
-    fn backdrop_layer(&mut self, cx: &App) -> impl IntoElement {
+    fn backdrop_layer(&mut self, handed_off: bool, cx: &App) -> impl IntoElement {
         let timed = self.variant == SetupWizardVariant::Focus && self.intro.is_some();
         let card = timed
             .then(|| cx.try_global::<SetupCard>().and_then(|card| card.0))
             .flatten();
         let backdrop = self.backdrop.take().unwrap_or_else(|| {
+            if self.variant == SetupWizardVariant::Focus
+                && matches!(
+                    self.intro,
+                    Some(SetupWizardIntro::Full | SetupWizardIntro::Rerun)
+                )
+                && !handed_off
+            {
+                return intro_print(self.tone, card);
+            }
             let wallpaper = Wallpaper::new(WallpaperSource::Live {
                 module: SETUP_WALLPAPER.into(),
             })
@@ -275,7 +284,15 @@ impl SetupWizardShell {
 }
 
 impl RenderOnce for SetupWizardShell {
-    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        // DS: setupIntro.ts stepChanged hands off permanently on the first key change.
+        let intro = window.use_keyed_state((self.id.clone(), "intro-handoff"), cx, |_, _| {
+            (self.step_key.clone(), false)
+        });
+        let handed_off = intro.update(cx, |state, _| {
+            state.1 |= state.0 != self.step_key;
+            state.1
+        });
         let ds = Ds::get(cx);
         let focus = self.variant == SetupWizardVariant::Focus;
         let held = focus && self.intro_held;
@@ -302,7 +319,7 @@ impl RenderOnce for SetupWizardShell {
             screen = screen.flex().items_center().justify_center().p(pad);
         }
         if !held {
-            screen = screen.child(self.backdrop_layer(cx));
+            screen = screen.child(self.backdrop_layer(handed_off, cx));
         }
         let (drag, controls) = chrome(ds, self.window_controls.take());
         let body = if focus {
