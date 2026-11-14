@@ -234,6 +234,49 @@ async fn without_a_usable_electron_the_headless_browser_serves() -> Result<(), H
     s.finish().await
 }
 
+#[cfg(windows)]
+#[tokio::test]
+async fn an_installed_app_with_a_cef_host_serves_through_it() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        hidden_app(),
+        "BUTLER_E2E_BROWSER_BACKEND=hidden-app not set"
+    );
+    let setup = setup("BROWSER-INSTALLED-CEF")?
+        .unset_env("BUTLER_BROWSER_APP")
+        .unset_env("BUTLER_BROWSER_APP_DIR")
+        .unset_env("BUTLER_BROWSER_CEF_HOST");
+    let localappdata = setup.sandbox.root.join("localappdata");
+    let app = localappdata.join("butler-app/app-9.9.9");
+    std::fs::create_dir_all(&app)?;
+    let fixture = butler_e2e::e2e::binary::mcp_fixture_binary()?;
+    for name in ["Butler.exe", "butler_cef_host.exe"] {
+        std::fs::copy(&fixture, app.join(name))?;
+    }
+    let s = setup
+        .env("LOCALAPPDATA", localappdata.to_string_lossy().into_owned())
+        .start()
+        .await?;
+    let admin = admin(&s);
+    let url = publish(&s).await?;
+    let opened = call(
+        &admin,
+        "general",
+        "tab.open",
+        &Value::Null,
+        json!({"url":url}),
+    )
+    .await?;
+    assert_eq!(opened["status"], "unavailable", "{opened}");
+    assert_ne!(opened["reason"], "browser_download_failed", "{opened}");
+    assert_eq!(profiles(&s), 0, "no hidden App host profile was created");
+    assert!(
+        !state_root(&s.sandbox.data).join("host.log").exists(),
+        "the App executable was never started as a hidden host"
+    );
+    s.finish().await
+}
+
 #[tokio::test]
 async fn hidden_outbox_backlog_blocks_retirement_until_drained() -> Result<(), HarnessError> {
     butler_e2e::gate!();
