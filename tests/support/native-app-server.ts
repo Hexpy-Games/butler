@@ -31,6 +31,8 @@ export type NativeAppServerOptions = {
   config?: Record<string, unknown>;
   /** Marks first-chat onboarding complete before launch. Default true. */
   onboardingComplete?: boolean;
+  /** Leaves the Butler Vault offer unanswered (setup step and update prompt). Default false: the vault is declined. */
+  vaultUndecided?: boolean;
   /** Default "done-today" pre-marks today's 04:00 jobs done in the gateway's local day so the scheduled briefing (#1242) cannot call the model mid-smoke at a time-of-day-dependent moment.
    * "due" leaves them to run on the first tick after 04:00. */
   dailyJobs?: "done-today" | "due";
@@ -291,8 +293,6 @@ async function completeAppOnboarding(url: string, token: string): Promise<void> 
     headers,
     body: JSON.stringify(onboardingCompletedPatch(onboarding, now, now)),
   });
-  // An existing user has answered the Butler Vault offer, so its dialog stays closed.
-  await fetch(`${url}setup/butler-vault/decline`, { method: "POST", headers }).catch(() => null);
 }
 
 export async function startStubModel(
@@ -448,6 +448,10 @@ export async function createNativeAppServer(options: NativeAppServerOptions = {}
     await new Promise((done) => setTimeout(done, 200));
   }
   if (options.onboardingComplete !== false && token) await completeAppOnboarding(url, token);
+  // Smokes start with the Butler Vault offer answered, so its step and prompt stay out of their flows.
+  if (!options.vaultUndecided && token) {
+    await fetch(`${url}setup/butler-vault/decline`, { method: "POST", headers: { authorization: `Bearer ${token}` } }).catch(() => null);
+  }
 
   const authHeaders = { authorization: `Bearer ${token}` };
   const connectUrl = async (): Promise<string> => {
