@@ -63,7 +63,7 @@ def previous(repository, pr, workflow, branch, base_ref, api_items, current_head
         name = f'ci-inputs-{workflow}-{run["run_attempt"]}'
         if not any(a['name'] == name and not a['expired'] for a in artifacts):
             continue
-        jobs = api_items(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100', 'jobs')
+        jobs = api_items(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=50', 'jobs')
         if not any(any(s['name'] == 'Publish successful inputs' and s['conclusion'] == 'success'
                        for s in j.get('steps', [])) for j in jobs):
             continue
