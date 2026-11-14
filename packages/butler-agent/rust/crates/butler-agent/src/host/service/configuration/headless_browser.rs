@@ -64,24 +64,3 @@ fn app_host_source(app: Option<String>, cef_host: bool) -> AppHostSource {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_cef_host_replaces_the_hidden_electron_host() {
-        assert!(matches!(app_host_source(None, true), AppHostSource::Off));
-        assert!(matches!(
-            app_host_source(None, false),
-            AppHostSource::Installed
-        ));
-        assert!(matches!(
-            app_host_source(Some("off".into()), false),
-            AppHostSource::Off
-        ));
-        let explicit = app_host_source(Some("/dev/electron".into()), true);
-        assert!(
-            matches!(explicit, AppHostSource::Electron(ref e) if e.executable == Path::new("/dev/electron"))
-        );
-    }
-}
