@@ -7,9 +7,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, ImageSource, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,
-    StyledImage as _, Window, div, px,
+    AnyElement, App, ClickEvent, ElementId, Hsla, ImageSource, InteractiveElement as _,
+    IntoElement, ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    Styled as _, StyledImage as _, Window, div, px,
 };
 
 use super::Icon;
@@ -266,6 +266,33 @@ fn favicon_slot(
         .into_any_element()
 }
 
+fn label_piece(
+    id: &ElementId,
+    index: usize,
+    text: String,
+    lead: Break,
+    ink: Hsla,
+    hover: &gpui::Entity<bool>,
+    hovered: bool,
+) -> AnyElement {
+    let on = hover.clone();
+    let mut el = div()
+        .id(SharedString::from(format!("{id}-{index}")))
+        .text_color(ink)
+        .whitespace_nowrap()
+        .on_hover(move |over, _, cx| {
+            on.update(cx, |state, cx| {
+                *state = *over;
+                cx.notify();
+            });
+        })
+        .child(Run::plain(text, lead));
+    if hovered {
+        el = el.underline();
+    }
+    el.into_any_element()
+}
+
 /// The pieces of an external link: the lead (icon and first character) and the rest, a
 /// character each so the label wraps anywhere.
 #[expect(
@@ -291,24 +318,6 @@ fn external_items(
     let slot = favicon_slot(id, favicon, em, window, cx);
     let ds = Ds::get(cx);
     let ink = ds.color(Color::AccentText);
-    let piece = |index: usize, text: String, lead: Break| {
-        let on = hover.clone();
-        let mut el = div()
-            .id(SharedString::from(format!("{id}-{index}")))
-            .text_color(ink)
-            .whitespace_nowrap()
-            .on_hover(move |over, _, cx| {
-                on.update(cx, |state, cx| {
-                    *state = *over;
-                    cx.notify();
-                });
-            })
-            .child(Run::plain(text, lead));
-        if hovered {
-            el = el.underline();
-        }
-        el.into_any_element()
-    };
     let gap_width = space(window);
     let chars: Vec<char> = text.chars().collect();
     // A space between label words is a margin (a text item's width drops trailing whitespace).
@@ -326,10 +335,14 @@ fn external_items(
         .text_color(ink)
         .mr(margin(0))
         .child(slot)
-        .child(piece(
+        .child(label_piece(
+            id,
             0,
             chars.first().map(char::to_string).unwrap_or_default(),
             lead,
+            ink,
+            &hover,
+            hovered,
         ))
         .into_any_element();
     let mut items = vec![
@@ -348,7 +361,8 @@ fn external_items(
             .map(|(n, c)| {
                 div()
                     .mr(margin(n))
-                    .child(piece(
+                    .child(label_piece(
+                        id,
                         n,
                         c.to_string(),
                         if chars[n - 1].is_whitespace() {
@@ -356,6 +370,9 @@ fn external_items(
                         } else {
                             Break::None
                         },
+                        ink,
+                        &hover,
+                        hovered,
                     ))
                     .into_any_element()
             }),
