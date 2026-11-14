@@ -163,7 +163,8 @@ try {
 
   await page.getByRole("button", { name: "설정", exact: true }).click();
   await page.getByRole("button", { name: "모델", exact: true }).click();
-  await page.getByText(copy.settings.modelManagement.manageButton, { exact: true }).click();
+  // The chat model card, not the image model card, which has the same button label.
+  await page.locator('[data-test-class="settings-model-management-button"]').click();
   await page.getByRole("button", { name: copy.settings.modelManagement.addButton, exact: true }).click();
   await page.locator('[data-test-class="model-add-provider-select"]').click();
   await page.getByRole("option", { name: "OpenAI", exact: true }).click();

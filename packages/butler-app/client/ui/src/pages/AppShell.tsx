@@ -46,6 +46,7 @@ import { ProjectCreateDialog } from "@/components/layout/ProjectCreateDialog.tsx
 import { SessionRenameDialog } from "@/components/layout/SessionRenameDialog.tsx";
 import { SessionObserverDialog } from "@/components/layout/SessionObserverDialog.tsx";
 import { AppToaster } from "@/components/common/AppToaster.tsx";
+import { ButlerVaultPrompt } from "@/components/vault/ButlerVaultPrompt.tsx";
 import { ImageViewerHost } from "@/components/media/ImageViewerHost";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { nativePlatform } from "@/app/nativeNotifications.ts";
@@ -279,6 +280,7 @@ function AppWorkspaceDialogs() {
     {renameProject && <ProjectRenameDialog />}
     {renameSession && <SessionRenameDialog />}
     <SessionObserverDialog />
+    <ButlerVaultPrompt />
     <ElementDragPreview />
     <TabDragPreview />
     <CardDragPreview />
