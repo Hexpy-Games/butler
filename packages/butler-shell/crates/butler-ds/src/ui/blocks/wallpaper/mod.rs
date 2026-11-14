@@ -1,12 +1,17 @@
 //! DS Wallpaper (blocks/Wallpaper `still.ts`, `stillContext.ts`, `imageCache.ts`, `imageMath.ts`,
 //! the engine's host side and WallpaperPicker `builtinPosters.ts`): a live module the renderer
-//! has shaders for (butler.riso-print) drawn as a static frame at its default params, any other
-//! live module from its bundled poster, or an image. Edited params, drift and crossfade are P6.
+//! has shaders for drawn at its default params, unknown live
+//! modules from their bundled posters, or an image. Animated modules hold their still frame
+//! (`stillTime`) for now; edited params, drift and crossfade are P6.
 //! [`Wallpaper`] is the layer to hand to `WallpaperStage::wallpaper`; it fills its parent, which
 //! clips it.
 mod image_cache;
 mod image_math;
 mod live;
+mod live_image;
+mod live_modules;
+mod live_params;
+mod live_print;
 mod posters;
 mod still;
 
@@ -180,8 +185,8 @@ impl RenderOnce for Wallpaper {
                     content_rect: self.content_rect,
                     content_rect2: self.content_rect2,
                 };
-                match live::layer(&module, frame) {
-                    Some(drawn) => layer.child(drawn),
+                match live::layer(&module, frame, cx) {
+                    Some((drawn, remaining)) => dim_pass(layer.child(drawn), remaining),
                     None => match builtin_poster(&module, tone) {
                         Some(poster) => layer.child(picture(poster, ObjectFit::Cover)),
                         None => layer,

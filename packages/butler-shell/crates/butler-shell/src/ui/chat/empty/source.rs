@@ -102,10 +102,8 @@ pub(super) fn resolve(fetched: Fetched, project_id: Option<&str>) -> Resolved {
     let own = project
         .as_ref()
         .and_then(|project| parse_source(project.get("wallpaper")?));
-    let wallpaper = own.unwrap_or_else(|| {
-        let settings = fetched.settings.unwrap_or(Value::Null);
-        global_source(&settings)
-    });
+    let settings = fetched.settings.unwrap_or(Value::Null);
+    let wallpaper = own.unwrap_or_else(|| global_source(&settings));
     Resolved {
         briefing,
         epic: fetched.epic,
