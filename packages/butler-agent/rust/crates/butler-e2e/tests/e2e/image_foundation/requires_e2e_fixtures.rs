@@ -44,7 +44,7 @@ async fn image_model_settings_are_durable_and_separate_from_chat() -> Result<(),
     let listed = s.gw.get("/settings/image-model").await?;
     assert_eq!(listed.status, 200, "{}", listed.text);
     let models = listed.data()["models"].as_array().unwrap();
-    assert_eq!(models.len(), 8);
+    assert_eq!(models.len(), 11);
     let model = models.iter().find(|m| m["model_ref"] == MODEL).unwrap();
     assert_eq!(model["edit"], true);
     assert_eq!(model["mask"], "alpha");
@@ -60,6 +60,13 @@ async fn image_model_settings_are_durable_and_separate_from_chat() -> Result<(),
         .unwrap();
     assert_eq!(signin["selectable"], false);
     assert_eq!(signin["reason"], "chatgpt_sign_in");
+    let registered =
+        s.gw.post(
+            "/settings/image-model/registered",
+            json!({"model_ref":MODEL,"credential_id":credential}),
+        )
+        .await?;
+    assert_eq!(registered.status, 200, "{}", registered.text);
     let rejected = put(&s, json!({"model_ref":MODEL,"credential_id":signin["id"]})).await?;
     assert_eq!(rejected.status, 400);
     assert_eq!(rejected.error_code(), Some("image_model_requires_api_key"));

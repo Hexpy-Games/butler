@@ -11,8 +11,10 @@ async fn criterion_upgrade_preserves_activity_sequence_and_matches_fresh_schema(
         &db,
         "SELECT type,name,sql FROM sqlite_schema WHERE tbl_name IN ('canon_activity','canon_criterion_checks') ORDER BY name",
     )?;
-    let old = include_str!("../../../../butler-canon/src/work_schema/activity.sql")
-        .replace(",'criterion_confirmed','criterion_unconfirmed'", "");
+    let old = include_str!("../../../../butler-canon/src/work_schema/activity.sql").replace(
+        ",'criterion_confirmed','criterion_unconfirmed','edited','moved'",
+        "",
+    );
     db.execute_batch("DROP TABLE canon_activity; DROP TABLE canon_criterion_checks;")?;
     db.execute_batch(&old)?;
     db.execute_batch("INSERT INTO canon_activity(seq,entity_id,actor_json,kind,summary,body,at) VALUES(19,'epic','{\"person\":\"app-user\",\"via\":\"app\"}','created','created',NULL,1);")?;
