@@ -1,6 +1,8 @@
 //! The shell's UI. The app binary (`main.rs`) and the shot harness
 //! (`bin/butler-shell-shots`) both build it from here.
 pub(crate) mod assets;
+#[allow(dead_code, reason = "used by the browser screen in the next change")]
+pub(crate) mod browser;
 pub(crate) mod chat;
 pub(crate) mod composer;
 pub(crate) mod decisions;
@@ -39,5 +41,6 @@ pub(crate) fn init(cx: &mut App) -> anyhow::Result<()> {
     cx.bind_keys(field::bindings());
     cx.bind_keys(composer::bindings());
     cx.bind_keys(shell::bindings());
+    browser::init(cx);
     Ok(())
 }
