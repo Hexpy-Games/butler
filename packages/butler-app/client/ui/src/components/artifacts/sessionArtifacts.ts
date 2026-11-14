@@ -15,3 +15,8 @@ export function sessionArtifacts(
   }
   return [...latest.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
+
+/** A running dev preview the gateway serves at /previews/<id>/view. */
+export function isPreviewArtifact(artifact: SessionArtifactSummary): boolean {
+  return artifact.url?.startsWith("/previews/") ?? false;
+}
