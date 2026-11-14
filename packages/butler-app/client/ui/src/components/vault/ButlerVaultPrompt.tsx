@@ -1,18 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
-import { consentIsCurrent } from "@/app/onboarding.ts";
 import { loadStartupSettings } from "@/app/startupSettings.ts";
-import { useButlerStore } from "@/app/store.ts";
-import { useOnboardingStore } from "@/stores/onboardingStore.ts";
 import { Button, ButtonContainer, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/butler-ds";
 import { VaultPasswordFields } from "./VaultPasswordFields";
 import { useButlerVault } from "./useButlerVault";
 
+/** Offers the vault once to an install that finished setup before this version; mounted with the workspace only. */
 export function ButlerVaultPrompt() {
   useAppLocale();
   const vault = useButlerVault();
-  const onboarding = useButlerStore((state) => state.settings.onboarding);
-  const rerunOpen = useOnboardingStore((state) => state.rerunOpen);
   const [existingUser, setExistingUser] = useState(false);
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<"intro" | "done" | "failed">("intro");
@@ -29,14 +25,13 @@ export function ButlerVaultPrompt() {
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
-  const setupVisible = !onboarding?.completed_at || !consentIsCurrent(onboarding) || rerunOpen;
   useEffect(() => {
-    if (offered.current || !existingUser || setupVisible || vault.state !== "ready") return;
+    if (offered.current || !existingUser || vault.state !== "ready") return;
     if (vault.view?.state === "off" && !vault.view.declined) {
       offered.current = true;
       setOpen(true);
     }
-  }, [existingUser, setupVisible, vault.state, vault.view]);
+  }, [existingUser, vault.state, vault.view]);
   async function enable() {
     if (vault.busy) return;
     if (passwordOnly && password !== confirmation) { setError(copy.mismatch); return; }
@@ -54,7 +49,7 @@ export function ButlerVaultPrompt() {
     }
   }
   return (
-    <Dialog open={open && !setupVisible} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{copy.name}</DialogTitle>
