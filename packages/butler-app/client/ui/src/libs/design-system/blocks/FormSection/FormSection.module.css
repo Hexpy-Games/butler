@@ -88,11 +88,11 @@
 /* Touch size: header actions share the title's row, centered on it; they
    wrap under the copy only when the copy would be narrower than 10rem. */
 @media (width <= 640px) {
-  .header:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+  .header:where(:not([data-viewport="desktop"], [data-viewport="desktop"] *)) {
     align-items: center;
   }
 
-  .copy:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+  .copy:where(:not([data-viewport="desktop"], [data-viewport="desktop"] *)) {
     flex-basis: 10rem;
   }
 }

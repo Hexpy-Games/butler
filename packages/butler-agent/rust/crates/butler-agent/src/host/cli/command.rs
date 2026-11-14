@@ -195,10 +195,10 @@ pub async fn main(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode
         return crate::host::embedding::worker::run().await;
     }
     // Internal child mode: the bundled mail plugin runs `${BUTLER_AGENT} --mail-connector`.
+    // Exit at once, as the standalone connector did: dropping the runtime would wait on
+    // its blocking stdin reader until the host closes stdin.
     if args.len() == 1 && args[0] == "--mail-connector" {
-        return ExitCode::from(
-            u8::try_from(butler_mail_connector::run_process().await).unwrap_or(1),
-        );
+        std::process::exit(butler_mail_connector::run_process().await);
     }
     // Fixture builds answer this probe so the E2E harness can refuse a binary
     // whose test hooks, the pinned App clock among them, are compiled out.
