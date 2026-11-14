@@ -93,6 +93,7 @@ export function SpaceDropScope({ enabled, ariaLabel, children }: { enabled: bool
       aria-label={ariaLabel}
       active={elementDragging || tabDragging || dragging && enabled}
       payload={elementDragging || tabDragging ? "outside" : "rows"} autoScroll={elementDragging ? elementEdge : tabDragging ? tabEdge : undefined}
+      onDragEnter={over}
       onDragOver={over}
       onDragLeave={(event) => {
         if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;

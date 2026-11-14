@@ -79,13 +79,26 @@ try {
   const targetRow = await header.boundingBox();
   assert(targetKey && targetRow);
   await page.mouse.move(targetRow.x + 25, targetRow.y + 2, { steps: 12 });
-  // A resting OS drag keeps sending dragover; Playwright sends one per move, so nudge the
-  // pointer, following the row while the list finishes scrolling.
-  for (let step = 0, deadline = Date.now() + 30_000; await target.getAttribute("data-drop") !== "before"; step++) {
+  // Drop zones are hit-tested on the rows' layout boxes (DS measureDropBox); open slots only move
+  // rows visually. Aim at the row's layout top and release once it holds still with the slot shown,
+  // so the zone under the pointer cannot change before the drop. A resting OS drag keeps sending
+  // dragover; Playwright sends one per move, hence the nudges.
+  const layoutTop = () => header.evaluate((element: HTMLElement) => {
+    const offset = (node: HTMLElement | null) => {
+      let top = 0;
+      for (; node; node = node.offsetParent as HTMLElement | null)
+        top += node.offsetTop + ((node.offsetParent as HTMLElement | null)?.clientTop ?? 0);
+      return top;
+    };
+    const scope = element.closest<HTMLElement>('[data-slot="nav-drop-scope"]')!;
+    return scope.getBoundingClientRect().top + offset(element) - offset(scope);
+  });
+  for (let step = 0, deadline = Date.now() + 30_000, aimed = Number.NaN; ; step++) {
+    const top = await layoutTop();
+    if (top === aimed && await target.getAttribute("data-drop") === "before") break;
     assert(Date.now() < deadline, "drop slot before the last folder never appeared");
-    const row = await header.boundingBox();
-    assert(row);
-    await page.mouse.move(row.x + 25, row.y + 2 + step % 2);
+    aimed = top;
+    await page.mouse.move(targetRow.x + 25, top + 2 + step % 2);
   }
   await page.mouse.up();
   const rootOrder = async () => (await navigation()).space.nodes.filter(node => node.parentKey === null)
