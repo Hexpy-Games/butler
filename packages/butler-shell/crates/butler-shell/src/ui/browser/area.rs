@@ -42,6 +42,8 @@ pub(super) struct AreaState {
     address: Option<(TabId, String)>,
     pub(super) collapsed: HashSet<String>,
     creating: bool,
+    _library: Option<gpui::Subscription>,
+    pub(super) bookmarks: super::bookmarks::Bookmarks,
 }
 
 pub(crate) fn result<T>(value: &Result<T, BrowserError>, cx: &mut App) {
@@ -217,12 +219,18 @@ fn area_state(session: Option<&str>, window: &mut Window, cx: &mut App) -> Entit
             "area",
         ),
         cx,
-        |_, cx| AreaState {
-            focus: cx.focus_handle(),
-            editing: false,
-            address: None,
-            collapsed: HashSet::new(),
-            creating: false,
+        |_, cx| {
+            let library = manage::window_ctx(cx)
+                .map(|ctx| cx.observe(&ctx.live, |_, _, cx| cx.refresh_windows()));
+            AreaState {
+                focus: cx.focus_handle(),
+                editing: false,
+                address: None,
+                collapsed: HashSet::new(),
+                creating: false,
+                _library: library,
+                bookmarks: super::bookmarks::Bookmarks::default(),
+            }
         },
     )
 }

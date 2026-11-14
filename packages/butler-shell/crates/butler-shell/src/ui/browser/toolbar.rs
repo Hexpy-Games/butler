@@ -106,6 +106,7 @@ fn address(tab: Option<&Tab>, state: &Entity<AreaState>, cx: &mut App) -> Addres
     let c = BrowserStrings::get(cx);
     let enabled = cx.global::<BrowserState>().enabled();
     let url = tab.map_or("", |t| t.url.as_str());
+    super::bookmarks::lookup(state, url, cx);
     let editing = state.clone();
     let submitted = state.clone();
     let id = tab.map(|t| t.id.clone());
@@ -123,8 +124,10 @@ fn address(tab: Option<&Tab>, state: &Entity<AreaState>, cx: &mut App) -> Addres
             placeholder: c.address_placeholder.into(),
             secure: c.secure.into(),
             insecure: c.not_secure.into(),
-            ..Default::default()
+            bookmark_add: c.bookmark_add.into(),
+            bookmarked: c.bookmarked.into(),
         })
+        .bookmarked(state.read(cx).bookmarks.current.is_some())
         .editing(state.read(cx).editing)
         .on_editing_change(move |value, _, cx| {
             editing.update(cx, |s, _| s.editing = value);
@@ -140,6 +143,10 @@ fn address(tab: Option<&Tab>, state: &Entity<AreaState>, cx: &mut App) -> Addres
         });
     if !enabled || tab.is_none() {
         field = field.disabled();
+    }
+    if let Some(tab) = tab.filter(|t| !t.url.is_empty()).cloned() {
+        let state = state.clone();
+        field = field.on_toggle_bookmark(move |_, cx| super::bookmarks::toggle(&state, &tab, cx));
     }
     field
 }
@@ -176,6 +183,7 @@ pub(super) fn toolbar(
     toolbar
         .address(anchor(div(), "browser-address").w_full().child(field))
         .action(pick)
+        .action(super::bookmarks::menu(state, window, cx))
         .action(options(window, cx))
 }
 fn options(window: &mut Window, cx: &mut App) -> AnyElement {

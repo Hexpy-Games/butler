@@ -102,3 +102,57 @@ async fn browser_switches_tabs() -> Result<(), HarnessError> {
     sandbox.mark_success();
     Ok(())
 }
+
+#[tokio::test]
+async fn conversation_link_opens_in_its_browser() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
+    let _serial = SERIAL.lock().await;
+    let mut sandbox = Sandbox::new("conversation_link_opens_in_its_browser")?;
+    let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
+    let mut shell = Shell::start(&sandbox, &[]).await?;
+    shell
+        .run(&["agent running", "wait-anchor composer"])
+        .await?;
+    let gw = super::shell_app::gateway(&shell.launch);
+    let created = gw
+        .post(
+            "/sessions",
+            serde_json::json!({"kind": "chat", "title": "Browser link"}),
+        )
+        .await?;
+    assert_eq!(created.status, 201, "{}", created.text);
+    let id = created.data()["session"]["id"]
+        .as_str()
+        .expect("session id")
+        .to_owned();
+    let sent = gw.post("/messages", serde_json::json!({"chat_id": id, "text": "Hello", "client_message_id": "browser-link"})).await?;
+    assert_eq!(sent.status, 202, "{}", sent.text);
+    shell
+        .run(&[
+            &format!("wait-anchor sidebar-row-{id}"),
+            &format!("open {id}"),
+            "expect-no-anchor titlebar-file-viewer-toggle",
+            "browser-link https://example.com/",
+            "wait-anchor browser-area",
+            "expect-no-anchor titlebar-file-viewer-toggle",
+        ])
+        .await?;
+    let state = shell.browser_state().await?;
+    assert_eq!(state["view"], "session");
+    assert_eq!(state["tabs"].as_array().unwrap().len(), 1);
+    assert_eq!(state["tabs"][0]["owner"], format!("conversation:{id}"));
+    assert_eq!(state["tabs"][0]["url"], "https://example.com/");
+    assert_eq!(state["active"], state["tabs"][0]["id"]);
+    shell
+        .run(&[
+            "click titlebar-browser-toggle",
+            "wait-no-anchor browser-area",
+            "expect-no-anchor titlebar-file-viewer-toggle",
+            "app-quit",
+        ])
+        .await?;
+    shell.finish().await?;
+    sandbox.mark_success();
+    Ok(())
+}

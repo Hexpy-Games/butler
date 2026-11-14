@@ -104,6 +104,7 @@ pub(crate) enum ManageEvent {
     SetView(View),
     OpenProjectDashboard(SharedString),
     OpenSession(SharedString),
+    OpenConversationLink(String),
     OpenNewChat,
     OpenProjectChat(SharedString),
     StartProjectChatWithDocument {
@@ -180,6 +181,10 @@ impl ManageCtx {
     /// `openSession`: the conversation view on that session.
     pub(crate) fn open_session(&self, id: SharedString, cx: &mut App) {
         self.emit(ManageEvent::OpenSession(id), cx);
+    }
+
+    pub(crate) fn open_conversation_link(&self, url: &str, cx: &mut App) {
+        self.emit(ManageEvent::OpenConversationLink(url.to_owned()), cx);
     }
 
     pub(crate) fn open_new_chat(&self, cx: &mut App) {
