@@ -36,7 +36,7 @@ impl Composer {
         let draft = ComposerState::read(cx, |draft| draft.text.trim().to_owned());
         let empty = draft.is_empty();
         let line: SharedString = if empty {
-            self.theme.strings.placeholder.into()
+            self.empty_placeholder(cx).into()
         } else {
             draft.into()
         };
@@ -94,7 +94,7 @@ impl Composer {
             && !(send.active_turn && send.can_stop && !send.can_send);
         if expanded_only {
             // The send button shows with the expanded controls only.
-            return ExpandedControls::new().child(button).into_any_element();
+            return ExpandedSend(button.into_any_element()).into_any_element();
         }
         button.into_any_element()
     }
@@ -120,5 +120,19 @@ impl Composer {
             .child(self.compact_preview(cx))
             .child(controls)
             .child(self.send_slot(lang, cx))
+    }
+}
+
+/// Electron `ComposerToolbar.tsx`: Send has no growing frame (`display: contents`).
+#[derive(IntoElement)]
+struct ExpandedSend(AnyElement);
+
+impl gpui::RenderOnce for ExpandedSend {
+    fn render(self, _: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
+        if butler_ds::ui::blocks::scope::composer(cx).is_none_or(|vars| vars.expanded) {
+            self.0
+        } else {
+            div().into_any_element()
+        }
     }
 }

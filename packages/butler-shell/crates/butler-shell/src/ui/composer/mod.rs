@@ -136,8 +136,6 @@ pub(crate) struct Composer {
     /// Whether the card is unfolded.
     fold: Fold,
     theme: Theme,
-    /// The open chat's turn is running.
-    pub(crate) streaming: bool,
     /// The open chat's view, for the decisions the transcript shows.
     decision_view: Option<Rc<SessionView>>,
     /// The open chat's queued follow-ups, for the plan decision's gate.
@@ -192,7 +190,6 @@ impl Composer {
             synced_revision: 0,
             fold: Fold::default(),
             theme,
-            streaming: false,
             decision_view: None,
             queue: Vec::new(),
             git_notice_dismissed: false,
@@ -267,7 +264,7 @@ impl Composer {
         let input = field::field(
             "composer-input",
             &self.input,
-            placeholder.unwrap_or(self.theme.strings.placeholder),
+            self.input_placeholder(placeholder, cx),
             &self.theme,
         )
         .aria_label(self.theme.strings.message_composer);
