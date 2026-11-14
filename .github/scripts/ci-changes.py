@@ -479,7 +479,7 @@ def record():
             job_passed[name] = digest
     part_state = {}
     if state.get('tier') == 'integration' and state.get('job_inputs') and ci_parts.inventory(state['workflow']):
-        actual = api_items(f'repos/{state["repository"]}/actions/runs/{state["run"]}/attempts/{os.environ["GITHUB_RUN_ATTEMPT"]}/jobs?per_page=100', 'jobs')
+        actual = api_items(f'repos/{state["repository"]}/actions/runs/{state["run"]}/attempts/{os.environ["GITHUB_RUN_ATTEMPT"]}/jobs?per_page=50', 'jobs')
         part_state = ci_parts.record(state, actual)
     directory = Path(os.environ['RUNNER_TEMP']) / 'ci-inputs'
     directory.mkdir(exist_ok=True)
