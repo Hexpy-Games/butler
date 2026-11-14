@@ -401,6 +401,16 @@ async function verifyMemoryStep(client: CdpClient): Promise<void> {
   await evaluateBoolean(client, "(() => { document.querySelector('[data-memory-choice=off]')?.click(); return true; })()");
   await waitForExpression(client, continueDisabled.replace("=== true", "=== false"), "Continue after a choice");
   await clickButton(client, "계속");
+  // A fresh install offers Butler Vault next. 사용 안 함 asks once more; the dialog's own 사용 안 함 declines it.
+  await waitForHeading(client, "버틀러 금고");
+  await clickButton(client, "사용 안 함");
+  await waitForHeading(client, "버틀러 금고를 쓰지 않을까요?");
+  assert(await evaluateBoolean(client, `(() => {
+    const confirm = Array.from(document.querySelectorAll("[role=dialog] button, [role=alertdialog] button"))
+      .find((button) => button.textContent?.trim() === "사용 안 함");
+    confirm?.click();
+    return Boolean(confirm);
+  })()`), "vault decline confirmed in its dialog");
   await waitForHeading(client, "어떤 AI와 일할까요?");
   const config = JSON.parse(readFileSync(join(dataDir, "butler.config.json"), "utf8")) as { memory?: { embeddings?: string } };
   assert(config.memory?.embeddings === "off", "memory choice saved as off");
