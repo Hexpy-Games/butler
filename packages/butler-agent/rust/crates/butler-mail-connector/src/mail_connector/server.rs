@@ -25,15 +25,26 @@ pub(super) async fn serve(mail: Option<Arc<Mail>>) -> Result<()> {
         .serve(rmcp::transport::stdio())
         .await
         .map_err(|_| "mail_mcp_failed")?;
-    let result = tokio::select! {
-        result = running.waiting() => result.map(|_| ()).map_err(|_| "mail_mcp_failed"),
-        () = auth_failed.cancelled() => {
-            let code = match &mail {
-                Some(mail) => mail.terminal.lock().await.unwrap_or("mail_auth_failed"),
-                None => "mail_auth_failed",
-            };
-            Err(code)
-        },
+    // A terminal intake failure cancels the service gracefully: rmcp still sends
+    // the replies in flight (such as the subscribe that started intake) and closes
+    // stdout before the process exits.
+    let cancel = running.cancellation_token();
+    let watch = tokio::spawn({
+        let auth_failed = auth_failed.clone();
+        async move {
+            auth_failed.cancelled().await;
+            cancel.cancel();
+        }
+    });
+    let waited = running.waiting().await;
+    watch.abort();
+    let result = if auth_failed.is_cancelled() {
+        Err(match &mail {
+            Some(mail) => mail.terminal.lock().await.unwrap_or("mail_auth_failed"),
+            None => "mail_auth_failed",
+        })
+    } else {
+        waited.map(|_| ()).map_err(|_| "mail_mcp_failed")
     };
     stop.cancel();
     if let Some(task) = intake.lock().await.take() {
