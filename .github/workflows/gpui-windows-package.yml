@@ -62,6 +62,8 @@ jobs:
     needs: versions
     runs-on: windows-latest
     timeout-minutes: 90
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-release
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/build-windows-agent
