@@ -104,7 +104,12 @@ fn copy_new(from: &Path, to: &Path) -> io::Result<()> {
 
 impl Downloads {
     pub(crate) fn new(root: &Path) -> Arc<Self> {
-        let directory = root.join(butler_platform::data_paths::DOWNLOADS);
+        // Rebuilt from its components: the data-path constants use `/`, and Chrome on Windows
+        // cancels every download whose `downloadPath` mixes separators (#2245).
+        let directory: PathBuf = root
+            .join(butler_platform::data_paths::DOWNLOADS)
+            .components()
+            .collect();
         let totals = std::fs::read(directory.join("budget.json"))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<HashMap<String, u64>>(&bytes).ok())
@@ -374,4 +379,19 @@ fn owner_event(state: &mut State, transfer: &Transfer, kind: &str, data: &Value)
         .entry(transfer.owner.clone())
         .or_default()
         .push(event);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stage_path_uses_one_separator() {
+        let root = std::env::temp_dir().join("butler-downloads-test");
+        let downloads = Downloads::new(&root);
+        let normalized: PathBuf = downloads.stage.components().collect();
+        // Path equality ignores separators; Chrome on Windows does not (#2245).
+        assert_eq!(downloads.stage.as_os_str(), normalized.as_os_str());
+        assert!(downloads.stage.ends_with("stage"));
+    }
 }
