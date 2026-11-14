@@ -14,10 +14,7 @@ use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::{blocks, context::Ds, focus, icon_button::IconButton, overlay, toast};
 use gpui::{AnyElement, Context, Entity, IntoElement, Render, Window, div, prelude::*};
 
-use super::{
-    Shell, TextSizeDown, TextSizeReset, TextSizeUp, TitlebarBack, ToggleSidebar, image_viewer,
-    region, system_dark,
-};
+use super::{Shell, TitlebarBack, ToggleSidebar, image_viewer, region, system_dark};
 use crate::ui::Icon;
 use crate::ui::lifecycle_view;
 use crate::ui::onboarding::{self, gate::Gate};
@@ -339,9 +336,9 @@ impl Render for Shell {
             .on_action(cx.listener(Self::focus_composer))
             .on_action(cx.listener(Self::toggle_palette))
             .on_action(cx.listener(|s, _: &TitlebarBack, w, cx| s.titlebar_back(w, cx)))
-            .on_action(|_: &TextSizeUp, _, cx| Self::text_size(1, cx))
-            .on_action(|_: &TextSizeDown, _, cx| Self::text_size(-1, cx))
-            .on_action(|_: &TextSizeReset, _, cx| Self::text_size(0, cx))
+            .on_action(cx.listener(Self::text_size_up))
+            .on_action(cx.listener(Self::text_size_down))
+            .on_action(cx.listener(Self::text_size_reset))
             .capture_key_down(|e, w, cx| {
                 if e.keystroke.key == "escape" {
                     peek::escape(w, cx);

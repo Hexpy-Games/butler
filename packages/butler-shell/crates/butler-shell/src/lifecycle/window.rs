@@ -4,13 +4,22 @@
 use std::ffi::OsString;
 
 use gpui::{
-    App, AppContext as _, Bounds, TitlebarOptions, WindowBackgroundAppearance, WindowBounds,
-    WindowOptions, point, px, size,
+    App, AppContext as _, Bounds, Pixels, Point, TitlebarOptions, WindowBackgroundAppearance,
+    WindowBounds, WindowOptions, point, px, size,
 };
 
 /// `macTrafficLightPosition` (Electron main.mjs:281): the close button's top-left inset, which
 /// centres the buttons on the title row. gpui re-applies it on resize and on leaving fullscreen.
 const TRAFFIC_LIGHTS: (f32, f32) = (20., 18.);
+
+/// `scaledWindowButtonPosition` (text-size.mjs): button centers follow the titlebar height;
+/// native button diameter stays constant. Applied when the window opens.
+fn scaled_traffic_lights(scale: f32) -> Point<Pixels> {
+    point(
+        px((TRAFFIC_LIGHTS.0 * scale).round()),
+        px(((TRAFFIC_LIGHTS.1 + 7.) * scale - 7.).round()),
+    )
+}
 
 use crate::ui::i18n::Locale;
 use crate::ui::shell::{Shell, ShellOptions};
@@ -35,7 +44,13 @@ pub(crate) fn open_window(cx: &mut App, args: &[OsString]) -> anyhow::Result<()>
         titlebar: Some(TitlebarOptions {
             title: Some(locale.strings().app_title.into()),
             appears_transparent: true,
-            traffic_light_position: Some(point(px(TRAFFIC_LIGHTS.0), px(TRAFFIC_LIGHTS.1))),
+            traffic_light_position: Some(scaled_traffic_lights(
+                saved
+                    .text_size
+                    .as_deref()
+                    .and_then(crate::ui::shell::text_scale)
+                    .unwrap_or(1.),
+            )),
         }),
         window_min_size: Some(size(px(320.), px(480.))),
         app_id: Some("butler-shell".into()),
