@@ -60,10 +60,13 @@ jobs:
         shell: bash
     env:
       BUTLER_E2E_TIER: stub
-      CEF_PATH: ${{ runner.temp }}/cef
       CARGO_TARGET_DIR: ${{ github.workspace }}/packages/butler-agent/rust/target
     steps:
       - uses: actions/checkout@v4
+
+      # `runner` is not available in job-level env; the pinned CEF lives under the runner temp.
+      - name: Locate the CEF archive cache
+        run: echo "CEF_PATH=$RUNNER_TEMP/cef" >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/rust-agent-setup
         with:
