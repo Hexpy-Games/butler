@@ -17,6 +17,7 @@ mod titlebar;
 mod transcript;
 pub(crate) mod vault;
 
+pub(crate) use settings_link::text_scale;
 pub(crate) use titlebar::window_controls;
 
 use std::cell::Cell;

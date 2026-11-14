@@ -136,6 +136,13 @@ pub(crate) struct SettingsView {
 impl EventEmitter<SettingsEvent> for SettingsView {}
 
 impl SettingsView {
+    /// The open page's settings state, for a save made outside it (the text-size shortcut).
+    pub(crate) fn section_ctx(&self) -> SectionCtx {
+        SectionCtx {
+            state: self.state.clone(),
+        }
+    }
+
     /// Opens on `section`, showing `settings` (the shell's last `/settings`) until its own read
     /// lands. A compact window starts on the page unless it is General.
     pub(crate) fn new(

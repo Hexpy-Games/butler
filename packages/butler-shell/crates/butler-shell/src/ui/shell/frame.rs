@@ -143,15 +143,62 @@ impl Shell {
         self.composer.update(cx, |c, cx| c.engage(w, cx));
     }
 
-    pub(super) fn text_size(direction: i8, cx: &mut gpui::App) {
-        let scale = Ds::get(cx).tokens().ui_scale;
+    pub(super) fn text_size_up(
+        &mut self,
+        _: &super::TextSizeUp,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.text_size(1, cx);
+    }
+
+    pub(super) fn text_size_down(
+        &mut self,
+        _: &super::TextSizeDown,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.text_size(-1, cx);
+    }
+
+    pub(super) fn text_size_reset(
+        &mut self,
+        _: &super::TextSizeReset,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.text_size(0, cx);
+    }
+
+    pub(super) fn text_size(&mut self, direction: i8, cx: &mut Context<Self>) {
+        let sizes = ["default", "large", "larger"];
+        let current = self
+            .settings_raw
+            .as_deref()
+            .and_then(|raw| raw.get("text_size"))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("default");
+        // `Math.max(0, Math.min(2, index + step))`, with an unknown size at index -1.
+        let index = sizes.iter().position(|size| *size == current);
         let next = match direction {
-            1 if scale < 1.15 => 1.15,
-            1 => 1.3,
-            -1 if scale > 1.15 => 1.15,
-            _ => 1.,
+            1 => index.map_or(0, |index| (index + 1).min(2)),
+            -1 => index.map_or(0, |index| index.saturating_sub(1)),
+            _ => 0,
         };
-        Ds::update(cx, |ds| ds.set_ui_scale(next));
-        cx.refresh_windows();
+        let next = sizes[next];
+        if next == current {
+            return;
+        }
+        let patch = serde_json::json!({ "text_size": next });
+        // An open settings page saves it itself, so the page and the shell stay in step.
+        if let Some(view) = &self.settings_view {
+            let save = crate::ui::settings::state::Save {
+                optimistic: true,
+                silent: true,
+            };
+            view.read(cx).section_ctx().save(patch, save, cx);
+            return;
+        }
+        self.save_text_size(patch, cx);
     }
 }
