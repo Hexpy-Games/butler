@@ -43,6 +43,8 @@ pub(crate) struct Inputs {
     pub(crate) progress: Option<TurnProgressSnapshot>,
     /// `liveConnectionLost`.
     pub(crate) reconnecting: bool,
+    /// Electron `useActiveCanonEpic`: the session belongs to an Epic.
+    pub(crate) epic: bool,
 }
 
 impl Inputs {
@@ -138,8 +140,7 @@ impl Composer {
     pub(super) fn recompute(&mut self, cx: &mut Context<Self>) {
         let active_worker = !self.inputs.workers.is_empty();
         let turn_active = (self.inputs.turn_state.as_deref()).is_some_and(is_active_turn_state);
-        let parent_active =
-            self.streaming || turn_active || self.inputs.active_progress().is_some();
+        let parent_active = turn_active || self.inputs.active_progress().is_some();
         let model_state = self.controls.shown.state;
         let latest_turn_cancellable = self.inputs.latest_turn_cancellable;
         let active_model = self.active_model().cloned();
@@ -158,5 +159,32 @@ impl Composer {
             draft.send = send;
             draft.blocked_attachments = blocked;
         });
+    }
+}
+
+impl Composer {
+    /// Electron `ComposerInputSurface.tsx`: authority, plan instruction, Epic, default.
+    pub(super) fn input_placeholder(
+        &self,
+        plan: Option<&'static str>,
+        cx: &gpui::App,
+    ) -> &'static str {
+        let authority = self.decision_view.as_deref().is_some_and(|view| {
+            crate::ui::decisions::authority_pending(crate::ui::decisions::DecisionCtx { view })
+        });
+        if authority {
+            return self.theme.strings.placeholder;
+        }
+        plan.unwrap_or_else(|| self.empty_placeholder(cx))
+    }
+
+    /// Electron `ComposerCompactPreview.tsx`: an Epic supplies the empty draft's copy.
+    pub(super) fn empty_placeholder(&self, cx: &gpui::App) -> &'static str {
+        if self.inputs.epic {
+            crate::ui::i18n::composer::words(butler_ds::ui::context::Ds::get(cx).lang())
+                .epic_placeholder
+        } else {
+            self.theme.strings.placeholder
+        }
     }
 }

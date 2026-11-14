@@ -135,3 +135,42 @@ fn row(answer: &AnsweredUserQuestions, role: MessageRecordRole, at: Option<&str>
         cursor: None,
     }
 }
+
+/// Electron `canonProposalMessages.ts`: attach each turn's anchors to its last assistant.
+pub(super) fn with_canon_proposals(
+    messages: &[Arc<MessageRecord>],
+    anchors: &[crate::ui::source::wire::CanonProposalAnchor],
+) -> Vec<Arc<MessageRecord>> {
+    let mut by_turn: HashMap<&str, Vec<_>> = HashMap::new();
+    for anchor in anchors {
+        by_turn
+            .entry(&anchor.turn_id)
+            .or_default()
+            .push(anchor.clone());
+    }
+    let mut result = messages.to_vec();
+    for (turn, anchors) in by_turn {
+        if let Some(message) = result.iter_mut().rev().find(|message| {
+            message.role == MessageRecordRole::Assistant && message.turn_id.as_deref() == Some(turn)
+        }) {
+            let mut row = (**message).clone();
+            row.canon_proposals = Some(anchors);
+            *message = Arc::new(row);
+        }
+    }
+    result
+}
+
+/// Electron `useConversationMessages.ts`: answers, then proposal anchors, before collapse.
+pub(super) fn with_view_receipts(
+    view: &crate::ui::source::wire::SessionView,
+) -> Vec<Arc<MessageRecord>> {
+    let messages = with_question_answers(
+        &view.messages,
+        view.question_answers.as_deref().unwrap_or_default(),
+    );
+    with_canon_proposals(
+        &messages,
+        view.canon_proposals.as_deref().unwrap_or_default(),
+    )
+}

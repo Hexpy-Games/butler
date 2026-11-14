@@ -58,6 +58,11 @@ pub(crate) fn decision_active(ctx: DecisionCtx<'_>, cx: &App) -> bool {
     authority::has_request(ctx.view) || question::question_pending(ctx) || plan::waiting(ctx, cx)
 }
 
+/// `useAuthorityRequest`: an authority request is shown in place of the composer's own copy.
+pub(crate) fn authority_pending(ctx: DecisionCtx<'_>) -> bool {
+    authority::has_request(ctx.view)
+}
+
 /// `useComposerDecision.ts`: Send waits for authority or the first pending question.
 pub(crate) fn send_blocked(ctx: DecisionCtx<'_>) -> bool {
     authority::has_request(ctx.view) || question::question_waiting(ctx)

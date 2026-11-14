@@ -23,7 +23,7 @@ mod tags;
 pub(crate) use chooser::TagChooser;
 pub(crate) use field::TagsField;
 pub(crate) use form::{form_fields, form_footer_submit, plan_select};
-pub(crate) use people::{actor_label, canon_avatar, person_name, person_select};
+pub(crate) use people::{actor_label, canon_avatar, person_name, person_select, warm_person_name};
 pub(crate) use status::{criteria_progress, epic_activity, epic_status};
 pub(crate) use tags::{CanonTags, tag_list};
 

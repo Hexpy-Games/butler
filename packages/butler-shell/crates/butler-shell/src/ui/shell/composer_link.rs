@@ -98,6 +98,7 @@ impl Shell {
         dashboard: Option<SharedString>,
         cx: &mut Context<Self>,
     ) {
+        let outgoing = outgoing.clone();
         let body = outgoing.body(&chat.chat.0, &client_message_id());
         let controls = outgoing.session_controls().filter(|_| new_chat);
         let session = chat.session.0.to_string();
@@ -122,7 +123,12 @@ impl Shell {
                 }
                 this.sync_composer(cx);
             }
-            Err(e) => this.chat_failed(&chat, &e, this.theme.strings.send_failed, cx),
+            Err(e) => {
+                if this.store.selected() == Some(&chat) {
+                    outgoing.restore_rejected(cx);
+                }
+                this.chat_failed(&chat, &e, this.theme.strings.send_failed, cx);
+            }
         });
     }
 
@@ -134,6 +140,16 @@ impl Shell {
         let summary = self.session_menu.summary.as_ref();
         let mut inputs = Inputs::from_summary(summary.filter(|_| dashboard.is_none()));
         inputs.connected = self.source.is_some() && !self.incompatible;
+        // Electron `store.ts summaryFromSessionView`: the shown view owns live turn state.
+        if let Some(view) = self.store.shown_view().filter(|view| {
+            chat.is_some_and(|chat| chat.session.0.as_ref() == view.session_id.as_str())
+        }) {
+            let turn = view.latest_turn.as_ref();
+            inputs.turn_state = Some(turn.map_or("idle", |turn| turn.state.as_str()).to_owned());
+            inputs.latest_turn_cancellable = turn.map(|turn| turn.cancellable);
+            inputs.progress = turn.and_then(|turn| turn.progress.clone());
+        }
+        inputs.epic = chat.is_some_and(|chat| self.sidebar.epic_of(&chat.session.0).is_some());
         inputs.chat_id = chat.map(|c| c.chat.0.to_string());
         inputs.session_id = chat.map(|c| c.session.0.to_string());
         inputs.project_id = chat
