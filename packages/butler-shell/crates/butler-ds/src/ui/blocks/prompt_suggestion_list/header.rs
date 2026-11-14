@@ -65,7 +65,9 @@ fn title(list: &PromptSuggestionList, m: &Metrics, ds: &Ds, cx: &App) -> Div {
         weight: ds.number(Number::TypoNewChatTitleWeight),
         letter_spacing: ds.number(Number::TypoNewChatTitleLetterSpacing),
     };
+    // DS: PromptSuggestionList.module.css .title text-wrap: balance
     keep_words(run(&face, list.title.clone(), ds, cx).text_color(ds.color(Color::TextPrimary)))
+        .text_wrap_balance()
 }
 
 fn icon_box(icon: &TitleIcon, side: f32, ds: &Ds) -> Div {
