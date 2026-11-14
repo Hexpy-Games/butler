@@ -13,12 +13,22 @@
 mod app;
 #[cfg(all(feature = "cef", windows))]
 mod boot;
+#[cfg(all(feature = "cef", target_os = "macos"))]
+mod mac;
 
 /// Run a CEF browser or helper process, passing bootstrap sandbox info through.
 #[cfg(feature = "cef")]
 pub fn run(sandbox_info: *mut u8) -> i32 {
-    let _ = cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0);
     let args = cef::args::Args::new();
+    #[cfg(target_os = "macos")]
+    let _loaded = match mac::load(&args) {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    let _ = cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0);
     let mut app = app::HostApp::new();
     let code = cef::execute_process(Some(args.as_main_args()), Some(&mut app), sandbox_info);
     if code >= 0 {

@@ -1,6 +1,7 @@
 //! Browser backend while no App is attached. Enabled by default, including
 //! when the App launched the Agent. The installed App's Electron runs on
 //! demand without a window; Chrome for Testing serves App-less installs.
+//! An installed App with a bundled CEF host uses that host through the headless backend.
 //! `BUTLER_BROWSER_HEADLESS=on|off` overrides `headlessBrowser` in the App
 //! gateway config for Chrome fallback. The installed App engine is always
 //! available. Neither backend starts until a browser call needs it.
