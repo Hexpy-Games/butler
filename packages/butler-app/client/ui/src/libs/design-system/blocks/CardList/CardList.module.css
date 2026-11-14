@@ -145,16 +145,18 @@
    centers its text and actions on each other instead of spilling the action
    into the row padding, and the description wraps instead of truncating. */
 @media (width <= 640px) {
-  .item:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+  .item:where(:not([data-viewport="desktop"], [data-viewport="desktop"] *)) {
     align-items: center;
   }
 
-  .actions:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+  .actions:where(:not([data-viewport="desktop"], [data-viewport="desktop"] *)) {
     height: auto;
     align-self: center;
   }
 
-  .description:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+  .description:where(
+    :not([data-viewport="desktop"], [data-viewport="desktop"] *)
+  ) {
     white-space: normal;
   }
 }

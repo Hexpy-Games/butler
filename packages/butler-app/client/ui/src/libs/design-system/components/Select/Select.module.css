@@ -247,7 +247,7 @@
 
 /* Touch size: the trigger's sides and radius follow the 44px button. */
 @media (width <= 640px) {
-  .trigger:not([data-viewport="desktop"], [data-viewport="desktop"] *) {
+  .trigger:where(:not([data-viewport="desktop"], [data-viewport="desktop"] *)) {
     padding-inline: var(--space-md);
     border-radius: var(--radius-control-touch);
   }
