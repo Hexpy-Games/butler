@@ -120,6 +120,7 @@ try {
     await capture("completed");
     await page.reload();
     await page.getByText(answer, { exact: true }).waitFor();
+    await assistant.nth(splits ? 1 : 0).waitFor();
     assert.equal(await assistant.count(), splits ? 2 : 1, "reload preserves segmentation");
     if (!splits) assert.equal(await groups.count(), 1);
   }
