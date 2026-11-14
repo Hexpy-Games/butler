@@ -133,7 +133,7 @@ async fn session_cookie(s: &Scenario, browser: &reqwest::Client) -> Result<Strin
     Ok(set_cookie.split(';').next().unwrap().to_owned())
 }
 
-/// SEC-05 — `butler open`: the one-time link sets an HttpOnly, SameSite=Strict
+/// SEC-05 — `butler open`: the one-time link sets an HttpOnly, SameSite=Lax
 /// session cookie and cannot be used twice; a browser without it gets the
 /// connection-code screen (no password dialog); only the Butler page itself
 /// may use the cookie.
@@ -164,7 +164,7 @@ async fn sec_05_one_time_link_sets_a_cookie_and_cannot_be_reused() -> Result<(),
     assert_eq!(header(redeemed.headers(), "location"), "/");
     let set_cookie = header(redeemed.headers(), "set-cookie").to_owned();
     assert!(
-        set_cookie.contains("HttpOnly") && set_cookie.contains("SameSite=Strict"),
+        set_cookie.contains("HttpOnly") && set_cookie.contains("SameSite=Lax"),
         "{set_cookie}"
     );
     assert!(set_cookie.contains("=v2."));
@@ -245,7 +245,7 @@ async fn assert_cookie_reads(
         let body: serde_json::Value = response.json().await?;
         assert_eq!(body["error"]["code"].as_str(), code, "{headers:?}: {body}");
     }
-    // A link from another local page lands on the connection screen.
+    // A cookie request from another local page that is not a page navigation lands on the connection screen.
     let navigation = browser
         .get(url(gw, "/"))
         .header("cookie", cookie)
