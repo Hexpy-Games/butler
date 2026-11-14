@@ -44,6 +44,7 @@ pub mod nav_section;
 pub mod notice;
 pub mod option_menu;
 pub mod overflow_action_menu;
+pub mod page_band;
 pub mod panel_header;
 pub mod progress_meter;
 pub mod prompt_suggestion_list;

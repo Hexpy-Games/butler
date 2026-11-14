@@ -91,6 +91,7 @@ mod nav_section;
 mod notice;
 mod option_menu;
 mod overflow_action_menu;
+mod page_band;
 mod page_container;
 mod panel_header;
 mod percent_input_control;
