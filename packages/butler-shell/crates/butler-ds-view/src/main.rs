@@ -9,6 +9,7 @@
 //!       (feature `shots`: stdin commands, each answered `LIVE OK`; see live.rs)
 mod app;
 mod browser_demo;
+mod browser_pane_demo;
 mod copy;
 #[cfg(feature = "shots")]
 mod live;

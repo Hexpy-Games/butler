@@ -2,7 +2,7 @@
 //! demo is the app container in miniature: its state lives here and the strip reports intents.
 //! The state matrix is covered by the live harness (hover, focus, active). Pointer drag-reorder
 //! is not ported (keyboard reorder, Cmd/Ctrl+Shift+arrows, is).
-mod data;
+pub(in crate::pages) mod data;
 
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::tab_strip::{Group, GroupKind, Tab, TabStrip, apply_move};
