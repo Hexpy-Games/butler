@@ -3,8 +3,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use gpui::{
-    AnyElement, App, Bounds, Corners, IntoElement as _, Pixels, Styled as _, WallpaperClock,
-    WallpaperImage, WallpaperPaint, WallpaperPass, Window, canvas,
+    AnyElement, App, Bounds, Corners, IntoElement as _, Pixels, Styled as _, WallpaperImage,
+    WallpaperPaint, WallpaperPass, Window, canvas,
 };
 
 use super::{WallpaperTone, live_image, live_modules, live_params, live_print};
@@ -17,8 +17,6 @@ pub(super) const STILL_DAY_PHASE: f32 = 0.5;
 #[derive(Clone, Copy)]
 pub(super) struct LiveFrame {
     pub(super) tone: WallpaperTone,
-    pub(super) animate: bool,
-    pub(super) start_ms: u32,
     pub(super) day_phase: f32,
     pub(super) content_rect: Option<ContentRect>,
     pub(super) content_rect2: Option<ContentRect>,
@@ -38,16 +36,11 @@ pub(super) fn layer(id: &str, frame: LiveFrame, cx: &mut App) -> Option<(AnyElem
     let key = hash.finish();
     let drawn = canvas(
         |_, _, _| (),
-        move |bounds, (), window, cx| {
+        move |bounds, (), window, _cx| {
             if (module.photo.is_some() && image.is_none())
                 || (module.manifest["image"] == "required" && module.photo.is_none())
             {
                 return;
-            }
-            let mut frame = frame;
-            if bounds.size.width > gpui::px(0.) && bounds.size.height > gpui::px(0.) {
-                frame.start_ms =
-                    crate::ui::motion::mounted_at(("wallpaper-clock", key), window, cx);
             }
             if module.manifest["density"] == true {
                 live_print::paint(bounds, key, params[0], frame, module, window);
@@ -92,7 +85,7 @@ fn paint(
     let wallpaper = WallpaperPaint {
         key,
         generation: live_print::generation(&passes),
-        clock: clock(module, frame, image.is_some()),
+        clock: None,
         image,
         passes: passes.into(),
     };
@@ -144,20 +137,4 @@ fn pass(module: u32, buffer: [f32; 2], previous: bool, uniforms: [[f32; 4]; 15])
         image: false,
         uniforms,
     }
-}
-
-/// DS: scheduler.ts WALLPAPER_ANIMATED_FPS and wallpaperFrameMode, glScene.ts pass order.
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "shader period is an f32 uniform"
-)]
-fn clock(module: &live_modules::Module, frame: LiveFrame, image: bool) -> Option<WallpaperClock> {
-    // P6: Electron's pauseOnBattery needs a power-source signal, which gpui does not expose.
-    (frame.animate && module.manifest["motion"] == "animated").then(|| WallpaperClock {
-        start_ms: frame.start_ms,
-        start_s: module.still_time,
-        fps: 20, // DS: scheduler.ts WALLPAPER_ANIMATED_FPS.
-        period_s: module.period() as f32,
-        animated_from: usize::from(image) + usize::from(module.manifest["overlay"] == true),
-    })
 }

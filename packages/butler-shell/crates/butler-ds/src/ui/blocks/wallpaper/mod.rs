@@ -1,7 +1,8 @@
 //! DS Wallpaper (blocks/Wallpaper `still.ts`, `stillContext.ts`, `imageCache.ts`, `imageMath.ts`,
 //! the engine's host side and WallpaperPicker `builtinPosters.ts`): a live module the renderer
 //! has shaders for drawn at its default params, unknown live
-//! modules from their bundled posters, or an image. Edited params, drift and crossfade are P6.
+//! modules from their bundled posters, or an image. Animated modules hold their still frame
+//! (`stillTime`) for now; edited params, drift and crossfade are P6.
 //! [`Wallpaper`] is the layer to hand to `WallpaperStage::wallpaper`; it fills its parent, which
 //! clips it.
 mod image_cache;
@@ -125,7 +126,6 @@ pub struct Wallpaper {
     content_rect: Option<ContentRect>,
     content_rect2: Option<ContentRect>,
     day_phase: f32,
-    paused: bool,
 }
 
 impl Wallpaper {
@@ -137,7 +137,6 @@ impl Wallpaper {
             content_rect: None,
             content_rect2: None,
             day_phase: STILL_DAY_PHASE,
-            paused: false,
         }
     }
 
@@ -156,12 +155,6 @@ impl Wallpaper {
     /// Local time of day, 0..1 from midnight (`u_dayPhase`); a still's midday by default.
     pub fn day_phase(mut self, phase: f32) -> Self {
         self.day_phase = phase;
-        self
-    }
-
-    /// Holds a still frame when the wallpaper motion setting is paused.
-    pub fn motion(mut self, paused: bool) -> Self {
-        self.paused = paused;
         self
     }
 
@@ -188,8 +181,6 @@ impl RenderOnce for Wallpaper {
             WallpaperSource::Live { module } => {
                 let frame = LiveFrame {
                     tone,
-                    animate: !self.paused && !ds.reduced_motion(),
-                    start_ms: 0,
                     day_phase: self.day_phase,
                     content_rect: self.content_rect,
                     content_rect2: self.content_rect2,
