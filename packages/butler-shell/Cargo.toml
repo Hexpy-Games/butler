@@ -28,10 +28,10 @@ lto = "thin"
 codegen-units = 1
 
 [workspace.dependencies]
-gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "41544d1ea29846def501ef0367b2e9b9f6db6d2a", package = "gpui-ce" }
-gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "41544d1ea29846def501ef0367b2e9b9f6db6d2a", package = "gpui_ce_platform" }
-gpui_wgpu = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "41544d1ea29846def501ef0367b2e9b9f6db6d2a", package = "gpui_ce_wgpu" }
-gpui_elements = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "41544d1ea29846def501ef0367b2e9b9f6db6d2a", package = "gpui_ce_elements" }
+gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "0fc0f2df3626f1bd247387958e0910944c64ba58", package = "gpui-ce" }
+gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "0fc0f2df3626f1bd247387958e0910944c64ba58", package = "gpui_ce_platform" }
+gpui_wgpu = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "0fc0f2df3626f1bd247387958e0910944c64ba58", package = "gpui_ce_wgpu" }
+gpui_elements = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "0fc0f2df3626f1bd247387958e0910944c64ba58", package = "gpui_ce_elements" }
 anyhow = "1"
 futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
 sys-locale = "0.3"
@@ -84,3 +84,19 @@ missing_panics_doc = "allow"
 doc_markdown = "allow"
 # `Default::default()` in struct literals avoids repeating long type names.
 default_trait_access = "allow"
+
+# gpui-ce builds wgpu 29.0.4 plus one commit (Hexpy-Games/wgpu, branch butler/metal-coalesce): on
+# Metal, render passes with no pre-pass work share the encoder's open command buffer instead of
+# two MTLCommandBuffers each. Cargo does not apply a git dependency's patches, so the section is
+# repeated here; keep the rev equal to the one in gpui-ce's Cargo.toml at the pinned rev. All
+# wgpu-repository crates are listed because they depend on each other by path there.
+[patch.crates-io]
+wgpu-core = { git = "https://github.com/Hexpy-Games/wgpu", rev = "32880beb30cf76ccd82742e8224c264c799061ff" }
+wgpu-hal = { git = "https://github.com/Hexpy-Games/wgpu", rev = "32880beb30cf76ccd82742e8224c264c799061ff" }
+wgpu-types = { git = "https://github.com/Hexpy-Games/wgpu", rev = "32880beb30cf76ccd82742e8224c264c799061ff" }
+naga = { git = "https://github.com/Hexpy-Games/wgpu", rev = "32880beb30cf76ccd82742e8224c264c799061ff" }
+wgpu-naga-bridge = { git = "https://github.com/Hexpy-Games/wgpu", rev = "32880beb30cf76ccd82742e8224c264c799061ff" }
+wgpu-core-deps-apple = { git = "https://github.com/Hexpy-Games/wgpu", rev = "32880beb30cf76ccd82742e8224c264c799061ff" }
+wgpu-core-deps-windows-linux-android = { git = "https://github.com/Hexpy-Games/wgpu", rev = "32880beb30cf76ccd82742e8224c264c799061ff" }
+wgpu-core-deps-wasm = { git = "https://github.com/Hexpy-Games/wgpu", rev = "32880beb30cf76ccd82742e8224c264c799061ff" }
+wgpu-core-deps-emscripten = { git = "https://github.com/Hexpy-Games/wgpu", rev = "32880beb30cf76ccd82742e8224c264c799061ff" }
