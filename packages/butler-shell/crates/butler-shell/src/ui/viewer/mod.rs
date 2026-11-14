@@ -2,7 +2,7 @@
 //! `useRightSlot`, in the AdaptiveShell split pane with tabs on TabStrip.
 mod artifact;
 pub(crate) mod frame;
-mod state;
+pub(crate) mod state;
 
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::adaptive_shell::parts::ShellCard;
