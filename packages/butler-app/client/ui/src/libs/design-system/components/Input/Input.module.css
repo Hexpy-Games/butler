@@ -101,12 +101,16 @@
   }
 }
 
-/* Touch size: the field's sides and radius follow the 44px button. */
+/* Touch size: the field's sides and radius follow the 44px button. The
+   exclusions sit in :where, so a block's own padding (a search field aligned
+   to its panel's text column) still wins, as on desktop. */
 @media (width <= 640px) {
-  .input:not(
-    [data-variant="underline"],
-    [data-viewport="desktop"],
-    [data-viewport="desktop"] *
+  .input:where(
+    :not(
+      [data-variant="underline"],
+      [data-viewport="desktop"],
+      [data-viewport="desktop"] *
+    )
   ) {
     padding-inline: var(--space-md);
     border-radius: var(--radius-control-touch);
@@ -114,7 +118,7 @@
 }
 
 @media (pointer: coarse) {
-  .input:not([data-variant="underline"]) {
+  .input:where(:not([data-variant="underline"])) {
     padding-inline: var(--space-md);
     border-radius: var(--radius-control-touch);
   }
