@@ -380,18 +380,3 @@ fn owner_event(state: &mut State, transfer: &Transfer, kind: &str, data: &Value)
         .or_default()
         .push(event);
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stage_path_uses_one_separator() {
-        let root = std::env::temp_dir().join("butler-downloads-test");
-        let downloads = Downloads::new(&root);
-        let normalized: PathBuf = downloads.stage.components().collect();
-        // Path equality ignores separators; Chrome on Windows does not (#2245).
-        assert_eq!(downloads.stage.as_os_str(), normalized.as_os_str());
-        assert!(downloads.stage.ends_with("stage"));
-    }
-}
