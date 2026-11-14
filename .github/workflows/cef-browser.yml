@@ -64,6 +64,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Use MSVC's linker, not Git's coreutils link
+        if: matrix.os == 'windows'
+        # the hosted runner is ephemeral
+        run: rm -f /usr/bin/link.exe
+
       # `runner` is not available in job-level env; the pinned CEF lives under the runner temp.
       - name: Locate the CEF archive cache
         run: echo "CEF_PATH=$RUNNER_TEMP/cef" >> "$GITHUB_ENV"
