@@ -13,8 +13,8 @@ mod still;
 use std::sync::Arc;
 
 use gpui::{
-    App, Div, Image, ImageSource, IntoElement, ObjectFit, ParentElement as _, RenderOnce,
-    SharedString, Styled as _, StyledImage as _, Window, div, hsla, img,
+    AnyElement, App, Div, Image, ImageSource, IntoElement, ObjectFit, ParentElement as _,
+    RenderOnce, SharedString, Styled as _, StyledImage as _, Window, div, hsla, img,
 };
 
 pub use image_cache::{ImageCache, ImageLoader, bundled_image, default_image_asset};
@@ -28,6 +28,11 @@ use self::live::{LiveFrame, STILL_DAY_PHASE};
 use crate::tokens::Color;
 use crate::ui::blocks::prompt_suggestion_list::ContentRect;
 use crate::ui::context::Ds;
+
+/// The first-run intro's dried end frame. // DS: intro/introFrame.ts
+pub fn intro_print(tone: WallpaperTone, card: Option<ContentRect>) -> AnyElement {
+    live::intro_layer(tone, card)
+}
 
 /// The theme a wallpaper draws for (`WallpaperTone`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
