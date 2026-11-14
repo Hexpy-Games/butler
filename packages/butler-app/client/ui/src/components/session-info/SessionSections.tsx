@@ -1,5 +1,5 @@
 import { StepOrderSection } from "./StepOrderSection.tsx";
-import { BrowserSection } from "./BrowserSection.tsx";
+import { BrowserSection, PreviewSection } from "./BrowserSection.tsx";
 import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -17,7 +17,7 @@ import { useSessionSectionsModel } from "./useSessionSectionsModel.ts";
 /** The same ordered sections on the flat margin and on floating glass. */
 export function SessionSections({ layout }: { layout: AsideLayout }) {
   useAppLocale();
-  const { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, branch, folder, artifacts, attachments, schedules } = useSessionSectionsModel();
+  const { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, previews, branch, folder, artifacts, attachments, schedules } = useSessionSectionsModel();
   const sections = new Set(ids);
   const setView = useButlerStore(state => state.setView);
   const [contextOpen, setContextOpen] = useState(false);
@@ -33,7 +33,9 @@ export function SessionSections({ layout }: { layout: AsideLayout }) {
       <StepOrderSection order={order} />
     </SessionSection>}
     {/* The model filters it, so a hidden browser section leaves no floating separator. */}
-    {sections.has("browser") && <BrowserSection key="browser" layout={layout} session={sessionId} tabs={browserTabs} />}
+    {sections.has("browser") && (previews.length > 0
+      ? <PreviewSection key="browser" layout={layout} previews={previews} />
+      : <BrowserSection key="browser" layout={layout} session={sessionId} tabs={browserTabs} />)}
     {sections.has("environment") && <SessionSection id="environment" layout={layout} title={c.environment}>
       {folder && <KeyValueRow label={c.folder} value={folder} valueTextSize="caption" />}
       {branch?.branch_name && <KeyValueRow label={c.branch} value={branch.branch_name} valueTextSize="caption" />}

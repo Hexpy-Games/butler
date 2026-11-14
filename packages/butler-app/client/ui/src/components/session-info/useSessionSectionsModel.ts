@@ -1,4 +1,4 @@
-import { sessionArtifacts } from "../artifacts/sessionArtifacts.ts";
+import { isPreviewArtifact, sessionArtifacts } from "../artifacts/sessionArtifacts.ts";
 import { useCanonSidebarState } from "@/app/canonSidebarState.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
@@ -26,6 +26,9 @@ export function useSessionSectionsModel() {
   const branch = summary?.branch_info;
   const folder = branch?.workspace_path || branch?.workspace_label;
   const artifacts = summary?.artifacts ?? [];
+  const nativeBrowser = canOpenHandoffTab();
+  // Without a native browser (phone, Remote), the running previews open in the file viewer instead of live tabs.
+  const previews = nativeBrowser ? [] : artifacts.filter(isPreviewArtifact);
   const attachments = [...new Map(messages.filter(message => message.role === "user").flatMap(message => message.attachments ?? []).map(file => [file.file_id, file])).values()];
   const schedules = summary?.automation_targets ?? [];
   const subtasks = summary?.subtasks ?? [];
@@ -38,7 +41,7 @@ export function useSessionSectionsModel() {
     if (asks && asks.open_count > 0) ids.push("asks");
     if (subtasks.length > 0) ids.push("subtasks");
     if (notDone > 0) ids.push("order");
-    if (browserTabs.length > 0 && canOpenHandoffTab()) ids.push("browser");
+    if ((nativeBrowser && browserTabs.length > 0) || previews.length > 0) ids.push("browser");
     if (folder || branch?.branch_name) ids.push("environment");
     if (epic) ids.push("task");
     if (summary?.context_details) ids.push("context");
@@ -46,7 +49,7 @@ export function useSessionSectionsModel() {
     if (attachments.length > 0) ids.push("attachments");
     if (schedules.length > 0) ids.push("schedules");
   }
-  return { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, branch, folder, artifacts, attachments, schedules };
+  return { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, previews, branch, folder, artifacts, attachments, schedules };
 }
 
 export function useSessionInfoHasContent() {
