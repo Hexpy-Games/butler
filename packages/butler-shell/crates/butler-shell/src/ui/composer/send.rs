@@ -20,18 +20,32 @@ use crate::ui::source::agent::Jobs;
 pub(crate) struct Outgoing {
     pub(crate) text: String,
     submission: Submission,
+    attachments: Vec<super::state::ComposerAttachment>,
 }
 
 impl From<String> for Outgoing {
     fn from(text: String) -> Self {
         Self {
             submission: Submission::plain(text.clone()),
+            attachments: Vec::new(),
             text,
         }
     }
 }
 
 impl Outgoing {
+    /// Electron `useComposerSubmit.ts onRejected`: restore only the still-empty draft.
+    pub(crate) fn restore_rejected(&self, cx: &mut gpui::App) {
+        ComposerState::update(cx, |draft| {
+            if draft.text.is_empty() {
+                draft.set_text(&self.text);
+                if draft.attachments.is_empty() {
+                    draft.attachments.clone_from(&self.attachments);
+                }
+            }
+        });
+    }
+
     /// The `POST /messages` body of `sendMessage`: the text, content parts, attachments and
     /// controls, and the queue policy the submission was made under.
     pub(crate) fn body(&self, chat_id: &str, client_message_id: &str) -> Value {
@@ -132,7 +146,12 @@ impl Composer {
             live_connection_lost: self.inputs.reconnecting,
         };
         let submission = ComposerState::update(cx, |draft| draft.begin_submit(input))?;
-        Some(Outgoing { text, submission })
+        let attachments = ComposerState::read(cx, |draft| draft.attachments.clone());
+        Some(Outgoing {
+            text,
+            submission,
+            attachments,
+        })
     }
 
     /// `queueMessage` of a started chat: the draft leaves the editor once the queue took it and
