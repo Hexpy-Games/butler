@@ -1,0 +1,248 @@
+name: gpui Linux package
+
+on:
+  pull_request:
+    paths:
+      - packages/butler-shell/**
+      - packages/butler-app/scripts/release/package-linux-app.ts
+      - packages/butler-app/scripts/release/gpui-linux-update-smoke.sh
+      - .github/workflows/gpui-linux-package.yml
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      release:
+        type: boolean
+        default: false
+        description: Build the bundled Agent as a tagged release does
+      version:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: gpui-linux-package-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  versions:
+    runs-on: ubuntu-24.04
+    outputs:
+      from: ${{ steps.versions.outputs.from }}
+      to: ${{ steps.versions.outputs.to }}
+    steps:
+      - name: Select the published Electron preview and candidate version
+        id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import fnmatch, json, os, re, subprocess
+          pages = json.loads(subprocess.check_output([
+              'gh', 'api', '--paginate', '--slurp',
+              f"repos/{os.environ['GH_REPO']}/releases?per_page=100"], text=True))
+          releases = [r for page in pages for r in page if not r['draft']
+                      and re.fullmatch(r'v\d+\.\d+\.\d+-preview\.\d+', r['tag_name'])
+                      and any(fnmatch.fnmatchcase(a['name'], 'butler-app-*-linux-x64.deb') for a in r['assets'])]
+          if not releases:
+              raise SystemExit('No published Electron preview with a Linux DEB')
+          latest = max(releases, key=lambda r: r['published_at'])
+          previous = latest['tag_name'][1:]
+          prefix, number = previous.rsplit('.', 1)
+          candidate = os.environ['REQUESTED_VERSION'].removeprefix('v') or f'{prefix}.{int(number) + 1}'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'from={previous}\nto={candidate}\n')
+          PY
+
+  agent:
+    needs: versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_BUILD_JOBS: '8'
+      GITHUB_REF_NAME: v${{ needs.versions.outputs.to }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: ${{ inputs.release && 'static-ort' || 'prebuilt-ort' }}
+          cache-key: gpui-package-linux-x64
+      - uses: ./.github/actions/bun-setup
+        with:
+          bun-version: 1.3.11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.3
+          cache: npm
+          cache-dependency-path: |
+            packages/butler-app/client/electron/package-lock.json
+            packages/butler-app/client/ui/package-lock.json
+      - name: Build the bundled App client
+        run: |
+          python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts
+          python3 .github/scripts/isolated.py npm --prefix packages/butler-app/client/ui run build
+      - name: Build the native Agent and sandbox helper
+        working-directory: packages/butler-agent/rust
+        run: |
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked \
+            -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --no-default-features --features ${{ inputs.release && 'static-ort' || 'prebuilt-ort' }}
+          echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
+      - name: Prepare the native Agent payload
+        env:
+          BUTLER_NATIVE_PAYLOAD_WRITABLE: '1'
+          BUTLER_PACKAGED_APP_VERSION: ${{ needs.versions.outputs.to }}
+        run: |
+          python3 .github/scripts/isolated.py node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs \
+            linux x64 "$RUNNER_TEMP/bundled-agent"
+          tar -C "$RUNNER_TEMP" -cf "$RUNNER_TEMP/gpui-agent.tar" bundled-agent
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpui-agent-linux-x64
+          path: ${{ runner.temp }}/gpui-agent.tar
+          if-no-files-found: error
+          compression-level: 0
+
+  shell:
+    needs: versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/butler-shell
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/gpui-package
+      BUTLER_APP_BUILD_VERSION: ${{ needs.versions.outputs.to }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-dev \
+            libx11-xcb-dev libxcb1-dev libwayland-dev wayland-protocols \
+            libfontconfig-dev libvulkan-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-randr0-dev libxcb-xinput-dev libegl1-mesa-dev libgles2-mesa-dev libglib2.0-dev
+      - name: Install workspace toolchain
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal --component rustfmt --component clippy
+          echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2.9.3
+        with:
+          workspaces: |
+            packages/butler-shell -> ../../target/gpui-package
+            packages/butler-agent/rust -> ../../../target/gpui-package
+          key: gpui-package-linux-x64
+      - name: Build release shell
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release --bin butler-shell
+      - name: Locate CEF cache
+        run: echo "CEF_PATH=$RUNNER_TEMP/cef" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cef
+          key: cef-linux-${{ hashFiles('packages/butler-agent/rust/crates/butler-platform/cef/fetch.py') }}
+      - name: Fetch pinned CEF
+        working-directory: packages/butler-agent/rust
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 crates/butler-platform/cef/fetch.py --dest "$CEF_PATH"
+      - name: Build CEF host
+        working-directory: packages/butler-agent/rust
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release -p butler-cef --features cef --target x86_64-unknown-linux-gnu
+      - name: Stage shell and CEF runtime
+        working-directory: packages/butler-agent/rust
+        run: |
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 crates/butler-platform/cef/stage.py \
+            --cef "$CEF_PATH" --target "$CARGO_TARGET_DIR/x86_64-unknown-linux-gnu/release" --out "$RUNNER_TEMP/gpui-shell/cef-runtime"
+          python3 - <<'PY'
+          import os, shutil, sys
+          from pathlib import Path
+          sys.path.insert(0, 'crates/butler-platform/cef')
+          from fetch import VERSION, PINS
+          stage = Path(os.environ['RUNNER_TEMP']) / 'gpui-shell'
+          cef = Path(os.environ['CEF_PATH']) / VERSION / PINS[('Linux', 'x86_64')]['dir']
+          shutil.copy2(cef / 'CREDITS.html', stage / 'cef-runtime/CREDITS.html')
+          shutil.copy2(Path(os.environ['CARGO_TARGET_DIR']) / 'release/butler-shell', stage)
+          PY
+          tar -C "$RUNNER_TEMP" -cf "$RUNNER_TEMP/gpui-shell.tar" gpui-shell
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpui-shell-linux-x64
+          path: ${{ runner.temp }}/gpui-shell.tar
+          if-no-files-found: error
+          compression-level: 0
+
+  package:
+    needs: [versions, agent, shell]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: gpui-agent-linux-x64
+          path: ${{ runner.temp }}/gpui-inputs
+      - uses: actions/download-artifact@v4
+        with:
+          name: gpui-shell-linux-x64
+          path: ${{ runner.temp }}/gpui-inputs
+      - uses: ./.github/actions/bun-setup
+        with:
+          bun-version: 1.3.11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.3
+          cache: npm
+          cache-dependency-path: |
+            packages/butler-app/client/electron/package-lock.json
+            packages/butler-app/client/ui/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install workspace toolchain for shell notices
+        working-directory: packages/butler-shell
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+      - name: Install package tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fakeroot libarchive-tools pacman-package-manager zstd
+          command -v dpkg-deb makepkg readelf
+      - name: Package the gpui App
+        env:
+          GITHUB_REF_NAME: v${{ needs.versions.outputs.to }}
+          BUTLER_NATIVE_AGENT_EXECUTABLE: ${{ runner.temp }}/bundled-agent/bin/butler-agent
+          BUTLER_NATIVE_UI_DIST: ${{ runner.temp }}/bundled-agent/resources/app-client/dist
+          BUTLER_SHELL_EXECUTABLE: ${{ runner.temp }}/gpui-shell/butler-shell
+          BUTLER_CEF_RUNTIME: ${{ runner.temp }}/gpui-shell/cef-runtime
+        run: |
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/gpui-inputs/gpui-agent.tar"
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/gpui-inputs/gpui-shell.tar"
+          python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts
+          python3 .github/scripts/isolated.py bun run packages/butler-app/scripts/release/package-linux-app.ts \
+            --platform=linux-x64 --format=deb --format=pacman --shell=gpui --out=dist/release/app-linux-gpui
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpui-app-linux-x64
+          path: dist/release/app-linux-gpui/*
+          if-no-files-found: error
+      - name: Install smoke runtime prerequisites
+        run: |
+          sudo apt-get install -y xvfb mesa-vulkan-drivers libvulkan1 libstdc++6 libgcc-s1 libnss3 libgbm1 \
+            libasound2t64 libxkbcommon0 libxkbcommon-x11-0 libxcb1 libwayland-client0 libfontconfig1 xdg-utils
+      - name: Download the Electron preview and prove the upgrade
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FROM_VERSION: ${{ needs.versions.outputs.from }}
+        run: |
+          gh release download "v$FROM_VERSION" -p 'butler-app-*-linux-x64.deb' -D dist/release/electron-from
+          sh packages/butler-app/scripts/release/gpui-linux-update-smoke.sh \
+            dist/release/electron-from/*.deb dist/release/app-linux-gpui/*.deb

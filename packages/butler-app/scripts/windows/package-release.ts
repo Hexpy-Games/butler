@@ -1,9 +1,9 @@
 /** Native unsigned Squirrel release, consuming a previously built Agent. */
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { writeWindowsReleaseOutputs } from "./release-outputs.ts";
 import { stageElectronPackageSource } from "../release/electron-package-source.ts";
 
 if (process.platform !== "win32") throw new Error("Windows release packaging requires Windows");
@@ -39,26 +39,7 @@ try {
     "--setup-exe", `ButlerSetup-${version}-x64.exe`, "--setup-icon", join(electron, "assets/butler.ico"), "--version", version]);
   run("node", [join(electron, "scripts/create-windows-portable.mjs"), app]);
   cpSync(join(work, "Butler-win32-x64-portable.zip"), join(out, `butler-app-${version}-windows-x64-portable.zip`));
-  const files = readdirSync(out).filter(name => name === "RELEASES" || /\.(exe|nupkg|zip)$/u.test(name));
-  const digests = new Map<string, string>();
-  for (const name of files) {
-    const digest = createHash("sha256").update(readFileSync(join(out, name))).digest("hex");
-    digests.set(name, digest);
-    writeFileSync(join(out, `${name}.sha256`), `${digest}  ${name}\n`);
-  }
-  const packages = files.filter(name => name.endsWith("-full.nupkg"));
-  if (packages.length !== 1) throw new Error("Expected one selected full nupkg");
-  const name = packages[0]!;
-  writeFileSync(join(out, "app-update-manifest.json"), JSON.stringify({
-    app_version: version, bundled_agent_version: version, artifacts: [{
-      component: "app", product: "butler-app", platform: "windows-x64", version,
-      app_version: version, bundled_agent_version: version, channel: version.includes("-") ? "preview" : "stable",
-      artifact_url: `${baseUrl}/${name}`, sha256: digests.get(name), package_format: "nupkg",
-      payload_format: "platform-app-package", update_policy: "app-user-action", restart_policy: "restart-app",
-      updater_owner: "butler-app", staging_policy: "butler-data-updates",
-      activation_policy: "user-installs-app-package", rollback_policy: "not-managed-by-butler",
-    }],
-  }, null, 2) + "\n");
+  const files = writeWindowsReleaseOutputs(out, version, baseUrl);
   console.log(JSON.stringify({ version, artifacts: files, unsigned: true }));
 } finally {
   rmSync(work, { recursive: true, force: true });
