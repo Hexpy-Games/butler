@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "tools/source-check"]
+members = ["crates/*", "crates/butler-platform/cef", "tools/source-check"]
 resolver = "3"
 
 [workspace.package]

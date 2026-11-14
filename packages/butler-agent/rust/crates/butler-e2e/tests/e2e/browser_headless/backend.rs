@@ -7,7 +7,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
-use super::support::{admin, call, hidden_app, open, publish, selected, setup};
+use super::support::{admin, call, cef, hidden_app, open, publish, selected, setup};
 use butler_e2e::e2e::{HarnessError, security::AdminClient};
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -127,7 +127,7 @@ pub(super) async fn serve_app(
 async fn attached_app_serves_new_work_and_tasks_never_switch() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
-    butler_e2e::skip_unless!(!hidden_app(), "Chrome for Testing only");
+    butler_e2e::skip_unless!(!hidden_app() && !cef(), "Chrome for Testing only");
     let s = setup("BROWSER-HEADLESS-BACKEND")?.start().await?;
     let admin = admin(&s);
     let url = publish(&s).await?;
@@ -226,7 +226,7 @@ async fn tampered_archive_host() -> Result<(String, tokio::task::JoinHandle<()>)
 async fn unverified_browser_download_is_never_run() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
-    butler_e2e::skip_unless!(!hidden_app(), "Chrome for Testing only");
+    butler_e2e::skip_unless!(!hidden_app() && !cef(), "Chrome for Testing only");
     let (base, server) = tampered_archive_host().await?;
     let isolated = tempdir_for("tampered")?;
     let s = setup("BROWSER-HEADLESS-UNVERIFIED")?

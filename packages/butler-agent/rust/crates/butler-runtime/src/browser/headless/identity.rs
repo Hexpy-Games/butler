@@ -11,13 +11,36 @@ pub(super) async fn read(
     events: &mut mpsc::UnboundedReceiver<Event>,
 ) -> Result<Value, String> {
     let version = cdp.send("Browser.getVersion", json!({}), None).await?;
+    // A disposable context, like every other page: a page of the persistent default profile is
+    // what Chrome's session service (present under the CEF host) records and rewrites later.
+    let context = cdp
+        .send(
+            "Target.createBrowserContext",
+            json!({"disposeOnDetach":true}),
+            None,
+        )
+        .await?;
+    let context = context["browserContextId"]
+        .as_str()
+        .ok_or("identity_unavailable")?;
     let target = cdp
-        .send("Target.createTarget", json!({"url":"about:blank"}), None)
+        .send(
+            "Target.createTarget",
+            json!({"url":"about:blank","browserContextId":context}),
+            None,
+        )
         .await?;
     let target = target["targetId"].as_str().ok_or("identity_unavailable")?;
     let result = probe(cdp, events, target, &version).await;
     let _ = cdp
         .send("Target.closeTarget", json!({"targetId":target}), None)
+        .await;
+    let _ = cdp
+        .send(
+            "Target.disposeBrowserContext",
+            json!({"browserContextId":context}),
+            None,
+        )
         .await;
     result
 }

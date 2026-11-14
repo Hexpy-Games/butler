@@ -173,9 +173,20 @@ fn crashed(browser: &Browser, target: &str) {
     }
 }
 
-fn info_changed(browser: &Browser, info: &Value) {
-    let mut state = browser.shared.lock();
+fn info_changed(browser: &Arc<Browser>, info: &Value) {
     let target = info["targetId"].as_str().unwrap_or("");
+    if info["type"] == "page" {
+        let session = { browser.shared.lock().others.remove(target) };
+        if let Some(session) = session {
+            let browser = browser.clone();
+            let target = target.to_owned();
+            let info = info.clone();
+            drop(tokio::spawn(async move {
+                targets::page_attached(browser, session, target, &info).await;
+            }));
+        }
+    }
+    let mut state = browser.shared.lock();
     if let Some(tab) = state.tabs.values_mut().find(|t| t.target == target) {
         let raw = info["url"].as_str().unwrap_or("");
         if let Ok(url) = url::Url::parse(raw)
@@ -214,5 +225,50 @@ fn chooser(browser: &Arc<Browser>, session: String, params: &Value) {
             Ok(_) => json!({"status":"completed","files":1}),
             Err(_) => json!({"status":"unknown","reason":"upload_failed"}),
         });
+    }));
+}
+
+/// Chrome for Testing attaches new tabs as pages; CEF 156 first attaches them as paused "other" targets.
+/// CEF then reports the page type through targetInfoChanged, without a second attachment event.
+/// Resuming and detaching immediately loses the tab, so hold it briefly for page setup instead.
+pub(crate) fn hold_other(
+    browser: Arc<Browser>,
+    parent: Option<String>,
+    target: String,
+    session: String,
+) {
+    browser.shared.lock().others.insert(target.clone(), session);
+    drop(tokio::spawn(async move {
+        // Its page type may have been reported while this attach was being set up: whichever of
+        // this check and `info_changed` removes the entry sets the page up, exactly once.
+        let info = browser
+            .cdp
+            .send("Target.getTargetInfo", json!({"targetId":target}), None)
+            .await
+            .map(|reply| reply["targetInfo"].clone())
+            .unwrap_or_default();
+        if info["type"] == "page" {
+            let held = { browser.shared.lock().others.remove(&target) };
+            if let Some(session) = held {
+                targets::page_attached(browser, session, target, &info).await;
+                return;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let session = { browser.shared.lock().others.remove(&target) };
+        if let Some(session) = session {
+            let _ = browser
+                .cdp
+                .send("Runtime.runIfWaitingForDebugger", json!({}), Some(&session))
+                .await;
+            let _ = browser
+                .cdp
+                .send(
+                    "Target.detachFromTarget",
+                    json!({"sessionId":session}),
+                    parent.as_deref(),
+                )
+                .await;
+        }
     }));
 }

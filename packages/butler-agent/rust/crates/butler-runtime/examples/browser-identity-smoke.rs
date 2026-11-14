@@ -17,6 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             install: InstallSource {
                 cache_root: root.join("cache"),
                 base_url: None,
+                cef_host: None,
             },
             content: Some(ContentOrigin(port)),
             enabled: true,

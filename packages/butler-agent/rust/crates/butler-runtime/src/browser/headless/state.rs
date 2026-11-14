@@ -218,6 +218,9 @@ pub(crate) struct State {
     pub events: HashMap<String, Vec<Value>>,
     /// Page targets attached before the call that created them claimed them.
     pub unclaimed: HashMap<String, String>,
+    /// Targets attached as "other" and still paused: target id -> session (CEF reports a new tab's
+    /// page type only after its attach).
+    pub others: HashMap<String, String>,
     /// Page targets this process is creating right now.
     pub creating: usize,
     pub utility: Option<String>,

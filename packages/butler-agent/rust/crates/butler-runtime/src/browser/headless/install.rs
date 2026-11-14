@@ -66,6 +66,10 @@ pub struct InstallSource {
     pub cache_root: PathBuf,
     /// Archive host; pinned hashes apply whatever the host.
     pub base_url: Option<String>,
+    /// A staged CEF host (`butler_cef_host.exe` / `butler-cef-host`, see crates/butler-platform/cef) to launch instead of
+    /// Chrome for Testing. It speaks the same DevTools pipe and takes the same switches; nothing is downloaded. Until the
+    /// App bundles CEF (P7) only development and CI set it.
+    pub cef_host: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -119,6 +123,13 @@ impl Installer {
     /// The verified executable, installing it first when missing. Waits at
     /// most `wait`; an install still running then reports its progress.
     pub(crate) async fn executable_within(self: &Arc<Self>, wait: Duration) -> Progress {
+        if let Some(path) = &self.source.cef_host {
+            return if path.is_file() {
+                Progress::Ready(path.clone())
+            } else {
+                Progress::Failed("browser_unavailable")
+            };
+        }
         let Some(artifact) = artifact() else {
             return Progress::Failed("browser_platform_unsupported");
         };

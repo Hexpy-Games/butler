@@ -294,6 +294,7 @@ async fn app_reconnect_keeps_one_tab_set() -> Result<(), HarnessError> {
                 .into_owned(),
         )
         .env("BUTLER_BROWSER_DOWNLOAD_BASE", "http://127.0.0.1:9/")
+        .env("BUTLER_BROWSER_CEF_HOST", "")
         .start()
         .await?;
     let admin = admin(&s);

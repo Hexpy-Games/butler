@@ -3,6 +3,7 @@
 use super::{cdp::Cdp, page::Page, state::Shared};
 use crate::browser::egress::{ContentOrigin, EgressProxy};
 use butler_platform::browser_process::{self, PipeBrowser};
+use butler_platform::process_control::{Liveness, liveness};
 use serde_json::json;
 use std::{
     ffi::OsString,
@@ -208,12 +209,23 @@ impl Browser {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
-        if let Some(mut process) = process {
+        let pid = process.map(|mut process| {
+            let pid = process.pid();
             process.kill();
-        }
+            pid
+        });
         self.alive.cancel();
-        for _ in 0..10 {
+        // The cap is only a guard; cleanup normally ends when the tree has exited.
+        for _ in 0..300 {
+            // Windows ends the tree asynchronously after its Job Object closes.
+            // Browser descendants keep profile files open until each exits.
+            // Under load this can take longer than a fixed one-second retry window.
             if std::fs::remove_dir_all(&self.profile).is_ok() || !self.profile.exists() {
+                break;
+            }
+            if pid.is_none_or(|pid| liveness(pid) == Liveness::Gone) {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                let _ = std::fs::remove_dir_all(&self.profile);
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
