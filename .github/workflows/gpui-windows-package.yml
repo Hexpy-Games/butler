@@ -15,6 +15,10 @@ on:
   workflow_dispatch:
   workflow_call:
     inputs:
+      release:
+        type: boolean
+        default: false
+        description: Build the bundled Agent as a tagged release does
       version:
         type: string
         default: ""
@@ -53,7 +57,7 @@ jobs:
           latest = max(releases, key=lambda r: r['published_at'])
           previous = latest['tag_name'][1:]
           prefix, number = previous.rsplit('.', 1)
-          candidate = os.environ['REQUESTED_VERSION'] or f'{prefix}.{int(number) + 1}'
+          candidate = os.environ['REQUESTED_VERSION'].removeprefix('v') or f'{prefix}.{int(number) + 1}'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f'from={previous}\nto={candidate}\n')
           PY
@@ -67,7 +71,7 @@ jobs:
       - uses: ./.github/actions/build-windows-agent
         with:
           version: ${{ needs.versions.outputs.to }}
-          profile: ci-fast
+          profile: ${{ inputs.release && 'release' || 'ci-fast' }}
           cache-key: gpui-package-windows-x64
           artifact-base-url: https://github.com/${{ github.repository }}/releases/download/v${{ needs.versions.outputs.to }}
       - uses: actions/upload-artifact@v4
