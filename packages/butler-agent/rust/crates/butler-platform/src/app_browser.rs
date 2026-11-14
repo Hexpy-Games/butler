@@ -1,5 +1,6 @@
 //! The installed Butler App's own Electron, run without a window as a browser
 //! host while the App itself is not running.
+//! An App with a bundled CEF host serves through that host instead of its executable.
 //!
 //! Discovery knows where each OS keeps the App: beside the Agent when the Agent
 //! is the App's bundled one, then the usual install location (a macOS app
@@ -15,6 +16,11 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use crate::process_control::{self, GroupSignal};
+
+#[cfg(windows)]
+const CEF_HOST: &str = "butler_cef_host.exe";
+#[cfg(not(windows))]
+const CEF_HOST: &str = "butler-cef-host";
 
 /// An Electron that can run the App's browser host.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -35,18 +41,35 @@ impl AppElectron {
 
 /// The installed App's Electron: the App this Agent came with, else the
 /// App in its usual install location. `None` when no App is installed.
+/// An App with a CEF host beside its executable is not an Electron and is skipped.
 pub fn installed_app() -> Option<AppElectron> {
-    let agent = std::env::current_exe().ok();
-    agent
-        .as_deref()
-        .and_then(bundled_with)
-        .into_iter()
-        .chain(standard_locations())
+    installed_app_candidates()
+        .filter(|executable| cef_host_beside(executable).is_none())
         .map(|executable| AppElectron {
             executable,
             app_dir: None,
         })
         .find(AppElectron::exists)
+}
+
+/// An installed App with a CEF host beside its executable serves the browser
+/// through that host (the headless backend), never through its executable.
+pub fn installed_cef_host() -> Option<PathBuf> {
+    installed_app_candidates().find_map(|executable| cef_host_beside(&executable))
+}
+
+fn cef_host_beside(executable: &Path) -> Option<PathBuf> {
+    let host = executable.parent()?.join(CEF_HOST);
+    host.is_file().then_some(host)
+}
+
+fn installed_app_candidates() -> impl Iterator<Item = PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .as_deref()
+        .and_then(bundled_with)
+        .into_iter()
+        .chain(standard_locations())
 }
 
 /// The App executable of an Agent bundled inside it:

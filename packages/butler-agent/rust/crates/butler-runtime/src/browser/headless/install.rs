@@ -67,8 +67,8 @@ pub struct InstallSource {
     /// Archive host; pinned hashes apply whatever the host.
     pub base_url: Option<String>,
     /// A staged CEF host (`butler_cef_host.exe` / `butler-cef-host`, see crates/butler-platform/cef) to launch instead of
-    /// Chrome for Testing. It speaks the same DevTools pipe and takes the same switches; nothing is downloaded. Until the
-    /// App bundles CEF (P7) only development and CI set it.
+    /// Chrome for Testing. It speaks the same DevTools pipe and takes the same switches; nothing is downloaded.
+    /// Set by development and CI; otherwise the installed App's bundled host is used.
     pub cef_host: Option<PathBuf>,
 }
 
@@ -129,6 +129,13 @@ impl Installer {
             } else {
                 Progress::Failed("browser_unavailable")
             };
+        }
+        if let Ok(Some(path)) = tokio::task::spawn_blocking(|| {
+            butler_platform::app_browser::installed_cef_host().filter(|path| path.is_file())
+        })
+        .await
+        {
+            return Progress::Ready(path);
         }
         let Some(artifact) = artifact() else {
             return Progress::Failed("browser_platform_unsupported");
