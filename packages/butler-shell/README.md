@@ -32,7 +32,7 @@ cargo run --release -p butler-shell --features shots --bin butler-shell-shots --
 ```
 
 For a real isolated agent, pass `<dir> --data <data-dir>` (and optionally `--dark`).
-The live harness accepts commands on stdin: `connected`, `open <chat>`, `new`,
+The live harness accepts `browser` (standalone view), `browser-link <url>` (the open chat’s message-link action), and `browser-state` (prints `LIVE BROWSER <json>` with view, active tab and tab metadata before `LIVE OK`), along with: `connected`, `open <chat>`, `new`,
 `compose`, `type <text>`, `key <keystroke>`, `send <text>`, `answer <text>`, `approval`, `exact <text>`, `modify`, `allow`, `deny`,
 `cancel`, `disconnected`, `shot <name>` and `quit`. Frame commands are `url <url>`,
 `size <width> <height>`, `click <anchor>`, `drag <anchor> <dx>`, `wait <ms>`,

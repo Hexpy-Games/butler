@@ -7,7 +7,7 @@
 //! `--headless` to run Chrome's headless mode without OS windows.
 //! The renderer sandbox stays on. On Windows, CEF's `bootstrapc.exe`, renamed
 //! to the DLL's stem, loads this DLL and passes sandbox info to `RunConsoleMain`.
-//! This crate is the audited CEF unsafe boundary (D-P2); only that export is unsafe.
+//! This crate is the audited CEF unsafe boundary (D-P2); its OSR GPU interop and bootstrap exports contain the audited unsafe code.
 
 #[cfg(feature = "cef")]
 mod app;
@@ -15,6 +15,9 @@ mod app;
 mod boot;
 #[cfg(all(feature = "cef", target_os = "macos"))]
 mod mac;
+
+#[cfg(all(feature = "cef", target_os = "macos"))]
+pub mod osr;
 
 /// Run a CEF browser or helper process, passing bootstrap sandbox info through.
 #[cfg(feature = "cef")]

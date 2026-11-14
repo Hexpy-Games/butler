@@ -71,9 +71,9 @@ pub(crate) fn open_library_item(ctx: &ManageCtx, item: &LibraryItem, source: boo
     }
     if let (false, Some(output)) = (source, &item.output) {
         open_output(ctx, item, output, cx);
+        return;
     }
-    // CARVE-OUT(G-cef): a bookmark, a source page or an output's page opens in the in-app
-    // browser (`openLink`, `/outputs/{id}/view`); the browser view is P5.
+    crate::ui::manage::library::detail::open_page(item, cx);
 }
 
 /// `openLibraryArtifact` for a page the agent made.

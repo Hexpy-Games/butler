@@ -35,6 +35,13 @@ fn press(h: &mut Harness, keystroke: Keystroke) -> anyhow::Result<()> {
     })
 }
 
+/// A keyboard command yields a frame before the next stdin command, like pointer commands.
+fn key(h: &mut Harness, value: &str) -> anyhow::Result<()> {
+    press(h, Keystroke::parse(value).map_err(|e| anyhow!("{e:?}"))?)?;
+    super::settle(&mut h.cx, h.handle);
+    Ok(())
+}
+
 /// Types `text` into the focused field, one character per keystroke.
 fn type_text(h: &mut Harness, text: &str) -> anyhow::Result<()> {
     for c in text.chars() {
@@ -111,10 +118,13 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "disconnected" => wait(h, |s, _| s.disconnected().is_some()),
         "open" => h.update(|s, w, cx| super::open_chat(s, arg, w, cx)),
         "close" => h.update(|s, w, cx| s.open_chat(s.store.selected().cloned(), w, cx)),
+        "browser" => h.update(|s, w, cx| s.set_view(ui::manage::View::Browser, w, cx)),
+        "browser-link" => h.update(|_, _, cx| ui::chat::open_link(arg, cx)),
+        "browser-state" => browser_state(h),
         "new" => h.update(|s, w, cx| s.open_chat(None, w, cx)),
         "compose" => h.update(|s, w, cx| s.composer.update(cx, |c, cx| c.engage(w, cx))),
         "type" => type_text(h, arg),
-        "key" => press(h, Keystroke::parse(arg).map_err(|e| anyhow!("{e:?}"))?),
+        "key" => key(h, arg),
         "send" => h.update(|s, _, cx| s.send(arg.to_owned(), cx)),
         // The text begins with `arg`: a command is one line, an answer may run on.
         "answer" | "streaming" => wait(h, |s, _| {
@@ -149,6 +159,23 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         _ => Err(anyhow!("unknown live harness command")),
     }
 }
+fn browser_state(h: &mut Harness) -> anyhow::Result<()> {
+    super::settle(&mut h.cx, h.handle);
+    h.update(|s, _, cx| {
+                let model = cx.global::<ui::browser::model::BrowserState>();
+                let view = match s.view(cx) {
+                    ui::manage::View::Browser => "browser", ui::manage::View::Session => "session",
+                    ui::manage::View::History { .. } => "history", ui::manage::View::Library(_) => "library",
+                    ui::manage::View::Automations => "automations", ui::manage::View::AutomationDetail(_) => "automation-detail",
+                    ui::manage::View::ProjectDashboard { .. } => "project-dashboard", ui::manage::View::PlanOverview { .. } => "plan-overview",
+                };
+                let tabs: Vec<_> = model.tabs().iter().map(|t| serde_json::json!({"id":t.id.0.as_ref(), "owner":match &t.owner {
+                    ui::browser::model::Owner::Mine => "mine".to_owned(), ui::browser::model::Owner::Conversation(id) => format!("conversation:{id}")
+                }, "url":t.url,"title":t.title,"status":format!("{:?}",t.status).to_lowercase()})).collect();
+                println!("LIVE BROWSER {}", serde_json::json!({"view":view,"active":model.active().map(|id|id.0.as_ref()),"tabs":tabs}));
+            })
+}
+
 pub(super) fn run(
     dir: &Path,
     data: std::path::PathBuf,
