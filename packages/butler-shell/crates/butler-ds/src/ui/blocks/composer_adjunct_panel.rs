@@ -172,15 +172,7 @@ fn header(parts: Header, state: &gpui::Entity<bool>, ds: &Ds) -> gpui::Stateful<
     });
     let chevron = slot(
         parts.turned.0.apply(
-            div().child(
-                icon_px(Icon::ChevronDown, ds.len(Length::IconSizeSm)).turned(
-                    if parts.turned.0.moving(&parts.turned.1) {
-                        0.
-                    } else {
-                        -std::f32::consts::FRAC_PI_2 * parts.turned.0.target()
-                    },
-                ),
-            ),
+            div().child(icon_px(Icon::ChevronDown, ds.len(Length::IconSizeSm))),
             &parts.turned.1,
             &Props {
                 rotation: Some((0., -std::f32::consts::FRAC_PI_2)),

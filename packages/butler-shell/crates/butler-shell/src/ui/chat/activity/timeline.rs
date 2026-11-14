@@ -66,7 +66,7 @@ pub(super) fn timeline(
         let views: Vec<AnyElement> = activities
             .iter()
             .enumerate()
-            .map(|(index, activity)| activity_view(activity, index < last, t, window, cx))
+            .map(|(index, activity)| activity_view(activity, turn_id, index < last, t, window, cx))
             .collect();
         body = body.child(Stack::new().gap(Space::Sm).children(views));
         body = body.child(
@@ -117,7 +117,7 @@ fn collapsed_step(
     let latest = activities.last()?.clone();
     // The current step folds away with its spacing when the turn settles; the header stays.
     let item_key: SharedString = latest.id.clone().into();
-    let tools = activity_tools(&latest, t, window, cx);
+    let tools = activity_tools(&latest, turn_id, t, window, cx);
     let step = RollingSwap::new(format!("{key}-swap"), item_key, move |_, cx| {
         activity_block(&latest, false, false, Ds::get(cx).lang()).into_any_element()
     })
@@ -171,23 +171,33 @@ fn browser_timeline_still(
 /// `workActivityToolsFromRows` of a phase activity: its operations' tool rows.
 pub(super) fn activity_tools(
     activity: &PhaseActivity,
+    turn: Option<&str>,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
-    tool_column(&activity.operations, None, content_x(true), t, window, cx)
+    tool_column(
+        &activity.operations,
+        None,
+        turn,
+        content_x(true),
+        t,
+        window,
+        cx,
+    )
 }
 
 /// `ActivityBlock` of TurnActivityBlock.tsx: a compact work activity with its operations.
 fn activity_view(
     activity: &PhaseActivity,
+    turn: Option<&str>,
     connected: bool,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let lang = Ds::get(cx).lang();
-    let tools = activity_tools(activity, t, window, cx);
+    let tools = activity_tools(activity, turn, t, window, cx);
     Stack::new()
         .gap(Space::Xs)
         .child(activity_block(activity, connected, false, lang))
@@ -335,12 +345,13 @@ fn has_live_work(projection: &TurnActivityProjection) -> bool {
 /// `liveTurnWork`: without a phase timeline, the work blocks, else the latest decision.
 fn live_turn_work(
     projection: &TurnActivityProjection,
+    turn: Option<&str>,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
     if !projection.work_blocks.is_empty() {
-        return work_blocks(&projection.work_blocks, true, t, window, cx);
+        return work_blocks(&projection.work_blocks, true, turn, t, window, cx);
     }
     if projection.public_activity.is_some()
         || projection.model_round_wait.is_some()
@@ -379,7 +390,7 @@ pub(crate) fn turn_activity_panel(
     }
     let work = match timeline(rows, turn_id, None, true, t, window, cx) {
         Some(timeline) => Some(timeline),
-        None => live_turn_work(&projection, t, window, cx),
+        None => live_turn_work(&projection, turn_id, t, window, cx),
     };
     let status = current_turn_status(t, cx);
     Some(
