@@ -18,7 +18,7 @@ pub(crate) struct Shell {
     output: BufReader<tokio::fs::File>,
     /// Where the harness writes its reports.
     out: PathBuf,
-    pub(super) launch: Launch,
+    pub(crate) launch: Launch,
     browser: Option<Value>,
 }
 

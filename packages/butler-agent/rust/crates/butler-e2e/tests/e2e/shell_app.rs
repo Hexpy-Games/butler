@@ -50,7 +50,7 @@ async fn default_to_local_model(
     Ok(local)
 }
 
-fn gateway(launch: &Launch) -> Gateway {
+pub(super) fn gateway(launch: &Launch) -> Gateway {
     let record = instance_record(&launch.data).expect("no instance record");
     let token = launch.data_folder_token().expect("no data folder token");
     let endpoint = record["app_endpoint"].as_str().expect("no app endpoint");
