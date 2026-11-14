@@ -72,6 +72,7 @@ export function TranscriptRows({ list, layout, queue, request, anchored, enterin
         rowVirtualizer={rowVirtualizer}
         stewardProgress={anchoredStewardProgress.get(message.id)}
         liveActivity={message.id === liveMessageId ? liveActivity : undefined}
+        turnLiveBelow={showTurnActivity && Boolean(turnId) && message.turn_id === turnId}
       />
     );
   });

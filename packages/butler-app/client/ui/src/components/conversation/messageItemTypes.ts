@@ -7,6 +7,8 @@ import type { LiveTurnActivity } from "./TurnActivityPanel";
 export interface MessageItemProps {
   message: MessageRecord;
   liveActivity?: LiveTurnActivity;
+  /** Its turn is still running in the separate live activity row after it; that row shows the turn's activity. */
+  turnLiveBelow?: boolean;
   virtualRow: VirtualItem;
   topOffset: number;
   copied: boolean;

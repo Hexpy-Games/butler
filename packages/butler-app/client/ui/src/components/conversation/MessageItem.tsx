@@ -19,6 +19,7 @@ function MessageItemComponent({
   rowVirtualizer,
   stewardProgress,
   liveActivity,
+  turnLiveBelow,
 }: MessageItemProps) {
   useAppLocale();
   const question = message.question_answer;
@@ -42,6 +43,7 @@ function MessageItemComponent({
         onCopyAssistantMessage={onCopyAssistantMessage}
         stewardProgress={stewardProgress}
         liveActivity={liveActivity}
+        turnLiveBelow={turnLiveBelow}
       />
     </VirtualMessageRow>
   );

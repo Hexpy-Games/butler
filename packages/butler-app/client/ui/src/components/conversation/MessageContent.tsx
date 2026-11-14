@@ -30,6 +30,7 @@ import type { AnchoredStewardProgress } from "./stewardParentProgressProjection"
 interface MessageContentProps {
   message: MessageRecord;
   liveActivity?: LiveTurnActivity;
+  turnLiveBelow?: boolean;
   copied: boolean;
   footerMeta: AssistantFooterMeta | null;
   onCopyAssistantMessage?: (message: MessageRecord) => void;
@@ -43,6 +44,7 @@ function MessageContentComponent({
   onCopyAssistantMessage,
   stewardProgress,
   liveActivity,
+  turnLiveBelow,
 }: MessageContentProps) {
   useAppLocale();
   const artifacts = message.artifacts ?? [];
@@ -57,7 +59,7 @@ function MessageContentComponent({
   return (
     <MessageImageContext.Provider value={openImage}>
       {message.role === "assistant" ? (
-        <AssistantMessageBody message={message} running={running} liveActivity={liveActivity} failureNotice={failureNotice}
+        <AssistantMessageBody message={message} running={running} liveActivity={liveActivity} turnLiveBelow={turnLiveBelow} failureNotice={failureNotice}
           stewardProgress={stewardProgress} refreshFileUrls={refreshFileUrls} attachedParts={<>
             <MessageArtifacts origin={message.initiated} bubble={isGeneralChat(message.chat_id)} text={message.text} artifacts={artifacts} attachments={message.attachments ?? []}
               refreshFileUrls={refreshFileUrls} />
@@ -104,6 +106,7 @@ export const MessageContent = memo(
   (previous, next) =>
     previous.message === next.message &&
     previous.liveActivity === next.liveActivity &&
+    previous.turnLiveBelow === next.turnLiveBelow &&
     previous.copied === next.copied &&
     previous.footerMeta === next.footerMeta &&
     previous.stewardProgress === next.stewardProgress &&
