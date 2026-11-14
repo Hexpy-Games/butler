@@ -251,8 +251,8 @@ class UserBrowser {
       if (previous?.holder === "user" && !previous.sticky) controlTab(this, previous, "agent");
       this.detach(previous); backgroundTab(this, previous ?? {});
     }
-    // Opening a tab Butler waits on hands it to the user until they give it back; a hold they have stays as it is.
-    if (tab.waiting && !tab.dialog && tab.holder !== "user") controlTab(this, tab, "user", true);
+    // Opening never changes a hold the user has (a hand-off stays until Give back); opening a tab Butler holds is a look.
+    if (tab.waiting && !tab.dialog && tab.holder !== "user") controlTab(this, tab, "user");
     tab.viewed = true; clearTimeout(tab.expiry);
     this.activeId = id;
     this.materialize(tab);
