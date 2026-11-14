@@ -1,4 +1,4 @@
-use super::{OsrSink, frame_pool::FramePool, gpu::GpuCopy, ime::OsrIme};
+use super::{OsrIme, OsrSink, frame_pool::FramePool, gpu::GpuCopy};
 use core_video::pixel_buffer::CVPixelBuffer;
 use std::{cell::RefCell, rc::Rc};
 

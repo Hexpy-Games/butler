@@ -61,6 +61,7 @@ pub struct OsrModifiers {
     pub command: bool,
 }
 
+#[cfg(target_os = "macos")]
 impl OsrModifiers {
     pub(super) fn flags(self) -> u32 {
         (u32::from(self.shift) * 2)
@@ -77,6 +78,7 @@ pub enum OsrButton {
     Right,
 }
 
+#[cfg(target_os = "macos")]
 impl OsrButton {
     pub(super) fn cef(self) -> cef::MouseButtonType {
         match self {

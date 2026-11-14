@@ -120,7 +120,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "close" => h.update(|s, w, cx| s.open_chat(s.store.selected().cloned(), w, cx)),
         "browser" => h.update(|s, w, cx| s.set_view(ui::manage::View::Browser, w, cx)),
         "browser-link" => h.update(|_, _, cx| ui::chat::open_link(arg, cx)),
-        "browser-state" => browser_state(h),
+        "browser-state" | "browser-frame" => browser_report(h, command),
         "new" => h.update(|s, w, cx| s.open_chat(None, w, cx)),
         "compose" => h.update(|s, w, cx| s.composer.update(cx, |c, cx| c.engage(w, cx))),
         "type" => type_text(h, arg),
@@ -159,7 +159,27 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         _ => Err(anyhow!("unknown live harness command")),
     }
 }
-fn browser_state(h: &mut Harness) -> anyhow::Result<()> {
+fn browser_frame(h: &mut Harness) -> anyhow::Result<()> {
+    super::settle(&mut h.cx, h.handle);
+    let content = h.cx.debug_bounds(h.handle, "browser-page")?;
+    h.update(|_, window, cx| {
+        let model = cx.global::<ui::browser::model::BrowserState>();
+        let frame = model.active().and_then(|id| model.frame_size(id));
+        println!(
+            "LIVE BROWSER FRAME {}",
+            serde_json::json!({
+                "frame": frame,
+                "content": content.map(|b| [f32::from(b.size.width), f32::from(b.size.height)]),
+                "scale": window.scale_factor(),
+            })
+        );
+    })
+}
+
+fn browser_report(h: &mut Harness, command: &str) -> anyhow::Result<()> {
+    if command == "browser-frame" {
+        return browser_frame(h);
+    }
     super::settle(&mut h.cx, h.handle);
     h.update(|s, _, cx| {
                 let model = cx.global::<ui::browser::model::BrowserState>();

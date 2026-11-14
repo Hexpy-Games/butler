@@ -35,6 +35,10 @@ pub(crate) trait PageEngine: 'static {
     /// The page's size in logical pixels and the device scale (from PageCard's bounds).
     fn resize(&mut self, page: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32);
     fn close(&mut self, page: &TabId);
+    fn show(&mut self, _page: Option<&TabId>) {}
+    fn frame_size(&self, _page: &TabId) -> Option<(usize, usize)> {
+        None
+    }
     /// What the page card draws for `page` (the frame surface, which owns its own input).
     fn surface(&self, page: &TabId, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
 }

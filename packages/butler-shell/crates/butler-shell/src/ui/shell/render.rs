@@ -334,6 +334,7 @@ impl Render for Shell {
             self.open_settings(&section, window, cx);
         }
         let (vault_prompt, vault_confirm) = self.vault_dialogs(window, cx);
+        self.sync_browser_visibility(cx);
         let frame = self.frame(window, cx);
         let rename = self.render_rename(window, cx);
         let task_graph = self.render_task_graph(window, cx);
