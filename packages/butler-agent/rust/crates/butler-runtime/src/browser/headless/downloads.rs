@@ -104,7 +104,12 @@ fn copy_new(from: &Path, to: &Path) -> io::Result<()> {
 
 impl Downloads {
     pub(crate) fn new(root: &Path) -> Arc<Self> {
-        let directory = root.join(butler_platform::data_paths::DOWNLOADS);
+        // Rebuilt from its components: the data-path constants use `/`, and Chrome on Windows
+        // cancels every download whose `downloadPath` mixes separators (#2245).
+        let directory: PathBuf = root
+            .join(butler_platform::data_paths::DOWNLOADS)
+            .components()
+            .collect();
         let totals = std::fs::read(directory.join("budget.json"))
             .ok()
             .and_then(|bytes| serde_json::from_slice::<HashMap<String, u64>>(&bytes).ok())
