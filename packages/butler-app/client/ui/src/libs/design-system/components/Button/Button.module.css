@@ -236,58 +236,12 @@
 /* Touch size: where --control-hit-target makes a button 44px tall, its
    insides scale with it. The label steps up the type ramp at medium weight,
    with --space-lg sides, an --space-sm icon gap, 1em icons and the touch
-   radius. Icon-only buttons draw an --icon-size-lg glyph. */
+   radius. Icon-only buttons draw an --icon-size-lg glyph. Each rule keeps the
+   base class's specificity (exclusions sit in :where), so a block that styles
+   a button still wins on touch exactly as it does on desktop. */
 @media (width <= 640px) {
-  .button:not(
-    .variantLink,
-    .variantInline,
-    .sizeIcon,
-    .sizeIconXs,
-    .sizeIconSm,
-    .sizeIconLg,
-    [data-viewport="desktop"],
-    [data-viewport="desktop"] *
-  ) {
-    gap: var(--space-sm);
-    padding-inline: var(--space-lg);
-    font-size: var(--font-size-4);
-    line-height: var(--typo-app-title-line-height);
-    font-weight: var(--font-weight-medium);
-  }
-
-  .button[data-has-icon-text="true"][data-icon-layout="start"]:not(
-      .variantLink,
-      .variantInline,
-      [data-viewport="desktop"],
-      [data-viewport="desktop"] *
-    ) {
-    padding-inline: var(--space-md) var(--space-lg);
-  }
-
-  .button[data-has-icon-text="true"][data-icon-layout="end"]:not(
-      .variantLink,
-      .variantInline,
-      [data-viewport="desktop"],
-      [data-viewport="desktop"] *
-    ) {
-    padding-inline: var(--space-lg) var(--space-md);
-  }
-
-  .button:not(
-    .variantLink,
-    .variantInline,
-    .shapePill,
-    .sizeIcon,
-    .sizeIconXs,
-    .sizeIconSm,
-    .sizeIconLg,
-    [data-viewport="desktop"],
-    [data-viewport="desktop"] *
-  ) {
-    border-radius: var(--radius-control-touch);
-  }
-
-  .button:not(
+  .button:where(
+    :not(
       .variantLink,
       .variantInline,
       .sizeIcon,
@@ -297,16 +251,76 @@
       [data-viewport="desktop"],
       [data-viewport="desktop"] *
     )
-    > svg,
-  .button:not(
+  ) {
+    gap: var(--space-sm);
+    padding-inline: var(--space-lg);
+    font-size: var(--font-size-4);
+    line-height: var(--typo-app-title-line-height);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .button[data-has-icon-text="true"][data-icon-layout="start"]:where(
+      :not(
+        .variantLink,
+        .variantInline,
+        [data-viewport="desktop"],
+        [data-viewport="desktop"] *
+      )
+    ) {
+    padding-inline: var(--space-md) var(--space-lg);
+  }
+
+  .button[data-has-icon-text="true"][data-icon-layout="end"]:where(
+      :not(
+        .variantLink,
+        .variantInline,
+        [data-viewport="desktop"],
+        [data-viewport="desktop"] *
+      )
+    ) {
+    padding-inline: var(--space-lg) var(--space-md);
+  }
+
+  .button:where(
+    :not(
       .variantLink,
       .variantInline,
+      .shapePill,
       .sizeIcon,
       .sizeIconXs,
       .sizeIconSm,
       .sizeIconLg,
       [data-viewport="desktop"],
       [data-viewport="desktop"] *
+    )
+  ) {
+    border-radius: var(--radius-control-touch);
+  }
+
+  .button:where(
+      :not(
+        .variantLink,
+        .variantInline,
+        .sizeIcon,
+        .sizeIconXs,
+        .sizeIconSm,
+        .sizeIconLg,
+        [data-viewport="desktop"],
+        [data-viewport="desktop"] *
+      )
+    )
+    > svg,
+  .button:where(
+      :not(
+        .variantLink,
+        .variantInline,
+        .sizeIcon,
+        .sizeIconXs,
+        .sizeIconSm,
+        .sizeIconLg,
+        [data-viewport="desktop"],
+        [data-viewport="desktop"] *
+      )
     )
     > .icon
     > svg {
@@ -324,13 +338,15 @@
 }
 
 @media (pointer: coarse) {
-  .button:not(
-    .variantLink,
-    .variantInline,
-    .sizeIcon,
-    .sizeIconXs,
-    .sizeIconSm,
-    .sizeIconLg
+  .button:where(
+    :not(
+      .variantLink,
+      .variantInline,
+      .sizeIcon,
+      .sizeIconXs,
+      .sizeIconSm,
+      .sizeIconLg
+    )
   ) {
     gap: var(--space-sm);
     padding-inline: var(--space-lg);
@@ -339,48 +355,52 @@
     font-weight: var(--font-weight-medium);
   }
 
-  .button[data-has-icon-text="true"][data-icon-layout="start"]:not(
-      .variantLink,
-      .variantInline
+  .button[data-has-icon-text="true"][data-icon-layout="start"]:where(
+      :not(.variantLink, .variantInline)
     ) {
     padding-inline: var(--space-md) var(--space-lg);
   }
 
-  .button[data-has-icon-text="true"][data-icon-layout="end"]:not(
-      .variantLink,
-      .variantInline
+  .button[data-has-icon-text="true"][data-icon-layout="end"]:where(
+      :not(.variantLink, .variantInline)
     ) {
     padding-inline: var(--space-lg) var(--space-md);
   }
 
-  .button:not(
-    .variantLink,
-    .variantInline,
-    .shapePill,
-    .sizeIcon,
-    .sizeIconXs,
-    .sizeIconSm,
-    .sizeIconLg
-  ) {
-    border-radius: var(--radius-control-touch);
-  }
-
-  .button:not(
+  .button:where(
+    :not(
       .variantLink,
       .variantInline,
+      .shapePill,
       .sizeIcon,
       .sizeIconXs,
       .sizeIconSm,
       .sizeIconLg
     )
+  ) {
+    border-radius: var(--radius-control-touch);
+  }
+
+  .button:where(
+      :not(
+        .variantLink,
+        .variantInline,
+        .sizeIcon,
+        .sizeIconXs,
+        .sizeIconSm,
+        .sizeIconLg
+      )
+    )
     > svg,
-  .button:not(
-      .variantLink,
-      .variantInline,
-      .sizeIcon,
-      .sizeIconXs,
-      .sizeIconSm,
-      .sizeIconLg
+  .button:where(
+      :not(
+        .variantLink,
+        .variantInline,
+        .sizeIcon,
+        .sizeIconXs,
+        .sizeIconSm,
+        .sizeIconLg
+      )
     )
     > .icon
     > svg {
