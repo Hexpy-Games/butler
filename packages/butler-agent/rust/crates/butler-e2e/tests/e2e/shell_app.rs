@@ -28,6 +28,7 @@ use serde_json::{Value, json};
 pub(super) mod driver;
 pub(super) mod live_turns;
 use driver::{SERIAL, SHOTS, Shell};
+mod text_selection;
 
 /// The gateway of the Agent the App started, with the token it created.
 /// Registers a local fake model answering with `behavior` and makes it the default model.

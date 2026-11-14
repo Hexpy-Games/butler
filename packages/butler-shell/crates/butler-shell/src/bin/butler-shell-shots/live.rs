@@ -82,22 +82,6 @@ fn decide(h: &mut Harness, allow: bool) -> anyhow::Result<()> {
 fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
     let (command, arg) = line.split_once(' ').unwrap_or((line, ""));
     match command {
-        "url"
-        | "size"
-        | "click"
-        | "hover"
-        | "drag"
-        | "reveal"
-        | "wait-anchor"
-        | "wait-no-anchor"
-        | "wait-theme"
-        | "expect-anchor"
-        | "expect-no-anchor"
-        | "expect-scale"
-        | "expect-toasts"
-        | "expect-session"
-        | "expect-composer-focus"
-        | "wait" => super::frame::command(h, command, arg),
         "agent" | "diagnostics" | "app-quit" => super::app::command(h, dir, command, arg),
         "connected" => wait(h, |s, _| {
             s.disconnected().is_none() && s.store.cursor.is_some() && !s.store.chats.is_empty()
@@ -156,7 +140,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "shot" => h.shot(dir, arg),
         "expect-fresh" => super::frame::expect_fresh(h, dir),
         "layout" => h.layout(dir, arg),
-        _ => Err(anyhow!("unknown live harness command")),
+        _ => super::frame::command(h, command, arg),
     }
 }
 fn browser_state(h: &mut Harness) -> anyhow::Result<()> {
