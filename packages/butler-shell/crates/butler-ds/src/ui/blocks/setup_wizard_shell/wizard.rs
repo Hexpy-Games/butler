@@ -84,7 +84,9 @@ fn title(wizard: &Wizard, ds: &Ds, cx: &App) -> Div {
         .font_family(family)
         .text_color(ds.color(Color::TextPrimary));
     el.text_style().letter_spacing = Some(px(ds.number(Number::TypoNewChatTitleLetterSpacing)));
+    // DS: SetupWizardShell.module.css .productTitle
     keep_words(el.child(div().relative().top(px(offset)).child(wizard.title.clone())))
+        .text_wrap_balance()
 }
 
 pub(super) fn body(wizard: Wizard, cx: &App) -> AnyElement {
