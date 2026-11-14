@@ -125,6 +125,13 @@ impl McpClient {
             }
             return Ok(None);
         }
+        if matches!(operation, Operation::ReadResource { .. })
+            && let Some(overlay) = self.overlay.clone().filter(|_| server.plugin.is_some())
+        {
+            return self
+                .overlay_call(&server.id, overlay, Some(serde_json::Map::new()))
+                .await;
+        }
         self.overlay_execution(&server.id).await
     }
     async fn with_stdio(
