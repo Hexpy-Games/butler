@@ -52,6 +52,7 @@ pub struct ScrollArea {
     max_height: Option<MaxHeight>,
     min_height: Option<MinHeight>,
     fill: bool,
+    follow_end: Option<bool>,
     bleed: Option<Bleed>,
     probe: Option<SharedString>,
     /// `contentClassName` padding: (top, bottom, inline start), replacing the column's own.
@@ -68,6 +69,7 @@ impl ScrollArea {
             max_height: None,
             min_height: None,
             fill: false,
+            follow_end: None,
             bleed: None,
             probe: None,
             padding: None,
@@ -84,6 +86,12 @@ impl ScrollArea {
     /// Electron `ScrollArea.tsx`: share the actual viewport handle with its owner.
     pub fn handle(mut self, handle: ScrollHandle) -> Self {
         self.handle = Some(handle);
+        self
+    }
+
+    /// Electron `useFollowLatest`: follow the newest content until the reader scrolls away.
+    pub fn follow_end(mut self, follow: bool) -> Self {
+        self.follow_end = Some(follow);
         self
     }
 
@@ -164,7 +172,6 @@ impl RenderOnce for ScrollArea {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let metrics = Metrics::of(&self, Ds::get(cx));
         let ds = Ds::get(cx);
-        let x = self.orientation == Axis::X;
         let height = |max: MaxHeight| match max {
             MaxHeight::Xs => ds.len(Length::ScrollAreaMaxHeightXs),
             MaxHeight::Sm => ds.len(Length::ScrollAreaMaxHeightSm),
@@ -203,25 +210,15 @@ impl RenderOnce for ScrollArea {
             .min_w_0()
             .min_h_0()
             .overflow_hidden();
-        frame = if x {
-            frame.max_w_full().my(-metrics.room)
-        } else {
-            frame.ml(-metrics.room).mr(-metrics.lane)
-        };
-        if let Some(max) = max {
-            frame = frame.max_h(max);
-        }
-        if let Some(min) = min {
-            frame = frame.min_h(min);
-        }
-        if self.fill {
-            // `flex: 1 1 auto`: the content's own height up to what the column leaves. A scroll
-            // container contributes no height of its own to its parent's size, so the basis is
-            // the content height the scroller reported on the last frame.
-            frame = frame.flex_auto();
-            if let Some(basis) = content_basis(&self.id, &built.handle, window, cx) {
-                frame = frame.flex_basis(basis);
-            }
+        frame = self.frame_size(frame, &metrics, &built.handle, (max, min), window, cx);
+        if let Some(follow) = self.follow_end {
+            let state = follow_latest(&self.id, &built.handle, follow, window, cx);
+            frame = frame.on_scroll_wheel(move |_, window, cx| {
+                state.update(cx, |state, _| {
+                    state.wheeled = true;
+                });
+                window.refresh();
+            });
         }
         let thumb = convert::with_alpha(Ds::get(cx).color(Color::LineStrong), 0.7);
         let overlay = self.overlay(&built, &metrics, thumb, window, cx);
@@ -236,6 +233,35 @@ impl RenderOnce for ScrollArea {
             .children(ring)
             .children(probe)
     }
+}
+
+/// Electron `useFollowLatest`: only a user wheel changes the pinned state.
+struct FollowLatest {
+    pinned: bool,
+    wheeled: bool,
+}
+
+fn follow_latest(
+    id: &ElementId,
+    handle: &ScrollHandle,
+    follow: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> Entity<FollowLatest> {
+    let state = window.use_keyed_state((id.clone(), "follow-end"), cx, |_, _| FollowLatest {
+        pinned: true,
+        wheeled: false,
+    });
+    state.update(cx, |state, _| {
+        if state.wheeled {
+            state.pinned = handle.max_offset().y - (-handle.offset().y) <= px(24.);
+            state.wheeled = false;
+        }
+        if follow && state.pinned {
+            handle.scroll_to_bottom();
+        }
+    });
+    state
 }
 
 /// The scrolled content's height (the viewport plus what scrolls), once the scroller has laid out;
@@ -256,6 +282,39 @@ fn content_basis(
 }
 
 impl ScrollArea {
+    /// Electron `ScrollArea.module.css`: size the clipping frame around the viewport.
+    fn frame_size(
+        &self,
+        mut frame: gpui::Stateful<gpui::Div>,
+        metrics: &Metrics,
+        handle: &ScrollHandle,
+        (max, min): (Option<Pixels>, Option<Pixels>),
+        window: &mut Window,
+        cx: &mut App,
+    ) -> gpui::Stateful<gpui::Div> {
+        frame = if self.orientation == Axis::X {
+            frame.max_w_full().my(-metrics.room)
+        } else {
+            frame.ml(-metrics.room).mr(-metrics.lane)
+        };
+        if let Some(max) = max {
+            frame = frame.max_h(max);
+        }
+        if let Some(min) = min {
+            frame = frame.min_h(min);
+        }
+        if self.fill {
+            // `flex: 1 1 auto`: the content's own height up to what the column leaves. A scroll
+            // container contributes no height of its own to its parent's size, so the basis is
+            // the content height the scroller reported on the last frame.
+            frame = frame.flex_auto();
+            if let Some(basis) = content_basis(&self.id, handle, window, cx) {
+                frame = frame.flex_basis(basis);
+            }
+        }
+        frame
+    }
+
     /// The column the children flow in, padded for the ring room, the fade and the lane.
     fn content(&mut self, metrics: &Metrics) -> gpui::Div {
         let column = if self.orientation == Axis::X {

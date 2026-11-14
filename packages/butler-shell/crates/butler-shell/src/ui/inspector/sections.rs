@@ -7,7 +7,7 @@
 //! session's view is the session summary here, so no section waits for a summary to load.
 pub(crate) mod asks;
 mod state;
-mod subtasks;
+pub(crate) mod subtasks;
 
 use std::collections::HashSet;
 

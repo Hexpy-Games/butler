@@ -54,6 +54,7 @@ pub(crate) struct TranscriptCtx<'a> {
     pub(crate) footer_meta: Rc<HashMap<String, FooterMeta>>,
     /// The message whose body is rendering.
     pub(crate) message_id: Option<&'a str>,
+    pub(crate) steward: Rc<HashMap<String, usize>>,
     pub(crate) status_line: Option<Entity<activity::status::StatusLineView>>,
 }
 
@@ -101,6 +102,7 @@ impl<'a> TranscriptCtx<'a> {
             footer_meta,
             message_id: None,
             status_line: None,
+            steward: Rc::default(),
         }
     }
 }

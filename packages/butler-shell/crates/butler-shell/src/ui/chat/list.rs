@@ -3,6 +3,7 @@
 //! The rows are gpui `list` items laid in the ConversationShell column; the list follows the
 //! newest message until the reader scrolls away, and a jump button brings it back.
 mod answers;
+mod column;
 mod request;
 mod scroll;
 mod turn;
@@ -19,11 +20,12 @@ use butler_ds::ui::context::Ds;
 use gpui::{
     AnyElement, App, Entity, FollowMode, Global, InteractiveElement as _, IntoElement as _,
     ListAlignment, ListState, ParentElement as _, Pixels, SharedString, Styled as _, WeakEntity,
-    Window, div, list, px, relative,
+    Window, div, list, px,
 };
 
 use super::TranscriptCtx;
 use super::activity::status::StatusLineView;
+use super::activity::steward::steward_anchors;
 use super::activity::timeline::turn_activity_panel;
 use super::assistant::{FooterMeta, session_branch_seed};
 use super::intro::{self, chats_intro};
@@ -34,17 +36,13 @@ use crate::ui::inspector::sections::asks::{pending_asks, request_source_message}
 use crate::ui::source::wire::{
     MessageRecord, MessageRecordRole, ProgressRow, SessionQueueView, SessionView, SessionViewTurn,
 };
+use column::in_column;
 use turn::{Live, collapse_assistant_attempts, has_visible_queue, reuse, turn_info, version};
 
 /// `MESSAGE_LIST_TOP_PADDING` (conversationUtils.tsx).
 const TOP_PADDING: f32 = 32.;
 /// `DEFAULT_COMPOSER_RESERVE` (conversationUtils.tsx).
 const DEFAULT_RESERVE: f32 = 170.;
-/// `CONTENT_MAX` of the DS message column, for a column the shell has not measured yet.
-const COLUMN_MAX: f32 = 760.;
-/// `COLUMN_SHARE` of the same column.
-const COLUMN_SHARE: f32 = 0.86;
-
 /// The window before the one shown: the shell fetches it and merges it into the view.
 pub(crate) struct OlderRequest {
     pub(crate) session_id: String,
@@ -132,6 +130,7 @@ struct State {
     /// The message carrying the running turn.
     live_id: Option<String>,
     status_line: Option<Entity<StatusLineView>>,
+    steward: Rc<HashMap<String, usize>>,
     /// The chats intro shows.
     intro: bool,
     queue: Option<Rc<SessionQueueView>>,
@@ -185,6 +184,7 @@ impl State {
             client: None,
             live_id: None,
             status_line: None,
+            steward: Rc::default(),
             intro: false,
             queue: None,
             messages: Vec::new(),
@@ -265,6 +265,7 @@ impl State {
                 _ => new,
             })
             .collect();
+        self.steward = Rc::new(steward_anchors(&self.messages, &view));
         self.turn = view
             .active_turn
             .clone()
@@ -390,21 +391,6 @@ fn jump_button(state: &Entity<State>, unread: bool, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// The message column a row flows in: the measured column, or its share before that.
-fn in_column(row: AnyElement, cx: &App) -> AnyElement {
-    let vars = scope::conversation(cx).unwrap_or_default();
-    let column = div().flex().flex_col().flex_none().min_w_0();
-    let column = if vars.column_width > 0. {
-        column.w(px(vars.column_width)).ml(px(vars.column_left))
-    } else {
-        column
-            .w(relative(COLUMN_SHARE))
-            .max_w(px(COLUMN_MAX))
-            .mx_auto()
-    };
-    div().w_full().child(column.child(row)).into_any_element()
-}
-
 /// The room above the first message; asks once per window for the older messages.
 fn top_row(state: &Entity<State>, cx: &mut App) -> AnyElement {
     let request = state.update(cx, |state, _| {
@@ -450,6 +436,7 @@ fn render_row(state: &Entity<State>, ix: usize, window: &mut Window, cx: &mut Ap
     let mut t = TranscriptCtx::new(&shared, client, entering, footer_meta);
     t.live_message = live_id.as_deref();
     t.status_line = state.read(cx).status_line.clone();
+    t.steward = state.read(cx).steward.clone();
     let element = match row {
         Row::Top => return top_row(state, cx),
         // The list renders its rows while it prepaints, after the conversation scope has
