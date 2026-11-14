@@ -87,6 +87,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         | "click"
         | "hover"
         | "drag"
+        | "drag-from"
         | "reveal"
         | "wait-anchor"
         | "wait-no-anchor"
@@ -125,6 +126,16 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "compose" => h.update(|s, w, cx| s.composer.update(cx, |c, cx| c.engage(w, cx))),
         "type" => type_text(h, arg),
         "key" => key(h, arg),
+        "expect-clipboard" => {
+            let expected: Option<String> = serde_json::from_str(arg)?;
+            let actual =
+                h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
+            anyhow::ensure!(
+                actual == expected,
+                "clipboard {actual:?}, expected {expected:?}"
+            );
+            Ok(())
+        }
         "send" => h.update(|s, _, cx| s.send(arg.to_owned(), cx)),
         // The text begins with `arg`: a command is one line, an answer may run on.
         "answer" | "streaming" => wait(h, |s, _| {
