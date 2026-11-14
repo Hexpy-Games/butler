@@ -19,7 +19,8 @@ mod scope;
 mod session;
 
 use gpui::{
-    AnyElement, ElementId, IntoElement, ParentElement, RenderOnce, Styled as _, Window, div,
+    AnyElement, ElementId, IntoElement, ParentElement, RenderOnce, ScrollHandle, Styled as _,
+    Window, div,
 };
 
 pub use card::KanbanCard;
@@ -42,6 +43,7 @@ pub struct KanbanBoard {
     id: ElementId,
     columns: GridColumns,
     scroll: bool,
+    scroll_handle: Option<ScrollHandle>,
     children: Vec<AnyElement>,
 }
 
@@ -51,8 +53,15 @@ impl KanbanBoard {
             id: id.into(),
             columns: Columns::fixed(4),
             scroll: false,
+            scroll_handle: None,
             children: Vec::new(),
         }
+    }
+
+    /// Electron `CanonPlanLanes.tsx`: share the viewport with the lane navigation.
+    pub fn scroll_handle(mut self, handle: ScrollHandle) -> Self {
+        self.scroll_handle = Some(handle);
+        self
     }
 
     /// One column per lane (default four). Ignored with `scroll`.
@@ -99,9 +108,10 @@ impl RenderOnce for KanbanBoard {
             }
             cell
         });
-        ScrollArea::new((self.id, "scroll"))
-            .orientation(Axis::X)
-            .children(lanes)
-            .into_any_element()
+        let mut area = ScrollArea::new((self.id, "scroll"));
+        if let Some(handle) = self.scroll_handle {
+            area = area.handle(handle);
+        }
+        area.orientation(Axis::X).children(lanes).into_any_element()
     }
 }

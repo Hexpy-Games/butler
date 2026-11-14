@@ -11,6 +11,8 @@ pub(crate) mod menus;
 pub(crate) mod usage;
 
 pub(crate) struct Words {
+    /// canon.epicPlaceholder
+    pub(crate) epic_placeholder: &'static str,
     /// feedback.reconnectingShort
     pub(crate) reconnecting: &'static str,
     /// interfaceFeedback.queueFailed
@@ -27,6 +29,7 @@ pub(crate) struct Words {
 }
 
 static KO: Words = Words {
+    epic_placeholder: "이 과제에 대해 말해 보세요",
     reconnecting: "실시간 연결 복구 중",
     queue_failed: "메시지 대기열 추가 실패",
     controls_failed: "대화 설정 조회 실패",
@@ -38,6 +41,7 @@ static KO: Words = Words {
 };
 
 static EN: Words = Words {
+    epic_placeholder: "Talk about this Epic",
     reconnecting: "Reconnecting to live updates",
     queue_failed: "Message queue failed",
     controls_failed: "Session controls failed",

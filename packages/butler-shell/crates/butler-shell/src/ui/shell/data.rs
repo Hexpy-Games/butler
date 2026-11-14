@@ -309,11 +309,9 @@ impl Shell {
     /// The composer follows the open chat: the agent, a running turn and its first request. On
     /// the dashboard it writes a new project chat, which has no running turn.
     pub(crate) fn sync_composer(&mut self, cx: &mut Context<Self>) {
-        let streaming = self.store.running().is_some() && self.dashboard_project(cx).is_none();
         let disabled = self.disconnected();
         self.composer.update(cx, |c, cx| {
-            let changed = c.streaming != streaming || c.disabled != disabled;
-            c.streaming = streaming;
+            let changed = c.disabled != disabled;
             if disabled.is_some() {
                 c.fold();
             }

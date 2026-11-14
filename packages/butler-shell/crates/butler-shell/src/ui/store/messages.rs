@@ -1,6 +1,7 @@
 //! `messageCache`, `sessionViewWindow`: the open session's view and its message window.
 use crate::ui::source::wire::{
-    AnsweredUserQuestions, AppEventEnvelope, MessageRecord, MessageRecordRole, SessionView,
+    AnsweredUserQuestions, AppEventEnvelope, CanonProposalAnchor, MessageRecord, MessageRecordRole,
+    SessionView,
 };
 use chrono::DateTime;
 use std::collections::{HashMap, HashSet};
@@ -38,6 +39,11 @@ impl MessageCache {
         latest.question_answers = merge_answers(
             view.question_answers.take(),
             latest.question_answers.take(),
+            &latest.messages,
+        );
+        latest.canon_proposals = merge_proposals(
+            view.canon_proposals.take(),
+            latest.canon_proposals.take(),
             &latest.messages,
         );
         let paged_further = match (
@@ -80,6 +86,11 @@ impl MessageCache {
         view.question_answers = merge_answers(
             view.question_answers.take(),
             older.question_answers,
+            &view.messages,
+        );
+        view.canon_proposals = merge_proposals(
+            view.canon_proposals.take(),
+            older.canon_proposals,
             &view.messages,
         );
         if let Some(entries) = older.activity_history {
@@ -277,4 +288,35 @@ fn updated_at(message: &MessageRecord) -> Option<i64> {
 
 fn message_cursor(message: &MessageRecord) -> i64 {
     message.cursor.unwrap_or(0)
+}
+
+/// Electron `store.ts applySessionView`: retain anchors by proposal identity and loaded turn.
+fn merge_proposals(
+    previous: Option<Vec<CanonProposalAnchor>>,
+    incoming: Option<Vec<CanonProposalAnchor>>,
+    messages: &[Arc<MessageRecord>],
+) -> Option<Vec<CanonProposalAnchor>> {
+    if previous.is_none() && incoming.is_none() {
+        return None;
+    }
+    let turns: HashSet<_> = messages
+        .iter()
+        .filter_map(|m| m.turn_id.as_deref())
+        .collect();
+    let mut anchors = Vec::new();
+    let mut index = HashMap::new();
+    for anchor in previous
+        .into_iter()
+        .flatten()
+        .chain(incoming.into_iter().flatten())
+    {
+        if let Some(&at) = index.get(&anchor.proposal_id) {
+            anchors[at] = anchor;
+        } else {
+            index.insert(anchor.proposal_id.clone(), anchors.len());
+            anchors.push(anchor);
+        }
+    }
+    anchors.retain(|anchor| turns.contains(anchor.turn_id.as_str()));
+    Some(anchors)
 }
