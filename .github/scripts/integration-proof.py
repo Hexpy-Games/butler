@@ -124,7 +124,7 @@ def check(repository, candidate, sha):
         runs = [run for run in pages(f'repos/{repository}/actions/workflows/{workflow}/runs?{query}', 'workflow_runs')
                 if trusted(run, repository, branch, workflow)]
         def gate_ok(run):
-            jobs = pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100', 'jobs')
+            jobs = pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=50', 'jobs')
             return gate_passed(workflow, run, jobs)
         inputs = changes.integration_inputs(workflow, workflow_hashes(workflow, current), candidate)
         if workflow == 'e2e.yml':
@@ -151,7 +151,7 @@ def check(repository, candidate, sha):
             # Missing/cancelled evidence cannot be waived as a known failure.
             failed = any(receipt.get('checkout') == sha and (receipt.get('job_results', {}).get(job) == 'failure' or receipt.get('part_results', {}).get(job) == 'failure') for receipt in receipts)
             if job in ('gate', 'e2e-live'):
-                failed = any(gate_passed(workflow, run, pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100', 'jobs'), 'failure') for run in runs if run['head_sha'] == sha)
+                failed = any(gate_passed(workflow, run, pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=50', 'jobs'), 'failure') for run in runs if run['head_sha'] == sha)
             if not failed or not waived(repository, candidate, sha, workflow, job):
                 missing.append(f'{workflow}/{job}')
     if missing:
