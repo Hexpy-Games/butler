@@ -15,7 +15,8 @@ const screenshots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? process.env.
 let textNodes = 0;
 let minimumContrast = Infinity;
 mkdirSync(screenshots, { recursive: true });
-const server = await createNativeAppServer({ onboardingComplete: false });
+// The vault offer stays open: a consent renewal must not raise the update prompt over setup.
+const server = await createNativeAppServer({ onboardingComplete: false, vaultUndecided: true });
 const browser = await launchSmokeBrowser();
 const fresh = { consent_version: null, accepted_at: null, completed_at: null };
 
