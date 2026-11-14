@@ -73,6 +73,9 @@ jobs:
       - name: Locate the CEF archive cache
         run: echo "CEF_PATH=$RUNNER_TEMP/cef" >> "$GITHUB_ENV"
 
+      # The preview scenarios start their dev server with the runner's Bun.
+      - uses: ./.github/actions/bun-setup
+
       - uses: ./.github/actions/rust-agent-setup
         with:
           native-deps: prebuilt-ort
