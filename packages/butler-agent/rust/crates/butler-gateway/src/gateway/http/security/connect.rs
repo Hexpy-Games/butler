@@ -25,6 +25,7 @@ pub(in crate::gateway::http) async fn connect_request(
         .map(|info| info.0);
     let secure = super::client_place::is_proxied_https(peer, request.headers(), origin);
     let ip = peer.map(|peer| peer.ip().to_string()).unwrap_or_default();
+    let replaced = state.devices.presented(request.headers());
     let encoded = if form {
         read_body_with_limit(request.into_body(), MAX_FORM_BYTES)
             .await?
@@ -54,6 +55,9 @@ pub(in crate::gateway::http) async fn connect_request(
     } else {
         "This computer · browser"
     };
+    if let Some(old) = replaced {
+        state.devices.revoke(Some(old)).await?;
+    }
     let (cookie, id) = state.devices.pair(name, &ip, secure).await?;
     let mut payload = Map::new();
     payload.insert("device_id".into(), Value::String(id.clone()));

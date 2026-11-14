@@ -114,7 +114,7 @@ impl DeviceRegistry {
         Arc::make_mut(&mut entries).insert(id.clone(), entry);
         let transport = if secure { "; Secure" } else { "" };
         let cookie = HeaderValue::from_str(&format!(
-            "{}=v2.{id}.{secret}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_TTL}{transport}",
+            "{}=v2.{id}.{secret}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}{transport}",
             self.cookie_name
         ))
         .map_err(|_| HttpError::public(500, "session_unavailable", "Session unavailable."))?;
@@ -125,6 +125,19 @@ impl DeviceRegistry {
         &self,
         headers: &HeaderMap,
     ) -> Option<CancellationToken> {
+        let entry = self.presented_entry(headers)?;
+        let now = self.now();
+        entry.seen.fetch_max(now, Ordering::Relaxed);
+        Self::schedule_expiry(entry.clone(), now);
+        self.touch(entry.clone(), now);
+        Some(entry.closed.clone())
+    }
+
+    pub(in crate::gateway::http) fn presented(&self, headers: &HeaderMap) -> Option<String> {
+        self.presented_entry(headers).map(|e| e.device.id.clone())
+    }
+
+    fn presented_entry(&self, headers: &HeaderMap) -> Option<Arc<Entry>> {
         let snapshot = self.entries.read().clone();
         for value in headers
             .get_all(header::COOKIE)
@@ -158,10 +171,7 @@ impl DeviceRegistry {
                         entry.closed.cancel();
                         continue;
                     }
-                    entry.seen.fetch_max(now, Ordering::Relaxed);
-                    Self::schedule_expiry(entry.clone(), now);
-                    self.touch(entry.clone(), now);
-                    return Some(entry.closed.clone());
+                    return Some(entry.clone());
                 }
             }
         }

@@ -328,6 +328,7 @@ impl GatewaySecurity {
             headers,
             origin,
             now,
+            ui_page: super::router::serves_ui(request),
         };
         match self.credential(&keyed, &request, device.is_some()) {
             Ok(access) => Ok(grant(access)),
@@ -358,6 +359,7 @@ impl GatewaySecurity {
             headers,
             origin,
             now,
+            ui_page,
         } = *request;
         if auth::bearer_matches(headers, token) {
             return Ok(Access::Bearer);
@@ -368,6 +370,7 @@ impl GatewaySecurity {
                 headers,
                 origin_allowed: origin.allowed().is_some(),
                 loopback_host: request_policy::is_loopback_host(headers),
+                ui_page,
             }) {
                 Ok(()) => return Ok(Access::BrowserSession),
                 Err(refusal) => Some(refusal),
@@ -427,6 +430,7 @@ struct CredentialRequest<'a> {
     headers: &'a HeaderMap,
     origin: &'a RequestOrigin,
     now: SystemTime,
+    ui_page: bool,
 }
 
 fn unix_seconds(time: SystemTime) -> u64 {

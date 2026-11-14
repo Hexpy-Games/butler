@@ -68,7 +68,7 @@ async fn proxied_https_cookies_and_remote_links() -> Result<(), HarnessError> {
             cookie.split(';').any(|part| part.trim() == "Secure"),
             secure
         );
-        assert!(cookie.contains("HttpOnly") && cookie.contains("SameSite=Strict"));
+        assert!(cookie.contains("HttpOnly") && cookie.contains("SameSite=Lax"));
     }
     let pin = issue(&app).await?;
     let local = connect(&s.gw, &browser, pin["code"].as_str().unwrap()).await?;
