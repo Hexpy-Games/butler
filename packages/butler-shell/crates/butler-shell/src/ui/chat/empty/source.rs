@@ -79,6 +79,7 @@ pub(super) struct Resolved {
     pub(super) epic: Option<EpicInfo>,
     pub(super) project_name: Option<String>,
     pub(super) wallpaper: WallpaperSource,
+    pub(super) wallpaper_paused: bool,
 }
 
 pub(super) fn resolve(fetched: Fetched, project_id: Option<&str>) -> Resolved {
@@ -102,15 +103,15 @@ pub(super) fn resolve(fetched: Fetched, project_id: Option<&str>) -> Resolved {
     let own = project
         .as_ref()
         .and_then(|project| parse_source(project.get("wallpaper")?));
-    let wallpaper = own.unwrap_or_else(|| {
-        let settings = fetched.settings.unwrap_or(Value::Null);
-        global_source(&settings)
-    });
+    let settings = fetched.settings.unwrap_or(Value::Null);
+    let wallpaper = own.unwrap_or_else(|| global_source(&settings));
+    let wallpaper_paused = settings["wallpaper"]["motion"] == "paused";
     Resolved {
         briefing,
         epic: fetched.epic,
         project_name,
         wallpaper,
+        wallpaper_paused,
     }
 }
 
