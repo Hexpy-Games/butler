@@ -20,11 +20,13 @@ import { PlanDocumentMessage } from "./PlanDocumentMessage";
 import { StewardParentProgress } from "./StewardParentProgress";
 import type { AnchoredStewardProgress } from "./stewardParentProgressProjection";
 
-export function AssistantMessageBody({ message, running, liveActivity, failureNotice, stewardProgress, refreshFileUrls, attachedParts }: {
+export function AssistantMessageBody({ message, running, liveActivity, turnLiveBelow, failureNotice, stewardProgress, refreshFileUrls, attachedParts }: {
   message: MessageRecord;
   running: boolean;
   /** Live progress of the running turn; it fills the slot the completed summary takes. */
   liveActivity?: LiveTurnActivity;
+  /** The turn's separate live row after this message shows its activity; the settled summary waits for it to end. */
+  turnLiveBelow?: boolean;
   failureNotice: boolean;
   stewardProgress?: AnchoredStewardProgress;
   refreshFileUrls: RefreshFileUrls;
@@ -38,7 +40,7 @@ export function AssistantMessageBody({ message, running, liveActivity, failureNo
   const attachments = <AssistantAttachments message={message}>{attachedParts}</AssistantAttachments>;
   return (
     <>
-      {!bubble && <MessageTurnActivity message={message} live={liveActivity} kept={kept} />}
+      {!bubble && !turnLiveBelow && <MessageTurnActivity message={message} live={liveActivity} kept={kept} />}
       {!bubble && !running && !hasPhaseActivity && <CompletedWorkBlocks
         blocks={message.work_blocks}
         turnId={message.turn_id}

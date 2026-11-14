@@ -100,6 +100,10 @@ try {
     assert.equal(records.length, 1);
     assert.equal(records[0].status, splits ? "delivered" : "streaming");
     const id = records[0].id;
+    await page.reload();
+    await panel.waitFor();
+    await groups.filter({ hasText: "현재" }).waitFor();
+    assert.equal(await groups.count(), 1, "the running turn shows its activity once after a reload");
     await capture("pending");
     if (mode === "authority") await panel.getByRole("button", { name: "이번만 허용", exact: true }).click();
     else await panel.getByText("자세히", { exact: true }).click();
