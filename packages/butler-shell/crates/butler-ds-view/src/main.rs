@@ -8,6 +8,7 @@
 //!   butler-ds-view --live <dir> [--scale 2 --size 1280x800 --dark --lang ko|en --motion]
 //!       (feature `shots`: stdin commands, each answered `LIVE OK`; see live.rs)
 mod app;
+mod browser_demo;
 mod copy;
 #[cfg(feature = "shots")]
 mod live;
