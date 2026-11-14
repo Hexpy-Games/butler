@@ -189,8 +189,11 @@ impl Plugins {
         });
         match (matched.next(), matched.next()) {
             (Some(account), None) => Ok(Some(account.clone())),
-            (None, _) => Err("connector_account_not_found"),
             (Some(_), Some(_)) => Err("connector_account_required"),
+            // A named account must exist; with none connected and none named,
+            // the server runs without an account as before.
+            (None, _) if requested.is_some() => Err("connector_account_not_found"),
+            (None, _) => Ok(None),
         }
     }
     fn prepare_server(&self, server_id: &str) -> Result<Value> {
