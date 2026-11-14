@@ -4,8 +4,8 @@
 use std::ffi::OsString;
 
 use gpui::{
-    App, AppContext as _, Bounds, Pixels, Point, TitlebarOptions, WindowBackgroundAppearance,
-    WindowBounds, WindowOptions, point, px, size,
+    App, AppContext as _, Bounds, Pixels, Point, Size, TitlebarOptions, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowOptions, point, px, size,
 };
 
 /// `macTrafficLightPosition` (Electron main.mjs:281): the close button's top-left inset, which
@@ -13,12 +13,36 @@ use gpui::{
 const TRAFFIC_LIGHTS: (f32, f32) = (20., 18.);
 
 /// `scaledWindowButtonPosition` (text-size.mjs): button centers follow the titlebar height;
-/// native button diameter stays constant. Applied when the window opens.
+/// native button diameter stays constant. Applied when the window opens and when the text size
+/// changes.
 fn scaled_traffic_lights(scale: f32) -> Point<Pixels> {
     point(
         px((TRAFFIC_LIGHTS.0 * scale).round()),
         px(((TRAFFIC_LIGHTS.1 + 7.) * scale - 7.).round()),
     )
+}
+
+/// Minimum window size (main.mjs:2020-2021 / text-size.mjs `updateWindow`).
+fn min_size(scale: f32, area: Option<Size<Pixels>>) -> Size<Pixels> {
+    let minimum = size(px((344. * scale).ceil()), px((480. * scale).ceil()));
+    match area {
+        Some(area) => size(
+            minimum.width.min(area.width),
+            minimum.height.min(area.height),
+        ),
+        None => minimum,
+    }
+}
+
+/// `updateWindow` (text-size.mjs): native window metrics follow the text scale.
+pub(crate) fn apply_text_scale(window: &Window, scale: f32, cx: &App) {
+    window.set_traffic_light_position(scaled_traffic_lights(scale));
+    window.set_window_min_size(min_size(
+        scale,
+        window
+            .display(cx)
+            .map(|display| display.visible_bounds().size),
+    ));
 }
 
 use crate::ui::i18n::Locale;
@@ -39,20 +63,19 @@ pub(crate) fn open_window(cx: &mut App, args: &[OsString]) -> anyhow::Result<()>
         .map(Locale::from_language)
         .unwrap_or_else(|| Locale::from_tag(&sys_locale::get_locale().unwrap_or_default()));
     let bounds = Bounds::centered(None, size(px(960.), px(710.)), cx);
+    let scale = saved
+        .text_size
+        .as_deref()
+        .and_then(crate::ui::shell::text_scale)
+        .unwrap_or(1.);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
             title: Some(locale.strings().app_title.into()),
             appears_transparent: true,
-            traffic_light_position: Some(scaled_traffic_lights(
-                saved
-                    .text_size
-                    .as_deref()
-                    .and_then(crate::ui::shell::text_scale)
-                    .unwrap_or(1.),
-            )),
+            traffic_light_position: Some(scaled_traffic_lights(scale)),
         }),
-        window_min_size: Some(size(px(320.), px(480.))),
+        window_min_size: Some(min_size(scale, None)),
         app_id: Some("butler-shell".into()),
         ..Default::default()
     };
