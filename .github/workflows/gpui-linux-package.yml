@@ -112,7 +112,6 @@ jobs:
         working-directory: packages/butler-shell
     env:
       CARGO_INCREMENTAL: '0'
-      CARGO_BUILD_JOBS: '8'
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/gpui-package
       BUTLER_APP_BUILD_VERSION: ${{ needs.versions.outputs.to }}
       PYTHONDONTWRITEBYTECODE: '1'
