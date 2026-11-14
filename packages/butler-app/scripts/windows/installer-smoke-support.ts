@@ -17,8 +17,8 @@ export function readJson(path: string): Record<string, any> | null {
   try { return JSON.parse(readFileSync(path, "utf8")); } catch { return null; }
 }
 
-export async function waitFor(check: () => boolean | Promise<boolean>, label: string) {
-  const deadline = Date.now() + 60_000;
+export async function waitFor(check: () => boolean | Promise<boolean>, label: string, timeoutMs = 60_000) {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await check()) return;
     await Bun.sleep(100);
