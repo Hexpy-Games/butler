@@ -117,13 +117,13 @@ impl Input {
         self
     }
 
-    /// `onChange`: the text after each edit the user makes (not after `value` replaces it).
     /// `type="password"`: shows a mask dot per character and keeps the text off the clipboard.
     pub fn masked(mut self) -> Self {
         self.masked = true;
         self
     }
 
+    /// Electron `Input.tsx` `onChange`: user edits only; owner `value` replacements are silent.
     pub fn on_change(mut self, handler: impl Fn(&str, &mut Window, &mut App) + 'static) -> Self {
         self.on_change = Some(Rc::new(handler));
         self

@@ -85,8 +85,8 @@ pub struct Scroller {
     pub lingering: bool,
 }
 
-struct State {
-    handle: ScrollHandle,
+pub(super) struct State {
+    pub(super) handle: ScrollHandle,
     focus: FocusHandle,
     flags: Flags,
     host: bool,
@@ -297,6 +297,20 @@ impl Fade {
     }
 }
 
+/// Persistent scroll state for Electron `useScrollEdges`.
+pub(super) fn state(cfg: &Config, window: &mut Window, cx: &mut App) -> Entity<State> {
+    window.use_keyed_state((cfg.id.clone(), "fade"), cx, |_, cx| State {
+        handle: ScrollHandle::new(),
+        focus: cx.focus_handle().tab_stop(false),
+        flags: Flags::default(),
+        host: false,
+        revealed: None,
+        last_position: 0.,
+        scrolled_at: None,
+        linger: Default::default(),
+    })
+}
+
 /// Starts a fading scroller. `focus` is the handle of an element that scrolls itself and takes
 /// focus (`None`: the scroller makes its own). `text_field` shows ring-aware fades on any focus,
 /// as a text field's ring does.
@@ -307,16 +321,7 @@ pub fn fade(
     window: &mut Window,
     cx: &mut App,
 ) -> Fade {
-    let state = window.use_keyed_state((cfg.id.clone(), "fade"), cx, |_, cx| State {
-        handle: ScrollHandle::new(),
-        focus: cx.focus_handle().tab_stop(false),
-        flags: Flags::default(),
-        host: false,
-        revealed: None,
-        last_position: 0.,
-        scrolled_at: None,
-        linger: Default::default(),
-    });
+    let state = state(cfg, window, cx);
     if let Some(focus) = focus {
         state.update(cx, |s, _| s.focus = focus);
     }

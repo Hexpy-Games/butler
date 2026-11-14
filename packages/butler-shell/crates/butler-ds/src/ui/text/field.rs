@@ -7,7 +7,7 @@ use gpui::{
 };
 use gpui_elements::editable_text::{EditableTextState, StringStorage, TextChanged};
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use super::TextSize;
@@ -212,10 +212,18 @@ pub(super) struct Parts {
 
 pub(super) fn render(spec: Spec, window: &mut Window, cx: &mut App) -> AnyElement {
     let state = state_of(&spec.id, window, cx, &spec.initial);
-    listen(&spec, &state, window, cx);
+    // Electron Input.tsx: controlled value updates never emit onChange.
+    let replacements = window
+        .use_keyed_state((spec.id.clone(), "replacements"), cx, |_, _| {
+            Rc::new(Cell::new(0_usize))
+        })
+        .read(cx)
+        .clone();
+    listen(&spec, &state, replacements.clone(), window, cx);
     if let Some(value) = &spec.value
         && state.read(cx).as_str() != value.as_ref()
     {
+        replacements.set(replacements.get() + 1);
         state.update(cx, |state, cx| state.emplace(value, cx));
     }
     let handle = focus::tab_stop(&state.read(cx).focus_handle(cx), true);
@@ -267,7 +275,13 @@ pub(super) fn render(spec: Spec, window: &mut Window, cx: &mut App) -> AnyElemen
 
 /// Reports the user's edits to `on_change`. One subscription lives as long as the field; the
 /// handler is the latest the owner passed, read when the edit arrives.
-fn listen(spec: &Spec, state: &Entity<EditableTextState>, window: &mut Window, cx: &mut App) {
+fn listen(
+    spec: &Spec,
+    state: &Entity<EditableTextState>,
+    replacements: Rc<Cell<usize>>,
+    window: &mut Window,
+    cx: &mut App,
+) {
     type Slot = Rc<RefCell<Option<ChangeHandler>>>;
     let slot = window
         .use_keyed_state((spec.id.clone(), "on-change"), cx, |_, _| Slot::default())
@@ -278,6 +292,10 @@ fn listen(spec: &Spec, state: &Entity<EditableTextState>, window: &mut Window, c
         let (slot, state) = (slot.clone(), state.clone());
         move |window, cx| {
             window.subscribe(&state, cx, move |state, _: &TextChanged, window, cx| {
+                if replacements.get() > 0 {
+                    replacements.set(replacements.get() - 1);
+                    return;
+                }
                 let handler = slot.borrow().clone();
                 if let Some(handler) = handler {
                     let text = state.read(cx).as_str().to_owned();

@@ -345,7 +345,7 @@ impl ConnectionsPage {
             .actions(add)
             .on_retry(cx.listener(|_, _, _, cx| Self::reload(cx, None)));
         if self.adding {
-            section = section.child(self.mail_form(w, cx));
+            section = section.children(self.mail_form(w, cx));
         }
         section.child(
             CardList::new("mail-accounts").flush().children(

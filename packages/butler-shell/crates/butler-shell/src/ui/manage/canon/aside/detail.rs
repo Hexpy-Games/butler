@@ -103,7 +103,7 @@ impl EpicInspector {
         };
         KeyValueRow::new(words.status, "")
             .value_size(ValueSize::Caption)
-            .value_element(tip.child(select))
+            .value_element(tip.child(butler_ds::ui::strut::grid_scope(select)))
     }
 
     fn assignee_row(
@@ -150,7 +150,11 @@ impl EpicInspector {
                 card.agent.as_ref(),
                 cx,
             ))
-            .child(div().min_w_0().child(select));
+            .child(
+                div()
+                    .min_w_0()
+                    .child(butler_ds::ui::strut::grid_scope(select)),
+            );
         KeyValueRow::new(words.assignee, "")
             .value_size(ValueSize::Caption)
             .value_element(
@@ -211,7 +215,11 @@ impl EpicInspector {
                 Stack::row()
                     .gap(Space::Xs)
                     .cross(Cross::Center)
-                    .child(div().min_w_0().child(select))
+                    .child(
+                        div()
+                            .min_w_0()
+                            .child(butler_ds::ui::strut::grid_scope(select)),
+                    )
                     .children(ordinal),
             )
     }

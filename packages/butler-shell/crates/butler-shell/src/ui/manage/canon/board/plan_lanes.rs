@@ -1,17 +1,16 @@
 //! `CanonPlanLanes.tsx` and the backlog lane of `CanonBoard.tsx`.
-use butler_ds::tokens::Length;
 use butler_ds::ui::blocks::kanban_board::{KanbanBoard, KanbanLane, LaneHeight};
 use butler_ds::ui::button::{self, Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Cross, Space, Stack};
-use butler_ds::ui::scroll::{Axis, Config, fade, read};
+use butler_ds::ui::scroll::{Axis, read};
 use butler_ds::ui::section::Section;
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{
-    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, ScrollHandle, SharedString,
-    Window, point,
+    AnyElement, App, IntoElement as _, ParentElement as _, ScrollHandle, SharedString, Window,
+    point,
 };
 
 use super::card::{Opts, card};
@@ -98,7 +97,14 @@ pub(super) fn plan_lanes(
         .child(Typo::h3(title.to_owned()))
         .child(Typo::caption(caption).tone(Tone::Secondary));
     let board_id = SharedString::from(format!("canon-plan-lanes-{}", id.unwrap_or("backlog")));
-    let handle = lanes_handle(&board_id, window, cx);
+    let handle = window
+        .use_keyed_state(
+            SharedString::from(format!("{board_id}-lanes")),
+            cx,
+            |_, _| ScrollHandle::new(),
+        )
+        .read(cx)
+        .clone();
     let edit = edit.map(|plan| edit_button(plan, lanes, cx));
     let mut actions = button::container(Size::Sm);
     // `edges.overflow`: the arrows show only while the lanes overflow the board.
@@ -109,7 +115,9 @@ pub(super) fn plan_lanes(
             .child(lanes_arrow(&board_id, &handle, 1., edges.at_end, words));
     }
     let actions = actions.children(edit);
-    let mut board = KanbanBoard::new(board_id).scroll(true);
+    let mut board = KanbanBoard::new(board_id)
+        .scroll(true)
+        .scroll_handle(handle);
     for status in CANON_LANES {
         let lane_id = canon_lane_id(id, status);
         let cards: Vec<(usize, &EpicCard)> = works
@@ -155,19 +163,6 @@ fn edit_button(plan: &CanonPlan, lanes: &Lanes, cx: &App) -> IconButton {
     .on_click(move |_, window, cx| {
         on_edit(edited.clone(), window, cx);
     })
-}
-
-/// The sideways scroller of a `KanbanBoard::scroll` board, which owns its handle (read by the
-/// id the DS gives its `ScrollArea`, as `management_page::scroll_handle` does).
-fn lanes_handle(board_id: &SharedString, window: &mut Window, cx: &mut App) -> ScrollHandle {
-    let ds = Ds::get(cx);
-    let config = Config {
-        id: (ElementId::from(board_id.clone()), "scroll").into(),
-        axis: Axis::X,
-        size: ds.len(Length::ScrollFadeSize),
-        guard: ds.len(Length::SpaceXs),
-    };
-    fade(&config, None, false, window, cx).handle
 }
 
 /// `scroll(direction)`: the previous/next lanes button, disabled at its edge.
