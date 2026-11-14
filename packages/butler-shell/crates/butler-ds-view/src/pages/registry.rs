@@ -29,7 +29,7 @@ use super::{
     worker_activity_panel, worker_activity_row,
 };
 
-use super::page_band;
+use super::{address_field, page_band};
 
 macro_rules! page {
     ($id:literal, $title:literal, $module:ident) => {
@@ -327,7 +327,10 @@ fn management_blocks() -> Vec<Page> {
 
 /// The browser blocks (P5-DS).
 fn browser_blocks() -> Vec<Page> {
-    vec![page!("page-band", "PageBand", page_band)]
+    vec![
+        page!("address-field", "AddressField", address_field),
+        page!("page-band", "PageBand", page_band),
+    ]
 }
 
 pub(crate) fn all() -> Vec<Page> {

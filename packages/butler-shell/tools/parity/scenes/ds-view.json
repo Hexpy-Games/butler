@@ -124,6 +124,7 @@
     { "page": "wallpaper", "entry": "blocks/Wallpaper" },
     { "page": "tab-strip", "entry": "blocks/TabStrip" },
     { "page": "breadcrumb", "entry": "components/Breadcrumb" },
+    { "page": "address-field", "entry": "blocks/AddressField" },
     { "page": "page-band", "entry": "blocks/PageBand" }
   ]
 }

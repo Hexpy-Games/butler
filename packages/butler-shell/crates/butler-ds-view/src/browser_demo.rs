@@ -13,6 +13,7 @@ use crate::copy::Lang;
 
 /// `BROWSER_DEMO_COPY`: the strings the band and address stories need.
 pub(crate) struct BrowserCopy {
+    pub url: &'static str,
     pub agent_using: &'static str,
     pub step: &'static str,
     pub take_over: &'static str,
@@ -38,6 +39,7 @@ pub(crate) struct BrowserCopy {
 pub(crate) fn copy(lang: Lang) -> BrowserCopy {
     lang.pick(
         BrowserCopy {
+            url: "https://shop.example.com/search?q=office-chair",
             agent_using: "Butler is browsing",
             step: "Click ‘Mesh Office Chair M2’",
             take_over: "Take over",
@@ -60,6 +62,7 @@ pub(crate) fn copy(lang: Lang) -> BrowserCopy {
             clear: "Clear",
         },
         BrowserCopy {
+            url: "https://shop.example.com/search?q=office-chair",
             agent_using: "버틀러가 조작 중",
             step: "‘메쉬 사무용 의자 M2’ 클릭",
             take_over: "직접 조작",

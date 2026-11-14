@@ -3,6 +3,7 @@ mod activity_feed;
 mod activity_heatmap;
 mod activity_strip;
 mod adaptive_shell;
+mod address_field;
 mod animated_number;
 mod artifact_list;
 mod artifact_preview;
