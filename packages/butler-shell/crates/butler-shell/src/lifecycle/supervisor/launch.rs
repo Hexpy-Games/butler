@@ -215,7 +215,7 @@ fn command(data: &Path, install: Install) -> AgentCommand {
             var("BUTLER_APP_FOREGROUND_LEASE", "1"),
             var("BUTLER_APP_QUIT_WAIT_SAFELY", "1"),
             var("BUTLER_SHUTDOWN_TRACE", "1"),
-            var("BUTLER_APP_VERSION", env!("CARGO_PKG_VERSION")),
+            var("BUTLER_APP_VERSION", crate::lifecycle::APP_VERSION),
         ],
         program: install.program,
         cwd: data.to_path_buf(),

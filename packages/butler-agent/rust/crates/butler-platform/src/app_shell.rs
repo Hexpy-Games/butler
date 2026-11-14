@@ -3,6 +3,22 @@
 //! (login item, notifications). Electron's `installShellRegistrationAllowed`.
 use std::path::{Path, PathBuf};
 
+/// Electron's Windows AppUserModelID and login Run value name.
+pub const WINDOWS_APP_ID: &str = "com.squirrel.butler-app.Butler";
+
+/// Registrations name the Squirrel stub so they survive updates (Electron
+/// `windowsLoginItemSettings`); other layouts keep the executable itself.
+pub fn launcher(executable: &Path) -> PathBuf {
+    #[cfg(windows)]
+    if let Some(root) = executable.parent().and_then(Path::parent)
+        && root.join("Update.exe").is_file()
+        && let Some(name) = executable.file_name()
+    {
+        return root.join(name);
+    }
+    executable.to_path_buf()
+}
+
 /// Set to `1`, the App registers nothing with the OS (every check sets it).
 const DISABLE_REGISTRATION: &str = "BUTLER_APP_DISABLE_SHELL_REGISTRATION";
 

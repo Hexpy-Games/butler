@@ -6,7 +6,7 @@ use winsafe::{HKEY, RegistryValue, co};
 use super::LoginItemError;
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
-const VALUE_NAME: &str = "com.squirrel.butler-app.Butler";
+const VALUE_NAME: &str = crate::app_shell::WINDOWS_APP_ID;
 
 /// The executable a Run value launches: the quoted path, or the text up to the first space.
 fn launched(value: &str) -> &str {
@@ -19,6 +19,7 @@ fn launched(value: &str) -> &str {
 
 /// Whether the Run value names `executable`.
 pub(super) fn enabled(executable: &Path) -> bool {
+    let executable = crate::app_shell::launcher(executable);
     let value = HKEY::CURRENT_USER
         .RegOpenKeyEx(Some(RUN_KEY), co::REG_OPTION::NoValue, co::KEY::QUERY_VALUE)
         .and_then(|key| key.RegQueryValueEx(Some(VALUE_NAME)));
@@ -34,6 +35,7 @@ pub(super) fn enabled(executable: &Path) -> bool {
 pub(super) fn set(executable: &Path, open_at_login: bool) -> Result<(), LoginItemError> {
     let fail = |call: &str| LoginItemError::Failed(format!("{call} failed"));
     if open_at_login {
+        let executable = crate::app_shell::launcher(executable);
         let executable = executable.to_str().ok_or_else(|| fail("Run key path"))?;
         return HKEY::CURRENT_USER
             .RegSetKeyValue(

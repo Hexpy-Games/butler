@@ -1,7 +1,7 @@
 # butler-shell (실험)
 
-An experimental native desktop shell for Butler, built on gpui. It runs alongside the
-Electron app and is not shipped.
+An experimental native desktop shell for Butler, built on gpui. Release packaging bundles
+it as the Butler App (scripts follow) and stamps `BUTLER_APP_BUILD_VERSION`.
 
 - Its own Cargo workspace (not part of `packages/butler-agent/rust`), with the same
   toolchain and lints.
@@ -10,7 +10,7 @@ Electron app and is not shipped.
   the Acrylic window material (Windows Acrylic, the macOS sidebar vibrancy).
 - The UI reads data through `source::Source`, backed by `butler-shell-client`.
   It attaches to the instance in `--data`, `BUTLER_DATA`, or the platform data directory,
-  and watches instance changes while disconnected. It never starts an agent.
+  and watches instance changes while disconnected. The App supervises its own child Agent.
 
 ## Build and run
 

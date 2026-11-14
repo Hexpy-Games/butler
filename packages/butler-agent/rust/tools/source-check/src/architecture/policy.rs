@@ -120,6 +120,8 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         | "tray" => &[],
         // The login item and notifications register only from a packaged App.
         "login_item" | "notification_settings" => &["app_shell"],
+        // Squirrel events keep this install's stub registrations in sync.
+        "squirrel" => &["app_shell", "login_item"],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.

@@ -16,7 +16,7 @@ use gpui_platform::application;
 use ui::shell::{Quit, Shell};
 
 /// Electron's Windows AppUserModelID (main.mjs:203); a no-op elsewhere.
-const APP_ID: &str = "com.squirrel.butler-app.Butler";
+const APP_ID: &str = butler_platform::app_shell::WINDOWS_APP_ID;
 
 /// The startup order of `main.mjs`: the data folder, the lifecycle, the Agent, then the window.
 fn start(cx: &mut App, args: &[OsString]) -> anyhow::Result<()> {
@@ -34,6 +34,25 @@ fn start(cx: &mut App, args: &[OsString]) -> anyhow::Result<()> {
 }
 
 fn main() {
+    let args: Vec<OsString> = std::env::args_os().collect();
+    if let Some(event) = butler_platform::squirrel::event(&args) {
+        let data = lifecycle::data_root(&args);
+        let owned = !args.iter().any(|arg| arg == "--data")
+            && std::env::var_os("BUTLER_DATA").is_none_or(|value| value.is_empty());
+        let result = std::env::current_exe()
+            .map_err(|_| "Squirrel executable unavailable".to_owned())
+            .and_then(|executable| {
+                butler_platform::squirrel::handle(event, &executable, &data, owned)
+            });
+        let code = match result {
+            Ok(()) => 0,
+            Err(error) => {
+                eprintln!("{error}");
+                1
+            }
+        };
+        std::process::exit(code);
+    }
     let app = application().with_assets(ui::assets::Assets);
     let (urls, mut incoming) = futures::channel::mpsc::unbounded::<Vec<String>>();
     app.on_open_urls(move |values| {
@@ -64,7 +83,6 @@ fn main() {
             }
         })
         .detach();
-        let args: Vec<OsString> = std::env::args_os().collect();
         if let Err(error) = start(cx, &args) {
             eprintln!("butler-shell: {error:#}");
             // `handleFatalStartupError`, then the quit that drains the App log.

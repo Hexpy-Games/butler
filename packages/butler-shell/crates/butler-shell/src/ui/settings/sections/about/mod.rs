@@ -98,7 +98,7 @@ impl AboutPage {
             ))
             .child(KeyValueRow::new(
                 copy.app_version,
-                env!("CARGO_PKG_VERSION"),
+                crate::lifecycle::APP_VERSION,
             ))
             .child(repository)
             .child(KeyValueRow::new(

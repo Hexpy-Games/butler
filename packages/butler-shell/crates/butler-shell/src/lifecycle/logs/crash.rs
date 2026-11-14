@@ -83,7 +83,7 @@ pub(super) fn from_panic(info: &PanicHookInfo<'_>) -> Value {
 
 fn app_version() -> &'static str {
     static CELL: OnceLock<Option<Regex>> = OnceLock::new();
-    let version = env!("CARGO_PKG_VERSION");
+    let version = crate::lifecycle::APP_VERSION;
     let cell = CELL.get_or_init(|| Regex::new(r"(?i)^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$").ok());
     if cell.as_ref().is_some_and(|re| re.is_match(version)) {
         version

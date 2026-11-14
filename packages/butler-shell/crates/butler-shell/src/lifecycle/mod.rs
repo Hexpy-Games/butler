@@ -21,6 +21,13 @@ use gpui::{App, AppContext as _, Context, Entity, Global, Task};
 
 use supervisor::{AgentState, AgentStatus, Requester, StopReason, Supervisor, SupervisorError};
 
+/// Release packaging stamps the exact App version (Electron's `app.getVersion()`);
+/// dev builds keep the crate version.
+pub(crate) const APP_VERSION: &str = match option_env!("BUTLER_APP_BUILD_VERSION") {
+    Some(version) => version,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
 /// A supervisor command's answer.
 pub(crate) type Answer = oneshot::Receiver<Result<(), SupervisorError>>;
 
