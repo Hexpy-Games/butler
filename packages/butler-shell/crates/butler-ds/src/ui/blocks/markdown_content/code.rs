@@ -1,6 +1,8 @@
 //! `CodeFrame` and `MarkdownCodeFrame` (`CodeFrame.tsx`, `MarkdownParts.tsx`): the hairline frame
 //! a fenced block sits in, with its header bar (language and actions) over a `pre` that scrolls
 //! sideways with edge fades. The highlighted code is memoized per language and text.
+use crate::ui::selectable::{self, Break, Run, Selection};
+
 use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
@@ -224,13 +226,12 @@ impl RenderOnce for MarkdownCodeFrame {
             (highlighted.shown.clone(), highlighted.tokens.clone())
         };
         let highlights = code_highlights(&text, found.as_ref(), cx);
-        let body = crate::ui::selectable::selectable(
-            (self.id.clone(), "select"),
-            &text,
-            highlights,
+        let styled = StyledText::new(text.clone()).with_highlights(highlights);
+        let body = Run::new(
+            text,
+            styled,
+            Break::Line,
             gpui::IntoElement::into_any_element,
-            window,
-            cx,
         );
         let ds = Ds::get(cx);
         let code_font = ds.code_font().clone();
@@ -278,6 +279,9 @@ impl RenderOnce for MarkdownCodeFrame {
             guard: ds.len(Length::SpaceXs),
         };
         let scroller = engine::scroller(&config, pre, window, cx);
-        CodeFrame::new().child(header).child(scroller.element)
+        selectable::scope(
+            Selection::new((self.id.clone(), "select"), window, cx),
+            CodeFrame::new().child(header).child(scroller.element),
+        )
     }
 }

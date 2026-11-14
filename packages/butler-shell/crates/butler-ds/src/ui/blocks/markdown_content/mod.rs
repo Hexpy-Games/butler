@@ -27,6 +27,7 @@ pub use reveal::{Reveal, track as track_reveal};
 use crate::tokens::{Color, Length};
 use crate::ui::context::{Ds, Lang, keep_words};
 use crate::ui::markdown::{Block, parse};
+use crate::ui::selectable::{self, Selection};
 
 /// `density`: `document` is the reading rhythm of a reply; `compact` is for a dense pane (a detail
 /// aside, a card): body line height, block gaps one step down.
@@ -191,9 +192,14 @@ impl RenderOnce for MarkdownContent {
         } else {
             root
         };
-        root.text_color(ds.color(Color::TextPrimary))
+        let root = root
+            .text_color(ds.color(Color::TextPrimary))
             .text_size(ds.len(Length::FontSize3))
             .line_height(ds.len(line))
-            .child(body)
+            .child(body);
+        selectable::scope(
+            Selection::new((self.id.clone(), "select"), window, cx),
+            root,
+        )
     }
 }
