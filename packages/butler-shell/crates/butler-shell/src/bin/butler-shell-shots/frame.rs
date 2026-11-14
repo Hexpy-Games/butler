@@ -42,6 +42,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             ensure!(shown == expected, "{shown} toasts, expected {expected}");
             Ok(())
         }
+        "expect-clipboard" => expect_clipboard(h, arg),
         "expect-scale" => {
             let scale: f32 = arg.parse()?;
             let actual =
@@ -72,6 +73,17 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         }
         _ => anyhow::bail!("unknown frame command"),
     }
+}
+
+fn expect_clipboard(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    let expected: Option<String> = serde_json::from_str(arg)?;
+    let actual =
+        h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
+    ensure!(
+        actual == expected,
+        "clipboard {actual:?}, expected {expected:?}"
+    );
+    Ok(())
 }
 
 /// `expect-fresh`: the frame drawn from notifications alone equals a full re-render. A region
