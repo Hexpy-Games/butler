@@ -138,13 +138,7 @@ fn title_line(
             .justify_center()
             .text_color(ds.color(Color::TextTertiary))
             .child(turn.0.apply(
-                div().child(icon(Icon::ChevronRight, IconSize::Sm, ds).turned(
-                    if turn.0.moving(&turn.1) {
-                        0.
-                    } else {
-                        turn.0.target() * std::f32::consts::FRAC_PI_2
-                    },
-                )),
+                div().child(icon(Icon::ChevronRight, IconSize::Sm, ds)),
                 &turn.1,
                 &Props {
                     rotation: Some((0., std::f32::consts::FRAC_PI_2)),

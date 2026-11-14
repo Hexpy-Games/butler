@@ -191,8 +191,9 @@ impl Steps<'_, '_> {
                         .is_some_and(|latest| std::ptr::eq(latest, *item));
                 let mut t = self.t.clone();
                 t.message_id = None;
-                let tools = activity::activity_tools(&item.phase, &t, window, cx);
-                // The tool operations retain their own turn ids; source turn also scopes row identity.
+                let tools =
+                    activity::activity_tools(&item.phase, Some(item.turn.as_str()), &t, window, cx);
+                // Electron `SessionObserverStepTimeline.tsx`: source turn scopes tools and row identity.
                 anchor(
                     div().child(
                         Stack::new()

@@ -66,5 +66,5 @@ pub(crate) fn message_activity(
         return None;
     }
     let blocks = msg.work_blocks.as_deref().unwrap_or(&[]);
-    blocks::work_blocks(blocks, false, t, window, cx)
+    blocks::work_blocks(blocks, false, turn_id, t, window, cx)
 }
