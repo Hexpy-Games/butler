@@ -100,11 +100,7 @@ fn valid_session(session: &str) -> bool {
 
 impl Headless {
     /// The backend; nothing runs or downloads until the first `tab.open`.
-    pub fn new(mut config: HeadlessConfig, shutdown: CancellationToken) -> Arc<Self> {
-        // Rebuilt from its components: the data-path constants use `/`, and Chrome on Windows
-        // rejects paths that mix separators (it cancels every download into one, #2245). The
-        // profile, the log and the downloads stage all live under this root.
-        config.root = config.root.components().collect();
+    pub fn new(config: HeadlessConfig, shutdown: CancellationToken) -> Arc<Self> {
         let headless = Arc::new(Self {
             installer: Installer::new(config.install.clone()),
             enabled: std::sync::atomic::AtomicBool::new(config.enabled),
