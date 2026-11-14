@@ -1,0 +1,136 @@
+name: CEF browser
+
+# The headless CEF host (packages/butler-agent/rust/crates/butler-platform/cef)
+# is an engine of the headless browser executor. These jobs run browser_headless
+# scenarios on it (BUTLER_E2E_BROWSER_BACKEND=cef). Windows runs on relevant PRs;
+# Linux and macOS run only on demand (dispatch, or the `cef:linux` / `cef:macos` PR labels)
+# until the host is the default.
+
+on:
+  pull_request:
+    # `labeled`: Linux and macOS are opt-in via labels (workflow_dispatch needs the file on main).
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - 'packages/butler-agent/rust/crates/butler-platform/cef/**'
+      - 'packages/butler-agent/rust/crates/butler-runtime/src/browser/headless/**'
+      - 'packages/butler-agent/rust/crates/butler-runtime/src/browser/headless.rs'
+      - 'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/browser_headless/**'
+      - 'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/browser_headless.rs'
+      - '.github/workflows/cef-browser.yml'
+  workflow_dispatch:
+    inputs:
+      os:
+        description: Runner OS for the CEF backend scenarios
+        type: choice
+        options: [windows, linux, macos]
+        default: windows
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cef-browser-${{ github.ref }}-${{ inputs.os || 'windows' }}
+  cancel-in-progress: true
+
+jobs:
+  scenarios:
+    name: CEF backend scenarios (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      # A job-level `if` cannot read `matrix`, so the event picks the entries:
+      # dispatch selects one OS; PRs always run Windows and independently opt in
+      # to Linux with `cef:linux` and macOS with `cef:macos` (both labels work).
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(format('[{0}{1}{2}]',
+          (github.event_name != 'workflow_dispatch' || inputs.os == 'windows')
+          && '{"os":"windows","runner":"windows-latest","target":"x86_64-pc-windows-msvc"}' || '',
+          github.event_name == 'workflow_dispatch' && inputs.os == 'linux'
+          && '{"os":"linux","runner":"ubuntu-24.04","target":"x86_64-unknown-linux-gnu"}'
+          || github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'cef:linux')
+          && ',{"os":"linux","runner":"ubuntu-24.04","target":"x86_64-unknown-linux-gnu"}' || '',
+          github.event_name == 'workflow_dispatch' && inputs.os == 'macos'
+          && '{"os":"macos","runner":"macos-15","target":"aarch64-apple-darwin"}'
+          || github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'cef:macos')
+          && ',{"os":"macos","runner":"macos-15","target":"aarch64-apple-darwin"}' || '')) }}
+    defaults:
+      run:
+        working-directory: packages/butler-agent/rust
+        shell: bash
+    env:
+      BUTLER_E2E_TIER: stub
+      CARGO_TARGET_DIR: ${{ github.workspace }}/packages/butler-agent/rust/target
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use MSVC's linker, not Git's coreutils link
+        if: matrix.os == 'windows'
+        # the hosted runner is ephemeral
+        run: rm -f /usr/bin/link.exe
+
+      # `runner` is not available in job-level env; the pinned CEF lives under the runner temp.
+      - name: Locate the CEF archive cache
+        run: echo "CEF_PATH=$RUNNER_TEMP/cef" >> "$GITHUB_ENV"
+
+      # The preview scenarios start their dev server with the runner's Bun.
+      - uses: ./.github/actions/bun-setup
+
+      - uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: prebuilt-ort
+          cache-key: cef-browser-${{ matrix.os }}
+          save-cargo-cache: 'false'
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cef
+          key: cef-${{ matrix.os }}-${{ hashFiles('packages/butler-agent/rust/crates/butler-platform/cef/fetch.py') }}
+
+      - name: Fetch the pinned CEF
+        run: |
+          py=$(command -v python3 || command -v python)
+          "$py" crates/butler-platform/cef/fetch.py --dest "$CEF_PATH"
+
+      - name: Let Chromium's renderer sandbox create its namespaces
+        if: matrix.os == 'linux'
+        # Ubuntu 24.04 restricts user namespaces through AppArmor; keep the
+        # host's renderer sandbox enabled by allowing them on this runner.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Build and stage the CEF host
+        run: |
+          cargo build --locked -p butler-cef --features cef --target ${{ matrix.target }}
+          py=$(command -v python3 || command -v python)
+          host=$("$py" crates/butler-platform/cef/stage.py --cef "$CEF_PATH" --target "$CARGO_TARGET_DIR/${{ matrix.target }}/debug" --out "$RUNNER_TEMP/cef-host" | tail -n1)
+          echo "BUTLER_E2E_CEF_HOST=$host" >> "$GITHUB_ENV"
+
+      - name: Run the browser_headless scenarios on CEF
+        env:
+          BUTLER_E2E_BROWSER_BACKEND: cef
+        run: |
+          # A fresh dir under the runner temp; Windows tools (MSVC's linker, the agent) need
+          # Windows paths, not Git Bash's /d/a/... form.
+          fresh() {
+            local dir; dir=$(mktemp -d "$RUNNER_TEMP/cef-$1.XXXXXX")
+            if command -v cygpath > /dev/null; then cygpath -w "$dir"; else echo "$dir"; fi
+          }
+          export HOME=$(fresh home) BUTLER_DATA=$(fresh data)
+          # Scenario fixtures live in the process temp dir; keep them under the runner temp for the evidence upload.
+          export TMPDIR=$(fresh tmp)
+          export TMP="$TMPDIR" TEMP="$TMPDIR"
+          if [[ '${{ matrix.os }}' == 'windows' ]]; then
+            export LOCALAPPDATA=$(fresh local) APPDATA=$(fresh roaming)
+          fi
+          cargo test --locked --target ${{ matrix.target }} -p butler-e2e --test e2e browser_headless -- --test-threads 2
+
+      - name: Preserve CEF failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cef-browser-failures-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/**/butler-e2e/failures
+            ${{ runner.temp }}/**/state/browser/headless/browser.log
+          retention-days: 7
+          if-no-files-found: ignore
