@@ -89,28 +89,8 @@ impl butler_models::mcp_client::McpOverlay for Plugins {
         args: &serde_json::Map<String, Value>,
     ) -> std::result::Result<butler_models::mcp_client::PreparedOverlay, &'static str> {
         let (plugin, server) = id.split_once('/').ok_or("plugin_mcp_id_invalid")?;
-        let account = {
-            let state = self.state.lock();
-            let accounts = state
-                .registry
-                .accounts
-                .values()
-                .filter(|a| {
-                    a.plugin == plugin
-                        && a.enabled
-                        && args
-                            .get("account")
-                            .and_then(Value::as_str)
-                            .is_none_or(|id| id == a.id)
-                })
-                .cloned()
-                .collect::<Vec<_>>();
-            if accounts.len() > 1 {
-                return Err("connector_account_required");
-            }
-            accounts.into_iter().next()
-        };
-        if let Some(account) = account {
+        let requested = args.get("account").and_then(Value::as_str);
+        if let Some(account) = self.call_account(plugin, server, requested)? {
             return self
                 .connectors
                 .prepared_blocking(&account, server)
@@ -171,6 +151,48 @@ impl butler_models::mcp_client::McpOverlay for Plugins {
     }
 }
 impl Plugins {
+    /// The connected account a call to a connector's event server runs with.
+    /// Servers that are no connector's event server run without an account.
+    fn call_account(
+        &self,
+        plugin: &str,
+        server: &str,
+        requested: Option<&str>,
+    ) -> std::result::Result<Option<butler_core::plugins::ConnectorAccount>, &'static str> {
+        let state = self.state.lock();
+        let Some(installed) = state.registry.plugins.get(plugin) else {
+            return Ok(None);
+        };
+        let connectors = installed
+            .package
+            .connectors
+            .iter()
+            .filter(|c| c.events.server == server)
+            .collect::<Vec<_>>();
+        if connectors.is_empty() {
+            return Ok(None);
+        }
+        let named = |account: &butler_core::plugins::ConnectorAccount, name: &str| {
+            account.id == name
+                || connectors
+                    .iter()
+                    .find(|c| c.id == account.connector)
+                    .and_then(|c| c.account.fields.first())
+                    .and_then(|field| account.fields.get(&field.key))
+                    .is_some_and(|value| value.eq_ignore_ascii_case(name))
+        };
+        let mut matched = state.registry.accounts.values().filter(|a| {
+            a.plugin == plugin
+                && a.enabled
+                && connectors.iter().any(|c| c.id == a.connector)
+                && requested.is_none_or(|name| named(a, name))
+        });
+        match (matched.next(), matched.next()) {
+            (Some(account), None) => Ok(Some(account.clone())),
+            (None, _) => Err("connector_account_not_found"),
+            (Some(_), Some(_)) => Err("connector_account_required"),
+        }
+    }
     fn prepare_server(&self, server_id: &str) -> Result<Value> {
         self.prepare_snapshot(server_id).map(|(config, _)| config)
     }

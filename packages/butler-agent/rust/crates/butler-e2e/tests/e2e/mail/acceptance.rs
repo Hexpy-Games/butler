@@ -325,3 +325,59 @@ async fn bundled_mail_installs_by_name_and_publishes_status_changes() -> Result<
     }).await?;
     s.finish().await
 }
+
+#[tokio::test]
+async fn mail_search_by_account_address_uses_that_account_and_an_unknown_one_is_refused()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let fake = FakeImap::start().await?;
+    let s = setup("MAIL-ACCOUNT-ADDRESS")?.start().await?;
+    install(&s).await?;
+    connect(&s, &fake, "mail-password").await?;
+    fake.deliver(
+        "INBOX",
+        &rfc822(
+            "addr-1",
+            "Account by address",
+            "owner@example.test",
+            "Body",
+            "",
+        ),
+    );
+    count(&s, "SELECT count(*) FROM app_connector_events", 1).await?;
+    for account in ["Owner@Example.test", "someone@example.test"] {
+        let turn = card(
+            &s,
+            "search",
+            json!({"query":"ALL","limit":5,"account":account}),
+        )
+        .await?;
+        approve(&s, "allow").await?;
+        s.gw.wait_terminal("general", &turn, Duration::from_secs(30))
+            .await?;
+    }
+    let outputs = s
+        .provider()?
+        .requests()
+        .iter()
+        .flat_map(|r| r["input"].as_array().cloned().unwrap_or_default())
+        .filter(|v| v["type"] == "function_call_output")
+        .map(|v| v["output"].to_string())
+        .collect::<Vec<_>>();
+    let found = outputs
+        .iter()
+        .position(|o| o.contains("Account by address"))
+        .expect("search by address did not reach the account");
+    assert!(
+        outputs[found + 1..]
+            .iter()
+            .any(|o| o.contains("connector_account_not_found")),
+        "unknown account was not refused"
+    );
+    assert!(
+        !outputs
+            .iter()
+            .any(|o| o.contains("mcp_tool_dispatch_uncertain"))
+    );
+    s.finish().await
+}
