@@ -48,6 +48,7 @@ pub struct Tab {
     pub(super) icon: Option<Icon>,
     pub(super) state: Option<TabState>,
     pub(super) closable: bool,
+    pub(super) anchor: Option<SharedString>,
 }
 
 impl Tab {
@@ -59,7 +60,14 @@ impl Tab {
             icon: None,
             state: None,
             closable: true,
+            anchor: None,
         }
+    }
+
+    /// Names the tab for the live harness (`debug_selector`).
+    pub fn anchor(mut self, name: impl Into<SharedString>) -> Self {
+        self.anchor = Some(name.into());
+        self
     }
 
     pub fn id(&self) -> &SharedString {

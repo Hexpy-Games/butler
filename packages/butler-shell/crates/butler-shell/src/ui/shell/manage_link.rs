@@ -116,6 +116,10 @@ impl Shell {
             ManageEvent::OpenSession(id) => {
                 self.navigate(Navigation::Session(id.to_string()), window, cx);
             }
+            ManageEvent::OpenConversationLink(url) => {
+                let session = self.store.selected().map(|chat| chat.session.0.clone());
+                crate::ui::browser::open_conversation_link(session.as_deref(), url, cx);
+            }
             ManageEvent::OpenNewChat => {
                 self.sidebar.new_chat_parent = None;
                 self.open_chat(None, window, cx);

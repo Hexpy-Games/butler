@@ -367,14 +367,14 @@ impl HistoryPage {
                 let rows = visits.into_iter().map(|visit| {
                     let toggle = me.clone();
                     let id = visit.id;
-                    // CARVE-OUT(G-cef): React's `onOpen` opens the URL in a browser tab
-                    // (`openHistoryUrl`); the row is not openable until the browser lands (P5).
+                    let url = visit.url.clone();
                     let row = HistoryRow::new(
                         SharedString::from(id.to_string()),
                         visit.url.clone(),
                         day::time(visit.time, lang),
                     )
-                    .title(visit.title.clone());
+                    .title(visit.title.clone())
+                    .on_open(move |_, cx| crate::ui::browser::open_link(&url, cx));
                     let row = if visit.favicon.is_empty() {
                         row
                     } else {

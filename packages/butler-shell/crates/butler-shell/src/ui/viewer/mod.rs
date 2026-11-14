@@ -2,7 +2,7 @@
 //! `useRightSlot`, in the AdaptiveShell split pane with tabs on TabStrip.
 mod artifact;
 pub(crate) mod frame;
-mod state;
+pub(crate) mod state;
 
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::adaptive_shell::parts::ShellCard;
@@ -116,15 +116,19 @@ pub(crate) fn file_viewer_toggle(
     let shown = right_slot_pane(browser, &files) == Some(RightSlotPane::Viewer);
     let session = session.to_owned();
     Some(
-        IconButton::new(
-            "titlebar-file-viewer-toggle",
-            FileViewerStrings::get(cx).title,
-        )
-        .glyph(Icon::FileText)
-        .pane(Pane::Viewer)
-        .pressed(shown)
-        .tone(if shown { Tone::Butler } else { Tone::Default })
-        .on_click(move |_, _, cx| set_shown(cx, &session, !shown))
-        .into_any_element(),
+        crate::ui::widgets::anchor(div(), "titlebar-file-viewer-toggle")
+            .flex()
+            .child(
+                IconButton::new(
+                    "titlebar-file-viewer-toggle",
+                    FileViewerStrings::get(cx).title,
+                )
+                .glyph(Icon::FileText)
+                .pane(Pane::Viewer)
+                .pressed(shown)
+                .tone(if shown { Tone::Butler } else { Tone::Default })
+                .on_click(move |_, _, cx| set_shown(cx, &session, !shown)),
+            )
+            .into_any_element(),
     )
 }

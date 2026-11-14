@@ -1,4 +1,4 @@
-//! The management surfaces (`AppView` without the browser and settings, `app/types.ts:1863`):
+//! The management surfaces (`AppView` without settings, `app/types.ts:1863`):
 //! the view model, the state every page observes, and the page switch of `AppShell.tsx:216-243`.
 //! The shell owns the view; a page is built when its remount key ([`page_key`]) changes and reads
 //! the current view from [`ManageCtx::view`] inside one key. Every page gets a [`ManageCtx`].
@@ -53,11 +53,12 @@ pub(crate) enum HistoryFrom {
     Settings,
 }
 
-/// `AppView` without `browser` (P5) and `settings` (the settings screen overlays the frame).
+/// `AppView` without `settings` (the settings screen overlays the frame).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) enum View {
     #[default]
     Session,
+    Browser,
     History {
         from: HistoryFrom,
     },
@@ -103,6 +104,7 @@ pub(crate) enum ManageEvent {
     SetView(View),
     OpenProjectDashboard(SharedString),
     OpenSession(SharedString),
+    OpenConversationLink(String),
     OpenNewChat,
     OpenProjectChat(SharedString),
     StartProjectChatWithDocument {
@@ -181,6 +183,10 @@ impl ManageCtx {
         self.emit(ManageEvent::OpenSession(id), cx);
     }
 
+    pub(crate) fn open_conversation_link(&self, url: &str, cx: &mut App) {
+        self.emit(ManageEvent::OpenConversationLink(url.to_owned()), cx);
+    }
+
     pub(crate) fn open_new_chat(&self, cx: &mut App) {
         self.emit(ManageEvent::OpenNewChat, cx);
     }
@@ -257,7 +263,7 @@ impl ManageCtx {
 /// when this changes. `None` for the conversation.
 pub(crate) fn page_key(view: &View) -> Option<SharedString> {
     let key: SharedString = match view {
-        View::Session => return None,
+        View::Session | View::Browser => return None,
         View::History { .. } => "history".into(),
         View::Library(_) => "library".into(),
         View::Automations => "automations".into(),
@@ -278,7 +284,7 @@ pub(crate) fn page(
     cx: &mut App,
 ) -> Option<AnyView> {
     Some(match view {
-        View::Session => return None,
+        View::Session | View::Browser => return None,
         View::History { .. } => history::page(ctx, window, cx),
         View::Library(_) => library::page(ctx, window, cx),
         View::Automations | View::AutomationDetail(_) => schedules::page(ctx, window, cx),
