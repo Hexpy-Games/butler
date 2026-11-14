@@ -19,7 +19,7 @@ pub struct AccountSchema {
     /// Credential inputs stored only through SecretStore.
     pub secrets: Vec<Field>,
     #[serde(default)]
-    /// Non-secret account settings.
+    /// Non-secret account settings. The first field names the account; calls may pass its value as `account`.
     pub fields: Vec<Field>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]

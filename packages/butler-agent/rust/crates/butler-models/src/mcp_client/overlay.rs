@@ -131,7 +131,19 @@ impl McpClient {
         })
         .await
         .map_err(|_| failure("plugin_unavailable", "Plugin is unavailable.", false))?
-        .map_err(|code| failure(code, "Plugin execution refused.", false))?;
+        .map_err(|code| match code {
+            "connector_account_not_found" => failure(
+                code,
+                "No connected account matches `account`. Pass the account's address or id, or leave it out when one account is connected.",
+                false,
+            ),
+            "connector_account_required" => failure(
+                code,
+                "Several accounts are connected. Pass `account` with the account's address.",
+                false,
+            ),
+            _ => failure(code, "Plugin execution refused.", false),
+        })?;
         config(&value.config)
             .map(|config| Some((config, value.lease)))
             .map_err(|_| failure("plugin_invalid", "Plugin server is invalid.", false))
