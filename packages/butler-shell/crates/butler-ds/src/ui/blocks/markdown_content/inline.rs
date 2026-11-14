@@ -241,7 +241,10 @@ fn text(nodes: &[Inline], env: &Env, cx: &App) -> Text {
                 .collect::<Vec<_>>();
             value.apply(
                 gpui::div()
+                    // Inset 0: an absolute box in a block sits below the base text otherwise.
                     .absolute()
+                    .top_0()
+                    .left_0()
                     .size_full()
                     .flex()
                     .flex_col()
