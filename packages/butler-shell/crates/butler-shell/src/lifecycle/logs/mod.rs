@@ -148,7 +148,7 @@ pub(crate) fn install_crash_hook(data: &Path) {
                 "INFO",
                 "lifecycle",
                 "app.start",
-                json!({ "version": env!("CARGO_PKG_VERSION") }),
+                json!({ "version": crate::lifecycle::APP_VERSION }),
             );
         }
     }
