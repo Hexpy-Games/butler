@@ -2,7 +2,8 @@
 //! collapsible panel attached above the composer (steps, workers). Its header is a button with an
 //! optional icon, a heading and, while collapsed, a one-line summary; the chevron follows the
 //! text. The composer card supplies `--composer-inner-padding-*`; a panel outside one has none,
-//! as in CSS where the unset variable voids the padding.
+//! as in CSS where the unset variable voids the padding. Under reduced motion, the chevron turns
+//! at once.
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
     SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
@@ -89,9 +90,10 @@ impl RenderOnce for ComposerAdjunctPanel {
             DsDuration::MotionBase,
             Easing::MotionEaseStandard,
         );
+        let jump = Ds::get(cx).reduced_motion();
         let turned = transition(
             (self.id.clone(), "chevron"),
-            (if collapsed { 1. } else { 0. }, false),
+            (if collapsed { 1. } else { 0. }, jump),
             &timing,
             window,
             cx,
