@@ -277,11 +277,7 @@ impl Render for ManagementPage {
                     "registered-models"
                 },
                 SettingsSectionKind::List,
-                if image {
-                    copy.image_title
-                } else {
-                    copy.registered_title
-                },
+                copy.registered_title,
             )
             .state(state)
             .empty_message(copy.empty_registered)

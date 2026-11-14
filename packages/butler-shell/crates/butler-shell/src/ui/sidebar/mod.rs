@@ -311,6 +311,7 @@ impl Shell {
             session: SessionId(id.into()),
         };
         self.store.open(Some(chat.clone()));
+        self.chat_opened(cx);
         self.show_view(false, cx);
         self.load_summary(&chat, cx);
         self.reload_open_chat(cx);

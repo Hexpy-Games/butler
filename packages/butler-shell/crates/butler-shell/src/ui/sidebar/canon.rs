@@ -10,7 +10,6 @@ use crate::ui::{
     },
 };
 use butler_ds::ui::{
-    avatar::Avatar,
     blocks::{
         collapsible_nav_group::CollapsibleNavGroup,
         drag_preview::DragPreview,
@@ -104,6 +103,7 @@ impl Shell {
         pin: Option<super::row::Pin<'_>>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        crate::ui::manage::canon::common::warm_person_name(cx);
         let groups = self
             .sidebar
             .canon
@@ -289,10 +289,7 @@ impl Shell {
                 s.mutate(Mutation::CanonConversation(shown.id.clone()), cx);
             }
         }));
-        if self
-            .store
-            .selected()
-            .is_some_and(|c| Some(c.session.0.as_ref()) == epic.home_session_id.as_deref())
+        if epic.home_session_id.is_some() && self.route_chat(cx) == epic.home_session_id.as_deref()
         {
             nav = nav.active();
         }
@@ -340,13 +337,18 @@ impl Shell {
                 butler_ds::ui::context::Ds::get(cx),
             ));
         }
-        if let Some(label) = self.canon_epic_label(epic, cx) {
+        if let Some(label) = Self::canon_epic_label(epic, cx) {
             nav = nav.label_element(label);
         }
         nav
     }
-    fn canon_epic_label(&self, epic: &EpicCard, cx: &Context<Self>) -> Option<AnyElement> {
-        let avatar = self.canon_avatar(epic)?;
+    /// Electron `CanonEpicRow.tsx`: the assignee follows the shrinking title.
+    fn canon_epic_label(epic: &EpicCard, cx: &Context<Self>) -> Option<AnyElement> {
+        let avatar = crate::ui::manage::canon::common::canon_avatar(
+            epic.assignee.as_deref(),
+            epic.agent.as_ref(),
+            cx,
+        )?;
         Some(
             div()
                 .flex()
@@ -355,48 +357,11 @@ impl Shell {
                 .gap(butler_ds::ui::context::Ds::get(cx).len(butler_ds::tokens::Length::SpaceSm))
                 .child(
                     div()
-                        .flex_1()
                         .min_w_0()
                         .child(Typo::text(epic.title.clone()).truncate()),
                 )
                 .child(div().flex_none().child(avatar))
                 .into_any_element(),
-        )
-    }
-    fn canon_avatar(&self, epic: &EpicCard) -> Option<Avatar> {
-        let person = epic
-            .agent
-            .as_ref()
-            .map(|a| a.person.as_str())
-            .or(epic.assignee.as_deref())?;
-        let own = person == "app-user";
-        let name = if own {
-            self.store
-                .navigation
-                .view
-                .as_ref()
-                .map(|v| v.settings_summary.profile_label.as_str())
-                .filter(|s| !s.is_empty())
-                .unwrap_or(self.copy("Me", "나"))
-        } else {
-            person
-        };
-        let label = epic.agent.as_ref().map_or_else(
-            || name.to_owned(),
-            |agent| format!("{name} · {} {}", agent.via, self.copy("working", "작업 중")),
-        );
-        Some(
-            Avatar::new(
-                SharedString::from(format!("epic-avatar-{}", epic.id)),
-                name.to_owned(),
-            )
-            .tone(if own {
-                butler_ds::ui::avatar::AvatarTone::Own
-            } else {
-                butler_ds::ui::avatar::AvatarTone::Other
-            })
-            .badge(epic.agent.as_ref().map(|_| Icon::Bot))
-            .label(label),
         )
     }
     fn canon_epic_drag_rules(
