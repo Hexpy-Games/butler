@@ -178,7 +178,7 @@ fn resume_button(
 }
 
 /// `resumeObservedSteward`: the agent resumes the relation; a refused request shows the error.
-fn resume(
+pub(crate) fn resume(
     parent_id: &str,
     relation_id: &str,
     resuming: &gpui::Entity<bool>,

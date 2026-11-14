@@ -1,13 +1,11 @@
 //! `stewardProgressPresentation.ts`, `stewardParentProgressProjection.ts`, and the work-block
 //! status lines (`workBlockLatestStatus.ts`, `workBlockTail.ts`) the card shows.
-use std::sync::Arc;
-
 use butler_ds::ui::context::Lang;
 
 use crate::ui::chat::activity::timeline::display_title;
 use crate::ui::source::wire::{
-    MessageRecord, MessageRecordRole, ProgressRow, SessionView, SessionViewStatus, SessionViewTurn,
-    StewardResultViewStatus, StewardSessionSummaryView, WorkPlanActionStatus,
+    ProgressRow, SessionView, SessionViewStatus, StewardResultViewStatus,
+    StewardSessionSummaryView, WorkPlanActionStatus,
 };
 use crate::ui::store::progress::activity::project_turn_activity;
 use crate::ui::store::progress::copy::{
@@ -17,71 +15,6 @@ use crate::ui::store::progress::copy::{
 use crate::ui::store::progress::labels::{
     phase_label, plan_compact, plan_delivered, plan_failed, plan_running,
 };
-
-/// `AnchoredStewardProgress`.
-pub(super) struct Anchored<'a> {
-    pub(super) child: &'a StewardSessionSummaryView,
-    pub(super) turn: &'a SessionViewTurn,
-    pub(super) rows: &'a [ProgressRow],
-}
-
-/// The assistant message that owns a child's card: both durable relation anchors must hold.
-fn anchored_parent<'a>(
-    messages: &'a [Arc<MessageRecord>],
-    session_id: &str,
-    child: &StewardSessionSummaryView,
-) -> Option<&'a MessageRecord> {
-    let relation = &child.relation;
-    if relation.child_session_id != child.session_id {
-        return None;
-    }
-    let anchor_index = messages
-        .iter()
-        .position(|message| message.id == relation.anchor_message_id)?;
-    let anchor = &messages[anchor_index];
-    if anchor.role != MessageRecordRole::User || anchor.chat_id.as_deref() != Some(session_id) {
-        return None;
-    }
-    let parent_index = (anchor_index + 1..messages.len()).find(|at| {
-        messages[*at].role == MessageRecordRole::Assistant
-            && messages[*at].turn_id.as_deref() == Some(relation.parent_turn_id.as_str())
-    })?;
-    let preceding_user = messages[..parent_index]
-        .iter()
-        .rev()
-        .find(|message| message.role == MessageRecordRole::User)?;
-    if preceding_user.id != relation.anchor_message_id {
-        return None;
-    }
-    let parent = &messages[parent_index];
-    (!parent.id.is_empty() && parent.chat_id.as_deref() == Some(session_id)).then_some(&**parent)
-}
-
-/// `anchoredStewardProgressByMessageId` for one message: the one child that is anchored to it;
-/// two children on one parent leave neither attached.
-pub(super) fn anchored_progress<'a>(
-    message: &MessageRecord,
-    view: &'a SessionView,
-) -> Option<Anchored<'a>> {
-    let mut owned = view.steward_children.iter().flatten().filter(|child| {
-        anchored_parent(&view.messages, &view.session_id, child)
-            .is_some_and(|parent| parent.id == message.id)
-            && (child.active_turn.is_some() || child.latest_turn.is_some())
-    });
-    let child = owned.next()?;
-    if owned.next().is_some() {
-        return None;
-    }
-    let turn = child.active_turn.as_ref().or(child.latest_turn.as_ref())?;
-    Some(Anchored {
-        child,
-        turn,
-        rows: turn
-            .progress
-            .as_ref()
-            .map_or(&[][..], |progress| progress.safe_progress_rows.as_slice()),
-    })
-}
 
 /// Electron `stewardProgressPresentation.ts` (`effectiveStewardStatus`): a child that ended
 /// with its model's final answer is delivered, whatever that answer reports (`blocked`
@@ -372,7 +305,20 @@ pub(super) fn latest_status(
 
 /// `workBlockTail`: the title of the activity before the latest one, and how many records the
 /// expanded timeline holds beyond the latest.
-pub(super) fn tail(lang: Lang, rows: &[ProgressRow], turn_id: &str) -> (Option<String>, usize) {
+pub(super) fn tail(
+    lang: Lang,
+    view: Option<&SessionView>,
+    rows: &[ProgressRow],
+    turn_id: &str,
+) -> (Option<String>, usize) {
+    if let Some(view) = view {
+        let activities = super::super::child_views::project(view, lang);
+        let previous = activities
+            .len()
+            .checked_sub(2)
+            .map(|at| display_title(&activities[at].phase, lang));
+        return (previous, activities.len().saturating_sub(1));
+    }
     let projection = project_turn_activity(lang, rows, Some(turn_id));
     let activities = &projection.phase_activities;
     let previous = activities

@@ -68,6 +68,7 @@ pub(super) fn timeline(
         view.session_id
     )))
     .max_height(MaxHeight::Sm)
+    .follow_end(context.live)
     .child(DsBox::new().padding_x(Space::Md).child(body))
     .into_any_element()
 }
