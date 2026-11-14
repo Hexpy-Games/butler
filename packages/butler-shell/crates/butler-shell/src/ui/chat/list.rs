@@ -258,16 +258,13 @@ impl State {
             .iter()
             .map(|message| (message.id.as_str(), message))
             .collect();
-        self.messages = collapse_assistant_attempts(&answers::with_question_answers(
-            &view.messages,
-            view.question_answers.as_deref().unwrap_or_default(),
-        ))
-        .into_iter()
-        .map(|new| match previous.get(new.id.as_str()) {
-            Some(kept) if Arc::ptr_eq(kept, &new) || ***kept == *new => Arc::clone(kept),
-            _ => new,
-        })
-        .collect();
+        self.messages = collapse_assistant_attempts(&answers::with_view_receipts(&view))
+            .into_iter()
+            .map(|new| match previous.get(new.id.as_str()) {
+                Some(kept) if Arc::ptr_eq(kept, &new) || ***kept == *new => Arc::clone(kept),
+                _ => new,
+            })
+            .collect();
         self.turn = view
             .active_turn
             .clone()
