@@ -7,9 +7,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, ImageSource, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,
-    StyledImage as _, Window, div, px,
+    AnyElement, App, ClickEvent, ElementId, Hsla, ImageSource, InteractiveElement as _,
+    IntoElement, ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    Styled as _, StyledImage as _, Window, div, px,
 };
 
 use super::Icon;
@@ -18,6 +18,7 @@ use super::control::{Blend, Control, Ring};
 use super::icon::icon_px;
 use super::media_frame::{Load, resolve};
 use super::motion::{Props, Timing};
+use super::selectable::{Break, Run};
 use super::tooltip::Tooltip;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 
@@ -40,6 +41,7 @@ pub struct InlineReference {
     id: ElementId,
     label: Option<SharedString>,
     kind: Kind,
+    lead: Break,
 }
 
 impl InlineReference {
@@ -47,6 +49,7 @@ impl InlineReference {
     pub fn mention(id: impl Into<ElementId>, icon: Icon, label: impl Into<SharedString>) -> Self {
         Self {
             id: id.into(),
+            lead: Break::None,
             label: Some(label.into()),
             kind: Kind::Mention {
                 icon,
@@ -60,12 +63,18 @@ impl InlineReference {
     pub fn external(id: impl Into<ElementId>, href: impl Into<SharedString>) -> Self {
         Self {
             id: id.into(),
+            lead: Break::None,
             label: None,
             kind: Kind::External {
                 href: href.into(),
                 favicon: None,
             },
         }
+    }
+
+    pub fn lead(mut self, lead: Break) -> Self {
+        self.lead = lead;
+        self
     }
 
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
@@ -156,14 +165,21 @@ impl InlineReference {
                         .child(icon_px(icon, em))
                         .into_any_element(),
                     div()
-                        .child(self.label.unwrap_or_default())
+                        .child(Run::plain(self.label.unwrap_or_default(), self.lead))
                         .into_any_element(),
                 ];
                 vec![control.into_any_element()]
             }
-            Kind::External { href, favicon } => {
-                external_items(&self.id, self.label, href, favicon.as_ref(), em, window, cx)
-            }
+            Kind::External { href, favicon } => external_items(
+                &self.id,
+                self.label,
+                href,
+                favicon.as_ref(),
+                em,
+                self.lead,
+                window,
+                cx,
+            ),
         }
     }
 }
@@ -250,14 +266,46 @@ fn favicon_slot(
         .into_any_element()
 }
 
+fn label_piece(
+    id: &ElementId,
+    index: usize,
+    text: String,
+    lead: Break,
+    ink: Hsla,
+    hover: &gpui::Entity<bool>,
+    hovered: bool,
+) -> AnyElement {
+    let on = hover.clone();
+    let mut el = div()
+        .id(SharedString::from(format!("{id}-{index}")))
+        .text_color(ink)
+        .whitespace_nowrap()
+        .on_hover(move |over, _, cx| {
+            on.update(cx, |state, cx| {
+                *state = *over;
+                cx.notify();
+            });
+        })
+        .child(Run::plain(text, lead));
+    if hovered {
+        el = el.underline();
+    }
+    el.into_any_element()
+}
+
 /// The pieces of an external link: the lead (icon and first character) and the rest, a
 /// character each so the label wraps anywhere.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "reference content and its copy lead"
+)]
 fn external_items(
     id: &ElementId,
     label: Option<SharedString>,
     href: SharedString,
     favicon: Option<&ImageSource>,
     em: gpui::Pixels,
+    lead: Break,
     window: &mut Window,
     cx: &mut App,
 ) -> Vec<AnyElement> {
@@ -270,24 +318,6 @@ fn external_items(
     let slot = favicon_slot(id, favicon, em, window, cx);
     let ds = Ds::get(cx);
     let ink = ds.color(Color::AccentText);
-    let piece = |index: usize, text: String| {
-        let on = hover.clone();
-        let mut el = div()
-            .id(SharedString::from(format!("{id}-{index}")))
-            .text_color(ink)
-            .whitespace_nowrap()
-            .on_hover(move |over, _, cx| {
-                on.update(cx, |state, cx| {
-                    *state = *over;
-                    cx.notify();
-                });
-            })
-            .child(text);
-        if hovered {
-            el = el.underline();
-        }
-        el.into_any_element()
-    };
     let gap_width = space(window);
     let chars: Vec<char> = text.chars().collect();
     // A space between label words is a margin (a text item's width drops trailing whitespace).
@@ -305,9 +335,14 @@ fn external_items(
         .text_color(ink)
         .mr(margin(0))
         .child(slot)
-        .child(piece(
+        .child(label_piece(
+            id,
             0,
             chars.first().map(char::to_string).unwrap_or_default(),
+            lead,
+            ink,
+            &hover,
+            hovered,
         ))
         .into_any_element();
     let mut items = vec![
@@ -326,7 +361,19 @@ fn external_items(
             .map(|(n, c)| {
                 div()
                     .mr(margin(n))
-                    .child(piece(n, c.to_string()))
+                    .child(label_piece(
+                        id,
+                        n,
+                        c.to_string(),
+                        if chars[n - 1].is_whitespace() {
+                            Break::Space
+                        } else {
+                            Break::None
+                        },
+                        ink,
+                        &hover,
+                        hovered,
+                    ))
                     .into_any_element()
             }),
     );
@@ -414,20 +461,33 @@ fn space(window: &mut Window) -> gpui::Pixels {
 impl RenderOnce for InlineFlow {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let gap_width = space(window);
+        let mut pending = Break::Line;
         let mut items = Vec::new();
         for part in self.parts {
             match part {
                 Part::Text(text) => {
-                    if text.starts_with(char::is_whitespace) {
+                    let leading_space = text.starts_with(char::is_whitespace);
+                    if leading_space {
                         items.push(div().w(gap_width).into_any_element());
+                        pending = pending.max(Break::Space);
                     }
-                    items.extend(words(&text).into_iter().map(|(word, gap)| {
-                        div()
-                            .whitespace_nowrap()
-                            .mr(if gap { gap_width } else { px(0.) })
-                            .child(word)
-                            .into_any_element()
-                    }));
+                    items.extend(words(&text).into_iter().enumerate().map(
+                        |(index, (word, gap))| {
+                            let run = Run::plain(word, pending)
+                                .space_before(if index == 0 && leading_space {
+                                    gap_width
+                                } else {
+                                    px(0.)
+                                })
+                                .space_after(if gap { gap_width } else { px(0.) });
+                            pending = if gap { Break::Space } else { Break::None };
+                            div()
+                                .whitespace_nowrap()
+                                .mr(if gap { gap_width } else { px(0.) })
+                                .child(run)
+                                .into_any_element()
+                        },
+                    ));
                 }
                 Part::Reference(reference) => items.extend(reference.items(window, cx)),
             }

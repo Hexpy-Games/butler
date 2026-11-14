@@ -5,6 +5,7 @@ use butler_ds::ui::button::{Button, Variant};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::copy_button::CopyButton;
 use butler_ds::ui::inline_reference::{InlineFlow, InlineReference};
+use butler_ds::ui::selectable;
 use butler_ds::ui::typo::{Typo, Wrap};
 use chrono::{DateTime, Datelike, Local};
 use gpui::{
@@ -100,7 +101,7 @@ fn parts_flow(id: &str, parts: &[MessageContentPart], line: gpui::Pixels) -> Any
 }
 
 impl UserMessageText {
-    fn content(&self, clamp: bool, line: gpui::Pixels) -> AnyElement {
+    fn content(&self, clamp: bool, selectable: bool, line: gpui::Pixels) -> AnyElement {
         match &self.content_parts {
             Some(parts) => {
                 let flow = parts_flow(&self.id, parts, line);
@@ -116,6 +117,7 @@ impl UserMessageText {
             }
             None => {
                 let text = Typo::text(self.text.clone()).wrap(Wrap::Pre);
+                let text = if selectable { text.selectable() } else { text };
                 if clamp {
                     text.line_clamp(COLLAPSED_LINES).into_any_element()
                 } else {
@@ -134,7 +136,7 @@ impl UserMessageText {
             .left_0()
             .w_full()
             .invisible()
-            .child(self.content(false, line))
+            .child(selectable::exclude(self.content(false, false, line)))
             .child(
                 canvas(
                     move |bounds, _, cx| {
@@ -192,7 +194,7 @@ impl RenderOnce for UserMessageText {
                 div()
                     .relative()
                     .min_w_0()
-                    .child(self.content(!expanded, line))
+                    .child(self.content(!expanded, true, line))
                     .child(self.measuring_copy(&state, line)),
             )
             .children(toggle)
