@@ -6,8 +6,8 @@ type Held = { key: string; progress: string };
 
 /**
  * The message that carries the running turn's live activity. Only a message that has not
- * settled (pending, thinking, streaming, retrying, or a draft) takes it; a delivered segment keeps
- * its settled summary and the live activity renders as its own row after it. When the turn's
+ * settled (pending, thinking, streaming, retrying, or a draft) takes it; a delivered segment's
+ * settled summary waits while the live activity renders as its own row after it. When the turn's
  * message settles while it carries the activity (including a draft replaced by its delivered
  * record), it keeps the activity until the progress changes or detaches, so completion does not
  * flicker.

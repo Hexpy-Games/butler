@@ -104,8 +104,8 @@ try {
   await app.gateway.signIn(page); await page.goto(app.gateway.url);
   await page.getByRole("button", { name: "사이드바 보기", exact: true }).click();
   await page.locator('[data-test-class="app-sidebar"]').getByText("Preview task", { exact: true }).click();
-  await page.getByRole("button", { name: "오른쪽 패널 보기", exact: true }).click();
-  await page.getByRole("button", { name: "아티팩트", exact: true }).click();
+  await page.locator('[data-test-class="session-info-toggle"]').click();
+  await page.getByRole("complementary", { name: "세션 정보", exact: true }).waitFor();
   await page.getByRole("button", { name: "열기: 미리보기", exact: true }).click();
   const frame = page.frameLocator('[data-test-class="artifact-viewer"] iframe');
   await frame.locator("#status").filter({ hasText: "Initial" }).waitFor();

@@ -1,7 +1,7 @@
 //! One-time browser links and foreground pairing: `butler open` asks for a one-time
 //! connection code (`POST /connection-codes`, bearer token only) and opens
 //! `/connect?code=<code>`, which trades the code for an HttpOnly,
-//! SameSite=Strict per-device session cookie. Pairing codes live only in memory.
+//! SameSite=Lax per-device session cookie. Pairing codes live only in memory.
 
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};

@@ -33,7 +33,7 @@ async function pageShown(app: ShellApp, id: string, icon: string, label: string)
   await waitBrowser(() => app.main<boolean>(`globalThis.browserAgentSubject.tabs.get(${JSON.stringify(id)}).view.webContents.executeJavaScript("document.visibilityState === 'visible'")`), `${label}: the page is visible`);
   assert.equal(facts.capture, "settled", `${label}: a still of the page settles`);
   assert.equal(facts.favicon, icon, `${label}: the tab keeps its favicon`);
-  assert.equal(await app.page.expression(`document.querySelector('${pane} [role=tab][aria-selected=true] img')?.getAttribute('src') ?? null`), icon, `${label}: the tab strip shows the favicon`);
+  await waitBrowser(() => app.page.expression(`document.querySelector('${pane} [role=tab][aria-selected=true] img')?.getAttribute('src') === ${JSON.stringify(icon)}`), `${label}: the tab strip shows the favicon`);
   // The still capture never takes the page out of the window.
   await nativeAligned(app);
 }

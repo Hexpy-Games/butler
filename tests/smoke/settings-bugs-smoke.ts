@@ -124,8 +124,8 @@ async function paletteChecks(page: Page, prefix: string) {
     await page.getByRole("button", { name: copy.settings.back, exact: true }).click();
   }
   let dialog = await search(page, "");
-  // #537: merged main declares fifteen sections, including Hooks and Server. Assert every entry.
-  const expectedSections = ["general", "appearance", "personalization", "memory", "models", "updates", "usage", "browser", "security", "system", "archives", "about", "mcp", "hooks", "skills", "server"] as const;
+  // #537: merged main declares seventeen sections, including Hooks and Server. Assert every entry.
+  const expectedSections = ["general", "appearance", "personalization", "memory", "models", "connections", "updates", "usage", "browser", "security", "system", "archives", "about", "mcp", "hooks", "skills", "server"] as const;
   assert.equal(await dialog.getByRole("option").filter({ hasText: copy.commandPalette.kindLabels.settings }).count(), expectedSections.length);
   for (const id of expectedSections) assert.equal(await dialog.getByRole("option").filter({ has: page.getByText(copy.settings.sections[id], { exact: true }) }).count(), 1);
   await capture(page, prefix, "palette-all-sections");
