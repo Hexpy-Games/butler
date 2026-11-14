@@ -209,13 +209,7 @@ fn stack(
         .text_color(ds.color(Color::TextTertiary))
         .children(overflows.then(|| {
             turn.apply(
-                div().child(icon(Icon::ChevronRight, IconSize::Sm, ds).turned(
-                    if turn.moving(&turn_timing) {
-                        0.
-                    } else {
-                        turn.target() * std::f32::consts::FRAC_PI_2
-                    },
-                )),
+                div().child(icon(Icon::ChevronRight, IconSize::Sm, ds)),
                 &turn_timing,
                 &Props {
                     rotation: Some((0., std::f32::consts::FRAC_PI_2)),

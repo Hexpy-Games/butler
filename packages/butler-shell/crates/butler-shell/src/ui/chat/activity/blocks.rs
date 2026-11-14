@@ -56,6 +56,7 @@ fn block_header(block: &WorkBlockView) -> WorkActivityBlock {
 /// `workActivityToolsForBlock`: the block's tool rows.
 fn block_tools(
     block: &WorkBlockView,
+    turn: Option<&str>,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
@@ -63,6 +64,7 @@ fn block_tools(
     tool_column(
         &block.rows,
         Some(&block.label),
+        turn,
         content_x(false),
         t,
         window,
@@ -72,11 +74,12 @@ fn block_tools(
 
 fn block_view(
     block: &WorkBlockView,
+    turn: Option<&str>,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let tools = block_tools(block, t, window, cx);
+    let tools = block_tools(block, turn, t, window, cx);
     Stack::new()
         .gap(Space::Sm)
         .child(block_header(block))
@@ -88,11 +91,30 @@ fn toggle_state(id: &str, window: &mut Window, cx: &mut App) -> gpui::Entity<boo
     window.use_keyed_state(format!("{id}-expanded"), cx, |_, _| false)
 }
 
+/// The expanded history's collapse control (`CollapsedTurnActivity`).
+fn collapse_button(key: &str, state: &gpui::Entity<bool>, label: &'static str) -> Stack {
+    let state = state.clone();
+    Stack::new().cross(Cross::Start).child(
+        Button::new(format!("{key}-collapse"))
+            .variant(Variant::Borderless)
+            .size(Size::Xs)
+            .icon_start(icon_px(Icon::ListChecks, px(14.)))
+            .text(label)
+            .on_click(move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
+                state.update(cx, |open, cx| {
+                    *open = false;
+                    cx.notify();
+                });
+            }),
+    )
+}
+
 /// `CollapsedTurnActivity` / `CompletedWorkBlocks`: the header, the latest block while live,
 /// every block when expanded; `None` without blocks.
 pub(crate) fn work_blocks(
     blocks: &[WorkBlockView],
     live: bool,
+    turn: Option<&str>,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
@@ -128,31 +150,13 @@ pub(crate) fn work_blocks(
     if expanded {
         let views: Vec<AnyElement> = blocks
             .iter()
-            .map(|block| block_view(block, t, window, cx))
+            .map(|block| block_view(block, turn, t, window, cx))
             .collect();
         body = body.children(views);
-        let collapse = {
-            let state = state.clone();
-            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| {
-                state.update(cx, |open, cx| {
-                    *open = false;
-                    cx.notify();
-                });
-            }
-        };
-        body = body.child(
-            Stack::new().cross(Cross::Start).child(
-                Button::new(format!("{key}-collapse"))
-                    .variant(Variant::Borderless)
-                    .size(Size::Xs)
-                    .icon_start(icon_px(Icon::ListChecks, px(14.)))
-                    .text(strings.activity_collapse())
-                    .on_click(collapse),
-            ),
-        );
+        body = body.child(collapse_button(&key, &state, strings.activity_collapse()));
     } else if live {
         let item_key: SharedString = latest.id.clone().into();
-        let tools = block_tools(&latest, t, window, cx);
+        let tools = block_tools(&latest, turn, t, window, cx);
         let swapped = latest;
         body = body
             .child(RollingSwap::new(

@@ -9,6 +9,8 @@ use gpui::{Context, Window};
 use super::{FocusComposer, Shell, ShellOptions};
 
 pub(super) struct FrameState {
+    /// The text scale last applied to the native window.
+    pub scale: Option<f32>,
     pub width: f32,
     pub suspended: Option<bool>,
     pub resize_start: Option<f32>,
@@ -21,6 +23,7 @@ pub(super) struct FrameState {
 impl Default for FrameState {
     fn default() -> Self {
         Self {
+            scale: None,
             width: 304.,
             suspended: None,
             resize_start: None,
@@ -66,6 +69,11 @@ impl Shell {
     }
 
     pub(super) fn frame_inputs(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let scale = Ds::get(cx).tokens().ui_scale;
+        if self.frame.scale != Some(scale) {
+            self.frame.scale = Some(scale);
+            crate::lifecycle::window::apply_text_scale(window, scale, cx);
+        }
         let size = window.viewport_size();
         let drawer = f32::from(size.width) <= 640.;
         if drawer && self.frame.suspended.is_none() {

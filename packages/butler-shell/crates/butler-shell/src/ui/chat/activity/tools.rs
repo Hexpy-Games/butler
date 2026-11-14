@@ -44,10 +44,10 @@ struct Disclosure {
     seen: bool,
 }
 
-/// The operation a row's output belongs to.
-fn operation_ids(row: &ProgressRow) -> Option<Ids> {
+/// Electron `toolchainDetails.tsx`: the operation a row's output belongs to.
+fn operation_ids(row: &ProgressRow, turn: Option<&str>) -> Option<Ids> {
     Some(Ids {
-        turn: nonempty(row.turn_id.as_deref())?.to_owned(),
+        turn: turn.or(nonempty(row.turn_id.as_deref()))?.to_owned(),
         request: nonempty(row.tool_call_id.as_deref())?.to_owned(),
         result: nonempty(row.tool_result_id.as_deref())?.to_owned(),
     })
@@ -55,13 +55,18 @@ fn operation_ids(row: &ProgressRow) -> Option<Ids> {
 
 /// The details of a row: `workActivityToolsFromRows` for thinking rows, else
 /// `toolDetails` (toolchainDetails.tsx).
-fn details_of(row: &ProgressRow, thinking: bool, lang: Lang) -> Option<Details> {
+fn details_of(
+    row: &ProgressRow,
+    turn: Option<&str>,
+    thinking: bool,
+    lang: Lang,
+) -> Option<Details> {
     if thinking {
         let has_text = nonempty(row.thinking_body.as_deref()).is_some();
         let result = nonempty(row.tool_result_id.as_deref()).is_some();
-        return (has_text || result).then(|| Details::Thinking(operation_ids(row)));
+        return (has_text || result).then(|| Details::Thinking(operation_ids(row, turn)));
     }
-    if let Some(ids) = operation_ids(row) {
+    if let Some(ids) = operation_ids(row, turn) {
         return Some(Details::Output(ids));
     }
     let command = nonempty(row.safe_input_label.as_deref());
@@ -117,6 +122,7 @@ fn is_work_activity_tool_row(row: &ProgressRow) -> bool {
 pub(super) fn tool_column(
     rows: &[ProgressRow],
     block_label: Option<&str>,
+    turn: Option<&str>,
     content_x: f32,
     t: &TranscriptCtx,
     window: &mut Window,
@@ -137,6 +143,7 @@ pub(super) fn tool_column(
         .map(|row| {
             tool_row(
                 row,
+                turn,
                 latest.is_some_and(|l| std::ptr::eq(l, row)),
                 t,
                 window,
@@ -159,20 +166,30 @@ pub(super) fn is_browser_step(row: &ProgressRow) -> bool {
 }
 
 /// `BrowserStepStill` of a row's step.
-fn row_still(row: &ProgressRow, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
-    let turn = nonempty(row.turn_id.as_deref())?;
+fn row_still(
+    row: &ProgressRow,
+    turn: Option<&str>,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<AnyElement> {
+    let turn = turn.or(nonempty(row.turn_id.as_deref()))?;
     let call = nonempty(row.tool_call_id.as_deref())?;
     let result = nonempty(row.tool_result_id.as_deref())?;
     browser_step_still(turn, call, result, None, window, cx)
 }
 
 /// Electron `toolchainAfter.tsx`: image tools with stored results show their output tiles.
-fn image_still(row: &ProgressRow, session: &str, cx: &mut App) -> Option<AnyElement> {
+fn image_still(
+    row: &ProgressRow,
+    turn: Option<&str>,
+    session: &str,
+    cx: &mut App,
+) -> Option<AnyElement> {
     let tool = row.safe_tool_name.as_deref()?;
     if !matches!(tool, "generate_image" | "edit_image") {
         return None;
     }
-    let turn = nonempty(row.turn_id.as_deref())?;
+    let turn = turn.or(nonempty(row.turn_id.as_deref()))?;
     let image_row = ImageToolRow {
         call_id: nonempty(row.tool_call_id.as_deref())?.to_owned().into(),
         result_id: nonempty(row.tool_result_id.as_deref())?.to_owned().into(),
@@ -186,6 +203,7 @@ fn image_still(row: &ProgressRow, session: &str, cx: &mut App) -> Option<AnyElem
 /// shows the step's still.
 fn tool_row(
     row: &ProgressRow,
+    turn: Option<&str>,
     latest_browser: bool,
     t: &TranscriptCtx,
     window: &mut Window,
@@ -201,7 +219,7 @@ fn tool_row(
     };
     let glyph = icon_px(icon, Ds::get(cx).len(Length::IconSizeMd));
     let id = SharedString::from(format!("tool-row:{}", row.id));
-    let head = match details_of(row, thinking.is_some(), lang) {
+    let head = match details_of(row, turn, thinking.is_some(), lang) {
         None => ListRow::new(title).icon(glyph).into_any_element(),
         Some(details) => {
             let state = window.use_keyed_state(
@@ -231,9 +249,13 @@ fn tool_row(
             disclosure.into_any_element()
         }
     };
-    let after = worker::capsule(row, t)
-        .or_else(|| image_still(row, &t.view.session_id, cx))
-        .or_else(|| latest_browser.then(|| row_still(row, window, cx)).flatten());
+    let after = worker::capsule(row, turn, t)
+        .or_else(|| image_still(row, turn, &t.view.session_id, cx))
+        .or_else(|| {
+            latest_browser
+                .then(|| row_still(row, turn, window, cx))
+                .flatten()
+        });
     match after {
         Some(after) => Stack::new()
             .gap(Space::Xs)

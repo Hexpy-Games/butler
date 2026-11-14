@@ -146,6 +146,7 @@ impl Store {
         }
         self.progress.load(&view);
         self.messages.open(view);
+        self.freeze_activity();
         true
     }
 
@@ -157,6 +158,7 @@ impl Store {
         }
         self.progress.load(&view);
         self.messages.refresh(view);
+        self.freeze_activity();
         true
     }
 
@@ -166,6 +168,7 @@ impl Store {
             return false;
         }
         self.messages.prepend_older(older);
+        self.freeze_activity();
         true
     }
 
