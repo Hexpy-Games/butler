@@ -2,9 +2,19 @@
 mod dispatch;
 mod select;
 use super::{HttpState, dispatch as dispatch_request};
-use axum::{Extension, Router, routing::any};
+use axum::{
+    Extension, Router,
+    body::Body,
+    http::{Method, Request},
+    routing::any,
+};
 pub(super) use dispatch::route;
 use std::sync::Arc;
+
+/// The request falls through every named route to the installed UI page (see `router/dispatch.rs`).
+pub(super) fn serves_ui(request: &Request<Body>) -> bool {
+    *request.method() == Method::GET && select::handler(request).is_none()
+}
 
 #[derive(Clone, Copy)]
 pub(super) enum Handler {
