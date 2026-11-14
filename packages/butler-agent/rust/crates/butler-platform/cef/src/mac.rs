@@ -7,8 +7,9 @@ use std::cell::Cell;
 
 use cef::application_mac::{CefAppProtocol, CrAppControlProtocol, CrAppProtocol};
 use objc2::{
-    Allocated, ClassType, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send,
-    rc::Retained, runtime::Bool,
+    ClassType, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send,
+    rc::{Allocated, Retained},
+    runtime::Bool,
 };
 use objc2_app_kit::{NSApplication, NSEvent};
 
@@ -26,7 +27,7 @@ define_class!(
     struct ButlerCefApplication;
 
     impl ButlerCefApplication {
-        #[unsafe(method(init))]
+        #[unsafe(method_id(init))]
         fn init(this: Allocated<Self>) -> Retained<Self> {
             let this = this.set_ivars(ApplicationIvars {
                 handling: Cell::new(Bool::NO),

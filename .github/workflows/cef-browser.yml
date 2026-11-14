@@ -106,13 +106,18 @@ jobs:
         env:
           BUTLER_E2E_BROWSER_BACKEND: cef
         run: |
-          export HOME=$(mktemp -d "$RUNNER_TEMP/cef-home.XXXXXX")
-          export BUTLER_DATA=$(mktemp -d "$RUNNER_TEMP/cef-data.XXXXXX")
+          # A fresh dir under the runner temp; Windows tools (MSVC's linker, the agent) need
+          # Windows paths, not Git Bash's /d/a/... form.
+          fresh() {
+            local dir; dir=$(mktemp -d "$RUNNER_TEMP/cef-$1.XXXXXX")
+            if command -v cygpath > /dev/null; then cygpath -w "$dir"; else echo "$dir"; fi
+          }
+          export HOME=$(fresh home) BUTLER_DATA=$(fresh data)
           # Scenario fixtures live in the process temp dir; keep them under the runner temp for the evidence upload.
-          export TMPDIR=$(mktemp -d "$RUNNER_TEMP/cef-tmp.XXXXXX") TMP="$TMPDIR" TEMP="$TMPDIR"
+          export TMPDIR=$(fresh tmp)
+          export TMP="$TMPDIR" TEMP="$TMPDIR"
           if [[ '${{ matrix.os }}' == 'windows' ]]; then
-            export LOCALAPPDATA=$(mktemp -d "$RUNNER_TEMP/cef-local.XXXXXX")
-            export APPDATA=$(mktemp -d "$RUNNER_TEMP/cef-roaming.XXXXXX")
+            export LOCALAPPDATA=$(fresh local) APPDATA=$(fresh roaming)
           fi
           cargo test --locked --target ${{ matrix.target }} -p butler-e2e --test e2e browser_headless -- --test-threads 2
 
