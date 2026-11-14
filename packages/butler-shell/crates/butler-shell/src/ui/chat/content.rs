@@ -1,6 +1,6 @@
 //! `MessageContent`: the body of one message by role, its attachments, the response footer of
 //! an answer and the retry actions of a failed message.
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window, div};
+use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window, div};
 
 use super::TranscriptCtx;
 use super::assistant::{
@@ -27,7 +27,10 @@ pub(super) fn message_content(
     let mut parts = vec![match msg.role {
         MessageRecordRole::User => user_body(msg, t, window, cx),
         _ => div()
-            .child(SharedString::from(visible_system_message_text(msg, cx)))
+            .child(butler_ds::ui::selectable::Run::plain(
+                visible_system_message_text(msg, cx),
+                butler_ds::ui::selectable::Break::Paragraph,
+            ))
             .into_any_element(),
     }];
     parts.extend(message_files(msg, t, window, cx));
