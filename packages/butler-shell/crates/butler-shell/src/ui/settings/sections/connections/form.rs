@@ -1,10 +1,12 @@
 //! Electron `MailAccountForm.tsx`: nullable host overrides preserve the address-derived defaults.
 use butler_ds::ui::blocks::settings_field::SettingsField;
 use butler_ds::ui::button::{self, Button, Size, Variant};
-use butler_ds::ui::layout::{Justify, Space, Stack};
+use butler_ds::ui::layout::{Justify, Stack};
 use butler_ds::ui::text::Input;
 use butler_ds::ui::tooltip::Tooltip;
-use gpui::{Context, ParentElement as _, prelude::FluentBuilder as _};
+use gpui::{
+    AnyElement, Context, IntoElement as _, ParentElement as _, prelude::FluentBuilder as _,
+};
 use serde_json::{Value, json};
 
 use super::{ConnectionsPage, Work, copy::Copy};
@@ -79,7 +81,7 @@ impl ConnectionsPage {
         SettingsField::new(label).setting_id(id).control(input)
     }
 
-    pub(super) fn mail_form(&self, w: &'static Copy, cx: &mut Context<Self>) -> Stack {
+    pub(super) fn mail_form(&self, w: &'static Copy, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let address = Self::mail_input(
             "mail-address",
             w.address,
@@ -125,14 +127,14 @@ impl ConnectionsPage {
             this.form.immediate = value.as_ref() == "immediate";
             cx.notify();
         }));
-        Stack::new()
-            .gap(Space::Sm)
-            .child(address)
-            .child(password)
-            .child(imap)
-            .child(smtp)
-            .child(handling)
-            .child(self.mail_buttons(w, cx))
+        vec![
+            address.into_any_element(),
+            password.into_any_element(),
+            imap.into_any_element(),
+            smtp.into_any_element(),
+            handling.into_any_element(),
+            self.mail_buttons(w, cx).into_any_element(),
+        ]
     }
 
     fn mail_buttons(&self, w: &'static Copy, cx: &mut Context<Self>) -> Stack {

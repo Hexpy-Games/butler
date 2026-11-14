@@ -5,8 +5,8 @@
 //! ends on the same edge either way; gpui draws an overlay scrollbar, which takes no layout width.
 use gpui::{
     AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
-    px, relative,
+    Pixels, RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _,
+    Window, div, px, relative,
 };
 
 use super::bar;
@@ -48,6 +48,7 @@ const BLEED_FADE: f32 = 10.;
 pub struct ScrollArea {
     id: ElementId,
     orientation: Axis,
+    handle: Option<ScrollHandle>,
     max_height: Option<MaxHeight>,
     min_height: Option<MinHeight>,
     fill: bool,
@@ -63,6 +64,7 @@ impl ScrollArea {
         Self {
             id: id.into(),
             orientation: Axis::Y,
+            handle: None,
             max_height: None,
             min_height: None,
             fill: false,
@@ -76,6 +78,12 @@ impl ScrollArea {
     /// The scrolling axis; the edge fade follows it.
     pub fn orientation(mut self, orientation: Axis) -> Self {
         self.orientation = orientation;
+        self
+    }
+
+    /// Electron `ScrollArea.tsx`: share the actual viewport handle with its owner.
+    pub fn handle(mut self, handle: ScrollHandle) -> Self {
+        self.handle = Some(handle);
         self
     }
 
@@ -185,6 +193,9 @@ impl RenderOnce for ScrollArea {
             size: metrics.fade,
             guard: metrics.guard,
         };
+        if let Some(handle) = self.handle.clone() {
+            engine::state(&config, window, cx).update(cx, |state, _| state.handle = handle);
+        }
         let built = engine::scroller(&config, scroller, window, cx);
         let mut frame = div()
             .id(self.id.clone())
