@@ -16,6 +16,7 @@ use crate::ui::icon::icon_px;
 use crate::ui::inline_reference::InlineReference;
 use crate::ui::markdown::{Inline, plain};
 use crate::ui::motion::Props;
+use crate::ui::selectable::{Break, Run};
 
 /// A task item's box: 13px, as the browser's disabled checkbox.
 const BOX: f32 = 13.;
@@ -52,10 +53,12 @@ fn words(text: &str) -> Vec<(String, bool)> {
     out
 }
 
+#[expect(clippy::too_many_arguments, reason = "flow content and its block lead")]
 pub(super) fn render(
     nodes: &[Inline],
     face: Face,
     task: Option<bool>,
+    lead: Break,
     env: &Env,
     key: &str,
     window: &mut Window,
@@ -67,7 +70,19 @@ pub(super) fn render(
         items.push(task_box(done, gap, cx));
     }
     let mut at = 0;
-    atoms(nodes, None, gap, env, key, &mut at, &mut items, window, cx);
+    let mut pending = lead;
+    atoms(
+        nodes,
+        None,
+        gap,
+        env,
+        key,
+        &mut at,
+        &mut pending,
+        &mut items,
+        window,
+        cx,
+    );
     div()
         .flex()
         .flex_wrap()
@@ -87,6 +102,7 @@ fn atoms(
     env: &Env,
     key: &str,
     at: &mut usize,
+    pending: &mut Break,
     out: &mut Vec<AnyElement>,
     window: &mut Window,
     cx: &mut App,
@@ -106,10 +122,13 @@ fn atoms(
                     &mut parts,
                 );
                 for part in &parts {
-                    out.extend(text_words(part, gap, &id, cx));
+                    out.extend(text_words(part, gap, &id, pending, cx));
                 }
             }
-            Inline::Code(code) => out.push(chip(code, cx, window)),
+            Inline::Code(code) => {
+                out.push(chip(code, *pending, cx, window));
+                *pending = Break::None;
+            }
             Inline::Break => out.push(div().w_full().h(px(0.)).into_any_element()),
             Inline::Image { src, alt } => {
                 out.push(super::image::inline(src, alt, env, window, cx));
@@ -123,23 +142,52 @@ fn atoms(
                 if let Some(source) = env.favicon.as_ref().and_then(|favicon| favicon(href)) {
                     reference = reference.favicon(source);
                 }
+                reference = reference.lead(*pending);
+                *pending = Break::None;
                 out.extend(reference.items(window, cx));
             }
             Inline::Link { href, children } => {
-                atoms(children, Some(href), gap, env, &id, at, out, window, cx);
+                atoms(
+                    children,
+                    Some(href),
+                    gap,
+                    env,
+                    &id,
+                    at,
+                    pending,
+                    out,
+                    window,
+                    cx,
+                );
             }
         }
     }
 }
 
-fn text_words(part: &Piece, gap: gpui::Pixels, id: &str, cx: &App) -> Vec<AnyElement> {
+fn text_words(
+    part: &Piece,
+    gap: gpui::Pixels,
+    id: &str,
+    pending: &mut Break,
+    cx: &App,
+) -> Vec<AnyElement> {
     let ds = Ds::get(cx);
     let accent = ds.color(Color::AccentText);
     let mut items = Vec::new();
-    if part.text.starts_with(' ') {
+    let leading_space = part.text.starts_with(char::is_whitespace);
+    if leading_space {
         items.push(div().w(gap).into_any_element());
+        *pending = (*pending).max(Break::Space);
     }
     for (index, (word, spaced)) in words(&part.text).into_iter().enumerate() {
+        let run = Run::plain(word, *pending)
+            .space_before(if index == 0 && leading_space {
+                gap
+            } else {
+                px(0.)
+            })
+            .space_after(if spaced { gap } else { px(0.) });
+        *pending = if spaced { Break::Space } else { Break::None };
         let mut el = div()
             .whitespace_nowrap()
             .mr(if spaced { gap } else { px(0.) });
@@ -162,10 +210,10 @@ fn text_words(part: &Piece, gap: gpui::Pixels, id: &str, cx: &App) -> Vec<AnyEle
                     .whitespace_nowrap()
                     .mr(if spaced { gap } else { px(0.) })
                     .on_click(move |_, _, cx| super::link::open(&href, cx))
-                    .child(word)
+                    .child(run)
                     .into_any_element()
             }
-            None => el.child(word).into_any_element(),
+            None => el.child(run).into_any_element(),
         };
         let el = match part.fade {
             Some((value, timing)) => value
@@ -188,7 +236,7 @@ fn text_words(part: &Piece, gap: gpui::Pixels, id: &str, cx: &App) -> Vec<AnyEle
 /// `code`: 0 4px padding, a hairline border, the control radius and the raised surface, set in
 /// the code font. Only its width takes part in the line: the box is the font's content area,
 /// not the line height.
-fn chip(code: &str, cx: &App, window: &mut Window) -> AnyElement {
+fn chip(code: &str, lead: Break, cx: &App, window: &mut Window) -> AnyElement {
     let ds = Ds::get(cx);
     let code_font = ds.code_font().clone();
     let size = f32::from(ds.len(Length::TypoCodeSize));
@@ -220,7 +268,7 @@ fn chip(code: &str, cx: &App, window: &mut Window) -> AnyElement {
                 .rounded(ds.len(Length::RadiusControl))
                 .bg(ds.color(Color::SurfaceRaised)),
         )
-        .child(div().relative().child(SharedString::from(code.to_owned())));
+        .child(div().relative().child(Run::plain(code.to_owned(), lead)));
     text.text_style().font_fallbacks = code_font.fallbacks;
     text.into_any_element()
 }

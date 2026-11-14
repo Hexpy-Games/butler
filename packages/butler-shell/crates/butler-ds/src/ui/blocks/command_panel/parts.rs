@@ -148,7 +148,7 @@ fn bare_input(
         .state(state.downgrade())
         .placeholder(placeholder.clone())
         .placeholder_color(ds.color(Color::Placeholder))
-        .selection_color(convert::with_alpha(ds.color(Color::Accent), 0.28))
+        .selection_color(crate::ui::selectable::fill(ds))
         .caret_color(primary)
         .marked_color(primary)
         .caret_w(px(1.))

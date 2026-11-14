@@ -17,6 +17,7 @@ use crate::ui::context::Ds;
 use crate::ui::convert;
 use crate::ui::markdown::Inline;
 use crate::ui::motion::{Props, Timing, Transition};
+use crate::ui::selectable::{Break, Run};
 
 /// A text run with its emphasis, after whitespace collapsing.
 pub(super) struct Piece {
@@ -145,41 +146,40 @@ fn needs_flow(nodes: &[Inline]) -> bool {
 }
 
 /// A paragraph's content: the element, set in `face`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "inline content and its block lead"
+)]
 pub(super) fn render(
     nodes: &[Inline],
     face: Face,
     task: Option<bool>,
+    lead: Break,
     env: &Env,
     key: &str,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     if task.is_some() || needs_flow(nodes) {
-        return flow::render(nodes, face, task, env, key, window, cx);
+        return flow::render(nodes, face, task, lead, env, key, window, cx);
     }
     let text = text(nodes, env, cx);
     let ranges: Vec<Range<usize>> = text.links.iter().map(|(range, _)| range.clone()).collect();
     let hrefs: Vec<String> = text.links.into_iter().map(|(_, href)| href).collect();
     let link_id = SharedString::from(format!("{key}-text"));
-    let base = crate::ui::selectable::selectable(
-        SharedString::from(format!("{key}-select")),
-        &text.content,
-        text.highlights,
-        move |styled| {
-            if ranges.is_empty() {
-                return styled.into_any_element();
-            }
-            InteractiveText::new(link_id, styled)
-                .on_click(ranges, move |index, _, cx| {
-                    if let Some(href) = hrefs.get(index) {
-                        super::link::open(href, cx);
-                    }
-                })
-                .into_any_element()
-        },
-        window,
-        cx,
-    );
+    let styled = StyledText::new(text.content.clone()).with_highlights(text.highlights);
+    let base = Run::new(text.content, styled, lead, move |styled| {
+        if ranges.is_empty() {
+            return styled.into_any_element();
+        }
+        InteractiveText::new(link_id, styled)
+            .on_click(ranges, move |index, _, cx| {
+                if let Some(href) = hrefs.get(index) {
+                    super::link::open(href, cx);
+                }
+            })
+            .into_any_element()
+    });
     gpui::div()
         .relative()
         .min_w_0()
