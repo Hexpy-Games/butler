@@ -3,12 +3,12 @@ name: CEF browser
 # The headless CEF host (packages/butler-agent/rust/crates/butler-platform/cef)
 # is an engine of the headless browser executor. These jobs run browser_headless
 # scenarios on it (BUTLER_E2E_BROWSER_BACKEND=cef). Windows runs on relevant PRs;
-# Linux (and later macOS) runs only on demand (dispatch, or the `cef:linux` PR label)
+# Linux and macOS run only on demand (dispatch, or the `cef:linux` / `cef:macos` PR labels)
 # until the host is the default.
 
 on:
   pull_request:
-    # `labeled`: Linux is opt-in with the `cef:linux` label (workflow_dispatch needs the file on main).
+    # `labeled`: Linux and macOS are opt-in via labels (workflow_dispatch needs the file on main).
     types: [opened, synchronize, reopened, labeled]
     paths:
       - 'packages/butler-agent/rust/crates/butler-platform/cef/**'
@@ -22,7 +22,7 @@ on:
       os:
         description: Runner OS for the CEF backend scenarios
         type: choice
-        options: [windows, linux]
+        options: [windows, linux, macos]
         default: windows
 
 permissions:
@@ -38,15 +38,22 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
-      # A job-level `if` cannot read `matrix`, so the event picks the entries: Windows on every
-      # run except a Linux dispatch; Linux on a Linux dispatch or a PR labeled `cef:linux`.
+      # A job-level `if` cannot read `matrix`, so the event picks the entries:
+      # dispatch selects one OS; PRs always run Windows and independently opt in
+      # to Linux with `cef:linux` and macOS with `cef:macos` (both labels work).
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.os == 'linux'
-          && '[{"os":"linux","runner":"ubuntu-24.04","target":"x86_64-unknown-linux-gnu"}]'
+        include: ${{ fromJSON(format('[{0}{1}{2}]',
+          (github.event_name != 'workflow_dispatch' || inputs.os == 'windows')
+          && '{"os":"windows","runner":"windows-latest","target":"x86_64-pc-windows-msvc"}' || '',
+          github.event_name == 'workflow_dispatch' && inputs.os == 'linux'
+          && '{"os":"linux","runner":"ubuntu-24.04","target":"x86_64-unknown-linux-gnu"}'
           || github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'cef:linux')
-          && '[{"os":"windows","runner":"windows-latest","target":"x86_64-pc-windows-msvc"},{"os":"linux","runner":"ubuntu-24.04","target":"x86_64-unknown-linux-gnu"}]'
-          || '[{"os":"windows","runner":"windows-latest","target":"x86_64-pc-windows-msvc"}]') }}
+          && ',{"os":"linux","runner":"ubuntu-24.04","target":"x86_64-unknown-linux-gnu"}' || '',
+          github.event_name == 'workflow_dispatch' && inputs.os == 'macos'
+          && '{"os":"macos","runner":"macos-15","target":"aarch64-apple-darwin"}'
+          || github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'cef:macos')
+          && ',{"os":"macos","runner":"macos-15","target":"aarch64-apple-darwin"}' || '')) }}
     defaults:
       run:
         working-directory: packages/butler-agent/rust
