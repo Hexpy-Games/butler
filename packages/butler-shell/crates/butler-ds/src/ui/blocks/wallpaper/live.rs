@@ -18,15 +18,19 @@ use crate::ui::blocks::prompt_suggestion_list::ContentRect;
 const RISO_PRINT: &str = "butler.riso-print";
 /// `fragment_wallpaper` modules: the density pass and the print pass.
 const DENSITY_MODULE: u32 = 4;
+// DS: intro/introShaders.ts INTRO_DENSITY (renderer module 6).
+const INTRO_DENSITY_MODULE: u32 = 6;
 const PRINT_MODULE: u32 = 5;
 /// `WallpaperPass::source`: a density module samples the print's own noise. // DS: glDraw.ts:84
 const PRINT_NOISE: u32 = 1;
 /// `WallpaperPass::source`: the print pass samples the density pass (`u_density`).
 const PREVIOUS_PASS: u32 = 2;
-/// Density texels per CSS px. // DS: glPrint.ts:52
 /// The drift render policy's pixel ratio and pixel budget. // DS: scheduler.ts:36
 const MAX_PIXEL_RATIO: f32 = 1.5;
 const MAX_PIXELS: f32 = 2_400_000.;
+// DS: intro/introFrame.ts INTRO_BUDGET.
+const INTRO_MAX_PIXEL_RATIO: f32 = 1.5;
+const INTRO_MAX_PIXELS: f32 = 1_600_000.;
 const DENSITY_SCALE: f32 = 0.25;
 /// Day-phase steps a cached frame redraws at. // DS: glScene.ts:24
 const DAY_PHASE_BUCKETS: f32 = 96.;
@@ -118,12 +122,89 @@ pub(super) fn layer(module: &str, frame: LiveFrame) -> Option<AnyElement> {
     Some(element)
 }
 
+/// The dried intro holds until the shell hands off. // DS: intro/introFrame.ts, introDraw.ts
+pub(super) fn intro_layer(tone: WallpaperTone, card: Option<ContentRect>) -> AnyElement {
+    let params = RisoParams::defaults(tone);
+    let key = paint_key("butler.riso-intro", tone, params);
+    canvas(
+        |_, _, _| (),
+        move |bounds, (), window, _| {
+            let css = [f32::from(bounds.size.width), f32::from(bounds.size.height)];
+            if css[0] < 1. || css[1] < 1. {
+                return;
+            }
+            let (buffer, pixel_ratio) = buffer_size(
+                css,
+                window.scale_factor(),
+                INTRO_MAX_PIXEL_RATIO,
+                INTRO_MAX_PIXELS,
+            );
+            let density = density_size(css);
+            // DS: introFrame.ts introLocalRect and the unmeasured layout default.
+            let card = card.map_or([css[0] / 2. - 210., css[1] * 0.2, 420., 344.], |r| {
+                [
+                    r.x - f32::from(bounds.left()),
+                    r.y - f32::from(bounds.top()),
+                    r.width,
+                    r.height,
+                ]
+            });
+            let shared = Shared {
+                dark: 0.,
+                day_phase: 0.,
+                css,
+                density,
+                // drawIntro's frame has seed 0. // DS: introFrame.ts
+                seed: 0.,
+                params: params.uniform(),
+            };
+            let mut density_uniforms =
+                uniforms(density, density[0] / css[0], [NO_RECT; 2], &shared);
+            density_uniforms[9..15].copy_from_slice(&intro_end(css, card));
+            let print_uniforms = uniforms(buffer, pixel_ratio, [NO_RECT; 2], &shared);
+            let passes = [
+                pass(INTRO_DENSITY_MODULE, density, PRINT_NOISE, density_uniforms),
+                pass(PRINT_MODULE, buffer, PREVIOUS_PASS, print_uniforms),
+            ];
+            window.paint_wallpaper(
+                bounds,
+                Corners::default(),
+                1.,
+                WallpaperPaint {
+                    key,
+                    generation: generation(&passes),
+                    passes: passes.into(),
+                },
+            );
+        },
+    )
+    .size_full()
+    .into_any_element()
+}
+
+/// wp_p0..wp_p5 at t = 2.9: every timeline segment has reached 1.
+/// DS: intro/introParams.ts introUniforms, introTimeline.ts RISO_INTRO_TIMELINE_S.
+fn intro_end(css: [f32; 2], card: [f32; 4]) -> [[f32; 4]; 6] {
+    let [width, height] = css;
+    let origin = [width / 2., height * 0.46];
+    let size = (width.min(height) * 0.4).clamp(140., 240.);
+    [
+        card,
+        [origin[0], origin[1], size, 0.55 * width.max(height)],
+        [1.9, 1., 1., 1.],      // flow, bloom, residue, cardOn
+        [1., 1., 1. + 0.2, 1.], // draw, dry, sweep, clear
+        [0., card[0] + card[2] / 2., card[1] + 56., 64.], // markA, mark at glide = 1
+        [0.; 4],                // ptr
+    ]
+}
+
 /// What both passes share.
 struct Shared {
     dark: f32,
     day_phase: f32,
     css: [f32; 2],
     density: [f32; 2],
+    seed: f32,
     params: [f32; 4],
 }
 
@@ -143,22 +224,15 @@ fn paint(
     // `wallpaperCanvasSize` with the drift policy (scheduler.ts:36, 60-62: pixel ratio at most
     // 1.5, at most 2.4M pixels): the buffer Electron draws riso into; the composite scales it to
     // the bounds. Rounded for the canvas, up for the density target. // DS: glPrint.ts:56
-    let base = window.scale_factor().min(MAX_PIXEL_RATIO);
-    let target = (css[0] * css[1] * base * base).max(1.);
-    let scale = base.min((MAX_PIXELS / target).sqrt() * base);
-    let buffer = [
-        (css[0] * scale).round().max(2.),
-        (css[1] * scale).round().max(2.),
-    ];
-    let density = [
-        (css[0] * DENSITY_SCALE).ceil().max(1.),
-        (css[1] * DENSITY_SCALE).ceil().max(1.),
-    ];
+    let (buffer, pixel_ratio) =
+        buffer_size(css, window.scale_factor(), MAX_PIXEL_RATIO, MAX_PIXELS);
+    let density = density_size(css);
     let shared = Shared {
         dark: f32::from(u8::from(frame.tone == WallpaperTone::Dark)),
         day_phase: (frame.day_phase * DAY_PHASE_BUCKETS).floor() / DAY_PHASE_BUCKETS,
         css,
         density,
+        seed: STILL_SEED,
         params: params.uniform(),
     };
     let rect = buffer_rect(frame.content_rect, bounds, buffer);
@@ -182,7 +256,7 @@ fn paint(
             PRINT_MODULE,
             buffer,
             PREVIOUS_PASS,
-            uniforms(buffer, scale, [rect, rect2], &shared),
+            uniforms(buffer, pixel_ratio, [rect, rect2], &shared),
         ),
     ];
     let wallpaper = WallpaperPaint {
@@ -191,6 +265,31 @@ fn paint(
         passes: passes.into(),
     };
     window.paint_wallpaper(bounds, Corners::default(), 1., wallpaper);
+}
+
+/// The rounded render buffer and its pixel ratio under the caller's pixel budget.
+fn buffer_size(
+    css: [f32; 2],
+    scale_factor: f32,
+    max_ratio: f32,
+    max_pixels: f32,
+) -> ([f32; 2], f32) {
+    let base = scale_factor.min(max_ratio);
+    let target = (css[0] * css[1] * base * base).max(1.);
+    let pixel_ratio = base.min((max_pixels / target).sqrt() * base);
+    let buffer = [
+        (css[0] * pixel_ratio).round().max(2.),
+        (css[1] * pixel_ratio).round().max(2.),
+    ];
+    (buffer, pixel_ratio)
+}
+
+/// Density texels per CSS px. // DS: glPrint.ts:52
+fn density_size(css: [f32; 2]) -> [f32; 2] {
+    [
+        (css[0] * DENSITY_SCALE).ceil().max(1.),
+        (css[1] * DENSITY_SCALE).ceil().max(1.),
+    ]
 }
 
 #[expect(
@@ -220,7 +319,7 @@ fn uniforms(
     // u_resolution, u_pixelRatio, u_time
     u[1] = [resolution[0], resolution[1], pixel_ratio, REST.time];
     // u_dark, u_dayPhase, u_seed
-    u[2] = [shared.dark, shared.day_phase, STILL_SEED, 0.];
+    u[2] = [shared.dark, shared.day_phase, shared.seed, 0.];
     // u_contentRect
     u[3] = rects[0];
     // u_css, u_flow, u_lift
