@@ -2763,7 +2763,7 @@ dependencies = [
 [[package]]
 name = "gpui-ce"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -2840,7 +2840,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_apple"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "anyhow",
  "block",
@@ -2866,7 +2866,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_collections"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "gpui_ce_util",
  "indexmap",
@@ -2876,7 +2876,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_derive_refineable"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2886,7 +2886,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_elements"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "derive_setters",
  "gpui-ce",
@@ -2898,7 +2898,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_linux"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -2946,7 +2946,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_macos"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -2999,7 +2999,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_macros"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3010,7 +3010,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_media"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -3024,7 +3024,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_parley"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "anyhow",
  "fontique",
@@ -3039,7 +3039,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_platform"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "console_error_panic_hook",
  "gpui-ce",
@@ -3053,7 +3053,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_refineable"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "gpui_ce_derive_refineable",
 ]
@@ -3061,7 +3061,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_render"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "gpui-ce",
  "naga 24.0.0",
@@ -3074,7 +3074,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_scheduler"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "async-task",
  "backtrace",
@@ -3089,7 +3089,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_shared_string"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "schemars",
  "serde",
@@ -3099,7 +3099,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_sum_tree"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "heapless",
  "log",
@@ -3110,7 +3110,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_util"
 version = "0.2.6"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "anyhow",
  "log",
@@ -3120,7 +3120,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_web"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -3144,7 +3144,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_wgpu"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "anyhow",
  "core-foundation 0.10.0",
@@ -3177,7 +3177,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_windows"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=8efe4ee13740df155eb34ea0981480f22c72dc74#8efe4ee13740df155eb34ea0981480f22c72dc74"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=41544d1ea29846def501ef0367b2e9b9f6db6d2a#41544d1ea29846def501ef0367b2e9b9f6db6d2a"
 dependencies = [
  "accesskit",
  "accesskit_windows",
