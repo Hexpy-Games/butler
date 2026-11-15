@@ -1,7 +1,7 @@
 /** Disposable hosted-runner proof of Electron -> gpui Squirrel activation. */
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
@@ -203,6 +203,7 @@ async function stopInstalled() {
 async function uninstall() {
   await stopInstalled();
   run(updater, ["--uninstall", "--silent"]);
+  const uninstallReturnedAt = Date.now();
   await waitFor(() => !existsSync(stub), "uninstalled stub removed");
   assertShortcuts(shortcuts, false);
   for (const key of ["HKCU:\\Software\\Classes\\butler", "HKCU:\\Software\\Classes\\AppUserModelId\\com.squirrel.butler-app.Butler"]) {
@@ -216,6 +217,28 @@ async function uninstall() {
   const unexpected = files.filter(path => !expected.includes(path));
   const missing = expected.filter(path => !files.includes(path));
   if (unexpected.length || missing.length) {
+    const sinceUninstallReturnedMs = Date.now() - uninstallReturnedAt;
+    const remnants = unexpected.map(path => {
+      const fullPath = join(installed, path);
+      let size: number | null = null;
+      let lastWriteTime: string | null = null;
+      let statError: string | null = null;
+      try {
+        const stat = statSync(fullPath);
+        size = stat.size;
+        lastWriteTime = stat.mtime.toISOString();
+      } catch (error) { statError = (error as NodeJS.ErrnoException).code ?? String(error); }
+      let removal: string = "success";
+      try { rmSync(fullPath); } catch (error) { removal = (error as NodeJS.ErrnoException).code ?? String(error); }
+      return { path, size, lastWriteTime, statError, removal };
+    });
+    let defender = null;
+    try {
+      defender = JSON.parse(powershell(`Get-MpComputerStatus -ErrorAction Stop |
+        Select-Object AMServiceEnabled, RealTimeProtectionEnabled, OnAccessProtectionEnabled |
+        ConvertTo-Json -Compress`, env));
+    } catch { /* Defender status is unavailable on this host. */ }
+    console.error(JSON.stringify({ remnants, sinceUninstallReturnedMs, defender }));
     console.error("Uninstall process/module holders:", JSON.stringify(installedProcesses(), null, 2));
   }
   assert.deepEqual(files.sort(), expected.sort(), `Uninstall remnants: unexpected [${unexpected.join(", ")}]; missing [${missing.join(", ")}]`);
