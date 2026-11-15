@@ -6,6 +6,7 @@ use butler_ds::ui::blocks::disclosure_row::{DisclosureRow, Surface};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::layout::{Box as DsBox, Space, Stack};
 use butler_ds::ui::scroll::{MaxHeight, ScrollArea};
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::separator::Separator;
 use butler_ds::ui::typo::Typo;
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window, div};
@@ -247,7 +248,11 @@ impl Steps<'_, '_> {
             butler_ds::ui::tooltip::Tooltip::new((id, "purpose"))
                 .label(action.purpose.clone())
                 .fill()
-                .child(Typo::caption(action.purpose.clone()).truncate()),
+                .child(
+                    Typo::caption(action.purpose.clone())
+                        .selectable(Break::Line)
+                        .truncate(),
+                ),
         );
         if expanded {
             body = body.child(self.activities(rows, window, cx));

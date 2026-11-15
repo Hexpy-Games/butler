@@ -14,6 +14,7 @@ use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Box as DsBox, Cross, Justify, MinWidth, Space, Stack, WithItem as _};
 use butler_ds::ui::scroll::{MaxHeight, ScrollArea};
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::typo::Typo;
 use gpui::{
     AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Window,
@@ -198,6 +199,7 @@ fn header(
         .gap(Space::Sm)
         .child(
             Typo::label(child.title.clone())
+                .selectable(Break::Line)
                 .truncate()
                 .min_width(MinWidth::Zero)
                 .grow(),
