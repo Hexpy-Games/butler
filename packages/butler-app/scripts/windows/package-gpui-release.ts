@@ -1,6 +1,6 @@
 /** Native unsigned gpui Squirrel release, consuming a release shell and Agent. */
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -62,7 +62,7 @@ function requiredPath(name: string): string {
 }
 
 async function stampExecutable(path: string, exactVersion: string) {
-  const require = createRequire(join(electron, "node_modules/@electron/packager/package.json"));
+  const require = createRequire(realpathSync(join(electron, "node_modules/@electron/packager/package.json")));
   const { Data, NtExecutable, NtExecutableResource, Resource } = await import(pathToFileURL(require.resolve("resedit")).href);
   const exe = NtExecutable.from(readFileSync(path));
   const res = NtExecutableResource.from(exe);
