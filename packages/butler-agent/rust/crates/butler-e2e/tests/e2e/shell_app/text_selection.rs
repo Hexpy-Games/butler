@@ -4,8 +4,8 @@ use super::*;
 
 /// SHELL-APP-05 — Text selection stays inside one message: chrome never selects, paragraphs
 /// copy together, and a drag beyond the user bubble clamps to that message's text.
-/// Assistant selection includes the answer-block title and footer meta.
-/// Composer focus clears selection; context-menu Copy includes the full answer-block markdown.
+/// Assistant selection includes the facts value, answer-block title and footer meta.
+/// Composer focus clears selection; context-menu and footer Copy include the full answer-block markdown.
 #[tokio::test]
 async fn shell_app_05_text_selection_stays_in_one_message() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -78,7 +78,8 @@ async fn shell_app_05_text_selection_stays_in_one_message() -> Result<(), Harnes
             "expect-clipboard null",
             &format!("drag-from message-{assistant}-body 0 0 1 1"),
             "key secondary-c",
-            "expect-clipboard-prefix \"Alpha first paragraph.\\n\\nBeta second paragraph.\\n\\nFacts\\n\"",
+            "expect-clipboard-prefix \"Alpha first paragraph.\\n\\nBeta second paragraph.\\n\\n\"",
+            "expect-clipboard-contains \"\\n1\\n\"",
             &format!("drag-from message-{user}-body 0 0 0.5 4"),
             "key secondary-c",
             "expect-clipboard \"Hello\"",
@@ -86,6 +87,8 @@ async fn shell_app_05_text_selection_stays_in_one_message() -> Result<(), Harnes
             &format!("click-at message-{assistant}-body 0.1 0.05 right"),
             &format!("wait-anchor message-menu-{assistant}-item-0-0"),
             &format!("click message-menu-{assistant}-item-0-0"),
+            "expect-clipboard \"Alpha first paragraph.\\n\\nBeta second paragraph.\\n\\n### Facts\\n\\n- Alpha: 1\"",
+            &format!("click copy-{assistant}"),
             "expect-clipboard \"Alpha first paragraph.\\n\\nBeta second paragraph.\\n\\n### Facts\\n\\n- Alpha: 1\"",
             "app-quit",
         ])
