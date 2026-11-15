@@ -270,7 +270,7 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
     let address = listener.local_addr()?;
     let pages = axum::Router::new()
         .route("/first", axum::routing::get(|| async {
-            axum::response::Html("<title>First local page</title><body style='margin:0;background:#14508c'>First local page</body>")
+            axum::response::Html("<title>First local page</title><body style='margin:0'>First local page</body>")
         }))
         .route("/second", axum::routing::get(|| async {
             axum::response::Html("<title>Second local page</title><body style='margin:0;background:#8c5014'>Second local page</body>")
@@ -326,6 +326,7 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
         if let Some(actual) = frame["frame"].as_array() {
             let scale = frame["scale"].as_f64().unwrap();
             assert_eq!(actual.len(), 2);
+            assert_eq!(frame["pixel"], serde_json::json!([255, 255, 255, 255]));
             for (axis, dimension) in actual.iter().enumerate() {
                 assert!(dimension.as_u64().unwrap() > 0);
                 assert_eq!(

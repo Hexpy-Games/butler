@@ -152,6 +152,11 @@ impl BrowserState {
         self.engine.frame_size(id)
     }
 
+    #[cfg(feature = "shots")]
+    pub(crate) fn frame_pixel(&self, id: &TabId, x: usize, y: usize) -> Option<[u8; 4]> {
+        self.engine.frame_pixel(id, x, y)
+    }
+
     pub(crate) fn create(
         &mut self,
         owner: Owner,

@@ -404,6 +404,11 @@ impl PageEngine for CefEngine {
         let frame = self.runtime.frame(*self.ids.get(page)?)?;
         Some((frame.get_width(), frame.get_height()))
     }
+    #[cfg(feature = "shots")]
+    fn frame_pixel(&self, page: &TabId, x: usize, y: usize) -> Option<[u8; 4]> {
+        let frame = self.runtime.frame(*self.ids.get(page)?)?;
+        butler_cef_host::osr::read_bgra_pixel(&frame, x, y).ok()
+    }
     fn surface(&self, page: &TabId, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
         let id = *self.ids.get(page)?;
         if self.pending.contains_key(&id) {

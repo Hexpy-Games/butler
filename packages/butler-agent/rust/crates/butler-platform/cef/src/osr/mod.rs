@@ -215,6 +215,7 @@ impl OsrRuntime {
             Some(&url.into()),
             Some(&cef::BrowserSettings {
                 windowless_frame_rate: 60,
+                background_color: 0xFFFF_FFFF,
                 ..Default::default()
             }),
             None,

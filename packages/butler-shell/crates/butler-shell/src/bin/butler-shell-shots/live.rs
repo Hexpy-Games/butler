@@ -150,10 +150,15 @@ fn browser_frame(h: &mut Harness) -> anyhow::Result<()> {
     h.update(|_, window, cx| {
         let model = cx.global::<ui::browser::model::BrowserState>();
         let frame = model.active().and_then(|id| model.frame_size(id));
+        let pixel = model.active().and_then(|id| {
+            let (width, height) = frame?;
+            model.frame_pixel(id, width.checked_sub(1)?, height.checked_sub(1)?)
+        });
         println!(
             "LIVE BROWSER FRAME {}",
             serde_json::json!({
                 "frame": frame,
+                "pixel": pixel,
                 "content": content.map(|b| [f32::from(b.size.width), f32::from(b.size.height)]),
                 "scale": window.scale_factor(),
             })

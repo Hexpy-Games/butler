@@ -105,6 +105,10 @@ pub(crate) trait PageEngine: 'static {
     fn frame_size(&self, _page: &TabId) -> Option<(usize, usize)> {
         None
     }
+    #[cfg(feature = "shots")]
+    fn frame_pixel(&self, _page: &TabId, _x: usize, _y: usize) -> Option<[u8; 4]> {
+        None
+    }
     /// What the page card draws for `page` (the frame surface, which owns its own input).
     fn surface(&self, page: &TabId, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
 }

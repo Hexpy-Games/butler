@@ -74,8 +74,9 @@ cef::wrap_life_span_handler! {
             _id: i32, url: Option<&CefString>, _name: Option<&CefString>,
             disposition: WindowOpenDisposition, gesture: i32, _features: Option<&PopupFeatures>,
             info: Option<&mut WindowInfo>, client: Option<&mut Option<Client>>,
-            _settings: Option<&mut BrowserSettings>, _extra: Option<&mut Option<DictionaryValue>>,
+            settings: Option<&mut BrowserSettings>, _extra: Option<&mut Option<DictionaryValue>>,
             _access: Option<&mut i32>) -> i32 {
+            if let Some(settings) = settings { settings.background_color = 0xFFFF_FFFF; }
             super::popups::before(&self.shared, &self.events, &self.runtime, url, disposition, gesture, info, client)
         }
     }

@@ -174,7 +174,6 @@ fn settle(id: &TabId, session: &Session, cx: &mut App) {
     } else {
         tab.selections.push(item);
     }
-    tab.pick_hover = None;
     super::follow::sync(id, cx);
     if press.moved {
         drag(id, &press, cx);
