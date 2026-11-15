@@ -7,7 +7,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 import { windowsPackageVersion } from "../../client/electron/scripts/windows-package-version.mjs";
-import { assertShortcuts, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { assertShortcuts, fileHolders, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
   throw new Error("Registry/shortcut/installer smoke is restricted to disposable GitHub-hosted runners");
@@ -44,7 +44,7 @@ const durations: Record<string, number> = {};
 let shortcuts: string[] = [];
 let oldAppPid = 0;
 let oldAgentPid = 0;
-let uninstalled = false;
+let uninstallStarted = false;
 let failed = false;
 let helperClosed = true;
 let phase = "prepare";
@@ -78,7 +78,7 @@ async function cleanup() {
   const errors: unknown[] = [];
   for (const action of [
     stopInstalled,
-    async () => { if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]); },
+    async () => { if (!uninstallStarted && existsSync(updater)) await runUninstall(); },
   ]) {
     try { await action(); } catch (error) { errors.push(error); }
   }
@@ -189,9 +189,26 @@ async function stopInstalled() {
   await waitFor(() => installedProcesses().length === 0, "installed processes stopped");
 }
 
+async function runUninstall() {
+  const files = readdirSync(installed, { recursive: true, withFileTypes: true })
+    .filter(entry => !entry.isDirectory()).map(entry => join(entry.parentPath, entry.name))
+    .filter(path => path.toLowerCase() !== updater.toLowerCase());
+  let holders: ReturnType<typeof fileHolders> = [];
+  try {
+    await waitFor(() => {
+      holders = fileHolders(files, env);
+      return holders.length === 0;
+    }, "install tree released", 30_000);
+  } catch (error) {
+    throw new Error(`${String(error)}; file holders: ${JSON.stringify(holders)}`, { cause: error });
+  }
+  uninstallStarted = true;
+  run(updater, ["--uninstall", "--silent"]);
+}
+
 async function uninstall() {
   await stopInstalled();
-  run(updater, ["--uninstall", "--silent"]);
+  await runUninstall();
   await waitFor(() => !existsSync(stub), "uninstalled stub removed");
   assertShortcuts(shortcuts, false);
   for (const key of ["HKCU:\\Software\\Classes\\butler", "HKCU:\\Software\\Classes\\AppUserModelId\\com.squirrel.butler-app.Butler"]) {
@@ -206,7 +223,6 @@ async function uninstall() {
   const missing = expected.filter(path => !files.includes(path));
   assert.deepEqual(files.sort(), expected.sort(), `Uninstall remnants: unexpected [${unexpected.join(", ")}]; missing [${missing.join(", ")}]`);
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
-  uninstalled = true;
 }
 
 function run(command: string, args: string[]) {

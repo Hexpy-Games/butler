@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
@@ -11,6 +12,72 @@ export function powershell(script: string, env = process.env): string {
   });
   assert.equal(result.status, 0, `PowerShell failed: ${result.stderr}`);
   return result.stdout.trim();
+}
+
+/** Query Restart Manager for processes holding any of the supplied files. */
+export function fileHolders(paths: string[], env: NodeJS.ProcessEnv): { pid: number; name: string }[] {
+  if (!paths.length) return [];
+  // A file, not an environment variable: the install tree's path list exceeds the 32,767-character variable limit.
+  const list = join(env.TEMP ?? tmpdir(), `butler-smoke-holders-${process.pid}.json`);
+  writeFileSync(list, JSON.stringify(paths));
+  return JSON.parse(powershell(`$ErrorActionPreference = 'Stop'
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class FileHolders {
+  [StructLayout(LayoutKind.Sequential)]
+  public struct UniqueProcess {
+    public uint pid;
+    public System.Runtime.InteropServices.ComTypes.FILETIME started;
+  }
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  public struct ProcessInfo {
+    public UniqueProcess process;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string name;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string service;
+    public uint type, status, session;
+    [MarshalAs(UnmanagedType.Bool)] public bool restartable;
+  }
+  [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)]
+  static extern uint RmStartSession(out uint session, uint flags, System.Text.StringBuilder key);
+  [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)]
+  static extern uint RmRegisterResources(uint session, uint count, string[] files,
+    uint appCount, UniqueProcess[] apps, uint serviceCount, string[] services);
+  [DllImport("rstrtmgr.dll")]
+  static extern uint RmGetList(uint session, out uint needed, ref uint count,
+    [In, Out] ProcessInfo[] processes, ref uint reasons);
+  [DllImport("rstrtmgr.dll")]
+  static extern uint RmEndSession(uint session);
+  static void Check(uint result) {
+    if (result != 0) throw new Win32Exception((int)result);
+  }
+  public static ProcessInfo[] Query(string[] files) {
+    uint session;
+    Check(RmStartSession(out session, 0, new System.Text.StringBuilder(33)));
+    try {
+      Check(RmRegisterResources(session, (uint)files.Length, files, 0, null, 0, null));
+      uint needed, count = 0, reasons = 0;
+      ProcessInfo[] processes = new ProcessInfo[0];
+      while (true) {
+        uint result = RmGetList(session, out needed, ref count, processes, ref reasons);
+        if (result == 234) {
+          processes = new ProcessInfo[needed];
+          count = needed;
+          continue;
+        }
+        Check(result);
+        Array.Resize(ref processes, (int)count);
+        return processes;
+      }
+    } finally { Check(RmEndSession(session)); }
+  }
+}
+'@
+    $files = [string[]](Get-Content -Raw -LiteralPath $env:BUTLER_SMOKE_FILES | ConvertFrom-Json)
+    ConvertTo-Json -Compress -InputObject @([FileHolders]::Query($files) |
+      ForEach-Object { @{ pid = $_.process.pid; name = $_.name } })`,
+  { ...env, BUTLER_SMOKE_FILES: list }));
 }
 
 export function readJson(path: string): Record<string, any> | null {
