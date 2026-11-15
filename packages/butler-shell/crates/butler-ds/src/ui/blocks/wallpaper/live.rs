@@ -7,7 +7,10 @@ use gpui::{
     WallpaperImage, WallpaperPaint, WallpaperPass, Window, canvas,
 };
 
-use super::{WallpaperTone, live_image, live_modules, live_params, live_print};
+use super::{
+    WallpaperHost, WallpaperTone, drift, live_image, live_modules, live_params, live_print,
+    watchdog::{self, Watchdog},
+};
 use crate::ui::blocks::prompt_suggestion_list::ContentRect;
 
 pub(super) use live_print::intro_layer;
@@ -17,6 +20,7 @@ pub(super) const STILL_DAY_PHASE: f32 = 0.5;
 #[derive(Clone, Copy)]
 pub(super) struct LiveFrame {
     pub(super) tone: WallpaperTone,
+    pub(super) host: WallpaperHost,
     pub(super) animate: bool,
     pub(super) start_ms: u32,
     pub(super) day_phase: f32,
@@ -25,7 +29,12 @@ pub(super) struct LiveFrame {
 }
 
 /// Known modules never fall back to posters, including while a photo is decoding.
-pub(super) fn layer(id: &str, frame: LiveFrame, cx: &mut App) -> Option<(AnyElement, f32)> {
+pub(super) fn layer(
+    id: &str,
+    frame: LiveFrame,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<(AnyElement, f32)> {
     let module = live_modules::get(id)?;
     let image = module
         .photo
@@ -36,6 +45,17 @@ pub(super) fn layer(id: &str, frame: LiveFrame, cx: &mut App) -> Option<(AnyElem
     id.hash(&mut hash);
     frame.tone.as_str().hash(&mut hash);
     let key = hash.finish();
+    let watchdog =
+        window.use_keyed_state(("wallpaper-watchdog", key), cx, |_, _| Watchdog::default());
+    let mut frame = frame;
+    frame.animate &= !watchdog.read(cx).degraded();
+    if module.manifest["motion"] == "drift" {
+        return Some((
+            drift::layer(key, params[0], frame, module, window, cx),
+            module.brightness(frame.tone),
+        ));
+    }
+    let watchdog = watchdog.clone();
     let drawn = canvas(
         |_, _, _| (),
         move |bounds, (), window, cx| {
@@ -50,9 +70,22 @@ pub(super) fn layer(id: &str, frame: LiveFrame, cx: &mut App) -> Option<(AnyElem
                     crate::ui::motion::mounted_at(("wallpaper-clock", key), window, cx);
             }
             if module.manifest["density"] == true {
-                live_print::paint(bounds, key, params[0], frame, module, window);
-            } else {
-                paint(bounds, key, module, params, image.clone(), frame, window);
+                live_print::paint(
+                    bounds,
+                    key,
+                    params[0],
+                    frame,
+                    live_print::REST.flow,
+                    module,
+                    window,
+                );
+            } else if paint(bounds, key, module, params, image.clone(), frame, window) {
+                let watchdog = watchdog.clone();
+                window.on_slow_animation_frames(
+                    watchdog::SLOW_RENDER,
+                    watchdog::SLOW_FRAMES,
+                    move |_, cx| watchdog.update(cx, Watchdog::degrade),
+                );
             }
         },
     )
@@ -69,10 +102,10 @@ fn paint(
     image: Option<WallpaperImage>,
     frame: LiveFrame,
     window: &mut Window,
-) {
+) -> bool {
     let css = [f32::from(bounds.size.width), f32::from(bounds.size.height)];
     if css[0] < 1. || css[1] < 1. {
-        return;
+        return false;
     }
     let (ratio, budget) = module.policy();
     let (buffer, pixel_ratio) = live_print::buffer_size(css, window.scale_factor(), ratio, budget);
@@ -89,14 +122,17 @@ fn paint(
     u[8] = live_print::buffer_rect(frame.content_rect2, bounds, buffer);
     u[9..15].copy_from_slice(&params);
     let passes = passes(module, buffer, u, image.as_ref());
+    let clock = clock(module, frame, image.is_some());
+    let animated = clock.is_some();
     let wallpaper = WallpaperPaint {
         key,
         generation: live_print::generation(&passes),
-        clock: clock(module, frame, image.is_some()),
+        clock,
         image,
         passes: passes.into(),
     };
     window.paint_wallpaper(bounds, Corners::default(), 1., wallpaper);
+    animated
 }
 
 /// DS: glScene.ts: prefit → base (time 0 for overlays) → overlay.
@@ -152,7 +188,6 @@ fn pass(module: u32, buffer: [f32; 2], previous: bool, uniforms: [[f32; 4]; 15])
     reason = "shader period is an f32 uniform"
 )]
 fn clock(module: &live_modules::Module, frame: LiveFrame, image: bool) -> Option<WallpaperClock> {
-    // P6: Electron's pauseOnBattery needs a power-source signal, which gpui does not expose.
     (frame.animate && module.manifest["motion"] == "animated").then(|| WallpaperClock {
         start_ms: frame.start_ms,
         start_s: module.still_time,
