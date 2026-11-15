@@ -179,6 +179,11 @@ mod smoke {
             Arc::new(move |delay| {
                 let _ = tx.send(delay);
             }),
+            Rc::new(|_| {
+                butler_cef_host::osr::PopupDecision::Block(
+                    butler_cef_host::osr::PopupBlock::NoGesture,
+                )
+            }),
         )?;
         let result = verify(&runtime, &sink, &requests);
         runtime.shutdown();

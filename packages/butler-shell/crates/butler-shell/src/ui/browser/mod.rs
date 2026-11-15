@@ -4,8 +4,10 @@ pub(crate) mod area;
 mod bookmarks;
 #[cfg(feature = "cef")]
 mod cef;
+mod dialog;
 pub(crate) mod engine;
 pub(crate) mod model;
+mod page_dialog;
 mod placeholder;
 pub(crate) mod shell_state;
 mod tabs;

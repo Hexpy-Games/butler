@@ -1,4 +1,7 @@
 //! Page engines own their frame surface and input; the shell owns tab metadata.
+use super::page_dialog::DialogAnswer;
+#[cfg(feature = "cef")]
+use super::page_dialog::PageDialog;
 use gpui::{AnyElement, App, SharedString, Window};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -38,7 +41,14 @@ pub(crate) enum PageChange {
     Title(String),
     Favicon(String),
     Loading(bool),
-    History { can_back: bool, can_forward: bool },
+    History {
+        can_back: bool,
+        can_forward: bool,
+    },
+    #[cfg(feature = "cef")]
+    Dialog(PageDialog),
+    #[cfg(feature = "cef")]
+    CloseRequested,
     Crashed,
 }
 
@@ -56,6 +66,7 @@ pub(crate) trait PageEngine: 'static {
     /// The page's size in logical pixels and the device scale (from PageCard's bounds).
     fn resize(&mut self, page: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32);
     fn close(&mut self, page: &TabId);
+    fn answer_dialog(&mut self, page: &TabId, id: u64, answer: DialogAnswer);
     fn show(&mut self, _page: Option<&TabId>) {}
     fn frame_size(&self, _page: &TabId) -> Option<(usize, usize)> {
         None

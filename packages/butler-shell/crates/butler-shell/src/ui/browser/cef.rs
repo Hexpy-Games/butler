@@ -5,7 +5,10 @@ mod input;
 mod surface;
 
 use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
-use butler_cef_host::osr::{OsrEvent, OsrProfile, OsrRuntime, OsrSink};
+use super::page_dialog::{DialogAnswer, DialogKind, PageDialog};
+use butler_cef_host::osr::{
+    OsrAnswer, OsrDialogKind, OsrEvent, OsrProfile, OsrRuntime, OsrSink, PopupBlock, PopupDecision,
+};
 use futures::{
     StreamExt as _,
     channel::mpsc,
@@ -50,6 +53,7 @@ impl CefEngine {
             Arc::new(move |delay| {
                 let _ = schedule.unbounded_send(Instant::now() + delay);
             }),
+            Rc::new(|_| PopupDecision::Block(PopupBlock::NoGesture)),
         )?);
         let pages = Pages::default();
         let shown = Rc::new(Cell::new(None));
@@ -152,8 +156,28 @@ fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
             can_back,
             can_forward,
         },
+        OsrEvent::Dialog(dialog) => PageChange::Dialog(PageDialog {
+            id: dialog.id,
+            kind: match dialog.kind {
+                OsrDialogKind::Alert => DialogKind::Alert,
+                OsrDialogKind::Confirm => DialogKind::Confirm,
+                OsrDialogKind::Prompt => DialogKind::Prompt,
+                OsrDialogKind::BeforeUnload => DialogKind::BeforeUnload,
+                OsrDialogKind::Auth => DialogKind::Auth,
+                OsrDialogKind::File => DialogKind::File,
+            },
+            message: dialog.message,
+            default_prompt: dialog.default_prompt,
+            origin: dialog.origin,
+            accept_types: dialog.accept_types,
+            multiple: dialog.multiple,
+        }),
+        OsrEvent::CloseRequested => PageChange::CloseRequested,
+        OsrEvent::PopupNewTab { .. }
+        | OsrEvent::PopupBlocked { .. }
+        | OsrEvent::PopupOpened { .. }
+        | OsrEvent::Frame => return None,
         OsrEvent::Crashed => PageChange::Crashed,
-        OsrEvent::Frame => return None,
         OsrEvent::Cursor(cursor) => {
             state.cursor = cursor;
             return None;
@@ -188,6 +212,21 @@ impl PageEngine for CefEngine {
         }
     }
 
+    fn answer_dialog(&mut self, page: &TabId, dialog: u64, answer: DialogAnswer) {
+        if let Some(&id) = self.ids.get(page) {
+            self.runtime.answer_dialog(
+                id,
+                dialog,
+                OsrAnswer {
+                    accept: answer.accept,
+                    text: answer.text,
+                    username: answer.username,
+                    password: answer.password,
+                    files: answer.files,
+                },
+            );
+        }
+    }
     fn command(&mut self, page: &TabId, command: PageCommand) {
         let Some(&id) = self.ids.get(page) else {
             return;

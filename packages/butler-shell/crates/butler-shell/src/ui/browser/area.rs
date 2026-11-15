@@ -125,6 +125,9 @@ fn page(tab: Option<&Tab>, window: &mut Window, cx: &mut App) -> PageCard {
         .reserve_band()
         .hidden(empty || crashed || !enabled);
     if let Some(tab) = tab {
+        if let Some(dialog) = &tab.dialog {
+            page = page.overlay(super::dialog::show(&tab.id, dialog, window, cx));
+        }
         let id = tab.id.clone();
         let surface =
             cx.update_global::<BrowserState, _>(|model, cx| model.surface(&id, window, cx));
