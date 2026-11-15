@@ -14,6 +14,7 @@ pub(super) struct PageState {
     pub(super) bounds: Bounds<Pixels>,
     pub(super) geometry: Option<(Size<Pixels>, f32)>,
     pub(super) cursor: OsrCursor,
+    pub(super) last_input: Rc<std::cell::Cell<Option<std::time::Instant>>>,
     pub(super) ime_bounds: Vec<Rect>,
 }
 impl Default for PageState {
@@ -22,6 +23,7 @@ impl Default for PageState {
             bounds: Bounds::default(),
             geometry: None,
             cursor: OsrCursor::Arrow,
+            last_input: Rc::default(),
             ime_bounds: Vec::new(),
         }
     }
