@@ -24,7 +24,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "click" | "drag" => pointer(h, command, arg),
         "drag-from" => drag_from(h, arg),
         "click-at" => click_at(h, arg),
-        "page-click" => page_click(h, arg),
+        "page-click" | "page-move" => page_pointer(h, arg, command == "page-click"),
         "hover" => hover(h, arg),
         "reveal" => reveal(h, arg),
         "wait-anchor" | "wait-no-anchor" => wait_anchor(h, arg, command == "wait-anchor"),
@@ -362,12 +362,56 @@ fn find_anchor(
     }
     Ok(None)
 }
-fn page_click(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+fn page_pointer(h: &mut Harness, arg: &str, click: bool) -> anyhow::Result<()> {
     settle(&mut h.cx, h.handle);
-    let (x, y) = arg.split_once(' ').context("page-click <x> <y>")?;
+    let mut parts = arg.split_whitespace();
+    let x: f32 = parts.next().context("page pointer x")?.parse()?;
+    let y: f32 = parts.next().context("page pointer y")?.parse()?;
+    let mut modifiers = gpui::Modifiers::default();
+    for modifier in parts {
+        match modifier {
+            "shift" => modifiers.shift = true,
+            "alt" => modifiers.alt = true,
+            _ => anyhow::bail!("unknown page pointer modifier"),
+        }
+    }
     let bounds =
         h.cx.debug_bounds(h.handle, "browser-page")?
             .context("missing page surface")?;
-    let at = bounds.origin + point(px(x.parse()?), px(y.parse()?));
-    pointer_sequence(h, h.handle, at, at, MouseButton::Left, false)
+    let at = bounds.origin + point(px(x), px(y));
+    h.cx.update_window(h.handle, |_, w, cx| {
+        w.activate();
+        if click {
+            w.dispatch_event(
+                PlatformInput::MouseDown(MouseDownEvent {
+                    button: MouseButton::Left,
+                    position: at,
+                    modifiers,
+                    click_count: 1,
+                    first_mouse: false,
+                }),
+                cx,
+            );
+            w.dispatch_event(
+                PlatformInput::MouseUp(MouseUpEvent {
+                    button: MouseButton::Left,
+                    position: at,
+                    modifiers,
+                    click_count: 1,
+                }),
+                cx,
+            );
+        } else {
+            w.dispatch_event(
+                PlatformInput::MouseMove(MouseMoveEvent {
+                    position: at,
+                    modifiers,
+                    pressed_button: None,
+                }),
+                cx,
+            );
+        }
+    })?;
+    settle(&mut h.cx, h.handle);
+    Ok(())
 }

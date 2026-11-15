@@ -14,3 +14,16 @@ impl Composer {
         drop_cards_on_session(&ctx, drag, &chat.into(), cx);
     }
 }
+
+impl Composer {
+    pub(super) fn drop_elements(
+        &mut self,
+        elements: &crate::ui::browser::pick::drag::Elements,
+        _: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(chat) = &self.inputs.chat_id {
+            crate::ui::browser::pick::drag::attach(elements, chat, cx);
+        }
+    }
+}

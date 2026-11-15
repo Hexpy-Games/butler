@@ -261,6 +261,11 @@ impl Composer {
             },
             cx,
         );
+        let tiles = tiles.map(|tiles| {
+            crate::ui::widgets::anchor(div(), "composer-attachments")
+                .child(tiles)
+                .into_any_element()
+        });
         let input = field::field(
             "composer-input",
             &self.input,
@@ -467,6 +472,7 @@ impl Render for Composer {
         .on_drop(cx.listener(|this, drag: &SpaceDragPayload, window, cx| {
             this.drop_session(drag, window, cx);
         }))
+        .on_drop(cx.listener(Self::drop_elements))
         .on_drag_over::<CardDrag>(move |style, _, _, _| style.bg(tint))
         .on_drop(cx.listener(|this, drag: &CardDrag, _, cx| this.drop_cards(drag, cx)))
         .child(probe)

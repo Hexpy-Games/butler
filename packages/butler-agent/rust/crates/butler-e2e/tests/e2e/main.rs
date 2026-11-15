@@ -337,6 +337,7 @@ mod canon_criteria;
 mod canon_mcp;
 mod shell_app;
 mod shell_browser;
+mod shell_browser_pick;
 mod shell_browser_popups;
 mod shell_client;
 
