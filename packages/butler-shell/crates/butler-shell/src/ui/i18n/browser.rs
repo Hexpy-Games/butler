@@ -36,6 +36,10 @@ pub(crate) struct BrowserStrings {
     pub(crate) move_to_conversation: &'static str,
     pub(crate) new_conversation: &'static str,
     pub(crate) bring_tab: &'static str,
+    pub(crate) popup_blocked: &'static str,
+    pub(crate) popup_opened: &'static str,
+    pub(crate) allow: &'static str,
+    pub(crate) show_popup: &'static str,
     pub(crate) page_says: &'static str,
     pub(crate) auth_needed: &'static str,
     pub(crate) choose_file: &'static str,
@@ -47,10 +51,26 @@ pub(crate) struct BrowserStrings {
     pub(crate) leave_title: &'static str,
     pub(crate) stay: &'static str,
     pub(crate) leave: &'static str,
+    #[cfg(feature = "cef")]
+    pub(crate) download_saved: &'static str,
+    #[cfg(feature = "cef")]
+    pub(crate) download_failed: &'static str,
+    #[cfg(feature = "cef")]
+    pub(crate) download_file_limit: &'static str,
+    #[cfg(feature = "cef")]
+    pub(crate) download_session_limit: &'static str,
     pub(crate) history: &'static str,
 }
 
 const KO: BrowserStrings = BrowserStrings {
+    #[cfg(feature = "cef")]
+    download_saved: "다운로드 저장됨",
+    #[cfg(feature = "cef")]
+    download_failed: "다운로드 실패",
+    #[cfg(feature = "cef")]
+    download_file_limit: "파일 한도 100 MB",
+    #[cfg(feature = "cef")]
+    download_session_limit: "대화 한도 500 MB",
     title: "브라우저",
     my_tabs: "내 탭",
     new_tab: "새 탭",
@@ -85,6 +105,10 @@ const KO: BrowserStrings = BrowserStrings {
     new_conversation: "새 대화",
     bring_tab: "탭 가져오기",
     history: "방문 기록",
+    popup_blocked: "팝업 차단됨",
+    popup_opened: "팝업 열림",
+    allow: "허용",
+    show_popup: "팝업 보기",
     page_says: "페이지 메시지",
     auth_needed: "로그인 필요",
     choose_file: "파일 선택",
@@ -99,6 +123,14 @@ const KO: BrowserStrings = BrowserStrings {
 };
 
 const EN: BrowserStrings = BrowserStrings {
+    #[cfg(feature = "cef")]
+    download_saved: "Download saved",
+    #[cfg(feature = "cef")]
+    download_failed: "Download failed",
+    #[cfg(feature = "cef")]
+    download_file_limit: "100 MB file limit",
+    #[cfg(feature = "cef")]
+    download_session_limit: "500 MB conversation limit",
     title: "Browser",
     my_tabs: "My tabs",
     new_tab: "New tab",
@@ -133,6 +165,10 @@ const EN: BrowserStrings = BrowserStrings {
     new_conversation: "New chat",
     bring_tab: "Bring in a tab",
     history: "History",
+    popup_blocked: "Pop-up blocked",
+    popup_opened: "Pop-up open",
+    allow: "Allow",
+    show_popup: "Show pop-up",
     page_says: "Page message",
     auth_needed: "Sign-in required",
     choose_file: "Choose file",

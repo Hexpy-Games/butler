@@ -262,6 +262,39 @@ impl ShellClient {
         self.json_as(method, segments, query, body, Some(&admin))
             .await
     }
+    pub(crate) async fn admin_raw_json(
+        &self,
+        method: Method,
+        segments: &[&str],
+        body: Option<&Value>,
+    ) -> Result<Value, Error> {
+        let data = self.inner.data.clone();
+        let admin = tokio::task::spawn_blocking(move || super::attach::read_admin(&data))
+            .await
+            .map_err(|_| Error::LocalMetadata)??;
+        let response = self
+            .json_response(method, segments, &[], body, Some(&admin))
+            .await?;
+        let bytes = response.bytes().await.map_err(|_| Error::Connection)?;
+        serde_json::from_slice(&bytes).map_err(|_| Error::Protocol)
+    }
+    async fn json_response(
+        &self,
+        method: Method,
+        segments: &[&str],
+        query: &[(&str, String)],
+        body: Option<&Value>,
+        admin: Option<&str>,
+    ) -> Result<Response, Error> {
+        self.request(
+            method,
+            self.url(segments, query)?,
+            &body.map_or(Body::None, Body::Json),
+            false,
+            admin,
+        )
+        .await
+    }
     async fn json_as<T: DeserializeOwned>(
         &self,
         method: Method,
@@ -271,13 +304,7 @@ impl ShellClient {
         admin: Option<&str>,
     ) -> Result<T, Error> {
         let response = self
-            .request(
-                method,
-                self.url(segments, query)?,
-                &body.map_or(Body::None, Body::Json),
-                false,
-                admin,
-            )
+            .json_response(method, segments, query, body, admin)
             .await?;
         #[derive(serde::Deserialize)]
         struct Envelope<T> {

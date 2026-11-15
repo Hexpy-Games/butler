@@ -29,3 +29,12 @@ pub(crate) struct DialogAnswer {
     pub(crate) password: String,
     pub(crate) files: Vec<PathBuf>,
 }
+#[derive(Clone, serde::Serialize)]
+pub(crate) struct BlockedPopup {
+    pub(crate) url: String,
+    pub(crate) site: String,
+    pub(crate) reason: &'static str,
+}
+#[cfg(feature = "cef")]
+#[derive(Clone, Copy)]
+pub(crate) struct EngineChild(pub(crate) u64);
