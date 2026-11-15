@@ -12,7 +12,7 @@ use futures::channel::mpsc::UnboundedSender;
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, Window, div};
 use url::Url;
 
-use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, TabId};
+use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
 
 #[derive(Default)]
 struct Page {
@@ -81,7 +81,7 @@ impl PageEngine for PlaceholderEngine {
         true
     }
 
-    fn open(&mut self, page: &TabId, url: &str) {
+    fn open(&mut self, page: &TabId, url: &str, _: Profile, _: &str) {
         let state = self.pages.entry(page.clone()).or_default();
         if !url.is_empty() {
             state.load(url.to_owned());
