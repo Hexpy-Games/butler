@@ -49,6 +49,7 @@ pub mod overflow_action_menu;
 pub mod page_band;
 pub mod page_card;
 pub mod panel_header;
+pub mod popup_window_chrome;
 pub mod progress_meter;
 pub mod prompt_suggestion_list;
 pub mod question_answer_card;
