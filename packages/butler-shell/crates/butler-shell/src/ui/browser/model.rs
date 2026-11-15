@@ -5,7 +5,7 @@ use futures::{StreamExt as _, channel::mpsc};
 use gpui::{AnyElement, App, Global, SharedString, Window};
 
 use super::address::{AddressError, address_url, web_url};
-use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, TabId};
+use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
 use super::placeholder::PlaceholderEngine;
 
 // Mirrors butler-runtime/src/browser/capacity.rs.
@@ -52,6 +52,7 @@ pub(crate) struct Tab {
     pub(crate) can_back: bool,
     pub(crate) can_forward: bool,
     pub(crate) placeholder: bool,
+    pub(crate) profile: Profile,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -162,9 +163,11 @@ impl BrowserState {
         self.next_id += 1;
         let id = TabId(format!("t{}", self.next_id).into());
         let tab_owner = owner.clone();
+        let profile = Profile::for_url(&url);
         self.tabs.push(Tab {
             id: id.clone(),
             owner,
+            profile,
             placeholder: placeholder && url.is_empty(),
             url: url.clone(),
             title: String::new(),
@@ -177,7 +180,8 @@ impl BrowserState {
         if !url.is_empty() {
             self.drop_placeholders(&tab_owner);
         }
-        self.engine.open(&id, &url);
+        self.engine
+            .open(&id, &url, profile, &super::area::owner_key(&tab_owner));
         Ok(Some(id))
     }
 

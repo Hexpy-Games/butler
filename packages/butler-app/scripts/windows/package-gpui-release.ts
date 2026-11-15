@@ -36,6 +36,7 @@ try {
   const app = join(work, "Butler-win32-x64");
   cpSync(cef, app, { recursive: true });
   cpSync(shell, join(app, "Butler.exe"));
+  cpSync(join(root, "LICENSE"), join(app, "LICENSE"));
   cpSync(payload, join(app, "resources/bundled-agent"), { recursive: true });
   run("node", [join(electron, "scripts/prepare-process-links.mjs"), join(app, "resources/bundled-agent/bin/butler-agent.exe")]);
   run("node", [join(root, "deploy/licenses/package-app.mjs"), app]);

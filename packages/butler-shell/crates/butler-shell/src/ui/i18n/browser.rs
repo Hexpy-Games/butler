@@ -32,6 +32,10 @@ pub(crate) struct BrowserStrings {
     pub(crate) waiting: &'static str,
     pub(crate) new_tab_in: &'static str,
     pub(crate) more_tabs: &'static str,
+    pub(crate) signed_in: &'static str,
+    pub(crate) move_to_conversation: &'static str,
+    pub(crate) new_conversation: &'static str,
+    pub(crate) bring_tab: &'static str,
     pub(crate) history: &'static str,
 }
 
@@ -65,6 +69,10 @@ const KO: BrowserStrings = BrowserStrings {
     waiting: "승인 대기",
     new_tab_in: "{group}에 새 탭",
     more_tabs: "+{count}",
+    signed_in: "로그인 사용",
+    move_to_conversation: "대화로 가져가기",
+    new_conversation: "새 대화",
+    bring_tab: "탭 가져오기",
     history: "방문 기록",
 };
 
@@ -98,6 +106,10 @@ const EN: BrowserStrings = BrowserStrings {
     waiting: "Waiting for approval",
     new_tab_in: "New tab in {group}",
     more_tabs: "+{count}",
+    signed_in: "Signed in",
+    move_to_conversation: "Move to a conversation",
+    new_conversation: "New chat",
+    bring_tab: "Bring in a tab",
     history: "History",
 };
 
