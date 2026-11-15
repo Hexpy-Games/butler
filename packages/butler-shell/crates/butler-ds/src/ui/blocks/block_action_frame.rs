@@ -3,6 +3,7 @@
 //! pointer is on this block and not on a block inside it (or while focus is inside it, or its
 //! menu is open); a right click opens the same menu. An untitled block floats the button on its
 //! top end corner, on a raised chip. The frame never clips, so the button keeps its focus ring.
+use crate::ui::selectable::Break;
 use gpui::{
     AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, MouseButton,
     MouseMoveEvent, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
@@ -139,8 +140,11 @@ fn header(
 ) -> gpui::Div {
     let titled = frame.title.is_some();
     let heading = frame.title.take().map(|title| match frame.level {
-        Level::Block => Typo::section_title(title).into_any_element(),
+        Level::Block => Typo::section_title(title)
+            .selectable(Break::Line)
+            .into_any_element(),
         Level::Child => Typo::label(title)
+            .selectable(Break::Line)
             .weight(Weight::Semibold)
             .into_any_element(),
     });

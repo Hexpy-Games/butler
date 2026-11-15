@@ -29,6 +29,11 @@ impl Shell {
                 == Some(viewer::RightSlotPane::Browser))
         .then_some(Owner::Conversation(session))
     }
+    pub(super) fn sync_browser_visibility(&self, cx: &mut gpui::App) {
+        if self.browser_owner(cx).is_none() {
+            cx.global_mut::<BrowserState>().show(None);
+        }
+    }
     pub(super) fn browser_focus_address(
         &mut self,
         _: &crate::ui::browser::area::FocusAddress,

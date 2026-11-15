@@ -17,6 +17,10 @@ use butler_e2e::e2e::{
 async fn browser_opens_a_page_and_navigates() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
+    butler_e2e::skip_unless!(
+        nonempty("BUTLER_CEF_DIR").is_none(),
+        "runs on the placeholder engine"
+    );
     let _serial = SERIAL.lock().await;
     let mut sandbox = Sandbox::new("browser_opens_a_page_and_navigates")?;
     let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
@@ -66,6 +70,10 @@ async fn browser_opens_a_page_and_navigates() -> Result<(), HarnessError> {
 async fn browser_switches_tabs() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
+    butler_e2e::skip_unless!(
+        nonempty("BUTLER_CEF_DIR").is_none(),
+        "runs on the placeholder engine"
+    );
     let _serial = SERIAL.lock().await;
     let mut sandbox = Sandbox::new("browser_switches_tabs")?;
     let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
@@ -107,6 +115,10 @@ async fn browser_switches_tabs() -> Result<(), HarnessError> {
 async fn conversation_link_opens_in_its_browser() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
+    butler_e2e::skip_unless!(
+        nonempty("BUTLER_CEF_DIR").is_none(),
+        "runs on the placeholder engine"
+    );
     let _serial = SERIAL.lock().await;
     let mut sandbox = Sandbox::new("conversation_link_opens_in_its_browser")?;
     let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
@@ -152,6 +164,95 @@ async fn conversation_link_opens_in_its_browser() -> Result<(), HarnessError> {
             "app-quit",
         ])
         .await?;
+    shell.finish().await?;
+    sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
+async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
+    butler_e2e::skip_unless!(
+        nonempty("BUTLER_CEF_DIR").is_some(),
+        "BUTLER_CEF_DIR is not set"
+    );
+    let _serial = SERIAL.lock().await;
+    let mut sandbox = Sandbox::new("cef_renders_a_local_page")?;
+    let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let address = listener.local_addr()?;
+    let pages = axum::Router::new()
+        .route("/first", axum::routing::get(|| async {
+            axum::response::Html("<title>First local page</title><body style='margin:0;background:#14508c'>First local page</body>")
+        }))
+        .route("/second", axum::routing::get(|| async {
+            axum::response::Html("<title>Second local page</title><body style='margin:0;background:#8c5014'>Second local page</body>")
+        }));
+    let _server = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
+        axum::serve(listener, pages).await.unwrap();
+    }));
+    let first = format!("http://{address}/first");
+    let second = format!("http://{address}/second");
+    let mut shell = Shell::start(&sandbox, &[]).await?;
+    shell
+        .run(&[
+            "agent running",
+            "wait-anchor composer",
+            "browser",
+            "wait-anchor browser-area",
+        ])
+        .await?;
+    for (url, title, back) in [
+        (&first, "First local page", false),
+        (&second, "Second local page", false),
+        (&first, "First local page", true),
+    ] {
+        if back {
+            shell.run(&["click browser-back"]).await?;
+        } else {
+            shell
+                .run(&["key cmd-l", &format!("type {url}"), "key enter"])
+                .await?;
+        }
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            let state = shell.browser_state().await?;
+            if state["tabs"][0]["title"] == title
+                && state["tabs"][0]["url"] == *url
+                && state["tabs"][0]["status"] == "idle"
+            {
+                break;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "page did not finish: {state}"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+    }
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let frame = shell.browser_frame().await?;
+        if let Some(actual) = frame["frame"].as_array() {
+            let scale = frame["scale"].as_f64().unwrap();
+            assert_eq!(actual.len(), 2);
+            for (axis, dimension) in actual.iter().enumerate() {
+                assert!(dimension.as_u64().unwrap() > 0);
+                assert_eq!(
+                    dimension.as_f64().unwrap(),
+                    (frame["content"][axis].as_f64().unwrap() * scale).round()
+                );
+            }
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "CEF did not produce a frame: {frame}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    shell.run(&["shot cef-browser", "app-quit"]).await?;
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())

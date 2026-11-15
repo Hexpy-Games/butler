@@ -1,48 +1,68 @@
 //! Main-thread, in-process CEF off-screen rendering. No gpui types cross this boundary.
-mod frame_pool;
-mod gpu;
-mod handlers;
-mod ime;
-mod input;
-mod paint;
-mod pump;
-mod state;
+mod ime_state;
 mod types;
+#[cfg(not(target_os = "macos"))]
+mod unsupported;
+pub use ime_state::OsrIme;
+pub use types::*;
+#[cfg(not(target_os = "macos"))]
+pub use unsupported::{OsrFrame, OsrRuntime};
 
+#[cfg(target_os = "macos")]
+mod frame_pool;
+#[cfg(target_os = "macos")]
+mod gpu;
+#[cfg(target_os = "macos")]
+mod handlers;
+#[cfg(target_os = "macos")]
+mod ime;
+#[cfg(target_os = "macos")]
+mod input;
+#[cfg(target_os = "macos")]
+mod paint;
+#[cfg(target_os = "macos")]
+mod pump;
+#[cfg(target_os = "macos")]
+mod state;
+
+#[cfg(target_os = "macos")]
 use cef::{ImplBrowser, ImplBrowserHost, ImplFrame};
+#[cfg(target_os = "macos")]
 use core_video::pixel_buffer::CVPixelBuffer;
+#[cfg(target_os = "macos")]
 pub use gpu::read_bgra_pixel;
-pub use ime::OsrIme;
+#[cfg(target_os = "macos")]
 use state::{Events, Page, PageRef};
+#[cfg(target_os = "macos")]
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
     rc::Rc,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
-pub use types::*;
 
+#[cfg(target_os = "macos")]
 static STARTED: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "macos")]
 const FALLBACK: Duration = Duration::from_nanos(1_000_000_000 / 30);
 
-/// All runtime methods and sink events run on the AppKit main thread.
+/// All runtime methods and sink events run on the UI thread.
 pub trait OsrSink: 'static {
     fn event(&self, page: u64, event: OsrEvent);
 }
 
 /// Called from any thread. Schedule a timer on the UI loop, then call `OsrRuntime::pump` there.
 /// Coalesce pending deadlines by keeping the earliest, including the visible-page fallback.
-pub type PumpScheduler = Arc<dyn Fn(Duration) + Send + Sync>;
+pub type PumpScheduler = std::sync::Arc<dyn Fn(std::time::Duration) + Send + Sync>;
 
+#[cfg(target_os = "macos")]
 struct RuntimeState {
     pages: RefCell<HashMap<u64, PageRef>>,
     visible: Cell<usize>,
 }
 
+#[cfg(target_os = "macos")]
 pub struct OsrRuntime {
     state: Rc<RuntimeState>,
     sink: Rc<dyn OsrSink>,
@@ -51,6 +71,7 @@ pub struct OsrRuntime {
     _framework: gpu::Framework,
 }
 
+#[cfg(target_os = "macos")]
 impl OsrRuntime {
     pub fn start(
         config: OsrConfig,
@@ -275,6 +296,7 @@ impl OsrRuntime {
     }
 }
 
+#[cfg(target_os = "macos")]
 impl Drop for OsrRuntime {
     fn drop(&mut self) {
         let pages: Vec<_> = self.state.pages.borrow().keys().copied().collect();
@@ -287,4 +309,15 @@ impl Drop for OsrRuntime {
         }
         cef::shutdown();
     }
+}
+
+/// Chromium version from the pinned CEF bindings.
+pub fn chrome_version() -> String {
+    format!(
+        "{}.{}.{}.{}",
+        cef_dll_sys::CHROME_VERSION_MAJOR,
+        cef_dll_sys::CHROME_VERSION_MINOR,
+        cef_dll_sys::CHROME_VERSION_BUILD,
+        cef_dll_sys::CHROME_VERSION_PATCH
+    )
 }

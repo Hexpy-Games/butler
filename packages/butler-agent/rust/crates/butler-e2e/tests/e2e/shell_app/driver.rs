@@ -20,6 +20,7 @@ pub(crate) struct Shell {
     out: PathBuf,
     pub(crate) launch: Launch,
     browser: Option<Value>,
+    frame: Option<Value>,
 }
 
 impl Shell {
@@ -50,6 +51,11 @@ impl Shell {
             .stdin(Stdio::piped())
             .stdout(std::fs::File::create(&stdout)?)
             .stderr(std::fs::File::create(sandbox.logs.join("shell.stderr"))?);
+        if let Some(directory) = nonempty("BUTLER_CEF_DIR") {
+            command
+                .env("BUTLER_CEF_DIR", directory)
+                .arg("--use-mock-keychain");
+        }
         let mut child = tokio::process::Command::from(command)
             .kill_on_drop(true)
             .spawn()?;
@@ -65,6 +71,7 @@ impl Shell {
             out,
             launch,
             browser: None,
+            frame: None,
         };
         shell.ack("LIVE READY").await?;
         Ok(shell)
@@ -89,7 +96,9 @@ impl Shell {
                 if line.trim() == expected {
                     return Ok(());
                 }
-                if let Some(raw) = line.trim().strip_prefix("LIVE BROWSER ") {
+                if let Some(raw) = line.trim().strip_prefix("LIVE BROWSER FRAME ") {
+                    self.frame = Some(serde_json::from_str(raw)?);
+                } else if let Some(raw) = line.trim().strip_prefix("LIVE BROWSER ") {
                     self.browser = Some(serde_json::from_str(raw)?);
                 }
                 print!("{line}");
@@ -118,6 +127,13 @@ impl Shell {
         self.browser
             .clone()
             .ok_or_else(|| harness_error("no browser state"))
+    }
+
+    pub(crate) async fn browser_frame(&mut self) -> Result<Value, HarnessError> {
+        self.run(&["browser-frame"]).await?;
+        self.frame
+            .clone()
+            .ok_or_else(|| harness_error("no browser frame"))
     }
 
     /// A report the harness wrote (`diagnostics <name>`, `app-quit`).
