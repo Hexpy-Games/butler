@@ -12,23 +12,23 @@ use std::{
 
 pub(super) struct PageState {
     pub(super) tab: Option<super::TabId>,
-    pub(super) devtools: super::devtools::Requests,
     pub(super) bounds: Bounds<Pixels>,
     pub(super) geometry: Option<(Size<Pixels>, f32)>,
     pub(super) cursor: OsrCursor,
     pub(super) last_input: Rc<std::cell::Cell<Option<std::time::Instant>>>,
     pub(super) ime_bounds: Vec<Rect>,
+    pub(super) devtools: super::devtools::Requests,
 }
 impl Default for PageState {
     fn default() -> Self {
         Self {
             tab: None,
-            devtools: Default::default(),
             bounds: Bounds::default(),
             geometry: None,
             cursor: OsrCursor::Arrow,
             last_input: Rc::default(),
             ime_bounds: Vec::new(),
+            devtools: Default::default(),
         }
     }
 }
@@ -53,8 +53,28 @@ pub(super) fn element(
     });
     page.into_any_element()
 }
+impl Page {
+    fn pick_mode(&self, window: &mut Window, cx: &mut App) -> bool {
+        let (picking, focus) = self
+            .state
+            .borrow()
+            .tab
+            .as_ref()
+            .and_then(|id| {
+                cx.global::<crate::ui::browser::model::BrowserState>()
+                    .tab(id)
+            })
+            .map(|tab| (tab.picking, tab.pick.focus_requested.replace(false)))
+            .unwrap_or_default();
+        if focus {
+            window.focus(&self.focus, cx);
+        }
+        picking
+    }
+}
 impl Render for Page {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let picking = self.pick_mode(window, cx);
         let entity = cx.entity();
         let focus = self.focus.clone();
         let state = self.state.clone();
@@ -75,11 +95,11 @@ impl Render for Page {
             .on_mouse_move(cx.listener(Self::mouse_move))
             .on_mouse_exit(cx.listener(Self::mouse_exit))
             .on_scroll_wheel(cx.listener(Self::wheel))
-            .on_key_down(cx.listener(|s, e: &KeyDownEvent, _, _| {
-                s.key(&e.keystroke, e.native, false);
+            .on_key_down(cx.listener(|s, e: &KeyDownEvent, _, cx| {
+                s.key(&e.keystroke, e.native, false, cx);
             }))
-            .on_key_up(cx.listener(|s, e: &KeyUpEvent, _, _| {
-                s.key(&e.keystroke, e.native, true);
+            .on_key_up(cx.listener(|s, e: &KeyUpEvent, _, cx| {
+                s.key(&e.keystroke, e.native, true, cx);
             }));
         let page = [MouseButton::Left, MouseButton::Middle, MouseButton::Right]
             .into_iter()
@@ -101,11 +121,13 @@ impl Render for Page {
                     bounds
                 },
                 move |_, bounds, window, cx| {
-                    window.handle_input(
-                        &focus,
-                        ElementInputHandler::new(bounds, entity.clone()),
-                        cx,
-                    );
+                    if !picking {
+                        window.handle_input(
+                            &focus,
+                            ElementInputHandler::new(bounds, entity.clone()),
+                            cx,
+                        );
+                    }
                 },
             )
             .size_full(),

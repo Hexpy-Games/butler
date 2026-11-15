@@ -18,7 +18,10 @@ use butler_ds::ui::{
 use gpui::{AnyElement, App, Entity, Window, div, prelude::*};
 use std::collections::HashSet;
 
-gpui::actions!(browser, [FocusAddress, NewTab, CloseTab, Back, Forward]);
+gpui::actions!(
+    browser,
+    [FocusAddress, NewTab, CloseTab, Back, Forward, Pick]
+);
 pub(crate) fn bindings() -> Vec<gpui::KeyBinding> {
     vec![
         // The shell field unbinds Enter for its composer; the DS address owns submission.
@@ -27,6 +30,7 @@ pub(crate) fn bindings() -> Vec<gpui::KeyBinding> {
             gpui_elements::editable_text::actions::Enter,
             Some("BrowserArea > EditableText"),
         ),
+        gpui::KeyBinding::new("secondary-shift-s", Pick, Some("BrowserArea")),
         gpui::KeyBinding::new("secondary-l", FocusAddress, Some("BrowserArea")),
         gpui::KeyBinding::new("secondary-t", NewTab, Some("BrowserArea")),
         gpui::KeyBinding::new("secondary-w", CloseTab, Some("BrowserArea")),
@@ -127,8 +131,11 @@ fn page(tab: Option<&Tab>, window: &mut Window, cx: &mut App) -> PageCard {
         .reserve_band()
         .hidden(empty || crashed || !enabled);
     if let Some(tab) = tab {
-        if let Some(band) = popup_band(tab, cx) {
+        if let Some(band) = super::pick::band(tab, cx).or_else(|| popup_band(tab, cx)) {
             page = page.band(band);
+        }
+        if tab.picking || !tab.selections.is_empty() {
+            page = page.overlay(super::pick::overlay(tab, window, cx));
         }
         if let Some(dialog) = &tab.dialog {
             page = page.overlay(super::dialog::show(&tab.id, dialog, window, cx));
@@ -218,13 +225,13 @@ pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut 
         PanePlacement::Standalone
     });
     let focus = state.read(cx).focus.clone();
-    anchor(div().id("browser-area"), "browser-area")
+    let element = anchor(div().id("browser-area"), "browser-area")
         .track_focus(&focus)
         .key_context("BrowserArea")
         .size_full()
         .flex()
-        .child(pane)
-        .into_any_element()
+        .child(pane);
+    super::pick::scope(element, tab.map(|t| t.id.clone())).into_any_element()
 }
 fn area_state(session: Option<&str>, window: &mut Window, cx: &mut App) -> Entity<AreaState> {
     let key = session.unwrap_or("standalone").to_owned();

@@ -135,11 +135,17 @@ impl Render for PopupWindow {
         {
             page = page.page(surface);
         }
+        if let Some(band) = super::pick::band(&tab, cx) {
+            page = page.band(band);
+        }
+        if tab.picking || !tab.selections.is_empty() {
+            page = page.overlay(super::pick::overlay(&tab, window, cx));
+        }
         if let Some(dialog) = &tab.dialog {
             page = page.overlay(super::dialog::show(&tab.id, dialog, window, cx));
         }
         let close = tab.id.clone();
-        anchor(div().id("popup-window-root"), "browser-popup-window")
+        let element = anchor(div().id("popup-window-root"), "browser-popup-window")
             .track_focus(&self.focus)
             .key_context("BrowserArea")
             .on_action(move |_: &super::area::CloseTab, window, cx| {
@@ -158,7 +164,7 @@ impl Render for PopupWindow {
                 .secure(secure)
                 .fullscreen(window.is_fullscreen())
                 .child(page),
-            )
-            .into_any_element()
+            );
+        super::pick::scope(element, Some(self.id.clone())).into_any_element()
     }
 }

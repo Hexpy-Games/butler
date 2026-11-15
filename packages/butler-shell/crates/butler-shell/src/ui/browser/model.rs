@@ -125,6 +125,7 @@ impl BrowserState {
         cx.spawn(async move |cx| {
             while let Some(event) = receiver.next().await {
                 cx.update(|cx| {
+                    super::pick::navigation(&event, cx);
                     cx.global_mut::<Self>().apply(event);
                     super::popup_window::sync(cx);
                     cx.refresh_windows();

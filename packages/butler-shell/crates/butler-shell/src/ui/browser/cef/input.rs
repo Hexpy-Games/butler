@@ -6,6 +6,10 @@ use gpui::{
 };
 
 impl Page {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "native mouse fields plus the gpui window and context"
+    )]
     fn mouse(
         &self,
         position: Point<Pixels>,
@@ -13,11 +17,42 @@ impl Page {
         button: Option<MouseButton>,
         kind: OsrMouseKind,
         clicks: usize,
+        window: &mut Window,
+        cx: &mut gpui::App,
     ) {
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };
         let point = position - self.state.borrow().bounds.origin;
+        if let Some(id) = self.state.borrow().tab.clone() {
+            if matches!(kind, OsrMouseKind::Down | OsrMouseKind::Up)
+                && button != Some(MouseButton::Left)
+                && cx
+                    .global::<crate::ui::browser::model::BrowserState>()
+                    .tab(&id)
+                    .is_some_and(|t| t.picking)
+            {
+                return;
+            }
+            use crate::ui::browser::pick::{self, Mouse};
+            let kind = match kind {
+                OsrMouseKind::Move => Mouse::Move,
+                OsrMouseKind::Leave => Mouse::Leave,
+                OsrMouseKind::Down => Mouse::Down,
+                OsrMouseKind::Up => Mouse::Up,
+            };
+            if pick::mouse(
+                &id,
+                f64::from(f32::from(point.x)),
+                f64::from(f32::from(point.y)),
+                modifiers,
+                kind,
+                window,
+                cx,
+            ) {
+                return;
+            }
+        }
         runtime.mouse(
             self.id,
             OsrMouse {
@@ -47,41 +82,74 @@ impl Page {
             Some(e.button),
             OsrMouseKind::Down,
             e.click_count,
+            window,
+            cx,
         );
     }
-    pub(super) fn mouse_up(&mut self, e: &MouseUpEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn mouse_up(
+        &mut self,
+        e: &MouseUpEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.mouse(
             e.position,
             e.modifiers,
             Some(e.button),
             OsrMouseKind::Up,
             e.click_count,
+            window,
+            cx,
         );
     }
-    pub(super) fn mouse_move(&mut self, e: &MouseMoveEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn mouse_move(
+        &mut self,
+        e: &MouseMoveEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.mouse(
             e.position,
             e.modifiers,
             e.pressed_button,
             OsrMouseKind::Move,
             0,
+            window,
+            cx,
         );
     }
-    pub(super) fn mouse_exit(&mut self, e: &MouseExitEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn mouse_exit(
+        &mut self,
+        e: &MouseExitEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.mouse(
             e.position,
             e.modifiers,
             e.pressed_button,
             OsrMouseKind::Leave,
             0,
+            window,
+            cx,
         );
     }
-    pub(super) fn wheel(&mut self, e: &ScrollWheelEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn wheel(&mut self, e: &ScrollWheelEvent, _: &mut Window, cx: &mut Context<Self>) {
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };
         let point = e.position - self.state.borrow().bounds.origin;
         let delta = e.delta.pixel_delta(px(line()));
+        if e.modifiers.alt
+            && let Some(id) = self.state.borrow().tab.clone()
+            && cx
+                .global::<crate::ui::browser::model::BrowserState>()
+                .tab(&id)
+                .is_some_and(|t| t.picking)
+        {
+            crate::ui::browser::pick::wheel(&id, f32::from(delta.y), cx);
+            return;
+        }
         runtime.wheel(
             self.id,
             OsrWheel {
@@ -93,7 +161,19 @@ impl Page {
             },
         );
     }
-    pub(super) fn key(&self, key: &Keystroke, native: Option<NativeKeyData>, up: bool) {
+    pub(super) fn key(
+        &self,
+        key: &Keystroke,
+        native: Option<NativeKeyData>,
+        up: bool,
+        cx: &mut gpui::App,
+    ) {
+        if let Some(id) = self.state.borrow().tab.clone()
+            && crate::ui::browser::pick::key(&id, key, up, cx)
+        {
+            cx.stop_propagation();
+            return;
+        }
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };
