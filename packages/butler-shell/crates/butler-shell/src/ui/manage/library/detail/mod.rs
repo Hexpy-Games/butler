@@ -11,7 +11,7 @@
     reason = "seam API: the page, the sidebar and the shell call it; F6 removes this"
 )]
 mod actions;
-mod api;
+pub(crate) mod api;
 mod attach;
 mod copy;
 mod delete;
@@ -32,6 +32,6 @@ pub(crate) use drag::{
     CardDrag, GroupDrag, card_ghost, drop_cards_on_group, drop_cards_on_session, drop_group_on,
     group_ghost,
 };
-pub(crate) use files::{file_viewer, open_detail, open_file};
+pub(crate) use files::{file_viewer, open_detail, open_file, open_page};
 pub(crate) use panel::LibraryDetail;
 pub(crate) use runtime::{dialog_host, install, open_dialog};

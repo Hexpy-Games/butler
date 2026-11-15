@@ -41,6 +41,7 @@ pub(crate) enum TabStatus {
     Crashed,
 }
 
+#[derive(Clone)]
 pub(crate) struct Tab {
     pub(crate) id: TabId,
     pub(crate) owner: Owner,

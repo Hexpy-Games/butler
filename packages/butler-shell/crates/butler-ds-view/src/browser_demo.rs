@@ -202,3 +202,8 @@ pub(crate) fn demo_band(
         BandKind::Popup => popup_band(&id, &c, cx),
     }
 }
+
+/// A child id: `part` under the element `id`.
+pub(crate) fn sub(id: &'static str, part: &'static str) -> ElementId {
+    (ElementId::from(id), part).into()
+}

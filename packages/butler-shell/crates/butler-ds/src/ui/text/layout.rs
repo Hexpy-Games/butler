@@ -12,7 +12,7 @@ use super::reveal;
 use crate::tokens::{Length, Number};
 use crate::ui::context::{Ds, Lang, keep_words};
 use crate::ui::scroll::{self, Axis, Config};
-use crate::ui::{control, convert, focus};
+use crate::ui::{control, focus};
 
 /// `padding: 9px 10px` of the bordered textarea (DS: Textarea.module.css:4).
 const AREA_PAD: [f32; 2] = [9., 10.];
@@ -108,10 +108,7 @@ fn editable(p: &Parts, ds: &Ds) -> EditableTextElement {
     }
     .state(p.state.downgrade())
     .placeholder_color(p.c.placeholder)
-    .selection_color(convert::with_alpha(
-        ds.color(crate::tokens::Color::Accent),
-        0.28,
-    ))
+    .selection_color(crate::ui::selectable::fill(ds))
     .caret_color(p.c.text)
     .marked_color(p.c.text)
     .caret_w(px(1.))

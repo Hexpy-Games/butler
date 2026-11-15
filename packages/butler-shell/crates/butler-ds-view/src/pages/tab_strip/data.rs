@@ -5,7 +5,7 @@ use butler_ds::ui::blocks::tab_strip::{
 
 use crate::copy::Lang;
 
-pub(super) fn labels(lang: Lang) -> TabStripLabels {
+pub(crate) fn labels(lang: Lang) -> TabStripLabels {
     lang.pick(
         TabStripLabels::default(),
         TabStripLabels {

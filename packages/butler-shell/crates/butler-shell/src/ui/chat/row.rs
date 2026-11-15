@@ -7,6 +7,7 @@ use butler_ds::ui::blocks::question_answer_card::{
 };
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::context_menu::{ContextMenu, ContextMenuContent, Item};
+use butler_ds::ui::selectable::Selection;
 use gpui::{
     AnyElement, App, ClipboardItem, IntoElement as _, ParentElement as _, SharedString, Window, div,
 };
@@ -199,8 +200,14 @@ fn virtual_message_row(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
+    let selection = Selection::new(
+        SharedString::from(format!("message-select-{}", msg.id)),
+        window,
+        cx,
+    );
     let compaction = is_compaction(msg);
     let mut row = MessageRow::new(row_id(msg), row_role(&msg.role))
+        .selection(selection.clone())
         .tone(message_tone(msg))
         .entering(entering(msg, t));
     if msg.role == MessageRecordRole::Assistant && msg.chat_id.as_deref() == Some("general") {
@@ -225,7 +232,11 @@ fn virtual_message_row(
     let label = transcript(Ds::get(cx).lang()).copy;
     let content = menu.content(
         ContextMenuContent::new().child(Item::new(label).icon(Icon::Copy).on_select(
-            move |_, cx| cx.write_to_clipboard(ClipboardItem::new_string(text.clone())),
+            move |_, cx| {
+                cx.write_to_clipboard(ClipboardItem::new_string(
+                    selection.text(cx).unwrap_or_else(|| text.clone()),
+                ));
+            },
         )),
         window,
         cx,

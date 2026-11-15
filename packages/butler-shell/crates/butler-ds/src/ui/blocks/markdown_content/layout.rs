@@ -13,6 +13,7 @@ use crate::ui::context::Ds;
 use crate::ui::convert;
 use crate::ui::copy_button::CopyButton;
 use crate::ui::markdown::{Block, Item};
+use crate::ui::selectable::Break;
 
 /// How a block takes part in the rhythm rules.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -145,7 +146,12 @@ pub(super) fn blocks(
             Kind::Rule => rhythm.rule,
             _ => 0.,
         };
-        let element = one(block, env, &id, window, cx);
+        let lead = if nest.item {
+            Break::Line
+        } else {
+            Break::Paragraph
+        };
+        let element = one(block, lead, env, &id, window, cx);
         column = column.child(div().mt(px(gap)).min_w_0().child(element));
         previous = Some((this, bottom));
     }
@@ -166,11 +172,18 @@ fn body_face(env: &Env, ds: &Ds) -> Face {
     }
 }
 
-fn one(block: &Block, env: &Env, key: &str, window: &mut Window, cx: &mut App) -> AnyElement {
+fn one(
+    block: &Block,
+    lead: Break,
+    env: &Env,
+    key: &str,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     match block {
         Block::Paragraph(nodes) => {
             let face = body_face(env, Ds::get(cx));
-            inline::render(nodes, face, None, env, key, window, cx)
+            inline::render(nodes, face, None, lead, env, key, window, cx)
         }
         Block::Heading { level, content } => heading(*level, content, env, key, window, cx),
         Block::List { start, items } => list(*start, items, env, key, window, cx),
@@ -210,6 +223,7 @@ fn heading(
         content,
         face,
         None,
+        Break::Line,
         &env.ink(Color::TextPrimary),
         key,
         window,
@@ -299,13 +313,23 @@ fn item_content(
                 nodes,
                 face,
                 Some(done),
+                Break::Line,
                 env,
                 key,
                 window,
                 cx,
             ))
         }
-        _ => Some(inline::render(&[], face, Some(done), env, key, window, cx)),
+        _ => Some(inline::render(
+            &[],
+            face,
+            Some(done),
+            Break::Line,
+            env,
+            key,
+            window,
+            cx,
+        )),
     };
     let tail = blocks(
         rest,
