@@ -121,6 +121,7 @@ jobs:
             packages/butler-shell -> ../../target/gpui-package
             packages/butler-agent/rust -> ../../../target/gpui-package
           key: gpui-package-windows-x64
+          save-if: ${{ github.event_name == 'push' }}
       - name: Build release shell
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release --bin butler-shell
       - name: Locate CEF cache
