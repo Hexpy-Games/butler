@@ -138,6 +138,7 @@ fn header(
     (alpha, timing): (Transition, Timing),
     ds: &Ds,
 ) -> gpui::Div {
+    let has_actions = !frame.actions.is_empty();
     let titled = frame.title.is_some();
     let heading = frame.title.take().map(|title| match frame.level {
         Level::Block => Typo::section_title(title)
@@ -185,7 +186,7 @@ fn header(
         .justify_between()
         .gap(ds.len(Length::SpaceSm))
         .children(heading.map(|heading| div().min_w_0().child(heading)))
-        .child(trigger);
+        .children(has_actions.then_some(trigger));
     if titled {
         return header;
     }
