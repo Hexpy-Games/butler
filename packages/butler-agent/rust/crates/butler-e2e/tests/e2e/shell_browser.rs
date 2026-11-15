@@ -298,7 +298,7 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
             shell.run(&["click browser-back"]).await?;
         } else {
             shell
-                .run(&["key cmd-l", &format!("type {url}"), "key enter"])
+                .run(&["key secondary-l", &format!("type {url}"), "key enter"])
                 .await?;
         }
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
