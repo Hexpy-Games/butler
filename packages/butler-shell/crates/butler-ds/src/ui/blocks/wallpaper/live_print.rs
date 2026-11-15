@@ -31,17 +31,17 @@ const NO_RECT: [f32; 4] = [0.; 4];
 
 /// The print at rest (`restWallpaperPrintFrame`, glPrint.ts:26) at its still clock (riso-print
 /// has no `stillTime`, so `u_time` is 0): what stills draw.
-struct Rest {
+pub(super) struct Rest {
     time: f32,
-    flow: f32,
+    pub(super) flow: f32,
     lift: f32,
     pulse: f32,
     drop: [f32; 4],
     col: [f32; 4],
 }
 
-// ANIM-MIGRATE(riso drift: very slow continuous drift + stronger motion on events — driftCore.ts/driftController.ts)
-const REST: Rest = Rest {
+// The drift's events and looks are P6; the rest drift sets `flow` (drift.rs).
+pub(super) const REST: Rest = Rest {
     time: 0.,
     flow: 0.,
     lift: 0.,
@@ -117,6 +117,7 @@ pub(super) fn intro_layer(tone: WallpaperTone, card: Option<ContentRect>) -> Any
                 // drawIntro's frame has seed 0. // DS: introFrame.ts
                 seed: 0.,
                 params: params.uniform(),
+                flow: REST.flow,
             };
             let mut density_uniforms =
                 uniforms(density, density[0] / css[0], [NO_RECT; 2], &shared);
@@ -168,6 +169,7 @@ struct Shared {
     density: [f32; 2],
     seed: f32,
     params: [f32; 4],
+    flow: f32,
 }
 
 /// The density pass at 1 texel per 4 CSS px (keep-outs scaled into it), then the print pass
@@ -177,6 +179,7 @@ pub(super) fn paint(
     key: u64,
     params: [f32; 4],
     frame: LiveFrame,
+    flow: f32,
     module: &super::live_modules::Module,
     window: &mut Window,
 ) {
@@ -196,6 +199,7 @@ pub(super) fn paint(
         css,
         density,
         seed: STILL_SEED,
+        flow,
         params,
     };
     let rect = buffer_rect(frame.content_rect, bounds, buffer);
@@ -290,7 +294,7 @@ fn uniforms(
     // u_contentRect
     u[3] = rects[0];
     // u_css, u_flow, u_lift
-    u[4] = [shared.css[0], shared.css[1], REST.flow, REST.lift];
+    u[4] = [shared.css[0], shared.css[1], shared.flow, REST.lift];
     // u_pulse; the density target's size (the print samples it)
     u[5] = [REST.pulse, shared.density[0], shared.density[1], 0.];
     u[6] = REST.drop;

@@ -110,7 +110,8 @@ pub(super) fn home_screen(ctx: &SectionCtx, slice: &Slice, words: &Words) -> Set
     let Some(wallpaper) = slice.wallpaper.as_ref().filter(|w| w.source.kind != "none") else {
         return section;
     };
-    let reduced = slice.reduce_motion;
+    let reduced =
+        slice.reduce_motion || butler_platform::display_accessibility::read().reduce_motion;
     let auto = wallpaper.motion == "auto";
     let motion_ctx = ctx.clone();
     let mut motion = SettingsSwitch::new("main-screen-motion", words.wallpaper_motion)
@@ -268,18 +269,18 @@ fn decoration_fields(
 }
 
 pub(super) fn accessibility(ctx: &SectionCtx, slice: &Slice, words: &Words) -> SettingsSection {
-    // CARVE-OUT(reduced-motion): React also reads the OS `prefers-reduced-motion` query
-    // (`useSystemReducedMotion`) and locks the switch on with `reduceMotionSystem`; gpui has
-    // no such query here, so only the saved value shows.
+    let system = butler_platform::display_accessibility::read().reduce_motion;
+    let mut motion = SettingsSwitch::new("reduce-motion", words.reduce_motion)
+        .description(words.reduce_motion_description)
+        .checked(system || slice.reduce_motion)
+        .on_change(toggle_now(ctx, "reduce_motion"));
+    if system {
+        motion = motion.disabled_reason(words.reduce_motion_system);
+    }
     SettingsSection::new(
         "accessibility",
         SettingsSectionKind::Form,
         words.section_accessibility,
     )
-    .child(
-        SettingsSwitch::new("reduce-motion", words.reduce_motion)
-            .description(words.reduce_motion_description)
-            .checked(slice.reduce_motion)
-            .on_change(toggle_now(ctx, "reduce_motion")),
-    )
+    .child(motion)
 }

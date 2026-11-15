@@ -116,6 +116,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         | "powershell_text"
         | "host_file_behavior"
         | "display_accessibility"
+        | "power"
         | "app_shell"
         | "tray" => &[],
         // The login item and notifications register only from a packaged App.
