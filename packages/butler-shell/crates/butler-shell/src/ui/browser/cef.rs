@@ -169,6 +169,10 @@ impl CefEngine {
         .detach();
     }
 }
+/// Windows CEF differs in its staged layout, key codes and wheel units (macOS otherwise).
+fn windows() -> bool {
+    butler_platform::launcher::node_platform() == "win32"
+}
 fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
     Some(match event {
         OsrEvent::Url(url) => PageChange::Url(if url == "about:blank" {
