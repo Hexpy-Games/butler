@@ -44,6 +44,25 @@ pub fn agent_home() -> Option<PathBuf> {
     configured.or_else(default_agent_home)
 }
 
+/// The CLI installation an App may prefer over its bundled Agent (Electron
+/// `cliAgentHome`): absolute [`AGENT_HOME_VARIABLE`], else the per-OS default
+/// on macOS and other Unix hosts. `None` on Windows without an absolute override.
+pub fn app_cli_agent_home() -> Option<PathBuf> {
+    env::var_os(AGENT_HOME_VARIABLE)
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| {
+            #[cfg(windows)]
+            {
+                None
+            }
+            #[cfg(unix)]
+            {
+                default_agent_home()
+            }
+        })
+}
+
 /// Names the directory of the user's `butler` command. Set, non-empty and
 /// absolute, it replaces the per-OS default of [`command_dir`].
 pub const COMMAND_DIR_VARIABLE: &str = "BUTLER_BIN_DIR";
