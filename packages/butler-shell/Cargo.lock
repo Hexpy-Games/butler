@@ -707,6 +707,15 @@ dependencies = [
 
 [[package]]
 name = "bit-set"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ec2f926cc3060f09db9ebc5b52823d85268d24bb917e472c0c4bea35780a7d"
+dependencies = [
+ "bit-vec 0.9.1",
+]
+
+[[package]]
+name = "bit-set"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56d87354e4229f54a44f7bf2435906a4656dba36026ab6eaca629a2c436a691c"
@@ -1829,7 +1838,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.3",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1861,7 +1870,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
- "libloading 0.8.9",
+ "libloading 0.7.4",
 ]
 
 [[package]]
@@ -2029,7 +2038,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2737,7 +2746,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.21",
- "windows 0.62.2",
+ "windows 0.53.0",
 ]
 
 [[package]]
@@ -2763,7 +2772,7 @@ dependencies = [
 [[package]]
 name = "gpui-ce"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -2840,7 +2849,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_apple"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "anyhow",
  "block",
@@ -2866,7 +2875,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_collections"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "gpui_ce_util",
  "indexmap",
@@ -2876,7 +2885,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_derive_refineable"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2886,7 +2895,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_elements"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "derive_setters",
  "gpui-ce",
@@ -2898,7 +2907,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_linux"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -2946,7 +2955,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_macos"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -2999,7 +3008,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_macros"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3010,7 +3019,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_media"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -3024,7 +3033,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_parley"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "anyhow",
  "fontique",
@@ -3039,7 +3048,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_platform"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "console_error_panic_hook",
  "gpui-ce",
@@ -3053,7 +3062,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_refineable"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "gpui_ce_derive_refineable",
 ]
@@ -3061,7 +3070,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_render"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "gpui-ce",
  "naga 24.0.0",
@@ -3074,7 +3083,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_scheduler"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "async-task",
  "backtrace",
@@ -3089,7 +3098,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_shared_string"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "schemars",
  "serde",
@@ -3099,7 +3108,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_sum_tree"
 version = "0.2.2"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "heapless",
  "log",
@@ -3110,7 +3119,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_util"
 version = "0.2.6"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "anyhow",
  "log",
@@ -3120,7 +3129,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_web"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -3144,7 +3153,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_wgpu"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "anyhow",
  "core-foundation 0.10.0",
@@ -3177,7 +3186,7 @@ dependencies = [
 [[package]]
 name = "gpui_ce_windows"
 version = "0.1.0"
-source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=f03474f17d3c890d2e41ef181d15ceb7bb4f3a88#f03474f17d3c890d2e41ef181d15ceb7bb4f3a88"
+source = "git+https://github.com/Hexpy-Games/gpui-ce?rev=00d8df012dbd613e4a27b073d62b6499b87822fb#00d8df012dbd613e4a27b073d62b6499b87822fb"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -3560,7 +3569,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.56.0",
 ]
 
 [[package]]
@@ -4771,6 +4780,43 @@ dependencies = [
  "spirv",
  "thiserror 2.0.21",
  "unicode-ident",
+]
+
+[[package]]
+name = "naga"
+version = "30.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd0dd362bf26c0ffdd143df6da66a25d287e196eff482f117771010b207ad163"
+dependencies = [
+ "arrayvec",
+ "bit-set 0.10.0",
+ "bitflags 2.13.2",
+ "cfg-if",
+ "cfg_aliases",
+ "codespan-reporting 0.13.1",
+ "half",
+ "hashbrown 0.17.1",
+ "indexmap",
+ "libm",
+ "log",
+ "naga-types",
+ "num-traits",
+ "once_cell",
+ "rustc-hash 1.1.0",
+ "thiserror 2.0.21",
+ "unicode-ident",
+]
+
+[[package]]
+name = "naga-types"
+version = "30.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14474170feb673cfb18b3565111a9869797cc1d290fb9ec969c53f5e1e231c6d"
+dependencies = [
+ "hashbrown 0.17.1",
+ "indexmap",
+ "rustc-hash 1.1.0",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -6242,7 +6288,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6771,7 +6817,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6784,7 +6830,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7305,7 +7351,7 @@ version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1c97747dbf44bb1ca44a561ece23508e99cb592e862f22222dcf42f51d1e451"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -7318,7 +7364,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7710,7 +7756,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.5",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8181,7 +8227,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -8839,12 +8885,12 @@ dependencies = [
 
 [[package]]
 name = "wgsl-rs"
-version = "0.1.0"
-source = "git+https://github.com/schell/wgsl-rs?rev=b2de16a1b81e67d76bc265c296184f882864badb#b2de16a1b81e67d76bc265c296184f882864badb"
+version = "0.1.0-beta.5"
+source = "git+https://github.com/schell/wgsl-rs?rev=8181a6c4340be228a6a5878fd3bc60d60ed67f7d#8181a6c4340be228a6a5878fd3bc60d60ed67f7d"
 dependencies = [
  "glam",
  "half",
- "naga 29.0.4",
+ "naga 30.0.2",
  "paste",
  "snafu",
  "wgsl-rs-ir",
@@ -8853,13 +8899,13 @@ dependencies = [
 
 [[package]]
 name = "wgsl-rs-ir"
-version = "0.1.0"
-source = "git+https://github.com/schell/wgsl-rs?rev=b2de16a1b81e67d76bc265c296184f882864badb#b2de16a1b81e67d76bc265c296184f882864badb"
+version = "0.1.0-beta.5"
+source = "git+https://github.com/schell/wgsl-rs?rev=8181a6c4340be228a6a5878fd3bc60d60ed67f7d#8181a6c4340be228a6a5878fd3bc60d60ed67f7d"
 
 [[package]]
 name = "wgsl-rs-macros"
-version = "0.1.0"
-source = "git+https://github.com/schell/wgsl-rs?rev=b2de16a1b81e67d76bc265c296184f882864badb#b2de16a1b81e67d76bc265c296184f882864badb"
+version = "0.1.0-beta.5"
+source = "git+https://github.com/schell/wgsl-rs?rev=8181a6c4340be228a6a5878fd3bc60d60ed67f7d#8181a6c4340be228a6a5878fd3bc60d60ed67f7d"
 dependencies = [
  "itertools 0.14.0",
  "proc-macro2",
@@ -8919,7 +8965,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -9585,7 +9631,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
 dependencies = [
  "cfg-if",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
