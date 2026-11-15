@@ -5,7 +5,7 @@ Electron app and is not shipped.
 
 - Its own Cargo workspace (not part of `packages/butler-agent/rust`), with the same
   toolchain and lints.
-- gpui comes from the Butler fork of gpui-ce, pinned to branch `feat/butler-port-gaps` (rev `d4e3761`)
+- gpui comes from the Butler fork of gpui-ce, pinned to branch `butler/lens` (rev `dac39a2`)
   (`https://github.com/Hexpy-Games/gpui-ce`). The fork adds the Liquid Glass lens and
   the Acrylic window material (Windows Acrylic, the macOS sidebar vibrancy).
 - The UI reads data through `source::Source`, backed by `butler-shell-client`.
@@ -51,7 +51,12 @@ native view and no still is needed. `page` is that surface, laid out exactly in 
 (or the fitted viewport rect); `on_bounds_change` reports the rect, scale and radius the engine
 sizes its view to.
 
-The shell's `cef` cargo feature is macOS-only until the Windows D3D11 and Linux software-paint jobs add their frame types to `butler_cef_host::osr` and the matching `SurfaceSource` conversion. Run these commands from the repository root to launch a signed development bundle: unbundled `cargo run` cannot work because CEF helpers rendezvous through the bundle's Mach ports. The `--use-mock-keychain` switch belongs only in development/test launch arguments.
+The shell's `cef` cargo feature builds on macOS and Windows. Linux waits for the software-paint job
+to add its frame type to `butler_cef_host::osr` and the matching `SurfaceSource` conversion.
+
+### macOS
+
+Run these commands from the repository root to launch a signed development bundle: unbundled `cargo run` cannot work because CEF helpers rendezvous through the bundle's Mach ports. The `--use-mock-keychain` switch belongs only in development/test launch arguments.
 
 ```sh
 export CEF_PATH="${CEF_PATH:-$PWD/target/cef}"
@@ -64,6 +69,31 @@ cp packages/butler-shell/target/debug/butler-shell target/cef-shell/ButlerCefHos
 codesign --force --deep --sign - target/cef-shell/ButlerCefHost.app
 BUTLER_CEF_DIR="$PWD/target/cef-shell/ButlerCefHost.app/Contents/Frameworks" target/cef-shell/ButlerCefHost.app/Contents/MacOS/butler-shell --use-mock-keychain
 ```
+
+### Windows
+
+Pages are D3D11 shared textures that gpui's Direct3D 11 renderer draws in the scene
+(`SurfaceSource::WindowsSharedTexture`); key events forward the key message's virtual key and
+lParam (`KeyDownEvent::native`). The shell finds CEF in one directory, the output of `stage.py`:
+CEF's resources, `locales` and the `butler_cef_host.exe` helper. That directory is
+`BUTLER_CEF_DIR` when set (development and tests), otherwise the shell executable's own directory.
+libcef.dll is linked at load time, so Windows must also find it beside the executable or on
+`PATH`. From the repository root in PowerShell:
+
+```powershell
+$env:CEF_PATH = "$PWD\target\cef"
+py -3 packages/butler-agent/rust/crates/butler-platform/cef/fetch.py --dest $env:CEF_PATH
+cargo build --manifest-path packages/butler-agent/rust/Cargo.toml -p butler-cef --features cef -j 6
+cargo build --manifest-path packages/butler-shell/Cargo.toml -p butler-shell --features cef --bin butler-shell -j 6
+py -3 packages/butler-agent/rust/crates/butler-platform/cef/stage.py --cef $env:CEF_PATH --target packages/butler-agent/rust/target/debug --out target/cef-shell
+Copy-Item packages/butler-shell/target/debug/butler-shell.exe target/cef-shell/
+target/cef-shell/butler-shell.exe
+```
+
+The shots harness drives `butler-shell-shots.exe` with `BUTLER_CEF_DIR` set to the staged
+directory; the `butler-e2e` driver also puts that directory first on the shell's `PATH`.
+The headless harness renders through wgpu, which cannot draw a shared D3D11 texture, so a shot
+of a CEF page fails there; check pages in the windowed shell.
 
 ## Tests
 
