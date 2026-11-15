@@ -18,6 +18,7 @@ mod mac;
 
 #[cfg(feature = "cef")]
 pub mod osr;
+pub mod switches;
 
 /// Run a CEF browser or helper process, passing bootstrap sandbox info through.
 #[cfg(feature = "cef")]
