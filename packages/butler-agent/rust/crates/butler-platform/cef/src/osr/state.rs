@@ -23,6 +23,7 @@ pub(super) struct Page {
     pub(super) next_dialog: u64,
     pub(super) devtools: Option<cef::Registration>,
     pub(super) next_devtools: i32,
+    pub(super) downloads: super::downloads::Transfers,
 }
 impl Page {
     pub(super) fn new(size: (u32, u32), scale: f32) -> Self {
@@ -43,6 +44,7 @@ impl Page {
             next_dialog: 0,
             devtools: None,
             next_devtools: 0,
+            downloads: super::downloads::Transfers::default(),
         }
     }
     pub(super) fn release_frames(&mut self) {
