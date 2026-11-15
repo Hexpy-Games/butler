@@ -176,7 +176,7 @@ gpui_ready() {
   health_exit=0
   health_status=$(curl -fsS --max-time "$remaining" -H "Authorization: Bearer $token" \
     -o "$root/health.json" -w '%{http_code}' "$endpoint/health") || health_exit=$?
-  if [ "$health_exit" -ne 0 ] || ! jq -e '.ok == true' "$root/health.json" >/dev/null; then
+  if [ "$health_exit" -ne 0 ] || ! jq -e '.data.ok == true' "$root/health.json" >/dev/null; then
     gpui_wait="health curl=$health_exit http=$health_status"; return 1;
   fi
 }
