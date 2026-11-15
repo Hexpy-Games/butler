@@ -171,6 +171,9 @@ jobs:
         with:
           name: gpui-shell-windows-x64
           path: dist/release/gpui-shell
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:
