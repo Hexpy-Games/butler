@@ -174,12 +174,14 @@ fn text_leaf(leaf: AnswerLeafBlock) -> Result<AnswerBlock, Box<AnswerLeafBlock>>
             img,
             caption,
             source,
+            image_url,
         } => AnswerBlock::Image {
             id,
             title,
             img,
             caption,
             source,
+            image_url,
         },
         L::Quote {
             id,

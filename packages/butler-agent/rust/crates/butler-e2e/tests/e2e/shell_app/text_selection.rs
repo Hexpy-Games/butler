@@ -4,6 +4,8 @@ use super::*;
 
 /// SHELL-APP-05 — Text selection stays inside one message: chrome never selects, paragraphs
 /// copy together, and a drag beyond the user bubble clamps to that message's text.
+/// Assistant selection includes the answer-block title and footer meta.
+/// Composer focus clears selection; context-menu Copy includes the full answer-block markdown.
 #[tokio::test]
 async fn shell_app_05_text_selection_stays_in_one_message() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -11,7 +13,21 @@ async fn shell_app_05_text_selection_stays_in_one_message() -> Result<(), Harnes
     let _serial = SERIAL.lock().await;
     let mut sandbox = Sandbox::new("SHELL-APP-05")?;
     let behavior = ChatBehavior {
-        answer: "Alpha first paragraph.\n\nBeta second paragraph.".into(),
+        script: vec![
+            json!({"role":"assistant","content":null,"tool_calls":[{
+                "id":"facts","type":"function","function":{
+                    "name":"answer_blocks","arguments":json!({"v":1,"blocks":[{
+                        "type":"facts","title":"Facts","items":[{"label":"Alpha","value":"1"}]
+                    }]}).to_string()
+                }
+            }]}),
+            json!({"role":"assistant","content":"Alpha first paragraph.\n\nBeta second paragraph."}),
+        ],
+        refuse_stream: true,
+        local_capabilities: LocalCapabilities {
+            ollama: Some(vec!["completion".into(), "tools".into()]),
+            ..Default::default()
+        },
         ..Default::default()
     };
     let _model = ready_workspace(&sandbox, behavior).await?;
@@ -62,10 +78,15 @@ async fn shell_app_05_text_selection_stays_in_one_message() -> Result<(), Harnes
             "expect-clipboard null",
             &format!("drag-from message-{assistant}-body 0 0 1 1"),
             "key secondary-c",
-            "expect-clipboard \"Alpha first paragraph.\\n\\nBeta second paragraph.\"",
+            "expect-clipboard-prefix \"Alpha first paragraph.\\n\\nBeta second paragraph.\\n\\nFacts\\n\"",
             &format!("drag-from message-{user}-body 0 0 0.5 4"),
             "key secondary-c",
             "expect-clipboard \"Hello\"",
+            "click composer",
+            &format!("click-at message-{assistant}-body 0.1 0.05 right"),
+            &format!("wait-anchor message-menu-{assistant}-item-0-0"),
+            &format!("click message-menu-{assistant}-item-0-0"),
+            "expect-clipboard \"Alpha first paragraph.\\n\\nBeta second paragraph.\\n\\n### Facts\\n\\n- Alpha: 1\"",
             "app-quit",
         ])
         .await?;
