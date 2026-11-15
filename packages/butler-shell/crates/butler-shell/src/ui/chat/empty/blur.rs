@@ -31,16 +31,15 @@ pub(super) fn level(window: &mut Window, cx: &mut App) -> u8 {
             away.wake = Some(cx.spawn(async move |this, cx| {
                 motion::sleep(cx.background_executor(), BLUR_SLOW).await;
                 this.update(cx, |_, cx| cx.notify()).ok();
-                motion::sleep(cx.background_executor(), BLUR_FREEZE - BLUR_SLOW).await;
+                motion::sleep(
+                    cx.background_executor(),
+                    BLUR_FREEZE.saturating_sub(BLUR_SLOW),
+                )
+                .await;
                 this.update(cx, |_, cx| cx.notify()).ok();
             }));
         }
-        if since.elapsed() >= BLUR_FREEZE {
-            2
-        } else if since.elapsed() >= BLUR_SLOW {
-            1
-        } else {
-            0
-        }
+        let elapsed = since.elapsed();
+        u8::from(elapsed >= BLUR_SLOW) + u8::from(elapsed >= BLUR_FREEZE)
     })
 }
