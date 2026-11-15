@@ -220,9 +220,10 @@ impl RenderOnce for BlockActionFrame {
         if has_actions {
             frame = gestures(frame, &hovered, &open);
         }
-        if self.title.is_some() || has_actions {
+        let titled = self.title.is_some();
+        if titled || has_actions {
             let header = header(&mut self, (&open, is_open), alpha, ds);
-            if self.title.is_none() {
+            if !titled {
                 // `z-index: var(--z-content)`: painted after the content, so over it.
                 return frame.children(self.children).child(header);
             }
