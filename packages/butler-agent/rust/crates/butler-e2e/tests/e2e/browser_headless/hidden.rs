@@ -325,6 +325,15 @@ mod installed {
             !state_root(&s.sandbox.data).join("host.log").exists(),
             "the installed App's Electron was never started as a hidden host"
         );
+        // ... and the headless backend did launch the named host.
+        let headless = s
+            .sandbox
+            .data
+            .join(butler_platform::data_paths::HEADLESS_BROWSER);
+        assert!(
+            headless.join("browser.log").exists(),
+            "the named CEF host was launched"
+        );
         s.finish().await
     }
 }
