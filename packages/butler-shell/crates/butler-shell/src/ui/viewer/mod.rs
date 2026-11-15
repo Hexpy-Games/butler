@@ -73,15 +73,20 @@ pub(crate) fn file_viewer_pane(
     }
     column = column.child(artifact::artifact_viewer(session, &active, window, cx));
     Some(
-        crate::ui::widgets::anchor(div().id("file-viewer-anchor").size_full(), "file-viewer")
-            .child(
-                ShellCard::new().child(
-                    Presence::new("file-viewer", true)
-                        .motion(PresenceMotion::Fade)
-                        .child(column),
-                ),
-            )
-            .into_any_element(),
+        // A flex column, so the card fills the pane as AdaptiveShellCard does (and the file's
+        // scroll gets the pane's height).
+        crate::ui::widgets::anchor(
+            div().id("file-viewer-anchor").size_full().flex().flex_col(),
+            "file-viewer",
+        )
+        .child(
+            ShellCard::new().child(
+                Presence::new("file-viewer", true)
+                    .motion(PresenceMotion::Fade)
+                    .child(column),
+            ),
+        )
+        .into_any_element(),
     )
 }
 

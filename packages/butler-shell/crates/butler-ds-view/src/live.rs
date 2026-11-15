@@ -190,7 +190,10 @@ impl Live {
         self.cx.update_window(self.handle, |_, window, cx| {
             window.dispatch_keystroke(parsed.clone(), cx);
             window.dispatch_event(
-                PlatformInput::KeyUp(gpui::KeyUpEvent { keystroke: parsed }),
+                PlatformInput::KeyUp(gpui::KeyUpEvent {
+                    keystroke: parsed,
+                    native: None,
+                }),
                 cx,
             );
         })?;
