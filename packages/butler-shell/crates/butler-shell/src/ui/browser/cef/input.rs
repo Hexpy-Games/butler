@@ -36,6 +36,10 @@ impl Page {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.state
+            .borrow()
+            .last_input
+            .set(Some(std::time::Instant::now()));
         window.focus(&self.focus, cx);
         self.mouse(
             e.position,
@@ -93,6 +97,12 @@ impl Page {
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };
+        if !up {
+            self.state
+                .borrow()
+                .last_input
+                .set(Some(std::time::Instant::now()));
+        }
         let message = native.as_ref().and_then(NativeKeyData::windows).copied();
         let (windows_key_code, native_key_code) = codes(&key.key, message);
         let character = key

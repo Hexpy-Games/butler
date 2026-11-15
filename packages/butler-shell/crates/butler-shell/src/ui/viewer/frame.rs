@@ -13,7 +13,7 @@ use butler_ds::ui::separator::Separator;
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, Styled as _, Window, div, px,
+    SharedString, Styled as _, Window, div,
 };
 
 use crate::ui::i18n::file_viewer::FileViewerStrings;
@@ -123,20 +123,17 @@ pub(crate) fn file_viewer_close_button(on_close: Run, cx: &App) -> IconButton {
         .on_click(move |_, window, cx| on_close(window, cx))
 }
 
-/// `FileViewerPage`: the file in the pane's one scroll. Documents fill the pane up to 1400px,
-/// centred beyond; other files keep the 760px reading page; both keep side gutters and page-end
-/// spacing.
+/// `FileViewerPage`: the file in the pane's one scroll. Every file fills the pane's width, with
+/// the side gutters and page-end spacing (PageContainer width="full").
 #[derive(IntoElement)]
 pub(crate) struct FileViewerPage {
     children: Vec<AnyElement>,
-    fill: bool,
 }
 
 impl FileViewerPage {
-    pub(crate) fn new(fill: bool) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             children: Vec::new(),
-            fill,
         }
     }
 }
@@ -150,8 +147,7 @@ impl gpui::ParentElement for FileViewerPage {
 impl RenderOnce for FileViewerPage {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
-        // DS: PageContainer width="document" 1400px, "narrow" 760px.
-        let max = if self.fill { 1400. } else { 760. };
+        // DS: PageContainer width="full" gutter="2xl".
         let body = Box::new()
             .padding_y(Space::Xxl)
             .child(Box::new().padding(Space::Xxl).children(self.children));
@@ -159,12 +155,7 @@ impl RenderOnce for FileViewerPage {
         // fill` directly); a wrapper that is not a flex column gives it no height.
         ScrollArea::new("file-viewer-scroll").fill().child(
             crate::ui::widgets::anchor(
-                div()
-                    .id("file-viewer-page")
-                    .w_full()
-                    .max_w(px(max))
-                    .mx_auto()
-                    .px(Space::Xxl.px(ds)),
+                div().id("file-viewer-page").w_full().px(Space::Xxl.px(ds)),
                 "file-viewer-page",
             )
             .child(body),

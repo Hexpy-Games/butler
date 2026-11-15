@@ -42,6 +42,10 @@ pub(crate) enum TabStatus {
 }
 
 #[derive(Clone)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent navigation capabilities and tab metadata flags"
+)]
 pub(crate) struct Tab {
     pub(crate) id: TabId,
     pub(crate) owner: Owner,
@@ -53,6 +57,10 @@ pub(crate) struct Tab {
     pub(crate) can_forward: bool,
     pub(crate) placeholder: bool,
     pub(crate) profile: Profile,
+    pub(crate) opener: Option<TabId>,
+    pub(crate) popup: bool,
+    pub(crate) blocked_popup: Option<super::page_dialog::BlockedPopup>,
+    pub(crate) dialog: Option<super::page_dialog::PageDialog>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -92,10 +100,10 @@ impl From<AddressError> for BrowserError {
 }
 
 pub(crate) struct BrowserState {
-    engine: Box<dyn PageEngine>,
-    tabs: Vec<Tab>,
-    active: Option<TabId>,
-    next_id: u64,
+    pub(super) engine: Box<dyn PageEngine>,
+    pub(super) tabs: Vec<Tab>,
+    pub(super) active: Option<TabId>,
+    pub(super) next_id: u64,
 }
 
 impl Global for BrowserState {}
@@ -114,6 +122,7 @@ impl BrowserState {
             while let Some(event) = receiver.next().await {
                 cx.update(|cx| {
                     cx.global_mut::<Self>().apply(event);
+                    super::popup_window::sync(cx);
                     cx.refresh_windows();
                 });
             }
@@ -155,9 +164,7 @@ impl BrowserState {
             .map(|url| web_url(url).ok_or(BrowserError::BlockedProtocol))
             .transpose()?
             .unwrap_or_default();
-        if owner == Owner::Mine
-            && self.tabs.iter().filter(|tab| tab.owner == owner).count() >= USER_TABS
-        {
+        if self.tabs.iter().filter(|tab| tab.owner == owner).count() >= USER_TABS {
             return Err(BrowserError::TabBudgetExhausted);
         }
         self.next_id += 1;
@@ -175,6 +182,10 @@ impl BrowserState {
             status: TabStatus::Idle,
             can_back: false,
             can_forward: false,
+            opener: None,
+            popup: false,
+            blocked_popup: None,
+            dialog: None,
         });
         self.activate(&id);
         if !url.is_empty() {
@@ -192,6 +203,8 @@ impl BrowserState {
     }
 
     pub(crate) fn close(&mut self, id: &TabId) {
+        self.close_popups(id);
+        self.cancel_dialog(id, "tab_closed");
         let Some(index) = self.tabs.iter().position(|tab| &tab.id == id) else {
             return;
         };
@@ -235,6 +248,16 @@ impl BrowserState {
         {
             return Err(BrowserError::TabBudgetExhausted);
         }
+        if changed_owner {
+            self.close_popups(id);
+            self.cancel_dialog(id, "owner_changed");
+            self.engine.change_owner(id, &super::area::owner_key(&to));
+        }
+        let from = self
+            .tabs
+            .iter()
+            .position(|tab| &tab.id == id)
+            .ok_or(BrowserError::InvalidMove)?;
         let mut tab = self.tabs.remove(from);
         let new_owner = to.clone();
         tab.owner = to;
@@ -311,6 +334,10 @@ impl BrowserState {
     }
 
     pub(crate) fn apply(&mut self, event: PageEvent) {
+        #[cfg(feature = "cef")]
+        if self.popup_event(&event) {
+            return;
+        }
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == event.page) else {
             return;
         };
@@ -331,6 +358,13 @@ impl BrowserState {
                 tab.can_forward = can_forward;
             }
             PageChange::Crashed => tab.status = TabStatus::Crashed,
+            #[cfg(feature = "cef")]
+            PageChange::Dialog(dialog) => tab.dialog = Some(dialog),
+            #[cfg(feature = "cef")]
+            PageChange::PopupNewTab(_)
+            | PageChange::PopupBlocked { .. }
+            | PageChange::PopupOpened { .. }
+            | PageChange::CloseRequested => {}
         }
     }
 

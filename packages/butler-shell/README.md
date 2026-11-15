@@ -32,10 +32,10 @@ cargo run --release -p butler-shell --features shots --bin butler-shell-shots --
 ```
 
 For a real isolated agent, pass `<dir> --data <data-dir>` (and optionally `--dark`).
-The live harness accepts `browser` (standalone view), `browser-link <url>` (the open chat’s message-link action), and `browser-state` (prints `LIVE BROWSER <json>` with view, active tab and tab metadata before `LIVE OK`), along with: `connected`, `open <chat>`, `new`,
+The live harness accepts `browser` (standalone view), `browser-link <url>` (the open chat’s message-link action), and `browser-state` (prints `LIVE BROWSER <json>` with view, active tab and tab metadata (including `opener`, `popup`, `blocked_popup`, and `dialog`) before `LIVE OK`), along with: `connected`, `open <chat>`, `new`,
 `compose`, `type <text>`, `key <keystroke>`, `send <text>`, `answer <text>`, `approval`, `exact <text>`, `modify`, `allow`, `deny`,
 `cancel`, `disconnected`, `shot <name>` and `quit`. Frame commands are `url <url>`,
-`size <width> <height>`, `click <anchor>`, `drag <anchor> <dx>`, `wait <ms>`,
+`size <width> <height>`, `page-click <x> <y>` (a real click in logical pixels relative to the page surface), `click <anchor>`, `drag <anchor> <dx>`, `wait <ms>`,
 `expect-anchor <name>`, `expect-no-anchor <name>`, `expect-scale <factor>`,
 `expect-session <id|new>` and `expect-composer-focus`. Each completed command prints
 `LIVE OK`. The main Rust workspace's `butler-e2e` example `gpui_shell` drives these
@@ -102,3 +102,5 @@ of a CEF page fails there; check pages in the windowed shell.
 ## Licences
 
 See [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES).
+
+Browser anchors include `browser-band`, `browser-page-dialog` and `browser-popup-window`. Anchor clicks and visibility checks include child windows.

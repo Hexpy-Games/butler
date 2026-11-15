@@ -14,6 +14,8 @@ pub use unsupported::{OsrFrame, OsrRuntime};
 mod d3d;
 #[cfg(windows)]
 mod d3d_pool;
+#[cfg(cef_osr)]
+mod dialogs;
 #[cfg(target_os = "macos")]
 mod frame_pool;
 #[cfg(target_os = "macos")]
@@ -26,6 +28,8 @@ mod ime;
 mod input;
 #[cfg(cef_osr)]
 mod paint;
+#[cfg(cef_osr)]
+mod popups;
 #[cfg(cef_osr)]
 mod pump;
 #[cfg(cef_osr)]
@@ -73,6 +77,8 @@ struct RuntimeState {
     pages: RefCell<HashMap<u64, PageRef>>,
     visible: Cell<usize>,
     contexts: RefCell<HashMap<String, (cef::RequestContext, usize)>>,
+    popups: PopupPolicy,
+    auth: dialogs::AuthSender,
 }
 
 #[cfg(cef_osr)]
@@ -80,6 +86,7 @@ pub struct OsrRuntime {
     state: Rc<RuntimeState>,
     sink: Rc<dyn OsrSink>,
     schedule: PumpScheduler,
+    auth_requests: std::sync::mpsc::Receiver<dialogs::AuthRequest>,
     _app: cef::App,
     #[cfg(target_os = "macos")]
     _framework: gpu::Framework,
@@ -91,6 +98,7 @@ impl OsrRuntime {
         config: OsrConfig,
         sink: Rc<dyn OsrSink>,
         schedule: PumpScheduler,
+        popups: PopupPolicy,
     ) -> Result<Self, OsrError> {
         #[cfg(target_os = "macos")]
         if objc2::MainThreadMarker::new().is_none() {
@@ -99,13 +107,14 @@ impl OsrRuntime {
         if STARTED.swap(true, Ordering::SeqCst) {
             return Err(OsrError("CEF already started in this process".into()));
         }
-        Self::initialize(config, sink, schedule)
+        Self::initialize(config, sink, schedule, popups)
     }
 
     fn initialize(
         config: OsrConfig,
         sink: Rc<dyn OsrSink>,
         schedule: PumpScheduler,
+        popups: PopupPolicy,
     ) -> Result<Self, OsrError> {
         #[cfg(target_os = "macos")]
         let framework = gpu::Framework::load(&config.framework_dir)?;
@@ -124,11 +133,18 @@ impl OsrRuntime {
         {
             return Err(OsrError("CEF initialization failed".into()));
         }
+        let (auth, auth_requests) = std::sync::mpsc::channel();
         Ok(Self {
+            auth_requests,
             state: Rc::new(RuntimeState {
                 pages: RefCell::default(),
                 visible: Cell::new(0),
                 contexts: RefCell::default(),
+                popups,
+                auth: dialogs::AuthSender {
+                    sender: auth,
+                    schedule: schedule.clone(),
+                },
             }),
             sink,
             schedule,
@@ -139,6 +155,7 @@ impl OsrRuntime {
     }
 
     pub fn pump(&self) {
+        self.receive_auth();
         cef::do_message_loop_work();
         #[cfg(windows)]
         self.repaint_dropped();
@@ -185,7 +202,7 @@ impl OsrRuntime {
             page,
             sink: self.sink.clone(),
         };
-        let mut client = handlers::client(shared.clone(), events, Rc::downgrade(&self.state));
+        let mut client = handlers::client(shared.clone(), events, &Rc::downgrade(&self.state));
         let browser = cef::browser_host_create_browser_sync(
             Some(&cef::WindowInfo {
                 windowless_rendering_enabled: 1,
@@ -229,6 +246,11 @@ impl OsrRuntime {
     pub fn navigate(&self, page: u64, url: &str) {
         if let Some(frame) = self.browser(page).and_then(|b| b.main_frame()) {
             frame.load_url(Some(&url.into()));
+        }
+    }
+    pub fn eval(&self, page: u64, js: &str) {
+        if let Some(frame) = self.browser(page).and_then(|b| b.main_frame()) {
+            frame.execute_java_script(Some(&js.into()), None, 0);
         }
     }
     pub fn back(&self, page: u64) {
@@ -295,6 +317,7 @@ impl OsrRuntime {
         }
     }
     pub fn close(&self, page: u64) {
+        self.cancel_dialogs(page);
         let Some(p) = self.page(page) else {
             return;
         };
