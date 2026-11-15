@@ -84,6 +84,7 @@ interface SettingsUIStore {
     onSettingsChange: (settings: SettingsData) => void,
     options?: { optimistic?: Partial<SettingsData>; silent?: boolean },
   ) => Promise<void>;
+  loadPersonalization: () => Promise<void>;
   savePersonalization: () => Promise<void>;
   importProfileMigration: (
     text: string,
@@ -221,24 +222,28 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
           }),
     }));
 
-    // Load personalization
     try {
-      const personalization =
-        await api<PersonalizationView>("/personalization");
-      set((state) => ({
-        personalization,
-        personalizationDraft: personalizationDraftHasChanges(
-          state.personalization,
-          state.personalizationDraft,
-        )
-          ? state.personalizationDraft
-          : draftFromPersonalization(personalization),
-      }));
+      await get().loadPersonalization();
     } catch (error) {
       notifyError(error, appCopy.settings.errors.loadPersonalization, {
         id: "settings-personalization",
       });
     }
+  },
+
+  // The only loader of `personalization`: the draft follows the loaded view
+  // unless it holds unsaved edits against the previous one.
+  loadPersonalization: async () => {
+    const personalization = await api<PersonalizationView>("/personalization");
+    set((state) => ({
+      personalization,
+      personalizationDraft: personalizationDraftHasChanges(
+        state.personalization,
+        state.personalizationDraft,
+      )
+        ? state.personalizationDraft
+        : draftFromPersonalization(personalization),
+    }));
   },
 
   // Update settings
