@@ -1,12 +1,16 @@
 //! Isolated-world browser reader and selection wire types.
-mod reader;
-mod geometry;
-mod probe;
-mod input;
 mod copy;
 mod follow;
+mod geometry;
+mod input;
+mod probe;
+mod reader;
 use serde_json::Value;
-use std::{cell::{Cell,RefCell},collections::HashMap,rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+};
 #[derive(Clone, Default)]
 pub(crate) struct Session {
     worlds: Rc<RefCell<HashMap<Vec<usize>, i64>>>,
@@ -44,4 +48,3 @@ pub(crate) struct Hover {
     pub(crate) rect: Value,
     pub(crate) label: String,
 }
-

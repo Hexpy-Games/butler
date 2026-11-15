@@ -1,5 +1,5 @@
 use super::probe;
-use crate::ui::browser::{engine::TabId,model::BrowserState};
+use crate::ui::browser::{engine::TabId, model::BrowserState};
 use gpui::App;
 #[derive(Clone)]
 pub(super) struct Press;
