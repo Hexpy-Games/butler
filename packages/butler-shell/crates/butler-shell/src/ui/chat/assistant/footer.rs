@@ -6,7 +6,7 @@ use butler_ds::ui::copy_button::CopyButton;
 use butler_ds::ui::selectable::Break;
 use butler_ds::ui::thinking_mark::{ButlerThinkingMark, MarkTheme};
 use butler_ds::ui::typo::Typo;
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString};
+use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _, div};
 
 use super::text;
 
@@ -36,7 +36,7 @@ pub(crate) struct ResponseFooter<'a> {
     pub(crate) bubble: bool,
     pub(crate) time_only: bool,
     /// The text the copy button writes.
-    pub(crate) copy_text: &'a str,
+    pub(crate) copy_text: Box<dyn Fn() -> String>,
     pub(crate) meta: Option<&'a FooterMeta>,
     pub(crate) status: Option<&'a str>,
     pub(crate) suppress_terminal_status: bool,
@@ -92,14 +92,17 @@ pub(crate) fn assistant_response_footer(footer: ResponseFooter, cx: &App) -> Vec
     let settled = if live { None } else { footer.meta };
     let mut row = MessageFooter::new().flush();
     if !footer.time_only {
-        row = row.child(
-            CopyButton::new(
-                SharedString::from(format!("copy-{}", footer.id)),
-                copy.copy_message,
-                copy.copied,
-            )
-            .text(footer.copy_text),
-        );
+        row = row.child(crate::ui::widgets::anchor(
+            div().flex().child(
+                CopyButton::new(
+                    SharedString::from(format!("copy-{}", footer.id)),
+                    copy.copy_message,
+                    copy.copied,
+                )
+                .text_with(footer.copy_text),
+            ),
+            &format!("copy-{}", footer.id),
+        ));
         if let Some(actions) = footer.actions {
             row = row.child(actions);
         }

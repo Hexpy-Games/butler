@@ -45,6 +45,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         }
         "expect-clipboard" => expect_clipboard(h, arg),
         "expect-clipboard-prefix" => expect_clipboard_prefix(h, arg),
+        "expect-clipboard-contains" => expect_clipboard_contains(h, arg),
         "expect-scale" => {
             let scale: f32 = arg.parse()?;
             let actual =
@@ -86,6 +87,17 @@ fn expect_clipboard_prefix(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             .as_ref()
             .is_some_and(|text| text.starts_with(&expected)),
         "clipboard {actual:?}, expected prefix {expected:?}"
+    );
+    Ok(())
+}
+
+fn expect_clipboard_contains(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    let expected: String = serde_json::from_str(arg)?;
+    let actual =
+        h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
+    ensure!(
+        actual.as_ref().is_some_and(|text| text.contains(&expected)),
+        "clipboard {actual:?}, expected substring {expected:?}"
     );
     Ok(())
 }
