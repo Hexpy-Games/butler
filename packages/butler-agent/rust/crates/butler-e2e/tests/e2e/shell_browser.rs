@@ -170,6 +170,92 @@ async fn conversation_link_opens_in_its_browser() -> Result<(), HarnessError> {
 }
 
 #[tokio::test]
+async fn browser_moves_tabs_between_groups() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
+    butler_e2e::skip_unless!(
+        nonempty("BUTLER_CEF_DIR").is_none(),
+        "runs on the placeholder engine"
+    );
+    let _serial = SERIAL.lock().await;
+    let mut sandbox = Sandbox::new("browser_moves_tabs_between_groups")?;
+    let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
+    let mut shell = Shell::start(&sandbox, &[]).await?;
+    shell
+        .run(&["agent running", "wait-anchor composer"])
+        .await?;
+    let gw = super::shell_app::gateway(&shell.launch);
+    let created = gw
+        .post(
+            "/sessions",
+            serde_json::json!({"kind":"chat", "title":"Browser transfers"}),
+        )
+        .await?;
+    assert_eq!(created.status, 201, "{}", created.text);
+    let id = created.data()["session"]["id"]
+        .as_str()
+        .expect("session id")
+        .to_owned();
+    shell
+        .run(&[
+            &format!("wait-anchor sidebar-row-{id}"),
+            "browser",
+            "wait-anchor browser-area",
+            "type example.com",
+            "key enter",
+        ])
+        .await?;
+    let first = shell.browser_state().await?["active"].clone();
+    shell
+        .run(&[
+            "click browser-move-trigger",
+            "key down",
+            "key enter",
+            "wait-anchor composer",
+            "wait-anchor browser-area",
+        ])
+        .await?;
+    let moved = shell.browser_state().await?;
+    assert_eq!(moved["view"], "session");
+    assert_eq!(moved["active"], first);
+    assert_eq!(moved["tabs"][0]["owner"], format!("conversation:{id}"));
+    shell
+        .run(&[
+            "browser",
+            "click browser-address",
+            "key cmd-t",
+            "type example.org",
+            "key enter",
+        ])
+        .await?;
+    let second = shell.browser_state().await?["active"].clone();
+    shell
+        .run(&[
+            &format!("open {id}"),
+            "wait-anchor browser-area",
+            "click browser-bring-trigger",
+            "key down",
+            "key enter",
+        ])
+        .await?;
+    let brought = shell.browser_state().await?;
+    let tabs: Vec<_> = brought["tabs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|t| t["owner"] == format!("conversation:{id}"))
+        .collect();
+    assert_eq!(tabs.len(), 2);
+    assert_eq!(tabs[0]["id"], second);
+    assert_eq!(tabs[1]["id"], first);
+    assert_eq!(brought["active"], second);
+    shell.run(&["app-quit"]).await?;
+    shell.finish().await?;
+    sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
 async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
@@ -222,6 +308,9 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
                 && state["tabs"][0]["url"] == *url
                 && state["tabs"][0]["status"] == "idle"
             {
+                if url == &first && !back {
+                    assert_eq!(state["tabs"][0]["can_back"], false);
+                }
                 break;
             }
             assert!(

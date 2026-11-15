@@ -180,11 +180,16 @@ pub(super) fn toolbar(
     if url.is_empty() {
         pick = pick.disabled();
     }
-    toolbar
+    let mut toolbar = toolbar
         .address(anchor(div(), "browser-address").w_full().child(field))
         .action(pick)
-        .action(super::bookmarks::menu(state, window, cx))
-        .action(options(window, cx))
+        .action(super::bookmarks::menu(state, window, cx));
+    if tab.is_some_and(|t| {
+        t.owner != super::model::Owner::Mine && t.profile == super::engine::Profile::SignedIn
+    }) {
+        toolbar = toolbar.action(butler_ds::ui::typo::Typo::caption(c.signed_in));
+    }
+    toolbar.action(options(window, cx))
 }
 fn options(window: &mut Window, cx: &mut App) -> AnyElement {
     let c = BrowserStrings::get(cx);
@@ -207,6 +212,8 @@ fn options(window: &mut Window, cx: &mut App) -> AnyElement {
         }
     }));
     div()
+        .flex()
+        .items_center()
         .child(trigger)
         .child(menu.content(content, window, cx))
         .into_any_element()

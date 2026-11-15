@@ -1,5 +1,11 @@
 use std::{fmt, path::PathBuf};
 
+#[derive(Clone)]
+pub enum OsrProfile {
+    SignedIn,
+    SignedOut(String),
+}
+
 pub struct OsrConfig {
     /// Absolute path to Chromium Embedded Framework.framework.
     pub framework_dir: PathBuf,

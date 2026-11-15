@@ -45,6 +45,13 @@ cef::wrap_life_span_handler! {
             if let Some(runtime) = self.runtime.upgrade() {
                 if visible { runtime.visible.set(runtime.visible.get() - 1); }
                 runtime.pages.borrow_mut().remove(&self.events.page);
+                if let Some(owner) = &self.shared.borrow().signed_out_owner {
+                    let mut contexts = runtime.contexts.borrow_mut();
+                    if let Some((_, count)) = contexts.get_mut(owner) {
+                        *count -= 1;
+                        if *count == 0 { contexts.remove(owner); }
+                    }
+                }
             }
         }
         fn on_before_popup(&self, _browser: Option<&mut Browser>, _frame: Option<&mut Frame>,

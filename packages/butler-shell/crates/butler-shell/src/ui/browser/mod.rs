@@ -10,6 +10,7 @@ mod placeholder;
 pub(crate) mod shell_state;
 mod tabs;
 mod toolbar;
+pub(crate) mod transfer;
 
 pub(crate) fn init(cx: &mut gpui::App) {
     if cx.has_global::<model::BrowserState>() {
