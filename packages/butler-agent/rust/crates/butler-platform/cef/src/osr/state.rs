@@ -18,6 +18,8 @@ pub(super) struct Page {
     pub(super) gpu: Option<GpuCopy>,
     pub(super) paint_error_logged: bool,
     pub(super) ime: OsrIme,
+    pub(super) dialog: Option<(u64, super::dialogs::Callback)>,
+    pub(super) next_dialog: u64,
 }
 impl Page {
     pub(super) fn new(size: (u32, u32), scale: f32) -> Self {
@@ -33,6 +35,8 @@ impl Page {
             gpu: None,
             paint_error_logged: false,
             ime: OsrIme::default(),
+            dialog: None,
+            next_dialog: 0,
         }
     }
     pub(super) fn release_frames(&mut self) {

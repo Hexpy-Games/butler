@@ -81,6 +81,7 @@ pub(super) fn strip(
         .on_close(|id, _, cx| {
             cx.global_mut::<BrowserState>()
                 .close(&TabId(id.to_owned().into()));
+            super::popup_window::sync(cx);
             cx.refresh_windows();
         })
         .on_move(|mv, _, cx| {

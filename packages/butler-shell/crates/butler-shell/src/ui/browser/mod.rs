@@ -4,9 +4,15 @@ pub(crate) mod area;
 mod bookmarks;
 #[cfg(feature = "cef")]
 mod cef;
+mod dialog;
 pub(crate) mod engine;
 pub(crate) mod model;
+mod page_dialog;
 mod placeholder;
+#[cfg(feature = "cef")]
+mod popup_policy;
+mod popup_window;
+mod popups;
 pub(crate) mod shell_state;
 mod tabs;
 mod toolbar;

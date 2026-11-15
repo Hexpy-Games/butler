@@ -27,6 +27,11 @@ pub enum OsrEvent {
     Favicon(String),
     Loading(bool),
     History { can_back: bool, can_forward: bool },
+    PopupNewTab { url: String },
+    PopupBlocked { url: String, reason: PopupBlock },
+    PopupOpened { child: u64, url: String },
+    CloseRequested,
+    Dialog(OsrDialog),
     Crashed,
     Frame,
     Cursor(OsrCursor),
@@ -154,3 +159,56 @@ impl fmt::Display for OsrError {
     }
 }
 impl std::error::Error for OsrError {}
+
+/// Synchronous UI-thread popup policy. No UI toolkit state crosses this boundary.
+pub type PopupPolicy = std::rc::Rc<dyn Fn(&PopupRequest) -> PopupDecision>;
+pub struct PopupRequest {
+    pub opener: u64,
+    pub url: String,
+    pub disposition: PopupDisposition,
+    pub user_gesture: bool,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PopupDisposition {
+    NewTab,
+    NewWindow,
+    NewPopup,
+    Other,
+}
+pub enum PopupDecision {
+    NewTab,
+    Block(PopupBlock),
+    Allow { child: u64 },
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PopupBlock {
+    NoGesture,
+    TabBudget,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OsrDialogKind {
+    Alert,
+    Confirm,
+    Prompt,
+    BeforeUnload,
+    Auth,
+    File,
+}
+#[derive(Clone, Debug)]
+pub struct OsrDialog {
+    pub id: u64,
+    pub kind: OsrDialogKind,
+    pub message: String,
+    pub default_prompt: String,
+    pub origin: String,
+    pub accept_types: Vec<String>,
+    pub multiple: bool,
+}
+#[derive(Default)]
+pub struct OsrAnswer {
+    pub accept: bool,
+    pub text: String,
+    pub username: String,
+    pub password: String,
+    pub files: Vec<PathBuf>,
+}

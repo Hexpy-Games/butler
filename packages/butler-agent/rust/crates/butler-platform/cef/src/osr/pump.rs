@@ -15,13 +15,12 @@ cef::wrap_app! {
     pub(super) struct OsrApp { pump: BrowserProcessHandler }
     impl App {
         fn browser_process_handler(&self) -> Option<BrowserProcessHandler> { Some(self.pump.clone()) }
-
         // The browser process only: helpers (`--type=…`) take what they need from it.
-        fn on_before_command_line_processing(&self, process_type: Option<&CefString>, command_line: Option<&mut CommandLine>) {
-            if process_type.is_none_or(|value| value.to_string().is_empty())
-                && let Some(command_line) = command_line
-            {
-                quiet(command_line);
+        fn on_before_command_line_processing(&self, process: Option<&CefString>, command: Option<&mut CommandLine>) {
+            if process.is_none_or(|value| value.to_string().is_empty()) && let Some(command) = command {
+                // The shell's synchronous policy must see automatic requests too.
+                command.append_switch(Some(&"disable-popup-blocking".into()));
+                quiet(command);
             }
         }
     }

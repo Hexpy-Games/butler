@@ -235,7 +235,7 @@ pub(super) fn render(
     };
     let scroller = engine::scroller(
         &config,
-        div().flex_none().min_w(relative(1.)).child(grid),
+        div().flex().flex_none().min_w(relative(1.)).child(grid),
         window,
         cx,
     );

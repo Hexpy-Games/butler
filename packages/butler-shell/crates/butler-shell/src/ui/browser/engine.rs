@@ -1,4 +1,10 @@
 //! Page engines own their frame surface and input; the shell owns tab metadata.
+use super::page_dialog::DialogAnswer;
+#[cfg(feature = "cef")]
+use super::page_dialog::EngineChild;
+#[cfg(feature = "cef")]
+use super::page_dialog::PageDialog;
+
 use gpui::{AnyElement, App, SharedString, Window};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -38,7 +44,26 @@ pub(crate) enum PageChange {
     Title(String),
     Favicon(String),
     Loading(bool),
-    History { can_back: bool, can_forward: bool },
+    History {
+        can_back: bool,
+        can_forward: bool,
+    },
+    #[cfg(feature = "cef")]
+    PopupNewTab(String),
+    #[cfg(feature = "cef")]
+    PopupBlocked {
+        url: String,
+        reason: &'static str,
+    },
+    #[cfg(feature = "cef")]
+    PopupOpened {
+        child: EngineChild,
+        url: String,
+    },
+    #[cfg(feature = "cef")]
+    CloseRequested,
+    #[cfg(feature = "cef")]
+    Dialog(PageDialog),
     Crashed,
 }
 
@@ -56,6 +81,11 @@ pub(crate) trait PageEngine: 'static {
     /// The page's size in logical pixels and the device scale (from PageCard's bounds).
     fn resize(&mut self, page: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32);
     fn close(&mut self, page: &TabId);
+    #[cfg(feature = "cef")]
+    fn adopt(&mut self, page: &TabId, child: EngineChild);
+    fn allow_popup(&mut self, page: &TabId, url: &str);
+    fn answer_dialog(&mut self, page: &TabId, id: u64, answer: DialogAnswer);
+    fn change_owner(&mut self, _page: &TabId, _owner: &str) {}
     fn show(&mut self, _page: Option<&TabId>) {}
     fn frame_size(&self, _page: &TabId) -> Option<(usize, usize)> {
         None
