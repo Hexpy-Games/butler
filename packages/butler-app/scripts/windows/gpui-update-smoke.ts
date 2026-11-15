@@ -200,50 +200,138 @@ async function stopInstalled() {
   await waitFor(() => installedProcesses().length === 0, "installed processes stopped");
 }
 
+async function startUninstallSampler() {
+  const handle = process.env.BUTLER_SMOKE_HANDLE_EXE;
+  if (!handle) return null;
+  assert.ok(existsSync(handle), "Handle executable missing");
+  const stopFile = join(root, "uninstall-handle.stop");
+  const readyFile = join(root, "uninstall-handle.ready");
+  const log = join(root, "uninstall-handles.log");
+  const script = join(root, "uninstall-handles.ps1");
+  writeFileSync(script, `$ErrorActionPreference = 'Stop'
+    while (-not (Test-Path -LiteralPath $env:BUTLER_HANDLE_STOP)) {
+      $seenAt = [DateTime]::UtcNow.ToString('o')
+      $lines = @(& $env:BUTLER_SMOKE_HANDLE_EXE -accepteula -nobanner $env:BUTLER_HANDLE_FOLDER 2>&1 | ForEach-Object { "$_" })
+      @{ seenAt = $seenAt; lines = $lines } | ConvertTo-Json -Compress | Add-Content -LiteralPath $env:BUTLER_HANDLE_LOG -Encoding UTF8
+      if (-not (Test-Path -LiteralPath $env:BUTLER_HANDLE_READY)) {
+        New-Item -ItemType File -Path $env:BUTLER_HANDLE_READY | Out-Null
+      }
+      if (-not (Test-Path -LiteralPath $env:BUTLER_HANDLE_STOP)) { Start-Sleep -Milliseconds 100 }
+    }`);
+  const output = openSync(join(root, "uninstall-handle-sampler.log"), "a");
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", script], {
+      env: { ...env, BUTLER_SMOKE_HANDLE_EXE: handle, BUTLER_HANDLE_FOLDER: newFolder,
+        BUTLER_HANDLE_STOP: stopFile, BUTLER_HANDLE_READY: readyFile, BUTLER_HANDLE_LOG: log },
+      stdio: ["ignore", output, output], windowsHide: true,
+    });
+  } finally { closeSync(output); }
+  let closed = false;
+  let exit: number | null = null;
+  let spawnError: Error | undefined;
+  child.on("error", error => { spawnError = error; closed = true; });
+  child.on("close", code => { exit = code; closed = true; });
+  const stop = () => writeFileSync(stopFile, "stop");
+  const finish = async () => {
+    try { await waitFor(() => closed, "uninstall Handle sampler exit"); } finally {
+      if (!closed && child.pid) run("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"]);
+    }
+    if (spawnError) throw spawnError;
+    assert.equal(exit, 0, "Handle sampler must succeed");
+  };
+  try {
+    await waitFor(() => {
+      if (closed) throw spawnError ?? new Error(`Handle sampler exited before readiness: ${exit}`);
+      return existsSync(readyFile);
+    }, "uninstall Handle sampler ready");
+  } catch (error) {
+    stop();
+    try { await finish(); } finally { printUninstallHolders(log); }
+    throw error;
+  }
+  return { stop, report: async () => { try { await finish(); } finally { printUninstallHolders(log); } } };
+}
+
+type UninstallHolder = {
+  processName: string; pid: number; handlePath: string; firstSeen: string; lastSeen: string;
+  process?: { ExecutablePath: string | null; CommandLine: string | null; ParentProcessId: number } | null;
+};
+function printUninstallHolders(log: string) {
+  const holders = new Map<string, UninstallHolder>();
+  try {
+    const samples = existsSync(log) ? readFileSync(log, "utf8").replace(/^\uFEFF/u, "").trim().split(/\r?\n/u).filter(Boolean) : [];
+    for (const sample of samples) {
+      const { seenAt, lines } = JSON.parse(sample) as { seenAt: string; lines: string[] };
+      for (const line of lines) {
+        const match = /^(.*?)\s+pid:\s*(\d+)\s+type:\s+File\s+[\da-f]+:\s+(.+)$/iu.exec(line.trim());
+        if (!match || !/(?:v8_context_snapshot\.bin|vk_swiftshader\.dll)$/iu.test(match[3])) continue;
+        const [, processName, pid, handlePath] = match;
+        const key = JSON.stringify([processName, Number(pid), handlePath]);
+        const previous = holders.get(key);
+        if (previous) previous.lastSeen = seenAt;
+        else holders.set(key, { processName, pid: Number(pid), handlePath, firstSeen: seenAt, lastSeen: seenAt });
+      }
+    }
+    const processes = new Map<number, UninstallHolder["process"]>();
+    for (const holder of holders.values()) {
+      if (!processes.has(holder.pid)) {
+        processes.set(holder.pid, JSON.parse(powershell(`$process = Get-CimInstance Win32_Process -Filter "ProcessId = $env:BUTLER_HANDLE_PID"
+          if ($process) { $process | Select-Object ExecutablePath, CommandLine, ParentProcessId | ConvertTo-Json -Compress }
+          else { 'null' }`, { ...env, BUTLER_HANDLE_PID: String(holder.pid) })));
+      }
+      holder.process = processes.get(holder.pid);
+    }
+  } finally { console.log(JSON.stringify({ uninstallHolders: [...holders.values()] })); }
+}
+
 async function uninstall() {
   await stopInstalled();
-  run(updater, ["--uninstall", "--silent"]);
-  const uninstallReturnedAt = Date.now();
-  await waitFor(() => !existsSync(stub), "uninstalled stub removed");
-  assertShortcuts(shortcuts, false);
-  for (const key of ["HKCU:\\Software\\Classes\\butler", "HKCU:\\Software\\Classes\\AppUserModelId\\com.squirrel.butler-app.Butler"]) {
-    assert.equal(powershell("Test-Path -LiteralPath $env:BUTLER_SMOKE_KEY", { ...env, BUTLER_SMOKE_KEY: key }), "False", key);
-  }
-  assert.equal(powershell("[bool](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env), "False");
-  const files = existsSync(installed) ? readdirSync(installed, { recursive: true, withFileTypes: true })
-    .filter(entry => !entry.isDirectory()).map(entry => relative(installed, join(entry.parentPath, entry.name)).toLowerCase()) : [];
-  // Squirrel's FullUninstall recreates the root with .dead and leaves the running Update.exe and app-version squirrel.exe.
-  const expected = [".dead", "Update.exe", join(`app-${toPackage}`, "squirrel.exe")].map(path => path.toLowerCase());
-  const unexpected = files.filter(path => !expected.includes(path));
-  const missing = expected.filter(path => !files.includes(path));
-  if (unexpected.length || missing.length) {
-    const sinceUninstallReturnedMs = Date.now() - uninstallReturnedAt;
-    const remnants = unexpected.map(path => {
-      const fullPath = join(installed, path);
-      let size: number | null = null;
-      let lastWriteTime: string | null = null;
-      let statError: string | null = null;
+  const sampler = await startUninstallSampler();
+  try {
+    try { run(updater, ["--uninstall", "--silent"]); } finally { sampler?.stop(); }
+    const uninstallReturnedAt = Date.now();
+    await waitFor(() => !existsSync(stub), "uninstalled stub removed");
+    assertShortcuts(shortcuts, false);
+    for (const key of ["HKCU:\\Software\\Classes\\butler", "HKCU:\\Software\\Classes\\AppUserModelId\\com.squirrel.butler-app.Butler"]) {
+      assert.equal(powershell("Test-Path -LiteralPath $env:BUTLER_SMOKE_KEY", { ...env, BUTLER_SMOKE_KEY: key }), "False", key);
+    }
+    assert.equal(powershell("[bool](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env), "False");
+    const files = existsSync(installed) ? readdirSync(installed, { recursive: true, withFileTypes: true })
+      .filter(entry => !entry.isDirectory()).map(entry => relative(installed, join(entry.parentPath, entry.name)).toLowerCase()) : [];
+    // Squirrel's FullUninstall recreates the root with .dead and leaves the running Update.exe and app-version squirrel.exe.
+    const expected = [".dead", "Update.exe", join(`app-${toPackage}`, "squirrel.exe")].map(path => path.toLowerCase());
+    const unexpected = files.filter(path => !expected.includes(path));
+    const missing = expected.filter(path => !files.includes(path));
+    if (unexpected.length || missing.length) {
+      const sinceUninstallReturnedMs = Date.now() - uninstallReturnedAt;
+      const remnants = unexpected.map(path => {
+        const fullPath = join(installed, path);
+        let size: number | null = null;
+        let lastWriteTime: string | null = null;
+        let statError: string | null = null;
+        try {
+          const stat = statSync(fullPath);
+          size = stat.size;
+          lastWriteTime = stat.mtime.toISOString();
+        } catch (error) { statError = (error as NodeJS.ErrnoException).code ?? String(error); }
+        let removal: string = "success";
+        try { rmSync(fullPath); } catch (error) { removal = (error as NodeJS.ErrnoException).code ?? String(error); }
+        return { path, size, lastWriteTime, statError, removal };
+      });
+      let defender = null;
       try {
-        const stat = statSync(fullPath);
-        size = stat.size;
-        lastWriteTime = stat.mtime.toISOString();
-      } catch (error) { statError = (error as NodeJS.ErrnoException).code ?? String(error); }
-      let removal: string = "success";
-      try { rmSync(fullPath); } catch (error) { removal = (error as NodeJS.ErrnoException).code ?? String(error); }
-      return { path, size, lastWriteTime, statError, removal };
-    });
-    let defender = null;
-    try {
-      defender = JSON.parse(powershell(`Get-MpComputerStatus -ErrorAction Stop |
-        Select-Object AMServiceEnabled, RealTimeProtectionEnabled, OnAccessProtectionEnabled |
-        ConvertTo-Json -Compress`, env));
-    } catch { /* Defender status is unavailable on this host. */ }
-    console.error(JSON.stringify({ remnants, sinceUninstallReturnedMs, defender }));
-    console.error("Uninstall process/module holders:", JSON.stringify(installedProcesses(), null, 2));
-  }
-  assert.deepEqual(files.sort(), expected.sort(), `Uninstall remnants: unexpected [${unexpected.join(", ")}]; missing [${missing.join(", ")}]`);
-  assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
-  uninstalled = true;
+        defender = JSON.parse(powershell(`Get-MpComputerStatus -ErrorAction Stop |
+          Select-Object AMServiceEnabled, RealTimeProtectionEnabled, OnAccessProtectionEnabled |
+          ConvertTo-Json -Compress`, env));
+      } catch { /* Defender status is unavailable on this host. */ }
+      console.error(JSON.stringify({ remnants, sinceUninstallReturnedMs, defender }));
+      console.error("Uninstall process/module holders:", JSON.stringify(installedProcesses(), null, 2));
+    }
+    assert.deepEqual(files.sort(), expected.sort(), `Uninstall remnants: unexpected [${unexpected.join(", ")}]; missing [${missing.join(", ")}]`);
+    assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
+    uninstalled = true;
+  } finally { await sampler?.report(); }
 }
 
 function run(command: string, args: string[]) {
