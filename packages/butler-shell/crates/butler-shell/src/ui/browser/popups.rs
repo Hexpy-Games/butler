@@ -68,6 +68,7 @@ impl BrowserState {
         self.tabs.push(Tab {
             id: id.clone(),
             owner: source.owner,
+            epoch: 1,
             profile: source.profile,
             url,
             title: String::new(),

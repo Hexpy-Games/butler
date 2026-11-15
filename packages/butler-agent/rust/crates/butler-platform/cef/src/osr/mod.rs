@@ -19,6 +19,8 @@ mod d3d_pool;
 #[cfg(cef_osr)]
 mod dialogs;
 #[cfg(cef_osr)]
+mod downloads;
+#[cfg(cef_osr)]
 mod embed;
 #[cfg(target_os = "macos")]
 mod frame_pool;
@@ -82,6 +84,7 @@ struct RuntimeState {
     visible: Cell<usize>,
     contexts: RefCell<HashMap<String, (cef::RequestContext, usize)>>,
     popups: PopupPolicy,
+    downloads: DownloadPolicy,
     auth: dialogs::AuthSender,
 }
 
@@ -103,6 +106,7 @@ impl OsrRuntime {
         sink: Rc<dyn OsrSink>,
         schedule: PumpScheduler,
         popups: PopupPolicy,
+        downloads: DownloadPolicy,
     ) -> Result<Self, OsrError> {
         #[cfg(target_os = "macos")]
         if objc2::MainThreadMarker::new().is_none() {
@@ -111,7 +115,7 @@ impl OsrRuntime {
         if STARTED.swap(true, Ordering::SeqCst) {
             return Err(OsrError("CEF already started in this process".into()));
         }
-        Self::initialize(config, sink, schedule, popups)
+        Self::initialize(config, sink, schedule, popups, downloads)
     }
 
     fn initialize(
@@ -119,6 +123,7 @@ impl OsrRuntime {
         sink: Rc<dyn OsrSink>,
         schedule: PumpScheduler,
         popups: PopupPolicy,
+        downloads: DownloadPolicy,
     ) -> Result<Self, OsrError> {
         #[cfg(target_os = "macos")]
         let framework = gpu::Framework::load(&config.framework_dir)?;
@@ -145,6 +150,7 @@ impl OsrRuntime {
                 visible: Cell::new(0),
                 contexts: RefCell::default(),
                 popups,
+                downloads,
                 auth: dialogs::AuthSender {
                     sender: auth,
                     schedule: schedule.clone(),

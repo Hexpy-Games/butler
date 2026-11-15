@@ -69,7 +69,7 @@ fn document_viewer(
     let trailing: documents::Slot =
         Rc::new(move |_, cx| file_viewer_close_button(close.clone(), cx).into_any_element());
     if let Some(page) = documents::viewer_page(id, (None, trailing), window, cx) {
-        return FileViewerPage::new(true).child(page).into_any_element();
+        return FileViewerPage::new().child(page).into_any_element();
     }
     Stack::new()
         .fill()
@@ -82,10 +82,7 @@ fn document_viewer(
             on_close,
             on_back: None,
         })
-        .child(
-            FileViewerPage::new(true)
-                .child(EmptyLine::new(ArtifactViewerCopy::get(cx).unsupported)),
-        )
+        .child(FileViewerPage::new().child(EmptyLine::new(ArtifactViewerCopy::get(cx).unsupported)))
         .into_any_element()
 }
 
@@ -104,7 +101,6 @@ fn file_viewer_artifact(
 ) -> AnyElement {
     let index = revision_index(latest, window, cx);
     let artifact = revision_artifact(latest, index);
-    let mode = preview_mode(&artifact);
     // The Library link and "open in the default app" have no route in the shell yet.
     let mut actions = Vec::new();
     if let Some(file_id) = artifact.file_id.clone() {
@@ -130,14 +126,7 @@ fn file_viewer_artifact(
             on_close,
             on_back: None,
         })
-        .child(
-            FileViewerPage::new(mode == Mode::Markdown).child(artifact_body(
-                &artifact,
-                Surface::Page,
-                window,
-                cx,
-            )),
-        )
+        .child(FileViewerPage::new().child(artifact_body(&artifact, Surface::Page, window, cx)))
         .into_any_element()
 }
 
