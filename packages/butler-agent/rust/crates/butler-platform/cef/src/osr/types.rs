@@ -174,6 +174,9 @@ pub struct OsrKey {
     pub unmodified_character: u16,
     pub modifiers: OsrModifiers,
     pub up: bool,
+    /// Windows: the key message was `WM_SYSKEYDOWN`/`WM_SYSKEYUP` (F10, or a key pressed with
+    /// Alt). Other platforms ignore it.
+    pub system_key: bool,
 }
 
 #[derive(Debug)]
