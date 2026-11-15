@@ -138,6 +138,7 @@ fn header(
     (alpha, timing): (Transition, Timing),
     ds: &Ds,
 ) -> gpui::Div {
+    let has_actions = !frame.actions.is_empty();
     let titled = frame.title.is_some();
     let heading = frame.title.take().map(|title| match frame.level {
         Level::Block => Typo::section_title(title)
@@ -185,7 +186,7 @@ fn header(
         .justify_between()
         .gap(ds.len(Length::SpaceSm))
         .children(heading.map(|heading| div().min_w_0().child(heading)))
-        .child(trigger);
+        .children(has_actions.then_some(trigger));
     if titled {
         return header;
     }
@@ -220,9 +221,10 @@ impl RenderOnce for BlockActionFrame {
         if has_actions {
             frame = gestures(frame, &hovered, &open);
         }
-        if self.title.is_some() || has_actions {
+        let titled = self.title.is_some();
+        if titled || has_actions {
             let header = header(&mut self, (&open, is_open), alpha, ds);
-            if self.title.is_none() {
+            if !titled {
                 // `z-index: var(--z-content)`: painted after the content, so over it.
                 return frame.children(self.children).child(header);
             }
