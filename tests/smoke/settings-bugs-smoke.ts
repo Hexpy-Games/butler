@@ -2,6 +2,7 @@
 // UI smoke coverage for #218–#221; all model providers are stubbed.
 import { commandSandboxSettings } from "../support/command-sandbox-settings";
 import { conversationBackgroundFlow } from "../support/conversation-background-flow";
+import { profileAfterCanon } from "../support/settings-profile-after-canon";
 import { strict as assert } from "node:assert";
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -21,19 +22,19 @@ const matrix = [[375, "light", "ko"], [375, "dark", "ko"], [1280, "light", "ko"]
 // Restricted Chromium must not accumulate closed CDP surfaces in one Bun loop.
 if (!process.argv.includes("--case")) {
   const captured: string[] = [];
-  for (let index = 0; index <= matrix.length; index += 1) {
+  for (let index = 0; index <= matrix.length + 1; index += 1) {
     await runIsolatedCase(index);
     const result = JSON.parse(readFileSync(resolve(screenshots, `manifest-${index}.json`), "utf8"));
     assert.equal(result.cases, 1);
     assert.equal(result.modelCalls, 0);
     captured.push(...result.screenshots);
   }
-  writeFileSync(resolve(screenshots, "manifest.json"), `${JSON.stringify({ screenshots: captured, cases: 6, modelCalls: 0 }, null, 2)}\n`);
-  console.log(JSON.stringify({ ok: true, cases: 6, screenshots: captured.length, modelCalls: 0 }));
+  writeFileSync(resolve(screenshots, "manifest.json"), `${JSON.stringify({ screenshots: captured, cases: 7, modelCalls: 0 }, null, 2)}\n`);
+  console.log(JSON.stringify({ ok: true, cases: 7, screenshots: captured.length, modelCalls: 0 }));
   process.exit(0);
 }
 const caseIndex = Number(process.argv[process.argv.indexOf("--case") + 1]);
-assert(Number.isInteger(caseIndex) && caseIndex >= 0 && caseIndex <= matrix.length);
+assert(Number.isInteger(caseIndex) && caseIndex >= 0 && caseIndex <= matrix.length + 1);
 
 async function runIsolatedCase(index: number) {
   const isolation = mkdtempSync(join(tmpdir(), "butler-settings-case-"));
@@ -369,7 +370,8 @@ try {
   }
   const cell = matrix[caseIndex];
   if (cell) await runCase(cell[0], cell[1], cell[2]);
-  else await englishChecks();
+  else if (caseIndex === matrix.length) await englishChecks();
+  else evidence.push(await profileAfterCanon(server, browser, screenshots));
   assert.equal(server.stubModelCalls.length, 0, "settings need no model calls");
   writeFileSync(resolve(screenshots, `manifest-${caseIndex}.json`), `${JSON.stringify({ screenshots: evidence, cases: 1, modelCalls: 0 }, null, 2)}\n`);
   console.log(JSON.stringify({ ok: true, cases: 1, screenshots: evidence.length, modelCalls: 0 }));
