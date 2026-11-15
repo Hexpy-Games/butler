@@ -52,6 +52,7 @@ impl Shell {
             .stdout(std::fs::File::create(&stdout)?)
             .stderr(std::fs::File::create(sandbox.logs.join("shell.stderr"))?);
         if let Some(directory) = nonempty("BUTLER_CEF_DIR") {
+            prepend_path(&mut command, &directory)?;
             command
                 .env("BUTLER_CEF_DIR", directory)
                 .arg("--use-mock-keychain");
@@ -154,4 +155,20 @@ impl Shell {
         }
         Ok(())
     }
+}
+
+/// Puts the staged CEF directory first on the shell's `PATH`: Windows loads the shell's libcef.dll
+/// at process start from there in development. The macOS framework directory holds no programs.
+fn prepend_path(command: &mut std::process::Command, directory: &str) -> Result<(), HarnessError> {
+    let path = command
+        .get_envs()
+        .find(|(key, _)| *key == "PATH")
+        .and_then(|(_, value)| value.map(std::ffi::OsStr::to_owned))
+        .unwrap_or_default();
+    let path = std::env::join_paths(
+        std::iter::once(PathBuf::from(directory)).chain(std::env::split_paths(&path)),
+    )
+    .map_err(|error| harness_error(error.to_string()))?;
+    command.env("PATH", path);
+    Ok(())
 }
