@@ -1,6 +1,7 @@
 mod agent_import;
 mod authority;
 mod automations;
+mod browser_host;
 mod browser_import;
 mod canon;
 mod canon_queue;

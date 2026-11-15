@@ -1,7 +1,7 @@
 //! Uninhabited seam for platforms without an OSR implementation.
 use super::{
-    OsrAnswer, OsrConfig, OsrError, OsrIme, OsrKey, OsrMouse, OsrProfile, OsrSink, OsrWheel,
-    PopupPolicy, PumpScheduler,
+    DownloadPolicy, OsrAnswer, OsrConfig, OsrError, OsrIme, OsrKey, OsrMouse, OsrProfile, OsrSink,
+    OsrWheel, PopupPolicy, PumpScheduler,
 };
 use std::{convert::Infallible, ops::Range, rc::Rc};
 
@@ -25,8 +25,18 @@ impl OsrRuntime {
         _: Rc<dyn OsrSink>,
         _: PumpScheduler,
         _: PopupPolicy,
+        _: DownloadPolicy,
     ) -> Result<Self, OsrError> {
         Err(OsrError("osr_unsupported".into()))
+    }
+    pub fn download_to(&self, _: u64, _: u32, _: &std::path::Path) {
+        match self.never {}
+    }
+    pub fn download_with_dialog(&self, _: u64, _: u32, _: &str) {
+        match self.never {}
+    }
+    pub fn cancel_download(&self, _: u64, _: u32) {
+        match self.never {}
     }
     pub fn pump(&self) {
         match self.never {}

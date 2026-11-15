@@ -5,7 +5,10 @@ mod bookmarks;
 #[cfg(feature = "cef")]
 mod cef;
 mod dialog;
+#[cfg(feature = "cef")]
+pub(crate) mod downloads;
 pub(crate) mod engine;
+mod host;
 pub(crate) mod model;
 mod page_dialog;
 mod placeholder;
