@@ -3,10 +3,11 @@
 //! code/text).
 mod display;
 mod files;
+mod page;
 
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::artifact_preview::{
-    ArtifactPreview, ArtifactPreviewFrame, ArtifactPreviewImage, ArtifactPreviewPre, Surface,
+    ArtifactPreview, ArtifactPreviewImage, ArtifactPreviewPre, Surface,
 };
 use butler_ds::ui::blocks::empty_line::EmptyLine;
 use butler_ds::ui::blocks::markdown_content::MarkdownContent;
@@ -40,11 +41,15 @@ pub(crate) fn artifact_viewer(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let (id, session) = (entry.id().to_owned(), session.to_owned());
-    let on_close: Run = Rc::new(move |_, cx| super::close(cx, &session, &id));
+    let (id, close_session) = (entry.id().to_owned(), session.to_owned());
+    let on_close: Run = Rc::new(move |_, cx| super::close(cx, &close_session, &id));
     match entry {
         FileViewerEntry::Artifact { artifact, .. } => {
-            file_viewer_artifact(artifact, on_close, window, cx)
+            let mut artifact = (**artifact).clone();
+            artifact
+                .session_id
+                .get_or_insert_with(|| session.to_owned());
+            file_viewer_artifact(&artifact, on_close, window, cx)
         }
         FileViewerEntry::Document { id, title } => document_viewer(id, title, on_close, window, cx),
     }
@@ -198,7 +203,7 @@ fn revision_select(
 }
 
 /// `ArtifactBody`: an artifact's content: markdown, a picture, a PDF, code or text in
-/// monospace. A page Butler made (web, html) is the P5 browser's: here the empty frame box.
+/// monospace, or an isolated embedded page for web, HTML and PDF.
 fn artifact_body(
     artifact: &SessionArtifactSummary,
     surface: Surface,
@@ -226,8 +231,8 @@ fn render_preview(
 ) -> AnyElement {
     let copy = ArtifactViewerCopy::get(cx);
     let caption = |text: &'static str| Typo::caption(text).into_any_element();
-    if matches!(mode, Mode::Web | Mode::Html) {
-        return ArtifactPreviewFrame::new().into_any_element();
+    if matches!(mode, Mode::Web | Mode::Html | Mode::Pdf) {
+        return page::preview(artifact, mode, window, cx);
     }
     let Some(file_id) = artifact
         .file_id
@@ -238,7 +243,6 @@ fn render_preview(
     };
     match mode {
         Mode::Image => image(&file_id, window, cx),
-        Mode::Pdf => ArtifactPreviewFrame::new().into_any_element(),
         _ => match artifact_text(&file_id, cx) {
             TextState::Loading => caption(copy.loading),
             TextState::Failed => caption(copy.load_failed),

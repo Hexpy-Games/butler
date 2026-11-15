@@ -18,7 +18,11 @@ pub(super) fn client(shared: PageRef, events: Events, runtime: &Weak<RuntimeStat
         Life::new(shared.clone(), events.clone(), runtime.clone()),
         Display::new(events.clone()),
         Load::new(events.clone()),
-        Request::new(events.clone(), runtime.upgrade().map(|r| r.auth.clone())),
+        Request::new(
+            shared.clone(),
+            events.clone(),
+            runtime.upgrade().map(|r| r.auth.clone()),
+        ),
         super::dialogs::Js::new(shared.clone(), events.clone()),
         super::dialogs::Files::new(shared, events),
     )
@@ -76,6 +80,10 @@ cef::wrap_life_span_handler! {
             info: Option<&mut WindowInfo>, client: Option<&mut Option<Client>>,
             settings: Option<&mut BrowserSettings>, _extra: Option<&mut Option<DictionaryValue>>,
             _access: Option<&mut i32>) -> i32 {
+            if self.shared.borrow().embed.is_some() {
+                self.events.emit(OsrEvent::PopupNewTab { url: url.map(ToString::to_string).unwrap_or_default() });
+                return 1;
+            }
             if let Some(settings) = settings { settings.background_color = 0xFFFF_FFFF; }
             super::popups::before(&self.shared, &self.events, &self.runtime, url, disposition, gesture, info, client)
         }
@@ -116,8 +124,12 @@ cef::wrap_load_handler! {
     }
 }
 cef::wrap_request_handler! {
-    pub(super) struct Request { events: Events, auth: Option<super::dialogs::AuthSender> }
+    pub(super) struct Request { shared: PageRef, events: Events, auth: Option<super::dialogs::AuthSender> }
     impl RequestHandler {
+        fn on_before_browse(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>,
+            request: Option<&mut cef::Request>, _gesture: i32, _redirect: i32) -> i32 {
+            super::embed::before(&self.shared, &self.events, frame, request)
+        }
         fn auth_credentials(&self, _browser: Option<&mut Browser>, url: Option<&CefString>,
             proxy: i32, _host: Option<&CefString>, _port: i32, realm: Option<&CefString>,
             _scheme: Option<&CefString>, callback: Option<&mut AuthCallback>) -> i32 {

@@ -106,6 +106,7 @@ impl From<AddressError> for BrowserError {
 pub(crate) struct BrowserState {
     pub(super) engine: Box<dyn PageEngine>,
     pub(super) tabs: Vec<Tab>,
+    pub(crate) embeds: std::collections::HashMap<TabId, super::embed::Embed>,
     pub(super) active: Option<TabId>,
     pub(super) next_id: u64,
 }
@@ -119,12 +120,17 @@ impl BrowserState {
         cx.set_global(Self {
             engine,
             tabs: Vec::new(),
+            embeds: Default::default(),
             active: None,
             next_id: 0,
         });
         cx.spawn(async move |cx| {
             while let Some(event) = receiver.next().await {
                 cx.update(|cx| {
+                    if super::embed::event(&event, cx) {
+                        cx.refresh_windows();
+                        return;
+                    }
                     super::pick::navigation(&event, cx);
                     cx.global_mut::<Self>().apply(event);
                     super::popup_window::sync(cx);
@@ -162,6 +168,16 @@ impl BrowserState {
         owner: Owner,
         url: Option<&str>,
         placeholder: bool,
+    ) -> Result<Option<TabId>, BrowserError> {
+        self.create_view(owner, url, placeholder, None)
+    }
+
+    pub(crate) fn create_view(
+        &mut self,
+        owner: Owner,
+        url: Option<&str>,
+        placeholder: bool,
+        preview: Option<&str>,
     ) -> Result<Option<TabId>, BrowserError> {
         if !self.enabled() {
             return Err(BrowserError::BrowsingDisabled);
@@ -205,8 +221,9 @@ impl BrowserState {
         if !url.is_empty() {
             self.drop_placeholders(&tab_owner);
         }
-        self.engine
-            .open(&id, &url, profile, &super::area::owner_key(&tab_owner));
+        let owner = super::area::owner_key(&tab_owner);
+        let partition = preview.map_or(owner.clone(), |id| format!("{owner}:preview:{id}"));
+        self.engine.open(&id, &url, profile, &partition);
         Ok(Some(id))
     }
 

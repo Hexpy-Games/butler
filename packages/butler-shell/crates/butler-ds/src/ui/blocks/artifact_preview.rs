@@ -2,8 +2,7 @@
 //! content shows in: a bordered, scrolling card (at least 280px tall, at most the window less
 //! the title bar and 210px), or with `page` no box at all, the content flowing in the host's
 //! scroll. Its parts: a code-font pre, a picture at its own size up to the box's width, and a
-//! frame. A web frame (PDF, HTML) is the P5 browser's: here it is the empty frame box at its
-//! size, with no page in it.
+//! frame. The host supplies its embedded page in the frame slot.
 use gpui::{
     AnyElement, App, ElementId, ImageSource, InteractiveElement as _, IntoElement, ObjectFit,
     ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,
@@ -151,15 +150,25 @@ impl RenderOnce for ArtifactPreviewImage {
 }
 
 /// `ArtifactPreviewFrame`: the frame box, 520px tall at least and the box's width, or exactly
-/// `intrinsic` size. No page loads in it.
+/// `intrinsic` size. The optional page fills its content box.
 #[derive(IntoElement)]
 pub struct ArtifactPreviewFrame {
+    page: Option<AnyElement>,
     intrinsic: Option<(f32, f32)>,
 }
 
 impl ArtifactPreviewFrame {
     pub fn new() -> Self {
-        Self { intrinsic: None }
+        Self {
+            intrinsic: None,
+            page: None,
+        }
+    }
+
+    /// The embedded surface, filling the frame content box.
+    pub fn page(mut self, page: impl IntoElement) -> Self {
+        self.page = Some(page.into_any_element());
+        self
     }
 
     /// Content that must show at its own size (a scrap's clipped part).
@@ -178,7 +187,10 @@ impl Default for ArtifactPreviewFrame {
 impl RenderOnce for ArtifactPreviewFrame {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
-        let frame = div().bg(ds.color(Color::Surface));
+        let frame = div()
+            .relative()
+            .bg(ds.color(Color::Surface))
+            .children(self.page.map(|page| div().absolute().inset_0().child(page)));
         match self.intrinsic {
             Some((width, height)) => frame.flex_none().w(px(width)).h(px(height)),
             None => frame

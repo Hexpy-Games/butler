@@ -41,6 +41,9 @@ impl OsrRuntime {
     ) -> Result<(), OsrError> {
         match self.never {}
     }
+    pub fn open_embed(&self, _: u64, _: &str, _: OsrProfile) -> Result<(), OsrError> {
+        match self.never {}
+    }
     pub fn navigate(&self, _: u64, _: &str) {
         match self.never {}
     }

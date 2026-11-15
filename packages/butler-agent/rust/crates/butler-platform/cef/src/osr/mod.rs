@@ -18,6 +18,8 @@ mod d3d;
 mod d3d_pool;
 #[cfg(cef_osr)]
 mod dialogs;
+#[cfg(cef_osr)]
+mod embed;
 #[cfg(target_os = "macos")]
 mod frame_pool;
 #[cfg(target_os = "macos")]
@@ -174,6 +176,18 @@ impl OsrRuntime {
         scale: f32,
         profile: OsrProfile,
     ) -> Result<(), OsrError> {
+        self.open_page(page, url, size, scale, profile, None)
+    }
+
+    fn open_page(
+        &self,
+        page: u64,
+        url: &str,
+        size: (u32, u32),
+        scale: f32,
+        profile: OsrProfile,
+        embed: Option<embed::Policy>,
+    ) -> Result<(), OsrError> {
         if self.state.pages.borrow().contains_key(&page) {
             return Err(OsrError("page already exists".into()));
         }
@@ -200,6 +214,7 @@ impl OsrRuntime {
             .transpose()?;
         let shared = Rc::new(RefCell::new(Page::new(size, scale)));
         shared.borrow_mut().signed_out_owner = owner.clone();
+        shared.borrow_mut().embed = embed;
         let events = Events {
             page,
             sink: self.sink.clone(),

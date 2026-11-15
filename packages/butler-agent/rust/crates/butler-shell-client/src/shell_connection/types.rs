@@ -31,6 +31,9 @@ pub enum Error {
     /// The agent lacks a required route.
     #[error("agent update required")]
     Incompatible,
+    /// Isolated content requires a configured content host.
+    #[error("content host required")]
+    ContentHostRequired,
     /// A response does not match the wire contract.
     #[error("invalid agent response")]
     Protocol,

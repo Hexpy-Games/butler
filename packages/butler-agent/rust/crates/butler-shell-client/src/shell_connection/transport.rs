@@ -125,6 +125,24 @@ impl ShellClient {
             }),
         })
     }
+    /// Resolve a server-provided file URL without attaching credentials.
+    pub fn file_url(&self, value: &str) -> Result<Url, Error> {
+        let url = self
+            .inner
+            .endpoint
+            .join(value)
+            .map_err(|_| Error::Protocol)?;
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err(Error::Protocol);
+        }
+        Ok(url)
+    }
+
+    /// Content capabilities must be isolated from the authenticated API origin.
+    pub fn is_api_origin(&self, url: &Url) -> bool {
+        url.origin() == self.inner.endpoint.origin()
+    }
+
     pub(crate) fn url(&self, segments: &[&str], query: &[(&str, String)]) -> Result<Url, Error> {
         let mut url = self.inner.endpoint.clone();
         url.path_segments_mut()
@@ -305,6 +323,12 @@ async fn checked(response: Response) -> Result<Response, Error> {
                 Some(code) if code.ends_with("_not_found") => Err(Error::Http(404)),
                 _ => Err(Error::Protocol),
             };
+        }
+        if status == 409 {
+            let raw: Value = response.json().await.map_err(|_| Error::Protocol)?;
+            if raw["error"]["code"] == "content_host_required" {
+                return Err(Error::ContentHostRequired);
+            }
         }
         Err(Error::Http(status))
     }

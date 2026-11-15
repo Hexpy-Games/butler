@@ -1,5 +1,5 @@
 //! ArtifactPreview.showcase.tsx: text, an image, frames, loading and failed, and the page
-//! surface. Frames hold no page (web artifacts are the P5 browser's), and the three page-surface
+//! surface. A stand-in page demonstrates the frame slot; the three page-surface
 //! stories, which React draws inside a scaled AdaptiveShell file viewer (ShellFrameDemo), show
 //! the page-surface preview alone in a plain 405px-tall box.
 use butler_ds::ui::blocks::artifact_preview::{
@@ -15,6 +15,10 @@ use crate::copy::Lang;
 
 pub(super) fn stories() -> Vec<Story> {
     vec![
+        Story {
+            name: "Frame with a page",
+            render: frame_page,
+        },
         Story {
             name: "Text",
             render: text,
@@ -135,4 +139,16 @@ fn page_image(_: Lang, _: &mut Window, _: &mut App) -> AnyElement {
             .surface(Surface::Page)
             .child(ArtifactPreviewImage::new(thumbnail_wide(), (320., 180.))),
     )
+}
+
+fn frame_page(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
+    ArtifactPreview::new("ap-page-frame")
+        .child(
+            ArtifactPreviewFrame::new().page(
+                div()
+                    .size_full()
+                    .child(Typo::body(lang.pick("Embedded page", "임베디드 페이지"))),
+            ),
+        )
+        .into_any_element()
 }

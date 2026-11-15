@@ -27,6 +27,13 @@ impl BrowserState {
         }
     }
     pub(crate) fn answer_dialog(&mut self, id: &TabId, dialog: u64, answer: DialogAnswer) {
+        if let Some(embed) = self.embeds.get_mut(id) {
+            if embed.dialog.as_ref().is_some_and(|d| d.id == dialog) {
+                embed.dialog = None;
+                self.engine.answer_dialog(id, dialog, answer);
+            }
+            return;
+        }
         let Some(tab) = self.tabs.iter_mut().find(|t| &t.id == id) else {
             return;
         };

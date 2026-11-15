@@ -35,6 +35,7 @@ impl OsrSink for Sink {
 }
 
 pub(crate) struct CefEngine {
+    events: mpsc::UnboundedSender<PageEvent>,
     runtime: Rc<OsrRuntime>,
     pages: Pages,
     ids: HashMap<TabId, u64>,
@@ -61,9 +62,10 @@ impl CefEngine {
         )?);
         let pages = Pages::default();
         let shown = Rc::new(Cell::new(None));
-        Self::receive(&pages, &gate, receiver, events, cx);
+        Self::receive(&pages, &gate, receiver, events.clone(), cx);
         Self::schedule(&runtime, requests, cx);
         Ok(Self {
+            events,
             runtime,
             pages,
             ids: HashMap::new(),
@@ -272,6 +274,26 @@ impl PageEngine for CefEngine {
         );
         if !url.is_empty() {
             self.materialize(id, url);
+        }
+    }
+
+    fn open_embed(&mut self, page: &TabId, url: &str, profile: Profile) {
+        self.open(page, "", profile, &page.0);
+        let Some(&id) = self.ids.get(page) else {
+            return;
+        };
+        let Some(profile) = self.pending.remove(&id) else {
+            return;
+        };
+        match self.runtime.open_embed(id, url, profile) {
+            Ok(()) => self.runtime.set_visible(id, true),
+            Err(error) => {
+                eprintln!("CEF embed failed: {error}");
+                let _ = self.events.unbounded_send(PageEvent {
+                    page: page.clone(),
+                    change: PageChange::Crashed,
+                });
+            }
         }
     }
 

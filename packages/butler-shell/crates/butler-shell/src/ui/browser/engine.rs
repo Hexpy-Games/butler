@@ -92,6 +92,9 @@ pub(crate) trait PageEngine: 'static {
     fn enabled(&self) -> bool;
     /// A page for `page`; `url` is empty for a blank page.
     fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str);
+    fn open_embed(&mut self, page: &TabId, url: &str, profile: Profile) {
+        self.open(page, url, profile, &page.0);
+    }
     fn command(&mut self, page: &TabId, command: PageCommand);
     /// The page's size in logical pixels and the device scale (from PageCard's bounds).
     fn resize(&mut self, page: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32);
