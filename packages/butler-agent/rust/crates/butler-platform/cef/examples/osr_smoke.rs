@@ -1,4 +1,7 @@
-#[cfg(target_os = "macos")]
+//! The OSR runtime end to end: first frame (centre pixel read on a separate GPU path), navigation
+//! events, shutdown. macOS: run inside the staged bundle. Windows: run from the stage.py output
+//! directory (libcef.dll and the `butler_cef_host.exe` helper beside this executable).
+#[cfg(cef_osr)]
 mod smoke {
     use butler_cef_host::osr::{OsrConfig, OsrEvent, OsrRuntime, OsrSink, read_bgra_pixel};
     use std::{
@@ -105,13 +108,54 @@ mod smoke {
         println!("second navigation: Url({SECOND}), Title(OSR second), History(can_back=true)");
         Ok(())
     }
-    pub(super) fn run() -> Result<(), Box<dyn Error>> {
+    #[cfg(target_os = "macos")]
+    fn locations() -> Result<(PathBuf, PathBuf, &'static str), Box<dyn Error>> {
         let exe = std::env::current_exe()?;
         let contents = exe
             .parent()
             .and_then(|p| p.parent())
             .ok_or("missing bundle Contents")?;
         let frameworks = contents.join("Frameworks");
+        Ok((
+            frameworks.join("Chromium Embedded Framework.framework"),
+            frameworks.join("butler-cef-host Helper.app/Contents/MacOS/butler-cef-host Helper"),
+            "Macintosh; Intel Mac OS X 10_15_7",
+        ))
+    }
+    #[cfg(windows)]
+    fn locations() -> Result<(PathBuf, PathBuf, &'static str), Box<dyn Error>> {
+        let exe = std::env::current_exe()?;
+        let dir = exe.parent().ok_or("missing executable directory")?;
+        Ok((
+            dir.to_path_buf(),
+            dir.join("butler_cef_host.exe"),
+            "Windows NT 10.0; Win64; x64",
+        ))
+    }
+    #[cfg(target_os = "macos")]
+    fn remove_profile(profile: &std::path::Path) -> std::io::Result<()> {
+        std::fs::remove_dir_all(profile)
+    }
+    /// Chromium's logging keeps this process's handle to cef.log open until exit, and Windows
+    /// cannot delete an open file; the caller removes that one file and the directory.
+    #[cfg(windows)]
+    fn remove_profile(profile: &std::path::Path) -> std::io::Result<()> {
+        for entry in std::fs::read_dir(profile)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                std::fs::remove_dir_all(&path)?;
+            } else if path.file_name() != Some("cef.log".as_ref()) {
+                std::fs::remove_file(&path)?;
+            }
+        }
+        println!(
+            "profile removed except cef.log (open until exit): {}",
+            profile.display()
+        );
+        Ok(())
+    }
+    pub(super) fn run() -> Result<(), Box<dyn Error>> {
+        let (framework_dir, helper_path, platform) = locations()?;
         let profile: PathBuf =
             std::env::temp_dir().join(format!("butler-osr-smoke-{}", std::process::id()));
         std::fs::create_dir(&profile)?;
@@ -119,13 +163,12 @@ mod smoke {
         let (tx, requests) = mpsc::channel();
         let runtime = OsrRuntime::start(
             OsrConfig {
-                framework_dir: frameworks.join("Chromium Embedded Framework.framework"),
-                helper_path: frameworks
-                    .join("butler-cef-host Helper.app/Contents/MacOS/butler-cef-host Helper"),
+                framework_dir,
+                helper_path,
                 profile_dir: profile.clone(),
                 locale: "en-US".into(),
                 user_agent: format!(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{}.{}.{}.{} Safari/537.36 Butler/1",
+                    "Mozilla/5.0 ({platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{}.{}.{}.{} Safari/537.36 Butler/1",
                     cef::sys::CHROME_VERSION_MAJOR,
                     cef::sys::CHROME_VERSION_MINOR,
                     cef::sys::CHROME_VERSION_BUILD,
@@ -139,18 +182,18 @@ mod smoke {
         )?;
         let result = verify(&runtime, &sink, &requests);
         runtime.shutdown();
-        std::fs::remove_dir_all(profile)?;
+        remove_profile(&profile)?;
         result?;
         println!("OSR smoke: PASS; shutdown complete");
         Ok(())
     }
 }
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     smoke::run()
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(cef_osr))]
 fn main() {
-    eprintln!("osr_smoke requires macOS");
+    eprintln!("osr_smoke requires macOS or Windows");
     std::process::exit(1);
 }

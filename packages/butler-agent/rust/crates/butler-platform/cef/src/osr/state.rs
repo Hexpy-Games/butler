@@ -1,5 +1,8 @@
-use super::{OsrIme, OsrSink, frame_pool::FramePool, gpu::GpuCopy};
-use core_video::pixel_buffer::CVPixelBuffer;
+use super::{Frame, OsrIme, OsrSink};
+#[cfg(windows)]
+use super::{d3d::GpuCopy, d3d_pool::FramePool};
+#[cfg(target_os = "macos")]
+use super::{frame_pool::FramePool, gpu::GpuCopy};
 use std::{cell::RefCell, rc::Rc};
 
 pub(super) type PageRef = Rc<RefCell<Page>>;
@@ -10,7 +13,7 @@ pub(super) struct Page {
     pub(super) closing: bool,
     pub(super) signed_out_owner: Option<String>,
     pub(super) browser: Option<cef::Browser>,
-    pub(super) frame: Option<CVPixelBuffer>,
+    pub(super) frame: Option<Frame>,
     pub(super) pool: FramePool,
     pub(super) gpu: Option<GpuCopy>,
     pub(super) paint_error_logged: bool,

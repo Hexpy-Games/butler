@@ -1,8 +1,15 @@
 #![allow(clippy::transmute_ptr_to_ptr, reason = "cef-rs wrap macros")]
+#[cfg(windows)]
+use super::d3d::copy_frame;
+#[cfg(target_os = "macos")]
 use super::{
-    OsrError, OsrEvent,
+    OsrError,
     gpu::{GpuCopy, wrap_accelerated},
-    state::{Events, Page, PageRef},
+    state::Page,
+};
+use super::{
+    OsrEvent,
+    state::{Events, PageRef},
 };
 use cef::*;
 
@@ -27,8 +34,9 @@ cef::wrap_render_handler! {
                 let mut p = self.shared.borrow_mut();
                 if !p.visible || p.closing { return; }
                 let Some(info) = info else { return; };
+                // Ok(false): the frame was dropped (no free pooled texture on Windows).
                 match copy_frame(&mut p, info) {
-                    Ok(()) => true,
+                    Ok(accepted) => accepted,
                     Err(error) => {
                         if !p.paint_error_logged {
                             eprintln!("CEF OSR paint skipped: {error}");
@@ -49,7 +57,8 @@ cef::wrap_render_handler! {
         }
     }
 }
-fn copy_frame(page: &mut Page, info: &AcceleratedPaintInfo) -> Result<(), OsrError> {
+#[cfg(target_os = "macos")]
+fn copy_frame(page: &mut Page, info: &AcceleratedPaintInfo) -> Result<bool, OsrError> {
     let source = wrap_accelerated(info)?;
     if page.gpu.is_none() {
         page.gpu = Some(GpuCopy::new()?);
@@ -61,5 +70,5 @@ fn copy_frame(page: &mut Page, info: &AcceleratedPaintInfo) -> Result<(), OsrErr
         .ok_or_else(|| OsrError("missing GPU copier".into()))?;
     gpu.copy(&source, &frame)?;
     page.frame = Some(frame);
-    Ok(())
+    Ok(true)
 }
