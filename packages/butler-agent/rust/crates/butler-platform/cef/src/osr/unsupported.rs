@@ -1,5 +1,7 @@
 //! Uninhabited seam for platforms without an OSR implementation.
-use super::{OsrConfig, OsrError, OsrIme, OsrKey, OsrMouse, OsrSink, OsrWheel, PumpScheduler};
+use super::{
+    OsrConfig, OsrError, OsrIme, OsrKey, OsrMouse, OsrProfile, OsrSink, OsrWheel, PumpScheduler,
+};
 use std::{convert::Infallible, ops::Range, rc::Rc};
 
 pub struct OsrRuntime {
@@ -23,7 +25,14 @@ impl OsrRuntime {
     pub fn pump(&self) {
         match self.never {}
     }
-    pub fn open(&self, _: u64, _: &str, _: (u32, u32), _: f32) -> Result<(), OsrError> {
+    pub fn open(
+        &self,
+        _: u64,
+        _: &str,
+        _: (u32, u32),
+        _: f32,
+        _: OsrProfile,
+    ) -> Result<(), OsrError> {
         match self.never {}
     }
     pub fn navigate(&self, _: u64, _: &str) {

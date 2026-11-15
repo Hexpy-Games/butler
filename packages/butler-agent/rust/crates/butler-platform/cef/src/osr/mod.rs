@@ -60,6 +60,7 @@ pub type PumpScheduler = std::sync::Arc<dyn Fn(std::time::Duration) + Send + Syn
 struct RuntimeState {
     pages: RefCell<HashMap<u64, PageRef>>,
     visible: Cell<usize>,
+    contexts: RefCell<HashMap<String, (cef::RequestContext, usize)>>,
 }
 
 #[cfg(target_os = "macos")]
@@ -145,6 +146,7 @@ impl OsrRuntime {
             state: Rc::new(RuntimeState {
                 pages: RefCell::default(),
                 visible: Cell::new(0),
+                contexts: RefCell::default(),
             }),
             sink,
             schedule,
@@ -160,11 +162,40 @@ impl OsrRuntime {
         }
     }
 
-    pub fn open(&self, page: u64, url: &str, size: (u32, u32), scale: f32) -> Result<(), OsrError> {
+    pub fn open(
+        &self,
+        page: u64,
+        url: &str,
+        size: (u32, u32),
+        scale: f32,
+        profile: OsrProfile,
+    ) -> Result<(), OsrError> {
         if self.state.pages.borrow().contains_key(&page) {
             return Err(OsrError("page already exists".into()));
         }
+        let owner = match profile {
+            OsrProfile::SignedIn => None,
+            OsrProfile::SignedOut(owner) => Some(owner),
+        };
+        let mut context = owner
+            .as_ref()
+            .map(|owner| {
+                self.state
+                    .contexts
+                    .borrow()
+                    .get(owner)
+                    .map(|(context, _)| context.clone())
+                    .or_else(|| {
+                        cef::request_context_create_context(
+                            Some(&cef::RequestContextSettings::default()),
+                            None,
+                        )
+                    })
+                    .ok_or_else(|| OsrError("create request context failed".into()))
+            })
+            .transpose()?;
         let shared = Rc::new(RefCell::new(Page::new(size, scale)));
+        shared.borrow_mut().signed_out_owner = owner.clone();
         let events = Events {
             page,
             sink: self.sink.clone(),
@@ -183,9 +214,17 @@ impl OsrRuntime {
                 ..Default::default()
             }),
             None,
-            None,
+            context.as_mut(),
         )
         .ok_or_else(|| OsrError("create OSR browser failed".into()))?;
+        if let (Some(owner), Some(context)) = (owner, context) {
+            self.state
+                .contexts
+                .borrow_mut()
+                .entry(owner)
+                .or_insert((context, 0))
+                .1 += 1;
+        }
         shared.borrow_mut().browser = Some(browser);
         self.state.pages.borrow_mut().insert(page, shared);
         self.state.visible.set(self.state.visible.get() + 1);

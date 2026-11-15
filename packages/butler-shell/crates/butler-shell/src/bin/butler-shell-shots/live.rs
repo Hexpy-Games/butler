@@ -175,7 +175,7 @@ fn browser_report(h: &mut Harness, command: &str) -> anyhow::Result<()> {
                 };
                 let tabs: Vec<_> = model.tabs().iter().map(|t| serde_json::json!({"id":t.id.0.as_ref(), "owner":match &t.owner {
                     ui::browser::model::Owner::Mine => "mine".to_owned(), ui::browser::model::Owner::Conversation(id) => format!("conversation:{id}")
-                }, "url":t.url,"title":t.title,"status":format!("{:?}",t.status).to_lowercase()})).collect();
+                }, "url":t.url,"title":t.title,"can_back":t.can_back,"can_forward":t.can_forward,"profile": match t.profile { ui::browser::engine::Profile::SignedIn => "signed_in", ui::browser::engine::Profile::SignedOut => "signed_out" },"status":format!("{:?}",t.status).to_lowercase()})).collect();
                 println!("LIVE BROWSER {}", serde_json::json!({"view":view,"active":model.active().map(|id|id.0.as_ref()),"tabs":tabs}));
             })
 }

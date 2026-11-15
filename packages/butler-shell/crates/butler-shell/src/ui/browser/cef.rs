@@ -4,8 +4,8 @@ mod ime;
 mod input;
 mod surface;
 
-use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, TabId};
-use butler_cef_host::osr::{OsrEvent, OsrRuntime, OsrSink};
+use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
+use butler_cef_host::osr::{OsrEvent, OsrProfile, OsrRuntime, OsrSink};
 use futures::{
     StreamExt as _,
     channel::mpsc,
@@ -35,6 +35,7 @@ pub(crate) struct CefEngine {
     ids: HashMap<TabId, u64>,
     shown: Rc<Cell<Option<u64>>>,
     next_id: u64,
+    pending: HashMap<u64, OsrProfile>,
 }
 impl CefEngine {
     pub(crate) fn start(
@@ -60,7 +61,20 @@ impl CefEngine {
             ids: HashMap::new(),
             shown,
             next_id: 0,
+            pending: HashMap::new(),
         })
+    }
+    fn materialize(&mut self, id: u64, url: &str) {
+        let Some(profile) = self.pending.get(&id) else {
+            return;
+        };
+        match self.runtime.open(id, url, (1, 1), 1., profile.clone()) {
+            Ok(()) => {
+                self.pending.remove(&id);
+                self.runtime.set_visible(id, self.shown.get() == Some(id));
+            }
+            Err(error) => eprintln!("CEF open failed: {error}"),
+        }
     }
     fn receive(
         pages: &Pages,
@@ -150,7 +164,7 @@ impl PageEngine for CefEngine {
     fn enabled(&self) -> bool {
         true
     }
-    fn open(&mut self, page: &TabId, url: &str) {
+    fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str) {
         self.next_id += 1;
         let id = self.next_id;
         self.ids.insert(page.clone(), id);
@@ -158,22 +172,30 @@ impl PageEngine for CefEngine {
             id,
             (page.clone(), Rc::new(RefCell::new(PageState::default()))),
         );
-        if let Err(error) = self.runtime.open(
+        self.pending.insert(
             id,
-            if url.is_empty() { "about:blank" } else { url },
-            (1, 1),
-            1.,
-        ) {
-            eprintln!("CEF open failed: {error}");
+            match profile {
+                Profile::SignedIn => OsrProfile::SignedIn,
+                Profile::SignedOut => OsrProfile::SignedOut(owner.to_owned()),
+            },
+        );
+        if !url.is_empty() {
+            self.materialize(id, url);
         }
-        self.runtime.set_visible(id, false);
     }
+
     fn command(&mut self, page: &TabId, command: PageCommand) {
         let Some(&id) = self.ids.get(page) else {
             return;
         };
         match command {
-            PageCommand::Load(url) => self.runtime.navigate(id, &url),
+            PageCommand::Load(url) => {
+                if self.pending.contains_key(&id) {
+                    self.materialize(id, &url);
+                } else {
+                    self.runtime.navigate(id, &url);
+                }
+            }
             PageCommand::Back => self.runtime.back(id),
             PageCommand::Forward => self.runtime.forward(id),
             PageCommand::Reload => self.runtime.reload(id),
@@ -215,6 +237,7 @@ impl PageEngine for CefEngine {
     }
     fn close(&mut self, page: &TabId) {
         if let Some(id) = self.ids.remove(page) {
+            self.pending.remove(&id);
             self.runtime.close(id);
             self.pages.borrow_mut().remove(&id);
             if self.shown.get() == Some(id) {
@@ -228,6 +251,9 @@ impl PageEngine for CefEngine {
     }
     fn surface(&self, page: &TabId, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
         let id = *self.ids.get(page)?;
+        if self.pending.contains_key(&id) {
+            return None;
+        }
         let state = self.pages.borrow().get(&id)?.1.clone();
         Some(surface::element(id, &self.runtime, state, window, cx))
     }

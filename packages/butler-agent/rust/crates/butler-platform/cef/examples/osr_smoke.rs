@@ -56,7 +56,13 @@ mod smoke {
         requests: &Receiver<Duration>,
     ) -> Result<(), Box<dyn Error>> {
         let start = Instant::now();
-        runtime.open(1, FIRST, (320, 240), 1.)?;
+        runtime.open(
+            1,
+            FIRST,
+            (320, 240),
+            1.,
+            butler_cef_host::osr::OsrProfile::SignedIn,
+        )?;
         wait(runtime, requests, || {
             sink.events
                 .borrow()

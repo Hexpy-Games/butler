@@ -17,7 +17,9 @@ use butler_ds::ui::{
     icon_button::IconButton,
     toast::{self, Toast},
 };
-use gpui::{AnyElement, App, Entity, IntoElement as _, ParentElement as _, Window, div};
+use gpui::{
+    AnyElement, App, Entity, IntoElement as _, ParentElement as _, Styled as _, Window, div,
+};
 use serde_json::{Value, json};
 
 #[derive(Default)]
@@ -216,6 +218,8 @@ pub(super) fn menu(state: &Entity<AreaState>, window: &mut Window, cx: &mut App)
             }
         }));
     div()
+        .flex()
+        .items_center()
         .child(trigger)
         .child(menu.content(content, window, cx))
         .into_any_element()

@@ -194,7 +194,7 @@ pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut 
         .filter(|t| !t.url.is_empty() && t.status != TabStatus::Crashed)
         .map(|t| t.id.clone());
     cx.global_mut::<BrowserState>().show(shown.as_ref());
-    let strip = super::tabs::strip(&tabs, session, &state, cx);
+    let strip = super::tabs::strip(&tabs, session, &state, window, cx);
     let toolbar = super::toolbar::toolbar(tab, &state, window, cx);
     let page = page(tab, window, cx);
     let pane = BrowserPane::new(
