@@ -28,7 +28,7 @@ const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-gpui-update-
 const data = join(root, "data");
 const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "home/AppData/Local"), APPDATA: join(root, "home/AppData/Roaming"),
-  TEMP: join(root, "tmp"), TMP: join(root, "tmp"), SQUIRREL_TEMP: join(root, "squirrel"),
+  TEMP: join(root, "tmp"), TMP: join(root, "tmp"), SQUIRREL_TEMP: join(root, "home/AppData/Local"),
   BUTLER_E2E_TIER: "stub", BUTLER_SECRET_STORE: "file", BUTLER_APP_SERVER_PORT: String(port),
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_UPDATE_MANIFEST: join(root, "manifest.json"),
   ELECTRON_ENABLE_LOGGING: "1", ELECTRON_LOG_FILE: join(root, "electron.log"),
@@ -51,7 +51,7 @@ let phase = "prepare";
 try {
   const local = powershell("[Environment]::GetFolderPath('LocalApplicationData', [Environment+SpecialFolderOption]::DoNotVerify)", env);
   assert.equal(resolve(local).toLowerCase(), resolve(env.LOCALAPPDATA).toLowerCase(), "Squirrel profile must be isolated");
-  for (const path of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, env.TEMP, env.SQUIRREL_TEMP]) mkdirSync(path, { recursive: true });
+  for (const path of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, env.TEMP]) mkdirSync(path, { recursive: true });
   writeFileSync(env.BUTLER_APP_UPDATE_MANIFEST, JSON.stringify({ app_version: from, artifacts: [] }));
   shortcuts = [join(env.APPDATA, "Microsoft/Windows/Start Menu/Programs/Butler.lnk"), shortcutPaths(env)[1]!];
   mkdirSync(dirname(shortcuts[1]!), { recursive: true });
