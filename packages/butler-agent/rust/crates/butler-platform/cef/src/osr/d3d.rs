@@ -201,6 +201,8 @@ pub(super) fn copy_frame(
         page.pool = FramePool::default();
     }
     if page.gpu.is_none() {
+        // While a reset device cannot be recreated yet, the pump retries this paint.
+        page.pool.repaint_pending = true;
         page.gpu = Some(GpuCopy::new()?);
     }
     let gpu = page.gpu.as_ref().ok_or_else(|| missing("GPU copier"))?;
@@ -237,6 +239,7 @@ pub(super) fn copy_frame(
         page.pool.repaint_pending = true;
         return Ok(false);
     }
+    page.pool.repaint_pending = false;
     page.frame = Some(target.frame);
     Ok(true)
 }
