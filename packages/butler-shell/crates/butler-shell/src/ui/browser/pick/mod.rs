@@ -10,6 +10,8 @@ mod gesture;
 mod input;
 mod probe;
 mod reader;
+mod resources;
+mod snapshot;
 mod view;
 #[cfg(feature = "cef")]
 pub(crate) use gesture::{Mouse, mouse};

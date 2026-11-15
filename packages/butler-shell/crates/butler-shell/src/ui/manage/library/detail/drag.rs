@@ -145,10 +145,6 @@ pub(crate) fn drop_group_on(drag: &GroupDrag, target: &str, cx: &mut App) {
 }
 
 /// `afterScrap`: scraps saved without a group: offer the group list.
-#[expect(
-    dead_code,
-    reason = "the in-app browser's element saves call it (G-cef)"
-)]
 pub(crate) fn after_scrap(ids: Vec<String>, cx: &mut App) {
     if !ids.is_empty() {
         open_dialog(LibraryDialog::Saved { ids, beside: false }, cx);

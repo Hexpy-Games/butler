@@ -29,8 +29,8 @@ pub(crate) use actions::{item_meta, rename_item};
 pub(crate) use attach::attach_dialog;
 pub(crate) use dialogs::{LibraryDialog, LibraryDialogsEvent};
 pub(crate) use drag::{
-    CardDrag, GroupDrag, card_ghost, drop_cards_on_group, drop_cards_on_session, drop_group_on,
-    group_ghost,
+    CardDrag, GroupDrag, after_scrap, card_ghost, drop_cards_on_group, drop_cards_on_session,
+    drop_group_on, group_ghost,
 };
 pub(crate) use files::{file_viewer, open_detail, open_file, open_page};
 pub(crate) use panel::LibraryDetail;
