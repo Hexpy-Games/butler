@@ -7,7 +7,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 import { windowsPackageVersion } from "../../client/electron/scripts/windows-package-version.mjs";
-import { assertShortcuts, fileHolders, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
+import { assertShortcuts, fileHolders, powershell, preserveInstallerLogs, readJson, removeProfile, sampleInstallProcesses, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
   throw new Error("Registry/shortcut/installer smoke is restricted to disposable GitHub-hosted runners");
@@ -203,7 +203,17 @@ async function runUninstall() {
     throw new Error(`${String(error)}; file holders: ${JSON.stringify(holders)}`, { cause: error });
   }
   uninstallStarted = true;
-  run(updater, ["--uninstall", "--silent"]);
+  await sampleInstallProcesses(installed, join(root, "uninstall-processes.log"), env, async () => {
+    const stdout = openSync(join(root, `${phase}-stdout.log`), "w");
+    const stderr = openSync(join(root, `${phase}-stderr.log`), "w");
+    try {
+      const child = spawn(updater, ["--uninstall", "--silent"], { env, timeout: 120_000, stdio: ["ignore", stdout, stderr] });
+      let error: Error | undefined;
+      child.on("error", value => { error = value; });
+      const status = await new Promise<number | null>(resolve => child.on("close", resolve));
+      assert.equal(status, 0, `${updater}: ${error?.message ?? status}`);
+    } finally { closeSync(stdout); closeSync(stderr); }
+  });
 }
 
 async function uninstall() {
@@ -221,7 +231,8 @@ async function uninstall() {
   const expected = [".dead", "Update.exe", join(`app-${toPackage}`, "squirrel.exe")].map(path => path.toLowerCase());
   const unexpected = files.filter(path => !expected.includes(path));
   const missing = expected.filter(path => !files.includes(path));
-  assert.deepEqual(files.sort(), expected.sort(), `Uninstall remnants: unexpected [${unexpected.join(", ")}]; missing [${missing.join(", ")}]`);
+  const processes = readFileSync(join(root, "uninstall-processes.log"), "utf8");
+  assert.deepEqual(files.sort(), expected.sort(), `Uninstall remnants: unexpected [${unexpected.join(", ")}]; missing [${missing.join(", ")}]; uninstall processes:\n${processes}`);
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
 }
 

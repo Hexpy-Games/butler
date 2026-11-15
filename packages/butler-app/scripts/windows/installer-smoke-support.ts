@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
-import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
@@ -12,6 +12,60 @@ export function powershell(script: string, env = process.env): string {
   });
   assert.equal(result.status, 0, `PowerShell failed: ${result.stderr}`);
   return result.stdout.trim();
+}
+
+/** Keep one CIM sampler ready before the action starts; flush each process identity once. */
+export async function sampleInstallProcesses(installed: string, log: string, env: NodeJS.ProcessEnv, action: () => Promise<void>) {
+  const output = openSync(log, "w");
+  const sampler = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `
+    $ErrorActionPreference = 'Stop'
+    [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    $install = [IO.Path]::GetFullPath($env:BUTLER_SMOKE_INSTALL).TrimEnd('\\')
+    $root = $install + '\\'
+    $seen = @{}
+    [Console]::Error.WriteLine('ready')
+    while ($true) {
+      Get-CimInstance Win32_Process | Where-Object {
+        ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) -or
+        ($_.CommandLine -and $_.CommandLine.IndexOf($install, [StringComparison]::OrdinalIgnoreCase) -ge 0)
+      } | ForEach-Object {
+        $key = '{0}:{1}' -f $_.ProcessId, $_.CreationDate.Ticks
+        if (-not $seen.ContainsKey($key)) {
+          $seen[$key] = $true
+          [Console]::Out.WriteLine((ConvertTo-Json -Compress -InputObject @{
+            pid = $_.ProcessId; parentPid = $_.ParentProcessId; path = $_.ExecutablePath
+            commandLine = $_.CommandLine; created = $_.CreationDate.ToString('o')
+          }))
+          [Console]::Out.Flush()
+        }
+      }
+      Start-Sleep -Milliseconds 250
+    }`], { env: windowsPowerShellEnvironment({ ...env, BUTLER_SMOKE_INSTALL: installed }),
+    windowsHide: true, stdio: ["ignore", output, "pipe"] });
+  closeSync(output);
+  let errors = "";
+  let ended = false;
+  let spawnError: Error | undefined;
+  const closed = new Promise<void>(resolve => sampler.on("close", () => { ended = true; resolve(); }));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("Process sampler readiness timed out")), 120_000);
+      sampler.on("error", error => { spawnError = error; reject(error); });
+      sampler.on("close", code => reject(new Error(`Process sampler exited: ${code}; ${errors}`)));
+      sampler.stderr!.on("data", chunk => {
+        errors += chunk.toString();
+        if (errors.split(/\r?\n/u).includes("ready")) resolve();
+      });
+    });
+    clearTimeout(timer);
+    await action();
+    assert.ok(!ended && !spawnError, `Process sampler stopped during uninstall: ${spawnError ?? errors}`);
+  } finally {
+    clearTimeout(timer);
+    if (!ended) sampler.kill();
+    await closed;
+  }
 }
 
 /** Query Restart Manager for processes holding any of the supplied files. */
