@@ -1501,6 +1501,7 @@ name = "butler-runtime"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
+ "butler-cef",
  "butler-core",
  "butler-log",
  "butler-models",

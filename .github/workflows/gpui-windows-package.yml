@@ -125,8 +125,7 @@ jobs:
             packages/butler-shell -> ../../target/gpui-package
             packages/butler-agent/rust -> ../../../target/gpui-package
           key: gpui-package-windows-x64
-      - name: Build release shell
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release --bin butler-shell
+          save-if: ${{ github.event_name == 'push' }}
       - name: Locate CEF cache
         shell: pwsh
         run: '"CEF_PATH=$env:RUNNER_TEMP/cef" >> $env:GITHUB_ENV'
@@ -137,6 +136,8 @@ jobs:
       - name: Fetch pinned CEF
         working-directory: packages/butler-agent/rust
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 crates/butler-platform/cef/fetch.py --dest "$CEF_PATH"
+      - name: Build release shell
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release --bin butler-shell --features cef
       - name: Build CEF host
         working-directory: packages/butler-agent/rust
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release -p butler-cef --features cef --target x86_64-pc-windows-msvc
@@ -224,6 +225,14 @@ jobs:
           name: gpui-app-windows-x64
           path: dist/release/app-windows-gpui/*
           if-no-files-found: error
+      - name: Download Handle for uninstall diagnostics
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $handle = Join-Path $env:RUNNER_TEMP 'handle'
+          New-Item -ItemType Directory -Force $handle | Out-Null
+          Invoke-WebRequest 'https://download.sysinternals.com/files/Handle.zip' -OutFile (Join-Path $handle 'Handle.zip')
+          Expand-Archive (Join-Path $handle 'Handle.zip') $handle -Force
       - name: Download the published Electron installer and prove the update
         shell: pwsh
         env:
@@ -231,6 +240,7 @@ jobs:
           BUTLER_WINDOWS_SMOKE_FROM: ${{ needs.versions.outputs.from }}
           BUTLER_WINDOWS_SMOKE_TO: ${{ needs.versions.outputs.to }}
           BUTLER_WINDOWS_INSTALLER_EVIDENCE: ${{ runner.temp }}/gpui-update-logs
+          BUTLER_SMOKE_HANDLE_EXE: ${{ runner.temp }}/handle/handle64.exe
         run: |
           $env:HOME = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
           $env:BUTLER_DATA = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid())
@@ -246,7 +256,7 @@ jobs:
             Remove-JobTree $env:BUTLER_DATA
           }
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: gpui-update-smoke-logs
           path: ${{ runner.temp }}/gpui-update-logs

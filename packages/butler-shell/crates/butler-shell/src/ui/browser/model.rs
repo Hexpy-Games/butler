@@ -1,5 +1,4 @@
 //! The shell owns tab order and metadata; page engines report changes over a channel.
-use super::page_dialog::DialogAnswer;
 use std::fmt;
 
 use futures::{StreamExt as _, channel::mpsc};
@@ -43,9 +42,14 @@ pub(crate) enum TabStatus {
 }
 
 #[derive(Clone)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent navigation capabilities and tab metadata flags"
+)]
 pub(crate) struct Tab {
     pub(crate) id: TabId,
     pub(crate) owner: Owner,
+    pub(crate) epoch: u64,
     pub(crate) url: String,
     pub(crate) title: String,
     pub(crate) favicon: String,
@@ -54,6 +58,9 @@ pub(crate) struct Tab {
     pub(crate) can_forward: bool,
     pub(crate) placeholder: bool,
     pub(crate) profile: Profile,
+    pub(crate) opener: Option<TabId>,
+    pub(crate) popup: bool,
+    pub(crate) blocked_popup: Option<super::page_dialog::BlockedPopup>,
     pub(crate) dialog: Option<super::page_dialog::PageDialog>,
 }
 
@@ -94,10 +101,11 @@ impl From<AddressError> for BrowserError {
 }
 
 pub(crate) struct BrowserState {
-    engine: Box<dyn PageEngine>,
-    tabs: Vec<Tab>,
-    active: Option<TabId>,
-    next_id: u64,
+    pub(super) engine: Box<dyn PageEngine>,
+    pub(super) tabs: Vec<Tab>,
+    pub(super) active: Option<TabId>,
+    pub(super) next_id: u64,
+    pub(super) publisher: super::host::Publisher,
 }
 
 impl Global for BrowserState {}
@@ -106,7 +114,9 @@ impl BrowserState {
     pub(crate) fn init(cx: &mut App) {
         let (sender, mut receiver) = mpsc::unbounded();
         let engine = Self::engine(sender, cx);
+        let publisher = super::host::Publisher::start(cx);
         cx.set_global(Self {
+            publisher,
             engine,
             tabs: Vec::new(),
             active: None,
@@ -116,6 +126,7 @@ impl BrowserState {
             while let Some(event) = receiver.next().await {
                 cx.update(|cx| {
                     cx.global_mut::<Self>().apply(event);
+                    super::popup_window::sync(cx);
                     cx.refresh_windows();
                 });
             }
@@ -157,9 +168,7 @@ impl BrowserState {
             .map(|url| web_url(url).ok_or(BrowserError::BlockedProtocol))
             .transpose()?
             .unwrap_or_default();
-        if owner == Owner::Mine
-            && self.tabs.iter().filter(|tab| tab.owner == owner).count() >= USER_TABS
-        {
+        if self.tabs.iter().filter(|tab| tab.owner == owner).count() >= USER_TABS {
             return Err(BrowserError::TabBudgetExhausted);
         }
         self.next_id += 1;
@@ -169,6 +178,7 @@ impl BrowserState {
         self.tabs.push(Tab {
             id: id.clone(),
             owner,
+            epoch: 1,
             profile,
             placeholder: placeholder && url.is_empty(),
             url: url.clone(),
@@ -177,6 +187,9 @@ impl BrowserState {
             status: TabStatus::Idle,
             can_back: false,
             can_forward: false,
+            opener: None,
+            popup: false,
+            blocked_popup: None,
             dialog: None,
         });
         self.activate(&id);
@@ -185,6 +198,7 @@ impl BrowserState {
         }
         self.engine
             .open(&id, &url, profile, &super::area::owner_key(&tab_owner));
+        self.publisher.changed(&self.tabs);
         Ok(Some(id))
     }
 
@@ -195,12 +209,14 @@ impl BrowserState {
     }
 
     pub(crate) fn close(&mut self, id: &TabId) {
+        self.close_popups(id);
         self.cancel_dialog(id, "tab_closed");
         let Some(index) = self.tabs.iter().position(|tab| &tab.id == id) else {
             return;
         };
         self.engine.close(id);
         self.tabs.remove(index);
+        self.publisher.changed(&self.tabs);
         if self.active.as_ref() == Some(id) {
             self.active = self.tabs.last().map(|tab| tab.id.clone());
         }
@@ -240,11 +256,21 @@ impl BrowserState {
             return Err(BrowserError::TabBudgetExhausted);
         }
         if changed_owner {
+            self.close_popups(id);
             self.cancel_dialog(id, "owner_changed");
+            self.engine.change_owner(id, &super::area::owner_key(&to));
         }
+        let from = self
+            .tabs
+            .iter()
+            .position(|tab| &tab.id == id)
+            .ok_or(BrowserError::InvalidMove)?;
         let mut tab = self.tabs.remove(from);
         let new_owner = to.clone();
         tab.owner = to;
+        if changed_owner {
+            tab.epoch += 1;
+        }
         let before = self
             .tabs
             .iter()
@@ -258,6 +284,7 @@ impl BrowserState {
         if changed_owner && has_url {
             self.drop_placeholders(&new_owner);
         }
+        self.publisher.changed(&self.tabs);
         Ok(())
     }
 
@@ -319,8 +346,8 @@ impl BrowserState {
 
     pub(crate) fn apply(&mut self, event: PageEvent) {
         #[cfg(feature = "cef")]
-        if matches!(event.change, PageChange::CloseRequested) {
-            self.close(&event.page);
+        if self.popup_event(&event) {
+            self.publisher.changed(&self.tabs);
             return;
         }
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == event.page) else {
@@ -346,8 +373,12 @@ impl BrowserState {
             #[cfg(feature = "cef")]
             PageChange::Dialog(dialog) => tab.dialog = Some(dialog),
             #[cfg(feature = "cef")]
-            PageChange::CloseRequested => {}
+            PageChange::PopupNewTab(_)
+            | PageChange::PopupBlocked { .. }
+            | PageChange::PopupOpened { .. }
+            | PageChange::CloseRequested => {}
         }
+        self.publisher.changed(&self.tabs);
     }
 
     pub(crate) fn tabs(&self) -> &[Tab] {
@@ -369,22 +400,5 @@ impl BrowserState {
         cx: &mut App,
     ) -> Option<AnyElement> {
         self.engine.surface(id, window, cx)
-    }
-}
-
-impl BrowserState {
-    pub(crate) fn answer_dialog(&mut self, id: &TabId, dialog: u64, answer: DialogAnswer) {
-        let Some(tab) = self.tabs.iter_mut().find(|t| &t.id == id) else {
-            return;
-        };
-        if tab.dialog.as_ref().is_some_and(|d| d.id == dialog) {
-            tab.dialog = None;
-            self.engine.answer_dialog(id, dialog, answer);
-        }
-    }
-    pub(super) fn cancel_dialog(&mut self, id: &TabId, _reason: &str) {
-        if let Some(dialog) = self.tab(id).and_then(|t| t.dialog.as_ref()) {
-            self.answer_dialog(id, dialog.id, DialogAnswer::default());
-        }
     }
 }

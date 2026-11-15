@@ -184,6 +184,7 @@ mod smoke {
                     butler_cef_host::osr::PopupBlock::NoGesture,
                 )
             }),
+            Rc::new(|_| butler_cef_host::osr::DownloadDecision::Dialog),
         )?;
         let result = verify(&runtime, &sink, &requests);
         runtime.shutdown();

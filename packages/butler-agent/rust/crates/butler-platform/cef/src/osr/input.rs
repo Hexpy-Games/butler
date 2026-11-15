@@ -77,10 +77,8 @@ impl OsrRuntime {
             windows_key_code: event.windows_key_code,
             character: event.character,
             unmodified_character: event.unmodified_character,
-            // Alt combinations arrive as WM_SYSKEYDOWN on Windows.
             #[cfg(windows)]
-            // AltGr arrives as Ctrl+Alt and is no system key.
-            is_system_key: i32::from(event.modifiers.alt && !event.modifiers.control),
+            is_system_key: i32::from(event.system_key),
             ..Default::default()
         }));
         // Printable text is committed through IME, preserving macOS composition.

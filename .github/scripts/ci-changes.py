@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ci_policy import CI_TEST_INPUTS, rust_jobs, windows_preview_jobs
 import ci_parts
 import ci_rust_inputs
+import ci_shell_inputs
 import ci_runtime_crates
 import ci_tool_path
 import ci_receipts
@@ -165,11 +166,12 @@ def categories(path, event=None):
     notice = re.match(r'^(licen[cs]e|copying|notice|copyright)([._-]|$)', Path(path).name, re.I)
     license_input = path in LICENSE_INPUTS or bool(notice)
     external_rust = ci_rust_inputs.consumes(path, Path(__file__).resolve().parents[2])
+    shell = ci_shell_inputs.consumes(path, Path(__file__).resolve().parents[2])
     runtime_markdown = (path.startswith('packages/butler-agent/resources/') or
                         (path.startswith('packages/butler-agent/rust/') and '/crates/' in path and '/docs/' not in path)) and not path.endswith('/README.md')
     # Repository and CI lint is unconditional in rust-quality.yml, including docs-only PRs.
     if path.endswith('.md') and not path.startswith('packages/butler-site/') and not runtime_markdown and not license_input and not external_rust:
-        return set()
+        return {'shell'} if shell else set()
     result = set()
     rust = external_rust or path.startswith(('packages/butler-agent/rust/', 'packages/butler-agent/resources/', '.cargo/', '.config/')) or matches(path, ('Cargo.*', '**/Cargo.toml', '**/Cargo.lock', 'rust-toolchain*'))
     package = matches(path, PACKAGING)
@@ -200,7 +202,7 @@ def categories(path, event=None):
     # leaving a new package or tool untested. Assets/readme are product assets.
     if not result and not path.startswith('assets/readme/'):
         result = set(GROUPS) - {'workflows', 'shell'}
-    if path.startswith('packages/butler-agent/rust/tools/source-check/'):
+    if shell or path.startswith('packages/butler-agent/rust/tools/source-check/'):
         result.add('shell')
     return result
 
