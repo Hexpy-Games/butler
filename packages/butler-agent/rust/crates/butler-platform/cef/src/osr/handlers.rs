@@ -7,6 +7,11 @@ use super::{
 use cef::*;
 use std::rc::Weak;
 
+#[cfg(target_os = "macos")]
+type NativeCursor = *mut u8;
+#[cfg(windows)]
+type NativeCursor = CursorHandle;
+
 pub(super) fn client(shared: PageRef, events: Events, runtime: Weak<RuntimeState>) -> Client {
     OsrClient::new(
         Paint::new(shared.clone(), events.clone()),
@@ -71,7 +76,7 @@ cef::wrap_display_handler! {
                 for url in urls.clone() { self.events.emit(OsrEvent::Favicon(url)); }
             }
         }
-        fn on_cursor_change(&self, _browser: Option<&mut Browser>, _cursor: *mut u8,
+        fn on_cursor_change(&self, _browser: Option<&mut Browser>, _cursor: NativeCursor,
             kind: CursorType, _custom: Option<&CursorInfo>) -> i32 {
             let cursor = if kind == CursorType::HAND { OsrCursor::PointingHand }
                 else if kind == CursorType::IBEAM { OsrCursor::IBeam } else { OsrCursor::Arrow };
