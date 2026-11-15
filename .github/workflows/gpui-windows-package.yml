@@ -187,8 +187,9 @@ jobs:
       - name: Package the gpui App
         shell: pwsh
         env:
-          GITHUB_REF_NAME: v${{ needs.versions.outputs.to }}
+          BUTLER_GPUI_VERSION: ${{ needs.versions.outputs.to }}
         run: |
+          $env:GITHUB_REF_NAME = "v$env:BUTLER_GPUI_VERSION"
           $ErrorActionPreference = 'Stop'
           $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
           $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"
