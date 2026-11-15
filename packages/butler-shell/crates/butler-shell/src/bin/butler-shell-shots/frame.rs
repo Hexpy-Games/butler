@@ -22,6 +22,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             })
         }
         "click" | "drag" => pointer(h, command, arg),
+        "drag-from" => drag_from(h, arg),
         "hover" => hover(h, arg),
         "reveal" => reveal(h, arg),
         "wait-anchor" | "wait-no-anchor" => wait_anchor(h, arg, command == "wait-anchor"),
@@ -41,6 +42,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             ensure!(shown == expected, "{shown} toasts, expected {expected}");
             Ok(())
         }
+        "expect-clipboard" => expect_clipboard(h, arg),
         "expect-scale" => {
             let scale: f32 = arg.parse()?;
             let actual =
@@ -71,6 +73,17 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         }
         _ => anyhow::bail!("unknown frame command"),
     }
+}
+
+fn expect_clipboard(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    let expected: Option<String> = serde_json::from_str(arg)?;
+    let actual =
+        h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
+    ensure!(
+        actual == expected,
+        "clipboard {actual:?}, expected {expected:?}"
+    );
+    Ok(())
 }
 
 /// `expect-fresh`: the frame drawn from notifications alone equals a full re-render. A region
@@ -186,6 +199,37 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
     let center = bounds.center();
     let end = point(center.x + px(dx), center.y + px(dy));
     let start = if command == "drag" { center } else { end };
+    pointer_sequence(h, start, end, button, command == "drag")
+}
+
+/// Fractions of the anchor bounds may extend beyond the anchor.
+fn drag_from(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let mut parts = arg.split_whitespace();
+    let anchor = parts.next().context("drag-from anchor")?;
+    let fx0: f32 = parts.next().context("drag-from fx0")?.parse()?;
+    let fy0: f32 = parts.next().context("drag-from fy0")?.parse()?;
+    let fx1: f32 = parts.next().context("drag-from fx1")?.parse()?;
+    let fy1: f32 = parts.next().context("drag-from fy1")?.parse()?;
+    let bounds =
+        h.cx.debug_bounds(h.handle, anchor)?
+            .context("missing pointer target")?;
+    let at = |x, y| {
+        point(
+            bounds.left() + bounds.size.width * x,
+            bounds.top() + bounds.size.height * y,
+        )
+    };
+    pointer_sequence(h, at(fx0, fy0), at(fx1, fy1), MouseButton::Left, true)
+}
+
+fn pointer_sequence(
+    h: &mut Harness,
+    start: gpui::Point<gpui::Pixels>,
+    end: gpui::Point<gpui::Pixels>,
+    button: MouseButton,
+    drag: bool,
+) -> anyhow::Result<()> {
     move_pointer(h, start, None)?;
     settle(&mut h.cx, h.handle);
     h.cx.update_window(h.handle, |_, w, cx| {
@@ -201,7 +245,7 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
         );
     })?;
     h.cx.run_until_parked();
-    if command == "drag" {
+    if drag {
         for step in 1..=8 {
             let fraction = step as f32 / 8.;
             let position = point(
