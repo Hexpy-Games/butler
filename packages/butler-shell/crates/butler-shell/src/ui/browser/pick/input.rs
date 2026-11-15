@@ -1,6 +1,9 @@
+#[cfg(feature = "cef")]
+pub(super) use super::gesture::Press;
 use super::probe;
 use crate::ui::browser::{engine::TabId, model::BrowserState};
 use gpui::{App, Keystroke};
+#[cfg(not(feature = "cef"))]
 #[derive(Clone)]
 pub(super) struct Press;
 pub(crate) fn hover(id: &TabId, x: f64, y: f64, cx: &mut App) {
@@ -160,17 +163,4 @@ pub(crate) fn scope<E: gpui::InteractiveElement>(element: E, id: Option<TabId>) 
                 cx.stop_propagation();
             }
         })
-}
-
-#[cfg(feature="cef")]
-pub(crate) enum Mouse { Move,Leave,Down,Up }
-#[cfg(feature="cef")]
-pub(crate) fn mouse(id:&TabId,x:f64,y:f64,_modifiers:gpui::Modifiers,kind:Mouse,_window:&mut gpui::Window,cx:&mut App) -> bool {
-    if !cx.global::<BrowserState>().tab(id).is_some_and(|t|t.picking) { return false; }
-    match kind {
-        Mouse::Move=>hover(id,x,y,cx),
-        Mouse::Leave=>{ if let Some(tab)=cx.global_mut::<BrowserState>().tabs.iter_mut().find(|t|&t.id==id) {tab.pick_hover=None;}cx.refresh_windows(); },
-        Mouse::Down|Mouse::Up=>{},
-    }
-    true
 }

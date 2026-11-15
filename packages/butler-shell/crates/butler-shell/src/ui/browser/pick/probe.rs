@@ -1,3 +1,5 @@
+#[cfg(feature = "cef")]
+use super::Item;
 use super::{
     Hover,
     geometry::{edges, meet, n, same, shift},
@@ -146,6 +148,105 @@ pub(super) fn label(hover: &mut Hover) {
             if hover.index > 0 { "↓" } else { "" }
         );
     }
+}
+#[cfg(feature = "cef")]
+pub(super) async fn hit(page: &TabId, hover: &Hover, cx: &AsyncApp) -> anyhow::Result<Item> {
+    let level = hover
+        .levels
+        .get(hover.index)
+        .ok_or_else(|| anyhow::anyhow!("nothing pickable"))?;
+    let mut data = reader::run(
+        page,
+        &level.frame.path,
+        json!({"op":"capture","id":level.data["id"]}),
+        cx,
+    )
+    .await?;
+    anyhow::ensure!(!data.is_null(), "element gone");
+    data["rect"] = level
+        .frame
+        .place(&data["rect"])
+        .ok_or_else(|| anyhow::anyhow!("offscreen"))?;
+    data["cropRect"] = level
+        .frame
+        .place(&data["cropRect"])
+        .ok_or_else(|| anyhow::anyhow!("offscreen"))?;
+    let media=reader::evaluate(page,&level.frame.path,format!("(()=>{{const el=globalThis.__butlerPick?.refs.get({})?.deref();const image=el?.matches('img,video')?el:el?.querySelector('img,video');return image?.currentSrc||image?.src||null}})()",level.data["id"]),cx).await?;
+    if media.is_string() {
+        data["imageSrc"] = media;
+    }
+    let masks = masks(page, &level.frame, &data, cx).await?;
+    data["crop"] = json!(super::crop::capture(page, &data["cropRect"], masks, cx).await?);
+    if let Some(data) = data.as_object_mut() {
+        data.remove("masks");
+        data.remove("frames");
+    }
+    decorate(page, &mut data, cx)?;
+    Ok(Item {
+        data,
+        frame: level.frame.clone(),
+        hidden: false,
+        area: None,
+    })
+}
+#[cfg(feature = "cef")]
+pub(super) fn decorate(page: &TabId, data: &mut Value, cx: &AsyncApp) -> anyhow::Result<()> {
+    let url = cx
+        .update(|cx| {
+            cx.global::<crate::ui::browser::model::BrowserState>()
+                .tab(page)
+                .map(|t| t.url.clone())
+        })
+        .ok_or_else(|| anyhow::anyhow!("page closed"))?;
+    data["id"] = json!(uuid::Uuid::new_v4().to_string());
+    data["tab"] = json!(page.0);
+    let parsed = url::Url::parse(&url)?;
+    data["site"] = json!(&parsed[url::Position::BeforeHost..url::Position::AfterPort]);
+    data["url"] = json!(url);
+    data["capturedAt"] = json!(chrono::Utc::now().to_rfc3339());
+    Ok(())
+}
+#[cfg(feature = "cef")]
+pub(super) async fn masks(
+    page: &TabId,
+    frame: &Frame,
+    data: &Value,
+    cx: &AsyncApp,
+) -> anyhow::Result<Vec<Value>> {
+    let mut masks: Vec<_> = data["masks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| frame.place(v))
+        .collect();
+    let mut pending: Vec<_> = data["frames"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|v| frame.nested(v))
+        .collect();
+    while let Some(frame) = pending.pop() {
+        match reader::run(page, &frame.path, json!({"op":"masks"}), cx).await {
+            Ok(data) if !data.is_null() => {
+                masks.extend(
+                    data["masks"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|v| frame.place(v)),
+                );
+                pending.extend(
+                    data["frames"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(|v| frame.nested(v)),
+                );
+            }
+            _ => masks.extend(frame.clip),
+        }
+    }
+    Ok(masks)
 }
 
 fn merge(levels: &mut Vec<Level>, item: &Value, frame: &Frame, chosen: &mut Option<String>) {

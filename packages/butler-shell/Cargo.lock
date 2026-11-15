@@ -1122,6 +1122,7 @@ name = "butler-shell"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "butler-cef",
  "butler-ds",
  "butler-platform",
@@ -1132,6 +1133,7 @@ dependencies = [
  "gpui_ce_elements",
  "gpui_ce_platform",
  "gpui_ce_wgpu",
+ "image",
  "notify",
  "percent-encoding",
  "regex",

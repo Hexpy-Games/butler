@@ -1,14 +1,18 @@
 //! Electron BrowserSelection: shell-owned state, isolated DOM reads and page-card overlays.
 mod actions;
 mod copy;
+mod crop;
+pub(crate) mod drag;
 mod follow;
 mod geometry;
+#[cfg(feature = "cef")]
+mod gesture;
 mod input;
 mod probe;
 mod reader;
 mod view;
 #[cfg(feature = "cef")]
-pub(crate) use input::{Mouse, mouse};
+pub(crate) use gesture::{Mouse, mouse};
 pub(crate) use input::scope;
 #[cfg(feature = "cef")]
 pub(crate) use input::{key, wheel};
@@ -90,7 +94,13 @@ pub(crate) fn mode(id: &TabId, value: bool, cx: &mut App) {
         })
         .detach();
     }
-
+    if cx
+        .active_drag()
+        .is_some_and(gpui::AnyDrag::is_type::<drag::Elements>)
+        && let Some(window) = cx.windows().first().copied()
+    {
+        let _ = window.update(cx, |_, window, cx| cx.stop_active_drag(window));
+    }
     follow::sync(id, cx);
     cx.refresh_windows();
 }
