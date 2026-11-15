@@ -56,6 +56,7 @@ pub mod question_answer_card;
 pub mod queued_message;
 pub mod responsive;
 pub mod scope;
+pub mod selection_bar;
 pub mod sidebar_shell;
 pub mod sortable_card_list;
 pub mod split_button;

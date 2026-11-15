@@ -128,6 +128,7 @@
     { "page": "browser-pane", "entry": "blocks/BrowserPane" },
     { "page": "page-card", "entry": "blocks/PageCard" },
     { "page": "page-band", "entry": "blocks/PageBand" },
-    { "page": "popup-window-chrome", "entry": "blocks/PopupWindowChrome" }
+    { "page": "popup-window-chrome", "entry": "blocks/PopupWindowChrome" },
+    { "page": "selection-bar", "entry": "blocks/SelectionBar" }
   ]
 }

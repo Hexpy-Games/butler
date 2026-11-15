@@ -115,6 +115,7 @@ mod scroll_area;
 mod section;
 mod segmented_control;
 mod select;
+mod selection_bar;
 mod separator;
 mod settings_action_field;
 mod settings_field;
