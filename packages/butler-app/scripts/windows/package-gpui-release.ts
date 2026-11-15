@@ -1,6 +1,6 @@
 /** Native unsigned gpui Squirrel release, consuming a release shell and Agent. */
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -45,6 +45,7 @@ try {
   cpSync(notices, join(app, "resources/licenses/butler-shell"), { recursive: true });
   await stampExecutable(join(app, "Butler.exe"), version);
   run("node", [join(electron, "scripts/create-windows-installer.mjs"),
+    "--no-package-json", ...additionalAppFiles(app).flatMap(name => ["--additional-file", name]),
     "--app-directory", app, "--output-directory", out,
     "--setup-exe", `ButlerSetup-${version}-x64.exe`, "--setup-icon", join(electron, "assets/butler.ico"), "--version", version]);
   run("node", [join(electron, "scripts/create-windows-portable.mjs"), app]);
@@ -53,6 +54,24 @@ try {
   console.log(JSON.stringify({ version, artifacts: files, unsigned: true }));
 } finally {
   rmSync(work, { recursive: true, force: true });
+}
+
+function additionalAppFiles(appDirectory: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(appDirectory, { withFileTypes: true })) {
+    const name = entry.name.toLowerCase();
+    if (entry.isDirectory()) {
+      if (!["locales", "resources", "swiftshader"].includes(name)) {
+        throw new Error(`Squirrel cannot pack top-level App directory: ${entry.name}`);
+      }
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (/\.(?:bin|dll|pak|exe\.config|exe\.sig)$/u.test(name)) continue;
+    if (["icudtl.dat", "squirrel.exe", "license", "butler.exe", "vk_swiftshader_icd.json"].includes(name)) continue;
+    files.push(entry.name);
+  }
+  return files;
 }
 
 function requiredPath(name: string): string {
