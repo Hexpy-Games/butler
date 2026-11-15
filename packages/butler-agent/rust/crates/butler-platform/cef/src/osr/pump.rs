@@ -12,7 +12,7 @@ cef::wrap_browser_process_handler! {
     }
 }
 cef::wrap_app! {
-    pub(super) struct OsrApp { pump: BrowserProcessHandler }
+    pub(super) struct OsrApp { pump: BrowserProcessHandler, adapter: Option<u64> }
     impl App {
         fn browser_process_handler(&self) -> Option<BrowserProcessHandler> { Some(self.pump.clone()) }
         // The browser process only: helpers (`--type=…`) take what they need from it.
@@ -21,6 +21,9 @@ cef::wrap_app! {
                 // The shell's synchronous policy must see automatic requests too.
                 command.append_switch(Some(&"disable-popup-blocking".into()));
                 quiet(command);
+                if let Some(luid) = self.adapter {
+                    adapter(command, luid);
+                }
             }
         }
     }
@@ -45,4 +48,30 @@ fn quiet(command_line: &CommandLine) {
         };
         command_line.append_switch_with_value(Some(&name), Some(&CefString::from(value.as_str())));
     }
+}
+
+/// Put CEF's GPU process on the frames' consumer adapter (`OsrConfig::adapter_luid`), so its
+/// shared textures open on the copy device. Chromium copies `use-adapter-luid` from the browser
+/// process to the GPU process, whose ANGLE display then picks that adapter.
+#[cfg(windows)]
+fn adapter(command_line: &CommandLine, luid: u64) {
+    let value = adapter_switch_value(luid);
+    command_line.append_switch_with_value(
+        Some(&"use-adapter-luid".into()),
+        Some(&CefString::from(value.as_str())),
+    );
+}
+/// macOS has one GPU path; the LUID is not used there.
+#[cfg(not(windows))]
+fn adapter(_: &CommandLine, _: u64) {}
+
+/// Chromium's format (ui/gl/gl_display.cc): `LUID.HighPart` (signed) and `LUID.LowPart`
+/// (unsigned) in decimal, comma-separated. A LUID no adapter has falls back to the default
+/// adapter, but a malformed value (hex, say) fails GPU initialization and CEF exits.
+#[cfg(windows)]
+fn adapter_switch_value(luid: u64) -> String {
+    let [h0, h1, h2, h3, l0, l1, l2, l3] = luid.to_be_bytes();
+    let high = i32::from_be_bytes([h0, h1, h2, h3]);
+    let low = u32::from_be_bytes([l0, l1, l2, l3]);
+    format!("{high},{low}")
 }

@@ -174,6 +174,8 @@ mod smoke {
                     cef::sys::CHROME_VERSION_BUILD,
                     cef::sys::CHROME_VERSION_PATCH,
                 ),
+                // The consumer is `read_bgra_pixel`, which uses the copy device's adapter.
+                adapter_luid: None,
             },
             sink.clone(),
             Arc::new(move |delay| {
