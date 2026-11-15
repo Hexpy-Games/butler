@@ -171,7 +171,7 @@ async function proveGpui() {
     const response = await fetch(new URL("/health", instance.app_endpoint), {
       headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000),
     }).catch(() => null);
-    return response?.ok === true && (await response.json()).ok === true;
+    return response?.ok === true && (await response.json()).data.ok === true;
   }, "updated gpui App and authenticated supervised Agent", 120_000);
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   assert.ok(existsSync(join(data, "butler.config.json")), "User configuration missing");
