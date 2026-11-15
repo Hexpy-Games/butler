@@ -57,6 +57,7 @@ impl CefEngine {
                 let _ = schedule.unbounded_send(Instant::now() + delay);
             }),
             policy(gate.clone()),
+            Rc::new(|_| butler_cef_host::osr::DownloadDecision::Dialog),
         )?);
         let pages = Pages::default();
         let shown = Rc::new(Cell::new(None));
@@ -203,6 +204,9 @@ fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
             accept_types: dialog.accept_types,
             multiple: dialog.multiple,
         }),
+        OsrEvent::DownloadStarted { .. }
+        | OsrEvent::DownloadProgress { .. }
+        | OsrEvent::DownloadDone { .. } => return None,
         OsrEvent::Crashed => PageChange::Crashed,
         OsrEvent::Frame => return None,
         OsrEvent::Cursor(cursor) => {

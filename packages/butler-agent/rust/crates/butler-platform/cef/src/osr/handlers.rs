@@ -20,16 +20,18 @@ pub(super) fn client(shared: PageRef, events: Events, runtime: &Weak<RuntimeStat
         Load::new(events.clone()),
         Request::new(events.clone(), runtime.upgrade().map(|r| r.auth.clone())),
         super::dialogs::Js::new(shared.clone(), events.clone()),
-        super::dialogs::Files::new(shared, events),
+        super::dialogs::Files::new(shared, events.clone()),
+        super::downloads::Downloads::new(events, runtime.clone()),
     )
 }
 
 cef::wrap_client! {
     pub(super) struct OsrClient {
         paint: RenderHandler, life: LifeSpanHandler, display: DisplayHandler,
-        load: LoadHandler, request: RequestHandler, js: JsdialogHandler, files: DialogHandler,
+        load: LoadHandler, request: RequestHandler, js: JsdialogHandler, files: DialogHandler, downloads: DownloadHandler,
     }
     impl Client {
+        fn download_handler(&self) -> Option<DownloadHandler> { Some(self.downloads.clone()) }
         fn render_handler(&self) -> Option<RenderHandler> { Some(self.paint.clone()) }
         fn life_span_handler(&self) -> Option<LifeSpanHandler> { Some(self.life.clone()) }
         fn display_handler(&self) -> Option<DisplayHandler> { Some(self.display.clone()) }
