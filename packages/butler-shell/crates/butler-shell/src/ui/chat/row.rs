@@ -5,7 +5,7 @@ use butler_ds::ui::blocks::message_row::{Entering, MessageRow, Role, Tone};
 use butler_ds::ui::blocks::question_answer_card::{
     Answer, Labels, Question, QuestionAnswerCard, QuestionKind, Variant,
 };
-use butler_ds::ui::context::Ds;
+use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::context_menu::{ContextMenu, ContextMenuContent, Item};
 use butler_ds::ui::selectable::Selection;
 use gpui::{
@@ -155,7 +155,11 @@ fn is_compaction(msg: &MessageRecord) -> bool {
 
 /// `visibleSystemMessageText`.
 pub(super) fn visible_system_message_text(msg: &MessageRecord, cx: &App) -> String {
-    let text = transcript(Ds::get(cx).lang());
+    visible_text(msg, Ds::get(cx).lang())
+}
+
+pub(super) fn visible_text(msg: &MessageRecord, lang: Lang) -> String {
+    let text = transcript(lang);
     match (&msg.system_event_kind, is_compaction(msg)) {
         (Some(MessageRecordSystemEventKind::ContextCompactionStarted), true) => {
             text.compacting.into()
@@ -231,15 +235,13 @@ fn virtual_message_row(
         window,
         cx,
     );
-    let copy_msg = Arc::clone(msg);
+    let markdown = message_markdown(msg, cx);
     let label = transcript(Ds::get(cx).lang()).copy;
     let content = menu.content(
         ContextMenuContent::new().child(Item::new(label).icon(Icon::Copy).on_select(
             move |_, cx| {
                 cx.write_to_clipboard(ClipboardItem::new_string(
-                    selection
-                        .text(cx)
-                        .unwrap_or_else(|| message_markdown(&copy_msg, cx)),
+                    selection.text(cx).unwrap_or_else(&markdown),
                 ));
             },
         )),

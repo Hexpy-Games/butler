@@ -7,6 +7,7 @@ use butler_ds::ui::blocks::message_row::MessageStatusLabel;
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::rolling_status_line::RollingStatusLine;
 use butler_ds::ui::rolling_swap::RollingSwap;
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::thinking_mark::{ButlerThinkingMark, MarkState};
 use butler_ds::ui::typo::{Role, Tone, Typo};
 use gpui::{
@@ -296,6 +297,7 @@ fn current_turn_status_line(status: &Status, id: &ElementId, lang: Lang) -> AnyE
                     SharedString::from(line.to_string()),
                     move |_, _| {
                         Typo::body(rolling.clone())
+                            .selectable(Break::Line)
                             .tone(Tone::Secondary)
                             .truncate()
                             .into_any_element()
