@@ -71,6 +71,8 @@ pub(crate) struct Words {
     pub(crate) composer_character_description: &'static str,
     /// settings.fields.reduceMotion
     pub(crate) reduce_motion: &'static str,
+    /// settings.descriptions.reduceMotionSystem
+    pub(crate) reduce_motion_system: &'static str,
     /// settings.descriptions.reduceMotion
     pub(crate) reduce_motion_description: &'static str,
 }
@@ -111,6 +113,7 @@ const KO: Words = Words {
     composer_character: "캐릭터",
     composer_character_description: "입력창 위에 작은 친구가 앉습니다.",
     reduce_motion: "동작 줄이기",
+    reduce_motion_system: "시스템 설정에서 켜져 있습니다",
     reduce_motion_description: "끄면 시스템 설정을 따릅니다.",
 };
 
@@ -150,6 +153,7 @@ const EN: Words = Words {
     composer_character: "Character",
     composer_character_description: "A little friend sits above the message box.",
     reduce_motion: "Reduce motion",
+    reduce_motion_system: "On in your system settings",
     reduce_motion_description: "When off, follows your system setting.",
 };
 
