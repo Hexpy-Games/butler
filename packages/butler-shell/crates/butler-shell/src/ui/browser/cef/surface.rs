@@ -110,6 +110,10 @@ impl Render for Page {
 }
 /// The macOS frame: an IOSurface-backed CoreVideo buffer.
 #[cfg(target_os = "macos")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "one signature with the fallible Windows frame conversion"
+)]
 fn source(frame: impl Into<SurfaceSource>) -> Option<SurfaceSource> {
     Some(frame.into())
 }
