@@ -133,6 +133,7 @@ pub(crate) fn empty_state(ctx: EmptyCtx<'_>, window: &mut Window, cx: &mut App) 
     // state sits in a locked, unmasked `ConversationScroll`, top-aligned at the conversation's
     // full width (not WallpaperStage's centred layer with its two `lg` insets).
     let wallpaper = Wallpaper::new(wallpaper)
+        .motion(resolved.as_ref().is_some_and(|r| r.wallpaper_paused))
         .content_rect(kept)
         .content_rect2(card_rect(cx))
         .day_phase(day_phase());
