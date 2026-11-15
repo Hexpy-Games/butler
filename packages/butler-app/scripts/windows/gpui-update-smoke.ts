@@ -1,7 +1,7 @@
 /** Disposable hosted-runner proof of Electron -> gpui Squirrel activation. */
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
@@ -81,7 +81,7 @@ async function cleanup() {
   const errors: unknown[] = [];
   for (const action of [
     stopInstalled,
-    async () => { if (!uninstalled && existsSync(updater)) run(updater, ["--uninstall", "--silent"]); },
+    async () => { if (!uninstalled && existsSync(updater)) runUninstall(); },
   ]) {
     try { await action(); } catch (error) { errors.push(error); }
   }
@@ -105,22 +105,37 @@ function startProcessTrace() {
       $started = $notification.SourceEventArgs.NewEvent
       $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($started.ProcessID)" -ErrorAction Ignore
       [ordered]@{
-        time = [DateTime]::FromFileTimeUtc([long]$started.TIME_CREATED).ToString('o')
+        event = 'start'; time = [DateTime]::FromFileTimeUtc([long]$started.TIME_CREATED).ToString('o')
         ProcessName = $started.ProcessName; ProcessID = $started.ProcessID; ParentProcessID = $started.ParentProcessID
         ExecutablePath = $process.ExecutablePath; CommandLine = $process.CommandLine
       } | ConvertTo-Json -Compress | Add-Content -LiteralPath $env:BUTLER_PROCESS_TRACE_LOG -Encoding UTF8
       Remove-Event -EventIdentifier $notification.EventIdentifier
     }
+    function Write-ProcessStop($notification) {
+      $stopped = $notification.SourceEventArgs.NewEvent
+      [ordered]@{
+        event = 'stop'; time = [DateTime]::FromFileTimeUtc([long]$stopped.TIME_CREATED).ToString('o')
+        ProcessName = $stopped.ProcessName; ProcessID = $stopped.ProcessID; ParentProcessID = $stopped.ParentProcessID
+        ExitStatus = $stopped.ExitStatus
+      } | ConvertTo-Json -Compress | Add-Content -LiteralPath $env:BUTLER_PROCESS_TRACE_LOG -Encoding UTF8
+      Remove-Event -EventIdentifier $notification.EventIdentifier
+    }
     Register-CimIndicationEvent -ClassName Win32_ProcessStartTrace -SourceIdentifier ButlerProcessStarts | Out-Null
+    Register-CimIndicationEvent -ClassName Win32_ProcessStopTrace -SourceIdentifier ButlerProcessStops | Out-Null
     try {
       New-Item -ItemType File -Path $env:BUTLER_PROCESS_TRACE_READY | Out-Null
       while (-not (Test-Path -LiteralPath $env:BUTLER_PROCESS_TRACE_STOP)) {
-        $notification = Wait-Event -SourceIdentifier ButlerProcessStarts -Timeout 1
-        if ($null -ne $notification) { Write-ProcessStart $notification }
+        $notification = Wait-Event -Timeout 1
+        if ($null -ne $notification) {
+          if ($notification.SourceIdentifier -eq 'ButlerProcessStarts') { Write-ProcessStart $notification }
+          else { Write-ProcessStop $notification }
+        }
       }
     } finally {
       Unregister-Event -SourceIdentifier ButlerProcessStarts
+      Unregister-Event -SourceIdentifier ButlerProcessStops
       Get-Event -SourceIdentifier ButlerProcessStarts -ErrorAction SilentlyContinue | ForEach-Object { Write-ProcessStart $_ }
+      Get-Event -SourceIdentifier ButlerProcessStops -ErrorAction SilentlyContinue | ForEach-Object { Write-ProcessStop $_ }
     }`);
   const output = openSync(join(root, "process-start-subscriber.log"), "a");
   let child: ReturnType<typeof spawn>;
@@ -156,14 +171,22 @@ function startProcessTrace() {
 }
 
 type ProcessStart = {
-  time: string; ProcessName: string; ProcessID: number; ParentProcessID: number;
+  event: "start"; time: string; ProcessName: string; ProcessID: number; ParentProcessID: number;
   ExecutablePath: string | null; CommandLine: string | null;
 };
+type ProcessStop = { event: "stop"; time: string; ProcessName: string; ProcessID: number; ParentProcessID: number; ExitStatus: number };
+type ProcessMark = { event: "mark"; name: string; time: string };
+function markProcessTrace(name: string) {
+  appendFileSync(join(root, "process-starts.jsonl"), `${JSON.stringify({ event: "mark", name, time: new Date().toISOString() })}\n`);
+}
 function printProcessStarts() {
   const trace = join(root, "process-starts.jsonl");
-  const starts: ProcessStart[] = existsSync(trace) ? readFileSync(trace, "utf8").replace(/^\uFEFF/u, "")
+  const events: (ProcessStart | ProcessStop | ProcessMark)[] = existsSync(trace) ? readFileSync(trace, "utf8").replace(/^\uFEFF/u, "")
     .split(/\r?\n/u).filter(line => line.trim()).map(line => JSON.parse(line)) : [];
+  const starts = events.filter((row): row is ProcessStart => row.event === "start");
+  const stops = events.filter((row): row is ProcessStop => row.event === "stop");
   starts.sort((a, b) => a.time.localeCompare(b.time));
+  stops.sort((a, b) => a.time.localeCompare(b.time));
   const byPid = new Map<number, ProcessStart[]>();
   for (const start of starts) {
     const history = byPid.get(start.ProcessID) ?? [];
@@ -179,6 +202,14 @@ function printProcessStarts() {
       return { ...start, parent: parent ? { ProcessName: parent.ProcessName, ExecutablePath: parent.ExecutablePath } : null };
     });
   console.log(JSON.stringify({ processStarts }));
+  const processLifetimes = processStarts.filter(start => [start.ExecutablePath, start.CommandLine]
+    .some(value => value?.toLowerCase().includes(installed.toLowerCase()))).map(start => {
+    const next = byPid.get(start.ProcessID)?.find(row => row.time > start.time);
+    const stop = stops.find(row => row.ProcessID === start.ProcessID && row.time >= start.time
+      && (!next || row.time < next.time));
+    return { ...start, stopTime: stop?.time ?? null, ExitStatus: stop?.ExitStatus ?? null };
+  });
+  console.log(JSON.stringify({ processLifetimes, marks: events.filter(row => row.event === "mark") }));
 }
 
 async function step(name: string, action: () => Promise<void>) {
@@ -281,14 +312,17 @@ async function proveGpui() {
 }
 
 async function stopInstalled() {
-  const processes = installedProcesses();
-  for (const { pid } of processes) {
-    // A parent tree kill may already have ended another collected child.
-    if (!installedProcesses().some(row => row.pid === pid)) continue;
-    const killed = spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { env, encoding: "utf8" });
-    if (killed.status !== 0) assert.ok(!installedProcesses().some(row => row.pid === pid), `Failed to stop owned PID ${pid}`);
-  }
-  await waitFor(() => installedProcesses().length === 0, "installed processes stopped");
+  markProcessTrace("stopInstalled:begin");
+  try {
+    const processes = installedProcesses();
+    for (const { pid } of processes) {
+      // A parent tree kill may already have ended another collected child.
+      if (!installedProcesses().some(row => row.pid === pid)) continue;
+      const killed = spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { env, encoding: "utf8" });
+      if (killed.status !== 0) assert.ok(!installedProcesses().some(row => row.pid === pid), `Failed to stop owned PID ${pid}`);
+    }
+    await waitFor(() => installedProcesses().length === 0, "installed processes stopped");
+  } finally { markProcessTrace("stopInstalled:end"); }
 }
 
 async function startUninstallSampler() {
@@ -380,7 +414,7 @@ async function uninstall() {
   await stopInstalled();
   const sampler = await startUninstallSampler();
   try {
-    try { run(updater, ["--uninstall", "--silent"]); } finally { sampler?.stop(); }
+    try { runUninstall(); } finally { sampler?.stop(); }
     const uninstallReturnedAt = Date.now();
     await waitFor(() => !existsSync(stub), "uninstalled stub removed");
     assertShortcuts(shortcuts, false);
@@ -423,6 +457,11 @@ async function uninstall() {
     assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
     uninstalled = true;
   } finally { await sampler?.report(); }
+}
+
+function runUninstall() {
+  markProcessTrace("uninstall:begin");
+  try { run(updater, ["--uninstall", "--silent"]); } finally { markProcessTrace("uninstall:end"); }
 }
 
 function run(command: string, args: string[]) {
