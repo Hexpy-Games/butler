@@ -24,6 +24,10 @@ fn emit() {
     events().send_modify(|counter| *counter = counter.wrapping_add(1));
 }
 
+/// Whether the OS watcher is a child process tree (macOS `notifyutil`)
+/// rather than an in-process subscription.
+pub const CHILD_PROCESS: bool = cfg!(target_os = "macos");
+
 /// Subscribe to power transitions. The OS watcher starts once, on first use.
 /// Unavailable OS facilities produce one diagnostic and retain the fallback waits.
 pub fn wake_events() -> watch::Receiver<u64> {

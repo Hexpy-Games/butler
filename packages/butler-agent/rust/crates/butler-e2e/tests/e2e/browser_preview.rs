@@ -8,6 +8,7 @@
 use butler_e2e::e2e::{HarnessError, scenario::Setup, security::AdminClient};
 use reqwest::Method;
 use serde_json::{Value, json};
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod failures;
@@ -369,4 +370,40 @@ Bun.serve({hostname:"127.0.0.1",port,fetch(request,server){
         );
     }
     s.finish().await
+}
+
+/// A preview still running when its scenario ends stops with the agent; the
+/// harness drops the agent the same way when an assertion fails.
+#[tokio::test]
+async fn preview_left_running_stops_with_the_agent() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = Setup::new("PREVIEW-TEARDOWN")?.env(
+        "PATH",
+        std::env::var("PATH").expect("runner PATH is required"),
+    );
+    let cwd = setup.sandbox.workspace.clone();
+    std::fs::write(
+        cwd.join("server.mjs"),
+        "Bun.serve({hostname:'127.0.0.1',port:Number(process.argv[2]),fetch(){return new Response('ready')}});",
+    )?;
+    let s = setup.start().await?;
+    let created =
+        s.gw.post("/sessions", json!({"kind":"chat","title":"Teardown"}))
+            .await?;
+    let session = created.data()["session"]["id"].as_str().unwrap().to_owned();
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let port = port();
+    let args = json!({"agent":"preview-agent","preview_id":"teardown","command":format!("bun server.mjs {port}"),"cwd":cwd,"port":port});
+    let started = call(&admin, &session, "preview.start", args).await?;
+    assert_eq!(started["status"], "ok", "{started}");
+    s.finish().await?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while tokio::net::TcpStream::connect(("127.0.0.1", port))
+        .await
+        .is_ok()
+    {
+        assert!(Instant::now() < deadline, "preview outlived its agent");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    Ok(())
 }
