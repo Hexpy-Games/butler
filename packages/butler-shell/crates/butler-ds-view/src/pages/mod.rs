@@ -100,6 +100,7 @@ mod panel_header;
 mod percent_input_control;
 mod pill_button;
 mod popover;
+mod popup_window_chrome;
 mod presence;
 mod progress_meter;
 mod progress_ring;
