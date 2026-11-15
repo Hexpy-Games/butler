@@ -127,6 +127,7 @@
     { "page": "address-field", "entry": "blocks/AddressField" },
     { "page": "browser-pane", "entry": "blocks/BrowserPane" },
     { "page": "page-card", "entry": "blocks/PageCard" },
-    { "page": "page-band", "entry": "blocks/PageBand" }
+    { "page": "page-band", "entry": "blocks/PageBand" },
+    { "page": "popup-window-chrome", "entry": "blocks/PopupWindowChrome" }
   ]
 }
