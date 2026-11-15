@@ -1,8 +1,11 @@
 //! The parts of an ItemCard: body, picture, text with its Show more, and the footer.
+use crate::ui::selectable::Break;
 use gpui::{
     AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
     SharedString, StatefulInteractiveElement as _, Styled as _, Window, canvas, div, px,
 };
+
+use gpui::prelude::FluentBuilder as _;
 
 use super::{ItemCard, ItemSource, ItemValue, own_target};
 use crate::tokens::{Color, Length};
@@ -79,7 +82,12 @@ pub(super) fn body(
         );
     }
     if let Some(subtitle) = card.subtitle.take() {
-        body = body.child(Typo::caption(subtitle).tone(Tone::Tertiary).truncate());
+        body = body.child(
+            Typo::caption(subtitle)
+                .when(card.on_open.is_none(), |t| t.selectable(Break::Line))
+                .tone(Tone::Tertiary)
+                .truncate(),
+        );
     }
     let media_col = if row && card.media.is_some() {
         ROW_MEDIA_COLUMN
@@ -90,10 +98,10 @@ pub(super) fn body(
         width - 2. * (f32::from(ds.len(Length::Space2)) + 1.) - 2. * f32::from(inset) - media_col;
     body = body.child(title(card, room, ds));
     if let Some(value) = card.value.take() {
-        body = body.child(value_block(value));
+        body = body.child(value_block(value, card.on_open.is_none()));
     }
     if !card.facts.is_empty() {
-        body = body.child(facts(&card.facts, ds));
+        body = body.child(facts(&card.facts, card.on_open.is_none(), ds));
     }
     if let Some(text) = text_block(card, row, parts, window, cx) {
         body = body.child(text);
@@ -118,6 +126,7 @@ fn title(card: &ItemCard, room: f32, ds: &Ds) -> AnyElement {
     .line_height(ds.len(Length::TypoBodyLineHeight))
     .child(
         Typo::text(card.title.clone())
+            .when(card.on_open.is_none(), |t| t.selectable(Break::Line))
             .weight(Weight::Semibold)
             .line_clamp(2),
     );
@@ -138,31 +147,43 @@ fn title(card: &ItemCard, room: f32, ds: &Ds) -> AnyElement {
     .into_any_element()
 }
 
-fn value_block(value: ItemValue) -> gpui::Div {
+fn value_block(value: ItemValue, selectable: bool) -> gpui::Div {
     let ds_amounts = div()
         .flex()
         .flex_wrap()
         .items_baseline()
         .min_w_0()
         .gap_x(px(8.)) // `column-gap: var(--space-sm)`
-        .child(Typo::metric_value(value.amount).tabular());
+        .child(
+            Typo::metric_value(value.amount)
+                .when(selectable, |t| t.selectable(Break::Line))
+                .tabular(),
+        );
     let amounts = match value.was {
         Some(was) => ds_amounts.child(
-            div()
-                .line_through()
-                .child(Typo::caption(was).tone(Tone::Tertiary).tabular()),
+            div().line_through().child(
+                Typo::caption(was)
+                    .when(selectable, |t| t.selectable(Break::Line))
+                    .tone(Tone::Tertiary)
+                    .tabular(),
+            ),
         ),
         None => ds_amounts,
     };
-    div().flex().flex_col().min_w_0().child(amounts).children(
-        value
-            .note
-            .map(|note| Typo::caption(note).tone(Tone::Secondary)),
-    )
+    div()
+        .flex()
+        .flex_col()
+        .min_w_0()
+        .child(amounts)
+        .children(value.note.map(|note| {
+            Typo::caption(note)
+                .when(selectable, |t| t.selectable(Break::Line))
+                .tone(Tone::Secondary)
+        }))
 }
 
 /// One dot-separated line that wraps whole facts: the dot belongs to the fact before it.
-fn facts(facts: &[SharedString], ds: &Ds) -> gpui::Div {
+fn facts(facts: &[SharedString], selectable: bool, ds: &Ds) -> gpui::Div {
     let last = facts.len() - 1;
     div()
         .flex()
@@ -172,6 +193,7 @@ fn facts(facts: &[SharedString], ds: &Ds) -> gpui::Div {
         .children(facts.iter().enumerate().map(|(index, fact)| {
             let mut item = div().flex().min_w_0().child(
                 Typo::caption(fact.clone())
+                    .when(selectable, |t| t.selectable(Break::Line))
                     .tone(Tone::Inherit)
                     .wrap(Wrap::Anywhere),
             );
@@ -188,8 +210,8 @@ fn facts(facts: &[SharedString], ds: &Ds) -> gpui::Div {
 }
 
 /// The paragraph at `--font-size-2` / label line height, secondary, wrapping anywhere.
-fn paragraph(text: &SharedString, clamp: Option<usize>, ds: &Ds) -> gpui::Div {
-    let mut typo = Typo::text(text.clone());
+fn paragraph(text: &SharedString, clamp: Option<usize>, selectable: bool, ds: &Ds) -> gpui::Div {
+    let mut typo = Typo::text(text.clone()).when(selectable, |t| t.selectable(Break::Paragraph));
     if let Some(lines) = clamp {
         typo = typo.line_clamp(lines);
     }
@@ -229,7 +251,7 @@ fn text_block(
         .left_0()
         .w_full()
         .invisible()
-        .child(paragraph(text, None, ds))
+        .child(paragraph(text, None, false, ds))
         .child(
             canvas(
                 move |bounds, _, cx| {
@@ -254,7 +276,7 @@ fn text_block(
         .min_w_0()
         .mt(ds.len(Length::SpaceXs))
         .child(measuring)
-        .child(paragraph(text, clamp, ds));
+        .child(paragraph(text, clamp, card.on_open.is_none(), ds));
     if let (true, Some((more, less))) = (clampable, card.toggle_labels.as_ref()) {
         let label = if open { less.clone() } else { more.clone() };
         let toggle = Button::new((id.clone(), "toggle"))

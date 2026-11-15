@@ -201,7 +201,11 @@ impl Shell {
     /// `Titlebar.tsx` `trailing`: the file viewer toggle of the open session.
     pub(super) fn viewer_toggle(&self, cx: &Context<Self>) -> Option<AnyElement> {
         let session = self.store.selected()?.session.0.clone();
-        viewer::file_viewer_toggle(&session, None, cx)
+        viewer::file_viewer_toggle(
+            &session,
+            crate::ui::browser::shell_state::browser_raise(&session, cx),
+            cx,
+        )
     }
 
     /// `AppShell.tsx` `splitChatWidth={pane ? chatWidth : undefined}`: the width the split gives
@@ -272,7 +276,11 @@ impl Shell {
             None => false,
         };
         let files = viewer::session_files(cx, &session);
-        let pane_open = editing || viewer::right_slot_pane(None, &files).is_some();
+        let pane = viewer::right_slot_pane(
+            crate::ui::browser::shell_state::browser_raise(&session, cx),
+            &files,
+        );
+        let pane_open = editing || pane.is_some();
         self.panes.split = pane_open.then(|| {
             self.panes
                 .chat_width
@@ -294,6 +302,8 @@ impl Shell {
         let editor = editing.then(|| images::editor_pane(window, cx)).flatten();
         if let Some(editor) = editor {
             split = split.pane(editor);
+        } else if pane == Some(viewer::RightSlotPane::Browser) {
+            split = split.pane(self.regions.browser.clone().cached(region::fill()));
         } else if pane_open {
             split = split.pane(self.regions.viewer.clone().cached(region::fill()));
         }

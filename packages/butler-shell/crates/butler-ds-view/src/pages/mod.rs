@@ -3,6 +3,7 @@ mod activity_feed;
 mod activity_heatmap;
 mod activity_strip;
 mod adaptive_shell;
+mod address_field;
 mod animated_number;
 mod artifact_list;
 mod artifact_preview;
@@ -17,6 +18,7 @@ mod block_tabs;
 mod bottom_sheet;
 mod boxes;
 mod breadcrumb;
+mod browser_pane;
 mod butler_thinking_mark;
 mod button;
 mod card;
@@ -91,6 +93,8 @@ mod nav_section;
 mod notice;
 mod option_menu;
 mod overflow_action_menu;
+mod page_band;
+mod page_card;
 mod page_container;
 mod panel_header;
 mod percent_input_control;
@@ -177,6 +181,7 @@ use crate::app::conversation_bg;
 use crate::copy::Lang;
 
 pub(crate) use registry::all;
+pub(crate) use tab_strip::data::labels as tab_strip_labels;
 
 /// One example: its name and how it renders.
 pub(crate) struct Story {

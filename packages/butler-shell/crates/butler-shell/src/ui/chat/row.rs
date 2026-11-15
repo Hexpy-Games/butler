@@ -7,11 +7,15 @@ use butler_ds::ui::blocks::question_answer_card::{
 };
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::context_menu::{ContextMenu, ContextMenuContent, Item};
+use butler_ds::ui::selectable::Selection;
 use gpui::{
     AnyElement, App, ClipboardItem, IntoElement as _, ParentElement as _, SharedString, Window, div,
 };
 
+use std::sync::Arc;
+
 use super::TranscriptCtx;
+use super::answers::message_markdown;
 use super::content::message_content;
 use super::user::user_footer;
 use crate::ui::i18n::transcript;
@@ -24,7 +28,7 @@ use crate::ui::widgets::anchor;
 
 /// One transcript message: the DS MessageRow by role, with the copy context menu.
 pub(crate) fn message_row(
-    msg: &MessageRecord,
+    msg: &Arc<MessageRecord>,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
@@ -194,13 +198,19 @@ fn row_role(role: &MessageRecordRole) -> Role {
 
 /// `VirtualMessageRow`: the DS MessageRow inside the copy ContextMenu.
 fn virtual_message_row(
-    msg: &MessageRecord,
+    msg: &Arc<MessageRecord>,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
+    let selection = Selection::new(
+        SharedString::from(format!("message-select-{}", msg.id)),
+        window,
+        cx,
+    );
     let compaction = is_compaction(msg);
     let mut row = MessageRow::new(row_id(msg), row_role(&msg.role))
+        .selection(selection.clone())
         .tone(message_tone(msg))
         .entering(entering(msg, t));
     if msg.role == MessageRecordRole::Assistant && msg.chat_id.as_deref() == Some("general") {
@@ -221,11 +231,17 @@ fn virtual_message_row(
         window,
         cx,
     );
-    let text = visible_system_message_text(msg, cx);
+    let copy_msg = Arc::clone(msg);
     let label = transcript(Ds::get(cx).lang()).copy;
     let content = menu.content(
         ContextMenuContent::new().child(Item::new(label).icon(Icon::Copy).on_select(
-            move |_, cx| cx.write_to_clipboard(ClipboardItem::new_string(text.clone())),
+            move |_, cx| {
+                cx.write_to_clipboard(ClipboardItem::new_string(
+                    selection
+                        .text(cx)
+                        .unwrap_or_else(|| message_markdown(&copy_msg, cx)),
+                ));
+            },
         )),
         window,
         cx,

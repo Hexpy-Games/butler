@@ -66,6 +66,13 @@ cef::wrap_app! {
                 && let Some(command_line) = command_line
             {
                 command_line.append_switch(Some(&CefString::from("headless")));
+                // Chrome's own headless mode picks Ozone's headless platform; CEF keeps X11 on
+                // Linux, whose GPU process then exits without a display.
+                #[cfg(target_os = "linux")]
+                command_line.append_switch_with_value(
+                    Some(&CefString::from("ozone-platform")),
+                    Some(&CefString::from("headless")),
+                );
             }
         }
     }

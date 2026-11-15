@@ -14,6 +14,7 @@ use crate::ui::blocks::measure;
 use crate::ui::context::Ds;
 use crate::ui::markdown::{Align, Inline, Table};
 use crate::ui::scroll::engine::{self, Axis, Config};
+use crate::ui::selectable::Break;
 
 /// A cell's content width: its longest line, and its longest unbreakable word.
 struct Extent {
@@ -112,14 +113,15 @@ fn widths(extents: &[Extent], room: f32) -> Vec<f32> {
 
 fn cell(
     nodes: &[Inline],
-    (width, align, head): (f32, Align, bool),
+    (width, align, head, column): (f32, Align, bool, usize),
     face: Face,
     env: &Env,
     key: &str,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let content = inline::render(nodes, face, None, env, key, window, cx);
+    let lead = if column == 0 { Break::Line } else { Break::Tab };
+    let content = inline::render(nodes, face, None, lead, env, key, window, cx);
     let ds = Ds::get(cx);
     let mut cell = div()
         .flex_none()
@@ -211,7 +213,7 @@ pub(super) fn render(
             let id = format!("{key}-{r}-{c}");
             line = line.child(cell(
                 nodes,
-                (width, align, head),
+                (width, align, head, c),
                 face,
                 env,
                 &id,

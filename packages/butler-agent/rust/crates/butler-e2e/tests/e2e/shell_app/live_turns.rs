@@ -3,7 +3,7 @@ use super::*;
 
 /// First launch: finish the onboarding through the Agent (`onboardingCompletedPatch`) and make
 /// a local model answering with `behavior` the default; the next launch opens the workspace.
-async fn ready_workspace(
+pub(crate) async fn ready_workspace(
     sandbox: &Sandbox,
     behavior: ChatBehavior,
 ) -> Result<FakeServer, HarnessError> {

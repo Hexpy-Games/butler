@@ -29,6 +29,8 @@ use super::{
     worker_activity_panel, worker_activity_row,
 };
 
+use super::{address_field, browser_pane, page_band, page_card};
+
 macro_rules! page {
     ($id:literal, $title:literal, $module:ident) => {
         Page {
@@ -323,6 +325,16 @@ fn management_blocks() -> Vec<Page> {
     ]
 }
 
+/// The browser blocks (P5-DS).
+fn browser_blocks() -> Vec<Page> {
+    vec![
+        page!("address-field", "AddressField", address_field),
+        page!("browser-pane", "BrowserPane", browser_pane),
+        page!("page-card", "PageCard", page_card),
+        page!("page-band", "PageBand", page_band),
+    ]
+}
+
 pub(crate) fn all() -> Vec<Page> {
     let mut pages = primitives();
     pages.extend(blocks());
@@ -330,5 +342,6 @@ pub(crate) fn all() -> Vec<Page> {
     pages.extend(composer_blocks());
     pages.extend(s7_blocks());
     pages.extend(management_blocks());
+    pages.extend(browser_blocks());
     pages
 }

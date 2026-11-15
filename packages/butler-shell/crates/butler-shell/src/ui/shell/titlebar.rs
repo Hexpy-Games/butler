@@ -108,8 +108,14 @@ impl Shell {
         if session && let Some(actions) = self.session_actions(window, cx) {
             bar = bar.chat_trailing(actions);
         }
-        if session && let Some(toggle) = self.viewer_toggle(cx) {
-            bar = bar.trailing(toggle);
+        if session && let Some(toggle) = self.browser_toggle(cx) {
+            use butler_ds::ui::layout::{Space, Stack};
+            bar = bar.trailing(
+                Stack::row()
+                    .gap(Space::None)
+                    .child(toggle)
+                    .children(self.viewer_toggle(cx)),
+            );
         }
         if !matches!(self.theme.platform, crate::ui::theme::Platform::Mac) {
             bar = bar.window_controls(window_controls(self.theme.strings.locale.ds_lang()));

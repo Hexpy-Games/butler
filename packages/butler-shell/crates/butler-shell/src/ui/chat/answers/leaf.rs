@@ -14,6 +14,7 @@ use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Columns, Grid, Inline, Space, Stack};
 use butler_ds::ui::media_frame::{Aspect, MediaFrame};
 use butler_ds::ui::pill_button::{PillButton, Surface};
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::typo::{Tone, Typo, Weight};
 use gpui::{
     AnyElement, App, ElementId, ImageSource, InteractiveElement as _, IntoElement as _,
@@ -94,10 +95,18 @@ fn timeline(
         let marker = icon(Icon::Circle, IconSize::Sm, Ds::get(cx));
         let mut text = Stack::new()
             .gap(Space::Xs)
-            .child(Typo::caption(item.when.clone()).tone(Tone::Tertiary))
-            .child(Typo::label(item.title.clone()).weight(Weight::Semibold));
+            .child(
+                Typo::caption(item.when.clone())
+                    .selectable(Break::Line)
+                    .tone(Tone::Tertiary),
+            )
+            .child(
+                Typo::label(item.title.clone())
+                    .selectable(Break::Line)
+                    .weight(Weight::Semibold),
+            );
         if let Some(body) = &item.text {
-            text = text.child(Typo::body(body.clone()));
+            text = text.child(Typo::body(body.clone()).selectable(Break::Line));
         }
         text = text.children(source_line(
             child_id(base, "source", index),
@@ -186,7 +195,7 @@ fn image(
         .child(media);
     let mut frame = Stack::new().gap(Space::Xs).child(opened);
     if let Some(caption) = caption.filter(|caption| !caption.is_empty()) {
-        frame = frame.child(Typo::caption(caption.to_string()));
+        frame = frame.child(Typo::caption(caption.to_string()).selectable(Break::Line));
     }
     frame
         .children(source_line(child_id(base, "source", 0), source, None))
