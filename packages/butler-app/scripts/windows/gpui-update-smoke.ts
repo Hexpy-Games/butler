@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 import { windowsPackageVersion } from "../../client/electron/scripts/windows-package-version.mjs";
@@ -199,8 +199,12 @@ async function uninstall() {
   }
   assert.equal(powershell("[bool](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env), "False");
   const files = existsSync(installed) ? readdirSync(installed, { recursive: true, withFileTypes: true })
-    .filter(entry => !entry.isDirectory()).map(entry => join(entry.parentPath, entry.name)) : [];
-  assert.deepEqual(files, [], `Uninstall left files: ${files.join(", ")}`);
+    .filter(entry => !entry.isDirectory()).map(entry => relative(installed, join(entry.parentPath, entry.name)).toLowerCase()) : [];
+  // Squirrel's FullUninstall recreates the root with .dead and leaves the running Update.exe and app-version squirrel.exe.
+  const expected = [".dead", "Update.exe", join(`app-${toPackage}`, "squirrel.exe")].map(path => path.toLowerCase());
+  const unexpected = files.filter(path => !expected.includes(path));
+  const missing = expected.filter(path => !files.includes(path));
+  assert.deepEqual(files.sort(), expected.sort(), `Uninstall remnants: unexpected [${unexpected.join(", ")}]; missing [${missing.join(", ")}]`);
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   uninstalled = true;
 }
