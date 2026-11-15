@@ -51,10 +51,26 @@ pub(crate) struct BrowserStrings {
     pub(crate) leave_title: &'static str,
     pub(crate) stay: &'static str,
     pub(crate) leave: &'static str,
+    #[cfg(feature = "cef")]
+    pub(crate) download_saved: &'static str,
+    #[cfg(feature = "cef")]
+    pub(crate) download_failed: &'static str,
+    #[cfg(feature = "cef")]
+    pub(crate) download_file_limit: &'static str,
+    #[cfg(feature = "cef")]
+    pub(crate) download_session_limit: &'static str,
     pub(crate) history: &'static str,
 }
 
 const KO: BrowserStrings = BrowserStrings {
+    #[cfg(feature = "cef")]
+    download_saved: "다운로드 저장됨",
+    #[cfg(feature = "cef")]
+    download_failed: "다운로드 실패",
+    #[cfg(feature = "cef")]
+    download_file_limit: "파일 한도 100 MB",
+    #[cfg(feature = "cef")]
+    download_session_limit: "대화 한도 500 MB",
     title: "브라우저",
     my_tabs: "내 탭",
     new_tab: "새 탭",
@@ -107,6 +123,14 @@ const KO: BrowserStrings = BrowserStrings {
 };
 
 const EN: BrowserStrings = BrowserStrings {
+    #[cfg(feature = "cef")]
+    download_saved: "Download saved",
+    #[cfg(feature = "cef")]
+    download_failed: "Download failed",
+    #[cfg(feature = "cef")]
+    download_file_limit: "100 MB file limit",
+    #[cfg(feature = "cef")]
+    download_session_limit: "500 MB conversation limit",
     title: "Browser",
     my_tabs: "My tabs",
     new_tab: "New tab",
