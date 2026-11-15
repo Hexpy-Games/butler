@@ -13,7 +13,9 @@ use gpui::{
 };
 
 use super::TranscriptCtx;
-use crate::ui::source::wire::{AnswerBlock, AnswerBlockSet, AnswerBlocks, CanonProposalAnchor};
+use crate::ui::source::wire::{
+    AnswerBlock, AnswerBlockSet, AnswerBlocks, CanonProposalAnchor, MessageRecord,
+};
 
 /// `AnswerBlocks`: a message's answer-block sets; nothing when they hold no block. A block's
 /// path is its set's call id and its place in the message (`/blocks/{index}`, the place the
@@ -51,9 +53,33 @@ pub(crate) fn preview_blocks(
 /// `toMarkdown` of a spec; `images` writes an image block's asset as a URL.
 pub(crate) fn spec_markdown(
     spec: &AnswerBlocks,
-    images: &dyn Fn(&str) -> Option<String>,
+    images: &dyn Fn(&str, Option<&str>) -> Option<String>,
 ) -> String {
     markdown::spec_markdown(&spec.blocks, images)
+}
+
+/// Electron's `messageMarkdown`: visible text followed by each answer-block spec.
+pub(crate) fn message_markdown(msg: &MessageRecord, cx: &App) -> String {
+    // `absoluteGatewayUrl`: a gateway-relative URL resolves against the attached gateway's endpoint.
+    let base = crate::ui::source::agent::Jobs::client(cx)
+        .and_then(|client| url::Url::parse(&client.instance_identity().2).ok());
+    let images = |_: &str, url: Option<&str>| {
+        url.map(|url| {
+            base.as_ref()
+                .and_then(|base| base.join(url).ok())
+                .map_or_else(|| url.to_owned(), String::from)
+        })
+    };
+    std::iter::once(super::row::visible_system_message_text(msg, cx))
+        .chain(
+            msg.answer_blocks
+                .iter()
+                .flatten()
+                .map(|set| spec_markdown(&set.spec, &images)),
+        )
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 /// The blocks (each with its set's call id) one under another; nothing when there are none.

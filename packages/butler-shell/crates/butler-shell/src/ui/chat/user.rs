@@ -5,7 +5,7 @@ use butler_ds::ui::button::{Button, Variant};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::copy_button::CopyButton;
 use butler_ds::ui::inline_reference::{InlineFlow, InlineReference};
-use butler_ds::ui::selectable;
+use butler_ds::ui::selectable::{self, Break};
 use butler_ds::ui::typo::{Typo, Wrap};
 use chrono::{DateTime, Datelike, Local};
 use gpui::{
@@ -117,7 +117,11 @@ impl UserMessageText {
             }
             None => {
                 let text = Typo::text(self.text.clone()).wrap(Wrap::Pre);
-                let text = if selectable { text.selectable() } else { text };
+                let text = if selectable {
+                    text.selectable(Break::Paragraph)
+                } else {
+                    text
+                };
                 if clamp {
                     text.line_clamp(COLLAPSED_LINES).into_any_element()
                 } else {

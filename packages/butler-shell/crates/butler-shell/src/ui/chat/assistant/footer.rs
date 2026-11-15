@@ -3,6 +3,7 @@
 use butler_ds::ui::blocks::message_row::{MessageFooter, MessageStatusLabel, MessageStatusRow};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::copy_button::CopyButton;
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::thinking_mark::{ButlerThinkingMark, MarkTheme};
 use butler_ds::ui::typo::Typo;
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString};
@@ -73,7 +74,9 @@ fn status_row(id: SharedString, label: &'static str, cx: &App) -> AnyElement {
         ButlerThinkingMark::new(SharedString::from(format!("{id}-mark"))).theme(mark_theme(cx));
     MessageStatusRow::new()
         .flush()
-        .child(MessageStatusLabel::new(id, mark).child(Typo::caption(label)))
+        .child(
+            MessageStatusLabel::new(id, mark).child(Typo::caption(label).selectable(Break::Line)),
+        )
         .into_any_element()
 }
 
@@ -104,11 +107,18 @@ pub(crate) fn assistant_response_footer(footer: ResponseFooter, cx: &App) -> Vec
             .filter(|_| !footer.bubble)
             .and_then(|meta| meta.duration_label.as_deref())
         {
-            row = row.child(gpui::div().child(copy.worked_for(duration)));
+            row = row.child(gpui::div().child(butler_ds::ui::selectable::Run::plain(
+                copy.worked_for(duration),
+                Break::Line,
+            )));
         }
     }
     if let Some(time) = settled.and_then(|meta| meta.time_label.as_deref()) {
-        row = row.child(Typo::text(time.to_owned()).tabular());
+        row = row.child(
+            Typo::text(time.to_owned())
+                .selectable(Break::Line)
+                .tabular(),
+        );
     }
     let mut parts = vec![row.into_any_element()];
     if let Some((label, state)) = terminal
