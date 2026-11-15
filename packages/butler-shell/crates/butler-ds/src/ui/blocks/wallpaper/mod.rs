@@ -1,8 +1,7 @@
 //! DS Wallpaper (blocks/Wallpaper `still.ts`, `stillContext.ts`, `imageCache.ts`, `imageMath.ts`,
 //! the engine's host side and WallpaperPicker `builtinPosters.ts`): a live module the renderer
 //! has shaders for drawn at its default params, unknown live
-//! modules from their bundled posters, or an image. Animated modules hold their still frame
-//! (`stillTime`) for now; edited params, drift and crossfade are P6.
+//! modules from their bundled posters, or an image. Edited params, drift and crossfade are P6.
 //! [`Wallpaper`] is the layer to hand to `WallpaperStage::wallpaper`; it fills its parent, which
 //! clips it.
 mod image_cache;
@@ -126,6 +125,7 @@ pub struct Wallpaper {
     content_rect: Option<ContentRect>,
     content_rect2: Option<ContentRect>,
     day_phase: f32,
+    paused: bool,
 }
 
 impl Wallpaper {
@@ -137,6 +137,7 @@ impl Wallpaper {
             content_rect: None,
             content_rect2: None,
             day_phase: STILL_DAY_PHASE,
+            paused: false,
         }
     }
 
@@ -158,6 +159,12 @@ impl Wallpaper {
         self
     }
 
+    /// Holds a still frame when the wallpaper motion setting is paused.
+    pub fn motion(mut self, paused: bool) -> Self {
+        self.paused = paused;
+        self
+    }
+
     /// Draws for this tone; the DS theme's by default.
     pub fn tone(mut self, tone: WallpaperTone) -> Self {
         self.tone = Some(tone);
@@ -172,15 +179,21 @@ impl Wallpaper {
 }
 
 impl RenderOnce for Wallpaper {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
         let tone = self.tone.unwrap_or(WallpaperTone::from_dark(ds.dark()));
         let layer = div().relative().size_full().overflow_hidden();
         match self.source {
             WallpaperSource::None => layer,
             WallpaperSource::Live { module } => {
+                // DS scheduler.ts `softwareRendering`: a software renderer holds still frames.
+                let software = window
+                    .gpu_specs()
+                    .is_some_and(|specs| specs.is_software_emulated);
                 let frame = LiveFrame {
                     tone,
+                    animate: !self.paused && !ds.reduced_motion() && !software,
+                    start_ms: 0,
                     day_phase: self.day_phase,
                     content_rect: self.content_rect,
                     content_rect2: self.content_rect2,

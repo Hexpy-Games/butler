@@ -1,39 +1,51 @@
 //! Main-thread, in-process CEF off-screen rendering. No gpui types cross this boundary.
+//! macOS copies frames into IOSurface-backed CoreVideo buffers (gpu.rs, frame_pool.rs);
+//! Windows copies them into pooled D3D11 shared textures (d3d.rs, d3d_pool.rs).
 mod ime_state;
 mod types;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(cef_osr))]
 mod unsupported;
 pub use ime_state::OsrIme;
 pub use types::*;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(cef_osr))]
 pub use unsupported::{OsrFrame, OsrRuntime};
 
+#[cfg(windows)]
+mod d3d;
+#[cfg(windows)]
+mod d3d_pool;
 #[cfg(target_os = "macos")]
 mod frame_pool;
 #[cfg(target_os = "macos")]
 mod gpu;
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 mod handlers;
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 mod ime;
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 mod input;
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 mod paint;
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 mod pump;
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 mod state;
 
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 use cef::{ImplBrowser, ImplBrowserHost, ImplFrame};
 #[cfg(target_os = "macos")]
-use core_video::pixel_buffer::CVPixelBuffer;
+use core_video::pixel_buffer::CVPixelBuffer as Frame;
+#[cfg(windows)]
+pub use d3d::read_bgra_pixel;
+#[cfg(windows)]
+pub use d3d_pool::OsrFrame;
+#[cfg(windows)]
+use d3d_pool::OsrFrame as Frame;
 #[cfg(target_os = "macos")]
 pub use gpu::read_bgra_pixel;
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 use state::{Events, Page, PageRef};
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
@@ -42,9 +54,9 @@ use std::{
     time::Duration,
 };
 
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 static STARTED: AtomicBool = AtomicBool::new(false);
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 const FALLBACK: Duration = Duration::from_nanos(1_000_000_000 / 30);
 
 /// All runtime methods and sink events run on the UI thread.
@@ -56,28 +68,31 @@ pub trait OsrSink: 'static {
 /// Coalesce pending deadlines by keeping the earliest, including the visible-page fallback.
 pub type PumpScheduler = std::sync::Arc<dyn Fn(std::time::Duration) + Send + Sync>;
 
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 struct RuntimeState {
     pages: RefCell<HashMap<u64, PageRef>>,
     visible: Cell<usize>,
+    contexts: RefCell<HashMap<String, (cef::RequestContext, usize)>>,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 pub struct OsrRuntime {
     state: Rc<RuntimeState>,
     sink: Rc<dyn OsrSink>,
     schedule: PumpScheduler,
     _app: cef::App,
+    #[cfg(target_os = "macos")]
     _framework: gpu::Framework,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 impl OsrRuntime {
     pub fn start(
         config: OsrConfig,
         sink: Rc<dyn OsrSink>,
         schedule: PumpScheduler,
     ) -> Result<Self, OsrError> {
+        #[cfg(target_os = "macos")]
         if objc2::MainThreadMarker::new().is_none() {
             return Err(OsrError("CEF must start on the main thread".into()));
         }
@@ -92,44 +107,12 @@ impl OsrRuntime {
         sink: Rc<dyn OsrSink>,
         schedule: PumpScheduler,
     ) -> Result<Self, OsrError> {
-        let OsrConfig {
-            framework_dir,
-            helper_path,
-            profile_dir,
-            locale,
-            user_agent,
-        } = config;
-        let framework = gpu::Framework::load(&framework_dir)?;
+        #[cfg(target_os = "macos")]
+        let framework = gpu::Framework::load(&config.framework_dir)?;
+        #[cfg(target_os = "macos")]
         crate::mac::install_application();
         let _ = cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0);
-        std::fs::create_dir_all(&profile_dir).map_err(|e| OsrError(e.to_string()))?;
-        #[expect(
-            clippy::disallowed_methods,
-            reason = "macOS-only CEF boundary; Windows extended paths cannot occur here"
-        )]
-        let profile_dir = profile_dir
-            .canonicalize()
-            .map_err(|e| OsrError(e.to_string()))?;
-        let profile = profile_dir
-            .to_str()
-            .ok_or_else(|| OsrError("profile path is not UTF-8".into()))?;
-        let settings = cef::Settings {
-            windowless_rendering_enabled: 1,
-            external_message_pump: 1,
-            root_cache_path: profile.into(),
-            cache_path: profile_dir.join("cache").to_string_lossy().as_ref().into(),
-            framework_dir_path: framework_dir.to_string_lossy().as_ref().into(),
-            browser_subprocess_path: helper_path.to_string_lossy().as_ref().into(),
-            locale: locale.as_str().into(),
-            user_agent: user_agent.as_str().into(),
-            log_file: profile_dir
-                .join("cef.log")
-                .to_string_lossy()
-                .as_ref()
-                .into(),
-            log_severity: cef::LogSeverity::WARNING,
-            ..Default::default()
-        };
+        let settings = settings(config)?;
         let mut app = pump::OsrApp::new(pump::Pump::new(schedule.clone()));
         let args = cef::args::Args::new();
         if cef::initialize(
@@ -145,26 +128,59 @@ impl OsrRuntime {
             state: Rc::new(RuntimeState {
                 pages: RefCell::default(),
                 visible: Cell::new(0),
+                contexts: RefCell::default(),
             }),
             sink,
             schedule,
             _app: app,
+            #[cfg(target_os = "macos")]
             _framework: framework,
         })
     }
 
     pub fn pump(&self) {
         cef::do_message_loop_work();
+        #[cfg(windows)]
+        self.repaint_dropped();
         if self.state.visible.get() > 0 {
             (self.schedule)(FALLBACK);
         }
     }
 
-    pub fn open(&self, page: u64, url: &str, size: (u32, u32), scale: f32) -> Result<(), OsrError> {
+    pub fn open(
+        &self,
+        page: u64,
+        url: &str,
+        size: (u32, u32),
+        scale: f32,
+        profile: OsrProfile,
+    ) -> Result<(), OsrError> {
         if self.state.pages.borrow().contains_key(&page) {
             return Err(OsrError("page already exists".into()));
         }
+        let owner = match profile {
+            OsrProfile::SignedIn => None,
+            OsrProfile::SignedOut(owner) => Some(owner),
+        };
+        let mut context = owner
+            .as_ref()
+            .map(|owner| {
+                self.state
+                    .contexts
+                    .borrow()
+                    .get(owner)
+                    .map(|(context, _)| context.clone())
+                    .or_else(|| {
+                        cef::request_context_create_context(
+                            Some(&cef::RequestContextSettings::default()),
+                            None,
+                        )
+                    })
+                    .ok_or_else(|| OsrError("create request context failed".into()))
+            })
+            .transpose()?;
         let shared = Rc::new(RefCell::new(Page::new(size, scale)));
+        shared.borrow_mut().signed_out_owner = owner.clone();
         let events = Events {
             page,
             sink: self.sink.clone(),
@@ -183,9 +199,17 @@ impl OsrRuntime {
                 ..Default::default()
             }),
             None,
-            None,
+            context.as_mut(),
         )
         .ok_or_else(|| OsrError("create OSR browser failed".into()))?;
+        if let (Some(owner), Some(context)) = (owner, context) {
+            self.state
+                .contexts
+                .borrow_mut()
+                .entry(owner)
+                .or_insert((context, 0))
+                .1 += 1;
+        }
         shared.borrow_mut().browser = Some(browser);
         self.state.pages.borrow_mut().insert(page, shared);
         self.state.visible.set(self.state.visible.get() + 1);
@@ -236,6 +260,8 @@ impl OsrRuntime {
             let mut p = p.borrow_mut();
             p.size = size;
             p.scale = scale;
+            // Windows keeps its device and fences; the pool replaces textures on a new size.
+            #[cfg(target_os = "macos")]
             p.release_frames();
         }
         if let Some(h) = self.host(page) {
@@ -288,7 +314,7 @@ impl OsrRuntime {
             h.close_browser(1);
         }
     }
-    pub fn frame(&self, page: u64) -> Option<CVPixelBuffer> {
+    pub fn frame(&self, page: u64) -> Option<Frame> {
         self.page(page).and_then(|p| p.borrow().frame.clone())
     }
     pub fn shutdown(self) {
@@ -296,7 +322,7 @@ impl OsrRuntime {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 impl Drop for OsrRuntime {
     fn drop(&mut self) {
         let pages: Vec<_> = self.state.pages.borrow().keys().copied().collect();
@@ -308,7 +334,54 @@ impl Drop for OsrRuntime {
             cef::do_message_loop_work();
         }
         cef::shutdown();
+        #[cfg(windows)]
+        d3d::release_device();
     }
+}
+
+#[cfg(cef_osr)]
+fn settings(config: OsrConfig) -> Result<cef::Settings, OsrError> {
+    let OsrConfig {
+        framework_dir,
+        helper_path,
+        profile_dir,
+        locale,
+        user_agent,
+    } = config;
+    std::fs::create_dir_all(&profile_dir).map_err(|e| OsrError(e.to_string()))?;
+    #[cfg(target_os = "macos")]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "macOS-only CEF boundary; Windows extended paths cannot occur here"
+    )]
+    let profile_dir = profile_dir
+        .canonicalize()
+        .map_err(|e| OsrError(e.to_string()))?;
+    // Not canonicalize: its Windows `\\?\` form never matches other paths; CEF needs an absolute path.
+    #[cfg(windows)]
+    let profile_dir = std::path::absolute(&profile_dir).map_err(|e| OsrError(e.to_string()))?;
+    let profile = profile_dir
+        .to_str()
+        .ok_or_else(|| OsrError("profile path is not UTF-8".into()))?;
+    let path = |p: &std::path::Path| cef::CefString::from(p.to_string_lossy().as_ref());
+    Ok(cef::Settings {
+        windowless_rendering_enabled: 1,
+        external_message_pump: 1,
+        root_cache_path: profile.into(),
+        cache_path: path(&profile_dir.join("cache")),
+        #[cfg(target_os = "macos")]
+        framework_dir_path: path(&framework_dir),
+        #[cfg(windows)]
+        resources_dir_path: path(&framework_dir),
+        #[cfg(windows)]
+        locales_dir_path: path(&framework_dir.join("locales")),
+        browser_subprocess_path: path(&helper_path),
+        locale: locale.as_str().into(),
+        user_agent: user_agent.as_str().into(),
+        log_file: path(&profile_dir.join("cef.log")),
+        log_severity: cef::LogSeverity::WARNING,
+        ..Default::default()
+    })
 }
 
 /// Chromium version from the pinned CEF bindings.

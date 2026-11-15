@@ -1,8 +1,18 @@
 use std::{fmt, path::PathBuf};
 
+#[derive(Clone)]
+pub enum OsrProfile {
+    SignedIn,
+    SignedOut(String),
+}
+
 pub struct OsrConfig {
-    /// Absolute path to Chromium Embedded Framework.framework.
+    /// macOS: absolute path to Chromium Embedded Framework.framework.
+    /// Windows: the CEF runtime directory (resources, `locales`). libcef.dll itself is linked at
+    /// load time, so it must also be on the process's DLL search path (beside the executable).
     pub framework_dir: PathBuf,
+    /// The CEF subprocess executable. macOS: the staged `butler-cef-host Helper`;
+    /// Windows: the staged `butler_cef_host.exe` (CEF's bootstrapc.exe, see stage.py).
     pub helper_path: PathBuf,
     pub profile_dir: PathBuf,
     pub locale: String,
@@ -61,7 +71,7 @@ pub struct OsrModifiers {
     pub command: bool,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 impl OsrModifiers {
     pub(super) fn flags(self) -> u32 {
         (u32::from(self.shift) * 2)
@@ -78,7 +88,7 @@ pub enum OsrButton {
     Right,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 impl OsrButton {
     pub(super) fn cef(self) -> cef::MouseButtonType {
         match self {
@@ -125,8 +135,10 @@ pub struct OsrWheel {
 
 #[derive(Clone, Copy, Debug)]
 pub struct OsrKey {
-    /// The macOS virtual key code and Windows virtual key code (CEF requires both).
+    /// The platform key code: macOS, the virtual key code; Windows, the `WM_KEYDOWN` lParam
+    /// (scan code in bits 16..24, extended-key flag in bit 24), which sets the DOM `code`.
     pub native_key_code: i32,
+    /// The Windows virtual key code (CEF requires it on every platform).
     pub windows_key_code: i32,
     pub character: u16,
     pub unmodified_character: u16,

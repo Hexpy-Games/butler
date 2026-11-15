@@ -96,6 +96,13 @@ impl Shell {
             .collapsed(!open)
             .split_chat_width(self.split_chat_width())
             .drag_region();
+        if self.view(cx) == crate::ui::manage::View::Browser
+            && let Some(leading) = crate::ui::browser::transfer::hub(window, cx)
+        {
+            bar = bar
+                .leading(leading)
+                .leading_size(butler_ds::ui::blocks::titlebar_shell::LeadingSize::Auto);
+        }
         if let Some(subtitle) = subtitle {
             bar = bar.subtitle(subtitle);
         }

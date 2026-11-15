@@ -4,6 +4,27 @@ use gpui::{AnyElement, App, SharedString, Window};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TabId(pub(crate) SharedString);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Profile {
+    SignedIn,
+    SignedOut,
+}
+
+impl Profile {
+    pub(crate) fn for_url(url: &str) -> Self {
+        if url::Url::parse(url).is_ok_and(|u| {
+            u.host_str() == Some("127.0.0.1")
+                && ["/__o/", "/__p/"]
+                    .iter()
+                    .any(|prefix| u.path().starts_with(prefix))
+        }) {
+            Self::SignedOut
+        } else {
+            Self::SignedIn
+        }
+    }
+}
+
 pub(crate) enum PageCommand {
     Load(String),
     Back,
@@ -30,7 +51,7 @@ pub(crate) trait PageEngine: 'static {
     /// Whether this build can browse (Electron's `enabled`).
     fn enabled(&self) -> bool;
     /// A page for `page`; `url` is empty for a blank page.
-    fn open(&mut self, page: &TabId, url: &str);
+    fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str);
     fn command(&mut self, page: &TabId, command: PageCommand);
     /// The page's size in logical pixels and the device scale (from PageCard's bounds).
     fn resize(&mut self, page: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32);
