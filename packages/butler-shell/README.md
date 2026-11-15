@@ -92,8 +92,9 @@ target/cef-shell/butler-shell.exe
 
 The shots harness drives `butler-shell-shots.exe` with `BUTLER_CEF_DIR` set to the staged
 directory; the `butler-e2e` driver also puts that directory first on the shell's `PATH`.
-The headless harness renders through wgpu, which cannot draw a shared D3D11 texture, so a shot
-of a CEF page fails there; check pages in the windowed shell.
+The headless harness renders through wgpu, which imports the shared D3D11 textures (gpui_wgpu's
+`wgpu-surfaces` feature, enabled by `shots`), so its shots include CEF pages. It renders on the
+default DXGI adapter, the one CEF renders on (`GPUI_HEADLESS_ADAPTER_LUID` overrides it).
 
 ## Tests
 
