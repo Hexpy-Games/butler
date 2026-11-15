@@ -252,7 +252,7 @@ jobs:
             Remove-JobTree $env:BUTLER_DATA
           }
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: gpui-update-smoke-logs
           path: ${{ runner.temp }}/gpui-update-logs

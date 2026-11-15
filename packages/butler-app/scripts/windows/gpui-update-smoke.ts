@@ -1,7 +1,7 @@
 /** Disposable hosted-runner proof of Electron -> gpui Squirrel activation. */
 import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
@@ -48,7 +48,10 @@ let uninstalled = false;
 let failed = false;
 let helperClosed = true;
 let phase = "prepare";
+let processTrace: ReturnType<typeof startProcessTrace> | undefined;
 try {
+  processTrace = startProcessTrace();
+  await processTrace.ready();
   const local = powershell("[Environment]::GetFolderPath('LocalApplicationData', [Environment+SpecialFolderOption]::DoNotVerify)", env);
   assert.equal(resolve(local).toLowerCase(), resolve(env.LOCALAPPDATA).toLowerCase(), "Squirrel profile must be isolated");
   for (const path of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, env.TEMP]) mkdirSync(path, { recursive: true });
@@ -85,9 +88,97 @@ async function cleanup() {
   try {
     await waitFor(() => helperClosed, "update helper streams closed");
   } catch (error) { errors.push(error); }
+  try { await processTrace?.stop(); } catch (error) { errors.push(error); }
+  try { printProcessStarts(); } catch (error) { errors.push(error); }
   try { preserveLogs(); } finally { removeProfile(root, env); }
   for (const error of errors) console.error(`Smoke cleanup failed: ${String(error)}`);
   if (errors.length && !failed) throw errors[0];
+}
+
+function startProcessTrace() {
+  const stopFile = join(root, "process-starts.stop");
+  const readyFile = join(root, "process-starts.ready");
+  const script = join(root, "process-starts.ps1");
+  writeFileSync(join(root, "process-starts.jsonl"), "");
+  writeFileSync(script, `$ErrorActionPreference = 'Stop'
+    function Write-ProcessStart($notification) {
+      $started = $notification.SourceEventArgs.NewEvent
+      $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($started.ProcessID)" -ErrorAction Ignore
+      [ordered]@{
+        time = [DateTime]::FromFileTimeUtc([long]$started.TIME_CREATED).ToString('o')
+        ProcessName = $started.ProcessName; ProcessID = $started.ProcessID; ParentProcessID = $started.ParentProcessID
+        ExecutablePath = $process.ExecutablePath; CommandLine = $process.CommandLine
+      } | ConvertTo-Json -Compress | Add-Content -LiteralPath $env:BUTLER_PROCESS_TRACE_LOG -Encoding UTF8
+      Remove-Event -EventIdentifier $notification.EventIdentifier
+    }
+    Register-CimIndicationEvent -ClassName Win32_ProcessStartTrace -SourceIdentifier ButlerProcessStarts | Out-Null
+    try {
+      New-Item -ItemType File -Path $env:BUTLER_PROCESS_TRACE_READY | Out-Null
+      while (-not (Test-Path -LiteralPath $env:BUTLER_PROCESS_TRACE_STOP)) {
+        $notification = Wait-Event -SourceIdentifier ButlerProcessStarts -Timeout 1
+        if ($null -ne $notification) { Write-ProcessStart $notification }
+      }
+    } finally {
+      Unregister-Event -SourceIdentifier ButlerProcessStarts
+      Get-Event -SourceIdentifier ButlerProcessStarts -ErrorAction SilentlyContinue | ForEach-Object { Write-ProcessStart $_ }
+    }`);
+  const output = openSync(join(root, "process-start-subscriber.log"), "a");
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-File", script], {
+      env: { ...env, BUTLER_PROCESS_TRACE_STOP: stopFile, BUTLER_PROCESS_TRACE_READY: readyFile,
+        BUTLER_PROCESS_TRACE_LOG: join(root, "process-starts.jsonl") },
+      stdio: ["ignore", output, output], windowsHide: true,
+    });
+  } finally { closeSync(output); }
+  let closed = false;
+  let exit: number | null = null;
+  let spawnError: Error | undefined;
+  child.on("error", error => { spawnError = error; closed = true; });
+  child.on("close", code => { exit = code; closed = true; });
+  return {
+    ready: () => waitFor(() => {
+      if (closed) throw spawnError ?? new Error(`Process-start subscriber exited before readiness: ${exit}`);
+      return existsSync(readyFile);
+    }, "process-start subscriber ready"),
+    stop: async () => {
+      writeFileSync(stopFile, "stop");
+      try { await waitFor(() => closed, "process-start subscriber exit"); } finally {
+        if (!closed && child.pid) {
+          run("taskkill.exe", ["/PID", String(child.pid), "/F"]);
+          await waitFor(() => closed, "terminated process-start subscriber streams closed");
+        }
+      }
+      if (spawnError) throw spawnError;
+      assert.equal(exit, 0, "Process-start subscriber must succeed");
+    },
+  };
+}
+
+type ProcessStart = {
+  time: string; ProcessName: string; ProcessID: number; ParentProcessID: number;
+  ExecutablePath: string | null; CommandLine: string | null;
+};
+function printProcessStarts() {
+  const trace = join(root, "process-starts.jsonl");
+  const starts: ProcessStart[] = existsSync(trace) ? readFileSync(trace, "utf8").replace(/^\uFEFF/u, "")
+    .split(/\r?\n/u).filter(line => line.trim()).map(line => JSON.parse(line)) : [];
+  starts.sort((a, b) => a.time.localeCompare(b.time));
+  const byPid = new Map<number, ProcessStart[]>();
+  for (const start of starts) {
+    const history = byPid.get(start.ProcessID) ?? [];
+    history.push(start);
+    byPid.set(start.ProcessID, history);
+  }
+  const names = new Set(["butler_cef_host.exe", "butler.exe", "butler-agent.exe", "update.exe"]);
+  const processStarts = starts.filter(start => names.has(start.ProcessName.toLowerCase())
+    || [start.ExecutablePath, start.CommandLine].some(value => value?.toLowerCase().includes(installed.toLowerCase())))
+    .map(start => {
+      // PIDs can be reused: take the most recent parent start preceding this child.
+      const parent = byPid.get(start.ParentProcessID)?.findLast(row => row.time <= start.time);
+      return { ...start, parent: parent ? { ProcessName: parent.ProcessName, ExecutablePath: parent.ExecutablePath } : null };
+    });
+  console.log(JSON.stringify({ processStarts }));
 }
 
 async function step(name: string, action: () => Promise<void>) {
@@ -353,4 +444,9 @@ function preserveLogs() {
   if (!evidence) return;
   mkdirSync(evidence, { recursive: true });
   for (const name of readdirSync(root).filter(name => name.endsWith(".log"))) copyFileSync(join(root, name), join(evidence, name));
+  const trace = join(root, "process-starts.jsonl");
+  if (existsSync(trace)) copyFileSync(trace, join(evidence, "process-starts.jsonl"));
+  for (const path of ["state/browser", "logs"]) {
+    if (existsSync(join(data, path))) cpSync(join(data, path), join(evidence, "data", path), { recursive: true });
+  }
 }
