@@ -36,6 +36,17 @@ pub(crate) struct BrowserStrings {
     pub(crate) move_to_conversation: &'static str,
     pub(crate) new_conversation: &'static str,
     pub(crate) bring_tab: &'static str,
+    pub(crate) page_says: &'static str,
+    pub(crate) auth_needed: &'static str,
+    pub(crate) choose_file: &'static str,
+    pub(crate) username: &'static str,
+    pub(crate) password: &'static str,
+    pub(crate) sign_in: &'static str,
+    pub(crate) ok: &'static str,
+    pub(crate) cancel: &'static str,
+    pub(crate) leave_title: &'static str,
+    pub(crate) stay: &'static str,
+    pub(crate) leave: &'static str,
     pub(crate) history: &'static str,
 }
 
@@ -74,6 +85,17 @@ const KO: BrowserStrings = BrowserStrings {
     new_conversation: "새 대화",
     bring_tab: "탭 가져오기",
     history: "방문 기록",
+    page_says: "페이지 메시지",
+    auth_needed: "로그인 필요",
+    choose_file: "파일 선택",
+    username: "사용자 이름",
+    password: "비밀번호",
+    sign_in: "로그인",
+    ok: "확인",
+    cancel: "취소",
+    leave_title: "이 페이지를 나갈까요?",
+    stay: "머무르기",
+    leave: "나가기",
 };
 
 const EN: BrowserStrings = BrowserStrings {
@@ -111,6 +133,17 @@ const EN: BrowserStrings = BrowserStrings {
     new_conversation: "New chat",
     bring_tab: "Bring in a tab",
     history: "History",
+    page_says: "Page message",
+    auth_needed: "Sign-in required",
+    choose_file: "Choose file",
+    username: "Username",
+    password: "Password",
+    sign_in: "Sign in",
+    ok: "OK",
+    cancel: "Cancel",
+    leave_title: "Leave this page?",
+    stay: "Stay",
+    leave: "Leave",
 };
 
 impl BrowserStrings {

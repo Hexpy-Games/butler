@@ -77,6 +77,7 @@ impl PlaceholderEngine {
 }
 
 impl PageEngine for PlaceholderEngine {
+    fn answer_dialog(&mut self, _: &TabId, _: u64, _: super::page_dialog::DialogAnswer) {}
     fn enabled(&self) -> bool {
         true
     }

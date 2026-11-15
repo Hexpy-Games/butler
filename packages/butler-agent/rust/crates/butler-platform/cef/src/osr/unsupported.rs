@@ -1,6 +1,7 @@
 //! Uninhabited seam for platforms without an OSR implementation.
 use super::{
-    OsrConfig, OsrError, OsrIme, OsrKey, OsrMouse, OsrProfile, OsrSink, OsrWheel, PumpScheduler,
+    OsrAnswer, OsrConfig, OsrError, OsrIme, OsrKey, OsrMouse, OsrProfile, OsrSink, OsrWheel,
+    PopupPolicy, PumpScheduler,
 };
 use std::{convert::Infallible, ops::Range, rc::Rc};
 
@@ -19,7 +20,12 @@ impl OsrFrame {
     }
 }
 impl OsrRuntime {
-    pub fn start(_: OsrConfig, _: Rc<dyn OsrSink>, _: PumpScheduler) -> Result<Self, OsrError> {
+    pub fn start(
+        _: OsrConfig,
+        _: Rc<dyn OsrSink>,
+        _: PumpScheduler,
+        _: PopupPolicy,
+    ) -> Result<Self, OsrError> {
         Err(OsrError("osr_unsupported".into()))
     }
     pub fn pump(&self) {
@@ -36,6 +42,15 @@ impl OsrRuntime {
         match self.never {}
     }
     pub fn navigate(&self, _: u64, _: &str) {
+        match self.never {}
+    }
+    pub fn eval(&self, _: u64, _: &str) {
+        match self.never {}
+    }
+    pub fn answer_dialog(&self, _: u64, _: u64, _: OsrAnswer) {
+        match self.never {}
+    }
+    pub fn cancel_dialogs(&self, _: u64) {
         match self.never {}
     }
     pub fn back(&self, _: u64) {
