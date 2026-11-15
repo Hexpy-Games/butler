@@ -55,6 +55,8 @@ pub(crate) struct Tab {
     pub(crate) url: String,
     pub(crate) title: String,
     pub(crate) favicon: String,
+    pub(super) title_url: String,
+    pub(super) favicon_url: String,
     pub(crate) status: TabStatus,
     pub(crate) can_back: bool,
     pub(crate) can_forward: bool,
@@ -189,6 +191,8 @@ impl BrowserState {
             url: url.clone(),
             title: String::new(),
             favicon: String::new(),
+            title_url: String::new(),
+            favicon_url: String::new(),
             status: TabStatus::Idle,
             can_back: false,
             can_forward: false,
@@ -391,8 +395,14 @@ impl BrowserState {
                     super::restore::changed(cx);
                 }
             }
-            PageChange::Title(title) => tab.title = title,
-            PageChange::Favicon(favicon) => tab.favicon = favicon,
+            PageChange::Title(title) => {
+                tab.title = title;
+                tab.title_url.clone_from(&tab.url);
+            }
+            PageChange::Favicon(favicon) => {
+                tab.favicon = favicon;
+                tab.favicon_url.clone_from(&tab.url);
+            }
             PageChange::Loading(true) => tab.status = TabStatus::Loading,
             PageChange::Loading(false) if tab.status != TabStatus::Crashed => {
                 tab.status = TabStatus::Idle;
