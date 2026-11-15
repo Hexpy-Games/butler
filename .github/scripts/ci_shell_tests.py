@@ -43,6 +43,7 @@ class ShellSelection(unittest.TestCase):
             expected = path.startswith(('packages/butler-shell/',
                                        'packages/butler-agent/rust/tools/source-check/'))
             expected |= path == '.github/workflows/shell.yml'
+            expected |= changes.ci_shell_inputs.consumes(path, Path(__file__).resolve().parents[2])
             with self.subTest(path=path):
                 self.assertEqual('shell' in changes.categories(path), expected)
                 if path.startswith('packages/butler-shell/'):
