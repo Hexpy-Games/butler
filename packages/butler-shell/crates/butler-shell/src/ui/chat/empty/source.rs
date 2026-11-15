@@ -80,6 +80,7 @@ pub(super) struct Resolved {
     pub(super) project_name: Option<String>,
     pub(super) wallpaper: WallpaperSource,
     pub(super) wallpaper_paused: bool,
+    pub(super) wallpaper_pause_on_battery: bool,
 }
 
 pub(super) fn resolve(fetched: Fetched, project_id: Option<&str>) -> Resolved {
@@ -112,6 +113,7 @@ pub(super) fn resolve(fetched: Fetched, project_id: Option<&str>) -> Resolved {
         project_name,
         wallpaper,
         wallpaper_paused,
+        wallpaper_pause_on_battery: settings["wallpaper"]["pauseOnBattery"] == true,
     }
 }
 

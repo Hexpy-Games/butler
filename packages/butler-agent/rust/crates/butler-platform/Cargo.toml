@@ -55,6 +55,8 @@ sysinfo.workspace = true
 zip.workspace = true
 # Display accessibility settings (`display_accessibility`): safe objc2 bindings.
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSProcessInfo"] }
+objc2-io-kit = { version = "0.3", default-features = false, features = ["std", "ps"] }
 # Login item (`login_item`): `SMAppService.mainAppService`, the API Electron's `setLoginItemSettings` uses on macOS 13+,
 # behind a safe API (objc2-service-management marks every SMAppService call unsafe).
 smappservice-rs = "=0.1.3"
@@ -67,6 +69,7 @@ tray-icon = { version = "=0.21.0", default-features = false }
 # contain command trees, paths without a needless `\\?\` prefix, and the
 # system time zone's IANA name.
 [target.'cfg(windows)'.dependencies]
+windows = { version = "=0.62.2", default-features = false, features = ["std", "System_Power", "UI_ViewManagement"] }
 notify-windows-ledger = { path = "../../../../../third_party/notify-windows-ledger" }
 mxc-sdk = { git = "https://github.com/microsoft/mxc", rev = "2366ee9b1e0bed3a0f950ec49a509f92285239cf", default-features = false }
 windows-dpapi = "=0.2.0"
