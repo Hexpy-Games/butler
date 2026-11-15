@@ -49,6 +49,7 @@ pub(crate) enum TabStatus {
 pub(crate) struct Tab {
     pub(crate) id: TabId,
     pub(crate) owner: Owner,
+    pub(crate) epoch: u64,
     pub(crate) url: String,
     pub(crate) title: String,
     pub(crate) favicon: String,
@@ -108,6 +109,7 @@ pub(crate) struct BrowserState {
     pub(super) tabs: Vec<Tab>,
     pub(super) active: Option<TabId>,
     pub(super) next_id: u64,
+    pub(super) publisher: super::host::Publisher,
 }
 
 impl Global for BrowserState {}
@@ -116,7 +118,9 @@ impl BrowserState {
     pub(crate) fn init(cx: &mut App) {
         let (sender, mut receiver) = mpsc::unbounded();
         let engine = Self::engine(sender, cx);
+        let publisher = super::host::Publisher::start(cx);
         cx.set_global(Self {
+            publisher,
             engine,
             tabs: Vec::new(),
             active: None,
@@ -184,6 +188,7 @@ impl BrowserState {
         self.tabs.push(Tab {
             id: id.clone(),
             owner,
+            epoch: 1,
             profile,
             placeholder: placeholder && url.is_empty(),
             url: url.clone(),
@@ -207,6 +212,7 @@ impl BrowserState {
         }
         self.engine
             .open(&id, &url, profile, &super::area::owner_key(&tab_owner));
+        self.publisher.changed(&self.tabs);
         Ok(Some(id))
     }
 
@@ -224,6 +230,7 @@ impl BrowserState {
         };
         self.engine.close(id);
         self.tabs.remove(index);
+        self.publisher.changed(&self.tabs);
         if self.active.as_ref() == Some(id) {
             self.active = self.tabs.last().map(|tab| tab.id.clone());
         }
@@ -275,6 +282,9 @@ impl BrowserState {
         let mut tab = self.tabs.remove(from);
         let new_owner = to.clone();
         tab.owner = to;
+        if changed_owner {
+            tab.epoch += 1;
+        }
         let before = self
             .tabs
             .iter()
@@ -288,6 +298,7 @@ impl BrowserState {
         if changed_owner && has_url {
             self.drop_placeholders(&new_owner);
         }
+        self.publisher.changed(&self.tabs);
         Ok(())
     }
 
@@ -354,6 +365,7 @@ impl BrowserState {
     pub(crate) fn apply(&mut self, event: PageEvent) {
         #[cfg(feature = "cef")]
         if self.popup_event(&event) {
+            self.publisher.changed(&self.tabs);
             return;
         }
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == event.page) else {
@@ -385,6 +397,7 @@ impl BrowserState {
             | PageChange::PopupOpened { .. }
             | PageChange::CloseRequested => {}
         }
+        self.publisher.changed(&self.tabs);
     }
 
     pub(crate) fn tabs(&self) -> &[Tab] {

@@ -22,18 +22,49 @@ pub struct OsrConfig {
 
 #[derive(Debug)]
 pub enum OsrEvent {
-    DevTools { id: i32, result_json: String },
-    DevToolsEvent { method: String, params_json: String },
+    DevTools {
+        id: i32,
+        result_json: String,
+    },
+    DevToolsEvent {
+        method: String,
+        params_json: String,
+    },
     Url(String),
     Title(String),
     Favicon(String),
     Loading(bool),
-    History { can_back: bool, can_forward: bool },
-    PopupNewTab { url: String },
-    PopupBlocked { url: String, reason: PopupBlock },
-    PopupOpened { child: u64, url: String },
+    History {
+        can_back: bool,
+        can_forward: bool,
+    },
+    PopupNewTab {
+        url: String,
+    },
+    PopupBlocked {
+        url: String,
+        reason: PopupBlock,
+    },
+    PopupOpened {
+        child: u64,
+        url: String,
+    },
     CloseRequested,
     Dialog(OsrDialog),
+    DownloadStarted {
+        id: u32,
+        suggested_name: String,
+        total_bytes: u64,
+    },
+    DownloadProgress {
+        id: u32,
+        received: u64,
+        total: u64,
+    },
+    DownloadDone {
+        id: u32,
+        completed: bool,
+    },
     Crashed,
     Frame,
     Cursor(OsrCursor),
@@ -213,4 +244,17 @@ pub struct OsrAnswer {
     pub username: String,
     pub password: String,
     pub files: Vec<PathBuf>,
+}
+
+/// Synchronous download destination policy; no toolkit state crosses this boundary.
+pub type DownloadPolicy = std::rc::Rc<dyn Fn(&DownloadRequest) -> DownloadDecision>;
+pub struct DownloadRequest {
+    pub page: u64,
+    pub id: u32,
+    pub suggested_name: String,
+    pub total_bytes: u64,
+}
+pub enum DownloadDecision {
+    Dialog,
+    Stage(PathBuf),
 }

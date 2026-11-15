@@ -19,23 +19,33 @@ pub(super) fn client(shared: PageRef, events: Events, runtime: &Weak<RuntimeStat
         Display::new(events.clone()),
         Load::new(events.clone()),
         Request::new(events.clone(), runtime.upgrade().map(|r| r.auth.clone())),
-        super::dialogs::Js::new(shared.clone(), events.clone()),
-        super::dialogs::Files::new(shared, events),
+        PageDialogs {
+            js: super::dialogs::Js::new(shared.clone(), events.clone()),
+            files: super::dialogs::Files::new(shared, events.clone()),
+        },
+        super::downloads::Downloads::new(events, runtime.clone()),
     )
+}
+
+#[derive(Clone)]
+pub(super) struct PageDialogs {
+    js: JsdialogHandler,
+    files: DialogHandler,
 }
 
 cef::wrap_client! {
     pub(super) struct OsrClient {
         paint: RenderHandler, life: LifeSpanHandler, display: DisplayHandler,
-        load: LoadHandler, request: RequestHandler, js: JsdialogHandler, files: DialogHandler,
+        load: LoadHandler, request: RequestHandler, dialogs: PageDialogs, downloads: DownloadHandler,
     }
     impl Client {
+        fn download_handler(&self) -> Option<DownloadHandler> { Some(self.downloads.clone()) }
         fn render_handler(&self) -> Option<RenderHandler> { Some(self.paint.clone()) }
         fn life_span_handler(&self) -> Option<LifeSpanHandler> { Some(self.life.clone()) }
         fn display_handler(&self) -> Option<DisplayHandler> { Some(self.display.clone()) }
         fn load_handler(&self) -> Option<LoadHandler> { Some(self.load.clone()) }
-        fn jsdialog_handler(&self) -> Option<JsdialogHandler> { Some(self.js.clone()) }
-        fn dialog_handler(&self) -> Option<DialogHandler> { Some(self.files.clone()) }
+        fn jsdialog_handler(&self) -> Option<JsdialogHandler> { Some(self.dialogs.js.clone()) }
+        fn dialog_handler(&self) -> Option<DialogHandler> { Some(self.dialogs.files.clone()) }
         fn request_handler(&self) -> Option<RequestHandler> { Some(self.request.clone()) }
     }
 }
