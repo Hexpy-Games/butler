@@ -8,6 +8,7 @@ mod dialog;
 pub(crate) mod engine;
 pub(crate) mod model;
 mod page_dialog;
+pub(crate) mod pick;
 mod placeholder;
 #[cfg(feature = "cef")]
 mod popup_policy;

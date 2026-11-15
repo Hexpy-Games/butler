@@ -73,6 +73,10 @@ impl BrowserState {
             popup: true,
             blocked_popup: None,
             dialog: None,
+            picking: false,
+            selections: Vec::new(),
+            pick_hover: None,
+            pick: Default::default(),
         });
         self.engine.adopt(&id, child);
     }

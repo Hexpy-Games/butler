@@ -61,6 +61,10 @@ pub(crate) struct Tab {
     pub(crate) popup: bool,
     pub(crate) blocked_popup: Option<super::page_dialog::BlockedPopup>,
     pub(crate) dialog: Option<super::page_dialog::PageDialog>,
+    pub(crate) picking: bool,
+    pub(crate) selections: Vec<super::pick::Item>,
+    pub(crate) pick_hover: Option<super::pick::Hover>,
+    pub(crate) pick: super::pick::Session,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -186,6 +190,10 @@ impl BrowserState {
             popup: false,
             blocked_popup: None,
             dialog: None,
+            picking: false,
+            selections: Vec::new(),
+            pick_hover: None,
+            pick: Default::default(),
         });
         self.activate(&id);
         if !url.is_empty() {
@@ -328,7 +336,11 @@ impl BrowserState {
     }
 
     pub(crate) fn resize(&mut self, id: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32) {
-        if self.tab(id).is_some() {
+        if let Some(tab) = self.tab(id) {
+            tab.pick.viewport.set((
+                f64::from(f32::from(size.width)),
+                f64::from(f32::from(size.height)),
+            ));
             self.engine.resize(id, size, scale);
         }
     }
@@ -342,6 +354,7 @@ impl BrowserState {
             return;
         };
         match event.change {
+            PageChange::DevToolsEvent { .. } => {}
             PageChange::Url(url) => tab.url = url,
             PageChange::Title(title) => tab.title = title,
             PageChange::Favicon(favicon) => tab.favicon = favicon,

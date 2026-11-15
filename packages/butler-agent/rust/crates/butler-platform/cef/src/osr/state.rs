@@ -20,6 +20,8 @@ pub(super) struct Page {
     pub(super) ime: OsrIme,
     pub(super) dialog: Option<(u64, super::dialogs::Callback)>,
     pub(super) next_dialog: u64,
+    pub(super) devtools: Option<cef::Registration>,
+    pub(super) next_devtools: i32,
 }
 impl Page {
     pub(super) fn new(size: (u32, u32), scale: f32) -> Self {
@@ -37,6 +39,8 @@ impl Page {
             ime: OsrIme::default(),
             dialog: None,
             next_dialog: 0,
+            devtools: None,
+            next_devtools: 0,
         }
     }
     pub(super) fn release_frames(&mut self) {
