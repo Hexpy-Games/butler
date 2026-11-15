@@ -49,21 +49,19 @@ fn arguments(profile: &Path, proxy: &str) -> Vec<OsString> {
         "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1".into(),
         "--force-webrtc-ip-handling-policy=disable_non_proxied_udp".into(),
         "--disable-quic".into(),
-        "--no-first-run".into(),
-        "--no-default-browser-check".into(),
-        "--disable-background-networking".into(),
-        "--disable-component-update".into(),
-        "--disable-sync".into(),
-        "--disable-breakpad".into(),
-        "--disable-crash-reporter".into(),
-        "--disable-domain-reliability".into(),
-        "--disable-features=Translate,MediaRouter,OptimizationHints,DialMediaRouteProvider".into(),
-        "--password-store=basic".into(),
-        "--use-mock-keychain".into(),
-        "--mute-audio".into(),
-        "--window-size=1280,800".into(),
     ];
-    args.push("about:blank".into());
+    // Background services and Google calls off: the list the in-app browser shares.
+    args.extend(butler_cef_host::switches::quiet_args().map(OsString::from));
+    args.extend(
+        [
+            "--password-store=basic",
+            "--use-mock-keychain",
+            "--mute-audio",
+            "--window-size=1280,800",
+            "about:blank",
+        ]
+        .map(OsString::from),
+    );
     args
 }
 

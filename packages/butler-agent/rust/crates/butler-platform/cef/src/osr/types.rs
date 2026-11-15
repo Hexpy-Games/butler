@@ -26,12 +26,37 @@ pub enum OsrEvent {
     Title(String),
     Favicon(String),
     Loading(bool),
-    History { can_back: bool, can_forward: bool },
-    PopupNewTab { url: String },
-    PopupBlocked { url: String, reason: PopupBlock },
-    PopupOpened { child: u64, url: String },
+    History {
+        can_back: bool,
+        can_forward: bool,
+    },
+    PopupNewTab {
+        url: String,
+    },
+    PopupBlocked {
+        url: String,
+        reason: PopupBlock,
+    },
+    PopupOpened {
+        child: u64,
+        url: String,
+    },
     CloseRequested,
     Dialog(OsrDialog),
+    DownloadStarted {
+        id: u32,
+        suggested_name: String,
+        total_bytes: u64,
+    },
+    DownloadProgress {
+        id: u32,
+        received: u64,
+        total: u64,
+    },
+    DownloadDone {
+        id: u32,
+        completed: bool,
+    },
     Crashed,
     Frame,
     Cursor(OsrCursor),
@@ -149,6 +174,9 @@ pub struct OsrKey {
     pub unmodified_character: u16,
     pub modifiers: OsrModifiers,
     pub up: bool,
+    /// Windows: the key message was `WM_SYSKEYDOWN`/`WM_SYSKEYUP` (F10, or a key pressed with
+    /// Alt). Other platforms ignore it.
+    pub system_key: bool,
 }
 
 #[derive(Debug)]
@@ -211,4 +239,17 @@ pub struct OsrAnswer {
     pub username: String,
     pub password: String,
     pub files: Vec<PathBuf>,
+}
+
+/// Synchronous download destination policy; no toolkit state crosses this boundary.
+pub type DownloadPolicy = std::rc::Rc<dyn Fn(&DownloadRequest) -> DownloadDecision>;
+pub struct DownloadRequest {
+    pub page: u64,
+    pub id: u32,
+    pub suggested_name: String,
+    pub total_bytes: u64,
+}
+pub enum DownloadDecision {
+    Dialog,
+    Stage(PathBuf),
 }
