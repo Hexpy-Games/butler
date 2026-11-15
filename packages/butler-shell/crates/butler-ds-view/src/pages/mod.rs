@@ -98,6 +98,7 @@ mod page_card;
 mod page_container;
 mod panel_header;
 mod percent_input_control;
+mod pick_outline;
 mod pill_button;
 mod popover;
 mod popup_window_chrome;

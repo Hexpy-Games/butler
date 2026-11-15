@@ -129,6 +129,7 @@
     { "page": "page-card", "entry": "blocks/PageCard" },
     { "page": "page-band", "entry": "blocks/PageBand" },
     { "page": "popup-window-chrome", "entry": "blocks/PopupWindowChrome" },
-    { "page": "selection-bar", "entry": "blocks/SelectionBar" }
+    { "page": "selection-bar", "entry": "blocks/SelectionBar" },
+    { "page": "pick-outline", "entry": "blocks/PickOutline" }
   ]
 }
