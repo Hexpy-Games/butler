@@ -29,7 +29,10 @@ use super::{
     worker_activity_panel, worker_activity_row,
 };
 
-use super::{address_field, browser_pane, page_band, page_card};
+use super::{
+    address_field, browser_pane, page_band, page_card, pick_outline, popup_window_chrome,
+    selection_bar,
+};
 
 macro_rules! page {
     ($id:literal, $title:literal, $module:ident) => {
@@ -332,6 +335,13 @@ fn browser_blocks() -> Vec<Page> {
         page!("browser-pane", "BrowserPane", browser_pane),
         page!("page-card", "PageCard", page_card),
         page!("page-band", "PageBand", page_band),
+        page!(
+            "popup-window-chrome",
+            "PopupWindowChrome",
+            popup_window_chrome
+        ),
+        page!("selection-bar", "SelectionBar", selection_bar),
+        page!("pick-outline", "PickOutline", pick_outline),
     ]
 }
 
