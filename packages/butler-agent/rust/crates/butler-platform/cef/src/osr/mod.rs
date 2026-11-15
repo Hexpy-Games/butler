@@ -33,6 +33,8 @@ mod input;
 #[cfg(cef_osr)]
 mod paint;
 #[cfg(cef_osr)]
+mod pdf;
+#[cfg(cef_osr)]
 mod popups;
 #[cfg(cef_osr)]
 mod pump;

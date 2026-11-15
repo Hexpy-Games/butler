@@ -8,14 +8,14 @@ use crate::ui::{
 };
 use butler_ds::ui::{
     button::{Button, Size, Variant},
-    layout::{Space, Stack},
+    layout::{Cross, Space, Stack},
     native_select::NativeSelect,
     tooltip::Tooltip,
     typo::Typo,
 };
 use gpui::{
-    AnyElement, App, Context, Entity, IntoElement as _, ParentElement as _, SharedString, Window,
-    div,
+    AnyElement, App, Context, Entity, IntoElement as _, ParentElement as _, SharedString,
+    Styled as _, Window, div,
 };
 use serde::Deserialize;
 use std::time::Duration;
@@ -63,6 +63,7 @@ impl Source {
                 let view = result.ok();
                 let refresh = view
                     .as_ref()
+                    .filter(|_| mode == Mode::Html)
                     .and_then(|v| v.expires_at)
                     .map(|expiry| Duration::from_secs(expiry.saturating_sub(now() + 60).max(1)));
                 if weak
@@ -233,7 +234,7 @@ fn controls(
             }
         });
     buttons = if enabled && view.is_some() {
-        buttons.child(anchor(div(), "output-browser").child(browser))
+        buttons.child(anchor(div().flex(), "output-browser").child(browser))
     } else {
         buttons.child(
             Tooltip::new("output-browser-disabled")
@@ -243,7 +244,7 @@ fn controls(
     };
     let (reload, artifact_reload) = (state.clone(), artifact.clone());
     buttons = buttons.child(
-        anchor(div(), "output-reload").child(
+        anchor(div().flex(), "output-reload").child(
             Button::new("output-reload")
                 .size(Size::Xs)
                 .variant(Variant::Outline)
@@ -256,7 +257,11 @@ fn controls(
                 }),
         ),
     );
-    let row = Stack::row().gap(Space::Sm).wrap(true).child(buttons);
+    let row = Stack::row()
+        .gap(Space::Sm)
+        .cross(Cross::Center)
+        .wrap(true)
+        .child(buttons);
     revisions(row, artifact, state, view, copy)
 }
 

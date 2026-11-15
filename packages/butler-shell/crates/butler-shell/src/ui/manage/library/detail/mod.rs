@@ -23,6 +23,7 @@ mod item_tags;
 mod panel;
 mod runtime;
 mod saved;
+mod snapshot;
 mod tags;
 
 pub(crate) use actions::{item_meta, rename_item};

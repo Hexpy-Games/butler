@@ -117,6 +117,12 @@ cef::wrap_display_handler! {
 cef::wrap_load_handler! {
     pub(super) struct Load { events: Events }
     impl LoadHandler {
+        fn on_load_end(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, status: i32) {
+            if frame.is_some_and(|f| f.is_main() != 0) { self.events.emit(OsrEvent::Loaded { ok: status < 400 }); }
+        }
+        fn on_load_error(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, _code: Errorcode, _text: Option<&CefString>, _url: Option<&CefString>) {
+            if frame.is_some_and(|f| f.is_main() != 0) { self.events.emit(OsrEvent::Loaded { ok: false }); }
+        }
         fn on_loading_state_change(&self, _browser: Option<&mut Browser>, loading: i32, back: i32, forward: i32) {
             self.events.emit(OsrEvent::Loading(loading != 0));
             self.events.emit(OsrEvent::History { can_back: back != 0, can_forward: forward != 0 });

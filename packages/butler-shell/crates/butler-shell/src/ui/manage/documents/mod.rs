@@ -4,9 +4,10 @@
 //! DocumentNodes, DocumentFormat, documentMarkdown, documentMerge and documentTextImport are not
 //! ported, so no draft is kept, nothing is saved and `PUT /documents/{id}` is never sent.
 mod actions;
-mod api;
+pub(crate) mod api;
 mod copy;
 mod export;
+pub(crate) mod pdf;
 mod read_view;
 mod view;
 

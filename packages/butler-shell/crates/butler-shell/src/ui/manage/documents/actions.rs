@@ -11,7 +11,6 @@ use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::overlay::place::Align;
 use butler_ds::ui::popover::Popover;
-use butler_ds::ui::toast::{self, Toast};
 use chrono::{DateTime, Utc};
 use gpui::Styled as _;
 use gpui::{
@@ -109,18 +108,21 @@ impl DocumentPage {
                     }
                 }),
         );
-        // CARVE-OUT(G-cef): Export as PDF prints a hidden window (`printToPDF`).
         items.push(
             OverflowItem::new(words.export_pdf)
                 .icon(Icon::Download)
                 .on_select(move |_, cx| {
-                    toast::show(cx, Toast::message(words.not_yet));
+                    let _ = page.update(cx, |this, cx| {
+                        if let Some(doc) = this.shown() {
+                            super::pdf::export(doc, cx);
+                        }
+                    });
                 }),
         );
         (inline.into_any_element(), items)
     }
 
-    /// `DocumentExportMenu`: Markdown, and PDF (not yet).
+    /// `DocumentExportMenu`: Markdown and PDF.
     fn export_menu(
         words: &'static Words,
         window: &mut Window,
@@ -136,13 +138,17 @@ impl DocumentPage {
                 .on_click(toggle.on_click())
                 .into_any_element()
         });
+        let pdf_page = page.clone();
         let markdown = Item::new(words.markdown).on_select(move |_, cx| {
             let _ = page.update(cx, |this, cx| this.export_markdown(cx));
         });
-        // CARVE-OUT(G-cef): PDF export prints a hidden window (`printToPDF`).
-        let pdf = Item::new(words.pdf)
-            .disabled()
-            .description([SharedString::from(words.not_yet)]);
+        let pdf = Item::new(words.pdf).on_select(move |_, cx| {
+            let _ = pdf_page.update(cx, |this, cx| {
+                if let Some(doc) = this.shown() {
+                    super::pdf::export(doc, cx);
+                }
+            });
+        });
         let content = menu.content(
             DropdownMenuContent::new()
                 .align(Align::End)

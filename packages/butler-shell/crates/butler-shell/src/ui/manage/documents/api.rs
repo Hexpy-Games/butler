@@ -25,11 +25,15 @@ pub(super) struct Revision {
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub(super) struct Asset {
     pub(super) id: String,
+    #[serde(default)]
+    pub(super) image_width: Option<u32>,
+    #[serde(default)]
+    pub(super) image_height: Option<u32>,
 }
 
 /// `EditableDocument`
 #[derive(Clone, Debug, PartialEq, Deserialize)]
-pub(super) struct Doc {
+pub(crate) struct Doc {
     pub(super) title: String,
     pub(super) body: String,
     pub(super) rev: u64,

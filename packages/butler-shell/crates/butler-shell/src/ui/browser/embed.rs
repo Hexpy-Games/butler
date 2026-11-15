@@ -12,6 +12,8 @@ use gpui::{
 
 pub(crate) struct Embed {
     pub(super) dialog: Option<PageDialog>,
+    pub(crate) loaded: Option<futures::channel::oneshot::Sender<bool>>,
+    pub(crate) printed: Option<futures::channel::oneshot::Sender<bool>>,
 }
 
 #[derive(Clone)]
@@ -21,7 +23,14 @@ impl BrowserState {
     pub(crate) fn embed_open(&mut self, url: &str, profile: Profile) -> EmbedHandle {
         self.next_id += 1;
         let id = TabId(format!("embed-{}", self.next_id).into());
-        self.embeds.insert(id.clone(), Embed { dialog: None });
+        self.embeds.insert(
+            id.clone(),
+            Embed {
+                dialog: None,
+                loaded: None,
+                printed: None,
+            },
+        );
         self.engine.open_embed(&id, url, profile);
         EmbedHandle(id)
     }
@@ -37,8 +46,37 @@ pub(super) fn event(event: &PageEvent, cx: &mut App) -> bool {
     if !cx.global::<BrowserState>().embeds.contains_key(&event.page) {
         return false;
     }
-    #[cfg(feature = "cef")]
     match &event.change {
+        super::engine::PageChange::Loaded(ok) => {
+            if let Some(sender) = cx
+                .global_mut::<BrowserState>()
+                .embeds
+                .get_mut(&event.page)
+                .and_then(|e| e.loaded.take())
+            {
+                let _ = sender.send(*ok);
+            }
+        }
+        super::engine::PageChange::PdfDone(ok) => {
+            if let Some(sender) = cx
+                .global_mut::<BrowserState>()
+                .embeds
+                .get_mut(&event.page)
+                .and_then(|e| e.printed.take())
+            {
+                let _ = sender.send(*ok);
+            }
+        }
+        super::engine::PageChange::Crashed => {
+            if let Some(embed) = cx.global_mut::<BrowserState>().embeds.get_mut(&event.page) {
+                if let Some(sender) = embed.loaded.take() {
+                    let _ = sender.send(false);
+                }
+                if let Some(sender) = embed.printed.take() {
+                    let _ = sender.send(false);
+                }
+            }
+        }
         #[cfg(feature = "cef")]
         super::engine::PageChange::PopupNewTab(url) => {
             if super::address::web_url(url).is_some() {
@@ -115,4 +153,15 @@ impl Render for EmbeddedPage {
         .size_full();
         page.child(measure).into_any_element()
     }
+}
+
+/// A srcDoc-equivalent frame; the browser enforces the same sandbox as Electron.
+pub(crate) fn html_frame(html: &str, sandbox: &str) -> String {
+    let escaped = html
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;");
+    format!(
+        "<!doctype html><html><head><style>html,body,iframe{{margin:0;border:0;width:100%;height:100%;display:block}}</style></head><body><iframe sandbox=\"{sandbox}\" referrerpolicy=\"no-referrer\" srcdoc=\"{escaped}\"></iframe></body></html>"
+    )
 }

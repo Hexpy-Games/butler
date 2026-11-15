@@ -7,6 +7,7 @@ mod cef;
 mod dialog;
 pub(crate) mod embed;
 pub(crate) mod engine;
+pub(crate) mod html;
 pub(crate) mod model;
 mod page_dialog;
 pub(crate) mod pick;
@@ -15,6 +16,8 @@ mod placeholder;
 mod popup_policy;
 mod popup_window;
 mod popups;
+#[cfg(feature = "cef")]
+pub(crate) mod printing;
 pub(crate) mod shell_state;
 mod tabs;
 mod toolbar;

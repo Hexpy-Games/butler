@@ -20,7 +20,7 @@ use crate::ui::source::agent::Jobs;
 const IMAGE: &str = r#"!\[((?:[^\]\\]|\\.)*)\]\((img_[^)\s"]*)(?:\s+"((?:[^"\\]|\\.)*)")?\)"#;
 
 /// `documentFileName`
-fn file_name(title: &str) -> String {
+pub(super) fn file_name(title: &str) -> String {
     let cleaned: String = title
         .chars()
         .map(|c| {
@@ -148,7 +148,7 @@ fn inline(found: &Captures, data: &HashMap<String, String>) -> String {
 }
 
 /// `imageData`: the asset as a data URL.
-async fn data_url(client: &ShellClient, id: &str) -> Option<String> {
+pub(super) async fn data_url(client: &ShellClient, id: &str) -> Option<String> {
     let file = client.download_message_asset(id, false).await.ok()?;
     let mime = file.content_type.unwrap_or_default();
     Some(format!("data:{mime};base64,{}", base64(&file.bytes)))

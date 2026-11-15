@@ -3,9 +3,7 @@
 use std::rc::Rc;
 
 use butler_ds::ui::Icon;
-use butler_ds::ui::blocks::artifact_preview::{
-    ArtifactPreview, ArtifactPreviewFrame, ArtifactPreviewImage,
-};
+use butler_ds::ui::blocks::artifact_preview::{ArtifactPreview, ArtifactPreviewImage};
 use butler_ds::ui::blocks::tag_field::{Suggestion, TagField};
 use butler_ds::ui::button::{self, Button, Size, Variant};
 use butler_ds::ui::context::Ds;
@@ -174,7 +172,9 @@ impl LibraryDetail {
         let mut preview = ArtifactPreview::new("library-detail-preview");
         // CARVE-OUT(G-ds): a block scrap renders its answer block (`BlockScrap` over
         // `AnswerBlocks preview`), which needs a transcript context the 서랍 has none of.
-        if let Some(src) = library_image(item, cx) {
+        if item.asset.is_none() && item.snapshot.is_some() && item.block.is_none() {
+            preview = preview.child(super::snapshot::frame(item, window, cx));
+        } else if let Some(src) = library_image(item, cx) {
             let natural = item
                 .snapshot
                 .as_ref()
@@ -183,11 +183,6 @@ impl LibraryDetail {
                 .or_else(|| decoded_size(&src, window, cx))
                 .unwrap_or(NATURAL);
             preview = preview.child(ArtifactPreviewImage::new(src, natural));
-        } else if let (Some(snapshot), false) = (&item.snapshot, item.block.is_some()) {
-            // CARVE-OUT(G-cef): React shows the saved HTML in a sandboxed frame
-            // (`ArtifactPreviewFrame srcDoc`); the web view is the P5 browser's.
-            let (width, height) = pixels(snapshot.width, snapshot.height);
-            preview = preview.child(ArtifactPreviewFrame::new().intrinsic_size(width, height));
         } else {
             let text = if item.asset.is_some() {
                 copy.artifact_loading

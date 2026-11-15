@@ -20,6 +20,7 @@ mod ui;
 mod lifecycle;
 
 mod app;
+mod artifacts;
 mod fixture;
 mod frame;
 mod live;

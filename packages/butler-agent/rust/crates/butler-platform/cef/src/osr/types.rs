@@ -28,6 +28,8 @@ pub enum OsrEvent {
     Title(String),
     Favicon(String),
     Loading(bool),
+    Loaded { ok: bool },
+    PdfDone { ok: bool },
     History { can_back: bool, can_forward: bool },
     PopupNewTab { url: String },
     PopupBlocked { url: String, reason: PopupBlock },
@@ -213,4 +215,11 @@ pub struct OsrAnswer {
     pub username: String,
     pub password: String,
     pub files: Vec<PathBuf>,
+}
+
+/// Electron printToPDF options; paper and margins retain Chromium defaults.
+#[derive(Clone, Copy)]
+pub struct PdfSettings {
+    pub print_background: bool,
+    pub prefer_css_page_size: bool,
 }

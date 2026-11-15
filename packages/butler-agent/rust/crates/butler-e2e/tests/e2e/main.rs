@@ -336,6 +336,7 @@ mod chats_work;
 mod canon_criteria;
 mod canon_mcp;
 mod shell_app;
+mod shell_artifacts;
 mod shell_browser;
 mod shell_browser_pick;
 mod shell_browser_popups;

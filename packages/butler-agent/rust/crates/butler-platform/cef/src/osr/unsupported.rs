@@ -44,6 +44,9 @@ impl OsrRuntime {
     pub fn open_embed(&self, _: u64, _: &str, _: OsrProfile) -> Result<(), OsrError> {
         match self.never {}
     }
+    pub fn print_to_pdf(&self, _: u64, _: &std::path::Path, _: super::PdfSettings) {
+        match self.never {}
+    }
     pub fn navigate(&self, _: u64, _: &str) {
         match self.never {}
     }

@@ -38,8 +38,6 @@ pub(super) struct Words {
     pub(super) failed: &'static str,
     /// artifacts.loading
     pub(super) loading: &'static str,
-    /// shell.notYet
-    pub(super) not_yet: &'static str,
 }
 
 static KO: Words = Words {
@@ -61,7 +59,6 @@ static KO: Words = Words {
     undo: "실행 취소",
     failed: "서랍을 불러오지 못함",
     loading: "아티팩트를 불러오는 중",
-    not_yet: "준비 중",
 };
 
 static EN: Words = Words {
@@ -83,7 +80,6 @@ static EN: Words = Words {
     undo: "Undo",
     failed: "Could not load the library",
     loading: "Loading artifact",
-    not_yet: "Coming soon",
 };
 
 pub(super) fn words(lang: Lang) -> &'static Words {

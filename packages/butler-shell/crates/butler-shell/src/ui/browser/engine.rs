@@ -68,6 +68,8 @@ pub(crate) enum PageChange {
     CloseRequested,
     #[cfg(feature = "cef")]
     Dialog(PageDialog),
+    Loaded(bool),
+    PdfDone(bool),
     Crashed,
 }
 
@@ -94,6 +96,10 @@ pub(crate) trait PageEngine: 'static {
     fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str);
     fn open_embed(&mut self, page: &TabId, url: &str, profile: Profile) {
         self.open(page, url, profile, &page.0);
+    }
+    fn embed_visible(&mut self, _page: &TabId, _visible: bool) {}
+    fn print_to_pdf(&mut self, _page: &TabId, _path: &std::path::Path) -> bool {
+        false
     }
     fn command(&mut self, page: &TabId, command: PageCommand);
     /// The page's size in logical pixels and the device scale (from PageCard's bounds).

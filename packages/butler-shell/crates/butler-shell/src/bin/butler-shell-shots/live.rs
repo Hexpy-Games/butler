@@ -105,6 +105,9 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "close" => h.update(|s, w, cx| s.open_chat(s.store.selected().cloned(), w, cx)),
         "browser" => h.update(|s, w, cx| s.set_view(ui::manage::View::Browser, w, cx)),
         "browser-link" => h.update(|_, _, cx| ui::chat::open_link(arg, cx)),
+        "artifact-open" | "embed-frame" | "document-export" => {
+            super::artifacts::command(h, dir, command, arg)
+        }
         "browser-state" | "browser-frame" => browser_report(h, command),
         "new" => h.update(|s, w, cx| s.open_chat(None, w, cx)),
         "compose" => h.update(|s, w, cx| s.composer.update(cx, |c, cx| c.engage(w, cx))),

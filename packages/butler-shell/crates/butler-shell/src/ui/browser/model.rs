@@ -393,6 +393,7 @@ impl BrowserState {
                 tab.can_back = can_back;
                 tab.can_forward = can_forward;
             }
+            PageChange::Loaded(_) | PageChange::PdfDone(_) => {}
             PageChange::Crashed => tab.status = TabStatus::Crashed,
             #[cfg(feature = "cef")]
             PageChange::Dialog(dialog) => tab.dialog = Some(dialog),

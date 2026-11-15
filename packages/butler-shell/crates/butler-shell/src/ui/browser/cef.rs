@@ -176,6 +176,8 @@ fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
         }),
         OsrEvent::Title(title) => PageChange::Title(title),
         OsrEvent::Favicon(url) => PageChange::Favicon(url),
+        OsrEvent::Loaded { ok } => PageChange::Loaded(ok),
+        OsrEvent::PdfDone { ok } => PageChange::PdfDone(ok),
         OsrEvent::Loading(loading) => PageChange::Loading(loading),
         OsrEvent::History {
             can_back,
@@ -277,6 +279,25 @@ impl PageEngine for CefEngine {
         }
     }
 
+    fn embed_visible(&mut self, page: &TabId, visible: bool) {
+        if let Some(&id) = self.ids.get(page) {
+            self.runtime.set_visible(id, visible);
+        }
+    }
+    fn print_to_pdf(&mut self, page: &TabId, path: &std::path::Path) -> bool {
+        let Some(&id) = self.ids.get(page) else {
+            return false;
+        };
+        self.runtime.print_to_pdf(
+            id,
+            path,
+            butler_cef_host::osr::PdfSettings {
+                print_background: true,
+                prefer_css_page_size: true,
+            },
+        );
+        true
+    }
     fn open_embed(&mut self, page: &TabId, url: &str, profile: Profile) {
         self.open(page, "", profile, &page.0);
         let Some(&id) = self.ids.get(page) else {
