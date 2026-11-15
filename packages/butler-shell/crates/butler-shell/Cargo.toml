@@ -21,9 +21,12 @@ path = "src/bin/butler-shell-shots/main.rs"
 required-features = ["shots"]
 
 [features]
+# The shell's `cef` cargo feature is macOS-only until the Windows D3D11 and Linux software-paint jobs add their frame types to `butler_cef_host::osr` and the matching `SurfaceSource` conversion.
+cef = ["dep:butler-cef"]
 shots = ["gpui/test-support", "dep:gpui_wgpu"]
 
 [dependencies]
+butler-cef = { path = "../../../butler-agent/rust/crates/butler-platform/cef", features = ["cef"], optional = true }
 butler-ds = { path = "../butler-ds" }
 butler-shell-client = { path = "../../../butler-agent/rust/crates/butler-shell-client" }
 butler-platform = { path = "../../../butler-agent/rust/crates/butler-platform" }

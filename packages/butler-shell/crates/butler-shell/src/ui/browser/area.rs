@@ -131,10 +131,13 @@ fn page(tab: Option<&Tab>, window: &mut Window, cx: &mut App) -> PageCard {
         if let Some(surface) = surface {
             page = page.page(anchor(div(), "browser-page").size_full().child(surface));
         }
-        page = page.on_bounds_change(move |bounds, _, cx| {
+        page = page.on_bounds_change(move |bounds, window, cx| {
             if bounds.visible {
-                cx.global_mut::<BrowserState>()
-                    .resize(&id, bounds.bounds.size, bounds.scale);
+                cx.global_mut::<BrowserState>().resize(
+                    &id,
+                    bounds.bounds.size,
+                    bounds.scale * window.scale_factor(),
+                );
             }
         });
     }
@@ -187,6 +190,10 @@ pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut 
     }
     let active = cx.global::<BrowserState>().active();
     let tab = tabs.iter().find(|t| Some(&t.id) == active);
+    let shown = tab
+        .filter(|t| !t.url.is_empty() && t.status != TabStatus::Crashed)
+        .map(|t| t.id.clone());
+    cx.global_mut::<BrowserState>().show(shown.as_ref());
     let strip = super::tabs::strip(&tabs, session, &state, cx);
     let toolbar = super::toolbar::toolbar(tab, &state, window, cx);
     let page = page(tab, window, cx);

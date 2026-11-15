@@ -2,6 +2,8 @@
 pub(crate) mod address;
 pub(crate) mod area;
 mod bookmarks;
+#[cfg(feature = "cef")]
+mod cef;
 pub(crate) mod engine;
 pub(crate) mod model;
 mod placeholder;
@@ -10,6 +12,9 @@ mod tabs;
 mod toolbar;
 
 pub(crate) fn init(cx: &mut gpui::App) {
+    if cx.has_global::<model::BrowserState>() {
+        return;
+    }
     model::BrowserState::init(cx);
     cx.set_global(shell_state::BrowserShell::default());
 }
