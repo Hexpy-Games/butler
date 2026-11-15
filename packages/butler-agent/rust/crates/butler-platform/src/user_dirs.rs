@@ -48,19 +48,13 @@ pub fn agent_home() -> Option<PathBuf> {
 /// `cliAgentHome`): absolute [`AGENT_HOME_VARIABLE`], else the per-OS default
 /// on macOS and other Unix hosts. `None` on Windows without an absolute override.
 pub fn app_cli_agent_home() -> Option<PathBuf> {
-    env::var_os(AGENT_HOME_VARIABLE)
+    let configured = env::var_os(AGENT_HOME_VARIABLE)
         .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .or_else(|| {
-            #[cfg(windows)]
-            {
-                None
-            }
-            #[cfg(unix)]
-            {
-                default_agent_home()
-            }
-        })
+        .filter(|path| path.is_absolute());
+    #[cfg(windows)]
+    return configured;
+    #[cfg(unix)]
+    configured.or_else(default_agent_home)
 }
 
 /// Names the directory of the user's `butler` command. Set, non-empty and
