@@ -149,12 +149,23 @@ async function activateUpdate() {
   assert.equal(exit, 0, "Update helper must succeed");
 }
 
-type InstalledProcess = { pid: number; path: string };
+type InstalledProcess = { pid: number; name: string; path: string; parentPid: number; modules: string[] };
 function installedProcesses(): InstalledProcess[] {
   return JSON.parse(powershell(`$root = [IO.Path]::GetFullPath($env:BUTLER_SMOKE_INSTALL).TrimEnd('\\') + '\\'
     ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process |
-      Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } |
-      ForEach-Object { @{ pid = $_.ProcessId; path = $_.ExecutablePath } })`, { ...env, BUTLER_SMOKE_INSTALL: installed }));
+      ForEach-Object {
+        $process = $_
+        $modules = @()
+        try {
+          $modules = @((Get-Process -Id $process.ProcessId -ErrorAction Stop).Modules |
+            ForEach-Object { $_.FileName } |
+            Where-Object { $_ -and $_.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) })
+        } catch { $modules = @() }
+        if (($process.ExecutablePath -and $process.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) -or $modules.Count -gt 0) {
+          @{ pid = $process.ProcessId; name = $process.Name; path = [string]$process.ExecutablePath;
+            parentPid = $process.ParentProcessId; modules = $modules }
+        }
+      })`, { ...env, BUTLER_SMOKE_INSTALL: installed }));
 }
 
 async function proveGpui() {
@@ -204,6 +215,9 @@ async function uninstall() {
   const expected = [".dead", "Update.exe", join(`app-${toPackage}`, "squirrel.exe")].map(path => path.toLowerCase());
   const unexpected = files.filter(path => !expected.includes(path));
   const missing = expected.filter(path => !files.includes(path));
+  if (unexpected.length || missing.length) {
+    console.error("Uninstall process/module holders:", JSON.stringify(installedProcesses(), null, 2));
+  }
   assert.deepEqual(files.sort(), expected.sort(), `Uninstall remnants: unexpected [${unexpected.join(", ")}]; missing [${missing.join(", ")}]`);
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   uninstalled = true;
