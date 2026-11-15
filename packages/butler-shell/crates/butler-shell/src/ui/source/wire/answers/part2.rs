@@ -146,6 +146,8 @@ pub(crate) enum AnswerBlock {
         caption: Option<String>,
         #[serde(default)]
         source: Option<AnswerSource>,
+        #[serde(default)]
+        image_url: Option<String>,
     },
     #[serde(rename = "quote")]
     Quote {

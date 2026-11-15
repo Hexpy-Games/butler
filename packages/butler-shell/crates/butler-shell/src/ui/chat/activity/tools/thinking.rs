@@ -1,6 +1,7 @@
 //! `ThinkingDetails.tsx`: the reasoning summary a thinking row reveals.
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Space, Stack};
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::typo::{Role, Run, Tone, Typo, Weight, Wrap};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Task, Window};
 
@@ -68,6 +69,7 @@ fn paragraph(body: &str) -> Typo {
         }
     });
     Typo::runs(Role::Caption, runs)
+        .selectable(Break::Line)
         .tone(Tone::Tertiary)
         .wrap(Wrap::Pre)
 }

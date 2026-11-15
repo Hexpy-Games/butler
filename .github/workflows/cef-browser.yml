@@ -14,6 +14,8 @@ on:
       - 'packages/butler-agent/rust/crates/butler-platform/cef/**'
       - 'packages/butler-agent/rust/crates/butler-runtime/src/browser/headless/**'
       - 'packages/butler-agent/rust/crates/butler-runtime/src/browser/headless.rs'
+      # Builds the headless backend's config (its root, the CEF host).
+      - 'packages/butler-agent/rust/crates/butler-gateway/src/gateway/http/start.rs'
       - 'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/browser_headless/**'
       - 'packages/butler-agent/rust/crates/butler-e2e/tests/e2e/browser_headless.rs'
       - '.github/workflows/cef-browser.yml'

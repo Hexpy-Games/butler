@@ -51,6 +51,20 @@ native view and no still is needed. `page` is that surface, laid out exactly in 
 (or the fitted viewport rect); `on_bounds_change` reports the rect, scale and radius the engine
 sizes its view to.
 
+The shell's `cef` cargo feature is macOS-only until the Windows D3D11 and Linux software-paint jobs add their frame types to `butler_cef_host::osr` and the matching `SurfaceSource` conversion. Run these commands from the repository root to launch a signed development bundle: unbundled `cargo run` cannot work because CEF helpers rendezvous through the bundle's Mach ports. The `--use-mock-keychain` switch belongs only in development/test launch arguments.
+
+```sh
+export CEF_PATH="${CEF_PATH:-$PWD/target/cef}"
+python3 packages/butler-agent/rust/crates/butler-platform/cef/fetch.py --dest "$CEF_PATH"
+cargo build --manifest-path packages/butler-agent/rust/Cargo.toml -p butler-cef --features cef --bin butler-cef-host -j 6
+cargo build --manifest-path packages/butler-shell/Cargo.toml -p butler-shell --features cef --bin butler-shell -j 6
+python3 packages/butler-agent/rust/crates/butler-platform/cef/stage.py --cef "$CEF_PATH" --target packages/butler-agent/rust/target/debug --out target/cef-shell
+cp packages/butler-shell/target/debug/butler-shell target/cef-shell/ButlerCefHost.app/Contents/MacOS/butler-shell
+/usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable butler-shell' target/cef-shell/ButlerCefHost.app/Contents/Info.plist
+codesign --force --deep --sign - target/cef-shell/ButlerCefHost.app
+BUTLER_CEF_DIR="$PWD/target/cef-shell/ButlerCefHost.app/Contents/Frameworks" target/cef-shell/ButlerCefHost.app/Contents/MacOS/butler-shell --use-mock-keychain
+```
+
 ## Tests
 
 `cargo test -p butler-shell` runs the data store's tests against a fake source.

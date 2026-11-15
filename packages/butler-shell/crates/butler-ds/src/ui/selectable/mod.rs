@@ -5,6 +5,7 @@
 //! One active scope per window copies plain text with block separators.
 mod hit;
 mod run;
+mod scroll;
 pub use run::Run;
 
 use super::context::Ds;
@@ -12,8 +13,8 @@ use crate::tokens::Color;
 use gpui::{
     AnyElement, App, Bounds, ClipboardItem, Element, ElementId, Entity, FocusHandle,
     GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, KeyDownEvent,
-    LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, SharedString,
-    TextLayout, WeakEntity, Window,
+    LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    SharedString, TextLayout, WeakEntity, Window,
 };
 
 /// The break before a run of text when copied (Chromium's plain-text serialization, measured).
@@ -48,6 +49,8 @@ pub struct State {
     dragging: bool,
     word: Option<(Pos, Pos)>,
     runs: Vec<RunInfo>,
+    scrolled_at: Option<std::time::Instant>,
+    _text_input: gpui::Subscription,
 }
 
 #[derive(Default)]
@@ -69,13 +72,19 @@ pub struct Selection(Entity<State>);
 impl Selection {
     /// The selection state keyed by `id`; its focus handle is created with it.
     pub fn new(id: impl Into<ElementId>, window: &mut Window, cx: &mut App) -> Self {
-        Self(window.use_keyed_state(id, cx, |_, cx| State {
+        Self(window.use_keyed_state(id, cx, |window, cx| State {
             focus: cx.focus_handle(),
             anchor: None,
             head: None,
             dragging: false,
             word: None,
             runs: Vec::new(),
+            scrolled_at: None,
+            _text_input: cx.on_text_input_focus(window, |state: &mut State, _, cx| {
+                if state.clear() {
+                    cx.notify();
+                }
+            }),
         }))
     }
 
@@ -86,6 +95,15 @@ impl Selection {
 }
 
 impl State {
+    fn clear(&mut self) -> bool {
+        let existed = self.anchor.is_some() || self.head.is_some();
+        self.anchor = None;
+        self.head = None;
+        self.word = None;
+        self.dragging = false;
+        existed
+    }
+
     fn range(&self) -> Option<(Pos, Pos)> {
         let (a, b) = (self.anchor?, self.head?);
         let clamp = |p: Pos| {
@@ -171,8 +189,8 @@ impl State {
         true
     }
 
-    fn drag(&mut self, event: &MouseMoveEvent) -> bool {
-        let Some(mut head) = hit::position(&self.runs, event.position) else {
+    fn drag(&mut self, position: Point<Pixels>) -> bool {
+        let Some(mut head) = hit::position(&self.runs, position) else {
             return false;
         };
         let mut anchor = self.anchor;
@@ -279,6 +297,12 @@ impl Element for ScopeElement {
                 .push(self.selection.as_ref().map(|s| s.0.clone()));
         }
         child.prepaint(window, cx);
+        if outer
+            && let Some(selection) = &self.selection
+            && selection.0.read(cx).dragging
+        {
+            scroll::autoscroll(&selection.0, bounds, window, cx);
+        }
         if push {
             cx.default_global::<Stack>().0.pop();
         }
@@ -344,8 +368,7 @@ fn listeners(selection: &Selection, hitbox: Hitbox, window: &mut Window, cx: &Ap
         let previous = cx.default_global::<Active>().0.replace(state.downgrade());
         if let Some(previous) = previous.and_then(|s| s.upgrade()).filter(|s| s != &state) {
             previous.update(cx, |s, cx| {
-                s.anchor = None;
-                s.head = None;
+                s.clear();
                 cx.notify();
             });
         }
@@ -357,7 +380,7 @@ fn listeners(selection: &Selection, hitbox: Hitbox, window: &mut Window, cx: &Ap
         window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
             if phase.bubble() {
                 state.update(cx, |s, cx| {
-                    if s.drag(event) {
+                    if s.drag(event.position) {
                         cx.notify();
                     }
                 });

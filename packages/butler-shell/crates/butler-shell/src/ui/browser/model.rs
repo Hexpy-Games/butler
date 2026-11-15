@@ -102,8 +102,9 @@ impl Global for BrowserState {}
 impl BrowserState {
     pub(crate) fn init(cx: &mut App) {
         let (sender, mut receiver) = mpsc::unbounded();
+        let engine = Self::engine(sender, cx);
         cx.set_global(Self {
-            engine: Box::new(PlaceholderEngine::new(sender)),
+            engine,
             tabs: Vec::new(),
             active: None,
             next_id: 0,
@@ -117,6 +118,23 @@ impl BrowserState {
             }
         })
         .detach();
+    }
+
+    fn engine(sender: mpsc::UnboundedSender<PageEvent>, cx: &mut App) -> Box<dyn PageEngine> {
+        #[cfg(feature = "cef")]
+        match super::cef::CefEngine::start(sender.clone(), cx) {
+            Ok(engine) => return Box::new(engine),
+            Err(error) => eprintln!("CEF unavailable: {error}"),
+        }
+        let _ = cx;
+        Box::new(PlaceholderEngine::new(sender))
+    }
+
+    pub(crate) fn show(&mut self, id: Option<&TabId>) {
+        self.engine.show(id);
+    }
+    pub(crate) fn frame_size(&self, id: &TabId) -> Option<(usize, usize)> {
+        self.engine.frame_size(id)
     }
 
     pub(crate) fn create(

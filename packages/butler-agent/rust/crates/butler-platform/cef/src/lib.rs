@@ -16,7 +16,7 @@ mod boot;
 #[cfg(all(feature = "cef", target_os = "macos"))]
 mod mac;
 
-#[cfg(all(feature = "cef", target_os = "macos"))]
+#[cfg(feature = "cef")]
 pub mod osr;
 
 /// Run a CEF browser or helper process, passing bootstrap sandbox info through.
