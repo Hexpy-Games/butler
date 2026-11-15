@@ -42,6 +42,7 @@ pub(crate) struct CefEngine {
     next_id: Rc<Cell<u64>>,
     gate: Rc<RefCell<PopupGate>>,
     pending: HashMap<u64, OsrProfile>,
+    downloads: super::downloads::Downloads,
 }
 impl CefEngine {
     pub(crate) fn start(
@@ -51,6 +52,7 @@ impl CefEngine {
         let (sink, receiver) = mpsc::unbounded();
         let (schedule, requests) = mpsc::unbounded();
         let gate = Rc::new(RefCell::new(PopupGate::default()));
+        let downloads = super::downloads::Downloads::new(cx);
         let runtime = Rc::new(OsrRuntime::start(
             config::config(cx)?,
             Rc::new(Sink(sink)),
@@ -58,7 +60,9 @@ impl CefEngine {
                 let _ = schedule.unbounded_send(Instant::now() + delay);
             }),
             policy(gate.clone()),
+            downloads.policy(),
         )?);
+        cx.set_global(super::downloads::DownloadsRuntime(runtime.clone()));
         let pages = Pages::default();
         let shown = Rc::new(Cell::new(None));
         Self::receive(&pages, &gate, receiver, events, cx);
@@ -71,6 +75,7 @@ impl CefEngine {
             next_id: gate.borrow().next_id.clone(),
             gate: gate.clone(),
             pending: HashMap::new(),
+            downloads,
         })
     }
     fn materialize(&mut self, id: u64, url: &str) {
@@ -99,6 +104,13 @@ impl CefEngine {
                 let Some(pages) = pages.upgrade() else {
                     break;
                 };
+                if cx.update(|cx| {
+                    let downloads = cx.global::<super::downloads::Downloads>().clone();
+                    let runtime = cx.global::<super::downloads::DownloadsRuntime>().0.clone();
+                    downloads.event(&event, &runtime, cx)
+                }) {
+                    continue;
+                }
                 let Some((tab, state)) = pages.borrow().get(&id).cloned() else {
                     continue;
                 };
@@ -211,6 +223,11 @@ fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
             accept_types: dialog.accept_types,
             multiple: dialog.multiple,
         }),
+        OsrEvent::DownloadStarted { .. }
+        | OsrEvent::DownloadProgress { .. }
+        | OsrEvent::DownloadDone { .. }
+        | OsrEvent::Frame
+        | OsrEvent::DevTools { .. } => return None,
         OsrEvent::Crashed => PageChange::Crashed,
         OsrEvent::DevToolsEvent {
             method,
@@ -219,7 +236,6 @@ fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
             method,
             params: serde_json::from_str(&params_json).unwrap_or_default(),
         },
-        OsrEvent::Frame | OsrEvent::DevTools { .. } => return None,
         OsrEvent::Cursor(cursor) => {
             state.cursor = cursor;
             return None;
@@ -252,6 +268,7 @@ impl PageEngine for CefEngine {
             .borrow_mut()
             .insert(id, owner.to_owned(), url.to_owned());
         self.ids.insert(page.clone(), id);
+        self.downloads.page(id, page, owner, 1);
         self.pages.borrow_mut().insert(
             id,
             (
@@ -277,6 +294,9 @@ impl PageEngine for CefEngine {
 
     fn adopt(&mut self, page: &TabId, child: EngineChild) {
         self.ids.insert(page.clone(), child.0);
+        if let Some(source) = self.gate.borrow().pages.get(&child.0) {
+            self.downloads.page(child.0, page, &source.owner_key, 1);
+        }
         let input = self
             .gate
             .borrow()
@@ -327,6 +347,9 @@ impl PageEngine for CefEngine {
         let Some(&id) = self.ids.get(page) else {
             return;
         };
+        self.downloads.cancel_page(id, &self.runtime);
+        let epoch = self.downloads.next_epoch(id);
+        self.downloads.page(id, page, owner, epoch);
         let mut gate = self.gate.borrow_mut();
         if let Some(source) = gate.pages.get_mut(&id) {
             let old = std::mem::replace(&mut source.owner_key, owner.to_owned());
@@ -391,6 +414,8 @@ impl PageEngine for CefEngine {
     }
     fn close(&mut self, page: &TabId) {
         if let Some(id) = self.ids.remove(page) {
+            self.downloads.cancel_page(id, &self.runtime);
+            self.downloads.remove_page(id);
             self.pending.remove(&id);
             self.gate.borrow_mut().remove(id);
             self.runtime.close(id);

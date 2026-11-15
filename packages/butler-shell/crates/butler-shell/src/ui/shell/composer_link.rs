@@ -188,6 +188,23 @@ impl Shell {
     /// Shell init: the image viewer host, and what deletes a queued message that is loaded
     /// into the composer for editing.
     pub(super) fn install_composer(manage: &ManageCtx, cx: &mut Context<Self>) {
+        #[cfg(feature = "cef")]
+        {
+            let shell = cx.entity().downgrade();
+            cx.set_global(crate::ui::browser::downloads::Refresh(Rc::new(
+                move |session, cx| {
+                    let _ = shell.update(cx, |this, cx| {
+                        if this
+                            .store
+                            .selected()
+                            .is_some_and(|chat| chat.session.0.as_ref() == session)
+                        {
+                            this.refresh_open_view(cx);
+                        }
+                    });
+                },
+            )));
+        }
         image_viewer::install(cx);
         crate::ui::images::install(manage.live.clone(), cx);
         // An answered request or question: the open view (which carries the requests) is read
