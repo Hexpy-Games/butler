@@ -124,7 +124,8 @@ async function activateUpdate() {
   const helperLog = openSync(join(root, "helper-stderr.log"), "a");
   helperClosed = false;
   const helper = spawn(join(dirname(oldApp), "resources/bundled-agent/bin/butler-agent.exe"),
-    ["app-update-install", packagePath, oldApp, String(oldAppPid)], { env, stdio: ["pipe", "pipe", helperLog] });
+    ["--installation-root", dirname(oldApp), "--resource-root", join(dirname(oldApp), "resources/bundled-agent/resources"),
+      "app-update-install", packagePath, oldApp, String(oldAppPid)], { env, stdio: ["pipe", "pipe", helperLog] });
   closeSync(helperLog);
   let output = "";
   let ended = false;
