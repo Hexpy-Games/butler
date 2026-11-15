@@ -28,6 +28,7 @@ use serde_json::{Value, json};
 struct Suggestion {
     url: String,
     title: String,
+    favicon: String,
     bookmark_id: Option<String>,
 }
 #[derive(Default)]
@@ -201,7 +202,7 @@ pub(super) fn field(
     for (i, item) in s.items.iter().enumerate() {
         let (state, tab, url) = (state.clone(), tab.clone(), item.url.clone());
         let id = SharedString::from(format!("browser-suggestion-{i}"));
-        let row = SuggestionRow::new(id.clone(), item.url.clone(), move |window, cx| {
+        let mut row = SuggestionRow::new(id.clone(), item.url.clone(), move |window, cx| {
             if let Some(tab) = &tab {
                 choose(&state, tab, &url, window, cx);
             }
@@ -214,6 +215,9 @@ pub(super) fn field(
         } else {
             SuggestionKind::History
         });
+        if !item.favicon.is_empty() {
+            row = row.icon_src(item.favicon.clone());
+        }
         list =
             list.child(anchor(div(), &format!("browser-suggestion-{i}-{}", item.url)).child(row));
     }
