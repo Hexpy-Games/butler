@@ -7,9 +7,9 @@ mod input;
 mod probe;
 mod reader;
 mod view;
+pub(crate) use input::scope;
 #[cfg(feature = "cef")]
 pub(crate) use input::{Mouse, mouse};
-pub(crate) use input::scope;
 #[cfg(feature = "cef")]
 pub(crate) use input::{key, wheel};
 pub(crate) use view::{band, overlay};
