@@ -346,3 +346,5 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
     sandbox.mark_success();
     Ok(())
 }
+
+mod new_tab;
