@@ -114,7 +114,10 @@ fn headless(
     let browser = browser?;
     Some(butler_runtime::browser::Headless::new(
         butler_runtime::browser::HeadlessConfig {
-            root: browser.root,
+            // Rebuilt from its components: the data-path constants use `/`, and Chrome on Windows
+            // rejects paths that mix separators (it cancels every download into one, #2245). The
+            // profile, the browser log and the downloads stage all live under this root.
+            root: browser.root.components().collect(),
             install: browser.install,
             content: Some(butler_runtime::browser::ContentOrigin(
                 remote.content_addr().port(),

@@ -9,7 +9,7 @@ use crate::ui::source::wire::{
 use std::fmt::Write as _;
 
 /// `imageUrl`: the URL a block's `img` asset is written as; `None` leaves it empty.
-pub(super) type ImageUrl<'a> = &'a dyn Fn(&str) -> Option<String>;
+pub(super) type ImageUrl<'a> = &'a dyn Fn(&str, Option<&str>) -> Option<String>;
 
 /// `text`: escapes the characters Markdown reads, and folds line breaks into spaces.
 fn text(value: &str) -> String {
@@ -306,10 +306,15 @@ fn leaf(block: &AnswerBlock, images: ImageUrl) -> String {
                 .unwrap_or_default();
             format!("> {}{cite}", text(body))
         }
-        AnswerBlock::Image { img, caption, .. } => format!(
+        AnswerBlock::Image {
+            img,
+            caption,
+            image_url,
+            ..
+        } => format!(
             "![{}]({})",
             text(caption.as_deref().unwrap_or_default()),
-            images(img).unwrap_or_default()
+            images(img, image_url.as_deref()).unwrap_or_default()
         ),
         AnswerBlock::Callout { text: body, .. } => format!("> {}", text(body)),
         AnswerBlock::Actions { items, .. } => joined(items.iter().map(|item| match item {
@@ -368,7 +373,7 @@ fn titled_block(block: &AnswerBlock, images: ImageUrl) -> String {
 
 /// `toMarkdown` of a spec holding just `block`.
 pub(super) fn to_markdown(block: &AnswerBlock) -> String {
-    titled_block(block, &|_| None)
+    titled_block(block, &|_, _| None)
 }
 
 /// `toMarkdown` of a whole spec: its blocks apart by a blank line, `images` resolving each

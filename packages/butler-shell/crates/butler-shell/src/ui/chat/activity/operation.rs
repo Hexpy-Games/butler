@@ -7,6 +7,7 @@ use butler_ds::ui::blocks::work_activity;
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::layout::{Space, Stack};
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::typo::{Typo, Wrap};
 use futures::future::BoxFuture;
 use gpui::{
@@ -133,7 +134,9 @@ pub(super) fn output_details(
         (joined, latest, pages.phase, pages.read.is_empty())
     };
     if phase == Phase::Failed && empty {
-        return Typo::caption(text(lang, "d.outputLoadFailed")).into_any_element();
+        return Typo::caption(text(lang, "d.outputLoadFailed"))
+            .selectable(Break::Line)
+            .into_any_element();
     }
     let complete = latest.is_some_and(|(complete, _)| complete);
     let output = present(tool, &joined, complete, lang);
@@ -169,9 +172,12 @@ fn execution(output: &Presentation, command: Option<&str>, lang: Lang) -> Option
     let shown = own.or(command)?;
     Some([
         Typo::caption(format!("{}: {shown}", text(lang, "st.execution")))
+            .selectable(Break::Line)
             .wrap(Wrap::Pre)
             .into_any_element(),
-        Typo::caption(format!("{}:", text(lang, "st.result"))).into_any_element(),
+        Typo::caption(format!("{}:", text(lang, "st.result")))
+            .selectable(Break::Line)
+            .into_any_element(),
     ])
 }
 
@@ -201,7 +207,9 @@ fn more_button(
 }
 
 fn caption(value: &str) -> AnyElement {
-    Typo::caption(value.to_owned()).into_any_element()
+    Typo::caption(value.to_owned())
+        .selectable(Break::Line)
+        .into_any_element()
 }
 
 fn code(content: &str, cx: &App) -> AnyElement {

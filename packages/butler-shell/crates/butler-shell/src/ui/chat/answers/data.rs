@@ -10,6 +10,7 @@ use butler_ds::ui::copy_button::CopyButton;
 use butler_ds::ui::layout::{Basis, Space, Stack, WithItem as _};
 use butler_ds::ui::media_frame::{Aspect, Fit, MediaFrame};
 use butler_ds::ui::scroll::{Axis, ScrollArea};
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::typo::Typo;
 use gpui::{
     AnyElement, App, ImageSource, InteractiveElement as _, IntoElement as _, ParentElement as _,
@@ -185,7 +186,7 @@ fn gallery_item(
         .shrink(false)
         .child(opened);
     if let Some(caption) = &item.caption {
-        stack = stack.child(Typo::caption(caption.clone()));
+        stack = stack.child(Typo::caption(caption.clone()).selectable(Break::Line));
     }
     stack
         .child(

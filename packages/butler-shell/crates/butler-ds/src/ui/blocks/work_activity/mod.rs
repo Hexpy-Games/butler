@@ -6,6 +6,7 @@ mod disclosure;
 mod marker;
 mod tools;
 
+use crate::ui::selectable::Break;
 use gpui::{
     AnyElement, App, ElementId, Hsla, IntoElement, ParentElement as _, Pixels, RenderOnce,
     SharedString, Styled as _, Window, div, px,
@@ -159,6 +160,7 @@ impl RenderOnce for WorkActivityBlock {
         } else {
             Typo::body(self.title)
         }
+        .selectable(Break::Line)
         .tone(Tone::Secondary)
         .weight(Weight::Regular)
         .wrap(Wrap::Anywhere);
@@ -175,7 +177,8 @@ impl RenderOnce for WorkActivityBlock {
                 Typo::body(text)
             };
             div().text_color(Look::muted(ds)).child(
-                typo.tone(Tone::Inherit)
+                typo.selectable(Break::Line)
+                    .tone(Tone::Inherit)
                     .weight(Weight::Regular)
                     .wrap(Wrap::Anywhere),
             )
@@ -215,7 +218,12 @@ pub fn output(text: impl Into<SharedString>, cx: &App) -> impl IntoElement {
         .rounded(ds.len(Length::RadiusControl))
         .bg(ds.color(Color::SurfaceRaised))
         .text_color(ds.color(Color::TextSecondary))
-        .child(Typo::code(text).wrap(Wrap::Pre).tone(Tone::Inherit))
+        .child(
+            Typo::code(text)
+                .selectable(Break::Line)
+                .wrap(Wrap::Pre)
+                .tone(Tone::Inherit),
+        )
 }
 
 /// The icon (or the dot) that marks the activity on the line, left of the content column.

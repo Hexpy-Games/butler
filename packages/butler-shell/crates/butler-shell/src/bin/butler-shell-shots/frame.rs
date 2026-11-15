@@ -23,6 +23,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         }
         "click" | "drag" => pointer(h, command, arg),
         "drag-from" => drag_from(h, arg),
+        "click-at" => click_at(h, arg),
         "hover" => hover(h, arg),
         "reveal" => reveal(h, arg),
         "wait-anchor" | "wait-no-anchor" => wait_anchor(h, arg, command == "wait-anchor"),
@@ -43,6 +44,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             Ok(())
         }
         "expect-clipboard" => expect_clipboard(h, arg),
+        "expect-clipboard-prefix" => expect_clipboard_prefix(h, arg),
         "expect-scale" => {
             let scale: f32 = arg.parse()?;
             let actual =
@@ -73,6 +75,19 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         }
         _ => anyhow::bail!("unknown frame command"),
     }
+}
+
+fn expect_clipboard_prefix(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    let expected: String = serde_json::from_str(arg)?;
+    let actual =
+        h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
+    ensure!(
+        actual
+            .as_ref()
+            .is_some_and(|text| text.starts_with(&expected)),
+        "clipboard {actual:?}, expected prefix {expected:?}"
+    );
+    Ok(())
 }
 
 fn expect_clipboard(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
@@ -188,11 +203,7 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
     let anchor = parts.next().context("pointer anchor")?;
     let dx = parts.next().unwrap_or("0").parse::<f32>()?;
     let dy = parts.next().unwrap_or("0").parse::<f32>()?;
-    let button = match parts.next().unwrap_or("left") {
-        "left" => MouseButton::Left,
-        "right" => MouseButton::Right,
-        _ => anyhow::bail!("pointer button must be left or right"),
-    };
+    let button = pointer_button(parts.next())?;
     let bounds =
         h.cx.debug_bounds(h.handle, anchor)?
             .context("missing pointer target")?;
@@ -200,6 +211,31 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
     let end = point(center.x + px(dx), center.y + px(dy));
     let start = if command == "drag" { center } else { end };
     pointer_sequence(h, start, end, button, command == "drag")
+}
+
+fn pointer_button(button: Option<&str>) -> anyhow::Result<MouseButton> {
+    match button.unwrap_or("left") {
+        "left" => Ok(MouseButton::Left),
+        "right" => Ok(MouseButton::Right),
+        _ => anyhow::bail!("pointer button must be left or right"),
+    }
+}
+
+fn click_at(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let mut parts = arg.split_whitespace();
+    let anchor = parts.next().context("click-at anchor")?;
+    let fx: f32 = parts.next().context("click-at fx")?.parse()?;
+    let fy: f32 = parts.next().context("click-at fy")?.parse()?;
+    let button = pointer_button(parts.next())?;
+    let bounds =
+        h.cx.debug_bounds(h.handle, anchor)?
+            .context("missing pointer target")?;
+    let p = point(
+        bounds.left() + bounds.size.width * fx,
+        bounds.top() + bounds.size.height * fy,
+    );
+    pointer_sequence(h, p, p, button, false)
 }
 
 /// Fractions of the anchor bounds may extend beyond the anchor.
