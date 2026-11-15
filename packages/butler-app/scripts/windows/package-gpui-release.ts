@@ -1,6 +1,6 @@
 /** Native unsigned gpui Squirrel release, consuming a release shell and Agent. */
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -36,6 +36,7 @@ try {
   const app = join(work, "Butler-win32-x64");
   cpSync(cef, app, { recursive: true });
   cpSync(shell, join(app, "Butler.exe"));
+  cpSync(join(root, "LICENSE"), join(app, "LICENSE"));
   cpSync(payload, join(app, "resources/bundled-agent"), { recursive: true });
   run("node", [join(electron, "scripts/prepare-process-links.mjs"), join(app, "resources/bundled-agent/bin/butler-agent.exe")]);
   run("node", [join(root, "deploy/licenses/package-app.mjs"), app]);
@@ -45,6 +46,7 @@ try {
   cpSync(notices, join(app, "resources/licenses/butler-shell"), { recursive: true });
   await stampExecutable(join(app, "Butler.exe"), version);
   run("node", [join(electron, "scripts/create-windows-installer.mjs"),
+    "--no-package-json", ...additionalAppFiles(app).flatMap(name => ["--additional-file", name]),
     "--app-directory", app, "--output-directory", out,
     "--setup-exe", `ButlerSetup-${version}-x64.exe`, "--setup-icon", join(electron, "assets/butler.ico"), "--version", version]);
   run("node", [join(electron, "scripts/create-windows-portable.mjs"), app]);
@@ -55,6 +57,24 @@ try {
   rmSync(work, { recursive: true, force: true });
 }
 
+function additionalAppFiles(appDirectory: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(appDirectory, { withFileTypes: true })) {
+    const name = entry.name.toLowerCase();
+    if (entry.isDirectory()) {
+      if (!["locales", "resources", "swiftshader"].includes(name)) {
+        throw new Error(`Squirrel cannot pack top-level App directory: ${entry.name}`);
+      }
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (/\.(?:bin|dll|pak|exe\.config|exe\.sig)$/u.test(name)) continue;
+    if (["icudtl.dat", "squirrel.exe", "license", "butler.exe", "vk_swiftshader_icd.json"].includes(name)) continue;
+    files.push(entry.name);
+  }
+  return files;
+}
+
 function requiredPath(name: string): string {
   const value = process.env[name];
   if (!value || !isAbsolute(value) || !existsSync(value)) throw new Error(`${name} requires an existing absolute path`);
@@ -62,7 +82,7 @@ function requiredPath(name: string): string {
 }
 
 async function stampExecutable(path: string, exactVersion: string) {
-  const require = createRequire(join(electron, "node_modules/@electron/packager/package.json"));
+  const require = createRequire(realpathSync(join(electron, "node_modules/@electron/packager/package.json")));
   const { Data, NtExecutable, NtExecutableResource, Resource } = await import(pathToFileURL(require.resolve("resedit")).href);
   const exe = NtExecutable.from(readFileSync(path));
   const res = NtExecutableResource.from(exe);

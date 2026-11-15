@@ -41,6 +41,5 @@ pub(crate) fn init(cx: &mut App) -> anyhow::Result<()> {
     cx.bind_keys(field::bindings());
     cx.bind_keys(composer::bindings());
     cx.bind_keys(shell::bindings());
-    browser::init(cx);
     Ok(())
 }

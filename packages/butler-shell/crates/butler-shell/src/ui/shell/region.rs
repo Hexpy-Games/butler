@@ -63,6 +63,7 @@ pub(super) struct Regions {
     /// The file viewer pane beside the chat. Inputs: `store.selected`, the file viewer state;
     /// not on the live path.
     pub(super) viewer: Entity<Region>,
+    pub(super) browser: Entity<Region>,
 }
 
 impl Regions {
@@ -77,6 +78,7 @@ impl Regions {
             }),
             conversation: region(|shell, window, cx| shell.conversation(window, cx)),
             viewer: region(Shell::render_viewer_pane),
+            browser: region(Shell::render_browser_pane),
         }
     }
 

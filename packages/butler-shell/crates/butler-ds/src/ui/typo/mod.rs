@@ -12,6 +12,7 @@ use gpui::{
 
 use super::context::{Ds, Lang, keep_words};
 use super::layout::{ItemProps, WithItem};
+use super::selectable::Break;
 use super::strut;
 use crate::tokens::{Color, Length, Number};
 
@@ -123,6 +124,7 @@ pub struct Typo {
     tabular: bool,
     literal: bool,
     align_with_control: bool,
+    selectable: Option<Break>,
     item: ItemProps,
 }
 
@@ -140,8 +142,14 @@ impl Typo {
             tabular: false,
             literal: false,
             align_with_control: false,
+            selectable: None,
             item: ItemProps::default(),
         }
+    }
+
+    pub fn selectable(mut self, lead: Break) -> Self {
+        self.selectable = Some(lead);
+        self
     }
 
     /// Text in several runs.
@@ -372,7 +380,14 @@ impl RenderOnce for Typo {
             el = keep_words(el);
         }
         el = self.layout(el, ds);
-        let styled = StyledText::new(text).with_highlights(highlights);
+        let text = SharedString::from(text);
+        let styled = StyledText::new(text.clone()).with_highlights(highlights);
+        let styled = if let Some(lead) = self.selectable {
+            super::selectable::Run::new(text, styled, lead, IntoElement::into_any_element)
+                .into_any_element()
+        } else {
+            styled.into_any_element()
+        };
         let body: AnyElement = match trim.filter(|_| !flow && self.line_clamp.is_none()) {
             Some(offset) => div()
                 .relative()
@@ -390,7 +405,8 @@ impl Typo {
     /// no block-only prop): consecutive such Typos share line boxes and wrap together, the
     /// container's strut setting the minimum line height. Block props make it a block.
     fn flows(&self, cx: &App) -> bool {
-        self.role.is_inline()
+        self.selectable.is_none()
+            && self.role.is_inline()
             && strut::active(cx)
             && !self.truncate
             && self.line_clamp.is_none()

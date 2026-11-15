@@ -3,6 +3,7 @@
 //! Window-level facts (the window size, the platform, fullscreen) come in as inputs, so the app
 //! wires them in one place.
 pub mod adaptive_shell;
+pub mod address_field;
 pub mod artifact_list;
 pub mod artifact_preview;
 pub mod attachment_list;
@@ -10,6 +11,7 @@ pub mod block_action_frame;
 pub mod block_columns;
 pub mod block_tabs;
 pub mod breadcrumb;
+pub mod browser_pane;
 pub mod card_list;
 pub mod changed_line_diff;
 pub mod collapsible_nav_group;
@@ -44,13 +46,18 @@ pub mod nav_section;
 pub mod notice;
 pub mod option_menu;
 pub mod overflow_action_menu;
+pub mod page_band;
+pub mod page_card;
 pub mod panel_header;
+pub mod pick_outline;
+pub mod popup_window_chrome;
 pub mod progress_meter;
 pub mod prompt_suggestion_list;
 pub mod question_answer_card;
 pub mod queued_message;
 pub mod responsive;
 pub mod scope;
+pub mod selection_bar;
 pub mod sidebar_shell;
 pub mod sortable_card_list;
 pub mod split_button;

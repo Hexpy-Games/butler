@@ -75,10 +75,13 @@ fn send_message(text: &str, cx: &mut App) {
     }
 }
 
-/// Opens a link of an answer or the image viewer: until the conversation browser lands (P5),
-/// the system browser (`openConversationLink`).
+/// Opens a message link through the shell, which owns the selected conversation.
 pub(crate) fn open_link(url: &str, cx: &mut App) {
-    cx.open_url(url);
+    if let Some(ctx) = crate::ui::manage::window_ctx(cx) {
+        ctx.open_conversation_link(url, cx);
+    } else {
+        cx.open_url(url);
+    }
 }
 
 /// Registers what sends a message into the open chat.

@@ -83,8 +83,8 @@ impl Shell {
             self.sidebar_open = open;
         }
         let platform = ds_platform(self.theme.platform);
-        let reduced = cx.reduce_motion();
         let display = butler_platform::display_accessibility::read();
+        let reduced = cx.reduce_motion() || display.reduce_motion;
         Ds::update(cx, |ds| {
             ds.set_viewport(size.width.into(), size.height.into());
             ds.set_platform(platform);
@@ -98,10 +98,15 @@ impl Shell {
     /// `useSidebarAutoCollapse` (`useBrowserShell.ts`): while the right slot holds a pane, the
     /// docked sidebar steps aside when the page would be narrower than `MIN_PAGE_WIDTH`.
     pub(super) fn sidebar_auto_collapsed(&mut self, shell_width: f32, cx: &gpui::App) -> bool {
-        let pane_open = self.store.selected().is_some_and(|chat| {
-            let files = crate::ui::viewer::session_files(cx, chat.session.0.as_ref());
-            crate::ui::viewer::right_slot_pane(None, &files).is_some()
-        });
+        let pane_open = self.on_session(cx)
+            && self.store.selected().is_some_and(|chat| {
+                let files = crate::ui::viewer::session_files(cx, chat.session.0.as_ref());
+                crate::ui::viewer::right_slot_pane(
+                    crate::ui::browser::shell_state::browser_raise(chat.session.0.as_ref(), cx),
+                    &files,
+                )
+                .is_some()
+            });
         self.frame.auto_collapsed = pane_open
             && sidebar_auto_collapses(AutoCollapse {
                 shell_width,

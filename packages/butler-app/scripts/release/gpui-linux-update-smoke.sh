@@ -23,6 +23,7 @@ record="$BUTLER_DATA/state/butler-agent-native-service.json"
 app_log="$root/app.log"
 launcher_pid=
 agent_pid=
+gpui_wait=
 phase=
 purged=false
 started=0
@@ -101,6 +102,7 @@ export BUTLER_APP_SERVER_PORT
 printf '{"app_version":"%s","artifacts":[]}\n' "$from" > "$BUTLER_APP_UPDATE_MANIFEST"
 
 start_app() {
+  gpui_wait=record
   # The non-job-control shell's child is not a group leader: setsid keeps $!.
   setsid xvfb-run -a /usr/bin/butler-app >> "$app_log" 2>&1 &
   launcher_pid=$!
@@ -108,9 +110,20 @@ start_app() {
   while :; do
     alive "$launcher_pid" || fail 'App exited during startup'
     remaining=$((deadline - $(date +%s)))
-    [ "$remaining" -gt 0 ] || fail 'Agent readiness exceeded 120 seconds'
+    if [ "$remaining" -le 0 ]; then
+      if [ "${1:-electron}" = gpui ]; then
+        ps -o pid,ppid,sid,pgid,args -s "$launcher_pid" >&2 || true
+        for pid in $(ps -o pid= -s "$launcher_pid"); do
+          ls -l "/proc/$pid/exe" >&2 || true
+        done
+        fail "Agent readiness exceeded 120 seconds (gpui: $gpui_wait)"
+      fi
+      fail 'Agent readiness exceeded 120 seconds'
+    fi
+    gpui_wait=record
     if jq -e '.state == "ready" and (.pid > 0)' "$record" >/dev/null 2>&1; then
       agent_pid=$(jq -r '.pid' "$record")
+      gpui_wait=agent_process
       if alive "$agent_pid"; then
         if [ "${1:-electron}" = electron ] || gpui_ready; then break; fi
       fi
@@ -140,19 +153,32 @@ upgrade() {
 }
 
 gpui_ready() {
-  jq -e '.app_supervised == true' "$record" >/dev/null || return 1
-  [ "$(readlink "/proc/$agent_pid/exe")" = "$install_dir/resources/bundled-agent/bin/butler-agent" ] || return 1
+  jq -e '.app_supervised == true' "$record" >/dev/null || { gpui_wait=app_supervised; return 1; }
+  agent_exe=$(readlink "/proc/$agent_pid/exe" 2>/dev/null || true)
+  [ "$agent_exe" = "$install_dir/resources/bundled-agent/bin/butler-agent" ] || {
+    gpui_wait="agent_exe $agent_exe"; return 1;
+  }
   # gpui has no Electron foreground record: identify the App in our session.
   app_pid=$(ps -eo pid=,sid= | awk -v sid="$launcher_pid" '$2 == sid { print $1 }' | while read -r pid; do
-    if [ "$(readlink "/proc/$pid/exe" 2>/dev/null || true)" = "$install_dir/Butler" ]; then printf '%s\n' "$pid"; fi
+    if [ "$(readlink "/proc/$pid/exe" 2>/dev/null || true)" = "$install_dir/Butler" ] && alive "$pid"; then
+      printf '%s\n' "$pid"
+      break
+    fi
   done)
-  [ -n "$app_pid" ] && alive "$app_pid" || return 1
-  token=$(jq -er '.token' "$BUTLER_DATA/app/runtime/auth/local-agent-auth.json" 2>/dev/null) || return 1
-  endpoint=$(jq -er '.app_endpoint' "$record") || return 1
+  if [ -z "$app_pid" ] || ! alive "$app_pid"; then gpui_wait=app_process; return 1; fi
+  token=$(jq -er '.token' "$BUTLER_DATA/app/runtime/auth/local-agent-auth.json" 2>/dev/null) || {
+    gpui_wait=token; return 1;
+  }
+  endpoint=$(jq -er '.app_endpoint' "$record") || { gpui_wait=endpoint; return 1; }
   remaining=$((deadline - $(date +%s)))
-  [ "$remaining" -gt 0 ] || return 1
+  [ "$remaining" -gt 0 ] || { gpui_wait=deadline; return 1; }
   [ "$remaining" -le 5 ] || remaining=5
-  curl -fsS --max-time "$remaining" -H "Authorization: Bearer $token" "$endpoint/health" | jq -e '.ok == true' >/dev/null || return 1
+  health_exit=0
+  health_status=$(curl -fsS --max-time "$remaining" -H "Authorization: Bearer $token" \
+    -o "$root/health.json" -w '%{http_code}' "$endpoint/health") || health_exit=$?
+  if [ "$health_exit" -ne 0 ] || ! jq -e '.data.ok == true' "$root/health.json" >/dev/null; then
+    gpui_wait="health curl=$health_exit http=$health_status"; return 1;
+  fi
 }
 
 prove_gpui() {
@@ -167,7 +193,7 @@ purge() {
   purged=true
   for path in /opt/butler /usr/bin/butler-app /usr/bin/butler /usr/share/applications/butler.desktop \
     /usr/share/icons/hicolor/512x512/apps/butler.png; do
-    [ ! -e "$path" ] && [ ! -L "$path" ] || fail "purge left $path"
+    if [ -e "$path" ] || [ -L "$path" ]; then fail "purge left $path"; fi
   done
   if dpkg -S /opt/butler >/dev/null 2>&1; then fail 'package still owns /opt/butler'; fi
   [ "$(cat "$BUTLER_DATA/sentinel.txt")" = retained ] || fail 'purge removed user data'

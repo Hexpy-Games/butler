@@ -1,11 +1,12 @@
 //! The shell owns tab order and metadata; page engines report changes over a channel.
+use super::page_dialog::DialogAnswer;
 use std::fmt;
 
 use futures::{StreamExt as _, channel::mpsc};
 use gpui::{AnyElement, App, Global, SharedString, Window};
 
 use super::address::{AddressError, address_url, web_url};
-use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, TabId};
+use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
 use super::placeholder::PlaceholderEngine;
 
 // Mirrors butler-runtime/src/browser/capacity.rs.
@@ -41,6 +42,7 @@ pub(crate) enum TabStatus {
     Crashed,
 }
 
+#[derive(Clone)]
 pub(crate) struct Tab {
     pub(crate) id: TabId,
     pub(crate) owner: Owner,
@@ -51,6 +53,8 @@ pub(crate) struct Tab {
     pub(crate) can_back: bool,
     pub(crate) can_forward: bool,
     pub(crate) placeholder: bool,
+    pub(crate) profile: Profile,
+    pub(crate) dialog: Option<super::page_dialog::PageDialog>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,8 +105,9 @@ impl Global for BrowserState {}
 impl BrowserState {
     pub(crate) fn init(cx: &mut App) {
         let (sender, mut receiver) = mpsc::unbounded();
+        let engine = Self::engine(sender, cx);
         cx.set_global(Self {
-            engine: Box::new(PlaceholderEngine::new(sender)),
+            engine,
             tabs: Vec::new(),
             active: None,
             next_id: 0,
@@ -116,6 +121,23 @@ impl BrowserState {
             }
         })
         .detach();
+    }
+
+    fn engine(sender: mpsc::UnboundedSender<PageEvent>, cx: &mut App) -> Box<dyn PageEngine> {
+        #[cfg(feature = "cef")]
+        match super::cef::CefEngine::start(sender.clone(), cx) {
+            Ok(engine) => return Box::new(engine),
+            Err(error) => eprintln!("CEF unavailable: {error}"),
+        }
+        let _ = cx;
+        Box::new(PlaceholderEngine::new(sender))
+    }
+
+    pub(crate) fn show(&mut self, id: Option<&TabId>) {
+        self.engine.show(id);
+    }
+    pub(crate) fn frame_size(&self, id: &TabId) -> Option<(usize, usize)> {
+        self.engine.frame_size(id)
     }
 
     pub(crate) fn create(
@@ -143,9 +165,11 @@ impl BrowserState {
         self.next_id += 1;
         let id = TabId(format!("t{}", self.next_id).into());
         let tab_owner = owner.clone();
+        let profile = Profile::for_url(&url);
         self.tabs.push(Tab {
             id: id.clone(),
             owner,
+            profile,
             placeholder: placeholder && url.is_empty(),
             url: url.clone(),
             title: String::new(),
@@ -153,12 +177,14 @@ impl BrowserState {
             status: TabStatus::Idle,
             can_back: false,
             can_forward: false,
+            dialog: None,
         });
         self.activate(&id);
         if !url.is_empty() {
             self.drop_placeholders(&tab_owner);
         }
-        self.engine.open(&id, &url);
+        self.engine
+            .open(&id, &url, profile, &super::area::owner_key(&tab_owner));
         Ok(Some(id))
     }
 
@@ -169,6 +195,7 @@ impl BrowserState {
     }
 
     pub(crate) fn close(&mut self, id: &TabId) {
+        self.cancel_dialog(id, "tab_closed");
         let Some(index) = self.tabs.iter().position(|tab| &tab.id == id) else {
             return;
         };
@@ -211,6 +238,9 @@ impl BrowserState {
             && self.tabs.iter().filter(|tab| tab.owner == to).count() >= USER_TABS
         {
             return Err(BrowserError::TabBudgetExhausted);
+        }
+        if changed_owner {
+            self.cancel_dialog(id, "owner_changed");
         }
         let mut tab = self.tabs.remove(from);
         let new_owner = to.clone();
@@ -288,6 +318,11 @@ impl BrowserState {
     }
 
     pub(crate) fn apply(&mut self, event: PageEvent) {
+        #[cfg(feature = "cef")]
+        if matches!(event.change, PageChange::CloseRequested) {
+            self.close(&event.page);
+            return;
+        }
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == event.page) else {
             return;
         };
@@ -308,6 +343,10 @@ impl BrowserState {
                 tab.can_forward = can_forward;
             }
             PageChange::Crashed => tab.status = TabStatus::Crashed,
+            #[cfg(feature = "cef")]
+            PageChange::Dialog(dialog) => tab.dialog = Some(dialog),
+            #[cfg(feature = "cef")]
+            PageChange::CloseRequested => {}
         }
     }
 
@@ -330,5 +369,22 @@ impl BrowserState {
         cx: &mut App,
     ) -> Option<AnyElement> {
         self.engine.surface(id, window, cx)
+    }
+}
+
+impl BrowserState {
+    pub(crate) fn answer_dialog(&mut self, id: &TabId, dialog: u64, answer: DialogAnswer) {
+        let Some(tab) = self.tabs.iter_mut().find(|t| &t.id == id) else {
+            return;
+        };
+        if tab.dialog.as_ref().is_some_and(|d| d.id == dialog) {
+            tab.dialog = None;
+            self.engine.answer_dialog(id, dialog, answer);
+        }
+    }
+    pub(super) fn cancel_dialog(&mut self, id: &TabId, _reason: &str) {
+        if let Some(dialog) = self.tab(id).and_then(|t| t.dialog.as_ref()) {
+            self.answer_dialog(id, dialog.id, DialogAnswer::default());
+        }
     }
 }

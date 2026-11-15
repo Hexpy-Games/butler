@@ -1,10 +1,10 @@
 //! DS Wallpaper (blocks/Wallpaper `still.ts`, `stillContext.ts`, `imageCache.ts`, `imageMath.ts`,
 //! the engine's host side and WallpaperPicker `builtinPosters.ts`): a live module the renderer
 //! has shaders for drawn at its default params, unknown live
-//! modules from their bundled posters, or an image. Animated modules hold their still frame
-//! (`stillTime`) for now; edited params, drift and crossfade are P6.
+//! modules from their bundled posters, or an image. Edited params, drift events and crossfade are P6.
 //! [`Wallpaper`] is the layer to hand to `WallpaperStage::wallpaper`; it fills its parent, which
 //! clips it.
+mod drift;
 mod image_cache;
 mod image_math;
 mod live;
@@ -14,6 +14,7 @@ mod live_params;
 mod live_print;
 mod posters;
 mod still;
+mod watchdog;
 
 use std::sync::Arc;
 
@@ -116,6 +117,24 @@ pub fn transition_key(source: &WallpaperSource) -> String {
     }
 }
 
+/// What the host tells a drifting print (DS `signals.ts`): battery power, thermal constraint,
+/// and the window blur level 0/1/2 (focused, unfocused at least 2 min, at least 10 min).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WallpaperHost {
+    pub on_battery: bool,
+    pub constrained: bool,
+    pub blur: u8,
+}
+
+pub fn drifts(source: &WallpaperSource) -> bool {
+    match source {
+        WallpaperSource::Live { module } => {
+            live_modules::get(module).is_some_and(|module| module.manifest["motion"] == "drift")
+        }
+        _ => false,
+    }
+}
+
 /// The wallpaper layer: the module's frame (or its poster) for a live module, the picture for an
 /// image source, nothing for `none`.
 #[derive(IntoElement)]
@@ -126,6 +145,8 @@ pub struct Wallpaper {
     content_rect: Option<ContentRect>,
     content_rect2: Option<ContentRect>,
     day_phase: f32,
+    paused: bool,
+    host: WallpaperHost,
 }
 
 impl Wallpaper {
@@ -137,6 +158,8 @@ impl Wallpaper {
             content_rect: None,
             content_rect2: None,
             day_phase: STILL_DAY_PHASE,
+            paused: false,
+            host: WallpaperHost::default(),
         }
     }
 
@@ -158,6 +181,17 @@ impl Wallpaper {
         self
     }
 
+    /// Holds a still frame when the wallpaper motion setting is paused.
+    pub fn motion(mut self, paused: bool) -> Self {
+        self.paused = paused;
+        self
+    }
+
+    pub fn host(mut self, host: WallpaperHost) -> Self {
+        self.host = host;
+        self
+    }
+
     /// Draws for this tone; the DS theme's by default.
     pub fn tone(mut self, tone: WallpaperTone) -> Self {
         self.tone = Some(tone);
@@ -172,20 +206,27 @@ impl Wallpaper {
 }
 
 impl RenderOnce for Wallpaper {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
         let tone = self.tone.unwrap_or(WallpaperTone::from_dark(ds.dark()));
         let layer = div().relative().size_full().overflow_hidden();
         match self.source {
             WallpaperSource::None => layer,
             WallpaperSource::Live { module } => {
+                // DS scheduler.ts `softwareRendering`: a software renderer holds still frames.
+                let software = window
+                    .gpu_specs()
+                    .is_some_and(|specs| specs.is_software_emulated);
                 let frame = LiveFrame {
                     tone,
+                    host: self.host,
+                    animate: !self.paused && !ds.reduced_motion() && !software,
+                    start_ms: 0,
                     day_phase: self.day_phase,
                     content_rect: self.content_rect,
                     content_rect2: self.content_rect2,
                 };
-                match live::layer(&module, frame, cx) {
+                match live::layer(&module, frame, window, cx) {
                     Some((drawn, remaining)) => dim_pass(layer.child(drawn), remaining),
                     None => match builtin_poster(&module, tone) {
                         Some(poster) => layer.child(picture(poster, ObjectFit::Cover)),

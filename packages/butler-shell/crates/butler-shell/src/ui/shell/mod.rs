@@ -1,5 +1,6 @@
 //! The window: AdaptiveShell frame="cards" (AdaptiveShellCards.module.css, AdaptiveShellFrame):
 //! the sidebar track, the chat card with the floating composer, and the title row.
+mod browser_link;
 mod composer_link;
 mod data;
 mod frame;
@@ -51,7 +52,8 @@ actions!(
 );
 
 pub(crate) fn bindings() -> Vec<KeyBinding> {
-    vec![
+    let mut bindings = crate::ui::browser::area::bindings();
+    bindings.extend([
         KeyBinding::new("secondary-shift-e", FocusComposer, None),
         KeyBinding::new("secondary-=", TextSizeUp, None),
         KeyBinding::new("secondary-+", TextSizeUp, None),
@@ -62,7 +64,8 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
         // `useTitlebarBack`: mod+[ anywhere, alt+← outside a text field.
         KeyBinding::new("secondary-[", TitlebarBack, None),
         KeyBinding::new("alt-left", TitlebarBack, Some("!EditableText")),
-    ]
+    ]);
+    bindings
 }
 
 pub(crate) struct Shell {
@@ -162,6 +165,7 @@ impl Shell {
         });
         let dark = theme_override.unwrap_or_else(|| system_dark(window));
         Self::install_ds(&options, dark, window, cx);
+        crate::ui::browser::init(cx);
         let theme = Theme::new(
             dark,
             options.platform,

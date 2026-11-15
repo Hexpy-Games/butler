@@ -157,6 +157,10 @@ impl Shell {
             Ds::update(cx, |ds| ds.set_ui_scale(scale));
             cx.refresh_windows();
         }
+        if let Some(value) = flag("reduce_motion") {
+            Ds::update(cx, |ds| ds.set_app_reduced_motion(value));
+            cx.refresh_windows();
+        }
         if !self.forced_theme
             && let Some(theme) = text("appearance_theme")
         {

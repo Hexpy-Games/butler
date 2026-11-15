@@ -79,6 +79,8 @@ pub(super) struct Resolved {
     pub(super) epic: Option<EpicInfo>,
     pub(super) project_name: Option<String>,
     pub(super) wallpaper: WallpaperSource,
+    pub(super) wallpaper_paused: bool,
+    pub(super) wallpaper_pause_on_battery: bool,
 }
 
 pub(super) fn resolve(fetched: Fetched, project_id: Option<&str>) -> Resolved {
@@ -104,11 +106,14 @@ pub(super) fn resolve(fetched: Fetched, project_id: Option<&str>) -> Resolved {
         .and_then(|project| parse_source(project.get("wallpaper")?));
     let settings = fetched.settings.unwrap_or(Value::Null);
     let wallpaper = own.unwrap_or_else(|| global_source(&settings));
+    let wallpaper_paused = settings["wallpaper"]["motion"] == "paused";
     Resolved {
         briefing,
         epic: fetched.epic,
         project_name,
         wallpaper,
+        wallpaper_paused,
+        wallpaper_pause_on_battery: settings["wallpaper"]["pauseOnBattery"] == true,
     }
 }
 

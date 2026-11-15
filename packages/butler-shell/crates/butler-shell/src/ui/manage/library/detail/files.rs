@@ -8,7 +8,7 @@ use gpui::{AnyElement, App, Window};
 
 use super::actions::kind_of;
 use super::copy::words;
-use crate::ui::chat::open_link;
+use crate::ui::browser::open_link;
 use crate::ui::manage::documents::open_document;
 use crate::ui::manage::library::LIBRARY_VIEWER;
 use crate::ui::manage::library::types::{LibraryFile, LibraryItem, LibraryItemKind, LibraryNames};
@@ -127,9 +127,8 @@ pub(super) fn open_source(item: &LibraryItem, ctx: &ManageCtx, cx: &mut App) {
     }
 }
 
-/// The source page, or an output's page. CARVE-OUT(G-cef): React opens it in the in-app
-/// browser (`openLink`); until the browser lands it opens in the system browser.
-fn open_page(item: &LibraryItem, cx: &mut App) {
+/// The source page, or an output's page, in the in-app browser.
+pub(crate) fn open_page(item: &LibraryItem, cx: &mut App) {
     if let Some(output) = item.output.clone() {
         let read = Jobs::run(cx, move |client| async move {
             client.get_output_view(&output, None).await.ok()

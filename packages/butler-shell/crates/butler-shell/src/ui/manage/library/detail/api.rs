@@ -28,7 +28,7 @@ pub(super) fn kind_name(kind: LibraryKind) -> &'static str {
 
 /// One write on the agent worker; `done` runs with the decoded answer, after the 서랍's lists
 /// were told to read again.
-pub(super) fn send<T, F, Fut>(
+pub(crate) fn send<T, F, Fut>(
     cx: &mut App,
     call: F,
     done: impl FnOnce(Result<T, Error>, &mut App) + 'static,
@@ -211,7 +211,7 @@ pub(super) fn delete_tag(
 }
 
 /// `deleteLibrary`
-pub(super) fn delete_item(
+pub(crate) fn delete_item(
     cx: &mut App,
     id: String,
     done: impl FnOnce(Result<Value, Error>, &mut App) + 'static,

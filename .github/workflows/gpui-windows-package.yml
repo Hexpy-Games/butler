@@ -66,6 +66,8 @@ jobs:
     needs: versions
     runs-on: windows-latest
     timeout-minutes: 90
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-release
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/build-windows-agent
@@ -173,6 +175,9 @@ jobs:
         with:
           name: gpui-shell-windows-x64
           path: dist/release/gpui-shell
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
       - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:
@@ -189,8 +194,9 @@ jobs:
       - name: Package the gpui App
         shell: pwsh
         env:
-          GITHUB_REF_NAME: v${{ needs.versions.outputs.to }}
+          BUTLER_GPUI_VERSION: ${{ needs.versions.outputs.to }}
         run: |
+          $env:GITHUB_REF_NAME = "v$env:BUTLER_GPUI_VERSION"
           $ErrorActionPreference = 'Stop'
           $env:CARGO_HOME = "$env:USERPROFILE/.cargo"
           $env:RUSTUP_HOME = "$env:USERPROFILE/.rustup"

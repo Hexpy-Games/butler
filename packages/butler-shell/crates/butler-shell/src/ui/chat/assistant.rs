@@ -6,6 +6,8 @@ pub(crate) mod hooks;
 mod remote;
 mod seed;
 
+use std::sync::Arc;
+
 use butler_ds::ui::blocks::message_row::{MessageBubble, MessageBubbleAttachments};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Space, Stack};
@@ -18,7 +20,7 @@ use gpui::{
 use super::TranscriptCtx;
 use super::activity::steward::steward_progress;
 use super::activity::{is_general_chat, message_activity};
-use super::answers::answer_blocks;
+use super::answers::{answer_blocks, message_markdown};
 use super::files::message_files;
 use super::message_markdown::message_markdown_in;
 use crate::ui::decisions::{
@@ -64,7 +66,7 @@ fn initiated_kind(message: &MessageRecord) -> Option<&str> {
 /// The assistant message: its body, then the response footer once it settled
 /// (`MessageContent`).
 pub(crate) fn assistant_message(
-    msg: &MessageRecord,
+    msg: &Arc<MessageRecord>,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
@@ -91,7 +93,7 @@ pub(crate) fn assistant_message(
 
 /// `AssistantResponseFooter` of a settled answer, with its branch and trace actions.
 fn response_footer(
-    msg: &MessageRecord,
+    msg: &Arc<MessageRecord>,
     t: &TranscriptCtx,
     steward: bool,
     window: &mut Window,
@@ -108,7 +110,7 @@ fn response_footer(
             id: &msg.id,
             bubble: is_general_chat(msg.chat_id.as_deref()),
             time_only: matches!(kind, Some("approval_needed" | "work_failed")),
-            copy_text: &msg.text,
+            copy_text: Box::new(message_markdown(msg, cx)),
             meta: t.footer_meta.get(&msg.id),
             status: if failed_notice {
                 Some("failed")

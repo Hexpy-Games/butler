@@ -64,7 +64,7 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_BUILD_JOBS: '8'
-      GITHUB_REF_NAME: v${{ needs.versions.outputs.to }}
+      BUTLER_GPUI_VERSION: ${{ needs.versions.outputs.to }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/rust-agent-setup
@@ -88,6 +88,7 @@ jobs:
       - name: Build the native Agent and sandbox helper
         working-directory: packages/butler-agent/rust
         run: |
+          export GITHUB_REF_NAME="v$BUTLER_GPUI_VERSION"
           python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked \
             -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --no-default-features --features ${{ inputs.release && 'static-ort' || 'prebuilt-ort' }}
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
@@ -96,6 +97,7 @@ jobs:
           BUTLER_NATIVE_PAYLOAD_WRITABLE: '1'
           BUTLER_PACKAGED_APP_VERSION: ${{ needs.versions.outputs.to }}
         run: |
+          export GITHUB_REF_NAME="v$BUTLER_GPUI_VERSION"
           python3 .github/scripts/isolated.py node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs \
             linux x64 "$RUNNER_TEMP/bundled-agent"
           tar -C "$RUNNER_TEMP" -cf "$RUNNER_TEMP/gpui-agent.tar" bundled-agent
@@ -218,12 +220,13 @@ jobs:
           command -v dpkg-deb makepkg readelf
       - name: Package the gpui App
         env:
-          GITHUB_REF_NAME: v${{ needs.versions.outputs.to }}
+          BUTLER_GPUI_VERSION: ${{ needs.versions.outputs.to }}
           BUTLER_NATIVE_AGENT_EXECUTABLE: ${{ runner.temp }}/bundled-agent/bin/butler-agent
           BUTLER_NATIVE_UI_DIST: ${{ runner.temp }}/bundled-agent/resources/app-client/dist
           BUTLER_SHELL_EXECUTABLE: ${{ runner.temp }}/gpui-shell/butler-shell
           BUTLER_CEF_RUNTIME: ${{ runner.temp }}/gpui-shell/cef-runtime
         run: |
+          export GITHUB_REF_NAME="v$BUTLER_GPUI_VERSION"
           tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/gpui-inputs/gpui-agent.tar"
           tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/gpui-inputs/gpui-shell.tar"
           python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts

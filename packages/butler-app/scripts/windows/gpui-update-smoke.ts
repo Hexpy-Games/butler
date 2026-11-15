@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 import { windowsPackageVersion } from "../../client/electron/scripts/windows-package-version.mjs";
@@ -28,7 +28,7 @@ const root = realpathSync.native(mkdtempSync(join(tmpdir(), "butler-gpui-update-
 const data = join(root, "data");
 const env = { ...windowsPowerShellEnvironment(), HOME: join(root, "home"), USERPROFILE: join(root, "home"), BUTLER_DATA: data,
   LOCALAPPDATA: join(root, "home/AppData/Local"), APPDATA: join(root, "home/AppData/Roaming"),
-  TEMP: join(root, "tmp"), TMP: join(root, "tmp"), SQUIRREL_TEMP: join(root, "squirrel"),
+  TEMP: join(root, "tmp"), TMP: join(root, "tmp"), SQUIRREL_TEMP: join(root, "home/AppData/Local"),
   BUTLER_E2E_TIER: "stub", BUTLER_SECRET_STORE: "file", BUTLER_APP_SERVER_PORT: String(port),
   BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "profile"), BUTLER_APP_UPDATE_MANIFEST: join(root, "manifest.json"),
   ELECTRON_ENABLE_LOGGING: "1", ELECTRON_LOG_FILE: join(root, "electron.log"),
@@ -51,7 +51,7 @@ let phase = "prepare";
 try {
   const local = powershell("[Environment]::GetFolderPath('LocalApplicationData', [Environment+SpecialFolderOption]::DoNotVerify)", env);
   assert.equal(resolve(local).toLowerCase(), resolve(env.LOCALAPPDATA).toLowerCase(), "Squirrel profile must be isolated");
-  for (const path of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, env.TEMP, env.SQUIRREL_TEMP]) mkdirSync(path, { recursive: true });
+  for (const path of [env.HOME, data, env.LOCALAPPDATA, env.APPDATA, env.TEMP]) mkdirSync(path, { recursive: true });
   writeFileSync(env.BUTLER_APP_UPDATE_MANIFEST, JSON.stringify({ app_version: from, artifacts: [] }));
   shortcuts = [join(env.APPDATA, "Microsoft/Windows/Start Menu/Programs/Butler.lnk"), shortcutPaths(env)[1]!];
   mkdirSync(dirname(shortcuts[1]!), { recursive: true });
@@ -124,7 +124,8 @@ async function activateUpdate() {
   const helperLog = openSync(join(root, "helper-stderr.log"), "a");
   helperClosed = false;
   const helper = spawn(join(dirname(oldApp), "resources/bundled-agent/bin/butler-agent.exe"),
-    ["app-update-install", packagePath, oldApp, String(oldAppPid)], { env, stdio: ["pipe", "pipe", helperLog] });
+    ["--installation-root", dirname(oldApp), "--resource-root", join(dirname(oldApp), "resources/bundled-agent/resources"),
+      "app-update-install", packagePath, oldApp, String(oldAppPid)], { env, stdio: ["pipe", "pipe", helperLog] });
   closeSync(helperLog);
   let output = "";
   let ended = false;
@@ -148,12 +149,23 @@ async function activateUpdate() {
   assert.equal(exit, 0, "Update helper must succeed");
 }
 
-type InstalledProcess = { pid: number; path: string };
+type InstalledProcess = { pid: number; name: string; path: string; parentPid: number; modules: string[] };
 function installedProcesses(): InstalledProcess[] {
   return JSON.parse(powershell(`$root = [IO.Path]::GetFullPath($env:BUTLER_SMOKE_INSTALL).TrimEnd('\\') + '\\'
     ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process |
-      Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } |
-      ForEach-Object { @{ pid = $_.ProcessId; path = $_.ExecutablePath } })`, { ...env, BUTLER_SMOKE_INSTALL: installed }));
+      ForEach-Object {
+        $process = $_
+        $modules = @()
+        try {
+          $modules = @((Get-Process -Id $process.ProcessId -ErrorAction Stop).Modules |
+            ForEach-Object { $_.FileName } |
+            Where-Object { $_ -and $_.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) })
+        } catch { $modules = @() }
+        if (($process.ExecutablePath -and $process.ExecutablePath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) -or $modules.Count -gt 0) {
+          @{ pid = $process.ProcessId; name = $process.Name; path = [string]$process.ExecutablePath;
+            parentPid = $process.ParentProcessId; modules = $modules }
+        }
+      })`, { ...env, BUTLER_SMOKE_INSTALL: installed }));
 }
 
 async function proveGpui() {
@@ -171,7 +183,7 @@ async function proveGpui() {
     const response = await fetch(new URL("/health", instance.app_endpoint), {
       headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000),
     }).catch(() => null);
-    return response?.ok === true && (await response.json()).ok === true;
+    return response?.ok === true && (await response.json()).data.ok === true;
   }, "updated gpui App and authenticated supervised Agent", 120_000);
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   assert.ok(existsSync(join(data, "butler.config.json")), "User configuration missing");
@@ -198,8 +210,15 @@ async function uninstall() {
   }
   assert.equal(powershell("[bool](Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -ErrorAction SilentlyContinue).'com.squirrel.butler-app.Butler'", env), "False");
   const files = existsSync(installed) ? readdirSync(installed, { recursive: true, withFileTypes: true })
-    .filter(entry => !entry.isDirectory()).map(entry => join(entry.parentPath, entry.name)) : [];
-  assert.deepEqual(files, [], `Uninstall left files: ${files.join(", ")}`);
+    .filter(entry => !entry.isDirectory()).map(entry => relative(installed, join(entry.parentPath, entry.name)).toLowerCase()) : [];
+  // Squirrel's FullUninstall recreates the root with .dead and leaves the running Update.exe and app-version squirrel.exe.
+  const expected = [".dead", "Update.exe", join(`app-${toPackage}`, "squirrel.exe")].map(path => path.toLowerCase());
+  const unexpected = files.filter(path => !expected.includes(path));
+  const missing = expected.filter(path => !files.includes(path));
+  if (unexpected.length || missing.length) {
+    console.error("Uninstall process/module holders:", JSON.stringify(installedProcesses(), null, 2));
+  }
+  assert.deepEqual(files.sort(), expected.sort(), `Uninstall remnants: unexpected [${unexpected.join(", ")}]; missing [${missing.join(", ")}]`);
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   uninstalled = true;
 }

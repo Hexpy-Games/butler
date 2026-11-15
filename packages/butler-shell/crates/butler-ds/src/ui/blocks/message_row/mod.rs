@@ -18,6 +18,7 @@ pub use parts::{
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number};
 use crate::ui::context::{Ds, Lang, keep_words};
 use crate::ui::motion::Props;
+use crate::ui::selectable::{self, Selection};
 
 /// The widest bubbles get: user `min(440px, 68%)`, Butler `min(440px, 90%)` of the row
 /// (`--message-bubble-max-width`).
@@ -78,6 +79,7 @@ pub(crate) fn bubble_cap(child: impl IntoElement, share: f32, wide: bool, end: b
 pub struct MessageRow {
     id: ElementId,
     role: Role,
+    selection: Option<Selection>,
     avatar: Option<AnyElement>,
     footer: Option<AnyElement>,
     tone: Tone,
@@ -94,6 +96,7 @@ impl MessageRow {
         Self {
             id: id.into(),
             role,
+            selection: None,
             avatar: None,
             footer: None,
             tone: Tone::Complete,
@@ -104,6 +107,11 @@ impl MessageRow {
             grouped: false,
             children: Vec::new(),
         }
+    }
+
+    pub fn selection(mut self, selection: Selection) -> Self {
+        self.selection = Some(selection);
+        self
     }
 
     pub fn avatar(mut self, avatar: impl IntoElement) -> Self {
@@ -183,7 +191,9 @@ impl MessageRow {
     fn body(&mut self, window: &mut Window, cx: &mut App) -> AnyElement {
         let ds = Ds::get(cx);
         let children = std::mem::take(&mut self.children);
+        let id = self.id.to_string();
         let base = div()
+            .debug_selector(move || format!("{id}-body"))
             .min_w_0()
             .text_size(ds.len(Length::FontSize3))
             .line_height(ds.len(Length::TypoBodyLineHeightDocument))
@@ -257,7 +267,11 @@ impl MessageRow {
         );
         let radius = ds.len(Length::RadiusPopover);
         let korean = ds.lang() == Lang::Ko;
-        let mut bubble = div().relative().min_w_0();
+        let id = self.id.to_string();
+        let mut bubble = div()
+            .debug_selector(move || format!("{id}-body"))
+            .relative()
+            .min_w_0();
         if korean {
             bubble = keep_words(bubble);
         }
@@ -332,6 +346,11 @@ impl RenderOnce for MessageRow {
         let rise = f32::from(Ds::get(cx).len(Length::MotionDistanceSm));
         let single = self.single_column();
         let body = self.body(window, cx);
+        let selection = self
+            .selection
+            .take()
+            .unwrap_or_else(|| Selection::new((self.id.clone(), "select"), window, cx));
+        let body = selectable::scope(selection, body).into_any_element();
         let lead = if single {
             body
         } else {

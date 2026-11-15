@@ -11,6 +11,7 @@ use butler_ds::ui::blocks::list_row::ListRow;
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon::icon_px;
 use butler_ds::ui::layout::{Space, Stack};
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::typo::Typo;
 use gpui::{
     AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _, Window, div,
@@ -88,7 +89,9 @@ fn body(details: Details, row: &ProgressRow, window: &mut Window, cx: &mut App) 
             output_details(&ids, row.safe_tool_name.as_deref(), command, window, cx)
         }
         Details::Thinking(ids) => thinking::thinking_details(row, ids, window, cx),
-        Details::Text(text) => Typo::caption(text).into_any_element(),
+        Details::Text(text) => Typo::caption(text)
+            .selectable(Break::Line)
+            .into_any_element(),
     }
 }
 

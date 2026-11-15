@@ -109,7 +109,7 @@ async fn portable(client: &ShellClient, body: &str) -> Option<String> {
                 out.push_str(&image.replace_all(text, |found: &Captures| inline(found, &data)));
             }
             Segment::Blocks { fence, json } => match parse(json) {
-                Some(spec) => out.push_str(&spec_markdown(&spec, &|id| data.get(id).cloned())),
+                Some(spec) => out.push_str(&spec_markdown(&spec, &|id, _| data.get(id).cloned())),
                 None => out.push_str(fence),
             },
         }
