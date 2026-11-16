@@ -54,6 +54,7 @@ Controls that show a disabled reason pass placement through:
 
 Tooltips open on hover and keyboard focus only; a tap on a phone does not
 open one yet. Never put the only copy of something people need in a tooltip.
+Pressing the trigger dismisses the tooltip.
 
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.

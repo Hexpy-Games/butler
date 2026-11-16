@@ -15,7 +15,7 @@ import { clearFilters, setFilters } from "../library/libraryFilters";
 import { openLibrary } from "../library/libraryNav";
 import { FileViewerHeader, FileViewerPage, type FileViewerAction } from "./FileViewerFrame";
 
-interface FileViewerArtifactProps { sessionId: string; artifact: SessionArtifactSummary; onClose: () => void; onBack?: () => void }
+interface FileViewerArtifactProps { sessionId: string; artifact: SessionArtifactSummary; onClose?: () => void; onBack?: () => void }
 
 /** A stored file in the viewer: its header (version, 서랍, save, close) and its content, filling the pane. */
 export function FileViewerArtifact(props: FileViewerArtifactProps) {
