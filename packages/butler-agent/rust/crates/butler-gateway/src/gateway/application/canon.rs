@@ -61,13 +61,15 @@ async fn validate_scope(
     use AppCanonResource::{
         Activity, AllowGrant, BacklogOrder, Canon, CheckCriterion, Comment, CreateEpic, CreatePlan,
         CreateTag, DeleteEpic, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic,
-        EpicProgress, Grants, List, Plan, PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
+        EpicProgress, Grants, List, Plan, PlanOrder, ProposeNewSpec, ProposeSpec, RevokeGrant,
+        Spec, Tags,
     };
     let project = match request.resource {
         Grants | AllowGrant | DenyGrant | RevokeGrant => return Ok(()),
         List if request.id.is_empty() => return Ok(()),
-        Spec | ProposeSpec | CheckCriterion | Activity | Comment | Plan | EditPlan | PlanOrder
-        | Epic | EpicProgress | EditEpic | DeleteEpic | EditTag | DeleteTag => {
+        Spec | ProposeSpec | ProposeNewSpec | CheckCriterion | Activity | Comment | Plan
+        | EditPlan | PlanOrder | Epic | EpicProgress | EditEpic | DeleteEpic | EditTag
+        | DeleteTag => {
             app.dependencies
                 .canon
                 .project_scope(request.resource, request.id.clone())

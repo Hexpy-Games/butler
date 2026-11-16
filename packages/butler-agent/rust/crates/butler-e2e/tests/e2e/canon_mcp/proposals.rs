@@ -72,3 +72,90 @@ async fn cn_11_mcp_proposals_preserve_chat_drafts_and_private_specs() -> Result<
     drop(db);
     s.finish().await
 }
+
+#[tokio::test]
+async fn cn_16_mcp_proposes_a_new_spec_and_the_owner_applies_it() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("CN-16")?.data_folder_token().start().await?;
+    let project = project(&s).await?;
+    trust(&s).await?;
+    let epic = call(
+        &s,
+        "canon_create_epic",
+        json!({"project":project,"title":"Export"}),
+    )
+    .await?;
+    let id = epic["id"].as_str().unwrap();
+    let invalid = call(
+        &s,
+        "canon_propose_spec",
+        json!({"epic_id":id,"body":"No title","summary":"Export design"}),
+    )
+    .await?;
+    assert!(
+        invalid["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("must start with")),
+        "{invalid}"
+    );
+    let detail = s.gw.get(&format!("/canon/epics/{id}")).await?;
+    assert_eq!(detail.data()["proposals"], json!([]));
+    let body = "# Export design\n\nFirst draft";
+    let first = call(
+        &s,
+        "canon_propose_spec",
+        json!({"epic_id":id,"body":body,"summary":"Export design"}),
+    )
+    .await?;
+    let second = call(
+        &s,
+        "canon_propose_spec",
+        json!({"epic_id":id,"body":"# Other design\n\nSecond","summary":"Other design"}),
+    )
+    .await?;
+    assert_eq!(first["state"], "open", "{first}");
+    let detail = s.gw.get(&format!("/canon/epics/{id}")).await?;
+    let proposals = detail.data()["proposals"].as_array().unwrap();
+    assert_eq!(proposals.len(), 2, "{second}");
+    assert!(proposals.iter().all(|p| p["current_body"].is_null()));
+    assert_eq!(detail.data()["specs"], json!([]));
+    assert_eq!(
+        call(&s, "canon_get_epic", json!({"epic_id":id})).await?["specs"],
+        json!([])
+    );
+    let declined =
+        s.gw.post(
+            &format!("/canon/proposals/{}", second["id"].as_str().unwrap()),
+            json!({"outcome":"declined"}),
+        )
+        .await?;
+    assert_eq!(declined.status, 200, "{}", declined.text);
+    let accepted =
+        s.gw.post(
+            &format!("/canon/proposals/{}", first["id"].as_str().unwrap()),
+            json!({"outcome":"accepted"}),
+        )
+        .await?;
+    assert_eq!(accepted.data()["ok"], true, "{}", accepted.text);
+    let epic = call(&s, "canon_get_epic", json!({"epic_id":id})).await?;
+    let specs = epic["specs"].as_array().unwrap();
+    assert_eq!(specs.len(), 1);
+    assert_eq!(specs[0]["title"], "Export design");
+    let spec = call(&s, "canon_get_spec", json!({"spec_id":specs[0]["id"]})).await?;
+    assert_eq!(spec["body"], body);
+    let revised = "# Export design\n\nRevised draft";
+    let edit = call(&s, "canon_propose_spec_change", json!({"spec_id":spec["id"],"base_revision":spec["revision"],"body":revised,"summary":"Revise export"})).await?;
+    assert_eq!(edit["state"], "open", "{edit}");
+    let accepted =
+        s.gw.post(
+            &format!("/canon/proposals/{}", edit["id"].as_str().unwrap()),
+            json!({"outcome":"accepted"}),
+        )
+        .await?;
+    assert_eq!(accepted.data()["ok"], true, "{}", accepted.text);
+    assert_eq!(
+        call(&s, "canon_get_spec", json!({"spec_id":spec["id"]})).await?["body"],
+        revised
+    );
+    s.finish().await
+}

@@ -11,7 +11,7 @@ export function CanonProposalChanges({ changes }: { changes: CanonProposal["chan
   const labels: Record<string, string> = {
     "epic.delete": deletion.deleteEpic, "epic.edit": proposalCard.ops.epicEdit, "epic.move": proposalCard.ops.epicMove,
     "plan.create": proposalCard.ops.planCreate, "plan.edit": proposalCard.ops.planEdit,
-    "plan.reorder": proposalCard.ops.planReorder, "spec.edit": proposalCard.ops.specEdit,
+    "plan.reorder": proposalCard.ops.planReorder, "spec.edit": proposalCard.ops.specEdit, "spec.create": proposalCard.ops.specCreate,
   };
   const visible = changes.filter(change => labels[change.op]);
   if (visible.length === 0) return null;

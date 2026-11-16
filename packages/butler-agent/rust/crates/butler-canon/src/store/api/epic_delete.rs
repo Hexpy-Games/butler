@@ -15,6 +15,8 @@ pub(super) fn delete(tx: &Transaction<'_>, ctx: &Context, id: &str, value: Value
     if runtime::epic_delete_running(tx, id)? {
         return Err(Error::Running);
     }
+    // Draft events must precede the delete event, which is the last word on this id.
+    stale_spec_drafts(tx, ctx, id)?;
     // Snapshot the identity for the durable outbox before removing the row.
     event_with_details(
         tx,
@@ -24,7 +26,6 @@ pub(super) fn delete(tx: &Transaction<'_>, ctx: &Context, id: &str, value: Value
     )?;
     super::super::queue::epic_deleted(tx, ctx, id)?;
     settle_panels(tx, ctx, id)?;
-    stale_spec_drafts(tx, ctx, id)?;
     for sql in [
         "DELETE FROM canon_intents WHERE json_extract(payload_json,'$.work_id')=?1",
         "DELETE FROM canon_session_epics WHERE epic_id=?1",
@@ -84,12 +85,17 @@ fn settle_panels(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
 }
 
 fn stale_spec_drafts(tx: &Transaction<'_>, ctx: &Context, id: &str) -> Result<()> {
-    for node in rows(
+    let nodes = rows(
         tx,
         "SELECT node_id FROM canon_spec_nodes WHERE epic_id=?1",
         [id],
-    )? {
-        for draft in rows(tx, super::sql::OPEN_MCP_SPEC, [text(&node, "node_id")?])? {
+    )?;
+    for target in nodes
+        .iter()
+        .map(|node| text(node, "node_id"))
+        .chain(std::iter::once(Ok(id)))
+    {
+        for draft in rows(tx, super::sql::OPEN_MCP_SPEC, [target?])? {
             super::super::proposals::transition(tx, ctx, text(&draft, "id")?, "stale", None)?;
         }
     }
