@@ -12,10 +12,6 @@ impl Global for AppSettings {}
 
 impl AppSettings {
     /// The current settings; `None` until the first load.
-    #[expect(
-        dead_code,
-        reason = "read by the wallpaper surfaces in the next change"
-    )]
     pub(crate) fn get(cx: &App) -> Option<Rc<Value>> {
         cx.try_global::<Self>()
             .and_then(|settings| settings.0.clone())

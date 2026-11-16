@@ -187,13 +187,15 @@ impl Metrics {
             .min(width - self.keep_out - 2. * self.inset)
             .max(0.);
         let shift = self.keep_out / 2.;
+        let column_left = ((width - column) / 2. - shift).max(0.);
         ConversationVars {
             // The page has no conversation scroll whose motion this keys.
             motion_id: None,
             composer_reserve: reserve,
             width,
             column_width: if width > 0. { column } else { 0. },
-            column_left: ((width - column) / 2. - shift).max(0.),
+            column_left,
+            column_right: column_left + column,
             column_shift: shift,
             top_reserve: 0.,
         }
