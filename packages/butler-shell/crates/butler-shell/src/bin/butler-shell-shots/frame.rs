@@ -47,13 +47,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "expect-clipboard" => expect_clipboard(h, arg),
         "expect-clipboard-prefix" => expect_clipboard_prefix(h, arg),
         "expect-clipboard-contains" => expect_clipboard_contains(h, arg),
-        "expect-scale" => {
-            let scale: f32 = arg.parse()?;
-            let actual =
-                h.cx.update(|cx| butler_ds::ui::context::Ds::get(cx).tokens().ui_scale);
-            ensure!(actual == scale, "scale {actual}, expected {scale}");
-            Ok(())
-        }
+        "expect-scale" => expect_scale(h, arg.parse()?),
         "expect-session" => h.update(|s, _, cx| {
             assert_eq!(
                 s.store.selected().map(|c| c.session.0.as_ref()),
@@ -147,6 +141,27 @@ fn wait_anchor(h: &mut Harness, anchor: &str, shown: bool) -> anyhow::Result<()>
             std::time::Instant::now() < deadline,
             "anchor {anchor} did not {}",
             if shown { "show" } else { "go" }
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
+/// `expect-scale <n>`: real time passes until the DS scale and the window zoom both equal `n`
+/// (a size saved through the Agent lands as a live event), for at most 30 seconds.
+fn expect_scale(h: &mut Harness, scale: f32) -> anyhow::Result<()> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        settle(&mut h.cx, h.handle);
+        let actual =
+            h.cx.update(|cx| butler_ds::ui::context::Ds::get(cx).tokens().ui_scale);
+        let zoom =
+            h.cx.update(|cx| h.window.update(cx, |_, window, _| window.zoom()))?;
+        if actual == scale && zoom == scale {
+            return Ok(());
+        }
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "scale {actual}, zoom {zoom}, expected {scale}"
         );
         std::thread::sleep(std::time::Duration::from_millis(10));
     }

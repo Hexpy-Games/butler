@@ -231,12 +231,14 @@ fn drag(id: &TabId, press: &Press, cx: &mut App) {
     super::drag::start(items, cx);
     if press.ended {
         let _ = press.window.update(cx, |_, window, cx| {
+            // Reader coordinates are page pixels; gpui positions are content pixels.
+            let zoom = window.zoom();
             #[expect(
                 clippy::cast_possible_truncation,
                 reason = "CSS pointer coordinates fit f32"
             )]
             let position = press.origin
-                + gpui::point(gpui::px(press.at.0 as f32), gpui::px(press.at.1 as f32));
+                + gpui::point(gpui::px(press.at.0 as f32), gpui::px(press.at.1 as f32)) / zoom;
             window.dispatch_event(
                 gpui::PlatformInput::MouseUp(gpui::MouseUpEvent {
                     button: gpui::MouseButton::Left,
@@ -278,7 +280,8 @@ impl Press {
             ready: false,
             item: None,
             window: window.window_handle(),
-            origin: window.mouse_position() - gpui::point(gpui::px(x as f32), gpui::px(y as f32)),
+            origin: window.mouse_position()
+                - gpui::point(gpui::px(x as f32), gpui::px(y as f32)) / window.zoom(),
         }
     }
 }
