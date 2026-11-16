@@ -127,6 +127,7 @@ pub(super) async fn wait(
     epoch: u64,
 ) -> Value {
     let id = page.tab.as_str();
+    let named = turn.clone();
     let dialog = page.shared.with_tab(id, |t| {
         t.waiting_turn = turn;
         t.waiting = t.dialog.is_some();
@@ -136,7 +137,8 @@ pub(super) async fn wait(
         // The user takes the tab: it is neither reclaimed nor expired, from before
         // the hold is asked for.
         page.shared.with_tab(id, |t| t.held = true);
-        let hold = json!({"tab":id,"holder":"user","sticky":true,"reason":args["reason"]});
+        let hold =
+            json!({"tab":id,"holder":"user","sticky":true,"reason":args["reason"],"turn":named});
         return match host.call("page.hold", hold).await {
             Ok(_) => json!({"status":"user_control","tab":id,"epoch":epoch}),
             Err(_) => {
@@ -156,6 +158,7 @@ pub(super) async fn waiting(
     turn: Option<String>,
 ) -> Value {
     let id = page.tab.as_str();
+    let named = turn.clone();
     let waiting = page
         .shared
         .with_tab(id, |t| {
@@ -167,7 +170,10 @@ pub(super) async fn waiting(
     if let Some(host) = browser.host() {
         // A failed hold is ignored on purpose: the tab snapshot is the source of truth.
         let _ = host
-            .call("page.hold", json!({"tab":id,"waiting":waiting}))
+            .call(
+                "page.hold",
+                json!({"tab":id,"waiting":waiting,"turn":named}),
+            )
             .await;
     }
     json!({"status":"ok"})
