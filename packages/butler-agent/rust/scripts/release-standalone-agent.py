@@ -340,12 +340,14 @@ def merge(inputs: list[Path], output: Path) -> dict:
     for filename, schema in MANIFEST_FILES:
         artifacts: dict[str, dict] = {}
         versions = set()
+        channels = set()
         base: dict = {}
         for directory in inputs:
             envelope = _read_envelope(directory / filename, schema)
             base = envelope
             versions.add(envelope.get("version", envelope.get("agent_version")))
             for artifact in envelope.get("artifacts", []):
+                channels.add(artifact.get("channel"))
                 platform = artifact.get("platform")
                 if platform in artifacts:
                     raise SystemExit(f"{filename} has two artifacts for {platform}")
@@ -354,6 +356,8 @@ def merge(inputs: list[Path], output: Path) -> dict:
                 artifacts[platform] = artifact
         if len(versions) != 1:
             raise SystemExit(f"{filename} inputs disagree on the Agent version: {sorted(map(str, versions))}")
+        if len(channels) > 1:
+            raise SystemExit(f"{filename} inputs disagree on the update channel: {sorted(map(str, channels))}")
         merged[filename] = {**base, "artifacts": [artifacts[key] for key in sorted(artifacts)]}
     output.mkdir(parents=True, exist_ok=True)
     for filename, envelope in merged.items():
