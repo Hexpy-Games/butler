@@ -307,6 +307,7 @@ fn context_section(
             window.refresh();
         })
         .children(compact);
+    let row = crate::ui::widgets::anchor(gpui::div(), "session-context").child(row);
     section("context", layout, None, None, vec![row.into_any_element()])
 }
 
