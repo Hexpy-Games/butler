@@ -326,11 +326,21 @@ fn leading(bar: &mut TitlebarShell, m: &Metrics, ds: &Ds) -> Option<AnyElement> 
                 .into_any_element(),
             _ => {
                 let side = ds.len(Length::TypoAppTitleLineHeight);
-                // A grid track grows to its content, so a wider control sits at the box start.
-                slot.min_w(side)
-                    .h(side)
+                // The box stays side x side; its grid track (the inner div) grows to a wider
+                // control, which then starts at the box origin and overflows right and down.
+                let track = div()
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .justify_center()
+                    .min_w(side)
+                    .min_h(side)
+                    .child(content);
+                slot.size(side)
+                    .items_start()
+                    .justify_start()
                     .text_color(ds.color(Color::TextTertiary))
-                    .child(content)
+                    .child(track)
                     .into_any_element()
             }
         },
