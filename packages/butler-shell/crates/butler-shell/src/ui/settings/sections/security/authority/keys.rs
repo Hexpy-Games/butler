@@ -205,8 +205,9 @@ impl SecurityAuthority {
     }
 
     /// `useSavedKeys.replace`: the provider checks the new key first (`verify`), so a refused key
-    /// changes nothing. The client carries the API error code, but this inline check does not
-    /// read it (React's `keySaveFailure`), so every refusal reads as "couldn't save the key".
+    /// changes nothing. The client carries the API error code; React maps it with
+    /// `keySaveFailure`, but this inline check does not, so every refusal reads as "couldn't
+    /// save the key".
     pub(super) fn submit_replace(&mut self, cx: &mut Context<Self>) {
         let Some(id) = self.keys.replacing.clone() else {
             return;

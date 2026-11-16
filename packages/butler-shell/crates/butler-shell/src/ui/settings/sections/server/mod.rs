@@ -6,7 +6,7 @@ use butler_ds::ui::blocks::settings_section::{SettingsPage, SettingsSection, Set
 use butler_ds::ui::button::{Button, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
-use butler_ds::ui::toast;
+use butler_ds::ui::toast::{self, Toast};
 use butler_shell_client::Error;
 use gpui::{
     AnyView, App, AppContext as _, Context, IntoElement, ParentElement as _, PathPromptOptions,
@@ -78,10 +78,9 @@ impl ServerPage {
                 Save::default(),
                 cx,
             ),
-            Err(error) => {
+            Err(_) => {
                 let copy = words(Ds::get(cx).lang());
-                let next = crate::ui::i18n::errors::toast(cx, &error, copy.choose_failed);
-                toast::show(cx, next);
+                toast::show(cx, Toast::error(copy.choose_failed));
             }
         }
     }
