@@ -35,7 +35,7 @@ export interface ManagementPageProps extends DsBaseProps<FormHTMLAttributes<HTML
   scrollRef?: Ref<HTMLDivElement>;
   as?: ManagementPageElement;
   dataTestClass?: string;
-  /** Page width of the content (PageContainer); default caps at 72rem. */
+  /** Page width of the content (PageContainer); default caps at 72rem, `extra-wide` at 84rem (a five-lane board). */
   width?: PageContainerWidth;
   /**
    * A decorative layer behind the scrolling content, confined to the page

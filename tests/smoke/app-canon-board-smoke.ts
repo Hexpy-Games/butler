@@ -61,6 +61,15 @@ try {
           if (getComputedStyle(node).getPropertyValue("app-region") === "no-drag") return node.getAttribute("data-test-class") ?? node.tagName;
         return null;
       }), null, "Dashboard scroll content is not a no-drag region");
+      if (cell === "1440-light-plain") {
+        // A wide window shows every lane: the dashboard column grows to fit all five.
+        await page.setViewportSize({ width: 1920, height: 900 });
+        await page.waitForFunction(() => {
+          const lanes = document.querySelector('[data-test-class="canon-plan-lanes"]')!;
+          return lanes.scrollWidth <= lanes.clientWidth + 1;
+        });
+        await page.setViewportSize({ width, height: 900 });
+      }
       assert.equal(await board.getByText(/GitHub|가져오기|동기화됨|마일스톤/).count(), 0);
       assert.equal(await board.getByRole("radio").count(), 0);
       await verifyBoardSelector(page, server, projectId, planId, name, shots, () => openCanonBoard(page!));

@@ -75,7 +75,7 @@ export function ProjectDashboardView({
   if (status !== "ready") {
     const copy = appCopy.feedback;
     return (
-      <ManagementPage dataTestClass="project-dashboard-view" background={background} backgroundTreatment="none" onColumnRect={onColumnRect}>
+      <ManagementPage dataTestClass="project-dashboard-view" width="extra-wide" background={background} backgroundTreatment="none" onColumnRect={onColumnRect}>
         <div role="status" aria-live="polite" data-test-class="project-dashboard-status">
           <Notice tone={status === "error" ? "error" : "info"}
             title={status === "error" ? copy.dashboardFailed : status === "missing" ? copy.projectMissing : undefined}
@@ -91,7 +91,7 @@ export function ProjectDashboardView({
   }
 
   return (
-    <ManagementPage dataTestClass="project-dashboard-view" scrollRef={scrollRef} background={background} backgroundTreatment="none" onColumnRect={onColumnRect}
+    <ManagementPage dataTestClass="project-dashboard-view" width="extra-wide" scrollRef={scrollRef} background={background} backgroundTreatment="none" onColumnRect={onColumnRect}
       aside={project && selected ? layout => <CanonAside key={selected} projectId={project.id} epicId={selected} layout={layout} /> : null}
       asideFloatOpen={Boolean(selected)} asideLabel={appCopy.canon.epic}
       footerPlacement="overlay" footerReserve={composerHeight}
