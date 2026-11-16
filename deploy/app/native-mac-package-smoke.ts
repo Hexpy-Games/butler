@@ -20,6 +20,12 @@ export function verifyMacPackageMetadata(app: string, exactVersion: string, hard
     : readFileSync(join(resources, "app/package.json"), "utf8");
   const runtime = JSON.parse(content);
   if (runtime.version !== exactVersion) throw new Error("Packaged App lost its exact release version");
+  verifyMacBundlePayload(app, exactVersion, hardLinks);
+}
+
+/** Checks shared by every shell: numeric bundle versions, read-only Agent payload, process-role aliases. */
+export function verifyMacBundlePayload(app: string, exactVersion: string, hardLinks: boolean): void {
+  const resources = join(app, "Contents/Resources");
   for (const path of walk(app).filter((path) => path.endsWith(".app/Contents/Info.plist"))) {
     for (const key of ["CFBundleShortVersionString", "CFBundleVersion"]) {
       const result = spawnSync("/usr/libexec/PlistBuddy", ["-c", `Print :${key}`, path], { encoding: "utf8" });
@@ -42,6 +48,18 @@ export function verifyMacPackageMetadata(app: string, exactVersion: string, hard
         (hardLinks && (mode.dev !== statSync(binary).dev || mode.ino !== statSync(binary).ino))) {
       throw new Error(`Invalid packaged process role: ${role}`);
     }
+  }
+}
+
+export function verifyGpuiMacPackage(app: string, exactVersion: string, hardLinks: boolean): void {
+  verifyMacBundlePayload(app, exactVersion, hardLinks);
+  for (const path of [
+    "Contents/MacOS/Butler",
+    "Contents/MacOS/butler-cef-host",
+    "Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework",
+    "Contents/Frameworks/butler-cef-host Helper.app/Contents/MacOS/butler-cef-host Helper",
+  ]) {
+    if (!statSync(join(app, path), { throwIfNoEntry: false })?.isFile()) throw new Error(`gpui App is missing ${path}`);
   }
 }
 

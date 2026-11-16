@@ -1,0 +1,283 @@
+name: gpui macOS package
+
+on:
+  pull_request:
+    paths:
+      - packages/butler-app/scripts/release/gpui-mac-bundle.ts
+      - packages/butler-app/scripts/release/package-app-release.ts
+      - packages/butler-app/scripts/release/native-mac-manifest.ts
+      - packages/butler-app/scripts/release/native-mac-signing.ts
+      - packages/butler-app/scripts/release/gpui-mac-update-smoke.sh
+      - packages/butler-app/client/electron/scripts/normalize-mac-bundle.mjs
+      - packages/butler-agent/rust/crates/butler-platform/cef/stage.py
+      - packages/butler-agent/rust/crates/butler-platform/cef/src/mac.rs
+      - packages/butler-agent/rust/crates/butler-platform/cef/Cargo.toml
+      - packages/butler-agent/rust/crates/butler-platform/cef/fetch.py
+      - deploy/macos/electron.entitlements.plist
+      - deploy/macos/sign-and-notarize.sh
+      - deploy/app/smoke.ts
+      - deploy/app/native-mac-package-smoke.ts
+      - .github/workflows/gpui-macos-package.yml
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      release:
+        type: boolean
+        default: false
+        description: Developer ID sign and notarize, as a tagged release does
+      version:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: gpui-macos-package-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  versions:
+    runs-on: ubuntu-24.04
+    outputs:
+      from: ${{ steps.versions.outputs.from }}
+      to: ${{ steps.versions.outputs.to }}
+    steps:
+      - name: Select the published Electron preview and candidate version
+        id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import fnmatch, json, os, re, subprocess
+          pages = json.loads(subprocess.check_output([
+              'gh', 'api', '--paginate', '--slurp',
+              f"repos/{os.environ['GH_REPO']}/releases?per_page=100"], text=True))
+          releases = [r for page in pages for r in page if not r['draft']
+                      and re.fullmatch(r'v\d+\.\d+\.\d+-preview\.\d+', r['tag_name'])
+                      and any(fnmatch.fnmatchcase(a['name'], 'butler-app-*-darwin-arm64.dmg') for a in r['assets'])]
+          if not releases:
+              raise SystemExit('No published Electron preview with a macOS DMG')
+          latest = max(releases, key=lambda r: r['published_at'])
+          previous = latest['tag_name'][1:]
+          prefix, number = previous.rsplit('.', 1)
+          candidate = os.environ['REQUESTED_VERSION'].removeprefix('v') or f'{prefix}.{int(number) + 1}'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'from={previous}\nto={candidate}\n')
+          PY
+
+  agent:
+    needs: versions
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: '8'
+      BUTLER_GPUI_VERSION: ${{ needs.versions.outputs.to }}
+    steps:
+      - name: Verify the native runner
+        run: test "$(uname -m)" = arm64
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: static-ort
+          cache-key: gpui-package-darwin-arm64
+      - uses: ./.github/actions/bun-setup
+        with:
+          bun-version: 1.3.11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.3
+          cache: npm
+          cache-dependency-path: |
+            packages/butler-app/client/electron/package-lock.json
+            packages/butler-app/client/ui/package-lock.json
+      - name: Build the bundled App client
+        run: |
+          python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts
+          python3 .github/scripts/isolated.py npm --prefix packages/butler-app/client/ui run build
+      - name: Build the native Agent
+        working-directory: packages/butler-agent/rust
+        run: |
+          export GITHUB_REF_NAME="v$BUTLER_GPUI_VERSION"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --timings -j 8 --release --locked \
+            -p butler-agent --bin butler-agent --no-default-features --features static-ort
+          echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
+      - name: Prepare the native Agent payload
+        env:
+          BUTLER_NATIVE_PAYLOAD_WRITABLE: '1'
+          BUTLER_PACKAGED_APP_VERSION: ${{ needs.versions.outputs.to }}
+        run: |
+          export GITHUB_REF_NAME="v$BUTLER_GPUI_VERSION"
+          python3 .github/scripts/isolated.py node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs \
+            darwin arm64 "$RUNNER_TEMP/bundled-agent"
+          tar -C "$RUNNER_TEMP" -cf "$RUNNER_TEMP/gpui-agent.tar" bundled-agent
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpui-agent-darwin-arm64
+          path: ${{ runner.temp }}/gpui-agent.tar
+          if-no-files-found: error
+          compression-level: 0
+
+  shell:
+    needs: versions
+    runs-on: macos-15
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/butler-shell
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/gpui-package
+      BUTLER_APP_BUILD_VERSION: ${{ needs.versions.outputs.to }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Verify the native runner
+        run: test "$(uname -m)" = arm64
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install workspace toolchain
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal --component rustfmt --component clippy
+          echo "RUSTUP_TOOLCHAIN=$toolchain" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2.9.3
+        with:
+          workspaces: |
+            packages/butler-shell -> ../../target/gpui-package
+            packages/butler-agent/rust -> ../../../target/gpui-package
+          key: gpui-package-darwin-arm64
+          save-if: ${{ github.event_name == 'push' }}
+      - name: Locate CEF cache
+        run: echo "CEF_PATH=$RUNNER_TEMP/cef" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cef
+          key: cef-macos-${{ hashFiles('packages/butler-agent/rust/crates/butler-platform/cef/fetch.py') }}
+      - name: Fetch pinned CEF
+        working-directory: packages/butler-agent/rust
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 crates/butler-platform/cef/fetch.py --dest "$CEF_PATH"
+      - name: Build release shell
+        # The shell's cef feature reads CEF_PATH at build time.
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release --features cef --bin butler-shell
+      - name: Build CEF host
+        working-directory: packages/butler-agent/rust
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release -p butler-cef --features cef --bin butler-cef-host --target aarch64-apple-darwin
+      - name: Stage shell and CEF runtime
+        working-directory: packages/butler-agent/rust
+        run: |
+          python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 crates/butler-platform/cef/stage.py \
+            --cef "$CEF_PATH" --target "$CARGO_TARGET_DIR/aarch64-apple-darwin/release" --out "$RUNNER_TEMP/gpui-shell/cef-runtime"
+          python3 - <<'PY'
+          import os, shutil, sys
+          from pathlib import Path
+          sys.path.insert(0, 'crates/butler-platform/cef')
+          from fetch import VERSION, PINS
+          stage = Path(os.environ['RUNNER_TEMP']) / 'gpui-shell'
+          cef = Path(os.environ['CEF_PATH']) / VERSION / PINS[('Darwin', 'arm64')]['dir']
+          shutil.copy2(cef / 'CREDITS.html', stage / 'cef-runtime/CREDITS.html')
+          shutil.copy2(Path(os.environ['CARGO_TARGET_DIR']) / 'release/butler-shell', stage)
+          PY
+          tar -C "$RUNNER_TEMP" -cf "$RUNNER_TEMP/gpui-shell.tar" gpui-shell
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpui-shell-darwin-arm64
+          path: ${{ runner.temp }}/gpui-shell.tar
+          if-no-files-found: error
+          compression-level: 0
+
+  package:
+    needs: [versions, agent, shell]
+    runs-on: macos-15
+    timeout-minutes: 120
+    # The deploy environment holds the Apple signing secrets and admits only v* tags.
+    environment: ${{ inputs.release && 'deploy' || '' }}
+    env:
+      BUTLER_GPUI_VERSION: ${{ needs.versions.outputs.to }}
+    steps:
+      - name: Verify the native runner
+        run: test "$(uname -m)" = arm64
+      - name: Select the signing mode
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          if [ "$RELEASE" = true ]; then
+            echo "BUTLER_SIGN_REQUIRED=1" >> "$GITHUB_ENV"
+          else
+            {
+              echo "BUTLER_APP_RELEASE_SMOKE_MODE=ad-hoc"
+              echo "BUTLER_SIGN_IDENTITY=-"
+            } >> "$GITHUB_ENV"
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: gpui-agent-darwin-arm64
+          path: ${{ runner.temp }}/gpui-inputs
+      - uses: actions/download-artifact@v4
+        with:
+          name: gpui-shell-darwin-arm64
+          path: ${{ runner.temp }}/gpui-inputs
+      - uses: ./.github/actions/bun-setup
+        with:
+          bun-version: 1.3.11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.3
+          cache: npm
+          cache-dependency-path: |
+            packages/butler-app/client/electron/package-lock.json
+            packages/butler-app/client/ui/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install workspace toolchain for shell notices
+        working-directory: packages/butler-shell
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+      - name: Install App dependencies
+        run: python3 .github/scripts/isolated.py bun install --frozen-lockfile --ignore-scripts
+      # After every third-party install step: keychain and notary key exist only from here on.
+      - name: Set up macOS code signing
+        if: ${{ inputs.release }}
+        env:
+          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: deploy/macos/sign-and-notarize.sh setup
+      - name: Package the gpui App
+        timeout-minutes: 90
+        env:
+          BUTLER_NATIVE_AGENT_EXECUTABLE: ${{ runner.temp }}/bundled-agent/bin/butler-agent
+          BUTLER_NATIVE_UI_DIST: ${{ runner.temp }}/bundled-agent/resources/app-client/dist
+          BUTLER_SHELL_EXECUTABLE: ${{ runner.temp }}/gpui-shell/butler-shell
+          BUTLER_CEF_RUNTIME: ${{ runner.temp }}/gpui-shell/cef-runtime
+        run: |
+          export GITHUB_REF_NAME="v$BUTLER_GPUI_VERSION"
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/gpui-inputs/gpui-agent.tar"
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/gpui-inputs/gpui-shell.tar"
+          python3 .github/scripts/isolated.py bun run release:app:package -- \
+            --platform=darwin-arm64 --shell=gpui --out dist/release/app-macos-gpui \
+            --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${BUTLER_GPUI_VERSION}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpui-app-darwin-arm64
+          path: dist/release/app-macos-gpui/*
+          if-no-files-found: error
+      - name: Verify the gpui App release artifacts
+        run: |
+          export GITHUB_REF_NAME="v$BUTLER_GPUI_VERSION"
+          python3 .github/scripts/isolated.py bun run release:app:smoke -- \
+            --platform=darwin-arm64 --shell=gpui --out dist/release/app-macos-gpui
+      - name: Remove the signing keychain and keys
+        if: ${{ always() && inputs.release }}
+        run: deploy/macos/sign-and-notarize.sh cleanup

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import type { MacAppShell } from "./native-mac-manifest.ts";
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
 const MAC_APP_BUNDLE_IDENTIFIER = "com.hexpy.butler";
@@ -49,8 +50,8 @@ function readPlistString(plistPath: string, key: string): string | null {
   return result.stdout.trim() || null;
 }
 
-export function normalizeMacBundle(root: string, appBundle: string): void {
-  const result = spawnSync("node", [join(root, MAC_NORMALIZE_SCRIPT), appBundle], {
+export function normalizeMacBundle(root: string, appBundle: string, shell: MacAppShell = "electron"): void {
+  const result = spawnSync("node", [join(root, MAC_NORMALIZE_SCRIPT), appBundle, ...(shell === "gpui" ? ["--shell=gpui"] : [])], {
     cwd: root,
     encoding: "utf8",
   });

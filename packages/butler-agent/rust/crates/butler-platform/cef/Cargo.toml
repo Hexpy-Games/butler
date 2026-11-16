@@ -17,7 +17,7 @@ cef-dll-sys = { version = "=156.2.0", default-features = false, features = ["san
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6.3", optional = true }
-objc2-app-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSApplication", "NSEvent", "NSResponder"] }
+objc2-app-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSApplication", "NSEvent", "NSResponder", "NSRunningApplication"] }
 
 core-video = { version = "0.5.2", features = ["metal"], optional = true }
 core-foundation = { version = "0.10", optional = true }
