@@ -129,7 +129,8 @@ struct HttpState {
 #[derive(Clone)]
 struct Client {
     access: security::Access,
-    /// From this computer (see [`security::is_local_client`]).
+    /// From this computer (see [`security::is_local_client`]). Never for a
+    /// device token: it speaks for its paired device.
     local: bool,
     /// Sent the local admin credential (`X-Butler-Admin`).
     admin: bool,
@@ -236,6 +237,9 @@ async fn authorized_route(
     mut request: Request<Body>,
     origin: &security::RequestOrigin,
 ) -> Result<Response, HttpError> {
+    if *request.method() == Method::POST && request.uri().path() == security::DEVICE_PAIR_PATH {
+        return security::pair_device_request(&state, request).await;
+    }
     if matches!(*request.method(), Method::GET | Method::POST)
         && request.uri().path() == security::CONNECT_PATH
     {
@@ -262,10 +266,11 @@ async fn authorized_route(
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
         .map(|info| info.0);
+    let device_token = grant.access == security::Access::DeviceToken;
     let client = Client {
         access: grant.access,
-        local: security::is_local_client(peer, request.headers(), origin),
-        admin: state.security.is_admin(request.headers()),
+        local: !device_token && security::is_local_client(peer, request.headers(), origin),
+        admin: !device_token && state.security.is_admin(request.headers()),
         keys: grant.keys,
     };
     request.extensions_mut().insert(client.clone());

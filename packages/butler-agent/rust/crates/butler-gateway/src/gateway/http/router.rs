@@ -149,6 +149,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/command-palette", Handler::Shell),
     ("/connect", Handler::Connect),
     ("/connection-codes", Handler::ConnectionCodes),
+    ("/devices/pair", Handler::Connect),
     ("/context-details", Handler::Subsessions),
     ("/credentials", Handler::Setup),
     ("/credentials/{id}", Handler::Setup),
