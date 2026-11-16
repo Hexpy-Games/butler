@@ -106,7 +106,13 @@ impl Headless {
     /// reclaimed or expired.
     pub fn set_held(&self, tab: &str, held: bool) {
         if let Some(browser) = self.browser() {
-            browser.shared.with_tab(tab, |t| t.held = held);
+            browser.shared.with_tab(tab, |t| {
+                // The idle window restarts when the Agent gets the page back.
+                if t.held && !held {
+                    t.last_call = std::time::Instant::now();
+                }
+                t.held = held;
+            });
             browser.changed.notify_waiters();
         }
     }
