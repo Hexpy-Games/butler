@@ -24,16 +24,18 @@ struct Ghost {
 }
 #[cfg(feature = "cef")]
 impl Render for Ghost {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+        // Reader sizes are page pixels; gpui lays out content pixels.
+        let zoom = window.zoom();
         let pictures = self
             .pictures
             .iter()
             .cloned()
             .map(|(source, (w, h))| {
-                DragPreviewImage::new(w, h, move |scale| {
+                DragPreviewImage::new(w / zoom, h / zoom, move |scale| {
                     img(source.clone())
-                        .w(px(w * scale))
-                        .h(px(h * scale))
+                        .w(px(w / zoom * scale))
+                        .h(px(h / zoom * scale))
                         .object_fit(ObjectFit::Cover)
                         .into_any_element()
                 })
