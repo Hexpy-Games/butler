@@ -1,7 +1,9 @@
 //! Child OSR pages retain their opener and have their own gpui window.
 use super::{engine::TabId, model::BrowserState};
+use crate::lifecycle::window::{WindowMetrics, apply_text_scale, min_size, scaled_traffic_lights};
 use crate::ui::{i18n::browser::BrowserStrings, widgets::anchor};
 use butler_ds::ui::blocks::{page_card::PageCard, popup_window_chrome::PopupWindowChrome};
+use butler_ds::ui::context::Ds;
 use gpui::{
     App, AppContext, Bounds, Context, Global, IntoElement, ParentElement, Render, TitlebarOptions,
     Window, WindowBounds, WindowHandle, WindowOptions, div, point, prelude::*, px, size,
@@ -14,7 +16,14 @@ impl Global for PopupWindows {}
 struct PopupWindow {
     id: TabId,
     focus: gpui::FocusHandle,
+    scale: Option<f32>,
 }
+
+/// The popup window's unscaled native metrics (Electron popups.mjs, popup-window.mjs).
+const POPUP: WindowMetrics = WindowMetrics {
+    buttons: (12., 13.),
+    minimum: (320., 240.),
+};
 
 pub(super) fn sync(cx: &mut App) {
     if !cx.has_global::<PopupWindows>() {
@@ -61,18 +70,20 @@ fn open(id: TabId, cx: &mut App) {
             size: popup_size,
         })
         .unwrap_or_else(|| Bounds::centered(None, popup_size, cx));
+    let scale = Ds::get(cx).tokens().ui_scale;
     let close = id.clone();
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
-        window_min_size: Some(size(px(320.), px(240.))),
+        window_min_size: Some(min_size(POPUP.minimum, scale, None)),
         titlebar: Some(TitlebarOptions {
             title: Some(BrowserStrings::get(cx).title.into()),
             appears_transparent: true,
-            traffic_light_position: Some(point(px(12.), px(13.))),
+            traffic_light_position: Some(scaled_traffic_lights(POPUP.buttons, scale)),
         }),
         ..WindowOptions::default()
     };
     match cx.open_window(options, |window, cx| {
+        window.set_zoom(scale, cx);
         window.on_window_should_close(cx, move |_, cx| {
             cx.update_global::<BrowserState, _>(|model, cx| model.close(&close, cx));
             cx.defer(sync);
@@ -84,6 +95,7 @@ fn open(id: TabId, cx: &mut App) {
             PopupWindow {
                 id: id.clone(),
                 focus,
+                scale: None,
             }
         })
     }) {
@@ -104,6 +116,11 @@ pub(super) fn focus(id: &TabId, cx: &mut App) {
 }
 impl Render for PopupWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let scale = Ds::get(cx).tokens().ui_scale;
+        if self.scale != Some(scale) {
+            self.scale = Some(scale);
+            apply_text_scale(window, &POPUP, scale, cx);
+        }
         let tab = cx.global::<BrowserState>().tab(&self.id).cloned();
         let Some(tab) = tab else {
             window.remove_window();
@@ -123,10 +140,11 @@ impl Render for PopupWindow {
         let id = tab.id.clone();
         let mut page = PageCard::new("popup-page").on_bounds_change(move |bounds, window, cx| {
             if bounds.visible {
+                let zoom = window.zoom();
                 cx.global_mut::<BrowserState>().resize(
                     &id,
-                    bounds.bounds.size,
-                    bounds.scale * window.scale_factor(),
+                    bounds.bounds.size.map(|length| length * zoom),
+                    bounds.scale * window.scale_factor() / zoom,
                 );
             }
         });

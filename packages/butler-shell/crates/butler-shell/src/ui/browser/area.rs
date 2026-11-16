@@ -142,10 +142,11 @@ fn page(tab: Option<&Tab>, window: &mut Window, cx: &mut App) -> PageCard {
         }
         page = page.on_bounds_change(move |bounds, window, cx| {
             if bounds.visible {
+                let zoom = window.zoom();
                 cx.global_mut::<BrowserState>().resize(
                     &id,
-                    bounds.bounds.size,
-                    bounds.scale * window.scale_factor(),
+                    bounds.bounds.size.map(|length| length * zoom),
+                    bounds.scale * window.scale_factor() / zoom,
                 );
             }
         });

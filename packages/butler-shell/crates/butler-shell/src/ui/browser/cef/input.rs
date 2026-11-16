@@ -2,7 +2,8 @@ use super::surface::Page;
 use butler_cef_host::osr::{OsrButton, OsrKey, OsrModifiers, OsrMouse, OsrMouseKind, OsrWheel};
 use gpui::{
     Context, Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
-    MouseUpEvent, NativeKeyData, Pixels, Point, ScrollWheelEvent, Window, WindowsKeyData, px,
+    MouseUpEvent, NativeKeyData, Pixels, Point, ScrollDelta, ScrollWheelEvent, Window,
+    WindowsKeyData, px,
 };
 
 impl Page {
@@ -13,11 +14,13 @@ impl Page {
         button: Option<MouseButton>,
         kind: OsrMouseKind,
         clicks: usize,
+        zoom: f32,
     ) {
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };
-        let point = position - self.state.borrow().bounds.origin;
+        // Page pixels are native logical pixels: content pixels times the window zoom.
+        let point = (position - self.state.borrow().bounds.origin) * zoom;
         runtime.mouse(
             self.id,
             OsrMouse {
@@ -47,41 +50,70 @@ impl Page {
             Some(e.button),
             OsrMouseKind::Down,
             e.click_count,
+            window.zoom(),
         );
     }
-    pub(super) fn mouse_up(&mut self, e: &MouseUpEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn mouse_up(
+        &mut self,
+        e: &MouseUpEvent,
+        window: &mut Window,
+        _: &mut Context<Self>,
+    ) {
         self.mouse(
             e.position,
             e.modifiers,
             Some(e.button),
             OsrMouseKind::Up,
             e.click_count,
+            window.zoom(),
         );
     }
-    pub(super) fn mouse_move(&mut self, e: &MouseMoveEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn mouse_move(
+        &mut self,
+        e: &MouseMoveEvent,
+        window: &mut Window,
+        _: &mut Context<Self>,
+    ) {
         self.mouse(
             e.position,
             e.modifiers,
             e.pressed_button,
             OsrMouseKind::Move,
             0,
+            window.zoom(),
         );
     }
-    pub(super) fn mouse_exit(&mut self, e: &MouseExitEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn mouse_exit(
+        &mut self,
+        e: &MouseExitEvent,
+        window: &mut Window,
+        _: &mut Context<Self>,
+    ) {
         self.mouse(
             e.position,
             e.modifiers,
             e.pressed_button,
             OsrMouseKind::Leave,
             0,
+            window.zoom(),
         );
     }
-    pub(super) fn wheel(&mut self, e: &ScrollWheelEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn wheel(
+        &mut self,
+        e: &ScrollWheelEvent,
+        window: &mut Window,
+        _: &mut Context<Self>,
+    ) {
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };
-        let point = e.position - self.state.borrow().bounds.origin;
-        let delta = e.delta.pixel_delta(px(line()));
+        let zoom = window.zoom();
+        let point = (e.position - self.state.borrow().bounds.origin) * zoom;
+        // Pixel deltas arrive in content pixels; line deltas become native pixels through `line()`.
+        let delta = match e.delta {
+            ScrollDelta::Pixels(delta) => delta * zoom,
+            ScrollDelta::Lines(_) => e.delta.pixel_delta(px(line())),
+        };
         runtime.wheel(
             self.id,
             OsrWheel {

@@ -72,7 +72,12 @@ impl Shell {
         let scale = Ds::get(cx).tokens().ui_scale;
         if self.frame.scale != Some(scale) {
             self.frame.scale = Some(scale);
-            crate::lifecycle::window::apply_text_scale(window, scale, cx);
+            crate::lifecycle::window::apply_text_scale(
+                window,
+                &crate::lifecycle::window::MAIN,
+                scale,
+                cx,
+            );
         }
         let size = window.viewport_size();
         let drawer = f32::from(size.width) <= 640.;
