@@ -1,6 +1,8 @@
 #![allow(clippy::transmute_ptr_to_ptr, reason = "cef-rs wrap macros")]
 #[cfg(windows)]
 use super::d3d::copy_frame;
+#[cfg(target_os = "linux")]
+use super::soft;
 #[cfg(target_os = "macos")]
 use super::{
     OsrError,
@@ -26,6 +28,23 @@ cef::wrap_render_handler! {
         fn screen_info(&self, _browser: Option<&mut Browser>, info: Option<&mut ScreenInfo>) -> i32 {
             if let Some(info) = info { info.device_scale_factor = self.shared.borrow().scale.max(1.); 1 } else { 0 }
         }
+        #[cfg(target_os = "linux")]
+        fn on_paint(&self, _browser: Option<&mut Browser>, kind: PaintElementType,
+            dirty: Option<&[Rect]>, buffer: *const u8, width: i32, height: i32) {
+            if kind != PaintElementType::VIEW { return; }
+            if buffer.is_null() || width <= 0 || height <= 0 { return; }
+            {
+                let mut p = self.shared.borrow_mut();
+                if !p.visible || p.closing { return; }
+                let len = width.unsigned_abs() as usize * height.unsigned_abs() as usize * 4;
+                #[allow(unsafe_code, reason = "CEF's paint buffer is a raw pointer")]
+                // SAFETY: CEF passes a `width * height * 4`-byte BGRA buffer valid for the callback.
+                let pixels = unsafe { std::slice::from_raw_parts(buffer, len) };
+                soft::paint(&mut p, dirty.unwrap_or_default(), pixels, width, height);
+            }
+            self.events.emit(OsrEvent::Frame);
+        }
+        #[cfg(not(target_os = "linux"))]
         fn on_accelerated_paint(&self, _browser: Option<&mut Browser>, kind: PaintElementType,
             _dirty: Option<&[Rect]>, info: Option<&AcceleratedPaintInfo>) {
             // Browser popups are cancelled by Life; VIEW is the page's surface.

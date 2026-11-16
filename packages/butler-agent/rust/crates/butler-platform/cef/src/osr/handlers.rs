@@ -9,7 +9,7 @@ use std::rc::Weak;
 
 #[cfg(target_os = "macos")]
 type NativeCursor = *mut u8;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 type NativeCursor = CursorHandle;
 
 pub(super) fn client(shared: PageRef, events: Events, runtime: &Weak<RuntimeState>) -> Client {
