@@ -14,7 +14,7 @@ use gpui::{AnyElement, App, Window};
 use crate::ui::source::wire::SessionView;
 
 pub(crate) use authority::{initiated_approval, on_authority_changed};
-pub(crate) use browser::browser_step_still;
+pub(crate) use browser::{browser_step_still, stop_conversation};
 pub(crate) use canon::InitiatedHooks;
 pub(crate) use canon::{
     canon_proposal_cards, initiated_approval_line, initiated_panels, turn_decision_row,

@@ -1,5 +1,6 @@
 //! BrowserArea's ordered owner groups and TabStrip callbacks.
 use super::{
+    agent_host::Hosted,
     area::{AreaState, create, owner_key, result, title},
     engine::TabId,
     model::{BrowserState, Owner, Tab, TabStatus},
@@ -12,6 +13,7 @@ use gpui::{AnyElement, App, Entity, Window, div, prelude::*};
 fn groups(tabs: &[Tab], state: &AreaState, cx: &App) -> Vec<Group> {
     let copy = BrowserStrings::get(cx);
     let mut groups: Vec<Group> = Vec::new();
+    let mut states: Vec<Option<GroupState>> = Vec::new();
     for tab in tabs {
         let key = owner_key(&tab.owner);
         let index = groups
@@ -29,21 +31,36 @@ fn groups(tabs: &[Tab], state: &AreaState, cx: &App) -> Vec<Group> {
                         .label(label)
                         .collapsed(state.collapsed.contains(&key)),
                 );
+                states.push(None);
                 groups.len() - 1
             });
         let mut item = StripTab::new(tab.id.0.clone(), tab.title.clone());
         if !tab.favicon.is_empty() {
             item = item.favicon(Favicon::Image(tab.favicon.clone().into()));
         }
+        let busy = tab.hosted.as_ref().is_some_and(Hosted::busy);
         item = match tab.status {
+            _ if busy => item.state(TabState::Working),
             TabStatus::Loading => item.state(TabState::Loading),
             TabStatus::Crashed => item.state(TabState::Crashed),
             TabStatus::Idle => item,
         };
+        // Electron `BrowserArea`: a waiting tab marks its group; else its first busy or crashed tab.
+        let group = &mut states[index];
+        if tab.hosted.as_ref().is_some_and(|hosted| hosted.waiting) {
+            *group = Some(GroupState::Waiting);
+        } else if busy {
+            group.get_or_insert(GroupState::Working);
+        }
         if tab.status == TabStatus::Crashed {
-            groups[index] = groups[index].clone().state(GroupState::Crashed);
+            group.get_or_insert(GroupState::Crashed);
         }
         groups[index].push_tab(item);
+    }
+    for (group, state) in groups.iter_mut().zip(states) {
+        if let Some(state) = state {
+            *group = group.clone().state(state);
+        }
     }
     let mut index = 0;
     for group in &mut groups {

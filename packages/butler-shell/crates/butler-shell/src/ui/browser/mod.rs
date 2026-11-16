@@ -11,6 +11,7 @@ mod dialog;
 #[cfg(feature = "cef")]
 pub(crate) mod downloads;
 pub(crate) mod engine;
+mod holder_band;
 mod host;
 pub(crate) mod model;
 mod new_tab;
@@ -76,12 +77,31 @@ pub(crate) fn open_conversation_link(session: Option<&str>, url: &str, cx: &mut 
         });
         area::result(&value, cx);
         if let Ok(Some(id)) = value {
-            cx.global_mut::<shell_state::BrowserShell>()
-                .remember_tab(session, id);
-            shell_state::open_conversation(session, cx);
+            open_tab(session, id, cx);
         }
     } else {
         // `openConversationLink` without a public conversation is `openLink`.
         open_link(url, cx);
     }
+}
+
+/// Electron `openHandoffTab`: the conversation's hosted tab at a human step, else one the Agent
+/// waits on, else its first hosted tab.
+pub(crate) fn handoff_tab(session: &str, cx: &gpui::App) -> Option<engine::TabId> {
+    let owner = model::Owner::Conversation(session.to_owned().into());
+    let hosted: Vec<_> = (cx.try_global::<model::BrowserState>()?.tabs().iter())
+        .filter(|tab| tab.owner == owner)
+        .filter_map(|tab| Some((&tab.id, tab.hosted.as_ref()?)))
+        .collect();
+    (hosted.iter().find(|(_, hosted)| hosted.step.is_some()))
+        .or_else(|| hosted.iter().find(|(_, hosted)| hosted.waiting))
+        .or(hosted.first())
+        .map(|(id, _)| (*id).clone())
+}
+
+/// Opens the conversation's browser on `tab`.
+pub(crate) fn open_tab(session: &str, tab: engine::TabId, cx: &mut gpui::App) {
+    cx.global_mut::<shell_state::BrowserShell>()
+        .remember_tab(session, tab);
+    shell_state::open_conversation(session, cx);
 }

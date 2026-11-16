@@ -10,10 +10,6 @@ use gpui::App;
 pub(crate) use control::Step;
 #[cfg(feature = "cef")]
 pub(super) use control::{Gate, Input};
-#[allow(
-    unused_imports,
-    reason = "the browser band reads it in the next change"
-)]
 pub(crate) use control::{ShownHolder, shown_holder};
 pub(super) use relay::{closed, page_changed};
 

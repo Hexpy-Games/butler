@@ -87,12 +87,12 @@ impl EntityInputHandler for Page {
             .get(requested.start.saturating_sub(start))
             .or_else(|| state.ime_bounds.last())?;
         // CEF reports page pixels; the window works in content pixels.
-        let zoom = window.zoom();
+        let (x, y) = state.page_scale(window.zoom());
         Some(Bounds::new(
-            bounds.origin + point(px(rect.x as f32 / zoom), px(rect.y as f32 / zoom)),
+            bounds.origin + point(px(rect.x as f32 / x), px(rect.y as f32 / y)),
             size(
-                px(rect.width.max(1) as f32 / zoom),
-                px(rect.height.max(1) as f32 / zoom),
+                px(rect.width.max(1) as f32 / x),
+                px(rect.height.max(1) as f32 / y),
             ),
         ))
     }

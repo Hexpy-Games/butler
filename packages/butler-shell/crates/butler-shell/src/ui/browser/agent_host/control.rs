@@ -26,7 +26,6 @@ impl Step {
 }
 
 /// The holder the page shows (Electron `browserHolder`).
-#[allow(dead_code, reason = "the browser band reads it in the next change")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ShownHolder {
     None,
@@ -36,7 +35,6 @@ pub(crate) enum ShownHolder {
 }
 
 /// You hold the page: shown only while a Butler turn is paused on it, not for your own browsing.
-#[allow(dead_code, reason = "the browser band reads it in the next change")]
 pub(crate) fn shown_holder(tab: &Tab) -> ShownHolder {
     let Some(hosted) = tab.hosted.as_ref().filter(|hosted| !hosted.internal) else {
         return ShownHolder::None;
