@@ -113,13 +113,13 @@ pub(crate) fn join_from_command_line() -> Option<i32> {
     None
 }
 
-/// Whether this process should join the App's job: it is in no job (the query fails), or its
-/// own (innermost) job holds the App's process. When the job cannot be read it joins: a helper
-/// that outlives the App is the bug this prevents.
+/// Whether this process should join the App's job: it is in no job (the query fails or lists no
+/// one), or its own (innermost) job holds the App's process. When the job cannot be read it
+/// joins: a helper that outlives the App is the bug this prevents.
 fn joins(app: u32) -> bool {
     let mut capacity = 512;
     for _ in 0..3 {
-        // The header (two u32) is one `usize` slot on 64-bit hosts; the ids follow it.
+        // The header (two u32) takes one `usize` slot on 64-bit, two on 32-bit; the ids follow.
         let mut buffer = vec![0_usize; capacity + 2];
         let bytes = u32::try_from(buffer.len() * size_of::<usize>()).unwrap_or(u32::MAX);
         // SAFETY: `buffer` holds `bytes` bytes, aligned for the list struct; a null job handle
@@ -134,9 +134,10 @@ fn joins(app: u32) -> bool {
             )
         };
         let list = buffer.as_ptr().cast::<JOBOBJECT_BASIC_PROCESS_ID_LIST>();
-        // SAFETY: the call filled the header (also on ERROR_MORE_DATA). `buffer` holds `capacity`
-        // ids after the header and `listed` is at most `capacity`, so the slice of `listed` ids
-        // lies inside it; the id pointer is taken without a reference to the one-id array field.
+        // SAFETY: `buffer` is zeroed, so the header is readable whether or not the call wrote it
+        // (it does on success and on ERROR_MORE_DATA). It holds at least `capacity` ids after the
+        // 8-byte header on 32- and 64-bit and `listed` is at most `capacity`, so the slice lies
+        // inside it; the id pointer is taken without a reference to the one-id array field.
         let (assigned, ids) = unsafe {
             let listed = ((*list).NumberOfProcessIdsInList as usize).min(capacity);
             (
@@ -148,7 +149,8 @@ fn joins(app: u32) -> bool {
             )
         };
         match queried {
-            Ok(()) => return ids.contains(&(app as usize)),
+            // A process in a job is always in its own list: an empty one means no job.
+            Ok(()) => return ids.is_empty() || ids.contains(&(app as usize)),
             Err(error) if error.code() == ERROR_MORE_DATA.to_hresult() => capacity = assigned + 16,
             Err(_) => return true,
         }
