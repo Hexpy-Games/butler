@@ -114,9 +114,10 @@ pub(crate) struct BrowserState {
 impl Global for BrowserState {}
 
 impl BrowserState {
-    pub(crate) fn init(cx: &mut App) {
+    /// `adapter`: the LUID of the GPU adapter that draws the page frames (`browser::init`).
+    pub(crate) fn init(adapter: Option<u64>, cx: &mut App) {
         let (sender, mut receiver) = mpsc::unbounded();
-        let engine = Self::engine(sender, cx);
+        let engine = Self::engine(sender, adapter, cx);
         let publisher = super::host::Publisher::start(cx);
         cx.set_global(Self {
             publisher,
@@ -137,13 +138,17 @@ impl BrowserState {
         .detach();
     }
 
-    fn engine(sender: mpsc::UnboundedSender<PageEvent>, cx: &mut App) -> Box<dyn PageEngine> {
+    fn engine(
+        sender: mpsc::UnboundedSender<PageEvent>,
+        adapter: Option<u64>,
+        cx: &mut App,
+    ) -> Box<dyn PageEngine> {
         #[cfg(feature = "cef")]
-        match super::cef::CefEngine::start(sender.clone(), cx) {
+        match super::cef::CefEngine::start(sender.clone(), adapter, cx) {
             Ok(engine) => return Box::new(engine),
             Err(error) => eprintln!("CEF unavailable: {error}"),
         }
-        let _ = cx;
+        let _ = (adapter, cx);
         Box::new(PlaceholderEngine::new(sender))
     }
 
