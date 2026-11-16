@@ -18,6 +18,11 @@ pub struct OsrConfig {
     pub locale: String,
     /// Full User-Agent string, built by the caller.
     pub user_agent: String,
+    /// Windows: the LUID of the GPU adapter that consumes the frames (the renderer of the window
+    /// that shows them), `HighPart` in the upper 32 bits. Shared textures and fences cannot be
+    /// opened across adapters, so the copy device and CEF's GPU process both follow it. `None`
+    /// keeps both on the default adapter. Ignored on macOS.
+    pub adapter_luid: Option<u64>,
 }
 
 #[derive(Debug)]
