@@ -1,4 +1,4 @@
-import { createContext, useContext, type ComponentRef, type RefObject } from "react";
+import { createContext, useContext, useState, type ComponentRef, type RefObject } from "react";
 import { PixelRatio, Platform, StyleSheet, View } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
@@ -13,10 +13,11 @@ export const GlassTarget = createContext<RefObject<ComponentRef<typeof View> | n
 // `--tinted-glass-blur` (4px) as a fraction of the ~30pt system blur.
 const GLASS_BLUR_IOS = 14;
 
-/** The glass layers: a blur, a fill, a tinted centre and two edge fades. Without a blur it is a plain --popover fill. */
+/** The glass layers: a blur, a fill and one tint gradient with edge fades. Without a blur it is a plain --popover fill. */
 export function GlassFill({ radii, fadeTop = true, fadeBottom = true }: { radii: Radii; fadeTop?: boolean; fadeBottom?: boolean }) {
   const t = useTokens();
   const target = useContext(GlassTarget);
+  const [h, setH] = useState(0);
   const canBlur = Platform.OS === "ios" || (Platform.OS === "android" && Number(Platform.Version) >= 31 && target != null);
   const edge = t.length("--tinted-glass-edge-size");
   const border = t.length("--border-hairline");
@@ -25,6 +26,7 @@ export function GlassFill({ radii, fadeTop = true, fadeBottom = true }: { radii:
   return (
     <View
       pointerEvents="none"
+      onLayout={(event) => setH(event.nativeEvent.layout.height)}
       style={{
         ...StyleSheet.absoluteFill,
         overflow: "hidden",
@@ -45,12 +47,12 @@ export function GlassFill({ radii, fadeTop = true, fadeBottom = true }: { radii:
           blurTarget={target ?? undefined}
         />
       ) : null}
-      {canBlur ? <View style={{ ...StyleSheet.absoluteFill, top: fadeTop ? edge : 0, bottom: fadeBottom ? edge : 0, backgroundColor: tint }} /> : null}
-      {canBlur && fadeTop ? (
-        <LinearGradient colors={[clear, tint]} style={{ position: "absolute", top: 0, left: 0, right: 0, height: edge }} />
-      ) : null}
-      {canBlur && fadeBottom ? (
-        <LinearGradient colors={[tint, clear]} style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: edge }} />
+      {canBlur && h > 0 ? (
+        <LinearGradient
+          style={StyleSheet.absoluteFill}
+          colors={[fadeTop ? clear : tint, tint, tint, fadeBottom ? clear : tint]}
+          locations={[0, fadeTop ? Math.min(edge / h, 0.5) : 0, 1 - (fadeBottom ? Math.min(edge / h, 0.5) : 0), 1]}
+        />
       ) : null}
     </View>
   );
