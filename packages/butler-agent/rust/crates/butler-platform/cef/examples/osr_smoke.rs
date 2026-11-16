@@ -7,6 +7,7 @@ mod smoke {
     use std::{
         cell::RefCell,
         error::Error,
+        io::Write,
         path::PathBuf,
         rc::Rc,
         sync::{
@@ -16,39 +17,119 @@ mod smoke {
         time::{Duration, Instant},
     };
 
+    /// What a `--kill-check` child prints once it has a frame, its helpers and its job.
+    const READY: &str = "kill-check ready";
     /// Every helper that carries our job's name is in it, or was already in another job; the job
     /// kills on close (`crate::job`).
     #[cfg(windows)]
     #[allow(unsafe_code, reason = "process and job queries; see SAFETY comments")]
     mod in_job {
-        use std::{error::Error, ffi::c_void};
-        use windows::Win32::Foundation::{CloseHandle, HANDLE};
+        use std::{
+            error::Error,
+            ffi::c_void,
+            io::BufRead,
+            os::windows::io::AsRawHandle,
+            time::{Duration, Instant},
+        };
+        use windows::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
         use windows::Win32::System::JobObjects::{
             IsProcessInJob, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
             JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
             OpenJobObjectW, QueryInformationJobObject,
         };
-        use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+        use windows::Win32::System::Threading::{
+            OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, WaitForSingleObject,
+        };
         use windows::core::{BOOL, HSTRING};
         /// `JOB_OBJECT_QUERY` (winnt.h).
         const JOB_OBJECT_QUERY: u32 = 0x4;
 
-        /// The pids of the `butler_cef_host.exe` processes whose command line names the job.
-        fn helpers(name: &str) -> Result<Vec<u32>, Box<dyn Error>> {
-            let script = "Get-CimInstance Win32_Process -Filter \"Name='butler_cef_host.exe'\" | ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }";
+        /// The `(pid, command line)` of the `butler_cef_host.exe` processes whose `--{switch}=` value
+        /// (quoted or not) is `value`.
+        fn helpers(switch: &str, value: &str) -> Result<Vec<(u32, String)>, Box<dyn Error>> {
+            // `Stop`: a failed query must fail the process, not print nothing.
+            let script = "$ErrorActionPreference='Stop'; Get-CimInstance Win32_Process -Filter \"Name='butler_cef_host.exe'\" | ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }";
             let list = std::process::Command::new("powershell")
                 .args(["-NoProfile", "-Command", script])
                 .output()?;
+            if !list.status.success() {
+                return Err(format!(
+                    "helper query failed: {}",
+                    String::from_utf8_lossy(&list.stderr)
+                )
+                .into());
+            }
+            let prefix = format!("--{switch}=");
             Ok(String::from_utf8_lossy(&list.stdout)
                 .lines()
-                .filter(|line| {
-                    line.contains(&format!(
-                        "--{}=\"{name}\"",
-                        butler_cef_host::switches::OSR_JOB
-                    ))
+                .filter_map(|line| {
+                    let (pid, cmd) = line.split_once(' ')?;
+                    let token = cmd.split(prefix.as_str()).nth(1)?.trim_start_matches('"');
+                    (token.split(['"', ' ']).next()? == value)
+                        .then(|| Some((pid.parse().ok()?, cmd.to_owned())))
+                        .flatten()
                 })
-                .filter_map(|line| line.split_once(' ')?.0.parse().ok())
                 .collect())
+        }
+        /// Kills the child on every path out of `kill_check`.
+        struct Child(std::process::Child);
+        impl Drop for Child {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        /// Kills a child App (`--hold`) once it printed `READY` and has helpers, then times how long
+        /// until the App is gone and until no helper names it in `--butler-osr-app` (5 s deadline).
+        /// A helper query is a PowerShell start (~0.4 s): the zero time has that resolution, and a
+        /// failed query is an error, never "zero".
+        pub(super) fn kill_check() -> Result<(), Box<dyn Error>> {
+            let mut app = Child(
+                std::process::Command::new(std::env::current_exe()?)
+                    .args(["--hold", "60"])
+                    .stdout(std::process::Stdio::piped())
+                    .spawn()?,
+            );
+            let (pid, switch) = (app.0.id().to_string(), butler_cef_host::switches::OSR_APP);
+            let mut out = std::io::BufReader::new(app.0.stdout.take().ok_or("no stdout")?);
+            let mut line = String::new();
+            while line.trim() != super::READY {
+                line.clear();
+                if out.read_line(&mut line)? == 0 {
+                    return Err("the child App exited before it was ready".into());
+                }
+            }
+            if helpers(switch, &pid)?.is_empty() {
+                return Err("the child App has no helpers before the kill".into());
+            }
+            let kill = Instant::now();
+            app.0.kill()?; // TerminateProcess on the handle we hold
+            // SAFETY: the handle belongs to `app`, which outlives the call.
+            let waited = unsafe { WaitForSingleObject(HANDLE(app.0.as_raw_handle()), 5000) };
+            if waited != WAIT_OBJECT_0 {
+                return Err("the child App was still alive 5 s after TerminateProcess".into());
+            }
+            let gone = kill.elapsed();
+            let left = loop {
+                let left = helpers(switch, &pid)?;
+                if left.is_empty() || kill.elapsed() >= Duration::from_secs(5) {
+                    break left;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            };
+            let zero = kill.elapsed();
+            let _ = std::fs::remove_dir_all(
+                std::env::temp_dir().join(format!("butler-osr-smoke-{pid}")),
+            );
+            if !left.is_empty() {
+                return Err(format!("helpers left after 5 s: {left:?}").into());
+            }
+            println!(
+                "kill-check: App gone {} ms, zero helpers {} ms",
+                gone.as_millis(),
+                zero.as_millis()
+            );
+            Ok(())
         }
         /// Closes the job handle on every path.
         struct Job(HANDLE);
@@ -96,7 +177,7 @@ mod smoke {
                 return Err("the job does not kill on close".into());
             }
             let (mut ours, mut other) = (0, 0);
-            for pid in helpers(name)? {
+            for (pid, _) in helpers(butler_cef_host::switches::OSR_JOB, name)? {
                 match in_job(pid, Some(job.0))? {
                     None => {}
                     Some(true) => ours += 1,
@@ -117,6 +198,7 @@ mod smoke {
             Ok(())
         }
     }
+    const LIMIT: Duration = Duration::from_secs(30);
     const FIRST: &str = "data:text/html,<title>OSR first</title><body style='margin:0;background:rgb(20,80,140)'></body>";
     const SECOND: &str =
         "data:text/html,<title>OSR second</title><body style='background:rgb(140,80,20)'></body>";
@@ -132,9 +214,10 @@ mod smoke {
     fn wait(
         runtime: &OsrRuntime,
         requests: &Receiver<Duration>,
+        limit: Duration,
         ready: impl Fn() -> bool,
     ) -> Result<(), Box<dyn Error>> {
-        let end = Instant::now() + Duration::from_secs(30);
+        let end = Instant::now() + limit;
         let mut deadline = Instant::now();
         while !ready() {
             let now = Instant::now();
@@ -158,6 +241,7 @@ mod smoke {
         runtime: &OsrRuntime,
         sink: &Sink,
         requests: &Receiver<Duration>,
+        hold: Option<u64>,
     ) -> Result<(), Box<dyn Error>> {
         let start = Instant::now();
         runtime.open(
@@ -167,7 +251,7 @@ mod smoke {
             1.,
             butler_cef_host::osr::OsrProfile::SignedIn,
         )?;
-        wait(runtime, requests, || {
+        wait(runtime, requests, LIMIT, || {
             sink.events
                 .borrow()
                 .iter()
@@ -187,8 +271,18 @@ mod smoke {
         drop(frame);
         #[cfg(windows)]
         in_job::check(runtime.child_job_name().ok_or("no helper job")?)?;
+        if let Some(secs) = hold {
+            // `--kill-check` child: keep pumping until the parent kills this App.
+            println!("{READY}");
+            std::io::stdout().flush()?;
+            let (limit, end) = (
+                Duration::from_secs(secs),
+                Instant::now() + Duration::from_secs(secs),
+            );
+            return wait(runtime, requests, limit, || Instant::now() >= end);
+        }
         // A finished first load is necessary for a committed back-history entry.
-        wait(runtime, requests, || {
+        wait(runtime, requests, LIMIT, || {
             sink.events
                 .borrow()
                 .iter()
@@ -196,7 +290,7 @@ mod smoke {
         })?;
         sink.events.borrow_mut().clear();
         runtime.navigate(1, SECOND);
-        wait(runtime, requests, || {
+        wait(runtime, requests, LIMIT, || {
             let events = sink.events.borrow();
             events
                 .iter()
@@ -258,6 +352,15 @@ mod smoke {
         Ok(())
     }
     pub(super) fn run() -> Result<(), Box<dyn Error>> {
+        let args: Vec<String> = std::env::args().collect();
+        #[cfg(windows)]
+        if args.get(1).map(String::as_str) == Some("--kill-check") {
+            return in_job::kill_check();
+        }
+        let hold = args
+            .iter()
+            .position(|a| a == "--hold")
+            .and_then(|i| args.get(i + 1)?.parse().ok());
         let (framework_dir, helper_path, platform) = locations()?;
         let profile: PathBuf =
             std::env::temp_dir().join(format!("butler-osr-smoke-{}", std::process::id()));
@@ -291,7 +394,7 @@ mod smoke {
             }),
             Rc::new(|_| butler_cef_host::osr::DownloadDecision::Dialog),
         )?;
-        let result = verify(&runtime, &sink, &requests);
+        let result = verify(&runtime, &sink, &requests, hold);
         runtime.shutdown();
         remove_profile(&profile)?;
         result?;
