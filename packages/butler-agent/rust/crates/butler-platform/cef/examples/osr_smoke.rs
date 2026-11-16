@@ -304,7 +304,7 @@ mod smoke {
                     .any(|e| matches!(e, OsrEvent::History { can_back: true, .. }))
         })?;
         // A repaint into the existing frame.
-        wait(runtime, requests, || {
+        wait(runtime, requests, LIMIT, || {
             runtime.frame(1).is_some_and(|f| {
                 read_bgra_pixel(&f, f.get_width() / 2, f.get_height() / 2)
                     .is_ok_and(|p| p == [20, 80, 140, 255])
