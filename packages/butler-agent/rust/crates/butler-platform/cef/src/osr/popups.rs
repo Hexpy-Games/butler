@@ -82,7 +82,8 @@ fn allow(
     let shared = Rc::new(RefCell::new(page));
     *info = WindowInfo {
         windowless_rendering_enabled: 1,
-        shared_texture_enabled: 1,
+        // Linux paints in software through `on_paint`.
+        shared_texture_enabled: i32::from(cfg!(not(target_os = "linux"))),
         ..Default::default()
     };
     *client = Some(super::handlers::client(
