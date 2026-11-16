@@ -5,7 +5,19 @@ import { MediaFrame, MarkdownContent, MarkdownLink, MarkdownTable, Typo, Stack }
 import { AnswerBlocks } from "../conversation/AnswerBlocks";
 import { gatewayImageSource } from "@/app/messageFileUrls";
 import type { AnswerBlocksView, AnswerBlockView } from "../../../../shared/answer-blocks-view";
-import type { EditableDocument } from "./documentApi";
+import type { DocumentAsset, EditableDocument } from "./documentApi";
+/** Markdown shown as written: the reader's parts and the editor's units that are not editable text. */
+export function DocumentMarkdown({ raw, assets }: { raw: string; assets?: DocumentAsset[] }) {
+  return <MarkdownContent><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: MarkdownLink, table: MarkdownTable,
+    img: ({ src, alt }) => {
+      const asset = assets?.find(asset => asset.id === src);
+      const url = gatewayImageSource(asset?.signed_url ?? asset?.url ?? src);
+      return asset?.image_width && asset?.image_height
+        ? <MediaFrame src={url} natural={{ width: asset.image_width, height: asset.image_height }} alt={alt} />
+        : <img src={url} alt={alt} />;
+    },
+  }}>{raw}</ReactMarkdown></MarkdownContent>;
+}
 /** Printing expands every tab in sequence, using the same answer renderer for the contents. */
 function printable(spec: AnswerBlocksView): AnswerBlocksView {
   const blocks: AnswerBlockView[] = [];
@@ -35,14 +47,6 @@ export function DocumentReadView({ doc, print = false }: { doc: EditableDocument
         </Stack>)}</div>;
       } catch { /* Unknown fences remain visible. */ }
     }
-    return <MarkdownContent key={index}><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: MarkdownLink, table: MarkdownTable,
-      img: ({ src, alt }) => {
-        const asset = doc.assets?.find(asset => asset.id === src);
-        const url = gatewayImageSource(asset?.signed_url ?? asset?.url ?? src);
-        return asset?.image_width && asset?.image_height
-          ? <MediaFrame src={url} natural={{ width: asset.image_width, height: asset.image_height }} alt={alt} />
-          : <img src={url} alt={alt} />;
-      },
-    }}>{raw}</ReactMarkdown></MarkdownContent>;
+    return <DocumentMarkdown key={index} raw={raw} assets={doc.assets} />;
   })}</Stack></div>;
 }
