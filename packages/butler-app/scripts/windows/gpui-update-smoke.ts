@@ -309,9 +309,10 @@ async function proveGpui() {
   }, "updated gpui App and authenticated supervised Agent", 120_000);
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   assert.ok(existsSync(join(data, "butler.config.json")), "User configuration missing");
-  const idle = await measureIdleProcesses(newFolder, env, powershell); console.log(JSON.stringify(idle)); assertIdle(idle);
+  const idle = await measureIdleProcesses(newFolder, env, powershell); console.log(JSON.stringify(idle));
   const squirrelRegistration = readPostUpdateRegistration(shortcuts, env, powershell);
-  console.log(JSON.stringify({ squirrelUpdatedRegistration: squirrelRegistration })); assertRegistrations(squirrelRegistration, stub, installed, "Squirrel-run updated hook");
+  console.log(JSON.stringify({ squirrelUpdatedRegistration: squirrelRegistration })); assertIdle(idle);
+  assertRegistrations(squirrelRegistration, stub, installed, "Squirrel-run updated hook");
   staleRegistrations(shortcuts, env, powershell);
   const { hook, updatedHook } = rerunUpdatedHook(newFolder, toPackage, env);
   console.log(JSON.stringify({ updatedHook }));
