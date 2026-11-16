@@ -188,7 +188,7 @@ impl EpicInspector {
                 changed
             }
             // CARVE-OUT(G-codes): `work_model_not_found` is told by its 404.
-            Err(Error::Http(404)) => {
+            Err(Error::Http(404, _)) => {
                 let changed = !self.missing;
                 (self.detail, self.tasks, self.missing, self.failed) = (None, None, true, false);
                 self.sync_diffs();
@@ -206,7 +206,7 @@ impl EpicInspector {
     pub(super) fn write_failed(&mut self, error: &Error, cx: &mut Context<Self>) {
         let words = Self::words(cx);
         // CARVE-OUT(G-codes): `conflict` and `running` are told apart by the one 409 status.
-        if matches!(error, Error::Http(409)) {
+        if matches!(error, Error::Http(409, _)) {
             toast::show(cx, Toast::error(words.conflict));
             self.refresh(cx);
         } else {

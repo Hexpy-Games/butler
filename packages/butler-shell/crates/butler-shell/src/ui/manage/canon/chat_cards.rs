@@ -109,7 +109,7 @@ impl Reader {
                             .map(|epic| (epic.id.clone(), epic))
                             .collect(),
                     ),
-                    Err(Error::Http(404)) => Snapshot::Missing,
+                    Err(Error::Http(404, _)) => Snapshot::Missing,
                     Err(_) => Snapshot::Error,
                 };
                 if this.flight.end() {
