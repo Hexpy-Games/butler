@@ -16,6 +16,7 @@ use super::convert;
 use super::dropdown_menu::{DropdownMenu, DropdownMenuContent, Entry};
 use super::icon::{IconSize, icon};
 use super::overlay::place::Align;
+use super::selectable::{self, Break};
 use super::strut;
 use crate::tokens::{Color, Length, Number};
 
@@ -125,6 +126,7 @@ pub struct Tag {
     remove_label: Option<SharedString>,
     edit_menu: Option<Vec<Entry>>,
     edit_label: Option<SharedString>,
+    selectable: Option<Break>,
 }
 
 impl Tag {
@@ -141,6 +143,7 @@ impl Tag {
             remove_label: None,
             edit_menu: None,
             edit_label: None,
+            selectable: None,
         }
     }
 
@@ -182,6 +185,12 @@ impl Tag {
     pub fn edit_menu(mut self, label: impl Into<SharedString>, entries: Vec<Entry>) -> Self {
         self.edit_label = Some(label.into());
         self.edit_menu = Some(entries);
+        self
+    }
+
+    /// The tag's text joins the enclosing selection scope; `lead` is the break before it.
+    pub fn selectable(mut self, lead: Break) -> Self {
+        self.selectable = Some(lead);
         self
     }
 
@@ -315,7 +324,10 @@ impl RenderOnce for Tag {
             .text_size(ds.len(size))
             .line_height(ds.len(line))
             .font_weight(FontWeight(ds.number(Number::TypoCaptionWeight)))
-            .child(self.text);
+            .child(match self.selectable {
+                Some(lead) => selectable::Run::plain(self.text, lead).into_any_element(),
+                None => self.text.into_any_element(),
+            });
         let spacing = ds.number(Number::TypoCaptionLetterSpacing);
         if spacing != 0. {
             label.text_style().letter_spacing = Some(px(spacing));

@@ -9,6 +9,7 @@ mod scroll;
 pub use run::Run;
 
 use super::context::Ds;
+use super::typo::Typo;
 use crate::tokens::Color;
 use gpui::{
     AnyElement, App, Bounds, ClipboardItem, Element, ElementId, Entity, FocusHandle,
@@ -25,6 +26,14 @@ pub enum Break {
     Tab,
     Line,
     Paragraph,
+}
+
+/// `typo` joins the enclosing selection scope when `lead` is set.
+pub(crate) fn mark(typo: Typo, lead: Option<Break>) -> Typo {
+    match lead {
+        Some(lead) => typo.selectable(lead),
+        None => typo,
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

@@ -10,6 +10,7 @@ use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
 use crate::ui::icon_slot::{IconSlot, SlotSize, SlotTone};
 use crate::ui::motion::{Timing, transition};
+use crate::ui::selectable::{Break, mark};
 use crate::ui::spinner::Spinner;
 use crate::ui::typo::{Tone, Typo};
 
@@ -48,6 +49,7 @@ pub struct ProgressMeter {
     meta_element: Option<AnyElement>,
     tone: MeterTone,
     look: Look,
+    selectable: Option<Break>,
 }
 
 impl ProgressMeter {
@@ -70,6 +72,7 @@ impl ProgressMeter {
             meta_element: None,
             tone: MeterTone::Default,
             look: Look::Labelled,
+            selectable: None,
         }
     }
 
@@ -86,6 +89,12 @@ impl ProgressMeter {
     /// The meta as an element (an animated number), in the meta's caption voice.
     pub fn meta_element(mut self, meta: impl IntoElement) -> Self {
         self.meta_element = Some(meta.into_any_element());
+        self
+    }
+
+    /// The meter's text joins the enclosing selection scope; `lead` is the break before the label.
+    pub fn selectable(mut self, lead: Break) -> Self {
+        self.selectable = Some(lead);
         self
     }
 
@@ -194,11 +203,10 @@ impl RenderOnce for ProgressMeter {
                         .tone(SlotTone::Secondary)
                         .child(Spinner::new((self.id, "spinner")).size(12.)),
                 )
-                .child(
-                    div()
-                        .min_w_0()
-                        .child(Typo::caption(text).tone(Tone::Secondary)),
-                )
+                .child(div().min_w_0().child(mark(
+                    Typo::caption(text).tone(Tone::Secondary),
+                    self.selectable,
+                )))
                 .into_any_element();
         };
         let track = self.track(value, window, cx);
@@ -212,12 +220,15 @@ impl RenderOnce for ProgressMeter {
                 .text_color(tertiary)
                 .child(element)
                 .into_any_element(),
-            None => Typo::caption(
-                self.meta
-                    .clone()
-                    .unwrap_or_else(|| format!("{}%", value.round()).into()),
+            None => mark(
+                Typo::caption(
+                    self.meta
+                        .clone()
+                        .unwrap_or_else(|| format!("{}%", value.round()).into()),
+                )
+                .tone(Tone::Tertiary),
+                self.selectable.map(|_| Break::Line),
             )
-            .tone(Tone::Tertiary)
             .into_any_element(),
         };
         let label = self.label.clone().unwrap_or_default();
@@ -232,11 +243,10 @@ impl RenderOnce for ProgressMeter {
                     .items_center()
                     .justify_between()
                     .gap(gap_sm)
-                    .child(
-                        div()
-                            .min_w_0()
-                            .child(Typo::caption(label).tone(Tone::Tertiary)),
-                    )
+                    .child(div().min_w_0().child(mark(
+                        Typo::caption(label).tone(Tone::Tertiary),
+                        self.selectable,
+                    )))
                     .child(meta),
             )
             .child(track)
