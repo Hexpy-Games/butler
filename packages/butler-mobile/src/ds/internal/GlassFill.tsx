@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, type ComponentRef, type RefObject } from "react";
 import { PixelRatio, Platform, StyleSheet, View } from "react-native";
 import { BlurView } from "expo-blur";
+import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { LinearGradient } from "expo-linear-gradient";
 import { alpha, type Tokens } from "../../design/tokens";
 import { useTokens } from "../../design/useTokens";
@@ -9,6 +10,9 @@ export interface Radii { topLeft: number; topRight: number; bottomRight: number;
 
 /** The blur target glass floats over (set by GlassBackdrop); Android blurs only a target's content. */
 export const GlassTarget = createContext<RefObject<ComponentRef<typeof View> | null> | null>(null);
+
+/** True where the platform has Liquid Glass (iOS 26+); glass then uses that material instead of our tint. */
+export const liquidGlass = Platform.OS === "ios" && isLiquidGlassAvailable();
 
 // `--tinted-glass-blur` (4px) as a fraction of the ~30pt system blur.
 const GLASS_BLUR_IOS = 14;
@@ -23,6 +27,22 @@ export function GlassFill({ radii, fadeTop = true, fadeBottom = true }: { radii:
   const border = t.length("--border-hairline");
   const tint = t.color("--tinted-glass-tint");
   const clear = alpha(tint, 0);
+  if (liquidGlass) {
+    return (
+      <GlassView
+        pointerEvents="none"
+        style={{
+          ...StyleSheet.absoluteFill,
+          borderTopLeftRadius: Math.max(radii.topLeft - border, 0),
+          borderTopRightRadius: Math.max(radii.topRight - border, 0),
+          borderBottomRightRadius: Math.max(radii.bottomRight - border, 0),
+          borderBottomLeftRadius: Math.max(radii.bottomLeft - border, 0),
+        }}
+        glassEffectStyle="regular"
+        colorScheme={t.scheme}
+      />
+    );
+  }
   return (
     <View
       pointerEvents="none"
@@ -43,7 +63,6 @@ export function GlassFill({ radii, fadeTop = true, fadeBottom = true }: { radii:
           tint={t.scheme === "dark" ? "systemUltraThinMaterialDark" : "systemUltraThinMaterialLight"}
           intensity={Platform.OS === "ios" ? GLASS_BLUR_IOS : t.length("--tinted-glass-blur") * PixelRatio.get()}
           blurMethod="dimezisBlurViewSdk31Plus"
-          blurReductionFactor={1}
           blurTarget={target ?? undefined}
         />
       ) : null}
@@ -60,6 +79,7 @@ export function GlassFill({ radii, fadeTop = true, fadeBottom = true }: { radii:
 
 /** Outer box shadow of a glass surface: its drop shadow plus the inset top highlight. */
 export function glassShadow(t: Tokens) {
+  if (liquidGlass) return [];
   return [
     ...t.shadow("--tinted-glass-shadow"),
     { offsetX: 0, offsetY: 1, blurRadius: 0, spreadDistance: 0, color: t.color("--tinted-glass-highlight"), inset: true },

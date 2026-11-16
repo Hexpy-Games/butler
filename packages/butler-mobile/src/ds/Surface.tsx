@@ -1,7 +1,7 @@
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTokens } from "../design/useTokens";
-import { GlassFill, glassShadow } from "./internal/GlassFill";
+import { GlassFill, glassShadow, liquidGlass } from "./internal/GlassFill";
 
 type Edge = "top" | "bottom" | "left" | "right";
 
@@ -42,7 +42,7 @@ export function Surface({ children, variant = "base", radius, padding, grow, edg
         flex: grow ? 1 : undefined,
         backgroundColor: background,
         borderRadius: corner,
-        borderWidth: framed ? t.length("--border-hairline") : 0,
+        borderWidth: framed && !(variant === "glass" && liquidGlass) ? t.length("--border-hairline") : 0,
         borderColor: variant === "glass" ? t.color("--tinted-glass-border") : t.color("--line"),
         boxShadow: variant === "glass" ? glassShadow(t) : undefined,
         paddingTop: inset + (edges.includes("top") ? insets.top : 0),

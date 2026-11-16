@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTokens } from "../design/useTokens";
 import { IconButton } from "./Button";
 import { icons } from "./icons";
-import { GlassFill, glassShadow } from "./internal/GlassFill";
+import { GlassFill, glassShadow, liquidGlass } from "./internal/GlassFill";
 import { useScaledLine } from "./internal/IconSlot";
 import { SendButton } from "./internal/SendButton";
 import { fontFace, maxFontScale } from "./internal/typography";
@@ -44,7 +44,7 @@ export function Composer({
     <View
       style={{
         borderRadius: radius,
-        borderWidth: t.length("--border-hairline"),
+        borderWidth: liquidGlass ? 0 : t.length("--border-hairline"),
         borderColor: t.color("--tinted-glass-border"),
         boxShadow: glassShadow(t),
       }}

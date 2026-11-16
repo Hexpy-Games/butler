@@ -6,7 +6,7 @@ import { IconButton } from "./Button";
 import { Text } from "./Text";
 import { icons } from "./icons";
 import { FadedScroll } from "./internal/FadedScroll";
-import { GlassFill } from "./internal/GlassFill";
+import { GlassFill, liquidGlass } from "./internal/GlassFill";
 import { run, useReducedMotion } from "./internal/motion";
 
 export interface SheetProps {
@@ -45,7 +45,7 @@ export function SheetPanel({ onClose, title, description, children, actions, clo
         maxHeight: height - insets.top - t.length("--space-2xl"),
         borderTopLeftRadius: radius,
         borderTopRightRadius: radius,
-        borderWidth: t.length("--border-hairline"),
+        borderWidth: liquidGlass ? 0 : t.length("--border-hairline"),
         borderColor: t.color("--tinted-glass-border"),
         padding: space,
         paddingBottom: space + insets.bottom,
