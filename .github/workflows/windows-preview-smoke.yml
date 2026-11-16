@@ -24,6 +24,10 @@ on:
         required: false
         type: boolean
         default: false
+      package-version:
+        description: Build and package the Windows App at this version on a non-release branch (e.g. 0.1.0-preview.99)
+        required: false
+        type: string
 permissions:
   actions: read
   contents: read
@@ -54,7 +58,7 @@ jobs:
       - uses: ./.github/actions/windows-preview-build
         with:
           native-cache: ${{ inputs.native-cache || 'windows-agent-v1' }}
-          version: ${{ needs.changes.outputs.candidate }}
+          version: ${{ needs.changes.outputs.candidate || inputs.package-version }}
 
   stub:
     permissions:
