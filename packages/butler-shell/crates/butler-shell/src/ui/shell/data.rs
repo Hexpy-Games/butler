@@ -195,6 +195,7 @@ impl Shell {
             return;
         }
         let new_chat = chat.is_none();
+        let before = self.chat_key();
         self.session_menu.rename = None;
         if let Some(chat) = &chat {
             self.load_summary(chat, cx);
@@ -202,13 +203,13 @@ impl Shell {
             self.session_menu.summary = None;
         }
         self.store.open(chat);
-        self.chat_opened(cx);
         self.chat.update(cx, |c, _| c.set_new_chat(new_chat));
         if let Some(id) = self.store.selected().map(|c| c.session.0.to_string()) {
             self.mark_sidebar_read(&id, cx);
         } else {
             self.sidebar.new_chat_parent = None;
         }
+        self.chat_opened(&before, cx);
         self.show_view(false, cx);
         self.reload_open_chat(cx);
         self.sync_composer(cx);
@@ -220,11 +221,12 @@ impl Shell {
         parent: Option<crate::ui::source::sidebar::DraftTarget>,
         cx: &mut Context<Self>,
     ) {
+        let before = self.chat_key();
         self.session_menu.rename = None;
         self.session_menu.summary = None;
         self.store.open(None);
-        self.chat_opened(cx);
         self.sidebar.new_chat_parent = parent;
+        self.chat_opened(&before, cx);
         self.show_view(false, cx);
         self.sync_composer(cx);
         cx.notify();

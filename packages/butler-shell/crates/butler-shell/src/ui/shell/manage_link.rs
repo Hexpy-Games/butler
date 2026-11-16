@@ -34,8 +34,10 @@ struct Observer {
     _events: Subscription,
 }
 
+/// The open chat or draft (Electron's `activeChatId`).
+pub(crate) type ChatKey = (Option<ChatRef>, Option<DraftTarget>);
 /// The composer's editor as Electron keys it: the view, and the open chat or draft.
-pub(super) type ComposerKey = (View, Option<ChatRef>, Option<DraftTarget>);
+pub(super) type ComposerKey = (View, ChatKey);
 
 /// The management side of the shell.
 pub(super) struct Manage {
@@ -86,10 +88,13 @@ impl Shell {
         self.manage.state.read(cx).view == View::Session
     }
 
-    pub(super) fn composer_key(&self, cx: &App) -> ComposerKey {
-        let view = self.manage.state.read(cx).view.clone();
+    pub(crate) fn chat_key(&self) -> ChatKey {
         let parent = self.sidebar.new_chat_parent.clone();
-        (view, self.store.selected().cloned(), parent)
+        (self.store.selected().cloned(), parent)
+    }
+
+    pub(super) fn composer_key(&self, cx: &App) -> ComposerKey {
+        (self.manage.state.read(cx).view.clone(), self.chat_key())
     }
 
     /// `routeActiveChatId`: the open session while the conversation is the view.
@@ -132,7 +137,6 @@ impl Shell {
                 crate::ui::browser::open_conversation_link(session.as_deref(), url, cx);
             }
             ManageEvent::OpenNewChat => {
-                self.sidebar.new_chat_parent = None;
                 self.open_chat(None, window, cx);
             }
             ManageEvent::OpenProjectChat(project) => {
@@ -228,11 +232,16 @@ impl Shell {
         }
     }
 
-    /// A chat was opened (`openSession`): the conversation is the view and the observer closes.
-    pub(crate) fn chat_opened(&mut self, cx: &mut Context<Self>) {
+    /// A chat was opened (`openSession`) in place of `before`: the conversation is the view and
+    /// the observer closes. Electron rebuilds the composer only when `activeChatId` changed or
+    /// the conversation was not the view (`AppShell.tsx` mounts it for `session` only).
+    pub(crate) fn chat_opened(&mut self, before: &ChatKey, cx: &mut Context<Self>) {
+        let rebuilt = !self.on_session(cx) || self.chat_key() != *before;
         self.manage.observer = None;
         self.store_view(View::Session, cx);
-        self.composer.update(cx, Composer::chat_opened);
+        if rebuilt {
+            self.composer.update(cx, Composer::chat_opened);
+        }
     }
 
     /// `openProjectDashboard`: the dashboard's activation moves its topic, and the sidebar
