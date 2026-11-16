@@ -1,6 +1,6 @@
 //! The editor and the composer state (`saveDraftFromEditor`, `syncEditorFromStore`,
 //! `composerFocus`), and the context donut's inputs and requests.
-use gpui::{Context, Entity, Window};
+use gpui::{Context, Entity, Focusable as _, Window};
 
 use super::context::{ComposerContextControl, ComposerContextEvent, load_quota, load_usage};
 use super::editor::FocusPlacement;
@@ -51,10 +51,59 @@ impl Composer {
         self.recompute(cx);
     }
 
-    /// `focusComposer`: the request of `ComposerState::request_focus` is taken once.
+    /// The settings' `collapse_message_box` (`useComposerPresentation`: `!collapse` keeps the
+    /// card unfolded).
+    pub(crate) fn set_collapse(&mut self, collapse: bool, cx: &mut Context<Self>) {
+        if self.collapse != collapse {
+            self.collapse = collapse;
+            cx.notify();
+        }
+    }
+
+    /// `focusComposer`: expands the card and puts the caret back where it was.
+    pub(crate) fn engage(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.disabled.is_some() {
+            return;
+        }
+        self.release_focus = false;
+        self.fold.engaged = true;
+        self.editor.focus(FocusPlacement::Restore, window, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn fold(&mut self) {
+        self.fold.engaged = false;
+    }
+
+    /// A chat opened. Electron rebuilds the editor per chat (`Conversation.tsx`
+    /// `<ErrorBoundary key={activeChatId}>`), so the card folds and no focus, kept or restored
+    /// later (a closing dialog's focus scope), stays in the field.
+    pub(crate) fn chat_opened(&mut self, cx: &mut Context<Self>) {
+        self.fold.engaged = false;
+        self.release_focus = true;
+        cx.notify();
+    }
+
+    /// While a chat opening asks for it, the focused field hands focus to the shell root.
+    pub(super) fn release(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.release_focus
+            && self.focus_handle(cx).is_focused(window)
+            && let Some(shell) = self.shell_focus.clone()
+        {
+            self.release_focus = false;
+            window.focus(&shell, cx);
+        }
+    }
+
+    /// `focusComposer`: the request of `ComposerState::request_focus` is taken once; a request
+    /// wins over a pending release.
     pub(super) fn take_focus_request(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let requested =
             ComposerState::update(cx, |draft| std::mem::take(&mut draft.focus_requested));
+        if requested {
+            self.release_focus = false;
+        }
+        self.release(window, cx);
         if requested && self.disabled.is_none() {
             self.fold.engaged = true;
             self.editor.focus(FocusPlacement::End, window, cx);

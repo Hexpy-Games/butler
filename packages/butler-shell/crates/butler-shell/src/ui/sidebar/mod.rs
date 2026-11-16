@@ -308,12 +308,12 @@ impl Shell {
             chat: ChatId(id.clone().into()),
             session: SessionId(id.into()),
         };
+        let before = self.chat_key();
         self.store.open(Some(chat.clone()));
-        self.chat_opened(cx);
+        self.chat_opened(&before, cx);
         self.show_view(false, cx);
         self.load_summary(&chat, cx);
         self.reload_open_chat(cx);
-        self.composer.update(cx, |c, _| c.fold());
         self.sync_composer(cx);
     }
     fn sidebar_input(&self) -> SharedString {

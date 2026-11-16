@@ -56,10 +56,12 @@ impl Shell {
         cx.notify();
     }
 
-    /// `closeSettings`: back to the frame, the composer engaged.
-    fn close_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.settings_view = None;
-        self.composer.update(cx, |c, cx| c.engage(window, cx));
+    /// `closeSettings`: back to the frame. Focus goes to the shell root, where Electron's falls
+    /// to `body` and the app's shortcuts still work; the composer does not take it.
+    pub(super) fn close_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings_view.take().is_some() {
+            window.focus(&self.focus, cx);
+        }
         cx.notify();
     }
 
@@ -139,8 +141,9 @@ impl Shell {
     }
 
     /// What the app does with new settings: the copy follows `language`
-    /// (`setAppCopyLanguage`), the transcript reads `chats_intro_seen` and developer mode, and
-    /// AppShell applies `text_size` and `appearance_theme` (unless the theme is forced).
+    /// (`setAppCopyLanguage`), the transcript reads `chats_intro_seen` and developer mode, the
+    /// composer reads `collapse_message_box`, and AppShell applies `text_size` and
+    /// `appearance_theme` (unless the theme is forced).
     pub(super) fn apply_settings(&mut self, raw: &Rc<Value>, cx: &mut Context<Self>) {
         let flag = |key: &str| raw.get(key).and_then(Value::as_bool);
         let text = |key: &str| raw.get(key).and_then(Value::as_str);
@@ -149,6 +152,10 @@ impl Shell {
         }
         if let Some(seen) = flag("chats_intro_seen") {
             chat::set_chats_intro_seen(cx, seen);
+        }
+        if let Some(collapse) = flag("collapse_message_box") {
+            self.composer
+                .update(cx, |c, cx| c.set_collapse(collapse, cx));
         }
         let developer = flag("diagnostics_enabled") == Some(true);
         cx.update_global(|hooks: &mut AssistantHooks, _| hooks.developer_mode = developer);
