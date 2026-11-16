@@ -107,6 +107,9 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "browser-link" => h.update(|_, _, cx| ui::chat::open_link(arg, cx)),
         "browser-state" | "browser-frame" => browser_report(h, command),
         "new" => h.update(|s, w, cx| s.open_chat(None, w, cx)),
+        // The main window closes; the tray's Open brings one back.
+        "close-window" => h.cx.update_window(h.handle, |_, w, _| w.remove_window()),
+        "tray-open" => tray_open(h),
         "compose" => h.update(|s, w, cx| s.composer.update(cx, |c, cx| c.engage(w, cx))),
         "type" => type_text(h, arg),
         "key" => key(h, arg),
@@ -144,6 +147,19 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         _ => super::frame::command(h, command, arg),
     }
 }
+/// The tray's Open, then follows the main window (root `Shell`) it left open.
+fn tray_open(h: &mut Harness) -> anyhow::Result<()> {
+    h.cx.update(super::lifecycle::window::reopen);
+    super::settle(&mut h.cx, h.handle);
+    let windows = h.cx.update(|cx| cx.windows());
+    let shell = windows
+        .into_iter()
+        .find_map(|w| w.downcast::<ui::shell::Shell>());
+    h.window = shell.context("no main window")?;
+    h.handle = h.window.into();
+    Ok(())
+}
+
 fn browser_frame(h: &mut Harness) -> anyhow::Result<()> {
     super::settle(&mut h.cx, h.handle);
     let content = h.cx.debug_bounds(h.handle, "browser-page")?;
@@ -229,7 +245,7 @@ pub(super) fn run(
                 serde_json::json!({"disconnected":shell.disconnected().is_some(),
                     "running":shell.store.running().is_some(), "approval":shell.store.shown_view().is_some_and(|v| v.authority_requests.as_ref().is_some_and(|r| !r.is_empty())),
                     "messages":shell.store.shown_view().map(|view| view.messages.iter().map(|m| serde_json::json!({"id":m.id,"text":m.text,"status":m.status})).collect::<Vec<_>>())})
-            }))?;
+            })).unwrap_or_default(); // a closed main window leaves no state to report
             std::fs::write(
                 dir.join("failure-ui.json"),
                 serde_json::to_vec_pretty(&state)?,
