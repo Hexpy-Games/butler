@@ -174,7 +174,7 @@ fn listen_keys(edit: &Edit, handle: &FocusHandle, window: &mut Window, cx: &mut 
 pub(super) fn editor(edit: Edit, window: &mut Window, cx: &mut App) -> AnyElement {
     let state = text::state(key(&edit.id), window, cx);
     let handle = focus::tab_stop(&state.read(cx).focus_handle(cx), true);
-    text::register(cx, handle.clone(), state.clone());
+    text::register(cx, &handle, &state);
     listen(&edit, &state, window, cx);
     listen_keys(&edit, &handle, window, cx);
     advance(&edit, &state, &handle, window, cx);
