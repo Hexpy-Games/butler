@@ -75,8 +75,8 @@ impl BrowserState {
         });
         self.engine.adopt(&id, child);
         self.engine.set_hosted(&id, awake.is_some());
-        if awake.is_some() {
-            self.engine.keep_awake(&id, true);
+        if let Some(awake) = awake {
+            self.engine.keep_awake(&id, awake);
             self.fix_hosted_size(&id);
         }
         Some(id)

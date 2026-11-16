@@ -238,8 +238,10 @@ impl BrowserState {
         };
         self.next_id += 1;
         let id = TabId(format!("t{}", self.next_id).into());
+        let hosted = self.new_hosted(internal);
+        let awake = hosted.awake();
         self.tabs.push(Tab {
-            hosted: Some(self.new_hosted(internal)),
+            hosted: Some(hosted),
             ..Tab::new(id.clone(), owner, profile, String::new())
         });
         self.engine
@@ -255,7 +257,7 @@ impl BrowserState {
         };
         self.engine
             .set_popup_sites(&id, list("sites"), list("hosts"));
-        self.engine.keep_awake(&id, true);
+        self.engine.keep_awake(&id, awake);
         self.fix_hosted_size(&id);
         self.publisher.changed(&self.tabs);
         Ok(id)
