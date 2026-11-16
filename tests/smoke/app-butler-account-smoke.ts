@@ -51,7 +51,9 @@ async function startFakeCloud() {
   return { url: `http://127.0.0.1:${address.port}`, state, stop: () => new Promise<void>((done) => server.close(() => done())) };
 }
 
-setAppCopyLanguage("en");
+// Screenshots for review can be taken in another UI language; the checks read the same copy.
+const language = process.env.BUTLER_SMOKE_LANGUAGE ?? "en";
+setAppCopyLanguage(language);
 const copy = appCopy.butlerAccount;
 const widths = [320, 375, 390, 430, 768, 1440];
 const section = (page: Page, id: string) => page.locator(`[data-settings-section-id="${id}"]`);
@@ -80,7 +82,7 @@ async function screenshot(page: Page, state: string) {
       await page.setViewportSize({ width, height: 900 });
       await page.evaluate(() => Promise.all(document.getAnimations()
         .filter((animation) => animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => undefined))));
-      await page.screenshot({ path: join(directory, `butler-account-${state}-${colorScheme}-${width}.png`), fullPage: true });
+      await page.screenshot({ path: join(directory, `butler-account-${state}-${language}-${colorScheme}-${width}.png`), fullPage: true });
     }
   }
   await page.emulateMedia({ colorScheme: "light" });
@@ -134,7 +136,7 @@ async function run(enabled: boolean, fake: Awaited<ReturnType<typeof startFakeCl
       writeFileSync(join(butlerData, "gateways/app.json"), JSON.stringify({ config: { butlerAccountEnabled: true } }));
     }
     server = await createNativeAppServer({ butlerData, uiRoot: resolve("packages/butler-app/client/ui/dist"),
-      config: { user: { name: "Smoke", language: "en" } }, env: { BUTLER_CLOUD_API_URL: fake.url } });
+      config: { user: { name: "Smoke", language } }, env: { BUTLER_CLOUD_API_URL: fake.url } });
     secret = JSON.parse(readFileSync(join(server.butlerData, "app/runtime/auth/local-admin.json"), "utf8")).secret;
     const adminHeaders = { ...server.authHeaders, "x-butler-admin": secret };
     browser = await launchSmokeBrowser();
