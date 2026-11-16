@@ -85,7 +85,7 @@ impl PageEngine for PlaceholderEngine {
         true
     }
 
-    fn open(&mut self, page: &TabId, url: &str, _: Profile, _: &str) {
+    fn open(&mut self, page: &TabId, url: &str, _: Profile, _: &str, _: &str) {
         let state = self.pages.entry(page.clone()).or_default();
         if !url.is_empty() {
             state.load(url.to_owned());
