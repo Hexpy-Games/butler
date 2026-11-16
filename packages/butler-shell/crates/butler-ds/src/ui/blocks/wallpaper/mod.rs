@@ -1,7 +1,7 @@
 //! DS Wallpaper (blocks/Wallpaper `still.ts`, `stillContext.ts`, `imageCache.ts`, `imageMath.ts`,
 //! the engine's host side and WallpaperPicker `builtinPosters.ts`): a live module the renderer
-//! has shaders for drawn at its default params, unknown live
-//! modules from their bundled posters, or an image. Edited params, drift events and crossfade are P6.
+//! has shaders for drawn with its saved params, unknown live
+//! modules from their bundled posters, or an image. Image filters, drift events and crossfade are P6.
 //! [`Wallpaper`] is the layer to hand to `WallpaperStage::wallpaper`; it fills its parent, which
 //! clips it.
 mod drift;
@@ -75,13 +75,20 @@ pub enum ImageVariant {
     Thumbnail,
 }
 
-/// What a wallpaper shows (`WallpaperSource`, without module params and filters: those need the
-/// engine).
+/// A live source's edited values (`params`, `paramsDark`); `Null` where none are stored.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WallpaperParams {
+    pub params: serde_json::Value,
+    pub params_dark: serde_json::Value,
+}
+
+/// What a wallpaper shows (`WallpaperSource`, without image filters: those need the engine).
 #[derive(Clone, Debug, PartialEq)]
 pub enum WallpaperSource {
     None,
     Live {
         module: SharedString,
+        values: WallpaperParams,
     },
     Image {
         asset: SharedString,
@@ -93,11 +100,23 @@ pub enum WallpaperSource {
     },
 }
 
+impl WallpaperSource {
+    /// A live module at its default params.
+    pub fn live(module: impl Into<SharedString>) -> Self {
+        Self::Live {
+            module: module.into(),
+            values: WallpaperParams::default(),
+        }
+    }
+}
+
 /// Content key of a source: equal sources share a key. // DS: keys.ts:35-37
 pub fn source_key(source: &WallpaperSource) -> String {
     match source {
         WallpaperSource::None => "none".into(),
-        WallpaperSource::Live { module } => format!("live:{module}"),
+        WallpaperSource::Live { module, values } => {
+            format!("live:{module}:{}:{}", values.params, values.params_dark)
+        }
         WallpaperSource::Image {
             asset,
             fit,
@@ -112,7 +131,7 @@ pub fn source_key(source: &WallpaperSource) -> String {
 pub fn transition_key(source: &WallpaperSource) -> String {
     match source {
         WallpaperSource::None => "none".into(),
-        WallpaperSource::Live { module } => format!("live:{module}"),
+        WallpaperSource::Live { module, .. } => format!("live:{module}"),
         WallpaperSource::Image { asset, .. } => format!("image:{asset}"),
     }
 }
@@ -128,7 +147,7 @@ pub struct WallpaperHost {
 
 pub fn drifts(source: &WallpaperSource) -> bool {
     match source {
-        WallpaperSource::Live { module } => {
+        WallpaperSource::Live { module, .. } => {
             live_modules::get(module).is_some_and(|module| module.manifest["motion"] == "drift")
         }
         _ => false,
@@ -212,7 +231,7 @@ impl RenderOnce for Wallpaper {
         let layer = div().relative().size_full().overflow_hidden();
         match self.source {
             WallpaperSource::None => layer,
-            WallpaperSource::Live { module } => {
+            WallpaperSource::Live { module, values } => {
                 // DS scheduler.ts `softwareRendering`: a software renderer holds still frames.
                 let software = window
                     .gpu_specs()
@@ -226,7 +245,7 @@ impl RenderOnce for Wallpaper {
                     content_rect: self.content_rect,
                     content_rect2: self.content_rect2,
                 };
-                match live::layer(&module, frame, window, cx) {
+                match live::layer(&module, &values, frame, window, cx) {
                     Some((drawn, remaining)) => dim_pass(layer.child(drawn), remaining),
                     None => match builtin_poster(&module, tone) {
                         Some(poster) => layer.child(picture(poster, ObjectFit::Cover)),

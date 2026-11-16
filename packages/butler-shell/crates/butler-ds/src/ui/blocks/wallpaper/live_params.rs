@@ -1,31 +1,88 @@
-//! DS: manifestParams.ts, values.ts defaults and filters.rs wp_p0..wp_p5 packing.
+//! DS: manifestParams.ts, values.ts `resolveWallpaperValues` and filters.rs wp_p0..wp_p5 packing.
 use serde_json::Value;
 
-use super::WallpaperTone;
+use super::{WallpaperParams, WallpaperTone};
 
-pub(super) fn defaults(manifest: &Value, tone: WallpaperTone) -> [[f32; 4]; 6] {
+/// The packed uniforms of a manifest's params: the first accepted candidate per param.
+pub(super) fn resolve(
+    manifest: &Value,
+    values: &WallpaperParams,
+    tone: WallpaperTone,
+) -> [[f32; 4]; 6] {
     let mut packed = [[0.; 4]; 6];
     let mut cursor = 0;
     for spec in manifest["params"].as_array().into_iter().flatten() {
-        let value = if tone == WallpaperTone::Dark {
-            spec.get("defaultDark").unwrap_or(&spec["default"])
+        let key = spec["key"].as_str().unwrap_or_default();
+        let light = values.params.get(key);
+        let candidates = if tone == WallpaperTone::Dark {
+            [
+                values.params_dark.get(key),
+                spec.get("defaultDark"),
+                light,
+                spec.get("default"),
+            ]
         } else {
-            &spec["default"]
+            [light, spec.get("default"), None, None]
         };
+        let value = candidates
+            .into_iter()
+            .flatten()
+            .find_map(|candidate| accept(spec, candidate, tone))
+            .unwrap_or(Value::Null);
         match spec["type"].as_str() {
-            Some("color") => color(&mut packed, &mut cursor, value),
+            Some("color") => color(&mut packed, &mut cursor, &value),
             Some("palette") => {
                 for value in value.as_array().into_iter().flatten() {
                     color(&mut packed, &mut cursor, value);
                 }
             }
             _ => {
-                packed[cursor / 4][cursor % 4] = scalar(spec, value);
+                packed[cursor / 4][cursor % 4] = scalar(spec, &value);
                 cursor += 1;
             }
         }
     }
     packed
+}
+
+fn is_hex(value: &Value) -> bool {
+    value.as_str().is_some_and(|hex| {
+        hex.len() == 7 && hex.starts_with('#') && hex[1..].chars().all(|c| c.is_ascii_hexdigit())
+    })
+}
+
+/// `accept` in values.ts: the candidate when it fits the spec.
+fn accept(spec: &Value, value: &Value, tone: WallpaperTone) -> Option<Value> {
+    match spec["type"].as_str()? {
+        "number" => {
+            let number = value.as_f64()?;
+            let clamped = number.clamp(
+                spec["min"].as_f64().unwrap_or(f64::MIN),
+                spec["max"].as_f64().unwrap_or(f64::MAX),
+            );
+            Some(Value::from(clamped))
+        }
+        "boolean" => value.is_boolean().then(|| value.clone()),
+        "enum" => {
+            let name = value.as_str()?;
+            spec["options"]
+                .as_array()?
+                .iter()
+                .any(|option| option.get("value").unwrap_or(option) == name)
+                .then(|| value.clone())
+        }
+        "color" => is_hex(value).then(|| value.clone()),
+        "palette" => {
+            let colors = match value.as_str() {
+                Some(name) => &spec["presets"][name][tone.as_str()],
+                None => value,
+            };
+            let list = colors.as_array()?;
+            let size = usize::try_from(spec["size"].as_u64()?).ok()?;
+            (list.len() == size && list.iter().all(is_hex)).then(|| colors.clone())
+        }
+        _ => None,
+    }
 }
 
 fn color(packed: &mut [[f32; 4]; 6], cursor: &mut usize, value: &Value) {
@@ -60,5 +117,39 @@ fn scalar(spec: &Value, value: &Value) -> f32 {
             spec["max"].as_f64().unwrap_or(f64::MAX),
         ) as f32,
         _ => 0.,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    // test-category: pure-logic
+    #[test]
+    fn resolve_follows_values_ts_candidate_order() {
+        let manifest = json!({ "params": [
+            { "key": "a", "type": "number", "min": 0, "max": 1, "default": 0.5, "defaultDark": 0.25 },
+            { "key": "b", "type": "enum", "options": ["x", "y"], "default": "x" },
+            { "key": "c", "type": "palette", "size": 2, "default": ["#102030", "#405060"],
+              "presets": { "p": { "light": ["#111111", "#222222"], "dark": ["#aa0000", "#bb0000"] } } },
+        ] });
+        let values = |params, params_dark| WallpaperParams {
+            params,
+            params_dark,
+        };
+        let light = |params| {
+            resolve(
+                &manifest,
+                &values(params, Value::Null),
+                WallpaperTone::Light,
+            )
+        };
+        let dark = |params| resolve(&manifest, &values(params, Value::Null), WallpaperTone::Dark);
+        assert_eq!(light(json!({ "a": 7 }))[0][0], 1.);
+        assert_eq!(dark(json!({ "a": 0.9 }))[0][0], 0.25);
+        assert_eq!(light(json!({ "b": "nope" }))[0][1], 0.);
+        assert_eq!(dark(json!({ "c": "p" }))[1][0], f32::from(0xaa_u8) / 255.);
     }
 }
