@@ -113,6 +113,9 @@ async fn signed_in_call(
             .await
             .map(Some);
     }
+    if let Some(refused) = super::pages::refusal(state, op) {
+        return Ok(Some(refused));
+    }
     if let Some(refused) = super::signed_in::admit(state, frame, op, session).await? {
         return Ok(Some(refused));
     }
@@ -305,7 +308,7 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
     let tabs = value["tabs"]
         .as_array()
         .ok_or_else(|| error(400, "invalid_snapshot"))?;
-    let (handed_back, handovers) = {
+    let (handed_back, handovers, link) = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
         hub.still_backlog = value["still_backlog"].as_u64().unwrap_or(0);
         let handovers = hub.tabs.handovers(tabs);
@@ -322,8 +325,14 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
             .replace(tabs)
             .map_err(|_| error(400, "invalid_snapshot"))?;
         super::hidden::hand_over(&state, &mut hub);
-        (changed, handovers)
+        (changed, handovers, hub.pages.clone())
     };
+    // Outside the hub lock: the executor keeps a page the user holds.
+    if let Some(link) = link {
+        for tab in tabs {
+            link.hold(tab["id"].as_str().unwrap_or(""), tab["holder"] == "user");
+        }
+    }
     state.browser.2.notify_waiters();
     super::signed_in::record_handovers(&state, handovers).await?;
     super::hand_back::resume_waits(&state, &handed_back).await?;

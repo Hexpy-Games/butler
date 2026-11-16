@@ -106,7 +106,7 @@ struct HttpState {
     /// The installed App's Electron as a windowless browser host.
     app_host: Option<Arc<butler_runtime::browser::AppHost>>,
     /// Where a page host's executor keeps its (unused) files.
-    hosted_root: std::path::PathBuf,
+    hosted_root: Option<std::path::PathBuf>,
     previews: butler_runtime::previews::Previews,
     preview_lifetime_started: parking_lot::Mutex<bool>,
     devices: security::DeviceRegistry,

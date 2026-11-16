@@ -199,6 +199,7 @@ pub(super) async fn route(
         (&Method::GET, "/internal/browser-host") => {
             attach(state, client.keys.live_streams(), request.headers()).await
         }
+        // Reached through the `/internal/browser` prefix fallback into this router; the router table has no entry of its own.
         (&Method::POST, "/internal/browser-host/cdp") => {
             pages::cdp(state, read_json(request).await?).await
         }
@@ -242,20 +243,28 @@ pub(super) async fn route(
                 || p.starts_with("/internal/browser-host/renders/")
                 || p.starts_with("/internal/browser-host/images/") =>
         {
-            let id = p
-                .trim_start_matches("/internal/browser-host/results/")
-                .trim_start_matches("/internal/browser-host/renders/")
-                .trim_start_matches("/internal/browser-host/images/");
-            let body = read_json(request).await?;
-            let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-            let Some(reply) = hub.pending.remove(id) else {
-                return Err(error(409, "browser_call_expired"));
-            };
-            reply.deliver(&hub, body);
-            super::json(StatusCode::OK, json!({"ok":true}))
+            host_reply(&state, p, request).await
         }
         _ => Err(error(404, "not_found")),
     }
+}
+/// The host's answer to a pending call (a result, a render or an image upload).
+async fn host_reply(
+    state: &HttpState,
+    path: &str,
+    request: Request<Body>,
+) -> Result<Response, HttpError> {
+    let id = path
+        .trim_start_matches("/internal/browser-host/results/")
+        .trim_start_matches("/internal/browser-host/renders/")
+        .trim_start_matches("/internal/browser-host/images/");
+    let body = read_json(request).await?;
+    let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+    let Some(reply) = hub.pending.remove(id) else {
+        return Err(error(409, "browser_call_expired"));
+    };
+    reply.deliver(&hub, body);
+    super::json(StatusCode::OK, json!({"ok":true}))
 }
 async fn attach(
     state: Arc<HttpState>,
@@ -439,6 +448,12 @@ async fn register_host(
     } else {
         None
     };
+    // Built off the hub lock (it reads files); dropped if admission fails.
+    let link = if pages {
+        Some(pages::open(state).await?)
+    } else {
+        None
+    };
     let _attach = state.browser.5.lock().await;
     {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
@@ -472,8 +487,8 @@ async fn register_host(
         hub.app_waiting = false;
         hub.generation += 1;
         let generation = hub.generation;
-        let relay = pages.then(|| {
-            let (link, relay) = pages::Link::new(state, generation);
+        let relay = link.map(|(link, relay)| {
+            link.bind(generation);
             hub.pages = Some(link);
             relay
         });

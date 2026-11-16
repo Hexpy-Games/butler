@@ -1,16 +1,33 @@
 //! CDP between the page host and the hosted executor: what may pass either way.
 use super::{HttpState, pages::Routes};
 use serde_json::{Value, json};
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, OnceLock, Weak};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 /// The app reserves the ids below this on each page for its own DevTools use.
 pub(super) const RAW_ID_BASE: u64 = 1 << 30;
 
-/// The only `Target.` methods a page session may call; the rest of that
-/// domain and all of `Browser.` could reach other pages or the browser itself.
+/// The CDP domains a page session may use, and the only `Target.` methods.
+/// Everything else (browser-wide, other pages, cookies of the whole profile)
+/// is answered here.
+const DOMAINS: &[&str] = &[
+    "Page",
+    "Runtime",
+    "Network",
+    "Fetch",
+    "Emulation",
+    "Input",
+    "DOM",
+    "DOMSnapshot",
+    "Accessibility",
+];
 const TARGET_ALLOWED: &[&str] = &["Target.setAutoAttach", "Target.detachFromTarget"];
+
+fn permitted(method: &str) -> bool {
+    let domain = method.split_once('.').map_or("", |(domain, _)| domain);
+    !method.contains("Cookie") && (DOMAINS.contains(&domain) || TARGET_ALLOWED.contains(&method))
+}
 
 /// What to do with one message from the executor.
 pub(super) enum Down {
@@ -31,9 +48,7 @@ pub(super) fn down(routes: &Routes, mut message: Value) -> Down {
     let id = message["id"].clone();
     let method = message["method"].as_str().unwrap_or("");
     let session = message["sessionId"].as_str().map(str::to_owned);
-    let fenced = method.starts_with("Browser.")
-        || method.starts_with("Target.") && !TARGET_ALLOWED.contains(&method);
-    let Some(session) = session.filter(|_| !fenced) else {
+    let Some(session) = session.filter(|_| permitted(method)) else {
         return refusal(&id);
     };
     let tab = if routes.has_tab(&session) {
@@ -73,15 +88,22 @@ pub(super) fn up(routes: &Routes, entry: &Value) -> Option<Value> {
     if let Some(id) = message["id"].as_u64() {
         message["id"] = json!(id.checked_sub(RAW_ID_BASE)?);
     }
-    if message.get("sessionId").is_none() {
-        message["sessionId"] = json!(tab);
+    match message["sessionId"].as_str() {
+        None => message["sessionId"] = json!(tab),
+        // A session of another page is not this page's to speak for.
+        Some(session) if session != tab && routes.child_tab(session).as_deref() != Some(tab) => {
+            return None;
+        }
+        Some(_) => {}
     }
     let params = &message["params"];
     match message["method"].as_str() {
         Some("Target.attachedToTarget") if params["targetInfo"]["type"] != "page" => {
             routes.add_child(params["sessionId"].as_str()?, tab);
         }
-        Some("Target.detachedFromTarget") => routes.remove_child(params["sessionId"].as_str()?),
+        Some("Target.detachedFromTarget") => {
+            routes.remove_child(params["sessionId"].as_str()?, tab);
+        }
         _ => {}
     }
     Some(message)
@@ -109,7 +131,7 @@ pub(super) struct Pump {
     pub to_app: mpsc::Sender<Value>,
     pub routes: Arc<Routes>,
     pub state: Weak<HttpState>,
-    pub generation: u64,
+    pub generation: Arc<OnceLock<u64>>,
     pub shutdown: CancellationToken,
 }
 
@@ -142,8 +164,10 @@ pub(super) async fn run_down(mut pump: Pump) {
                     }
                 }
                 Down::Exhausted => {
-                    if let Some(state) = pump.state.upgrade() {
-                        super::detach_generation(&state, pump.generation);
+                    if let (Some(state), Some(generation)) =
+                        (pump.state.upgrade(), pump.generation.get())
+                    {
+                        super::detach_generation(&state, *generation);
                     }
                     return;
                 }

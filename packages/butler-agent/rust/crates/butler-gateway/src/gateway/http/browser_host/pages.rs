@@ -5,7 +5,7 @@ use butler_runtime::browser::{ContentOrigin, Headless, PageHost, PortFuture};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, PoisonError, Weak},
+    sync::{Arc, Mutex, OnceLock, PoisonError, Weak},
     time::Duration,
 };
 use tokio::sync::{mpsc, oneshot};
@@ -25,8 +25,11 @@ impl Routes {
     pub(super) fn has_tab(&self, tab: &str) -> bool {
         lock(&self.tabs).contains_key(tab)
     }
+    /// Records a page; one already known keeps its entry.
     pub(super) fn add_tab(&self, tab: &str, target: &str) {
-        lock(&self.tabs).insert(tab.to_owned(), target.to_owned());
+        lock(&self.tabs)
+            .entry(tab.to_owned())
+            .or_insert_with(|| target.to_owned());
     }
     pub(super) fn remove_target(&self, target: &str) {
         let tab = lock(&self.tabs)
@@ -46,8 +49,12 @@ impl Routes {
     pub(super) fn add_child(&self, session: &str, tab: &str) {
         lock(&self.children).insert(session.to_owned(), tab.to_owned());
     }
-    pub(super) fn remove_child(&self, session: &str) {
-        lock(&self.children).remove(session);
+    /// Forgets a child session, only when it belongs to `tab`.
+    pub(super) fn remove_child(&self, session: &str, tab: &str) {
+        let mut children = lock(&self.children);
+        if children.get(session).is_some_and(|owner| owner == tab) {
+            children.remove(session);
+        }
     }
 }
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -61,6 +68,8 @@ pub(super) struct Link {
     routes: Arc<Routes>,
     runtime: tokio::runtime::Handle,
     shutdown: CancellationToken,
+    /// The attach this link serves; set once the host is admitted.
+    generation: Arc<OnceLock<u64>>,
 }
 impl Drop for Link {
     fn drop(&mut self) {
@@ -69,11 +78,13 @@ impl Drop for Link {
 }
 
 impl Link {
-    /// The link of attach `generation`, and the relay frames for the app.
+    /// A link with its executor (built off the hub lock: it reads files), and
+    /// the relay frames for the app. It serves nothing until [`Link::bind`].
     pub(super) fn new(
         state: &Arc<HttpState>,
-        generation: u64,
+        root: std::path::PathBuf,
     ) -> (Arc<Self>, mpsc::Receiver<Value>) {
+        let generation = Arc::new(OnceLock::new());
         let (host, incoming) = mpsc::channel::<Vec<u8>>(QUEUE);
         let (outgoing, from_executor) = mpsc::channel::<Vec<u8>>(QUEUE);
         let (relay_tx, relay_rx) = mpsc::channel(QUEUE);
@@ -82,23 +93,17 @@ impl Link {
         let port = Arc::new(Port {
             state: Arc::downgrade(state),
             routes: routes.clone(),
+            generation: generation.clone(),
         });
         let content = Some(ContentOrigin(super::super::content::port(state)));
-        let executor = Headless::hosted(
-            port,
-            incoming,
-            outgoing,
-            state.hosted_root.clone(),
-            content,
-            shutdown.clone(),
-        );
+        let executor = Headless::hosted(port, incoming, outgoing, root, content, shutdown.clone());
         tokio::spawn(relay::run_down(relay::Pump {
             from_executor,
             to_executor: host.clone(),
             to_app: relay_tx,
             routes: routes.clone(),
             state: Arc::downgrade(state),
-            generation,
+            generation: generation.clone(),
             shutdown: shutdown.clone(),
         }));
         let link = Arc::new(Self {
@@ -107,8 +112,14 @@ impl Link {
             routes,
             runtime: tokio::runtime::Handle::current(),
             shutdown,
+            generation,
         });
         (link, relay_rx)
+    }
+
+    /// Ties the link to the attach it was admitted for.
+    pub(super) fn bind(&self, generation: u64) {
+        let _ = self.generation.set(generation);
     }
 
     /// Runs `frame` on the executor; its value answers the pending call `id`.
@@ -132,6 +143,13 @@ impl Link {
         self.runtime.spawn(async move {
             executor.execute(frame).await;
         });
+    }
+
+    /// Tells the executor who holds one of its pages (the app's own are ignored).
+    pub(super) fn hold(&self, tab: &str, user: bool) {
+        if self.routes.has_tab(tab) {
+            self.executor.set_held(tab, user);
+        }
     }
 
     /// Closes a tab whose page fell outside policy.
@@ -164,51 +182,110 @@ impl Link {
     }
 }
 
+/// Builds a link on a blocking thread: the executor reads files as it starts.
+pub(super) async fn open(
+    state: &Arc<HttpState>,
+) -> Result<(Arc<Link>, mpsc::Receiver<Value>), super::HttpError> {
+    let root = state
+        .hosted_root
+        .clone()
+        .ok_or_else(|| super::error(503, "browser_unavailable"))?;
+    let state = state.clone();
+    tokio::task::spawn_blocking(move || Link::new(&state, root))
+        .await
+        .map_err(|_| super::HttpError::Internal)
+}
+
 /// The executor's way to ask the app for a page.
 struct Port {
     state: Weak<HttpState>,
     routes: Arc<Routes>,
+    generation: Arc<OnceLock<u64>>,
 }
 impl PageHost for Port {
     fn call(&self, op: &'static str, args: Value) -> PortFuture {
-        let (state, routes) = (self.state.clone(), self.routes.clone());
+        let (state, routes, generation) = (
+            self.state.clone(),
+            self.routes.clone(),
+            self.generation.clone(),
+        );
         Box::pin(async move {
             let unavailable = || "browser_unavailable".to_owned();
             let state = state.upgrade().ok_or_else(unavailable)?;
-            let secs = if op == "page.open" { 20 } else { 5 };
-            let id = uuid::Uuid::new_v4().to_string();
-            let (sender, receiver) = oneshot::channel();
-            {
-                let mut hub = state.browser.0.lock().map_err(|_| unavailable())?;
-                let frame = json!({"id":id,"op":op,"args":args,"deadline_ms":secs * 1000});
-                let host = hub.host.as_ref().ok_or_else(unavailable)?;
-                host.try_send(frame).map_err(|_| unavailable())?;
-                hub.pending.insert(id.clone(), sender.into());
-            }
-            let _pending = PendingCall {
-                state: state.clone(),
-                id,
-            };
-            let reply = tokio::time::timeout(Duration::from_secs(secs), receiver).await;
-            if op == "page.close" {
-                routes.remove_tab(args["tab"].as_str().unwrap_or(""));
-            }
-            let value = reply
-                .map_err(|_| unavailable())?
-                .map_err(|_| unavailable())?;
-            if value["status"] != "ok" {
-                return Err(value["reason"]
-                    .as_str()
-                    .map_or_else(unavailable, str::to_owned));
-            }
-            if op == "page.open"
-                && let Some(tab) = value["tab"].as_str()
-            {
-                routes.add_tab(tab, value["target"].as_str().unwrap_or(""));
+            let value = exchange(&state, &generation, op, &args).await?;
+            match op {
+                "page.close" => routes.remove_tab(args["tab"].as_str().unwrap_or("")),
+                "page.open" => {
+                    let (tab, target) = (value["tab"].as_str(), value["target"].as_str());
+                    let (Some(tab), Some(target)) = (
+                        tab.filter(|t| !t.is_empty()),
+                        target.filter(|t| !t.is_empty()),
+                    ) else {
+                        // A page that cannot be tracked is closed, never left open.
+                        if let Some(tab) = tab {
+                            let _ =
+                                exchange(&state, &generation, "page.close", &json!({"tab":tab}))
+                                    .await;
+                        }
+                        return Err(unavailable());
+                    };
+                    routes.add_tab(tab, target);
+                }
+                _ => {}
             }
             Ok(value)
         })
     }
+}
+
+/// One call to the page host of this port's own attach: its answer, or why not.
+async fn exchange(
+    state: &Arc<HttpState>,
+    generation: &OnceLock<u64>,
+    op: &'static str,
+    args: &Value,
+) -> Result<Value, String> {
+    let unavailable = || "browser_unavailable".to_owned();
+    let secs = if op == "page.open" { 20 } else { 5 };
+    let id = uuid::Uuid::new_v4().to_string();
+    let (sender, receiver) = oneshot::channel();
+    {
+        let mut hub = state.browser.0.lock().map_err(|_| unavailable())?;
+        // A dead link never reaches a newer host.
+        if generation.get() != Some(&hub.generation) || hub.pages.is_none() {
+            return Err(unavailable());
+        }
+        let frame = json!({"id":id,"op":op,"args":args,"deadline_ms":secs * 1000});
+        let host = hub.host.as_ref().ok_or_else(unavailable)?;
+        host.try_send(frame).map_err(|_| unavailable())?;
+        hub.pending.insert(id.clone(), sender.into());
+    }
+    let _pending = PendingCall {
+        state: state.clone(),
+        id,
+    };
+    let reply = tokio::time::timeout(Duration::from_secs(secs), receiver).await;
+    let value = reply
+        .map_err(|_| unavailable())?
+        .map_err(|_| unavailable())?;
+    if value["status"] != "ok" {
+        return Err(value["reason"]
+            .as_str()
+            .map_or_else(unavailable, str::to_owned));
+    }
+    Ok(value)
+}
+
+/// The page host does not fill sign-ins, cards or autofill yet: these ops are
+/// refused, as the hosted executor refuses them, before any secret is read.
+pub(super) fn refusal(state: &HttpState, op: &str) -> Option<Value> {
+    let reason = match op {
+        "signin.fill" => "signed_in_unavailable",
+        "pay.inspect" | "pay.fill" | "autofill.fill" => "vault_needs_app",
+        _ => return None,
+    };
+    let paged = state.browser.0.lock().is_ok_and(|hub| hub.pages.is_some());
+    paged.then(|| json!({"status":"refused","reason":reason}))
 }
 
 /// `POST /internal/browser-host/cdp`: messages from the app's pages.

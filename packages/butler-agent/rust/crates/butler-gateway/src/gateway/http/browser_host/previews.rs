@@ -63,13 +63,13 @@ async fn close_on_host(state: &Arc<HttpState>, session: &str, id: &str) {
         hub.pending.insert(call.clone(), sender.into());
         hub.pages.clone()
     };
-    if let Some(link) = pages {
-        link.executor.close_preview(session, id).await;
-    }
     let _pending = super::PendingCall {
         state: state.clone(),
         id: call,
     };
+    if let Some(link) = pages {
+        link.executor.close_preview(session, id).await;
+    }
     let _ = tokio::time::timeout(std::time::Duration::from_secs(5), receiver).await;
 }
 async fn start(
