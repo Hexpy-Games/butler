@@ -326,7 +326,9 @@ fn leading(bar: &mut TitlebarShell, m: &Metrics, ds: &Ds) -> Option<AnyElement> 
                 .into_any_element(),
             _ => {
                 let side = ds.len(Length::TypoAppTitleLineHeight);
-                slot.size(side)
+                // A grid track grows to its content, so a wider control sits at the box start.
+                slot.min_w(side)
+                    .h(side)
                     .text_color(ds.color(Color::TextTertiary))
                     .child(content)
                     .into_any_element()
