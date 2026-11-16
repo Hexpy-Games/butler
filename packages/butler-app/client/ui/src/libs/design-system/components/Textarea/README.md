@@ -21,6 +21,9 @@ import { Textarea } from "@/butler-ds";
 
 Prefer token-backed spacing and responsive composition. Check its showcase and usage guidance in the DS Viewer before using it in a domain flow.
 
+## Props
+- `dropActive?: boolean`: A dragged file can be dropped on the field: the interactive border and ring of the ComposerCard drop state.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 
