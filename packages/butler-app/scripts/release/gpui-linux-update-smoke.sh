@@ -11,6 +11,15 @@ electron=$(realpath "$1")
 gpui=$(realpath "$2")
 from=$(dpkg-deb -f "$electron" Version | sed 's/~/-/')
 to=$(dpkg-deb -f "$gpui" Version | sed 's/~/-/')
+case $(dpkg-deb -f "$gpui" Architecture) in
+  amd64) install_dir=/opt/butler/Butler-linux-x64 ;;
+  arm64) install_dir=/opt/butler/Butler-linux-arm64 ;;
+  *) echo 'gpui upgrade smoke: unsupported package architecture' >&2; exit 1 ;;
+esac
+[ "$(dpkg-deb -f "$electron" Architecture)" = "$(dpkg-deb -f "$gpui" Architecture)" ] || {
+  echo 'gpui upgrade smoke: the Electron and gpui packages target different architectures' >&2
+  exit 1
+}
 root=$(mktemp -d)
 export HOME="$root/home" BUTLER_DATA="$root/data" TMPDIR="$root/tmp"
 export XDG_CONFIG_HOME="$root/config" XDG_CACHE_HOME="$root/cache" XDG_DATA_HOME="$root/share"
@@ -18,7 +27,6 @@ export XDG_STATE_HOME="$root/state" XDG_RUNTIME_DIR="$root/runtime"
 export BUTLER_E2E_TIER=stub BUTLER_SECRET_STORE=file BUTLER_APP_SERVER_HOST=127.0.0.1
 export BUTLER_APP_ELECTRON_USER_DATA_DIR="$root/electron" BUTLER_APP_UPDATE_MANIFEST="$root/manifest.json"
 export DEBIAN_FRONTEND=noninteractive
-install_dir=/opt/butler/Butler-linux-x64
 record="$BUTLER_DATA/state/butler-agent-native-service.json"
 app_log="$root/app.log"
 launcher_pid=
