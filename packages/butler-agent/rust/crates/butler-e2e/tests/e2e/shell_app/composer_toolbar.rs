@@ -2,9 +2,10 @@
 use super::live_turns::ready_workspace;
 use super::*;
 
-/// SHELL-APP-08 — With the composer unfolded, a press on a toolbar control (the "+", the access
-/// menu, the model menu) opens its menu and the card stays unfolded, as in Electron, where focus
-/// moving between the card's controls does not fold it (`useComposerPresentation`).
+/// SHELL-APP-08 — A press on the folded composer unfolds it with the caret in the editor; with it
+/// unfolded, a press on a toolbar control (the "+", the access menu, the model menu) opens its
+/// menu and the card stays unfolded, as in Electron, where focus moving between the card's
+/// controls does not fold it (`useComposerPresentation`).
 #[tokio::test]
 async fn shell_app_08_toolbar_menus_open_from_the_unfolded_composer() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -19,7 +20,10 @@ async fn shell_app_08_toolbar_menus_open_from_the_unfolded_composer() -> Result<
             "wait-anchor composer",
             "controls loaded",
             "new",
-            "compose",
+            // A press on the folded card unfolds it and puts the caret in the editor.
+            "click-at composer 0.5 0.5",
+            "expect-composer-focus",
+            "expect-anchor access-menu",
         ])
         .await?;
     for menu in ["attachment-menu", "access-menu", "model-menu"] {

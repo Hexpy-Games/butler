@@ -242,11 +242,14 @@ impl Composer {
         }
     }
 
-    /// A pointer pressed inside the card.
-    pub(super) fn engage_by_pointer(&mut self, cx: &mut Context<Self>) {
-        if self.disabled.is_none() {
-            self.fold.engaged = true;
-            cx.notify();
+    /// `onPointerDownCapture` and `focusDraftFromComposerChrome` (`Composer.tsx`): a press inside
+    /// the card engages it; one no control took (padding, the folded preview line) is kept from
+    /// moving focus and puts the caret in the editor. A control that took the press engages the
+    /// card through its focus.
+    pub(super) fn press_chrome(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !window.default_prevented() {
+            window.prevent_default();
+            self.engage(window, cx);
         }
     }
 

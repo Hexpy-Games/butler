@@ -424,12 +424,8 @@ impl Render for Composer {
             .w(px(column.column_width.max(0.)))
             .id("composer")
             .track_focus(&self.within)
-            // `onPointerDownCapture` engages. The container takes no focus from a pointer: a
-            // press on the card's padding keeps focus where it is.
-            .on_any_mouse_down(cx.listener(|this, _, window, cx| {
-                window.prevent_default();
-                this.engage_by_pointer(cx);
-            }));
+            // `focusDraftFromComposerChrome`: a press no control took.
+            .on_any_mouse_down(cx.listener(|this, _, window, cx| this.press_chrome(window, cx)));
         file_drop(surface, move |files, _, cx| {
             let _ = dropped.update(cx, |this, cx| this.add_files(files, cx));
         })
@@ -443,11 +439,6 @@ impl Render for Composer {
         .child(probe)
         .child(card)
         .capture_any_mouse_down(cx.listener(|this, _, _, _| this.release_focus = false))
-        .on_click(cx.listener(|this, _, window, cx| {
-            if !this.fold.engaged {
-                this.engage(window, cx);
-            }
-        }))
         // useComposerPresentation: a pointer-down anywhere else folds the composer, unless a
         // toolbar popover is open or the IME is composing.
         .on_mouse_down_out(cx.listener(|this, _, window, cx| {
