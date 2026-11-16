@@ -185,7 +185,17 @@ pub(crate) async fn utility(
             .to_owned()
     };
     let (_, session) = match host {
-        Some(host) => open_hosted(host, "butler:utility", "signed_out", &context, true).await?,
+        Some(host) => {
+            open_hosted(
+                host,
+                "butler:utility",
+                "signed_out",
+                &context,
+                true,
+                &Value::Null,
+            )
+            .await?
+        }
         None => create(cdp, shared, &context).await?,
     };
     if let Err(error) = cdp
