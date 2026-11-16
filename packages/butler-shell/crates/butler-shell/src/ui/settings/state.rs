@@ -40,7 +40,7 @@ pub(crate) struct Save {
 }
 
 /// `{...base, ...patch}`
-fn merged(base: Option<&Value>, patch: &Value) -> Value {
+pub(super) fn merged(base: Option<&Value>, patch: &Value) -> Value {
     let mut next = base.cloned().unwrap_or_else(|| Value::Object(Map::new()));
     if let (Some(next), Some(patch)) = (next.as_object_mut(), patch.as_object()) {
         for (key, value) in patch {
@@ -148,7 +148,7 @@ impl SettingsState {
         );
     }
 
-    fn set_settings(&mut self, settings: Value, cx: &mut Context<Self>) {
+    pub(super) fn set_settings(&mut self, settings: Value, cx: &mut Context<Self>) {
         let settings = Rc::new(settings);
         self.settings = Some(settings.clone());
         cx.emit(SettingsEvent::Changed(settings));

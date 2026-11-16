@@ -6,7 +6,6 @@ use gpui::{Context, Window};
 
 use super::Shell;
 use super::region::Touched;
-use crate::ui::i18n::Locale;
 use crate::ui::manage::Topic;
 use crate::ui::source::agent::MonitorSignal;
 use crate::ui::source::{ChatRef, EventCursor, Fetch, SourceError};
@@ -135,12 +134,13 @@ impl Shell {
             crate::ui::source::LiveUpdate::NavigationEvent(e) => Some(e.clone()),
             _ => None,
         };
-        // `settings.updated` carries the changed subset; a language in it switches the UI.
+        // `settings.updated` carries the changed subset; it is merged over the current settings
+        // and applied (`settingsFromLiveEvent`).
         if let crate::ui::source::LiveUpdate::NavigationEvent(e) = &event.update
             && e.r#type == "settings.updated"
-            && let Some(language) = e.payload["settings"]["language"].as_str()
+            && e.payload["settings"].is_object()
         {
-            self.set_locale(Locale::from_language(language), cx);
+            self.merge_settings(&e.payload["settings"], cx);
         }
         // Each committed event: the App's log level may change, and the work a deferred App
         // update waits on may settle.
