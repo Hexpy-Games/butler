@@ -141,11 +141,12 @@ fn raw(cx: &App, tab: &TabId, bytes: &[u8]) {
 
 /// What the Agent's executor turns on for a page it drives (butler-runtime `headless/targets.rs`
 /// `setup_page`) that would otherwise keep intercepting after the page is the user's: undone here
-/// because the session cannot be detached. Turning auto-attach off detaches every child session,
-/// which ends their own interception.
+/// because the session cannot be detached. The list mirrors `setup_page` in full: interception,
+/// then the domains (which also stop the page looking automated and the events flowing). Turning
+/// auto-attach off detaches every child session, which ends their own interception.
 #[cfg(feature = "cef")]
 pub(super) fn release(engine: &dyn PageEngine, tab: &TabId) {
-    const MESSAGES: [(&str, &str); 5] = [
+    const MESSAGES: [(&str, &str); 8] = [
         ("Fetch.disable", "{}"),
         ("Page.setInterceptFileChooserDialog", r#"{"enabled":false}"#),
         ("Emulation.clearDeviceMetricsOverride", "{}"),
@@ -154,6 +155,9 @@ pub(super) fn release(engine: &dyn PageEngine, tab: &TabId) {
             "Target.setAutoAttach",
             r#"{"autoAttach":false,"waitForDebuggerOnStart":false,"flatten":true}"#,
         ),
+        ("Runtime.disable", "{}"),
+        ("Network.disable", "{}"),
+        ("Page.disable", "{}"),
     ];
     for (offset, (method, params)) in (1..).zip(MESSAGES) {
         let id = butler_cef_host::osr::RAW_ID_BASE + offset;
