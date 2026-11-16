@@ -55,7 +55,8 @@ pub(crate) fn result<T>(value: &Result<T, BrowserError>, cx: &mut App) {
     cx.refresh_windows();
 }
 pub(crate) fn create(owner: Owner, cx: &mut App) {
-    let value = cx.global_mut::<BrowserState>().create(owner, None, false);
+    let value =
+        cx.update_global::<BrowserState, _>(|model, cx| model.create(owner, None, false, true, cx));
     result(&value, cx);
 }
 pub(super) fn owner_key(owner: &Owner) -> String {
@@ -175,6 +176,7 @@ fn page(tab: Option<&Tab>, window: &mut Window, cx: &mut App) -> PageCard {
     page
 }
 pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut App) -> AnyElement {
+    let restored = super::restore::ready(cx);
     let state = area_state(session, window, cx);
     let tabs = shown(session, &state, cx);
     let owner = session.map_or(Owner::Mine, |s| Owner::Conversation(s.to_owned().into()));
@@ -189,11 +191,17 @@ pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut 
         || manage::window_ctx(cx)
             .and_then(|ctx| ctx.navigation(cx))
             .is_some();
-    if tabs.is_empty() && known && cx.global::<BrowserState>().enabled() && !state.read(cx).creating
+    if restored
+        && tabs.is_empty()
+        && known
+        && cx.global::<BrowserState>().enabled()
+        && !state.read(cx).creating
     {
         state.update(cx, |s, _| s.creating = true);
         let owner = session.map_or(Owner::Mine, |s| Owner::Conversation(s.to_owned().into()));
-        let value = cx.global_mut::<BrowserState>().create(owner, None, true);
+        let value = cx.update_global::<BrowserState, _>(|model, cx| {
+            model.create(owner, None, true, true, cx)
+        });
         result(&value, cx);
     }
     let active = cx.global::<BrowserState>().active();

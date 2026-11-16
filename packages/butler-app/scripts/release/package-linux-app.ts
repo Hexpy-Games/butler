@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Linux App packages (#260 Linux track): the Electron App with the native
+ * Linux App packages (#260 Linux track): the App with the native
  * Butler Agent bundled the way macOS bundles it, as a DEB (x64, arm64) and an
  * Arch pacman package (x64). The App starts the agent in its own POSIX process
  * group while it is open; no systemd unit is installed.
@@ -32,11 +32,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { readAppComponentVersions } from "./manifest.ts";
 
 export type LinuxAppPlatform = "linux-x64" | "linux-arm64";
 export type LinuxPackageFormat = "deb" | "pacman";
+type AppShell = "electron" | "gpui";
 
 export interface LinuxPackageArtifact {
   platform: LinuxAppPlatform;
@@ -70,6 +71,7 @@ export function createLinuxAppPackages(input: {
   outDir: string;
   platform: LinuxAppPlatform;
   formats: LinuxPackageFormat[];
+  shell?: AppShell;
 }): LinuxPackageArtifact[] {
   const root = resolve(input.root);
   const outDir = resolve(input.outDir);
@@ -84,11 +86,13 @@ export function createLinuxAppPackages(input: {
   process.env.SOURCE_DATE_EPOCH = String(epoch);
   const workDir = mkdtempSync(join(tmpdir(), "butler-linux-app-"));
   try {
-    const staged = packageElectronApp(root, workDir, input.platform, epoch);
+    const shell = input.shell ?? "electron";
+    const staged = shell === "gpui" ? packageGpuiApp(root, workDir, input.platform, epoch)
+      : packageElectronApp(root, workDir, input.platform, epoch);
     return input.formats.map((format) => {
       const artifactPath = join(outDir, artifactName(staged, format));
-      if (format === "deb") createDeb(staged, workDir, artifactPath);
-      else createPacman(staged, workDir, artifactPath);
+      if (format === "deb") createDeb(staged, workDir, artifactPath, shell);
+      else createPacman(staged, workDir, artifactPath, shell);
       const sha256 = sha256File(artifactPath);
       writeFileSync(`${artifactPath}.sha256`, `${sha256}  ${basename(artifactPath)}\n`, "utf8");
       return { platform: input.platform, format, artifactPath, sha256 };
@@ -109,14 +113,7 @@ function artifactName(staged: StagedApp, format: LinuxPackageFormat): string {
 function packageElectronApp(root: string, workDir: string, platform: LinuxAppPlatform, epoch: number): StagedApp {
   const versions = readAppComponentVersions(root);
   const arch = platform === "linux-x64" ? "x64" : "arm64";
-  const agentDir = join(workDir, "bundled-agent");
-  run(process.env.BUTLER_NODE || "node", [
-    join(root, ELECTRON_ROOT, "scripts", "prepare-native-agent.mjs"), "linux", arch, agentDir,
-  ], { cwd: root, env: { ...process.env, BUTLER_NATIVE_PAYLOAD_WRITABLE: "1", BUTLER_PACKAGED_APP_VERSION: versions.app } });
-  const manifest = JSON.parse(readFileSync(join(agentDir, "native-agent-manifest.json"), "utf8"));
-  if (manifest.version !== versions.bundledAgent || manifest.appVersion !== versions.app) {
-    throw new Error("native bundled Agent version does not match the App release");
-  }
+  const agentDir = prepareBundledAgent(root, workDir, arch);
   const rendererDist = join(root, APP_RENDERER_DIST);
   if (!existsSync(join(rendererDist, "index.html"))) {
     throw new Error(`Butler app renderer dist is missing: ${rendererDist}`);
@@ -145,8 +142,52 @@ function packageElectronApp(root: string, workDir: string, platform: LinuxAppPla
   return { root, platform, version: versions.app, packagedDir, agentBinary, appBinary: join(packagedDir, "Butler"), epoch };
 }
 
+function prepareBundledAgent(root: string, workDir: string, arch: string): string {
+  const versions = readAppComponentVersions(root);
+  const agentDir = join(workDir, "bundled-agent");
+  run(process.env.BUTLER_NODE || "node", [
+    join(root, ELECTRON_ROOT, "scripts", "prepare-native-agent.mjs"), "linux", arch, agentDir,
+  ], { cwd: root, env: { ...process.env, BUTLER_NATIVE_PAYLOAD_WRITABLE: "1", BUTLER_PACKAGED_APP_VERSION: versions.app } });
+  const manifest = JSON.parse(readFileSync(join(agentDir, "native-agent-manifest.json"), "utf8"));
+  if (manifest.version !== versions.bundledAgent || manifest.appVersion !== versions.app) {
+    throw new Error("native bundled Agent version does not match the App release");
+  }
+  return agentDir;
+}
+
+function packageGpuiApp(root: string, workDir: string, platform: LinuxAppPlatform, epoch: number): StagedApp {
+  const executable = requiredPath("BUTLER_SHELL_EXECUTABLE");
+  const runtime = requiredPath("BUTLER_CEF_RUNTIME");
+  for (const name of ["butler-cef-host", "libcef.so", "chrome-sandbox", "CREDITS.html"]) {
+    if (!statSync(join(runtime, name), { throwIfNoEntry: false })?.isFile()) throw new Error(`CEF runtime is missing ${name}`);
+  }
+  const versions = readAppComponentVersions(root);
+  const arch = platform === "linux-x64" ? "x64" : "arm64";
+  const agentDir = prepareBundledAgent(root, workDir, arch);
+  const packagedDir = join(workDir, `Butler-${platform}`);
+  cpSync(runtime, packagedDir, { recursive: true });
+  const appBinary = join(packagedDir, "Butler");
+  copyFileSync(executable, appBinary);
+  chmodSync(appBinary, 0o755);
+  cpSync(agentDir, join(packagedDir, "resources", "bundled-agent"), { recursive: true });
+  const agentBinary = join(packagedDir, "resources", "bundled-agent", "bin", "butler-agent");
+  run(process.env.BUTLER_NODE || "node", [join(root, ELECTRON_ROOT, "scripts", "prepare-process-links.mjs"), agentBinary], { cwd: root });
+  run(process.env.BUTLER_NODE || "node", [join(root, "deploy/licenses/package-app.mjs"), packagedDir], { cwd: root });
+  const notices = join(workDir, "shell-notices");
+  run(process.env.PYTHON3 || "python3", [join(root, "deploy/licenses/cargo-notices.py"), "--root", join(root, "packages/butler-shell"),
+    "--target", `${platform === "linux-x64" ? "x86_64" : "aarch64"}-unknown-linux-gnu`, "--output", notices], { cwd: root });
+  cpSync(notices, join(packagedDir, "resources/licenses/butler-shell"), { recursive: true });
+  return { root, platform, version: versions.app, packagedDir, agentBinary, appBinary, epoch };
+}
+
+function requiredPath(name: string): string {
+  const value = process.env[name];
+  if (!value || !isAbsolute(value) || !existsSync(value)) throw new Error(`${name} requires an existing absolute path`);
+  return value;
+}
+
 /** Lays out the file system every package format installs. */
-function stagePackageRoot(staged: StagedApp, packageRoot: string, format: LinuxPackageFormat): string {
+function stagePackageRoot(staged: StagedApp, packageRoot: string, format: LinuxPackageFormat, shell: AppShell): string {
   const installDir = join(LINUX_INSTALL_ROOT, `Butler-${staged.platform}`);
   const target = join(packageRoot, installDir.slice(1));
   mkdirSync(join(target, ".."), { recursive: true });
@@ -156,7 +197,7 @@ function stagePackageRoot(staged: StagedApp, packageRoot: string, format: LinuxP
     join(staged.root, ELECTRON_ROOT, "scripts", "prepare-process-links.mjs"),
     join(target, "resources", "bundled-agent", "bin", "butler-agent"),
   ], { cwd: staged.root });
-  // Electron's sandbox helper must be setuid root; both formats install as root.
+  // The Chromium sandbox helper must be setuid root; both formats install as root.
   chmodSync(join(target, "chrome-sandbox"), 0o4755);
   const binDir = join(packageRoot, "usr", "bin");
   const shareDir = join(packageRoot, "usr", "share");
@@ -164,7 +205,7 @@ function stagePackageRoot(staged: StagedApp, packageRoot: string, format: LinuxP
     format === "deb" ? join(shareDir, "doc", PACKAGE_NAME) : join(shareDir, "licenses", PACKAGE_NAME)]) {
     mkdirSync(dir, { recursive: true });
   }
-  writeExecutable(join(binDir, PACKAGE_NAME), launcherScript(installDir));
+  writeExecutable(join(binDir, PACKAGE_NAME), launcherScript(installDir, shell));
   writeExecutable(join(binDir, "butler"), cliLauncherScript(installDir));
   copyFileSync(join(staged.root, ELECTRON_ROOT, "assets", "icon.png"), join(shareDir, "icons", "hicolor", "512x512", "apps", "butler.png"));
   // Debian policy: the license text is /usr/share/doc/<package>/copyright.
@@ -177,23 +218,23 @@ function stagePackageRoot(staged: StagedApp, packageRoot: string, format: LinuxP
   return installDir;
 }
 
-function createDeb(staged: StagedApp, workDir: string, artifactPath: string): void {
+function createDeb(staged: StagedApp, workDir: string, artifactPath: string, shell: AppShell): void {
   const debRoot = join(workDir, "deb-root");
   const controlDir = join(debRoot, "DEBIAN");
   mkdirSync(controlDir, { recursive: true });
-  const installDir = stagePackageRoot(staged, debRoot, "deb");
-  writeFileSync(join(controlDir, "control"), debControl(staged), "utf8");
-  writeExecutable(join(controlDir, "postinst"), postInstallScript(installDir));
+  const installDir = stagePackageRoot(staged, debRoot, "deb", shell);
+  writeFileSync(join(controlDir, "control"), debControl(staged, shell), "utf8");
+  writeExecutable(join(controlDir, "postinst"), postInstallScript(installDir, shell));
   setTreeMtime(controlDir, staged.epoch);
   rmSync(artifactPath, { force: true });
   run(process.env.BUTLER_APP_DPKG_DEB || "dpkg-deb", ["--build", "--root-owner-group", "-Zxz", debRoot, artifactPath]);
 }
 
-function createPacman(staged: StagedApp, workDir: string, artifactPath: string): void {
+function createPacman(staged: StagedApp, workDir: string, artifactPath: string, shell: AppShell): void {
   const buildDir = join(workDir, "pacman");
   mkdirSync(buildDir, { recursive: true });
-  const installDir = stagePackageRoot(staged, join(buildDir, "pkgroot"), "pacman");
-  writeFileSync(join(buildDir, "PKGBUILD"), pkgbuild(staged, installDir), "utf8");
+  const installDir = stagePackageRoot(staged, join(buildDir, "pkgroot"), "pacman", shell);
+  writeFileSync(join(buildDir, "PKGBUILD"), pkgbuild(staged, installDir, shell), "utf8");
   writeFileSync(join(buildDir, `${PACKAGE_NAME}.install`), pacmanInstallHooks(installDir), "utf8");
   setTreeMtime(buildDir, staged.epoch);
   run(process.env.BUTLER_APP_MAKEPKG || "makepkg", ["--force", "--nodeps"], {
@@ -207,7 +248,7 @@ function createPacman(staged: StagedApp, workDir: string, artifactPath: string):
 
 /**
  * The glibc floor of the package: the highest GLIBC_x.y symbol version needed
- * by the bundled agent or the Butler (Electron) binary, so a DEB never installs
+ * by the bundled agent or the Butler binary, so a DEB never installs
  * where either cannot start.
  */
 function glibcFloor(...binaries: string[]): string {
@@ -244,7 +285,10 @@ function compareVersions(left: number[], right: number[]): number {
   return 0;
 }
 
-function debControl(staged: StagedApp): string {
+function debControl(staged: StagedApp, shell: AppShell): string {
+  const dependencies = shell === "gpui"
+    ? "libnss3, libgbm1, libasound2t64 | libasound2, libxkbcommon0, libxkbcommon-x11-0, libxcb1, libwayland-client0, libfontconfig1, libvulkan1, mesa-vulkan-drivers | vulkan-icd, xdg-utils"
+    : "libgtk-3-0t64 | libgtk-3-0, libnss3, libxss1, libasound2t64 | libasound2, libgbm1, libnotify4, xdg-utils";
   return `Package: ${PACKAGE_NAME}
 Version: ${debPackageVersion(staged.version)}
 Section: utils
@@ -252,14 +296,17 @@ Priority: optional
 Architecture: ${DEB_ARCHITECTURES[staged.platform]}
 Maintainer: Hexpy Games <support@hexpy.games>
 Homepage: https://github.com/Hexpy-Games/butler
-Depends: libc6 (>= ${glibcFloor(staged.agentBinary, staged.appBinary)}), libstdc++6, libgcc-s1, libgtk-3-0t64 | libgtk-3-0, libnss3, libxss1, libasound2t64 | libasound2, libgbm1, libnotify4, xdg-utils
+Depends: libc6 (>= ${glibcFloor(staged.agentBinary, staged.appBinary)}), libstdc++6, libgcc-s1, ${dependencies}
 Description: Butler desktop app
  Butler desktop app with the bundled native Butler Agent. The agent runs
  while the app is open.
 `;
 }
 
-function pkgbuild(staged: StagedApp, installDir: string): string {
+function pkgbuild(staged: StagedApp, installDir: string, shell: AppShell): string {
+  const dependencies = shell === "gpui"
+    ? "'glibc' 'gcc-libs' 'nss' 'mesa' 'alsa-lib' 'libxkbcommon-x11' 'libxcb' 'wayland' 'fontconfig' 'vulkan-icd-loader' 'vulkan-driver' 'xdg-utils'"
+    : "'glibc' 'gcc-libs' 'gtk3' 'nss' 'libxss' 'alsa-lib' 'mesa' 'libnotify' 'xdg-utils'";
   return `pkgname=${PACKAGE_NAME}
 pkgver=${archPackageVersion(staged.version)}
 pkgrel=1
@@ -267,7 +314,7 @@ pkgdesc='Butler desktop app with the bundled native Butler Agent'
 arch=('x86_64')
 url='https://github.com/Hexpy-Games/butler'
 license=('MIT')
-depends=('glibc' 'gcc-libs' 'gtk3' 'nss' 'libxss' 'alsa-lib' 'mesa' 'libnotify' 'xdg-utils')
+depends=(${dependencies})
 options=('!strip' '!debug')
 install=${PACKAGE_NAME}.install
 
@@ -290,10 +337,12 @@ post_upgrade() {
 `;
 }
 
-function postInstallScript(installDir: string): string {
+function postInstallScript(installDir: string, shell: AppShell): string {
+  // Preserve the existing Electron postinst bytes.
+  const sandbox = shell === "electron" ? "Electron's" : "The Chromium";
   return `#!/bin/sh
 set -eu
-# Electron's setuid sandbox helper must be root-owned and setuid.
+# ${sandbox} setuid sandbox helper must be root-owned and setuid.
 chmod 4755 "${installDir}/chrome-sandbox" 2>/dev/null || true
 echo "Butler installed. App: butler-app. CLI: butler."
 exit 0
@@ -309,7 +358,13 @@ exec '${installDir}/resources/bundled-agent/bin/butler-agent' --installation-roo
 `;
 }
 
-function launcherScript(installDir: string): string {
+function launcherScript(installDir: string, shell: AppShell): string {
+  if (shell === "gpui") return `#!/bin/sh
+# Starts the Butler App; the App starts the bundled Butler Agent.
+set -eu
+exec "${installDir}/Butler" "$@"
+`;
+
   return `#!/bin/sh
 # Starts the Butler App; the App starts the bundled Butler Agent.
 set -eu
@@ -371,7 +426,8 @@ function run(command: string, args: string[], options: { cwd?: string; env?: Nod
   throw new Error(`${basename(command)} ${args[0] ?? ""} failed: ${detail.slice(-4000)}`);
 }
 
-function parseCliArgs(args: string[]): { platform: LinuxAppPlatform; formats: LinuxPackageFormat[]; outDir: string } {
+function parseCliArgs(args: string[]): { platform: LinuxAppPlatform; formats: LinuxPackageFormat[]; outDir: string; shell: AppShell } {
+  let shell: AppShell = "electron";
   let platform: LinuxAppPlatform | undefined = HOST_PLATFORMS[process.arch];
   const formats: LinuxPackageFormat[] = [];
   let outDir = join(process.cwd(), "dist", "release", "app-linux");
@@ -379,15 +435,20 @@ function parseCliArgs(args: string[]): { platform: LinuxAppPlatform; formats: Li
     const [name, value = ""] = arg.split("=", 2);
     if (name === "--platform" && (value === "linux-x64" || value === "linux-arm64")) platform = value;
     else if (name === "--format" && (value === "deb" || value === "pacman")) formats.push(value);
+    else if (name === "--shell" && (value === "electron" || value === "gpui")) shell = value;
     else if (name === "--out" && value.trim()) outDir = value;
     else throw new Error(`unknown or invalid option: ${arg}`);
   }
   if (!platform) throw new Error("--platform=linux-x64|linux-arm64 is required on this host");
-  return { platform, formats: formats.length ? formats : ["deb"], outDir };
+  return { platform, formats: formats.length ? formats : ["deb"], outDir, shell };
 }
 
 if (import.meta.main) {
   try {
+    if (process.argv.includes("--help")) {
+      process.stdout.write("Usage: package-linux-app.ts --platform=linux-x64|linux-arm64 --format=deb|pacman --shell=electron|gpui --out=<directory> (default shell: electron)\n");
+      process.exit(0);
+    }
     const args = parseCliArgs(process.argv.slice(2));
     for (const artifact of createLinuxAppPackages({ root: process.cwd(), ...args })) {
       process.stdout.write(`Linux App package (${artifact.format}): ${artifact.artifactPath}\nSHA256: ${artifact.sha256}\n`);
