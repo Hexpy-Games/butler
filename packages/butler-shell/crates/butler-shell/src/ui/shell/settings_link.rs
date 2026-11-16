@@ -56,10 +56,9 @@ impl Shell {
         cx.notify();
     }
 
-    /// `closeSettings`: back to the frame, the composer engaged.
-    fn close_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// `closeSettings`: back to the frame; the composer does not take focus.
+    fn close_settings(&mut self, cx: &mut Context<Self>) {
         self.settings_view = None;
-        self.composer.update(cx, |c, cx| c.engage(window, cx));
         cx.notify();
     }
 
@@ -71,15 +70,15 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         match event {
-            SettingsEvent::Close => self.close_settings(window, cx),
+            SettingsEvent::Close => self.close_settings(cx),
             SettingsEvent::Changed(raw) => self.apply_settings(raw, cx),
             SettingsEvent::OpenSession(id) => {
-                self.close_settings(window, cx);
+                self.close_settings(cx);
                 self.navigate(Navigation::Session(id.to_string()), window, cx);
             }
             // `openHistory("settings")`: History with Settings › Browser as its parent.
             SettingsEvent::OpenHistory => {
-                self.close_settings(window, cx);
+                self.close_settings(cx);
                 self.set_view(
                     View::History {
                         from: HistoryFrom::Settings,
@@ -90,7 +89,7 @@ impl Shell {
             }
             // `RerunSetupField` `openRerun`: Settings closes and the setup shows again.
             SettingsEvent::RerunSetup => {
-                self.close_settings(window, cx);
+                self.close_settings(cx);
                 self.onboarding.rerun = true;
                 cx.notify();
             }

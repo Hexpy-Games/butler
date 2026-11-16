@@ -18,6 +18,7 @@ use crate::ui::manage::{
     self, LibraryView, ManageCtx, ManageEvent, ManageLive, ManageState, Proceed, Topic, View, route,
 };
 use crate::ui::observer::{ObserverEvent, SessionObserver};
+use crate::ui::source::ChatRef;
 use crate::ui::source::sidebar::DraftTarget;
 use crate::ui::source::wire::{AppEventEnvelope, ProjectDashboardDocument};
 use crate::ui::viewer;
@@ -32,6 +33,9 @@ struct Observer {
     history: Vec<Observed>,
     _events: Subscription,
 }
+
+/// The composer's editor as Electron keys it: the view, and the open chat or draft.
+pub(super) type ComposerKey = (View, Option<ChatRef>, Option<DraftTarget>);
 
 /// The management side of the shell.
 pub(super) struct Manage {
@@ -80,6 +84,12 @@ impl Shell {
     /// The conversation is the view (`view.kind === "session"`).
     pub(crate) fn on_session(&self, cx: &App) -> bool {
         self.manage.state.read(cx).view == View::Session
+    }
+
+    pub(super) fn composer_key(&self, cx: &App) -> ComposerKey {
+        let view = self.manage.state.read(cx).view.clone();
+        let parent = self.sidebar.new_chat_parent.clone();
+        (view, self.store.selected().cloned(), parent)
     }
 
     /// `routeActiveChatId`: the open session while the conversation is the view.
