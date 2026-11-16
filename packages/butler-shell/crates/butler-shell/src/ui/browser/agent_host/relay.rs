@@ -13,7 +13,11 @@ use futures::{
 };
 use gpui::{App, Global};
 use serde_json::{Value, json};
-use std::{cell::RefCell, collections::VecDeque, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::VecDeque,
+    rc::Rc,
+};
 
 const BATCH_MESSAGES: usize = 256;
 const BATCH_BYTES: usize = 8 << 20;
@@ -24,6 +28,8 @@ struct Relay {
     wake: mpsc::UnboundedSender<()>,
     /// Ends the attach stream of the current attachment.
     abort: Rc<RefCell<Option<oneshot::Sender<()>>>>,
+    /// Counts attachments; a failure only ends the attachment it was sent on.
+    generation: Rc<Cell<u64>>,
 }
 impl Global for Relay {}
 
@@ -53,11 +59,13 @@ pub(super) fn start(cx: &mut App) {
         queue: Rc::default(),
         wake,
         abort: Rc::default(),
+        generation: Rc::default(),
     };
     cx.set_global(relay.clone());
     cx.spawn(async move |cx| {
         while woken.next().await.is_some() {
             while let Some(body) = relay.batch() {
+                let generation = relay.generation.get();
                 let sent = cx
                     .update(|cx| {
                         Jobs::run(cx, move |client| async move {
@@ -66,6 +74,10 @@ pub(super) fn start(cx: &mut App) {
                     })
                     .await;
                 if sent != Some(true) {
+                    if relay.generation.get() != generation {
+                        // The attachment this batch belonged to is already gone.
+                        break;
+                    }
                     // The host leaves: the stream ends and the reset closes the hosted pages.
                     relay.queue.borrow_mut().clear();
                     if let Some(abort) = relay.abort.borrow_mut().take() {
@@ -83,6 +95,7 @@ pub(super) fn start(cx: &mut App) {
 pub(super) fn arm(cx: &App) -> oneshot::Receiver<()> {
     let (send, receive) = oneshot::channel();
     if let Some(relay) = cx.try_global::<Relay>() {
+        relay.generation.set(relay.generation.get() + 1);
         *relay.abort.borrow_mut() = Some(send);
     }
     receive
@@ -124,25 +137,19 @@ fn raw(cx: &App, tab: &TabId, bytes: &[u8]) {
     }
 }
 
-/// Browser-level methods never run from the Agent, even though a page session could.
-#[cfg(feature = "cef")]
-const FENCED: [&str; 6] = [
-    "Target.createBrowserContext",
-    "Target.createTarget",
-    "Target.closeTarget",
-    "Target.disposeBrowserContext",
-    "Target.attachToTarget",
-    "Target.exposeDevToolsProtocol",
-];
-
-/// Ids below `RAW_ID_BASE` are the shell's own DevTools requests.
+/// What the Agent may send down. A page session can otherwise reach the browser and every
+/// other page (`Browser.*`, `Target.attachToBrowserTarget`, `Target.getTargets`,
+/// `Target.sendMessageToTarget`, ...), so of the Target domain only auto-attach (the page's own
+/// frames and workers) and detach pass. Ids below `RAW_ID_BASE` are the shell's own requests.
 #[cfg(feature = "cef")]
 fn allowed(message: &Value) -> bool {
     let own = message["id"]
         .as_f64()
         .is_some_and(|id| id < f64::from(butler_cef_host::osr::RAW_ID_BASE));
     let method = message["method"].as_str().unwrap_or_default();
-    !own && !method.starts_with("Browser.") && !FENCED.contains(&method)
+    !own && !method.starts_with("Browser.")
+        && (!method.starts_with("Target.")
+            || matches!(method, "Target.setAutoAttach" | "Target.detachFromTarget"))
 }
 
 /// A `cdp` frame of the Agent, sent unchanged to the hosted page it names.

@@ -34,6 +34,8 @@ pub(super) fn start(cx: &mut App) {
             while cx.update(|cx| Jobs::client(cx)).is_none() {
                 changed.next().await;
             }
+            // Only changes from here on concern this attachment.
+            while changed.try_recv().is_ok() {}
             let (send, mut receive) = mpsc::unbounded();
             let attach = cx.update(|cx| {
                 let stop = relay::arm(cx);
@@ -49,9 +51,11 @@ pub(super) fn start(cx: &mut App) {
             if attached {
                 delay = RETRY_MIN;
             }
-            sleep(cx, delay).await;
-            if !attached {
-                delay = (delay * 2).min(RETRY_MAX);
+            // A new client (a restarted Agent) reattaches at once, with a fresh delay.
+            match select(sleep(cx, delay), changed.next()).await {
+                Either::Left(_) if !attached => delay = (delay * 2).min(RETRY_MAX),
+                Either::Left(_) => {}
+                Either::Right(_) => delay = RETRY_MIN,
             }
         }
     })

@@ -162,12 +162,19 @@ pub(super) fn reset(cx: &mut App) {
 impl BrowserState {
     /// A hosted page's size is fixed whatever the pane asks.
     pub(in crate::ui::browser) fn fix_hosted_size(&mut self, id: &TabId) {
+        if let Some(tab) = self.tab(id) {
+            tab.pick.viewport.set((1280., 800.));
+        }
         self.engine.resize(id, size(px(1280.), px(800.)), 1.);
     }
 
     /// The tab stops being a hosted page: the Agent hears of its end, the page keeps running.
     pub(in crate::ui::browser) fn end_hosting(&mut self, id: &TabId, cx: &App) {
-        let Some(tab) = self.tabs.iter_mut().find(|tab| &tab.id == id) else {
+        let Some(tab) = self
+            .tabs
+            .iter_mut()
+            .find(|tab| &tab.id == id && tab.hosted.is_some())
+        else {
             return;
         };
         relay::closed(cx, tab);
