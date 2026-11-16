@@ -4,7 +4,7 @@
 use butler_ds::ui::blocks::message_row::MessageBubble;
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{AlignSelf, Space, Stack, WithItem as _};
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast;
 use butler_ds::ui::typo::Typo;
 use gpui::{AnyElement, App, Global, IntoElement as _, ParentElement as _, Window};
 
@@ -47,8 +47,11 @@ fn mark_shown(cx: &mut App) {
     });
     let failed = transcript(Ds::get(cx).lang()).save_failed;
     cx.spawn(async move |cx| {
-        if let Some(Err(_)) = request.await {
-            cx.update(|cx| toast::show(cx, Toast::error(failed)));
+        if let Some(Err(error)) = request.await {
+            cx.update(|cx| {
+                let toast = crate::ui::i18n::errors::toast(cx, &error, failed);
+                toast::show(cx, toast)
+            });
         }
     })
     .detach();

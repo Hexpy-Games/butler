@@ -9,7 +9,7 @@ use butler_ds::ui::blocks::settings_section::{
     SettingsPage, SettingsSection, SettingsSectionKind, SettingsSectionMore,
 };
 use butler_ds::ui::context::Ds;
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast;
 use butler_shell_client::Error;
 use gpui::{
     AnyView, App, AppContext as _, Context, IntoElement, ParentElement as _, Render, SharedString,
@@ -86,9 +86,10 @@ impl ArchivesPage {
                     list.sessions.extend(next.sessions);
                     list.pagination = next.pagination;
                 }
-                (Err(_), _) => {
+                (Err(error), _) => {
                     let copy = words(Ds::get(cx).lang());
-                    toast::show(cx, Toast::error(copy.load_more_failed));
+                    let next = crate::ui::i18n::errors::toast(cx, &error, copy.load_more_failed);
+                    toast::show(cx, next);
                 }
                 _ => {}
             },
@@ -108,7 +109,7 @@ impl ArchivesPage {
                 }
             },
             |this: &mut Self, result: Result<Value, Error>, cx| {
-                this.finish(result.is_ok(), |copy| copy.restore_failed, cx);
+                this.finish(result.as_ref().err(), |copy| copy.restore_failed, cx);
             },
         );
     }
@@ -125,7 +126,7 @@ impl ArchivesPage {
                 }
             },
             |this: &mut Self, result: Result<Value, Error>, cx| {
-                this.finish(result.is_ok(), |copy| copy.remove_failed, cx);
+                this.finish(result.as_ref().err(), |copy| copy.remove_failed, cx);
             },
         );
     }
@@ -133,16 +134,17 @@ impl ArchivesPage {
     /// After a restore or a delete: refresh on success, else the error toast.
     fn finish(
         &mut self,
-        ok: bool,
+        error: Option<&Error>,
         failed: fn(&copy::Words) -> &'static str,
         cx: &mut Context<Self>,
     ) {
-        if ok {
-            self.refresh(cx);
-        } else {
+        if let Some(error) = error {
             self.busy = None;
             let copy = words(Ds::get(cx).lang());
-            toast::show(cx, Toast::error(failed(copy)));
+            let next = crate::ui::i18n::errors::toast(cx, error, failed(copy));
+            toast::show(cx, next);
+        } else {
+            self.refresh(cx);
         }
     }
 

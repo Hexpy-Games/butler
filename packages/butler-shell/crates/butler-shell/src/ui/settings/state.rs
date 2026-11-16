@@ -187,14 +187,17 @@ impl SettingsState {
                             this.notify_saved(Toast::success(copy.saved), cx);
                         }
                     }
-                    Err(_) => {
+                    Err(error) => {
                         if opts.optimistic
                             && let Some(previous) = previous
                         {
                             this.settings = Some(previous.clone());
                             cx.emit(SettingsEvent::Changed(previous));
                         }
-                        this.notify_saved(Toast::error(copy.save_failed), cx);
+                        this.notify_saved(
+                            crate::ui::i18n::errors::toast(cx, &error, copy.save_failed),
+                            cx,
+                        );
                     }
                 }
             },

@@ -32,8 +32,8 @@ impl Mutation {
     }
 }
 
-fn error_toast(cx: &mut App, text: impl Into<gpui::SharedString>) {
-    toast::show(cx, Toast::error(text));
+fn error_toast(cx: &mut App, error: &Error, text: impl Into<gpui::SharedString>) {
+    toast::show(cx, crate::ui::i18n::errors::toast(cx, error, text));
 }
 
 fn success_toast(cx: &mut App) {
@@ -101,9 +101,9 @@ impl AutomationDetail {
                         this.runs = loaded.runs.runs;
                         this.error = None;
                     }
-                    Err(_) => {
+                    Err(error) => {
                         let text = words(Ds::get(cx).lang()).detail_failed;
-                        error_toast(cx, text);
+                        error_toast(cx, &error, text);
                     }
                 }
                 this.ready = true;
@@ -147,14 +147,14 @@ impl AutomationDetail {
                         }
                         success_toast(cx);
                     }
-                    // G-codes: the client returns no error code, so only a 400 names the form.
+                    // The field codes are not mapped to fields here: a 400 names the form.
                     Err(Error::Http(400, _)) => {
                         this.error = Some(SaveError {
                             field: Field::Form,
                             message: words.error_invalid,
                         });
                     }
-                    Err(_) => error_toast(cx, words.save_failed),
+                    Err(error) => error_toast(cx, &error, words.save_failed),
                 }
             },
         );
@@ -182,9 +182,9 @@ impl AutomationDetail {
                     this.load(cx);
                     success_toast(cx);
                 }
-                Err(_) => {
+                Err(error) => {
                     let text = (words(Ds::get(cx).lang()).action_failed)(mutation.name());
-                    error_toast(cx, text);
+                    error_toast(cx, &error, text);
                 }
             },
         );
@@ -202,9 +202,9 @@ impl AutomationDetail {
                         this.run_action(&action, cx);
                     }
                 }
-                Err(_) => {
+                Err(error) => {
                     let text = words(Ds::get(cx).lang()).delete_failed;
-                    error_toast(cx, text);
+                    error_toast(cx, &error, text);
                 }
             },
         );

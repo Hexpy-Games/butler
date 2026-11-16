@@ -205,8 +205,8 @@ impl SecurityAuthority {
     }
 
     /// `useSavedKeys.replace`: the provider checks the new key first (`verify`), so a refused key
-    /// changes nothing. The client reports no key-check code, so a refusal reads as "couldn't
-    /// save the key" (React's fallback for an unknown code).
+    /// changes nothing. The client carries the API error code, but this inline check does not
+    /// read it (React's `keySaveFailure`), so every refusal reads as "couldn't save the key".
     pub(super) fn submit_replace(&mut self, cx: &mut Context<Self>) {
         let Some(id) = self.keys.replacing.clone() else {
             return;
@@ -282,7 +282,7 @@ impl SecurityAuthority {
                 let words = Self::words(cx);
                 let toast = match result {
                     Ok(_) => Toast::success(super::copy::Words::fill(words.deleted_status, &name)),
-                    Err(_) => Toast::error(words.delete_error),
+                    Err(error) => crate::ui::i18n::errors::toast(cx, &error, words.delete_error),
                 };
                 announce(&mut this.keys.toast, toast, cx);
                 this.refresh_keys(cx);

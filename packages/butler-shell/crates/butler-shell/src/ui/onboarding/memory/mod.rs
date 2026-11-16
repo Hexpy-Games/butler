@@ -6,7 +6,7 @@ pub(crate) mod status;
 use butler_ds::ui::blocks::choice_card::{ChoiceCard, ChoiceCardList, ChoiceState, glyph};
 use butler_ds::ui::blocks::setup_wizard_step_card::SetupWizardStepAction;
 use butler_ds::ui::context::Ds;
-use butler_ds::ui::toast::{self, Toast, ToastId};
+use butler_ds::ui::toast::{self, ToastId};
 use butler_ds::ui::tooltip::{Side, Tooltip};
 use butler_shell_client::Error;
 use gpui::{
@@ -95,8 +95,12 @@ impl MemoryChoice {
                         }
                         cx.emit(MemoryEvent::Saved);
                     }
-                    Err(_) => {
-                        let toast = Toast::error(words(Ds::get(cx).lang()).save_failed);
+                    Err(error) => {
+                        let toast = crate::ui::i18n::errors::toast(
+                            cx,
+                            &error,
+                            words(Ds::get(cx).lang()).save_failed,
+                        );
                         let toast = match this.toast {
                             Some(id) => toast.id(id),
                             None => toast,
