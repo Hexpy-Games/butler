@@ -77,12 +77,12 @@ fn flush(cx: &mut App) {
                 .tab(&TabId(id.to_owned().into()))
         });
         if let Some(tab) = tab {
-            visit["title"] = json!(if tab.title.is_empty() {
-                &tab.url
-            } else {
-                &tab.title
-            });
-            visit["favicon"] = json!(tab.favicon);
+            if !tab.title.is_empty() && visit["url"].as_str() == Some(tab.title_url.as_str()) {
+                visit["title"] = json!(tab.title);
+            }
+            if visit["url"].as_str() == Some(tab.favicon_url.as_str()) {
+                visit["favicon"] = json!(tab.favicon);
+            }
         }
         if let Some(object) = visit.as_object_mut() {
             object.remove("_tab");
