@@ -1,5 +1,7 @@
 //! Raw DevTools messages between hosted pages and the Agent; up in order, one request at a time.
 use super::Hosted;
+#[cfg(feature = "cef")]
+use crate::ui::browser::engine::PageEngine;
 use crate::ui::{
     browser::{
         engine::{PageChange, TabId},
@@ -134,6 +136,29 @@ pub(super) fn event(cx: &App, message: Value) {
 fn raw(cx: &App, tab: &TabId, bytes: &[u8]) {
     if let Ok(message) = serde_json::from_slice(bytes) {
         up(cx, Some(tab), message, bytes.len());
+    }
+}
+
+/// What the Agent's executor turns on for a page it drives (butler-runtime `headless/targets.rs`
+/// `setup_page`) that would otherwise keep intercepting after the page is the user's: undone here
+/// because the session cannot be detached. Turning auto-attach off detaches every child session,
+/// which ends their own interception.
+#[cfg(feature = "cef")]
+pub(super) fn release(engine: &dyn PageEngine, tab: &TabId) {
+    const MESSAGES: [(&str, &str); 5] = [
+        ("Fetch.disable", "{}"),
+        ("Page.setInterceptFileChooserDialog", r#"{"enabled":false}"#),
+        ("Emulation.clearDeviceMetricsOverride", "{}"),
+        ("Emulation.setFocusEmulationEnabled", r#"{"enabled":false}"#),
+        (
+            "Target.setAutoAttach",
+            r#"{"autoAttach":false,"waitForDebuggerOnStart":false,"flatten":true}"#,
+        ),
+    ];
+    for (offset, (method, params)) in (1..).zip(MESSAGES) {
+        let id = butler_cef_host::osr::RAW_ID_BASE + offset;
+        let message = format!(r#"{{"id":{id},"method":"{method}","params":{params}}}"#);
+        engine.devtools_raw(tab, message.as_bytes());
     }
 }
 

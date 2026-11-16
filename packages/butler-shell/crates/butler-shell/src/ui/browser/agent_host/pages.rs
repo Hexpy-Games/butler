@@ -160,6 +160,24 @@ pub(super) fn reset(cx: &mut App) {
 }
 
 impl BrowserState {
+    /// A hosted page ignores the pane's size but remembers it. True when `id` is hosted.
+    pub(in crate::ui::browser) fn note_pane(
+        &mut self,
+        id: &TabId,
+        size: gpui::Size<gpui::Pixels>,
+        scale: f32,
+    ) -> bool {
+        let hosted = self
+            .tabs
+            .iter_mut()
+            .find(|tab| &tab.id == id)
+            .and_then(|tab| tab.hosted.as_mut());
+        hosted.is_some_and(|hosted| {
+            hosted.pane = Some((size, scale));
+            true
+        })
+    }
+
     /// A hosted page's size is fixed whatever the pane asks.
     pub(in crate::ui::browser) fn fix_hosted_size(&mut self, id: &TabId) {
         if let Some(tab) = self.tab(id) {
@@ -178,9 +196,14 @@ impl BrowserState {
             return;
         };
         relay::closed(cx, tab);
-        tab.hosted = None;
+        let pane = tab.hosted.take().and_then(|hosted| hosted.pane);
+        #[cfg(feature = "cef")]
+        relay::release(&*self.engine, id);
         self.engine.devtools_raw_end(id);
         self.engine.keep_awake(id, false);
+        if let Some((size, scale)) = pane {
+            self.resize(id, size, scale);
+        }
         self.publisher.changed(&self.tabs);
     }
 

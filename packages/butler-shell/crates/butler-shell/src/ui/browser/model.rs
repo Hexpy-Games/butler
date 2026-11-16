@@ -396,7 +396,10 @@ impl BrowserState {
     }
 
     pub(crate) fn resize(&mut self, id: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32) {
-        if let Some(tab) = self.tab(id).filter(|tab| tab.hosted.is_none()) {
+        if self.note_pane(id, size, scale) {
+            return;
+        }
+        if let Some(tab) = self.tab(id) {
             tab.pick.viewport.set((
                 f64::from(f32::from(size.width)),
                 f64::from(f32::from(size.height)),

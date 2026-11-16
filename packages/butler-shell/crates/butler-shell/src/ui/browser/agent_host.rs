@@ -31,6 +31,8 @@ pub(crate) struct Hosted {
     pub(super) waiting: bool,
     pub(super) uses: u32,
     pub(super) internal: bool,
+    /// The size the pane last asked for; applied when the page stops being hosted.
+    pub(super) pane: Option<(gpui::Size<gpui::Pixels>, f32)>,
 }
 impl Hosted {
     /// The Agent is acting in the page right now.
@@ -45,6 +47,7 @@ impl Hosted {
             waiting: false,
             uses: 0,
             internal,
+            pane: None,
         }
     }
 }
