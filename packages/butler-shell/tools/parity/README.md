@@ -198,7 +198,7 @@ Finds every box difference between the React DS Viewer and the native pages at o
 inside each story (no screenshots). Both sides record, per story, the canvas box (`canvas`) and its controls
 (`control-<n>`, counted again from 0 in each story), in logical px relative to the canvas.
 The native `control-<n>` is the control numbering of `butler_ds::ui::control::parts`; a control belongs to the
-story whose canvas contains its origin, and the web side applies the same rule over the whole document
+story whose canvas contains its centre, and the web side applies the same rule over the whole document
 (controls in no canvas are dropped). Light, ko, 1280x800, scale 2, reduced motion; run both sides on the same Mac.
 
 ```sh

@@ -187,7 +187,7 @@ const SCROLL_MARGIN: f32 = 16.;
 /// per frame (`butler_ds::ui::control::slot_anchor`).
 const SCROLLERS: [&str; 3] = ["sidebar-scroll", "conversation-aside-scroll", "scroll-area"];
 
-/// Each story canvas and the controls whose origin lies inside it, relative to the canvas.
+/// Each story canvas and the controls whose centre lies inside it, relative to the canvas.
 /// `control-<n>` is numbered per frame over the whole page (`butler_ds::ui::control::parts`);
 /// inside a story it counts again from 0, in the same order.
 fn parts(
@@ -222,12 +222,12 @@ fn parts(
                 "w": b.size.width.as_f32(), "h": b.size.height.as_f32()})
         };
         parts.push(part("canvas".to_owned(), &canvas));
-        let inside = controls.iter().filter(|b| canvas.contains(&b.origin));
+        let inside = controls.iter().filter(|b| canvas.contains(&b.center()));
         for (n, b) in inside.enumerate() {
             parts.push(part(format!("control-{n}"), b));
         }
         for (slot, pairs) in &scrollers {
-            let inside = pairs.iter().filter(|(s, _)| canvas.contains(&s.origin));
+            let inside = pairs.iter().filter(|(s, _)| canvas.contains(&s.center()));
             for (n, (scroller, frame)) in inside.enumerate() {
                 parts.push(part(format!("slot:{slot}#{n}"), scroller));
                 parts.push(part(format!("slot:{slot}:frame#{n}"), frame));

@@ -1,6 +1,6 @@
 // Web side of the per-control DS layout diff: for each page of scenes/ds-view.json, writes
 //   <out>/react/1280x800-light/<page>.parts.json
-// the box of every story canvas (key `canvas`) and of the controls whose origin lies inside it
+// the box of every story canvas (key `canvas`) and of the controls whose centre lies inside it
 // (`control-<n>`, document order, counted again from 0 in each story; controls in no canvas are dropped)
 // and of every scroller (`slot:<data-slot>#<n>`, its parent as `slot:<data-slot>:frame#<n>`, with `client_h` and
 // `scroll_h`), in logical px relative to the canvas. The native side is `butler-ds-view --shots --parts`.
@@ -57,7 +57,7 @@ try {
       const out = stories.map(s => part(s, "canvas", s.canvas));
       for (const e of document.querySelectorAll(${JSON.stringify(SELECTOR)})) {
         const b = e.getBoundingClientRect();
-        const s = stories.find(c => b.x >= c.canvas.x && b.x < c.canvas.right && b.y >= c.canvas.y && b.y < c.canvas.bottom);
+        const s = stories.find(c => b.x + b.width / 2 >= c.canvas.x && b.x + b.width / 2 < c.canvas.right && b.y + b.height / 2 >= c.canvas.y && b.y + b.height / 2 < c.canvas.bottom);
         if (s) out.push(part(s, "control-" + s.n++, b));
       }
       // Scrollers: overflow-y auto or scroll, keyed by data-slot (data-test-class when there is none, scroll:<n>
@@ -65,7 +65,7 @@ try {
       for (const e of document.querySelectorAll("*")) {
         if (!/^(auto|scroll)$/.test(getComputedStyle(e).overflowY)) continue;
         const b = e.getBoundingClientRect();
-        const s = stories.find(c => b.x >= c.canvas.x && b.x < c.canvas.right && b.y >= c.canvas.y && b.y < c.canvas.bottom);
+        const s = stories.find(c => b.x + b.width / 2 >= c.canvas.x && b.x + b.width / 2 < c.canvas.right && b.y + b.height / 2 >= c.canvas.y && b.y + b.height / 2 < c.canvas.bottom);
         if (!s) continue;
         const slot = e.getAttribute("data-slot") ?? e.getAttribute("data-test-class");
         const name = slot ? "slot:" + slot : "scroll";
