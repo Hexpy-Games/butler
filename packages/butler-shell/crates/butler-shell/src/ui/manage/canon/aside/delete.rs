@@ -55,7 +55,7 @@ impl EpicInspector {
                     }
                     // CARVE-OUT(G-codes): `running` and `conflict` are both a 409; the epic is
                     // read again, which tells which (`delete_blocked`).
-                    Err(Error::Http(409)) => {
+                    Err(Error::Http(409, _)) => {
                         toast::show(cx, Toast::error(words.conflict));
                         this.refresh(cx);
                     }

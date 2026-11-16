@@ -53,7 +53,7 @@ impl MemoryPage {
                         this.summary.inventory = Load::Ready(inventory);
                     }
                     Err(error) => {
-                        this.summary.missing = matches!(error, Error::Http(404));
+                        this.summary.missing = matches!(error, Error::Http(404, _));
                         this.summary.inventory = Load::Failed;
                     }
                 }

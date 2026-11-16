@@ -148,7 +148,7 @@ impl AutomationDetail {
                         success_toast(cx);
                     }
                     // G-codes: the client returns no error code, so only a 400 names the form.
-                    Err(Error::Http(400)) => {
+                    Err(Error::Http(400, _)) => {
                         this.error = Some(SaveError {
                             field: Field::Form,
                             message: words.error_invalid,

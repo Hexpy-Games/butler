@@ -11,7 +11,7 @@ use super::copy::words;
 // other refusal takes React's `requestFailed` fallback.
 pub(super) fn write_failure(error: &Error, cx: &mut App) -> bool {
     let copy = words(Ds::get(cx).lang());
-    let conflict = matches!(error, Error::Http(409));
+    let conflict = matches!(error, Error::Http(409, _));
     let message = if conflict {
         copy.conflict
     } else {

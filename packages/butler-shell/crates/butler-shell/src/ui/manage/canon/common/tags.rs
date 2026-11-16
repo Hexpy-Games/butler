@@ -58,7 +58,7 @@ pub(super) fn chip(tag: &EpicTag) -> Tag {
 /// again), anything else React's fallback copy.
 pub(super) fn write_failure(error: &Error, cx: &mut App) -> bool {
     let copy = words(Ds::get(cx).lang());
-    let conflict = matches!(error, Error::Http(409));
+    let conflict = matches!(error, Error::Http(409, _));
     let text = if conflict {
         copy.conflict
     } else {
@@ -168,7 +168,7 @@ impl CanonTags {
                     this.refresh(cx);
                     done(Some(tag), cx);
                 }
-                Err(Error::Http(409)) => this.select_existing(&input.name, done, cx),
+                Err(Error::Http(409, _)) => this.select_existing(&input.name, done, cx),
                 Err(error) => {
                     write_failure(&error, cx);
                     done(None, cx);

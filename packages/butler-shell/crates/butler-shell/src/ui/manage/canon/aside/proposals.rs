@@ -263,7 +263,7 @@ impl EpicInspector {
                         .error
                         .as_ref()
                         .map(|error| error.code == "canon_conflict"),
-                    Err(Error::Http(409)) => Some(true),
+                    Err(Error::Http(409, _)) => Some(true),
                     Err(_) => Some(false),
                 };
                 match conflict {

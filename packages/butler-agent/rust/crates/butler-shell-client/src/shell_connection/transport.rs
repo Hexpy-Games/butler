@@ -323,16 +323,36 @@ async fn checked(response: Response) -> Result<Response, Error> {
         Err(Error::Authentication)
     } else {
         let status = response.status().as_u16();
+        let body = response.bytes().await;
         if status == 404 {
             // The gateway distinguishes route errors from resource-specific codes.
-            let bytes = response.bytes().await.map_err(|_| Error::Connection)?;
-            let raw: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Protocol)?;
-            return match raw["error"]["code"].as_str() {
-                Some("not_found") => Err(Error::Incompatible),
-                Some(code) if code.ends_with("_not_found") => Err(Error::Http(404)),
+            let bytes = body.map_err(|_| Error::Connection)?;
+            return match error_code(&bytes) {
+                Some(code) if code == "not_found" => Err(Error::Incompatible),
+                Some(code) if code.ends_with("_not_found") => Err(Error::Http(404, Some(code))),
                 _ => Err(Error::Protocol),
             };
         }
-        Err(Error::Http(status))
+        Err(Error::Http(
+            status,
+            body.ok().and_then(|bytes| error_code(&bytes)),
+        ))
     }
+}
+fn error_code(bytes: &[u8]) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct Body {
+        error: Detail,
+    }
+    #[derive(serde::Deserialize)]
+    struct Detail {
+        code: String,
+    }
+    let body: Body = serde_json::from_slice(bytes).ok()?;
+    let code = body.error.code;
+    ((1..=64).contains(&code.len())
+        && code
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'))
+    .then_some(code)
 }

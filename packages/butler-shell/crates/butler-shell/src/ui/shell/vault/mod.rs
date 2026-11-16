@@ -81,7 +81,7 @@ impl Vault {
                     this.view = Some(view);
                     this.state = State::Ready;
                 }
-                Err(Error::Http(404) | Error::Incompatible) => this.state = State::Unsupported,
+                Err(Error::Http(404, _) | Error::Incompatible) => this.state = State::Unsupported,
                 Err(_) => this.state = State::Error,
             },
         );
