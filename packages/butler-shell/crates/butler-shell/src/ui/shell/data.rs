@@ -135,10 +135,12 @@ impl Shell {
             _ => None,
         };
         // `settings.updated` carries the changed subset; it is merged over the current settings
-        // and applied (`settingsFromLiveEvent`).
+        // and applied (`settingsFromLiveEvent`). Before the first `/settings` answer there is
+        // nothing to merge into, and that read brings the saved value.
         if let crate::ui::source::LiveUpdate::NavigationEvent(e) = &event.update
             && e.r#type == "settings.updated"
             && e.payload["settings"].is_object()
+            && self.settings_raw.is_some()
         {
             self.merge_settings(&e.payload["settings"], cx);
         }

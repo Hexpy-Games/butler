@@ -198,8 +198,12 @@ impl SettingsView {
         }
         if event.r#type == "settings.updated" && event.payload["settings"].is_object() {
             self.state.update(cx, |state, cx| {
-                let next = state::merged(state.settings(), &event.payload["settings"]);
-                state.set_settings(next, cx);
+                // The subset is merged only into loaded settings; the pending load brings the
+                // saved value.
+                if let Some(current) = state.settings() {
+                    let next = state::merged(Some(current), &event.payload["settings"]);
+                    state.set_settings(next, cx);
+                }
             });
         }
     }
