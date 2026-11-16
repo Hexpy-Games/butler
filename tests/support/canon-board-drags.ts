@@ -2,7 +2,7 @@ import { selectBoardPlan } from "./canon-board-selector.ts";
 import { strict as assert } from "node:assert";
 import type { Locator, Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { CanonOverview } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { CanonOverview } from "../../packages/butler-protocol/src/canon-contracts.ts";
 import { waitToast } from "./canon-board-scenarios.ts";
 
 // dnd-kit AbstractPointerSensor.detach removes its capture click guard after 50 ms.

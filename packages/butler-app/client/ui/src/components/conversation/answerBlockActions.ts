@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { AnswerCardView } from "../../../../shared/answer-blocks-view";
+import type { AnswerCardView } from "../../../../../../butler-protocol/src/answer-blocks-view";
 import { getAppCopy, getAppLocale } from "@/app/copy";
 import { faviconSrc } from "@/app/favicons";
 import { gatewayImageSource } from "@/app/messageFileUrls";

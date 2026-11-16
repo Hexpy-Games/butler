@@ -3,7 +3,7 @@ import { api } from "@/app/api.ts";
 import { rememberDashboardLoadedCount, useProjectDashboardState } from "@/app/projectDashboardState.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, ButtonContainer, ChevronRight, FileText, IconButton, MessageSquarePlus, NavRow, Pin, Notice, Section, Stack, Typo, Box } from "@/butler-ds";
-import type { DashboardArtifactPage } from "../../../../shared/app-contracts.ts";
+import type { DashboardArtifactPage } from "../../../../../../butler-protocol/src/app-contracts.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { useProjectArtifactAttachment } from "@/hooks/useProjectArtifactAttachment.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";

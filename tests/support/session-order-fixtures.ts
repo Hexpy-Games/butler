@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { CanonQueueEdit, CanonQueueView } from "../../packages/butler-app/client/shared/canon-queue-contracts.ts";
+import type { CanonQueueEdit, CanonQueueView } from "../../packages/butler-protocol/src/canon-queue-contracts.ts";
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { subtaskFixtures } from "./session-subtasks-fixtures.ts";
 

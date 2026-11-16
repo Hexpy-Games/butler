@@ -1,5 +1,5 @@
-import type { CanonOverview, EpicCard } from "../../packages/butler-app/client/shared/canon-contracts.ts";
-import type { CanonProposal } from "../../packages/butler-app/client/shared/canon-proposal-contracts.ts";
+import type { CanonOverview, EpicCard } from "../../packages/butler-protocol/src/canon-contracts.ts";
+import type { CanonProposal } from "../../packages/butler-protocol/src/canon-proposal-contracts.ts";
 export const epicCards: EpicCard[] = [
   { id: "release", title: "릴리스 확인", criteria: { confirmed: 2, total: 3 }, assignee: "app-user", task_counts: { completed: 2, total: 4 } },
   { id: "docs", title: "문서 검토", criteria: { confirmed: 1, total: 1 }, assignee: "버틀러", agent: { person: "버틀러", via: "API" }, task_counts: { completed: 3, total: 3 } },

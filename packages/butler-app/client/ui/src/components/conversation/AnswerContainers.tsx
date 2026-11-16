@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { AnswerContainerView, AnswerLeafView } from "../../../../shared/answer-blocks-view";
+import type { AnswerContainerView, AnswerLeafView } from "../../../../../../butler-protocol/src/answer-blocks-view";
 import { BlockColumns, BlockTabs, Stack } from "@/butler-ds";
 
 export function AnswerContainers({ block, render }: { block: AnswerContainerView; render: (leaf: AnswerLeafView, path: string) => ReactNode }) {

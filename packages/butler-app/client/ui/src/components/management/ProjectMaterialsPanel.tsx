@@ -6,7 +6,7 @@ import { notifyError } from "@/app/notifications.ts";
 import { projectDocumentBadgeLabel } from "@/app/projectDocuments.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
 import { Button, ButtonContainer, ChevronRight, FileText, IconButton, Pin, NavRow, Notice, Section, Stack, Typo, Box } from "@/butler-ds";
-import type { DashboardMaterialsPage } from "../../../../shared/app-contracts.ts";
+import type { DashboardMaterialsPage } from "../../../../../../butler-protocol/src/app-contracts.ts";
 
 export function ProjectMaterialsPanel({ projectId, onSelect, preferences, onUpdated, limit = 8, onShowAll }: {
   projectId: string; onSelect: (document: ProjectDashboardDocument) => void;

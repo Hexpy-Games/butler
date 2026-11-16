@@ -1,4 +1,6 @@
-import type { AnswerBlockSet } from "../../../shared/app-contracts.ts";
+import type { MessageFileRef } from "../../../../../butler-protocol/src/message-session-contracts.ts";
+export type { MessageFileKind, MessageFileRef } from "../../../../../butler-protocol/src/message-session-contracts.ts";
+import type { AnswerBlockSet } from "../../../../../butler-protocol/src/app-contracts.ts";
 import type { ReactElement, ReactNode } from "react";
 // Relative (not `@/butler-ds`): the root typecheck reaches this file without the UI path aliases.
 import type { WallpaperSetting, WallpaperSource } from "../libs/design-system/blocks/Wallpaper/types.ts";
@@ -27,7 +29,6 @@ export type SettingsSectionId =
   | "system"
   | "archives"
   | "about";
-export type MessageFileKind = "text" | "image" | "generic";
 export type RuntimeDeliveryState =
   | "running"
   | "waiting_user"
@@ -853,11 +854,11 @@ export interface ProjectSummary {
   git?: ProjectGitState | null;
 }
 
-export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../shared/app-contracts.ts";
+export type { SpaceCommand, SpaceNode, SpaceGroup, SpaceView, SpaceMutationResult } from "../../../../../butler-protocol/src/app-contracts.ts";
 
 export interface NavigationView {
   archive_count?: number;
-  space: import("../../../shared/app-contracts.ts").SpaceView;
+  space: import("../../../../../butler-protocol/src/app-contracts.ts").SpaceView;
   chats: SessionSummary[];
   projects: ProjectSummary[];
   automations_summary: {
@@ -878,24 +879,6 @@ export interface ActiveChatView {
   location?: string;
 }
 
-export interface MessageFileRef {
-  /** Workspace label the file was produced under; null on legacy rows. */
-  source_label?: string | null;
-  /** Handed to the user as a finished file (it is in the Library). */
-  deliverable?: boolean;
-  file_id: string;
-  kind: MessageFileKind;
-  mime_type: string;
-  safe_name: string;
-  size_bytes: number;
-  sha256: string;
-  url: string;
-  /** Short-lived `url` with `?expires=..&signature=..` for token-less loads. */
-  signed_url?: string;
-  created_at: string;
-  width?: number | null;
-  height?: number | null;
-}
 
 export interface ChangedFileLine {
   type: "added" | "deleted";
@@ -921,7 +904,7 @@ export interface PlanDocumentRecord {
 }
 
 export interface MessageRecord {
-  canon_proposals?: import("../../../shared/canon-proposal-contracts.ts").CanonProposalAnchor[];
+  canon_proposals?: import("../../../../../butler-protocol/src/canon-proposal-contracts.ts").CanonProposalAnchor[];
   quiet?: boolean;
   /** Terminal failure grouped with this turn's retained partial answer. */
   failure_notice?: MessageRecord;
@@ -1268,8 +1251,8 @@ export interface SessionView {
   authority_requests?: unknown[];
   pending_questions?: PendingUserQuestions[];
   question_answers?: AnsweredUserQuestions[];
-  canon_proposals?: import("../../../shared/canon-proposal-contracts.ts").CanonProposalAnchor[];
-  branch_seed?: import("../../../shared/app-contracts.ts").SessionBranchSeed;
+  canon_proposals?: import("../../../../../butler-protocol/src/canon-proposal-contracts.ts").CanonProposalAnchor[];
+  branch_seed?: import("../../../../../butler-protocol/src/app-contracts.ts").SessionBranchSeed;
   protocol_version?: string;
   session_id: string;
   kind: ChatKind;
@@ -1311,7 +1294,7 @@ export interface SessionViewBridgeInput {
 }
 
 export interface SessionViewBridgeError {
-  existing?: import("../../../shared/canon-contracts.ts").CanonTag;
+  existing?: import("../../../../../butler-protocol/src/canon-contracts.ts").CanonTag;
   current?: { revision: number };
   hook_reason?: string;
   schema: "butler.app.bridge-error.v1";
@@ -1630,10 +1613,10 @@ export interface ProjectDashboardPreferencesPatch {
 }
 
 export interface ProjectDashboardView {
-  briefing?: import("../../../shared/app-contracts.ts").DashboardBriefingView;
+  briefing?: import("../../../../../butler-protocol/src/app-contracts.ts").DashboardBriefingView;
   description?: string | null;
   preferences?: ProjectDashboardPreferences;
-  overview?: import("../../../shared/app-contracts.ts").DashboardOverview;
+  overview?: import("../../../../../butler-protocol/src/app-contracts.ts").DashboardOverview;
   project: ProjectSummary;
   stats: {
     active_sessions: number;
@@ -1750,7 +1733,7 @@ export interface WorkStreamSummary {
 
 export interface SessionSummaryView {
   epic_ids?: string[];
-  branch_seed?: import("../../../shared/app-contracts.ts").SessionBranchSeed;
+  branch_seed?: import("../../../../../butler-protocol/src/app-contracts.ts").SessionBranchSeed;
   session_id?: string;
   turn_state?: string;
   latest_progress?: TurnProgressSnapshot;

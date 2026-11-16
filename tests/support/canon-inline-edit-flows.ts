@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { join } from "node:path";
 import type { Page, Locator } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
 import { probeFocusRing } from "./focus-ring-clipping.ts";
 import { waitToast } from "./canon-board-scenarios.ts";
 import { canonAsideClose } from "./canon-board-aside.ts";

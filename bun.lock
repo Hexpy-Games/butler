@@ -98,6 +98,9 @@
       "name": "@butler/progress-projection",
       "version": "0.0.21",
     },
+    "packages/butler-protocol": {
+      "name": "@butler/protocol",
+    },
     "packages/butler-site": {
       "name": "@butler/site",
       "version": "0.0.0",
@@ -216,6 +219,8 @@
     "@butler/progress-projection": ["@butler/progress-projection@workspace:packages/butler-progress-projection"],
 
     "@butler/project-ledger": ["@butler/project-ledger@workspace:packages/project-ledger"],
+
+    "@butler/protocol": ["@butler/protocol@workspace:packages/butler-protocol"],
 
     "@butler/site": ["@butler/site@workspace:packages/butler-site"],
 

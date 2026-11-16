@@ -7,10 +7,10 @@ import { join, resolve } from "node:path";
 import { createServer } from "../../packages/butler-app/client/ui/node_modules/vite/dist/node/index.js";
 import type { Page } from "playwright";
 import { launchSmokeBrowser } from "../support/smoke-browser";
-import type { AnswerBlocks } from "../../packages/butler-app/client/shared/app-contracts";
+import type { AnswerBlocks } from "../../packages/butler-protocol/src/app-contracts";
 import type { MessageRecord } from "../../packages/butler-app/client/ui/src/app/types";
 import { fixtureItems } from "../../packages/butler-app/client/ui/src/libs/design-system/blocks/ItemCard/fixtures";
-import { toMarkdown } from "../../packages/butler-app/client/shared/answer-blocks-markdown";
+import { toMarkdown } from "../../packages/butler-protocol/src/answer-blocks-markdown";
 
 const root = process.cwd();
 const only = process.env.BUTLER_ANSWER_ONLY;

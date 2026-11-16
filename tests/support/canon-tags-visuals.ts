@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { CanonTag, EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { CanonTag, EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
 import { selectBoardPlan } from "./canon-board-selector.ts";
 import { closeCanonAside } from "./canon-board-aside.ts";
 import { assertNoChipControls, chooseTag } from "./canon-tags-flows.ts";

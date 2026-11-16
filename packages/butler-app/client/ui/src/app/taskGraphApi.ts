@@ -1,6 +1,6 @@
 import { api } from "./api.ts";
-import type { TaskGraphDocument, TaskGraphReadOptions, TaskGraphsPage, TaskGraphSnapshot } from "../../../shared/task-graph-contracts.ts";
-export type * from "../../../shared/task-graph-contracts.ts";
+import type { TaskGraphDocument, TaskGraphReadOptions, TaskGraphsPage, TaskGraphSnapshot } from "../../../../../butler-protocol/src/task-graph-contracts.ts";
+export type * from "../../../../../butler-protocol/src/task-graph-contracts.ts";
 
 function graphPath(path: string, options: TaskGraphReadOptions): string {
   const query = new URLSearchParams();
