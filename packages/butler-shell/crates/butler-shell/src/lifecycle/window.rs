@@ -8,23 +8,33 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowOptions, point, px, size,
 };
 
-/// `macTrafficLightPosition` (Electron main.mjs:281): the close button's top-left inset, which
-/// centres the buttons on the title row. gpui re-applies it on resize and on leaving fullscreen.
-const TRAFFIC_LIGHTS: (f32, f32) = (20., 18.);
+/// The unscaled native metrics of a window: its traffic lights' top-left inset and minimum size.
+pub(crate) struct WindowMetrics {
+    pub buttons: (f32, f32),
+    pub minimum: (f32, f32),
+}
+
+/// The App window: `macTrafficLightPosition` (Electron main.mjs:281), which centres the buttons on
+/// the title row (gpui re-applies it on resize and on leaving fullscreen), and its minimum size
+/// (main.mjs:2020-2021).
+pub(crate) const MAIN: WindowMetrics = WindowMetrics {
+    buttons: (20., 18.),
+    minimum: (344., 480.),
+};
 
 /// `scaledWindowButtonPosition` (text-size.mjs): button centers follow the titlebar height;
 /// native button diameter stays constant. Applied when the window opens and when the text size
 /// changes.
-fn scaled_traffic_lights(scale: f32) -> Point<Pixels> {
+pub(crate) fn scaled_traffic_lights(base: (f32, f32), scale: f32) -> Point<Pixels> {
     point(
-        px((TRAFFIC_LIGHTS.0 * scale).round()),
-        px(((TRAFFIC_LIGHTS.1 + 7.) * scale - 7.).round()),
+        px((base.0 * scale).round()),
+        px(((base.1 + 7.) * scale - 7.).round()),
     )
 }
 
-/// Minimum window size (main.mjs:2020-2021 / text-size.mjs `updateWindow`).
-fn min_size(scale: f32, area: Option<Size<Pixels>>) -> Size<Pixels> {
-    let minimum = size(px((344. * scale).ceil()), px((480. * scale).ceil()));
+/// Minimum window size (text-size.mjs `updateWindow`).
+pub(crate) fn min_size(base: (f32, f32), scale: f32, area: Option<Size<Pixels>>) -> Size<Pixels> {
+    let minimum = size(px((base.0 * scale).ceil()), px((base.1 * scale).ceil()));
     match area {
         Some(area) => size(
             minimum.width.min(area.width),
@@ -35,9 +45,10 @@ fn min_size(scale: f32, area: Option<Size<Pixels>>) -> Size<Pixels> {
 }
 
 /// `updateWindow` (text-size.mjs): native window metrics follow the text scale.
-pub(crate) fn apply_text_scale(window: &Window, scale: f32, cx: &App) {
-    window.set_traffic_light_position(scaled_traffic_lights(scale));
+pub(crate) fn apply_text_scale(window: &Window, metrics: &WindowMetrics, scale: f32, cx: &App) {
+    window.set_traffic_light_position(scaled_traffic_lights(metrics.buttons, scale));
     window.set_window_min_size(min_size(
+        metrics.minimum,
         scale,
         window
             .display(cx)
@@ -82,9 +93,9 @@ pub(crate) fn open_window(cx: &mut App, args: &[OsString]) -> anyhow::Result<()>
         titlebar: Some(TitlebarOptions {
             title: Some(locale.strings().app_title.into()),
             appears_transparent: true,
-            traffic_light_position: Some(scaled_traffic_lights(scale)),
+            traffic_light_position: Some(scaled_traffic_lights(MAIN.buttons, scale)),
         }),
-        window_min_size: Some(min_size(scale, None)),
+        window_min_size: Some(min_size(MAIN.minimum, scale, None)),
         app_id: Some("butler-shell".into()),
         ..Default::default()
     };
