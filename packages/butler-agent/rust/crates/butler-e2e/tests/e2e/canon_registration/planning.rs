@@ -85,8 +85,8 @@ async fn cb_05_confirmed_spec_revision_reaches_context_and_governing_refs()
         vec![("canon_read", json!({"view":"epic","id":epic,"bind":true}))],
     )
     .await?;
-    let body = "# 시각화\n\n- VB-01 1만 행을 끊김 없이 스크롤한다.";
-    let id = draft(&s, &script, &chat, json!({"project_id":project,"summary":"명세 기준 추가","changes":[{"op":"spec.edit","id":"spec-blocks","expected_revision":0,"body":body,"criteria":[{"id":"VB-01","part_id":"scroll","text":"1만 행을 끊김 없이 스크롤한다."}]}]})).await?;
+    let body = "# 시각화\n\n## scroll\n- VB-01 1만 행을 끊김 없이 스크롤한다.";
+    let id = draft(&s, &script, &chat, json!({"project_id":project,"summary":"명세 기준 추가","changes":[{"op":"spec.edit","id":"spec-blocks","expected_revision":0,"body":body}]})).await?;
     assert_eq!(links(&s)?, Vec::new(), "the card itself starts no Work");
     accept(&s, &id).await?;
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;

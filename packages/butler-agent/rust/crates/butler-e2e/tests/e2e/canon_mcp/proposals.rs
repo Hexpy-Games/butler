@@ -100,7 +100,7 @@ async fn cn_16_mcp_proposes_specs_the_owner_applies_and_finds_them() -> Result<(
     );
     let detail = s.gw.get(&format!("/canon/epics/{id}")).await?;
     assert_eq!(detail.data()["proposals"], json!([]));
-    let body = "# Export design\n\nFirst draft";
+    let body = "# Export design\n\n## Format\n- EX-01 CSV opens in a spreadsheet.\n- plain note\n\n```\n- EX-99 not a criterion\n```\n\n## Speed\n* EX-02 Ten thousand rows export without a pause.";
     let first = call(
         &s,
         "canon_propose_spec",
@@ -170,7 +170,23 @@ async fn cn_16_mcp_proposes_specs_the_owner_applies_and_finds_them() -> Result<(
         .unwrap();
     let single = call(&s, "canon_get_spec", json!({"spec_id":spec["id"]})).await?;
     assert_eq!(single["specs"], json!([spec]));
-    let revised = "# Export design\n\nRevised draft";
+    assert_eq!(
+        spec["criteria"],
+        json!([
+            {"criterion_id":"EX-01","part_id":"Format","text":"CSV opens in a spreadsheet."},
+            {"criterion_id":"EX-02","part_id":"Speed","text":"Ten thousand rows export without a pause."}
+        ])
+    );
+    let invalid = call(&s, "canon_propose_spec_change", json!({"spec_id":spec["id"],"base_revision":spec["revision"],"body":"# Export design\n- EX-01 CSV opens in a spreadsheet.\n- EX-01 Repeated criterion.","summary":"Duplicate criteria"})).await?;
+    assert!(
+        invalid["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("duplicate criterion id")),
+        "{invalid}"
+    );
+    let detail = s.gw.get(&format!("/canon/epics/{id}")).await?;
+    assert_eq!(detail.data()["proposals"], json!([]));
+    let revised = "# Export format\n\n## Format\n- EX-01 CSV opens in a spreadsheet.";
     let edit = call(&s, "canon_propose_spec_change", json!({"spec_id":spec["id"],"base_revision":spec["revision"],"body":revised,"summary":"Revise export"})).await?;
     assert_eq!(edit["state"], "open", "{edit}");
     let accepted =
@@ -180,9 +196,26 @@ async fn cn_16_mcp_proposes_specs_the_owner_applies_and_finds_them() -> Result<(
         )
         .await?;
     assert_eq!(accepted.data()["ok"], true, "{}", accepted.text);
+    let updated = call(&s, "canon_get_spec", json!({"spec_id":spec["id"]})).await?;
+    assert_eq!(updated["specs"][0]["body"], revised);
     assert_eq!(
-        call(&s, "canon_get_spec", json!({"spec_id":spec["id"]})).await?["specs"][0]["body"],
-        revised
+        updated["specs"][0]["criteria"],
+        json!([
+            {"criterion_id":"EX-01","part_id":"Format","text":"CSV opens in a spreadsheet."}
+        ])
+    );
+    let page = call(&s, "canon_list", json!({"project":project})).await?;
+    let listed = page["epics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == id)
+        .unwrap();
+    assert!(
+        listed["specs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!({"id":spec["id"],"title":"Export format"}))
     );
     s.finish().await
 }

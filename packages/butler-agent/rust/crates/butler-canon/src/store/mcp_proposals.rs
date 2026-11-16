@@ -23,8 +23,12 @@ pub fn create(tx: &Transaction<'_>, ctx: &Context, id: &str, input: Value) -> Re
     }
     let node = read_canon_spec(tx, id)?;
     cas(&node, "revision", input.base_revision)?;
-    let changes = json!([{"op":"spec.edit","id":id,"expected_revision":input.base_revision,"body":input.body}]);
-    let proposal = insert(tx, ctx, text(&node, "scope_ref")?, &input.summary, &changes)?;
+    let project = text(&node, "scope_ref")?;
+    let changes = [
+        json!({"op":"spec.edit","id":id,"expected_revision":input.base_revision,"body":input.body}),
+    ];
+    proposals::apply::validate(tx, ctx, project, &changes)?;
+    let proposal = insert(tx, ctx, project, &input.summary, &json!(changes))?;
     activity::append(tx, ctx, id, "proposal_opened", &input.summary, None)?;
     api::outbox(
         tx,

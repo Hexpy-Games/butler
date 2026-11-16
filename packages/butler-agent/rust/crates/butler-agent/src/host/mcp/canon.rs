@@ -351,7 +351,7 @@ impl McpServer {
     }
     #[tool(
         name = "canon_propose_spec_change",
-        description = "Open a spec change proposal for approval in Butler."
+        description = "Open a spec change proposal for approval in Butler. The body replaces the whole spec and uses the same Markdown format as canon_propose_spec."
     )]
     async fn canon_propose_spec_change(
         &self,
@@ -374,7 +374,7 @@ impl McpServer {
     }
     #[tool(
         name = "canon_propose_spec",
-        description = "Propose a new spec for an epic, for approval in Butler. The body is Markdown and its first line is '# ' followed by the spec title."
+        description = "Propose a new spec for an epic, for approval in Butler. The body is Markdown: first line '# ' and the title; '## ' lines name parts; an acceptance criterion is a list item that starts with an ID such as 'VB-03', then its text."
     )]
     async fn canon_propose_spec(
         &self,

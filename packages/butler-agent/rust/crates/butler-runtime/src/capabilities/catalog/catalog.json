@@ -8108,7 +8108,8 @@
                     "description": "Not for epic.create."
                   },
                   "body": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Spec Markdown. First line '# ' and the title; '## ' lines name parts; an acceptance criterion is a list item that starts with an ID such as 'VB-03', then its text."
                   },
                   "work_ids": {
                     "type": "array",
@@ -8153,28 +8154,6 @@
                       },
                       "required": [
                         "file_id"
-                      ]
-                    }
-                  },
-                  "criteria": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "part_id": {
-                          "type": "string"
-                        },
-                        "text": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "part_id",
-                        "text"
                       ]
                     }
                   },
@@ -14499,7 +14478,8 @@
                   "description": "Not for epic.create."
                 },
                 "body": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Spec Markdown. First line '# ' and the title; '## ' lines name parts; an acceptance criterion is a list item that starts with an ID such as 'VB-03', then its text."
                 },
                 "work_ids": {
                   "type": "array",
@@ -14544,28 +14524,6 @@
                     },
                     "required": [
                       "file_id"
-                    ]
-                  }
-                },
-                "criteria": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "part_id": {
-                        "type": "string"
-                      },
-                      "text": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "part_id",
-                      "text"
                     ]
                   }
                 },
