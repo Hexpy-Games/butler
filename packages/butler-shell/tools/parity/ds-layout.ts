@@ -1,8 +1,8 @@
 // Web side of the per-control DS layout diff: for each page of scenes/ds-view.json, writes
 //   <out>/react/1280x800-light/<page>.parts.json
-// the box of every story canvas (key `canvas`), of the controls inside it (`control-<n>`, DOM order,
-// counted again from 0 in each story) and of the canvas's direct element children (`child-<i>`, web
-// only), in logical px relative to the canvas. The native side is `butler-ds-view --shots --parts`.
+// the box of every story canvas (key `canvas`) and of the controls whose origin lies inside it
+// (`control-<n>`, document order, counted again from 0 in each story; controls in no canvas are dropped),
+// in logical px relative to the canvas. The native side is `butler-ds-view --shots --parts`.
 //
 //   bun ds-layout.ts --site <dist-ds-site> --out <dir> [--locale ko] [--only page,page]
 // Serving, URL state, viewport growing and page mapping are those of ds-view.ts (light, 1280x800, scale 2).
@@ -32,8 +32,8 @@ const server = Bun.serve({
     return file.exists().then(found => found ? new Response(file, { headers: { "content-type": types[extname(path)] ?? "application/octet-stream" } }) : new Response("not found", { status: 404 }));
   },
 });
-/** Control definition of README.md line 92 (button, [role=button|radio|switch], [tabindex="0"]) and line 121 (input, textarea, select); same as SELECTOR in ds-view-states.ts. */
-const SELECTOR = "button, [role=\"button\"], [role=\"radio\"], [role=\"switch\"], input:not([type=\"hidden\"]), textarea, select, [tabindex=\"0\"]";
+/** Control selector of the native side (queried over the whole document, as shots.rs does). */
+const SELECTOR = "button, [role=\"button\"], [role=\"radio\"], [role=\"switch\"], input:not([type=hidden]):not([aria-hidden=true]), textarea, select, [tabindex=\"0\"]";
 /** Viewport height used to lay every story canvas out on screen (CSS px). */
 const TALL = 7000;
 const [width, height, theme] = [1280, 800, "light"];
@@ -51,14 +51,15 @@ try {
     await page.setViewportSize({ width, height: TALL });
     await page.evaluate("new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))");
     const parts = await page.evaluate(`(() => {
-      const seen = new Set();
-      return [...document.querySelectorAll("[data-ds-story]")].flatMap(story => {
-        const canvas = story.querySelector("[data-ds-fixture-canvas]");
-        const origin = canvas.getBoundingClientRect();
-        const part = (key, e) => { const b = e.getBoundingClientRect(); return { story: story.getAttribute("data-ds-story"), key, x: b.x - origin.x, y: b.y - origin.y, w: b.width, h: b.height }; };
-        const controls = [...canvas.querySelectorAll(${JSON.stringify(SELECTOR)})].filter(e => !seen.has(e) && seen.add(e));
-        return [part("canvas", canvas), ...controls.map((e, n) => part("control-" + n, e)), ...[...canvas.children].map((e, i) => part("child-" + i, e))];
-      });
+      const stories = [...document.querySelectorAll("[data-ds-story]")].map(story => ({ name: story.getAttribute("data-ds-story"), canvas: story.querySelector("[data-ds-fixture-canvas]").getBoundingClientRect(), n: 0 }));
+      const part = (s, key, b) => ({ story: s.name, key, x: b.x - s.canvas.x, y: b.y - s.canvas.y, w: b.width, h: b.height });
+      const out = stories.map(s => part(s, "canvas", s.canvas));
+      for (const e of document.querySelectorAll(${JSON.stringify(SELECTOR)})) {
+        const b = e.getBoundingClientRect();
+        const s = stories.find(c => b.x >= c.canvas.x && b.x < c.canvas.right && b.y >= c.canvas.y && b.y < c.canvas.bottom);
+        if (s) out.push(part(s, "control-" + s.n++, b));
+      }
+      return stories.flatMap(s => out.filter(p => p.story === s.name));
     })()`);
     writeFileSync(join(dir, `${id}.parts.json`), JSON.stringify(parts, null, 2));
     await page.close();

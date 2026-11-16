@@ -196,10 +196,10 @@ Interactive states, all through the live harness:
 
 Finds every box difference between the React DS Viewer and the native pages at once, down to the controls
 inside each story (no screenshots). Both sides record, per story, the canvas box (`canvas`) and its controls
-(`control-<n>`, DOM order of the README control definition above, counted again from 0 in each story), in logical
-px relative to the canvas; the web side also lists the canvas children (`child-<i>`, shown as web-only).
+(`control-<n>`, counted again from 0 in each story), in logical px relative to the canvas.
 The native `control-<n>` is the control numbering of `butler_ds::ui::control::parts`; a control belongs to the
-story whose canvas contains its origin. Light, ko, 1280x800, scale 2, reduced motion; run both sides on the same Mac.
+story whose canvas contains its origin, and the web side applies the same rule over the whole document
+(controls in no canvas are dropped). Light, ko, 1280x800, scale 2, reduced motion; run both sides on the same Mac.
 
 ```sh
 bun packages/butler-shell/tools/parity/ds-layout.ts --site $TMPDIR/ds-site --out $TMPDIR/ds-layout
@@ -210,4 +210,6 @@ bun packages/butler-shell/tools/parity/ds-layout-diff.ts --web $TMPDIR/ds-layout
 ```
 
 `diff.txt` holds one JSON line per matched part (`dx dy dw dh` are gpui minus web), a summary line per story,
-the totals line and, last, the table of stories off by more than 0.5 px, largest first.
+the totals line and two tables: (A) stories whose canvas is off by more than 0.5 px, largest first, and
+(B) stories with equal control counts whose controls are off by more than 0.5 px (first offending control).
+A story whose web and gpui control counts differ prints one `count-mismatch` line and no control rows.
