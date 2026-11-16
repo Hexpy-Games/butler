@@ -25,6 +25,10 @@ pub struct OsrConfig {
     pub adapter_luid: Option<u64>,
 }
 
+/// Ids below this belong to `devtools()`; raw senders use ids at or above it, so the two never
+/// collide on one page.
+pub const RAW_ID_BASE: i32 = 1 << 30;
+
 #[derive(Debug)]
 pub enum OsrEvent {
     DevTools {
@@ -34,6 +38,10 @@ pub enum OsrEvent {
     DevToolsEvent {
         method: String,
         params_json: String,
+    },
+    /// One raw CDP message (reply or event, with `sessionId` when present) of a raw-mode page.
+    DevToolsRaw {
+        message: Vec<u8>,
     },
     Url(String),
     Title(String),

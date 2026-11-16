@@ -231,6 +231,7 @@ fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
         | OsrEvent::DownloadProgress { .. }
         | OsrEvent::DownloadDone { .. }
         | OsrEvent::Frame
+        | OsrEvent::DevToolsRaw { .. }
         | OsrEvent::DevTools { .. } => return None,
         OsrEvent::Crashed => PageChange::Crashed,
         OsrEvent::DevToolsEvent {
