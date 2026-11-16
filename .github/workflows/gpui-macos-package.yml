@@ -279,6 +279,9 @@ jobs:
           export GITHUB_REF_NAME="v$BUTLER_GPUI_VERSION"
           python3 .github/scripts/isolated.py bun run release:app:smoke -- \
             --platform=darwin-arm64 --shell=gpui --out dist/release/app-macos-gpui
+      - name: Remove the signing keychain and keys
+        if: ${{ always() && inputs.release }}
+        run: deploy/macos/sign-and-notarize.sh cleanup
       - name: Download the Electron preview and prove the update
         timeout-minutes: 20
         env:
@@ -288,6 +291,3 @@ jobs:
           gh release download "v$FROM_VERSION" -p 'butler-app-*-darwin-arm64.dmg' -D dist/release/electron-from
           bash packages/butler-app/scripts/release/gpui-mac-update-smoke.sh \
             dist/release/electron-from/*.dmg dist/release/app-macos-gpui/*.dmg
-      - name: Remove the signing keychain and keys
-        if: ${{ always() && inputs.release }}
-        run: deploy/macos/sign-and-notarize.sh cleanup

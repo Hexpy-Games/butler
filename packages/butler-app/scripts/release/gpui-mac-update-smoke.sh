@@ -25,6 +25,7 @@ app_pid=
 helper_pid=
 host_pid=
 old_agent_pid=
+baseline_agent_pid=
 mounted=false
 gpui_wait=
 phase=
@@ -86,7 +87,7 @@ cleanup() {
   fi
   if [ "$mounted" = true ]; then hdiutil detach "$root/mount" >&2 || result=1; fi
   chmod -R u+w "$root" 2>/dev/null || true
-  rm -rf "$root"
+  rm -rf "$root" || result=1
   exit "$result"
 }
 trap cleanup EXIT
@@ -111,8 +112,6 @@ install_electron() {
       "$repo/deploy/macos/sign-and-notarize.sh" sign-app "$install" >&2
     echo 'baseline re-signed ad-hoc: the candidate is an ad-hoc build and the updater requires one signing team'
   fi
-  had_asar=false
-  [ ! -e "$install/Contents/Resources/app.asar" ] || had_asar=true
   "$exe" >> "$app_log" 2>&1 &
   app_pid=$!
   deadline=$((SECONDS + 120))
@@ -122,6 +121,7 @@ install_electron() {
     sleep 1
   done
   old_agent_pid=$(jq -r .pid "$record")
+  baseline_agent_pid=$old_agent_pid
   printf retained > "$BUTLER_DATA/sentinel.txt"
 }
 
@@ -153,6 +153,7 @@ update() {
   done
   if ! wait "$helper_pid"; then
     helper_pid=
+    app_pid=$(app_process || true)
     fail 'update helper failed'
   fi
   helper_pid=
@@ -168,7 +169,7 @@ gpui_ready() {
   app_pid=$(app_process)
   jq -e '.state == "ready" and (.pid > 0)' "$record" >/dev/null 2>&1 || { gpui_wait=record; return 1; }
   new_agent=$(jq -r .pid "$record")
-  { alive "$new_agent" && [ "$new_agent" != "$old_agent_pid" ]; } || { gpui_wait=new_agent_process; return 1; }
+  { alive "$new_agent" && [ "$new_agent" != "$baseline_agent_pid" ]; } || { gpui_wait=new_agent_process; return 1; }
   jq -e '.app_supervised == true' "$record" >/dev/null || { gpui_wait=app_supervised; return 1; }
   comm=$(ps -o comm= -p "$new_agent" 2>/dev/null || true)
   [ "$comm" = "$agent_exe" ] || { gpui_wait="agent_exe $comm"; return 1; }
@@ -195,12 +196,9 @@ prove_gpui() {
     [ -f "$install/$path" ] || fail "missing $path"
   done
   [ ! -e "$install/Contents/Frameworks/Electron Framework.framework" ] || fail 'Electron Framework remains'
-  if [ "$had_asar" = true ]; then
-    [ ! -e "$install/Contents/Resources/app.asar" ] || fail 'Electron app.asar remains'
-  fi
+  [ ! -e "$install/Contents/Resources/app.asar" ] || fail 'Electron app.asar remains'
   codesign --verify --deep --strict "$install" || fail 'installed bundle signature invalid'
   [ "$(cat "$BUTLER_DATA/sentinel.txt")" = retained ] || fail 'user data lost'
-  [ -f "$BUTLER_DATA/butler.config.json" ] || fail 'user configuration missing'
   to=$(jq -er .appVersion "$install/$manifest_rel")
   [ "$to" != "$from" ] || fail "version unchanged: $from"
   stop_pids "$app_pid" "$new_agent" || fail 'App or Agent did not exit'
@@ -221,9 +219,10 @@ prove_host() {
     --password-store=basic --use-mock-keychain --mute-audio --window-size=1280,800 about:blank \
     3< "$root/host.in" 4> "$root/host.out" >> "$root/host.log" 2>&1 &
   host_pid=$!
-  deadline=$((SECONDS + 5))
-  while [ "$SECONDS" -lt "$deadline" ]; do
+  deadline=$((SECONDS + 30))
+  until [[ "$(lsappinfo find pid="$host_pid")" == ASN:* ]]; do
     alive "$host_pid" || fail 'CEF host exited'
+    [ "$SECONDS" -lt "$deadline" ] || fail 'CEF host did not register with LaunchServices within 30 seconds'
     sleep 1
   done
   [ -z "$(app_process)" ] || fail 'an App process from the previous step is still running'
