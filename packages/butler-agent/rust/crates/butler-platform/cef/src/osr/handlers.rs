@@ -27,6 +27,33 @@ pub(super) fn client(shared: PageRef, events: Events, runtime: &Weak<RuntimeStat
     )
 }
 
+/// A page leaves the runtime: its browser closed or CEF aborted its popup creation.
+fn retire(shared: &PageRef, page: u64, runtime: Option<&RuntimeState>) {
+    let visible = {
+        let mut p = shared.borrow_mut();
+        p.release_frames();
+        p.browser = None;
+        let visible = p.visible;
+        p.visible = false;
+        visible
+    };
+    if let Some(runtime) = runtime {
+        if visible {
+            runtime.visible.set(runtime.visible.get() - 1);
+        }
+        runtime.pages.borrow_mut().remove(&page);
+        if let Some(owner) = &shared.borrow().signed_out_owner {
+            let mut contexts = runtime.contexts.borrow_mut();
+            if let Some((_, count)) = contexts.get_mut(owner) {
+                *count -= 1;
+                if *count == 0 {
+                    contexts.remove(owner);
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct PageDialogs {
     js: JsdialogHandler,
@@ -53,40 +80,36 @@ cef::wrap_life_span_handler! {
     pub(super) struct Life { shared: PageRef, events: Events, runtime: Weak<RuntimeState> }
     impl LifeSpanHandler {
         fn on_after_created(&self, browser: Option<&mut Browser>) {
-            self.shared.borrow_mut().browser = browser.cloned();
+            let mut p = self.shared.borrow_mut();
+            p.browser = browser.cloned();
+            p.popup = None;
         }
         fn do_close(&self, _browser: Option<&mut Browser>) -> i32 {
             if !self.shared.borrow().closing { self.events.emit(OsrEvent::CloseRequested); }
             0
         }
         fn on_before_close(&self, _browser: Option<&mut Browser>) {
-            let visible = {
-                let mut p = self.shared.borrow_mut();
-                p.release_frames();
-                p.browser = None;
-                let visible = p.visible;
-                p.visible = false;
-                visible
-            };
-            if let Some(runtime) = self.runtime.upgrade() {
-                if visible { runtime.visible.set(runtime.visible.get() - 1); }
-                runtime.pages.borrow_mut().remove(&self.events.page);
-                if let Some(owner) = &self.shared.borrow().signed_out_owner {
-                    let mut contexts = runtime.contexts.borrow_mut();
-                    if let Some((_, count)) = contexts.get_mut(owner) {
-                        *count -= 1;
-                        if *count == 0 { contexts.remove(owner); }
-                    }
-                }
-            }
+            retire(&self.shared, self.events.page, self.runtime.upgrade().as_deref());
         }
         fn on_before_popup(&self, _browser: Option<&mut Browser>, _frame: Option<&mut Frame>,
-            _id: i32, url: Option<&CefString>, _name: Option<&CefString>,
+            id: i32, url: Option<&CefString>, _name: Option<&CefString>,
             disposition: WindowOpenDisposition, gesture: i32, _features: Option<&PopupFeatures>,
             info: Option<&mut WindowInfo>, client: Option<&mut Option<Client>>,
             _settings: Option<&mut BrowserSettings>, _extra: Option<&mut Option<DictionaryValue>>,
             _access: Option<&mut i32>) -> i32 {
-            super::popups::before(&self.shared, &self.events, &self.runtime, url, disposition, gesture, info, client)
+            super::popups::before(&self.shared, &self.events, &self.runtime, id, url, disposition, gesture, info, client)
+        }
+        // CEF failed to create a popup child it allowed; that child never gets its own callbacks.
+        fn on_before_popup_aborted(&self, _browser: Option<&mut Browser>, popup_id: i32) {
+            let Some(runtime) = self.runtime.upgrade() else { return; };
+            let popup = Some((self.events.page, popup_id));
+            let child = runtime.pages.borrow().iter()
+                .find(|(_, p)| p.borrow().popup == popup)
+                .map(|(page, shared)| (*page, shared.clone()));
+            if let Some((page, shared)) = child {
+                retire(&shared, page, Some(&*runtime));
+                Events { page, sink: self.events.sink.clone() }.emit(OsrEvent::CloseRequested);
+            }
         }
     }
 }

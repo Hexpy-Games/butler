@@ -14,6 +14,9 @@ pub(super) struct Page {
     /// Loading from creation; then as CEF reports it.
     pub(super) loading: bool,
     pub(super) signed_out_owner: Option<String>,
+    /// A popup child whose browser CEF has not created yet: the opener page and CEF's popup id,
+    /// which is unique only per opener.
+    pub(super) popup: Option<(u64, i32)>,
     pub(super) browser: Option<cef::Browser>,
     pub(super) frame: Option<Frame>,
     #[cfg(not(target_os = "linux"))]
@@ -39,6 +42,7 @@ impl Page {
             loading: true,
             browser: None,
             signed_out_owner: None,
+            popup: None,
             frame: None,
             #[cfg(not(target_os = "linux"))]
             pool: FramePool::default(),
