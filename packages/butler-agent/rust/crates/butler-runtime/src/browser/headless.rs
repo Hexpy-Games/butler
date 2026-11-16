@@ -395,7 +395,7 @@ impl Headless {
         let crashed = page
             .shared
             .with_tab(id, |t| {
-                t.touch(browser.host().is_some());
+                t.last_call = Instant::now();
                 t.crashed
             })
             .unwrap_or(true);

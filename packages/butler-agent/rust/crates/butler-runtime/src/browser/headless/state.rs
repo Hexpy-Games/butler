@@ -113,6 +113,8 @@ pub(crate) struct Tab {
     pub cancelled: bool,
     pub call_id: Option<String>,
     pub waiting: bool,
+    /// The user holds this page in the App; never reclaimed or expired while true.
+    pub held: bool,
     pub waiting_turn: Option<String>,
     pub last_call: Instant,
     pub crashed: bool,
@@ -168,6 +170,7 @@ impl Tab {
             cancelled: false,
             call_id: None,
             waiting: false,
+            held: false,
             waiting_turn: None,
             last_call: Instant::now(),
             crashed: false,
@@ -181,14 +184,6 @@ impl Tab {
             profile: "signed_out",
             history_transition: Some("generated".into()),
             turn: None,
-        }
-    }
-
-    /// An agent op reached the page. A hosted tab the user held is the agent's again.
-    pub(crate) fn touch(&mut self, hosted: bool) {
-        self.last_call = Instant::now();
-        if hosted {
-            self.waiting = false;
         }
     }
 
@@ -310,7 +305,9 @@ impl State {
     pub(crate) fn reclaimable(&self, keep: &[&str], turn: Option<&str>) -> Option<String> {
         self.tabs
             .values()
-            .filter(|t| t.hidden.is_none() && t.admitted && !t.busy && !t.waiting && !t.closing)
+            .filter(|t| {
+                t.hidden.is_none() && t.admitted && !t.busy && !t.waiting && !t.held && !t.closing
+            })
             .filter(|t| t.dialog.is_none() && !keep.contains(&t.id.as_str()))
             .filter(|t| turn.is_none() || t.turn.as_deref() != turn)
             .min_by_key(|t| t.last_call)

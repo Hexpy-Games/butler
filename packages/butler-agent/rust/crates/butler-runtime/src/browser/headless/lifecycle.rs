@@ -137,14 +137,14 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
             let expired: Vec<String> = state
                 .tabs
                 .values()
-                .filter(|t| !(hosted && t.waiting))
+                .filter(|t| !t.held)
                 .filter(|t| now.duration_since(t.last_call) >= TAB_IDLE)
                 .map(|t| t.id.clone())
                 .collect();
             let earliest = state
                 .tabs
                 .values()
-                .filter(|t| !(hosted && t.waiting))
+                .filter(|t| !t.held)
                 .map(|t| t.last_call + TAB_IDLE)
                 .min();
             (expired, earliest, state.tabs.is_empty())

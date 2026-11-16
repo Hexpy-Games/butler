@@ -101,6 +101,17 @@ impl Headless {
     }
 }
 
+impl Headless {
+    /// The App reports who holds a page: while the user does, the tab is never
+    /// reclaimed or expired.
+    pub fn set_held(&self, tab: &str, held: bool) {
+        if let Some(browser) = self.browser() {
+            browser.shared.with_tab(tab, |t| t.held = held);
+            browser.changed.notify_waiters();
+        }
+    }
+}
+
 /// `tab.wait`: with the App, the user takes the tab over; otherwise the wait is already over.
 pub(super) async fn wait(
     browser: &Browser,
@@ -117,16 +128,13 @@ pub(super) async fn wait(
     });
     if let (Some(false), Some(host)) = (dialog, browser.host()) {
         // The user takes the tab: it is neither reclaimed nor expired, from before
-        // the hold is asked for until the agent's next op.
-        let before = page
-            .shared
-            .with_tab(id, |t| std::mem::replace(&mut t.waiting, true));
+        // the hold is asked for.
+        page.shared.with_tab(id, |t| t.held = true);
         let hold = json!({"tab":id,"holder":"user","sticky":true,"reason":args["reason"]});
         return match host.call("page.hold", hold).await {
             Ok(_) => json!({"status":"user_control","tab":id,"epoch":epoch}),
             Err(_) => {
-                page.shared
-                    .with_tab(id, |t| t.waiting = before.unwrap_or(false));
+                page.shared.with_tab(id, |t| t.held = false);
                 json!({"status":"unknown","reason":"browser_unavailable"})
             }
         };
