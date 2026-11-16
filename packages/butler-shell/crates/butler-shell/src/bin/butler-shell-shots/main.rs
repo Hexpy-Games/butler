@@ -22,6 +22,7 @@ mod lifecycle;
 mod app;
 mod fixture;
 mod frame;
+mod glide;
 mod live;
 
 use std::path::{Path, PathBuf};
