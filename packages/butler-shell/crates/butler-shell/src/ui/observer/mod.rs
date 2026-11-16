@@ -45,6 +45,8 @@ pub(crate) struct SessionObserver {
     /// The session topic's revision as of the last read (`useSessionViewSubscription`).
     revision: u64,
     view: Option<Rc<SessionView>>,
+    /// What the transcript shows of `view`: the one source of "nothing to show".
+    shown: Option<Rc<SessionView>>,
     /// The observed transcript: the conversation's own list over the observed view.
     chat: Entity<Chat>,
     flight: Flight,
@@ -87,6 +89,7 @@ impl SessionObserver {
             live,
             revision,
             view: None,
+            shown: None,
             chat,
             flight: Flight::default(),
             can_go_back: false,
@@ -169,7 +172,7 @@ impl SessionObserver {
 
     /// Hands the transcript the observed view: a steward's own prompt is hidden
     /// (`message.role !== "user"` when it has a relation), and nothing pages older.
-    fn sync_chat(&self, cx: &mut Context<Self>) {
+    fn sync_chat(&mut self, cx: &mut Context<Self>) {
         let shown = self.view.as_deref().map(|view| {
             let mut view = view.clone();
             if view.relation.is_some() {
@@ -177,18 +180,14 @@ impl SessionObserver {
                     .retain(|message| message.role != MessageRecordRole::User);
             }
             // A child's messages carry no rows; its turns' rows come from the view.
-            let rows = child_views::rows_by_turn(&view)
-                .into_iter()
-                .map(|(turn, rows)| (turn.to_owned(), rows.to_vec()))
-                .collect::<std::collections::HashMap<_, _>>();
+            let rows = child_views::rows_by_turn(&view);
             for message in &mut view.messages {
-                let turn = message.turn_id.clone().unwrap_or_default();
                 if message.role == MessageRecordRole::Assistant
                     && message
                         .turn_activity_rows
                         .as_deref()
                         .is_none_or(<[_]>::is_empty)
-                    && let Some(rows) = rows.get(&turn).filter(|rows| !rows.is_empty())
+                    && let Some(rows) = message.turn_id.as_deref().and_then(|turn| rows.get(turn))
                 {
                     std::sync::Arc::make_mut(message).turn_activity_rows = Some(rows.clone());
                 }
@@ -197,6 +196,7 @@ impl SessionObserver {
             view.message_window.previous_cursor_token = None;
             Rc::new(view)
         });
+        self.shown.clone_from(&shown);
         self.chat
             .update(cx, |chat, cx| chat.set_view(shown, true, cx));
     }
@@ -229,7 +229,11 @@ impl SessionObserver {
             return Typo::caption(copy.pending).into_any_element();
         };
         let waiting = view.waiting_for_children == Some(true);
-        if view.messages.is_empty() && view.active_turn.is_none() && !waiting {
+        let replies = self
+            .shown
+            .as_deref()
+            .is_some_and(|shown| !shown.messages.is_empty());
+        if !replies && view.active_turn.is_none() && !waiting {
             let label = match view.status {
                 SessionViewStatus::Delivered => copy.delivered,
                 SessionViewStatus::Failed => copy.failed,
@@ -238,10 +242,11 @@ impl SessionObserver {
             };
             return Typo::caption(label).into_any_element();
         }
-        let mut body = Stack::new()
-            .gap(Space::Lg)
-            .fill()
-            .child(div().flex_1().min_h_0().child(self.chat.clone()));
+        // The list mounts only over something to show: an empty one is the new-chat screen.
+        let mut body = Stack::new().gap(Space::Lg).fill();
+        if replies || view.active_turn.is_some() {
+            body = body.child(div().flex_1().min_h_0().child(self.chat.clone()));
+        }
         if waiting && view.active_turn.is_none() {
             body = body.child(
                 MessageRow::new("steward-observer-worker-wait", Role::Assistant)

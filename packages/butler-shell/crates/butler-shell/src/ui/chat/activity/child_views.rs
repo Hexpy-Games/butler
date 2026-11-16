@@ -212,10 +212,11 @@ fn turn_source(turn: &crate::ui::source::wire::SessionViewTurn) -> ActivitySourc
 }
 
 /// `observerActivitySources.ts`: the rows of every turn the view carries, by turn id.
-pub(crate) fn rows_by_turn(view: &SessionView) -> HashMap<&str, &[ProgressRow]> {
+pub(crate) fn rows_by_turn(view: &SessionView) -> HashMap<String, Vec<ProgressRow>> {
     sources(view)
         .into_iter()
-        .map(|source| (source.turn, source.rows))
+        .filter(|source| !source.rows.is_empty())
+        .map(|source| (source.turn.to_owned(), source.rows.to_vec()))
         .collect()
 }
 
