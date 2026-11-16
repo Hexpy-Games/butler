@@ -109,43 +109,57 @@ async fn shell_app_05_text_selection_stays_in_one_message() -> Result<(), Harnes
     Ok(())
 }
 
-/// Top and height of each contiguous band of pixel rows that differ between two shots.
-fn changed_bands(before: &std::path::Path, after: &std::path::Path) -> Vec<(u32, u32)> {
+/// The bands (top, height) of pixel rows that differ between two shots within `cols`, and the
+/// columns they span.
+fn changed(
+    before: &std::path::Path,
+    after: &std::path::Path,
+    cols: std::ops::Range<u32>,
+) -> (Vec<(u32, u32)>, std::ops::Range<u32>) {
     let (a, b) = (
         image::open(before).expect("shot").to_rgba8(),
         image::open(after).expect("shot").to_rgba8(),
     );
     assert_eq!(a.dimensions(), b.dimensions());
+    let cols = cols.start..cols.end.min(a.width());
     let mut bands: Vec<(u32, u32)> = Vec::new();
-    for y in
-        (0..a.height()).filter(|&y| (0..a.width()).any(|x| a.get_pixel(x, y) != b.get_pixel(x, y)))
-    {
+    let mut span = cols.end..cols.start;
+    for y in 0..a.height() {
+        let xs: Vec<u32> = cols
+            .clone()
+            .filter(|&x| a.get_pixel(x, y) != b.get_pixel(x, y))
+            .collect();
+        let (Some(&first), Some(&last)) = (xs.first(), xs.last()) else {
+            continue;
+        };
+        span = span.start.min(first)..span.end.max(last + 1);
         match bands.last_mut() {
             Some((top, height)) if *top + *height == y => *height += 1,
             _ => bands.push((y, 1)),
         }
     }
-    bands
+    (bands, span)
 }
 
-/// SHELL-APP-10 — Selecting message text fills every wrapped line of a paragraph and of table
+/// SHELL-APP-11 — Selecting message text fills every wrapped line of a paragraph and of table
 /// cells, not only each text's last line; a press that starts inside a table cell or an answer
 /// block still starts a selection; a left press outside the message (sidebar, empty chat area)
 /// clears the selection.
 #[tokio::test]
-async fn shell_app_10_selection_fills_wrapped_lines_and_clears_outside() -> Result<(), HarnessError>
+async fn shell_app_11_selection_fills_wrapped_lines_and_clears_outside() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
     let _serial = SERIAL.lock().await;
-    let mut sandbox = Sandbox::new("SHELL-APP-10")?;
+    let mut sandbox = Sandbox::new("SHELL-APP-11")?;
     let paragraph = "보고서에는 이 흐름에 더해 악성코드가 실제로 할 수 있었던 일(원격 조종, 브라우저 비밀번호·쿠키 탈취, 가상자산 지갑 28종 수집, 흔적 삭제)과 구조적 원인 분석, 출처 16건이 함께 들어 있습니다. 사건을 키운 핵심은 공격 자체보다 37일간 아무도 몰랐고, 공지는 약 10시간 늦게 나왔다는 점입니다.";
     let (head, cell) = (
         "| 사건 | 결과 |\n|---|---|",
         "하루 만에 종료되었고 핵심 보상이 누락되어 추가 보상 공지가 나옴",
     );
     let row = "| 협동 작전 버그가 발견되어 하루 만에 종료된 이벤트와 그 뒤의 공지 |";
-    let markdown = format!("{paragraph}\n\n{head}\n{row} {cell} |\n\n### 정리\n\n마지막 문단입니다.");
+    let markdown =
+        format!("{paragraph}\n\n{head}\n{row} {cell} |\n\n### 정리\n\n마지막 문단입니다.");
     let timeline = json!({"v":1,"blocks":[{"type":"timeline","title":"무슨 일이 있었나","items":[{
         "when":"2026-09-27","title":"CDN 배포 파일 변조",
         "text":"런처 자바스크립트 4개에 외부 스크립트 호출 코드가 삽입됐다는 사실이 뒤늦게 확인됐습니다."}]}]});
@@ -186,7 +200,7 @@ async fn shell_app_10_selection_fills_wrapped_lines_and_clears_outside() -> Resu
     let sent = gw
         .post(
             "/messages",
-            json!({"chat_id": id, "text": "Hello", "client_message_id": "shell-app-10"}),
+            json!({"chat_id": id, "text": "Hello", "client_message_id": "shell-app-11"}),
         )
         .await?;
     assert_eq!(sent.status, 202, "{}", sent.text);
@@ -209,24 +223,29 @@ async fn shell_app_10_selection_fills_wrapped_lines_and_clears_outside() -> Resu
     let shots = sandbox.root.join("shell");
     let shot = |name: &str| shots.join(format!("{name}.png"));
     // Selection fill present in a shot, as bands of rows differing from the unselected one.
-    let filled = |name: &str| changed_bands(&shot("before"), &shot(name));
-    let cleared = |name: &str, bands: &[(u32, u32)]| {
-        !filled(name)
-            .iter()
-            .any(|r| bands.iter().any(|b| r.0 < b.0 + b.1 && b.0 < r.0 + r.1))
+    let filled = |name: &str| changed(&shot("before"), &shot(name), 0..u32::MAX);
+    // No fill left where `selected` had it (the sidebar's own hover state is outside its columns).
+    let cleared = |name: &str, selected: &(Vec<(u32, u32)>, std::ops::Range<u32>)| {
+        let (rows, _) = changed(&shot("before"), &shot(name), selected.1.clone());
+        !rows.iter().any(|r| {
+            selected
+                .0
+                .iter()
+                .any(|b| r.0 < b.0 + b.1 && b.0 < r.0 + r.1)
+        })
     };
     shell.run(&["size 1000 900", "shot before"]).await?;
-    // D1: the press starts in the last body cell (second line) and ends on the heading "정리".
+    // D1: the press starts in the last body cell (first line) and ends on the heading "정리".
     shell
         .run(&[
-            &drag("0.62 0.55 0.2 0.7"),
+            &drag("0.524 0.316 0.027 0.473"),
             "shot d1",
             "key secondary-c",
             &format!("expect-clipboard-contains {}", json!(cell)),
         ])
         .await?;
     let d1 = filled("d1");
-    assert!(d1.len() >= 2, "table and heading rows filled: {d1:?}");
+    assert!(d1.0.len() >= 2, "table and heading rows filled: {d1:?}");
     // D2: the press starts on the blank marker column left of the timeline item, ends on its text.
     shell
         .run(&[&format!("click sidebar-row-{id}"), "shot c1"])
@@ -234,48 +253,65 @@ async fn shell_app_10_selection_fills_wrapped_lines_and_clears_outside() -> Resu
     assert!(cleared("c1", &d1), "sidebar press left the D1 selection");
     shell
         .run(&[
-            &drag("0.01 0.9 0.4 0.92"),
+            &drag("0.005 0.765 0.93 0.804"),
             "shot d2",
             "key secondary-c",
             "expect-clipboard-contains \"CDN 배포 파일 변조\"",
         ])
         .await?;
     let d2 = filled("d2");
-    assert!(!d2.is_empty(), "timeline text filled");
+    assert!(!d2.0.is_empty(), "timeline text filled");
     // A: all wrapped lines are filled: paragraph, header row, body row, heading, last paragraph.
     shell
         .run(&[&format!("click sidebar-row-{id}"), "shot c2"])
         .await?;
     assert!(cleared("c2", &d2), "sidebar press left the D2 selection");
     let copied = format!(
-        "{paragraph}\n\n사건\t결과\n협동 작전 버그가 발견되어 하루 만에 종료된 이벤트와 그 뒤의 공지\t{cell}\n\n정리\n\n마지막 문단입니다."
+        "{paragraph}\n\n사건\t결과\n협동 작전 버그가 발견되어 하루 만에 종료된 이벤트와 그 뒤의 공지\t{cell}\n정리\n마지막 문단입니다."
     );
     shell
         .run(&[
-            &drag("0 0 0.3 0.6"),
+            &drag("0 0 0.3 0.547"),
             "shot selected",
             "key secondary-c",
             &format!("expect-clipboard-prefix {}", json!(copied)),
         ])
         .await?;
-    let bands = filled("selected");
+    let selected = filled("selected");
+    let bands = selected.0.clone();
     let heights: Vec<u32> = bands.iter().map(|b| b.1).collect();
-    assert_eq!(heights.len(), 5, "paragraph, header, body row, heading, last: {bands:?}");
-    assert!(heights[0] >= 2 * heights[1], "paragraph wrapped lines unfilled: {bands:?}");
-    assert!(2 * heights[2] >= 3 * heights[1], "cell wrapped lines unfilled: {bands:?}");
+    assert_eq!(
+        heights.len(),
+        5,
+        "paragraph, header, body row, heading, last: {bands:?}"
+    );
+    assert!(
+        heights[0] >= 2 * heights[1],
+        "paragraph wrapped lines unfilled: {bands:?}"
+    );
+    assert!(
+        2 * heights[2] >= 3 * heights[1],
+        "cell wrapped lines unfilled: {bands:?}"
+    );
     // B: a press on the sidebar, and one on the empty chat area, clear it.
     shell
         .run(&[&format!("click sidebar-row-{id}"), "shot sidebar-press"])
         .await?;
-    assert!(cleared("sidebar-press", &bands), "sidebar press left the selection");
+    assert!(
+        cleared("sidebar-press", &selected),
+        "sidebar press left the selection"
+    );
     shell
         .run(&[
-            &drag("0 0 0.3 0.6"),
+            &drag("0 0 0.3 0.547"),
             &format!("click-at message-{user}-body -2 0.5"),
             "shot empty-press",
         ])
         .await?;
-    assert!(cleared("empty-press", &bands), "empty chat-area press left the selection");
+    assert!(
+        cleared("empty-press", &selected),
+        "empty chat-area press left the selection"
+    );
     shell.run(&["app-quit"]).await?;
     shell.finish().await?;
     sandbox.mark_success();
