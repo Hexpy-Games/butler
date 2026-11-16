@@ -213,3 +213,13 @@ bun packages/butler-shell/tools/parity/ds-layout-diff.ts --web $TMPDIR/ds-layout
 the totals line and two tables: (A) stories whose canvas is off by more than 0.5 px, largest first, and
 (B) stories with equal control counts whose controls are off by more than 0.5 px (first offending control).
 A story whose web and gpui control counts differ prints one `count-mismatch` line and no control rows.
+
+Scrollers are recorded too: every web element with computed `overflow-y` auto or scroll (key `slot:<data-slot>#<n>`,
+`data-test-class` when it has no data-slot, `scroll:<n>` otherwise; its parent is `slot:<name>:frame#<n>`; also
+`client_h` and `scroll_h`) and, natively, the elements that publish `butler_ds::ui::control::slot_anchor` (the list `SCROLLERS` in
+`shots.rs`: `sidebar-scroll`, `conversation-aside-scroll`, `scroll-area`), both assigned to stories by canvas
+containment. The diff adds one row per scroller pair, `{web:{h, frame_h, max_offset}, gpui:{h, frame_h}, web_flag, gpui_flag}`,
+where the flag is `scroller>frame` when the scroller is taller than its frame (it grows with its content and the frame only
+clips it: no scrolling) and `=` otherwise, a table (C) with the mismatched flags first, and scroller counts in the totals
+(`matched`, `web_only`, `gpui_only`, `flag_mismatch`). Run only the pages with scrollers by adding `--pages sidebar-shell,conversation-shell,scroll-area`
+to `butler-ds-view` and `--only sidebar-shell,conversation-shell,scroll-area` to `ds-layout.ts`.

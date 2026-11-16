@@ -1,8 +1,9 @@
 // Web side of the per-control DS layout diff: for each page of scenes/ds-view.json, writes
 //   <out>/react/1280x800-light/<page>.parts.json
 // the box of every story canvas (key `canvas`) and of the controls whose origin lies inside it
-// (`control-<n>`, document order, counted again from 0 in each story; controls in no canvas are dropped),
-// in logical px relative to the canvas. The native side is `butler-ds-view --shots --parts`.
+// (`control-<n>`, document order, counted again from 0 in each story; controls in no canvas are dropped)
+// and of every scroller (`slot:<data-slot>#<n>`, its parent as `slot:<data-slot>:frame#<n>`, with `client_h` and
+// `scroll_h`), in logical px relative to the canvas. The native side is `butler-ds-view --shots --parts`.
 //
 //   bun ds-layout.ts --site <dist-ds-site> --out <dir> [--locale ko] [--only page,page]
 // Serving, URL state, viewport growing and page mapping are those of ds-view.ts (light, 1280x800, scale 2).
@@ -58,6 +59,21 @@ try {
         const b = e.getBoundingClientRect();
         const s = stories.find(c => b.x >= c.canvas.x && b.x < c.canvas.right && b.y >= c.canvas.y && b.y < c.canvas.bottom);
         if (s) out.push(part(s, "control-" + s.n++, b));
+      }
+      // Scrollers: overflow-y auto or scroll, keyed by data-slot (data-test-class when there is none, scroll:<n>
+      // otherwise), with the parent box as the frame; counted again from 0 per name in each story.
+      for (const e of document.querySelectorAll("*")) {
+        if (!/^(auto|scroll)$/.test(getComputedStyle(e).overflowY)) continue;
+        const b = e.getBoundingClientRect();
+        const s = stories.find(c => b.x >= c.canvas.x && b.x < c.canvas.right && b.y >= c.canvas.y && b.y < c.canvas.bottom);
+        if (!s) continue;
+        const slot = e.getAttribute("data-slot") ?? e.getAttribute("data-test-class");
+        const name = slot ? "slot:" + slot : "scroll";
+        s.seen = s.seen ?? {};
+        const n = s.seen[name] = (s.seen[name] ?? -1) + 1;
+        const [key, frame] = slot ? [name + "#" + n, name + ":frame#" + n] : ["scroll:" + n, "scroll:" + n + ":frame"];
+        out.push({ ...part(s, key, b), client_h: e.clientHeight, scroll_h: e.scrollHeight });
+        out.push(part(s, frame, e.parentElement.getBoundingClientRect()));
       }
       return stories.flatMap(s => out.filter(p => p.story === s.name));
     })()`);

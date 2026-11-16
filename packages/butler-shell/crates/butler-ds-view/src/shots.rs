@@ -182,6 +182,11 @@ const MAX_WINDOW_HEIGHT: f32 = 6400.;
 /// Where a scrolled story's canvas is put under the window's top edge.
 const SCROLL_MARGIN: f32 = 16.;
 
+/// The scrollers the layout diff compares, by the web `data-slot` (`data-test-class` for the sidebar's):
+/// each publishes `slot:<name>#<k>` (the scrolling element) and `slot:<name>:frame#<k>` (its parent)
+/// per frame (`butler_ds::ui::control::slot_anchor`).
+const SCROLLERS: [&str; 3] = ["sidebar-scroll", "conversation-aside-scroll", "scroll-area"];
+
 /// Each story canvas and the controls whose origin lies inside it, relative to the canvas.
 /// `control-<n>` is numbered per frame over the whole page (`butler_ds::ui::control::parts`);
 /// inside a story it counts again from 0, in the same order.
@@ -193,6 +198,17 @@ fn parts(
     let mut controls = Vec::new();
     while let Some(b) = cx.debug_bounds(handle, &format!("control-{}", controls.len()))? {
         controls.push(b);
+    }
+    let mut scrollers = Vec::new();
+    for name in SCROLLERS {
+        let mut pairs = Vec::new();
+        while let (Some(scroller), Some(frame)) = (
+            cx.debug_bounds(handle, &format!("slot:{name}#{}", pairs.len()))?,
+            cx.debug_bounds(handle, &format!("slot:{name}:frame#{}", pairs.len()))?,
+        ) {
+            pairs.push((scroller, frame));
+        }
+        scrollers.push((name, pairs));
     }
     let mut parts = Vec::new();
     for name in story_anchors(cx, window) {
@@ -209,6 +225,13 @@ fn parts(
         let inside = controls.iter().filter(|b| canvas.contains(&b.origin));
         for (n, b) in inside.enumerate() {
             parts.push(part(format!("control-{n}"), b));
+        }
+        for (slot, pairs) in &scrollers {
+            let inside = pairs.iter().filter(|(s, _)| canvas.contains(&s.origin));
+            for (n, (scroller, frame)) in inside.enumerate() {
+                parts.push(part(format!("slot:{slot}#{n}"), scroller));
+                parts.push(part(format!("slot:{slot}:frame#{n}"), frame));
+            }
         }
     }
     Ok(parts)
