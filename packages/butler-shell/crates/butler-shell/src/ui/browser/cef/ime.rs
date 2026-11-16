@@ -71,7 +71,7 @@ impl EntityInputHandler for Page {
         &mut self,
         requested: Range<usize>,
         bounds: Bounds<Pixels>,
-        _: &mut Window,
+        window: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
         let ime = self.runtime.upgrade()?.ime(self.id)?;
@@ -81,9 +81,14 @@ impl EntityInputHandler for Page {
             .ime_bounds
             .get(requested.start.saturating_sub(start))
             .or_else(|| state.ime_bounds.last())?;
+        // CEF reports page pixels; the window works in content pixels.
+        let zoom = window.zoom();
         Some(Bounds::new(
-            bounds.origin + point(px(rect.x as f32), px(rect.y as f32)),
-            size(px(rect.width.max(1) as f32), px(rect.height.max(1) as f32)),
+            bounds.origin + point(px(rect.x as f32 / zoom), px(rect.y as f32 / zoom)),
+            size(
+                px(rect.width.max(1) as f32 / zoom),
+                px(rect.height.max(1) as f32 / zoom),
+            ),
         ))
     }
     fn character_index_for_point(
