@@ -46,9 +46,10 @@ async fn tree_toggle_count_and_mcp_follow_active_revision_until_activation()
         external["specs"][0]["criteria"],
         baseline["specs"][0]["criteria"]
     );
-    let spec =
+    let specs =
         super::super::canon_mcp::call(&s, "canon_get_spec", json!({"spec_id":"criteria-spec"}))
             .await?;
+    let spec = &specs["specs"][0];
     let criterion_ids = |criteria: &Value| {
         criteria
             .as_array()
