@@ -131,7 +131,7 @@ async fn publish(
     };
     let (output, size) = tokio::task::spawn_blocking(move || {
         let output = OutputStore::new(&data).publish(request)?.0;
-        Ok((output, std::fs::metadata(file)?.len()))
+        Ok((output, std::fs::metadata(file).map_or(0, |m| m.len())))
     })
     .await
     .map_err(|_| HttpError::Internal)?
