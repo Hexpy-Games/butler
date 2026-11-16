@@ -58,6 +58,9 @@ fn single_instance(args: &[OsString]) -> Option<tokio::sync::mpsc::UnboundedRece
 }
 
 fn main() {
+    // CEF runs in this process.
+    #[cfg(feature = "cef")]
+    butler_cef_host::shorten_temp_path();
     let args: Vec<OsString> = std::env::args_os().collect();
     if let Some(event) = butler_platform::squirrel::event(&args) {
         let data = lifecycle::data_root(&args);

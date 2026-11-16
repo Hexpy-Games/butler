@@ -56,6 +56,18 @@ impl Shell {
             command
                 .env("BUTLER_CEF_DIR", directory)
                 .arg("--use-mock-keychain");
+            // CEF's Linux platform connects to the session's display server; the isolated
+            // environment otherwise carries none.
+            for name in [
+                "DISPLAY",
+                "XAUTHORITY",
+                "WAYLAND_DISPLAY",
+                "XDG_RUNTIME_DIR",
+            ] {
+                if let Some(value) = std::env::var_os(name) {
+                    command.env(name, value);
+                }
+            }
         }
         let mut child = tokio::process::Command::from(command)
             .kill_on_drop(true)

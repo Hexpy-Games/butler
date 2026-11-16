@@ -20,6 +20,24 @@ mod mac;
 pub mod osr;
 pub mod switches;
 
+/// Keep Chrome's singleton socket below the Unix socket path limit (104–108 bytes): a process that
+/// runs CEF calls this first in `main`, before any thread exists. Linux only; elsewhere it does
+/// nothing. Chrome removes its own temporary entries when it exits.
+pub fn shorten_temp_path() {
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("TMPDIR").is_none_or(|path| path.len() > 60) {
+        // SAFETY: the caller contract is that this runs first in `main`, before any thread exists,
+        // so no other thread can read the environment while it changes.
+        #[allow(
+            unsafe_code,
+            reason = "std::env::set_var before any thread exists; see SAFETY"
+        )]
+        unsafe {
+            std::env::set_var("TMPDIR", "/tmp");
+        }
+    }
+}
+
 /// Run a CEF browser or helper process, passing bootstrap sandbox info through.
 #[cfg(feature = "cef")]
 pub fn run(sandbox_info: *mut u8) -> i32 {
