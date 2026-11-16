@@ -116,7 +116,12 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "instance" => &["process_table", "process_names"],
         "process_names" => &["launcher", "secure_fs"],
         // Package activation waits for its parent and restores verified ZIP role links.
-        "app_update" => &["process_control", "process_names", "secure_fs", "store_update"],
+        "app_update" => &[
+            "process_control",
+            "process_names",
+            "secure_fs",
+            "store_update",
+        ],
         // User-entered paths resolve the user's home.
         "tool_paths" => &["user_dirs"],
         // Other browsers' profile folders are found in the account folders the OS
