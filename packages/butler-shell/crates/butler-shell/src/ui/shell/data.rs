@@ -7,7 +7,7 @@ use gpui::{Context, Window};
 use super::Shell;
 use super::region::Touched;
 use crate::ui::manage::Topic;
-use crate::ui::source::agent::MonitorSignal;
+use crate::ui::source::agent::{Jobs, MonitorSignal};
 use crate::ui::source::{ChatRef, EventCursor, Fetch, SourceError};
 use crate::ui::store::{Applied, ChatsLoad};
 
@@ -42,15 +42,14 @@ impl Shell {
     ) {
         self.rediscover = Some(attachment.retry.clone());
         self.connection_task = Some(cx.spawn(async move |this, cx| {
-            while let Some((source, jobs)) = attachment.next().await {
+            while let Some(change) = attachment.next().await {
                 if this
                     .update(cx, |this, cx| {
-                        cx.set_global(jobs);
-                        this.lost(cx);
-                        this.incompatible = false;
-                        this.source = source;
-                        this.sync_composer(cx);
-                        this.connect(cx);
+                        if !change.1.current(cx) {
+                            Jobs::rediscover(cx);
+                        }
+                        this.attaching = Some(change);
+                        this.adopt(cx);
                     })
                     .is_err()
                 {
@@ -58,6 +57,23 @@ impl Shell {
                 }
             }
         }));
+    }
+
+    /// Applies the window's attach change once the app's [`Jobs`] reaches the same Agent: the
+    /// reads `connect` starts go through it.
+    pub(super) fn adopt(&mut self, cx: &mut Context<Self>) {
+        let Some((source, jobs)) = self.attaching.take() else {
+            return;
+        };
+        if !jobs.current(cx) {
+            self.attaching = Some((source, jobs));
+            return;
+        }
+        self.lost(cx);
+        self.incompatible = false;
+        self.source = source;
+        self.sync_composer(cx);
+        self.connect(cx);
     }
 
     /// A fresh snapshot: the first page of chats, then live updates after its cursor.
@@ -361,8 +377,11 @@ impl Shell {
                 // A request found the agent gone while its record may still name it: look again.
                 let attached = self.source.is_some();
                 self.lost(cx);
-                if attached && let Some(retry) = &self.rediscover {
-                    let _ = retry.send(MonitorSignal::Retry);
+                if attached {
+                    if let Some(retry) = &self.rediscover {
+                        let _ = retry.send(MonitorSignal::Retry);
+                    }
+                    Jobs::rediscover(cx);
                 }
             }
             SourceError::Incompatible => {
