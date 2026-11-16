@@ -47,7 +47,8 @@ gpui.workspace = true
 gpui_elements.workspace = true
 # macos-wgpu: the glass lens is drawn by the wgpu renderer (Metal's renderer has no lens).
 gpui_platform = { workspace = true, features = ["macos-wgpu"] }
-gpui_wgpu = { workspace = true, features = ["test-support"], optional = true }
+# wgpu-surfaces: on Windows the headless harness imports CEF's D3D11 shared textures.
+gpui_wgpu = { workspace = true, features = ["test-support", "wgpu-surfaces"], optional = true }
 sys-locale.workspace = true
 url = "2"
 percent-encoding = "2"
