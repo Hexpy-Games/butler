@@ -72,7 +72,7 @@ async function verifyLayouts(page: Page) {
   }
 }
 
-async function screenshot(page: Page, state: string) {
+async function screenshot(page: Page, state: string, fullPage = true) {
   const directory = process.env.BUTLER_SMOKE_SHOTS;
   if (!directory) return;
   mkdirSync(directory, { recursive: true });
@@ -82,7 +82,7 @@ async function screenshot(page: Page, state: string) {
       await page.setViewportSize({ width, height: 900 });
       await page.evaluate(() => Promise.all(document.getAnimations()
         .filter((animation) => animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => undefined))));
-      await page.screenshot({ path: join(directory, `butler-account-${state}-${language}-${colorScheme}-${width}.png`), fullPage: true });
+      await page.screenshot({ path: join(directory, `butler-account-${state}-${language}-${colorScheme}-${width}.png`), fullPage });
     }
   }
   await page.emulateMedia({ colorScheme: "light" });
@@ -91,18 +91,35 @@ async function screenshot(page: Page, state: string) {
 
 async function signedInFlow(page: Page, fake: Awaited<ReturnType<typeof startFakeCloud>>) {
   const account = section(page, "butler-account");
-  await account.getByLabel(copy.email, { exact: true }).waitFor();
+  const signIn = account.getByRole("button", { name: copy.signIn, exact: true });
+  await signIn.waitFor();
+  assert.equal(await account.getByLabel(copy.email, { exact: true }).count(), 0);
   await verifyLayouts(page);
-  await screenshot(page, "email");
-  await account.getByLabel(copy.email, { exact: true }).fill("user@example.com");
-  await account.getByRole("button", { name: copy.sendCode, exact: true }).click();
-  await account.getByLabel(copy.code, { exact: true }).fill("000000");
-  await account.getByRole("button", { name: copy.signIn, exact: true }).click();
-  await account.getByText(copy.codeInvalid, { exact: true }).waitFor();
+  await screenshot(page, "signed-out");
+  await signIn.click();
+  const dialog = page.getByRole("dialog");
+  await dialog.waitFor();
+  await page.waitForFunction(() => document.activeElement?.id === "butler-account-email");
+  await screenshot(page, "email", false);
+  await dialog.getByLabel(copy.email, { exact: true }).fill("user@example.com");
+  await dialog.getByLabel(copy.email, { exact: true }).press("Enter");
+  await dialog.getByLabel(copy.code, { exact: true }).fill("000000");
+  await dialog.getByRole("button", { name: copy.signIn, exact: true }).click();
+  await dialog.getByText(copy.codeInvalid, { exact: true }).waitFor();
   await verifyLayouts(page);
-  await screenshot(page, "code-error");
-  await account.getByLabel(copy.code, { exact: true }).fill("123456");
-  await account.getByRole("button", { name: copy.signIn, exact: true }).click();
+  await screenshot(page, "code-error", false);
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "hidden" });
+  await signIn.click();
+  await dialog.waitFor();
+  const email = dialog.getByLabel(copy.email, { exact: true });
+  await email.waitFor();
+  assert.equal(await email.inputValue(), "");
+  await email.fill("user@example.com");
+  await email.press("Enter");
+  await dialog.getByLabel(copy.code, { exact: true }).fill("123456");
+  await dialog.getByLabel(copy.code, { exact: true }).press("Enter");
+  await dialog.waitFor({ state: "hidden" });
   await account.getByText(copy.plans.free, { exact: true }).waitFor();
   const devices = section(page, "butler-account-devices");
   await devices.getByText("Other", { exact: true }).waitFor();
@@ -121,7 +138,7 @@ async function signedInFlow(page: Page, fake: Awaited<ReturnType<typeof startFak
   assert.equal(await devices.locator('[data-slot="form-section-card"] > *').count(), 1);
   await account.getByRole("button", { name: copy.signOut, exact: true }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: copy.signOut, exact: true }).click();
-  await account.getByLabel(copy.email, { exact: true }).waitFor();
+  await signIn.waitFor();
   await verifyLayouts(page);
 }
 

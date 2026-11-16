@@ -1,40 +1,16 @@
 import { useState } from "react";
 import { appCopy, getAppLocale, useAppLocale } from "@/app/copy";
-import { notifyStatus } from "@/app/notifications";
-import { Button, ButtonContainer, Input, SettingsField, SettingsSection, Tag, Typo } from "@/butler-ds";
+import { Button, ButtonContainer, SettingsField, SettingsSection, Tag, Typo } from "@/butler-ds";
 import { ButlerAccountDevices } from "./ButlerAccountDevices";
+import { ButlerAccountSignInDialog } from "./ButlerAccountSignInDialog";
 import { useButlerAccount } from "./hooks/useButlerAccount";
-
-function errorMessage(code: string | undefined, step: "email" | "code") {
-  const copy = appCopy.butlerAccount;
-  switch (code) {
-    case "code_invalid": return copy.codeInvalid;
-    case "code_expired": return copy.codeExpired;
-    case "rate_limited": return copy.tooSoon;
-    case "email_capacity": case "paused": return copy.unavailableNow;
-    case "cloud_unavailable": return copy.offline;
-    case "invalid_request": return step === "email" ? copy.emailInvalid : copy.failed;
-    default: return copy.failed;
-  }
-}
 
 export function ButlerAccountSection() {
   useAppLocale();
   const account = useButlerAccount();
   const copy = appCopy.butlerAccount;
-  const [step, setStep] = useState<"email" | "code">("email");
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [error, setError] = useState("");
+  const [open, setOpen] = useState(false);
   const { status, busy } = account;
-  async function submit(resend = false) {
-    if (busy || !email.trim() || (step === "code" && !resend && code.length !== 6)) return;
-    const result = step === "email" || resend ? await account.start(email.trim()) : await account.verify(email.trim(), code);
-    if (!result.ok) { setError(errorMessage(result.code, step)); return; }
-    setError("");
-    if (resend) notifyStatus(copy.resent, { id: "butler-account", tone: "ok" });
-    else { setStep(step === "email" ? "code" : "email"); setCode(""); }
-  }
   if (account.state === "unsupported") return null;
   if (account.state !== "ready") return (
     <SettingsSection id="butler-account" kind="form" title={copy.name} state={account.state}
@@ -53,26 +29,10 @@ export function ButlerAccountSection() {
     <ButlerAccountDevices account={account} />
   </>;
   return (
-    <SettingsSection id="butler-account" kind="form" title={copy.name} description={copy.intro}>
-      {step === "email" ? <>
-        <SettingsField id="butler-account-email" label={copy.email} controlWidth="full" error={error}
-          control={<Input id="butler-account-email" type="email" autoComplete="email" value={email}
-            onChange={(event) => setEmail(event.target.value)} disabled={busy}
-            onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} />} />
-        <ButtonContainer size="default" justify="end">
-          <Button aria-busy={busy} disabled={busy || !email.trim()} onClick={() => void submit()}>{copy.sendCode}</Button>
-        </ButtonContainer>
-      </> : <>
-        <SettingsField id="butler-account-code" label={copy.code} description={copy.codeSent(email)} controlWidth="full" error={error}
-          control={<Input id="butler-account-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code}
-            onChange={(event) => setCode(event.target.value.replace(/\D/gu, ""))} disabled={busy}
-            onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} />} />
-        <ButtonContainer size="default" justify="end">
-          <Button variant="secondary" disabled={busy} onClick={() => { setStep("email"); setCode(""); setError(""); }}>{copy.changeEmail}</Button>
-          <Button variant="secondary" disabled={busy} onClick={() => void submit(true)}>{copy.resend}</Button>
-          <Button aria-busy={busy} disabled={busy || code.length !== 6} onClick={() => void submit()}>{copy.signIn}</Button>
-        </ButtonContainer>
-      </>}
+    <SettingsSection id="butler-account" kind="form" title={copy.name}>
+      <SettingsField id="butler-account-sign-in" label={copy.signedOut} description={copy.intro}
+        control={<Button onClick={() => setOpen(true)}>{copy.signIn}</Button>} />
+      <ButlerAccountSignInDialog open={open} onOpenChange={setOpen} account={account} />
     </SettingsSection>
   );
 }

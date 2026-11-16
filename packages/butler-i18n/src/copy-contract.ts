@@ -696,6 +696,10 @@ export interface AppCopy {
   butlerAccount: {
     name: string;
     intro: string;
+    dialogTitle: string;
+    dialogIntro: string;
+    cancel: string;
+    signedIn: string;
     email: string;
     sendCode: string;
     code: string;
