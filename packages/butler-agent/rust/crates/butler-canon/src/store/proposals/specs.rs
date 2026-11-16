@@ -60,11 +60,9 @@ pub(super) fn create(
         return Err(Error::Invalid("spec outside project"));
     }
     let body = text(change, "body")?;
-    let title = body
-        .lines()
-        .next()
-        .and_then(|line| line.strip_prefix("# "))
-        .map(str::trim)
+    let parsed = spec_markdown::parse(body)?;
+    let title = parsed
+        .title
         .filter(|title| !title.is_empty())
         .ok_or(Error::Invalid("spec body must start with '# ' and a title"))?;
     let id = crate::work_ids::IdGenerator::global_next(crate::work_ids::IdKind::Spec, ctx.now)?;
@@ -95,13 +93,22 @@ fn publish(
     expected: i64,
 ) -> Result<()> {
     let id = text(node, "node_id")?;
-    let body = put_body(tx, text(change, "body")?)?;
+    let body = text(change, "body")?;
+    let parsed = spec_markdown::parse(body)?;
+    if let Some(title) = parsed.title
+        && node["concern_id"] != title
+    {
+        tx.execute(
+            "UPDATE canon_spec_nodes SET concern_id=?2 WHERE node_id=?1",
+            params![id, title],
+        )?;
+    }
+    let body = put_body(tx, body)?;
     let next: i64 = tx.query_row(
         "SELECT COALESCE(MAX(revision),0)+1 FROM canon_spec_revisions WHERE node_id=?1",
         [id],
         |r| r.get(0),
     )?;
-    let criteria = criteria(tx, node, change)?;
     publish_spec(
         tx,
         ctx,
@@ -110,8 +117,8 @@ fn publish(
         &Publication {
             revision: next,
             body_hash: body,
-            parser_version: "markdown".into(),
-            criteria,
+            parser_version: "markdown-1".into(),
+            criteria: parsed.criteria,
         },
     )?;
     activate_spec(
@@ -123,36 +130,4 @@ fn publish(
         next,
     )?;
     Ok(())
-}
-
-fn criteria(db: &Connection, node: &Value, change: &Value) -> Result<Vec<Criterion>> {
-    let items = if let Some(value) = change.get("criteria") {
-        value
-            .as_array()
-            .cloned()
-            .ok_or(Error::Invalid("criteria must be an array"))?
-    } else if let Some(revision) = node["active_revision"].as_i64() {
-        rows(
-            db,
-            super::super::api::sql::SPEC_CRITERIA,
-            params![text(node, "node_id")?, revision],
-        )?
-    } else {
-        Vec::new()
-    };
-    items
-        .iter()
-        .map(|c| {
-            Ok(Criterion {
-                id: c
-                    .get("id")
-                    .or_else(|| c.get("criterion_id"))
-                    .and_then(Value::as_str)
-                    .ok_or(Error::Invalid("criterion id required"))?
-                    .into(),
-                part_id: text(c, "part_id")?.into(),
-                text: text(c, "text")?.into(),
-            })
-        })
-        .collect()
 }

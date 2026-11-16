@@ -2,6 +2,7 @@
 pub(super) mod apply;
 mod operations;
 pub mod queries;
+mod spec_markdown;
 pub mod specs;
 mod target;
 pub mod view;
