@@ -8,13 +8,16 @@ use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Lang;
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, App, Context, IntoElement as _, ParentElement as _, Styled as _, Window};
+use gpui::{
+    AnyElement, App, Context, Entity, IntoElement as _, ParentElement as _, Styled as _, Window,
+};
 use serde_json::{Value, json};
 
 use super::card::step_card;
 use super::copy::words as shared_words;
 use super::providers::CardId;
 use super::readiness::prep_status;
+use super::sign_in::SignIn;
 use super::{Mode, Onboarding};
 use crate::ui::source::agent::Jobs;
 use copy::{Words, words};
@@ -41,7 +44,7 @@ pub(crate) fn screen(
             .into_any_element();
     };
     let account = view.sign_in.read(cx).account().cloned();
-    let show_notice = plan_notice(account.as_ref(), window, cx);
+    let show_notice = plan_notice(account.as_ref(), &view.sign_in, window, cx);
     let (saving, failed) = {
         let reply = view.reply.read(cx);
         (reply.saving(), reply.failed())
@@ -138,7 +141,12 @@ fn notice_row(copy: &Words, cx: &mut Context<Onboarding>) -> AnyElement {
 
 /// `showPlanNotice`: on once the account says the notice is pending, and it stays on. The first
 /// frame it shows with the AI connected sends the acknowledgement.
-fn plan_notice(account: Option<&Value>, window: &mut Window, cx: &mut App) -> bool {
+fn plan_notice(
+    account: Option<&Value>,
+    sign_in: &Entity<SignIn>,
+    window: &mut Window,
+    cx: &mut App,
+) -> bool {
     let pending = account
         .and_then(|account| account.get("plan_notice_pending"))
         .and_then(Value::as_bool)
@@ -157,8 +165,11 @@ fn plan_notice(account: Option<&Value>, window: &mut Window, cx: &mut App) -> bo
                 .await
                 .ok()
         });
-        cx.spawn(async move |_| {
-            let _ = job.await;
+        let sign_in = sign_in.clone();
+        cx.spawn(async move |cx| {
+            if let Some(Some(account)) = job.await {
+                sign_in.update(cx, |sign_in, cx| sign_in.set_account(account, cx));
+            }
         })
         .detach();
     }

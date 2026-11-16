@@ -52,7 +52,6 @@ fn layout(local_reachable: bool) -> (Vec<CardId>, Vec<CardId>) {
 struct Snapshot {
     online: bool,
     found: Option<SharedString>,
-    more_open: Option<bool>,
     top: Vec<CardId>,
     more: Vec<CardId>,
 }
@@ -151,7 +150,6 @@ fn snapshot(view: &Onboarding, lang: Lang, cx: &Context<Onboarding>) -> Snapshot
     Snapshot {
         online: local.online(),
         found: local.found(lang),
-        more_open: local.more_open,
         top,
         more,
     }
@@ -159,7 +157,7 @@ fn snapshot(view: &Onboarding, lang: Lang, cx: &Context<Onboarding>) -> Snapshot
 
 pub(crate) fn screen(
     view: &Onboarding,
-    _window: &mut Window,
+    window: &mut Window,
     cx: &mut Context<Onboarding>,
 ) -> AnyElement {
     let lang = view.lang;
@@ -167,8 +165,9 @@ pub(crate) fn screen(
     let snap = snapshot(view, lang, cx);
     let current = view.current_card_id(cx);
     // Run setup again opens "more" when the AI in use is there.
-    let expanded = snap
-        .more_open
+    let more_open = window.use_keyed_state("first-run-more-open", cx, |_, _| None::<bool>);
+    let expanded = more_open
+        .read(cx)
         .unwrap_or_else(|| current.is_some_and(|id| snap.more.contains(&id)));
 
     let mut body = Vec::new();
@@ -216,12 +215,12 @@ pub(crate) fn screen(
         .size(Size::Sm)
         .text(label)
         .icon_end(icon(chevron, IconSize::Sm, Ds::get(cx)))
-        .on_click(cx.listener(move |view, _, _, cx| {
-            view.providers.update(cx, |local, cx| {
-                local.more_open = Some(!expanded);
+        .on_click(move |_, _, cx| {
+            more_open.update(cx, |open, cx| {
+                *open = Some(!expanded);
                 cx.notify();
             });
-        }));
+        });
     step_card(view, "providers", copy.title, body, cx)
         .description(copy.lede)
         .on_back(

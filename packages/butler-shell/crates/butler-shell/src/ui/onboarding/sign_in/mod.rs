@@ -112,6 +112,12 @@ impl SignIn {
         self.account.as_ref()
     }
 
+    /// The account the notice acknowledgement answered.
+    pub(crate) fn set_account(&mut self, account: Value, cx: &mut Context<Self>) {
+        self.account = Some(account);
+        cx.notify();
+    }
+
     /// Leaving the screen cancels a running sign-in.
     pub(crate) fn leave(&mut self, cx: &mut Context<Self>) {
         if matches!(self.phase, Phase::Waiting | Phase::Starting) {
