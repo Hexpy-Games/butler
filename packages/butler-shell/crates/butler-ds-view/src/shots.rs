@@ -33,6 +33,8 @@ pub(crate) struct Options {
     pub(crate) stage_width: Option<f32>,
     /// Render only these page ids (`--pages a,b`); all pages when unset.
     pub(crate) pages: Option<Vec<String>>,
+    /// Also write `<page>.parts.json`: every story canvas and the controls inside it.
+    pub(crate) parts: bool,
 }
 
 impl Options {
@@ -74,6 +76,7 @@ impl Options {
             motion: args.iter().any(|arg| arg == "--motion"),
             stage_width: value("--stage-width")?.map(str::parse).transpose()?,
             pages: value("--pages")?.map(|ids| ids.split(',').map(str::to_owned).collect()),
+            parts: args.iter().any(|arg| arg == "--parts"),
         })
     }
 }
@@ -179,6 +182,38 @@ const MAX_WINDOW_HEIGHT: f32 = 6400.;
 /// Where a scrolled story's canvas is put under the window's top edge.
 const SCROLL_MARGIN: f32 = 16.;
 
+/// Each story canvas and the controls whose origin lies inside it, relative to the canvas.
+/// `control-<n>` is numbered per frame over the whole page (`butler_ds::ui::control::parts`);
+/// inside a story it counts again from 0, in the same order.
+fn parts(
+    cx: &mut HeadlessAppContext,
+    handle: AnyWindowHandle,
+    window: WindowHandle<DsView>,
+) -> anyhow::Result<Vec<serde_json::Value>> {
+    let mut controls = Vec::new();
+    while let Some(b) = cx.debug_bounds(handle, &format!("control-{}", controls.len()))? {
+        controls.push(b);
+    }
+    let mut parts = Vec::new();
+    for name in story_anchors(cx, window) {
+        let Some(canvas) = cx.debug_bounds(handle, &format!("story-{name}"))? else {
+            continue;
+        };
+        let part = |key: String, b: &gpui::Bounds<gpui::Pixels>| {
+            serde_json::json!({"story": name, "key": key,
+                "x": (b.origin.x - canvas.origin.x).as_f32(),
+                "y": (b.origin.y - canvas.origin.y).as_f32(),
+                "w": b.size.width.as_f32(), "h": b.size.height.as_f32()})
+        };
+        parts.push(part("canvas".to_owned(), &canvas));
+        let inside = controls.iter().filter(|b| canvas.contains(&b.origin));
+        for (n, b) in inside.enumerate() {
+            parts.push(part(format!("control-{n}"), b));
+        }
+    }
+    Ok(parts)
+}
+
 fn render_page(
     cx: &mut HeadlessAppContext,
     options: &Options,
@@ -204,6 +239,12 @@ fn render_page(
     }
     let mut layout = Vec::new();
     let mut image = cx.capture_screenshot(handle)?;
+    // Read before the story loop scrolls the page: every box is of this frame.
+    let parts = if options.parts {
+        Some(parts(cx, handle, window)?)
+    } else {
+        None
+    };
     let window_height = cx.update_window(handle, |_, window, _| {
         window.viewport_size().height.as_f32()
     })?;
@@ -243,6 +284,12 @@ fn render_page(
         options.dir.join(format!("{id}.layout.json")),
         serde_json::to_vec_pretty(&layout)?,
     )?;
+    if let Some(parts) = parts {
+        std::fs::write(
+            options.dir.join(format!("{id}.parts.json")),
+            serde_json::to_vec_pretty(&parts)?,
+        )?;
+    }
     println!(
         "saved {} ({}x{})",
         path.display(),

@@ -191,3 +191,23 @@ Interactive states, all through the live harness:
 - ImageViewer: `click 0` opens the modal; `key right`, `key left`, `key +`, `key -`, `key 0` and `key escape` drive it;
   `dragto` pans a zoomed picture; the surface names `iv-modal-surface`, `iv-first-stage` and the like as anchors.
 - Attachments: `hover @tile-<id>` shows a tile's remove dot (its id is the item id).
+
+### Per-control layout diff
+
+Finds every box difference between the React DS Viewer and the native pages at once, down to the controls
+inside each story (no screenshots). Both sides record, per story, the canvas box (`canvas`) and its controls
+(`control-<n>`, DOM order of the README control definition above, counted again from 0 in each story), in logical
+px relative to the canvas; the web side also lists the canvas children (`child-<i>`, shown as web-only).
+The native `control-<n>` is the control numbering of `butler_ds::ui::control::parts`; a control belongs to the
+story whose canvas contains its origin. Light, ko, 1280x800, scale 2, reduced motion; run both sides on the same Mac.
+
+```sh
+bun packages/butler-shell/tools/parity/ds-layout.ts --site $TMPDIR/ds-site --out $TMPDIR/ds-layout
+butler-ds-view --shots $TMPDIR/ds-layout/gpui/1280x800-light --parts --scale 2 --size 1280x800 \
+  --canvas-width <canvas-width> --full
+bun packages/butler-shell/tools/parity/ds-layout-diff.ts --web $TMPDIR/ds-layout/react/1280x800-light \
+  --gpui $TMPDIR/ds-layout/gpui/1280x800-light > $TMPDIR/ds-layout/diff.txt
+```
+
+`diff.txt` holds one JSON line per matched part (`dx dy dw dh` are gpui minus web), a summary line per story,
+the totals line and, last, the table of stories off by more than 0.5 px, largest first.
