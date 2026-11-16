@@ -29,6 +29,7 @@ mod protocol;
 pub use pending_asks_port::GatewayPendingAsks;
 mod published_event;
 mod rate_limit;
+mod remote_computers;
 mod security_settings;
 pub use devices::{GatewayDevices, PairedDevice};
 mod server;

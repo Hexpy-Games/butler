@@ -101,6 +101,7 @@ pub mod user_dirs;
 mod process_table;
 
 pub mod hook_process;
+pub mod remote_ssh;
 
 pub mod preview_process;
 

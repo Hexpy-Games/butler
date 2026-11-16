@@ -15,6 +15,7 @@ pub(super) fn handler(request: &Request<Body>) -> Option<Handler> {
         (path.starts_with("/outputs/"), Handler::Output),
         (family(path, "/security"), Handler::Security),
         (family(path, "/hooks"), Handler::Hooks),
+        (family(path, "/computers"), Handler::Computers),
         (
             family(path, "/plugins")
                 || family(path, "/plugin-registries")
