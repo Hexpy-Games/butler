@@ -64,6 +64,7 @@ export function Button({
       style={[
         {
           minHeight: t.length("--control-hit-target"),
+          paddingVertical: (t.length("--control-hit-target") - lineHeight) / 2,
           paddingStart: iconStart ? inlineIcon : inline,
           paddingEnd: iconEnd ? inlineIcon : inline,
           borderRadius: t.length("--radius-control-touch"),

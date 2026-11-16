@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import { useTokens } from "../../design/useTokens";
 import { Badge, UnreadDot } from "../Badge";
 import { Button, IconButton, type ButtonVariant } from "../Button";
 import { Composer } from "../Composer";
+import { GlassBackdrop } from "../GlassBackdrop";
 import { Icon } from "../Icon";
 import { icons } from "../icons";
 import { ForcedState } from "../internal/press";
@@ -46,6 +47,19 @@ function Over({ children }: { children: React.ReactNode }) {
     <View>
       <Text lines={5}>{`${en.note}. ${long.note}. ${en.sentence}. ${long.sentence}. ${en.note}. ${long.note}.`}</Text>
       <View style={{ marginTop: -t.length("--space-6") }}>{children}</View>
+    </View>
+  );
+}
+
+/** A glass sample floating over body text inside a blur target of a fixed height. */
+function Floating({ height, children }: { height: number; children: React.ReactNode }) {
+  const t = useTokens();
+  const overlay = <View style={{ position: "absolute", left: 0, right: 0, top: t.length("--space-6") }}>{children}</View>;
+  return (
+    <View style={{ height, overflow: "hidden" }}>
+      <GlassBackdrop overlay={overlay}>
+        <Text>{`${en.note}. ${long.note}. ${en.sentence}. ${long.sentence}. `.repeat(8)}</Text>
+      </GlassBackdrop>
     </View>
   );
 }
@@ -135,6 +149,8 @@ function ButtonSection() {
 }
 
 function SurfaceSection() {
+  const t = useTokens();
+  const reserve = t.length("--composer-reserve");
   const body = <Text>{en.sentence}</Text>;
   return (
     <>
@@ -143,8 +159,9 @@ function SurfaceSection() {
       <Cell name="card · control"><Surface variant="card" radius="control">{body}</Surface></Cell>
       <Cell name="card · lg"><Surface variant="card" radius="lg">{body}</Surface></Cell>
       {(["panel", "popover", "composer"] as const).map((radius) => (
-        <Cell key={radius} name={`glass · ${radius}`}><Over><Surface variant="glass" radius={radius}>{body}</Surface></Over></Cell>
+        <Cell key={radius} name={`glass · ${radius}`}><Floating height={reserve}><Surface variant="glass" radius={radius}>{body}</Surface></Floating></Cell>
       ))}
+      <Cell name="glass, no blur target"><Over><Surface variant="glass">{body}</Surface></Over></Cell>
     </>
   );
 }
@@ -245,9 +262,10 @@ function LiveComposer() {
 }
 
 function ComposerSection() {
+  const { height } = useWindowDimensions();
   const base = { onChangeText: noop, placeholder: en.message, onSend: noop, sendLabel: en.send, stopLabel: en.stop };
   const cell = (name: string, props: Partial<React.ComponentProps<typeof Composer>>, forced: Forced = null) => (
-    <Cell key={name} name={name}><Over><Forcing state={forced}><Composer {...base} value="" canSend={false} {...props} /></Forcing></Over></Cell>
+    <Cell key={name} name={name}><Floating height={height}><Forcing state={forced}><Composer {...base} value="" canSend={false} {...props} /></Forcing></Floating></Cell>
   );
   return (
     <>
@@ -260,7 +278,7 @@ function ComposerSection() {
       {cell("with attach", { attach: { label: en.attach, onPress: noop } })}
       {cell("with adjunct", { adjunct: <Text tone="secondary">{en.note}</Text> })}
       {cell("send pressed", { value: en.sentence, canSend: true }, "pressed")}
-      <Cell name="Live"><Over><LiveComposer /></Over></Cell>
+      <Cell name="Live"><Floating height={height}><LiveComposer /></Floating></Cell>
     </>
   );
 }
@@ -278,15 +296,22 @@ function LiveSheet({ initial }: { initial: boolean }) {
   );
 }
 
-function ScrimBlock({ children }: { children: React.ReactNode }) {
+function ScrimFill() {
   const t = useTokens();
-  return <View style={{ backgroundColor: t.color("--dialog-overlay-bg"), justifyContent: "flex-end" }}>{children}</View>;
+  return <View style={{ flex: 1, backgroundColor: t.color("--dialog-overlay-bg") }} />;
 }
 
 function SheetSection({ state }: { state?: string }) {
+  const { height } = useWindowDimensions();
   const actions = (s: Strings) => <><Button label={s.cancel} variant="ghost" onPress={noop} /><Button label={s.action} onPress={noop} /></>;
   const panel = (name: string, props: Partial<React.ComponentProps<typeof SheetPanel>>, s: Strings = en) => (
-    <Cell key={name} name={name}><ScrimBlock><SheetPanel title={s.sentence} closeLabel={s.close} onClose={noop} actions={actions(s)} {...props} /></ScrimBlock></Cell>
+    <Cell key={name} name={name}>
+      <View style={{ height }}>
+        <GlassBackdrop overlay={<View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}><SheetPanel title={s.sentence} closeLabel={s.close} onClose={noop} actions={actions(s)} {...props} /></View>}>
+          <ScrimFill />
+        </GlassBackdrop>
+      </View>
+    </Cell>
   );
   const lines = Array.from({ length: 30 }, (_, i) => <Text key={i}>{`${i + 1}. ${en.note}`}</Text>);
   return (

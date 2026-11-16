@@ -66,6 +66,7 @@ export function TextField({
         maxFontSizeMultiplier={maxFontScale.control}
         style={{
           minHeight: t.length("--control-hit-target"),
+          paddingVertical: (t.length("--control-hit-target") - t.length("--typo-body-line-height")) / 2,
           paddingHorizontal: t.length("--space-md"),
           borderRadius: t.length("--radius-control-touch"),
           borderWidth: t.length("--border-hairline"),
