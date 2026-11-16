@@ -72,6 +72,9 @@ function PopoverContent({
           data-slot="popover-content"
           onCloseAutoFocus={onCloseAutoFocus}
           onOpenAutoFocus={onOpenAutoFocus}
+          // Scrolling inside the popover is its own: a modal dialog's page scroll lock must not cancel it.
+          onWheel={(event) => event.stopPropagation()}
+          onTouchMove={(event) => event.stopPropagation()}
           {...props}
           {...sheetContentProps(cn(theme && adaptiveShellThemeClasses(theme), className), onKeyDown)}
         >
@@ -104,6 +107,8 @@ function PopoverContent({
           if (!event.defaultPrevented) event.preventDefault();
         }}
         onKeyDown={onKeyDown}
+        onWheel={(event) => event.stopPropagation()}
+        onTouchMove={(event) => event.stopPropagation()}
         {...props}
       >
         {children}
