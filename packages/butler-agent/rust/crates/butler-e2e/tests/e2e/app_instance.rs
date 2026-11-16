@@ -17,7 +17,7 @@ use butler_platform::app_instance::{Launch, claim};
 #[tokio::test]
 async fn app_instance_01_second_launch_hands_over_its_arguments() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let sandbox = Sandbox::new("APP-INSTANCE-01")?;
+    let mut sandbox = Sandbox::new("APP-INSTANCE-01")?;
     let data = sandbox.data.clone();
     let first = {
         let data = data.clone();
@@ -40,5 +40,6 @@ async fn app_instance_01_second_launch_hands_over_its_arguments() -> Result<(), 
         .await
         .expect("the first launch received nothing");
     assert_eq!(received, Some(args));
+    sandbox.mark_success();
     Ok(())
 }
