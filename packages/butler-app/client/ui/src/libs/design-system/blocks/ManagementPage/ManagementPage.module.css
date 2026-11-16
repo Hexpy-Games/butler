@@ -11,8 +11,6 @@
   overflow: hidden;
   color: var(--text-primary);
   background: transparent;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
 }
 
 /* The page background (e.g. a container-scope Wallpaper) fills the page
