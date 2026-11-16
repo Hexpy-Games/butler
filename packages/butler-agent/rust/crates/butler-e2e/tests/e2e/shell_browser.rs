@@ -399,12 +399,14 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
         let image = image::open(sandbox.root.join("shell/cef-browser.png"))
             .unwrap()
             .to_rgb8();
-        if image.get_pixel(centre("x", "w"), centre("y", "h")).0 == [20, 80, 140] {
+        let (x, y) = (centre("x", "w"), centre("y", "h"));
+        let pixel = image.get_pixel(x, y).0;
+        if pixel == [20, 80, 140] {
             break;
         }
         assert!(
             tokio::time::Instant::now() < deadline,
-            "the shot does not show the page"
+            "the shot does not show the page: {pixel:?} at ({x}, {y})"
         );
     }
     shell.run(&["app-quit"]).await?;

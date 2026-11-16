@@ -155,6 +155,10 @@ fn source(frame: butler_cef_host::osr::OsrFrame, window: &Window) -> Option<Surf
         texture: wgpu::Texture,
         handle: Arc<dyn Any + Send + Sync>,
     }
+    // gpui's `gpu_context` panics while the renderer recovers a lost device; headless reports `None`.
+    if window.gpu_device_lost() == Some(true) {
+        return None;
+    }
     let (device, queue) = *window
         .gpu_context()?
         .downcast::<(Arc<wgpu::Device>, Arc<wgpu::Queue>)>()

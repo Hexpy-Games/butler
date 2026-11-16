@@ -17,7 +17,7 @@ pub(super) fn client(shared: PageRef, events: Events, runtime: &Weak<RuntimeStat
         Paint::new(shared.clone(), events.clone()),
         Life::new(shared.clone(), events.clone(), runtime.clone()),
         Display::new(events.clone()),
-        Load::new(events.clone()),
+        Load::new(shared.clone(), events.clone()),
         Request::new(events.clone(), runtime.upgrade().map(|r| r.auth.clone())),
         PageDialogs {
             js: super::dialogs::Js::new(shared.clone(), events.clone()),
@@ -116,9 +116,10 @@ cef::wrap_display_handler! {
     }
 }
 cef::wrap_load_handler! {
-    pub(super) struct Load { events: Events }
+    pub(super) struct Load { shared: PageRef, events: Events }
     impl LoadHandler {
         fn on_loading_state_change(&self, _browser: Option<&mut Browser>, loading: i32, back: i32, forward: i32) {
+            self.shared.borrow_mut().loading = loading != 0;
             self.events.emit(OsrEvent::Loading(loading != 0));
             self.events.emit(OsrEvent::History { can_back: back != 0, can_forward: forward != 0 });
         }

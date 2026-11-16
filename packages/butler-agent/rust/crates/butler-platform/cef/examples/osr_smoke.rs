@@ -216,6 +216,7 @@ mod smoke {
 }
 #[cfg(cef_osr)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    butler_cef_host::shorten_temp_path();
     smoke::run()
 }
 #[cfg(not(cef_osr))]

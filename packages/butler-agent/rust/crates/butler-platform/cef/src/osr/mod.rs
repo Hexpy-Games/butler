@@ -78,7 +78,7 @@ pub trait OsrSink: 'static {
 }
 
 /// Called from any thread. Schedule a timer on the UI loop, then call `OsrRuntime::pump` there.
-/// Coalesce pending deadlines by keeping the earliest, including the visible-page fallback.
+/// Coalesce pending deadlines by keeping the earliest, including the visible-or-loading-page fallback.
 pub type PumpScheduler = std::sync::Arc<dyn Fn(std::time::Duration) + Send + Sync>;
 
 #[cfg(cef_osr)]
@@ -172,7 +172,15 @@ impl OsrRuntime {
         cef::do_message_loop_work();
         #[cfg(windows)]
         self.repaint_dropped();
-        if self.state.visible.get() > 0 {
+        // Pump while a page is visible or loading: CEF does not always announce the work of a starting load.
+        if self.state.visible.get() > 0
+            || self
+                .state
+                .pages
+                .borrow()
+                .values()
+                .any(|p| p.borrow().loading)
+        {
             (self.schedule)(FALLBACK);
         }
     }

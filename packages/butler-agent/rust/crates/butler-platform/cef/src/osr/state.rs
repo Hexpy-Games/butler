@@ -11,6 +11,8 @@ pub(super) struct Page {
     pub(super) scale: f32,
     pub(super) visible: bool,
     pub(super) closing: bool,
+    /// Loading from creation; then as CEF reports it.
+    pub(super) loading: bool,
     pub(super) signed_out_owner: Option<String>,
     pub(super) browser: Option<cef::Browser>,
     pub(super) frame: Option<Frame>,
@@ -32,6 +34,7 @@ impl Page {
             scale,
             visible: true,
             closing: false,
+            loading: true,
             browser: None,
             signed_out_owner: None,
             frame: None,
