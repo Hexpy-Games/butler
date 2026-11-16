@@ -210,7 +210,8 @@ impl EpicInspector {
             toast::show(cx, Toast::error(words.conflict));
             self.refresh(cx);
         } else {
-            toast::show(cx, Toast::error(words.request_failed));
+            let failure = crate::ui::i18n::errors::toast(cx, error, words.request_failed);
+            toast::show(cx, failure);
         }
     }
 

@@ -7,7 +7,7 @@ use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Cross, MinWidth, Space, Stack, WithItem as _};
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast;
 use butler_ds::ui::tooltip::Tooltip;
 use butler_shell_client::Error;
 use gpui::{Context, ParentElement as _, SharedString, prelude::FluentBuilder as _};
@@ -131,9 +131,10 @@ impl SecurityPage {
                 this.devices.busy = false;
                 match result {
                     Ok(_) => this.refresh_devices(cx),
-                    Err(_) => {
+                    Err(error) => {
                         let failed = words(Ds::get(cx).lang()).revoke_failed;
-                        toast::show(cx, Toast::error(failed));
+                        let next = crate::ui::i18n::errors::toast(cx, &error, failed);
+                        toast::show(cx, next);
                     }
                 }
             },

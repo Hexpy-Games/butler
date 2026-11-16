@@ -63,9 +63,10 @@ impl LogList {
                 this.paging = false;
                 match result {
                     Ok(page) => this.rows.more_page(&page, &range),
-                    Err(_) => {
+                    Err(error) => {
                         let message = super::copy::get(cx).load_failed;
-                        show(&mut this.more_toast, Toast::error(message), cx);
+                        let next = crate::ui::i18n::errors::toast(cx, &error, message);
+                        show(&mut this.more_toast, next, cx);
                     }
                 }
             },

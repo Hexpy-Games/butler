@@ -120,7 +120,7 @@ impl Shell {
             move |this: &mut Self, result: Result<Value, butler_shell_client::Error>, cx| {
                 match result {
                     Ok(saved) => this.merge_settings(&saved, cx),
-                    Err(_) => {
+                    Err(error) => {
                         let raw = previous
                             .clone()
                             .unwrap_or_else(|| Rc::new(serde_json::json!({})));
@@ -130,10 +130,8 @@ impl Shell {
                         crate::lifecycle::window::zoom_windows(previous_scale, cx);
                         cx.refresh_windows();
                         let copy = crate::ui::i18n::settings::words(Ds::get(cx).lang());
-                        butler_ds::ui::toast::show(
-                            cx,
-                            butler_ds::ui::toast::Toast::error(copy.save_failed),
-                        );
+                        let toast = crate::ui::i18n::errors::toast(cx, &error, copy.save_failed);
+                        butler_ds::ui::toast::show(cx, toast);
                     }
                 }
             },

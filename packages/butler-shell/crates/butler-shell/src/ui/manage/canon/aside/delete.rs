@@ -59,8 +59,10 @@ impl EpicInspector {
                         toast::show(cx, Toast::error(words.conflict));
                         this.refresh(cx);
                     }
-                    Err(_) => {
-                        toast::show(cx, Toast::error(words.request_failed));
+                    Err(error) => {
+                        let failure =
+                            crate::ui::i18n::errors::toast(cx, &error, words.request_failed);
+                        toast::show(cx, failure);
                     }
                 }
             },

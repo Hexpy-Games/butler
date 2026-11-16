@@ -1,7 +1,7 @@
 //! The shell's side of the composer: what it tells the composer about the open chat, what it
 //! does with the composer's events, and the handlers the composer installs once.
 use butler_ds::ui::context::Ds;
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast;
 use gpui::{App, BorrowAppContext as _, Context, Entity, SharedString, Window};
 
 use std::rc::Rc;
@@ -246,9 +246,11 @@ impl Shell {
             cx.spawn(async move |cx| {
                 let deleted = fetch.await;
                 cx.update(|cx| {
-                    if matches!(deleted, Some(Err(_))) {
+                    if let Some(Err(error)) = &deleted {
                         let lang = Ds::get(cx).lang();
-                        toast::show(cx, Toast::error(words(lang).queue_failed));
+                        let toast =
+                            crate::ui::i18n::errors::toast(cx, error, words(lang).queue_failed);
+                        toast::show(cx, toast);
                     }
                     crate::ui::chat::queue_changed(cx);
                 });
