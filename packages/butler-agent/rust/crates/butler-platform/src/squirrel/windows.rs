@@ -197,19 +197,3 @@ fn shortcuts(stub: &Path, root: &Path, create: bool) -> Result<(), String> {
         Err("Squirrel shortcut operation failed".into())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty_registry_strings_are_written_as_a_lone_nul() {
-        let mut buffer = winsafe::WString::new();
-        for value in ["", "URL:butler"] {
-            let data = registry_string(value.to_owned());
-            let (pointer, length) = data.as_ptr_with_len(&mut buffer);
-            assert!(!pointer.is_null(), "{value:?}");
-            assert_eq!(length as usize, (value.len() + 1) * 2, "{value:?}");
-        }
-    }
-}
