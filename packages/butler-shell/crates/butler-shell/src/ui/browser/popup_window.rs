@@ -74,7 +74,7 @@ fn open(id: TabId, cx: &mut App) {
     };
     match cx.open_window(options, |window, cx| {
         window.on_window_should_close(cx, move |_, cx| {
-            cx.global_mut::<BrowserState>().close(&close);
+            cx.update_global::<BrowserState, _>(|model, cx| model.close(&close, cx));
             cx.defer(sync);
             true
         });
@@ -143,7 +143,7 @@ impl Render for PopupWindow {
             .track_focus(&self.focus)
             .key_context("BrowserArea")
             .on_action(move |_: &super::area::CloseTab, window, cx| {
-                cx.global_mut::<BrowserState>().close(&close);
+                cx.update_global::<BrowserState, _>(|model, cx| model.close(&close, cx));
                 window.remove_window();
                 cx.defer(sync);
                 cx.refresh_windows();

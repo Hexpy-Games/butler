@@ -13,6 +13,16 @@ impl ShellClient {
         .await
     }
 
+    /// Records committed native browser visits (local admin only).
+    pub async fn browser_host_visits(&self, body: &Value) -> Result<Value, Error> {
+        self.admin_raw_json(
+            Method::POST,
+            &["internal", "browser-host", "visits"],
+            Some(body),
+        )
+        .await
+    }
+
     /// Prepares or publishes a conversation download (local admin only).
     pub async fn browser_host_downloads(&self, body: &Value) -> Result<Value, Error> {
         self.admin_raw_json(

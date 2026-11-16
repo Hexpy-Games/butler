@@ -16,6 +16,7 @@ use futures::{
     channel::mpsc,
     future::{Either, select},
 };
+use gpui::BorrowAppContext as _;
 use gpui::{AnyElement, App, Window};
 use std::{
     cell::{Cell, RefCell},
@@ -129,7 +130,9 @@ impl CefEngine {
                     if matches!(event.change, PageChange::PopupOpened { .. }) {
                         // Bind the child's TabId before reading its first title/frame event.
                         cx.update(|cx| {
-                            cx.global_mut::<super::model::BrowserState>().apply(event);
+                            cx.update_global::<super::model::BrowserState, _>(|model, cx| {
+                                model.apply(event, cx);
+                            });
                             super::popup_window::sync(cx);
                             cx.refresh_windows();
                         });
