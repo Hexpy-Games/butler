@@ -45,6 +45,15 @@ pub(crate) fn apply_text_scale(window: &Window, scale: f32, cx: &App) {
     ));
 }
 
+/// `updateWindow` (text-size.mjs) `setZoomFactor`: every App window zooms its content by the text scale.
+pub(crate) fn zoom_windows(scale: f32, cx: &mut App) {
+    cx.defer(move |cx| {
+        for window in cx.windows() {
+            let _ = window.update(cx, |_, window, cx| window.set_zoom(scale, cx));
+        }
+    });
+}
+
 use crate::ui::i18n::Locale;
 use crate::ui::shell::{Shell, ShellOptions};
 use crate::ui::theme::Platform;
@@ -82,6 +91,7 @@ pub(crate) fn open_window(cx: &mut App, args: &[OsString]) -> anyhow::Result<()>
     let code_font = crate::ui::theme::code_font(&cx.text_system().all_font_names());
     let attachment = crate::ui::source::agent::Attachment::start(data);
     let window = cx.open_window(options, move |window, cx| {
+        window.set_zoom(scale, cx);
         // Butler's Electron window uses the acrylic material; where the platform has none the
         // shell paints an opaque fallback.
         window.set_background_appearance(WindowBackgroundAppearance::Acrylic);
