@@ -27,9 +27,14 @@ pub const QUIET: &[(&str, Option<&str>)] = &[
     ("disable-features", Some(DISABLED_FEATURES)),
 ];
 
-/// [`QUIET`] as command-line arguments: `--name` or `--name=value`.
-pub fn quiet_args() -> impl Iterator<Item = String> {
+/// [`QUIET`] as the headless executor's command-line arguments: `--name` or `--name=value`, with
+/// [`HEADLESS_ONLY_FEATURES`] added to `--disable-features`.
+pub fn headless_args() -> impl Iterator<Item = String> {
     QUIET.iter().map(|(name, value)| match value {
+        Some(value) if *name == "disable-features" => format!(
+            "--{name}={}",
+            merge_disabled_features(value, HEADLESS_ONLY_FEATURES)
+        ),
         Some(value) => format!("--{name}={value}"),
         None => format!("--{name}"),
     })
@@ -52,6 +57,17 @@ pub const VISIBLE_ONLY: &[(&str, Option<&str>)] = &[
         Some("NetworkTimeServiceQuerying,AimEnabled"),
     ),
 ];
+
+/// What the headless executor disables on top of [`DISABLED_FEATURES`]. On macOS Chrome clones its
+/// whole app bundle at every start so a running Chrome survives its own in-place updater; the
+/// headless host never removes that clone, whatever way it exits (measured: one left per start,
+/// about 600 MB apparent, real bytes once the bundle changes); Chromium clears them only at reboot.
+/// The headless host lives at most a minute past its last tab and uses the mock keychain; Chrome
+/// for Testing builds without it. Not for the in-app browser yet: in a harness run on macOS it
+/// removed its clone 0.07 to 0.21 s after a clean exit, and a kill or crash left one until reboot.
+/// Whether disabling the feature changes anything with the real OS password store was not tested
+/// (with the mock keychain it makes no difference).
+pub const HEADLESS_ONLY_FEATURES: &str = "MacAppCodeSignClone";
 
 /// A `--disable-features` value holding `existing`'s features and then `add`'s that `existing`
 /// lacks.

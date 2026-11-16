@@ -7,7 +7,7 @@ mod start;
 use std::rc::Rc;
 
 use butler_ds::ui::context::Lang;
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast::{self, ToastId};
 use butler_shell_client::Error;
 use chrono::{SecondsFormat, Utc};
 use gpui::{Context, EventEmitter, SharedString};
@@ -29,6 +29,8 @@ pub(crate) enum ConsentEvent {
 pub(crate) struct Consent {
     accepted_at: Option<SharedString>,
     saving: bool,
+    /// The `first-run-consent` toast, replaced by the next failure's.
+    toast: Option<ToastId>,
 }
 
 impl EventEmitter<ConsentEvent> for Consent {}
@@ -66,6 +68,7 @@ impl Consent {
         Self {
             accepted_at: None,
             saving: false,
+            toast: None,
         }
     }
 
@@ -104,8 +107,14 @@ impl Consent {
                         this.accepted_at = Some(accepted_at.into());
                         cx.emit(ConsentEvent::Agreed(Rc::new(settings)));
                     }
-                    Err(_) => {
-                        toast::show(cx, Toast::error(words(lang).finish_failed));
+                    Err(error) => {
+                        let toast =
+                            crate::ui::i18n::errors::toast(cx, &error, words(lang).finish_failed);
+                        let toast = match this.toast {
+                            Some(id) => toast.id(id),
+                            None => toast,
+                        };
+                        this.toast = Some(toast::show(cx, toast));
                     }
                 }
             },

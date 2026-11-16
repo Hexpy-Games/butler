@@ -30,7 +30,7 @@ pub(super) enum Access {
 /// `refusedState`: the admin credential is missing (`Error::LocalMetadata`) or the gateway
 /// refused it (403; `loopback_required` cannot occur, so a 403 is `admin_credential_required`).
 pub(super) fn refused(error: &Error) -> Option<Access> {
-    matches!(error, Error::LocalMetadata | Error::Http(403)).then_some(Access::AdminRequired)
+    matches!(error, Error::LocalMetadata | Error::Http(403, _)).then_some(Access::AdminRequired)
 }
 
 #[derive(Deserialize)]

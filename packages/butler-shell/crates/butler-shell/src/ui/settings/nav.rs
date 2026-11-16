@@ -29,9 +29,11 @@ pub(super) fn settings_sidebar(
         .cross(Cross::Center)
         .window_drag(WindowDrag::Drag)
         .child(
-            NavRow::new("settings-back", copy.back)
-                .glyph(Icon::ArrowLeft)
-                .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::Close))),
+            crate::ui::widgets::anchor(div().flex().w_full(), "settings-back").child(
+                NavRow::new("settings-back", copy.back)
+                    .glyph(Icon::ArrowLeft)
+                    .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::Close))),
+            ),
         );
     let view = cx.entity().downgrade();
     let search = Input::new("settings-navigation-search")

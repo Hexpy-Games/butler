@@ -287,7 +287,7 @@ async fn request_failures_are_bounded_and_leave_the_client_usable() -> Result<()
             .list_chats(PageRequest::new(2, None)?)
             .await
             .unwrap_err();
-        assert!(matches!(error, Error::Http(code) if code == status));
+        assert!(matches!(error, Error::Http(code, _) if code == status));
         assert_eq!(error.kind(), kind);
         assert_eq!(count.load(Ordering::SeqCst), attempts);
         let page = client.list_chats(PageRequest::new(2, None)?).await?;

@@ -198,8 +198,12 @@ impl SettingsView {
         }
         if event.r#type == "settings.updated" && event.payload["settings"].is_object() {
             self.state.update(cx, |state, cx| {
-                let next = state::merged(state.settings(), &event.payload["settings"]);
-                state.set_settings(next, cx);
+                // The subset is merged only into loaded settings; the pending load brings the
+                // saved value.
+                if let Some(current) = state.settings() {
+                    let next = state::merged(Some(current), &event.payload["settings"]);
+                    state.set_settings(next, cx);
+                }
             });
         }
     }
@@ -332,7 +336,9 @@ impl Render for SettingsView {
             .page_title(title)
             .page_key(key)
             .page_order(order)
-            .detail_navigation(back)
+            .detail_navigation(
+                crate::ui::widgets::anchor(div().flex(), "settings-detail-back").child(back),
+            )
             .sidebar(sidebar)
             .detail_header(header)
             .detail(

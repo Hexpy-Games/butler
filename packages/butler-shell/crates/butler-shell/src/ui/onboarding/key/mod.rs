@@ -38,8 +38,11 @@ pub(crate) enum KeyEvent {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Failure {
     Invalid,
+    NoAccess,
     Network,
+    RateLimited,
     Unavailable,
+    Unsupported,
     BadRequest,
     SaveFailed,
 }
@@ -47,7 +50,10 @@ pub(super) enum Failure {
 impl Failure {
     /// `RETRYABLE_KEY_FAILURES`: a second try can fix it without a new key.
     pub(super) fn retryable(self) -> bool {
-        matches!(self, Self::Network | Self::Unavailable | Self::SaveFailed)
+        matches!(
+            self,
+            Self::Network | Self::RateLimited | Self::Unavailable | Self::SaveFailed
+        )
     }
 }
 
@@ -164,7 +170,7 @@ impl KeyForm {
                         let verified = answer.and_then(|answer| answer.verified) != Some(false);
                         this.save(id, verified, cx);
                     }
-                    Err(error) => this.fail(check_failure(&error)),
+                    Err(error) => this.fail(key_failure(&error).unwrap_or(Failure::Unavailable)),
                 }
             },
         );
@@ -192,26 +198,28 @@ impl KeyForm {
                             credential_id: saved.credential.id.into(),
                         });
                     }
-                    // CARVE-OUT(G-codes): React maps the save error's code (`keySaveFailure`);
-                    // every failure reads as "couldn't save".
-                    Err(_) => this.fail(Failure::SaveFailed),
+                    Err(error) => this.fail(key_failure(&error).unwrap_or(Failure::SaveFailed)),
                 }
             },
         );
     }
 }
 
-/// `keyCheckFailure`.
-///
-/// CARVE-OUT(G-codes): the client returns no error code, so only a status that names one
-/// failure maps: 422 (`invalid_key`; `no_access` shares it and reads as invalid), 502
-/// (`network`), 400 (`invalid_request`). `noaccess`, `ratelimited` and `unsupported` cannot be
-/// told apart; anything else reads as "the service isn't responding", as React's fallback.
-fn check_failure(error: &Error) -> Failure {
-    match error {
-        Error::Http(422) => Failure::Invalid,
-        Error::Http(502) => Failure::Network,
-        Error::Http(400) => Failure::BadRequest,
-        _ => Failure::Unavailable,
+/// `KEY_CHECK_FAILURES`: the failure an API error code names.
+fn key_failure(error: &Error) -> Option<Failure> {
+    let Error::Http(_, Some(code)) = error else {
+        return None;
+    };
+    match code.as_str() {
+        "provider_auth_error" | "credential_key_invalid" | "invalid_key" => Some(Failure::Invalid),
+        "provider_permission_error" | "provider_quota_exhausted" | "no_access" => {
+            Some(Failure::NoAccess)
+        }
+        "provider_network_error" | "provider_timeout" | "network" => Some(Failure::Network),
+        "rate_limited" => Some(Failure::RateLimited),
+        "provider_unavailable" => Some(Failure::Unavailable),
+        "unsupported_provider" => Some(Failure::Unsupported),
+        "invalid_request" => Some(Failure::BadRequest),
+        _ => None,
     }
 }

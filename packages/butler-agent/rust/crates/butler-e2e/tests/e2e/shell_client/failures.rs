@@ -28,8 +28,36 @@ async fn failed_create_is_sent_once_even_if_the_server_created_the_chat() -> Res
     ))
     .await?;
     let error = peer.client().await?.create_session(None).await.unwrap_err();
-    assert!(matches!(error, butler_shell_client::Error::Http(500)));
+    assert!(matches!(error, butler_shell_client::Error::Http(500, _)));
     assert_eq!(created.load(Ordering::SeqCst), 1, "no duplicate chat");
+    Ok(())
+}
+
+#[tokio::test]
+async fn http_failure_keeps_only_the_error_code() -> Result<(), TestError> {
+    butler_e2e::gate!();
+    let peer = Peer::new(Router::new().route(
+        "/setup/credentials/verify",
+        post(|| async {
+            Response::builder()
+                .status(422)
+                .body(Body::from(
+                    r#"{"protocol_version":"1","error":{"code":"no_access","message":"sk-secret-text"},"extra":{"api_key":"sk-secret-text"}}"#,
+                ))
+                .unwrap()
+        }),
+    ))
+    .await?;
+    let error = peer
+        .client()
+        .await?
+        .verify_setup_credential(&json!({}))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&error, butler_shell_client::Error::Http(422, Some(code)) if code == "no_access")
+    );
+    assert!(!format!("{error:?} {error}").contains("sk-secret-text"));
     Ok(())
 }
 

@@ -117,11 +117,14 @@ impl CanonBoard {
                     Ok(_) => {
                         toast::show(cx, Toast::message(message));
                     }
-                    Err(_) => {
+                    Err(error) => {
                         // CARVE-OUT(G-codes): `canonWriteFailure` words a `conflict` or `running`
-                        // refusal on its own; without codes every refusal gets the fallback.
+                        // refusal on its own; here those take the fallback, any other refusal its
+                        // code's sentence (`notifyError`).
                         this.canon = Some(canon);
-                        toast::show(cx, Toast::error(words.request_failed));
+                        let failure =
+                            crate::ui::i18n::errors::toast(cx, &error, words.request_failed);
+                        toast::show(cx, failure);
                     }
                 }
                 this.moving = false;
