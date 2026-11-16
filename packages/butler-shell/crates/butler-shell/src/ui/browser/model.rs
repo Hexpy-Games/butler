@@ -120,6 +120,10 @@ pub(crate) struct BrowserState {
 impl Global for BrowserState {}
 
 impl BrowserState {
+    pub(crate) fn shutdown(&mut self) {
+        self.engine.shutdown();
+    }
+
     /// `adapter`: the LUID of the GPU adapter that draws the page frames (`browser::init`).
     pub(crate) fn init(adapter: Option<u64>, cx: &mut App) {
         let (sender, mut receiver) = mpsc::unbounded();

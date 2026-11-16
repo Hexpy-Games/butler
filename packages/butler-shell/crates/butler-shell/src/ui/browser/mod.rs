@@ -41,6 +41,13 @@ pub(crate) fn init(window: &gpui::Window, cx: &mut gpui::App) {
     cx.set_global(shell_state::BrowserShell::default());
 }
 
+/// The App is quitting: the engine closes its pages and flushes the profile.
+pub(crate) fn shutdown(cx: &mut gpui::App) {
+    if cx.has_global::<model::BrowserState>() {
+        cx.update_global::<model::BrowserState, _>(|model, _| model.shutdown());
+    }
+}
+
 /// Electron's `openLink`: a user-owned tab in the standalone browser.
 pub(crate) fn open_link(url: &str, cx: &mut gpui::App) {
     if !url::Url::parse(url).is_ok_and(|u| matches!(u.scheme(), "http" | "https")) {

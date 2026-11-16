@@ -136,9 +136,10 @@ pub(crate) fn start(cx: &mut App, data: PathBuf, legacy: bool) {
         }
     })
     .detach();
-    // A forced OS quit still releases the lease: the Agent drains and exits by itself.
+    // A forced OS quit still shuts the browser down and releases the lease: the Agent drains and exits by itself.
     cx.on_app_quit(|cx| {
         crate::ui::browser::restore::flush_now(cx);
+        crate::ui::browser::shutdown(cx);
         if let Some(entity) = runtime(cx) {
             entity.read(cx).supervisor.release_lease_now();
         }

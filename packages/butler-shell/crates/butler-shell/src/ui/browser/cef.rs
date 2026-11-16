@@ -251,6 +251,9 @@ fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
     })
 }
 impl PageEngine for CefEngine {
+    fn shutdown(&mut self) {
+        self.runtime.shutdown();
+    }
     fn supports_devtools(&self) -> bool {
         true
     }

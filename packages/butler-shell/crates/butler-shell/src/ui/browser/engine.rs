@@ -90,6 +90,8 @@ pub(crate) trait PageEngine: 'static {
     }
     /// Whether this build can browse (Electron's `enabled`).
     fn enabled(&self) -> bool;
+    /// The App is quitting: flush and stop the engine.
+    fn shutdown(&mut self) {}
     /// A page for `page`; `url` is empty for a blank page.
     fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str);
     fn command(&mut self, page: &TabId, command: PageCommand);

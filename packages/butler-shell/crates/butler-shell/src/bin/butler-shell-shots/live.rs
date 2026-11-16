@@ -241,7 +241,7 @@ pub(super) fn run(
     for line in io::stdin().lock().lines() {
         let line = line?;
         if line == "quit" {
-            return Ok(());
+            end(&mut h);
         }
         if let Err(error) = command(&mut h, dir, &line) {
             let _ = h.shot(dir, "failure");
@@ -259,7 +259,15 @@ pub(super) fn run(
         println!("LIVE OK");
         io::stdout().flush()?;
     }
-    Ok(())
+    end(&mut h)
+}
+
+/// The App's Quit after `lifecycle::quit`: AppKit's `terminate:` runs the quit observers and the
+/// process exits without dropping globals. A drop would shut CEF down and hide a missing hook.
+fn end(h: &mut Harness) -> ! {
+    h.cx.update(gpui::App::shutdown);
+    let _ = io::stdout().flush();
+    std::process::exit(0)
 }
 
 /// Both rows must be present, in the requested sidebar order.
