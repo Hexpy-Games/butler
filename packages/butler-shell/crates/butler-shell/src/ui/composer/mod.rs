@@ -173,7 +173,7 @@ impl Composer {
                 cx.notify();
             }),
             cx.on_focus(&handle, window, |this: &mut Self, window, cx| {
-                this.release(window, cx)
+                this.release(window, cx);
             }),
             cx.subscribe_in(&input, window, |this, _, _: &TextChanged, window, cx| {
                 this.on_text_changed(window, cx);
