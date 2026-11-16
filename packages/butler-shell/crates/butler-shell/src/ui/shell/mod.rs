@@ -1,5 +1,6 @@
 //! The window: AdaptiveShell frame="cards" (AdaptiveShellCards.module.css, AdaptiveShellFrame):
 //! the sidebar track, the chat card with the floating composer, and the title row.
+mod app_settings;
 mod browser_link;
 mod composer_link;
 mod data;
@@ -18,6 +19,7 @@ mod titlebar;
 mod transcript;
 pub(crate) mod vault;
 
+pub(crate) use app_settings::AppSettings;
 pub(crate) use settings_link::text_scale;
 pub(crate) use titlebar::window_controls;
 
