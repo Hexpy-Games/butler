@@ -146,8 +146,8 @@ pub(crate) struct BrowserState {
     pub(super) active: Option<TabId>,
     pub(super) next_id: u64,
     pub(super) publisher: super::host::Publisher,
-    /// Per conversation, the calls in flight whose use frame names no tab (only `tab.open`).
-    pub(super) tabless_calls: std::collections::HashMap<String, u32>,
+    /// The Agent's calls in flight; hosted pages stay awake while it is above zero and they open.
+    pub(super) calls: u32,
 }
 
 impl Global for BrowserState {}
@@ -164,7 +164,7 @@ impl BrowserState {
             tabs: Vec::new(),
             active: None,
             next_id: 0,
-            tabless_calls: std::collections::HashMap::new(),
+            calls: 0,
         });
         super::agent_host::start(cx);
         cx.spawn(async move |cx| {

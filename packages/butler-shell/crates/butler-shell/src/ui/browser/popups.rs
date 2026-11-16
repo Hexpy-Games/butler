@@ -1,11 +1,10 @@
+use super::{engine::TabId, model::BrowserState, page_dialog::DialogAnswer};
 #[cfg(feature = "cef")]
 use super::{
-    agent_host::Hosted,
     engine::{PageChange, PageEvent},
     model::Tab,
     page_dialog::{BlockedPopup, EngineChild},
 };
-use super::{engine::TabId, model::BrowserState, page_dialog::DialogAnswer};
 
 #[cfg(feature = "cef")]
 pub(super) fn site(url: &str) -> String {
@@ -65,7 +64,7 @@ impl BrowserState {
         self.tabs.push(Tab {
             opener: Some(opener.clone()),
             popup: source.hosted.is_none(),
-            hosted: source.hosted.as_ref().map(|h| Hosted::agent(h.internal)),
+            hosted: source.hosted.as_ref().map(|h| self.new_hosted(h.internal)),
             ..Tab::new(id.clone(), source.owner, source.profile, url)
         });
         self.engine.adopt(&id, child);

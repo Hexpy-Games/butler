@@ -59,13 +59,9 @@ pub(super) fn call(frame: &Value, cx: &mut App) {
         }
         Some(op @ ("use.started" | "use.ended")) => {
             let tab = tab_id(&frame["tab"]);
-            let tabless = frame["tab"].as_str().is_none();
-            let session = frame["session"].as_str().unwrap_or_default().to_owned();
             cx.update_global::<BrowserState, _>(|model, _| {
                 model.use_changed(&tab, op == "use.started");
-                if tabless {
-                    model.tabless_use(&session, op == "use.started");
-                }
+                model.call_changed(op == "use.started");
             });
         }
         Some("owner.closed") => {
@@ -159,7 +155,7 @@ pub(super) fn reset(cx: &mut App) {
                 model.end_hosting(&id, cx);
             }
         }
-        model.tabless_calls.clear();
+        model.calls = 0;
         model.publisher.changed(&model.tabs);
     });
     relay::clear(cx);
@@ -242,7 +238,7 @@ impl BrowserState {
         self.next_id += 1;
         let id = TabId(format!("t{}", self.next_id).into());
         self.tabs.push(Tab {
-            hosted: Some(Hosted::agent(internal)),
+            hosted: Some(self.new_hosted(internal)),
             ..Tab::new(id.clone(), owner, profile, String::new())
         });
         self.engine
@@ -318,36 +314,38 @@ impl BrowserState {
         self.publisher.changed(&self.tabs);
     }
 
-    /// A call that names no tab started or ended; the session's opening ends with its last one.
-    fn tabless_use(&mut self, session: &str, started: bool) {
-        let count = self.tabless_calls.entry(session.to_owned()).or_default();
+    /// A call started or ended; the opening of every hosted page ends with the last call.
+    fn call_changed(&mut self, started: bool) {
         if started {
-            *count += 1;
+            self.calls = self.calls.saturating_add(1);
             return;
         }
-        *count = count.saturating_sub(1);
-        if *count == 0 {
-            self.tabless_calls.remove(session);
-            self.end_opening(session);
-        }
-    }
-
-    /// An opening call ended: the session's just-opened pages (and internal ones) go back to the
-    /// use count.
-    fn end_opening(&mut self, session: &str) {
-        let Ok(owner) = Owner::parse(&format!("conversation:{session}")) else {
+        self.calls = self.calls.saturating_sub(1);
+        if self.calls > 0 {
             return;
-        };
+        }
         for tab in &mut self.tabs {
-            let mine = tab.owner == owner;
             if let Some(hosted) = tab
                 .hosted
                 .as_mut()
-                .filter(|hosted| hosted.stage == Stage::Opening && (mine || hosted.internal))
+                .filter(|hosted| hosted.stage == Stage::Opening)
             {
                 hosted.stage = Stage::Open;
                 self.engine.keep_awake(&tab.id, hosted.awake());
             }
+        }
+    }
+
+    /// A new hosted page: still opening while any call is in flight.
+    pub(in crate::ui::browser) fn new_hosted(&self, internal: bool) -> Hosted {
+        let stage = if self.calls > 0 {
+            Stage::Opening
+        } else {
+            Stage::Open
+        };
+        Hosted {
+            stage,
+            ..Hosted::agent(internal)
         }
     }
 
