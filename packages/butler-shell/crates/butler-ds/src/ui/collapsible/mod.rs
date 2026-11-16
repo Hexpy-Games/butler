@@ -2,21 +2,24 @@
 //! disclosure content. Opening reveals from height 0 to the content's measured height (CSS
 //! `interpolate-size: allow-keywords`) over `--motion-base` standard, then the height is `auto`
 //! again; closing folds to 0 over `--motion-exit-base` accelerate and unmounts unless the
-//! content is kept. Content that starts open does not animate unless `appear` is set. The clip
-//! keeps `--focus-ring-room` of paint room around the content (`overflow-clip-margin`): the
-//! box bleeds that room out with a negative margin and pads it back, so layout does not move.
+//! content is kept. Content that starts open does not animate unless `appear` is set. The height
+//! is layout, as in CSS: while it moves, each frame lays out the eased height, so the parents
+//! (a card's glass, a toolbar below) follow it. The clip paints `--focus-ring-room` past the box
+//! (`overflow-clip-margin`) without taking layout room.
 //! Reduced motion: the height never animates; opening snaps it and fades in over
 //! `--motion-fast`, closing fades out first and only then snaps shut.
+mod clip;
 mod list;
 
 use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    Styled as _, Window, canvas, div, px,
+    AnyElement, App, Edges, ElementId, InteractiveElement as _, IntoElement, ParentElement,
+    RenderOnce, Styled as _, Window, canvas, div, px,
 };
 
+use clip::ClipMargin;
 pub use list::{CollapsibleList, Row};
 
 use crate::tokens::{Duration as DsDuration, Easing};
@@ -153,9 +156,6 @@ impl State {
         window: &mut Window,
         cx: &mut App,
     ) {
-        if !Ds::get(cx).reduced_motion() {
-            window.animate_layout(timing.ms());
-        }
         let (open, generation) = {
             let s = state.read(cx);
             (s.open, s.generation)
@@ -177,6 +177,25 @@ impl State {
             }
         });
     }
+}
+
+/// Records the content's own height as it paints; the first one starts a pending reveal.
+fn measure(state: &gpui::Entity<State>, natural: Rc<Cell<Option<f32>>>) -> impl IntoElement {
+    let probe = state.clone();
+    canvas(
+        |_, _, _| (),
+        move |bounds, (), _, cx| {
+            let height = Some(f32::from(bounds.size.height));
+            let first = natural.replace(height).is_none();
+            if first {
+                probe.update(cx, |_, cx| cx.notify());
+            }
+        },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
 }
 
 impl RenderOnce for Collapsible {
@@ -203,59 +222,43 @@ impl RenderOnce for Collapsible {
             State::advance(&state, keep, &timing, self.on_exit, window, cx);
         }
         if !mounted {
-            return div().id((self.id, "height")).hidden();
+            return div().id((self.id, "height")).hidden().into_any_element();
         }
         if !open && keep == KeepMounted::Hidden && phase == Phase::Settled {
-            return div().id((self.id, "height")).h(px(0.));
+            return div().id((self.id, "height")).h(px(0.)).into_any_element();
         }
-        let room = focus::room(Ds::get(cx));
-        let probe = state.clone();
-        let measure = canvas(
-            |_, _, _| (),
-            move |bounds, (), _, cx| {
-                let height = Some(f32::from(bounds.size.height));
-                let first = natural.replace(height).is_none();
-                if first {
-                    probe.update(cx, |_, cx| cx.notify());
-                }
-            },
-        )
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full();
-        let content = div().relative().flex_none().child(measure).children(
-            self.children
-                .into_iter()
-                .map(|child| strut::scope(true, child)),
-        );
-        let mut frame = div()
-            .id((self.id, "height"))
-            .m(-room)
-            .p(room)
-            .min_h_0()
-            .layout_motion(gpui::LayoutMotion {
-                duration_ms: if reduced { 0 } else { timing.ms() },
-                easing: timing.easing(),
-            })
-            .child(content);
+        let content = div()
+            .relative()
+            .flex_none()
+            .child(measure(&state, natural.clone()))
+            .children(
+                self.children
+                    .into_iter()
+                    .map(|child| strut::scope(true, child)),
+            );
+        let mut frame = div().id((self.id, "height")).min_h_0().child(content);
         let collapsed =
             !(open || reduced && phase == Phase::Closing) || (phase == Phase::Opening && !started);
-        if collapsed {
-            frame = frame.h(room * 2.);
+        if !reduced && phase != Phase::Settled && opacity.moving(&timing) {
+            // CSS transitions height and opacity on one curve: the height is the natural height
+            // at the opacity's eased progress, laid out again each frame until it lands.
+            let natural = natural.get().unwrap_or(0.);
+            frame = frame.h(px(natural * opacity.value(&timing)));
+            crate::ui::motion::layout_transition_frame(window);
+        } else if collapsed {
+            frame = frame.h(px(0.));
         } else if phase == Phase::Opening {
-            frame = frame.h(px(state.read(cx).natural.get().unwrap_or(0.)) + room * 2.);
+            frame = frame.h(px(natural.get().unwrap_or(0.)));
         }
-        if phase == Phase::Settled {
-            frame = frame.overflow_hidden();
-        }
-        opacity.apply(
+        let frame = opacity.apply(
             frame,
             &timing,
             &Props {
                 opacity: Some((0., 1.)),
                 ..Default::default()
             },
-        )
+        );
+        let room = focus::room(Ds::get(cx));
+        ClipMargin::new(frame.into_any_element(), Edges::all(room)).into_any_element()
     }
 }
