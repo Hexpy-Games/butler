@@ -47,6 +47,7 @@ pub(crate) struct CefEngine {
 impl CefEngine {
     pub(crate) fn start(
         events: mpsc::UnboundedSender<PageEvent>,
+        adapter: Option<u64>,
         cx: &mut App,
     ) -> anyhow::Result<Self> {
         let (sink, receiver) = mpsc::unbounded();
@@ -54,7 +55,7 @@ impl CefEngine {
         let gate = Rc::new(RefCell::new(PopupGate::default()));
         let downloads = super::downloads::Downloads::new(cx);
         let runtime = Rc::new(OsrRuntime::start(
-            config::config(cx)?,
+            config::config(adapter, cx)?,
             Rc::new(Sink(sink)),
             Arc::new(move |delay| {
                 let _ = schedule.unbounded_send(Instant::now() + delay);

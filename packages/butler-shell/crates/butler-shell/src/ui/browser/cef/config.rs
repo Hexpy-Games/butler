@@ -3,7 +3,8 @@ use butler_ds::ui::context::{Ds, Lang, Platform};
 use gpui::App;
 use std::path::PathBuf;
 
-pub(super) fn config(cx: &App) -> anyhow::Result<OsrConfig> {
+/// `adapter`: the consumer's GPU adapter LUID; CEF and the frame copies follow it (Windows).
+pub(super) fn config(adapter: Option<u64>, cx: &App) -> anyhow::Result<OsrConfig> {
     let (framework_dir, helper_path) = locations()?;
     let profile = crate::lifecycle::data_root(&std::env::args_os().collect::<Vec<_>>())
         .join("app/browser/profile");
@@ -23,6 +24,7 @@ pub(super) fn config(cx: &App) -> anyhow::Result<OsrConfig> {
             crate::lifecycle::APP_VERSION,
             ds.platform(),
         ),
+        adapter_luid: adapter,
     })
 }
 /// The CEF runtime and helper: `BUTLER_CEF_DIR` (development and tests), else beside the
