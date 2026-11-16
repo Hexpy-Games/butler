@@ -42,6 +42,8 @@ clang -dynamiclib -install_name @rpath/Lib.framework/Lib -x c - -o "$fw/Versions
 clang -x c - -o "$app/Contents/MacOS/Fake" -F "$app/Contents/Frameworks" -framework Lib \
   -Wl,-rpath,@executable_path/../Frameworks <<< 'int lib(void); int main(void){return lib();}'
 exe "$helper/Contents/MacOS/Fake Helper"
+# a second executable beside the main one, as the CEF host is
+exe "$app/Contents/MacOS/fake-host"
 exe "$app/Contents/Resources/bundled-agent/bin/butler-agent"
 agent=$app/Contents/Resources/bundled-agent/bin/butler-agent
 for role in memory restart update; do ln "$agent" "$agent ($role)"; done
@@ -50,6 +52,8 @@ chmod 555 "$app/Contents/Resources/bundled-agent/bin/butler-agent" "$app/Content
 
 BUTLER_SIGN_IDENTITY=- "$script" sign-app "$app"
 codesign --verify --strict --deep "$app"
+host_signature=$(codesign -dv "$app/Contents/MacOS/fake-host" 2>&1)
+! grep -q linker-signed <<< "$host_signature" || { echo "second executable not signed" >&2; exit 1; }
 "$app/Contents/MacOS/Fake" || { echo "ad-hoc app failed to load its nested framework" >&2; exit 1; }
 agent_signature=$(codesign -d --verbose=2 "$app/Contents/Resources/bundled-agent/bin/butler-agent" 2>&1)
 grep -q 'Identifier=com.hexpy.butler.agent' <<< "$agent_signature" || { echo "agent identifier missing" >&2; exit 1; }
