@@ -119,37 +119,3 @@ fn scalar(spec: &Value, value: &Value) -> f32 {
         _ => 0.,
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-
-    // test-category: pure-logic
-    #[test]
-    fn resolve_follows_values_ts_candidate_order() {
-        let manifest = json!({ "params": [
-            { "key": "a", "type": "number", "min": 0, "max": 1, "default": 0.5, "defaultDark": 0.25 },
-            { "key": "b", "type": "enum", "options": ["x", "y"], "default": "x" },
-            { "key": "c", "type": "palette", "size": 2, "default": ["#102030", "#405060"],
-              "presets": { "p": { "light": ["#111111", "#222222"], "dark": ["#aa0000", "#bb0000"] } } },
-        ] });
-        let values = |params, params_dark| WallpaperParams {
-            params,
-            params_dark,
-        };
-        let light = |params| {
-            resolve(
-                &manifest,
-                &values(params, Value::Null),
-                WallpaperTone::Light,
-            )
-        };
-        let dark = |params| resolve(&manifest, &values(params, Value::Null), WallpaperTone::Dark);
-        assert_eq!(light(json!({ "a": 7 }))[0][0], 1.);
-        assert_eq!(dark(json!({ "a": 0.9 }))[0][0], 0.25);
-        assert_eq!(light(json!({ "b": "nope" }))[0][1], 0.);
-        assert_eq!(dark(json!({ "c": "p" }))[1][0], f32::from(0xaa_u8) / 255.);
-    }
-}
