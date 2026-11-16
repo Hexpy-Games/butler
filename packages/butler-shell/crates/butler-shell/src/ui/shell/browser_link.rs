@@ -69,7 +69,7 @@ impl Shell {
             return;
         }
         if let Some(id) = cx.global::<BrowserState>().active().cloned() {
-            cx.global_mut::<BrowserState>().close(&id);
+            cx.update_global::<BrowserState, _>(|model, cx| model.close(&id, cx));
             cx.refresh_windows();
         }
     }

@@ -18,6 +18,8 @@ toml_edit = { version = "0.25", default-features = false, features = ["parse"] }
 zeroize.workspace = true
 butler-core = { path = "../butler-core" }
 butler-platform = { path = "../butler-platform" }
+# Only the always-compiled `switches` list; without the `cef` feature butler-cef has no dependencies.
+butler-cef = { path = "../butler-platform/cef" }
 butler-turn = { path = "../butler-turn" }
 butler-models = { path = "../butler-models" }
 base64.workspace = true
