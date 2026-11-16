@@ -114,7 +114,11 @@ fn main() {
             let failed = serde_json::json!({});
             lifecycle::logs::app_log("ERROR", "lifecycle", "app.start_failed", failed);
             lifecycle::logs::quit();
-            cx.quit();
+            // A start that failed is not a clean exit: the quit observers still run first (the
+            // Agent's lease is released), then the process ends with 1. The quit runs as a task,
+            // because Linux's event loop drops a stop requested before it starts.
+            cx.on_app_quit(|_| async { std::process::exit(1) }).detach();
+            cx.spawn(async move |cx| cx.update(|cx| cx.quit())).detach();
             return;
         }
         // Later launches are read only once the first window exists.
