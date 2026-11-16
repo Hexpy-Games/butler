@@ -6,6 +6,7 @@ mod compaction;
 mod conversation;
 mod conversation_session_reference;
 mod conversation_tools;
+mod document_text;
 mod image;
 mod pdf;
 mod prompt;
@@ -33,6 +34,7 @@ pub use compaction::{
 pub use conversation::*;
 pub use conversation_session_reference::ConversationSessionReference;
 pub use conversation_tools::ConversationTools;
+pub use document_text::{DocumentTextError, document_text};
 pub use image::{
     ImageCapabilityEvidence, ImageCarrierTuple, ImageSanitizerInput, ImageSanitizerLimits,
     ImageSourceRecord, VisualAttachmentManifest, VisualImageAdmissionResult,
