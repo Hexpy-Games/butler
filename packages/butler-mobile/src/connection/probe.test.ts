@@ -4,7 +4,7 @@ import { butlerOrigin, classify, type ProbeResult } from "./probe";
 // test-category: pure-logic
 test("a typed address becomes a plain http(s) origin", () => {
   const cases: [string, string | null][] = [
-    ["192.168.0.5:18765", "http://192.168.0.5:18765"],
+    ["192.0.2.5:18765", "http://192.0.2.5:18765"],
     ["  https://butler.example.com/ ", "https://butler.example.com"],
     ["butler.local", "http://butler.local"],
     ["", null],
