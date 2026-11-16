@@ -158,7 +158,7 @@ pub(super) fn output_details(
         stack = stack.children(execution);
     }
     stack
-        .child(body(output, cx))
+        .child(body(output, &key, cx))
         .children(more)
         .into_any_element()
 }
@@ -212,36 +212,42 @@ fn caption(value: &str) -> AnyElement {
         .into_any_element()
 }
 
-fn code(content: &str, cx: &App) -> AnyElement {
-    work_activity::output(content.to_owned(), cx).into_any_element()
+/// One output block; `key` names the operation and `index` the block within it (its scroll).
+fn code(key: &SharedString, index: usize, content: &str, cx: &App) -> AnyElement {
+    work_activity::output((key.clone(), index), content.to_owned(), cx).into_any_element()
 }
 
-fn section(section: &Section, cx: &App) -> AnyElement {
+fn section(key: &SharedString, index: usize, section: &Section, cx: &App) -> AnyElement {
     let mut stack = Stack::new().gap(Space::Xs).child(caption(&section.title));
     if let Some(message) = section.message.as_deref().filter(|m| !m.is_empty()) {
         stack = stack.child(caption(message));
     }
     if let Some(content) = section.content.as_deref().filter(|c| !c.is_empty()) {
-        stack = stack.child(code(content, cx));
+        stack = stack.child(code(key, index, content, cx));
     }
     stack.into_any_element()
 }
 
-fn body(output: Presentation, cx: &App) -> AnyElement {
+fn body(output: Presentation, key: &SharedString, cx: &App) -> AnyElement {
     match output {
         Presentation::Summary(content) => caption(&content),
-        Presentation::Code(content) => code(&content, cx),
+        Presentation::Code(content) => code(key, 0, &content, cx),
         Presentation::Sections { summary, sections } => Stack::new()
             .gap(Space::Xs)
             .child(caption(&summary))
-            .children(sections.iter().map(|item| section(item, cx)))
+            .children(
+                sections
+                    .iter()
+                    .enumerate()
+                    .map(|(index, item)| section(key, index, item, cx)),
+            )
             .into_any_element(),
         Presentation::Command {
             summary, content, ..
         } => {
             let mut stack = Stack::new().gap(Space::Xs).child(caption(&summary));
             if let Some(content) = content.filter(|content| !content.is_empty()) {
-                stack = stack.child(code(&content, cx));
+                stack = stack.child(code(key, 0, &content, cx));
             }
             stack.into_any_element()
         }
