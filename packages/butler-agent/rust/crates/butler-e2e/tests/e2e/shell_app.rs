@@ -28,6 +28,7 @@ use serde_json::{Value, json};
 pub(super) mod driver;
 pub(super) mod live_turns;
 use driver::{SERIAL, SHOTS, Shell};
+mod composer_toolbar;
 mod focus_fallback;
 mod text_selection;
 mod text_size;
