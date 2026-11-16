@@ -105,18 +105,19 @@ impl Page {
         }
         let message = native.as_ref().and_then(NativeKeyData::windows).copied();
         let (windows_key_code, native_key_code) = codes(&key.key, message);
+        let unmodified_character = key_character(&key.key);
         let character = key
             .key_char
             .as_deref()
             .and_then(|s| s.encode_utf16().next())
-            .unwrap_or(0);
+            .unwrap_or(unmodified_character);
         runtime.key(
             self.id,
             OsrKey {
                 native_key_code,
                 windows_key_code,
                 character,
-                unmodified_character: key.key.encode_utf16().next().unwrap_or(0),
+                unmodified_character,
                 modifiers: flags(key.modifiers),
                 up,
                 // Without a key message: Windows sends Alt combinations as system keys, but not
@@ -181,24 +182,36 @@ fn codes(key: &str, message: Option<WindowsKeyData>) -> (i32, i32) {
 }
 /// No macOS key code: Chromium's invalid macOS native key code, which sets no DOM `code`.
 const NO_MAC_KEY: u16 = 0xFFFF;
-/// gpui's named keys: the Windows virtual key and the macOS key code.
-const NAMED_KEYS: [(&str, u16, u16); 15] = [
-    ("space", 0x20, 0x31),
-    ("enter", 0x0D, 0x24),
-    ("tab", 0x09, 0x30),
-    ("backspace", 0x08, 0x33),
-    ("escape", 0x1B, 0x35),
-    ("delete", 0x2E, 0x75),
-    ("insert", 0x2D, 0x72),
-    ("home", 0x24, 0x73),
-    ("end", 0x23, 0x77),
-    ("pageup", 0x21, 0x74),
-    ("pagedown", 0x22, 0x79),
-    ("left", 0x25, 0x7B),
-    ("up", 0x26, 0x7E),
-    ("right", 0x27, 0x7C),
-    ("down", 0x28, 0x7D),
+/// gpui's named keys: the Windows virtual key, macOS key code and unmodified character.
+const NAMED_KEYS: [(&str, u16, u16, u16); 16] = [
+    ("space", 0x20, 0x31, 0x20),
+    ("enter", 0x0D, 0x24, 0x0D),
+    ("return", 0x0D, 0x24, 0x0D),
+    ("tab", 0x09, 0x30, 0x09),
+    ("backspace", 0x08, 0x33, 0x08),
+    ("escape", 0x1B, 0x35, 0x1B),
+    ("delete", 0x2E, 0x75, 0x7F),
+    ("insert", 0x2D, 0x72, 0),
+    ("home", 0x24, 0x73, 0),
+    ("end", 0x23, 0x77, 0),
+    ("pageup", 0x21, 0x74, 0),
+    ("pagedown", 0x22, 0x79, 0),
+    ("left", 0x25, 0x7B, 0),
+    ("up", 0x26, 0x7E, 0),
+    ("right", 0x27, 0x7C, 0),
+    ("down", 0x28, 0x7D, 0),
 ];
+/// CEF characters describe what a key types, never the spelling of a named key.
+fn key_character(key: &str) -> u16 {
+    let mut chars = key.chars();
+    if chars.next().is_some() && chars.next().is_none() {
+        return key.encode_utf16().next().unwrap_or(0);
+    }
+    NAMED_KEYS
+        .iter()
+        .find(|(name, ..)| *name == key)
+        .map_or(0, |(_, _, _, character)| *character)
+}
 /// The US layout's space and punctuation keys, by their unshifted and shifted characters: the
 /// Windows virtual key (VK_OEM_*) and the macOS key code.
 const PUNCTUATION_KEYS: [(&str, u16, u16); 12] = [
@@ -235,7 +248,12 @@ fn key_codes(key: &str) -> (i32, i32) {
     let mut chars = key.chars();
     let single = chars.next().filter(|_| chars.next().is_none());
     let table = |(_, windows, mac): &(&str, u16, u16)| (*windows, *mac);
-    let named = || NAMED_KEYS.iter().find(|(name, ..)| *name == key).map(table);
+    let named = || {
+        NAMED_KEYS
+            .iter()
+            .find(|(name, ..)| *name == key)
+            .map(|(_, windows, mac, _)| (*windows, *mac))
+    };
     let function = || {
         let n = key.strip_prefix('f')?.parse::<u16>().ok()?;
         let mac = MAC_FUNCTION_KEYS.get(usize::from(n.checked_sub(1)?));
