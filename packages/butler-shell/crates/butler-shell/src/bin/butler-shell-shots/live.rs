@@ -104,6 +104,10 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "open" => h.update(|s, w, cx| super::open_chat(s, arg, w, cx)),
         "close" => h.update(|s, w, cx| s.open_chat(s.store.selected().cloned(), w, cx)),
         "browser" => h.update(|s, w, cx| s.set_view(ui::manage::View::Browser, w, cx)),
+        "history" => h.update(|s, w, cx| {
+            let from = ui::manage::HistoryFrom::Browser;
+            s.set_view(ui::manage::View::History { from }, w, cx);
+        }),
         "browser-link" => h.update(|_, _, cx| ui::chat::open_link(arg, cx)),
         "browser-state" | "browser-frame" => browser_report(h, command),
         "new" => h.update(|s, w, cx| s.open_chat(None, w, cx)),

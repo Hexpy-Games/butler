@@ -266,7 +266,7 @@ impl HistoryPage {
         };
         Stack::new()
             .gap(Space::Md)
-            .child(input)
+            .child(anchor(div().w_full(), "history-search").child(input))
             .child(
                 Stack::row()
                     .justify(Justify::Between)

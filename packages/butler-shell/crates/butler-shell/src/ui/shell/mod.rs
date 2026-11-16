@@ -267,6 +267,9 @@ impl Shell {
                 }
             }),
             cx.subscribe_in(composer, window, Self::on_composer),
+            // Electron falls back to `body` when the focused element goes, where the
+            // app-wide shortcuts still work: the shell root is that fallback.
+            cx.on_focus_lost(window, |this, window, cx| window.focus(&this.focus, cx)),
         ];
         if let Some(runtime) = crate::lifecycle::runtime(cx) {
             subscriptions.push(cx.observe(&runtime, |_, _, cx| cx.notify()));

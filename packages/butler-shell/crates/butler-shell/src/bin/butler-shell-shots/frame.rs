@@ -55,6 +55,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             );
             cx.notify();
         }),
+        "expect-palette" => h.update(|s, _, cx| assert!(s.palette().read(cx).is_open())),
         "expect-composer-focus" => h.cx.update(|cx| {
             h.window.update(cx, |shell, window, cx| {
                 ensure!(
