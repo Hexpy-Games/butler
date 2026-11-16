@@ -27,6 +27,9 @@ type Toggle = std::rc::Rc<dyn Fn(&mut Window, &mut App)>;
 
 struct Copy {
     title: &'static str,
+    split_title: &'static str,
+    split_project: &'static str,
+    split_branch: &'static str,
     project: &'static str,
     branch: &'static str,
     show_left: &'static str,
@@ -52,6 +55,9 @@ fn copy(lang: Lang) -> Copy {
     lang.pick(
         Copy {
             title: "Token page review",
+            split_title: "Shortcut conflicts",
+            split_project: "Butler app",
+            split_branch: "Local",
             project: "butler",
             branch: "ui/ds-viewer-complete",
             show_left: "Show left panel",
@@ -74,6 +80,9 @@ fn copy(lang: Lang) -> Copy {
         },
         Copy {
             title: "토큰 페이지 검토",
+            split_title: "단축키 충돌 정리",
+            split_project: "버틀러 앱",
+            split_branch: "로컬",
             project: "butler",
             branch: "ui/ds-viewer-complete",
             show_left: "왼쪽 패널 보기",
@@ -175,19 +184,26 @@ fn leading_story(lang: Lang, collapsed: bool, _: &mut Window, cx: &mut App) -> A
         .leading_size(LeadingSize::Auto)
         .leading(leading)
         .trailing(trailing);
-    if !collapsed {
-        bar = bar.start_padding(18.); // DS: TitlebarShell.module.css:5
-    }
+    bar = bar.start_padding(if collapsed {
+        // DS: TitlebarShell.module.css:216-219, `.fixtureCollapsed` (AdaptiveShell sets
+        // `--traffic-controls-width: 0px`)
+        let len = |token| f32::from(ds.len(token));
+        len(Length::SidebarPaddingInline)
+            + len(Length::ChromeFloatingToggleSize)
+            + len(Length::SpaceMd)
+    } else {
+        18. // DS: TitlebarShell.module.css:5
+    });
     fixture(bar, false, cx)
 }
 
-fn subtitle(c: &Copy, cx: &App) -> AnyElement {
+fn subtitle((project, branch): (&'static str, &'static str), cx: &App) -> AnyElement {
     Stack::row()
         .cross(Cross::Center)
         .gap(Space::Xs)
-        .child(Typo::caption(c.project).tone(TextTone::Secondary))
+        .child(Typo::caption(project).tone(TextTone::Secondary))
         .child(glyph_sm(Icon::GitBranch, cx))
-        .child(Typo::caption(c.branch).tone(TextTone::Secondary))
+        .child(Typo::caption(branch).tone(TextTone::Secondary))
         .into_any_element()
 }
 
@@ -209,7 +225,7 @@ fn titlebar_story(lang: Lang, windows: bool, cx: &mut App) -> AnyElement {
         .collapsed(true)
         .drag_region()
         .leading(IconButton::new("titlebar-left", c.show_left).glyph(Icon::PanelLeft))
-        .subtitle(subtitle(&c, cx))
+        .subtitle(subtitle((c.project, c.branch), cx))
         .trailing(trailing);
     if windows {
         bar = bar.window_controls(
@@ -272,13 +288,13 @@ fn viewer_toggle(id: SharedString, c: &Copy, open: bool, on_toggle: Option<Toggl
 
 /// Title, the workspace subtitle and the menu after them, as the conversation titlebar passes them.
 fn conversation_title(id: &'static str, c: &Copy, cx: &App) -> TitlebarShell {
-    TitlebarShell::new(id, c.title)
+    TitlebarShell::new(id, c.split_title)
         .title_actions(
             IconButton::new(format!("{id}-menu"), c.menu)
                 .glyph(Icon::MoreHorizontal)
                 .menu_trigger(),
         )
-        .subtitle(subtitle(c, cx))
+        .subtitle(subtitle((c.split_project, c.split_branch), cx))
 }
 
 /// What a grouped bar shows: the attention dot, the pressed 세션 정보 toggle, whether the viewer's
