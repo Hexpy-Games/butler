@@ -68,7 +68,7 @@ class HostLinks(unittest.TestCase):
         own_id = ' cmd LC_ID_DYLIB\n name ./libexample.dylib (offset 24)\n'
         guard.check_macho('libexample.dylib', own, own_id)
         with self.assertRaisesRegex(RuntimeError, 'outside allowed'):
-            guard.check_macho('libexample.dylib', own, own_id + ' cmd LC_LOAD_DYLIB\n name ./libother.dylib (offset 24)\n')
+            guard.check_macho('libexample.dylib', own, own_id + ' cmd LC_LOAD_DYLIB\n name ./libexample.dylib (offset 24)\n')
 
     # test-category: security
     def test_elf_loader_metadata(self):
