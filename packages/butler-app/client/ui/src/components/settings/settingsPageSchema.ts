@@ -117,6 +117,8 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   ],
   // Remote-only controls hide when refused. Authority and keys stay visible.
   security: [
+    { id: "butler-account", kind: "form", fields: [], optional: true },
+    { id: "butler-account-devices", kind: "list", fields: [], optional: true },
     { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },
     { id: "device-pairing", kind: "form", fields: ["pairing-code"], optional: true },
     { id: "paired-devices", kind: "list", fields: [], optional: true },

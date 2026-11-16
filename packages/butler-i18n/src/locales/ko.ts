@@ -73,6 +73,42 @@ const onboardingFallback: BriefingFallbackCopy = {
     ],
   };
 
+const butlerAccount: AppCopy["butlerAccount"] = {
+  name: "버틀러 계정",
+  intro: "이메일로 로그인해요.",
+  email: "이메일",
+  sendCode: "코드 보내기",
+  code: "로그인 코드",
+  codeSent: (email) => `${email}로 보냈어요.`,
+  changeEmail: "이메일 바꾸기",
+  resend: "다시 보내기",
+  resent: "코드를 다시 보냈어요.",
+  signIn: "로그인",
+  account: "계정",
+  plan: "요금제",
+  renews: (date) => `${date} 갱신`,
+  plans: { free: "무료", plus: "Plus", pro: "Pro", enterprise: "Enterprise" },
+  signOut: "로그아웃",
+  signOutConfirm: "이 컴퓨터에서 버틀러 계정을 로그아웃할까요?",
+  signedOut: "로그아웃했어요.",
+  devices: "기기",
+  thisDevice: "이 기기",
+  platforms: { macos: "macOS", windows: "Windows", linux: "Linux", ios: "iOS", android: "Android" },
+  revoke: "해제",
+  revokeDevice: (name) => `${name} 해제`,
+  revokeConfirm: (name) => `${name}을(를) 계정에서 해제할까요?`,
+  revoked: "기기를 해제했어요.",
+  working: "처리 중…",
+  codeInvalid: "코드가 맞지 않아요.",
+  codeExpired: "코드가 만료됐어요. 새로 받아 주세요.",
+  tooSoon: "잠시 후 다시 시도해 주세요.",
+  unavailableNow: "지금은 코드를 보낼 수 없어요. 나중에 다시 시도해 주세요.",
+  offline: "버틀러 서비스에 연결하지 못했어요.",
+  emailInvalid: "이메일 주소를 확인해 주세요.",
+  failed: "문제가 생겼어요. 다시 시도해 주세요.",
+  loadFailed: "버틀러 계정을 불러오지 못했어요.",
+};
+
 const butlerVault: AppCopy["butlerVault"] = {
   passwordIntro: "이 컴퓨터는 키체인이 없어 마스터 비밀번호로 금고를 잠급니다.",
   masterPassword: "마스터 비밀번호",
@@ -704,6 +740,7 @@ export const koKrCopy: AppCopy = {
     notificationNewMessage: "새 메시지가 도착했습니다.", notificationCompleted: "작업이 완료되었습니다.", notificationFailed: "작업이 실패했습니다.", notificationCancelled: "작업이 취소되었습니다.", notificationUpdated: "작업 상태가 업데이트되었습니다.",
 
   },
+  butlerAccount,
   butlerVault,
   firstRun: firstRun,
   interfaceDetails: {

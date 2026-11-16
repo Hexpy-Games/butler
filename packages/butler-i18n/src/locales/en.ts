@@ -67,6 +67,42 @@ const onboardingFallback: BriefingFallbackCopy = {
     ],
   };
 
+const butlerAccount: AppCopy["butlerAccount"] = {
+  name: "Butler account",
+  intro: "Sign in with your email.",
+  email: "Email",
+  sendCode: "Send code",
+  code: "Sign-in code",
+  codeSent: (email) => `Sent to ${email}.`,
+  changeEmail: "Change email",
+  resend: "Resend",
+  resent: "Code sent again.",
+  signIn: "Sign in",
+  account: "Account",
+  plan: "Plan",
+  renews: (date) => `Renews ${date}`,
+  plans: { free: "Free", plus: "Plus", pro: "Pro", enterprise: "Enterprise" },
+  signOut: "Sign out",
+  signOutConfirm: "Sign out of your Butler account on this computer?",
+  signedOut: "Signed out.",
+  devices: "Devices",
+  thisDevice: "This device",
+  platforms: { macos: "macOS", windows: "Windows", linux: "Linux", ios: "iOS", android: "Android" },
+  revoke: "Remove",
+  revokeDevice: (name) => `Remove ${name}`,
+  revokeConfirm: (name) => `Remove ${name} from your account?`,
+  revoked: "Device removed.",
+  working: "Working…",
+  codeInvalid: "That code is not right.",
+  codeExpired: "The code expired. Send a new one.",
+  tooSoon: "Try again in a minute.",
+  unavailableNow: "Can't send codes right now. Try again later.",
+  offline: "Can't reach Butler online.",
+  emailInvalid: "Check the email address.",
+  failed: "Something went wrong. Try again.",
+  loadFailed: "Couldn't load your Butler account.",
+};
+
 const butlerVault: AppCopy["butlerVault"] = {
   passwordIntro: "This computer has no keychain, so a master password locks the vault.",
   masterPassword: "Master password",
@@ -707,6 +743,7 @@ export const enUsCopy: AppCopy = {
     notificationNewMessage: "A new message arrived.", notificationCompleted: "Work completed.", notificationFailed: "Work failed.", notificationCancelled: "Work cancelled.", notificationUpdated: "Work status updated.",
 
   },
+  butlerAccount,
   butlerVault,
   firstRun: firstRun,
   interfaceDetails: {
