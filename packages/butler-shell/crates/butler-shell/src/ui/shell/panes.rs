@@ -116,11 +116,11 @@ impl Shell {
             }
             // A chat replaces the settings screen (`view` leaves `settings`).
             PaletteEvent::OpenSession(id) => {
-                self.close_settings(window, cx);
+                self.close_settings(cx);
                 self.navigate(Navigation::Session(id.clone()), window, cx);
             }
             PaletteEvent::OpenProjectChat(project) => {
-                self.close_settings(window, cx);
+                self.close_settings(cx);
                 let target = crate::ui::source::sidebar::DraftTarget::Project(project.clone());
                 self.open_sidebar_draft(Some(target), cx);
             }
@@ -133,7 +133,7 @@ impl Shell {
             PaletteEvent::OpenLogTrace => self.open_settings("logs", window, cx),
             // `navigateCommandResult` `automation:<id>`: the schedule's detail replaces Settings.
             PaletteEvent::OpenSchedule(id) => {
-                self.close_settings(window, cx);
+                self.close_settings(cx);
                 self.set_view(View::AutomationDetail(id.clone().into()), window, cx);
             }
         }
@@ -343,7 +343,7 @@ impl Shell {
             .unwrap_or_else(|| gpui::div().into_any_element())
     }
 
-    pub(super) fn palette(&self) -> Entity<CommandPalette> {
+    pub(crate) fn palette(&self) -> Entity<CommandPalette> {
         self.panes.palette.clone()
     }
 }
