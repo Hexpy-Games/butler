@@ -98,7 +98,7 @@ impl Shell {
         }
     }
 
-    fn merge_text_settings(&mut self, patch: &Value, cx: &mut Context<Self>) {
+    pub(super) fn merge_settings(&mut self, patch: &Value, cx: &mut Context<Self>) {
         let mut merged = self
             .settings_raw
             .as_deref()
@@ -113,13 +113,13 @@ impl Shell {
     pub(super) fn save_text_size(&mut self, patch: Value, cx: &mut Context<Self>) {
         let previous = self.settings_raw.clone();
         let previous_scale = Ds::get(cx).tokens().ui_scale;
-        self.merge_text_settings(&patch, cx);
+        self.merge_settings(&patch, cx);
         crate::ui::source::fetch::fetch(
             cx,
             move |client| async move { client.update_settings(&patch).await },
             move |this: &mut Self, result: Result<Value, butler_shell_client::Error>, cx| {
                 match result {
-                    Ok(saved) => this.merge_text_settings(&saved, cx),
+                    Ok(saved) => this.merge_settings(&saved, cx),
                     Err(_) => {
                         let raw = previous
                             .clone()
@@ -127,6 +127,7 @@ impl Shell {
                         this.apply_settings(&raw, cx);
                         this.settings_raw = previous;
                         Ds::update(cx, |ds| ds.set_ui_scale(previous_scale));
+                        crate::lifecycle::window::zoom_windows(previous_scale, cx);
                         cx.refresh_windows();
                         let copy = crate::ui::i18n::settings::words(Ds::get(cx).lang());
                         butler_ds::ui::toast::show(
@@ -155,6 +156,7 @@ impl Shell {
         cx.update_global(|hooks: &mut AssistantHooks, _| hooks.developer_mode = developer);
         if let Some(scale) = text("text_size").and_then(text_scale) {
             Ds::update(cx, |ds| ds.set_ui_scale(scale));
+            crate::lifecycle::window::zoom_windows(scale, cx);
             cx.refresh_windows();
         }
         if let Some(value) = flag("reduce_motion") {
