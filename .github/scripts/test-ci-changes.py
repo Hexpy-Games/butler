@@ -25,6 +25,8 @@ class Paths(unittest.TestCase):
             'packages/butler-app/client/ui/src/app.tsx': {'ui', 'site', 'ds'},
             'packages/butler-i18n/src/locale.ts': {'ui', 'site', 'ds'},
             'packages/project-ledger/src/index.ts': {'ui', 'ds'},
+            'packages/butler-mobile/src/connection/probe.ts': {'mobile'},
+            'packages/butler-mobile/bun.lock': {'mobile'},
             'bun.lock': {'ui', 'site', 'ds', 'licenses', 'signing'},
             'bun.lockb': {'ui', 'site', 'ds', 'licenses', 'signing'},
             'packages/butler-agent/rust/crates/butler-core/src/lib.rs': {'rust', 'package', 'install', 'linux-package'},
@@ -313,7 +315,7 @@ class Trust(unittest.TestCase):
         groups = json.loads(re.search(r"groups: '([^']+)'", workflow).group(1))
         # Evaluate the actual gate's selection policy, without its result loop.
         policy = (ROOT / 'check-gate.py').read_text().split("for name, enabled in selected.items():")[0]
-        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds', 'licenses', 'signing']
+        flags = ['rust', 'package', 'install', 'linux-package', 'ui', 'site', 'ds', 'mobile', 'licenses', 'signing']
         for values in itertools.product(['false', 'true'], repeat=len(flags)):
             outputs = dict(zip(flags, values), tier='smoke', workflows='true')
             outputs['jobs'] = json.dumps(changes.rust_jobs(outputs, 'pull_request') | {'lint': True})
