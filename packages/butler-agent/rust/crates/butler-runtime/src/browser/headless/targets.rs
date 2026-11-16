@@ -397,10 +397,11 @@ pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value)
                     main && t.opener.is_some(),
                     t.popup_parent_url.clone().unwrap_or_default(),
                     t.policy.clone(),
+                    t.held,
                 )
             })
     };
-    let Some((tab, main, popup, parent, policy)) = facts else {
+    let Some((tab, main, popup, parent, policy, held)) = facts else {
         let _ = browser
             .cdp
             .send(
@@ -451,6 +452,10 @@ pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value)
         if let Some(entry) = state.tabs.get_mut(&tab) {
             entry.changed();
         }
+    }
+    // The user is driving this page in the App: the request failed, the tab stays.
+    if held {
+        return;
     }
     let _ = browser
         .cdp
