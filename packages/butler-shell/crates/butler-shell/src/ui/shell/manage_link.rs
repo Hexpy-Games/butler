@@ -220,7 +220,8 @@ impl Shell {
         rebuild && key.is_some()
     }
 
-    /// Shows `view` now (past the guard). The conversation takes the composer back.
+    /// Shows `view` now (past the guard). Back on the conversation, which Electron mounts anew
+    /// (`AppShell.tsx`), focus goes to the shell root and the composer stays folded.
     fn show_view_now(&mut self, view: &View, window: &mut Window, cx: &mut Context<Self>) {
         let was_session = self.on_session(cx);
         if self.store_view(view.clone(), cx) {
@@ -228,7 +229,7 @@ impl Shell {
             self.manage.page = manage::page_key(view).zip(manage::page(view, ctx, window, cx));
         }
         if !was_session && *view == View::Session {
-            self.composer.update(cx, |c, cx| c.engage(window, cx));
+            window.focus(&self.focus, cx);
         }
     }
 
