@@ -3,6 +3,7 @@
 //! code/text).
 mod display;
 mod files;
+mod open;
 
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::artifact_preview::{
@@ -100,7 +101,6 @@ fn file_viewer_artifact(
 ) -> AnyElement {
     let index = revision_index(latest, window, cx);
     let artifact = revision_artifact(latest, index);
-    // "Open in the default app" has no route in the shell yet.
     let actions = file_actions(latest, &artifact, outside_library, cx);
     let select = revision_select(latest, index, window, cx);
     Stack::new()
@@ -118,7 +118,8 @@ fn file_viewer_artifact(
         .into_any_element()
 }
 
-/// `fileActions`: 서랍에서 열기 for a delivered file outside the 서랍's own viewer, then save.
+/// `fileActions`: 서랍에서 열기 for a delivered file outside the 서랍's own viewer, then save and
+/// open-in-app (or show-in-folder) for a stored file.
 fn file_actions(
     latest: &SessionArtifactSummary,
     artifact: &SessionArtifactSummary,
@@ -148,6 +149,21 @@ fn file_actions(
             label_icon: false,
             icon_only: false,
             run: Rc::new(move |_, cx| save_file(file_id.clone(), &name, cx)),
+        });
+    }
+    if let Some(file_id) = artifact.file_id.clone() {
+        let (label, icon) = if open::can_open_in_app(&file_name(artifact)) {
+            (FileViewerStrings::get(cx).open_in_default_app, Icon::Popup)
+        } else {
+            (FileViewerStrings::get(cx).show_in_folder, Icon::FolderOpen)
+        };
+        actions.push(FileViewerAction {
+            id: "open-external",
+            label: label.into(),
+            icon,
+            label_icon: false,
+            icon_only: true,
+            run: Rc::new(move |_, cx| open::open_in_app(file_id.clone(), cx)),
         });
     }
     actions
