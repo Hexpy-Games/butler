@@ -13,6 +13,7 @@ type NativeCursor = *mut u8;
 type NativeCursor = CursorHandle;
 
 pub(super) fn client(shared: PageRef, events: Events, runtime: &Weak<RuntimeState>) -> Client {
+    let loads = shared.borrow().loads.clone();
     OsrClient::new(
         Paint::new(shared.clone(), events.clone()),
         Life::new(shared.clone(), events.clone(), runtime.clone()),
@@ -21,7 +22,7 @@ pub(super) fn client(shared: PageRef, events: Events, runtime: &Weak<RuntimeStat
         Request::new(
             events.clone(),
             runtime.upgrade().map(|r| r.auth.clone()),
-            shared.borrow().loads.clone(),
+            loads,
         ),
         PageDialogs {
             js: super::dialogs::Js::new(shared.clone(), events.clone()),
