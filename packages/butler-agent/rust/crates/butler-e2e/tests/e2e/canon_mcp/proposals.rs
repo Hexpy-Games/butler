@@ -72,3 +72,150 @@ async fn cn_11_mcp_proposals_preserve_chat_drafts_and_private_specs() -> Result<
     drop(db);
     s.finish().await
 }
+
+#[tokio::test]
+async fn cn_16_mcp_proposes_specs_the_owner_applies_and_finds_them() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("CN-16")?.data_folder_token().start().await?;
+    let project = project(&s).await?;
+    trust(&s).await?;
+    let epic = call(
+        &s,
+        "canon_create_epic",
+        json!({"project":project,"title":"Export"}),
+    )
+    .await?;
+    let id = epic["id"].as_str().unwrap();
+    let invalid = call(
+        &s,
+        "canon_propose_spec",
+        json!({"epic_id":id,"body":"No title","summary":"Export design"}),
+    )
+    .await?;
+    assert!(
+        invalid["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("must start with")),
+        "{invalid}"
+    );
+    let detail = s.gw.get(&format!("/canon/epics/{id}")).await?;
+    assert_eq!(detail.data()["proposals"], json!([]));
+    let body = "# Export design\n\n## Format\n- EX-01 CSV opens in a spreadsheet.\n- plain note\n\n```\n- EX-99 not a criterion\n```\n\n## Speed\n* EX-02 Ten thousand rows export without a pause.";
+    let first = call(
+        &s,
+        "canon_propose_spec",
+        json!({"epic_id":id,"body":body,"summary":"Export design"}),
+    )
+    .await?;
+    let other_body = "# Other design\n\nSecond";
+    let second = call(
+        &s,
+        "canon_propose_spec",
+        json!({"epic_id":id,"body":other_body,"summary":"Other design"}),
+    )
+    .await?;
+    assert_eq!(first["state"], "open", "{first}");
+    let detail = s.gw.get(&format!("/canon/epics/{id}")).await?;
+    let proposals = detail.data()["proposals"].as_array().unwrap();
+    assert_eq!(proposals.len(), 2, "{second}");
+    assert!(proposals.iter().all(|p| p["current_body"].is_null()));
+    assert_eq!(detail.data()["specs"], json!([]));
+    assert_eq!(
+        call(&s, "canon_get_epic", json!({"epic_id":id})).await?["specs"],
+        json!([])
+    );
+    for proposal in [&first, &second] {
+        let accepted =
+            s.gw.post(
+                &format!("/canon/proposals/{}", proposal["id"].as_str().unwrap()),
+                json!({"outcome":"accepted"}),
+            )
+            .await?;
+        assert_eq!(accepted.data()["ok"], true, "{}", accepted.text);
+    }
+    let epic = call(&s, "canon_get_epic", json!({"epic_id":id})).await?;
+    let specs = epic["specs"].as_array().unwrap();
+    assert_eq!(specs.len(), 2);
+    let page = call(&s, "canon_list", json!({"project":project})).await?;
+    let listed = page["epics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == id)
+        .unwrap();
+    assert_eq!(listed["specs"].as_array().unwrap().len(), 2);
+    let bodies = call(&s, "canon_get_spec", json!({"epic_id":id})).await?;
+    assert_eq!(bodies["specs"].as_array().unwrap().len(), 2);
+    for (title, body) in [("Export design", body), ("Other design", other_body)] {
+        let spec = specs.iter().find(|s| s["title"] == title).unwrap();
+        assert!(
+            listed["specs"]
+                .as_array()
+                .unwrap()
+                .contains(&json!({"id":spec["id"],"title":title}))
+        );
+        let found = bodies["specs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["id"] == spec["id"])
+            .unwrap();
+        assert_eq!(found["body"], body);
+    }
+    let spec = bodies["specs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["title"] == "Export design")
+        .unwrap();
+    let single = call(&s, "canon_get_spec", json!({"spec_id":spec["id"]})).await?;
+    assert_eq!(single["specs"], json!([spec]));
+    assert_eq!(
+        spec["criteria"],
+        json!([
+            {"criterion_id":"EX-01","part_id":"Format","text":"CSV opens in a spreadsheet."},
+            {"criterion_id":"EX-02","part_id":"Speed","text":"Ten thousand rows export without a pause."}
+        ])
+    );
+    let invalid = call(&s, "canon_propose_spec_change", json!({"spec_id":spec["id"],"base_revision":spec["revision"],"body":"# Export design\n- EX-01 CSV opens in a spreadsheet.\n- EX-01 Repeated criterion.","summary":"Duplicate criteria"})).await?;
+    assert!(
+        invalid["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("duplicate criterion id")),
+        "{invalid}"
+    );
+    let detail = s.gw.get(&format!("/canon/epics/{id}")).await?;
+    assert_eq!(detail.data()["proposals"], json!([]));
+    let revised = "# Export format\n\n## Format\n- EX-01 CSV opens in a spreadsheet.";
+    let edit = call(&s, "canon_propose_spec_change", json!({"spec_id":spec["id"],"base_revision":spec["revision"],"body":revised,"summary":"Revise export"})).await?;
+    assert_eq!(edit["state"], "open", "{edit}");
+    let accepted =
+        s.gw.post(
+            &format!("/canon/proposals/{}", edit["id"].as_str().unwrap()),
+            json!({"outcome":"accepted"}),
+        )
+        .await?;
+    assert_eq!(accepted.data()["ok"], true, "{}", accepted.text);
+    let updated = call(&s, "canon_get_spec", json!({"spec_id":spec["id"]})).await?;
+    assert_eq!(updated["specs"][0]["body"], revised);
+    assert_eq!(
+        updated["specs"][0]["criteria"],
+        json!([
+            {"criterion_id":"EX-01","part_id":"Format","text":"CSV opens in a spreadsheet."}
+        ])
+    );
+    let page = call(&s, "canon_list", json!({"project":project})).await?;
+    let listed = page["epics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == id)
+        .unwrap();
+    assert!(
+        listed["specs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!({"id":spec["id"],"title":"Export format"}))
+    );
+    s.finish().await
+}

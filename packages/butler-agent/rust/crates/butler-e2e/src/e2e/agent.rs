@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
+use butler_platform::instance::request_stop;
+
 use super::executable;
 use super::gateway::Gateway;
 use super::sandbox::Sandbox;
@@ -197,7 +199,11 @@ impl Launch {
     }
 }
 
-/// A running agent. Killed (SIGKILL) on drop.
+/// The App's SIGKILL deadline after a stop request.
+const DROP_STOP_GRACE: Duration = Duration::from_secs(8);
+
+/// A running agent. Stopped on drop as the App stops it: a stop request, then
+/// SIGKILL after the App's grace, so the agent ends the trees it owns.
 pub struct Agent {
     pub launch: Launch,
     child: Option<Child>,
@@ -443,6 +449,13 @@ impl Drop for Agent {
             process::print_failure_logs(&self.launch.logs, self.starts);
         }
         if let Some(mut child) = self.child.take() {
+            // Hosts without stop signals (Windows) end owned trees with the agent's job.
+            if request_stop(child.id()).is_ok() {
+                let deadline = Instant::now() + DROP_STOP_GRACE;
+                while matches!(child.try_wait(), Ok(None)) && Instant::now() < deadline {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            }
             let _ = child.kill();
             let _ = child.wait();
         }

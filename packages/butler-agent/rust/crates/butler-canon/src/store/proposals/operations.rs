@@ -12,6 +12,9 @@ pub(super) fn execute(
     if op == "project.create" {
         return Ok(json!({"op":op,"project_id":project}));
     }
+    if op == "spec.create" {
+        return super::specs::create(tx, ctx, project, change);
+    }
     if op == "spec.edit" {
         return super::specs::edit(tx, ctx, project, change);
     }

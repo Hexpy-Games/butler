@@ -1,7 +1,8 @@
 //! Independent canon drafts; no Work lifecycle or execution state is stored here.
-mod apply;
+pub(super) mod apply;
 mod operations;
 pub mod queries;
+mod spec_markdown;
 pub mod specs;
 mod target;
 pub mod view;
@@ -115,12 +116,18 @@ pub(super) fn iso(db: &Connection, now: i64) -> Result<String> {
 fn notify(tx: &Transaction<'_>, ctx: &Context, row: &Value) -> Result<()> {
     if row["source"] == "mcp" {
         for change in row["document"]["changes"].as_array().into_iter().flatten() {
+            let id = text(change, "id")?;
+            let (kind, target) = if change["op"] == "spec.create" {
+                ("work", read_work(tx, id)?)
+            } else {
+                ("spec_node", one(tx, super::sql::NODE, [id])?)
+            };
             api::outbox(
                 tx,
                 ctx,
-                "spec_node",
-                text(change, "id")?,
-                one(tx, super::sql::NODE, [text(change, "id")?])?["revision"]
+                kind,
+                id,
+                target["revision"]
                     .as_i64()
                     .ok_or(Error::Invalid("revision"))?,
                 &json!({"proposal_id":row["id"]}),

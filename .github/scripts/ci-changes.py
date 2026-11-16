@@ -22,9 +22,10 @@ import ci_shell
 from ci_main_baseline import latest_main_run
 from urllib.parse import urlencode
 
-GROUPS = ('shell', 'rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing')
+GROUPS = ('shell', 'rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing', 'mobile')
 SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock*', 'bunfig.toml', 'tsconfig*.json',
           '*eslint*', '*stylelint*', '*prettier*')
+MOBILE_TOKENS_SOURCE = 'packages/butler-app/client/ui/src/libs/design-system/tokens.css'  # input of packages/butler-mobile/scripts/tokens.sh
 WINDOWS_BROWSER_INPUTS = ('tests/smoke/composer-permission-agent-smoke.ts',
                           'tests/support/smoke-browser*', 'tests/support/bun-child-stdio.ts')
 PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/electron/*',
@@ -120,7 +121,7 @@ CI_CONSUMERS = (
     (NATIVE_CI, ('.github/workflows/macos-*.yml',)),
     (('signing',), ('.github/workflows/macos-selftest.yml',)),
     (('ui',), ('.github/workflows/bun-*.yml',)),
-    (NATIVE_CI + ('site', 'ds', 'workflows'), ('.github/actions/bun-setup/*',)),
+    (NATIVE_CI + ('site', 'ds', 'mobile', 'workflows'), ('.github/actions/bun-setup/*',)),
     (('site', 'ds', 'workflows'), ('.github/workflows/*site*.yml',)),
     (('rust', 'ui', 'package'), ('.github/workflows/*windows*.yml',
                                '.github/actions/*windows*/**', '.github/scripts/*windows*')),
@@ -158,8 +159,12 @@ def github_categories(path):
 
 
 def categories(path, event=None):
+    if path.startswith('packages/butler-shell/tools/ds-tokens/'):
+        return {'shell', 'mobile'}
     if path.startswith('packages/butler-shell/'):
         return {'shell'}
+    if path.startswith('packages/butler-mobile/'):
+        return {'mobile'}
     if path.startswith('.github/'):
         return github_categories(path)
     notice = re.match(r'^(licen[cs]e|copying|notice|copyright)([._-]|$)', Path(path).name, re.I)
@@ -202,6 +207,8 @@ def categories(path, event=None):
         result = set(GROUPS) - {'workflows', 'shell'}
     if path.startswith('packages/butler-agent/rust/tools/source-check/'):
         result.add('shell')
+    if path == MOBILE_TOKENS_SOURCE:
+        result.add('mobile')
     return result
 
 

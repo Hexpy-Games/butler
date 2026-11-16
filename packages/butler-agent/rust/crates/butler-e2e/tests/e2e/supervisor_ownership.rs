@@ -172,3 +172,43 @@ async fn recover_queue(s: &mut Scenario, id: &str) -> Result<(), HarnessError> {
     }
     Ok(())
 }
+
+/// The wake watcher's notifyutil ends with the runtime that started it, also
+/// when that runtime drops the watcher without closing it (in-process gateways).
+#[test]
+fn wake_watcher_ends_with_its_runtime() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    if !butler_platform::system_wake::CHILD_PROCESS {
+        return Ok(());
+    }
+    let runtime = tokio::runtime::Runtime::new()?;
+    let watcher = runtime.block_on(async {
+        let _events = butler_platform::system_wake::wake_events();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let shell = child_of(std::process::id(), &["-f", "notifyutil -w"]);
+            if let Some(watcher) = shell.and_then(|shell| child_of(shell, &["-x", "notifyutil"])) {
+                break watcher;
+            }
+            assert!(Instant::now() < deadline, "wake watcher did not start");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    });
+    drop(runtime);
+    tokio::runtime::Runtime::new()?.block_on(until_gone(watcher));
+    Ok(())
+}
+
+fn child_of(parent: u32, pattern: &[&str]) -> Option<u32> {
+    let out = std::process::Command::new("pgrep")
+        .args(["-P", &parent.to_string()])
+        .args(pattern)
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .next()?
+        .trim()
+        .parse()
+        .ok()
+}

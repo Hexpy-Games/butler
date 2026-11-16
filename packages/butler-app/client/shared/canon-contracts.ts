@@ -21,7 +21,7 @@ export interface CanonAgent { person: string; via: string }
 export interface CanonActor { person?: string | null; via?: string | null; origin?: string; client?: string }
 export interface CanonActivity { seq: number; entity_id: string; kind: string; from?: CanonStatus; to?: CanonStatus; summary: string; body: string | null; actor: CanonActor; at: number }
 export interface CanonActivityPage { activity: CanonActivity[]; activity_before: number | null }
-export interface CanonMcpProposal { id: string; spec_id: string; summary: string; current_body: string | null; proposed_body: string; actor: CanonActor; base_revision: number; created_at: string }
+export interface CanonMcpProposal { id: string; spec_id: string | null; summary: string; current_body: string | null; proposed_body: string; actor: CanonActor; base_revision: number | null; created_at: string }
 export interface CriteriaCount { confirmed: number; total: number }
 export interface CanonWork {
   criteria?: CriteriaCount | null;

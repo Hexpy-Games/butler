@@ -29,6 +29,11 @@ pub struct Criterion {
     pub text: String,
 }
 #[derive(Debug, Serialize, Deserialize)]
+pub struct SpecRef {
+    pub id: String,
+    pub title: String,
+}
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Spec {
     pub id: String,
     pub title: String,
@@ -81,6 +86,7 @@ pub struct SpecBody {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EpicSummary {
+    pub specs: Vec<SpecRef>,
     pub id: String,
     pub title: String,
     pub status: String,

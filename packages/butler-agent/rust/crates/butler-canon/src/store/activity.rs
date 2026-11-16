@@ -104,7 +104,10 @@ pub(super) fn proposal(tx: &Transaction<'_>, ctx: &Context, row: &Value, kind: &
     let mut ctx = ctx.clone();
     ctx.actor["proposal_source"] = row["source"].clone();
     if let Some(changes) = row["document"]["changes"].as_array() {
-        for change in changes.iter().filter(|c| c["op"] == "spec.edit") {
+        for change in changes
+            .iter()
+            .filter(|c| matches!(c["op"].as_str(), Some("spec.edit" | "spec.create")))
+        {
             append(
                 tx,
                 &ctx,

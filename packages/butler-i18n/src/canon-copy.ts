@@ -27,11 +27,11 @@ export interface CanonCopy {
   proposalCard: {
     draft: string; changes: string; cancel: string; add: string; apply: string; cancelled: string; superseded: string; stale: string; open: string; name: string;
     currentPlan: string; destinationPlan: string; backlog: string; order: string; project: string; newProject: string; closed: string; opened: string;
-    ops: { epicEdit: string; epicMove: string; planCreate: string; planEdit: string; planReorder: string; specEdit: string };
+    ops: { epicEdit: string; epicMove: string; planCreate: string; planEdit: string; planReorder: string; specEdit: string; specCreate: string };
     receipt: {
       epics: (parts: string) => string; epicCreate: (count: number) => string; epicEdit: (count: number) => string;
       epicMove: (count: number) => string; epicDelete: (count: number) => string; planCreate: string; planEdit: string;
-      planReorder: string; specEdit: string; projectCreate: string;
+      planReorder: string; specEdit: string; specCreate: string; projectCreate: string;
     };
     target: { newProject: (name: string) => string; plan: (plan: string) => string; backlog: string };
   };

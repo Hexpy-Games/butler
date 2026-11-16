@@ -47,7 +47,8 @@ class ShellSelection(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual('shell' in changes.categories(path), expected)
                 if path.startswith('packages/butler-shell/'):
-                    self.assertEqual(changes.categories(path), {'shell'})
+                    mobile = path.startswith('packages/butler-shell/tools/ds-tokens/')
+                    self.assertEqual(changes.categories(path), {'shell', 'mobile'} if mobile else {'shell'})
 
     # test-category: pure-logic
     def test_full_fallback_uses_changed_paths_and_dispatch_for_shell(self):
