@@ -74,10 +74,16 @@ async function screenshot(page: Page, state: string) {
   const directory = process.env.BUTLER_SMOKE_SHOTS;
   if (!directory) return;
   mkdirSync(directory, { recursive: true });
-  for (const width of [390, 1280]) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.screenshot({ path: join(directory, `butler-account-${state}-${width}.png`), fullPage: true });
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    for (const width of [390, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate(() => Promise.all(document.getAnimations()
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => undefined))));
+      await page.screenshot({ path: join(directory, `butler-account-${state}-${colorScheme}-${width}.png`), fullPage: true });
+    }
   }
+  await page.emulateMedia({ colorScheme: "light" });
   await page.setViewportSize({ width: 1440, height: 900 });
 }
 
