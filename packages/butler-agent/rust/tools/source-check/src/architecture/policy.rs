@@ -96,7 +96,8 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "data_paths" | "cpu" | "memory" | "desktop" | "launcher" | "network" | "process_table"
         | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
         | "account_dirs" | "process_priority" | "download_mark" | "plugin_files" | "plugin_git"
-        | "shared_locks" | "powershell_text" | "host_file_behavior" => &[],
+        | "shared_locks" | "powershell_text" | "host_file_behavior" | "startup_task"
+        | "store_update" => &[],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.
@@ -115,7 +116,12 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "instance" => &["process_table", "process_names"],
         "process_names" => &["launcher", "secure_fs"],
         // Package activation waits for its parent and restores verified ZIP role links.
-        "app_update" => &["process_control", "process_names", "secure_fs"],
+        "app_update" => &[
+            "process_control",
+            "process_names",
+            "secure_fs",
+            "store_update",
+        ],
         // User-entered paths resolve the user's home.
         "tool_paths" => &["user_dirs"],
         // Other browsers' profile folders are found in the account folders the OS
