@@ -7,6 +7,8 @@ pub(crate) struct FileViewerStrings {
     pub(crate) title: &'static str,
     /// fileViewer.files
     pub(crate) files: &'static str,
+    /// fileViewer.openInLibrary
+    pub(crate) open_in_library: &'static str,
     /// fileViewer.close
     pub(crate) close: &'static str,
     /// fileViewer.closeFile
@@ -18,6 +20,7 @@ pub(crate) struct FileViewerStrings {
 const KO: FileViewerStrings = FileViewerStrings {
     title: "파일 보기",
     files: "파일",
+    open_in_library: "서랍에서 열기",
     close: "닫기",
     close_file: "파일 닫기",
     back_to_chat: "대화로 돌아가기",
@@ -26,6 +29,7 @@ const KO: FileViewerStrings = FileViewerStrings {
 const EN: FileViewerStrings = FileViewerStrings {
     title: "View files",
     files: "Files",
+    open_in_library: "Open in Library",
     close: "Close",
     close_file: "Close file",
     back_to_chat: "Back to chat",
