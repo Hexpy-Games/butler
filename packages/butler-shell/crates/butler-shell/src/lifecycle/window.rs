@@ -1,6 +1,8 @@
 //! The App window: opening it (at startup, from the tray, on a dock reopen) and what closing
 //! the last one does (main.mjs:2067-2074, 2767-2770). Electron hides the window; gpui drops it
 //! and the next [`open_window`] builds a new shell that re-attaches and reloads from the Agent.
+//! Windows stays in the tray too (Electron quits there, main.mjs:2076-2080): schedules use
+//! the App's browser tabs while no window is open.
 use std::ffi::OsString;
 
 use gpui::{
@@ -148,13 +150,41 @@ pub(crate) fn reopen(cx: &mut App) {
     }
 }
 
-/// The last window closed: quit on Windows, or when the tray is off or failed to start;
-/// otherwise the App keeps running with the tray and the Agent.
+/// A later launch (`second-instance`, main.mjs:455-465) and the tray's New Chat and recent
+/// conversations: `args` navigate in the open window, else open a new one, and the App comes
+/// forward. Nothing while quitting.
+pub(crate) fn launched(cx: &mut App, args: &[String]) {
+    if super::runtime(cx).is_some_and(|runtime| runtime.read(cx).quitting) {
+        return;
+    }
+    let shell = cx
+        .windows()
+        .into_iter()
+        .find_map(|handle| handle.downcast::<Shell>());
+    let Some(shell) = shell else {
+        let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+        if let Err(error) = open_window(cx, &args) {
+            eprintln!("butler-shell: {error:#}");
+        }
+        return;
+    };
+    let request = crate::ui::shell::navigation::Navigation::from_args(args);
+    let _ = shell.update(cx, |view, window, cx| {
+        if let Some(request) = request {
+            view.navigate(request, window, cx);
+        }
+        window.activate();
+    });
+    cx.activate(true);
+}
+
+/// The last window closed: quit when the tray is off or failed to start; otherwise the App
+/// keeps running with the tray and the Agent.
 pub(super) fn closed(cx: &mut App) {
     if !cx.windows().is_empty() {
         return;
     }
-    if matches!(Platform::host(), Platform::Windows) || !super::tray::active(cx) {
+    if !super::tray::active(cx) {
         super::quit(cx);
     }
 }
