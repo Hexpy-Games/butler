@@ -7,8 +7,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 import { windowsPackageVersion } from "../../client/electron/scripts/windows-package-version.mjs";
+import { measureIdleProcesses, readPostUpdateRegistration, rerunUpdatedHook } from "./gpui-update-checks.ts";
 import { assertShortcuts, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
-
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
   throw new Error("Registry/shortcut/installer smoke is restricted to disposable GitHub-hosted runners");
 }
@@ -289,7 +289,6 @@ function installedProcesses(): InstalledProcess[] {
         }
       })`, { ...env, BUTLER_SMOKE_INSTALL: installed }));
 }
-
 async function proveGpui() {
   assert.ok(existsSync(join(newFolder, "butler_cef_host.exe")), "Updated CEF host missing");
   const appPath = join(newFolder, "Butler.exe").toLowerCase();
@@ -309,8 +308,18 @@ async function proveGpui() {
   }, "updated gpui App and authenticated supervised Agent", 120_000);
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   assert.ok(existsSync(join(data, "butler.config.json")), "User configuration missing");
+  console.log(JSON.stringify(await measureIdleProcesses(newFolder, env, powershell)));
+  const { hook, updatedHook } = rerunUpdatedHook(newFolder, toPackage, env);
+  console.log(JSON.stringify({ updatedHook }));
+  const postUpdateRegistration = readPostUpdateRegistration(shortcuts, env, powershell);
+  console.log(JSON.stringify({ postUpdateRegistration }));
+  assert.equal(hook.status, 0, `Updated hook exitCode must be 0: ${hook.error?.message ?? hook.status}`);
+  for (const shortcut of postUpdateRegistration.shortcuts) {
+    assert.equal(shortcut.TargetPath?.toLowerCase(), stub.toLowerCase(), `Post-update shortcut TargetPath: ${shortcut.path}`);
+    assert.equal(shortcut.WorkingDirectory, installed, `Post-update shortcut WorkingDirectory: ${shortcut.path}`);
+  }
+  assert.equal(postUpdateRegistration.protocolCommand, `"${stub}" "%1"`, "Post-update butler protocol command");
 }
-
 async function stopInstalled() {
   markProcessTrace("stopInstalled:begin");
   try {
@@ -324,7 +333,6 @@ async function stopInstalled() {
     await waitFor(() => installedProcesses().length === 0, "installed processes stopped");
   } finally { markProcessTrace("stopInstalled:end"); }
 }
-
 async function startUninstallSampler() {
   const handle = process.env.BUTLER_SMOKE_HANDLE_EXE;
   if (!handle) return null;

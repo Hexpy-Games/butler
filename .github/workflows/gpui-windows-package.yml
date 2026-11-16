@@ -7,6 +7,7 @@ on:
       - packages/butler-app/scripts/windows/package-gpui-release.ts
       - packages/butler-app/scripts/windows/release-outputs.ts
       - packages/butler-app/scripts/windows/gpui-update-smoke.ts
+      - packages/butler-app/scripts/windows/gpui-update-checks.ts
       - packages/butler-agent/rust/crates/butler-platform/src/squirrel.rs
       - packages/butler-agent/rust/crates/butler-platform/src/squirrel/**
       - packages/butler-agent/rust/crates/butler-platform/src/app_shell.rs
