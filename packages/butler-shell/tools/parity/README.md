@@ -218,8 +218,8 @@ Scrollers are recorded too: every web element with computed `overflow-y` auto or
 `data-test-class` when it has no data-slot, `scroll:<n>` otherwise; its parent is `slot:<name>:frame#<n>`; also
 `client_h` and `scroll_h`) and, natively, the elements that publish `butler_ds::ui::control::slot_anchor` (the list `SCROLLERS` in
 `shots.rs`: `sidebar-scroll`, `conversation-aside-scroll`, `management-page-aside-scroll`, `scroll-area`; a single instance may be named plain, `slot:<name>`), both assigned to stories by canvas
-containment. The diff adds one row per scroller pair, `{web:{h, frame_h, max_offset}, gpui:{h, frame_h}, web_flag, gpui_flag}`,
+containment. The diff adds one row per scroller pair, `{web:{h, frame_h, max_offset}, gpui:{h, frame_h}, dh, frame_dh, web_flag, gpui_flag}` (`dh`, `frame_dh`: gpui minus web),
 where the flag is `scroller>frame` when the scroller is taller than its frame (it grows with its content and the frame only
 clips it: no scrolling), `scroller<frame` when it is shorter, and `=` within 0.5 px, a table (C) with the mismatched flags first, and scroller counts in the totals
-(`matched`, `web_only`, `gpui_only`, `flag_mismatch`). Run only the pages with scrollers by adding `--pages sidebar-shell,conversation-shell,scroll-area`
+(`matched`, `web_only`, `gpui_only`, `flag_mismatch`, `dh_over_tolerance`). Run only the pages with scrollers by adding `--pages sidebar-shell,conversation-shell,scroll-area`
 to `butler-ds-view` and `--only sidebar-shell,conversation-shell,scroll-area` to `ds-layout.ts`.
