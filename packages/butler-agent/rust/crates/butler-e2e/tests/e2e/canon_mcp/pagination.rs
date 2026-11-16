@@ -142,6 +142,7 @@ async fn cn_11_pages_are_complete_and_activity_cursor_has_no_gaps() -> Result<()
                         "order",
                         "plan",
                         "revision",
+                        "specs",
                         "status",
                         "tags",
                         "title",
