@@ -361,6 +361,38 @@ impl McpServer {
                 Some(json!({"base_revision":args.base_revision,"body":args.body,"summary":args.summary}))).await?)
         }.await)
     }
+    #[tool(
+        name = "canon_propose_spec",
+        description = "Propose a new spec for an epic, for approval in Butler. The body is Markdown and its first line is '# ' followed by the spec title."
+    )]
+    async fn canon_propose_spec(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(args): Parameters<args::ProposeNew>,
+    ) -> CallToolResult {
+        #[derive(serde::Serialize, serde::Deserialize)]
+        struct Proposal {
+            id: String,
+            epic_id: String,
+            summary: String,
+            state: String,
+        }
+        result(
+            async {
+                let client = Client::local(self, &context).await?;
+                decode::<Proposal>(
+                    client
+                        .request(
+                            reqwest::Method::POST,
+                            &format!("/canon/epics/{}/specs", component(&args.epic_id)),
+                            Some(json!({"body":args.body,"summary":args.summary})),
+                        )
+                        .await?,
+                )
+            }
+            .await,
+        )
+    }
 }
 
 fn list_query(args: &args::List) -> String {

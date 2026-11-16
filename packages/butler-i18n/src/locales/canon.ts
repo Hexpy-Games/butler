@@ -6,10 +6,10 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     proposalCard: {
       draft: "과제 초안 · 버틀러", changes: "변경 제안 · 버틀러", cancel: "취소", add: "등록", apply: "반영", cancelled: "취소함", superseded: "새 초안으로 바뀜", stale: "이전 내용 기준", open: "열기", name: "이름을 입력하세요",
       currentPlan: "현재 계획", destinationPlan: "대상 계획", backlog: "백로그", order: "순서", project: "프로젝트", newProject: "새 프로젝트", closed: "닫힘", opened: "열림",
-      ops: { epicEdit: "과제 변경", epicMove: "과제 이동", planCreate: "계획 등록", planEdit: "계획 변경", planReorder: "순서 변경", specEdit: "명세 변경" },
+      ops: { epicEdit: "과제 변경", epicMove: "과제 이동", planCreate: "계획 등록", planEdit: "계획 변경", planReorder: "순서 변경", specEdit: "명세 변경", specCreate: "명세 등록" },
       receipt: {
         epics: parts => `과제 ${parts}`, epicCreate: count => `${count}개 등록`, epicEdit: count => `${count}개 변경`, epicMove: count => `${count}개 이동`, epicDelete: count => `${count}개 삭제`,
-        planCreate: "계획 등록", planEdit: "계획 변경", planReorder: "순서 변경", specEdit: "명세 변경", projectCreate: "프로젝트 생성",
+        planCreate: "계획 등록", planEdit: "계획 변경", planReorder: "순서 변경", specEdit: "명세 변경", specCreate: "명세 등록", projectCreate: "프로젝트 생성",
       },
       target: { newProject: name => `새 프로젝트 ‘${name}’ 만들고 과제 등록`, plan: plan => `‘${plan}’에 과제 등록`, backlog: "백로그에 과제 등록" },
     },
@@ -106,10 +106,10 @@ export const CANON_COPY: Record<"ko-KR" | "en-US", CanonCopy> = {
     proposalCard: {
       draft: "Epic draft · Butler", changes: "Changes · Butler", cancel: "Cancel", add: "Add", apply: "Apply", cancelled: "Cancelled", superseded: "Replaced", stale: "Out of date", open: "Open", name: "Enter a name",
       currentPlan: "Current plan", destinationPlan: "Destination plan", backlog: "Backlog", order: "Order", project: "Project", newProject: "New project", closed: "Closed", opened: "Open",
-      ops: { epicEdit: "Edit Epic", epicMove: "Move Epic", planCreate: "Add plan", planEdit: "Edit plan", planReorder: "Reorder", specEdit: "Edit spec" },
+      ops: { epicEdit: "Edit Epic", epicMove: "Move Epic", planCreate: "Add plan", planEdit: "Edit plan", planReorder: "Reorder", specEdit: "Edit spec", specCreate: "Add spec" },
       receipt: {
         epics: parts => `Epics: ${parts}`, epicCreate: count => `${count} added`, epicEdit: count => `${count} changed`, epicMove: count => `${count} moved`, epicDelete: count => `${count} deleted`,
-        planCreate: "Plan added", planEdit: "Plan changed", planReorder: "Reordered", specEdit: "Spec changed", projectCreate: "Project created",
+        planCreate: "Plan added", planEdit: "Plan changed", planReorder: "Reordered", specEdit: "Spec changed", specCreate: "Spec added", projectCreate: "Project created",
       },
       target: { newProject: name => `Create project ‘${name}’ and add Epic`, plan: plan => `Add Epic to ‘${plan}’`, backlog: "Add Epic to Backlog" },
     },

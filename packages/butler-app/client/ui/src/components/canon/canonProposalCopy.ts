@@ -29,7 +29,7 @@ export const canonProposalCopy = () => {
       });
       const others = ([
         ["plan.create", receipts.planCreate], ["plan.edit", receipts.planEdit],
-        ["plan.reorder", receipts.planReorder], ["spec.edit", receipts.specEdit], ["project.create", receipts.projectCreate],
+        ["plan.reorder", receipts.planReorder], ["spec.edit", receipts.specEdit], ["spec.create", receipts.specCreate], ["project.create", receipts.projectCreate],
       ] as const).flatMap(([op, label]) => count(op) ? [label] : []);
       return [...(epics.length ? [receipts.epics(epics.join(", "))] : []), ...others].join(" · ");
     },

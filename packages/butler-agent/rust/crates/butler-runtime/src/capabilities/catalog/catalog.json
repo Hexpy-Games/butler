@@ -8064,7 +8064,7 @@
                 "properties": {
                   "op": {
                     "type": "string",
-                    "description": "epic.delete requires separate approval to delete a local Epic by id and expected_revision; linked conversations and Work history stay.",
+                    "description": "epic.delete requires separate approval to delete a local Epic by id and expected_revision; linked conversations and Work history stay. spec.create adds a spec to the Epic given by id; its body is Markdown whose first line is '# ' followed by the spec title.",
                     "enum": [
                       "epic.create",
                       "epic.edit",
@@ -8074,6 +8074,7 @@
                       "plan.edit",
                       "plan.reorder",
                       "spec.edit",
+                      "spec.create",
                       "project.create"
                     ]
                   },
@@ -14454,7 +14455,7 @@
               "properties": {
                 "op": {
                   "type": "string",
-                  "description": "epic.delete requires separate approval to delete a local Epic by id and expected_revision; linked conversations and Work history stay.",
+                  "description": "epic.delete requires separate approval to delete a local Epic by id and expected_revision; linked conversations and Work history stay. spec.create adds a spec to the Epic given by id; its body is Markdown whose first line is '# ' followed by the spec title.",
                   "enum": [
                     "epic.create",
                     "epic.edit",
@@ -14464,6 +14465,7 @@
                     "plan.edit",
                     "plan.reorder",
                     "spec.edit",
+                    "spec.create",
                     "project.create"
                   ]
                 },

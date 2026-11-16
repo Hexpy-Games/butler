@@ -118,3 +118,31 @@ async fn spec_read_and_atomic_edit_preserve_full_body_and_criteria() -> Result<(
     server.abort();
     s.finish().await
 }
+
+#[tokio::test]
+async fn spec_create_card_publishes_body_and_criteria() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, project, chat) = setup("CP-spec-create", Access::AskAlways).await?;
+    let epic = data(
+        s.gw.post(
+            &format!("/projects/{project}/canon/epics"),
+            json!({"title":"저장"}),
+        )
+        .await?,
+        201,
+    );
+    let epic = epic["id"].as_str().unwrap();
+    let id = draft(&s, &script, &chat, json!({"project_id":project,"summary":"명세 등록","changes":[{"op":"spec.create","id":epic,"body":"# 저장 흐름\n\n…","criteria":[{"id":"SV-01","part_id":"save","text":"저장한 내용을 다시 열 수 있다."}]}]})).await?;
+    assert_eq!(accept(&s, &id).await?["ok"], true);
+    let detail = data(s.gw.get(&format!("/canon/epics/{epic}")).await?, 200);
+    let specs = detail["specs"].as_array().unwrap();
+    assert_eq!(specs.len(), 1);
+    assert_eq!(specs[0]["concern_id"], "저장 흐름");
+    let criteria = specs[0]["criteria"].as_array().unwrap();
+    assert_eq!(criteria.len(), 1);
+    assert_eq!(criteria[0]["criterion_id"], "SV-01");
+    assert_eq!(criteria[0]["part_id"], "save");
+    assert_eq!(criteria[0]["text"], "저장한 내용을 다시 열 수 있다.");
+    server.abort();
+    s.finish().await
+}
