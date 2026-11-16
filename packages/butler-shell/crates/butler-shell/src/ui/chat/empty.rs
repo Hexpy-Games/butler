@@ -1,5 +1,7 @@
 //! The new chat: `EmptyState`, `EpicEmptyState`, `emptyStateSuggestions`, `mainScreenTheme` and
 //! `useConversationWallpaper` (poster stills behind the conversation).
+mod blur;
+mod power;
 mod source;
 
 use std::sync::{Arc, OnceLock};
@@ -8,7 +10,7 @@ use butler_ds::ui::blocks::conversation_shell::ConversationScroll;
 use butler_ds::ui::blocks::prompt_suggestion_list::{
     ContentRect, PromptSuggestionItem, PromptSuggestionList,
 };
-use butler_ds::ui::blocks::wallpaper::{Wallpaper, WallpaperSource, bundled_image};
+use butler_ds::ui::blocks::wallpaper::{Wallpaper, WallpaperHost, WallpaperSource, bundled_image};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::layout::{Box, Cross, Justify, MaxWidth, Space, Stack, WithItem as _};
 use butler_ds::ui::typo::{TextAlign, Tone, Typo, Wrap};
@@ -132,7 +134,22 @@ pub(crate) fn empty_state(ctx: EmptyCtx<'_>, window: &mut Window, cx: &mut App) 
     // `Conversation.tsx`: the wallpaper is the conversation's `background` layer and the empty
     // state sits in a locked, unmasked `ConversationScroll`, top-aligned at the conversation's
     // full width (not WallpaperStage's centred layer with its two `lg` insets).
+    let drifts = butler_ds::ui::blocks::wallpaper::drifts(&wallpaper);
+    let power = resolved
+        .as_ref()
+        .filter(|r| drifts || r.wallpaper_pause_on_battery)
+        .map(|_| power::state(window, cx))
+        .unwrap_or_default();
+    let paused = resolved
+        .as_ref()
+        .is_some_and(|r| r.wallpaper_paused || (r.wallpaper_pause_on_battery && power.on_battery));
     let wallpaper = Wallpaper::new(wallpaper)
+        .motion(paused)
+        .host(WallpaperHost {
+            on_battery: power.on_battery,
+            constrained: power.constrained,
+            blur: if drifts { blur::level(window, cx) } else { 0 },
+        })
         .content_rect(kept)
         .content_rect2(card_rect(cx))
         .day_phase(day_phase());

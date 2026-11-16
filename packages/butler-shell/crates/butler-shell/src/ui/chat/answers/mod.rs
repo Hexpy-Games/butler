@@ -6,6 +6,9 @@ mod frame;
 mod leaf;
 mod markdown;
 
+use std::sync::Arc;
+
+use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Space, Stack};
 use gpui::{
     AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
@@ -59,27 +62,36 @@ pub(crate) fn spec_markdown(
 }
 
 /// Electron's `messageMarkdown`: visible text followed by each answer-block spec.
-pub(crate) fn message_markdown(msg: &MessageRecord, cx: &App) -> String {
-    // `absoluteGatewayUrl`: a gateway-relative URL resolves against the attached gateway's endpoint.
-    let base = crate::ui::source::agent::Jobs::client(cx)
-        .and_then(|client| url::Url::parse(&client.instance_identity().2).ok());
-    let images = |_: &str, url: Option<&str>| {
-        url.map(|url| {
-            base.as_ref()
-                .and_then(|base| base.join(url).ok())
-                .map_or_else(|| url.to_owned(), String::from)
-        })
-    };
-    std::iter::once(super::row::visible_system_message_text(msg, cx))
-        .chain(
-            msg.answer_blocks
-                .iter()
-                .flatten()
-                .map(|set| spec_markdown(&set.spec, &images)),
-        )
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n\n")
+pub(crate) fn message_markdown(
+    msg: &Arc<MessageRecord>,
+    cx: &App,
+) -> impl Fn() -> String + 'static {
+    let msg = Arc::clone(msg);
+    let lang = Ds::get(cx).lang();
+    let client = crate::ui::source::agent::Jobs::client(cx);
+    move || {
+        // `absoluteGatewayUrl`: a gateway-relative URL resolves against the attached gateway's endpoint.
+        let base = client
+            .as_ref()
+            .and_then(|client| url::Url::parse(&client.instance_identity().2).ok());
+        let images = |_: &str, url: Option<&str>| {
+            url.map(|url| {
+                base.as_ref()
+                    .and_then(|base| base.join(url).ok())
+                    .map_or_else(|| url.to_owned(), String::from)
+            })
+        };
+        std::iter::once(super::row::visible_text(&msg, lang))
+            .chain(
+                msg.answer_blocks
+                    .iter()
+                    .flatten()
+                    .map(|set| spec_markdown(&set.spec, &images)),
+            )
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
 }
 
 /// The blocks (each with its set's call id) one under another; nothing when there are none.

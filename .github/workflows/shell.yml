@@ -107,23 +107,24 @@ jobs:
     needs: changes
     # Build unsigned experimental artifacts in parallel with platform checks.
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.shell == 'true')
-    # Cold check/test each took 4-7 min; optimized gpui compilation needs its
-    # own budget. Allow 30 min for cold release + notices/upload/cache saving;
-    # this is an initial allowance, not a measured release completion time.
-    timeout-minutes: 30
+    # Measured cold Windows release build: 1799 s, plus setup and packaging.
+    timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
+            timeout: 45
             target: x86_64-pc-windows-msvc
             platform: win-x64
             binary: butler-shell.exe
           - os: macos-15
+            timeout: 30
             target: aarch64-apple-darwin
             platform: macos-arm64
             binary: butler-shell
           - os: ubuntu-24.04
+            timeout: 30
             target: x86_64-unknown-linux-gnu
             platform: linux-x64
             binary: butler-shell

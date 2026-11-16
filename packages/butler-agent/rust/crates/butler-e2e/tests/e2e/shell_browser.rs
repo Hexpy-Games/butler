@@ -170,6 +170,92 @@ async fn conversation_link_opens_in_its_browser() -> Result<(), HarnessError> {
 }
 
 #[tokio::test]
+async fn browser_moves_tabs_between_groups() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
+    butler_e2e::skip_unless!(
+        nonempty("BUTLER_CEF_DIR").is_none(),
+        "runs on the placeholder engine"
+    );
+    let _serial = SERIAL.lock().await;
+    let mut sandbox = Sandbox::new("browser_moves_tabs_between_groups")?;
+    let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
+    let mut shell = Shell::start(&sandbox, &[]).await?;
+    shell
+        .run(&["agent running", "wait-anchor composer"])
+        .await?;
+    let gw = super::shell_app::gateway(&shell.launch);
+    let created = gw
+        .post(
+            "/sessions",
+            serde_json::json!({"kind":"chat", "title":"Browser transfers"}),
+        )
+        .await?;
+    assert_eq!(created.status, 201, "{}", created.text);
+    let id = created.data()["session"]["id"]
+        .as_str()
+        .expect("session id")
+        .to_owned();
+    shell
+        .run(&[
+            &format!("wait-anchor sidebar-row-{id}"),
+            "browser",
+            "wait-anchor browser-area",
+            "type example.com",
+            "key enter",
+        ])
+        .await?;
+    let first = shell.browser_state().await?["active"].clone();
+    shell
+        .run(&[
+            "click browser-move-trigger",
+            "key down",
+            "key enter",
+            "wait-anchor composer",
+            "wait-anchor browser-area",
+        ])
+        .await?;
+    let moved = shell.browser_state().await?;
+    assert_eq!(moved["view"], "session");
+    assert_eq!(moved["active"], first);
+    assert_eq!(moved["tabs"][0]["owner"], format!("conversation:{id}"));
+    shell
+        .run(&[
+            "browser",
+            "click browser-address",
+            "key cmd-t",
+            "type example.org",
+            "key enter",
+        ])
+        .await?;
+    let second = shell.browser_state().await?["active"].clone();
+    shell
+        .run(&[
+            &format!("open {id}"),
+            "wait-anchor browser-area",
+            "click browser-bring-trigger",
+            "key down",
+            "key enter",
+        ])
+        .await?;
+    let brought = shell.browser_state().await?;
+    let tabs: Vec<_> = brought["tabs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|t| t["owner"] == format!("conversation:{id}"))
+        .collect();
+    assert_eq!(tabs.len(), 2);
+    assert_eq!(tabs[0]["id"], second);
+    assert_eq!(tabs[1]["id"], first);
+    assert_eq!(brought["active"], second);
+    shell.run(&["app-quit"]).await?;
+    shell.finish().await?;
+    sandbox.mark_success();
+    Ok(())
+}
+
+#[tokio::test]
 async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
@@ -188,6 +274,10 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
         }))
         .route("/second", axum::routing::get(|| async {
             axum::response::Html("<title>Second local page</title><body style='margin:0;background:#8c5014'>Second local page</body>")
+        }))
+        // The title reports the key codes of the input's keydown events and its value.
+        .route("/keys", axum::routing::get(|| async {
+            axum::response::Html("<title>keys</title><body style='margin:0'><input id=k style='width:100%;height:100vh;border:0'><script>const c=[];const t=()=>{document.title='keys|'+c.join(',')+'|'+k.value};k.onkeydown=e=>{c.push(e.keyCode);t()};k.oninput=t;t()</script></body>")
         }));
     let _server = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
         axum::serve(listener, pages).await.unwrap();
@@ -212,7 +302,7 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
             shell.run(&["click browser-back"]).await?;
         } else {
             shell
-                .run(&["key cmd-l", &format!("type {url}"), "key enter"])
+                .run(&["key secondary-l", &format!("type {url}"), "key enter"])
                 .await?;
         }
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
@@ -222,6 +312,9 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
                 && state["tabs"][0]["url"] == *url
                 && state["tabs"][0]["status"] == "idle"
             {
+                if url == &first && !back {
+                    assert_eq!(state["tabs"][0]["can_back"], false);
+                }
                 break;
             }
             assert!(
@@ -231,6 +324,33 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
             tokio::time::sleep(std::time::Duration::from_millis(25)).await;
         }
     }
+    // Keystrokes without native key data take their key codes from the key name: letters,
+    // named keys, US punctuation (VK_OEM_*) and function keys; Backspace edits the value.
+    let keys = format!("http://{address}/keys");
+    shell
+        .run(&[
+            "click browser-address",
+            "key secondary-l",
+            &format!("type {keys}"),
+            "key enter",
+        ])
+        .await?;
+    // The script sets this title once its handlers are attached.
+    wait_for_page(&mut shell, "keys||", &keys).await?;
+    shell
+        .run(&[
+            "click browser-page",
+            "type a",
+            "key space",
+            "type -.,",
+            "key pageup",
+            "key f2",
+            "key backspace",
+        ])
+        .await?;
+    wait_for_page(&mut shell, "keys|65,32,189,190,188,33,113,8|a -.", &keys).await?;
+    shell.run(&["click browser-back"]).await?;
+    wait_for_page(&mut shell, "First local page", &first).await?;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
         let frame = shell.browser_frame().await?;
@@ -256,4 +376,21 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())
+}
+
+/// Waits until the tab shows `url`, titled `title`, and has finished loading.
+async fn wait_for_page(shell: &mut Shell, title: &str, url: &str) -> Result<(), HarnessError> {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let state = shell.browser_state().await?;
+        let tab = &state["tabs"][0];
+        if tab["title"] == title && tab["url"] == url && tab["status"] == "idle" {
+            return Ok(());
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "title is not {title}: {state}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
 }

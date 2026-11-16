@@ -1,8 +1,18 @@
 use std::{fmt, path::PathBuf};
 
+#[derive(Clone)]
+pub enum OsrProfile {
+    SignedIn,
+    SignedOut(String),
+}
+
 pub struct OsrConfig {
-    /// Absolute path to Chromium Embedded Framework.framework.
+    /// macOS: absolute path to Chromium Embedded Framework.framework.
+    /// Windows: the CEF runtime directory (resources, `locales`). libcef.dll itself is linked at
+    /// load time, so it must also be on the process's DLL search path (beside the executable).
     pub framework_dir: PathBuf,
+    /// The CEF subprocess executable. macOS: the staged `butler-cef-host Helper`;
+    /// Windows: the staged `butler_cef_host.exe` (CEF's bootstrapc.exe, see stage.py).
     pub helper_path: PathBuf,
     pub profile_dir: PathBuf,
     pub locale: String,
@@ -16,7 +26,37 @@ pub enum OsrEvent {
     Title(String),
     Favicon(String),
     Loading(bool),
-    History { can_back: bool, can_forward: bool },
+    History {
+        can_back: bool,
+        can_forward: bool,
+    },
+    PopupNewTab {
+        url: String,
+    },
+    PopupBlocked {
+        url: String,
+        reason: PopupBlock,
+    },
+    PopupOpened {
+        child: u64,
+        url: String,
+    },
+    CloseRequested,
+    Dialog(OsrDialog),
+    DownloadStarted {
+        id: u32,
+        suggested_name: String,
+        total_bytes: u64,
+    },
+    DownloadProgress {
+        id: u32,
+        received: u64,
+        total: u64,
+    },
+    DownloadDone {
+        id: u32,
+        completed: bool,
+    },
     Crashed,
     Frame,
     Cursor(OsrCursor),
@@ -61,7 +101,7 @@ pub struct OsrModifiers {
     pub command: bool,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 impl OsrModifiers {
     pub(super) fn flags(self) -> u32 {
         (u32::from(self.shift) * 2)
@@ -78,7 +118,7 @@ pub enum OsrButton {
     Right,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(cef_osr)]
 impl OsrButton {
     pub(super) fn cef(self) -> cef::MouseButtonType {
         match self {
@@ -125,13 +165,18 @@ pub struct OsrWheel {
 
 #[derive(Clone, Copy, Debug)]
 pub struct OsrKey {
-    /// The macOS virtual key code and Windows virtual key code (CEF requires both).
+    /// The platform key code: macOS, the virtual key code; Windows, the `WM_KEYDOWN` lParam
+    /// (scan code in bits 16..24, extended-key flag in bit 24), which sets the DOM `code`.
     pub native_key_code: i32,
+    /// The Windows virtual key code (CEF requires it on every platform).
     pub windows_key_code: i32,
     pub character: u16,
     pub unmodified_character: u16,
     pub modifiers: OsrModifiers,
     pub up: bool,
+    /// Windows: the key message was `WM_SYSKEYDOWN`/`WM_SYSKEYUP` (F10, or a key pressed with
+    /// Alt). Other platforms ignore it.
+    pub system_key: bool,
 }
 
 #[derive(Debug)]
@@ -142,3 +187,69 @@ impl fmt::Display for OsrError {
     }
 }
 impl std::error::Error for OsrError {}
+
+/// Synchronous UI-thread popup policy. No UI toolkit state crosses this boundary.
+pub type PopupPolicy = std::rc::Rc<dyn Fn(&PopupRequest) -> PopupDecision>;
+pub struct PopupRequest {
+    pub opener: u64,
+    pub url: String,
+    pub disposition: PopupDisposition,
+    pub user_gesture: bool,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PopupDisposition {
+    NewTab,
+    NewWindow,
+    NewPopup,
+    Other,
+}
+pub enum PopupDecision {
+    NewTab,
+    Block(PopupBlock),
+    Allow { child: u64 },
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PopupBlock {
+    NoGesture,
+    TabBudget,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OsrDialogKind {
+    Alert,
+    Confirm,
+    Prompt,
+    BeforeUnload,
+    Auth,
+    File,
+}
+#[derive(Clone, Debug)]
+pub struct OsrDialog {
+    pub id: u64,
+    pub kind: OsrDialogKind,
+    pub message: String,
+    pub default_prompt: String,
+    pub origin: String,
+    pub accept_types: Vec<String>,
+    pub multiple: bool,
+}
+#[derive(Default)]
+pub struct OsrAnswer {
+    pub accept: bool,
+    pub text: String,
+    pub username: String,
+    pub password: String,
+    pub files: Vec<PathBuf>,
+}
+
+/// Synchronous download destination policy; no toolkit state crosses this boundary.
+pub type DownloadPolicy = std::rc::Rc<dyn Fn(&DownloadRequest) -> DownloadDecision>;
+pub struct DownloadRequest {
+    pub page: u64,
+    pub id: u32,
+    pub suggested_name: String,
+    pub total_bytes: u64,
+}
+pub enum DownloadDecision {
+    Dialog,
+    Stage(PathBuf),
+}

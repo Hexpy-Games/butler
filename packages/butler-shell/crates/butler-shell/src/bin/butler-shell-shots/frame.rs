@@ -24,6 +24,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "click" | "drag" => pointer(h, command, arg),
         "drag-from" => drag_from(h, arg),
         "click-at" => click_at(h, arg),
+        "page-click" => page_click(h, arg),
         "hover" => hover(h, arg),
         "reveal" => reveal(h, arg),
         "wait-anchor" | "wait-no-anchor" => wait_anchor(h, arg, command == "wait-anchor"),
@@ -31,7 +32,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "expect-anchor" | "expect-no-anchor" => {
             settle(&mut h.cx, h.handle);
             ensure!(
-                h.cx.debug_bounds(h.handle, arg)?.is_some() == (command == "expect-anchor"),
+                find_anchor(h, arg)?.is_some() == (command == "expect-anchor"),
                 "unexpected visibility for {arg}"
             );
             Ok(())
@@ -45,6 +46,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         }
         "expect-clipboard" => expect_clipboard(h, arg),
         "expect-clipboard-prefix" => expect_clipboard_prefix(h, arg),
+        "expect-clipboard-contains" => expect_clipboard_contains(h, arg),
         "expect-scale" => {
             let scale: f32 = arg.parse()?;
             let actual =
@@ -90,6 +92,17 @@ fn expect_clipboard_prefix(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn expect_clipboard_contains(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    let expected: String = serde_json::from_str(arg)?;
+    let actual =
+        h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
+    ensure!(
+        actual.as_ref().is_some_and(|text| text.contains(&expected)),
+        "clipboard {actual:?}, expected substring {expected:?}"
+    );
+    Ok(())
+}
+
 fn expect_clipboard(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     let expected: Option<String> = serde_json::from_str(arg)?;
     let actual =
@@ -127,7 +140,7 @@ fn wait_anchor(h: &mut Harness, anchor: &str, shown: bool) -> anyhow::Result<()>
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
         settle(&mut h.cx, h.handle);
-        if h.cx.debug_bounds(h.handle, anchor)?.is_some() == shown {
+        if find_anchor(h, anchor)?.is_some() == shown {
             return Ok(());
         }
         ensure!(
@@ -170,7 +183,7 @@ fn reveal(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             .context("missing scroll port")?;
     let position = port.center();
     let delta = target.center().y - position.y;
-    move_pointer(h, position, None)?;
+    move_pointer(h, h.handle, position, None)?;
     h.cx.update_window(h.handle, |_, w, cx| {
         w.dispatch_event(
             PlatformInput::ScrollWheel(ScrollWheelEvent {
@@ -192,7 +205,7 @@ fn hover(h: &mut Harness, anchor: &str) -> anyhow::Result<()> {
     let bounds =
         h.cx.debug_bounds(h.handle, anchor)?
             .context("missing hover target")?;
-    move_pointer(h, bounds.center(), None)?;
+    move_pointer(h, h.handle, bounds.center(), None)?;
     settle(&mut h.cx, h.handle);
     Ok(())
 }
@@ -204,13 +217,11 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
     let dx = parts.next().unwrap_or("0").parse::<f32>()?;
     let dy = parts.next().unwrap_or("0").parse::<f32>()?;
     let button = pointer_button(parts.next())?;
-    let bounds =
-        h.cx.debug_bounds(h.handle, anchor)?
-            .context("missing pointer target")?;
+    let (handle, bounds) = find_anchor(h, anchor)?.context("missing pointer target")?;
     let center = bounds.center();
     let end = point(center.x + px(dx), center.y + px(dy));
     let start = if command == "drag" { center } else { end };
-    pointer_sequence(h, start, end, button, command == "drag")
+    pointer_sequence(h, handle, start, end, button, command == "drag")
 }
 
 fn pointer_button(button: Option<&str>) -> anyhow::Result<MouseButton> {
@@ -235,7 +246,7 @@ fn click_at(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
         bounds.left() + bounds.size.width * fx,
         bounds.top() + bounds.size.height * fy,
     );
-    pointer_sequence(h, p, p, button, false)
+    pointer_sequence(h, h.handle, p, p, button, false)
 }
 
 /// Fractions of the anchor bounds may extend beyond the anchor.
@@ -256,19 +267,28 @@ fn drag_from(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             bounds.top() + bounds.size.height * y,
         )
     };
-    pointer_sequence(h, at(fx0, fy0), at(fx1, fy1), MouseButton::Left, true)
+    pointer_sequence(
+        h,
+        h.handle,
+        at(fx0, fy0),
+        at(fx1, fy1),
+        MouseButton::Left,
+        true,
+    )
 }
 
 fn pointer_sequence(
     h: &mut Harness,
+    handle: gpui::AnyWindowHandle,
     start: gpui::Point<gpui::Pixels>,
     end: gpui::Point<gpui::Pixels>,
     button: MouseButton,
     drag: bool,
 ) -> anyhow::Result<()> {
-    move_pointer(h, start, None)?;
+    move_pointer(h, handle, start, None)?;
     settle(&mut h.cx, h.handle);
-    h.cx.update_window(h.handle, |_, w, cx| {
+    h.cx.update_window(handle, |_, w, cx| {
+        w.activate();
         w.dispatch_event(
             PlatformInput::MouseDown(MouseDownEvent {
                 button,
@@ -288,7 +308,7 @@ fn pointer_sequence(
                 start.x + (end.x - start.x) * fraction,
                 start.y + (end.y - start.y) * fraction,
             );
-            move_pointer(h, position, Some(button))?;
+            move_pointer(h, handle, position, Some(button))?;
             h.cx.advance_clock(std::time::Duration::from_millis(16));
             h.cx.run_until_parked();
         }
@@ -297,7 +317,7 @@ fn pointer_sequence(
         h.cx.advance_clock(std::time::Duration::from_millis(200));
         h.cx.run_until_parked();
     }
-    h.cx.update_window(h.handle, |_, w, cx| {
+    h.cx.update_window(handle, |_, w, cx| {
         w.dispatch_event(
             PlatformInput::MouseUp(MouseUpEvent {
                 button,
@@ -314,10 +334,11 @@ fn pointer_sequence(
 
 fn move_pointer(
     h: &mut Harness,
+    handle: gpui::AnyWindowHandle,
     position: gpui::Point<gpui::Pixels>,
     pressed_button: Option<MouseButton>,
 ) -> anyhow::Result<()> {
-    h.cx.update_window(h.handle, |_, w, cx| {
+    h.cx.update_window(handle, |_, w, cx| {
         w.dispatch_event(
             PlatformInput::MouseMove(MouseMoveEvent {
                 position,
@@ -327,4 +348,26 @@ fn move_pointer(
             cx,
         );
     })
+}
+
+fn find_anchor(
+    h: &mut Harness,
+    anchor: &str,
+) -> anyhow::Result<Option<(gpui::AnyWindowHandle, gpui::Bounds<gpui::Pixels>)>> {
+    let windows = h.cx.update(|cx| cx.windows());
+    for handle in windows {
+        if let Some(bounds) = h.cx.debug_bounds(handle, anchor)? {
+            return Ok(Some((handle, bounds)));
+        }
+    }
+    Ok(None)
+}
+fn page_click(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let (x, y) = arg.split_once(' ').context("page-click <x> <y>")?;
+    let bounds =
+        h.cx.debug_bounds(h.handle, "browser-page")?
+            .context("missing page surface")?;
+    let at = bounds.origin + point(px(x.parse()?), px(y.parse()?));
+    pointer_sequence(h, h.handle, at, at, MouseButton::Left, false)
 }

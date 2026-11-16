@@ -57,11 +57,14 @@ fn context(scale: f32) -> anyhow::Result<HeadlessAppContext> {
     Ok(cx)
 }
 
-fn settle(cx: &mut HeadlessAppContext, window: AnyWindowHandle) {
+fn settle(cx: &mut HeadlessAppContext, _window: AnyWindowHandle) {
     for _ in 0..12 {
         cx.advance_clock(Duration::from_millis(50));
         cx.run_until_parked();
-        let _ = cx.update_window(window, |_, window, _| window.refresh());
+        let windows = cx.update(|app| app.windows());
+        for handle in windows {
+            let _ = cx.update_window(handle, |_, window, _| window.refresh());
+        }
     }
     cx.run_until_parked();
 }
@@ -189,8 +192,12 @@ impl Harness {
     /// six (a spinner never stops). Between frames the clock moves one display frame, not a
     /// whole settle, so a running loop never lands on the same phase and passes for steady.
     fn shot(&mut self, dir: &Path, name: &str) -> anyhow::Result<()> {
-        settle(&mut self.cx, self.handle);
-        let mut image = self.cx.capture_screenshot(self.handle)?;
+        let handle = self
+            .cx
+            .update(|cx| cx.active_window())
+            .unwrap_or(self.handle);
+        settle(&mut self.cx, handle);
+        let mut image = self.cx.capture_screenshot(handle)?;
         let mut still = 0;
         for _ in 0..60 {
             std::thread::sleep(Duration::from_millis(100));
@@ -198,9 +205,9 @@ impl Harness {
             self.cx.run_until_parked();
             let _ = self
                 .cx
-                .update_window(self.handle, |_, window, _| window.refresh());
+                .update_window(handle, |_, window, _| window.refresh());
             self.cx.run_until_parked();
-            let next = self.cx.capture_screenshot(self.handle)?;
+            let next = self.cx.capture_screenshot(handle)?;
             still = if next.as_raw() == image.as_raw() {
                 still + 1
             } else {

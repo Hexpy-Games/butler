@@ -8,6 +8,7 @@ use crate::ui::{i18n::browser::BrowserStrings, manage, widgets::anchor};
 use butler_ds::ui::blocks::{
     browser_pane::{BrowserPane, PanePlacement},
     empty_line::EmptyLine,
+    page_band::{PageBand, PageBandTone},
     page_card::PageCard,
 };
 use butler_ds::ui::{
@@ -50,10 +51,12 @@ pub(crate) fn result<T>(value: &Result<T, BrowserError>, cx: &mut App) {
     if value.is_err() {
         toast::show(cx, Toast::error(BrowserStrings::get(cx).failed));
     }
+    super::popup_window::sync(cx);
     cx.refresh_windows();
 }
 pub(crate) fn create(owner: Owner, cx: &mut App) {
-    let value = cx.global_mut::<BrowserState>().create(owner, None, false);
+    let value =
+        cx.update_global::<BrowserState, _>(|model, cx| model.create(owner, None, false, true, cx));
     result(&value, cx);
 }
 pub(super) fn owner_key(owner: &Owner) -> String {
@@ -87,7 +90,7 @@ fn shown(session: Option<&str>, state: &Entity<AreaState>, cx: &mut App) -> Vec<
     let tabs: Vec<_> = model
         .tabs()
         .iter()
-        .filter(|t| visible(session, t, cx))
+        .filter(|t| !t.popup && visible(session, t, cx))
         .cloned()
         .collect();
     let active = model.active().cloned();
@@ -125,6 +128,12 @@ fn page(tab: Option<&Tab>, window: &mut Window, cx: &mut App) -> PageCard {
         .reserve_band()
         .hidden(empty || crashed || !enabled);
     if let Some(tab) = tab {
+        if let Some(band) = popup_band(tab, cx) {
+            page = page.band(band);
+        }
+        if let Some(dialog) = &tab.dialog {
+            page = page.overlay(super::dialog::show(&tab.id, dialog, window, cx));
+        }
         let id = tab.id.clone();
         let surface =
             cx.update_global::<BrowserState, _>(|model, cx| model.surface(&id, window, cx));
@@ -167,6 +176,7 @@ fn page(tab: Option<&Tab>, window: &mut Window, cx: &mut App) -> PageCard {
     page
 }
 pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut App) -> AnyElement {
+    let restored = super::restore::ready(cx);
     let state = area_state(session, window, cx);
     let tabs = shown(session, &state, cx);
     let owner = session.map_or(Owner::Mine, |s| Owner::Conversation(s.to_owned().into()));
@@ -181,11 +191,17 @@ pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut 
         || manage::window_ctx(cx)
             .and_then(|ctx| ctx.navigation(cx))
             .is_some();
-    if tabs.is_empty() && known && cx.global::<BrowserState>().enabled() && !state.read(cx).creating
+    if restored
+        && tabs.is_empty()
+        && known
+        && cx.global::<BrowserState>().enabled()
+        && !state.read(cx).creating
     {
         state.update(cx, |s, _| s.creating = true);
         let owner = session.map_or(Owner::Mine, |s| Owner::Conversation(s.to_owned().into()));
-        let value = cx.global_mut::<BrowserState>().create(owner, None, true);
+        let value = cx.update_global::<BrowserState, _>(|model, cx| {
+            model.create(owner, None, true, true, cx)
+        });
         result(&value, cx);
     }
     let active = cx.global::<BrowserState>().active();
@@ -194,7 +210,7 @@ pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut 
         .filter(|t| !t.url.is_empty() && t.status != TabStatus::Crashed)
         .map(|t| t.id.clone());
     cx.global_mut::<BrowserState>().show(shown.as_ref());
-    let strip = super::tabs::strip(&tabs, session, &state, cx);
+    let strip = super::tabs::strip(&tabs, session, &state, window, cx);
     let toolbar = super::toolbar::toolbar(tab, &state, window, cx);
     let page = page(tab, window, cx);
     let pane = BrowserPane::new(
@@ -244,4 +260,62 @@ fn area_state(session: Option<&str>, window: &mut Window, cx: &mut App) -> Entit
 pub(crate) fn focus_address(owner: Owner, cx: &mut App) {
     cx.global_mut::<BrowserShell>().address_focus = Some(owner);
     cx.refresh_windows();
+}
+
+fn popup_band(tab: &Tab, cx: &App) -> Option<PageBand> {
+    let c = BrowserStrings::get(cx);
+    let id = tab.id.clone();
+    if let Some(blocked) = &tab.blocked_popup {
+        let mut band =
+            PageBand::new("browser-band", PageBandTone::Info, c.popup_blocked).icon(popup_icon(cx));
+        if blocked.reason == "no_gesture" {
+            band = band.actions(
+                anchor(div(), "browser-popup-allow").child(
+                    Button::new("browser-popup-allow")
+                        .size(butler_ds::ui::button::Size::Xs)
+                        .variant(Variant::Ghost)
+                        .text(c.allow)
+                        .on_click(move |_, _, cx| {
+                            cx.global_mut::<BrowserState>().allow_popup(&id);
+                            cx.refresh_windows();
+                        }),
+                ),
+            );
+        }
+        return Some(band);
+    }
+    let popup = cx
+        .global::<BrowserState>()
+        .tabs()
+        .iter()
+        .find(|t| t.opener.as_ref() == Some(&tab.id))?;
+    let host = url::Url::parse(&popup.url)
+        .ok()
+        .map(|u| u[url::Position::BeforeHost..url::Position::AfterPort].to_owned())
+        .unwrap_or_default();
+    let child = popup.id.clone();
+    Some(
+        PageBand::new("browser-band", PageBandTone::Info, c.popup_opened)
+            .icon(popup_icon(cx))
+            .detail(host)
+            .actions(
+                anchor(div(), "browser-popup-show").child(
+                    Button::new("browser-popup-show")
+                        .size(butler_ds::ui::button::Size::Xs)
+                        .variant(Variant::Ghost)
+                        .text(c.show_popup)
+                        .on_click(move |_, _, cx| super::popup_window::focus(&child, cx)),
+                ),
+            ),
+    )
+}
+
+fn popup_icon(cx: &App) -> AnyElement {
+    anchor(div(), "browser-band")
+        .child(butler_ds::ui::icon::icon(
+            butler_ds::ui::Icon::Popup,
+            butler_ds::ui::icon::IconSize::Sm,
+            butler_ds::ui::context::Ds::get(cx),
+        ))
+        .into_any_element()
 }

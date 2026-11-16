@@ -1,8 +1,8 @@
 use butler_cef_host::osr::{OsrCursor, OsrRuntime, Rect};
 use gpui::{
     AnyElement, App, Bounds, Context, CursorStyle, ElementId, ElementInputHandler, FocusHandle,
-    KeyDownEvent, KeyUpEvent, MouseButton, ObjectFit, Pixels, Render, Size, Window, canvas, div,
-    prelude::*, surface,
+    KeyDownEvent, KeyUpEvent, MouseButton, ObjectFit, Pixels, Render, Size, SurfaceSource, Window,
+    canvas, div, prelude::*, surface,
 };
 use std::{
     cell::RefCell,
@@ -14,6 +14,7 @@ pub(super) struct PageState {
     pub(super) bounds: Bounds<Pixels>,
     pub(super) geometry: Option<(Size<Pixels>, f32)>,
     pub(super) cursor: OsrCursor,
+    pub(super) last_input: Rc<std::cell::Cell<Option<std::time::Instant>>>,
     pub(super) ime_bounds: Vec<Rect>,
 }
 impl Default for PageState {
@@ -22,6 +23,7 @@ impl Default for PageState {
             bounds: Bounds::default(),
             geometry: None,
             cursor: OsrCursor::Arrow,
+            last_input: Rc::default(),
             ime_bounds: Vec::new(),
         }
     }
@@ -57,7 +59,9 @@ impl Render for Page {
             OsrCursor::PointingHand => CursorStyle::PointingHand,
             OsrCursor::IBeam => CursorStyle::IBeam,
         };
-        let frame = self.runtime.upgrade().and_then(|r| r.frame(self.id));
+        let frame = (self.runtime.upgrade())
+            .and_then(|r| r.frame(self.id))
+            .and_then(source);
         let page = div()
             .id("cef-surface")
             .relative()
@@ -67,8 +71,12 @@ impl Render for Page {
             .on_mouse_move(cx.listener(Self::mouse_move))
             .on_mouse_exit(cx.listener(Self::mouse_exit))
             .on_scroll_wheel(cx.listener(Self::wheel))
-            .on_key_down(cx.listener(|s, e: &KeyDownEvent, _, _| s.key(&e.keystroke, false)))
-            .on_key_up(cx.listener(|s, e: &KeyUpEvent, _, _| s.key(&e.keystroke, true)));
+            .on_key_down(cx.listener(|s, e: &KeyDownEvent, _, _| {
+                s.key(&e.keystroke, e.native, false);
+            }))
+            .on_key_up(cx.listener(|s, e: &KeyUpEvent, _, _| {
+                s.key(&e.keystroke, e.native, true);
+            }));
         let page = [MouseButton::Left, MouseButton::Middle, MouseButton::Right]
             .into_iter()
             .fold(page, |page, button| {
@@ -99,6 +107,38 @@ impl Render for Page {
             .size_full(),
         )
     }
+}
+/// The macOS frame: an IOSurface-backed CoreVideo buffer.
+#[cfg(target_os = "macos")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "one signature with the fallible Windows frame conversion"
+)]
+fn source(frame: impl Into<SurfaceSource>) -> Option<SurfaceSource> {
+    Some(frame.into())
+}
+/// The Windows frame: a pooled D3D11 shared texture with its acquire and release fences. The
+/// runtime raises the fence value per frame, as gpui's damage tracking requires.
+#[cfg(windows)]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the frame is the runtime's clone; one signature with the macOS conversion"
+)]
+fn source(frame: butler_cef_host::osr::OsrFrame) -> Option<SurfaceSource> {
+    let (width, height) = frame.size();
+    let size = gpui::size(
+        gpui::DevicePixels(i32::try_from(width).ok()?),
+        gpui::DevicePixels(i32::try_from(height).ok()?),
+    );
+    Some(SurfaceSource::WindowsSharedTexture(
+        gpui::WindowsSharedTextureFrame::new(
+            frame.texture().clone(),
+            frame.fence().clone(),
+            frame.fence_value(),
+            frame.release().clone(),
+            size,
+        ),
+    ))
 }
 pub(super) fn range(range: Range<u32>) -> Range<usize> {
     usize::try_from(range.start).unwrap_or(usize::MAX)

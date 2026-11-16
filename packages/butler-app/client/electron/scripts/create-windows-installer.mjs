@@ -20,6 +20,7 @@ const outputDirectory = requiredOption("--output-directory");
 const setupExe = requiredOption("--setup-exe");
 const setupIcon = requiredOption("--setup-icon");
 const version = requiredOption("--version");
+const additionalFiles = additionalFileOptions();
 const certificateFile = process.env.BUTLER_WINDOWS_SIGN_CERTIFICATE_FILE?.trim();
 const certificatePassword =
   process.env.BUTLER_WINDOWS_SIGN_CERTIFICATE_PASSWORD ?? "";
@@ -112,6 +113,8 @@ try {
     iconUrl:
       "https://raw.githubusercontent.com/Hexpy-Games/butler/main/packages/butler-app/client/electron/assets/butler.ico",
     noMsi: true,
+    ...(process.argv.includes("--no-package-json") ? { usePackageJson: false } : {}),
+    ...(additionalFiles.length > 0 ? { additionalFiles } : {}),
     ...(signingOptions ?? {}),
   });
 } finally {
@@ -127,6 +130,19 @@ function requiredOption(name) {
     throw new Error(`${name} requires a value`);
   }
   return value;
+}
+
+function additionalFileOptions() {
+  const files = [];
+  for (let index = 2; index < process.argv.length; index++) {
+    if (process.argv[index] !== "--additional-file") continue;
+    const name = process.argv[++index];
+    if (!name || name.startsWith("--") || /[<>:"/\\|?*]/u.test(name) || name === "." || name === "..") {
+      throw new Error("--additional-file requires a top-level file name");
+    }
+    files.push({ src: name, target: "lib\\net45" });
+  }
+  return files;
 }
 
 function signWithCurrentUserCertificate(path, thumbprint) {

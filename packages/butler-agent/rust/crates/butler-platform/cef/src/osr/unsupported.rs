@@ -1,5 +1,8 @@
 //! Uninhabited seam for platforms without an OSR implementation.
-use super::{OsrConfig, OsrError, OsrIme, OsrKey, OsrMouse, OsrSink, OsrWheel, PumpScheduler};
+use super::{
+    DownloadPolicy, OsrAnswer, OsrConfig, OsrError, OsrIme, OsrKey, OsrMouse, OsrProfile, OsrSink,
+    OsrWheel, PopupPolicy, PumpScheduler,
+};
 use std::{convert::Infallible, ops::Range, rc::Rc};
 
 pub struct OsrRuntime {
@@ -17,16 +20,47 @@ impl OsrFrame {
     }
 }
 impl OsrRuntime {
-    pub fn start(_: OsrConfig, _: Rc<dyn OsrSink>, _: PumpScheduler) -> Result<Self, OsrError> {
+    pub fn start(
+        _: OsrConfig,
+        _: Rc<dyn OsrSink>,
+        _: PumpScheduler,
+        _: PopupPolicy,
+        _: DownloadPolicy,
+    ) -> Result<Self, OsrError> {
         Err(OsrError("osr_unsupported".into()))
+    }
+    pub fn download_to(&self, _: u64, _: u32, _: &std::path::Path) {
+        match self.never {}
+    }
+    pub fn download_with_dialog(&self, _: u64, _: u32, _: &str) {
+        match self.never {}
+    }
+    pub fn cancel_download(&self, _: u64, _: u32) {
+        match self.never {}
     }
     pub fn pump(&self) {
         match self.never {}
     }
-    pub fn open(&self, _: u64, _: &str, _: (u32, u32), _: f32) -> Result<(), OsrError> {
+    pub fn open(
+        &self,
+        _: u64,
+        _: &str,
+        _: (u32, u32),
+        _: f32,
+        _: OsrProfile,
+    ) -> Result<(), OsrError> {
         match self.never {}
     }
     pub fn navigate(&self, _: u64, _: &str) {
+        match self.never {}
+    }
+    pub fn eval(&self, _: u64, _: &str) {
+        match self.never {}
+    }
+    pub fn answer_dialog(&self, _: u64, _: u64, _: OsrAnswer) {
+        match self.never {}
+    }
+    pub fn cancel_dialogs(&self, _: u64) {
         match self.never {}
     }
     pub fn back(&self, _: u64) {

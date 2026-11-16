@@ -83,8 +83,8 @@ impl Shell {
             self.sidebar_open = open;
         }
         let platform = ds_platform(self.theme.platform);
-        let reduced = cx.reduce_motion();
         let display = butler_platform::display_accessibility::read();
+        let reduced = cx.reduce_motion() || display.reduce_motion;
         Ds::update(cx, |ds| {
             ds.set_viewport(size.width.into(), size.height.into());
             ds.set_platform(platform);

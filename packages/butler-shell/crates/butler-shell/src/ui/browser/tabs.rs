@@ -8,7 +8,7 @@ use crate::ui::{i18n::browser::BrowserStrings, widgets::anchor};
 use butler_ds::ui::blocks::tab_strip::{
     Favicon, Group, GroupKind, GroupState, Tab as StripTab, TabState, TabStrip, TabStripLabels,
 };
-use gpui::{AnyElement, App, Entity, div, prelude::*};
+use gpui::{AnyElement, App, Entity, Window, div, prelude::*};
 fn groups(tabs: &[Tab], state: &AreaState, cx: &App) -> Vec<Group> {
     let copy = BrowserStrings::get(cx);
     let mut groups: Vec<Group> = Vec::new();
@@ -65,7 +65,8 @@ pub(super) fn strip(
     tabs: &[Tab],
     session: Option<&str>,
     state: &Entity<AreaState>,
-    cx: &App,
+    window: &mut Window,
+    cx: &mut App,
 ) -> AnyElement {
     let pane_owner = session.map_or(Owner::Mine, |s| Owner::Conversation(s.to_owned().into()));
     let collapse = state.clone();
@@ -78,17 +79,22 @@ pub(super) fn strip(
             cx.refresh_windows();
         })
         .on_close(|id, _, cx| {
-            cx.global_mut::<BrowserState>()
-                .close(&TabId(id.to_owned().into()));
+            cx.update_global::<BrowserState, _>(|model, cx| {
+                model.close(&TabId(id.to_owned().into()), cx);
+            });
+            super::popup_window::sync(cx);
             cx.refresh_windows();
         })
         .on_move(|mv, _, cx| {
             let value = Owner::parse(&mv.to_group).and_then(|owner| {
-                cx.global_mut::<BrowserState>().move_tab(
-                    &TabId(mv.tab_id.clone()),
-                    owner,
-                    isize::try_from(mv.index).unwrap_or(isize::MAX),
-                )
+                cx.update_global::<BrowserState, _>(|model, cx| {
+                    model.move_tab(
+                        &TabId(mv.tab_id.clone()),
+                        owner,
+                        isize::try_from(mv.index).unwrap_or(isize::MAX),
+                        cx,
+                    )
+                })
             });
             result(&value, cx);
         })
@@ -111,8 +117,10 @@ pub(super) fn strip(
             });
         }
     }
-    if session.is_some() {
-        strip = strip.hide_chip();
+    if let Some(session) = session {
+        strip = strip
+            .hide_chip()
+            .child(super::transfer::bring(session, window, cx));
     }
     anchor(div(), "browser-tabs")
         .w_full()

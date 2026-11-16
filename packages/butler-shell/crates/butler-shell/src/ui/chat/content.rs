@@ -1,5 +1,7 @@
 //! `MessageContent`: the body of one message by role, its attachments, the response footer of
 //! an answer and the retry actions of a failed message.
+use std::sync::Arc;
+
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window, div};
 
 use super::TranscriptCtx;
@@ -13,7 +15,7 @@ use crate::ui::source::wire::{MessageRecord, MessageRecordRole};
 
 /// The children of a message's row, in order.
 pub(super) fn message_content(
-    msg: &MessageRecord,
+    msg: &Arc<MessageRecord>,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,

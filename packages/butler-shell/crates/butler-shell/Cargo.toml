@@ -21,7 +21,9 @@ path = "src/bin/butler-shell-shots/main.rs"
 required-features = ["shots"]
 
 [features]
-# The shell's `cef` cargo feature is macOS-only until the Windows D3D11 and Linux software-paint jobs add their frame types to `butler_cef_host::osr` and the matching `SurfaceSource` conversion.
+# The shell's `cef` cargo feature builds on macOS (CVPixelBuffer frames) and Windows (D3D11 shared
+# textures, `SurfaceSource::WindowsSharedTexture`). Linux waits for the software-paint job to add its
+# frame type to `butler_cef_host::osr` and the matching `SurfaceSource` conversion.
 cef = ["dep:butler-cef"]
 shots = ["gpui/test-support", "dep:gpui_wgpu"]
 
@@ -43,7 +45,8 @@ gpui.workspace = true
 gpui_elements.workspace = true
 # macos-wgpu: the glass lens is drawn by the wgpu renderer (Metal's renderer has no lens).
 gpui_platform = { workspace = true, features = ["macos-wgpu"] }
-gpui_wgpu = { workspace = true, features = ["test-support"], optional = true }
+# wgpu-surfaces: on Windows the headless harness imports CEF's D3D11 shared textures.
+gpui_wgpu = { workspace = true, features = ["test-support", "wgpu-surfaces"], optional = true }
 sys-locale.workspace = true
 url = "2"
 percent-encoding = "2"
