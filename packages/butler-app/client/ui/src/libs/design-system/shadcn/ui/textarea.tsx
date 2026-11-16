@@ -7,7 +7,7 @@ import underline from "../../components/Input/UnderlineField.module.css";
 import styles from "../../components/Textarea/Textarea.module.css";
 
 function Textarea({
-  className, variant = "default", textSize = "inherit", autoGrow = false, onChange, ...props
+  className, variant = "default", textSize = "inherit", autoGrow = false, dropActive = false, onChange, ...props
 }: DsBaseProps<React.ComponentPropsWithoutRef<"textarea">> & {
   /** Wrapping in-place entry, growing from one line to the DS line cap. */
   variant?: "default" | "underline";
@@ -17,6 +17,8 @@ function Textarea({
    * (no manual resize). The underline variant always grows.
    */
   autoGrow?: boolean;
+  /** A dragged file can be dropped on the field: the interactive border and ring of the ComposerCard drop state. */
+  dropActive?: boolean;
 }) {
   const ref = React.useRef<HTMLTextAreaElement>(null);
   const underlined = variant === "underline";
@@ -29,6 +31,7 @@ function Textarea({
   }, [edges]);
   const textarea = <textarea {...props} ref={attach} rows={variant === "underline" ? 1 : props.rows}
     data-slot="textarea" data-variant={variant} data-auto-grow={growing ? "" : undefined}
+    data-drop-active={dropActive ? "true" : undefined}
     className={cn(styles.textarea, variant === "underline" && underline.field, className)}
     onChange={(event) => { grow(); onChange?.(event); }} />;
   return variant === "underline"
