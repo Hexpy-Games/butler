@@ -227,4 +227,5 @@ to `butler-ds-view` and `--only sidebar-shell,conversation-shell,scroll-area` to
 ### Known differences
 
 - page-card "No tab (empty)" dy +37 and "Crashed tab" dy +23: web-side difference. The web `Stack fill` sits in a block `.frame` (NativeViewSlot) and neither fills nor centres; gpui's centred result is intended. Not counted as a gpui bug.
+- page-card "Butler holds the tab (riso edge, fixed 1280×800 page)" control-0 dx +265, "You hold the tab" +212, "Waiting for approval (static amber)" +72.5: web-side difference. The web PageBand declares `container-type: inline-size`, so in these stories the fixed-page card collapses to ~22 px inside the shrink-wrapping story stage (page hidden, band text 0 wide); gpui keeps a usable card. Not counted as a gpui bug.
 - Follow-up (not done): composer-question-panel puts the Tabs gap token above a body that sits outside Tabs, because gpui Tabs has no list-inset slot; the web structure (list inset inside `<Tabs>`, body as TabsContent with its tab stop and focus ring) would need a new Tabs prop. Raise only if a keyboard or focus difference shows up.
