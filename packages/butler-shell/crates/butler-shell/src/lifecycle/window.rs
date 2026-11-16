@@ -1,6 +1,8 @@
 //! The App window: opening it (at startup, from the tray, on a dock reopen) and what closing
 //! the last one does (main.mjs:2067-2074, 2767-2770). Electron hides the window; gpui drops it
 //! and the next [`open_window`] builds a new shell that re-attaches and reloads from the Agent.
+//! Windows stays in the tray too (Electron quits there, main.mjs:2076-2080): schedules use
+//! the App's browser tabs while no window is open.
 use std::ffi::OsString;
 
 use gpui::{
@@ -127,13 +129,13 @@ pub(crate) fn reopen(cx: &mut App) {
     }
 }
 
-/// The last window closed: quit on Windows, or when the tray is off or failed to start;
-/// otherwise the App keeps running with the tray and the Agent.
+/// The last window closed: quit when the tray is off or failed to start; otherwise the App
+/// keeps running with the tray and the Agent.
 pub(super) fn closed(cx: &mut App) {
     if !cx.windows().is_empty() {
         return;
     }
-    if matches!(Platform::host(), Platform::Windows) || !super::tray::active(cx) {
+    if !super::tray::active(cx) {
         super::quit(cx);
     }
 }
