@@ -2,9 +2,9 @@
 use super::live_turns::ready_workspace;
 use super::*;
 
-/// SHELL-APP-07 — When the focused page goes (History's search field, then a chat opens from
-/// the sidebar), the shell root takes focus, as Electron's `body` does: mod+K still opens the
-/// command palette.
+/// SHELL-APP-07 — When the focused page goes (History's search field, then a chat opens without
+/// a click, as a notification or deep link opens it), the shell root takes focus, as Electron's
+/// `body` does: mod+K still opens the command palette.
 #[tokio::test]
 async fn shell_app_07_shortcuts_work_after_the_focused_page_goes() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -32,7 +32,7 @@ async fn shell_app_07_shortcuts_work_after_the_focused_page_goes() -> Result<(),
             "history",
             "wait-anchor history-search",
             "click history-search",
-            &format!("click {row}"),
+            &format!("open {id}"),
             "wait-no-anchor history-page",
             "key secondary-k",
             "expect-palette",
