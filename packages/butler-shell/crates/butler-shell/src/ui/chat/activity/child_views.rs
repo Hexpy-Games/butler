@@ -211,6 +211,14 @@ fn turn_source(turn: &crate::ui::source::wire::SessionViewTurn) -> ActivitySourc
     }
 }
 
+/// `observerActivitySources.ts`: the rows of every turn the view carries, by turn id.
+pub(crate) fn rows_by_turn(view: &SessionView) -> HashMap<&str, &[ProgressRow]> {
+    sources(view)
+        .into_iter()
+        .map(|source| (source.turn, source.rows))
+        .collect()
+}
+
 /// `SessionObserverStepTimeline.tsx` projectActivities, including model-authored action keys.
 pub(super) fn project(view: &SessionView, lang: Lang) -> Vec<StepActivity> {
     let mut activities = Vec::new();

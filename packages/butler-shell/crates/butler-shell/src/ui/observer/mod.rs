@@ -23,6 +23,7 @@ use gpui::{
 
 use self::copy::{Words, words};
 use crate::ui::chat::Chat;
+use crate::ui::chat::activity::child_views;
 use crate::ui::manage::{ManageLive, Topic};
 use crate::ui::source::fetch::{Flight, fetch_if};
 use crate::ui::source::wire::{MessageRecordRole, SessionView, SessionViewStatus};
@@ -175,6 +176,23 @@ impl SessionObserver {
                 view.messages
                     .retain(|message| message.role != MessageRecordRole::User);
             }
+            // A child's messages carry no rows; its turns' rows come from the view.
+            let rows = child_views::rows_by_turn(&view)
+                .into_iter()
+                .map(|(turn, rows)| (turn.to_owned(), rows.to_vec()))
+                .collect::<std::collections::HashMap<_, _>>();
+            for message in &mut view.messages {
+                let turn = message.turn_id.clone().unwrap_or_default();
+                if message.role == MessageRecordRole::Assistant
+                    && message
+                        .turn_activity_rows
+                        .as_deref()
+                        .is_none_or(<[_]>::is_empty)
+                    && let Some(rows) = rows.get(&turn).filter(|rows| !rows.is_empty())
+                {
+                    std::sync::Arc::make_mut(message).turn_activity_rows = Some(rows.clone());
+                }
+            }
             view.message_window.previous_cursor = None;
             view.message_window.previous_cursor_token = None;
             Rc::new(view)
@@ -222,6 +240,7 @@ impl SessionObserver {
         }
         let mut body = Stack::new()
             .gap(Space::Lg)
+            .fill()
             .child(div().flex_1().min_h_0().child(self.chat.clone()));
         if waiting && view.active_turn.is_none() {
             body = body.child(
@@ -256,6 +275,8 @@ impl SessionObserver {
             .child(anchor(
                 div()
                     .id("steward-observer-transcript")
+                    .flex()
+                    .flex_col()
                     .flex_1()
                     .min_h_0()
                     .child(self.body(copy)),
