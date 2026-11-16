@@ -6,8 +6,8 @@ pub(crate) mod enter;
 mod parts;
 
 use gpui::{
-    AnyElement, App, ElementId, FontWeight, InteractiveElement as _, IntoElement, OverflowWrap,
-    ParentElement, RenderOnce, Styled as _, Window, div, px, relative,
+    AnyElement, App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement,
+    OverflowWrap, ParentElement, Pixels, RenderOnce, Styled as _, Window, div, px, relative,
 };
 
 pub use parts::{
@@ -285,14 +285,7 @@ impl MessageRow {
             .font_weight(FontWeight(ds.number(Number::FontWeightRegular)))
             .text_color(ink)
             .opacity(if self.tone == Tone::Pending { 0.72 } else { 1. });
-        // Pinned to the padding box: an absolute layer with auto insets starts at the content box.
-        let background = div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .rounded(radius)
-            .bg(fill);
+        let background = bubble_layer(radius).bg(fill);
         let background = match delivered {
             Some((value, timing)) => value.apply(
                 background,
@@ -306,12 +299,7 @@ impl MessageRow {
         };
         bubble = bubble.child(background);
         if let Some((value, timing)) = delivered {
-            let pending = div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
-                .rounded(radius)
+            let pending = bubble_layer(radius)
                 .border(ds.len(Length::BorderHairline))
                 .border_dashed()
                 .border_color(ds.color(Color::LineStrong));
@@ -328,6 +316,17 @@ impl MessageRow {
             .child(div().relative().children(children))
             .into_any_element()
     }
+}
+
+/// A layer over the whole bubble. Pinned to the padding box: an absolute layer with auto insets
+/// starts at the content box.
+fn bubble_layer(radius: Pixels) -> Div {
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .rounded(radius)
 }
 
 impl RenderOnce for MessageRow {
