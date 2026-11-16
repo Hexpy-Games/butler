@@ -274,6 +274,10 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
         }))
         .route("/second", axum::routing::get(|| async {
             axum::response::Html("<title>Second local page</title><body style='margin:0;background:#8c5014'>Second local page</body>")
+        }))
+        // The title reports the key codes of the input's keydown events and its value.
+        .route("/keys", axum::routing::get(|| async {
+            axum::response::Html("<title>keys</title><body style='margin:0'><input id=k style='width:100%;height:100vh;border:0'><script>const c=[];const t=()=>{document.title='keys|'+c.join(',')+'|'+k.value};k.onkeydown=e=>{c.push(e.keyCode);t()};k.oninput=t;t()</script></body>")
         }));
     let _server = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
         axum::serve(listener, pages).await.unwrap();
@@ -320,6 +324,33 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
             tokio::time::sleep(std::time::Duration::from_millis(25)).await;
         }
     }
+    // Keystrokes without native key data take their key codes from the key name: letters,
+    // named keys, US punctuation (VK_OEM_*) and function keys; Backspace edits the value.
+    let keys = format!("http://{address}/keys");
+    shell
+        .run(&[
+            "click browser-address",
+            "key secondary-l",
+            &format!("type {keys}"),
+            "key enter",
+        ])
+        .await?;
+    // The script sets this title once its handlers are attached.
+    wait_for_page(&mut shell, "keys||", &keys).await?;
+    shell
+        .run(&[
+            "click browser-page",
+            "type a",
+            "key space",
+            "type -.,",
+            "key pageup",
+            "key f2",
+            "key backspace",
+        ])
+        .await?;
+    wait_for_page(&mut shell, "keys|65,32,189,190,188,33,113,8|a -.", &keys).await?;
+    shell.run(&["click browser-back"]).await?;
+    wait_for_page(&mut shell, "First local page", &first).await?;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
         let frame = shell.browser_frame().await?;
@@ -348,3 +379,20 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
 }
 
 mod new_tab;
+
+/// Waits until the tab shows `url`, titled `title`, and has finished loading.
+async fn wait_for_page(shell: &mut Shell, title: &str, url: &str) -> Result<(), HarnessError> {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let state = shell.browser_state().await?;
+        let tab = &state["tabs"][0];
+        if tab["title"] == title && tab["url"] == url && tab["status"] == "idle" {
+            return Ok(());
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "title is not {title}: {state}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+}
