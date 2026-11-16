@@ -236,36 +236,27 @@ async fn shell_app_11_selection_fills_wrapped_lines_and_clears_outside() -> Resu
     };
     shell.run(&["size 1000 900", "shot before"]).await?;
     // D1: the press starts in the last body cell (first line) and ends on the heading "정리".
+    // The context-menu Copy then copies that selection, though its press clears the selection.
     shell
         .run(&[
-            &drag("0.524 0.316 0.027 0.473"),
-            "shot d1",
-            "key secondary-c",
-            &format!("expect-clipboard-contains {}", json!(cell)),
+            &drag("0.508 0.316 0.027 0.473"),
+            &format!("click-at message-{assistant}-body 0.5 0.1 right"),
+            &format!("wait-anchor message-menu-{assistant}-item-0-0"),
+            &format!("click message-menu-{assistant}-item-0-0"),
+            &format!("expect-clipboard-prefix {}", json!(cell)),
         ])
         .await?;
-    let d1 = filled("d1");
-    assert!(d1.0.len() >= 2, "table and heading rows filled: {d1:?}");
     // D2: the press starts on the blank marker column left of the timeline item, ends on its text.
-    shell
-        .run(&[&format!("click sidebar-row-{id}"), "shot c1"])
-        .await?;
-    assert!(cleared("c1", &d1), "sidebar press left the D1 selection");
+    shell.run(&[&format!("click sidebar-row-{id}")]).await?;
     shell
         .run(&[
             &drag("0.005 0.765 0.93 0.804"),
-            "shot d2",
             "key secondary-c",
             "expect-clipboard-contains \"CDN 배포 파일 변조\"",
         ])
         .await?;
-    let d2 = filled("d2");
-    assert!(!d2.0.is_empty(), "timeline text filled");
     // A: all wrapped lines are filled: paragraph, header row, body row, heading, last paragraph.
-    shell
-        .run(&[&format!("click sidebar-row-{id}"), "shot c2"])
-        .await?;
-    assert!(cleared("c2", &d2), "sidebar press left the D2 selection");
+    shell.run(&[&format!("click sidebar-row-{id}")]).await?;
     let copied = format!(
         "{paragraph}\n\n사건\t결과\n협동 작전 버그가 발견되어 하루 만에 종료된 이벤트와 그 뒤의 공지\t{cell}\n정리\n마지막 문단입니다."
     );

@@ -361,15 +361,21 @@ impl Element for ScopeElement {
 fn listeners(selection: &Selection, hitbox: Hitbox, window: &mut Window, cx: &App) {
     let state = selection.0.clone();
     window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
-        if !phase.bubble() || event.button != MouseButton::Left {
+        if event.button != MouseButton::Left {
+            return;
+        }
+        // A press anywhere else clears in capture: a control painted later stops the bubble.
+        if phase.capture() {
+            if !hitbox.is_hovered(window) {
+                state.update(cx, |s, cx| {
+                    if s.clear() {
+                        cx.notify();
+                    }
+                });
+            }
             return;
         }
         if !hitbox.is_hovered(window) {
-            state.update(cx, |s, cx| {
-                if s.clear() {
-                    cx.notify();
-                }
-            });
             return;
         }
         // A focusable descendant (table scroller, answer block) already took focus and the press.
