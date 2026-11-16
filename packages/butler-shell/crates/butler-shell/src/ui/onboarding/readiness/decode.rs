@@ -2,7 +2,7 @@
 use gpui::SharedString;
 use serde_json::Value;
 
-use super::{MemoryModel, ReadinessStatus, ReadinessView};
+use super::{MemoryModel, ReadinessStatus, ReadinessStep, ReadinessView};
 
 const STEP_STATUSES: [&str; 4] = ["pending", "running", "done", "failed"];
 const MODEL_STATES: [&str; 7] = [
@@ -33,7 +33,7 @@ impl ReadinessStatus {
 
 impl ReadinessView {
     /// A validated view of a `/setup/readiness` (or retry, or memory-model) answer; `None` for
-    /// anything else. Each step is `(id, status)`.
+    /// anything else. A step's `error` is its code and, when a string, its detail.
     pub(crate) fn from_value(raw: &Value) -> Option<Self> {
         let status = ReadinessStatus::parse(raw.get("status")?.as_str()?)?;
         let mut steps = Vec::new();
@@ -55,16 +55,25 @@ impl ReadinessView {
                 continue;
             }
             done += usize::from(state == "done");
+            let error = step
+                .pointer("/error/code")
+                .and_then(Value::as_str)
+                .map(|code| {
+                    (
+                        SharedString::from(code.to_owned()),
+                        step.pointer("/error/detail")
+                            .and_then(Value::as_str)
+                            .map(|detail| SharedString::from(detail.to_owned())),
+                    )
+                });
             if state == "failed" && error_code.is_none() {
-                error_code = step
-                    .pointer("/error/code")
-                    .and_then(Value::as_str)
-                    .map(SharedString::from);
+                error_code = error.as_ref().map(|(code, _)| code.clone());
             }
-            steps.push((
-                SharedString::from(id.to_owned()),
-                SharedString::from(state.to_owned()),
-            ));
+            steps.push(ReadinessStep {
+                id: SharedString::from(id.to_owned()),
+                status: SharedString::from(state.to_owned()),
+                error,
+            });
         }
         Some(Self {
             status,
