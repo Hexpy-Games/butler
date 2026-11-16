@@ -220,7 +220,10 @@ def rust_checks():
     if not all(available):
         return True
     success = run('fmt', ['cargo', 'fmt', '--all', '--', '--check'], RUST)
-    success = run('source-check', ['cargo', 'run', '--locked', '-p',
+    # This tool decides whether the push passes, so it is built in this worktree's own target
+    # (the path CI uses): a target shared between worktrees can hold another branch's build.
+    success = run('source-check', ['cargo', 'run', '--locked', '--target-dir',
+                                 ROOT / 'target/source-check', '-p',
                                  'butler-source-check', '--', '.'], RUST) and success
     success = run('runtime-crates', ['python3', '.github/scripts/ci_runtime_crates.py',
                                      '--check']) and success
