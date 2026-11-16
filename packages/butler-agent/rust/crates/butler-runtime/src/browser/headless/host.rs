@@ -2,7 +2,7 @@
 //! and hold them and exchanges per-page DevTools messages over byte channels.
 use super::{
     Headless, HeadlessConfig, InstallSource, browser::Browser, downloads::PortFuture, lifecycle,
-    page::Page, refused, state::Tab,
+    page::Page, state::Tab,
 };
 use crate::browser::egress::ContentOrigin;
 use serde_json::{Value, json};
@@ -115,18 +115,20 @@ pub(super) async fn wait(
         t.waiting = t.dialog.is_some();
         t.dialog.is_some()
     });
-    let Some(dialog) = dialog else {
-        return refused("not_your_tab");
-    };
-    if let (false, Some(host)) = (dialog, browser.host()) {
+    if let (Some(false), Some(host)) = (dialog, browser.host()) {
+        // The user takes the tab: it is neither reclaimed nor expired, from before
+        // the hold is asked for until the agent's next op.
+        let before = page
+            .shared
+            .with_tab(id, |t| std::mem::replace(&mut t.waiting, true));
         let hold = json!({"tab":id,"holder":"user","sticky":true,"reason":args["reason"]});
         return match host.call("page.hold", hold).await {
-            Ok(_) => {
-                // The user has the tab: it is neither reclaimed nor expired.
-                page.shared.with_tab(id, |t| t.waiting = true);
-                json!({"status":"user_control","tab":id,"epoch":epoch})
+            Ok(_) => json!({"status":"user_control","tab":id,"epoch":epoch}),
+            Err(_) => {
+                page.shared
+                    .with_tab(id, |t| t.waiting = before.unwrap_or(false));
+                json!({"status":"unknown","reason":"browser_unavailable"})
             }
-            Err(_) => json!({"status":"unknown","reason":"browser_unavailable"}),
         };
     }
     json!({"status":"ready","tab":id,"epoch":epoch})

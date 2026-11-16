@@ -188,8 +188,15 @@ pub(crate) async fn utility(
         Some(host) => open_hosted(host, "butler:utility", "signed_out", &context, true).await?,
         None => create(cdp, shared, &context).await?,
     };
-    cdp.send("Runtime.runIfWaitingForDebugger", json!({}), Some(&session))
-        .await?;
+    if let Err(error) = cdp
+        .send("Runtime.runIfWaitingForDebugger", json!({}), Some(&session))
+        .await
+    {
+        if let Some(host) = host {
+            let _ = host.call("page.close", json!({"tab":session})).await;
+        }
+        return Err(error);
+    }
     let existing = {
         let mut state = shared.lock();
         let existing = state.utility.clone();
@@ -314,7 +321,10 @@ pub(crate) async fn attached(browser: Arc<Browser>, parent: Option<String>, para
         .await
         .is_err()
     {
-        close_target(&browser, &target, &session).await;
+        // The App's child sessions (frames, workers) are no pages of its own to close.
+        if browser.host().is_none() || kind == "page" {
+            close_target(&browser, &target, &session).await;
+        }
         return;
     }
     match kind {
