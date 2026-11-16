@@ -32,7 +32,7 @@ use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{QueuedMessageRecord, SessionQueueView, SessionView};
 
 pub(crate) use assistant::AssistantHooks;
-pub(crate) use background::conversation_background;
+pub(crate) use background::ConversationBackground;
 pub(crate) use intro::set_seen as set_chats_intro_seen;
 pub(crate) use list::{OlderRequest, on_load_older};
 pub(crate) use queue::{on_queue_changed, queue_changed};

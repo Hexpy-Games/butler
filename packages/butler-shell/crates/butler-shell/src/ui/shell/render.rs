@@ -50,15 +50,10 @@ impl Shell {
         } else {
             Gutter::default()
         };
-        let background = if self.chat.read(cx).shows_empty() {
-            None
-        } else {
-            crate::ui::chat::conversation_background(window, cx)
-        };
         let mut conversation =
             ConversationShell::new("conversation", reserve).content_gutter(gutter);
-        if let Some(background) = background {
-            conversation = conversation.background(background);
+        if !self.chat.read(cx).shows_empty() {
+            conversation = conversation.background(crate::ui::chat::ConversationBackground);
         }
         let notice = self.live_notice(window, cx);
         anchor(div(), "chat-card")

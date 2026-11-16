@@ -269,7 +269,6 @@ impl RenderOnce for ConversationShell {
             .bg(convert::gradient(
                 ds.tokens().gradient(GradientToken::ConversationBg),
             ))
-            .children(backdrop)
             .child(scope::scoped(
                 Spec {
                     conversation: Some(vars),
@@ -278,6 +277,7 @@ impl RenderOnce for ConversationShell {
                 div()
                     .relative()
                     .size_full()
+                    .children(backdrop)
                     .children(std::mem::take(&mut self.children)),
             ))
             .children(rail_layer)

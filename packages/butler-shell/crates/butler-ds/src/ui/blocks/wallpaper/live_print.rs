@@ -118,6 +118,7 @@ pub(super) fn intro_layer(tone: WallpaperTone, card: Option<ContentRect>) -> Any
                 seed: 0.,
                 params: params.uniform(),
                 flow: REST.flow,
+                col: REST.col,
             };
             let mut density_uniforms =
                 uniforms(density, density[0] / css[0], [NO_RECT; 2], &shared);
@@ -170,6 +171,7 @@ struct Shared {
     seed: f32,
     params: [f32; 4],
     flow: f32,
+    col: [f32; 4],
 }
 
 /// The density pass at 1 texel per 4 CSS px (keep-outs scaled into it), then the print pass
@@ -201,6 +203,9 @@ pub(super) fn paint(
         seed: STILL_SEED,
         flow,
         params,
+        col: frame
+            .column
+            .map_or(REST.col, |[left, right, top]| [left, right, top, 1.]),
     };
     let rect = buffer_rect(frame.content_rect, bounds, buffer);
     let (sx, sy) = (density[0] / buffer[0], density[1] / buffer[1]);
@@ -298,7 +303,7 @@ fn uniforms(
     // u_pulse; the density target's size (the print samples it)
     u[5] = [REST.pulse, shared.density[0], shared.density[1], 0.];
     u[6] = REST.drop;
-    u[7] = REST.col;
+    u[7] = shared.col;
     // u_contentRect2: the composer keep-out
     u[8] = rects[1];
     u[9] = shared.params;

@@ -188,6 +188,7 @@ pub struct Wallpaper {
     picture: Option<WallpaperImage>,
     content_rect: Option<ContentRect>,
     content_rect2: Option<ContentRect>,
+    column: Option<[f32; 3]>,
     day_phase: f32,
     paused: bool,
     host: WallpaperHost,
@@ -202,6 +203,7 @@ impl Wallpaper {
             picture: None,
             content_rect: None,
             content_rect2: None,
+            column: None,
             day_phase: STILL_DAY_PHASE,
             paused: false,
             host: WallpaperHost::default(),
@@ -218,6 +220,14 @@ impl Wallpaper {
     /// The composer a live module keeps clear of (`contentRect2`), in window px; none by default.
     pub fn content_rect2(mut self, rect: Option<ContentRect>) -> Self {
         self.content_rect2 = rect;
+        self
+    }
+
+    /// `u_col`: the reading column a print keeps its ink out of — its left and right edges and its
+    /// top, in px from this wallpaper's own top-left corner (Electron `columnRect`, already made
+    /// canvas-relative as engineDrift.ts does); none by default (new chat).
+    pub fn column(mut self, left: f32, right: f32, top: f32) -> Self {
+        self.column = Some([left, right, top]);
         self
     }
 
@@ -270,6 +280,7 @@ impl Wallpaper {
             day_phase: self.day_phase,
             content_rect: self.content_rect,
             content_rect2: self.content_rect2,
+            column: self.column,
         }
     }
 }

@@ -1,9 +1,10 @@
 //! `useConversationWallpaper` for a conversation with messages: the `conversation_background`
 //! setting's source behind the conversation, under the theme's paper.
+use butler_ds::ui::blocks::scope;
 use butler_ds::ui::blocks::wallpaper::{
     Wallpaper, WallpaperHost, WallpaperImage, WallpaperSource, drifts,
 };
-use gpui::{AnyElement, App, IntoElement as _, SharedString, Window};
+use gpui::{App, IntoElement, RenderOnce, SharedString, Window, div};
 use serde_json::Value;
 
 use super::empty::source::{parse_source, wallpaper_picture};
@@ -81,35 +82,47 @@ fn setting(settings: &Value) -> (WallpaperSource, u8) {
     parsed.unwrap_or_else(|| (WallpaperSource::live("butler.riso-print"), 70))
 }
 
-/// `useConversationWallpaper`'s background for a conversation that is not empty.
-pub(crate) fn conversation_background(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
-    let settings = AppSettings::get(cx)?;
-    let (source, percent) = setting(&settings);
-    if source == WallpaperSource::None {
-        return None;
-    }
-    let overlay = match &source {
-        WallpaperSource::Image { .. } => f32::from(percent) / 100.,
-        WallpaperSource::Live { module, .. } if module != "butler.riso-print" => {
-            f32::from(percent) / 100.
+/// `useConversationWallpaper`'s background for a conversation that is not empty. It renders
+/// inside the conversation shell's scope, which tells it where the message column is.
+#[derive(IntoElement)]
+pub(crate) struct ConversationBackground;
+
+impl RenderOnce for ConversationBackground {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let Some(settings) = AppSettings::get(cx) else {
+            return div().into_any_element();
+        };
+        let (source, percent) = setting(&settings);
+        if source == WallpaperSource::None {
+            return div().into_any_element();
         }
-        _ => 0.,
-    };
-    let drifts = drifts(&source);
-    let power = power::state(window, cx);
-    let picture = picture("conversation-background-picture", &source, window, cx);
-    let mut wallpaper = Wallpaper::new(source)
-        .motion(power.on_battery)
-        .host(WallpaperHost {
-            on_battery: power.on_battery,
-            constrained: power.constrained,
-            blur: if drifts { blur::level(window, cx) } else { 0 },
-        })
-        .content_rect2(card_rect(cx))
-        .day_phase(day_phase())
-        .paper_overlay(overlay);
-    if let Some(picture) = picture {
-        wallpaper = wallpaper.picture(picture);
+        let overlay = match &source {
+            WallpaperSource::Image { .. } => f32::from(percent) / 100.,
+            WallpaperSource::Live { module, .. } if module != "butler.riso-print" => {
+                f32::from(percent) / 100.
+            }
+            _ => 0.,
+        };
+        let drifts = drifts(&source);
+        let power = power::state(window, cx);
+        let picture = picture("conversation-background-picture", &source, window, cx);
+        let mut wallpaper = Wallpaper::new(source)
+            .motion(power.on_battery)
+            .host(WallpaperHost {
+                on_battery: power.on_battery,
+                constrained: power.constrained,
+                blur: if drifts { blur::level(window, cx) } else { 0 },
+            })
+            .content_rect2(card_rect(cx))
+            .day_phase(day_phase())
+            .paper_overlay(overlay);
+        if let Some(picture) = picture {
+            wallpaper = wallpaper.picture(picture);
+        }
+        if let Some(vars) = scope::conversation(cx) {
+            wallpaper =
+                wallpaper.column(vars.column_left, vars.column_left + vars.column_width, 0.);
+        }
+        wallpaper.into_any_element()
     }
-    Some(wallpaper.into_any_element())
 }
