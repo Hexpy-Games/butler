@@ -63,11 +63,10 @@ async fn a_reused_profile_keeps_no_site_state() -> Result<(), HarnessError> {
     );
     assert!(state_root(&s.sandbox.data).join("profile").is_dir());
     // A lock left by a killed browser under another hostname must not block the next start.
-    #[cfg(unix)]
-    {
+    if butler_platform::command_sandbox::POSIX_SHELL {
         let lock = state_root(&s.sandbox.data).join("profile/SingletonLock");
         let _ = std::fs::remove_file(&lock);
-        std::os::unix::fs::symlink("otherhost-99999", &lock)?;
+        butler_platform::secure_fs::symlink(std::path::Path::new("otherhost-99999"), &lock)?;
     }
     let (tab, seen) = visit(admin(&s), "general", after).await?;
     assert!(seen.contains("found: none"), "{seen}");
