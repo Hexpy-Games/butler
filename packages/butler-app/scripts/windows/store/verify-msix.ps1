@@ -67,7 +67,7 @@ function Read-Token { (Get-Content "$Data\app\runtime\auth\local-agent-auth.json
 function Get-Gateway($Tree) {
     $ids = @($Tree | Where-Object { $_.Name -eq 'butler-agent.exe' } | ForEach-Object { [int]$_.ProcessId })
     Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-        Where-Object { $ids -contains [int]$_.OwningProcess } | Select-Object -First 1 -ExpandProperty LocalPort
+        Where-Object { $ids -contains [int]$_.OwningProcess } | Select-Object -ExpandProperty LocalPort -Unique
 }
 function Find-SdkTool([string]$Name) {
     $hit = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.*\x64\$Name" -ErrorAction SilentlyContinue |
@@ -114,14 +114,20 @@ try {
         $tree = @(Get-CimInstance Win32_Process | Where-Object { [PkgId]::OfPid([int]$_.ProcessId) -eq $pkg.PackageFullName })
         Get-Gateway $tree
     } 180
-    $port = Get-Gateway @(Get-CimInstance Win32_Process | Where-Object { [PkgId]::OfPid([int]$_.ProcessId) -eq $pkg.PackageFullName })
-    $healthy = $false
+    # The Agent listens on more than one port; the gateway is the one whose authenticated /health answers.
     $headers = @{}
-    try {
-        $headers = @{ Authorization = 'Bearer ' + (Read-Token) }
-        $health = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 -Uri "http://127.0.0.1:$port/health" -Headers $headers
-        $healthy = $health.StatusCode -eq 200
-    } catch { Write-Host "check error: $($_.Exception.Message)" }
+    try { $headers = @{ Authorization = 'Bearer ' + (Read-Token) } } catch { Write-Host "check error: $($_.Exception.Message)" }
+    $script:port = $null
+    $healthy = Wait-Until {
+        foreach ($candidate in @(Get-Gateway @(Get-CimInstance Win32_Process | Where-Object { [PkgId]::OfPid([int]$_.ProcessId) -eq $pkg.PackageFullName }))) {
+            try {
+                $health = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri "http://127.0.0.1:$candidate/health" -Headers $headers
+                if ($health.StatusCode -eq 200) { $script:port = $candidate; return $true }
+            } catch { }
+        }
+        $false
+    } 120
+    $port = $script:port
     Check 'app_agent_gateway_start' ($listening -and $healthy) "gateway port=$port; authenticated health=$healthy"
     $updatesOk = $false
     try {
