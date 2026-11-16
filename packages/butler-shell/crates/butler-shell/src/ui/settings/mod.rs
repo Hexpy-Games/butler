@@ -196,6 +196,12 @@ impl SettingsView {
                 cx.notify();
             });
         }
+        if event.r#type == "settings.updated" && event.payload["settings"].is_object() {
+            self.state.update(cx, |state, cx| {
+                let next = state::merged(state.settings(), &event.payload["settings"]);
+                state.set_settings(next, cx);
+            });
+        }
     }
 
     /// Takes the keyboard back (Escape closes the screen), as after the command palette.

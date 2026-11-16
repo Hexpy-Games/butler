@@ -83,6 +83,8 @@ pub(crate) fn overlay(tab: &Tab, window: &mut Window, cx: &mut App) -> AnyElemen
         f32::from(size.width),
         f32::from(size.height),
     )
+    // Reader rects are page pixels (content pixels times the window zoom); gpui lays out content pixels.
+    .scale(1.0 / window.zoom())
     .picks(tab.selections.iter().map(|p| {
         PickOutlinePick::new(
             p.data["id"].as_str().unwrap_or_default().to_owned(),

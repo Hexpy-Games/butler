@@ -56,7 +56,7 @@ fn decoded_size(
         gpui::ImageSource::Custom(_) => return None,
     };
     let size = render.size(0);
-    let scale = window.scale_factor();
+    let scale = window.scale_factor() / window.zoom();
     Some((size.width.0 as f32 / scale, size.height.0 as f32 / scale))
 }
 
