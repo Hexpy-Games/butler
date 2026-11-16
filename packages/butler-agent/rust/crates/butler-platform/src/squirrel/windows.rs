@@ -81,7 +81,11 @@ fn register_protocol(stub: &Path) -> Result<(), String> {
 /// empty string, so `RegSetKeyValueW` gets a null pointer with a 2-byte length and
 /// fails; a lone NUL is stored as the same empty REG_SZ.
 fn registry_string(value: String) -> RegistryValue {
-    RegistryValue::Sz(if value.is_empty() { "\0".to_owned() } else { value })
+    RegistryValue::Sz(if value.is_empty() {
+        "\0".to_owned()
+    } else {
+        value
+    })
 }
 
 fn unregister_protocol(stub: &Path) -> Result<(), String> {
