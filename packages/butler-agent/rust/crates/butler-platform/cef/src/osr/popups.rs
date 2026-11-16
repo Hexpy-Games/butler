@@ -51,27 +51,32 @@ pub(super) fn before(
             events.emit(OsrEvent::PopupBlocked { url, reason });
             1
         }
-        PopupDecision::Allow { child } => {
+        PopupDecision::Allow { child, held } => {
             let (Some(info), Some(client)) = (info, client) else {
                 return 1;
             };
-            allow(opener, events, &runtime, child, info, client);
+            allow(opener, events, &runtime, child, held, info, client);
             events.emit(OsrEvent::PopupOpened { child, url });
             0
         }
     }
 }
 
+/// The child page, held from before its first request when `held`.
 fn allow(
     opener: &PageRef,
     events: &Events,
     runtime: &Rc<RuntimeState>,
     child: u64,
+    held: bool,
     info: &mut WindowInfo,
     client: &mut Option<Client>,
 ) {
     let source = opener.borrow();
     let mut page = Page::new(source.size, source.scale);
+    if held {
+        page.loads = super::hold::Loads::held();
+    }
     page.signed_out_owner = source.signed_out_owner.clone();
     if let Some(owner) = &page.signed_out_owner
         && let Some((_, count)) = runtime.contexts.borrow_mut().get_mut(owner)

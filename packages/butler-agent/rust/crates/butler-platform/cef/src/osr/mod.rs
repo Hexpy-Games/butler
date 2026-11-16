@@ -27,6 +27,8 @@ mod gpu;
 #[cfg(cef_osr)]
 mod handlers;
 #[cfg(cef_osr)]
+mod hold;
+#[cfg(cef_osr)]
 mod ime;
 #[cfg(cef_osr)]
 mod input;

@@ -227,7 +227,11 @@ pub enum PopupDisposition {
 pub enum PopupDecision {
     NewTab,
     Block(PopupBlock),
-    Allow { child: u64 },
+    /// `held`: the child is created with its loads held until `OsrRuntime::release_loads`.
+    Allow {
+        child: u64,
+        held: bool,
+    },
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PopupBlock {
