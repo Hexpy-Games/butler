@@ -10,6 +10,8 @@ on:
       - packages/butler-app/scripts/windows/gpui-update-checks.ts
       - packages/butler-agent/rust/crates/butler-platform/src/squirrel.rs
       - packages/butler-agent/rust/crates/butler-platform/src/squirrel/**
+      - packages/butler-agent/rust/crates/butler-platform/src/app_instance.rs
+      - packages/butler-agent/rust/crates/butler-platform/src/app_instance/**
       - packages/butler-agent/rust/crates/butler-platform/src/app_shell.rs
       - packages/butler-agent/rust/crates/butler-platform/src/login_item/**
       - .github/workflows/gpui-windows-package.yml

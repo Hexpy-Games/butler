@@ -236,8 +236,11 @@ impl Shell {
         crate::ui::manage::library::detail::install(&self.manage_ctx(), cx);
         crate::ui::manage::install_window(&self.manage_ctx(), cx);
         let manage = self.manage_ctx();
-        self.composer
-            .update(cx, |composer, _| composer.manage = Some(manage.clone()));
+        let focus = self.focus.clone();
+        self.composer.update(cx, |composer, _| {
+            composer.manage = Some(manage.clone());
+            composer.shell_focus = Some(focus);
+        });
         let weak = cx.entity().downgrade();
         crate::ui::inspector::install_epic_host(cx, manage, move |session, cx| {
             weak.upgrade()?.read(cx).sidebar.epic_of(session)
@@ -266,6 +269,15 @@ impl Shell {
                 }
             }),
             cx.subscribe_in(composer, window, Self::on_composer),
+            // Electron falls back to `body` when the focused element goes, where the
+            // app-wide shortcuts still work: the nearest surviving focusable ancestor (an open
+            // overlay keeps its focus), else the shell root, is that fallback.
+            cx.on_focus_lost(window, |this, window, cx| {
+                let target = window
+                    .focus_lost_restore_target(cx)
+                    .unwrap_or_else(|| this.focus.clone());
+                window.focus(&target, cx);
+            }),
         ];
         if let Some(runtime) = crate::lifecycle::runtime(cx) {
             subscriptions.push(cx.observe(&runtime, |_, _, cx| cx.notify()));

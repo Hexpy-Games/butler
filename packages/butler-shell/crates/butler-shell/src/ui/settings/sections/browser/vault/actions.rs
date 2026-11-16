@@ -1,6 +1,6 @@
 //! The loads and the actions of `useSignIns` and `useVault`: one action runs at a time (`busy`),
-//! shows its toast, reloads, and a failure shows React's fallback copy (the client returns no
-//! error codes).
+//! shows its toast, reloads, and a failure shows the sentence of the API error code the client
+//! carries, else React's fallback copy (`notifyError`).
 use butler_ds::ui::motion;
 use std::time::Duration;
 
@@ -126,12 +126,13 @@ impl BrowserVault {
                         after(this, cx);
                         Self::reload(scope, cx);
                     }
-                    Err(_) => {
+                    Err(error) => {
                         let failed = match scope {
                             Scope::SignIns => copy.sign_in_failed,
                             Scope::Vault => copy.failed,
                         };
-                        toast::show(cx, Toast::error(failed));
+                        let next = crate::ui::i18n::errors::toast(cx, &error, failed);
+                        toast::show(cx, next);
                     }
                 }
             },
@@ -364,10 +365,11 @@ impl BrowserVault {
                     );
                     Self::forget_later(key, epoch, cx);
                 }
-                Err(_) => {
+                Err(error) => {
                     this.revealed.remove(&key);
                     let copy = words(Ds::get(cx).lang());
-                    toast::show(cx, Toast::error(copy.failed));
+                    let next = crate::ui::i18n::errors::toast(cx, &error, copy.failed);
+                    toast::show(cx, next);
                 }
             },
         );

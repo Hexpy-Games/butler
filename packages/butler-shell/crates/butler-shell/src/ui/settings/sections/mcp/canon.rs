@@ -84,10 +84,11 @@ impl McpPage {
                     this.canon.grants = Some(grants);
                     this.canon.failed = false;
                 }
-                Err(_) => {
+                Err(error) => {
                     this.canon.failed = true;
                     let message = words(Ds::get(cx).lang()).request_failed;
-                    toast::show(cx, Toast::error(message));
+                    let next = crate::ui::i18n::errors::toast(cx, &error, message);
+                    toast::show(cx, next);
                 }
             },
         );
@@ -122,8 +123,9 @@ impl McpPage {
                         let done = if denied { w.deleted } else { w.revoked };
                         toast::show(cx, Toast::message(done));
                     }
-                    Err(_) => {
-                        toast::show(cx, Toast::error(w.request_failed));
+                    Err(error) => {
+                        let next = crate::ui::i18n::errors::toast(cx, &error, w.request_failed);
+                        toast::show(cx, next);
                     }
                 }
             },

@@ -11,7 +11,7 @@ use objc2::{
     rc::{Allocated, Retained},
     runtime::Bool,
 };
-use objc2_app_kit::{NSApplication, NSEvent};
+use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSEvent};
 
 struct ApplicationIvars {
     handling: Cell<Bool>,
@@ -76,6 +76,15 @@ pub(crate) fn install_application() {
         unsafe { msg_send![ButlerCefApplication::class(), sharedApplication] };
 }
 
+/// The host has no windows, and the bundle it runs from may be the App's, whose Info.plist cannot mark it as a background process.
+fn set_accessory_policy() {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    NSApplication::sharedApplication(mtm)
+        .setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+}
+
 pub(crate) struct Loaded {
     _loader: cef::library_loader::LibraryLoader,
     _sandbox: Option<cef::sandbox::Sandbox>,
@@ -88,6 +97,7 @@ pub(crate) fn load(args: &cef::args::Args) -> Result<Loaded, &'static str> {
         .is_some_and(|name| name.to_string_lossy().contains(" Helper"));
     if !helper {
         install_application();
+        set_accessory_policy();
     }
     let loader = cef::library_loader::LibraryLoader::new(&exe, helper);
     if !loader.load() {
