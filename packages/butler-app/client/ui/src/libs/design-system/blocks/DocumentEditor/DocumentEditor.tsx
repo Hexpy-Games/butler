@@ -27,6 +27,26 @@ export interface DocumentEditorProps extends Omit<DsBaseProps<HTMLAttributes<HTM
   formatBar?: ReactNode;
 }
 
+export interface DocumentEditorHeaderProps extends Omit<DsBaseProps<HTMLAttributes<HTMLDivElement>>, "title">, Pick<DocumentEditorProps, "title" | "note" | "actions" | "menuActions" | "menuLabel" | "menuRef" | "controls"> {}
+
+/** The title line by itself, for a host that keeps it fixed above a scrolling page. */
+export function DocumentEditorHeader({ title, note, actions, menuActions, menuLabel, menuRef, controls, className, ...props }: DocumentEditorHeaderProps) {
+  const folds = Boolean(menuActions?.length);
+  return (
+    <div {...props} className={dsClass(styles.header, className)} data-slot="document-editor-header">
+      <div className={styles.title}>{title}</div>
+      {actions || controls ? (
+        <div className={styles.actions} data-folds={folds ? "true" : undefined}>
+          {actions ? <div className={styles.inline} data-slot="document-editor-actions">{actions}</div> : null}
+          {folds ? <div ref={menuRef} className={styles.menu} data-slot="document-editor-menu"><OverflowActionMenu items={menuActions!} label={menuLabel} /></div> : null}
+          {controls}
+        </div>
+      ) : null}
+      {note ? <div className={styles.status}>{note}</div> : null}
+    </div>
+  );
+}
+
 /**
  * A document being written: title line, status and the editable page in MarkdownContent's document
  * typography, so a document reads the same while edited as when read. The caller owns the editor engine;
@@ -35,21 +55,10 @@ export interface DocumentEditorProps extends Omit<DsBaseProps<HTMLAttributes<HTM
  * wash and rule, faded in and out.
  */
 export function DocumentEditor({ title, note, actions, menuActions, menuLabel, menuRef, controls, children, formatBar, className, ...props }: DocumentEditorProps) {
-  const folds = Boolean(menuActions?.length);
   return (
     <div {...props} className={dsClass(styles.editor, className)} data-slot="document-editor">
       {title || actions || controls ? (
-        <div className={styles.header}>
-          <div className={styles.title}>{title}</div>
-          {actions || controls ? (
-            <div className={styles.actions} data-folds={folds ? "true" : undefined}>
-              {actions ? <div className={styles.inline} data-slot="document-editor-actions">{actions}</div> : null}
-              {folds ? <div ref={menuRef} className={styles.menu} data-slot="document-editor-menu"><OverflowActionMenu items={menuActions!} label={menuLabel} /></div> : null}
-              {controls}
-            </div>
-          ) : null}
-          {note ? <div className={styles.status}>{note}</div> : null}
-        </div>
+        <DocumentEditorHeader title={title} note={note} actions={actions} menuActions={menuActions} menuLabel={menuLabel} menuRef={menuRef} controls={controls} />
       ) : note ? <div className={styles.status}>{note}</div> : null}
       <div className={cn(markdown.markdown, styles.page)} data-selectable data-slot="document-editor-page">{children}</div>
       {formatBar}
