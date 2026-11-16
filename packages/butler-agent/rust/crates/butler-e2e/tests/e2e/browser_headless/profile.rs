@@ -62,6 +62,13 @@ async fn a_reused_profile_keeps_no_site_state() -> Result<(), HarnessError> {
         "the fixture keeps its origin across the restart"
     );
     assert!(state_root(&s.sandbox.data).join("profile").is_dir());
+    // A lock left by a killed browser under another hostname must not block the next start.
+    #[cfg(unix)]
+    {
+        let lock = state_root(&s.sandbox.data).join("profile/SingletonLock");
+        let _ = std::fs::remove_file(&lock);
+        std::os::unix::fs::symlink("otherhost-99999", &lock)?;
+    }
     let (tab, seen) = visit(admin(&s), "general", after).await?;
     assert!(seen.contains("found: none"), "{seen}");
     call(&admin(&s), "general", "tab.close", &tab, json!({})).await?;

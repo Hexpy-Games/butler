@@ -69,6 +69,12 @@ fn prepare(root: &Path) -> std::io::Result<(PathBuf, PathBuf)> {
     std::fs::create_dir_all(root)?;
     let profile = root.join("profile");
     std::fs::create_dir_all(&profile)?;
+    // A killed browser leaves Chrome's singleton lock behind. Only this agent's one browser uses
+    // the profile and `stop` waits for it to end, so a lock found here is stale; one naming
+    // another hostname would make Chrome refuse the profile.
+    for name in ["SingletonLock", "SingletonCookie", "SingletonSocket"] {
+        let _ = std::fs::remove_file(profile.join(name));
+    }
     let log = root.join("browser.log");
     if std::fs::metadata(&log).is_ok_and(|m| m.len() > LOG_LIMIT) {
         let _ = std::fs::remove_file(&log);
@@ -210,7 +216,6 @@ impl Browser {
         // exiting with the same profile open.
         for _ in 0..300 {
             // Windows ends the tree asynchronously after its Job Object closes.
-            // Under load this can take longer than a fixed one-second retry window.
             if pid.is_none_or(|pid| liveness(pid) == Liveness::Gone) {
                 break;
             }

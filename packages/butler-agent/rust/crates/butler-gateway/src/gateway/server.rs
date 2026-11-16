@@ -47,11 +47,11 @@ pub struct GatewayConfig {
     pub headless_browser: Option<HeadlessBrowserConfig>,
 }
 
-/// Where the headless browser keeps its throwaway profile and its pinned
+/// Where the headless browser keeps its one reused profile and its pinned
 /// Chrome for Testing install.
 #[derive(Clone, Debug)]
 pub struct HeadlessBrowserConfig {
-    /// Profile and log directory (emptied when the browser is reaped).
+    /// Holds the one reused profile (it stays when the browser is reaped) and the log.
     pub root: std::path::PathBuf,
     pub install: butler_runtime::browser::InstallSource,
     /// On at start (Settings → Security changes it while running).
