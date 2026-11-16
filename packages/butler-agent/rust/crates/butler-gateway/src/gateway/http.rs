@@ -7,6 +7,7 @@ mod authority_permissions;
 mod body;
 mod browser_host;
 mod browser_stills;
+mod butler_account;
 mod content;
 mod documents;
 #[cfg(feature = "e2e-fixtures")]

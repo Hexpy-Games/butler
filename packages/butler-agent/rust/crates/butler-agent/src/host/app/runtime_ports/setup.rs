@@ -2,6 +2,8 @@
 //! local model servers, API keys and the ChatGPT sign-in flow, behind the
 //! gateway's [`AppSetupPort`].
 
+mod butler_account;
+pub(crate) use butler_account::ButlerAccount;
 mod butler_vault;
 mod chatgpt_account;
 mod credentials;
@@ -17,8 +19,9 @@ use tokio::sync::watch;
 
 use butler_gateway::gateway::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
-    ApplicationFuture, GatewayApplicationError, LocalModelServersView, OauthFlowView,
-    ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView, SetupReadinessView,
+    ApplicationFuture, ButlerAccountRequest, GatewayApplicationError, LocalModelServersView,
+    OauthFlowView, ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView,
+    SetupReadinessView, butler_account_disabled,
 };
 use butler_models::models::{
     CredentialList, DeletedCredential, LocalServerKind, LocalServerProbe, ModelConfiguration,
@@ -35,6 +38,7 @@ const LOCAL_PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 
 /// Everything first-run setup needs from the process.
 pub(crate) struct AppSetupParts {
+    pub(crate) butler_account: Option<ButlerAccount>,
     pub(crate) plugins: Arc<crate::host::plugins::Plugins>,
     pub(crate) configuration: Arc<ModelConfiguration>,
     pub(crate) settings: Arc<AppSettingsFactsAdapter>,
@@ -49,6 +53,7 @@ pub(crate) struct AppSetupParts {
 pub(crate) struct AppSetup(Arc<SetupInner>);
 
 struct SetupInner {
+    butler_account: Option<ButlerAccount>,
     plugins: Arc<crate::host::plugins::Plugins>,
     configuration: Arc<ModelConfiguration>,
     settings: Arc<AppSettingsFactsAdapter>,
@@ -73,6 +78,7 @@ impl AppSetup {
             parts.acquisition,
         );
         Self(Arc::new(SetupInner {
+            butler_account: parts.butler_account,
             oauth: OauthFlows::new(parts.configuration.clone()),
             configuration: parts.configuration,
             plugins: parts.plugins,
@@ -110,6 +116,19 @@ fn local_server_probes() -> Vec<LocalServerProbe> {
 }
 
 impl AppSetupPort for AppSetup {
+    fn butler_account(
+        &self,
+        request: ButlerAccountRequest,
+    ) -> ApplicationFuture<serde_json::Value> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            match &this.butler_account {
+                Some(account) => account.handle(request).await,
+                None => Err(butler_account_disabled()),
+            }
+        })
+    }
+
     fn readiness(&self) -> watch::Receiver<SetupReadinessView> {
         self.0.preparation.subscribe()
     }

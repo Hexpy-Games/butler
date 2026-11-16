@@ -58,6 +58,7 @@ mod browser_tab_claims;
 mod browser_tool_args;
 mod browser_usage;
 mod browsing_settings;
+mod butler_account;
 mod cassette_lint;
 mod catalog_provider_truth;
 mod chatgpt_plan_usage;
