@@ -196,7 +196,7 @@ fn dispatch(
             }
             return response(count, refused).map(Some);
         }
-        if page_op(&op) {
+        if super::usage::page_op(&op) {
             let tab = hub
                 .tabs
                 .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
@@ -233,28 +233,9 @@ fn dispatch(
         }
         frame["id"] = json!(id);
         frame["deadline_ms"] = json!(deadline);
-        super::usage::dispatch(&mut hub, frame, sender)?;
+        super::usage::dispatch(state, &mut hub, frame, sender)?;
     }
     Ok(None)
-}
-/// Ops that act on a tab's page: its URL must be permitted and its policy is sent.
-fn page_op(op: &str) -> bool {
-    matches!(
-        op,
-        "tab.observe"
-            | "tab.read"
-            | "tab.zoom"
-            | "tab.screenshot"
-            | "tab.image_collect"
-            | "tab.devtools"
-            | "tab.prepare"
-            | "tab.act"
-            | "tab.dialog"
-            | "signin.fill"
-            | "pay.inspect"
-            | "pay.fill"
-            | "autofill.fill"
-    )
 }
 pub(super) fn response(count: usize, value: Value) -> Result<Response, HttpError> {
     super::super::json(
@@ -315,6 +296,7 @@ pub(super) fn enforce_result_policy(
             && let Some(host) = &hub.host
         {
             let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"use.revoked","session":session,"tab":tab,"args":{}}));
+            hub.pages.iter().for_each(|link| link.revoke(session, tab));
         }
     }
     *result = json!({"status":if op == "tab.act" {"unknown"} else {"not_dispatched"},"reason":"navigation_denied"});
@@ -360,6 +342,7 @@ pub(in crate::gateway::http) async fn close_owner(
         && let Some(host) = &hub.host
     {
         let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"owner.closed","session":session,"args":{},"deadline_ms":5000}));
+        hub.pages.iter().for_each(|link| link.close_owner(session));
     }
     stopped.map_err(|reason| error(500, reason))
 }
