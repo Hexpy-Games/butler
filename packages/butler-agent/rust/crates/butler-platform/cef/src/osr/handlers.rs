@@ -85,7 +85,7 @@ cef::wrap_life_span_handler! {
             p.popup = None;
             // Quit already closed this page: a browser created after that must close too, or the
             // teardown waits for it until the 3 s limit and skips cef::shutdown.
-            if p.closing && let Some(host) = p.browser.as_ref().and_then(|b| b.host()) {
+            if p.closing && let Some(host) = p.browser.as_ref().and_then(cef::ImplBrowser::host) {
                 host.close_browser(1);
             }
         }
