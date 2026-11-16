@@ -79,18 +79,22 @@ pub(super) fn strip(
             cx.refresh_windows();
         })
         .on_close(|id, _, cx| {
-            cx.global_mut::<BrowserState>()
-                .close(&TabId(id.to_owned().into()));
+            cx.update_global::<BrowserState, _>(|model, cx| {
+                model.close(&TabId(id.to_owned().into()), cx);
+            });
             super::popup_window::sync(cx);
             cx.refresh_windows();
         })
         .on_move(|mv, _, cx| {
             let value = Owner::parse(&mv.to_group).and_then(|owner| {
-                cx.global_mut::<BrowserState>().move_tab(
-                    &TabId(mv.tab_id.clone()),
-                    owner,
-                    isize::try_from(mv.index).unwrap_or(isize::MAX),
-                )
+                cx.update_global::<BrowserState, _>(|model, cx| {
+                    model.move_tab(
+                        &TabId(mv.tab_id.clone()),
+                        owner,
+                        isize::try_from(mv.index).unwrap_or(isize::MAX),
+                        cx,
+                    )
+                })
             });
             result(&value, cx);
         })

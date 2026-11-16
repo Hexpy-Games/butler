@@ -132,9 +132,9 @@ fn dev_install(configured: &Path) -> Option<Install> {
     )
 }
 
-/// `resolveCliInstalledAgent`: the active CLI installation (`AGENT_HOME/current`), if usable here.
+/// `resolveCliInstalledAgent`: the active CLI installation (`cliAgentHome/current`), if usable here.
 fn cli_installed() -> Option<Install> {
-    let home = user_dirs::agent_home()?;
+    let home = user_dirs::app_cli_agent_home()?;
     let root = home.join("current").canonical().ok()?;
     let manifest = read_manifest(&root)?;
     let text = |key: &str| manifest.get(key).and_then(Value::as_str);

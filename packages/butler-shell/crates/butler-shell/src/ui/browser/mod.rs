@@ -1,4 +1,6 @@
 //! Shell-owned browser tabs, address policy and page engine boundary.
+use gpui::BorrowAppContext as _;
+
 pub(crate) mod address;
 pub(crate) mod area;
 mod bookmarks;
@@ -21,15 +23,19 @@ mod popup_window;
 mod popups;
 #[cfg(feature = "cef")]
 pub(crate) mod printing;
+pub(crate) mod restore;
 pub(crate) mod shell_state;
 mod tabs;
 mod toolbar;
 pub(crate) mod transfer;
+mod visits;
 
 pub(crate) fn init(cx: &mut gpui::App) {
     if cx.has_global::<model::BrowserState>() {
         return;
     }
+    visits::init(cx);
+    restore::init(cx);
     model::BrowserState::init(cx);
     cx.set_global(shell_state::BrowserShell::default());
 }
@@ -40,9 +46,9 @@ pub(crate) fn open_link(url: &str, cx: &mut gpui::App) {
         cx.open_url(url);
         return;
     }
-    let value = cx
-        .global_mut::<model::BrowserState>()
-        .create(model::Owner::Mine, Some(url), false);
+    let value = cx.update_global::<model::BrowserState, _>(|model, cx| {
+        model.create(model::Owner::Mine, Some(url), false, true, cx)
+    });
     area::result(&value, cx);
     if value.is_ok()
         && let Some(ctx) = crate::ui::manage::window_ctx(cx)
@@ -70,12 +76,16 @@ pub(crate) fn open_output_in_browser(
     if let Some(session) = session
         .filter(|_| url::Url::parse(url).is_ok_and(|u| matches!(u.scheme(), "http" | "https")))
     {
-        let value = cx.global_mut::<model::BrowserState>().create_view(
-            model::Owner::Conversation(session.to_owned().into()),
-            Some(url),
-            false,
-            preview,
-        );
+        let value = cx.update_global::<model::BrowserState, _>(|model, cx| {
+            model.create_view(
+                model::Owner::Conversation(session.to_owned().into()),
+                Some(url),
+                false,
+                preview,
+                true,
+                cx,
+            )
+        });
         area::result(&value, cx);
         if let Ok(Some(id)) = value {
             cx.global_mut::<shell_state::BrowserShell>()
