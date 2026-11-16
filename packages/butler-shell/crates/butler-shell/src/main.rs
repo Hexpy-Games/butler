@@ -33,6 +33,30 @@ fn start(cx: &mut App, args: &[OsString]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// One App per data folder (main.mjs:432-466): the arguments of later launches. Exits when
+/// another App has the folder. `None` for a legacy folder, which is read only and takes no
+/// lock, and when the endpoint cannot be opened.
+fn single_instance(args: &[OsString]) -> Option<tokio::sync::mpsc::UnboundedReceiver<Vec<String>>> {
+    use butler_platform::app_instance::{Launch, claim};
+    let data = lifecycle::data_root(args);
+    if lifecycle::legacy_data(&data) {
+        return None;
+    }
+    let forwarded: Vec<String> = args
+        .iter()
+        .skip(1)
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    match claim(&data, &forwarded) {
+        Ok(Launch::Forwarded) => std::process::exit(0),
+        Ok(Launch::First(launches)) => Some(launches),
+        Err(error) => {
+            eprintln!("butler-shell: single instance unavailable ({error})");
+            None
+        }
+    }
+}
+
 fn main() {
     let args: Vec<OsString> = std::env::args_os().collect();
     if let Some(event) = butler_platform::squirrel::event(&args) {
@@ -53,25 +77,7 @@ fn main() {
         };
         std::process::exit(code);
     }
-    // One App per data folder (main.mjs:432-466). A legacy folder is read only: no lock there.
-    let data = lifecycle::data_root(&args);
-    let forwarded: Vec<String> = args
-        .iter()
-        .skip(1)
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
-    let launches = if lifecycle::legacy_data(&data) {
-        None
-    } else {
-        match butler_platform::app_instance::claim(&data, &forwarded) {
-            Ok(butler_platform::app_instance::Launch::Forwarded) => return,
-            Ok(butler_platform::app_instance::Launch::First(launches)) => Some(launches),
-            Err(error) => {
-                eprintln!("butler-shell: single instance unavailable ({error})");
-                None
-            }
-        }
-    };
+    let launches = single_instance(&args);
     let app = application().with_assets(ui::assets::Assets);
     let (urls, mut incoming) = futures::channel::mpsc::unbounded::<Vec<String>>();
     app.on_open_urls(move |values| {
