@@ -18,6 +18,7 @@ export default tseslint.config(
       "packages/butler-app/client/electron/.native-agent-payload/**",
       "packages/butler-site/dist/**",
       "packages/butler-site/.astro/**",
+      "packages/butler-mobile/**",
       // Cargo output, including the static ONNX Runtime source/build cache that
       // scripts/prepare-static-ort.py keeps under target/native-deps.
       "packages/butler-agent/rust/target/**",

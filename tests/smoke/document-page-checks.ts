@@ -23,6 +23,18 @@ export const documentHarnessPlugin = {
   },
 };
 
+export async function checkMenuTooltip(page: Page) {
+  const button = page.locator('[data-test-class="document-title-row"]').getByRole("button", { name: "내보내기", exact: true });
+  await button.hover();
+  await page.getByRole("tooltip", { name: "내보내기" }).waitFor({ state: "visible" });
+  await button.click();
+  await page.getByRole("menu").waitFor({ state: "visible" });
+  await page.getByRole("tooltip").waitFor({ state: "hidden" });
+  assert.equal(await page.getByRole("tooltip").count(), 0);
+  await page.keyboard.press("Escape");
+  await page.getByRole("menu").waitFor({ state: "hidden" });
+}
+
 export async function checkTrailing(page: Page, base: string, id: string) {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${base}?visual=components&theme=light&locale=ko`);

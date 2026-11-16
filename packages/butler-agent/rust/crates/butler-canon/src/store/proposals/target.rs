@@ -60,13 +60,8 @@ pub(super) fn label(
                     "Reorder Epics".into()
                 }
             }
-            "spec.edit" => {
-                if ko {
-                    "명세 변경".into()
-                } else {
-                    "Edit spec".into()
-                }
-            }
+            "spec.edit" => (if ko { "명세 변경" } else { "Edit spec" }).into(),
+            "spec.create" => (if ko { "명세 등록" } else { "Add spec" }).into(),
             // The required epic.create also labels project.create.
             _ => continue,
         };

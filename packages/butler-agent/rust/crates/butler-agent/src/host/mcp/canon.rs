@@ -34,7 +34,7 @@ fn required(value: Option<String>) -> Result<String, Error> {
 impl McpServer {
     #[tool(
         name = "canon_list",
-        description = "List canon plans and epics. Follow cursor for further pages."
+        description = "List canon plans and epics; each epic names its specs. Follow cursor for further pages."
     )]
     async fn canon_list(
         &self,
@@ -82,28 +82,35 @@ impl McpServer {
     }
     #[tool(
         name = "canon_get_spec",
-        description = "Read a shared canon spec body, criteria and revision."
+        description = "Read shared canon specs: one by spec_id, or every spec of an epic by epic_id. Returns each body, criteria and revision."
     )]
     async fn canon_get_spec(
         &self,
         context: RequestContext<RoleServer>,
         Parameters(args): Parameters<args::Spec>,
     ) -> CallToolResult {
+        #[derive(serde::Serialize)]
+        struct Specs {
+            specs: Vec<CanonSpecBody>,
+        }
         result(
             async {
                 let client = Client::local(self, &context).await?;
-                let id = match (args.spec_id, args.epic_id) {
-                    (Some(id), None) => id,
+                let ids = match (args.spec_id, args.epic_id) {
+                    (Some(id), None) => vec![id],
                     (None, Some(epic)) => {
                         let epic: CanonEpic = decode(
                             client
                                 .get(&format!("/canon/epics/{}", component(&epic)))
                                 .await?,
                         )?;
-                        epic.specs
-                            .first()
-                            .map(|s| s.id.clone())
-                            .ok_or_else(|| Error::new("not_linked", "연결된 스펙이 없습니다."))?
+                        let mut pending: Vec<_> = epic.specs.into_iter().rev().collect();
+                        let mut ids = Vec::new();
+                        while let Some(spec) = pending.pop() {
+                            ids.push(spec.id);
+                            pending.extend(spec.children.into_iter().rev());
+                        }
+                        ids
                     }
                     _ => {
                         return Err(Error::new(
@@ -112,11 +119,15 @@ impl McpServer {
                         ));
                     }
                 };
-                decode::<CanonSpecBody>(
-                    client
-                        .get(&format!("/canon/specs/{}", component(&id)))
-                        .await?,
-                )
+                let mut specs = Vec::new();
+                for id in ids {
+                    specs.push(decode::<CanonSpecBody>(
+                        client
+                            .get(&format!("/canon/specs/{}", component(&id)))
+                            .await?,
+                    )?);
+                }
+                Ok(Specs { specs })
             }
             .await,
         )
@@ -340,7 +351,7 @@ impl McpServer {
     }
     #[tool(
         name = "canon_propose_spec_change",
-        description = "Open a spec change proposal for approval in Butler."
+        description = "Open a spec change proposal for approval in Butler. The body replaces the whole spec and uses the same Markdown format as canon_propose_spec."
     )]
     async fn canon_propose_spec_change(
         &self,
@@ -360,6 +371,38 @@ impl McpServer {
             decode::<Proposal>(client.request(reqwest::Method::POST,&format!("/canon/specs/{}/proposals",component(&args.spec_id)),
                 Some(json!({"base_revision":args.base_revision,"body":args.body,"summary":args.summary}))).await?)
         }.await)
+    }
+    #[tool(
+        name = "canon_propose_spec",
+        description = "Propose a new spec for an epic, for approval in Butler. The body is Markdown: first line '# ' and the title; '## ' lines name parts; an acceptance criterion is a list item that starts with an ID such as 'VB-03', then its text."
+    )]
+    async fn canon_propose_spec(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(args): Parameters<args::ProposeNew>,
+    ) -> CallToolResult {
+        #[derive(serde::Serialize, serde::Deserialize)]
+        struct Proposal {
+            id: String,
+            epic_id: String,
+            summary: String,
+            state: String,
+        }
+        result(
+            async {
+                let client = Client::local(self, &context).await?;
+                decode::<Proposal>(
+                    client
+                        .request(
+                            reqwest::Method::POST,
+                            &format!("/canon/epics/{}/specs", component(&args.epic_id)),
+                            Some(json!({"body":args.body,"summary":args.summary})),
+                        )
+                        .await?,
+                )
+            }
+            .await,
+        )
     }
 }
 

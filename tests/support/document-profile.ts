@@ -17,7 +17,7 @@ export function documentProfilePlugin() {
   return { name: "document-profile", enforce: "pre" as const, transform(source: string, id: string) {
     if (!id.includes("/components/documents/") || !/\.(tsx?|jsx?)$/u.test(id)) return;
     if (id.endsWith("/documentMarkdown.ts")) {
-      source = replace(source, "fromMarkdown(markdown).children", '__documentProfile("mdast parse", () => fromMarkdown(markdown)).children');
+      source = replace(source, "fromMarkdown(markdown, { extensions: [gfmTable()], mdastExtensions: [gfmTableFromMarkdown()] }).children", '__documentProfile("mdast parse", () => fromMarkdown(markdown, { extensions: [gfmTable()], mdastExtensions: [gfmTableFromMarkdown()] })).children');
       source = replace(source, "function importPart(", "function importPartContent(");
       source += `\nconst importPart: typeof importPartContent = (raw, part) => __documentProfile(
         part.type === "code" && part.lang === "blocks" ? "part blocks" : part.type === "paragraph" && part.children[0]?.type === "image" ? "part image" : "part text or raw",

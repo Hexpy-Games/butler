@@ -1,5 +1,5 @@
-//! notifyd power events with explicit process-owned shutdown and reaping.
-use crate::process_control;
+//! notifyd power events; the watcher's process group ends with its owner.
+use crate::process_control::{self, GroupSignal};
 use std::{
     process::Stdio,
     sync::{Mutex, OnceLock},
@@ -54,9 +54,14 @@ async fn watch(cancel: CancellationToken) -> std::io::Result<()> {
         .stderr(Stdio::null());
     process_control::hide_console(&mut command);
     process_control::isolate_group(&mut command);
-    let mut child = tokio::process::Command::from(command)
-        .kill_on_drop(true)
-        .spawn()?;
+    let mut child = tokio::process::Command::from(command).spawn()?;
+    // sh and notifyutil share sh's group: end both, also when this future is
+    // dropped without close().
+    let _group = Group(
+        child
+            .id()
+            .ok_or_else(|| std::io::Error::other("missing pid"))?,
+    );
     process_control::contain(&child)?;
     // EOF is the parent-death signal, including when the host is SIGKILLed.
     let stdin = child.stdin.take();
@@ -76,4 +81,12 @@ async fn watch(cancel: CancellationToken) -> std::io::Result<()> {
     }
     let status = child.wait().await?;
     Err(std::io::Error::other(format!("exited {status}")))
+}
+
+/// Kills the watcher's process group when dropped.
+struct Group(u32);
+impl Drop for Group {
+    fn drop(&mut self) {
+        let _ = process_control::signal_group(self.0, GroupSignal::Kill);
+    }
 }

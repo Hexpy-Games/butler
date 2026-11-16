@@ -140,7 +140,8 @@ fn resource<'a>(
     use crate::gateway::AppCanonResource::{
         Activity, AllowGrant, BacklogOrder, Canon, CheckCriterion, Comment, CreateEpic, CreatePlan,
         CreateTag, DeleteEpic, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic,
-        EpicProgress, Grants, List, Plan, PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
+        EpicProgress, Grants, List, Plan, PlanOrder, ProposeNewSpec, ProposeSpec, RevokeGrant,
+        Spec, Tags,
     };
     Ok(match (method, parts) {
         (&Method::GET, ["canon", "list"]) => (List, ""),
@@ -151,6 +152,7 @@ fn resource<'a>(
         (&Method::GET, ["canon", "specs", id]) => (Spec, *id),
         (&Method::POST, ["canon", "specs", id, "criteria", _]) => (CheckCriterion, *id),
         (&Method::POST, ["canon", "specs", id, "proposals"]) => (ProposeSpec, *id),
+        (&Method::POST, ["canon", "epics", id, "specs"]) => (ProposeNewSpec, *id),
         (&Method::POST, ["canon", "epics", id, "comments"]) => (Comment, *id),
         (&Method::GET, ["canon", "epics", id, "activity"]) => (Activity, *id),
         (&Method::GET, ["projects", id, "canon", "tags"]) => (Tags, *id),

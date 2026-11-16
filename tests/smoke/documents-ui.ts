@@ -1,5 +1,5 @@
 // UI behavior smoke: offline gateway fixtures, real Lexical editor and product screens.
-import { assertDocumentOverflow, assertDocumentLayout, measureDocumentLayout, checkDocumentImage, checkTrailing, checkTitleLine, clickDocumentAction, checkDocumentMenu, measureHeader, documentHarnessPlugin } from "./document-page-checks";
+import { assertDocumentOverflow, assertDocumentLayout, measureDocumentLayout, checkDocumentImage, checkTrailing, checkTitleLine, checkMenuTooltip, clickDocumentAction, checkDocumentMenu, measureHeader, documentHarnessPlugin } from "./document-page-checks";
 import assert from "node:assert/strict";
 import { getAppCopy } from "../../packages/butler-i18n/src/index";
 import { execFileSync } from "node:child_process";
@@ -414,7 +414,7 @@ async function titleLines() {
     await setup(page);
     for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (const fullPage of [false, true]) {
       await open(page, width, theme, fullPage);
-      results.push(await checkTitleLine(page, { width, theme, stage, evidence, fullPage }));
+      results.push(await checkTitleLine(page, { width, theme, stage, evidence, fullPage })); if (width === 1440 && theme === "light" && !fullPage) await checkMenuTooltip(page);
       if (width === 390 && stage !== "before") await checkDocumentMenu(page, { theme, evidence, fullPage, exports });
     }
     for (const fullPage of [false, true]) for (const width of [390, 768, 1024, 1280, 1440]) {
@@ -426,7 +426,7 @@ async function titleLines() {
 async function matrix(page: Page) {
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
     head = { ...head, title: "Report — document layout, revisions and export", body: initial + wideContent }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
-    await open(page, width, theme);
+    await open(page, width, theme); await editor(page).locator("table").waitFor();
     const paneLayout = await measureDocumentLayout(page);
     layouts.push({ width, theme, background, state: "pane-document", layout: paneLayout });
     assertDocumentLayout(paneLayout, width); await assertDocumentOverflow(page);
