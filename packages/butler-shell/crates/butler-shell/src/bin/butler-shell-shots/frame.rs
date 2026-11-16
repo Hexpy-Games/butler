@@ -70,6 +70,15 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
                 Ok(())
             })
         })?,
+        "expect-composer-menu" => {
+            settle(&mut h.cx, h.handle);
+            let open = h.cx.update(|cx| {
+                h.window
+                    .update(cx, |shell, _, cx| shell.composer.read(cx).menu_open())
+            })?;
+            ensure!(open == (arg == "open"), "composer menu open is {open}");
+            Ok(())
+        }
         "wait" => {
             h.cx.advance_clock(std::time::Duration::from_millis(arg.parse()?));
             settle(&mut h.cx, h.handle);

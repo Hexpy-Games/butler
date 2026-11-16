@@ -135,6 +135,9 @@ pub(crate) struct Composer {
     synced_revision: u64,
     /// Whether the card is unfolded.
     fold: Fold,
+    /// The card's container (Electron's `<form>`): focus anywhere inside it, a toolbar control
+    /// or a menu opened from it included, keeps the card engaged.
+    within: FocusHandle,
     theme: Theme,
     /// The open chat's view, for the decisions the transcript shows.
     decision_view: Option<Rc<SessionView>>,
@@ -166,14 +169,25 @@ impl Composer {
         let mut editor = ComposerEditor::default();
         editor.bind(input.clone());
         let context_control = cx.new(|_| ComposerContextControl::new());
+        let within = cx.focus_handle().tab_stop(false);
         let subscriptions = vec![
             cx.on_blur(&handle, window, |this: &mut Self, window, cx| {
                 this.editor.save_selection(window, cx);
-                this.fold.engaged = false;
-                cx.notify();
             }),
             cx.on_focus(&handle, window, |this: &mut Self, window, cx| {
                 this.release(window, cx);
+            }),
+            // `onFocusCapture` and `onBlurCapture`: focus entering the card engages it; focus
+            // leaving the card, not moving between its controls, folds it.
+            cx.on_focus_in(&within, window, |this: &mut Self, window, cx| {
+                if this.within.contains_focused(window, cx) {
+                    this.fold.engaged = true;
+                    cx.notify();
+                }
+            }),
+            cx.on_focus_out(&within, window, |this: &mut Self, _, _, cx| {
+                this.fold.engaged = false;
+                cx.notify();
             }),
             cx.subscribe_in(&input, window, |this, _, _: &TextChanged, window, cx| {
                 this.on_text_changed(window, cx);
@@ -197,6 +211,7 @@ impl Composer {
             inputs: Inputs::default(),
             synced_revision: 0,
             fold: Fold::default(),
+            within,
             theme,
             decision_view: None,
             queue: Vec::new(),
@@ -342,6 +357,12 @@ impl Composer {
             }))
     }
 
+    /// A toolbar popover is open (the shot harness checks it).
+    #[allow(dead_code, reason = "read by the shot harness (butler-shell-shots)")]
+    pub(crate) fn menu_open(&self) -> bool {
+        self.fold.protected
+    }
+
     /// `useComposerPresentation`'s `protectedExpanded`.
     fn popover_open(window: &mut Window, cx: &mut Context<Self>) -> bool {
         let popover = POPOVERS
@@ -455,7 +476,11 @@ impl Render for Composer {
             }))
             .left(px(column.column_left))
             .w(px(column.column_width.max(0.)))
-            .id("composer");
+            .id("composer")
+            .track_focus(&self.within)
+            // The container takes no focus from a pointer: a press on the card's padding keeps
+            // focus where it is instead of moving it to the container or the shell root.
+            .on_any_mouse_down(|_, window, _| window.prevent_default());
         file_drop(surface, move |files, _, cx| {
             let _ = dropped.update(cx, |this, cx| this.add_files(files, cx));
         })
