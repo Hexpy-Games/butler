@@ -18,7 +18,7 @@ use serde_json::{Value, json};
 use std::{path::PathBuf, time::Duration};
 
 mod host;
-pub(crate) use host::Pending;
+pub(crate) use host::{Pending, shell};
 
 /// `BUTLER_E2E_BROWSER_BACKEND=headless` runs these scenarios on Chrome for
 /// Testing (the first run downloads the pinned build into a temp cache);
@@ -28,16 +28,8 @@ pub(crate) use host::Pending;
 /// named by `BUTLER_E2E_CEF_HOST` (no Chrome, no Electron).
 /// `=shell` attaches the gpui shell (CEF) to the scenario's agent as its page host.
 pub(crate) fn selected() -> bool {
-    match backend().as_deref() {
-        Ok("headless" | "hidden-app" | "cef") => true,
-        Ok("shell") => host::runnable(),
-        _ => false,
-    }
-}
-
-/// Whether the scenarios run on the gpui shell attached as page host.
-pub(crate) fn shell() -> bool {
-    backend().as_deref() == Ok("shell")
+    matches!(backend().as_deref(), Ok("headless" | "hidden-app" | "cef"))
+        || (shell() && host::runnable())
 }
 
 fn backend() -> Result<String, std::env::VarError> {
@@ -123,7 +115,6 @@ fn configured(id: &str) -> Result<Setup, HarnessError> {
             "BUTLER_BROWSER_CACHE_DIR",
             cache().to_string_lossy().into_owned(),
         );
-        // The shell is the App: it attaches to an agent the App supervises, and no Electron host.
         return Ok(if shell() {
             setup.app_supervisor().env("BUTLER_BROWSER_APP", "off")
         } else {

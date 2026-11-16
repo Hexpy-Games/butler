@@ -16,6 +16,11 @@ use std::{
 };
 use tokio::{sync::oneshot, task::JoinHandle};
 
+/// The shell is the App: it attaches to an agent the App supervises, with no Electron host.
+pub(crate) fn shell() -> bool {
+    super::backend().as_deref() == Ok("shell")
+}
+
 /// The shell needs the harness executable and a staged CEF; without them the scenario skips.
 pub(super) fn runnable() -> bool {
     let missing = [SHOTS, "BUTLER_CEF_DIR"]
@@ -45,7 +50,7 @@ impl Pending {
 
     pub(crate) async fn start(self) -> Result<Hosted, HarnessError> {
         let scenario = self.0.start().await?;
-        if !super::shell() {
+        if !shell() {
             return Ok(Hosted {
                 pump: None,
                 scenario,
