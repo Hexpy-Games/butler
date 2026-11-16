@@ -60,6 +60,18 @@ async fn browser_opens_a_page_and_navigates() -> Result<(), HarnessError> {
         shell.browser_state().await?["tabs"][0]["url"],
         "https://example.org/a"
     );
+    // The whole field is the click target, not only the text line.
+    shell
+        .run(&[
+            "click-at browser-address 0.5 0.12",
+            "type example.net",
+            "key enter",
+        ])
+        .await?;
+    assert_eq!(
+        shell.browser_state().await?["tabs"][0]["url"],
+        "https://example.net/"
+    );
     shell.run(&["app-quit"]).await?;
     shell.finish().await?;
     sandbox.mark_success();
