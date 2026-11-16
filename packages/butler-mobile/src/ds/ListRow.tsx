@@ -1,0 +1,131 @@
+import { useEffect, useRef } from "react";
+import { Animated, Pressable, StyleSheet, Text as RNText, View } from "react-native";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { useTokens } from "../design/useTokens";
+import type { IconGlyph } from "./icons";
+import { IconSlot, useScaledLine } from "./internal/IconSlot";
+import { run, useReducedMotion } from "./internal/motion";
+import { usePress } from "./internal/press";
+import { fontStyle, maxFontScale, textStyle, weightValue } from "./internal/typography";
+
+export interface ListRowProps {
+  title: string;
+  description?: string;
+  meta?: string;
+  icon?: IconGlyph;
+  trailing?: React.ReactNode;
+  onPress?: () => void;
+  selected?: boolean;
+  disabled?: boolean;
+  titleLines?: 1 | 2;
+  descriptionLines?: 1 | 2 | 3;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  testID?: string;
+}
+
+export function ListRow({
+  title, description, meta, icon, trailing, onPress, selected, disabled, titleLines = 1, descriptionLines = 2,
+  accessibilityLabel, accessibilityHint, testID,
+}: ListRowProps) {
+  const t = useTokens();
+  const reduced = useReducedMotion();
+  const press = usePress({ scale: false, disabled: disabled || !onPress });
+  const filled = press.pressed || !!selected;
+  const underlay = useRef(new Animated.Value(filled ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduced) underlay.setValue(filled ? 1 : 0);
+    else run(t, underlay, filled ? 1 : 0, filled ? "--motion-instant" : "--motion-fast", "--motion-ease-standard").start();
+  }, [filled, reduced, t, underlay]);
+
+  const titleLine = t.length("--typo-app-title-line-height");
+  const trailingHeight = useScaledLine(titleLine);
+  const radius = t.length("--radius-control");
+  const fg = (key: "--text-primary" | "--text-secondary" | "--text-tertiary") =>
+    t.color(disabled ? "--interactive-disabled-fg" : key);
+  const titleColor = fg("--text-primary");
+
+  const body = (
+    <>
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { borderRadius: radius, backgroundColor: t.color("--selection-strong"), opacity: underlay }]}
+      />
+      {icon ? (
+        <View style={{ opacity: 0.82 }}>
+          <IconSlot size={t.length("--sidebar-icon-size")} lineHeight={titleLine}>
+            <HugeiconsIcon icon={icon} size={t.length("--sidebar-icon-size")} color={titleColor} />
+          </IconSlot>
+        </View>
+      ) : null}
+      <View style={{ flex: 1 }}>
+        <View
+          style={{
+            flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center",
+            columnGap: t.length("--space-md"), rowGap: t.length("--space-xs"),
+          }}
+        >
+          <RNText
+            numberOfLines={titleLines}
+            ellipsizeMode="tail"
+            maxFontSizeMultiplier={maxFontScale.control}
+            style={{
+              ...fontStyle(t.length("--font-size-4"), titleLine, weightValue(t, selected ? "medium" : "regular")),
+              color: titleColor, flexGrow: 1, flexShrink: 1, flexBasis: "50%",
+            }}
+          >
+            {title}
+          </RNText>
+          {meta ? (
+            <RNText
+              maxFontSizeMultiplier={maxFontScale.control}
+              style={{ ...textStyle(t, "caption"), color: fg("--text-tertiary"), flexShrink: 1, fontVariant: ["tabular-nums"] }}
+            >
+              {meta}
+            </RNText>
+          ) : null}
+        </View>
+        {description ? (
+          <RNText
+            numberOfLines={descriptionLines}
+            ellipsizeMode="tail"
+            maxFontSizeMultiplier={maxFontScale.control}
+            style={{ ...textStyle(t, "caption"), color: fg("--text-secondary"), marginTop: t.length("--space-xs") }}
+          >
+            {description}
+          </RNText>
+        ) : null}
+      </View>
+      {trailing ? <View style={{ height: trailingHeight, justifyContent: "center" }}>{trailing}</View> : null}
+    </>
+  );
+
+  const container = {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    minHeight: t.length("--sidebar-row-height"),
+    paddingVertical: t.length("--space-md"),
+    paddingHorizontal: t.length("--space-sm"),
+    columnGap: t.length("--sidebar-row-gap"),
+    borderRadius: radius,
+    boxShadow: press.focused ? t.shadow("--focus-ring") : undefined,
+  } as const;
+
+  if (!onPress) return <View style={container} testID={testID}>{body}</View>;
+  return (
+    <Pressable
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? [title, description, meta].filter(Boolean).join(", ")}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ selected: !!selected, disabled: !!disabled }}
+      testID={testID}
+      disabled={disabled}
+      onPress={onPress}
+      {...press.handlers}
+      style={container}
+    >
+      {body}
+    </Pressable>
+  );
+}
