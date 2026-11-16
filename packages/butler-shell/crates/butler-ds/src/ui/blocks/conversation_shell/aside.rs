@@ -1,6 +1,6 @@
 //! The aside of ConversationShell (lib/AsideSlot.tsx, lib/asideLayout.ts, conversationAside.ts):
 //! session details in the right margin. From a 960px shell it docks flat in the margin and the
-//! column moves left; narrower it floats on TintedGlass over the conversation while open. Each
+//! column moves left; narrower it floats on TintedGlass over the conversation while open, as tall as its content. Each
 //! layout enters and leaves with a fade; its content has a scroller of its own.
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
@@ -168,34 +168,32 @@ fn panel(
                 wanted
             };
             let bottom = (slot.composer_reserve - space(Length::SpaceSm)).max(0.);
-            // `.asideGlass { height: 100% }`: the glass fills the panel between its insets.
-            let height = (shell_h - slot.top - bottom).max(0.);
+            // Desktop only: the glass sizes to its content, no taller than the room above the composer.
+            let max_height = (shell_h - slot.top - bottom).max(0.);
             aside
                 .top(px(slot.top))
                 .right(ds.len(Length::SpaceSm))
-                .bottom(px(bottom))
                 .w(px(width))
-                .child(floating_glass(scroller, (height, alpha)))
+                .child(floating_glass(scroller, (max_height, alpha)))
                 .into_any_element()
         }
     }
 }
 
-/// The glass is the floating aside's only surface: it fills the panel, its scroller inside.
+/// The glass is the floating aside's only surface: as tall as its content up to `max_height`, its scroller inside.
 /// `alpha` is its presence: the glass materializes with it and only the content fades.
-fn floating_glass(scroller: AnyElement, (height, alpha): (f32, Presence)) -> AnyElement {
+fn floating_glass(scroller: AnyElement, (max_height, alpha): (f32, Presence)) -> AnyElement {
     div()
-        .size_full()
+        .w_full()
         .flex()
         .flex_col()
-        .min_h_0()
         .child(with_presence(
             alpha,
             TintedGlass::new()
                 .radius(GlassRadius::Popover)
                 .padding(GlassPadding::None)
-                .height(px(height))
-                .child(div().flex().flex_col().h_full().min_h_0().child(scroller)),
+                .column(px(max_height))
+                .child(scroller),
         ))
         .into_any_element()
 }
