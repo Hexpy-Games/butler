@@ -126,24 +126,35 @@ fn regular_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     use butler_platform::secure_fs::{canonicalize, symlink};
     use serde_json::json;
 
     use super::{Answer, target};
 
+    /// Removes the test folder however the test ends.
+    struct TempDir(PathBuf);
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _cleanup = fs::remove_dir_all(&self.0);
+        }
+    }
+
     /// `open-message-file.test.ts`: a copy opens only as a regular file inside the opened-files
     /// folder, resolved; an original only as an absolute regular file.
     // test-category: security
     #[test]
     fn open_target_refuses_links_the_root_and_unflagged_outside_files() {
-        let dir = std::env::temp_dir().join(format!("butler-open-target-{}", std::process::id()));
-        let root = dir.join("opened-files");
+        let dir = TempDir(
+            std::env::temp_dir().join(format!("butler-open-target-{}", std::process::id())),
+        );
+        let root = dir.0.join("opened-files");
         fs::create_dir_all(&root).unwrap();
         let (copy, outside, link) = (
             root.join("copy.txt"),
-            dir.join("outside.txt"),
+            dir.0.join("outside.txt"),
             root.join("link.txt"),
         );
         fs::write(&copy, "stored bytes").unwrap();
@@ -168,13 +179,12 @@ mod tests {
         }
         assert!(matches!(answer(&outside, false), Answer::Failed));
         assert!(matches!(answer(&outside, true), Answer::Target(path, true) if path == outside));
+        // The package's own manifest, a regular file from the test's working directory.
         assert!(matches!(
-            answer(Path::new("outside.txt"), true),
+            answer(Path::new("Cargo.toml"), true),
             Answer::Failed
         ));
         let resolved = canonicalize(&copy).unwrap();
         assert!(matches!(answer(&copy, false), Answer::Target(path, true) if path == resolved));
-
-        fs::remove_dir_all(&dir).unwrap();
     }
 }
