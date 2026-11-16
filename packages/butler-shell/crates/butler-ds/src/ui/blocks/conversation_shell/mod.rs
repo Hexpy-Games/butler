@@ -196,11 +196,21 @@ impl ConversationShell {
         } else {
             f32::from(ds.len(Length::TitlebarSafeAreaTop))
         };
+        let column_left = ((width - col) / 2. - shift).max(0.);
+        // `useColumnRect`'s `contentRight`: a docked aside (`aside.rs` `panel`: `right` is
+        // `SpaceLg - glide`) extends the right edge to its own far edge.
+        let column_right = if shown_aside == Some(AsideLayout::Docked) {
+            let docked_edge = width - (f32::from(ds.len(Length::SpaceLg)) - (target - shift));
+            (column_left + col).max(docked_edge)
+        } else {
+            column_left + col
+        };
         let vars = ConversationVars {
             composer_reserve: self.composer_reserve,
             width,
             column_width: if width > 0. { col } else { 0. },
-            column_left: ((width - col) / 2. - shift).max(0.),
+            column_left,
+            column_right,
             column_shift: shift,
             motion_id: Some(self.id.clone()),
             top_reserve: top_reserve + rail_top(rail, width, ds),

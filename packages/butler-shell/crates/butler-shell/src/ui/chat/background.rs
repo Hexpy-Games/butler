@@ -119,9 +119,9 @@ impl RenderOnce for ConversationBackground {
         if let Some(picture) = picture {
             wallpaper = wallpaper.picture(picture);
         }
-        if let Some(vars) = scope::conversation(cx) {
-            wallpaper =
-                wallpaper.column(vars.column_left, vars.column_left + vars.column_width, 0.);
+        // Electron sends no column before the shell has laid out.
+        if let Some(vars) = scope::conversation(cx).filter(|vars| vars.column_width > 0.) {
+            wallpaper = wallpaper.column(vars.column_left, vars.column_right, 0.);
         }
         wallpaper.into_any_element()
     }
