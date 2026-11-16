@@ -6,6 +6,7 @@ mod columns;
 mod field;
 mod model;
 
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -303,11 +304,7 @@ fn field_box(
         )
     };
     let border = progress.apply(
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
+        cover()
             .rounded(ds.len(Length::RadiusControl))
             .border(ds.len(Length::BorderHairline))
             .border_color(focused),

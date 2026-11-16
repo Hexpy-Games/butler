@@ -1,5 +1,6 @@
 //! Markdown images (`.markdown img`): the natural size, never upscaled, capped by the column and
 //! by 60% of the window height (640px at most), an inset hairline outline, the panel radius.
+use crate::ui::cover::cover;
 use std::sync::Arc;
 
 use gpui::{
@@ -120,11 +121,7 @@ pub(super) fn inline(
                 .max_h(px(height)),
         })
         .child(
-            div()
-                .absolute()
-                .size_full()
-                .top_0()
-                .left_0()
+            cover()
                 .rounded(ds.len(Length::RadiusPanel))
                 .border(ds.len(Length::BorderHairline))
                 .border_color(ds.color(Color::Line)),

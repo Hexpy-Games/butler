@@ -1,3 +1,4 @@
+mod absolute_layer;
 mod animation_frames;
 mod architecture;
 mod e2e_gate;
@@ -85,6 +86,7 @@ fn scan(root: &Path, mode: Mode) -> Result<bool, String> {
     has_violations |= test_count::check(root, &sources, mode)?;
     has_violations |= wall_clock::check(root, &sources)?;
     has_violations |= animation_frames::check(root, &sources)?;
+    has_violations |= absolute_layer::check(root, &sources)?;
     has_violations |= architecture::check(root)?;
     has_violations |= model_literals::check(root, &sources)?;
     has_violations |= e2e_gate::check(root, &sources)?;

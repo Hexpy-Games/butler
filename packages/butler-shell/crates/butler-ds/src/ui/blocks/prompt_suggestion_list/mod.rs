@@ -15,6 +15,7 @@ mod metrics;
 mod rail;
 mod text;
 
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -183,14 +184,10 @@ impl RenderOnce for PromptSuggestionList {
         let m = Metrics::new(f32::from(size.width), self.new_chat_icon, Ds::get(cx), cx);
         let header = header::render(&self, &m, recording.as_ref(), cx);
         let rail = rail::render(&self, &m, recording.as_ref(), window, cx);
-        let wallpaper = self.wallpaper.as_ref().map(|draw| {
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
-                .child(draw(rect, cx))
-        });
+        let wallpaper = self
+            .wallpaper
+            .as_ref()
+            .map(|draw| cover().child(draw(rect, cx)));
         let reporter = recording.map(|recording| {
             content_rect::reporter(
                 recording,

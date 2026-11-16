@@ -3,6 +3,7 @@
 //! start and the content pads it back, so a ring at the column edge paints inside the clip. A
 //! scrollbar lane past the column is reserved whether or not the content overflows, so the content
 //! ends on the same edge either way; gpui draws an overlay scrollbar, which takes no layout width.
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
     Pixels, RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _,
@@ -394,23 +395,13 @@ pub(crate) fn overlay(
     let thumb = shown
         .then(|| bar::thumb(&built.handle, axis, color))
         .flatten();
-    div()
-        .absolute()
-        .size_full()
-        .top_0()
-        .left_0()
-        .children(thumb)
-        .child(strip)
+    cover().children(thumb).child(strip)
 }
 
 /// The scroller draws the ring of a control too large to show whole: `outline: 2px solid` at
 /// offset -2px, inset on its own box (scroll-fade.css `[data-focus-ring-host]`).
 fn host_ring(ds: &Ds) -> gpui::Div {
-    div()
-        .absolute()
-        .size_full()
-        .top_0()
-        .left_0()
+    cover()
         .border(ds.len(Length::FocusRingWidth))
         .border_color(ds.color(Color::ColorActionPrimary))
 }

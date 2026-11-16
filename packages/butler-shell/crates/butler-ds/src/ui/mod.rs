@@ -17,6 +17,7 @@ pub mod context_menu;
 pub mod control;
 pub mod convert;
 pub mod copy_button;
+pub mod cover;
 pub mod dialog;
 pub mod done_icon_button;
 pub mod dropdown_menu;

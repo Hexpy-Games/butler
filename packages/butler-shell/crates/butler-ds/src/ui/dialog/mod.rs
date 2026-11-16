@@ -11,6 +11,7 @@
 mod content;
 mod parts;
 
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -299,11 +300,7 @@ impl Dialog {
         };
         let child = self.guarded(animated, handle, focus, area.card.is_some());
         if area.card.is_some() {
-            return div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
+            return cover()
                 .children(scrim)
                 .child(
                     div()

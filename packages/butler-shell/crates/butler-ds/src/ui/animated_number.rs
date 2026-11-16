@@ -2,6 +2,7 @@
 //! its new value over `--motion-deliberate` on the decelerate easing (reduced motion: an
 //! instant swap with a short fade). Tabular numerals, and a start and an end sizer in one grid
 //! cell, keep the width stable while counting; the start sizer is released when the count ends.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -198,9 +199,7 @@ impl RenderOnce for AnimatedNumber {
                     let progress = convert::ease_at(timing.ease, (i + 1) as f32 / n as f32);
                     let value = from + (self.value - from) * f64::from(progress);
                     let value = if whole { value.round() } else { value };
-                    div()
-                        .absolute()
-                        .size_full()
+                    cover()
                         .motion(gpui::LayerMotion {
                             visible: (i as f32 / n as f32, (i + 1) as f32 / n as f32),
                             ..linear.motion(since)

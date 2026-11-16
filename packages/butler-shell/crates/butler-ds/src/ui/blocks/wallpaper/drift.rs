@@ -1,4 +1,5 @@
 //! The resting print crossfades cached keyframes; host changes retain the current mix.
+use crate::ui::cover::cover;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
@@ -189,12 +190,7 @@ pub(super) fn layer(
     if d.host == DriftHost::Still {
         return layer.into_any_element();
     }
-    let top = div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
-        .child(print(slot_key(!d.top), d.flow + SEGMENT_FLOW));
+    let top = cover().child(print(slot_key(!d.top), d.flow + SEGMENT_FLOW));
     let top = match d.host {
         DriftHost::Full | DriftHost::Slow => top.motion(LayerMotion {
             start_ms: d.t0_ms,

@@ -1,6 +1,7 @@
 //! Wallpaper.showcase.tsx, the still-image subset: the module playground on the bundled posters,
 //! the image wallpaper with its fit, dim, blur and filter, and the container scope. The WebGL engine stories
 //! (drift, paper overlay, transparent decoration, generated param controls, motion) are P6.
+use butler_ds::ui::cover::cover;
 use std::sync::Arc;
 
 use butler_ds::tokens::Length;
@@ -263,11 +264,7 @@ fn viewport_scope(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
         .rounded(Ds::get(cx).len(Length::RadiusPanel))
         .child(Wallpaper::new(silk))
         .child(
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
+            cover()
                 .flex()
                 .items_center()
                 .justify_center()

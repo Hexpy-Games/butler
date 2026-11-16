@@ -75,6 +75,8 @@ pub(in crate::ui::blocks) fn riso_ring(ring: Ring) -> impl IntoElement {
     )
     .absolute()
     .size_full()
+    .top_0()
+    .left_0()
 }
 
 /// The riso edge's conic gradient under a translucent surface: `background: linear-gradient(bg)
@@ -92,6 +94,8 @@ pub(in crate::ui::blocks) fn riso_fill(ring: Ring, surface: Hsla) -> impl IntoEl
     )
     .absolute()
     .size_full()
+    .top_0()
+    .left_0()
 }
 
 fn paint_fill(ring: &Ring, surface: Hsla, angle: f32, bounds: Bounds<Pixels>, window: &mut Window) {

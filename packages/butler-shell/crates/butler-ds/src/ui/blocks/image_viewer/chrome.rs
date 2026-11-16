@@ -1,5 +1,6 @@
 //! The pieces of the viewer's surface: the bar, the side buttons, the caption, the picture on the
 //! stage and the geometry of a pointer over it.
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, Bounds, ElementId, Entity, InteractiveElement as _, IntoElement, MouseButton,
     ObjectFit, ParentElement, Pixels, Point, Size, Styled as _, StyledImage as _, div, img, px,
@@ -227,9 +228,7 @@ pub(super) fn picture(
     match load {
         Load::Pending => None,
         Load::Failed => Some(
-            div()
-                .absolute()
-                .size_full()
+            cover()
                 .flex()
                 .items_center()
                 .justify_center()

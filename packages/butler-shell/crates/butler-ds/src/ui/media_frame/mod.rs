@@ -11,6 +11,7 @@
 mod load;
 mod paint;
 
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, Bounds, ElementId, ImageSource, IntoElement, ParentElement, Pixels,
     RenderOnce, Styled as _, StyledImage as _, Window, canvas, div, px,
@@ -259,10 +260,7 @@ impl RenderOnce for MediaFrame {
         ];
         let frame = frame
             .child({
-                let layer = div()
-                    .absolute()
-                    .size_full()
-                    .children(layers.into_iter().flatten());
+                let layer = cover().children(layers.into_iter().flatten());
                 match arrived {
                     Some(start_ms) => Transition {
                         from: 0.,
@@ -324,9 +322,7 @@ impl MediaFrame {
             layer = layer.left(inset).right(inset).top(top).bottom(inset);
         }
         Some(
-            div()
-                .absolute()
-                .size_full()
+            cover()
                 .opacity(opacity)
                 .child(
                     layer.child(
@@ -353,9 +349,7 @@ impl MediaFrame {
     ) -> AnyElement {
         let mark = placeholder_mark(id, favicon, window, cx);
         let tint = convert::with_alpha(Ds::get(cx).color(Color::Accent), 0.10); // DS: MediaFrame.module.css:110
-        div()
-            .absolute()
-            .size_full()
+        cover()
             .opacity(opacity)
             .flex()
             .items_center()
@@ -366,7 +360,9 @@ impl MediaFrame {
                     move |bounds, (), window, _| paint_glow(bounds, tint, window),
                 )
                 .absolute()
-                .size_full(),
+                .size_full()
+                .top_0()
+                .left_0(),
             )
             .child(mark)
             .into_any_element()

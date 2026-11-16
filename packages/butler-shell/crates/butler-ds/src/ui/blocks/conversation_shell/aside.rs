@@ -2,6 +2,7 @@
 //! session details in the right margin. From a 960px shell it docks flat in the margin and the
 //! column moves left; narrower it floats on TintedGlass over the conversation while open, as tall as its content. Each
 //! layout enters and leaves with a fade; its content has a scroller of its own.
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
     SharedString, Styled as _, Window, div, px,
@@ -251,7 +252,7 @@ fn layer(
             },
         ),
     );
-    let layer = div().absolute().top_0().left_0().size_full();
+    let layer = cover();
     // The floating glass takes `alpha` as its presence (LG research §5 Appear/disappear): the
     // docked aside has no glass and fades whole.
     let layer = match layout {
