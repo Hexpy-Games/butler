@@ -31,7 +31,8 @@ async fn shell_app_08_toolbar_menus_open_from_the_unfolded_composer() -> Result<
                 // The same press closes it; the card is still unfolded for the next control.
                 &format!("click {menu}"),
                 "expect-composer-menu closed",
-                &format!("expect-anchor {menu}"),
+                // The access control renders only while the card is unfolded.
+                "expect-anchor access-menu",
             ])
             .await?;
     }

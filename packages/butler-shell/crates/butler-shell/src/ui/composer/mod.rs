@@ -25,7 +25,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use butler_ds::ui::blocks::composer_card::{ComposerCard, ExpandedBody};
-use butler_ds::ui::popover::Popover;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Div, Entity, EventEmitter, FocusHandle, Focusable,
     KeyBinding, KeyDownEvent, SharedString, Window, actions, canvas, div, prelude::*, px,
@@ -41,6 +40,7 @@ use self::editor::ComposerEditor;
 use self::editor::clipboard::Paste;
 use self::references::{MentionKey, References};
 use self::state::{ComposerState, image_refusal_label};
+use self::sync::Fold;
 use crate::ui::decisions::{DecisionCtx, decision_active, set_plan_gate};
 use crate::ui::field;
 use crate::ui::manage::ManageCtx;
@@ -100,26 +100,6 @@ pub(crate) enum ComposerEvent {
     OpenUsageSettings,
 }
 
-/// The popovers of the toolbar; the composer stays expanded while one is open
-/// (`protectedExpanded`).
-const POPOVERS: [&str; 4] = [
-    "composer-access-menu",
-    "composer-model-menu",
-    "composer-attachment-menu",
-    "composer-documents-menu",
-];
-
-/// What keeps the card unfolded.
-#[derive(Default)]
-struct Fold {
-    /// The field has been engaged and no click outside has folded it.
-    engaged: bool,
-    /// A toolbar popover is open.
-    protected: bool,
-    /// A decision waits in the transcript (`decision.plan || .authority || .question`).
-    decision: bool,
-}
-
 pub(crate) struct Composer {
     input: Entity<EditableTextState>,
     editor: ComposerEditor,
@@ -170,25 +150,8 @@ impl Composer {
         editor.bind(input.clone());
         let context_control = cx.new(|_| ComposerContextControl::new());
         let within = cx.focus_handle().tab_stop(false);
-        let subscriptions = vec![
-            cx.on_blur(&handle, window, |this: &mut Self, window, cx| {
-                this.editor.save_selection(window, cx);
-            }),
-            cx.on_focus(&handle, window, |this: &mut Self, window, cx| {
-                this.release(window, cx);
-            }),
-            // `onFocusCapture` and `onBlurCapture`: focus entering the card engages it; focus
-            // leaving the card, not moving between its controls, folds it.
-            cx.on_focus_in(&within, window, |this: &mut Self, window, cx| {
-                if this.within.contains_focused(window, cx) {
-                    this.fold.engaged = true;
-                    cx.notify();
-                }
-            }),
-            cx.on_focus_out(&within, window, |this: &mut Self, _, _, cx| {
-                this.fold.engaged = false;
-                cx.notify();
-            }),
+        let mut subscriptions = Self::focus_listeners(&handle, &within, window, cx);
+        subscriptions.extend([
             cx.subscribe_in(&input, window, |this, _, _: &TextChanged, window, cx| {
                 this.on_text_changed(window, cx);
             }),
@@ -200,7 +163,7 @@ impl Composer {
                     this.editor.on_window_activated(window, cx);
                 }
             }),
-        ];
+        ]);
         Self {
             input,
             editor,
@@ -356,23 +319,6 @@ impl Composer {
                 }
             }))
     }
-
-    /// A toolbar popover is open (the shot harness checks it).
-    #[allow(dead_code, reason = "read by the shot harness (butler-shell-shots)")]
-    pub(crate) fn menu_open(&self) -> bool {
-        self.fold.protected
-    }
-
-    /// `useComposerPresentation`'s `protectedExpanded`.
-    fn popover_open(window: &mut Window, cx: &mut Context<Self>) -> bool {
-        let popover = POPOVERS
-            .iter()
-            .any(|id| Popover::new(*id, window, cx).is_open(cx));
-        // A session dragged over the composer keeps it open (`referenceDragging`).
-        popover
-            || cx.has_active_drag()
-            || ComposerState::read(cx, |draft| draft.context_popover_open)
-    }
 }
 
 impl Focusable for Composer {
@@ -478,9 +424,12 @@ impl Render for Composer {
             .w(px(column.column_width.max(0.)))
             .id("composer")
             .track_focus(&self.within)
-            // The container takes no focus from a pointer: a press on the card's padding keeps
-            // focus where it is instead of moving it to the container or the shell root.
-            .on_any_mouse_down(|_, window, _| window.prevent_default());
+            // `onPointerDownCapture` engages. The container takes no focus from a pointer: a
+            // press on the card's padding keeps focus where it is.
+            .on_any_mouse_down(cx.listener(|this, _, window, cx| {
+                window.prevent_default();
+                this.engage_by_pointer(cx);
+            }));
         file_drop(surface, move |files, _, cx| {
             let _ = dropped.update(cx, |this, cx| this.add_files(files, cx));
         })
