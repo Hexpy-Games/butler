@@ -22,12 +22,21 @@ def reject(file, path, rule):
 
 
 def check_macho(file, libraries, commands):
+    # A dylib's own install name (LC_ID_DYLIB, listed first by otool -L) is not a load path.
+    own_id = None
+    command = None
+    for line in commands.splitlines():
+        text = line.strip()
+        if text.startswith('cmd '):
+            command = text[4:]
+        if command == 'LC_ID_DYLIB' and text.startswith('name '):
+            own_id = text[5:].rsplit(' (offset ', 1)[0]
     # Strip only the metadata suffix: framework and executable names contain spaces.
     for line in libraries.splitlines():
         if not line.startswith((' ', '\t')) or ' (compatibility version ' not in line:
             continue
         path = line.strip().rsplit(' (compatibility version ', 1)[0]
-        if not path.startswith(DYLIB_PREFIXES):
+        if path != own_id and not path.startswith(DYLIB_PREFIXES):
             reject(file, path, 'dylib outside allowed load roots')
     command = None
     for line in commands.splitlines():
