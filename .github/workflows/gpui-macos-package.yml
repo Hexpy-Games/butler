@@ -135,9 +135,10 @@ jobs:
       BUTLER_APP_BUILD_VERSION: ${{ needs.versions.outputs.to }}
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
+      # Checkout first: this job runs in packages/butler-shell.
+      - uses: actions/checkout@v4
       - name: Verify the native runner
         run: test "$(uname -m)" = arm64
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
