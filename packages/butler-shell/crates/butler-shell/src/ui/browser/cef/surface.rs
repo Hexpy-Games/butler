@@ -11,6 +11,8 @@ use std::{
 };
 
 pub(super) struct PageState {
+    pub(super) tab: Option<super::TabId>,
+    pub(super) devtools: super::devtools::Requests,
     pub(super) bounds: Bounds<Pixels>,
     pub(super) geometry: Option<(Size<Pixels>, f32)>,
     pub(super) cursor: OsrCursor,
@@ -20,6 +22,8 @@ pub(super) struct PageState {
 impl Default for PageState {
     fn default() -> Self {
         Self {
+            tab: None,
+            devtools: Default::default(),
             bounds: Bounds::default(),
             geometry: None,
             cursor: OsrCursor::Arrow,

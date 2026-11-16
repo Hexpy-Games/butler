@@ -27,6 +27,14 @@ pub struct OsrConfig {
 
 #[derive(Debug)]
 pub enum OsrEvent {
+    DevTools {
+        id: i32,
+        result_json: String,
+    },
+    DevToolsEvent {
+        method: String,
+        params_json: String,
+    },
     Url(String),
     Title(String),
     Favicon(String),

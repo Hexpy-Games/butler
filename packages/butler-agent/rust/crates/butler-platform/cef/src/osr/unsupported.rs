@@ -54,6 +54,9 @@ impl OsrRuntime {
     pub fn navigate(&self, _: u64, _: &str) {
         match self.never {}
     }
+    pub fn devtools(&self, _: u64, _: &str, _: &str) -> Result<i32, OsrError> {
+        match self.never {}
+    }
     pub fn eval(&self, _: u64, _: &str) {
         match self.never {}
     }

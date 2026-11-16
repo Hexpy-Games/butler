@@ -1,6 +1,8 @@
 //! Main-thread, in-process CEF off-screen rendering. No gpui types cross this boundary.
 //! macOS copies frames into IOSurface-backed CoreVideo buffers (gpu.rs, frame_pool.rs);
 //! Windows copies them into pooled D3D11 shared textures (d3d.rs, d3d_pool.rs).
+#[cfg(cef_osr)]
+mod devtools;
 mod ime_state;
 mod types;
 #[cfg(not(cef_osr))]
