@@ -1,7 +1,9 @@
 //! What the new chat reads from the server, and what it makes of it: the briefing
 //! (`/new-chat-briefing`), the epic and its group, the project, and the wallpaper
 //! (`mainScreenTheme.ts`, `projectWallpaper.ts`: the project's source, else the global one).
-use butler_ds::ui::blocks::wallpaper::{ImageFit, WallpaperSource};
+use butler_ds::ui::blocks::wallpaper::{
+    ImageFilter, ImageFit, WallpaperImage, WallpaperParams, WallpaperSource, decode_picture,
+};
 use butler_shell_client::ShellClient;
 use serde_json::Value;
 
@@ -27,6 +29,7 @@ pub(super) struct Fetched {
     navigation: Option<Value>,
     briefing: Option<Value>,
     epic: Option<EpicInfo>,
+    picture: Option<WallpaperImage>,
 }
 
 /// Runs the calls on the agent worker.
@@ -48,12 +51,49 @@ pub(super) async fn fetch(client: ShellClient, want: Want) -> Fetched {
         Some(id) => epic_info(&client, &id).await,
         None => None,
     };
+    let project = find_project(navigation.as_ref(), want.project_id.as_deref());
+    let source = wallpaper_source(settings.as_ref(), project.as_ref());
+    let picture = wallpaper_picture(&client, &source).await;
     Fetched {
         settings,
         navigation,
         briefing,
         epic,
+        picture,
     }
+}
+
+/// The image source's stored picture, decoded here in the job; `None` for other sources or a
+/// failed request or decode.
+async fn wallpaper_picture(
+    client: &ShellClient,
+    source: &WallpaperSource,
+) -> Option<WallpaperImage> {
+    let WallpaperSource::Image { asset, .. } = source else {
+        return None;
+    };
+    let download = client.read_wallpaper_image(asset).await.ok()?;
+    tokio::task::spawn_blocking(move || decode_picture(&download.bytes))
+        .await
+        .ok()
+        .flatten()
+}
+
+fn find_project(navigation: Option<&Value>, project_id: Option<&str>) -> Option<Value> {
+    let id = project_id?;
+    navigation?
+        .get("projects")?
+        .as_array()?
+        .iter()
+        .find(|project| project.get("id").and_then(Value::as_str) == Some(id))
+        .cloned()
+}
+
+/// `mainScreenWallpaper`: the project's own source, else the global one.
+fn wallpaper_source(settings: Option<&Value>, project: Option<&Value>) -> WallpaperSource {
+    project
+        .and_then(|project| parse_source(project.get("wallpaper")?))
+        .unwrap_or_else(|| global_source(settings.unwrap_or(&Value::Null)))
 }
 
 fn title_of(value: &Value) -> Option<String> {
@@ -79,6 +119,7 @@ pub(super) struct Resolved {
     pub(super) epic: Option<EpicInfo>,
     pub(super) project_name: Option<String>,
     pub(super) wallpaper: WallpaperSource,
+    pub(super) wallpaper_picture: Option<WallpaperImage>,
     pub(super) wallpaper_paused: bool,
     pub(super) wallpaper_pause_on_battery: bool,
 }
@@ -87,31 +128,20 @@ pub(super) fn resolve(fetched: Fetched, project_id: Option<&str>) -> Resolved {
     let briefing: Option<NewChatBriefing> = fetched
         .briefing
         .and_then(|value| serde_json::from_value(value).ok());
-    let project = project_id.and_then(|id| {
-        fetched
-            .navigation
-            .as_ref()?
-            .get("projects")?
-            .as_array()?
-            .iter()
-            .find(|project| project.get("id").and_then(Value::as_str) == Some(id))
-            .cloned()
-    });
+    let project = find_project(fetched.navigation.as_ref(), project_id);
     let project_name = project
         .as_ref()
         .and_then(|project| project.get("display_name")?.as_str().map(str::to_owned))
         .or_else(|| briefing.as_ref()?.source.as_ref()?.project_name.clone());
-    let own = project
-        .as_ref()
-        .and_then(|project| parse_source(project.get("wallpaper")?));
+    let wallpaper = wallpaper_source(fetched.settings.as_ref(), project.as_ref());
     let settings = fetched.settings.unwrap_or(Value::Null);
-    let wallpaper = own.unwrap_or_else(|| global_source(&settings));
     let wallpaper_paused = settings["wallpaper"]["motion"] == "paused";
     Resolved {
         briefing,
         epic: fetched.epic,
         project_name,
         wallpaper,
+        wallpaper_picture: fetched.picture,
         wallpaper_paused,
         wallpaper_pause_on_battery: settings["wallpaper"]["pauseOnBattery"] == true,
     }
@@ -130,7 +160,21 @@ fn f32_of(value: &Value) -> Option<f32> {
     value.as_f64()?.to_string().parse().ok()
 }
 
-/// `parseWallpaperSource`, without module params and filters.
+/// `params`/`paramsDark` of a source or filter: absent is `Null`, an object is kept, anything
+/// else makes the whole source malformed.
+fn params_of(value: &Value) -> Option<WallpaperParams> {
+    let params = |key: &str| match value.get(key) {
+        None => Some(Value::Null),
+        Some(object) if object.is_object() => Some(object.clone()),
+        Some(_) => None,
+    };
+    Some(WallpaperParams {
+        params: params("params")?,
+        params_dark: params("paramsDark")?,
+    })
+}
+
+/// `parseWallpaperSource`.
 fn parse_source(value: &Value) -> Option<WallpaperSource> {
     match value.get("kind")?.as_str()? {
         "none" => Some(WallpaperSource::None),
@@ -138,6 +182,7 @@ fn parse_source(value: &Value) -> Option<WallpaperSource> {
             let module = value.get("module")?.as_str().filter(|m| !m.is_empty())?;
             Some(WallpaperSource::Live {
                 module: module.to_owned().into(),
+                values: params_of(value)?,
             })
         }
         "image" => {
@@ -146,36 +191,50 @@ fn parse_source(value: &Value) -> Option<WallpaperSource> {
                 "contain" => ImageFit::Contain,
                 _ => return None,
             };
+            let filter = match value.get("filter") {
+                None => None,
+                Some(filter) => Some(ImageFilter {
+                    module: filter.get("module")?.as_str()?.to_owned().into(),
+                    values: params_of(filter)?,
+                }),
+            };
             Some(WallpaperSource::Image {
                 asset: value.get("asset")?.as_str()?.to_owned().into(),
                 fit,
                 dim: f32_of(value.get("dim")?)?,
                 blur: f32_of(value.get("blur")?)?,
+                filter,
             })
         }
         _ => None,
     }
 }
 
-fn custom_colors(settings: &Value) -> bool {
-    let valid = |color: &Value| {
-        color.as_str().is_some_and(|color| {
-            let color = color.trim();
-            color.len() == 7
+fn custom_colors(settings: &Value) -> Option<Vec<String>> {
+    let colors = settings
+        .get("main_screen_theme_custom_colors")?
+        .as_array()
+        .filter(|colors| colors.len() == 6)?;
+    colors
+        .iter()
+        .map(|color| {
+            let color = color.as_str()?.trim();
+            (color.len() == 7
                 && color.starts_with('#')
-                && color[1..].chars().all(|c| c.is_ascii_hexdigit())
+                && color[1..].chars().all(|c| c.is_ascii_hexdigit()))
+            .then(|| color.to_ascii_lowercase())
         })
-    };
-    settings
-        .get("main_screen_theme_custom_colors")
-        .and_then(Value::as_array)
-        .is_some_and(|colors| colors.len() == 6 && colors.iter().all(valid))
+        .collect()
 }
 
 /// `legacyWallpaperSource`: the `main_screen_theme*` keys.
 fn legacy_source(settings: &Value) -> WallpaperSource {
-    let live = |module: &str| WallpaperSource::Live {
-        module: module.to_owned().into(),
+    let bloom = |colors: Value| WallpaperSource::Live {
+        module: "butler.bloom".into(),
+        values: WallpaperParams {
+            params: serde_json::json!({ "colors": colors }),
+            params_dark: Value::Null,
+        },
     };
     let text = |key: &str| {
         settings
@@ -185,9 +244,12 @@ fn legacy_source(settings: &Value) -> WallpaperSource {
     };
     match (text("main_screen_theme"), text("main_screen_theme_preset")) {
         ("none", _) => WallpaperSource::None,
-        ("silk" | "curtain", _) => live("butler.silk"),
-        (_, "aurora" | "bloom" | "lavender" | "morning") => live("butler.bloom"),
-        (_, "custom") if custom_colors(settings) => live("butler.bloom"),
-        _ => live("butler.riso-print"),
+        ("silk" | "curtain", _) => WallpaperSource::live("butler.silk"),
+        (_, preset @ ("aurora" | "bloom" | "lavender" | "morning")) => bloom(preset.into()),
+        (_, "custom") => match custom_colors(settings) {
+            Some(colors) => bloom(colors.into()),
+            None => WallpaperSource::live("butler.riso-print"),
+        },
+        _ => WallpaperSource::live("butler.riso-print"),
     }
 }

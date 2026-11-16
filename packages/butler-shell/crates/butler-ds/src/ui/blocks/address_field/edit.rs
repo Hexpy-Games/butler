@@ -53,6 +53,10 @@ struct Phase {
 
 /// Leaving edit mode: the next one starts again from the URL.
 pub(super) fn reset(id: &ElementId, window: &mut Window, cx: &mut App) {
+    let slot = window.use_keyed_state((id.clone(), "address-key-hook"), cx, |_, _| {
+        Rc::new(RefCell::<Option<KeyHook>>::new(None))
+    });
+    *slot.read(cx).borrow_mut() = None;
     let phase = window.use_keyed_state((id.clone(), "address-phase"), cx, |_, _| Phase::default());
     if phase.read(cx).loaded {
         phase.update(cx, |phase, _| *phase = Phase::default());
@@ -128,17 +132,43 @@ fn submit(edit: &Edit, state: &Entity<EditableTextState>, window: &mut Window, c
 
 /// The built-in keys: Escape cancels (Enter is an action of the editor, see `editor`).
 fn on_key(edit: &Edit, event: &KeyDownEvent, window: &mut Window, cx: &mut App) {
-    if edit
-        .on_key
-        .as_ref()
-        .is_some_and(|hook| hook(event, window, cx))
-    {
-        return;
-    }
     if event.keystroke.key == "escape" {
         (edit.set_editing)(false, window, cx);
         cx.stop_propagation();
     }
+}
+
+/// A key hook must run before bindings: the text editor consumes bound arrow and Enter
+/// actions before element key listeners. Keep one focus-scoped interceptor per field.
+fn listen_keys(edit: &Edit, handle: &FocusHandle, window: &mut Window, cx: &mut App) {
+    type Slot = Rc<RefCell<Option<KeyHook>>>;
+    let slot = window
+        .use_keyed_state((edit.id.clone(), "address-key-hook"), cx, |_, _| {
+            Slot::default()
+        })
+        .read(cx)
+        .clone();
+    slot.borrow_mut().clone_from(&edit.on_key);
+    window.use_keyed_state((edit.id.clone(), "address-key-sub"), cx, {
+        let handle = handle.clone();
+        move |_, cx| {
+            cx.intercept_keystrokes(move |event, window, cx| {
+                if !handle.is_focused(window) {
+                    return;
+                }
+                let hook = slot.borrow().clone();
+                let key = KeyDownEvent {
+                    keystroke: event.keystroke.clone(),
+                    is_held: false,
+                    prefer_character_input: false,
+                    native: None,
+                };
+                if hook.is_some_and(|hook| hook(&key, window, cx)) {
+                    cx.stop_propagation();
+                }
+            })
+        }
+    });
 }
 
 pub(super) fn editor(edit: Edit, window: &mut Window, cx: &mut App) -> AnyElement {
@@ -146,6 +176,7 @@ pub(super) fn editor(edit: Edit, window: &mut Window, cx: &mut App) -> AnyElemen
     let handle = focus::tab_stop(&state.read(cx).focus_handle(cx), true);
     text::register(cx, handle.clone(), state.clone());
     listen(&edit, &state, window, cx);
+    listen_keys(&edit, &handle, window, cx);
     advance(&edit, &state, &handle, window, cx);
     let ds = Ds::get(cx);
     let color = ds.color(Color::TextPrimary);

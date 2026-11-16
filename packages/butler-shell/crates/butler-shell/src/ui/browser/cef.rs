@@ -1,5 +1,6 @@
 //! CEF pages share the shell's UI thread; callbacks enter through channels.
 mod config;
+mod devtools;
 mod ime;
 mod input;
 mod surface;
@@ -47,6 +48,7 @@ pub(crate) struct CefEngine {
 impl CefEngine {
     pub(crate) fn start(
         events: mpsc::UnboundedSender<PageEvent>,
+        adapter: Option<u64>,
         cx: &mut App,
     ) -> anyhow::Result<Self> {
         let (sink, receiver) = mpsc::unbounded();
@@ -54,7 +56,7 @@ impl CefEngine {
         let gate = Rc::new(RefCell::new(PopupGate::default()));
         let downloads = super::downloads::Downloads::new(cx);
         let runtime = Rc::new(OsrRuntime::start(
-            config::config(cx)?,
+            config::config(adapter, cx)?,
             Rc::new(Sink(sink)),
             Arc::new(move |delay| {
                 let _ = schedule.unbounded_send(Instant::now() + delay);
@@ -118,6 +120,9 @@ impl CefEngine {
                     && let Some(page) = gate.borrow_mut().pages.get_mut(&id)
                 {
                     page.url.clone_from(url);
+                }
+                if devtools::receive(&event, &mut state.borrow_mut()) {
+                    continue;
                 }
                 // Opening a window can render the opener synchronously. Release its state first.
                 let change = change(event, &mut state.borrow_mut());
@@ -225,8 +230,16 @@ fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
         OsrEvent::DownloadStarted { .. }
         | OsrEvent::DownloadProgress { .. }
         | OsrEvent::DownloadDone { .. }
-        | OsrEvent::Frame => return None,
+        | OsrEvent::Frame
+        | OsrEvent::DevTools { .. } => return None,
         OsrEvent::Crashed => PageChange::Crashed,
+        OsrEvent::DevToolsEvent {
+            method,
+            params_json,
+        } => PageChange::DevToolsEvent {
+            method,
+            params: serde_json::from_str(&params_json).unwrap_or_default(),
+        },
         OsrEvent::Cursor(cursor) => {
             state.cursor = cursor;
             return None;
@@ -238,6 +251,17 @@ fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
     })
 }
 impl PageEngine for CefEngine {
+    fn supports_devtools(&self) -> bool {
+        true
+    }
+    fn devtools(
+        &self,
+        page: &TabId,
+        method: &str,
+        params: &serde_json::Value,
+    ) -> super::engine::DevToolsReply {
+        devtools::send(self, page, method, params)
+    }
     fn enabled(&self) -> bool {
         true
     }
@@ -254,6 +278,7 @@ impl PageEngine for CefEngine {
             (
                 page.clone(),
                 Rc::new(RefCell::new(PageState {
+                    tab: Some(page.clone()),
                     last_input: self.gate.borrow().pages[&id].last_input.clone(),
                     ..PageState::default()
                 })),
@@ -288,6 +313,7 @@ impl PageEngine for CefEngine {
             (
                 page.clone(),
                 Rc::new(RefCell::new(PageState {
+                    tab: Some(page.clone()),
                     last_input: input,
                     ..PageState::default()
                 })),

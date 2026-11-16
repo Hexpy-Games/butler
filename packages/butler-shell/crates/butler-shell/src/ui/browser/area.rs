@@ -44,6 +44,7 @@ pub(super) struct AreaState {
     pub(super) collapsed: HashSet<String>,
     creating: bool,
     _library: Option<gpui::Subscription>,
+    pub(super) suggestions: super::suggestions::Suggestions,
     pub(super) bookmarks: super::bookmarks::Bookmarks,
 }
 
@@ -107,6 +108,7 @@ fn shown(session: Option<&str>, state: &Entity<AreaState>, cx: &mut App) -> Vec<
             state.update(cx, |s, _| {
                 s.editing = tab.url.is_empty();
                 s.address = address;
+                s.suggestions.reset();
             });
         }
         if active.as_ref() != Some(&id) {
@@ -118,7 +120,7 @@ fn shown(session: Option<&str>, state: &Entity<AreaState>, cx: &mut App) -> Vec<
     }
     tabs
 }
-fn page(tab: Option<&Tab>, window: &mut Window, cx: &mut App) -> PageCard {
+fn page(tab: Option<&Tab>, key: &str, window: &mut Window, cx: &mut App) -> PageCard {
     let c = BrowserStrings::get(cx);
     let enabled = cx.global::<BrowserState>().enabled();
     let empty = tab.is_none_or(|t| t.url.is_empty());
@@ -142,17 +144,18 @@ fn page(tab: Option<&Tab>, window: &mut Window, cx: &mut App) -> PageCard {
         }
         page = page.on_bounds_change(move |bounds, window, cx| {
             if bounds.visible {
+                let zoom = window.zoom();
                 cx.global_mut::<BrowserState>().resize(
                     &id,
-                    bounds.bounds.size,
-                    bounds.scale * window.scale_factor(),
+                    bounds.bounds.size.map(|length| length * zoom),
+                    bounds.scale * window.scale_factor() / zoom,
                 );
             }
         });
     }
     if empty && enabled && !crashed {
-        // CARVE-OUT(G-cef): NewTabPage
-        page = page.internal(anchor(div(), "browser-page").child(EmptyLine::new(c.new_tab)));
+        page = page
+            .internal(anchor(div(), "browser-page").child(super::new_tab::page(key, window, cx)));
     } else if crashed || !enabled {
         let mut line = EmptyLine::new(if enabled {
             c.crashed
@@ -212,7 +215,7 @@ pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut 
     cx.global_mut::<BrowserState>().show(shown.as_ref());
     let strip = super::tabs::strip(&tabs, session, &state, window, cx);
     let toolbar = super::toolbar::toolbar(tab, &state, window, cx);
-    let page = page(tab, window, cx);
+    let page = page(tab, session.unwrap_or("standalone"), window, cx);
     let pane = BrowserPane::new(
         "browser-pane",
         BrowserStrings::get(cx).title,
@@ -253,6 +256,7 @@ fn area_state(session: Option<&str>, window: &mut Window, cx: &mut App) -> Entit
                 creating: false,
                 _library: library,
                 bookmarks: super::bookmarks::Bookmarks::default(),
+                suggestions: super::suggestions::Suggestions::default(),
             }
         },
     )

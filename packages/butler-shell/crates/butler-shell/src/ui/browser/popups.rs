@@ -66,6 +66,8 @@ impl BrowserState {
             url,
             title: String::new(),
             favicon: String::new(),
+            title_url: String::new(),
+            favicon_url: String::new(),
             status: TabStatus::Idle,
             can_back: false,
             can_forward: false,
@@ -74,6 +76,10 @@ impl BrowserState {
             popup: true,
             blocked_popup: None,
             dialog: None,
+            picking: false,
+            selections: Vec::new(),
+            pick_hover: None,
+            pick: Default::default(),
             last_nav: None,
         });
         self.engine.adopt(&id, child);

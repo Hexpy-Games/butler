@@ -33,6 +33,30 @@ fn start(cx: &mut App, args: &[OsString]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// One App per data folder (main.mjs:432-466): the arguments of later launches. Exits when
+/// another App has the folder. `None` for a legacy folder, which is read only and takes no
+/// lock, and when the endpoint cannot be opened.
+fn single_instance(args: &[OsString]) -> Option<tokio::sync::mpsc::UnboundedReceiver<Vec<String>>> {
+    use butler_platform::app_instance::{Launch, claim};
+    let data = lifecycle::data_root(args);
+    if lifecycle::legacy_data(&data) {
+        return None;
+    }
+    let forwarded: Vec<String> = args
+        .iter()
+        .skip(1)
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    match claim(&data, &forwarded) {
+        Ok(Launch::Forwarded) => std::process::exit(0),
+        Ok(Launch::First(launches)) => Some(launches),
+        Err(error) => {
+            eprintln!("butler-shell: single instance unavailable ({error})");
+            None
+        }
+    }
+}
+
 fn main() {
     let args: Vec<OsString> = std::env::args_os().collect();
     if let Some(event) = butler_platform::squirrel::event(&args) {
@@ -53,6 +77,7 @@ fn main() {
         };
         std::process::exit(code);
     }
+    let launches = single_instance(&args);
     let app = application().with_assets(ui::assets::Assets);
     let (urls, mut incoming) = futures::channel::mpsc::unbounded::<Vec<String>>();
     app.on_open_urls(move |values| {
@@ -90,6 +115,16 @@ fn main() {
             lifecycle::logs::app_log("ERROR", "lifecycle", "app.start_failed", failed);
             lifecycle::logs::quit();
             cx.quit();
+            return;
+        }
+        // Later launches are read only once the first window exists.
+        if let Some(mut launches) = launches {
+            cx.spawn(async move |cx| {
+                while let Some(args) = launches.recv().await {
+                    cx.update(|cx| lifecycle::window::launched(cx, &args));
+                }
+            })
+            .detach();
         }
     });
 }

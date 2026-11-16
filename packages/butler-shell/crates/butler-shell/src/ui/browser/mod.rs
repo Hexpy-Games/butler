@@ -12,7 +12,9 @@ pub(crate) mod downloads;
 pub(crate) mod engine;
 mod host;
 pub(crate) mod model;
+mod new_tab;
 mod page_dialog;
+pub(crate) mod pick;
 mod placeholder;
 #[cfg(feature = "cef")]
 mod popup_policy;
@@ -20,18 +22,22 @@ mod popup_window;
 mod popups;
 pub(crate) mod restore;
 pub(crate) mod shell_state;
+mod suggestions;
 mod tabs;
 mod toolbar;
 pub(crate) mod transfer;
 mod visits;
 
-pub(crate) fn init(cx: &mut gpui::App) {
+/// `window` is the shell's main window, whose renderer already exists. Its GPU adapter is where
+/// page frames are consumed: gpui draws all windows, popups included, with one shared device, so
+/// the page engine produces its frames on that adapter (shared GPU resources cannot cross one).
+pub(crate) fn init(window: &gpui::Window, cx: &mut gpui::App) {
     if cx.has_global::<model::BrowserState>() {
         return;
     }
     visits::init(cx);
     restore::init(cx);
-    model::BrowserState::init(cx);
+    model::BrowserState::init(window.gpu_adapter_luid(), cx);
     cx.set_global(shell_state::BrowserShell::default());
 }
 

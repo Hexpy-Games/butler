@@ -6,8 +6,6 @@
 //! item) and the OS reports clicks on a channel; no timer, no poll, no request of its own.
 mod copy;
 
-use std::ffi::OsString;
-
 use butler_platform::login_item::{self, LoginItem};
 use butler_platform::tray::{self as platform, Tray, TrayEvent, TrayIcon, TrayItem};
 use gpui::{App, AppContext as _, Context, Entity, Global, Task, WindowAppearance};
@@ -16,7 +14,6 @@ use super::supervisor::{AgentState, Supervisor};
 use super::window;
 use crate::ui::i18n::Locale;
 use crate::ui::shell::Shell;
-use crate::ui::shell::navigation::Navigation;
 use copy::Words;
 
 /// `butler-mark-flat.png` (light theme) and `butler-mark-flat-white.png` (dark theme).
@@ -256,35 +253,14 @@ fn handle(event: TrayEvent, cx: &mut App) {
             }
             refresh(cx);
         }
-        NEW_CHAT => navigate("--butler-new-chat".to_owned(), cx),
+        NEW_CHAT => window::launched(cx, &["--butler-new-chat".to_owned()]),
         QUIT => super::quit(cx),
         other => {
             if let Some(session) = other.strip_prefix(SESSION) {
-                navigate(format!("--butler-open-session={session}"), cx);
+                window::launched(cx, &[format!("--butler-open-session={session}")]);
             }
         }
     }
-}
-
-/// New Chat or a recent conversation: in the open window, else in a new one.
-fn navigate(arg: String, cx: &mut App) {
-    let Some(request) = Navigation::from_args(std::slice::from_ref(&arg)) else {
-        return;
-    };
-    let shell = cx
-        .windows()
-        .into_iter()
-        .find_map(|handle| handle.downcast::<Shell>());
-    let Some(shell) = shell else {
-        if let Err(error) = window::open_window(cx, &[OsString::from(arg)]) {
-            eprintln!("butler-shell: {error:#}");
-        }
-        return;
-    };
-    let _ = shell.update(cx, |view, window, cx| {
-        view.navigate(request, window, cx);
-        window.activate();
-    });
 }
 
 /// Shows the tray. In foreground mode Electron keeps it on whatever `desktop_tray_enabled`

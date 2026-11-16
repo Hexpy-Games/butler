@@ -1,13 +1,13 @@
 //! DS SuggestionList (SuggestionList.tsx / SuggestionList.module.css): the listbox under a
 //! combobox field. Focus stays in the field; rows are options it highlights. A row is one line:
 //! a glyph, the title with the muted address, a badge, and the typed terms in bold. The favicon
-//! image of an address row is not drawn: a glyph stands in.
+//! image of an address row uses its favicon, with a glyph until it decodes.
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ElementId, FontWeight, HighlightStyle, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,
-    StyledText, Window, div,
+    AnyElement, App, ElementId, FontWeight, HighlightStyle, ImageSource, InteractiveElement as _,
+    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
+    Styled as _, StyledImage as _, StyledText, Window, div,
 };
 
 use crate::tokens::{Color, Length, Number};
@@ -16,6 +16,7 @@ use crate::ui::context::Ds;
 use crate::ui::convert;
 use crate::ui::icon::{IconSize, icon};
 use crate::ui::icon_slot::{IconSlot, SlotSize, SlotTone};
+use crate::ui::media_frame::{Load, resolve};
 
 type Select = Rc<dyn Fn(&mut Window, &mut App)>;
 
@@ -178,6 +179,7 @@ pub struct SuggestionRow {
     title: Option<SharedString>,
     url: SharedString,
     kind: SuggestionKind,
+    icon_src: Option<ImageSource>,
     query: SharedString,
     active: bool,
     on_select: Select,
@@ -194,6 +196,7 @@ impl SuggestionRow {
             title: None,
             url: url.into(),
             kind: SuggestionKind::History,
+            icon_src: None,
             query: SharedString::default(),
             active: false,
             on_select: Rc::new(on_select),
@@ -208,6 +211,12 @@ impl SuggestionRow {
 
     pub fn kind(mut self, kind: SuggestionKind) -> Self {
         self.kind = kind;
+        self
+    }
+
+    /// The site's favicon; the kind's glyph remains until it decodes or if it fails.
+    pub fn icon_src(mut self, source: impl Into<ImageSource>) -> Self {
+        self.icon_src = Some(source.into());
         self
     }
 
@@ -235,7 +244,13 @@ fn address_of(url: &str) -> String {
 }
 
 impl RenderOnce for SuggestionRow {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let favicon = self.icon_src.as_ref().and_then(|source| {
+            match resolve(&(self.id.clone(), "favicon").into(), source, window, cx) {
+                Load::Ready(data) => Some(ImageSource::Render(data)),
+                _ => None,
+            }
+        });
         let ds = Ds::get(cx);
         let address = address_of(&self.url);
         let address = if address.is_empty() {
@@ -249,14 +264,22 @@ impl RenderOnce for SuggestionRow {
             .as_ref()
             .filter(|title| !title.is_empty() && **title != self.url);
         let bookmark = self.kind == SuggestionKind::Bookmark;
-        let glyph = IconSlot::new()
-            .size(SlotSize::Md)
-            .tone(SlotTone::Tertiary)
-            .child(icon(
+        let face = match favicon {
+            Some(source) => gpui::img(source)
+                .size(ds.len(Length::IconSizeMd))
+                .object_fit(gpui::ObjectFit::Contain)
+                .into_any_element(),
+            None => icon(
                 if bookmark { Icon::Star } else { Icon::Globe2 },
                 IconSize::Md,
                 ds,
-            ))
+            )
+            .into_any_element(),
+        };
+        let glyph = IconSlot::new()
+            .size(SlotSize::Md)
+            .tone(SlotTone::Tertiary)
+            .child(face)
             .into_any_element();
         let (title, address) = match named {
             Some(title) => (

@@ -17,6 +17,7 @@ mod identity;
 mod images;
 mod parallel;
 mod preview;
+mod profile;
 mod progress;
 mod real_app;
 mod selfcheck;

@@ -166,11 +166,9 @@ fn finish_failed(view: &Onboarding, cx: &Context<Onboarding>) -> AnyElement {
     let copy = shared(view.lang);
     let retry = Button::new("first-run-signin-retry")
         .size(Size::Sm)
-        .variant(Variant::Outline)
         .text(copy.retry)
         .on_click(cx.listener(|view, _, _, cx| view.retry_commit(cx)));
     Notice::new(NoticeTone::Error, copy.finish_failed)
-        .icon(icon(Icon::CircleAlert, IconSize::Md, Ds::get(cx)))
         .action(retry)
         .into_any_element()
 }
