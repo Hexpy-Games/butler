@@ -53,6 +53,25 @@ fn main() {
         };
         std::process::exit(code);
     }
+    // One App per data folder (main.mjs:432-466). A legacy folder is read only: no lock there.
+    let data = lifecycle::data_root(&args);
+    let forwarded: Vec<String> = args
+        .iter()
+        .skip(1)
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    let launches = if lifecycle::legacy_data(&data) {
+        None
+    } else {
+        match butler_platform::app_instance::claim(&data, &forwarded) {
+            Ok(butler_platform::app_instance::Launch::Forwarded) => return,
+            Ok(butler_platform::app_instance::Launch::First(launches)) => Some(launches),
+            Err(error) => {
+                eprintln!("butler-shell: single instance unavailable ({error})");
+                None
+            }
+        }
+    };
     let app = application().with_assets(ui::assets::Assets);
     let (urls, mut incoming) = futures::channel::mpsc::unbounded::<Vec<String>>();
     app.on_open_urls(move |values| {
@@ -90,6 +109,16 @@ fn main() {
             lifecycle::logs::app_log("ERROR", "lifecycle", "app.start_failed", failed);
             lifecycle::logs::quit();
             cx.quit();
+            return;
+        }
+        // Later launches are read only once the first window exists.
+        if let Some(mut launches) = launches {
+            cx.spawn(async move |cx| {
+                while let Some(args) = launches.recv().await {
+                    cx.update(|cx| lifecycle::window::launched(cx, &args));
+                }
+            })
+            .detach();
         }
     });
 }

@@ -70,6 +70,7 @@
 pub mod account_dirs;
 pub mod agent_homes;
 pub mod app_browser;
+pub mod app_instance;
 pub mod app_shell;
 pub mod app_update;
 pub mod browser_process;

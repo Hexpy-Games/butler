@@ -129,6 +129,34 @@ pub(crate) fn reopen(cx: &mut App) {
     }
 }
 
+/// A later launch (`second-instance`, main.mjs:455-465) and the tray's New Chat and recent
+/// conversations: `args` navigate in the open window, else open a new one, and the App comes
+/// forward. Nothing while quitting.
+pub(crate) fn launched(cx: &mut App, args: &[String]) {
+    if super::runtime(cx).is_some_and(|runtime| runtime.read(cx).quitting) {
+        return;
+    }
+    let shell = cx
+        .windows()
+        .into_iter()
+        .find_map(|handle| handle.downcast::<Shell>());
+    let Some(shell) = shell else {
+        let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+        if let Err(error) = open_window(cx, &args) {
+            eprintln!("butler-shell: {error:#}");
+        }
+        return;
+    };
+    let request = crate::ui::shell::navigation::Navigation::from_args(args);
+    let _ = shell.update(cx, |view, window, cx| {
+        if let Some(request) = request {
+            view.navigate(request, window, cx);
+        }
+        window.activate();
+    });
+    cx.activate(true);
+}
+
 /// The last window closed: quit when the tray is off or failed to start; otherwise the App
 /// keeps running with the tray and the Agent.
 pub(super) fn closed(cx: &mut App) {

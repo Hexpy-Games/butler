@@ -134,6 +134,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // The installed App is found under the user's home; its windowless
         // browser host runs in a contained process tree.
         "app_browser" => &["process_control", "user_dirs"],
+        "app_instance" => &["instance", "secure_fs"],
         // Hook processes compose shell selection and tree containment.
         "hook_process" | "preview_process" => &["command_sandbox", "process_control"],
         // Process naming owns verified executable aliases; instance queries
