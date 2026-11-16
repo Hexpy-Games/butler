@@ -147,6 +147,8 @@ pub(crate) struct Composer {
     pub(crate) shell_focus: Option<FocusHandle>,
     /// A chat opened: the field gives up focus on the next frame.
     release_focus: bool,
+    /// The settings' `collapse_message_box`: the card folds while not engaged.
+    collapse: bool,
     /// The card's height as last drawn.
     height: Rc<Cell<f32>>,
     /// Where a dropped library card attaches; the shell sets it once built.
@@ -198,6 +200,7 @@ impl Composer {
             disabled: None,
             shell_focus: None,
             release_focus: false,
+            collapse: true,
             height: Rc::new(Cell::new(48.)),
             manage: None,
             _subscriptions: subscriptions,
@@ -397,7 +400,8 @@ impl Composer {
         // `Boolean(scope || decision...) || presentation.expanded`: the dashboard's scoped
         // composer (`draft_key`) is always unfolded, and is not `large` (`large={false}`).
         let scoped = self.inputs.draft_key.is_some();
-        let expanded = scoped || self.fold.engaged || self.fold.decision || self.fold.protected;
+        let fold = &self.fold;
+        let expanded = scoped || !self.collapse || fold.engaged || fold.decision || fold.protected;
         let mut card = ComposerCard::new("composer-card").expanded(expanded);
         if !scoped {
             card = card.large();

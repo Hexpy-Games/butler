@@ -51,6 +51,15 @@ impl Composer {
         self.recompute(cx);
     }
 
+    /// The settings' `collapse_message_box` (`useComposerPresentation`: `!collapse` keeps the
+    /// card unfolded).
+    pub(crate) fn set_collapse(&mut self, collapse: bool, cx: &mut Context<Self>) {
+        if self.collapse != collapse {
+            self.collapse = collapse;
+            cx.notify();
+        }
+    }
+
     /// A chat opened. Electron rebuilds the editor per chat (`Conversation.tsx`
     /// `<ErrorBoundary key={activeChatId}>`), so the card folds and the caret leaves it.
     pub(crate) fn chat_opened(&mut self, cx: &mut Context<Self>) {
