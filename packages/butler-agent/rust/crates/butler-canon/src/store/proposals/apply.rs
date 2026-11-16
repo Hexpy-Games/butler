@@ -89,7 +89,7 @@ fn batch(
 }
 
 /// Validate a draft against the same writers without retaining any mutations.
-pub(super) fn validate(
+pub(in crate::store) fn validate(
     tx: &Transaction<'_>,
     ctx: &Context,
     project: &str,

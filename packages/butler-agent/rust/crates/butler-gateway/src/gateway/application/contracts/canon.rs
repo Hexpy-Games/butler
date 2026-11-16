@@ -10,6 +10,7 @@ pub enum AppCanonResource {
     Activity,
     Comment,
     ProposeSpec,
+    ProposeNewSpec,
     CheckCriterion,
     Grants,
     AllowGrant,
@@ -37,7 +38,7 @@ pub fn delegate_capability(
 ) -> Option<&'static str> {
     use AppCanonResource::{
         Activity, Canon, Comment, CreateEpic, CreatePlan, CreateTag, EditEpic, EditPlan, Epic,
-        List, Plan, ProposeSpec, Spec, Tags,
+        List, Plan, ProposeNewSpec, ProposeSpec, Spec, Tags,
     };
     match resource {
         Canon | List | Plan | Epic | Spec | Activity | Tags => Some("canon.read"),
@@ -86,7 +87,7 @@ pub fn delegate_capability(
         CreateEpic => Some("canon.epic.create"),
         CreatePlan => Some("canon.plan.create"),
         CreateTag => Some("canon.tag.create"),
-        ProposeSpec => Some("canon.spec.propose"),
+        ProposeSpec | ProposeNewSpec => Some("canon.spec.propose"),
         _ => None,
     }
 }

@@ -1,4 +1,6 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
+import { gfmTableFromMarkdown } from "mdast-util-gfm-table";
+import { gfmTable } from "micromark-extension-gfm-table";
 import type { RootContent } from "mdast";
 import { $createParagraphNode, $getNodeByKey, $getRoot, type LexicalNode } from "lexical";
 import { $convertToMarkdownString, $generateNodesFromMarkdownString, HEADING, UNORDERED_LIST, ORDERED_LIST, BOLD_STAR, BOLD_UNDERSCORE, ITALIC_STAR, ITALIC_UNDERSCORE, LINK } from "@lexical/markdown";
@@ -24,7 +26,7 @@ function importPart(raw: string, part: RootContent): LexicalNode[] {
 /** Keep source slices, including inter-node whitespace, until the corresponding node changes. */
 export function importDocument(markdown: string): MarkdownSource {
   const root = $getRoot(); root.clear();
-  const parts = fromMarkdown(markdown).children;
+  const parts = fromMarkdown(markdown, { extensions: [gfmTable()], mdastExtensions: [gfmTableFromMarkdown()] }).children;
   const source: MarkdownSource = { nodes: new Map(), prefix: markdown.slice(0, parts[0]?.position?.start.offset ?? markdown.length) };
   const imported: LexicalNode[] = [];
   parts.forEach((part, index) => {

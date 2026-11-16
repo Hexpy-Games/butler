@@ -71,8 +71,8 @@ async fn spec_read_and_atomic_edit_preserve_full_body_and_criteria() -> Result<(
         "spec-flow"
     );
     assert_eq!(shared["untrusted_content"]["specs"][0]["revision"], 0);
-    let body = "# 사용성\n\n- [ ] 저장한 내용을 다시 열 수 있다.";
-    let id=draft(&s,&script,&chat,json!({"project_id":project,"summary":"명세 반영","changes":[{"op":"spec.edit","id":"spec-flow","expected_revision":0,"body":body,"criteria":[{"id":"keep","part_id":"usability","text":"저장한 내용을 다시 열 수 있다."}]}]})).await?;
+    let body = "# 사용성\n\n## usability\n- KP-01 저장한 내용을 다시 열 수 있다.";
+    let id=draft(&s,&script,&chat,json!({"project_id":project,"summary":"명세 반영","changes":[{"op":"spec.edit","id":"spec-flow","expected_revision":0,"body":body}]})).await?;
     accept(&s, &id).await?;
     run(
         &s,
@@ -90,7 +90,7 @@ async fn spec_read_and_atomic_edit_preserve_full_body_and_criteria() -> Result<(
     assert_eq!(result["untrusted_content"]["revision"], 2);
     assert_eq!(
         result["untrusted_content"]["criteria"],
-        json!([{"node_id":"spec-flow","revision":1,"criterion_id":"keep","part_id":"usability","text":"저장한 내용을 다시 열 수 있다."}])
+        json!([{"node_id":"spec-flow","revision":1,"criterion_id":"KP-01","part_id":"usability","text":"저장한 내용을 다시 열 수 있다."}])
     );
     let revised = format!("{body}\n\n편집한 설명을 모두 유지한다.");
     let id=draft(&s,&script,&chat,json!({"project_id":project,"summary":"명세 설명 수정","changes":[{"op":"spec.edit","id":"spec-flow","expected_revision":2,"body":revised}]})).await?;
@@ -113,8 +113,36 @@ async fn spec_read_and_atomic_edit_preserve_full_body_and_criteria() -> Result<(
     assert_eq!(latest["untrusted_content"]["active_revision"], 2);
     assert_eq!(
         latest["untrusted_content"]["criteria"],
-        json!([{"node_id":"spec-flow","revision":2,"criterion_id":"keep","part_id":"usability","text":"저장한 내용을 다시 열 수 있다."}])
+        json!([{"node_id":"spec-flow","revision":2,"criterion_id":"KP-01","part_id":"usability","text":"저장한 내용을 다시 열 수 있다."}])
     );
+    server.abort();
+    s.finish().await
+}
+
+#[tokio::test]
+async fn spec_create_card_publishes_body_and_criteria() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let (s, script, server, project, chat) = setup("CP-spec-create", Access::AskAlways).await?;
+    let epic = data(
+        s.gw.post(
+            &format!("/projects/{project}/canon/epics"),
+            json!({"title":"저장"}),
+        )
+        .await?,
+        201,
+    );
+    let epic = epic["id"].as_str().unwrap();
+    let id = draft(&s, &script, &chat, json!({"project_id":project,"summary":"명세 등록","changes":[{"op":"spec.create","id":epic,"body":"# 저장 흐름\n\n…\n\n## save\n- SV-01 저장한 내용을 다시 열 수 있다."}]})).await?;
+    assert_eq!(accept(&s, &id).await?["ok"], true);
+    let detail = data(s.gw.get(&format!("/canon/epics/{epic}")).await?, 200);
+    let specs = detail["specs"].as_array().unwrap();
+    assert_eq!(specs.len(), 1);
+    assert_eq!(specs[0]["concern_id"], "저장 흐름");
+    let criteria = specs[0]["criteria"].as_array().unwrap();
+    assert_eq!(criteria.len(), 1);
+    assert_eq!(criteria[0]["criterion_id"], "SV-01");
+    assert_eq!(criteria[0]["part_id"], "save");
+    assert_eq!(criteria[0]["text"], "저장한 내용을 다시 열 수 있다.");
     server.abort();
     s.finish().await
 }

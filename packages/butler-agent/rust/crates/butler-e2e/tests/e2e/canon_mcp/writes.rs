@@ -78,7 +78,8 @@ async fn cn_11_mcp_updates_comments_creates_and_proposes() -> Result<(), Harness
     assert_eq!(comment["activity"][0]["summary"], "Decision");
     assert_eq!(comment["activity"][0]["body"], "Decision\nFull explanation");
     seed_spec(&mut s, &id, &project).await?;
-    let spec = call(&s, "canon_get_spec", json!({"epic_id":id})).await?;
+    let specs = call(&s, "canon_get_spec", json!({"epic_id":id})).await?;
+    let spec = &specs["specs"][0];
     let proposal=call(&s,"canon_propose_spec_change",json!({"spec_id":spec["id"],"base_revision":spec["revision"],"body":"# Changed design","summary":"Review design"})).await?;
     let detail = s.gw.get(&format!("/canon/epics/{id}")).await?;
     assert_eq!(detail.data()["proposals"][0]["id"], proposal["id"]);
@@ -90,7 +91,8 @@ async fn cn_11_mcp_updates_comments_creates_and_proposes() -> Result<(), Harness
         .await?;
     assert_eq!(accepted.status, 200, "{}", accepted.text);
     assert_eq!(accepted.data()["ok"], true);
-    let spec = call(&s, "canon_get_spec", json!({"spec_id":spec["id"]})).await?;
+    let specs = call(&s, "canon_get_spec", json!({"spec_id":spec["id"]})).await?;
+    let spec = &specs["specs"][0];
     assert_eq!(spec["body"], "# Changed design");
     assert!(spec["revision"].as_i64().unwrap() > 0);
     let proposal=call(&s,"canon_propose_spec_change",json!({"spec_id":spec["id"],"base_revision":spec["revision"],"body":"Declined","summary":"Alternative"})).await?;

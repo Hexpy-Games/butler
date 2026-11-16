@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Butler",
+    "slug": "butler",
+    "scheme": "butler",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.hexpy.butler.mobile",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Butler connects to Butler on your computer over your local network.",
+        "NSAppTransportSecurity": { "NSAllowsLocalNetworking": true }
+      }
+    },
+    "android": { "package": "com.hexpy.butler.mobile" },
+    "locales": { "ko": "./locales/ko.json" },
+    "plugins": [
+      "expo-router",
+      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }]
+    ]
+  }
+}

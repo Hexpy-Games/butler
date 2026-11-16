@@ -198,19 +198,32 @@ fn unscoped_page(
     Ok(found)
 }
 
+const EPIC_SPEC_REFS: &str = "SELECT n.epic_id,n.node_id AS id,n.concern_id AS title FROM json_each(?1) ids JOIN canon_spec_nodes n INDEXED BY canon_spec_nodes_epic ON n.epic_id=ids.value WHERE n.scope_kind='project' AND n.visibility='canon' ORDER BY n.node_id";
+
 fn summaries(db: &Connection, found: &[Value]) -> Result<Vec<public::EpicSummary>> {
     let ids = json!(found.iter().map(|r| &r["id"]).collect::<Vec<_>>()).to_string();
     let mut tags = std::collections::HashMap::<String, Vec<public::Tag>>::new();
     for mut row in rows(
         db,
         "SELECT a.epic_id,t.id,t.name,t.color FROM json_each(?1) ids JOIN canon_epic_tags a ON a.epic_id=ids.value JOIN canon_tags t ON t.id=a.tag_id ORDER BY t.name_key",
-        [ids],
+        [&ids],
     )? {
         let epic = text(&row, "epic_id")?.to_owned();
         if let Some(object) = row.as_object_mut() {
             object.remove("epic_id");
         }
         tags.entry(epic)
+            .or_default()
+            .push(serde_json::from_value(row)?);
+    }
+    let mut specs = std::collections::HashMap::<String, Vec<public::SpecRef>>::new();
+    for mut row in rows(db, EPIC_SPEC_REFS, [ids])? {
+        let epic = text(&row, "epic_id")?.to_owned();
+        if let Some(object) = row.as_object_mut() {
+            object.remove("epic_id");
+        }
+        specs
+            .entry(epic)
             .or_default()
             .push(serde_json::from_value(row)?);
     }
@@ -224,6 +237,8 @@ fn summaries(db: &Connection, found: &[Value]) -> Result<Vec<public::EpicSummary
                 json!({"id":row["plan_id"],"title":row["plan_title"]})
             };
             row["tags"] = serde_json::to_value(tags.remove(text(&row, "id")?).unwrap_or_default())?;
+            row["specs"] =
+                serde_json::to_value(specs.remove(text(&row, "id")?).unwrap_or_default())?;
             Ok(serde_json::from_value(row)?)
         })
         .collect()

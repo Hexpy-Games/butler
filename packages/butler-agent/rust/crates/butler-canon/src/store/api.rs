@@ -16,7 +16,7 @@ use crate::{
 use Resource::{
     Activity, AllowGrant, BacklogOrder, Canon, CheckCriterion, Comment, CreateEpic, CreatePlan,
     CreateTag, DeleteEpic, DeleteTag, DenyGrant, EditEpic, EditPlan, EditTag, Epic, Grants, List,
-    Plan, PlanOrder, ProposeSpec, RevokeGrant, Spec, Tags,
+    Plan, PlanOrder, ProposeNewSpec, ProposeSpec, RevokeGrant, Spec, Tags,
 };
 pub use reads::{canon, epic, epic_only, plan};
 
@@ -28,6 +28,7 @@ pub enum Resource {
     Activity,
     Comment,
     ProposeSpec,
+    ProposeNewSpec,
     CheckCriterion,
     Grants,
     AllowGrant,
@@ -55,7 +56,7 @@ pub fn project_scope(db: &Connection, resource: Resource, id: &str) -> Result<St
         Spec | ProposeSpec | CheckCriterion => {
             "SELECT scope_ref FROM canon_spec_nodes WHERE node_id=?1 AND scope_kind='project' AND visibility='canon'"
         }
-        Activity | Comment | Epic | EditEpic | DeleteEpic => sql::EPIC_SCOPE,
+        Activity | Comment | Epic | EditEpic | DeleteEpic | ProposeNewSpec => sql::EPIC_SCOPE,
         Plan | EditPlan | PlanOrder => sql::PLAN_SCOPE,
         EditTag | DeleteTag => sql::TAG_SCOPE,
         Canon | CreatePlan | CreateEpic | BacklogOrder | Tags | CreateTag => {
@@ -72,7 +73,7 @@ pub fn read(db: &Connection, resource: Resource, id: &str) -> Result<Value> {
         Spec => mcp_proposals::spec(db, id),
         Activity => activity::page(db, id, None),
         List | Grants | AllowGrant | DenyGrant | RevokeGrant | Comment | ProposeSpec
-        | CheckCriterion => Err(Error::Invalid("request input required")),
+        | ProposeNewSpec | CheckCriterion => Err(Error::Invalid("request input required")),
         Tags => tags::list(db, id),
         Canon => canon(db, id),
         Plan => plan(db, id),
@@ -105,6 +106,7 @@ pub fn write(
         Comment => activity::comment(tx, ctx, id, input),
         CheckCriterion => criteria::toggle(tx, ctx, id, input),
         ProposeSpec => mcp_proposals::create(tx, ctx, id, input),
+        ProposeNewSpec => mcp_proposals::create_spec(tx, ctx, id, input),
         Grants => grants::list(tx, input["state"].as_str()),
         AllowGrant => grants::decide(tx, ctx, id, "allowed"),
         DenyGrant => grants::decide(tx, ctx, id, "denied"),

@@ -426,7 +426,7 @@ async function titleLines() {
 async function matrix(page: Page) {
   for (const width of [1440, 390]) for (const theme of ["light", "dark"]) for (background of ["plain", "wallpaper"]) {
     head = { ...head, title: "Report — document layout, revisions and export", body: initial + wideContent }; history = [structuredClone(head), { ...head, rev: head.rev - 1, author: "user" }];
-    await open(page, width, theme);
+    await open(page, width, theme); await editor(page).locator("table").waitFor();
     const paneLayout = await measureDocumentLayout(page);
     layouts.push({ width, theme, background, state: "pane-document", layout: paneLayout });
     assertDocumentLayout(paneLayout, width); await assertDocumentOverflow(page);

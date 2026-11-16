@@ -66,6 +66,13 @@ pub(super) struct Propose {
 }
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(super) struct ProposeNew {
+    pub(super) epic_id: String,
+    pub(super) body: String,
+    pub(super) summary: String,
+}
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(super) struct CreatePlan {
     pub(super) project: String,
     #[schemars(length(min = 1, max = 256))]
