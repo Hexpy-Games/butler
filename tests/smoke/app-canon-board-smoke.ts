@@ -55,6 +55,12 @@ try {
       }
       const board = page.locator('[data-test-class="canon-board"]');
       await board.locator("[data-kanban-item]").filter({ hasText: "캐논" }).getByRole("button").first().waitFor();
+      // Chromium does not clip a no-drag box to its scroller, so scrolled content would erase the titlebar's drag region.
+      assert.equal(await board.evaluate(element => {
+        for (let node: Element | null = element; node; node = node.parentElement)
+          if (getComputedStyle(node).getPropertyValue("app-region") === "no-drag") return node.getAttribute("data-test-class") ?? node.tagName;
+        return null;
+      }), null, "Dashboard scroll content is not a no-drag region");
       assert.equal(await board.getByText(/GitHub|가져오기|동기화됨|마일스톤/).count(), 0);
       assert.equal(await board.getByRole("radio").count(), 0);
       await verifyBoardSelector(page, server, projectId, planId, name, shots, () => openCanonBoard(page!));
