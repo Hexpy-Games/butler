@@ -117,6 +117,11 @@ impl Link {
         (link, relay_rx)
     }
 
+    /// Whether `tab` is one of this link's pages.
+    pub(super) fn has_tab(&self, tab: &str) -> bool {
+        self.routes.has_tab(tab)
+    }
+
     /// Ties the link to the attach it was admitted for.
     pub(super) fn bind(&self, generation: u64) {
         let _ = self.generation.set(generation);
