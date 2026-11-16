@@ -50,6 +50,16 @@ impl Shell {
         } else {
             Gutter::default()
         };
+        let background = if self.chat.read(cx).shows_empty() {
+            None
+        } else {
+            crate::ui::chat::conversation_background(window, cx)
+        };
+        let mut conversation =
+            ConversationShell::new("conversation", reserve).content_gutter(gutter);
+        if let Some(background) = background {
+            conversation = conversation.background(background);
+        }
         let notice = self.live_notice(window, cx);
         anchor(div(), "chat-card")
             .size_full()
@@ -59,11 +69,9 @@ impl Shell {
             .children(notice)
             .child(
                 ShellCard::new().child(
-                    self.with_aside(
-                        ConversationShell::new("conversation", reserve).content_gutter(gutter),
-                    )
-                    .child(content)
-                    .child(self.composer.clone()),
+                    self.with_aside(conversation)
+                        .child(content)
+                        .child(self.composer.clone()),
                 ),
             )
             .into_any_element()

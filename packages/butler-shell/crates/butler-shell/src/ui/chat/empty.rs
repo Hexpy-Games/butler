@@ -1,8 +1,8 @@
 //! The new chat: `EmptyState`, `EpicEmptyState`, `emptyStateSuggestions`, `mainScreenTheme` and
 //! `useConversationWallpaper` (poster stills behind the conversation).
-mod blur;
-mod power;
-mod source;
+pub(super) mod blur;
+pub(super) mod power;
+pub(super) mod source;
 
 use std::sync::{Arc, OnceLock};
 
@@ -20,8 +20,8 @@ use gpui::{
     Styled as _, Window, div, img,
 };
 
-use self::source::{EpicInfo, Resolved, Want, fetch, resolve};
-use super::send_message;
+use self::source::{EpicInfo, Resolved, Want, fetch, global_source, resolve};
+use super::{background, send_message};
 use crate::ui::composer::{card_rect, fill_composer_with_template};
 use crate::ui::i18n::new_chat::{epic_caption, general_suggestions, project_suggestions, words};
 use crate::ui::source::agent::Jobs;
@@ -113,9 +113,14 @@ pub(crate) fn empty_state(ctx: EmptyCtx<'_>, window: &mut Window, cx: &mut App) 
     let content_rect =
         window.use_keyed_state("new-chat-content-rect", cx, |_, _| None::<ContentRect>);
     let resolved = state.read(cx).resolved.clone();
-    let wallpaper = resolved
-        .as_ref()
-        .map_or(WallpaperSource::None, |resolved| resolved.wallpaper.clone());
+    let settings = crate::ui::shell::AppSettings::get(cx);
+    let wallpaper = match (resolved.as_ref(), settings.as_deref()) {
+        (Some(resolved), Some(settings)) => resolved
+            .project_wallpaper
+            .clone()
+            .unwrap_or_else(|| global_source(settings)),
+        _ => WallpaperSource::None,
+    };
     let content = match (ctx.epic_id, resolved.as_ref().and_then(|r| r.epic.clone())) {
         (Some(_), epic) => epic.map(|epic| epic_empty_state(&epic, lang)),
         (None, _) => Some(prompt_list(
@@ -135,14 +140,19 @@ pub(crate) fn empty_state(ctx: EmptyCtx<'_>, window: &mut Window, cx: &mut App) 
     // state sits in a locked, unmasked `ConversationScroll`, top-aligned at the conversation's
     // full width (not WallpaperStage's centred layer with its two `lg` insets).
     let drifts = butler_ds::ui::blocks::wallpaper::drifts(&wallpaper);
-    let power = resolved
+    let motion_paused = settings
+        .as_deref()
+        .is_some_and(|settings| settings["wallpaper"]["motion"] == "paused");
+    let pause_on_battery = settings
+        .as_deref()
+        .is_some_and(|settings| settings["wallpaper"]["pauseOnBattery"] == true);
+    let power = settings
         .as_ref()
-        .filter(|r| drifts || r.wallpaper_pause_on_battery)
+        .filter(|_| drifts || pause_on_battery)
         .map(|_| power::state(window, cx))
         .unwrap_or_default();
-    let paused = resolved
-        .as_ref()
-        .is_some_and(|r| r.wallpaper_paused || (r.wallpaper_pause_on_battery && power.on_battery));
+    let paused = settings.is_some() && (motion_paused || (pause_on_battery && power.on_battery));
+    let picture = background::picture("new-chat-wallpaper-picture", &wallpaper, window, cx);
     let mut wallpaper = Wallpaper::new(wallpaper)
         .motion(paused)
         .host(WallpaperHost {
@@ -153,7 +163,7 @@ pub(crate) fn empty_state(ctx: EmptyCtx<'_>, window: &mut Window, cx: &mut App) 
         .content_rect(kept)
         .content_rect2(card_rect(cx))
         .day_phase(day_phase());
-    if let Some(picture) = resolved.as_ref().and_then(|r| r.wallpaper_picture.clone()) {
+    if let Some(picture) = picture {
         wallpaper = wallpaper.picture(picture);
     }
     div()

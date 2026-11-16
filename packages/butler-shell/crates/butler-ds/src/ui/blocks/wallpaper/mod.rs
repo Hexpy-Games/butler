@@ -34,8 +34,10 @@ pub use posters::{POSTER_SIZE, builtin_poster, poster_modules};
 pub use still::{StillCache, StillSize, still_key};
 
 use self::live::{LiveFrame, STILL_DAY_PHASE};
+use crate::tokens::Color;
 use crate::ui::blocks::prompt_suggestion_list::ContentRect;
 use crate::ui::context::Ds;
+use crate::ui::convert;
 
 /// The first-run intro's dried end frame. // DS: intro/introFrame.ts
 pub fn intro_print(tone: WallpaperTone, card: Option<ContentRect>) -> AnyElement {
@@ -189,6 +191,7 @@ pub struct Wallpaper {
     day_phase: f32,
     paused: bool,
     host: WallpaperHost,
+    paper: f32,
 }
 
 impl Wallpaper {
@@ -202,6 +205,7 @@ impl Wallpaper {
             day_phase: STILL_DAY_PHASE,
             paused: false,
             host: WallpaperHost::default(),
+            paper: 0.,
         }
     }
 
@@ -231,6 +235,13 @@ impl Wallpaper {
 
     pub fn host(mut self, host: WallpaperHost) -> Self {
         self.host = host;
+        self
+    }
+
+    /// `paperOverlay`: one uniform layer of the theme's paper over the whole wallpaper, 0..0.95;
+    /// none by default.
+    pub fn paper_overlay(mut self, amount: f32) -> Self {
+        self.paper = amount;
         self
     }
 
@@ -269,7 +280,15 @@ impl RenderOnce for Wallpaper {
         let tone = self.tone.unwrap_or(WallpaperTone::from_dark(ds.dark()));
         let layer = div().relative().size_full().overflow_hidden();
         let frame = self.live_frame(tone, window, cx);
-        match self.source {
+        let paper = self.paper.clamp(0., 0.95);
+        let paper_fill = convert::with_alpha(
+            ds.color(match tone {
+                WallpaperTone::Light => Color::RisoPaperDay,
+                WallpaperTone::Dark => Color::RisoPaperNight,
+            }),
+            paper,
+        );
+        let layer = match self.source {
             WallpaperSource::None => layer,
             WallpaperSource::Live { module, values } => {
                 match live::layer(&module, &values, frame, window, cx) {
@@ -286,14 +305,27 @@ impl RenderOnce for Wallpaper {
                 blur,
                 filter,
                 ..
-            } => {
-                let Some(image) = self.picture else {
-                    return layer;
-                };
-                let (drawn, remaining) =
-                    live::image_layer(image, fit, blur, dim, filter.as_ref(), frame, window, cx);
-                dim_pass(layer.child(drawn), remaining)
-            }
+            } => match self.picture {
+                None => layer,
+                Some(image) => {
+                    let (drawn, remaining) = live::image_layer(
+                        image,
+                        fit,
+                        blur,
+                        dim,
+                        filter.as_ref(),
+                        frame,
+                        window,
+                        cx,
+                    );
+                    dim_pass(layer.child(drawn), remaining)
+                }
+            },
+        };
+        if paper > 0. {
+            layer.child(div().absolute().top_0().left_0().size_full().bg(paper_fill))
+        } else {
+            layer
         }
     }
 }
