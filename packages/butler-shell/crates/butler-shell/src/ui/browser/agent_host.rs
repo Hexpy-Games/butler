@@ -42,8 +42,9 @@ pub(crate) struct Hosted {
     pub(super) internal: bool,
     /// The size the pane last asked for; applied when the page stops being hosted.
     pub(super) pane: Option<(gpui::Size<gpui::Pixels>, f32)>,
-    /// The id of the Agent's `Fetch.enable` on the page until its reply: the Agent's guard.
-    pub(super) guard: Option<serde_json::Value>,
+    /// The id of the Agent's `Runtime.runIfWaitingForDebugger` on the page until its reply: the
+    /// Agent letting the page run.
+    pub(super) start: Option<serde_json::Value>,
 }
 impl Hosted {
     /// The Agent is acting in the page right now.
@@ -68,7 +69,7 @@ impl Hosted {
             stage: Stage::Opening,
             internal,
             pane: None,
-            guard: None,
+            start: None,
         }
     }
 }

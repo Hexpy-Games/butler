@@ -132,20 +132,24 @@ pub(super) fn event(cx: &App, message: Value) {
 }
 
 /// A hosted page's own raw DevTools message; bytes that are not JSON are dropped. The success
-/// reply to the Agent's guard (`Fetch.enable` on the page itself) lets the page's held loads go:
-/// the URL its main frame tried meanwhile loads now, under the guard.
+/// reply to the Agent's `Runtime.runIfWaitingForDebugger` on the page itself, the last step of
+/// its setup, lets the page's held loads go: the URL its main frame tried meanwhile loads now,
+/// if it is a web address.
 #[cfg(feature = "cef")]
 fn raw(cx: &App, tab: &TabId, hosted: &mut Hosted, engine: &mut dyn PageEngine, bytes: &[u8]) {
     let Ok(message) = serde_json::from_slice::<Value>(bytes) else {
         return;
     };
-    let reply = message.get("sessionId").is_none() && hosted.guard.as_ref() == Some(&message["id"]);
+    let reply = message.get("sessionId").is_none() && hosted.start.as_ref() == Some(&message["id"]);
     if reply {
-        hosted.guard = None;
+        hosted.start = None;
     }
-    let guard_on = reply && message.get("result").is_some();
+    let started = reply && message.get("result").is_some();
     up(cx, Some(tab), message, bytes.len());
-    if guard_on && let Some(url) = engine.release_loads(tab) {
+    if started
+        && let Some(url) = engine.release_loads(tab)
+        && let Some(url) = crate::ui::browser::address::web_url(&url)
+    {
         engine.command(tab, PageCommand::Load(url));
     }
 }
@@ -192,9 +196,9 @@ fn allowed(message: &Value) -> bool {
             || matches!(method, "Target.setAutoAttach" | "Target.detachFromTarget"))
 }
 
-/// A `cdp` frame of the Agent, sent unchanged to the hosted page it names. A `Fetch.enable` on
-/// the page itself (a frame's session carries its `sessionId`) is the Agent's guard: its id is
-/// kept until the reply.
+/// A `cdp` frame of the Agent, sent unchanged to the hosted page it names. A
+/// `Runtime.runIfWaitingForDebugger` on the page itself (a frame's session carries its
+/// `sessionId`) lets the page run: its id is kept until the reply.
 #[cfg(feature = "cef")]
 pub(super) fn down(cx: &mut App, frame: &Value) {
     use crate::ui::browser::model::BrowserState;
@@ -218,8 +222,10 @@ pub(super) fn down(cx: &mut App, frame: &Value) {
         else {
             return;
         };
-        if message["method"] == "Fetch.enable" && message.get("sessionId").is_none() {
-            hosted.guard = Some(message["id"].clone());
+        if message["method"] == "Runtime.runIfWaitingForDebugger"
+            && message.get("sessionId").is_none()
+        {
+            hosted.start = Some(message["id"].clone());
         }
         model.engine.devtools_raw(&tab, &bytes);
     });

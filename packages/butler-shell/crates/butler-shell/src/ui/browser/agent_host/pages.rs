@@ -368,10 +368,10 @@ impl BrowserState {
 
     /// A popup of a hosted page is a hosted page itself; the Agent hears of it with its target
     /// and the URL its held loads keep (else `url`). A popup whose target cannot be found is
-    /// closed.
+    /// closed, and so is one whose opener is no longer hosted.
     #[cfg(feature = "cef")]
     pub(in crate::ui::browser) fn announce_popup(
-        &self,
+        &mut self,
         id: &TabId,
         opener: &TabId,
         url: &str,
@@ -382,6 +382,9 @@ impl BrowserState {
             .and_then(|tab| tab.hosted.as_ref())
             .map(|hosted| hosted.target.clone())
         else {
+            if self.tab(id).is_some_and(|tab| tab.hosted.is_some()) {
+                self.close(id, cx);
+            }
             return;
         };
         let target = self.engine.devtools(id, "Target.getTargetInfo", &json!({}));
