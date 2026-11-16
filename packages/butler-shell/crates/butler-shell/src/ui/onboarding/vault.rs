@@ -53,7 +53,7 @@ pub(crate) fn screen(
     card.action(
         SetupWizardStepAction::new("first-run-vault-continue", copy.continue_)
             .forward()
-            .when(busy, SetupWizardStepAction::disabled)
+            .when(busy && !done, SetupWizardStepAction::disabled)
             .on_click(cx.listener(move |view, _, _, cx| {
                 if done {
                     view.screen = Screen::Connect;
