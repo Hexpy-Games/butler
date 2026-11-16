@@ -41,7 +41,6 @@ def main():
     parser.add_argument('--renderer', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--artifact-base-url', required=True)
-    parser.add_argument('--channel', default='preview')
     args = parser.parse_args()
     verify_pe(args.binary)
     helper = args.binary.with_name("butler-sandbox.exe")
@@ -80,8 +79,9 @@ def main():
                     info = zipfile.ZipInfo(path.relative_to(stage).as_posix(), (1980, 1, 1, 0, 0, 0))
                     info.compress_type = zipfile.ZIP_DEFLATED
                     target.writestr(info, path.read_bytes())
+    # Same rule as the App packages: a prerelease version is a preview.
     packager.write_agent_manifests(archive, version=version, app_version=None,
-                                  target='windows-x64', channel=args.channel,
+                                  target='windows-x64', channel='preview' if '-' in version else 'stable',
                                   artifact_url=args.artifact_base_url.rstrip('/') + '/' + archive.name)
     digest = packager.sha256_file(archive)
     (args.output / (archive.name + '.sha256')).write_text(f'{digest}  {archive.name}\n', encoding='utf-8')
