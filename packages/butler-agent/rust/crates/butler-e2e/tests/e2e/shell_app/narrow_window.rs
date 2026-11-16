@@ -35,6 +35,15 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
         .run(&["agent running", "wait-anchor composer"])
         .await?;
     let gw = gateway(&shell.launch);
+    for n in 0..30 {
+        let filler = gw
+            .post(
+                "/sessions",
+                json!({"kind": "chat", "title": format!("Filler {n}")}),
+            )
+            .await?;
+        assert_eq!(filler.status, 201, "{}", filler.text);
+    }
     let created = gw
         .post("/sessions", json!({"kind": "chat", "title": "Narrow"}))
         .await?;
@@ -55,6 +64,34 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
         .run(&[
             &format!("wait-anchor sidebar-row-{id}"),
             &format!("open {id}"),
+            "wait-anchor sidebar",
+            "wait 600",
+            "layout tall slot:sidebar-scroll slot:sidebar-scroll:frame",
+        ])
+        .await?;
+    let report = shell.report("tall.layout")?;
+    let last = report
+        .as_array()
+        .expect("layout array")
+        .iter()
+        .filter(|entry| {
+            entry["anchor"]
+                .as_str()
+                .is_some_and(|a| a.starts_with("sidebar-row-"))
+        })
+        .max_by(|a, b| {
+            a["y"]
+                .as_f64()
+                .unwrap_or(0.)
+                .total_cmp(&b["y"].as_f64().unwrap_or(0.))
+        })
+        .and_then(|entry| entry["anchor"].as_str())
+        .expect("a session row")
+        .to_owned();
+    shell
+        .run(&[
+            &format!("reveal {last} slot:sidebar-scroll:frame"),
+            &format!("layout scrolled {last} slot:sidebar-scroll slot:sidebar-scroll:frame"),
             "size 400 700",
             "wait 600",
             "compose",
@@ -70,7 +107,10 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
             "click session-info-toggle",
             "wait-anchor inspector",
             "wait 600",
-            &format!("layout info {anchors}"),
+            &format!("layout info {anchors} slot:conversation-aside-scroll slot:conversation-aside-scroll:frame"),
+            "click inspector",
+            "wait 600",
+            &format!("layout infoopen {anchors} slot:conversation-aside-scroll slot:conversation-aside-scroll:frame"),
             "click session-info-toggle",
             "wait-no-anchor inspector",
             "key secondary-k",
@@ -134,6 +174,33 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
     assert!(
         near(small[2], large[2]) && near(small[3], large[3]),
         "{small:?} {large:?}"
+    );
+    // (e) The sidebar tree scrolls: its scroll element is as tall as its frame, not as tall as its
+    // rows, and a wheel over the tree brings the last row into the frame.
+    let (tree, frame) = (
+        get("tall", "slot:sidebar-scroll"),
+        get("tall", "slot:sidebar-scroll:frame"),
+    );
+    let (before, after) = (get("tall", &last), get("scrolled", &last));
+    let frame_bottom = frame[1] + frame[3];
+    assert!(tree[3] <= frame[3] + 0.5, "{tree:?} {frame:?}");
+    assert!(before[1] + before[3] > frame_bottom, "{before:?} {frame:?}");
+    assert!(
+        after[1] + after[3] <= frame_bottom + 0.5,
+        "{after:?} {frame:?}"
+    );
+    // (f) A row inside the floating session info works: clicking the context row opens its usage,
+    // which makes the panel taller, and the panel's content stays inside its scroll frame.
+    let (closed, open) = (get("info", "inspector"), get("infoopen", "inspector"));
+    let (scroll, frame) = (
+        get("infoopen", "slot:conversation-aside-scroll"),
+        get("infoopen", "slot:conversation-aside-scroll:frame"),
+    );
+    assert!(open[3] > closed[3] + 0.5, "{closed:?} {open:?}");
+    assert!(scroll[3] <= frame[3] + 0.5, "{scroll:?} {frame:?}");
+    assert!(
+        open[1] + open[3] <= frame[1] + frame[3] + 0.5,
+        "{open:?} {frame:?}"
     );
     shell.finish().await?;
     sandbox.mark_success();

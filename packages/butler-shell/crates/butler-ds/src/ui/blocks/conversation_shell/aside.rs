@@ -13,6 +13,7 @@ use crate::ui::context::Ds;
 use crate::ui::liquid_glass::{Presence, with_presence};
 use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::scroll::engine::{self, Axis, Config};
+use crate::ui::scroll::frame as scroll_frame;
 use crate::ui::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
 
 /// The shell width from which the aside docks in the right margin (a floating one docks again
@@ -119,17 +120,20 @@ fn scroll(
         .flex()
         .flex_col()
         .w_full()
-        .flex_none()
         .py(fade)
         .pl(side)
         .pr(side)
         .child(content);
-    let built = engine::scroller(&config, body.min_w_0().flex_auto().min_h_0(), window, cx);
-    let frame = div()
+    let built = engine::scroller(
+        &config,
+        scroll_frame::body(body.min_w_0(), "conversation-aside-scroll"),
+        window,
+        cx,
+    );
+    let frame = scroll_frame::frame("conversation-aside-scroll")
         .relative()
         .flex_auto()
         .min_w_0()
-        .min_h_0()
         .overflow_hidden();
     match layout {
         AsideLayout::Docked => frame.mx(-room).child(built.element),
