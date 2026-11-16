@@ -1,15 +1,22 @@
 //! StatusChecklist.showcase.tsx: an answer checklist.
 use butler_ds::ui::blocks::status_checklist::{ChecklistItem, StatusChecklist};
+use butler_ds::ui::selectable::{self, Break, Selection};
 use gpui::{AnyElement, App, IntoElement as _, Window};
 
 use super::Story;
 use crate::copy::Lang;
 
 pub(super) fn stories() -> Vec<Story> {
-    vec![Story {
-        name: "Answer checklist",
-        render: answer,
-    }]
+    vec![
+        Story {
+            name: "Answer checklist",
+            render: answer,
+        },
+        Story {
+            name: "Selectable text",
+            render: selectable,
+        },
+    ]
 }
 
 fn answer(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
@@ -32,6 +39,25 @@ fn answer(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
             .into_iter()
             .enumerate()
             .map(|(index, text)| ChecklistItem::new(text, index < 2)),
+    )
+    .into_any_element()
+}
+
+fn selectable(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
+    let items = lang.pick(
+        ["Book the venue", "Send invitations", "Order the cake"],
+        ["장소 예약", "초대장 보내기", "케이크 주문"],
+    );
+    let selection = Selection::new("status-checklist-selectable", window, cx);
+    selectable::scope(
+        selection,
+        StatusChecklist::new(
+            items
+                .into_iter()
+                .enumerate()
+                .map(|(index, text)| ChecklistItem::new(text, index < 2)),
+        )
+        .selectable(Break::Line),
     )
     .into_any_element()
 }

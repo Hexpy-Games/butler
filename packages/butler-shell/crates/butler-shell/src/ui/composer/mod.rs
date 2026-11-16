@@ -37,8 +37,8 @@ use gpui_elements::editable_text::{EditableTextState, StringStorage, TextChanged
 use self::attachments::{Attachments, composer_attachments, file_drag_active, file_drop};
 use self::context::ComposerContextControl;
 use self::controls::Controls;
+use self::editor::ComposerEditor;
 use self::editor::clipboard::Paste;
-use self::editor::{ComposerEditor, FocusPlacement};
 use self::references::{MentionKey, References};
 use self::state::{ComposerState, image_refusal_label};
 use crate::ui::decisions::{DecisionCtx, decision_active, set_plan_gate};
@@ -143,8 +143,13 @@ pub(crate) struct Composer {
     git_notice_dismissed: bool,
     /// Why the composer cannot be used (shown as a tooltip), when it cannot.
     pub(crate) disabled: Option<SharedString>,
-    /// Where focus goes when a click outside folds the composer.
+    /// Where focus goes when a click outside folds the composer, or a chat opens.
     pub(crate) shell_focus: Option<FocusHandle>,
+    /// A chat opened: the field hands focus to the shell when it has or gets it, until a
+    /// deliberate focus (a pointer on the composer, `engage`, a focus request) clears this.
+    release_focus: bool,
+    /// The settings' `collapse_message_box`: the card folds while not engaged.
+    collapse: bool,
     /// The card's height as last drawn.
     height: Rc<Cell<f32>>,
     /// Where a dropped library card attaches; the shell sets it once built.
@@ -166,6 +171,9 @@ impl Composer {
                 this.editor.save_selection(window, cx);
                 this.fold.engaged = false;
                 cx.notify();
+            }),
+            cx.on_focus(&handle, window, |this: &mut Self, window, cx| {
+                this.release(window, cx);
             }),
             cx.subscribe_in(&input, window, |this, _, _: &TextChanged, window, cx| {
                 this.on_text_changed(window, cx);
@@ -195,6 +203,8 @@ impl Composer {
             git_notice_dismissed: false,
             disabled: None,
             shell_focus: None,
+            release_focus: false,
+            collapse: true,
             height: Rc::new(Cell::new(48.)),
             manage: None,
             _subscriptions: subscriptions,
@@ -203,20 +213,6 @@ impl Composer {
 
     pub(crate) fn set_theme(&mut self, theme: Theme, _cx: &mut Context<Self>) {
         self.theme = theme;
-    }
-
-    /// `focusComposer`: expands the card and puts the caret back where it was.
-    pub(crate) fn engage(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.disabled.is_some() {
-            return;
-        }
-        self.fold.engaged = true;
-        self.editor.focus(FocusPlacement::Restore, window, cx);
-        cx.notify();
-    }
-
-    pub(crate) fn fold(&mut self) {
-        self.fold.engaged = false;
     }
 
     /// The card's measured height, shared with the conversation's composer reserve.
@@ -399,7 +395,8 @@ impl Composer {
         // `Boolean(scope || decision...) || presentation.expanded`: the dashboard's scoped
         // composer (`draft_key`) is always unfolded, and is not `large` (`large={false}`).
         let scoped = self.inputs.draft_key.is_some();
-        let expanded = scoped || self.fold.engaged || self.fold.decision || self.fold.protected;
+        let fold = &self.fold;
+        let expanded = scoped || !self.collapse || fold.engaged || fold.decision || fold.protected;
         let mut card = ComposerCard::new("composer-card").expanded(expanded);
         if !scoped {
             card = card.large();
@@ -477,6 +474,7 @@ impl Render for Composer {
         .on_drop(cx.listener(|this, drag: &CardDrag, _, cx| this.drop_cards(drag, cx)))
         .child(probe)
         .child(card)
+        .capture_any_mouse_down(cx.listener(|this, _, _, _| this.release_focus = false))
         .on_click(cx.listener(|this, _, window, cx| {
             if !this.fold.engaged {
                 this.engage(window, cx);

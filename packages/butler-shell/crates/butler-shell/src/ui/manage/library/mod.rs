@@ -9,6 +9,8 @@ pub(crate) mod detail;
 mod filters;
 mod kind;
 mod main;
+pub(crate) use main::copy::get as card_words;
+pub(crate) use main::{CARD_COLUMNS, card::library_card, open::open_library_item};
 mod toolbar;
 pub(crate) mod types;
 
@@ -125,6 +127,7 @@ impl LibraryPage {
             detail: None,
             document: None,
         };
+        page.search_for(page.seen.search.clone());
         page.refresh(false, cx);
         page
     }
@@ -135,6 +138,7 @@ impl LibraryPage {
             return;
         };
         if view != self.seen {
+            self.search_for(view.search.clone());
             self.seen = view;
             self.refresh(false, cx);
         }

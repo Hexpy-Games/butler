@@ -10,7 +10,7 @@ pub enum AttachState {
     NotRunning,
 }
 
-/// Credential-safe errors: response bodies, headers and tokens are never included.
+/// Credential-safe errors: tokens, headers and response bodies are never included; an HTTP failure keeps only the body's fixed `error.code` identifier.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Local discovery or credential read failed.
@@ -25,9 +25,9 @@ pub enum Error {
     /// The gateway rejected both the cached credential and its refresh.
     #[error("agent authentication failed")]
     Authentication,
-    /// HTTP failure after the single permitted credential refresh.
+    /// HTTP failure after the single permitted credential refresh, with the API error code when the body names one.
     #[error("agent returned HTTP {0}")]
-    Http(u16),
+    Http(u16, Option<String>),
     /// The agent lacks a required route.
     #[error("agent update required")]
     Incompatible,
@@ -70,10 +70,10 @@ impl Error {
             Self::Connection | Self::LocalMetadata | Self::Authentication => {
                 FailureKind::Disconnected
             }
-            Self::Http(401) => FailureKind::Disconnected,
+            Self::Http(401, _) => FailureKind::Disconnected,
             Self::Incompatible => FailureKind::Incompatible,
-            Self::Http(404) => FailureKind::Missing,
-            Self::Http(429 | 500..=599) => FailureKind::Retryable,
+            Self::Http(404, _) => FailureKind::Missing,
+            Self::Http(429 | 500..=599, _) => FailureKind::Retryable,
             _ => FailureKind::Refused,
         }
     }

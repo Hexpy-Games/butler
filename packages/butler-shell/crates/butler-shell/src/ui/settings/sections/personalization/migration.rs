@@ -158,7 +158,13 @@ impl PersonalizationPage {
                 self.personalization = Some(result.personalization);
                 feedback
             }
-            Err(_) => Feedback::new(Outcome::Error, words(lang).err_migration),
+            Err(error) => {
+                let failed = words(lang).err_migration;
+                let next = crate::ui::i18n::errors::toast(cx, &error, failed);
+                notify(&mut self.migration_toast, next, cx);
+                self.migration.feedback = Some(Feedback::new(Outcome::Error, failed));
+                return;
+            }
         };
         notify(&mut self.migration_toast, feedback.toast(), cx);
         self.migration.feedback = Some(feedback);

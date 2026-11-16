@@ -4,7 +4,8 @@ use super::*;
 
 /// SHELL-APP-05 — Text selection stays inside one message: chrome never selects, paragraphs
 /// copy together, and a drag beyond the user bubble clamps to that message's text.
-/// Assistant selection includes the facts value, answer-block title and footer meta.
+/// Assistant selection includes the labels and values of facts, metrics, checklist and progress,
+/// the answer-block title and footer meta.
 /// Composer focus clears selection; context-menu and footer Copy include the full answer-block markdown.
 #[tokio::test]
 async fn shell_app_05_text_selection_stays_in_one_message() -> Result<(), HarnessError> {
@@ -16,9 +17,18 @@ async fn shell_app_05_text_selection_stays_in_one_message() -> Result<(), Harnes
         script: vec![
             json!({"role":"assistant","content":null,"tool_calls":[{
                 "id":"facts","type":"function","function":{
-                    "name":"answer_blocks","arguments":json!({"v":1,"blocks":[{
-                        "type":"facts","title":"Facts","items":[{"label":"Alpha","value":"1"}]
-                    }]}).to_string()
+                    "name":"answer_blocks","arguments":json!({"v":1,"blocks":[
+                        {"type":"facts","title":"Facts","items":[
+                            {"label":"Alpha","value":"1"},{"label":"Beta","value":"2"}]},
+                        {"type":"metrics","items":[
+                            {"label":"Speed","value":"12","unit":"ms","delta":"+3%"},
+                            {"label":"Size","value":"4"}]},
+                        {"type":"checklist","items":[
+                            {"text":"Done item","done":true},{"text":"Open item","done":false}]},
+                        {"type":"progress","items":[
+                            {"label":"Build","value":3,"max":10,"unit":"steps"},
+                            {"label":"Test","value":50}]}
+                    ]}).to_string()
                 }
             }]}),
             json!({"role":"assistant","content":"Alpha first paragraph.\n\nBeta second paragraph."}),
@@ -73,13 +83,14 @@ async fn shell_app_05_text_selection_stays_in_one_message() -> Result<(), Harnes
         .expect("assistant id");
     shell
         .run(&[
+            "size 800 1400",
             &format!("drag sidebar-row-{id} 60 0"),
             "key secondary-c",
             "expect-clipboard null",
             &format!("drag-from message-{assistant}-body 0 0 1 1"),
             "key secondary-c",
             "expect-clipboard-prefix \"Alpha first paragraph.\\n\\nBeta second paragraph.\\n\\n\"",
-            "expect-clipboard-contains \"\\n1\\n\"",
+            "expect-clipboard-contains \"Facts\\nAlpha\\n1\\n\\nBeta\\n2\\n\\n12 ms\\nSpeed\\n+3%\\n4\\nSize\\nDone item\\nOpen item\\nBuild\\n3 / 10 steps\\nTest\\n50 / 100\\n\"",
             &format!("drag-from message-{user}-body 0 0 0.5 4"),
             "key secondary-c",
             "expect-clipboard \"Hello\"",
@@ -87,9 +98,9 @@ async fn shell_app_05_text_selection_stays_in_one_message() -> Result<(), Harnes
             &format!("click-at message-{assistant}-body 0.1 0.05 right"),
             &format!("wait-anchor message-menu-{assistant}-item-0-0"),
             &format!("click message-menu-{assistant}-item-0-0"),
-            "expect-clipboard \"Alpha first paragraph.\\n\\nBeta second paragraph.\\n\\n### Facts\\n\\n- Alpha: 1\"",
+            "expect-clipboard \"Alpha first paragraph.\\n\\nBeta second paragraph.\\n\\n### Facts\\n\\n- Alpha: 1\\n- Beta: 2\\n\\n- Speed: 12 ms (\\\\+3%)\\n- Size: 4\\n\\n- [x] Done item\\n- [ ] Open item\\n\\nBuild: 3 / 10 steps\\nTest: 50 / 100\"",
             &format!("click copy-{assistant}"),
-            "expect-clipboard \"Alpha first paragraph.\\n\\nBeta second paragraph.\\n\\n### Facts\\n\\n- Alpha: 1\"",
+            "expect-clipboard \"Alpha first paragraph.\\n\\nBeta second paragraph.\\n\\n### Facts\\n\\n- Alpha: 1\\n- Beta: 2\\n\\n- Speed: 12 ms (\\\\+3%)\\n- Size: 4\\n\\n- [x] Done item\\n- [ ] Open item\\n\\nBuild: 3 / 10 steps\\nTest: 50 / 100\"",
             "app-quit",
         ])
         .await?;

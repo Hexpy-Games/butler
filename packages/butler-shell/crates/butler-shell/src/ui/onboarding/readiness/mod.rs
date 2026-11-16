@@ -36,12 +36,21 @@ pub(crate) struct MemoryModel {
     pub(crate) reason: Option<SharedString>,
 }
 
+/// `SetupReadinessStep`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ReadinessStep {
+    pub(crate) id: SharedString,
+    /// `pending`, `running`, `done` or `failed`.
+    pub(crate) status: SharedString,
+    /// A failed step: `(code, detail)`.
+    pub(crate) error: Option<(SharedString, Option<SharedString>)>,
+}
+
 /// The readiness the screens show.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ReadinessView {
     pub(crate) status: ReadinessStatus,
-    /// (id, status) per step; the status is `pending`, `running`, `done` or `failed`.
-    pub(crate) steps: Vec<(SharedString, SharedString)>,
+    pub(crate) steps: Vec<ReadinessStep>,
     pub(crate) done: usize,
     pub(crate) total: usize,
     /// The first failed step's code (`readinessFailureCode`).
@@ -79,7 +88,11 @@ fn combine(local: &Local, agent: &Agent) -> ReadinessView {
     match (local, agent) {
         (Local::Failed(code), _) => ReadinessView {
             status: ReadinessStatus::Failed,
-            steps: vec![("agent_service".into(), "failed".into())],
+            steps: vec![ReadinessStep {
+                id: "agent_service".into(),
+                status: "failed".into(),
+                error: Some((code.clone(), None)),
+            }],
             total: 1,
             error_code: Some(code.clone()),
             ..ReadinessView::default()
@@ -264,7 +277,9 @@ impl Readiness {
                         this.agent =
                             Agent::View(ReadinessView::from_value(&raw).unwrap_or_default());
                     }
-                    Err(Error::Http(404) | Error::Incompatible) => this.agent = Agent::Unsupported,
+                    Err(Error::Http(404, _) | Error::Incompatible) => {
+                        this.agent = Agent::Unsupported;
+                    }
                     Err(_) => {}
                 }
                 this.recompute(cx);

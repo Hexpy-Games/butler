@@ -66,7 +66,7 @@ impl RenderOnce for GroupMenu {
         let content = menu.content(content, window, cx);
         div()
             .flex()
-            .child(crate::ui::widgets::anchor(div(), &anchor).child(trigger))
+            .child(crate::ui::widgets::anchor(div().flex(), &anchor).child(trigger))
             .child(content)
     }
 }

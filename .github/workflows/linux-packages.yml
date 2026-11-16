@@ -102,9 +102,9 @@ jobs:
           export GITHUB_REF_NAME="$BUTLER_PACKAGE_REF_NAME"
           if [[ "$BUTLER_PACKAGE_REF_NAME" == release/* ]]; then export GITHUB_REF_NAME="v${BUTLER_PACKAGE_REF_NAME#release/}"; fi
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == refs/tags/v* ]]; then
-            cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features static-ort
+            cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --no-default-features --features static-ort
           else
-            cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent --no-default-features --features prebuilt-ort
+            cargo build --timings -j 8 --release --locked -p butler-agent --bin butler-agent -p butler-platform --bin butler-sandbox --no-default-features --features prebuilt-ort
           fi
           echo "BUTLER_NATIVE_AGENT_EXECUTABLE=$PWD/target/release/butler-agent" >> "$GITHUB_ENV"
 

@@ -2,7 +2,7 @@
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::dialog::DialogFooter;
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast;
 use butler_shell_client::Error;
 use gpui::ParentElement as _;
 use gpui::{Context, SharedString};
@@ -90,13 +90,14 @@ impl SessionObserver {
                 this.resuming = false;
                 match result {
                     Ok(_) => this.refresh(cx),
-                    Err(_) => {
+                    Err(error) => {
                         let copy = words(Ds::get(cx).lang());
                         let message = match call {
                             Call::Cancel => copy.stop_failed,
                             Call::Resume => copy.resume_failed,
                         };
-                        toast::show(cx, Toast::error(message));
+                        let toast = crate::ui::i18n::errors::toast(cx, &error, message);
+                        toast::show(cx, toast);
                     }
                 }
             },

@@ -379,6 +379,8 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
     Ok(())
 }
 
+mod new_tab;
+
 /// Waits until the tab shows `url`, titled `title`, and has finished loading.
 async fn wait_for_page(shell: &mut Shell, title: &str, url: &str) -> Result<(), HarnessError> {
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);

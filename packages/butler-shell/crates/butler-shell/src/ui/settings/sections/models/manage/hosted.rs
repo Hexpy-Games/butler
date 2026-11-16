@@ -299,7 +299,11 @@ impl HostedForm {
                         notify(&mut this.toast, Toast::success(text), cx);
                         cx.emit(Saved);
                     }
-                    Err(_) => notify(&mut this.toast, Toast::error(copy.error_save), cx),
+                    Err(error) => notify(
+                        &mut this.toast,
+                        crate::ui::i18n::errors::toast(cx, &error, copy.error_save),
+                        cx,
+                    ),
                 }
             },
         );

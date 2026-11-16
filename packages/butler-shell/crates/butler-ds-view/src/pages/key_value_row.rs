@@ -5,6 +5,7 @@ use butler_ds::tokens::Color;
 use butler_ds::ui::blocks::key_value_row::{Detail, KeyValueRow, SwatchPattern, ValueSize};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Columns, Grid, Space, Stack};
+use butler_ds::ui::selectable::{self, Break, Selection};
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window};
 
@@ -134,6 +135,10 @@ pub(super) fn stories() -> Vec<Story> {
             name: "Metadata grid",
             render: grid,
         },
+        Story {
+            name: "Selectable text",
+            render: selectable,
+        },
     ]
 }
 
@@ -222,4 +227,18 @@ fn grid(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         .child(KeyValueRow::new(c.runtime, "responses"))
         .child(KeyValueRow::new(c.secrets, c.redacted).detail(Detail::Stack))
         .into_any_element()
+}
+
+fn selectable(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
+    let c = copy(lang);
+    let category = &c.categories[0];
+    let selection = Selection::new("key-value-row-selectable", window, cx);
+    selectable::scope(
+        selection,
+        KeyValueRow::new(category.label, category.value)
+            .description(category.description)
+            .meta(category.meta)
+            .selectable(Break::Line),
+    )
+    .into_any_element()
 }

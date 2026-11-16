@@ -73,6 +73,8 @@ impl BrowserState {
             url,
             title: String::new(),
             favicon: String::new(),
+            title_url: String::new(),
+            favicon_url: String::new(),
             status: TabStatus::Idle,
             can_back: false,
             can_forward: false,

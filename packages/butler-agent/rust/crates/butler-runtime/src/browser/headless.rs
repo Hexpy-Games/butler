@@ -9,8 +9,8 @@
 //!
 //! One process tree serves every conversation; it starts on the first
 //! `tab.open`, an idle agent tab closes 10 minutes after its last call, and
-//! the tree is ended 60 seconds after its last tab closed, taking its
-//! throwaway profile directory with it.
+//! the tree is ended 60 seconds after its last tab closed; its one reused
+//! profile directory stays.
 mod act;
 mod browser;
 mod calls;
@@ -64,7 +64,7 @@ use tokio_util::sync::CancellationToken;
 const INSTALL_WAIT: Duration = Duration::from_secs(15);
 
 pub struct HeadlessConfig {
-    /// Holds the throwaway profile and the browser log.
+    /// Holds the one reused profile (it stays when the browser is reaped) and the browser log.
     pub root: PathBuf,
     pub install: InstallSource,
     /// Butler's output origin, the only loopback destination.

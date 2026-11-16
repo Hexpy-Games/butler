@@ -243,9 +243,10 @@ impl Onboarding {
         {
             self.imports.update(cx, import::Imports::enable);
         }
-        if self.step(cx) == Step::Connect {
-            self.providers.update(cx, providers::LocalServers::refresh);
-        }
+        let shown = self.step(cx) == Step::Connect;
+        let ready = status == ReadinessStatus::Ready;
+        self.providers
+            .update(cx, |local, cx| local.refresh(shown, ready, cx));
         cx.notify();
     }
 
@@ -299,6 +300,7 @@ impl Onboarding {
         let CommitEvent::Connected(settings, catalog) = event;
         self.settings = settings.clone();
         self.catalog = catalog.clone();
+        self.reply.update(cx, |reply, _| reply.reset());
         if self.stages.advance_on_connect {
             self.stages.advance_on_connect = false;
             self.stages.auth_done = true;

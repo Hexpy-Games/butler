@@ -263,7 +263,7 @@ impl EpicInspector {
                         .error
                         .as_ref()
                         .map(|error| error.code == "canon_conflict"),
-                    Err(Error::Http(409)) => Some(true),
+                    Err(Error::Http(409, _)) => Some(true),
                     Err(_) => Some(false),
                 };
                 match conflict {
@@ -271,7 +271,13 @@ impl EpicInspector {
                         toast::show(cx, Toast::message(words.conflict));
                     }
                     Some(false) => {
-                        toast::show(cx, Toast::error(words.request_failed));
+                        let failure = match &result {
+                            Err(error) => {
+                                crate::ui::i18n::errors::toast(cx, error, words.request_failed)
+                            }
+                            Ok(_) => Toast::error(words.request_failed),
+                        };
+                        toast::show(cx, failure);
                     }
                     None => {}
                 }

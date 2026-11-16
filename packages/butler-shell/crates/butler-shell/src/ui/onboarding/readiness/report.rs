@@ -35,19 +35,32 @@ fn readiness_json(view: &ReadinessView) -> Value {
     let steps: Vec<Value> = view
         .steps
         .iter()
-        .map(|(id, status)| json!({ "id": &**id, "status": &**status }))
+        .map(|step| {
+            let mut value = json!({ "id": &*step.id, "status": &*step.status });
+            if let Some((code, detail)) = &step.error {
+                let mut error = json!({ "code": &**code });
+                if let Some(detail) = detail {
+                    error["detail"] = Value::from(&**detail);
+                }
+                value["error"] = error;
+            }
+            value
+        })
         .collect();
     let mut readiness = json!({ "status": view.status.as_str(), "steps": steps });
     if let Some(code) = &view.error_code {
         readiness["error_code"] = Value::from(&**code);
     }
     if let Some(model) = &view.memory_model {
-        readiness["memory_model"] = json!({
+        let mut value = json!({
             "state": &*model.state,
             "bytes_done": model.bytes_done,
             "bytes_total": model.bytes_total,
-            "reason": model.reason.as_deref(),
         });
+        if let Some(reason) = &model.reason {
+            value["reason"] = Value::from(&**reason);
+        }
+        readiness["memory_model"] = value;
     }
     readiness
 }

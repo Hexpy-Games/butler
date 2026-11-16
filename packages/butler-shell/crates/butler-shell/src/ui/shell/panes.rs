@@ -10,12 +10,15 @@ use butler_ds::ui::blocks::conversation_shell::AsideLayout;
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::dialog::{Dialog, DialogContent, DialogHeader, DialogTitle, Layout, Size};
 use gpui::{
-    AnyElement, AppContext as _, Context, Entity, IntoElement, Subscription, Window, prelude::*,
+    AnyElement, AppContext as _, Context, Entity, Focusable as _, IntoElement, Subscription,
+    Window, prelude::*,
 };
 
+use super::manage_link::ComposerKey;
 use super::navigation::Navigation;
 use super::region;
 use super::{Shell, TogglePalette};
+use crate::ui::composer::focus_composer;
 use crate::ui::images;
 use crate::ui::inspector::{
     InspectorCtx, InspectorPane, SessionActionHandler, SessionInfoActionsProps,
@@ -28,6 +31,9 @@ use crate::ui::viewer;
 
 pub(super) struct Panes {
     palette: Entity<CommandPalette>,
+    /// `useCommandPaletteFocus`'s `returnComposer`: the composer's key when its field had focus
+    /// as the palette opened.
+    return_composer: Option<ComposerKey>,
     inspector: Entity<InspectorPane>,
     /// The state the session sections read besides the view (the titlebar and the inspector).
     sections: Entity<SessionSectionsState>,
@@ -58,6 +64,7 @@ impl Shell {
         let layout = inspector.read(cx).layout_cell();
         let panes = Panes {
             palette,
+            return_composer: None,
             inspector,
             sections,
             layout,
@@ -77,6 +84,10 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.panes.palette.read(cx).is_open() {
+            let focused = self.composer.read(cx).focus_handle(cx).is_focused(window);
+            self.panes.return_composer = focused.then(|| self.composer_key(cx));
+        }
         self.panes
             .palette
             .update(cx, |palette, cx| palette.toggle(window, cx));
@@ -90,17 +101,26 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         match event {
-            PaletteEvent::Dismissed => match self.settings_view.clone() {
-                Some(view) => view.update(cx, |view, cx| view.focus(window, cx)),
-                None => self.composer.update(cx, |c, cx| c.engage(window, cx)),
-            },
+            PaletteEvent::Dismissed => {
+                let back = self.panes.return_composer.take();
+                match self.settings_view.clone() {
+                    Some(view) => view.update(cx, |view, cx| view.focus(window, cx)),
+                    // Back to the composer, at the draft end, only when it had focus and its
+                    // editor is still the same one (`editor.isConnected`).
+                    None if back.is_some_and(|key| key == self.composer_key(cx)) => {
+                        focus_composer(cx);
+                        self.composer.update(cx, |_, cx| cx.notify());
+                    }
+                    None => {}
+                }
+            }
             // A chat replaces the settings screen (`view` leaves `settings`).
             PaletteEvent::OpenSession(id) => {
-                self.settings_view = None;
+                self.close_settings(window, cx);
                 self.navigate(Navigation::Session(id.clone()), window, cx);
             }
             PaletteEvent::OpenProjectChat(project) => {
-                self.settings_view = None;
+                self.close_settings(window, cx);
                 let target = crate::ui::source::sidebar::DraftTarget::Project(project.clone());
                 self.open_sidebar_draft(Some(target), cx);
             }
@@ -113,7 +133,7 @@ impl Shell {
             PaletteEvent::OpenLogTrace => self.open_settings("logs", window, cx),
             // `navigateCommandResult` `automation:<id>`: the schedule's detail replaces Settings.
             PaletteEvent::OpenSchedule(id) => {
-                self.settings_view = None;
+                self.close_settings(window, cx);
                 self.set_view(View::AutomationDetail(id.clone().into()), window, cx);
             }
         }

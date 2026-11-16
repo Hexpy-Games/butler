@@ -2,6 +2,7 @@
 use butler_ds::ui::blocks::progress_meter::{MeterTone, ProgressMeter};
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::layout::{Inline, Space, Stack};
+use butler_ds::ui::selectable::{self, Break, Selection};
 use butler_ds::ui::typo::Typo;
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
@@ -33,6 +34,10 @@ pub(super) fn stories() -> Vec<Story> {
         Story {
             name: "Thin (page load line)",
             render: thin,
+        },
+        Story {
+            name: "Selectable text",
+            render: selectable,
         },
     ]
 }
@@ -142,4 +147,17 @@ fn thin(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
                 .child(ProgressMeter::new(format!("pm-thin-{value}"), value).thin())
         }))
         .into_any_element()
+}
+
+fn selectable(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
+    let (context, full) = lang.pick(("Context window", "42% full"), ("컨텍스트 창", "42% 사용"));
+    let selection = Selection::new("progress-meter-selectable", window, cx);
+    selectable::scope(
+        selection,
+        ProgressMeter::new("pm-selectable", 42.)
+            .label(context)
+            .meta(full)
+            .selectable(Break::Line),
+    )
+    .into_any_element()
 }

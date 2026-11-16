@@ -151,7 +151,7 @@ impl TagManage {
             }
             Err(error) => {
                 self.failed(&error, cx);
-                if matches!(error, Error::Http(409)) {
+                if matches!(error, Error::Http(409, _)) {
                     cx.emit(TagManageEvent::Closed);
                 }
             }

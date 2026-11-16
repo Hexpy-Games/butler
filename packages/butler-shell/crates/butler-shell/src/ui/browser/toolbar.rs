@@ -129,7 +129,12 @@ fn address(tab: Option<&Tab>, state: &Entity<AreaState>, cx: &mut App) -> Addres
         .bookmarked(state.read(cx).bookmarks.current.is_some())
         .editing(state.read(cx).editing)
         .on_editing_change(move |value, _, cx| {
-            editing.update(cx, |s, _| s.editing = value);
+            editing.update(cx, |s, _| {
+                s.editing = value;
+                if !value {
+                    s.suggestions.reset();
+                }
+            });
             cx.refresh_windows();
         })
         .on_submit(move |address, window, cx| {
@@ -159,6 +164,7 @@ pub(super) fn toolbar(
     let c = BrowserStrings::get(cx);
     let toolbar = navigation(tab, cx);
     let field = address(tab, state, cx);
+    let field = super::suggestions::field(field, state, tab.map(|t| &t.id), window, cx);
     let url = tab.map_or("", |t| t.url.as_str());
     let pick_id = tab.map(|t| t.id.clone());
     let mut pick = IconButton::new("browser-pick", c.pick)

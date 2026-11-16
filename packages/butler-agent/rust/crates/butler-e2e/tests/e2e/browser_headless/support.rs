@@ -378,6 +378,16 @@ fn turn_calls(prompt: &str) -> Vec<(&'static str, Value)> {
                 json!({"path":"dead-frames","title":"Dead frames fixture"}),
             ),
         ],
+        "Publish profile fixture" => vec![
+            (
+                "write_file",
+                json!({"path":"profile-site/index.html","content":super::profile::FIXTURE,"create_parents":true}),
+            ),
+            (
+                "output_publish",
+                json!({"path":"profile-site","title":"Profile fixture"}),
+            ),
+        ],
         "Publish parallel" => super::parallel::publish_calls(),
         "Publish shop" => vec![
             (
@@ -420,6 +430,7 @@ fn cassette() -> Result<Cassette, HarnessError> {
             "Publish shop",
             "Publish parallel",
             "Publish dead frames",
+            "Publish profile fixture",
             "Open fixture",
             "Observe fixture",
             "Act fixture",

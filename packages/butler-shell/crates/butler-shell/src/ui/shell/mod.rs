@@ -1,5 +1,6 @@
 //! The window: AdaptiveShell frame="cards" (AdaptiveShellCards.module.css, AdaptiveShellFrame):
 //! the sidebar track, the chat card with the floating composer, and the title row.
+mod app_settings;
 mod browser_link;
 mod composer_link;
 mod data;
@@ -18,6 +19,7 @@ mod titlebar;
 mod transcript;
 pub(crate) mod vault;
 
+pub(crate) use app_settings::AppSettings;
 pub(crate) use settings_link::text_scale;
 pub(crate) use titlebar::window_controls;
 
@@ -165,7 +167,7 @@ impl Shell {
         });
         let dark = theme_override.unwrap_or_else(|| system_dark(window));
         Self::install_ds(&options, dark, window, cx);
-        crate::ui::browser::init(cx);
+        crate::ui::browser::init(window, cx);
         let theme = Theme::new(
             dark,
             options.platform,
@@ -234,8 +236,11 @@ impl Shell {
         crate::ui::manage::library::detail::install(&self.manage_ctx(), cx);
         crate::ui::manage::install_window(&self.manage_ctx(), cx);
         let manage = self.manage_ctx();
-        self.composer
-            .update(cx, |composer, _| composer.manage = Some(manage.clone()));
+        let focus = self.focus.clone();
+        self.composer.update(cx, |composer, _| {
+            composer.manage = Some(manage.clone());
+            composer.shell_focus = Some(focus);
+        });
         let weak = cx.entity().downgrade();
         crate::ui::inspector::install_epic_host(cx, manage, move |session, cx| {
             weak.upgrade()?.read(cx).sidebar.epic_of(session)

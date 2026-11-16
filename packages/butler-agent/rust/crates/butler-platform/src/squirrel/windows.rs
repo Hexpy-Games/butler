@@ -71,10 +71,21 @@ fn register_protocol(stub: &Path) -> Result<(), String> {
         (COMMAND_KEY, None, command),
     ] {
         HKEY::CURRENT_USER
-            .RegSetKeyValue(Some(key), name, RegistryValue::Sz(value))
+            .RegSetKeyValue(Some(key), name, registry_string(value))
             .map_err(|_| "Squirrel protocol registration failed")?;
     }
     Ok(())
+}
+
+/// A REG_SZ value winsafe can write. winsafe 0.0.29 allocates no buffer for an
+/// empty string, so `RegSetKeyValueW` gets a null pointer with a 2-byte length and
+/// fails; a lone NUL is stored as the same empty REG_SZ.
+fn registry_string(value: String) -> RegistryValue {
+    RegistryValue::Sz(if value.is_empty() {
+        "\0".to_owned()
+    } else {
+        value
+    })
 }
 
 fn unregister_protocol(stub: &Path) -> Result<(), String> {
