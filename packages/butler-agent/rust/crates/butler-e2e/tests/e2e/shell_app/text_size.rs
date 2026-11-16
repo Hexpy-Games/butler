@@ -16,16 +16,24 @@ async fn shell_app_06_text_size_zooms_the_window() -> Result<(), HarnessError> {
         .await?;
     shell.run(&["key secondary-=", "expect-scale 1.15"]).await?;
     let gw = gateway(&shell.launch);
-    let mut saved = gw.settings().await?["text_size"].clone();
-    for _ in 0..50 {
-        if saved == "large" {
-            break;
+    let saved_as = |expected: &'static str| {
+        let gw = gw.clone();
+        async move {
+            let mut saved = gw.settings().await?["text_size"].clone();
+            for _ in 0..50 {
+                if saved == expected {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                saved = gw.settings().await?["text_size"].clone();
+            }
+            assert_eq!(saved, expected);
+            Ok::<(), HarnessError>(())
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        saved = gw.settings().await?["text_size"].clone();
-    }
-    assert_eq!(saved, "large");
+    };
+    saved_as("large").await?;
     shell.run(&["key secondary-0", "expect-scale 1"]).await?;
+    saved_as("default").await?;
     let patched = gw
         .patch("/settings", json!({"text_size": "larger"}))
         .await?;
