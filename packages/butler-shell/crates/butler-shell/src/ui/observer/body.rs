@@ -83,7 +83,8 @@ pub(super) fn entries(view: &SessionView, lang: Lang) -> Vec<Entry> {
 
 impl SessionObserver {
     /// The rows in order, over the view's own transcript context: no list reserve, top inset,
-    /// tail-follow or footer meta.
+    /// tail-follow or answer footer
+    /// (`SessionObserverTimeline` passes no `onCopyAssistantMessage` and `footerMeta={null}`).
     pub(super) fn transcript(
         &mut self,
         view: &Rc<SessionView>,
@@ -92,6 +93,7 @@ impl SessionObserver {
     ) -> Stack {
         let mut t = TranscriptCtx::new(view, Jobs::client(cx), Rc::default(), Rc::default());
         t.status_line.clone_from(&self.status_line);
+        t.answer_footer = false;
         let lang = Ds::get(cx).lang();
         let mut target = self.target.take();
         // `delegatedGoal`: the first activity entry carries the child's title.
