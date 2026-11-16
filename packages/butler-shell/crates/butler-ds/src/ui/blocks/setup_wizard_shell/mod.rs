@@ -262,11 +262,9 @@ impl SetupWizardShell {
             {
                 return intro_print(self.tone, card);
             }
-            let wallpaper = Wallpaper::new(WallpaperSource::Live {
-                module: SETUP_WALLPAPER.into(),
-            })
-            .tone(self.tone)
-            .content_rect(card);
+            let wallpaper = Wallpaper::new(WallpaperSource::live(SETUP_WALLPAPER))
+                .tone(self.tone)
+                .content_rect(card);
             let wallpaper = match self.day_phase {
                 Some(phase) => wallpaper.day_phase(phase),
                 None => wallpaper,

@@ -8,7 +8,8 @@ use gpui::{
 };
 
 use super::{
-    WallpaperHost, WallpaperTone, drift, live_image, live_modules, live_params, live_print,
+    WallpaperHost, WallpaperParams, WallpaperTone, drift, live_image, live_modules, live_params,
+    live_print,
     watchdog::{self, Watchdog},
 };
 use crate::ui::blocks::prompt_suggestion_list::ContentRect;
@@ -31,6 +32,7 @@ pub(super) struct LiveFrame {
 /// Known modules never fall back to posters, including while a photo is decoding.
 pub(super) fn layer(
     id: &str,
+    values: &WallpaperParams,
     frame: LiveFrame,
     window: &mut Window,
     cx: &mut App,
@@ -40,7 +42,7 @@ pub(super) fn layer(
         .photo
         .as_ref()
         .and_then(|photo| live_image::load(photo, cx));
-    let params = live_params::defaults(&module.manifest, frame.tone);
+    let params = live_params::resolve(&module.manifest, values, frame.tone);
     let mut hash = DefaultHasher::new();
     id.hash(&mut hash);
     frame.tone.as_str().hash(&mut hash);
