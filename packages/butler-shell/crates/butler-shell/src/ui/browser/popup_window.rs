@@ -80,6 +80,7 @@ fn open(id: TabId, cx: &mut App) {
             appears_transparent: true,
             traffic_light_position: Some(scaled_traffic_lights(POPUP.buttons, scale)),
         }),
+        inactive_frame_interval: None,
         ..WindowOptions::default()
     };
     match cx.open_window(options, |window, cx| {
