@@ -145,6 +145,8 @@ pub(crate) struct LocalServers {
     servers: Vec<Server>,
     options: Vec<LocalModelOption>,
     checking: bool,
+    /// The latest lookup; an older one's answer is dropped.
+    request: u64,
     /// The OS network status.
     online: bool,
     /// The Agent-ready value of the last lookup while the AI step shows; unset off the step.
@@ -225,21 +227,23 @@ impl LocalServers {
     }
 
     fn fetch(&mut self, cx: &mut Context<Self>) {
-        if self.checking {
-            return;
-        }
+        self.request += 1;
+        let request = self.request;
         self.checking = true;
-        let request = Jobs::run(cx, |client| async move {
+        let lookup = Jobs::run(cx, |client| async move {
             client.get_local_model_servers().await.ok()
         });
         cx.spawn(async move |this, cx| {
-            let reply = request.await.flatten();
-            let _ = this.update(cx, |this, cx| this.loaded(reply.as_ref(), cx));
+            let reply = lookup.await.flatten();
+            let _ = this.update(cx, |this, cx| this.loaded(request, reply.as_ref(), cx));
         })
         .detach();
     }
 
-    fn loaded(&mut self, reply: Option<&Value>, cx: &mut Context<Self>) {
+    fn loaded(&mut self, request: u64, reply: Option<&Value>, cx: &mut Context<Self>) {
+        if request != self.request {
+            return;
+        }
         let servers = reply.map(parse_servers).unwrap_or_default();
         self.checking = false;
         if self.servers != servers {
