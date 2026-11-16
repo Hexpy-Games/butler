@@ -3,6 +3,13 @@
 //! passes them on its command line; the in-app OSR runtime appends them in its browser process,
 //! then [`VISIBLE_ONLY`]. Always compiled (no `cef` feature) so the executor shares this one list.
 
+/// The OSR browser process appends these two to every helper (Windows): the name of the App's
+/// kill-on-close Job Object, and the App's process id (`crate::job` decides from it whether a
+/// helper joins the job).
+pub const OSR_JOB: &str = "butler-osr-job";
+/// See [`OSR_JOB`].
+pub const OSR_APP: &str = "butler-osr-app";
+
 /// The value of `--disable-features` in [`QUIET`].
 pub const DISABLED_FEATURES: &str =
     "Translate,MediaRouter,OptimizationHints,DialMediaRouteProvider";
