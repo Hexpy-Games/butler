@@ -11,7 +11,8 @@ pub(super) struct Endpoint {
 }
 
 /// The pipe of a data folder: its absolute path, which does not change once the folder exists,
-/// lowercased because Windows compares paths without case.
+/// lowercased because Windows compares paths without case. Other spellings of one folder (8.3
+/// names, junctions, subst drives, UNC paths) are not folded.
 fn name(data: &Path) -> String {
     let path = std::path::absolute(data).unwrap_or_else(|_| data.to_path_buf());
     let digest = Sha256::digest(path.to_string_lossy().to_lowercase().as_bytes());
