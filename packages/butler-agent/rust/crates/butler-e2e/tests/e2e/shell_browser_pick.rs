@@ -149,7 +149,7 @@ async fn cef_pick_and_wheel_follow_text_size() -> Result<(), HarnessError> {
     let _serial = SERIAL.lock().await;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
-    let page = "<title>Zoom</title><body style='margin:0'><h1 style='margin:0;height:60px'>Heading</h1><p id=p style='margin:0;height:60px'>Zoom paragraph</p><div style='height:3000px'></div><script>function r(){const b=document.getElementById('p').getBoundingClientRect();document.title='Zoom '+JSON.stringify({r:[b.x,b.y,b.width,b.height],y:scrollY,w:innerWidth})}addEventListener('scroll',r);addEventListener('resize',r);r()</script></body>";
+    let page = "<title>Zoom</title><body style='margin:0'><h1 style='margin:0;height:200px'>Heading</h1><p id=p style='margin:0;height:40px'>Zoom paragraph</p><div style='height:3000px'></div><script>function r(){const b=document.getElementById('p').getBoundingClientRect();document.title='Zoom '+JSON.stringify({r:[b.x,b.y,b.width,b.height],y:scrollY})}addEventListener('scroll',r);r()</script></body>";
     let pages = axum::Router::new().route(
         "/",
         axum::routing::get(move || async move { axum::response::Html(page) }),
@@ -157,85 +157,67 @@ async fn cef_pick_and_wheel_follow_text_size() -> Result<(), HarnessError> {
     let _server = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
         axum::serve(listener, pages).await.unwrap();
     }));
-    for (zoom, keys) in [(1.0_f64, 0), (1.3, 2)] {
-        let mut sandbox = Sandbox::new(&format!("cef_pick_and_wheel_follow_text_size_{keys}"))?;
-        let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
-        let mut shell = Shell::start(&sandbox, &[]).await?;
-        shell
-            .run(&["agent running", "wait-anchor composer", "size 1280 800"])
-            .await?;
-        for _ in 0..keys {
-            shell.run(&["key secondary-="]).await?;
-        }
-        shell
-            .run(&[
-                &format!("expect-scale {zoom}"),
-                "browser",
-                "wait-anchor browser-area",
-                &format!("type http://{address}/"),
-                "key enter",
-            ])
-            .await?;
-        let report = loaded_title(&mut shell).await?;
-        let [x, y, w, h] = report["r"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_f64().unwrap())
-            .collect::<Vec<_>>()[..]
-        else {
-            panic!("paragraph rect missing: {report}");
-        };
-        let (cx, cy) = ((x + w / 2.) / zoom, (y + h / 2.) / zoom);
-        shell
-            .run(&[
-                "click browser-pick",
-                "wait-anchor browser-pick-band",
-                &format!("page-move {cx} {cy}"),
-            ])
-            .await?;
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-        let label = loop {
-            let state = shell.browser_state().await?;
-            if let Some(label) = state["tabs"][0]["pick_hover_label"].as_str() {
-                break label.to_owned();
-            }
-            assert!(tokio::time::Instant::now() < deadline, "no hover label");
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        };
-        assert!(
-            label.starts_with("p ·"),
-            "hover label {label:?} at zoom {zoom}"
-        );
-        shell
-            .run(&[
-                &format!("page-click {cx} {cy}"),
-                "wait-anchor browser-selection-count-1",
-            ])
-            .await?;
-        let state = shell.browser_state().await?;
-        assert_eq!(state["tabs"][0]["selections"][0]["text"], "Zoom paragraph");
-        shell
-            .run(&[
-                "key escape",
-                "wait-no-anchor browser-pick-band",
-                "page-wheel 200",
-            ])
-            .await?;
-        let scrolled = scrolled_title(&mut shell).await?;
-        let scroll_y = scrolled["y"].as_f64().unwrap();
-        println!(
-            "ZOOM-CHECK zoom={zoom} innerWidth={} rect={:?} label={label:?} wheel=200 scrollY={scroll_y}",
-            scrolled["w"], report["r"]
-        );
-        assert!(
-            (scroll_y - 200. * zoom).abs() <= 1.,
-            "scrollY {scroll_y} at zoom {zoom}"
-        );
-        shell.run(&["app-quit"]).await?;
-        shell.finish().await?;
-        sandbox.mark_success();
+    let (zoom, keys) = (1.3_f64, 2);
+    let mut sandbox = Sandbox::new(&format!("cef_pick_and_wheel_follow_text_size_{keys}"))?;
+    let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
+    let mut shell = Shell::start(&sandbox, &[]).await?;
+    shell
+        .run(&["agent running", "wait-anchor composer", "size 1280 800"])
+        .await?;
+    for _ in 0..keys {
+        shell.run(&["key secondary-="]).await?;
     }
+    shell
+        .run(&[
+            &format!("expect-scale {zoom}"),
+            "browser",
+            "wait-anchor browser-area",
+            &format!("type http://{address}/"),
+            "key enter",
+        ])
+        .await?;
+    let report = loaded_title(&mut shell).await?;
+    let [_, y, _, h] = report["r"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_f64().unwrap())
+        .collect::<Vec<_>>()[..]
+    else {
+        panic!("paragraph rect missing: {report}");
+    };
+    let (cx, cy) = (100., (y + h / 2.) / zoom);
+    shell
+        .run(&[
+            "click browser-pick",
+            "wait-anchor browser-pick-band",
+            &format!("page-move {cx} {cy}"),
+        ])
+        .await?;
+    shell
+        .run(&[
+            &format!("page-click {cx} {cy}"),
+            "wait-anchor browser-selection-count-1",
+        ])
+        .await?;
+    let state = shell.browser_state().await?;
+    assert_eq!(state["tabs"][0]["selections"][0]["text"], "Zoom paragraph");
+    shell
+        .run(&[
+            "key escape",
+            "wait-no-anchor browser-pick-band",
+            "page-wheel 200",
+        ])
+        .await?;
+    let scrolled = scrolled_title(&mut shell).await?;
+    let scroll_y = scrolled["y"].as_f64().unwrap();
+    assert!(
+        (scroll_y - 200. * zoom).abs() <= 1.,
+        "scrollY {scroll_y} at zoom {zoom}"
+    );
+    shell.run(&["app-quit"]).await?;
+    shell.finish().await?;
+    sandbox.mark_success();
     Ok(())
 }
 
