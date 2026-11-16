@@ -1,15 +1,18 @@
 //! Window-sized frames of the live modules. // DS: stillGpu.ts, glScene.ts.
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use gpui::{
     AnyElement, App, Bounds, Corners, IntoElement as _, Pixels, Styled as _, WallpaperClock,
     WallpaperImage, WallpaperPaint, WallpaperPass, Window, canvas,
 };
 
+use super::live_image::ImageBytes;
+use super::live_modules::IMAGE_MODULE;
 use super::{
-    WallpaperHost, WallpaperParams, WallpaperTone, drift, live_image, live_modules, live_params,
-    live_print,
+    ImageFilter, ImageFit, WallpaperHost, WallpaperParams, WallpaperTone, drift, live_image,
+    live_modules, live_params, live_print,
     watchdog::{self, Watchdog},
 };
 use crate::ui::blocks::prompt_suggestion_list::ContentRect;
@@ -29,6 +32,14 @@ pub(super) struct LiveFrame {
     pub(super) content_rect2: Option<ContentRect>,
 }
 
+/// A picture to draw under a module, with how to fit and blur it.
+#[derive(Clone)]
+pub(super) struct ImageInput {
+    pub(super) image: Option<WallpaperImage>,
+    pub(super) fit: ImageFit,
+    pub(super) blur: f32,
+}
+
 /// Known modules never fall back to posters, including while a photo is decoding.
 pub(super) fn layer(
     id: &str,
@@ -38,31 +49,93 @@ pub(super) fn layer(
     cx: &mut App,
 ) -> Option<(AnyElement, f32)> {
     let module = live_modules::get(id)?;
-    let image = module
-        .photo
-        .as_ref()
-        .and_then(|photo| live_image::load(photo, cx));
+    let input = ImageInput {
+        image: module
+            .photo
+            .as_ref()
+            .and_then(|photo| live_image::load(ImageBytes::Bundled(photo), cx)),
+        fit: ImageFit::Cover,
+        blur: 0.,
+    };
     let params = live_params::resolve(&module.manifest, values, frame.tone);
     let mut hash = DefaultHasher::new();
     id.hash(&mut hash);
     frame.tone.as_str().hash(&mut hash);
-    let key = hash.finish();
+    let brightness = module
+        .photo
+        .as_ref()
+        .map_or(1., |_| module.brightness(module.default_dim(), frame.tone));
+    let drawn = draw(module, hash.finish(), input, params, frame, window, cx);
+    Some((drawn, brightness))
+}
+
+/// An image wallpaper: the picture fitted and blurred by `butler.image`, or under the filter
+/// module when it takes an image; its brightness is what the dim leaves.
+// DS: glScene.ts imageInput, drawWallpaperScene.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the source's fields, the frame and the window context"
+)]
+pub(super) fn image_layer(
+    picture: Arc<gpui::Image>,
+    fit: ImageFit,
+    blur: f32,
+    dim: f32,
+    filter: Option<&ImageFilter>,
+    frame: LiveFrame,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<(AnyElement, f32)> {
+    let filter = filter.and_then(|filter| {
+        live_modules::get(&filter.module)
+            .filter(|module| module.manifest["image"] != "none")
+            .map(|module| (module, filter))
+    });
+    let (module, values) = match filter {
+        Some((module, filter)) => (module, filter.values.clone()),
+        None => (
+            live_modules::get("butler.image")?,
+            WallpaperParams::default(),
+        ),
+    };
+    let params = live_params::resolve(&module.manifest, &values, frame.tone);
+    let mut hash = DefaultHasher::new();
+    module.manifest["id"].as_str().hash(&mut hash);
+    frame.tone.as_str().hash(&mut hash);
+    picture.id().hash(&mut hash);
+    (fit == ImageFit::Contain).hash(&mut hash);
+    filter.map(|(_, filter)| &filter.module).hash(&mut hash);
+    let input = ImageInput {
+        image: live_image::load(ImageBytes::Picture(picture), cx),
+        fit,
+        blur,
+    };
+    let drawn = draw(module, hash.finish(), input, params, frame, window, cx);
+    Some((drawn, module.brightness(dim, frame.tone)))
+}
+
+fn draw(
+    module: &'static live_modules::Module,
+    key: u64,
+    input: ImageInput,
+    params: [[f32; 4]; 6],
+    frame: LiveFrame,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     let watchdog =
         window.use_keyed_state(("wallpaper-watchdog", key), cx, |_, _| Watchdog::default());
     let mut frame = frame;
     frame.animate &= !watchdog.read(cx).degraded();
     if module.manifest["motion"] == "drift" {
-        return Some((
-            drift::layer(key, params[0], frame, module, window, cx),
-            module.brightness(frame.tone),
-        ));
+        return drift::layer(key, params[0], frame, module, window, cx);
     }
     let watchdog = watchdog.clone();
-    let drawn = canvas(
+    canvas(
         |_, _, _| (),
         move |bounds, (), window, cx| {
-            if (module.photo.is_some() && image.is_none())
-                || (module.manifest["image"] == "required" && module.photo.is_none())
+            if (module.photo.is_some() || module.manifest["image"] == "required")
+                && input.image.is_none()
             {
                 return;
             }
@@ -81,7 +154,7 @@ pub(super) fn layer(
                     module,
                     window,
                 );
-            } else if paint(bounds, key, module, params, image.clone(), frame, window) {
+            } else if paint(bounds, key, module, params, input.clone(), frame, window) {
                 let watchdog = watchdog.clone();
                 window.on_slow_animation_frames(
                     watchdog::SLOW_RENDER,
@@ -92,8 +165,7 @@ pub(super) fn layer(
         },
     )
     .size_full()
-    .into_any_element();
-    Some((drawn, module.brightness(frame.tone)))
+    .into_any_element()
 }
 
 fn paint(
@@ -101,7 +173,7 @@ fn paint(
     key: u64,
     module: &live_modules::Module,
     params: [[f32; 4]; 6],
-    image: Option<WallpaperImage>,
+    input: ImageInput,
     frame: LiveFrame,
     window: &mut Window,
 ) -> bool {
@@ -123,34 +195,39 @@ fn paint(
     u[4] = [css[0], css[1], 0., 0.];
     u[8] = live_print::buffer_rect(frame.content_rect2, bounds, buffer);
     u[9..15].copy_from_slice(&params);
-    let passes = passes(module, buffer, u, image.as_ref());
-    let clock = clock(module, frame, image.is_some());
+    let passes = passes(module, buffer, u, &input);
+    let prefit = input.image.is_some() && module.shaders[0] != IMAGE_MODULE;
+    let clock = clock(module, frame, prefit);
     let animated = clock.is_some();
     let wallpaper = WallpaperPaint {
         key,
         generation: live_print::generation(&passes),
         clock,
-        image,
+        image: input.image,
         passes: passes.into(),
     };
     window.paint_wallpaper(bounds, Corners::default(), 1., wallpaper);
     animated
 }
 
-/// DS: glScene.ts: prefit → base (time 0 for overlays) → overlay.
+/// DS: glScene.ts: prefit (none for `butler.image`, which fits itself) → base (time 0 for
+/// overlays) → overlay.
 fn passes(
     module: &live_modules::Module,
     buffer: [f32; 2],
     mut u: [[f32; 4]; 15],
-    image: Option<&WallpaperImage>,
+    input: &ImageInput,
 ) -> Vec<WallpaperPass> {
     let mut passes = Vec::new();
-    if let Some(image) = image {
-        let mut prefit = u;
-        live_image::fit(image, buffer, &mut prefit);
-        let mut pass = pass(17, buffer, false, prefit);
+    if let Some(image) = &input.image {
+        let mut fitted = u;
+        live_image::fit(image, input.fit, input.blur, buffer, &mut fitted);
+        let mut pass = pass(IMAGE_MODULE, buffer, false, fitted);
         pass.image = true;
         passes.push(pass);
+        if module.shaders[0] == IMAGE_MODULE {
+            return passes;
+        }
         u[2][3] = buffer[0] / buffer[1];
         u[7][3] = 1.;
     }
@@ -159,7 +236,7 @@ fn passes(
     if overlay {
         u[1][3] = 0.;
     }
-    passes.push(pass(module.shaders[0], buffer, image.is_some(), u));
+    passes.push(pass(module.shaders[0], buffer, input.image.is_some(), u));
     if overlay {
         u[1][3] = time;
         passes.push(pass(module.shaders[1], buffer, true, u));
@@ -189,12 +266,12 @@ fn pass(module: u32, buffer: [f32; 2], previous: bool, uniforms: [[f32; 4]; 15])
     clippy::cast_possible_truncation,
     reason = "shader period is an f32 uniform"
 )]
-fn clock(module: &live_modules::Module, frame: LiveFrame, image: bool) -> Option<WallpaperClock> {
+fn clock(module: &live_modules::Module, frame: LiveFrame, prefit: bool) -> Option<WallpaperClock> {
     (frame.animate && module.manifest["motion"] == "animated").then(|| WallpaperClock {
         start_ms: frame.start_ms,
         start_s: module.still_time,
         fps: 20, // DS: scheduler.ts WALLPAPER_ANIMATED_FPS.
         period_s: module.period() as f32,
-        animated_from: usize::from(image) + usize::from(module.manifest["overlay"] == true),
+        animated_from: usize::from(prefit) + usize::from(module.manifest["overlay"] == true),
     })
 }

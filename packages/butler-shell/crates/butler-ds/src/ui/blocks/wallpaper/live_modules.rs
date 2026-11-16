@@ -4,7 +4,10 @@ use std::sync::OnceLock;
 
 use serde_json::Value;
 
-use super::{DIM_SKIP, ImageDim, WallpaperTone, brightness, default_dim};
+use super::{ImageDim, WallpaperTone, brightness, default_dim};
+
+/// filters.rs wp_image: butler.image/shader.frag
+pub(super) const IMAGE_MODULE: u32 = 17;
 
 pub(super) struct Photo {
     pub path: &'static str,
@@ -71,6 +74,7 @@ fn modules() -> HashMap<String, Module> {
             photo!("butler.stipple", 0.14),
         ),
         (manifest!("butler.grain"), [16, 0], 0., None),
+        (manifest!("butler.image"), [IMAGE_MODULE, 0], 0., None),
         (manifest!("butler.cherry-blossom"), [18, 0], 37., None),
     ];
     entries
@@ -123,18 +127,20 @@ impl Module {
             .unwrap_or(5000. * std::f64::consts::PI)
     }
 
-    /// DS: registry.ts wallpaperDefaultImageScene, imageMath.ts wallpaperImageBrightness.
-    pub(super) fn brightness(&self, tone: WallpaperTone) -> f32 {
-        let Some(photo) = &self.photo else {
-            return 1.;
-        };
-        let dim = default_dim(Some(photo.luminance));
-        let dim = if dim <= DIM_SKIP { 0. } else { dim };
+    /// DS: imageMath.ts wallpaperImageBrightness under the manifest's `imageDim`.
+    pub(super) fn brightness(&self, dim: f32, tone: WallpaperTone) -> f32 {
         let mode = match self.manifest["imageDim"].as_str() {
             Some("none") => ImageDim::None,
             Some("noDarkStep") => ImageDim::NoDarkStep,
             _ => ImageDim::Auto,
         };
         brightness(dim, tone == WallpaperTone::Dark, mode)
+    }
+
+    /// DS: registry.ts wallpaperDefaultImageScene: the default dim of the bundled photo.
+    pub(super) fn default_dim(&self) -> f32 {
+        self.photo
+            .as_ref()
+            .map_or(0., |photo| default_dim(Some(photo.luminance)))
     }
 }

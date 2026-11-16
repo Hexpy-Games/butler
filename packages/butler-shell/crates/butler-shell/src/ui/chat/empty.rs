@@ -143,7 +143,7 @@ pub(crate) fn empty_state(ctx: EmptyCtx<'_>, window: &mut Window, cx: &mut App) 
     let paused = resolved
         .as_ref()
         .is_some_and(|r| r.wallpaper_paused || (r.wallpaper_pause_on_battery && power.on_battery));
-    let wallpaper = Wallpaper::new(wallpaper)
+    let mut wallpaper = Wallpaper::new(wallpaper)
         .motion(paused)
         .host(WallpaperHost {
             on_battery: power.on_battery,
@@ -153,6 +153,9 @@ pub(crate) fn empty_state(ctx: EmptyCtx<'_>, window: &mut Window, cx: &mut App) 
         .content_rect(kept)
         .content_rect2(card_rect(cx))
         .day_phase(day_phase());
+    if let Some(picture) = resolved.as_ref().and_then(|r| r.wallpaper_picture.clone()) {
+        wallpaper = wallpaper.picture(picture);
+    }
     div()
         .relative()
         .size_full()
