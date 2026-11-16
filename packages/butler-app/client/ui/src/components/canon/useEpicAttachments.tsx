@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, type SyntheticEvent } from "react";
+import { useId, useLayoutEffect, useRef, useState, type DragEvent, type SyntheticEvent } from "react";
 import { Button, ButtonContainer, Input, Tooltip } from "@/butler-ds";
 import { useCanonInlineUploads } from "./CanonInlineDraft.tsx";
 import { appCopy } from "@/app/copy.ts";
@@ -49,6 +49,23 @@ export function useEpicAttachments(projectId: string, description: string, onDes
     }
     finally { setUpload(current => ({ ...current, pendingFile: null })); }
   };
+  const [dropActive, setDropActive] = useState(false);
+  const fileDrag = (event: DragEvent<HTMLTextAreaElement>) => !disabled && !uploading && event.dataTransfer.types.includes("Files");
+  // Props for the description Textarea: a dropped file takes the button's upload path, at the editor's caret.
+  const drop = {
+    dropActive, "data-file-drop": true,
+    onDragEnter: (event: DragEvent<HTMLTextAreaElement>) => { if (fileDrag(event)) { event.preventDefault(); setDropActive(true); } },
+    onDragOver: (event: DragEvent<HTMLTextAreaElement>) => { if (fileDrag(event)) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } },
+    onDragLeave: () => setDropActive(false),
+    onDrop: (event: DragEvent<HTMLTextAreaElement>) => {
+      if (!fileDrag(event)) return;
+      event.preventDefault();
+      setDropActive(false);
+      onSelect(event);
+      const dropped = Array.from(event.dataTransfer.files);
+      void (async () => { for (const file of dropped) await upload(file); })();
+    },
+  };
   const control = <ButtonContainer size="sm">
     <Input type="file" hidden aria-label={appCopy.canon.attachFile} id={pickerId} disabled={disabled || uploading}
       onChange={event => { void upload(event.target.files?.[0]); event.target.value = ""; }} />
@@ -57,5 +74,5 @@ export function useEpicAttachments(projectId: string, description: string, onDes
         onClick={() => { const picker = document.getElementById(pickerId); if (picker instanceof HTMLInputElement) picker.click(); }}>{appCopy.canon.attachFile}</Button>
     </Tooltip>
   </ButtonContainer>;
-  return { control, onSelect, uploading, pendingFile, files };
+  return { control, onSelect, drop, uploading, pendingFile, files };
 }
