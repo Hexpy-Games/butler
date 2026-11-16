@@ -1,7 +1,7 @@
 //! What the new chat reads from the server, and what it makes of it: the briefing
 //! (`/new-chat-briefing`), the epic and its group, the project, and the wallpaper
 //! (`mainScreenTheme.ts`, `projectWallpaper.ts`: the project's source, else the global one).
-use butler_ds::ui::blocks::wallpaper::{ImageFit, WallpaperSource};
+use butler_ds::ui::blocks::wallpaper::{ImageFit, WallpaperParams, WallpaperSource};
 use butler_shell_client::ShellClient;
 use serde_json::Value;
 
@@ -130,14 +130,23 @@ fn f32_of(value: &Value) -> Option<f32> {
     value.as_f64()?.to_string().parse().ok()
 }
 
-/// `parseWallpaperSource`, without module params and filters.
+/// `parseWallpaperSource`, without image filters.
 fn parse_source(value: &Value) -> Option<WallpaperSource> {
     match value.get("kind")?.as_str()? {
         "none" => Some(WallpaperSource::None),
         "live" => {
             let module = value.get("module")?.as_str().filter(|m| !m.is_empty())?;
+            let params = |key: &str| match value.get(key) {
+                None => Some(Value::Null),
+                Some(object) if object.is_object() => Some(object.clone()),
+                Some(_) => None,
+            };
             Some(WallpaperSource::Live {
                 module: module.to_owned().into(),
+                values: WallpaperParams {
+                    params: params("params")?,
+                    params_dark: params("paramsDark")?,
+                },
             })
         }
         "image" => {
@@ -157,25 +166,31 @@ fn parse_source(value: &Value) -> Option<WallpaperSource> {
     }
 }
 
-fn custom_colors(settings: &Value) -> bool {
-    let valid = |color: &Value| {
-        color.as_str().is_some_and(|color| {
-            let color = color.trim();
-            color.len() == 7
+fn custom_colors(settings: &Value) -> Option<Vec<String>> {
+    let colors = settings
+        .get("main_screen_theme_custom_colors")?
+        .as_array()
+        .filter(|colors| colors.len() == 6)?;
+    colors
+        .iter()
+        .map(|color| {
+            let color = color.as_str()?.trim();
+            (color.len() == 7
                 && color.starts_with('#')
-                && color[1..].chars().all(|c| c.is_ascii_hexdigit())
+                && color[1..].chars().all(|c| c.is_ascii_hexdigit()))
+            .then(|| color.to_ascii_lowercase())
         })
-    };
-    settings
-        .get("main_screen_theme_custom_colors")
-        .and_then(Value::as_array)
-        .is_some_and(|colors| colors.len() == 6 && colors.iter().all(valid))
+        .collect()
 }
 
 /// `legacyWallpaperSource`: the `main_screen_theme*` keys.
 fn legacy_source(settings: &Value) -> WallpaperSource {
-    let live = |module: &str| WallpaperSource::Live {
-        module: module.to_owned().into(),
+    let bloom = |colors: Value| WallpaperSource::Live {
+        module: "butler.bloom".into(),
+        values: WallpaperParams {
+            params: serde_json::json!({ "colors": colors }),
+            params_dark: Value::Null,
+        },
     };
     let text = |key: &str| {
         settings
@@ -185,9 +200,12 @@ fn legacy_source(settings: &Value) -> WallpaperSource {
     };
     match (text("main_screen_theme"), text("main_screen_theme_preset")) {
         ("none", _) => WallpaperSource::None,
-        ("silk" | "curtain", _) => live("butler.silk"),
-        (_, "aurora" | "bloom" | "lavender" | "morning") => live("butler.bloom"),
-        (_, "custom") if custom_colors(settings) => live("butler.bloom"),
-        _ => live("butler.riso-print"),
+        ("silk" | "curtain", _) => WallpaperSource::live("butler.silk"),
+        (_, preset @ ("aurora" | "bloom" | "lavender" | "morning")) => bloom(preset.into()),
+        (_, "custom") => match custom_colors(settings) {
+            Some(colors) => bloom(colors.into()),
+            None => WallpaperSource::live("butler.riso-print"),
+        },
+        _ => WallpaperSource::live("butler.riso-print"),
     }
 }
