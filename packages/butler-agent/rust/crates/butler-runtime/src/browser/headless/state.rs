@@ -184,6 +184,14 @@ impl Tab {
         }
     }
 
+    /// An agent op reached the page. A hosted tab the user held is the agent's again.
+    pub(crate) fn touch(&mut self, hosted: bool) {
+        self.last_call = Instant::now();
+        if hosted {
+            self.waiting = false;
+        }
+    }
+
     /// A navigation or document change: every ref of the last observation expires.
     pub(crate) fn changed(&mut self) {
         self.epoch += 1;

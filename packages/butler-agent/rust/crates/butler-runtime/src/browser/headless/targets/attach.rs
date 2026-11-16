@@ -1,4 +1,4 @@
-use super::super::state::short_id;
+use super::super::host::tab_id;
 use super::{Browser, Tab, close, close_target, make_room, setup_page, web_url};
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -34,11 +34,9 @@ pub(crate) async fn page_attached(
     let admitted = {
         let mut state = browser.shared.lock();
         if room {
-            // The App names its pages: a popup's tab id is its target id.
-            let id = if browser.host().is_some() {
-                target.clone()
-            } else {
-                short_id('h', |id| state.tabs.contains_key(id))
+            // A tab id the App reuses would replace a live tab: drop the popup, close nothing.
+            let Some(id) = tab_id(&browser, &state.tabs, &session) else {
+                return;
             };
             let mut tab = Tab::new(id.clone(), owner, target.clone(), session.clone());
             tab.turn = turn;
@@ -67,7 +65,7 @@ pub(crate) async fn page_attached(
     };
     browser.changed.notify_waiters();
     if admitted.is_none() {
-        close_target(&browser, &target).await;
+        close_target(&browser, &target, &session).await;
         return;
     }
     if setup_page(&browser.cdp, &session).await.is_err()
@@ -83,13 +81,13 @@ async fn claim_or_close(browser: &Browser, target: String, session: String) {
         let mut state = browser.shared.lock();
         let creating = state.creating > 0;
         if creating {
-            state.unclaimed.insert(target.clone(), session);
+            state.unclaimed.insert(target.clone(), session.clone());
         }
         creating
     };
     if claimed {
         browser.shared.attached.notify_waiters();
     } else {
-        close_target(browser, &target).await;
+        close_target(browser, &target, &session).await;
     }
 }

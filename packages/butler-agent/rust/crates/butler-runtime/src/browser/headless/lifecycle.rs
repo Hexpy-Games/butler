@@ -1,5 +1,5 @@
 //! Tab creation and the idle lifecycle of the headless browser process.
-use super::{Headless, INSTALL_WAIT, browser::Browser, install::Progress, state, targets};
+use super::{Headless, INSTALL_WAIT, browser::Browser, host, install::Progress, state, targets};
 use serde_json::{Value, json};
 use std::{
     sync::{
@@ -22,21 +22,15 @@ pub(super) async fn open_tab(
     let preview = preview_of(args);
     let profile = profile_of(args);
     let context = targets::context(browser, owner, preview).await?;
-    let open = targets::Opening {
-        owner,
-        profile,
-        context: &context,
-        internal: false,
+    let (target, session) = match browser.host() {
+        Some(host) => host::open_hosted(host, owner, profile, &context, false).await?,
+        None => targets::create(&browser.cdp, &browser.shared, &context).await?,
     };
-    let (target, session) =
-        targets::create(&browser.cdp, &browser.shared, browser.host(), &open).await?;
     let id = {
         let mut state = browser.shared.lock();
-        // The App names its pages; a launched browser's tabs get short ids.
-        let id = if browser.host().is_some() {
-            target.clone()
-        } else {
-            state::short_id('h', |id| state.tabs.contains_key(id))
+        // A tab id the App reuses would replace a live tab: fail, close nothing.
+        let Some(id) = host::tab_id(browser, &state.tabs, &session) else {
+            return Err("browser_unavailable".into());
         };
         let mut tab = state::Tab::new(
             id.clone(),
@@ -132,6 +126,7 @@ pub(super) fn preview_of(args: &Value) -> Option<&str> {
 /// Closes idle agent tabs and ends the process tree 60 s after the last tab.
 pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Browser>) {
     let mut empty_since: Option<Instant> = None;
+    let hosted = browser.host().is_some();
     loop {
         let notified = browser.changed.notified();
         tokio::pin!(notified);
@@ -142,10 +137,16 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
             let expired: Vec<String> = state
                 .tabs
                 .values()
+                .filter(|t| !(hosted && t.waiting))
                 .filter(|t| now.duration_since(t.last_call) >= TAB_IDLE)
                 .map(|t| t.id.clone())
                 .collect();
-            let earliest = state.tabs.values().map(|t| t.last_call + TAB_IDLE).min();
+            let earliest = state
+                .tabs
+                .values()
+                .filter(|t| !(hosted && t.waiting))
+                .map(|t| t.last_call + TAB_IDLE)
+                .min();
             (expired, earliest, state.tabs.is_empty())
         };
         for id in expired {
@@ -157,7 +158,7 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
             empty_since = None;
             now
         };
-        let reaps = browser.host().is_none();
+        let reaps = !hosted;
         if empty && reaps && now.duration_since(since) >= REAP_AFTER {
             let Some(headless) = owner.upgrade() else {
                 browser.stop().await;

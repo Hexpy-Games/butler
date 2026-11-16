@@ -4,7 +4,7 @@
 use super::{
     browser::Browser,
     cdp::Cdp,
-    host::PageHost,
+    host::{PageHost, open_hosted},
     state::{Shared, Tab},
 };
 use crate::browser::egress::{guard_preview_url, guard_url};
@@ -134,55 +134,12 @@ pub(crate) async fn context(
     browser.shared.lock().contexts.insert(key, id.clone());
     Ok(id)
 }
-/// What a new page is for: the App needs all of it, a launched browser only the context.
-pub(crate) struct Opening<'a> {
-    pub owner: &'a str,
-    /// `signed_in` or `signed_out`.
-    pub profile: &'a str,
-    pub context: &'a str,
-    /// Butler's own page, listed in no tab list.
-    pub internal: bool,
-}
-
-impl<'a> Opening<'a> {
-    /// A launched browser's helper page (hosted mode never opens one).
-    pub(crate) fn hidden(context: &'a str) -> Self {
-        Self {
-            owner: "butler:hidden",
-            profile: "signed_out",
-            context,
-            internal: false,
-        }
-    }
-}
-
-/// Asks the App for a page; its id is the target, the session and the tab id.
-async fn open_hosted(
-    host: &Arc<dyn PageHost>,
-    open: &Opening<'_>,
-) -> Result<(String, String), String> {
-    let args = json!({"owner":open.owner,"profile":open.profile,"context":open.context,"internal":open.internal});
-    let reply = host.call("page.open", args).await;
-    match reply
-        .as_ref()
-        .map(|r| (r["status"].as_str(), r["tab"].as_str()))
-    {
-        Ok((Some("ok"), Some(tab))) if !tab.is_empty() => Ok((tab.to_owned(), tab.to_owned())),
-        _ => Err("browser_unavailable".into()),
-    }
-}
-
-/// Creates a paused blank page and returns (target, session).
+/// Creates a paused blank page in `context` and returns (target, session).
 pub(crate) async fn create(
     cdp: &Cdp,
     shared: &Shared,
-    host: Option<&Arc<dyn PageHost>>,
-    open: &Opening<'_>,
+    context: &str,
 ) -> Result<(String, String), String> {
-    if let Some(host) = host {
-        return open_hosted(host, open).await;
-    }
-    let context = open.context;
     shared.lock().creating += 1;
     // Width/height apply only to a new window (CEF reuses one otherwise; the headless shell always makes one).
     let created = cdp
@@ -227,21 +184,28 @@ pub(crate) async fn utility(
             .unwrap_or("")
             .to_owned()
     };
-    let open = Opening {
-        owner: "butler:utility",
-        profile: "signed_out",
-        context: &context,
-        internal: true,
+    let (_, session) = match host {
+        Some(host) => open_hosted(host, "butler:utility", "signed_out", &context, true).await?,
+        None => create(cdp, shared, &context).await?,
     };
-    let (_, session) = create(cdp, shared, host, &open).await?;
     cdp.send("Runtime.runIfWaitingForDebugger", json!({}), Some(&session))
         .await?;
-    let mut state = shared.lock();
-    if let Some(existing) = state.utility.clone() {
-        return Ok(existing);
+    let existing = {
+        let mut state = shared.lock();
+        let existing = state.utility.clone();
+        if existing.is_none() {
+            state.utility = Some(session.clone());
+        }
+        existing
+    };
+    let Some(existing) = existing else {
+        return Ok(session);
+    };
+    // The App's page of the losing caller would otherwise stay open.
+    if let Some(host) = host {
+        let _ = host.call("page.close", json!({"tab":session})).await;
     }
-    state.utility = Some(session.clone());
-    Ok(session)
+    Ok(existing)
 }
 
 /// Room for one more conversation tab: when every tab memory allows is open,
@@ -270,14 +234,14 @@ pub(crate) async fn close(browser: &Browser, id: &str) {
     let Some(tab) = removed else {
         return;
     };
-    close_target(browser, &tab.target).await;
+    close_target(browser, &tab.target, &tab.session).await;
     forget(browser, &tab).await;
 }
 
-/// Closes one page: the browser's target, or the App's page (its id is the target).
-pub(crate) async fn close_target(browser: &Browser, target: &str) {
+/// Closes one page: the browser's target, or the App's page (its tab id is the session).
+pub(crate) async fn close_target(browser: &Browser, target: &str, session: &str) {
     if let Some(host) = browser.host() {
-        let _ = host.call("page.close", json!({"tab":target})).await;
+        let _ = host.call("page.close", json!({"tab":session})).await;
         return;
     }
     let _ = browser
@@ -346,11 +310,11 @@ pub(crate) async fn attached(browser: Arc<Browser>, parent: Option<String>, para
     let info = &params["targetInfo"];
     let target = info["targetId"].as_str().unwrap_or("").to_owned();
     let kind = info["type"].as_str().unwrap_or("");
-    if super::identity::apply(&browser.cdp, &session, kind)
+    if super::identity::apply(&browser.cdp, &session, kind, browser.host().is_some())
         .await
         .is_err()
     {
-        close_target(&browser, &target).await;
+        close_target(&browser, &target, &session).await;
         return;
     }
     match kind {

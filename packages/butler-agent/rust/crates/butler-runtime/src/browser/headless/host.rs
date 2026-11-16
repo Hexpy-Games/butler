@@ -1,11 +1,14 @@
 //! Hosted mode: the App owns the pages, this executor asks it to open, close
 //! and hold them and exchanges per-page DevTools messages over byte channels.
-use super::{Headless, HeadlessConfig, InstallSource, browser::Browser, lifecycle, page::Page};
+use super::{
+    Headless, HeadlessConfig, InstallSource, browser::Browser, downloads::PortFuture, lifecycle,
+    page::Page, refused, state::Tab,
+};
 use crate::browser::egress::ContentOrigin;
 use serde_json::{Value, json};
 use std::{
-    future::Future,
-    pin::Pin,
+    collections::HashMap,
+    path::PathBuf,
     sync::{Arc, PoisonError},
 };
 use tokio::sync::mpsc;
@@ -14,11 +17,46 @@ use tokio_util::sync::CancellationToken;
 /// Where pages come from when an attached App owns them (signed-in profile, the user's tab list).
 pub trait PageHost: Send + Sync {
     /// `page.open` | `page.close` | `page.hold`; answers the host's result object.
-    fn call(
-        &self,
-        op: &'static str,
-        args: Value,
-    ) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send + '_>>;
+    /// An implementation must answer or fail every call within 25 seconds; the
+    /// executor does not add its own timeout.
+    fn call(&self, op: &'static str, args: Value) -> PortFuture;
+}
+
+/// Asks the App for a page: (target, session). The session is the tab id; the
+/// target is the page's real CDP target id.
+pub(super) async fn open_hosted(
+    host: &Arc<dyn PageHost>,
+    owner: &str,
+    profile: &str,
+    context: &str,
+    internal: bool,
+) -> Result<(String, String), String> {
+    let args = json!({"owner":owner,"profile":profile,"context":context,"internal":internal});
+    let reply = host.call("page.open", args).await;
+    let reply = reply.map_err(|_| "browser_unavailable".to_owned())?;
+    match (
+        reply["status"].as_str(),
+        reply["tab"].as_str(),
+        reply["target"].as_str(),
+    ) {
+        (Some("ok"), Some(tab), Some(target)) if !tab.is_empty() && !target.is_empty() => {
+            Ok((target.to_owned(), tab.to_owned()))
+        }
+        _ => Err("browser_unavailable".into()),
+    }
+}
+
+/// The id of a new tab: the App's session id when hosted, a short id otherwise.
+/// None when a hosted id is already a live tab.
+pub(super) fn tab_id(
+    browser: &Browser,
+    tabs: &HashMap<String, Tab>,
+    session: &str,
+) -> Option<String> {
+    if browser.host().is_some() {
+        return (!tabs.contains_key(session)).then(|| session.to_owned());
+    }
+    Some(super::state::short_id('h', |id| tabs.contains_key(id)))
 }
 
 impl Headless {
@@ -28,16 +66,15 @@ impl Headless {
         host: Arc<dyn PageHost>,
         incoming: mpsc::Receiver<Vec<u8>>,
         outgoing: mpsc::Sender<Vec<u8>>,
+        root: PathBuf,
         content: Option<ContentOrigin>,
         shutdown: CancellationToken,
     ) -> Arc<Self> {
-        // Never used: no profile, log, download stage or install lives here.
-        let unused = std::env::temp_dir().join("butler-hosted-browser");
         let headless = Self::assemble(
             HeadlessConfig {
-                root: unused.clone(),
+                root: root.clone(),
                 install: InstallSource {
-                    cache_root: unused,
+                    cache_root: root,
                     base_url: None,
                     cef_host: None,
                 },
@@ -73,18 +110,22 @@ pub(super) async fn wait(
     epoch: u64,
 ) -> Value {
     let id = page.tab.as_str();
-    let dialog = page
-        .shared
-        .with_tab(id, |t| {
-            t.waiting_turn = turn;
-            t.waiting = t.dialog.is_some();
-            t.dialog.is_some()
-        })
-        .unwrap_or(false);
+    let dialog = page.shared.with_tab(id, |t| {
+        t.waiting_turn = turn;
+        t.waiting = t.dialog.is_some();
+        t.dialog.is_some()
+    });
+    let Some(dialog) = dialog else {
+        return refused("not_your_tab");
+    };
     if let (false, Some(host)) = (dialog, browser.host()) {
         let hold = json!({"tab":id,"holder":"user","sticky":true,"reason":args["reason"]});
         return match host.call("page.hold", hold).await {
-            Ok(_) => json!({"status":"user_control","tab":id,"epoch":epoch}),
+            Ok(_) => {
+                // The user has the tab: it is neither reclaimed nor expired.
+                page.shared.with_tab(id, |t| t.waiting = true);
+                json!({"status":"user_control","tab":id,"epoch":epoch})
+            }
             Err(_) => json!({"status":"unknown","reason":"browser_unavailable"}),
         };
     }
@@ -108,6 +149,7 @@ pub(super) async fn waiting(
         })
         .unwrap_or(false);
     if let Some(host) = browser.host() {
+        // A failed hold is ignored on purpose: the tab snapshot is the source of truth.
         let _ = host
             .call("page.hold", json!({"tab":id,"waiting":waiting}))
             .await;

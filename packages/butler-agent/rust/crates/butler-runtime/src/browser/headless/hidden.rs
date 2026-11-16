@@ -142,6 +142,10 @@ pub(crate) struct HiddenPage {
 
 impl HiddenPage {
     pub(crate) async fn open(browser: &Arc<Browser>, purpose: Purpose) -> Result<Self, String> {
+        // The App owns the pages: a hosted executor never opens Butler's own.
+        if browser.host().is_some() {
+            return Err("browser_unavailable".into());
+        }
         let created = browser
             .cdp
             .send("Target.createBrowserContext", json!({"disposeOnDetach":true,"proxyServer":browser.proxy_url(),"proxyBypassList":"<-loopback>"}), None)
@@ -158,13 +162,7 @@ impl HiddenPage {
                 None,
             )
             .await;
-        let (target, session) = targets::create(
-            &browser.cdp,
-            &browser.shared,
-            None,
-            &targets::Opening::hidden(&context),
-        )
-        .await?;
+        let (target, session) = targets::create(&browser.cdp, &browser.shared, &context).await?;
         let id = {
             let mut state = browser.shared.lock();
             let id = short_id('x', |id| state.tabs.contains_key(id));

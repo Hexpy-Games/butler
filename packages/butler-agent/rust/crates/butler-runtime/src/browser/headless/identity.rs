@@ -120,9 +120,15 @@ async fn normalize(version: &Value, observed: &Value) -> Result<Value, String> {
 }
 
 /// Applies before running any page, OOPIF, worker or nested worker.
-pub(super) async fn apply(cdp: &Cdp, session: &str, kind: &str) -> Result<(), String> {
-    // Unset when the App owns the browser: its own identity applies.
-    if let Some(identity) = cdp.identity.get().cloned() {
+pub(super) async fn apply(
+    cdp: &Cdp,
+    session: &str,
+    kind: &str,
+    hosted: bool,
+) -> Result<(), String> {
+    // Hosted: the App's own browser identity applies. A launched browser fails closed.
+    if !hosted {
+        let identity = cdp.identity.get().ok_or("identity_unavailable")?.clone();
         let method = if kind.contains("worker") {
             cdp.send("Network.enable", json!({}), Some(session)).await?;
             "Network.setUserAgentOverride"
