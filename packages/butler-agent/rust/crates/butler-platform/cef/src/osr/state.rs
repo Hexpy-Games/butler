@@ -11,11 +11,16 @@ pub(super) struct Page {
     pub(super) scale: f32,
     pub(super) visible: bool,
     pub(super) closing: bool,
+    /// Loading from creation; then as CEF reports it.
+    pub(super) loading: bool,
     pub(super) signed_out_owner: Option<String>,
     pub(super) browser: Option<cef::Browser>,
     pub(super) frame: Option<Frame>,
+    #[cfg(not(target_os = "linux"))]
     pub(super) pool: FramePool,
+    #[cfg(not(target_os = "linux"))]
     pub(super) gpu: Option<GpuCopy>,
+    #[cfg(not(target_os = "linux"))]
     pub(super) paint_error_logged: bool,
     pub(super) ime: OsrIme,
     pub(super) dialog: Option<(u64, super::dialogs::Callback)>,
@@ -31,11 +36,15 @@ impl Page {
             scale,
             visible: true,
             closing: false,
+            loading: true,
             browser: None,
             signed_out_owner: None,
             frame: None,
+            #[cfg(not(target_os = "linux"))]
             pool: FramePool::default(),
+            #[cfg(not(target_os = "linux"))]
             gpu: None,
+            #[cfg(not(target_os = "linux"))]
             paint_error_logged: false,
             ime: OsrIme::default(),
             dialog: None,
@@ -47,8 +56,11 @@ impl Page {
     }
     pub(super) fn release_frames(&mut self) {
         self.frame = None;
-        self.pool = FramePool::default();
-        self.gpu = None;
+        #[cfg(not(target_os = "linux"))]
+        {
+            self.pool = FramePool::default();
+            self.gpu = None;
+        }
     }
 }
 

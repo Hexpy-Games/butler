@@ -82,9 +82,11 @@ impl OsrRuntime {
             ..Default::default()
         }));
         // Printable text is committed through IME, preserving macOS composition.
-        // Windows: Chromium edits Enter, Tab, Backspace and Escape on their WM_CHAR, which
-        // TranslateMessage would post; printable text still arrives through IME commit.
-        #[cfg(windows)]
+        // Chromium edits Enter, Tab, Backspace and Escape on their character event: on Windows the
+        // WM_CHAR TranslateMessage would post, on Linux the one Chromium's input layer generates
+        // with the key press (X11 delivers only the press).
+        // Printable text still arrives through IME commit.
+        #[cfg(not(target_os = "macos"))]
         if let Some(character) = control_char(&event) {
             h.send_key_event(Some(&cef::KeyEvent {
                 type_: cef::KeyEventType::CHAR,
@@ -99,8 +101,9 @@ impl OsrRuntime {
     }
 }
 
-/// The WM_CHAR TranslateMessage posts for a key-down of Enter, Tab, Backspace or Escape.
-#[cfg(windows)]
+/// The character event for a key-down of Enter, Tab, Backspace or Escape (Windows: the WM_CHAR
+/// TranslateMessage posts).
+#[cfg(not(target_os = "macos"))]
 fn control_char(event: &OsrKey) -> Option<u16> {
     if event.up || event.modifiers.alt {
         return None;
