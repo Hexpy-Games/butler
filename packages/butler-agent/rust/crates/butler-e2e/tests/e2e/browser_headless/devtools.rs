@@ -76,24 +76,25 @@ async fn read(admin: &AdminClient, tab: &Value, args: Value) -> Result<Value, Ha
     Ok(reply)
 }
 
-/// The rows of a read, waiting out the page's own late requests.
+/// The reply of a read once a row satisfies `ready`, waiting out the page's own late requests.
 async fn entries_with(
     admin: &AdminClient,
     tab: &Value,
     what: &str,
-    needle: &str,
+    ready: impl Fn(&Value) -> bool,
 ) -> Result<Value, HarnessError> {
+    let mut reply = Value::Null;
     for _ in 0..50 {
-        let reply = read(admin, tab, json!({"read":what})).await?;
+        reply = read(admin, tab, json!({"read":what})).await?;
         if reply["untrusted_content"]["entries"]
-            .to_string()
-            .contains(needle)
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(&ready))
         {
             return Ok(reply);
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    panic!("{what} never showed {needle}");
+    panic!("{what} never became ready: {reply}");
 }
 
 #[tokio::test]
@@ -109,7 +110,10 @@ async fn a_butler_page_reads_its_console_network_and_dom() -> Result<(), Harness
     assert_eq!(opened["status"], "ok", "{opened}");
     let tab = opened["tab"].clone();
 
-    let console = entries_with(&admin, &tab, "console", "fixture failed").await?;
+    let console = entries_with(&admin, &tab, "console", |row| {
+        row.to_string().contains("fixture failed")
+    })
+    .await?;
     let first = &console["untrusted_content"]["entries"][0];
     assert_eq!(first["level"], "error", "{console}");
     assert!(
@@ -120,7 +124,13 @@ async fn a_butler_page_reads_its_console_network_and_dom() -> Result<(), Harness
         "{console}"
     );
 
-    let network = entries_with(&admin, &tab, "network", "missing.json").await?;
+    let network = entries_with(&admin, &tab, "network", |row| {
+        row["url"]
+            .as_str()
+            .is_some_and(|url| url.contains("missing.json"))
+            && row["status"].is_number()
+    })
+    .await?;
     let rows = network["untrusted_content"]["entries"].as_array().unwrap();
     let missing = rows
         .iter()
@@ -185,7 +195,10 @@ async fn a_butler_page_reads_its_console_network_and_dom() -> Result<(), Harness
     let acted = call(&admin, "general", "tab.act", &tab, reload).await?;
     assert_eq!(acted["status"], "ok", "{acted}");
     tokio::time::sleep(Duration::from_millis(500)).await;
-    let again = entries_with(&admin, &tab, "console", "fixture failed").await?;
+    let again = entries_with(&admin, &tab, "console", |row| {
+        row.to_string().contains("fixture failed")
+    })
+    .await?;
     assert_eq!(again["untrusted_content"]["total"], 1, "{again}");
     s.finish().await
 }
@@ -205,7 +218,10 @@ async fn a_long_page_reads_in_parts_and_says_so() -> Result<(), HarnessError> {
     assert_eq!(opened["status"], "ok", "{opened}");
     let tab = opened["tab"].clone();
 
-    let console = entries_with(&admin, &tab, "console", "오류 259").await?;
+    let console = entries_with(&admin, &tab, "console", |row| {
+        row.to_string().contains("오류 259")
+    })
+    .await?;
     let data = &console["untrusted_content"];
     assert_eq!(data["total"], 200, "the newest 200 are kept");
     assert_eq!(data["dropped_oldest"], 60, "and the rest are counted");
@@ -282,10 +298,16 @@ async fn a_preview_reads_only_its_current_document() -> Result<(), HarnessError>
     assert_eq!(started["browser"]["status"], "ok", "{started}");
     let tab = started["browser"]["tab"].clone();
 
-    let next = entries_with(&admin, &tab, "network", "/own").await?;
+    let next = entries_with(&admin, &tab, "network", |row| {
+        row.to_string().contains("/own")
+    })
+    .await?;
     let rows = next["untrusted_content"]["entries"].to_string();
     assert!(!rows.contains("OLD_DOCUMENT"), "{rows}");
-    entries_with(&admin, &tab, "network", "/hang?i=").await?;
+    entries_with(&admin, &tab, "network", |row| {
+        row.to_string().contains("/hang?i=")
+    })
+    .await?;
     let mut bounded = Value::Null;
     for _ in 0..25 {
         bounded = read(&admin, &tab, json!({"read":"network"})).await?;
