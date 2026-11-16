@@ -15,6 +15,7 @@ use crate::ui::context::Ds;
 use crate::ui::convert;
 use crate::ui::focus;
 use crate::ui::layout::{Cross, Justify, MinWidth, Space, Stack, WithItem as _};
+use crate::ui::selectable::{Break, mark};
 use crate::ui::typo::{TextAlign, Tone, Typo, Weight, Wrap};
 
 type Highlight = Rc<dyn Fn(bool, &mut Window, &mut App)>;
@@ -60,6 +61,7 @@ pub struct KeyValueRow {
     value_size: ValueSize,
     detail: Detail,
     link: Option<(ElementId, Highlight)>,
+    selectable: Option<Break>,
 }
 
 impl KeyValueRow {
@@ -76,6 +78,7 @@ impl KeyValueRow {
             value_size: ValueSize::Body,
             detail: Detail::Row,
             link: None,
+            selectable: None,
         }
     }
 
@@ -118,6 +121,12 @@ impl KeyValueRow {
 
     pub fn detail(mut self, detail: Detail) -> Self {
         self.detail = detail;
+        self
+    }
+
+    /// The row's text joins the enclosing selection scope; `lead` is the break before the label.
+    pub fn selectable(mut self, lead: Break) -> Self {
+        self.selectable = Some(lead);
         self
     }
 
@@ -191,11 +200,12 @@ impl KeyValueRow {
             .min_w_0()
             .gap(ds.len(Length::Space2))
             .children(swatch)
-            .child(
+            .child(mark(
                 Typo::caption(self.label.clone())
                     .tone(Tone::Tertiary)
                     .wrap(Wrap::Anywhere),
-            );
+                self.selectable,
+            ));
         let value = match self.value_element.take() {
             Some(element) => {
                 let (size, line) = match self.value_size {
@@ -210,14 +220,21 @@ impl KeyValueRow {
                     .child(element)
                     .into_any_element()
             }
-            None => match self.value_size {
-                ValueSize::Body => Typo::body(self.value.clone()),
-                ValueSize::Caption => Typo::caption(self.value.clone()),
-            }
-            .tone(Tone::Primary)
-            .weight(Weight::Regular)
-            .align(TextAlign::End)
-            .wrap(Wrap::Anywhere)
+            // Electron's body value is a <p> (a blank line follows it when copied); the caption value is a span.
+            None => mark(
+                match self.value_size {
+                    ValueSize::Body => Typo::body(self.value.clone()),
+                    ValueSize::Caption => Typo::caption(self.value.clone()),
+                }
+                .tone(Tone::Primary)
+                .weight(Weight::Regular)
+                .align(TextAlign::End)
+                .wrap(Wrap::Anywhere),
+                self.selectable.map(|_| match self.value_size {
+                    ValueSize::Body => Break::Paragraph,
+                    ValueSize::Caption => Break::Line,
+                }),
+            )
             .into_any_element(),
         };
         Stack::row()
@@ -249,14 +266,15 @@ impl KeyValueRow {
         let line = line
             .min_width(MinWidth::Zero)
             .children(self.description.take().map(|text| {
-                div().min_w_0().child(
+                div().min_w_0().child(mark(
                     Typo::caption(text)
                         .tone(Tone::Tertiary)
                         .wrap(Wrap::Anywhere),
-                )
+                    self.selectable.map(|_| Break::Line),
+                ))
             }))
             .children(self.meta.take().map(|text| {
-                div().flex_none().min_w_0().child(
+                div().flex_none().min_w_0().child(mark(
                     Typo::caption(text)
                         .tone(Tone::Tertiary)
                         .align(if stacked {
@@ -265,7 +283,8 @@ impl KeyValueRow {
                             TextAlign::End
                         })
                         .wrap(Wrap::Anywhere),
-                )
+                    self.selectable.map(|_| Break::Line),
+                ))
             }));
         let inset = if with_swatch {
             px(SWATCH) + ds.len(Length::Space2)

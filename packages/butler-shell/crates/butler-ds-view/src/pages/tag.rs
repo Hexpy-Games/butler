@@ -5,6 +5,7 @@ use butler_ds::ui::Icon;
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::dropdown_menu::{Item, Variant as ItemVariant};
 use butler_ds::ui::layout::{Columns, Grid, Inline, Space};
+use butler_ds::ui::selectable::{self, Break, Selection};
 use butler_ds::ui::tag::{LabelTone, Size, Tag, Tone};
 use butler_ds::ui::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, Window, div};
@@ -110,6 +111,10 @@ pub(super) fn stories() -> Vec<Story> {
         Story {
             name: "Editable",
             render: editable,
+        },
+        Story {
+            name: "Selectable text",
+            render: selectable,
         },
     ]
 }
@@ -244,4 +249,16 @@ fn editable(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         )
         .child(Tag::new("tag-plain", c.label).tone(Tone::Label(LabelTone::Teal)))
         .into_any_element()
+}
+
+fn selectable(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
+    let c = copy(lang);
+    let selection = Selection::new("tag-selectable", window, cx);
+    selectable::scope(
+        selection,
+        Tag::new("tag-select-sample", c.success)
+            .tone(Tone::Success)
+            .selectable(Break::Line),
+    )
+    .into_any_element()
 }
