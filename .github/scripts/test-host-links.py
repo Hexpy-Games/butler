@@ -55,7 +55,7 @@ class HostLinks(unittest.TestCase):
         for dependency in ('/opt/homebrew/opt/protobuf/lib/libprotobuf.29.dylib',
                            '/usr/local/lib/libzstd.1.dylib', '/tmp/Helper (GPU)/libbad.dylib'):
             for command in ('LC_LOAD_DYLIB', 'LC_LOAD_WEAK_DYLIB',
-                            'LC_REEXPORT_DYLIB', 'LC_LOAD_UPWARD_DYLIB'):
+                            'LC_REEXPORT_DYLIB', 'LC_LOAD_UPWARD_DYLIB', 'LC_LAZY_LOAD_DYLIB'):
                 with self.subTest(dependency=dependency, command=command):
                     with self.assertRaisesRegex(RuntimeError, 'outside allowed'):
                         guard.check_macho('Butler Helper (GPU)', 'helper:\n',
