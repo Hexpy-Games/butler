@@ -72,7 +72,7 @@ cleanup() {
   if [ "$result" -ne 0 ]; then
     [ -z "$phase" ] || finish_step
     for file in "$app_log" "$root/helper.out" "$root/helper.log" "$root/host.log" "$record"; do
-      [ ! -f "$file" ] || { echo "--- $file" >&2; cat "$file" >&2; }
+      [ ! -f "$file" ] || { echo "--- $file" >&2; cat "$file" >&2 || true; }
     done
   fi
   agent_pid=
@@ -148,7 +148,7 @@ update() {
   old_agent_pid=
   deadline=$((SECONDS + 90))
   while alive "$helper_pid"; do
-    [ "$SECONDS" -lt "$deadline" ] || fail 'update helper still running after 90 seconds'
+    [ "$SECONDS" -lt "$deadline" ] || { app_pid=$(app_process || true); fail 'update helper still running after 90 seconds'; }
     sleep 1
   done
   if ! wait "$helper_pid"; then
