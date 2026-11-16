@@ -211,6 +211,8 @@ jobs:
   package:
     name: package (${{ matrix.platform }})
     needs: [versions, agent, shell]
+    # A failed leg of one platform must not skip the other platform's package; that leg fails at its download.
+    if: ${{ !cancelled() && needs.versions.result == 'success' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.versions.outputs.matrix) }}
