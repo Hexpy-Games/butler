@@ -128,6 +128,7 @@ export async function checkTitleLine(page: Page, options: {
   const surface = fullPage ? "drawer" : "fv";
   const host = fullPage ? '[data-test-class="document-reading-page"]' : '[data-test-class="file-viewer"]';
   const document = page.locator(`${host} [data-test-class="editable-document"]`);
+  const row = page.locator('[data-test-class="document-title-row"]');
   await document.waitFor();
   await page.waitForFunction(selector => {
     const node = window.document.querySelector(selector);
@@ -137,7 +138,7 @@ export async function checkTitleLine(page: Page, options: {
         || (!animation.pending && ["finished", "idle"].includes(animation.playState));
     });
   }, `${host} [data-test-class="editable-document"]`);
-  const beforeTitleWidth = await document.evaluate(node => {
+  const beforeTitleWidth = await row.evaluate(node => {
     const inline = node.querySelector<HTMLElement>('[data-slot="document-editor-actions"]')!;
     const menu = node.querySelector<HTMLElement>('[data-slot="document-editor-menu"]');
     inline.style.display = "flex"; if (menu) menu.style.display = "none";
@@ -145,7 +146,7 @@ export async function checkTitleLine(page: Page, options: {
     inline.style.removeProperty("display"); menu?.style.removeProperty("display");
     return width;
   });
-  const geometry = await document.locator(":scope > :first-child").evaluate(row => {
+  const geometry = await row.evaluate(row => {
     const center = (node: Element) => { const rect = node.getBoundingClientRect(); return rect.y + rect.height / 2; };
     const title = row.querySelector("h2")!;
     return { title: center(title), titleWidth: title.getBoundingClientRect().width, clientWidth: title.clientWidth, scrollWidth: title.scrollWidth, buttons: [...row.querySelectorAll("button")].filter(button => button.getClientRects().length).map(button => ({
@@ -155,17 +156,17 @@ export async function checkTitleLine(page: Page, options: {
   if (stage !== "before") {
     if (!fullPage) {
       assert(await page.locator(`${host} [data-test-class="file-viewer-close"]`).isVisible());
-      if (width === 390) assert(await document.locator('[data-test-class="file-viewer-back"]').isVisible());
+      if (width === 390) assert(await row.locator('[data-test-class="file-viewer-back"]').isVisible());
     }
-    assert.equal(await document.locator('[data-slot="document-editor-actions"]').isVisible(), width !== 390);
-    assert.equal(await document.locator('[data-slot="document-editor-menu"] button').isVisible(), width === 390);
+    assert.equal(await row.locator('[data-slot="document-editor-actions"]').isVisible(), width !== 390);
+    assert.equal(await row.locator('[data-slot="document-editor-menu"] button').isVisible(), width === 390);
     if (width === 390) { assert(geometry.titleWidth >= 80, JSON.stringify(geometry)); assert(geometry.scrollWidth <= geometry.clientWidth, "fixture title fits without ellipsis"); }
   }
   assert(geometry.buttons.length > 0, "the document title line has actions");
   const result = { check: "document-title-line", stage, surface, width, theme, beforeTitleWidth, ...geometry };
   console.log(JSON.stringify(result));
   const clip = await document.evaluate(node => {
-    const row = node.firstElementChild!.getBoundingClientRect();
+    const row = window.document.querySelector('[data-test-class="document-title-row"]')!.getBoundingClientRect();
     const body = node.querySelector('[data-slot="document-editor-page"]')!.getBoundingClientRect();
     const x = Math.max(0, row.left - 16), y = Math.max(0, row.top - 16);
     return { x, y, width: Math.min(window.innerWidth, row.right + 16) - x,
