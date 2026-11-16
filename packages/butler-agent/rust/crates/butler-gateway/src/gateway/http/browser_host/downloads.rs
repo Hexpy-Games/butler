@@ -20,11 +20,8 @@ pub(super) async fn handle(state: Arc<HttpState>, args: Value) -> Result<Respons
             .map_err(|_| error(403, "not_your_tab"))?;
         hub.pages.clone()
     };
-    if link.as_ref().is_some_and(|link| !link.has_tab(tab)) {
-        return Err(error(403, "not_your_tab"));
-    }
     if args["op"] == "failed" {
-        return failed(link.as_deref(), tab, &args["reason"]);
+        return failed(link.as_deref(), session, tab, &args["reason"]);
     }
     let context = context(&state, session).await?;
     if args["op"] == "prepare" {
@@ -49,14 +46,22 @@ pub(super) async fn handle(state: Arc<HttpState>, args: Value) -> Result<Respons
             target.extend(data.clone());
         }
         // A tab closed meanwhile has no one left to tell.
-        let _ = link.executor.tab_event(tab, "download_completed", &event);
+        let owner = format!("conversation:{session}");
+        let _ = link
+            .executor
+            .tab_event(&owner, tab, "download_completed", &event);
     }
     super::super::json(StatusCode::OK, output)
 }
 
 /// The page host's terminal failure of a download: the event the executor
 /// itself would queue for it.
-fn failed(link: Option<&pages::Link>, tab: &str, reason: &Value) -> Result<Response, HttpError> {
+fn failed(
+    link: Option<&pages::Link>,
+    session: &str,
+    tab: &str,
+    reason: &Value,
+) -> Result<Response, HttpError> {
     let link = link.ok_or_else(|| error(409, "no_page_host"))?;
     let (kind, data) = match reason.as_str() {
         Some(r @ ("download_interrupted" | "download_storage_failed")) => {
@@ -65,7 +70,8 @@ fn failed(link: Option<&pages::Link>, tab: &str, reason: &Value) -> Result<Respo
         Some(
             r @ ("download_file_limit"
             | "download_session_limit"
-            | "download_workspace_unavailable"),
+            | "download_workspace_unavailable"
+            | "download_cancelled"),
         ) => (
             "download_refused",
             json!({"reason":r,"file_limit_bytes":FILE_LIMIT,"session_limit_bytes":SESSION_LIMIT}),
@@ -73,7 +79,7 @@ fn failed(link: Option<&pages::Link>, tab: &str, reason: &Value) -> Result<Respo
         _ => return Err(error(400, "invalid_request")),
     };
     link.executor
-        .tab_event(tab, kind, &data)
+        .tab_event(&format!("conversation:{session}"), tab, kind, &data)
         .map_err(|_| error(403, "not_your_tab"))?;
     super::super::json(StatusCode::OK, json!({"ok":true}))
 }
@@ -98,7 +104,8 @@ async fn publish(
         .filter(|s| {
             !s.is_empty()
                 && s.len() <= 240
-                && !s.contains(['/', '\\', '\0'])
+                && !s.contains(['/', '\\'])
+                && !s.chars().any(|c| c < '\u{20}')
                 && *s != "."
                 && *s != ".."
         })

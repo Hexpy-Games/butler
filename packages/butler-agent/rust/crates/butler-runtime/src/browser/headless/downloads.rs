@@ -386,15 +386,22 @@ fn owner_event(state: &mut State, owner: &str, tab: &str, epoch: u64, kind: &str
 impl super::Headless {
     /// Queues `kind` for the owner of `tab`, as the download events of a
     /// transfer this executor runs itself are; a tab it does not know is an error.
-    pub fn tab_event(&self, tab: &str, kind: &str, data: &Value) -> Result<(), String> {
+    pub fn tab_event(
+        &self,
+        owner: &str,
+        tab: &str,
+        kind: &str,
+        data: &Value,
+    ) -> Result<(), String> {
         let browser = self.browser().ok_or("browser_unavailable")?;
         let mut state = browser.shared.lock();
-        let (owner, epoch) = state
+        let epoch = state
             .tabs
             .get(tab)
-            .map(|t| (t.owner.clone(), t.epoch))
+            .filter(|t| t.owner == owner)
+            .map(|t| t.epoch)
             .ok_or("unknown_tab")?;
-        owner_event(&mut state, &owner, tab, epoch, kind, data);
+        owner_event(&mut state, owner, tab, epoch, kind, data);
         Ok(())
     }
 }
