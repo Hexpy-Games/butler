@@ -18,6 +18,8 @@ pub(super) struct GatePage {
     pub(super) url: String,
     pub(super) last_input: Rc<Cell<Option<Instant>>>,
     pub(super) allowance: Option<String>,
+    /// The Agent's page: its popups always open as pages of the Agent's own.
+    pub(super) hosted: bool,
 }
 impl PopupGate {
     pub(super) fn insert(&mut self, id: u64, owner_key: String, url: String) {
@@ -29,6 +31,7 @@ impl PopupGate {
                 url,
                 last_input: Rc::default(),
                 allowance: None,
+                hosted: false,
             },
         );
     }
@@ -47,10 +50,13 @@ pub(super) fn policy(gate: Rc<RefCell<PopupGate>>) -> butler_cef_host::osr::Popu
         if let PopupDecision::Allow { child } = decision
             && let Some(source) = gate.pages.get_mut(&request.opener)
         {
-            let owner = source.owner_key.clone();
+            let (owner, hosted) = (source.owner_key.clone(), source.hosted);
             source.allowance = None;
             gate.next_id.set(child);
             gate.insert(child, owner, request.url.clone());
+            if let Some(page) = gate.pages.get_mut(&child) {
+                page.hosted = hosted;
+            }
         }
         decision
     })
@@ -68,7 +74,7 @@ pub(super) fn popup_decision(
     let web = super::address::web_url(&request.url).is_some();
     let once = source.allowance.as_deref() == Some(super::popups::site(&source.url).as_str());
     // Electron marks window.open as programmatic, so Allow preserves its popup and opener.
-    if !once && web && request.disposition == PopupDisposition::NewTab {
+    if !once && !source.hosted && web && request.disposition == PopupDisposition::NewTab {
         return PopupDecision::NewTab;
     }
     if gate.owners.get(&source.owner_key).copied().unwrap_or(0) >= 30 {
@@ -78,7 +84,9 @@ pub(super) fn popup_decision(
         .last_input
         .get()
         .is_some_and(|at| now.saturating_duration_since(at) < std::time::Duration::from_secs(5));
-    if (web || request.url == "about:blank") && (request.user_gesture || recent || once) {
+    // The Agent's executor decides whether to keep a popup of a hosted page.
+    let allowed = request.user_gesture || recent || once || source.hosted;
+    if (web || request.url == "about:blank") && allowed {
         PopupDecision::Allow {
             child: gate.next_id.get() + 1,
         }

@@ -3,7 +3,10 @@ use super::{Frame, OsrIme, OsrSink};
 use super::{d3d::GpuCopy, d3d_pool::FramePool};
 #[cfg(target_os = "macos")]
 use super::{frame_pool::FramePool, gpu::GpuCopy};
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 pub(super) type PageRef = Rc<RefCell<Page>>;
 pub(super) struct Page {
@@ -22,6 +25,7 @@ pub(super) struct Page {
     pub(super) next_dialog: u64,
     pub(super) devtools: Option<cef::Registration>,
     pub(super) next_devtools: i32,
+    pub(super) devtools_raw: Rc<Cell<bool>>,
     pub(super) downloads: super::downloads::Transfers,
 }
 impl Page {
@@ -42,6 +46,7 @@ impl Page {
             next_dialog: 0,
             devtools: None,
             next_devtools: 0,
+            devtools_raw: Rc::default(),
             downloads: super::downloads::Transfers::default(),
         }
     }

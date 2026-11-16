@@ -44,6 +44,8 @@ pub(crate) enum PageChange {
         method: String,
         params: serde_json::Value,
     },
+    #[cfg(feature = "cef")]
+    DevToolsRaw(Vec<u8>),
     Url(String),
     Title(String),
     Favicon(String),
@@ -71,6 +73,18 @@ pub(crate) enum PageChange {
     Crashed,
 }
 
+impl PageChange {
+    /// Changes that only feed DevTools consumers: no tab state, nothing to redraw.
+    pub(crate) fn is_quiet(&self) -> bool {
+        match self {
+            Self::DevToolsEvent { .. } => true,
+            #[cfg(feature = "cef")]
+            Self::DevToolsRaw(_) => true,
+            _ => false,
+        }
+    }
+}
+
 pub(crate) struct PageEvent {
     pub(crate) page: TabId,
     pub(crate) change: PageChange,
@@ -88,10 +102,19 @@ pub(crate) trait PageEngine: 'static {
         let _ = sender.send(Err(anyhow::anyhow!("DevTools unavailable")));
         receiver
     }
+    /// Sends one complete CDP message to `page`; its messages then arrive as `DevToolsRaw`.
+    #[cfg(feature = "cef")]
+    fn devtools_raw(&self, _page: &TabId, _message: &[u8]) {}
+    fn devtools_raw_end(&self, _page: &TabId) {}
+    /// Keeps `page` not hidden while awake, even when it is not the shown page.
+    fn keep_awake(&mut self, _page: &TabId, _awake: bool) {}
+    /// Whether `page` is the Agent's: its popups then open as pages of the Agent's own.
+    fn set_hosted(&mut self, _page: &TabId, _hosted: bool) {}
     /// Whether this build can browse (Electron's `enabled`).
     fn enabled(&self) -> bool;
-    /// A page for `page`; `url` is empty for a blank page.
-    fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str);
+    /// A page for `page`; `url` is empty for a blank page. `owner` keys the popup gate and
+    /// downloads; `partition` keys the in-memory profile of a signed-out page.
+    fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str, partition: &str);
     fn command(&mut self, page: &TabId, command: PageCommand);
     /// The page's size in logical pixels and the device scale (from PageCard's bounds).
     fn resize(&mut self, page: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32);

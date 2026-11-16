@@ -20,7 +20,7 @@ use gpui::BorrowAppContext as _;
 use gpui::{AnyElement, App, Window};
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     rc::Rc,
     sync::Arc,
     time::Instant,
@@ -40,6 +40,7 @@ pub(crate) struct CefEngine {
     pages: Pages,
     ids: HashMap<TabId, u64>,
     shown: Rc<Cell<Option<u64>>>,
+    awake: HashSet<u64>,
     next_id: Rc<Cell<u64>>,
     gate: Rc<RefCell<PopupGate>>,
     pending: HashMap<u64, OsrProfile>,
@@ -74,11 +75,16 @@ impl CefEngine {
             pages,
             ids: HashMap::new(),
             shown,
+            awake: HashSet::new(),
             next_id: gate.borrow().next_id.clone(),
             gate: gate.clone(),
             pending: HashMap::new(),
             downloads,
         })
+    }
+    /// The one place that decides a page's visibility: shown, or kept awake.
+    fn visible(&self, id: u64) -> bool {
+        self.shown.get() == Some(id) || self.awake.contains(&id)
     }
     fn materialize(&mut self, id: u64, url: &str) {
         let Some(profile) = self.pending.get(&id) else {
@@ -87,7 +93,7 @@ impl CefEngine {
         match self.runtime.open(id, url, (1, 1), 1., profile.clone()) {
             Ok(()) => {
                 self.pending.remove(&id);
-                self.runtime.set_visible(id, self.shown.get() == Some(id));
+                self.runtime.set_visible(id, self.visible(id));
             }
             Err(error) => eprintln!("CEF open failed: {error}"),
         }
@@ -232,6 +238,8 @@ fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
         | OsrEvent::DownloadDone { .. }
         | OsrEvent::Frame
         | OsrEvent::DevTools { .. } => return None,
+        #[cfg(feature = "cef")]
+        OsrEvent::DevToolsRaw { message } => PageChange::DevToolsRaw(message),
         OsrEvent::Crashed => PageChange::Crashed,
         OsrEvent::DevToolsEvent {
             method,
@@ -262,10 +270,40 @@ impl PageEngine for CefEngine {
     ) -> super::engine::DevToolsReply {
         devtools::send(self, page, method, params)
     }
+    fn devtools_raw(&self, page: &TabId, message: &[u8]) {
+        if let Some(&id) = self.ids.get(page) {
+            let _ = self.runtime.devtools_raw(id, message);
+        }
+    }
+    fn devtools_raw_end(&self, page: &TabId) {
+        if let Some(&id) = self.ids.get(page) {
+            self.runtime.devtools_raw_end(id);
+        }
+    }
+    fn keep_awake(&mut self, page: &TabId, awake: bool) {
+        let Some(&id) = self.ids.get(page) else {
+            return;
+        };
+        if awake {
+            self.awake.insert(id);
+        } else {
+            self.awake.remove(&id);
+        }
+        if !self.pending.contains_key(&id) {
+            self.runtime.set_visible(id, self.visible(id));
+        }
+    }
+    fn set_hosted(&mut self, page: &TabId, hosted: bool) {
+        if let Some(id) = self.ids.get(page)
+            && let Some(source) = self.gate.borrow_mut().pages.get_mut(id)
+        {
+            source.hosted = hosted;
+        }
+    }
     fn enabled(&self) -> bool {
         true
     }
-    fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str) {
+    fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str, partition: &str) {
         let id = self.next_id.get() + 1;
         self.next_id.set(id);
         self.gate
@@ -288,7 +326,7 @@ impl PageEngine for CefEngine {
             id,
             match profile {
                 Profile::SignedIn => OsrProfile::SignedIn,
-                Profile::SignedOut => OsrProfile::SignedOut(owner.to_owned()),
+                Profile::SignedOut => OsrProfile::SignedOut(partition.to_owned()),
             },
         );
         if !url.is_empty() {
@@ -410,7 +448,7 @@ impl PageEngine for CefEngine {
             return;
         }
         if let Some(old) = old {
-            self.runtime.set_visible(old, false);
+            self.runtime.set_visible(old, self.visible(old));
         }
         if let Some(next) = next {
             self.runtime.set_visible(next, true);
@@ -422,6 +460,7 @@ impl PageEngine for CefEngine {
             self.downloads.remove_page(id);
             self.pending.remove(&id);
             self.gate.borrow_mut().remove(id);
+            self.awake.remove(&id);
             self.runtime.close(id);
             self.pages.borrow_mut().remove(&id);
             if self.shown.get() == Some(id) {

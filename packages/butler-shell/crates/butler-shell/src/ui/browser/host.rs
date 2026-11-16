@@ -56,7 +56,11 @@ impl Publisher {
             waiters,
         }
     }
-    #[cfg(feature = "cef")]
+    /// Publishes the current snapshot again, as on a fresh attachment.
+    pub(super) fn resend(&self) {
+        self.state.borrow_mut().0 += 1;
+        let _ = self.changed.unbounded_send(());
+    }
     pub(super) fn ready(&self) -> oneshot::Receiver<bool> {
         let (send, receive) = oneshot::channel();
         self.waiters.borrow_mut().push(send);
@@ -64,16 +68,17 @@ impl Publisher {
         receive
     }
     pub(super) fn changed(&self, tabs: &[Tab]) {
-        let tabs: Vec<_> = tabs.iter().map(|tab| json!({
+        let tabs: Vec<_> = tabs.iter().filter(|tab| tab.hosted.as_ref().is_none_or(|h| !h.internal)).map(|tab| json!({
             "id":tab.id.0.as_ref(), "owner":super::area::owner_key(&tab.owner),
             "profile":match tab.profile { Profile::SignedIn => "signed_in", Profile::SignedOut => "signed_out" },
-            "epoch":tab.epoch, "holder":"user", "url":tab.url, "title":tab.title,
+            "epoch":tab.epoch, "holder":tab.hosted.as_ref().map_or("user", |h| h.holder.name()), "url":tab.url, "title":tab.title,
             "status":format!("{:?}",tab.status).to_lowercase(), "favicon":tab.favicon,
             "opener":tab.opener.as_ref().map(|id|id.0.as_ref()), "popup":tab.popup,
             "dialog":tab.dialog, "blockedPopup":tab.blocked_popup,
             "canBack":tab.can_back, "canForward":tab.can_forward,
-            "agent":false,"driven":false,"sticky":false,"waiting":false,"busy":false,
-            "inUse":false,"paused":false,"privacyFrozen":false,"picking":false,"selectionCount":0,"stills":true
+            "agent":tab.hosted.is_some(),"driven":false,"sticky":tab.hosted.as_ref().is_some_and(|h| h.sticky),
+            "waiting":tab.hosted.as_ref().is_some_and(|h| h.waiting),"busy":false,
+            "inUse":tab.hosted.as_ref().is_some_and(|h| h.uses > 0),"paused":false,"privacyFrozen":false,"picking":false,"selectionCount":0,"stills":true
         })).collect();
         let next = json!({"tabs":tabs,"still_backlog":0});
         let mut state = self.state.borrow_mut();
