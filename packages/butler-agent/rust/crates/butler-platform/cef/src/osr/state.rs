@@ -20,6 +20,8 @@ pub(super) struct Page {
     pub(super) ime: OsrIme,
     pub(super) dialog: Option<(u64, super::dialogs::Callback)>,
     pub(super) next_dialog: u64,
+    pub(super) devtools: Option<cef::Registration>,
+    pub(super) next_devtools: i32,
     pub(super) downloads: super::downloads::Transfers,
 }
 impl Page {
@@ -38,6 +40,8 @@ impl Page {
             ime: OsrIme::default(),
             dialog: None,
             next_dialog: 0,
+            devtools: None,
+            next_devtools: 0,
             downloads: super::downloads::Transfers::default(),
         }
     }

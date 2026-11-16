@@ -4,6 +4,7 @@ use butler_ds::ui::blocks::metric_card::{MetricCard, MetricGrid, Trend};
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Inline, Space, Stack};
+use butler_ds::ui::selectable::{self, Break, Selection};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::animated_number::compact;
@@ -20,6 +21,10 @@ pub(super) fn stories() -> Vec<Story> {
         Story {
             name: "Static value",
             render: fixed,
+        },
+        Story {
+            name: "Selectable text",
+            render: selectable,
         },
     ]
 }
@@ -77,4 +82,17 @@ fn counting(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
 fn fixed(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
     let requests = lang.pick("Model requests", "모델 요청");
     MetricCard::text("m-static", "1.2K", requests).into_any_element()
+}
+
+fn selectable(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
+    let requests = lang.pick("Model requests", "모델 요청");
+    let selection = Selection::new("metric-card-selectable", window, cx);
+    selectable::scope(
+        selection,
+        MetricCard::text("m-selectable", "1.2K", requests)
+            .trend(Trend::Up)
+            .change("+12%")
+            .selectable(Break::Line),
+    )
+    .into_any_element()
 }

@@ -55,6 +55,8 @@ pub(crate) struct Tab {
     pub(crate) url: String,
     pub(crate) title: String,
     pub(crate) favicon: String,
+    pub(super) title_url: String,
+    pub(super) favicon_url: String,
     pub(crate) status: TabStatus,
     pub(crate) can_back: bool,
     pub(crate) can_forward: bool,
@@ -64,6 +66,10 @@ pub(crate) struct Tab {
     pub(crate) popup: bool,
     pub(crate) blocked_popup: Option<super::page_dialog::BlockedPopup>,
     pub(crate) dialog: Option<super::page_dialog::PageDialog>,
+    pub(crate) picking: bool,
+    pub(crate) selections: Vec<super::pick::Item>,
+    pub(crate) pick_hover: Option<super::pick::Hover>,
+    pub(crate) pick: super::pick::Session,
     pub(super) last_nav: Option<super::visits::Transition>,
 }
 
@@ -114,9 +120,10 @@ pub(crate) struct BrowserState {
 impl Global for BrowserState {}
 
 impl BrowserState {
-    pub(crate) fn init(cx: &mut App) {
+    /// `adapter`: the LUID of the GPU adapter that draws the page frames (`browser::init`).
+    pub(crate) fn init(adapter: Option<u64>, cx: &mut App) {
         let (sender, mut receiver) = mpsc::unbounded();
-        let engine = Self::engine(sender, cx);
+        let engine = Self::engine(sender, adapter, cx);
         let publisher = super::host::Publisher::start(cx);
         cx.set_global(Self {
             publisher,
@@ -137,13 +144,17 @@ impl BrowserState {
         .detach();
     }
 
-    fn engine(sender: mpsc::UnboundedSender<PageEvent>, cx: &mut App) -> Box<dyn PageEngine> {
+    fn engine(
+        sender: mpsc::UnboundedSender<PageEvent>,
+        adapter: Option<u64>,
+        cx: &mut App,
+    ) -> Box<dyn PageEngine> {
         #[cfg(feature = "cef")]
-        match super::cef::CefEngine::start(sender.clone(), cx) {
+        match super::cef::CefEngine::start(sender.clone(), adapter, cx) {
             Ok(engine) => return Box::new(engine),
             Err(error) => eprintln!("CEF unavailable: {error}"),
         }
-        let _ = cx;
+        let _ = (adapter, cx);
         Box::new(PlaceholderEngine::new(sender))
     }
 
@@ -189,6 +200,8 @@ impl BrowserState {
             url: url.clone(),
             title: String::new(),
             favicon: String::new(),
+            title_url: String::new(),
+            favicon_url: String::new(),
             status: TabStatus::Idle,
             can_back: false,
             can_forward: false,
@@ -196,6 +209,10 @@ impl BrowserState {
             popup: false,
             blocked_popup: None,
             dialog: None,
+            picking: false,
+            selections: Vec::new(),
+            pick_hover: None,
+            pick: Default::default(),
             last_nav: None,
         });
         if activate {
@@ -362,7 +379,11 @@ impl BrowserState {
     }
 
     pub(crate) fn resize(&mut self, id: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32) {
-        if self.tab(id).is_some() {
+        if let Some(tab) = self.tab(id) {
+            tab.pick.viewport.set((
+                f64::from(f32::from(size.width)),
+                f64::from(f32::from(size.height)),
+            ));
             self.engine.resize(id, size, scale);
         }
     }
@@ -383,6 +404,7 @@ impl BrowserState {
             return;
         };
         match event.change {
+            PageChange::DevToolsEvent { .. } => {}
             PageChange::Url(url) => {
                 let changed = tab.url != url;
                 tab.url = url;
@@ -391,8 +413,14 @@ impl BrowserState {
                     super::restore::changed(cx);
                 }
             }
-            PageChange::Title(title) => tab.title = title,
-            PageChange::Favicon(favicon) => tab.favicon = favicon,
+            PageChange::Title(title) => {
+                tab.title = title;
+                tab.title_url.clone_from(&tab.url);
+            }
+            PageChange::Favicon(favicon) => {
+                tab.favicon = favicon;
+                tab.favicon_url.clone_from(&tab.url);
+            }
             PageChange::Loading(true) => tab.status = TabStatus::Loading,
             PageChange::Loading(false) if tab.status != TabStatus::Crashed => {
                 tab.status = TabStatus::Idle;

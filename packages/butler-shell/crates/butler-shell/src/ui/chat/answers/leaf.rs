@@ -15,7 +15,7 @@ use butler_ds::ui::layout::{Columns, Grid, Inline, Space, Stack};
 use butler_ds::ui::media_frame::{Aspect, MediaFrame};
 use butler_ds::ui::pill_button::{PillButton, Surface};
 use butler_ds::ui::selectable::Break;
-use butler_ds::ui::typo::{TextAlign, Tone, Typo, Weight, Wrap};
+use butler_ds::ui::typo::{Tone, Typo, Weight};
 use gpui::{
     AnyElement, App, ElementId, ImageSource, InteractiveElement as _, IntoElement as _,
     ParentElement as _, Pixels, SharedString, StatefulInteractiveElement as _, Styled as _, div,
@@ -40,6 +40,7 @@ pub(super) fn render(block: &AnswerBlock, path: &str, cx: &mut App) -> AnyElemen
                 .iter()
                 .map(|item| ChecklistItem::new(item.text.clone(), item.done)),
         )
+        .selectable(Break::Line)
         .into_any_element(),
         AnswerBlock::Progress { items, .. } => progress(&base(path, "progress"), items, cx),
         AnswerBlock::Text { text, .. } => MarkdownContent::new(base(path, "text"), text.clone())
@@ -143,11 +144,7 @@ fn progress(
         )
         .label(item.label.clone())
         .meta(format!("{} / {max}{unit}", item.value))
-        .meta_element(
-            Typo::caption(format!("{} / {max}{unit}", item.value))
-                .tone(Tone::Tertiary)
-                .selectable(Break::Line),
-        );
+        .selectable(Break::Line);
         rows = rows.child(
             Stack::new()
                 .gap(Space::Xs)
@@ -224,14 +221,8 @@ fn facts(
             Stack::new()
                 .gap(Space::None)
                 .child(
-                    KeyValueRow::new(item.label.clone(), item.value.clone()).value_element(
-                        Typo::body(item.value.clone())
-                            .tone(Tone::Primary)
-                            .weight(Weight::Regular)
-                            .align(TextAlign::End)
-                            .wrap(Wrap::Anywhere)
-                            .selectable(Break::Line),
-                    ),
+                    KeyValueRow::new(item.label.clone(), item.value.clone())
+                        .selectable(Break::Line),
                 )
                 .children(source_line(
                     child_id(base, "source", index),
@@ -262,6 +253,7 @@ fn metrics(
             .collect::<Vec<_>>()
             .join(" ");
         let mut card = MetricCard::text(child_id(base, "card", index), value, item.label.clone())
+            .selectable(Break::Line)
             .trend(metric_trend(item.delta.as_deref(), item.direction.as_ref()));
         if let Some(delta) = &item.delta {
             card = card.change(delta.clone());

@@ -35,8 +35,8 @@ fn action(
     };
     let (entity, api_key) = (server.clone(), api_key.cloned());
     let next = next.on_click(move |_, _, cx| {
-        entity.update(cx, |server, cx| {
-            server.pick(option.clone(), api_key.clone(), cx);
+        entity.update(cx, |_, cx| {
+            CustomServer::pick(option.clone(), api_key.clone(), cx);
         });
     });
     if snap.connecting {

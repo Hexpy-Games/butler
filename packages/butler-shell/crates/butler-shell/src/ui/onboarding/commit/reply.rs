@@ -108,16 +108,21 @@ impl Reply {
         self.failed
     }
 
+    /// Drops the value and any running read, so the next live connection reads it again.
+    pub(crate) fn reset(&mut self) {
+        if self.value.is_some() || self.loading || self.failed {
+            self.epoch += 1;
+            self.value = None;
+            self.loading = false;
+            self.failed = false;
+        }
+    }
+
     /// Reads the reply language once a connection is live (the screen calls it each render; it
     /// reads once, and its answer re-renders).
     fn ensure_loaded(&mut self, connected: bool, cx: &mut Context<Self>) {
         if !connected {
-            if self.value.is_some() || self.loading || self.failed {
-                self.epoch += 1;
-                self.value = None;
-                self.loading = false;
-                self.failed = false;
-            }
+            self.reset();
             return;
         }
         if self.value.is_some() || self.loading || self.failed {

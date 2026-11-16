@@ -39,12 +39,12 @@ pub(crate) fn key_screen(
         (form.card, form.value.clone(), form.status)
     };
     let spec = providers::card(card_id);
-    let (connected, failed) = {
+    let (connected, pending) = {
         let commit = view.commit.read(cx);
-        (commit.connected().is_some(), commit.failed())
+        (commit.connected().is_some(), commit.pending())
     };
-    // `connecting`: the key is saved and the connection is being made.
-    let connecting = !connected && !failed && matches!(typed, Status::Valid | Status::Saved);
+    // `connecting`: a choice is submitted and not yet connected.
+    let connecting = pending && !connected;
     let status = if connected {
         Status::Valid
     } else if connecting {

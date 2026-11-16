@@ -2,7 +2,8 @@ use super::surface::Page;
 use butler_cef_host::osr::{OsrButton, OsrKey, OsrModifiers, OsrMouse, OsrMouseKind, OsrWheel};
 use gpui::{
     Context, Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
-    MouseUpEvent, NativeKeyData, Pixels, Point, ScrollWheelEvent, Window, WindowsKeyData, px,
+    MouseUpEvent, NativeKeyData, Pixels, Point, ScrollDelta, ScrollWheelEvent, Window,
+    WindowsKeyData, px,
 };
 
 impl Page {
@@ -13,11 +14,13 @@ impl Page {
         button: Option<MouseButton>,
         kind: OsrMouseKind,
         clicks: usize,
+        zoom: f32,
     ) {
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };
-        let point = position - self.state.borrow().bounds.origin;
+        // Page pixels are native logical pixels: content pixels times the window zoom.
+        let point = (position - self.state.borrow().bounds.origin) * zoom;
         runtime.mouse(
             self.id,
             OsrMouse {
@@ -47,41 +50,70 @@ impl Page {
             Some(e.button),
             OsrMouseKind::Down,
             e.click_count,
+            window.zoom(),
         );
     }
-    pub(super) fn mouse_up(&mut self, e: &MouseUpEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn mouse_up(
+        &mut self,
+        e: &MouseUpEvent,
+        window: &mut Window,
+        _: &mut Context<Self>,
+    ) {
         self.mouse(
             e.position,
             e.modifiers,
             Some(e.button),
             OsrMouseKind::Up,
             e.click_count,
+            window.zoom(),
         );
     }
-    pub(super) fn mouse_move(&mut self, e: &MouseMoveEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn mouse_move(
+        &mut self,
+        e: &MouseMoveEvent,
+        window: &mut Window,
+        _: &mut Context<Self>,
+    ) {
         self.mouse(
             e.position,
             e.modifiers,
             e.pressed_button,
             OsrMouseKind::Move,
             0,
+            window.zoom(),
         );
     }
-    pub(super) fn mouse_exit(&mut self, e: &MouseExitEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn mouse_exit(
+        &mut self,
+        e: &MouseExitEvent,
+        window: &mut Window,
+        _: &mut Context<Self>,
+    ) {
         self.mouse(
             e.position,
             e.modifiers,
             e.pressed_button,
             OsrMouseKind::Leave,
             0,
+            window.zoom(),
         );
     }
-    pub(super) fn wheel(&mut self, e: &ScrollWheelEvent, _: &mut Window, _: &mut Context<Self>) {
+    pub(super) fn wheel(
+        &mut self,
+        e: &ScrollWheelEvent,
+        window: &mut Window,
+        _: &mut Context<Self>,
+    ) {
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };
-        let point = e.position - self.state.borrow().bounds.origin;
-        let delta = e.delta.pixel_delta(px(line()));
+        let zoom = window.zoom();
+        let point = (e.position - self.state.borrow().bounds.origin) * zoom;
+        // Pixel deltas arrive in content pixels; line deltas become native pixels through `line()`.
+        let delta = match e.delta {
+            ScrollDelta::Pixels(delta) => delta * zoom,
+            ScrollDelta::Lines(_) => e.delta.pixel_delta(px(line())),
+        };
         runtime.wheel(
             self.id,
             OsrWheel {
@@ -105,18 +137,19 @@ impl Page {
         }
         let message = native.as_ref().and_then(NativeKeyData::windows).copied();
         let (windows_key_code, native_key_code) = codes(&key.key, message);
+        let unmodified_character = key_character(&key.key);
         let character = key
             .key_char
             .as_deref()
             .and_then(|s| s.encode_utf16().next())
-            .unwrap_or(0);
+            .unwrap_or(unmodified_character);
         runtime.key(
             self.id,
             OsrKey {
                 native_key_code,
                 windows_key_code,
                 character,
-                unmodified_character: key.key.encode_utf16().next().unwrap_or(0),
+                unmodified_character,
                 modifiers: flags(key.modifiers),
                 up,
                 // Without a key message: Windows sends Alt combinations as system keys, but not
@@ -181,24 +214,36 @@ fn codes(key: &str, message: Option<WindowsKeyData>) -> (i32, i32) {
 }
 /// No macOS key code: Chromium's invalid macOS native key code, which sets no DOM `code`.
 const NO_MAC_KEY: u16 = 0xFFFF;
-/// gpui's named keys: the Windows virtual key and the macOS key code.
-const NAMED_KEYS: [(&str, u16, u16); 15] = [
-    ("space", 0x20, 0x31),
-    ("enter", 0x0D, 0x24),
-    ("tab", 0x09, 0x30),
-    ("backspace", 0x08, 0x33),
-    ("escape", 0x1B, 0x35),
-    ("delete", 0x2E, 0x75),
-    ("insert", 0x2D, 0x72),
-    ("home", 0x24, 0x73),
-    ("end", 0x23, 0x77),
-    ("pageup", 0x21, 0x74),
-    ("pagedown", 0x22, 0x79),
-    ("left", 0x25, 0x7B),
-    ("up", 0x26, 0x7E),
-    ("right", 0x27, 0x7C),
-    ("down", 0x28, 0x7D),
+/// gpui's named keys: the Windows virtual key, macOS key code and unmodified character.
+const NAMED_KEYS: [(&str, u16, u16, u16); 16] = [
+    ("space", 0x20, 0x31, 0x20),
+    ("enter", 0x0D, 0x24, 0x0D),
+    ("return", 0x0D, 0x24, 0x0D),
+    ("tab", 0x09, 0x30, 0x09),
+    ("backspace", 0x08, 0x33, 0x08),
+    ("escape", 0x1B, 0x35, 0x1B),
+    ("delete", 0x2E, 0x75, 0x7F),
+    ("insert", 0x2D, 0x72, 0),
+    ("home", 0x24, 0x73, 0),
+    ("end", 0x23, 0x77, 0),
+    ("pageup", 0x21, 0x74, 0),
+    ("pagedown", 0x22, 0x79, 0),
+    ("left", 0x25, 0x7B, 0),
+    ("up", 0x26, 0x7E, 0),
+    ("right", 0x27, 0x7C, 0),
+    ("down", 0x28, 0x7D, 0),
 ];
+/// CEF characters describe what a key types, never the spelling of a named key.
+fn key_character(key: &str) -> u16 {
+    let mut chars = key.chars();
+    if chars.next().is_some() && chars.next().is_none() {
+        return key.encode_utf16().next().unwrap_or(0);
+    }
+    NAMED_KEYS
+        .iter()
+        .find(|(name, ..)| *name == key)
+        .map_or(0, |(_, _, _, character)| *character)
+}
 /// The US layout's space and punctuation keys, by their unshifted and shifted characters: the
 /// Windows virtual key (VK_OEM_*) and the macOS key code.
 const PUNCTUATION_KEYS: [(&str, u16, u16); 12] = [
@@ -235,7 +280,12 @@ fn key_codes(key: &str) -> (i32, i32) {
     let mut chars = key.chars();
     let single = chars.next().filter(|_| chars.next().is_none());
     let table = |(_, windows, mac): &(&str, u16, u16)| (*windows, *mac);
-    let named = || NAMED_KEYS.iter().find(|(name, ..)| *name == key).map(table);
+    let named = || {
+        NAMED_KEYS
+            .iter()
+            .find(|(name, ..)| *name == key)
+            .map(|(_, windows, mac, _)| (*windows, *mac))
+    };
     let function = || {
         let n = key.strip_prefix('f')?.parse::<u16>().ok()?;
         let mac = MAC_FUNCTION_KEYS.get(usize::from(n.checked_sub(1)?));

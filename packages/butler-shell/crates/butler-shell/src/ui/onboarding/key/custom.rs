@@ -56,10 +56,6 @@ struct Discovered {
 }
 
 /// Other: models on this computer and a server address.
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "FirstRunCustomServer's useState flags"
-)]
 pub(crate) struct CustomServer {
     /// The model chosen (the first when unset); the model picker shares it.
     choice: Option<SharedString>,
@@ -69,8 +65,6 @@ pub(crate) struct CustomServer {
     api_key: SharedString,
     busy: bool,
     failed: bool,
-    /// A model was sent to connect.
-    picking: bool,
 }
 
 impl EventEmitter<CustomEvent> for CustomServer {}
@@ -85,7 +79,6 @@ impl CustomServer {
             api_key: SharedString::default(),
             busy: false,
             failed: false,
-            picking: false,
         }
     }
 
@@ -111,13 +104,7 @@ impl CustomServer {
         cx.notify();
     }
 
-    fn pick(
-        &mut self,
-        option: LocalModelOption,
-        api_key: Option<SharedString>,
-        cx: &mut Context<Self>,
-    ) {
-        self.picking = true;
+    fn pick(option: LocalModelOption, api_key: Option<SharedString>, cx: &mut Context<Self>) {
         cx.emit(CustomEvent::Pick { option, api_key });
         cx.notify();
     }
@@ -157,7 +144,6 @@ impl CustomServer {
                 );
                 this.choice = None;
                 this.server = false;
-                this.picking = false;
                 cx.emit(CustomEvent::Models {
                     options: Rc::from(options),
                     api_key: key.map(Into::into),
@@ -185,10 +171,10 @@ pub(crate) fn custom_screen(
     }
 }
 
-/// `connected`, and whether the commit failed (its notice carries the Retry).
+/// `connected`, and whether a choice is pending (it stays so after a failure, until Retry).
 fn connection(view: &Onboarding, cx: &App) -> (bool, bool) {
     let commit = view.commit.read(cx);
-    (commit.connected().is_some(), commit.failed())
+    (commit.connected().is_some(), commit.pending())
 }
 
 /// `ModelLogo`: the local server's logo, else the server mark.
@@ -250,7 +236,7 @@ struct Snapshot {
     busy: bool,
     failed: bool,
     connected: bool,
-    /// A model was sent and the connection is being made.
+    /// A choice is submitted and not yet connected.
     connecting: bool,
 }
 
@@ -261,7 +247,7 @@ fn snapshot(
     cx: &App,
 ) -> Snapshot {
     let state = server.read(cx);
-    let (connected, commit_failed) = connection(view, cx);
+    let (connected, pending) = connection(view, cx);
     Snapshot {
         model: state.selected(options).cloned(),
         url: state.url.clone(),
@@ -269,7 +255,7 @@ fn snapshot(
         busy: state.busy,
         failed: state.failed,
         connected,
-        connecting: state.picking && !connected && !commit_failed,
+        connecting: pending && !connected,
     }
 }
 
@@ -295,7 +281,7 @@ fn server_action(
         let action = SetupWizardStepAction::new("first-run-custom-next", label)
             .forward()
             .on_click(move |_, _, cx| {
-                entity.update(cx, |server, cx| server.pick(option.clone(), None, cx));
+                entity.update(cx, |_, cx| CustomServer::pick(option.clone(), None, cx));
             });
         return if snap.connecting {
             action.disabled()

@@ -9,6 +9,7 @@ use gpui::{
 use crate::tokens::{Color, Length};
 use crate::ui::context::Ds;
 use crate::ui::layout::{MinWidth, Space, Stack, WithItem as _};
+use crate::ui::selectable::{Break, mark};
 use crate::ui::typo::{Tone, Typo, Weight};
 
 #[derive(IntoElement)]
@@ -17,6 +18,7 @@ pub struct ListRow {
     title: SharedString,
     description: Option<SharedString>,
     meta: Option<SharedString>,
+    selectable: Option<Break>,
 }
 
 impl ListRow {
@@ -26,6 +28,7 @@ impl ListRow {
             title: title.into(),
             description: None,
             meta: None,
+            selectable: None,
         }
     }
 
@@ -42,6 +45,12 @@ impl ListRow {
     /// A date, a size, a state.
     pub fn meta(mut self, meta: impl Into<SharedString>) -> Self {
         self.meta = Some(meta.into());
+        self
+    }
+
+    /// The row's text joins the enclosing selection scope; `lead` is the break before the title.
+    pub fn selectable(mut self, lead: Break) -> Self {
+        self.selectable = Some(lead);
         self
     }
 }
@@ -63,21 +72,29 @@ impl RenderOnce for ListRow {
                     .flex_shrink(1.)
                     .flex_basis(relative(0.5))
                     .min_w_0()
-                    .child(Typo::body(self.title).truncate().weight(Weight::Regular)),
+                    .child(mark(
+                        Typo::body(self.title).truncate().weight(Weight::Regular),
+                        self.selectable,
+                    )),
             )
             .children(self.meta.map(|meta| {
-                Typo::caption(meta)
-                    .tone(Tone::Tertiary)
-                    .wrap(crate::ui::typo::Wrap::Anywhere)
+                mark(
+                    Typo::caption(meta)
+                        .tone(Tone::Tertiary)
+                        .wrap(crate::ui::typo::Wrap::Anywhere),
+                    self.selectable.map(|_| Break::Line),
+                )
             }));
         let content = Stack::new()
             .gap(Space::Xs)
             .min_width(MinWidth::Zero)
             .child(heading)
-            .children(
-                self.description
-                    .map(|text| Typo::caption(text).tone(Tone::Secondary)),
-            );
+            .children(self.description.map(|text| {
+                mark(
+                    Typo::caption(text).tone(Tone::Secondary),
+                    self.selectable.map(|_| Break::Line),
+                )
+            }));
         // The icon box is one title line tall, so it centres on the title's first line.
         let icon = self.icon.map(|icon| {
             div()

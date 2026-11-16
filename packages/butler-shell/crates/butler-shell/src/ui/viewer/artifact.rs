@@ -280,7 +280,7 @@ fn image(file_id: &str, window: &mut Window, cx: &mut App) -> AnyElement {
         return Typo::caption(copy.loading).into_any_element();
     };
     let size = render.size(0);
-    let scale = window.scale_factor();
+    let scale = window.scale_factor() / window.zoom();
     let natural = (size.width.0 as f32 / scale, size.height.0 as f32 / scale);
     ArtifactPreviewImage::new(ImageSource::Image(source), natural).into_any_element()
 }

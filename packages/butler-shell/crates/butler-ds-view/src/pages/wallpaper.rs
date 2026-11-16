@@ -6,7 +6,7 @@ use std::sync::Arc;
 use butler_ds::tokens::Length;
 use butler_ds::ui::blocks::wallpaper::{
     ImageCache, ImageFit, ImageLoader, ImageVariant, Wallpaper, WallpaperSource, WallpaperTone,
-    builtin_poster,
+    builtin_poster, decode_picture,
 };
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Space, Stack};
@@ -119,9 +119,7 @@ fn playground(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let (choice, change) = chosen("wallpaper-choice", "butler.riso-print", window, cx);
     let source = match choice.as_ref() {
         "none" => WallpaperSource::None,
-        module => WallpaperSource::Live {
-            module: module.to_owned().into(),
-        },
+        module => WallpaperSource::live(module.to_owned()),
     };
     let layer = if choice.as_ref() == "image" {
         image_layer(ImageFit::Cover, 0.1)
@@ -164,11 +162,16 @@ fn image_layer(fit: ImageFit, dim: f32) -> Wallpaper {
         fit,
         dim,
         blur: 0.,
+        filter: None,
     };
     let wallpaper = Wallpaper::new(source);
-    match ImageCache::new(showcase_loader()).image(&asset, ImageVariant::Full) {
-        Ok(picture) => wallpaper.picture(picture),
-        Err(_) => wallpaper,
+    let picture = ImageCache::new(showcase_loader())
+        .image(&asset, ImageVariant::Full)
+        .ok()
+        .and_then(|picture| decode_picture(&picture.bytes));
+    match picture {
+        Some(picture) => wallpaper.picture(picture),
+        None => wallpaper,
     }
 }
 
@@ -205,9 +208,7 @@ fn image_wallpaper(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement 
 
 fn viewport_scope(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
-    let silk = WallpaperSource::Live {
-        module: "butler.silk".into(),
-    };
+    let silk = WallpaperSource::live("butler.silk");
     // `Wallpaper.showcase.module.css:11-21`: a 220px stage that centres its caption over the layer.
     div()
         .id("wallpaper-viewport")

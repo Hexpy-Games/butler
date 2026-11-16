@@ -132,6 +132,15 @@ async fn image_assets_collect_dedupe_crop_guard_serve_and_sweep() -> Result<(), 
     verify_delivery(&s, &first).await?;
     save_evidence(&s, &page, &crop, &files_before[0].0).await?;
     call(&admin, session, "tab.close", &tab, json!({})).await?;
+    // Idle starts when the browser is reaped, 60 s after its last tab; a running browser keeps its own profile's books (#2249).
+    let marker = s.sandbox.data.to_string_lossy().into_owned();
+    tokio::time::timeout(Duration::from_secs(90), async {
+        while !super::support::browser_processes(&marker).is_empty() {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    })
+    .await
+    .expect("the browser process tree ends within 90 s");
     let mut watch = crate::idle_resources::writes::Watch::open_after_quiet(&s.sandbox.data).await?;
     tokio::time::sleep(Duration::from_millis(500)).await;
     watch.assert_unchanged();

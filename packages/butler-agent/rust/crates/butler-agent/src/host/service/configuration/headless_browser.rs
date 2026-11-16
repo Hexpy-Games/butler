@@ -9,10 +9,16 @@
 //! of the installed App's (with `BUTLER_BROWSER_APP_DIR`, the App directory a
 //! development Electron loads).
 //! `BUTLER_BROWSER_CEF_HOST`: a staged CEF host the headless backend launches instead of Chrome for Testing.
+//! A CEF host, when present, serves instead of the hidden Electron host: with it set to a file (and the
+//! headless backend on), the installed App's Electron is not started; `BUTLER_BROWSER_APP` naming
+//! an Electron still wins.
 use butler_gateway::gateway::HeadlessBrowserConfig;
 use butler_platform::app_browser::AppElectron;
 use butler_runtime::browser::{AppHostSource, InstallSource};
-use std::{env, path::Path};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
 fn env_value(name: &str) -> Option<String> {
     env::var(name)
@@ -30,22 +36,28 @@ pub(super) fn headless_browser(
         Some("off") => false,
         _ => configured.unwrap_or(true),
     };
+    let cef_host: Option<PathBuf> = env_value("BUTLER_BROWSER_CEF_HOST").map(Into::into);
     Some(HeadlessBrowserConfig {
         enabled,
         root: data_root.join(butler_platform::data_paths::HEADLESS_BROWSER),
-        app_host: app_host_source(),
+        app_host: app_host_source(
+            env_value("BUTLER_BROWSER_APP"),
+            enabled && cef_host.as_deref().is_some_and(Path::is_file),
+        ),
         app_host_root: data_root.join(butler_platform::data_paths::APP_HOST_BROWSER),
         install: InstallSource {
             cache_root: env_value("BUTLER_BROWSER_CACHE_DIR")
                 .map_or_else(|| data_root.join("cache/browser"), Into::into),
             base_url: env_value("BUTLER_BROWSER_DOWNLOAD_BASE"),
-            cef_host: env_value("BUTLER_BROWSER_CEF_HOST").map(Into::into),
+            cef_host,
         },
     })
 }
 
-fn app_host_source() -> AppHostSource {
-    match env_value("BUTLER_BROWSER_APP") {
+/// The hidden host's Electron. A CEF host the headless backend runs takes its place.
+fn app_host_source(app: Option<String>, cef_host: bool) -> AppHostSource {
+    match app {
+        None if cef_host => AppHostSource::Off,
         None => AppHostSource::Installed,
         Some(value) if value == "off" => AppHostSource::Off,
         Some(executable) => AppHostSource::Electron(AppElectron {

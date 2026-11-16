@@ -164,6 +164,11 @@ impl Commit {
         self.failed
     }
 
+    /// `pending`: a choice is submitted and not yet connected.
+    pub(crate) fn pending(&self) -> bool {
+        self.pending.is_some()
+    }
+
     /// `committing`: a commit is running.
     pub(crate) fn committing(&self) -> bool {
         self.in_flight == Some(self.generation)

@@ -40,6 +40,10 @@ pub(crate) enum PageCommand {
 }
 
 pub(crate) enum PageChange {
+    DevToolsEvent {
+        method: String,
+        params: serde_json::Value,
+    },
     Url(String),
     Title(String),
     Favicon(String),
@@ -72,7 +76,18 @@ pub(crate) struct PageEvent {
     pub(crate) change: PageChange,
 }
 
+pub(crate) type DevToolsReply =
+    futures::channel::oneshot::Receiver<anyhow::Result<serde_json::Value>>;
+
 pub(crate) trait PageEngine: 'static {
+    fn supports_devtools(&self) -> bool {
+        false
+    }
+    fn devtools(&self, _page: &TabId, _method: &str, _params: &serde_json::Value) -> DevToolsReply {
+        let (sender, receiver) = futures::channel::oneshot::channel();
+        let _ = sender.send(Err(anyhow::anyhow!("DevTools unavailable")));
+        receiver
+    }
     /// Whether this build can browse (Electron's `enabled`).
     fn enabled(&self) -> bool;
     /// A page for `page`; `url` is empty for a blank page.

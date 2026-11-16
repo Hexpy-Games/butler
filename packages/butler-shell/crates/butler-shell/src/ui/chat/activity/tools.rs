@@ -223,7 +223,10 @@ fn tool_row(
     let glyph = icon_px(icon, Ds::get(cx).len(Length::IconSizeMd));
     let id = SharedString::from(format!("tool-row:{}", row.id));
     let head = match details_of(row, turn, thinking.is_some(), lang) {
-        None => ListRow::new(title).icon(glyph).into_any_element(),
+        None => ListRow::new(title)
+            .icon(glyph)
+            .selectable(Break::Line)
+            .into_any_element(),
         Some(details) => {
             let state = window.use_keyed_state(
                 SharedString::from(format!("{id}:disclosure")),

@@ -6,6 +6,8 @@ use super::ImageVariant;
 pub const DARK_DIM_STEP: f32 = 0.2;
 /// Long edge (px) of an asset's thumbnail. // DS: imageMath.ts:9
 pub const THUMBNAIL_EDGE: f32 = 480.;
+/// Blur radius at `blur: 1`, as a fraction of the canvas's short edge. // DS: imageMath.ts:7
+pub(super) const IMAGE_BLUR_RADIUS: f32 = 0.04;
 /// Dims up to this are not drawn. // DS: imageMath.ts:37
 pub const DIM_SKIP: f32 = 0.05;
 

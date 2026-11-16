@@ -1,6 +1,8 @@
 //! Main-thread, in-process CEF off-screen rendering. No gpui types cross this boundary.
 //! macOS copies frames into IOSurface-backed CoreVideo buffers (gpu.rs, frame_pool.rs);
 //! Windows copies them into pooled D3D11 shared textures (d3d.rs, d3d_pool.rs).
+#[cfg(cef_osr)]
+mod devtools;
 mod ime_state;
 mod types;
 #[cfg(not(cef_osr))]
@@ -126,8 +128,11 @@ impl OsrRuntime {
         #[cfg(target_os = "macos")]
         crate::mac::install_application();
         let _ = cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0);
+        let adapter = config.adapter_luid;
+        #[cfg(windows)]
+        d3d::set_adapter(adapter);
         let settings = settings(config)?;
-        let mut app = pump::OsrApp::new(pump::Pump::new(schedule.clone()));
+        let mut app = pump::OsrApp::new(pump::Pump::new(schedule.clone()), adapter);
         let args = cef::args::Args::new();
         if cef::initialize(
             Some(args.as_main_args()),
@@ -376,6 +381,7 @@ fn settings(config: OsrConfig) -> Result<cef::Settings, OsrError> {
         profile_dir,
         locale,
         user_agent,
+        adapter_luid: _,
     } = config;
     std::fs::create_dir_all(&profile_dir).map_err(|e| OsrError(e.to_string()))?;
     #[cfg(target_os = "macos")]
