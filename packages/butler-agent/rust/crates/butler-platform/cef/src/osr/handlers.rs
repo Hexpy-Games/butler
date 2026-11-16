@@ -83,6 +83,11 @@ cef::wrap_life_span_handler! {
             let mut p = self.shared.borrow_mut();
             p.browser = browser.cloned();
             p.popup = None;
+            // Quit already closed this page: a browser created after that must close too, or the
+            // teardown waits for it until the 3 s limit and skips cef::shutdown.
+            if p.closing && let Some(host) = browser.and_then(|b| b.host()) {
+                host.close_browser(1);
+            }
         }
         fn do_close(&self, _browser: Option<&mut Browser>) -> i32 {
             if !self.shared.borrow().closing { self.events.emit(OsrEvent::CloseRequested); }

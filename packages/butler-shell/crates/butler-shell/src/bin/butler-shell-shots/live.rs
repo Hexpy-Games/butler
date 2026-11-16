@@ -241,7 +241,7 @@ pub(super) fn run(
     for line in io::stdin().lock().lines() {
         let line = line?;
         if line == "quit" {
-            end(&mut h);
+            return end(&mut h);
         }
         if let Err(error) = command(&mut h, dir, &line) {
             let _ = h.shot(dir, "failure");
@@ -262,12 +262,15 @@ pub(super) fn run(
     end(&mut h)
 }
 
-/// The App's Quit after `lifecycle::quit`: AppKit's `terminate:` runs the quit observers and the
-/// process exits without dropping globals. A drop would shut CEF down and hide a missing hook.
-fn end(h: &mut Harness) -> ! {
+/// The App's Quit after `lifecycle::quit`: the quit observers run once (`App::shutdown` removes
+/// them, so `HeadlessAppContext::drop` runs none), then the CEF runtime is kept from dropping as
+/// AppKit's `terminate:` would, and the harness returns so the leak check and `Harness::drop` run.
+fn end(h: &mut Harness) -> anyhow::Result<()> {
     h.cx.update(gpui::App::shutdown);
-    let _ = io::stdout().flush();
-    std::process::exit(0)
+    #[cfg(feature = "cef")]
+    h.cx.update(|cx| ui::browser::keep_runtime_alive(cx));
+    io::stdout().flush()?;
+    Ok(())
 }
 
 /// Both rows must be present, in the requested sidebar order.

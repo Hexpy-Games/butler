@@ -48,6 +48,16 @@ pub(crate) fn shutdown(cx: &mut gpui::App) {
     }
 }
 
+/// A quitting process never drops the engine (AppKit `terminate:` exits without dropping globals),
+/// and dropping it would shut CEF down and hide a missing quit hook. The shot harness returns
+/// normally instead of exiting, so it leaks one strong reference to keep that behaviour.
+#[cfg(feature = "cef")]
+pub(crate) fn keep_runtime_alive(cx: &gpui::App) {
+    if cx.has_global::<downloads::DownloadsRuntime>() {
+        std::mem::forget(cx.global::<downloads::DownloadsRuntime>().0.clone());
+    }
+}
+
 /// Electron's `openLink`: a user-owned tab in the standalone browser.
 pub(crate) fn open_link(url: &str, cx: &mut gpui::App) {
     if !url::Url::parse(url).is_ok_and(|u| matches!(u.scheme(), "http" | "https")) {
