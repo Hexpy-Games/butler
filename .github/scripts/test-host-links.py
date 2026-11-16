@@ -64,6 +64,11 @@ class HostLinks(unittest.TestCase):
             guard.check_macho('agent', 'agent:\n', ' cmd LC_RPATH\n path /usr/local/lib (offset 12)\n')
         with self.assertRaisesRegex(RuntimeError, 'outside allowed'):
             guard.check_macho('agent', 'agent:\n\t/usr/local/lib/libzstd.1.dylib (compatibility version 1.0.0)\n', '')
+        own = 'lib:\n\t./libexample.dylib (compatibility version 1.0.0, current version 1.0.0)\n'
+        own_id = ' cmd LC_ID_DYLIB\n name ./libexample.dylib (offset 24)\n'
+        guard.check_macho('libexample.dylib', own, own_id)
+        with self.assertRaisesRegex(RuntimeError, 'outside allowed'):
+            guard.check_macho('libexample.dylib', own, own_id + ' cmd LC_LOAD_DYLIB\n name ./libother.dylib (offset 24)\n')
 
     # test-category: security
     def test_elf_loader_metadata(self):
