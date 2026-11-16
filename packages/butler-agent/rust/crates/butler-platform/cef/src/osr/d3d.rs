@@ -5,10 +5,11 @@
 //! signals the frame's acquire fence, flushes, and waits for the copy before returning, since CEF
 //! reuses the source texture after the callback.
 //!
-//! Adapter: CEF does not expose its GPU process's adapter LUID, so the device uses the default
-//! hardware adapter, as CEF's GPU process does. On hybrid-GPU machines a per-app GPU preference
-//! (Windows graphics settings) can put the shell and `butler_cef_host.exe` on different adapters;
-//! opening CEF's texture then fails and paint is skipped with a logged error.
+//! Adapter: shared textures and fences open only on the adapter that created them. The producer
+//! follows the consumer: with `OsrConfig::adapter_luid` (the adapter of the renderer that shows
+//! the frames) this device is created on that adapter and CEF's GPU process is told to use it
+//! too (pump.rs). Without it both use their default adapter, which on hybrid-GPU machines can
+//! differ from the consumer's; opening a texture then fails and paint is skipped with an error.
 #![allow(unsafe_code, reason = "D3D11 interop; see SAFETY comments")]
 use super::{
     OsrError, OsrFrame,
@@ -19,13 +20,20 @@ use cef::{ImplBrowser, ImplBrowserHost};
 use std::{
     cell::RefCell,
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
+    sync::{
+        OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 use windows::{
     Win32::{
-        Foundation::{HANDLE, HMODULE, WAIT_OBJECT_0},
+        Foundation::{HANDLE, HMODULE, LUID, WAIT_OBJECT_0},
         Graphics::{
-            Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1},
+            Direct3D::{
+                D3D_DRIVER_TYPE, D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN,
+                D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_11_1,
+            },
             Direct3D11::{
                 D3D11_BOX, D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAP_READ,
                 D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC,
@@ -36,7 +44,7 @@ use windows::{
                 Common::{
                     DXGI_FORMAT_B8G8R8A8_TYPELESS, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC,
                 },
-                IDXGIAdapter,
+                CreateDXGIFactory2, DXGI_CREATE_FACTORY_FLAGS, IDXGIAdapter, IDXGIFactory4,
             },
         },
         System::Threading::{CreateEventW, WaitForSingleObject},
@@ -51,19 +59,70 @@ thread_local! {
     /// One device for every page on the UI thread; pages share it instead of creating their own.
     static DEVICE: RefCell<Option<Device>> = const { RefCell::new(None) };
 }
+/// The consumer's adapter LUID (`OsrConfig::adapter_luid`), process-wide like CEF itself, so
+/// every thread's devices (the copy device, `read_bgra_pixel`) use the same adapter.
+static ADAPTER: OnceLock<Option<u64>> = OnceLock::new();
+/// Whether the missing-adapter fallback has been logged.
+static FALLBACK_LOGGED: AtomicBool = AtomicBool::new(false);
+
+/// Set by the runtime before CEF starts; CEF starts once per process, so this is set once.
+pub(super) fn set_adapter(luid: Option<u64>) {
+    let _ = ADAPTER.set(luid);
+}
+fn configured_adapter() -> Option<u64> {
+    ADAPTER.get().copied().flatten()
+}
 
 #[derive(Clone)]
 struct Device {
     device: ID3D11Device5,
     context: ID3D11DeviceContext4,
 }
-fn create_device() -> Result<Device, OsrError> {
+/// The adapter with this LUID, or an error when it is gone (for example after a driver reset).
+fn adapter(luid: u64) -> Result<IDXGIAdapter, OsrError> {
+    let [h0, h1, h2, h3, l0, l1, l2, l3] = luid.to_be_bytes();
+    let luid = LUID {
+        LowPart: u32::from_be_bytes([l0, l1, l2, l3]),
+        HighPart: i32::from_be_bytes([h0, h1, h2, h3]),
+    };
+    // SAFETY: Creating a factory and looking up an adapter have no preconditions.
+    unsafe {
+        let factory: IDXGIFactory4 = CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0))
+            .map_err(failed("create DXGI factory"))?;
+        factory.EnumAdapterByLuid(luid)
+    }
+    .map_err(failed("find the consumer's GPU adapter"))
+}
+/// A device on `luid`'s adapter (`None`: the default adapter).
+///
+/// A LUID no adapter has any more (the adapter was removed, or a driver update reassigned LUIDs)
+/// falls back to the default adapter, logged once, as Chromium's GPU process does for an unknown
+/// `use-adapter-luid`; both sides then land on the same default. Known limitation: an adapter
+/// change after startup is not followed. CEF's switch is fixed when CEF starts, so following the
+/// consumer to a new adapter needs a restart.
+fn create_device(luid: Option<u64>) -> Result<Device, OsrError> {
+    let adapter = luid.and_then(|luid| {
+        adapter(luid)
+            .inspect_err(|error| {
+                if !FALLBACK_LOGGED.swap(true, Ordering::Relaxed) {
+                    eprintln!("CEF OSR: using the default GPU adapter: {error}");
+                }
+            })
+            .ok()
+    });
+    // An explicit adapter requires the UNKNOWN driver type; HARDWARE picks the default adapter.
+    let driver: D3D_DRIVER_TYPE = if adapter.is_some() {
+        D3D_DRIVER_TYPE_UNKNOWN
+    } else {
+        D3D_DRIVER_TYPE_HARDWARE
+    };
     let (mut device, mut context) = (None, None);
-    // SAFETY: Out slots are valid; a null adapter selects the default hardware adapter.
+    // SAFETY: Out slots are valid; the adapter, when given, is live for the call and paired with
+    // the UNKNOWN driver type, and a null adapter with HARDWARE selects the default adapter.
     unsafe {
         D3D11CreateDevice(
-            None::<&IDXGIAdapter>,
-            D3D_DRIVER_TYPE_HARDWARE,
+            adapter.as_ref(),
+            driver,
             HMODULE::default(),
             D3D11_CREATE_DEVICE_BGRA_SUPPORT,
             Some(&[D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0]),
@@ -104,7 +163,7 @@ impl GpuCopy {
             }) {
                 return Ok(device.clone());
             }
-            let device = create_device()?;
+            let device = create_device(configured_adapter())?;
             *cached = Some(device.clone());
             Ok::<_, OsrError>(device)
         })?;
@@ -271,6 +330,7 @@ impl super::OsrRuntime {
 
 /// Read one BGRA pixel of a frame on a separate device, as a consumer would: open the shared
 /// texture and fences, wait for the frame's value, copy the pixel to a staging texture, release.
+/// Any thread: the device is created on the runtime's adapter (`OsrConfig::adapter_luid`).
 pub fn read_bgra_pixel(frame: &OsrFrame, x: usize, y: usize) -> Result<[u8; 4], OsrError> {
     let (width, height) = frame.size();
     let (Ok(x), Ok(y)) = (u32::try_from(x), u32::try_from(y)) else {
@@ -279,7 +339,8 @@ pub fn read_bgra_pixel(frame: &OsrFrame, x: usize, y: usize) -> Result<[u8; 4], 
     if x >= width || y >= height {
         return Err(OsrError("pixel outside the frame".into()));
     }
-    let Device { device, context } = create_device()?;
+    // The producer's adapter (process-wide): the frame's resources open only there.
+    let Device { device, context } = create_device(configured_adapter())?;
     let staging = staging_pixel(&device)?;
     let (mut fence, mut release): (Option<ID3D11Fence>, Option<ID3D11Fence>) = (None, None);
     let region = D3D11_BOX {
