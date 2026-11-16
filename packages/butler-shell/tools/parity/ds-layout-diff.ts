@@ -29,7 +29,7 @@ const scrollerRows: Scroller[] = [];
 const oneSidedScrollers: Array<{ page: string; story: string; key: string; status: string }> = [];
 const isScroller = (p: Part) => p.key.startsWith("slot:") || p.key.startsWith("scroll:");
 const frameOf = (key: string) => key.startsWith("scroll:") ? `${key}:frame` : key.replace(/^(slot:.*)#(\d+)$/, "$1:frame#$2");
-const flag = (h: number, frame: number) => h > frame + TOLERANCE ? "scroller>frame" : "=";
+const flag = (h: number, frame: number) => h > frame + TOLERANCE ? "scroller>frame" : h < frame - TOLERANCE ? "scroller<frame" : "=";
 const over = (m: Line) => Math.max(Math.abs(m.dx), Math.abs(m.dy), Math.abs(m.dw), Math.abs(m.dh)) > TOLERANCE;
 let mapped = 0, compared = 0, oneSided = 0, withControls = 0, equalCount = 0, countMismatch = 0;
 for (const { page } of scene.pages) {

@@ -185,7 +185,27 @@ const SCROLL_MARGIN: f32 = 16.;
 /// The scrollers the layout diff compares, by the web `data-slot` (`data-test-class` for the sidebar's):
 /// each publishes `slot:<name>#<k>` (the scrolling element) and `slot:<name>:frame#<k>` (its parent)
 /// per frame (`butler_ds::ui::control::slot_anchor`).
-const SCROLLERS: [&str; 3] = ["sidebar-scroll", "conversation-aside-scroll", "scroll-area"];
+const SCROLLERS: [&str; 4] = [
+    "sidebar-scroll",
+    "conversation-aside-scroll",
+    "management-page-aside-scroll",
+    "scroll-area",
+];
+
+/// The `k`th `slot:<name><suffix>#k`; a shell that has one instance names it plain, `slot:<name><suffix>`.
+fn slot_bounds(
+    cx: &mut HeadlessAppContext,
+    handle: AnyWindowHandle,
+    name: &str,
+    suffix: &str,
+    k: usize,
+) -> anyhow::Result<Option<gpui::Bounds<gpui::Pixels>>> {
+    let numbered = cx.debug_bounds(handle, &format!("slot:{name}{suffix}#{k}"))?;
+    if numbered.is_none() && k == 0 {
+        return cx.debug_bounds(handle, &format!("slot:{name}{suffix}"));
+    }
+    Ok(numbered)
+}
 
 /// Each story canvas and the controls whose centre lies inside it, relative to the canvas.
 /// `control-<n>` is numbered per frame over the whole page (`butler_ds::ui::control::parts`);
@@ -203,8 +223,8 @@ fn parts(
     for name in SCROLLERS {
         let mut pairs = Vec::new();
         while let (Some(scroller), Some(frame)) = (
-            cx.debug_bounds(handle, &format!("slot:{name}#{}", pairs.len()))?,
-            cx.debug_bounds(handle, &format!("slot:{name}:frame#{}", pairs.len()))?,
+            slot_bounds(cx, handle, name, "", pairs.len())?,
+            slot_bounds(cx, handle, name, ":frame", pairs.len())?,
         ) {
             pairs.push((scroller, frame));
         }
