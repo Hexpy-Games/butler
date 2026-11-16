@@ -234,8 +234,11 @@ impl Shell {
         crate::ui::manage::library::detail::install(&self.manage_ctx(), cx);
         crate::ui::manage::install_window(&self.manage_ctx(), cx);
         let manage = self.manage_ctx();
-        self.composer
-            .update(cx, |composer, _| composer.manage = Some(manage.clone()));
+        let focus = self.focus.clone();
+        self.composer.update(cx, |composer, _| {
+            composer.manage = Some(manage.clone());
+            composer.shell_focus = Some(focus);
+        });
         let weak = cx.entity().downgrade();
         crate::ui::inspector::install_epic_host(cx, manage, move |session, cx| {
             weak.upgrade()?.read(cx).sidebar.epic_of(session)

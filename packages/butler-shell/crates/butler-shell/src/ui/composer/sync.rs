@@ -1,6 +1,6 @@
 //! The editor and the composer state (`saveDraftFromEditor`, `syncEditorFromStore`,
 //! `composerFocus`), and the context donut's inputs and requests.
-use gpui::{Context, Entity, Window};
+use gpui::{Context, Entity, Focusable as _, Window};
 
 use super::context::{ComposerContextControl, ComposerContextEvent, load_quota, load_usage};
 use super::editor::FocusPlacement;
@@ -51,8 +51,23 @@ impl Composer {
         self.recompute(cx);
     }
 
-    /// `focusComposer`: the request of `ComposerState::request_focus` is taken once.
+    /// A chat opened. Electron rebuilds the editor per chat (`Conversation.tsx`
+    /// `<ErrorBoundary key={activeChatId}>`), so the card folds and the caret leaves it.
+    pub(crate) fn chat_opened(&mut self, cx: &mut Context<Self>) {
+        self.fold.engaged = false;
+        self.release_focus = true;
+        cx.notify();
+    }
+
+    /// `focusComposer`: the request of `ComposerState::request_focus` is taken once, after a
+    /// chat opened since the last frame took the caret out of the field.
     pub(super) fn take_focus_request(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if std::mem::take(&mut self.release_focus)
+            && self.focus_handle(cx).is_focused(window)
+            && let Some(f) = &self.shell_focus
+        {
+            window.focus(f, cx);
+        }
         let requested =
             ComposerState::update(cx, |draft| std::mem::take(&mut draft.focus_requested));
         if requested && self.disabled.is_none() {

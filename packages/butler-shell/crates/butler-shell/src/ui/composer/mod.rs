@@ -143,8 +143,10 @@ pub(crate) struct Composer {
     git_notice_dismissed: bool,
     /// Why the composer cannot be used (shown as a tooltip), when it cannot.
     pub(crate) disabled: Option<SharedString>,
-    /// Where focus goes when a click outside folds the composer.
+    /// Where focus goes when a click outside folds the composer, or a chat opens.
     pub(crate) shell_focus: Option<FocusHandle>,
+    /// A chat opened: the field gives up focus on the next frame.
+    release_focus: bool,
     /// The card's height as last drawn.
     height: Rc<Cell<f32>>,
     /// Where a dropped library card attaches; the shell sets it once built.
@@ -195,6 +197,7 @@ impl Composer {
             git_notice_dismissed: false,
             disabled: None,
             shell_focus: None,
+            release_focus: false,
             height: Rc::new(Cell::new(48.)),
             manage: None,
             _subscriptions: subscriptions,

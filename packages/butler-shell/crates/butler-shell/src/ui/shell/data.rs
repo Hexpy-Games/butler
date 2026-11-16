@@ -210,8 +210,6 @@ impl Shell {
             self.sidebar.new_chat_parent = None;
         }
         self.show_view(false, cx);
-        // `useComposerPresentation`: opening a chat, new or not, folds the composer.
-        self.composer.update(cx, |c, _| c.fold());
         self.reload_open_chat(cx);
         self.sync_composer(cx);
         cx.notify();
@@ -228,10 +226,6 @@ impl Shell {
         self.chat_opened(cx);
         self.sidebar.new_chat_parent = parent;
         self.show_view(false, cx);
-        self.composer.update(cx, |c, cx| {
-            c.fold();
-            cx.notify();
-        });
         self.sync_composer(cx);
         cx.notify();
     }

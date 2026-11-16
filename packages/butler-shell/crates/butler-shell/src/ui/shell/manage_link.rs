@@ -11,6 +11,7 @@ use gpui::{
 
 use super::Shell;
 use super::navigation::Navigation;
+use crate::ui::composer::Composer;
 use crate::ui::i18n::manage::words;
 use crate::ui::manage::canon::plan::CanonTrustDialog;
 use crate::ui::manage::{
@@ -221,6 +222,7 @@ impl Shell {
     pub(crate) fn chat_opened(&mut self, cx: &mut Context<Self>) {
         self.manage.observer = None;
         self.store_view(View::Session, cx);
+        self.composer.update(cx, Composer::chat_opened);
     }
 
     /// `openProjectDashboard`: the dashboard's activation moves its topic, and the sidebar
