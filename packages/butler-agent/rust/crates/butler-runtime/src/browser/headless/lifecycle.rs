@@ -141,7 +141,13 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
             () = tokio::time::sleep_until(wake.into()) => {},
             () = &mut notified => {},
             () = browser.alive.cancelled() => {
-                if let Some(headless) = owner.upgrade() {
+                // A new start waits until this browser has ended: both use the one profile.
+                let owner = owner.upgrade();
+                let _start = match &owner {
+                    Some(headless) => Some(headless.starting.lock().await),
+                    None => None,
+                };
+                if let Some(headless) = &owner {
                     headless.forget(&browser);
                 }
                 browser.stop().await;
@@ -208,6 +214,15 @@ impl Headless {
         let _start = self.starting.lock().await;
         if let Some(browser) = self.browser() {
             return Ok(browser);
+        }
+        // A browser whose pipe ended may still be exiting; it ends before another starts on the one profile.
+        let ended = self
+            .current
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        if let Some(ended) = ended {
+            ended.stop().await;
         }
         let executable = match self.installer.executable_within(INSTALL_WAIT).await {
             Progress::Ready(path) => path,

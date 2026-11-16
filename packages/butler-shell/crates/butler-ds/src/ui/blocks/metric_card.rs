@@ -12,6 +12,7 @@ use crate::tokens::{Color, Length};
 use crate::ui::animated_number::AnimatedNumber;
 use crate::ui::context::Ds;
 use crate::ui::layout::{Columns, Grid, Space};
+use crate::ui::selectable::{Break, mark};
 use crate::ui::typo::{Role, Tone, Typo, Weight};
 
 type Format = Rc<dyn Fn(f64) -> String>;
@@ -48,6 +49,7 @@ pub struct MetricCard {
     change: Option<SharedString>,
     icon: Option<AnyElement>,
     tile: bool,
+    selectable: Option<Break>,
 }
 
 impl MetricCard {
@@ -74,6 +76,7 @@ impl MetricCard {
             change: None,
             icon: None,
             tile: false,
+            selectable: None,
         }
     }
 
@@ -100,6 +103,13 @@ impl MetricCard {
         self
     }
 
+    /// The card's text joins the enclosing selection scope; `lead` is the break before a text value.
+    /// A counting number is not selectable.
+    pub fn selectable(mut self, lead: Break) -> Self {
+        self.selectable = Some(lead);
+        self
+    }
+
     /// A tile of a joined grid: no border, corner or fill of its own, label and change on one line.
     fn tile(mut self) -> Self {
         self.tile = true;
@@ -112,7 +122,9 @@ impl RenderOnce for MetricCard {
         let ds = Ds::get(cx);
         let tint = self.trend.map(|trend| trend.color(ds));
         let value = match self.value {
-            Value::Text(text) => Typo::metric_value(text).tabular().into_any_element(),
+            Value::Text(text) => {
+                mark(Typo::metric_value(text).tabular(), self.selectable).into_any_element()
+            }
             Value::Number(number, format) => {
                 let mut counter =
                     AnimatedNumber::new((self.id, "value"), number).role(Role::MetricValue);
@@ -142,13 +154,17 @@ impl RenderOnce for MetricCard {
             .gap(ds.len(Length::SpaceXs))
             .text_color(ds.color(Color::TextPrimary))
             .child(head)
-            .child(line(Typo::caption(self.label).tone(Tone::Secondary)));
+            .child(line(mark(
+                Typo::caption(self.label).tone(Tone::Secondary),
+                self.selectable.map(|_| Break::Line),
+            )));
         if let Some(change) = self.change {
-            let mut text = div().min_w_0().child(line(
+            let mut text = div().min_w_0().child(line(mark(
                 Typo::caption(change)
                     .weight(Weight::Medium)
                     .tone(Tone::Inherit),
-            ));
+                self.selectable.map(|_| Break::Line),
+            )));
             if let Some(tint) = tint {
                 text = text.text_color(tint);
             }

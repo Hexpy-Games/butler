@@ -11,6 +11,7 @@ use std::sync::Arc;
 use butler_ds::ui::blocks::message_row::{MessageBubble, MessageBubbleAttachments};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Space, Stack};
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::tag::Tag;
 use butler_ds::ui::typo::{Tone, Typo, Wrap};
 use gpui::{
@@ -390,7 +391,9 @@ fn attachments(
             copy.stopped
         };
         parts.push(
-            Tag::new(SharedString::from(format!("status-{}", msg.id)), label).into_any_element(),
+            Tag::new(SharedString::from(format!("status-{}", msg.id)), label)
+                .selectable(Break::Line)
+                .into_any_element(),
         );
     }
     if let Some(notice) = msg.failure_notice.as_deref() {
@@ -408,6 +411,7 @@ fn attachments(
                 SharedString::from(format!("unavailable-{}", msg.id)),
                 copy.attachment_unavailable,
             )
+            .selectable(Break::Line)
             .into_any_element(),
         );
     }

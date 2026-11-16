@@ -7,6 +7,7 @@ use crate::tokens::{Color, Length};
 use crate::ui::Icon;
 use crate::ui::context::Ds;
 use crate::ui::icon::{IconSize, icon};
+use crate::ui::selectable::{Break, mark};
 use crate::ui::typo::{Tone, Typo};
 
 /// One item: its text and whether it is done.
@@ -27,13 +28,21 @@ impl ChecklistItem {
 #[derive(IntoElement, Default)]
 pub struct StatusChecklist {
     items: Vec<ChecklistItem>,
+    selectable: Option<Break>,
 }
 
 impl StatusChecklist {
     pub fn new(items: impl IntoIterator<Item = ChecklistItem>) -> Self {
         Self {
             items: items.into_iter().collect(),
+            selectable: None,
         }
+    }
+
+    /// The items' text joins the enclosing selection scope; `lead` is the break before the first item.
+    pub fn selectable(mut self, lead: Break) -> Self {
+        self.selectable = Some(lead);
+        self
     }
 }
 
@@ -71,7 +80,12 @@ impl RenderOnce for StatusChecklist {
             .flex()
             .flex_col()
             .gap(ds.len(Length::SpaceSm))
-            .children(self.items.into_iter().map(|item| {
+            .children(self.items.into_iter().enumerate().map(|(index, item)| {
+                let lead = if index == 0 {
+                    self.selectable
+                } else {
+                    self.selectable.map(|_| Break::Line)
+                };
                 let tone = if item.done {
                     Tone::Secondary
                 } else {
@@ -93,7 +107,7 @@ impl RenderOnce for StatusChecklist {
                         div()
                             .flex_1()
                             .min_w_0()
-                            .child(Typo::body(item.text).tone(tone)),
+                            .child(mark(Typo::body(item.text).tone(tone), lead)),
                     )
             }))
     }

@@ -357,10 +357,17 @@ pub(in crate::ui::blocks) fn internal_slot(
     ds: &Ds,
 ) -> AnyElement {
     div()
+        .flex()
+        .flex_col()
         .min_h_0()
         .flex_auto()
         .overflow_hidden()
         .bg(ds.color(Color::WorkspaceBg))
-        .child(ScrollArea::new((id, "internal")).fill().child(page))
+        .child(
+            ScrollArea::new((id, "internal"))
+                .fill()
+                .content_padding(px(0.), px(0.), ds.len(Length::FocusRingRoom))
+                .child(page),
+        )
         .into_any_element()
 }

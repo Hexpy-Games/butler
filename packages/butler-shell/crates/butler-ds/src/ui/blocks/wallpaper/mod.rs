@@ -1,7 +1,8 @@
 //! DS Wallpaper (blocks/Wallpaper `still.ts`, `stillContext.ts`, `imageCache.ts`, `imageMath.ts`,
 //! the engine's host side and WallpaperPicker `builtinPosters.ts`): a live module the renderer
 //! has shaders for drawn with its saved params, unknown live
-//! modules from their bundled posters, or an image. Image filters, drift events and crossfade are P6.
+//! modules from their bundled posters, or an image drawn by the renderer's image module (fit,
+//! blur, an optional filter module and the dim pass). Drift events and crossfade are P6.
 //! [`Wallpaper`] is the layer to hand to `WallpaperStage::wallpaper`; it fills its parent, which
 //! clips it.
 mod drift;
@@ -23,15 +24,16 @@ use gpui::{
     RenderOnce, SharedString, Styled as _, StyledImage as _, Window, div, hsla, img,
 };
 
+pub use gpui::WallpaperImage;
 pub use image_cache::{ImageCache, ImageLoader, bundled_image, default_image_asset};
 pub use image_math::{
     DARK_DIM_STEP, DIM_SKIP, ImageDim, THUMBNAIL_EDGE, brightness, default_dim, unit, variant_for,
 };
+pub use live_image::decode_picture;
 pub use posters::{POSTER_SIZE, builtin_poster, poster_modules};
 pub use still::{StillCache, StillSize, still_key};
 
 use self::live::{LiveFrame, STILL_DAY_PHASE};
-use crate::tokens::Color;
 use crate::ui::blocks::prompt_suggestion_list::ContentRect;
 use crate::ui::context::Ds;
 
@@ -82,7 +84,14 @@ pub struct WallpaperParams {
     pub params_dark: serde_json::Value,
 }
 
-/// What a wallpaper shows (`WallpaperSource`, without image filters: those need the engine).
+/// The `filter` of an image source: a module that takes an image, drawn over the fitted picture.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImageFilter {
+    pub module: SharedString,
+    pub values: WallpaperParams,
+}
+
+/// What a wallpaper shows (`WallpaperSource`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum WallpaperSource {
     None,
@@ -97,6 +106,7 @@ pub enum WallpaperSource {
         dim: f32,
         /// 0..1 blur relative to the canvas size.
         blur: f32,
+        filter: Option<ImageFilter>,
     },
 }
 
@@ -122,7 +132,17 @@ pub fn source_key(source: &WallpaperSource) -> String {
             fit,
             dim,
             blur,
-        } => format!("image:{asset}:{fit:?}:{dim}:{blur}"),
+            filter,
+        } => {
+            let key = format!("image:{asset}:{fit:?}:{dim}:{blur}");
+            match filter {
+                Some(filter) => format!(
+                    "{key}:{}:{}:{}",
+                    filter.module, filter.values.params, filter.values.params_dark
+                ),
+                None => key,
+            }
+        }
     }
 }
 
@@ -132,7 +152,10 @@ pub fn transition_key(source: &WallpaperSource) -> String {
     match source {
         WallpaperSource::None => "none".into(),
         WallpaperSource::Live { module, .. } => format!("live:{module}"),
-        WallpaperSource::Image { asset, .. } => format!("image:{asset}"),
+        WallpaperSource::Image { asset, filter, .. } => format!(
+            "image:{asset}:{}",
+            filter.as_ref().map_or("", |filter| filter.module.as_ref())
+        ),
     }
 }
 
@@ -160,7 +183,7 @@ pub fn drifts(source: &WallpaperSource) -> bool {
 pub struct Wallpaper {
     source: WallpaperSource,
     tone: Option<WallpaperTone>,
-    picture: Option<Arc<Image>>,
+    picture: Option<WallpaperImage>,
     content_rect: Option<ContentRect>,
     content_rect2: Option<ContentRect>,
     day_phase: f32,
@@ -217,10 +240,26 @@ impl Wallpaper {
         self
     }
 
-    /// The decoded picture of an image source (from [`ImageCache::image`]).
-    pub fn picture(mut self, picture: Arc<Image>) -> Self {
+    /// The decoded picture of an image source (from [`decode_picture`]).
+    pub fn picture(mut self, picture: WallpaperImage) -> Self {
         self.picture = Some(picture);
         self
+    }
+
+    fn live_frame(&self, tone: WallpaperTone, window: &Window, cx: &App) -> LiveFrame {
+        // DS scheduler.ts `softwareRendering`: a software renderer holds still frames.
+        let software = window
+            .gpu_specs()
+            .is_some_and(|specs| specs.is_software_emulated);
+        LiveFrame {
+            tone,
+            host: self.host,
+            animate: !self.paused && !Ds::get(cx).reduced_motion() && !software,
+            start_ms: 0,
+            day_phase: self.day_phase,
+            content_rect: self.content_rect,
+            content_rect2: self.content_rect2,
+        }
     }
 }
 
@@ -229,22 +268,10 @@ impl RenderOnce for Wallpaper {
         let ds = Ds::get(cx);
         let tone = self.tone.unwrap_or(WallpaperTone::from_dark(ds.dark()));
         let layer = div().relative().size_full().overflow_hidden();
+        let frame = self.live_frame(tone, window, cx);
         match self.source {
             WallpaperSource::None => layer,
             WallpaperSource::Live { module, values } => {
-                // DS scheduler.ts `softwareRendering`: a software renderer holds still frames.
-                let software = window
-                    .gpu_specs()
-                    .is_some_and(|specs| specs.is_software_emulated);
-                let frame = LiveFrame {
-                    tone,
-                    host: self.host,
-                    animate: !self.paused && !ds.reduced_motion() && !software,
-                    start_ms: 0,
-                    day_phase: self.day_phase,
-                    content_rect: self.content_rect,
-                    content_rect2: self.content_rect2,
-                };
                 match live::layer(&module, &values, frame, window, cx) {
                     Some((drawn, remaining)) => dim_pass(layer.child(drawn), remaining),
                     None => match builtin_poster(&module, tone) {
@@ -253,21 +280,19 @@ impl RenderOnce for Wallpaper {
                     },
                 }
             }
-            WallpaperSource::Image { fit, dim, .. } => {
+            WallpaperSource::Image {
+                fit,
+                dim,
+                blur,
+                filter,
+                ..
+            } => {
                 let Some(image) = self.picture else {
                     return layer;
                 };
-                let object_fit = match fit {
-                    ImageFit::Cover => ObjectFit::Cover,
-                    ImageFit::Contain => ObjectFit::Contain,
-                };
-                let remaining = brightness(dim, tone == WallpaperTone::Dark, ImageDim::Auto);
-                let field = (fit == ImageFit::Contain).then(|| ds.color(Color::Surface));
-                let layer = match field {
-                    Some(field) => layer.bg(field),
-                    None => layer,
-                };
-                dim_pass(layer.child(picture(image, object_fit)), remaining)
+                let (drawn, remaining) =
+                    live::image_layer(image, fit, blur, dim, filter.as_ref(), frame, window, cx);
+                dim_pass(layer.child(drawn), remaining)
             }
         }
     }

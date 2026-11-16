@@ -77,6 +77,27 @@ fn media(item: &LibraryItem, meta: &str, cx: &mut App) -> LibraryCardMedia {
     LibraryCardMedia::Document
 }
 
+/// The shared display of a saved item, independent of the library page's selection.
+pub(crate) fn library_card(item: &LibraryItem, id: SharedString, cx: &mut App) -> LibraryCard {
+    let words = get(cx);
+    let meta = item_meta(item, words.lang());
+    let tags: Vec<SharedString> = item
+        .tags
+        .iter()
+        .flatten()
+        .cloned()
+        .map(SharedString::from)
+        .collect();
+    LibraryCard::new(
+        id,
+        media(item, &meta, cx),
+        SharedString::from(item.title.clone()),
+    )
+    .meta(meta)
+    .tag(kind_tag(item, words))
+    .tags(tags)
+}
+
 impl LibraryPage {
     /// `LibraryItemCard`
     pub(crate) fn item_card(
@@ -88,27 +109,12 @@ impl LibraryPage {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let words = get(cx);
-        let meta = item_meta(item, words.lang());
         let page = cx.entity();
         let id = SharedString::from(format!("library-item-{}", item.id));
-        let tags: Vec<SharedString> = item
-            .tags
-            .iter()
-            .flatten()
-            .cloned()
-            .map(SharedString::from)
-            .collect();
-        let mut card = LibraryCard::new(
-            id.clone(),
-            media(item, &meta, cx),
-            SharedString::from(item.title.clone()),
-        )
-        .meta(meta)
-        .tag(kind_tag(item, words))
-        .tags(tags)
-        .menu(Self::card_menu(item, &id, &page, words))
-        .dragging(cx.has_active_drag() && self.drag.lifted.contains(&item.id))
-        .on_open(open_handler(&page, item, view, selection));
+        let mut card = library_card(item, id.clone(), cx)
+            .menu(Self::card_menu(item, &id, &page, words))
+            .dragging(cx.has_active_drag() && self.drag.lifted.contains(&item.id))
+            .on_open(open_handler(&page, item, view, selection));
         if let Some(selection) = selection {
             let (select, item) = (page.clone(), item.clone());
             card = card

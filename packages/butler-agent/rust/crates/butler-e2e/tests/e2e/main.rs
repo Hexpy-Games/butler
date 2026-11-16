@@ -18,6 +18,7 @@ mod anthropic_requests;
 mod anthropic_thinking_history;
 mod app_admission_history;
 mod app_db_schema;
+mod app_instance;
 mod app_retention;
 mod app_state;
 mod ask_user;

@@ -59,10 +59,14 @@ pub(crate) struct BrowserStrings {
     pub(crate) download_file_limit: &'static str,
     #[cfg(feature = "cef")]
     pub(crate) download_session_limit: &'static str,
+    pub(crate) recent_scraps: &'static str,
+    pub(crate) view_all: &'static str,
     pub(crate) history: &'static str,
 }
 
 const KO: BrowserStrings = BrowserStrings {
+    recent_scraps: "최근 스크랩",
+    view_all: "모두 보기",
     #[cfg(feature = "cef")]
     download_saved: "다운로드 저장됨",
     #[cfg(feature = "cef")]
@@ -123,6 +127,8 @@ const KO: BrowserStrings = BrowserStrings {
 };
 
 const EN: BrowserStrings = BrowserStrings {
+    recent_scraps: "Recent scraps",
+    view_all: "View all",
     #[cfg(feature = "cef")]
     download_saved: "Download saved",
     #[cfg(feature = "cef")]

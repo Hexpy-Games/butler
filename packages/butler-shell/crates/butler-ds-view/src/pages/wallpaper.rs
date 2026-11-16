@@ -6,7 +6,7 @@ use std::sync::Arc;
 use butler_ds::tokens::Length;
 use butler_ds::ui::blocks::wallpaper::{
     ImageCache, ImageFit, ImageLoader, ImageVariant, Wallpaper, WallpaperSource, WallpaperTone,
-    builtin_poster,
+    builtin_poster, decode_picture,
 };
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Space, Stack};
@@ -162,11 +162,16 @@ fn image_layer(fit: ImageFit, dim: f32) -> Wallpaper {
         fit,
         dim,
         blur: 0.,
+        filter: None,
     };
     let wallpaper = Wallpaper::new(source);
-    match ImageCache::new(showcase_loader()).image(&asset, ImageVariant::Full) {
-        Ok(picture) => wallpaper.picture(picture),
-        Err(_) => wallpaper,
+    let picture = ImageCache::new(showcase_loader())
+        .image(&asset, ImageVariant::Full)
+        .ok()
+        .and_then(|picture| decode_picture(&picture.bytes));
+    match picture {
+        Some(picture) => wallpaper.picture(picture),
+        None => wallpaper,
     }
 }
 

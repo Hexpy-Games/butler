@@ -7,6 +7,7 @@ use butler_ds::ui::clickable::Clickable;
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Cross, MinWidth, Space, Stack, WithItem as _};
+use butler_ds::ui::selectable::{self, Break, Selection};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
 
 use super::Story;
@@ -80,6 +81,10 @@ pub(super) fn stories() -> Vec<Story> {
         Story {
             name: "Inside a Clickable (selectable list)",
             render: in_clickable,
+        },
+        Story {
+            name: "Selectable text",
+            render: selectable,
         },
     ]
 }
@@ -165,4 +170,18 @@ fn in_clickable(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
                 .meta(c.state),
         )
         .into_any_element()
+}
+
+fn selectable(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
+    let c = copy(lang);
+    let selection = Selection::new("list-row-selectable", window, cx);
+    selectable::scope(
+        selection,
+        ListRow::new(c.automation)
+            .icon(icon(Icon::Clock3, IconSize::Md, Ds::get(cx)))
+            .description(c.target)
+            .meta(c.state)
+            .selectable(Break::Line),
+    )
+    .into_any_element()
 }

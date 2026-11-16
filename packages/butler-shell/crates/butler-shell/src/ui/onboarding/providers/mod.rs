@@ -141,21 +141,16 @@ pub(crate) fn connection_card_id(model: &Value) -> Option<CardId> {
 
 /// `useLocalModelServers` and the online status.
 #[derive(Default)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "independent states (checking, failed, online, fetched), not one mode"
-)]
 pub(crate) struct LocalServers {
     servers: Vec<Server>,
     options: Vec<LocalModelOption>,
     checking: bool,
-    /// The last request got no reply (the Agent was not ready); it is tried again.
-    failed: bool,
+    /// The latest lookup; an older one's answer is dropped.
+    request: u64,
     /// The OS network status.
     online: bool,
-    fetched: bool,
-    /// "More services" opened or closed by the user; unset follows the AI in use.
-    more_open: Option<bool>,
+    /// The Agent-ready value of the last lookup while the AI step shows; unset off the step.
+    seen: Option<bool>,
 }
 
 impl LocalServers {
@@ -174,10 +169,15 @@ impl LocalServers {
         }
     }
 
-    /// The frame calls it on every flow change while the AI step shows; it fetches only when
-    /// it has not yet, or the last try got no answer (the Agent was not ready).
-    pub(crate) fn refresh(&mut self, cx: &mut Context<Self>) {
-        if !self.fetched || self.failed {
+    /// The frame calls it on every flow change; it looks the servers up again each time the AI
+    /// step opens and when the Agent becomes ready or stops being ready while it shows.
+    pub(crate) fn refresh(&mut self, shown: bool, ready: bool, cx: &mut Context<Self>) {
+        if !shown {
+            self.seen = None;
+            return;
+        }
+        if self.seen != Some(ready) {
+            self.seen = Some(ready);
             self.fetch(cx);
         }
     }
@@ -227,33 +227,29 @@ impl LocalServers {
     }
 
     fn fetch(&mut self, cx: &mut Context<Self>) {
-        if self.checking {
-            return;
-        }
+        self.request += 1;
+        let request = self.request;
         self.checking = true;
-        let request = Jobs::run(cx, |client| async move {
+        let lookup = Jobs::run(cx, |client| async move {
             client.get_local_model_servers().await.ok()
         });
         cx.spawn(async move |this, cx| {
-            let reply = request.await.flatten();
-            let _ = this.update(cx, |this, cx| this.loaded(reply.as_ref(), cx));
+            let reply = lookup.await.flatten();
+            let _ = this.update(cx, |this, cx| this.loaded(request, reply.as_ref(), cx));
         })
         .detach();
     }
 
-    fn loaded(&mut self, reply: Option<&Value>, cx: &mut Context<Self>) {
+    fn loaded(&mut self, request: u64, reply: Option<&Value>, cx: &mut Context<Self>) {
+        if request != self.request {
+            return;
+        }
         let servers = reply.map(parse_servers).unwrap_or_default();
-        let failed = reply.is_none();
-        let changed = self.failed != failed || self.servers != servers || !self.fetched;
         self.checking = false;
-        self.fetched = true;
-        self.failed = failed;
         if self.servers != servers {
             self.options = model_options(&servers);
             self.servers = servers;
         }
-        if changed {
-            cx.notify();
-        }
+        cx.notify();
     }
 }

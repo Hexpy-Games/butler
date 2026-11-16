@@ -12,7 +12,9 @@ pub(crate) mod downloads;
 pub(crate) mod engine;
 mod host;
 pub(crate) mod model;
+mod new_tab;
 mod page_dialog;
+pub(crate) mod pick;
 mod placeholder;
 #[cfg(feature = "cef")]
 mod popup_policy;
@@ -20,6 +22,7 @@ mod popup_window;
 mod popups;
 pub(crate) mod restore;
 pub(crate) mod shell_state;
+mod suggestions;
 mod tabs;
 mod toolbar;
 pub(crate) mod transfer;

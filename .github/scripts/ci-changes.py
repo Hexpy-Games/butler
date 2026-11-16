@@ -434,6 +434,11 @@ def select(event, workflow):
         parts = {'hosted': ci_parts.HOSTED}
         native = outputs['package'] == 'true' and native_required
         jobs = windows_preview_jobs(dict(outputs, windows=str(native).lower(), label=str(label).lower()), os.environ['GITHUB_EVENT_NAME'])
+        package_version = (event.get('inputs') or {}).get('package-version') or ''
+        if os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch' and package_version:
+            if not re.fullmatch(r'\d+\.\d+\.\d+(-preview\.\d+)?', package_version):
+                raise ValueError(f'Invalid package version: {package_version}')
+            jobs['build'] = True
     elif workflow == 'windows-preview-smoke.yml':
         jobs['hosted-build'] = False  # Integration builds on the owner PC.
     if os.environ['GITHUB_EVENT_NAME'] == 'pull_request' and workflow not in ('rust-quality.yml', 'windows-preview-smoke.yml'):
