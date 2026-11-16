@@ -4,7 +4,7 @@ use super::{Job, Worker};
 use butler_shell_client::ShellClient;
 use futures::{channel::oneshot, future::BoxFuture};
 use gpui::App;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 /// The worker and the client of the current attachment; `client` is `None` while detached.
 #[derive(Clone, Default)]
@@ -21,6 +21,18 @@ impl Jobs {
             worker: Some(worker),
             client,
         }
+    }
+
+    /// The App's own attachment, for the life of the App: a restarted Agent reaches [`Jobs`]
+    /// with no window open (each window still attaches for its own source).
+    pub(crate) fn keep_current(data: PathBuf, cx: &mut App) {
+        let mut attachment = super::Attachment::start(Some(data));
+        cx.spawn(async move |cx| {
+            while let Some((_source, jobs)) = attachment.next().await {
+                cx.update(|cx| cx.set_global(jobs));
+            }
+        })
+        .detach();
     }
 
     /// The current client, for code that only builds requests.
