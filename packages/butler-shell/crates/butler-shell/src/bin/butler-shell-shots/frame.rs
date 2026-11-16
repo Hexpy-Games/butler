@@ -25,6 +25,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "drag-from" => drag_from(h, arg),
         "click-at" => click_at(h, arg),
         "page-click" | "page-move" => page_pointer(h, arg, command == "page-click"),
+        "page-wheel" => page_wheel(h, arg.parse()?),
         "hover" => hover(h, arg),
         "reveal" => reveal(h, arg),
         "wait-anchor" | "wait-no-anchor" => wait_anchor(h, arg, command == "wait-anchor"),
@@ -426,6 +427,29 @@ fn page_pointer(h: &mut Harness, arg: &str, click: bool) -> anyhow::Result<()> {
                 cx,
             );
         }
+    })?;
+    settle(&mut h.cx, h.handle);
+    Ok(())
+}
+
+/// `page-wheel <dy>`: one wheel event of `dy` content pixels (downwards) at the page's centre.
+fn page_wheel(h: &mut Harness, dy: f32) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let bounds =
+        h.cx.debug_bounds(h.handle, "browser-page")?
+            .context("missing page surface")?;
+    let position = bounds.center();
+    move_pointer(h, h.handle, position, None)?;
+    h.cx.update_window(h.handle, |_, w, cx| {
+        w.dispatch_event(
+            PlatformInput::ScrollWheel(ScrollWheelEvent {
+                position,
+                delta: ScrollDelta::Pixels(point(px(0.), -px(dy))),
+                modifiers: Default::default(),
+                touch_phase: TouchPhase::Moved,
+            }),
+            cx,
+        );
     })?;
     settle(&mut h.cx, h.handle);
     Ok(())

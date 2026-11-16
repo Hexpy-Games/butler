@@ -35,7 +35,7 @@ For a real isolated agent, pass `<dir> --data <data-dir>` (and optionally `--dar
 The live harness accepts `browser` (standalone view), `browser-link <url>` (the open chat’s message-link action), and `browser-state` (prints `LIVE BROWSER <json>` with view, active tab and tab metadata (including `opener`, `popup`, `blocked_popup`, and `dialog`) before `LIVE OK`), along with: `connected`, `open <chat>`, `new`,
 `compose`, `type <text>`, `key <keystroke>`, `send <text>`, `answer <text>`, `approval`, `exact <text>`, `modify`, `allow`, `deny`,
 `cancel`, `disconnected`, `shot <name>` and `quit`. Frame commands are `url <url>`,
-`size <width> <height>`, `page-click <x> <y>` (a real click in window content pixels relative to the page surface; the page point is that times the window zoom), `click <anchor>`, `drag <anchor> <dx>`, `wait <ms>`,
+`size <width> <height>`, `page-click <x> <y>` (a real click in window content pixels relative to the page surface; the page point is that times the window zoom), `page-wheel <dy>` (one downward wheel event of `dy` content pixels at the page centre), `click <anchor>`, `drag <anchor> <dx>`, `wait <ms>`,
 `expect-anchor <name>`, `expect-no-anchor <name>`, `expect-scale <factor>`,
 `expect-session <id|new>` and `expect-composer-focus`. Each completed command prints
 `LIVE OK`. The main Rust workspace's `butler-e2e` example `gpui_shell` drives these
