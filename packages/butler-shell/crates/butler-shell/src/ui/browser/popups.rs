@@ -61,14 +61,21 @@ impl BrowserState {
         let source = self.tab(opener).cloned()?;
         self.next_id += 1;
         let id = TabId(format!("t{}", self.next_id).into());
+        let hosted = source
+            .hosted
+            .as_ref()
+            .filter(|h| h.held_by_agent())
+            .map(|h| self.new_hosted(h.internal));
+        let awake = hosted.as_ref().map(super::agent_host::Hosted::awake);
         self.tabs.push(Tab {
             opener: Some(opener.clone()),
-            popup: source.hosted.is_none(),
-            hosted: source.hosted.as_ref().map(|h| self.new_hosted(h.internal)),
+            popup: hosted.is_none(),
+            hosted,
             ..Tab::new(id.clone(), source.owner, source.profile, url)
         });
         self.engine.adopt(&id, child);
-        if source.hosted.is_some() {
+        self.engine.set_hosted(&id, awake.is_some());
+        if awake.is_some() {
             self.engine.keep_awake(&id, true);
             self.fix_hosted_size(&id);
         }
@@ -83,7 +90,10 @@ impl BrowserState {
                 }
             }
             PageChange::PopupBlocked { url, reason } => {
-                if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == event.page) {
+                // The Agent's own block is no prompt for the user.
+                if let Some(tab) = self.tabs.iter_mut().find(|t| {
+                    t.id == event.page && !t.hosted.as_ref().is_some_and(|h| h.held_by_agent())
+                }) {
                     tab.blocked_popup = Some(BlockedPopup {
                         url: url.clone(),
                         site: site(&tab.url),

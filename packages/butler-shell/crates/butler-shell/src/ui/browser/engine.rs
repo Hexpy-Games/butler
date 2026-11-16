@@ -108,8 +108,10 @@ pub(crate) trait PageEngine: 'static {
     fn devtools_raw_end(&self, _page: &TabId) {}
     /// Keeps `page` not hidden while awake, even when it is not the shown page.
     fn keep_awake(&mut self, _page: &TabId, _awake: bool) {}
-    /// Whether `page` is the Agent's: its popups then open as pages of the Agent's own.
+    /// Whether `page` is the Agent's and held by it: its popups then open as pages of the Agent's own.
     fn set_hosted(&mut self, _page: &TabId, _hosted: bool) {}
+    /// The sites and exact hosts the Agent's policy lets `page`'s popups reach.
+    fn set_popup_sites(&mut self, _page: &TabId, _sites: Vec<String>, _hosts: Vec<String>) {}
     /// Whether this build can browse (Electron's `enabled`).
     fn enabled(&self) -> bool;
     /// A page for `page`; `url` is empty for a blank page. `owner` keys the popup gate and

@@ -52,6 +52,10 @@ impl Hosted {
     pub(super) fn awake(&self) -> bool {
         self.stage == Stage::Opening || self.uses > 0
     }
+    /// The Agent holds the page: its popups follow the Agent's rule, not the user's.
+    pub(super) fn held_by_agent(&self) -> bool {
+        self.holder == Holder::Agent
+    }
     pub(super) fn agent(internal: bool) -> Self {
         Self {
             target: String::new(),

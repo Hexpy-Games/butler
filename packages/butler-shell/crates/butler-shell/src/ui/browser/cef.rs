@@ -7,7 +7,7 @@ mod surface;
 
 use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
 use super::page_dialog::{DialogAnswer, DialogKind, EngineChild, PageDialog};
-use super::popup_policy::{PopupGate, policy};
+use super::popup_policy::{PopupGate, PopupSites, policy};
 use butler_cef_host::osr::{
     OsrAnswer, OsrDialogKind, OsrEvent, OsrProfile, OsrRuntime, OsrSink, PopupBlock,
 };
@@ -298,6 +298,13 @@ impl PageEngine for CefEngine {
             && let Some(source) = self.gate.borrow_mut().pages.get_mut(id)
         {
             source.hosted = hosted;
+        }
+    }
+    fn set_popup_sites(&mut self, page: &TabId, sites: Vec<String>, hosts: Vec<String>) {
+        if let Some(id) = self.ids.get(page)
+            && let Some(source) = self.gate.borrow_mut().pages.get_mut(id)
+        {
+            source.popups = Rc::new(PopupSites { sites, hosts });
         }
     }
     fn enabled(&self) -> bool {

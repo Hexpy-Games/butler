@@ -245,6 +245,16 @@ impl BrowserState {
         self.engine
             .open(&id, "about:blank", profile, &key, &partition);
         self.engine.set_hosted(&id, true);
+        let list = |key: &str| -> Vec<String> {
+            args["popups"][key]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        };
+        self.engine
+            .set_popup_sites(&id, list("sites"), list("hosts"));
         self.engine.keep_awake(&id, true);
         self.fix_hosted_size(&id);
         self.publisher.changed(&self.tabs);
@@ -288,6 +298,7 @@ impl BrowserState {
         if let Some(holder) = holder.filter(|holder| *holder != hosted.holder) {
             hosted.holder = holder;
             tab.epoch += 1;
+            self.engine.set_hosted(&id, holder == Holder::Agent);
         }
         hosted.sticky = args["sticky"].as_bool().unwrap_or(hosted.sticky);
         hosted.waiting = args["waiting"].as_bool().unwrap_or(hosted.waiting);
