@@ -4,11 +4,13 @@ import { Button } from "../../components/Button";
 import { IconButton } from "../../components/IconButton";
 import { Download, History, MessageSquare, X } from "../../components/Icons";
 import { Inline } from "../../components/Inline";
+import { Stack } from "../../components/Stack";
+import { ScrollArea } from "../ScrollArea";
 import { Typo } from "../../components/Typo";
 import { BlockActionFrame } from "../BlockActionFrame";
 import { MetricCard } from "../MetricCard";
 import { MetricGrid } from "../MetricGrid";
-import { DocumentBlockEmbed, DocumentEditor, documentEditorClasses } from "./DocumentEditor";
+import { DocumentBlockEmbed, DocumentEditor, DocumentEditorHeader, documentEditorClasses } from "./DocumentEditor";
 
 export const meta: ShowcaseMeta = {
   title: "DocumentEditor",
@@ -67,6 +69,23 @@ function TitleLine({ context }: { context: ShowcaseRenderContext }) {
   );
 }
 
+function FixedTitleRow({ context }: { context: ShowcaseRenderContext }) {
+  const copy = labels[context.locale];
+  return (
+    <Stack gap="lg">
+      <DocumentEditorHeader title={<Typo.PanelTitle as="h2" truncate>{copy.title}</Typo.PanelTitle>} note={copy.saved} />
+      <ScrollArea maxHeight="xs">
+        <DocumentEditor title={null}>
+          <div className={documentEditorClasses.root} contentEditable suppressContentEditableWarning>
+            <h2>{copy.heading}</h2>
+            {Array.from({ length: 8 }, (_, index) => <p key={index}>{copy.first} {copy.second}</p>)}
+          </div>
+        </DocumentEditor>
+      </ScrollArea>
+    </Stack>
+  );
+}
+
 function Editing({ context }: { context: ShowcaseRenderContext }) {
   const [editing, setEditing] = useState(true);
   return (
@@ -79,6 +98,7 @@ function Editing({ context }: { context: ShowcaseRenderContext }) {
 
 export const stories: ShowcaseStory[] = [
   { name: "Document", widths: ["375", "app"], render: (context) => <Page context={context} editing={false} /> },
+  { name: "Fixed title row over a scrolling page", widths: ["375", "app"], render: (context) => <FixedTitleRow context={context} /> },
   { name: "Title line", widths: ["375", "app"], render: (context) => <TitleLine context={context} /> },
   { name: "Butler editing a paragraph", states: ["changing"], widths: ["375", "app"], render: (context) => <Editing context={context} /> },
 ];

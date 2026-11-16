@@ -763,6 +763,7 @@
 | Unrelated actions | `DropdownMenu` | `SplitButton` |
 | Usage split into stacked parts (new input, cached, output) per time bucket | `UsageBars` |  |
 | Usage totals per day or hour | `UsageBars` | `SpanBar` |
+| Use DocumentEditorHeader when the host keeps the title row fixed and scrolls only the page. | `DocumentEditor` |  |
 | Viewing a picture large | `ImageViewer` | `MaskCanvas` |
 | Weeks of activity in a calendar grid | `ActivityHeatmap` | `ActivityStrip` |
 | What Butler did, step by step | `WorkActivityBlock` | `TabRail` |
@@ -2945,6 +2946,7 @@ The artifact viewer body: exactly one of text, image or frame (PDF/HTML), or a l
 The document editor: title row, one status line, header actions and the editable body in MarkdownContent's document typography, with block embeds and Butler's editing highlight.
 
 - Use for: A 버틀러 document the user edits (서랍 문서, the side panel next to the chat)
+- Use for: Use DocumentEditorHeader when the host keeps the title row fixed and scrolls only the page.
 - Not for: Reading a file or artifact → `DocumentReader`
 - Not for: Writing a message → `ComposerCard`
 - Tokens: `--control-height-md`, `--control-hit-target`, `--butler-ink-blue`, `--butler-ink-purple`, `--accent`, `--radius-control`, `--motion-slow`
