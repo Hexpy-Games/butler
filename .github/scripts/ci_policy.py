@@ -5,7 +5,7 @@
 # shellcheck is a hosted Linux lint, so packaging script findings fail the PR.
 # ci-invariants proves CI policy before merge; the archive step runs only on main/release.
 PR_FAST_JOBS = frozenset(('lint', 'windows-check', 'shellcheck', 'ci-invariants', 'linux-clippy',
-                          'linux-archive', 'ui', 'site', 'ds'))
+                          'linux-archive', 'ui', 'site', 'ds', 'mobile'))
 # Repository files outside .github that the CI policy tests load.
 CI_TEST_INPUTS = ('packages/butler-agent/rust/scripts/*-standalone-agent.py',)
 
@@ -34,6 +34,7 @@ def rust_jobs(outputs, event):
         'ui': outputs['ui'] == 'true',
         'site': outputs['site'] == 'true' and (event != 'push' or integration),
         'ds': outputs['ds'] == 'true' and (event != 'push' or integration),
+        'mobile': outputs.get('mobile') == 'true',
     }
     if event == 'pull_request':
         selected = {name: enabled and name in PR_FAST_JOBS for name, enabled in selected.items()}
