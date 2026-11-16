@@ -402,14 +402,7 @@ pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value)
             })
     };
     let Some((tab, main, popup, parent, policy, held)) = facts else {
-        let _ = browser
-            .cdp
-            .send(
-                "Fetch.failRequest",
-                json!({"requestId":request,"errorReason":"BlockedByClient"}),
-                Some(&session),
-            )
-            .await;
+        fail_request(&browser, &session, &request).await;
         return;
     };
     let popup_violation = popup && !popup_allowed(&policy, &parent, &url);
@@ -429,14 +422,7 @@ pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value)
             .await;
         return;
     }
-    let _ = browser
-        .cdp
-        .send(
-            "Fetch.failRequest",
-            json!({"requestId":request,"errorReason":"BlockedByClient"}),
-            Some(&session),
-        )
-        .await;
+    fail_request(&browser, &session, &request).await;
     if !main {
         return;
     }
@@ -462,4 +448,15 @@ pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value)
         .send("Page.stopLoading", json!({}), Some(&session))
         .await;
     close(&browser, &tab).await;
+}
+
+async fn fail_request(browser: &Browser, session: &str, request: &Value) {
+    let _ = browser
+        .cdp
+        .send(
+            "Fetch.failRequest",
+            json!({"requestId":request,"errorReason":"BlockedByClient"}),
+            Some(session),
+        )
+        .await;
 }
