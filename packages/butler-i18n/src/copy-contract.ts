@@ -358,10 +358,6 @@ interface ConversationCopy {
 }
 
 export interface BrowserCopy {
-  contextMenu: {
-    openInNewTab: string; openInButler: string; openInBrowser: (name: string) => string; copyLink: string;
-    copy: string; selectAll: string; paste: string;
-  };
   siteData: { title: string; label: string; description: string; clear: string; confirmTitle: string; confirmMessage: string; items: string; itemList: string; kept: string; cleared: string; failed: string; desktopOnly: string };
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; pageLabel: string; pageDescription: string; };
   tabCount: string; newTabIn: string; moreTabs: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
@@ -454,6 +450,11 @@ export interface LogTraceCopy {
   attrs: Record<string, string>;
 }
 
+/** Copy for the mobile app (packages/butler-mobile). Screens add their keys here, in both locales. */
+export interface MobileCopy {
+  appName: string;
+}
+
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
 export interface AppCopy {
   canon: CanonCopy;
@@ -498,6 +499,7 @@ export interface AppCopy {
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
   browser: BrowserCopy;
+  mobile: MobileCopy;
   library: LibraryCopy;
   documents: { title: string; saved: string; editing: string; edited: string; restore: string;
     versions: string; current: string; me: string; butler: string; export: string; markdown: string; pdf: string; moreActions: string; exportMarkdown: string; exportPdf: string;

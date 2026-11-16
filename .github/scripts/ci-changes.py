@@ -209,6 +209,8 @@ def categories(path, event=None):
         result.add('shell')
     if path == MOBILE_TOKENS_SOURCE:
         result.add('mobile')
+    if path.startswith(('packages/butler-protocol/', 'packages/butler-i18n/')):
+        result.add('mobile')  # packages/butler-mobile consumes both.
     return result
 
 

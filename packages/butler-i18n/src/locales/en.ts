@@ -6,7 +6,6 @@ import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-en.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
-import { nativeContextMenuCopy } from "../../../butler-app/client/electron/i18n/native-context-menu.mjs";
 
 /** Where an approval request acts: the quoted workspace label, or this workspace. */
 const inWorkspace = (workspace: string | null) => workspace ? `in '${workspace}'` : "in this folder";
@@ -387,7 +386,6 @@ export const enUsCopy: AppCopy = {
   taskGraph: TASK_GRAPH_COPY["en-US"],
   lifecycle: lifecycleCopy.en,
   browser: {
-    contextMenu: nativeContextMenuCopy("en-US"),
     siteData: { title: "Site data", label: "Cookies and cache", description: "Signs you out of every site. Saved sign-ins stay.", clear: "Clear", confirmTitle: "Clear cookies and cache?", confirmMessage: "You'll be signed out of every site in Butler's browser.", items: "To clear", itemList: "Cookies and site data\nCached images and files", kept: "Saved sign-ins, payment methods, history and bookmarks stay.", cleared: "Cookies and cache cleared", failed: "Couldn't clear", desktopOnly: "Only available in the desktop app" },
     history: { erase: "Clear", title: "History", search: "Search history", clear: "Clear browsing history", butlerOnly: "Visited by Butler", empty: "No visits", hour: "Last hour", today: "Today", week: "Last 7 days", all: "All time", suggestions: "Address suggestions", pageLabel: "Visited pages", pageDescription: "View or clear the pages opened in Butler's browser." },
     tabCount: "Tabs: {count}", newTabIn: "New tab in {group}", moreTabs: "+{count}", tabMoved: "{title}: {group}, position {position}", agentControl: "Butler is browsing", handBack: "Give back to Butler", stills: "Step images", still: "Browser step", stillFailure: {"dialog_pending": "Dialog open", "dispatch_interrupted": "Input interrupted", "timeout": "Input timed out", "stills_disabled": "Step images off", "document_changed": "Page changed", "capture_unavailable": "Capture unavailable", "capture_failed": "Capture failed", "pixels_not_captured": "Image not captured", "file_deleted": "Image removed", "control_changed": "Control changed", "browser_host_lost": "Browser disconnected", "gateway_restarted": "Butler restarted"}, stillPending: "Saving image", stillUnavailable: "Image unavailable",
@@ -425,6 +423,7 @@ export const enUsCopy: AppCopy = {
     rail: { region: "Butler's tabs", openToCheck: "Open to check", needsCheck: "Needs you", pageError: "Page didn't load", error: "Error", more: (count) => `${count} more ${count === 1 ? "tab" : "tabs"} · View in browser` },
     glow: { busy: "View browser · Butler is using it", attention: "View browser · Needs you", error: "View browser · Error" },
   },
+  mobile: { appName: "Butler" },
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",
     remaining: "Where work remains", remainingHelp: "Current board stages, independent of the selected date range.",

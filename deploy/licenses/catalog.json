@@ -1,6 +1,6 @@
 {
   "inputs": {
-    "bun.lock": "f49e4a1ca3c6f30c02318b98ef333e74975e38abae4552c36560579f6c642c37",
+    "bun.lock": "396b254520eceeb05f77c652cb4c66e65747e54bad74dcc9d2c02ea69d7aee97",
     "deploy/licenses/disclosure.py": "992c3d7f47a0944dc1c0ab0628e11a818b88f9ae7d5f62a5c5692715a175d859",
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",

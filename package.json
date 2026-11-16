@@ -6,6 +6,7 @@
   "workspaces": [
     "packages/butler-app/client/electron",
     "packages/butler-app/client/ui",
+    "packages/butler-i18n",
     "packages/butler-progress-projection",
     "packages/butler-protocol",
     "packages/project-ledger",

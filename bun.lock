@@ -94,6 +94,9 @@
         "postcss": "8.5.13",
       },
     },
+    "packages/butler-i18n": {
+      "name": "@butler/i18n",
+    },
     "packages/butler-progress-projection": {
       "name": "@butler/progress-projection",
       "version": "0.0.21",
@@ -215,6 +218,8 @@
     "@bruits/satteri-win32-arm64-msvc": ["@bruits/satteri-win32-arm64-msvc@0.10.5", "", { "os": "win32", "cpu": "arm64" }, "sha512-siTV88nb0LRqNpkL2gXboqCwVdq95sLtzMHS1/3eONV2gLbB3NAK46wmSMvCO/yquBvI2lvaFIfd8P12ecsxBw=="],
 
     "@bruits/satteri-win32-x64-msvc": ["@bruits/satteri-win32-x64-msvc@0.10.5", "", { "os": "win32", "cpu": "x64" }, "sha512-C3IfPvfvMXmlzBxaMPKFS1XiuV9pu2mC7YqkPk7PSvTgPZ8gbdASIpHpztDLvTTQjqZ0z1Ol8tK5X+V6XXC0wQ=="],
+
+    "@butler/i18n": ["@butler/i18n@workspace:packages/butler-i18n"],
 
     "@butler/progress-projection": ["@butler/progress-projection@workspace:packages/butler-progress-projection"],
 
