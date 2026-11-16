@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
-import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
+import { windowsPowerShellEnvironment } from "./windows-powershell-environment.mjs";
 
 export function powershell(script: string, env = process.env): string {
   const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {

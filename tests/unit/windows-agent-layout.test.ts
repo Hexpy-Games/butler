@@ -34,7 +34,7 @@ test("Windows archive staging leaves exactly one agent executable", () => {
     writeFileSync(join(bin, `butler-agent (${role}).exe`), "archive copy");
   }
   const result = spawnSync("node", [
-    resolve("packages/butler-app/client/electron/scripts/prepare-process-links.mjs"), binary,
+    resolve("packages/butler-app/scripts/release/prepare-process-links.mjs"), binary,
   ], { encoding: "utf8" });
   expect(result.status, result.stderr).toBe(0);
   expect(readdirSync(bin)).toEqual(["butler-agent.exe"]);
@@ -141,7 +141,7 @@ require("node:module").syncBuiltinESMExports();
   writeFileSync(join(ui, "THIRD_PARTY_NOTICES.txt.gz"), gzipSync(readFileSync("deploy/licenses/THIRD_PARTY_NOTICES.txt")));
   const payload = join(root, "payload");
   const result = spawnSync("node", ["--require", preload,
-    resolve("packages/butler-app/client/electron/scripts/prepare-native-agent.mjs"), "win32", "x64", payload,
+    resolve("packages/butler-app/scripts/release/prepare-native-agent.mjs"), "win32", "x64", payload,
   ], { encoding: "utf8", env: {
     ...process.env,
     NODE_OPTIONS: `--require=${JSON.stringify(preload)}`, BUTLER_NATIVE_AGENT_EXECUTABLE: binary, BUTLER_NATIVE_UI_DIST: ui,

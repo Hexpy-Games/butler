@@ -304,8 +304,10 @@ export function prepareBundledAgentResource(
   const [requestedPlatform, requestedArch] = platform.split("-");
   const preparer = join(
     root,
-    ELECTRON_ROOT,
+    "packages",
+    "butler-app",
     "scripts",
+    "release",
     "prepare-native-agent.mjs",
   );
   const result = spawnSync(

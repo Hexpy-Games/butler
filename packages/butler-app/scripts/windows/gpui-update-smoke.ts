@@ -5,8 +5,8 @@ import { appendFileSync, closeSync, copyFileSync, cpSync, existsSync, mkdirSync,
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
-import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
-import { windowsPackageVersion } from "../../client/electron/scripts/windows-package-version.mjs";
+import { windowsPowerShellEnvironment } from "./windows-powershell-environment.mjs";
+import { windowsPackageVersion } from "./windows-package-version.mjs";
 import { assertShortcuts, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {

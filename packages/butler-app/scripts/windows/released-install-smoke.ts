@@ -11,7 +11,7 @@ import { freeGatewayPort, freePort } from "../../../../tests/support/native-app-
 import { FIRST_RUN_CONSENT_VERSION } from "../../client/ui/src/app/onboarding.ts";
 import { assertShortcuts, bridge, ownedProcesses, ownedSurvivors, powershell, readJson, removeProfile, shortcutPaths, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { smokeProviderReply, type SmokeProviderCalls } from "./smoke-provider.ts";
-import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
+import { windowsPowerShellEnvironment } from "./windows-powershell-environment.mjs";
 import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {

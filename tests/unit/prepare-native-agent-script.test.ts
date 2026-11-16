@@ -16,10 +16,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { legacyProcessRoleFileNames, processRoleFileNames } from "../../packages/butler-app/client/electron/scripts/process-role-names.mjs";
-import { unpackagedWindowsDlls, windowsImportedDlls } from "../../packages/butler-app/client/electron/scripts/windows-system-dlls.mjs";
+import { legacyProcessRoleFileNames, processRoleFileNames } from "../../packages/butler-app/scripts/release/process-role-names.mjs";
+import { unpackagedWindowsDlls, windowsImportedDlls } from "../../packages/butler-app/scripts/release/windows-system-dlls.mjs";
 
-const script = resolve("packages/butler-app/client/electron/scripts/prepare-native-agent.mjs");
+const script = resolve("packages/butler-app/scripts/release/prepare-native-agent.mjs");
 // The producer only runs on its supported host; the fixture agent implements
 // role-link preparation and a stub otool accepts its executable payload.
 const supportedHost = process.platform === "darwin" && process.arch === "arm64";

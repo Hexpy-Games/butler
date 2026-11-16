@@ -53,8 +53,8 @@ if (requestedPlatform !== process.platform || requestedArch !== process.arch) {
 }
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const electronRoot = resolve(scriptDir, "..");
-const repositoryRoot = resolve(electronRoot, "../../../..");
+const repositoryRoot = resolve(scriptDir, "../../../..");
+const electronRoot = join(repositoryRoot, "packages", "butler-app", "client", "electron");
 const rustRoot = join(repositoryRoot, "packages", "butler-agent", "rust");
 
 const payloadRoot = explicitPayloadRoot ??

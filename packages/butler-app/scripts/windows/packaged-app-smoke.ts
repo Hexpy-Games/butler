@@ -6,7 +6,7 @@ import { createServer } from "node:net";
 import { classifyAppForegroundActiveWork } from "../../client/electron/app-foreground-quit.mjs";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { smokeProviderReply } from "./smoke-provider.ts";
-import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
+import { windowsPowerShellEnvironment } from "./windows-powershell-environment.mjs";
 
 if (process.platform !== "win32") throw new Error("Packaged smoke requires Windows");
 if (!process.env.BUTLER_SMOKE_PROFILE_ROOT) throw new Error("Run through deploy/windows-portable-smoke.ps1");

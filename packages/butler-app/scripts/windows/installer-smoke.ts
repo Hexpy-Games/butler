@@ -12,8 +12,8 @@ import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { alive, assertShortcuts, bridge, click, ownedProcesses, ownedSurvivors, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, versionProcesses, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
 import { smokeProviderReply } from "./smoke-provider.ts";
 import { proveReleasedDownloads, releasedDownloadsReply, type DownloadsProof } from "./released-downloads-smoke.ts";
-import { processRoleFileNames } from "../../client/electron/scripts/process-role-names.mjs";
-import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
+import { processRoleFileNames } from "../release/process-role-names.mjs";
+import { windowsPowerShellEnvironment } from "./windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
   throw new Error("Registry/shortcut/installer smoke is restricted to disposable GitHub-hosted runners");

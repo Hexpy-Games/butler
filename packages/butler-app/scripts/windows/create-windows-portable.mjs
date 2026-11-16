@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { windowsPowerShellEnvironment } from "../windows-powershell-environment.mjs";
+import { windowsPowerShellEnvironment } from "./windows-powershell-environment.mjs";
 
 const root = resolve(process.argv[2]);
 if (process.platform !== "win32" || !existsSync(join(root, "Butler.exe"))) {

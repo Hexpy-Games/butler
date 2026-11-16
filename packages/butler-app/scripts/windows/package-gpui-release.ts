@@ -1,16 +1,15 @@
 /** Native unsigned gpui Squirrel release, consuming a release shell and Agent. */
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { windowsPackageVersion } from "../../client/electron/scripts/windows-package-version.mjs";
+import { windowsPackageVersion } from "./windows-package-version.mjs";
 import { writeWindowsReleaseOutputs } from "./release-outputs.ts";
 
 if (process.platform !== "win32") throw new Error("Windows release packaging requires Windows");
 const root = process.cwd();
-const electron = join(root, "packages/butler-app/client/electron");
 const version = process.env.GITHUB_REF_NAME?.replace(/^v/u, "");
 if (!version) throw new Error("GITHUB_REF_NAME is required");
 windowsPackageVersion(version);
@@ -28,7 +27,7 @@ const work = mkdtempSync(join(tmpdir(), "butler-gpui-squirrel-package-"));
 try {
   mkdirSync(out, { recursive: true });
   const payload = join(work, "bundled-agent");
-  run("node", [join(electron, "scripts/prepare-native-agent.mjs"), "win32", "x64", payload]);
+  run("node", [join(root, "packages/butler-app/scripts/release/prepare-native-agent.mjs"), "win32", "x64", payload]);
   const built = spawnSync(join(payload, "bin/butler-agent.exe"), ["--version"], { encoding: "utf8", env: process.env });
   if (built.status !== 0 || !built.stdout.startsWith(`butler ${version} (`)) {
     throw new Error("Bundled Agent does not match the exact App version");
@@ -38,18 +37,18 @@ try {
   cpSync(shell, join(app, "Butler.exe"));
   cpSync(join(root, "LICENSE"), join(app, "LICENSE"));
   cpSync(payload, join(app, "resources/bundled-agent"), { recursive: true });
-  run("node", [join(electron, "scripts/prepare-process-links.mjs"), join(app, "resources/bundled-agent/bin/butler-agent.exe")]);
+  run("node", [join(root, "packages/butler-app/scripts/release/prepare-process-links.mjs"), join(app, "resources/bundled-agent/bin/butler-agent.exe")]);
   run("node", [join(root, "deploy/licenses/package-app.mjs"), app]);
   const notices = join(work, "shell-notices");
   run("python3", [join(root, "deploy/licenses/cargo-notices.py"), "--root", join(root, "packages/butler-shell"),
     "--target", "x86_64-pc-windows-msvc", "--output", notices]);
   cpSync(notices, join(app, "resources/licenses/butler-shell"), { recursive: true });
   await stampExecutable(join(app, "Butler.exe"), version);
-  run("node", [join(electron, "scripts/create-windows-installer.mjs"),
+  run("node", [join(root, "packages/butler-app/scripts/windows/create-windows-installer.mjs"),
     "--no-package-json", ...additionalAppFiles(app).flatMap(name => ["--additional-file", name]),
     "--app-directory", app, "--output-directory", out,
-    "--setup-exe", `ButlerSetup-${version}-x64.exe`, "--setup-icon", join(electron, "assets/butler.ico"), "--version", version]);
-  run("node", [join(electron, "scripts/create-windows-portable.mjs"), app]);
+    "--setup-exe", `ButlerSetup-${version}-x64.exe`, "--setup-icon", join(root, "packages/butler-app/scripts/release/assets/butler.ico"), "--version", version]);
+  run("node", [join(root, "packages/butler-app/scripts/windows/create-windows-portable.mjs"), app]);
   cpSync(join(work, "Butler-win32-x64-portable.zip"), join(out, `butler-app-${version}-windows-x64-portable.zip`));
   const files = writeWindowsReleaseOutputs(out, version, baseUrl);
   console.log(JSON.stringify({ version, artifacts: files, unsigned: true }));
@@ -82,11 +81,11 @@ function requiredPath(name: string): string {
 }
 
 async function stampExecutable(path: string, exactVersion: string) {
-  const require = createRequire(realpathSync(join(electron, "node_modules/@electron/packager/package.json")));
+  const require = createRequire(import.meta.url);
   const { Data, NtExecutable, NtExecutableResource, Resource } = await import(pathToFileURL(require.resolve("resedit")).href);
   const exe = NtExecutable.from(readFileSync(path));
   const res = NtExecutableResource.from(exe);
-  const icon = Data.IconFile.from(readFileSync(join(electron, "assets/butler.ico")));
+  const icon = Data.IconFile.from(readFileSync(join(root, "packages/butler-app/scripts/release/assets/butler.ico")));
   Resource.IconGroupEntry.replaceIconsForResource(res.entries, 1, 1033, icon.icons.map((item: any) => item.data));
   const [major, minor, patch] = exactVersion.split("-")[0]!.split(".").map(Number);
   const info = Resource.VersionInfo.create({ lang: 1033, fixedInfo: { fileOS: 0x40004, fileType: 1 }, strings: [] });

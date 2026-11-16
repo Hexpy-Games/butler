@@ -140,7 +140,7 @@ runs:
         platform="$(node -p 'process.platform + "-" + process.arch')"
         payload="$RUNNER_TEMP/butler-native-agent-payload"
         scripts=packages/butler-agent/rust/scripts
-        node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs "${platform%%-*}" "${platform#*-}" "$payload"
+        node packages/butler-app/scripts/release/prepare-native-agent.mjs "${platform%%-*}" "${platform#*-}" "$payload"
         version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["version"])' "$payload/native-agent-manifest.json")"
         archive="$OUT/butler-agent-${version}-${platform}.tar.gz"
         url="$BASE_URL/$(basename "$archive")"

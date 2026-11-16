@@ -2,17 +2,17 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { smokeBrowserArgs } from "../../../../../tests/support/smoke-browser-args";
+import { smokeBrowserArgs } from "../../../../tests/support/smoke-browser-args";
 import { createHash } from "node:crypto";
 import { chromium } from "playwright";
 
-const ui = resolve(import.meta.dir, "../../ui");
+const ui = resolve(import.meta.dir, "../../client/ui");
 const mark = join(ui, "src/libs/design-system/components/ButlerThinkingMark");
 const tokens = readFileSync(join(ui, "src/libs/design-system/tokens.css"), "utf8");
 // Light DS surface (--color-surface-base -> --grayscale-01): the installer tile in every Windows theme.
 const surface = /--grayscale-01:\s*(#[0-9a-f]{6})/iu.exec(tokens)?.[1];
 if (!surface) throw new Error("DS --grayscale-01 token missing");
-const output = resolve(process.argv[2] ?? join(import.meta.dir, "../assets/butler-install.gif"));
+const output = resolve(process.argv[2] ?? join(import.meta.dir, "../release/assets/butler-install.gif"));
 
 const TILE = 192;
 const MARK = 168;

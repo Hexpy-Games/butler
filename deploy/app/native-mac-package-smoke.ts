@@ -3,7 +3,7 @@ import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync, readdi
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { processRoleFileNames } from "../../packages/butler-app/client/electron/scripts/process-role-names.mjs";
+import { processRoleFileNames } from "../../packages/butler-app/scripts/release/process-role-names.mjs";
 
 export function verifyMacPackageMetadata(app: string, exactVersion: string, hardLinks: boolean): void {
   verifyMacFrameworkLinks(app);

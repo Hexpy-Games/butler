@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { cpSync, copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { windowsPowerShellEnvironment } from "../windows-powershell-environment.mjs";
+import { windowsPowerShellEnvironment } from "./windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.arch !== "x64") {
   throw new Error("Butler Squirrel packaging requires Windows x64");
@@ -109,7 +109,7 @@ try {
     noDelta: true,
     setupExe,
     setupIcon: resolve(setupIcon),
-    loadingGif: fileURLToPath(new URL("../assets/butler-install.gif", import.meta.url)),
+    loadingGif: fileURLToPath(new URL("../release/assets/butler-install.gif", import.meta.url)),
     iconUrl:
       "https://raw.githubusercontent.com/Hexpy-Games/butler/main/packages/butler-app/client/electron/assets/butler.ico",
     noMsi: true,

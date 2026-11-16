@@ -171,7 +171,7 @@ class ApprovedTiers(unittest.TestCase):
             'packages/butler-app/client/ui/src/app.tsx': False,
             'tests/unit/prepare-native-agent-script.test.ts': True,
             'tests/unit/run-fast-unit-tests.sh': True,
-            'packages/butler-app/client/electron/scripts/prepare-native-agent.mjs': True,
+            'packages/butler-app/scripts/release/prepare-native-agent.mjs': True,
             '.github/workflows/bun-unit.yml': True, 'bun.lock': True, 'bunfig.toml': True,
         }.items():
             self.assertEqual(json.loads(selection([path])['parts'])['ui']['macos'], False, path)

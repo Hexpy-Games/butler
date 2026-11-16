@@ -111,7 +111,7 @@ async fn process_roles_preserve_worker_protocol_and_executable_identity() -> Res
         }
         assert!(process_names::prepare(&sandbox.binary).is_err());
         let script = butler_e2e::e2e::binary::workspace_root()
-            .join("../../butler-app/client/electron/scripts/prepare-process-links.mjs");
+            .join("../../butler-app/scripts/release/prepare-process-links.mjs");
         let output = launch
             .env_command(std::path::Path::new("node"))
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())

@@ -75,7 +75,7 @@ if (!existsSync(nativeAgentResources) || !statSync(nativeAgentResources).isDirec
   throw new Error(`native Butler Agent resources not found: ${nativeAgentResources}`);
 }
 accessSync(nativeAgentBinary, constants.X_OK);
-run("node", [resolve(scriptDir, "prepare-process-links.mjs"), nativeAgentBinary]);
+run("node", [resolve(scriptDir, "../../../scripts/release/prepare-process-links.mjs"), nativeAgentBinary]);
 setNativePayloadReadOnly(nativeAgentRoot);
 
 // Electron's runtime package retains the exact release identity. Apple bundle

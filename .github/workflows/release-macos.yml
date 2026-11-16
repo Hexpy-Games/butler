@@ -112,7 +112,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Prepare the native Agent payload
-        run: python3 .github/scripts/isolated.py node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64 "$BUTLER_NATIVE_AGENT_PAYLOAD"
+        run: python3 .github/scripts/isolated.py node packages/butler-app/scripts/release/prepare-native-agent.mjs darwin arm64 "$BUTLER_NATIVE_AGENT_PAYLOAD"
 
       # After every third-party install step: keychain and notary key exist only from here on.
       - name: Set up macOS code signing

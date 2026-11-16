@@ -58,6 +58,7 @@ interface StagedApp {
 }
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
+const RELEASE_SCRIPTS = join("packages", "butler-app", "scripts", "release");
 const APP_RENDERER_DIST = join("packages", "butler-app", "client", "ui", "dist");
 /** Where the packages install the App; the agent's installation root. */
 export const LINUX_INSTALL_ROOT = "/opt/butler";
@@ -137,7 +138,7 @@ function packageElectronApp(root: string, workDir: string, platform: LinuxAppPla
   if (!existsSync(join(packagedDir, "Butler")) || !existsSync(agentBinary)) {
     throw new Error(`electron package is incomplete: ${packagedDir}`);
   }
-  run(process.env.BUTLER_NODE || "node", [join(root, ELECTRON_ROOT, "scripts", "prepare-process-links.mjs"), agentBinary], { cwd: root });
+  run(process.env.BUTLER_NODE || "node", [join(root, RELEASE_SCRIPTS, "prepare-process-links.mjs"), agentBinary], { cwd: root });
   run(process.env.BUTLER_NODE || "node", [join(root, "deploy/licenses/package-app.mjs"), packagedDir], { cwd: root });
   return { root, platform, version: versions.app, packagedDir, agentBinary, appBinary: join(packagedDir, "Butler"), epoch };
 }
@@ -146,7 +147,7 @@ function prepareBundledAgent(root: string, workDir: string, arch: string): strin
   const versions = readAppComponentVersions(root);
   const agentDir = join(workDir, "bundled-agent");
   run(process.env.BUTLER_NODE || "node", [
-    join(root, ELECTRON_ROOT, "scripts", "prepare-native-agent.mjs"), "linux", arch, agentDir,
+    join(root, RELEASE_SCRIPTS, "prepare-native-agent.mjs"), "linux", arch, agentDir,
   ], { cwd: root, env: { ...process.env, BUTLER_NATIVE_PAYLOAD_WRITABLE: "1", BUTLER_PACKAGED_APP_VERSION: versions.app } });
   const manifest = JSON.parse(readFileSync(join(agentDir, "native-agent-manifest.json"), "utf8"));
   if (manifest.version !== versions.bundledAgent || manifest.appVersion !== versions.app) {
@@ -171,7 +172,7 @@ function packageGpuiApp(root: string, workDir: string, platform: LinuxAppPlatfor
   chmodSync(appBinary, 0o755);
   cpSync(agentDir, join(packagedDir, "resources", "bundled-agent"), { recursive: true });
   const agentBinary = join(packagedDir, "resources", "bundled-agent", "bin", "butler-agent");
-  run(process.env.BUTLER_NODE || "node", [join(root, ELECTRON_ROOT, "scripts", "prepare-process-links.mjs"), agentBinary], { cwd: root });
+  run(process.env.BUTLER_NODE || "node", [join(root, RELEASE_SCRIPTS, "prepare-process-links.mjs"), agentBinary], { cwd: root });
   run(process.env.BUTLER_NODE || "node", [join(root, "deploy/licenses/package-app.mjs"), packagedDir], { cwd: root });
   const notices = join(workDir, "shell-notices");
   run(process.env.PYTHON3 || "python3", [join(root, "deploy/licenses/cargo-notices.py"), "--root", join(root, "packages/butler-shell"),
@@ -194,7 +195,7 @@ function stagePackageRoot(staged: StagedApp, packageRoot: string, format: LinuxP
   cpSync(staged.packagedDir, target, { recursive: true, dereference: false });
   normalizeModes(target);
   run(process.env.BUTLER_NODE || "node", [
-    join(staged.root, ELECTRON_ROOT, "scripts", "prepare-process-links.mjs"),
+    join(staged.root, RELEASE_SCRIPTS, "prepare-process-links.mjs"),
     join(target, "resources", "bundled-agent", "bin", "butler-agent"),
   ], { cwd: staged.root });
   // The Chromium sandbox helper must be setuid root; both formats install as root.
@@ -207,7 +208,7 @@ function stagePackageRoot(staged: StagedApp, packageRoot: string, format: LinuxP
   }
   writeExecutable(join(binDir, PACKAGE_NAME), launcherScript(installDir, shell));
   writeExecutable(join(binDir, "butler"), cliLauncherScript(installDir));
-  copyFileSync(join(staged.root, ELECTRON_ROOT, "assets", "icon.png"), join(shareDir, "icons", "hicolor", "512x512", "apps", "butler.png"));
+  copyFileSync(join(staged.root, RELEASE_SCRIPTS, "assets", "icon.png"), join(shareDir, "icons", "hicolor", "512x512", "apps", "butler.png"));
   // Debian policy: the license text is /usr/share/doc/<package>/copyright.
   const license = join(staged.root, "LICENSE");
   if (format === "deb") copyFileSync(license, join(shareDir, "doc", PACKAGE_NAME, "copyright"));

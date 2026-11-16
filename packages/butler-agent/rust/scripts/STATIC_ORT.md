@@ -11,7 +11,7 @@
 
 The custom static recipe needs Python 3.9+, Rust 1.99.0 and more than 8 GiB free. CMake, Ninja and protoc come from pinned archives; they do not need a global installation. The script rejects other hosts and caps downloads, archive expansion, build time, parallel jobs and disk use. The `ort` crate's official prebuilt binaries cover all four CI targets; its Windows archive includes DirectML, and that job only type-checks without linking or running the agent.
 
-`packages/butler-app/client/electron/scripts/prepare-native-agent.mjs` is the native payload producer for macOS arm64 and Linux x64/arm64. It invokes the recipe with the matching `--target` (`macos-arm64`, `linux-x64`, `linux-arm64`), then passes the returned `ORT_LIB_PATH` and `PROTOC` to a release build that selects `--no-default-features --features static-ort`. Linux package builds use that mode on release tags and use prebuilt ORT for PR smoke checks. CI/dev builds select the default `prebuilt-ort` feature; downloaded artifacts are cached through `ORT_CACHE_DIR` in the Rust cache. Setup still uses `--protoc-only` where Lance build scripts need it and never compiles ORT from source.
+`packages/butler-app/scripts/release/prepare-native-agent.mjs` is the native payload producer for macOS arm64 and Linux x64/arm64. It invokes the recipe with the matching `--target` (`macos-arm64`, `linux-x64`, `linux-arm64`), then passes the returned `ORT_LIB_PATH` and `PROTOC` to a release build that selects `--no-default-features --features static-ort`. Linux package builds use that mode on release tags and use prebuilt ORT for PR smoke checks. CI/dev builds select the default `prebuilt-ort` feature; downloaded artifacts are cached through `ORT_CACHE_DIR` in the Rust cache. Setup still uses `--protoc-only` where Lance build scripts need it and never compiles ORT from source.
 
 ## Pinned inputs
 
@@ -28,7 +28,7 @@ The custom static cache lives under `${CARGO_TARGET_DIR:-packages/butler-agent/r
 Run the existing producer on a macOS arm64 build host:
 
 ```sh
-node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64 /path/to/output/bundled-agent
+node packages/butler-app/scripts/release/prepare-native-agent.mjs darwin arm64 /path/to/output/bundled-agent
 ```
 
 Prepare a Linux or Windows cache directly (prints `ort_lib_path`, `protoc` and `fingerprint` as JSON):

@@ -18,7 +18,7 @@ const baseUrl = process.env.BUTLER_RELEASE_BASE_URL ??
 try {
   mkdirSync(out, { recursive: true });
   const payload = join(work, "bundled-agent");
-  run("node", [join(electron, "scripts/prepare-native-agent.mjs"), "win32", "x64", payload]);
+  run("node", [join(root, "packages/butler-app/scripts/release/prepare-native-agent.mjs"), "win32", "x64", payload]);
   const built = spawnSync(join(payload, "bin/butler-agent.exe"), ["--version"], { encoding: "utf8", env: process.env });
   if (built.status !== 0 || !built.stdout.startsWith(`butler ${version} (`)) {
     throw new Error("Bundled Agent does not match the exact App version");
@@ -29,15 +29,15 @@ try {
   cpSync(process.env.BUTLER_NATIVE_UI_DIST ?? join(root, "packages/butler-app/client/ui/dist"), renderer, { recursive: true });
   run("node", [join(electron, "node_modules/@electron/packager/bin/electron-packager.mjs"), source, "Butler",
     "--platform=win32", "--arch=x64", `--electron-version=${pkg.devDependencies.electron}`,
-    `--out=${work}`, `--icon=${join(electron, "assets/butler.ico")}`,
+    `--out=${work}`, `--icon=${join(root, "packages/butler-app/scripts/release/assets/butler.ico")}`,
     `--extra-resource=${payload}`, `--extra-resource=${renderer}`, "--overwrite", "--quiet"]);
   const app = join(work, "Butler-win32-x64");
-  run("node", [join(electron, "scripts/prepare-process-links.mjs"), join(app, "resources/bundled-agent/bin/butler-agent.exe")]);
+  run("node", [join(root, "packages/butler-app/scripts/release/prepare-process-links.mjs"), join(app, "resources/bundled-agent/bin/butler-agent.exe")]);
   run("node", [join(root, "deploy/licenses/package-app.mjs"), app]);
-  run("node", [join(electron, "scripts/create-windows-installer.mjs"),
+  run("node", [join(root, "packages/butler-app/scripts/windows/create-windows-installer.mjs"),
     "--app-directory", app, "--output-directory", out,
-    "--setup-exe", `ButlerSetup-${version}-x64.exe`, "--setup-icon", join(electron, "assets/butler.ico"), "--version", version]);
-  run("node", [join(electron, "scripts/create-windows-portable.mjs"), app]);
+    "--setup-exe", `ButlerSetup-${version}-x64.exe`, "--setup-icon", join(root, "packages/butler-app/scripts/release/assets/butler.ico"), "--version", version]);
+  run("node", [join(root, "packages/butler-app/scripts/windows/create-windows-portable.mjs"), app]);
   cpSync(join(work, "Butler-win32-x64-portable.zip"), join(out, `butler-app-${version}-windows-x64-portable.zip`));
   const files = writeWindowsReleaseOutputs(out, version, baseUrl);
   console.log(JSON.stringify({ version, artifacts: files, unsigned: true }));

@@ -62,7 +62,7 @@ cd butler
 bun install                 # also points git at the hooks in .githooks
 bun run app:client:install  # Electron and UI dependencies (npm)
 bun run app:ui:build        # the agent payload includes the built UI
-node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs darwin arm64
+node packages/butler-app/scripts/release/prepare-native-agent.mjs darwin arm64
 ```
 
 `prepare-native-agent.mjs` builds a pinned static ONNX Runtime and a release build of `butler-agent`, then stages the binary and its resources in `packages/butler-app/client/electron/.native-agent-payload/bundled-agent`. The first run is slow. Later runs reuse the cache in `${CARGO_TARGET_DIR:-packages/butler-agent/rust/target}/native-deps`. Run it again after you change the agent or its resources.

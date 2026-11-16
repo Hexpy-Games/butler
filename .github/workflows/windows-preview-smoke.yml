@@ -599,7 +599,7 @@ jobs:
           try {
             bun install --frozen-lockfile --ignore-scripts
             if ($LASTEXITCODE) { throw 'Dependency installation failed' }
-            ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel packages/butler-app/client/electron/node_modules/electron-winstaller/vendor/Squirrel.exe
+            ./packages/butler-app/scripts/windows/verify-squirrel-version.ps1 -Squirrel node_modules/electron-winstaller/vendor/Squirrel.exe
             bun run packages/butler-app/scripts/windows/installer-smoke.ts dist/release/app-windows-first dist/release/app-windows
             if ($LASTEXITCODE) { throw 'Installer/update smoke failed' }
           } finally { . "$env:GITHUB_WORKSPACE/deploy/windows-job-tree.ps1"; Remove-JobTree $profile }

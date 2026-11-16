@@ -16,7 +16,7 @@ binary (lipo/otool on macOS, readelf on Linux: architecture and no dynamic
 dependency beyond the system or glibc runtime).
 
 ```sh
-node packages/butler-app/client/electron/scripts/prepare-native-agent.mjs \
+node packages/butler-app/scripts/release/prepare-native-agent.mjs \
   "$(uname -s | tr A-Z a-z)" "$ARCH" "$BUTLER_NATIVE_AGENT_PAYLOAD"   # ARCH: arm64 or x64
 python3 packages/butler-agent/rust/scripts/release-standalone-agent.py \
   gate --payload "$BUTLER_NATIVE_AGENT_PAYLOAD"

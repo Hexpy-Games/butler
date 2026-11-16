@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { electronPage, type ElectronPage } from "../../../../tests/support/electron-page-cdp.ts";
 import { freeGatewayPort, freePort } from "../../../../tests/support/native-app-server.ts";
 import { bridge, click, ownedProcesses, ownedSurvivors, ownedDiagnostics, powershell, readJson, waitFor, waitForOwnedExit, type OwnedProcesses } from "./installer-smoke-support.ts";
-import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
+import { windowsPowerShellEnvironment } from "./windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
   throw new Error("Legacy desktop smoke requires a disposable GitHub-hosted Windows runner");
