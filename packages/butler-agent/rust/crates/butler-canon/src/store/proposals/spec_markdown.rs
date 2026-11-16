@@ -25,7 +25,10 @@ pub(super) fn parse(body: &str) -> Result<Parsed<'_>> {
             continue;
         }
         if index == 0 {
-            parsed.title = line.strip_prefix("# ").map(str::trim);
+            parsed.title = line
+                .strip_prefix("# ")
+                .map(str::trim)
+                .filter(|title| !title.is_empty());
         }
         if let Some(heading) = line.strip_prefix("## ") {
             part = heading.trim();

@@ -63,7 +63,6 @@ pub(super) fn create(
     let parsed = spec_markdown::parse(body)?;
     let title = parsed
         .title
-        .filter(|title| !title.is_empty())
         .ok_or(Error::Invalid("spec body must start with '# ' and a title"))?;
     let id = crate::work_ids::IdGenerator::global_next(crate::work_ids::IdKind::Spec, ctx.now)?;
     let node = create_spec_node(
