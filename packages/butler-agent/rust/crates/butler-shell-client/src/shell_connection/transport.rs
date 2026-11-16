@@ -143,6 +143,21 @@ impl ShellClient {
         live: bool,
         admin: Option<&str>,
     ) -> Result<Response, Error> {
+        self.request_with(method, url, body, live, admin, &[]).await
+    }
+    pub(crate) async fn request_with(
+        &self,
+        method: Method,
+        url: Url,
+        body: &Body<'_>,
+        live: bool,
+        admin: Option<&str>,
+        headers: &[(&str, String)],
+    ) -> Result<Response, Error> {
+        let mut headers = headers.to_vec();
+        if let Some(admin) = admin {
+            headers.push((ADMIN_HEADER, admin.to_owned()));
+        }
         // Only the message ingress dedupes client ids. Session creation and
         // authority side effects have no end-to-end retry guarantee.
         let idempotent = !matches!(body, Body::Bytes { .. })
@@ -153,7 +168,7 @@ impl ShellClient {
         let mut delay = Duration::from_millis(200);
         for attempt in 0..3 {
             let result = self
-                .authenticated_request(method.clone(), url.clone(), body, live, admin)
+                .authenticated_request(method.clone(), url.clone(), body, live, &headers)
                 .await;
             if !idempotent
                 || attempt == 2
@@ -172,11 +187,11 @@ impl ShellClient {
         url: Url,
         body: &Body<'_>,
         live: bool,
-        admin: Option<&str>,
+        headers: &[(&str, String)],
     ) -> Result<Response, Error> {
         let token = self.inner.token.lock().await.clone();
         let first = self
-            .send(method.clone(), url.clone(), body, live, &token, admin)
+            .send(method.clone(), url.clone(), body, live, &token, headers)
             .await?;
         if first.status().as_u16() != 401 {
             return checked(first).await;
@@ -200,7 +215,7 @@ impl ShellClient {
         if next == token {
             return Err(Error::Authentication);
         }
-        checked(self.send(method, url, body, live, &next, admin).await?).await
+        checked(self.send(method, url, body, live, &next, headers).await?).await
     }
     async fn send(
         &self,
@@ -209,7 +224,7 @@ impl ShellClient {
         body: &Body<'_>,
         live: bool,
         token: &str,
-        admin: Option<&str>,
+        headers: &[(&str, String)],
     ) -> Result<Response, Error> {
         let mut request = self
             .inner
@@ -217,8 +232,8 @@ impl ShellClient {
             .request(method, url)
             .phase(butler_log::http::Phase::current().sensitive())
             .bearer_auth(token);
-        if let Some(admin) = admin {
-            request = request.header(ADMIN_HEADER, admin);
+        for (name, value) in headers {
+            request = request.header(*name, value);
         }
         if !live {
             request = request.timeout(Duration::from_secs(30));
@@ -277,6 +292,29 @@ impl ShellClient {
             .await?;
         let bytes = response.bytes().await.map_err(|_| Error::Connection)?;
         serde_json::from_slice(&bytes).map_err(|_| Error::Protocol)
+    }
+    /// An admin request whose response body the caller reads itself (or ignores).
+    pub(crate) async fn admin_response(
+        &self,
+        method: Method,
+        segments: &[&str],
+        headers: &[(&str, String)],
+        body: Option<&Value>,
+        live: bool,
+    ) -> Result<Response, Error> {
+        let data = self.inner.data.clone();
+        let admin = tokio::task::spawn_blocking(move || super::attach::read_admin(&data))
+            .await
+            .map_err(|_| Error::LocalMetadata)??;
+        self.request_with(
+            method,
+            self.url(segments, &[])?,
+            &body.map_or(Body::None, Body::Json),
+            live,
+            Some(&admin),
+            headers,
+        )
+        .await
     }
     async fn json_response(
         &self,
