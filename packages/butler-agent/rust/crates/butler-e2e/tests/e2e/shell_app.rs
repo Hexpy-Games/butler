@@ -29,6 +29,7 @@ pub(super) mod driver;
 pub(super) mod live_turns;
 use driver::{SERIAL, SHOTS, Shell};
 mod focus_fallback;
+mod narrow_window;
 mod text_selection;
 mod text_size;
 

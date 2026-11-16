@@ -289,7 +289,6 @@ impl Shell {
             .chrome_environment(ChromeEnvironment::Electron)
             .platform(platform)
             .left_open(open)
-            .compact_sidebar_full_width(true)
             .panel_widths(width, 376.)
             .resizing(self.frame.resize_start.is_some())
             .peek(peek)
