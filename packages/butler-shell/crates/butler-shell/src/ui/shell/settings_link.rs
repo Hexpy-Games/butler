@@ -8,7 +8,7 @@ use gpui::{AppContext as _, BorrowAppContext as _, Context, Entity, Window};
 use serde_json::Value;
 
 use super::navigation::Navigation;
-use super::{Shell, appearance};
+use super::{AppSettings, Shell, appearance};
 use crate::lifecycle::ui_state::UiState;
 use crate::ui::chat::{self, AssistantHooks};
 use crate::ui::i18n::Locale;
@@ -175,7 +175,12 @@ impl Shell {
             crate::lifecycle::ui_state::save(cx, &saved);
             self.ui_state = saved;
         }
+        let changed = self.settings_raw.as_deref() != Some(&**raw);
         self.settings_raw = Some(raw.clone());
+        AppSettings::set(cx, raw.clone());
+        if changed {
+            cx.refresh_windows();
+        }
         cx.notify();
     }
 }

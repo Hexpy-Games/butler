@@ -136,11 +136,22 @@ impl Shell {
             _ => None,
         };
         // `settings.updated` carries the changed subset; a language in it switches the UI.
+        // The subset is merged into the shared settings (`settingsFromLiveEvent`).
         if let crate::ui::source::LiveUpdate::NavigationEvent(e) = &event.update
             && e.r#type == "settings.updated"
             && let Some(language) = e.payload["settings"]["language"].as_str()
         {
             self.set_locale(Locale::from_language(language), cx);
+        }
+        if let crate::ui::source::LiveUpdate::NavigationEvent(e) = &event.update
+            && e.r#type == "settings.updated"
+            && let Some(patch) = e.payload["settings"].as_object()
+            && let Some(current) = self.settings_raw.as_deref()
+            && let Some(base) = current.as_object()
+        {
+            let mut merged = base.clone();
+            merged.extend(patch.clone());
+            self.apply_settings(&std::rc::Rc::new(serde_json::Value::Object(merged)), cx);
         }
         // Each committed event: the App's log level may change, and the work a deferred App
         // update waits on may settle.
