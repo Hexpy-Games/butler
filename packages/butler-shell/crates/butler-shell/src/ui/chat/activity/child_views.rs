@@ -131,10 +131,10 @@ pub(super) struct StepActivity {
     pub(super) action: Option<String>,
 }
 
-struct ActivitySource<'a> {
-    turn: &'a str,
-    at: Option<&'a str>,
-    rows: &'a [ProgressRow],
+pub(crate) struct ActivitySource<'a> {
+    pub(crate) turn: &'a str,
+    pub(crate) at: Option<&'a str>,
+    pub(crate) rows: &'a [ProgressRow],
 }
 
 /// `observerActivitySources.ts`: Map replacement keeps a turn's original insertion order.
@@ -152,7 +152,7 @@ fn set_source<'a>(
 }
 
 /// `observerActivitySources.ts`: messages override history; the active turn overrides all.
-fn sources(view: &SessionView) -> Vec<ActivitySource<'_>> {
+pub(crate) fn sources(view: &SessionView) -> Vec<ActivitySource<'_>> {
     let mut sources = Vec::new();
     let mut indices = HashMap::new();
     for source in view.activity_history.iter().flatten() {
@@ -209,15 +209,6 @@ fn turn_source(turn: &crate::ui::source::wire::SessionViewTurn) -> ActivitySourc
             .as_ref()
             .map_or(&[], |p| p.safe_progress_rows.as_slice()),
     }
-}
-
-/// `observerActivitySources.ts`: the rows of every turn the view carries, by turn id.
-pub(crate) fn rows_by_turn(view: &SessionView) -> HashMap<String, Vec<ProgressRow>> {
-    sources(view)
-        .into_iter()
-        .filter(|source| !source.rows.is_empty())
-        .map(|source| (source.turn.to_owned(), source.rows.to_vec()))
-        .collect()
 }
 
 /// `SessionObserverStepTimeline.tsx` projectActivities, including model-authored action keys.

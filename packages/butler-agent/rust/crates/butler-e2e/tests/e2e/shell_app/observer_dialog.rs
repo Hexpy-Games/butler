@@ -76,16 +76,16 @@ async fn finished_child(id: &str) -> Result<(Sandbox, String, Child), HarnessErr
     Ok((sandbox, chat, child))
 }
 
-/// SHELL-APP-08 — The eye on a steward card opens the activity dialog, and the dialog shows the
-/// child's work: its transcript fills the dialog, the turn's steps and the child's reply are in
-/// view (Electron's `SessionObserverDialog`).
+/// SHELL-APP-09 — The eye on a steward card opens the activity dialog, and the dialog shows the
+/// child's work: the turn's first activity row and the child's reply are inside the dialog, in
+/// view right after it opens (Electron's `SessionObserverDialog`).
 #[tokio::test]
-async fn shell_app_08_activity_dialog_shows_the_childs_steps_and_reply() -> Result<(), HarnessError>
+async fn shell_app_09_activity_dialog_shows_the_childs_steps_and_reply() -> Result<(), HarnessError>
 {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
     let _serial = SERIAL.lock().await;
-    let (mut sandbox, chat, child) = finished_child("SHELL-APP-08").await?;
+    let (mut sandbox, chat, child) = finished_child("SHELL-APP-09").await?;
     let mut shell = Shell::start(&sandbox, &[]).await?;
     let (row, open) = (
         format!("wait-anchor sidebar-row-{chat}"),
@@ -107,7 +107,7 @@ async fn shell_app_08_activity_dialog_shows_the_childs_steps_and_reply() -> Resu
             "wait-anchor steward-observer-transcript",
             "expect-within steward-observer-transcript dialog-content",
             &format!("wait-anchor {steps}"),
-            &format!("expect-within {steps} steward-observer-transcript"),
+            &format!("expect-within {steps} dialog-content"),
             &format!("wait-anchor {reply}"),
             &format!("expect-within {reply} dialog-content"),
             "app-quit",

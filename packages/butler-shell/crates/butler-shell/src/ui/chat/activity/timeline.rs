@@ -28,7 +28,7 @@ use crate::ui::widgets::anchor;
 
 /// `TurnActivityTimeline` for the phase activities of `rows`; `None` when there are none.
 /// `state` is the turn's current state (`currentState`).
-pub(super) fn timeline(
+pub(crate) fn timeline(
     rows: &[ProgressRow],
     turn_id: Option<&str>,
     state: Option<&str>,
@@ -43,7 +43,7 @@ pub(super) fn timeline(
     let latest = activities.last()?.clone();
     let state = state.map(str::to_string).or(projection.semantic_state);
     let key = format!("turn-activity-{}", activities[0].id);
-    let open = window.use_keyed_state(format!("{key}-expanded"), cx, |_, _| false);
+    let open = expanded_state(&activities[0].id, window, cx);
     let expanded = *open.read(cx);
     let current = phase_label(lang, state.as_deref().or(latest.phase.as_deref()));
     let strings = locale(cx).strings();
@@ -95,6 +95,11 @@ pub(super) fn timeline(
         )
         .into_any_element(),
     )
+}
+
+/// The expanded flag of the timeline whose first activity is `first`.
+pub(crate) fn expanded_state(first: &str, window: &mut Window, cx: &mut App) -> Entity<bool> {
+    window.use_keyed_state(format!("turn-activity-{first}-expanded"), cx, |_, _| false)
 }
 
 /// Sets or flips the timeline's expanded state.

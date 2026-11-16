@@ -14,6 +14,7 @@ mod list;
 mod message_markdown;
 mod queue;
 mod row;
+pub(crate) use row::message_row;
 mod user;
 
 use std::collections::{HashMap, HashSet};
