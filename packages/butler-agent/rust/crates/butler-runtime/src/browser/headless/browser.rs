@@ -1,5 +1,6 @@
 //! One headless browser process tree: launched on demand, sandboxed, its
-//! egress through the guard proxy, its profile a throwaway directory.
+//! egress through the guard proxy, its profile one reused directory; pages live in
+//! disposable contexts, so it holds no site state.
 use super::{cdp::Cdp, page::Page, state::Shared};
 use crate::browser::egress::{ContentOrigin, EgressProxy};
 use butler_platform::browser_process::{self, PipeBrowser};
@@ -33,7 +34,6 @@ pub(crate) struct Browser {
     process: Mutex<Option<PipeBrowser>>,
     _proxy: EgressProxy,
     _preview_proxy: Option<EgressProxy>,
-    profile: PathBuf,
 }
 
 const LOG_LIMIT: u64 = 1024 * 1024;
@@ -67,13 +67,7 @@ fn arguments(profile: &Path, proxy: &str) -> Vec<OsString> {
 
 fn prepare(root: &Path) -> std::io::Result<(PathBuf, PathBuf)> {
     std::fs::create_dir_all(root)?;
-    // Profiles of a run that ended without its reap hold nothing worth keeping.
-    for entry in std::fs::read_dir(root)?.flatten() {
-        if entry.file_name().to_string_lossy().starts_with("profile-") {
-            let _ = std::fs::remove_dir_all(entry.path());
-        }
-    }
-    let profile = root.join(format!("profile-{}", uuid::Uuid::new_v4()));
+    let profile = root.join("profile");
     std::fs::create_dir_all(&profile)?;
     let log = root.join("browser.log");
     if std::fs::metadata(&log).is_ok_and(|m| m.len() > LOG_LIMIT) {
@@ -141,7 +135,6 @@ impl Browser {
             process: Mutex::new(Some(process)),
             _proxy: proxy,
             _preview_proxy: preview_proxy,
-            profile,
         });
         let _ = std::fs::create_dir_all(&downloads.stage);
         downloads.attach(&browser);
@@ -194,7 +187,7 @@ impl Browser {
         })
     }
 
-    /// Closes the browser, ends its whole process tree and removes its profile.
+    /// Closes the browser and ends its whole process tree; its reused profile stays.
     pub(crate) async fn stop(&self) {
         let _ = tokio::time::timeout(
             Duration::from_secs(2),
@@ -213,17 +206,12 @@ impl Browser {
             pid
         });
         self.alive.cancel();
-        // The cap is only a guard; cleanup normally ends when the tree has exited.
+        // The cap is only a guard; the next start must not meet a browser still
+        // exiting with the same profile open.
         for _ in 0..300 {
             // Windows ends the tree asynchronously after its Job Object closes.
-            // Browser descendants keep profile files open until each exits.
             // Under load this can take longer than a fixed one-second retry window.
-            if std::fs::remove_dir_all(&self.profile).is_ok() || !self.profile.exists() {
-                break;
-            }
             if pid.is_none_or(|pid| liveness(pid) == Liveness::Gone) {
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                let _ = std::fs::remove_dir_all(&self.profile);
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -241,6 +229,5 @@ impl Drop for Browser {
         {
             process.kill();
         }
-        let _ = std::fs::remove_dir_all(&self.profile);
     }
 }

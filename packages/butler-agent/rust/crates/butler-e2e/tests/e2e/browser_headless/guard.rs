@@ -173,12 +173,6 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
         started.elapsed()
     );
     let elapsed_ms = started.elapsed().as_millis();
-    let root = super::support::state_root(&s.sandbox.data);
-    let profiles = std::fs::read_dir(&root)?
-        .flatten()
-        .filter(|e| e.file_name().to_string_lossy().starts_with("profile-"))
-        .count();
-    assert_eq!(profiles, 0, "the throwaway profile is removed");
     let before = backend::tree(&s.sandbox.data);
     tokio::time::sleep(Duration::from_secs(10)).await;
     assert_eq!(
@@ -190,7 +184,7 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
         std::fs::create_dir_all(&dir)?;
         std::fs::write(
             std::path::Path::new(&dir).join("idle-reap.json"),
-            json!({"elapsed_ms":elapsed_ms,"polls":polls,"processes":browser_processes(&marker),"profiles":profiles,"no_writes_for_seconds":10}).to_string(),
+            json!({"elapsed_ms":elapsed_ms,"polls":polls,"processes":browser_processes(&marker),"no_writes_for_seconds":10}).to_string(),
         )?;
     }
     Ok(())
