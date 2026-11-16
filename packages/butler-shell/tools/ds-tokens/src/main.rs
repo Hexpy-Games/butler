@@ -3,6 +3,7 @@ mod color;
 mod css;
 mod easing;
 mod length;
+mod mobile;
 mod output;
 mod resolve;
 mod value;
@@ -15,12 +16,30 @@ fn run() -> Result<bool, String> {
     if check {
         args.remove(0);
     }
+    let mobile = args.first().is_some_and(|a| a == "--mobile");
+    if mobile {
+        args.remove(0);
+    }
     if args.len() != 2 {
-        return Err("usage: ds-tokens [--check] <tokens.css> <out-dir>".into());
+        return Err(
+            "usage: ds-tokens [--check] <tokens.css> <out-dir>\n       ds-tokens [--check] --mobile <tokens.css> <tokens.json>"
+                .into(),
+        );
     }
     let source = std::fs::read_to_string(&args[0]).map_err(|e| e.to_string())?;
-    let files = output::generate(&css::read(&source)?)?;
+    let blocks = css::read(&source)?;
     let out = Path::new(&args[1]);
+    if mobile {
+        let text = mobile::generate(&blocks)?;
+        let same = std::fs::read_to_string(out).ok().as_ref() == Some(&text);
+        if check && !same {
+            eprintln!("{}", out.display());
+        } else if !same {
+            std::fs::write(out, text).map_err(|e| e.to_string())?;
+        }
+        return Ok(!check || same);
+    }
+    let files = output::generate(&blocks)?;
     if !check {
         std::fs::create_dir_all(out).map_err(|e| e.to_string())?;
     }

@@ -70,7 +70,7 @@ pub(crate) fn generate(blocks: &[Block]) -> Result<BTreeMap<String, String>, Str
         .collect()
 }
 
-fn classify(name: &str, values: &[Values]) -> Result<Kind, String> {
+pub(crate) fn classify(name: &str, values: &[Values]) -> Result<Kind, String> {
     let mut kind = None;
     for value in values.iter().filter_map(|v| v.get(name)) {
         match kind {
@@ -89,7 +89,11 @@ fn classify(name: &str, values: &[Values]) -> Result<Kind, String> {
     kind.ok_or_else(|| format!("{name} is never set"))
 }
 
-fn value_code(value: Option<&Value>, kind: Kind, optional: bool) -> Result<String, String> {
+pub(crate) fn value_code(
+    value: Option<&Value>,
+    kind: Kind,
+    optional: bool,
+) -> Result<String, String> {
     let code = match value {
         Some(v) if v.kind == kind => v.code.clone(),
         Some(v) if kind == Kind::GradientToken && v.kind == Kind::Color => {
