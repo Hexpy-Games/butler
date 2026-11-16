@@ -5,13 +5,13 @@ use super::{
     state::{Events, Page, PageRef},
 };
 use cef::*;
-use std::{cell::RefCell, rc::Weak};
+use std::{cell::Cell, rc::Rc};
 
 impl OsrRuntime {
     pub fn devtools(&self, page: u64, method: &str, params_json: &str) -> Result<i32, OsrError> {
         let (shared, host) = self.devtools_page(page)?;
         let mut state = shared.borrow_mut();
-        self.ensure_observer(page, &shared, &host, &mut state)?;
+        self.ensure_observer(page, &host, &mut state)?;
         state.next_devtools = state
             .next_devtools
             .checked_add(1)
@@ -32,10 +32,14 @@ impl OsrRuntime {
     pub fn devtools_raw(&self, page: u64, message: &[u8]) -> Result<(), OsrError> {
         let (shared, host) = self.devtools_page(page)?;
         let mut state = shared.borrow_mut();
-        self.ensure_observer(page, &shared, &host, &mut state)?;
-        state.devtools_raw = true;
+        self.ensure_observer(page, &host, &mut state)?;
+        let raw = state.devtools_raw.clone();
         drop(state);
+        let turned_on = !raw.replace(true);
         if host.send_dev_tools_message(Some(message)) != 1 {
+            if turned_on {
+                raw.set(false);
+            }
             return Err(OsrError("DevTools message rejected".into()));
         }
         Ok(())
@@ -43,7 +47,7 @@ impl OsrRuntime {
 
     pub fn devtools_raw_end(&self, page: u64) {
         if let Some(shared) = self.page(page) {
-            shared.borrow_mut().devtools_raw = false;
+            shared.borrow().devtools_raw.set(false);
         }
     }
 
@@ -60,7 +64,6 @@ impl OsrRuntime {
     fn ensure_observer(
         &self,
         page: u64,
-        shared: &PageRef,
         host: &BrowserHost,
         state: &mut Page,
     ) -> Result<(), OsrError> {
@@ -70,7 +73,7 @@ impl OsrRuntime {
                     page,
                     sink: self.sink.clone(),
                 },
-                std::rc::Rc::downgrade(shared),
+                Rc::clone(&state.devtools_raw),
             );
             state.devtools = host.add_dev_tools_message_observer(Some(&mut observer));
             if state.devtools.is_none() {
@@ -82,11 +85,10 @@ impl OsrRuntime {
 }
 
 cef::wrap_dev_tools_message_observer! {
-    struct Observer { events: Events, shared: Weak<RefCell<Page>> }
+    struct Observer { events: Events, raw: Rc<Cell<bool>> }
     impl DevToolsMessageObserver {
         fn on_dev_tools_message(&self, _browser: Option<&mut Browser>, message: Option<&[u8]>) -> i32 {
-            let raw = self.shared.upgrade().is_some_and(|page| page.borrow().devtools_raw);
-            if raw {
+            if self.raw.get() {
                 self.events.emit(OsrEvent::DevToolsRaw { message: message.unwrap_or_default().to_vec() });
             }
             0
