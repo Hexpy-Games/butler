@@ -9,6 +9,9 @@
   font: inherit;
   outline: none;
   resize: vertical;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-fast) var(--motion-ease-standard);
 }
 
 .textarea::placeholder {
@@ -26,6 +29,12 @@
 
 .textarea:focus-visible {
   box-shadow: var(--focus-ring);
+}
+
+/* A dragged file can be dropped here: the ComposerCard drop state. */
+.textarea[data-drop-active="true"] {
+  border-color: var(--color-border-interactive);
+  box-shadow: 0 0 0 3px var(--ring);
 }
 
 /* Disabled: the disabled tone and surface, never an editable look. */
@@ -50,4 +59,10 @@
 
 .textarea[aria-invalid="true"] {
   border-color: var(--color-danger-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .textarea {
+    transition: none;
+  }
 }

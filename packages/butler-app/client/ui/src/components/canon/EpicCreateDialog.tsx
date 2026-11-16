@@ -38,7 +38,7 @@ export function EpicCreateDialog({ projectId, plans, defaultPlanId = null, onClo
     <DialogContent size="md" closeLabel={appCopy.canon.close} aria-describedby={undefined}>
       <DialogForm dialog title={appCopy.canon.newEpic} busy={busy} onSubmit={() => void submit()}
         footer={<CanonFormFooter title={title} busy={busy || attachments.uploading} submitLabel={appCopy.canon.create} onCancel={onClose} />}>
-        <CanonFormFields prefix="canon-create" title={title} description={description} onTitle={setTitle} onDescription={setDescription} attachmentControl={attachments.control} onDescriptionSelect={attachments.onSelect} />
+        <CanonFormFields prefix="canon-create" title={title} description={description} onTitle={setTitle} onDescription={setDescription} attachmentControl={attachments.control} onDescriptionSelect={attachments.onSelect} descriptionDrop={attachments.drop} />
         <CanonTagsField projectId={projectId} value={tags} onChange={setTags} disabled={busy} />
         <Grid columns="2" gap="md">
           <Field><FieldLabel htmlFor="canon-create-plan">{appCopy.canon.plan}</FieldLabel>

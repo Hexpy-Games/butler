@@ -21,6 +21,7 @@ const labels = {
     description: "Project description", descriptionValue: "Butler desktop app: Electron shell, React UI and the Rust agent gateway.",
     cancel: "Cancel", save: "Save", prompt: "Migration prompt",
     brief: "Task brief", briefHint: "Grows as you type, up to 12 lines",
+    drop: "Description", dropHint: "Drop a file to attach it",
     briefValue: Array.from({ length: 16 }, (_, index) => `${index + 1}. Check the release notes and the changed screens.`).join("\n"),
   },
   "ko-KR": {
@@ -31,6 +32,7 @@ const labels = {
     description: "프로젝트 설명", descriptionValue: "버틀러 데스크톱 앱: Electron 셸, React UI, Rust 에이전트 게이트웨이.",
     cancel: "취소", save: "저장", prompt: "마이그레이션 프롬프트",
     brief: "과제 설명", briefHint: "입력하는 만큼 12줄까지 늘어납니다",
+    drop: "설명", dropHint: "파일을 놓으면 첨부됩니다",
     briefValue: Array.from({ length: 16 }, (_, index) => `${index + 1}. 릴리스 노트와 바뀐 화면을 확인합니다.`).join("\n"),
   },
 } as const;
@@ -101,6 +103,16 @@ export const stories: ShowcaseStory[] = [
     name: "Underline · wrapping in-place entry",
     widths: ["375", "app"],
     render: (context) => <Textarea variant="underline" textSize="label" aria-label={text(context).description} placeholder={text(context).description} />,
+  },
+  {
+    name: "Drop target",
+    render: (context) => (
+      <Field>
+        <FieldLabel htmlFor="ds-textarea-drop">{text(context).drop}</FieldLabel>
+        <Textarea id="ds-textarea-drop" dropActive />
+        <FieldDescription>{text(context).dropHint}</FieldDescription>
+      </Field>
+    ),
   },
 ];
 

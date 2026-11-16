@@ -30,6 +30,7 @@ export const guidance: ShowcaseGuidance = {
     },
   ],
   content: [
+    "dropActive shows that a dragged file can be dropped on the field; the caller handles the drop.",
     "Say the expected format in the description (One per line).",
     "autoGrow (default variant): the box grows with the text from its min height to --textarea-grow-max-lines (12), then scrolls; use it where the length varies a lot (a brief, a description).",
   ],

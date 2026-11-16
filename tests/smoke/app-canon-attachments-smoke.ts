@@ -78,6 +78,18 @@ async function verifyFiles(page: import("playwright").Page, server: Awaited<Retu
   await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>("#canon-create-description")?.value.includes("attachment:file-"));
   const markdown = await description.inputValue();
   assert.match(markdown, /^앞 !\[capture.png\]\(attachment:file-[a-f0-9-]+\)뒤$/u);
+  // Dropping a file on the editor attaches it like the button; the page composer behind does not take it.
+  const dropped = await page.evaluateHandle(() => {
+    const data = new DataTransfer();
+    data.items.add(new File(["drop"], "notes.txt", { type: "text/plain" }));
+    return data;
+  });
+  await description.dispatchEvent("dragenter", { dataTransfer: dropped });
+  await page.waitForFunction(() => document.querySelector("#canon-create-description")?.getAttribute("data-drop-active") === "true");
+  await description.dispatchEvent("dragover", { dataTransfer: dropped });
+  await description.dispatchEvent("drop", { dataTransfer: dropped });
+  await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>("#canon-create-description")?.value.includes("[notes.txt](attachment:file-"));
+  assert.equal(await page.locator('[data-test-class="composer-card"] [data-slot="attachment-list"]').count(), 0, "The composer does not take a file dropped on the editor");
   const remote: string[] = [];
   page.on("request", request => { if (request.url().includes("remote-image.invalid")) remote.push(request.url()); });
   await description.fill(`${markdown.replace("attachment:", "AtTaChMeNt:")}\n<script>globalThis.epicExecuted=true</script>\n<img src="https://remote-image.invalid/raw.png">\n![remote](https://remote-image.invalid/image.png)\n[bad](javascript:alert(1))`);

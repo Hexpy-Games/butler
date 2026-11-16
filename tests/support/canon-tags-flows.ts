@@ -46,6 +46,10 @@ async function createTaggedEpic(page: Page, server: NativeAppServerHandle, proje
   await dialog.getByLabel("제목", { exact: true }).fill("태그 생성 과제");
   await dialog.getByRole("combobox", { name: "태그", exact: true }).click();
   const popover = page.locator('[data-slot="filtered-select-popover"]');
+  // A modal dialog locks page scroll; the picker's own list still scrolls.
+  await popover.locator('[data-slot="filtered-select-results"]').hover();
+  await page.mouse.wheel(0, 60);
+  await page.waitForFunction(() => document.querySelector('[data-slot="filtered-select-results"]')!.scrollTop > 0);
   await popover.getByRole("textbox", { name: "태그 검색", exact: true }).fill("새 태그");
   const response = await tagRequest(page, "POST", `/projects/${projectId}/canon/tags`,
     () => popover.getByRole("button", { name: "‘새 태그’ 만들기", exact: true }).click(), 201);

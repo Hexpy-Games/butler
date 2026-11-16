@@ -18,6 +18,7 @@ export function useComposerFileDrop(
     };
 
     const onDragEnter = (event: DragEvent) => {
+      if (claimedElsewhere(event)) return;
       const dataTransfer = event.dataTransfer;
       if (!hasFilePayload(dataTransfer)) return;
       event.preventDefault();
@@ -27,6 +28,7 @@ export function useComposerFileDrop(
     };
 
     const onDragOver = (event: DragEvent) => {
+      if (claimedElsewhere(event)) return;
       const dataTransfer = event.dataTransfer;
       if (!hasFilePayload(dataTransfer)) return;
       event.preventDefault();
@@ -34,6 +36,7 @@ export function useComposerFileDrop(
     };
 
     const onDragLeave = (event: DragEvent) => {
+      if (claimedElsewhere(event)) return;
       const dataTransfer = event.dataTransfer;
       if (!hasFilePayload(dataTransfer)) return;
       event.preventDefault();
@@ -46,6 +49,7 @@ export function useComposerFileDrop(
     };
 
     const onDrop = (event: DragEvent) => {
+      if (claimedElsewhere(event)) return;
       const dataTransfer = event.dataTransfer;
       if (!hasFilePayload(dataTransfer)) return;
       event.preventDefault();
@@ -74,6 +78,10 @@ export function useComposerFileDrop(
   }, []);
 
   return { dropActive: isFileDragActive };
+}
+
+function claimedElsewhere(event: DragEvent): boolean {
+  return event.target instanceof Element && event.target.closest("[data-file-drop]") !== null;
 }
 
 function hasFilePayload(

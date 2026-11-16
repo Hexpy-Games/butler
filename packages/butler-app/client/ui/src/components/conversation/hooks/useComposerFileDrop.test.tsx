@@ -34,6 +34,7 @@ afterEach(() => {
   delete (globalThis as { document?: unknown }).document;
   delete (globalThis as { navigator?: unknown }).navigator;
   delete (globalThis as { HTMLElement?: unknown }).HTMLElement;
+  delete (globalThis as { Element?: unknown }).Element;
   delete (globalThis as { Node?: unknown }).Node;
   delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: unknown })
     .IS_REACT_ACT_ENVIRONMENT;
@@ -347,6 +348,7 @@ function installDom() {
     document: dom.window.document,
     navigator: dom.window.navigator,
     HTMLElement: dom.window.HTMLElement,
+    Element: dom.window.Element,
     Node: dom.window.Node,
     IS_REACT_ACT_ENVIRONMENT: true,
   });
