@@ -25,7 +25,7 @@ function AnswerImage({ block }: { block: AnswerImageView }) {
 
 export function AnswerLeafBlocks({ block }: { block: AnswerLeafView }) {
   switch (block.type) {
-    case "timeline": return <EventTimeline>{block.items.map((item, index) => <EventTimelineItem key={index} marker={<Circle size="sm" aria-hidden="true" />}>
+    case "timeline": return <EventTimeline lead="caption">{block.items.map((item, index) => <EventTimelineItem key={index} marker={<Circle size="sm" aria-hidden="true" />}>
       <Stack gap="xs"><Typo.Caption tone="tertiary">{item.when}</Typo.Caption><Typo.Label weight="semibold">{item.title}</Typo.Label>
         {item.text ? <Typo.Body>{item.text}</Typo.Body> : null}<AnswerSourceLine item={item} /></Stack>
     </EventTimelineItem>)}</EventTimeline>;
