@@ -27,6 +27,8 @@ class Paths(unittest.TestCase):
             'packages/project-ledger/src/index.ts': {'ui', 'ds'},
             'packages/butler-mobile/src/connection/probe.ts': {'mobile'},
             'packages/butler-mobile/bun.lock': {'mobile'},
+            'packages/butler-app/client/ui/src/libs/design-system/tokens.css': {'ui', 'site', 'ds', 'mobile'},
+            'packages/butler-shell/tools/ds-tokens/src/mobile.rs': {'shell', 'mobile'},
             'bun.lock': {'ui', 'site', 'ds', 'licenses', 'signing'},
             'bun.lockb': {'ui', 'site', 'ds', 'licenses', 'signing'},
             'packages/butler-agent/rust/crates/butler-core/src/lib.rs': {'rust', 'package', 'install', 'linux-package'},
