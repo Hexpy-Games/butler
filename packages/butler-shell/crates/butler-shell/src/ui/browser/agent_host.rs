@@ -49,6 +49,8 @@ pub(crate) struct Hosted {
     pub(super) paused: bool,
     /// The human step the Agent stopped at.
     pub(super) step: Option<Step>,
+    /// The turn waiting on the user here; its end clears the wait and the step.
+    pub(super) waiting_turn: Option<String>,
     pub(super) internal: bool,
     /// The size the pane last asked for; applied when the page stops being hosted.
     pub(super) pane: Option<(gpui::Size<gpui::Pixels>, f32)>,
@@ -84,6 +86,7 @@ impl Hosted {
             turns: Vec::new(),
             paused: false,
             step: None,
+            waiting_turn: None,
             internal,
             pane: None,
         }

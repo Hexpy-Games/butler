@@ -148,6 +148,8 @@ pub(crate) struct BrowserState {
     pub(super) active: Option<TabId>,
     pub(super) next_id: u64,
     pub(super) publisher: super::host::Publisher,
+    /// The browser area rendered since it was last hidden.
+    pub(super) area_shown: bool,
 }
 
 impl Global for BrowserState {}
@@ -164,6 +166,7 @@ impl BrowserState {
             tabs: Vec::new(),
             active: None,
             next_id: 0,
+            area_shown: false,
         });
         super::agent_host::start(cx);
         cx.spawn(async move |cx| {
@@ -196,6 +199,7 @@ impl BrowserState {
     }
 
     pub(crate) fn show(&mut self, id: Option<&TabId>) {
+        self.area_shown = true;
         self.engine.show(id);
     }
     pub(crate) fn frame_size(&self, id: &TabId) -> Option<(usize, usize)> {
@@ -267,9 +271,7 @@ impl BrowserState {
         }
         self.publisher.changed(&self.tabs);
         super::agent_host::closed(cx, &removed);
-        if self.active.as_ref() == Some(id) {
-            self.active = self.tabs.last().map(|tab| tab.id.clone());
-        }
+        self.reselect(id);
     }
 
     fn drop_placeholders(&mut self, owner: &Owner, cx: &mut App) {
