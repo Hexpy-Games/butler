@@ -99,6 +99,8 @@ pub(crate) fn open_window(cx: &mut App, args: &[OsString]) -> anyhow::Result<()>
         }),
         window_min_size: Some(min_size(MAIN.minimum, scale, None)),
         app_id: Some("butler-shell".into()),
+        // AppKit neither drags a strip nor delays title-bar clicks; the bands move the window.
+        app_owns_titlebar_drag: true,
         ..Default::default()
     };
     let code_font = crate::ui::theme::code_font(&cx.text_system().all_font_names());

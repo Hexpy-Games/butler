@@ -215,11 +215,7 @@ impl Shell {
             .size_full()
             .child(
                 SidebarShell::new("sidebar-shell")
-                    .titlebar(
-                        div()
-                            .w_full()
-                            .window_control_area(gpui::WindowControlArea::Drag),
-                    )
+                    .titlebar(butler_ds::ui::window_drag::area(div().w_full()))
                     .scroll_header(header)
                     .sticky_header(browse)
                     .scroll_slot(self.sidebar.scroll.clone())
