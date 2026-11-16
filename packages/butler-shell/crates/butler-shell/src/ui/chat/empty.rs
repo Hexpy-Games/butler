@@ -136,36 +136,10 @@ pub(crate) fn empty_state(ctx: EmptyCtx<'_>, window: &mut Window, cx: &mut App) 
         .is_none()
         .then(|| *content_rect.read(cx))
         .flatten();
+    let wallpaper = new_chat_wallpaper(wallpaper, settings.as_deref(), kept, window, cx);
     // `Conversation.tsx`: the wallpaper is the conversation's `background` layer and the empty
     // state sits in a locked, unmasked `ConversationScroll`, top-aligned at the conversation's
     // full width (not WallpaperStage's centred layer with its two `lg` insets).
-    let drifts = butler_ds::ui::blocks::wallpaper::drifts(&wallpaper);
-    let motion_paused = settings
-        .as_deref()
-        .is_some_and(|settings| settings["wallpaper"]["motion"] == "paused");
-    let pause_on_battery = settings
-        .as_deref()
-        .is_some_and(|settings| settings["wallpaper"]["pauseOnBattery"] == true);
-    let power = settings
-        .as_ref()
-        .filter(|_| drifts || pause_on_battery)
-        .map(|_| power::state(window, cx))
-        .unwrap_or_default();
-    let paused = settings.is_some() && (motion_paused || (pause_on_battery && power.on_battery));
-    let picture = background::picture("new-chat-wallpaper-picture", &wallpaper, window, cx);
-    let mut wallpaper = Wallpaper::new(wallpaper)
-        .motion(paused)
-        .host(WallpaperHost {
-            on_battery: power.on_battery,
-            constrained: power.constrained,
-            blur: if drifts { blur::level(window, cx) } else { 0 },
-        })
-        .content_rect(kept)
-        .content_rect2(card_rect(cx))
-        .day_phase(day_phase());
-    if let Some(picture) = picture {
-        wallpaper = wallpaper.picture(picture);
-    }
     div()
         .relative()
         .size_full()
@@ -185,6 +159,42 @@ pub(crate) fn empty_state(ctx: EmptyCtx<'_>, window: &mut Window, cx: &mut App) 
                 .children(content),
         )
         .into_any_element()
+}
+
+/// The new chat's wallpaper layer: the source under the wallpaper setting's motion and battery
+/// rules.
+fn new_chat_wallpaper(
+    source: WallpaperSource,
+    settings: Option<&serde_json::Value>,
+    kept: Option<ContentRect>,
+    window: &mut Window,
+    cx: &mut App,
+) -> Wallpaper {
+    let drifts = butler_ds::ui::blocks::wallpaper::drifts(&source);
+    let motion_paused =
+        settings.is_some_and(|settings| settings["wallpaper"]["motion"] == "paused");
+    let pause_on_battery =
+        settings.is_some_and(|settings| settings["wallpaper"]["pauseOnBattery"] == true);
+    let power = settings
+        .filter(|_| drifts || pause_on_battery)
+        .map(|_| power::state(window, cx))
+        .unwrap_or_default();
+    let paused = motion_paused || (pause_on_battery && power.on_battery);
+    let picture = background::picture("new-chat-wallpaper-picture", &source, window, cx);
+    let mut wallpaper = Wallpaper::new(source)
+        .motion(paused)
+        .host(WallpaperHost {
+            on_battery: power.on_battery,
+            constrained: power.constrained,
+            blur: if drifts { blur::level(window, cx) } else { 0 },
+        })
+        .content_rect(kept)
+        .content_rect2(card_rect(cx))
+        .day_phase(day_phase());
+    if let Some(picture) = picture {
+        wallpaper = wallpaper.picture(picture);
+    }
+    wallpaper
 }
 
 /// `EpicEmptyState`.
