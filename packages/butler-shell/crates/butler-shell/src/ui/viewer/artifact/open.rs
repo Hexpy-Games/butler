@@ -58,7 +58,7 @@ pub(super) fn open_in_app(file_id: String, cx: &mut App) {
                 let check = async move { target(&data, &root) };
                 cx.background_executor().spawn(check).await
             }
-            Some(Err(Error::Http(404))) => Answer::OriginalNotFound,
+            Some(Err(Error::Http(404, _))) => Answer::OriginalNotFound,
             _ => Answer::Failed,
         };
         cx.update(|cx| answered(answer, cx));
