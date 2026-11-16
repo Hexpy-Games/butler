@@ -203,6 +203,7 @@ impl BrowserState {
         relay::release(&*self.engine, id);
         self.engine.devtools_raw_end(id);
         self.engine.keep_awake(id, false);
+        self.engine.set_hosted(id, false);
         if let Some((size, scale)) = pane {
             self.resize(id, size, scale);
         }
@@ -243,6 +244,7 @@ impl BrowserState {
         });
         self.engine
             .open(&id, "about:blank", profile, &key, &partition);
+        self.engine.set_hosted(&id, true);
         self.engine.keep_awake(&id, true);
         self.fix_hosted_size(&id);
         self.publisher.changed(&self.tabs);

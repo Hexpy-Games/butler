@@ -293,6 +293,13 @@ impl PageEngine for CefEngine {
             self.runtime.set_visible(id, self.visible(id));
         }
     }
+    fn set_hosted(&mut self, page: &TabId, hosted: bool) {
+        if let Some(id) = self.ids.get(page)
+            && let Some(source) = self.gate.borrow_mut().pages.get_mut(id)
+        {
+            source.hosted = hosted;
+        }
+    }
     fn enabled(&self) -> bool {
         true
     }
