@@ -188,7 +188,7 @@ impl Shell {
     pub(crate) fn open_chat(
         &mut self,
         chat: Option<ChatRef>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.source.is_none() {
@@ -210,13 +210,8 @@ impl Shell {
             self.sidebar.new_chat_parent = None;
         }
         self.show_view(false, cx);
-        self.composer.update(cx, |c, cx| {
-            if new_chat {
-                c.engage(window, cx);
-            } else {
-                c.fold();
-            }
-        });
+        // `useComposerPresentation`: opening a chat, new or not, folds the composer.
+        self.composer.update(cx, |c, _| c.fold());
         self.reload_open_chat(cx);
         self.sync_composer(cx);
         cx.notify();
@@ -233,14 +228,11 @@ impl Shell {
         self.chat_opened(cx);
         self.sidebar.new_chat_parent = parent;
         self.show_view(false, cx);
-        self.composer.update(cx, |_, cx| cx.notify());
+        self.composer.update(cx, |c, cx| {
+            c.fold();
+            cx.notify();
+        });
         self.sync_composer(cx);
-        if let Some(handle) = self.sidebar.window_handle {
-            let composer = self.composer.clone();
-            let _ = handle.update(cx, move |_, window, cx| {
-                composer.update(cx, |c, cx| c.engage(window, cx));
-            });
-        }
         cx.notify();
     }
     /// Reloads the open chat's latest window and its authority requests.

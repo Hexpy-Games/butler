@@ -80,7 +80,6 @@ pub(crate) struct SidebarState {
     update: Option<crate::ui::source::wire::UpdateProgressView>,
     update_in_flight: bool,
     pub(super) attended: bool,
-    pub(super) window_handle: Option<gpui::AnyWindowHandle>,
     age_task: Option<gpui::Task<()>>,
     reading: HashSet<String>,
     general_ready: bool,
@@ -182,7 +181,6 @@ impl Shell {
             self.sidebar.drag_instance = None;
             self.sidebar.root_drop_active = false;
         }
-        self.sidebar.window_handle = Some(window.window_handle());
         self.sidebar.attended = window.is_window_active();
         self.sync_minute_clock(cx);
         let header = self.space_header(cx);
