@@ -223,3 +223,8 @@ where the flag is `scroller>frame` when the scroller is taller than its frame (i
 clips it: no scrolling), `scroller<frame` when it is shorter, and `=` within 0.5 px, a table (C) with the mismatched flags first, and scroller counts in the totals
 (`matched`, `web_only`, `gpui_only`, `flag_mismatch`, `dh_over_tolerance`). Run only the pages with scrollers by adding `--pages sidebar-shell,conversation-shell,scroll-area`
 to `butler-ds-view` and `--only sidebar-shell,conversation-shell,scroll-area` to `ds-layout.ts`.
+
+### Known differences
+
+- page-card "No tab (empty)" dy +37 and "Crashed tab" dy +23: web-side difference. The web `Stack fill` sits in a block `.frame` (NativeViewSlot) and neither fills nor centres; gpui's centred result is intended. Not counted as a gpui bug.
+- Follow-up (not done): composer-question-panel puts the Tabs gap token above a body that sits outside Tabs, because gpui Tabs has no list-inset slot; the web structure (list inset inside `<Tabs>`, body as TabsContent with its tab stop and focus ring) would need a new Tabs prop. Raise only if a keyboard or focus difference shows up.
