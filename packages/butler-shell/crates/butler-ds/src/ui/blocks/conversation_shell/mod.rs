@@ -197,10 +197,11 @@ impl ConversationShell {
             f32::from(ds.len(Length::TitlebarSafeAreaTop))
         };
         let column_left = ((width - col) / 2. - shift).max(0.);
-        // `useColumnRect`'s `contentRight`: a docked aside (`aside.rs` `panel`: `right` is
-        // `SpaceLg - glide`) extends the right edge to its own far edge.
+        // `useColumnRect`'s `contentRight`, reported once motion has settled: a docked aside
+        // extends the right edge to its settled far edge (`aside.rs` `panel`: `right` is
+        // `SpaceLg` once the glide is over).
         let column_right = if shown_aside == Some(AsideLayout::Docked) {
-            let docked_edge = width - (f32::from(ds.len(Length::SpaceLg)) - (target - shift));
+            let docked_edge = width - f32::from(ds.len(Length::SpaceLg));
             (column_left + col).max(docked_edge)
         } else {
             column_left + col
