@@ -3,7 +3,7 @@ import { createContext, useContext, type JSX } from "react";
 import { $createNodeSelection, $setSelection, $getRoot, DecoratorNode, type NodeKey, type SerializedLexicalNode } from "lexical";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
-import { BlockActionFrame, DocumentBlockEmbed, MarkdownContent, MediaFrame } from "@/butler-ds";
+import { BlockActionFrame, DocumentBlockEmbed, MediaFrame } from "@/butler-ds";
 import { AnswerBlocks } from "../conversation/AnswerBlocks";
 import type { AnswerBlocksView } from "../../../../shared/answer-blocks-view";
 import { toMarkdown } from "../../../../shared/answer-blocks-markdown";
@@ -13,6 +13,7 @@ import { gatewayImageSource } from "@/app/messageFileUrls";
 import { notifyStatus } from "@/app/notifications";
 import { libraryChanged } from "@/app/libraryEvents";
 import type { DocumentAsset } from "./documentApi";
+import { DocumentMarkdown } from "./DocumentReadView";
 export const DocumentOperations = createContext<{ id: string; flush: () => Promise<void> }>({ id: "", flush: async () => undefined });
 export const DocumentAssets = createContext<DocumentAsset[]>([]);
 type UnitJSON = SerializedLexicalNode & { raw: string };
@@ -50,7 +51,7 @@ function Unit({ nodeKey, raw, type }: { nodeKey: NodeKey; raw: string; type: str
     const image = paragraph?.type === "paragraph" ? paragraph.children[0] : undefined;
     const asset = assets.find(asset => image?.type === "image" && asset.id === image.url);
     content = <MediaFrame src={gatewayImageSource(asset?.signed_url ?? asset?.url)} natural={asset?.image_width && asset?.image_height ? { width: asset.image_width, height: asset.image_height } : undefined} alt={image?.type === "image" ? image.alt ?? "" : ""} />;
-  } else content = <MarkdownContent><pre>{raw}</pre></MarkdownContent>;
+  } else content = <DocumentMarkdown raw={raw} assets={assets} />;
   return <div onMouseDown={event => { if (!(event.target as Element).closest("button,a,input")) event.preventDefault(); }}
     onClick={event => { if ((event.target as Element).closest("button,a,input")) return; event.stopPropagation(); editor.getRootElement()?.focus({ preventScroll: true });
       editor.update(() => { const selection = $createNodeSelection(); selection.add(nodeKey); $setSelection(selection); }); }}>
