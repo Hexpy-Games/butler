@@ -132,7 +132,7 @@ async fn unsupported_local_build_has_no_update_progress() -> Result<(), HarnessE
 }
 
 #[tokio::test]
-async fn store_build_never_checks_downloads_or_stages_app_updates() -> Result<(), HarnessError> {
+async fn store_build_checks_the_store_not_the_manifest() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let counted = requests.clone();
@@ -157,30 +157,24 @@ async fn store_build_never_checks_downloads_or_stages_app_updates() -> Result<()
         .start()
         .await?;
     let request = json!({"component":"app"});
-    for response in [
-        s.gw.get("/updates").await?,
-        s.gw.post("/updates/check", request.clone()).await?,
-    ] {
+    let response = s.gw.post("/updates/check", request.clone()).await?;
+    {
         assert_eq!(response.status, 200, "{}", response.text);
         let view = response.data();
         let status = &view["components"][0];
-        assert_eq!(status["check_state"], "store");
+        assert_eq!(status["check_state"], "unavailable");
+        assert_eq!(status["check_error"], "update_store_unavailable");
         assert_eq!(status["updater_owner"], "store");
         assert_eq!(status["update_available"], false);
         assert_eq!(status["current_version"], "1.0.0");
     }
     assert_eq!(
         s.gw.post("/updates/apply", request).await?.error_code(),
-        Some("updates_store_managed")
+        Some("update_store_unavailable")
     );
-    assert!(
-        s.gw.events_since(0)
-            .await?
-            .iter()
-            .all(|event| event["type"] != "updates.progress")
-    );
-    assert!(!s.sandbox.data.join("updates/status.json").exists());
     assert!(!s.sandbox.data.join("updates/staged").exists());
+    let artifacts = s.sandbox.data.join("updates/artifacts");
+    assert!(!artifacts.exists() || std::fs::read_dir(artifacts)?.next().is_none());
     s.finish().await?;
     assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 0);
     task.abort();

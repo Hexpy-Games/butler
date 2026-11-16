@@ -132,28 +132,24 @@ try {
     $updatesOk = $false
     $statesOk = $false
     $refused = $false
+    $component = $null
+    $applyCode = $null
     try {
         $base = "http://127.0.0.1:$port"
-        $get = Invoke-RestMethod -TimeoutSec 10 -Uri "$base/updates" -Headers $headers
         $post = Invoke-RestMethod -TimeoutSec 10 -Uri "$base/updates/check" -Method Post -Headers $headers -ContentType 'application/json' -Body '{"component":"app"}'
-        $statesOk = $true
-        foreach ($response in @($get, $post)) {
-            $component = $response.data.components[0]
-            $statesOk = $statesOk -and $component.check_state -eq 'store' -and $component.updater_owner -eq 'store' -and $component.update_available -eq $false
-        }
-        $refused = $false
+        $component = $post.data.components[0]
+        $statesOk = $component.updater_owner -eq 'store' -and $component.check_state -eq 'unavailable' -and $component.check_error -eq 'update_store_unassociated' -and $component.update_available -eq $false
         try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 -Uri "$base/updates/apply" -Method Post -Headers $headers -ContentType 'application/json' -Body '{"component":"app"}' }
         catch {
-            if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 409) {
-                # Windows PowerShell keeps the error response body in ErrorDetails.
-                $refused = ($_.ErrorDetails.Message | ConvertFrom-Json).error.code -eq 'updates_store_managed'
-            }
+            # Windows PowerShell keeps the error response body in ErrorDetails.
+            $applyCode = ($_.ErrorDetails.Message | ConvertFrom-Json).error.code
+            $refused = $applyCode -in @('update_store_unassociated')
         }
         $updatesOk = $statesOk -and $refused
     } catch { Write-Host "check error: $($_.Exception.Message)" }
-    Check 'updates_store_managed' $updatesOk "GET/check Store-owned=$statesOk; apply refused with updates_store_managed=$refused"
+    Check 'updates_ask_the_store' $updatesOk "owner=$($component.updater_owner); state=$($component.check_state); error=$($component.check_error); available=$($component.update_available); apply=$applyCode"
     Start-Sleep -Seconds 20
-    Check 'no_update_check_or_stage' (-not (Test-Path "$Data\updates\status.json") -and -not (Test-Path "$Data\updates\staged")) 'no update status or staged directory'
+    Check 'no_update_check_or_stage' (-not (Test-Path "$Data\updates\staged") -and -not (Test-Path "$Data\updates\artifacts") -and -not (Test-Path "$Data\updates\app-install.log")) 'no staged directory, artifacts or activation helper log'
     $links = @(Get-ChildItem "$Install\resources\bundled-agent\bin" -File | Where-Object { $_.Name -like 'butler-agent (*).exe' })
     $logs = @((Get-Item "$Out\app-stdout.txt" -ErrorAction SilentlyContinue)) + @(Get-ChildItem "$Data\logs" -Recurse -File -ErrorAction SilentlyContinue)
     $roleLines = @($logs | Select-String -Pattern 'process role link')

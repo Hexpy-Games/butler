@@ -436,7 +436,7 @@ export type UpdatePolicy = "explicit" | "app-user-action";
 export type UpdateProduct = "butler-agent" | "butler-app";
 export type UpdateCanonicalComponent = "agent" | "app";
 export type UpdateProfile = "agent-standalone" | "electron";
-export type UpdateUpdaterOwner = "butler-agent" | "butler-app";
+export type UpdateUpdaterOwner = "butler-agent" | "butler-app" | "store";
 export type UpdatePayloadFormat = "agent-archive" | "platform-app-package";
 export type UpdateStagingPolicy = "butler-data-updates" | "platform-updater-cache";
 export type UpdateActivationPolicy = "versioned-standalone-runtime" | "platform-app-update-then-versioned-app-runtime";
@@ -474,7 +474,7 @@ export interface ComponentUpdateStatus {
   rollback_policy: UpdateRollbackPolicy;
   checked_at: string;
   /** "unavailable": no usable manifest at the last check; "unchecked": never checked. */
-  check_state?: "ok" | "unavailable" | "unchecked" | "store";
+  check_state?: "ok" | "unavailable" | "unchecked";
   check_error?: string | null;
   staged: boolean;
   stage_path: string;

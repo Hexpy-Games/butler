@@ -67,6 +67,38 @@ pub(super) async fn download(
     .await
 }
 
+pub(super) fn store_error(error: butler_platform::store_update::StoreUpdateError) -> UpdateError {
+    match error {
+        butler_platform::store_update::StoreUpdateError::NotFromStore => {
+            UpdateCode::UpdateStoreUnassociated.into()
+        }
+        butler_platform::store_update::StoreUpdateError::Failed(text) => {
+            UpdateError::caused(UpdateCode::UpdateStoreUnavailable, text)
+        }
+    }
+}
+
+pub(super) async fn store_download(
+    data: &Path,
+    installation: &Path,
+    version: &str,
+    progress: &super::UpdateProgress,
+) -> Result<(String, String), UpdateError> {
+    progress.report("downloading", None, None, None).await?;
+    tokio::task::spawn_blocking(butler_platform::store_update::download)
+        .await
+        .map_err(|error| UpdateError::caused(UpdateCode::UpdateStoreUnavailable, error))?
+        .map_err(store_error)?;
+    // The Store holds the package bytes; the marker is the staged record the
+    // existing restart step activates.
+    let label = format!("updates/artifacts/butler-app-{version}.store-update");
+    let value = serde_json::json!({"source":"microsoft-store", "version":version});
+    let bytes = serde_json::to_vec(&value)
+        .map_err(|error| UpdateError::caused(UpdateCode::UpdateStatusInvalid, error))?;
+    write_json(data, installation, &label, &value).await?;
+    Ok((label, format!("{:x}", Sha256::digest(&bytes))))
+}
+
 pub(super) struct DownloadSource<'a> {
     pub url: &'a str,
     pub sha256: &'a str,

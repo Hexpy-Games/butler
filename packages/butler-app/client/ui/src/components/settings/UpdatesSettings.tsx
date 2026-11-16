@@ -58,7 +58,7 @@ export function UpdatesSettings() {
     if (unchecked) void check(true);
   }, [unchecked, check]);
 
-  const storeManaged = view?.components.some((item) => item.check_state === "store") ?? false;
+  const storeManaged = view?.components.some((item) => item.updater_owner === "store") ?? false;
 
   const rows = useMemo(
     () =>
@@ -79,7 +79,7 @@ export function UpdatesSettings() {
         state={view ? "ready" : loadFailed ? "error" : "loading"}
         errorMessage={copy.errors.loadUpdates}
         onRetry={() => void load()}
-        actions={!storeManaged &&
+        actions={
           <Button type="button" size="sm" variant="outline" disabled={loading || applying !== null} onClick={() => void check()}>
             <RefreshCcw size="md" /> {loading ? copy.actions.updateChecking : copy.actions.checkUpdates}
           </Button>

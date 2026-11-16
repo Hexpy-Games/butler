@@ -46,7 +46,7 @@ pub struct AppUpdateService {
     data: PathBuf,
     installation: PathBuf,
     version: Option<String>,
-    /// An install whose updates the OS store delivers: no manifest check, no download, no staging.
+    /// An install whose App updates the Microsoft Store delivers.
     store_managed: bool,
     manifest: String,
     /// Downloads packages.
@@ -119,9 +119,6 @@ impl AppUpdateService {
     }
 
     pub async fn check(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
-        if self.store_managed {
-            return self.current().await;
-        }
         let _check = self.checks.lock().await;
         self.check_now(self.resolved_request(request).await).await
     }
@@ -138,9 +135,6 @@ impl AppUpdateService {
         let _check = self.checks.lock().await;
         if self.version.is_none() {
             return Err(UpdateCode::AppVersionUnavailable.into());
-        }
-        if self.store_managed {
-            return Err(UpdateCode::UpdatesStoreManaged.into());
         }
         let prior = self.progress.snapshot().await;
         if prior["stage"] == "ready" && !request.dry_run {
@@ -215,7 +209,17 @@ impl AppUpdateService {
             // An available update is now being downloaded, including failures
             // opening the package source before the first bytes arrive.
             *attempted = true;
-            artifact_path = Some(
+            artifact_path = Some(if self.store_managed {
+                let (label, hash) = stage::store_download(
+                    &self.data,
+                    &self.installation,
+                    &artifact.version,
+                    &self.progress,
+                )
+                .await?;
+                status["sha256"] = json!(hash);
+                label
+            } else {
                 Box::pin(stage::download(
                     &self.client,
                     cancel,
@@ -224,8 +228,8 @@ impl AppUpdateService {
                     &artifact,
                     Some(&self.progress),
                 ))
-                .await?,
-            );
+                .await?
+            });
         }
         let stage_status = if request.dry_run {
             "dry_run"
@@ -321,7 +325,7 @@ impl AppUpdateService {
             "integrity": {"digestAlgorithm":"sha256", "digest":artifact.sha256,"signature":null},
             "update_policy": "app-user-action",
             "restart_policy": "restart-app",
-            "updater_owner": "butler-app",
+            "updater_owner": if self.store_managed { "store" } else { "butler-app" },
             "payload_format": "platform-app-package",
             "staging_policy": "butler-data-updates",
             "activation_policy": "user-installs-app-package",
@@ -344,6 +348,22 @@ impl AppUpdateService {
     async fn artifact(&self, request: &UpdateRequest) -> Result<AppArtifact, UpdateError> {
         if self.version.is_none() {
             return Err(UpdateCode::AppVersionUnavailable.into());
+        }
+        if self.store_managed {
+            let found = tokio::task::spawn_blocking(butler_platform::store_update::check)
+                .await
+                .map_err(|error| UpdateError::caused(UpdateCode::UpdateStoreUnavailable, error))?
+                .map_err(stage::store_error)?;
+            let mut artifact = self.unchecked_artifact(
+                &UpdateRequest::default(),
+                self.version
+                    .as_deref()
+                    .ok_or(UpdateCode::AppVersionUnavailable)?,
+            );
+            if let Some(version) = found {
+                artifact.version = version;
+            }
+            return Ok(artifact);
         }
         let previews = channel::previews(
             &self.data,

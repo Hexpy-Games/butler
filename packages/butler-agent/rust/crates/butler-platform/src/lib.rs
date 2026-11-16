@@ -92,6 +92,7 @@ pub mod sqlite;
 pub mod startup_task;
 pub mod stdio;
 pub mod storage_size;
+pub mod store_update;
 pub mod system_wake;
 pub mod time_zone;
 pub mod tool_paths;

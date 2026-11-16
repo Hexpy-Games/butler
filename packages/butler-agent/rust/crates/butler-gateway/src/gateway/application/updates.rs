@@ -8,7 +8,9 @@ pub(super) fn update_error(
         "install_busy" | "update_status_invalid" => {
             (409, "Update state does not allow this action.")
         }
-        "updates_store_managed" => (409, "Updates for this install come from the store."),
+        "update_store_unassociated" | "update_store_unavailable" => {
+            (503, "Microsoft Store updates are unavailable.")
+        }
         "unsupported_component" => (400, "Only Butler App package updates are available."),
         "app_version_unavailable" => (503, "Installed Butler App version is unavailable."),
         "update_manifest_incompatible" | "update_signature_unsupported" => (

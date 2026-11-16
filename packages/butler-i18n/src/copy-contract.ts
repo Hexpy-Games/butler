@@ -1974,8 +1974,6 @@ export interface AppCopy {
       upToDate: string;
       updateChecking: string;
       updateUnavailable: string;
-      updateFromStore: string;
-      updateFromStoreHint: string;
       updateChoice: string;
       updateCheckpoint: string;
       updateAfterWork: string;
