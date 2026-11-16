@@ -29,8 +29,16 @@ export function withProjectLedgerMutation(project, mutation) {
     return mutation();
   } finally {
     heldMutationLocks.delete(path);
+    advanceGeneration(path, owner);
     releaseExactClaim(path, owner);
   }
+}
+
+function advanceGeneration(lockPath, owner) {
+  const target = lockPath.replace(/\.lock$/, ".generation");
+  const temporary = `${target}.tmp-${randomUUID()}`;
+  writeFileSync(temporary, JSON.stringify(owner.claimId));
+  renameSync(temporary, target);
 }
 
 export function tryCreateClaim(path, owner) {
