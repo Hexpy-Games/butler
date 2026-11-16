@@ -700,6 +700,7 @@ export interface AppCopy {
     dialogIntro: string;
     cancel: string;
     signedIn: string;
+    notSignedIn: string;
     email: string;
     sendCode: string;
     code: string;

@@ -30,7 +30,7 @@ export function ButlerAccountSection() {
   </>;
   return (
     <SettingsSection id="butler-account" kind="form" title={copy.name}>
-      <SettingsField id="butler-account-sign-in" label={copy.signedOut} description={copy.intro}
+      <SettingsField id="butler-account-sign-in" label={copy.notSignedIn} description={copy.intro}
         control={<Button onClick={() => setOpen(true)}>{copy.signIn}</Button>} />
       <ButlerAccountSignInDialog open={open} onOpenChange={setOpen} account={account} />
     </SettingsSection>
