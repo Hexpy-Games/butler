@@ -239,7 +239,7 @@ async fn shell_app_11_selection_fills_wrapped_lines_and_clears_outside() -> Resu
     // The context-menu Copy then copies that selection, though its press clears the selection.
     shell
         .run(&[
-            &drag("0.508 0.316 0.027 0.473"),
+            &drag("0.522 0.316 0.027 0.473"),
             &format!("click-at message-{assistant}-body 0.5 0.1 right"),
             &format!("wait-anchor message-menu-{assistant}-item-0-0"),
             &format!("click message-menu-{assistant}-item-0-0"),
