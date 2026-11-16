@@ -25,35 +25,39 @@ pub(super) fn config(cx: &App) -> anyhow::Result<OsrConfig> {
         ),
     })
 }
-/// The CEF runtime and helper: `BUTLER_CEF_DIR` (development and tests), else beside the
-/// executable as stage.py lays it out.
+/// The CEF runtime and helper. On Windows and Linux they sit in one directory, the output of
+/// stage.py: `BUTLER_CEF_DIR` (development and tests), else the executable's own directory. On
+/// macOS, `BUTLER_CEF_DIR` or the bundle's `Contents/Frameworks` holds the framework and the
+/// helper app.
 fn locations() -> anyhow::Result<(PathBuf, PathBuf)> {
     let executable = std::env::current_exe()?;
-    let directory = executable
+    let beside = executable
         .parent()
         .ok_or_else(|| anyhow::anyhow!("missing executable directory"))?;
-    let windows = super::windows();
+    let platform = butler_platform::launcher::node_platform();
     let directory = std::env::var_os("BUTLER_CEF_DIR")
         .filter(|p| !p.is_empty())
         .map(PathBuf::from)
         .or_else(|| {
-            if windows {
-                Some(directory.to_path_buf())
+            if platform == "darwin" {
+                beside.parent().map(|c| c.join("Frameworks"))
             } else {
-                directory.parent().map(|c| c.join("Frameworks"))
+                Some(beside.to_path_buf())
             }
         })
         .ok_or_else(|| anyhow::anyhow!("missing bundle Contents"))?;
-    Ok(if windows {
+    Ok(match platform {
         // CEF's resources, `locales` and the helper. libcef.dll is linked at load time, so
         // Windows loads it from beside the executable or `PATH`, not from here.
-        (directory.clone(), directory.join("butler_cef_host.exe"))
-    } else {
+        "win32" => (directory.clone(), directory.join("butler_cef_host.exe")),
         // The bundle's `Contents/Frameworks`: the framework and the helper app.
-        (
+        "darwin" => (
             directory.join("Chromium Embedded Framework.framework"),
             directory.join("butler-cef-host Helper.app/Contents/MacOS/butler-cef-host Helper"),
-        )
+        ),
+        // CEF's resources, `locales` and the helper. libcef.so is linked at load time, so Linux
+        // finds it beside the executable through its `$ORIGIN` rpath, not from here.
+        _ => (directory.clone(), directory.join("butler-cef-host")),
     })
 }
 fn web_user_agent(chrome: &str, app: &str, platform: Platform) -> String {

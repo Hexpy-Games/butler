@@ -96,6 +96,25 @@ The headless harness renders through wgpu, which imports the shared D3D11 textur
 `wgpu-surfaces` feature, enabled by `shots`), so its shots include CEF pages. It renders on the
 default DXGI adapter, the one CEF renders on (`GPUI_HEADLESS_ADAPTER_LUID` overrides it).
 
+### Linux
+
+Pages are CPU pixels (`butler_cef_host::osr::OsrFrame`) that the shell uploads to a wgpu texture on
+gpui's device (`SurfaceSource::Texture`); only the damaged area is uploaded. The shell finds CEF as
+on Windows: in the `stage.py` output directory, which is `BUTLER_CEF_DIR` when set (development and
+tests), otherwise the shell executable's own directory, with the `butler-cef-host` helper in it.
+libcef.so is linked at load time and found beside the executable through the `$ORIGIN` rpath. From
+the repository root:
+
+```sh
+export CEF_PATH="$PWD/target/cef"
+python3 packages/butler-agent/rust/crates/butler-platform/cef/fetch.py --dest "$CEF_PATH"
+cargo build --manifest-path packages/butler-agent/rust/Cargo.toml -p butler-cef --features cef
+cargo build --manifest-path packages/butler-shell/Cargo.toml -p butler-shell --features cef --bin butler-shell
+python3 packages/butler-agent/rust/crates/butler-platform/cef/stage.py --cef "$CEF_PATH" --target packages/butler-agent/rust/target/debug --out target/cef-shell
+cp packages/butler-shell/target/debug/butler-shell target/cef-shell/
+target/cef-shell/butler-shell
+```
+
 ## Tests
 
 `cargo test -p butler-shell` runs the data store's tests against a fake source.

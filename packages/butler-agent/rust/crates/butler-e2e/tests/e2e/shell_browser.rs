@@ -372,7 +372,42 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
         );
         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
     }
-    shell.run(&["shot cef-browser", "app-quit"]).await?;
+    // The shot shows the page: its centre has the page's background (`#14508c`). The anchor's
+    // bounds are logical pixels; the shot is in device pixels.
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        shell
+            .run(&["shot cef-browser", "layout cef-browser browser-page"])
+            .await?;
+        let scale = shell.browser_frame().await?["scale"].as_f64().unwrap();
+        let layout = shell.report("cef-browser.layout")?;
+        let page = layout
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["anchor"] == "browser-page")
+            .unwrap();
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a pixel position inside the shot"
+        )]
+        let centre = |origin: &str, size: &str| {
+            let logical = page[origin].as_f64().unwrap() + page[size].as_f64().unwrap() / 2.;
+            (logical * scale).round() as u32
+        };
+        let image = image::open(sandbox.root.join("shell/cef-browser.png"))
+            .unwrap()
+            .to_rgb8();
+        if image.get_pixel(centre("x", "w"), centre("y", "h")).0 == [20, 80, 140] {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the shot does not show the page"
+        );
+    }
+    shell.run(&["app-quit"]).await?;
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())

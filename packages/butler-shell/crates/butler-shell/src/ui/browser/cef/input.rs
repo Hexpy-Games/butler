@@ -166,8 +166,9 @@ fn line() -> f32 {
 }
 /// The Windows virtual key and the platform key code. A Windows key message gives both: its
 /// virtual key and its lParam (CEF's `native_key_code`, which sets the DOM `code`; a WM_CHAR
-/// translated from the key shares it). Otherwise both come from the key name: macOS's virtual key
-/// code, or on Windows lParam 0 for a keystroke gpui synthesized without a key message.
+/// translated from the key shares it). Otherwise both come from the key name; its macOS key code is
+/// the native key code on macOS only. Windows and Linux pass 0: a keystroke gpui synthesized
+/// without a key message has no native key data there.
 #[expect(
     clippy::cast_possible_truncation,
     reason = "a key message's lParam is 32 bits; CEF takes it as int, as cefclient does"
@@ -177,7 +178,12 @@ fn codes(key: &str, message: Option<WindowsKeyData>) -> (i32, i32) {
         return (i32::from(data.virtual_key), data.lparam as i32);
     }
     let (windows_key_code, mac) = key_codes(key);
-    (windows_key_code, if super::windows() { 0 } else { mac })
+    let native = if butler_platform::launcher::node_platform() == "darwin" {
+        mac
+    } else {
+        0
+    };
+    (windows_key_code, native)
 }
 /// No macOS key code: Chromium's invalid macOS native key code, which sets no DOM `code`.
 const NO_MAC_KEY: u16 = 0xFFFF;

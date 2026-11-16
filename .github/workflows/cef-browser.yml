@@ -126,6 +126,33 @@ jobs:
           fi
           cargo test --locked --target ${{ matrix.target }} -p butler-e2e --test e2e browser_headless -- --test-threads 2
 
+      - name: Install the gpui build packages
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-dev \
+            libx11-xcb-dev libxcb1-dev libwayland-dev wayland-protocols \
+            libfontconfig-dev libvulkan-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-randr0-dev libxcb-xinput-dev libegl1-mesa-dev libgles2-mesa-dev libglib2.0-dev \
+            mesa-vulkan-drivers libvulkan1
+
+      - name: Build the shell's headless harness with CEF
+        if: matrix.os == 'linux'
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/shell
+        run: |
+          cargo build --locked --manifest-path "$GITHUB_WORKSPACE/packages/butler-shell/Cargo.toml" \
+            -p butler-shell --features shots,cef --bin butler-shell-shots
+          cp "$CARGO_TARGET_DIR/debug/butler-shell-shots" "$RUNNER_TEMP/cef-host/"
+
+      - name: Run the shell browser flows on CEF
+        if: matrix.os == 'linux'
+        run: |
+          export HOME=$(mktemp -d "$RUNNER_TEMP/cef-home.XXXXXX") BUTLER_DATA=$(mktemp -d "$RUNNER_TEMP/cef-data.XXXXXX")
+          export TMPDIR=$(mktemp -d "$RUNNER_TEMP/cef-tmp.XXXXXX")
+          export BUTLER_SHELL_SHOTS_EXECUTABLE="$RUNNER_TEMP/cef-host/butler-shell-shots" BUTLER_CEF_DIR="$RUNNER_TEMP/cef-host"
+          xvfb-run -a cargo test --locked --target ${{ matrix.target }} -p butler-e2e --test e2e shell_browser -- --test-threads 1
+
       - name: Preserve CEF failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
