@@ -50,8 +50,9 @@ fn arguments(profile: &Path, proxy: &str) -> Vec<OsString> {
         "--force-webrtc-ip-handling-policy=disable_non_proxied_udp".into(),
         "--disable-quic".into(),
     ];
-    // Background services and Google calls off: the list the in-app browser shares.
-    args.extend(butler_cef_host::switches::quiet_args().map(OsString::from));
+    // Background services and Google calls off (the list the in-app browser shares), plus what
+    // only the headless host disables.
+    args.extend(butler_cef_host::switches::headless_args().map(OsString::from));
     args.extend(
         [
             "--password-store=basic",
