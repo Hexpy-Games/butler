@@ -130,6 +130,8 @@ try {
     $port = $script:port
     Check 'app_agent_gateway_start' ($listening -and $healthy) "gateway port=$port; authenticated health=$healthy"
     $updatesOk = $false
+    $statesOk = $false
+    $refused = $false
     try {
         $base = "http://127.0.0.1:$port"
         $get = Invoke-RestMethod -TimeoutSec 10 -Uri "$base/updates" -Headers $headers
@@ -143,14 +145,13 @@ try {
         try { $null = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 -Uri "$base/updates/apply" -Method Post -Headers $headers -ContentType 'application/json' -Body '{"component":"app"}' }
         catch {
             if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 409) {
-                $reader = New-Object IO.StreamReader($_.Exception.Response.GetResponseStream())
-                try { $body = $reader.ReadToEnd() | ConvertFrom-Json; $refused = $body.error.code -eq 'updates_store_managed' }
-                finally { $reader.Dispose() }
+                # Windows PowerShell keeps the error response body in ErrorDetails.
+                $refused = ($_.ErrorDetails.Message | ConvertFrom-Json).error.code -eq 'updates_store_managed'
             }
         }
         $updatesOk = $statesOk -and $refused
     } catch { Write-Host "check error: $($_.Exception.Message)" }
-    Check 'updates_store_managed' $updatesOk 'GET/check are Store-owned; apply returns 409 updates_store_managed'
+    Check 'updates_store_managed' $updatesOk "GET/check Store-owned=$statesOk; apply refused with updates_store_managed=$refused"
     Start-Sleep -Seconds 20
     Check 'no_update_check_or_stage' (-not (Test-Path "$Data\updates\status.json") -and -not (Test-Path "$Data\updates\staged")) 'no update status or staged directory'
     $links = @(Get-ChildItem "$Install\resources\bundled-agent\bin" -File | Where-Object { $_.Name -like 'butler-agent (*).exe' })
