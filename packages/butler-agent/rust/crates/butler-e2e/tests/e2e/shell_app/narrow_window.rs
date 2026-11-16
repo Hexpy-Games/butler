@@ -19,16 +19,16 @@ fn near(a: f64, b: f64) -> bool {
     (a - b).abs() < 0.5
 }
 
-/// SHELL-APP-08 — At 400 px wide the App never takes the phone form: the sidebar overlays at its
+/// SHELL-APP-10 — At 400 px wide the App never takes the phone form: the sidebar overlays at its
 /// own panel width without moving the conversation, session info floats shorter than the space
 /// between the titlebar and the composer, the command palette is as wide as at 1200 px, and the
 /// send button keeps its desktop size.
 #[tokio::test]
-async fn shell_app_08_narrow_window_keeps_the_desktop_layout() -> Result<(), HarnessError> {
+async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
     let _serial = SERIAL.lock().await;
-    let mut sandbox = Sandbox::new("SHELL-APP-08")?;
+    let mut sandbox = Sandbox::new("SHELL-APP-10")?;
     let _model = ready_workspace(&sandbox, ChatBehavior::default()).await?;
     let mut shell = Shell::start(&sandbox, &[]).await?;
     shell
