@@ -143,6 +143,11 @@ fn activate_store(parent: u32, _arguments: &[OsString]) -> Result<(), String> {
     println!("app-update-ready");
     super::await_activation()?;
     super::wait_for_parent(parent)?;
-    crate::store_update::install().map_err(|error| format!("{error:?}"))?;
+    match crate::store_update::install() {
+        Err(crate::store_update::StoreUpdateError::NotSilent) => {
+            let _ = crate::store_update::open_updates_page();
+        }
+        result => result.map_err(|error| format!("{error:?}"))?,
+    }
     super::run(Command::new("explorer.exe").arg(format!("shell:AppsFolder\\{aumid}")))
 }

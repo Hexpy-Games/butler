@@ -478,7 +478,7 @@ export interface ComponentUpdateStatus {
   check_error?: string | null;
   staged: boolean;
   stage_path: string;
-  stage_status: "up_to_date" | "staged" | "activated" | "rolled_back" | "dry_run";
+  stage_status: "up_to_date" | "staged" | "opened_in_store" | "activated" | "rolled_back" | "dry_run";
   activation_status: "not_required" | "activated" | "rolled_back";
   active_runtime_path: string | null;
   attempted_runtime_path: string | null;
@@ -512,7 +512,7 @@ export interface UpdateApplyResult extends ComponentUpdateStatus {
   dryRun: boolean;
   artifact_path: string | null;
   planned_actions: string[];
-  stage_status: "up_to_date" | "staged" | "activated" | "rolled_back" | "dry_run";
+  stage_status: "up_to_date" | "staged" | "opened_in_store" | "activated" | "rolled_back" | "dry_run";
   activation_status: "not_required" | "activated" | "rolled_back";
   active_runtime_path: string | null;
   attempted_runtime_path: string | null;

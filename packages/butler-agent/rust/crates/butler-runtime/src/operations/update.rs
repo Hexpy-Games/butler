@@ -209,32 +209,38 @@ impl AppUpdateService {
             // An available update is now being downloaded, including failures
             // opening the package source before the first bytes arrive.
             *attempted = true;
-            artifact_path = Some(if self.store_managed {
-                let (label, hash) = stage::store_download(
+            artifact_path = if self.store_managed {
+                stage::store_download(
                     &self.data,
                     &self.installation,
                     &artifact.version,
                     &self.progress,
                 )
-                .await?;
-                status["sha256"] = json!(hash);
-                label
-            } else {
-                Box::pin(stage::download(
-                    &self.client,
-                    cancel,
-                    &self.data,
-                    &self.installation,
-                    &artifact,
-                    Some(&self.progress),
-                ))
                 .await?
-            });
+                .map(|(label, hash)| {
+                    status["sha256"] = json!(hash);
+                    label
+                })
+            } else {
+                Some(
+                    Box::pin(stage::download(
+                        &self.client,
+                        cancel,
+                        &self.data,
+                        &self.installation,
+                        &artifact,
+                        Some(&self.progress),
+                    ))
+                    .await?,
+                )
+            };
         }
         let stage_status = if request.dry_run {
             "dry_run"
         } else if artifact_path.is_some() {
             "staged"
+        } else if status["update_available"] == true {
+            "opened_in_store"
         } else {
             "up_to_date"
         };
@@ -250,13 +256,8 @@ impl AppUpdateService {
         object.insert("planned_actions".into(), json!(actions));
         if !request.dry_run {
             let _write = self.writes.lock().await;
-            stage::write_json(
-                &self.data,
-                &self.installation,
-                "updates/staged/app.json",
-                &status,
-            )
-            .await?;
+            let stage_path = "updates/staged/app.json";
+            stage::write_json(&self.data, &self.installation, stage_path, &status).await?;
         }
         Ok(status)
     }

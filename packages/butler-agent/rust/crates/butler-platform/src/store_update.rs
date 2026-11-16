@@ -11,6 +11,8 @@ mod windows;
 pub enum StoreUpdateError {
     /// The package is not associated with a Store product (sideloaded, or not yet submitted).
     NotFromStore,
+    /// The Store cannot install silently now (auto-update off or a metered network); the user finishes the update in the Store.
+    NotSilent,
     /// The Store refused or failed; the text names the HRESULT or state.
     Failed(String),
 }
@@ -49,6 +51,20 @@ pub fn install() -> Result<(), StoreUpdateError> {
     #[cfg(windows)]
     {
         windows::install()
+    }
+    #[cfg(not(windows))]
+    {
+        Err(StoreUpdateError::Failed(
+            "Microsoft Store updates exist only on Windows".into(),
+        ))
+    }
+}
+
+/// Opens the Microsoft Store's downloads-and-updates page.
+pub fn open_updates_page() -> Result<(), StoreUpdateError> {
+    #[cfg(windows)]
+    {
+        windows::open_updates_page()
     }
     #[cfg(not(windows))]
     {

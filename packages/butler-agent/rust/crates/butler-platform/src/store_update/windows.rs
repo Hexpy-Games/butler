@@ -53,10 +53,7 @@ pub(super) fn download() -> Result<(), StoreUpdateError> {
         ));
     }
     if !context.CanSilentlyDownloadStorePackageUpdates()? {
-        return Err(StoreUpdateError::Failed(
-            "silent Store download is unavailable (Store auto-update off or metered network)"
-                .into(),
-        ));
+        return Err(StoreUpdateError::NotSilent);
     }
     let state = context
         .TrySilentDownloadStorePackageUpdatesAsync(&updates)?
@@ -81,6 +78,9 @@ pub(super) fn install() -> Result<(), StoreUpdateError> {
             "no Store update is available".into(),
         ));
     }
+    if !context.CanSilentlyDownloadStorePackageUpdates()? {
+        return Err(StoreUpdateError::NotSilent);
+    }
     let state = context
         .TrySilentDownloadAndInstallStorePackageUpdatesAsync(&updates)?
         .join()?
@@ -90,6 +90,20 @@ pub(super) fn install() -> Result<(), StoreUpdateError> {
             "Store install ended in state {}",
             state.0
         )));
+    }
+    Ok(())
+}
+
+pub(super) fn open_updates_page() -> Result<(), StoreUpdateError> {
+    let opened =
+        ::windows::System::Launcher::LaunchUriAsync(&::windows::Foundation::Uri::CreateUri(
+            &::windows::core::HSTRING::from("ms-windows-store://downloadsandupdates"),
+        )?)?
+        .join()?;
+    if !opened {
+        return Err(StoreUpdateError::Failed(
+            "the Microsoft Store could not be opened".into(),
+        ));
     }
     Ok(())
 }
