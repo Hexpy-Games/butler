@@ -1,68 +1,106 @@
 //! `useConversationWallpaper` for a conversation with messages: the `conversation_background`
 //! setting's source behind the conversation, under the theme's paper.
+use std::collections::HashMap;
+
 use butler_ds::ui::blocks::scope;
 use butler_ds::ui::blocks::wallpaper::{
     Wallpaper, WallpaperHost, WallpaperImage, WallpaperSource, drifts,
 };
-use gpui::{App, IntoElement, RenderOnce, SharedString, Window, div};
+use gpui::{App, Global, IntoElement, RenderOnce, SharedString, Window, div};
 use serde_json::Value;
 
-use super::empty::source::{parse_source, wallpaper_picture};
+use super::empty::source::{global_source, parse_source, wallpaper_picture};
 use super::empty::{blur, day_phase, power};
 use crate::ui::composer::card_rect;
 use crate::ui::shell::AppSettings;
 use crate::ui::source::agent::Jobs;
 
-/// The decoded picture of the asset it was loaded for.
+/// The decoded pictures of the image sources in use (`imageCache.ts`): one per asset, shared by
+/// every screen. `None` while the asset loads, and after a failed load (not retried while the
+/// asset stays in use). In use: the assets the settings name, plus the latest requested asset
+/// they do not name (a project's own picture).
 #[derive(Default)]
-struct Picture {
-    asset: Option<SharedString>,
-    picture: Option<WallpaperImage>,
+struct Pictures {
+    loaded: HashMap<SharedString, Option<WallpaperImage>>,
+    /// The latest requested image asset the settings do not name.
+    other: Option<SharedString>,
 }
 
-/// The decoded picture of an image source, loaded once per asset; never the previous asset's.
+impl Global for Pictures {}
+
+/// The assets of the image sources the current settings name: the main wallpaper and the
+/// conversation background.
+fn named_assets(cx: &App) -> Vec<SharedString> {
+    let Some(settings) = AppSettings::get(cx) else {
+        return Vec::new();
+    };
+    [global_source(&settings), setting(&settings).0]
+        .into_iter()
+        .filter_map(|source| match source {
+            WallpaperSource::Image { asset, .. } => Some(asset),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `imageCache.ts` `retain`: forgets the pictures no longer in use; a requested asset the
+/// settings do not name becomes the kept other asset.
+fn retain(requested: Option<&SharedString>, cx: &mut App) {
+    let named = named_assets(cx);
+    let pictures = cx.default_global::<Pictures>();
+    if let Some(asset) = requested.filter(|asset| !named.contains(asset)) {
+        pictures.other = Some(asset.clone());
+    }
+    let other = pictures.other.clone();
+    pictures
+        .loaded
+        .retain(|kept, _| named.contains(kept) || other.as_ref() == Some(kept));
+}
+
+/// The decoded picture of an image source, loaded once per asset; never another asset's.
 pub(in crate::ui::chat) fn picture(
-    id: &'static str,
     source: &WallpaperSource,
-    window: &mut Window,
     cx: &mut App,
 ) -> Option<WallpaperImage> {
-    let WallpaperSource::Image { asset, .. } = source else {
-        return None;
+    let asset = match source {
+        WallpaperSource::Image { asset, .. } => Some(asset),
+        _ => None,
     };
-    let state = window.use_keyed_state(id, cx, |_, _| Picture::default());
-    if state.read(cx).asset.as_ref() != Some(asset) {
-        state.update(cx, |loaded, _| {
-            *loaded = Picture {
-                asset: Some(asset.clone()),
-                picture: None,
-            };
-        });
-        let job = {
-            let source = source.clone();
-            Jobs::run(cx, move |client| async move {
-                wallpaper_picture(&client, &source).await
-            })
-        };
-        let state = state.clone();
-        let asset = asset.clone();
-        cx.spawn(async move |cx| {
-            let Some(picture) = job.await else { return };
-            state.update(cx, |loaded, cx| {
-                if loaded.asset.as_ref() == Some(&asset) {
-                    loaded.picture = picture;
-                    cx.notify();
-                }
-            });
+    retain(asset, cx);
+    let asset = asset?;
+    if let Some(picture) = cx.default_global::<Pictures>().loaded.get(asset) {
+        return picture.clone();
+    }
+    Jobs::client(cx)?;
+    cx.default_global::<Pictures>()
+        .loaded
+        .insert(asset.clone(), None);
+    let job = {
+        let source = source.clone();
+        Jobs::run(cx, move |client| async move {
+            wallpaper_picture(&client, &source).await
         })
-        .detach();
-    }
-    let loaded = state.read(cx);
-    if loaded.asset.as_ref() == Some(asset) {
-        loaded.picture.clone()
-    } else {
-        None
-    }
+    };
+    let asset = asset.clone();
+    cx.spawn(async move |cx| {
+        let answer = job.await;
+        cx.update(|cx| {
+            let loaded = &mut cx.default_global::<Pictures>().loaded;
+            // Only a pending entry: another load may have answered already.
+            if !matches!(loaded.get(&asset), Some(None)) {
+                return;
+            }
+            let Some(picture) = answer else {
+                // The job never answered (the agent detached): ask again on the next request.
+                loaded.remove(&asset);
+                return;
+            };
+            loaded.insert(asset, picture);
+            cx.refresh_windows();
+        });
+    })
+    .detach();
+    None
 }
 
 /// `parseConversationBackgroundSetting`, else `EMPTY_SETTINGS.conversation_background`
@@ -105,7 +143,7 @@ impl RenderOnce for ConversationBackground {
         };
         let drifts = drifts(&source);
         let power = power::state(window, cx);
-        let picture = picture("conversation-background-picture", &source, window, cx);
+        let picture = picture(&source, cx);
         let mut wallpaper = Wallpaper::new(source)
             .motion(power.on_battery)
             .host(WallpaperHost {

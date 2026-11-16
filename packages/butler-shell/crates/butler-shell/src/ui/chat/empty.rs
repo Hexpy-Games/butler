@@ -180,7 +180,7 @@ fn new_chat_wallpaper(
         .map(|_| power::state(window, cx))
         .unwrap_or_default();
     let paused = motion_paused || (pause_on_battery && power.on_battery);
-    let picture = background::picture("new-chat-wallpaper-picture", &source, window, cx);
+    let picture = background::picture(&source, cx);
     let mut wallpaper = Wallpaper::new(source)
         .motion(paused)
         .host(WallpaperHost {
