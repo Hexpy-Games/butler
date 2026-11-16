@@ -17,9 +17,9 @@ def run(*args):
 
 def required(tag):
     names = ['agent-darwin-arm64', 'agent-linux-x64', 'agent-linux-arm64',
-             'app-darwin-arm64', 'butler-app-linux-x64', 'butler-app-linux-arm64']
+             'app-darwin-arm64', 'gpui-app-linux-x64', 'butler-app-linux-arm64']
     if '-preview.' in tag:
-        names += ['agent-windows-x64', 'app-windows-x64']
+        names += ['agent-windows-x64', 'gpui-app-windows-x64']
     return names
 
 
@@ -69,16 +69,17 @@ def validate_files(root, tag):
                                      for ext in ('dmg', 'zip') for suffix in ('', '.sha256')]
     for platform in ('linux-x64', 'linux-arm64'):
         extensions = ('deb', 'pkg.tar.zst') if platform == 'linux-x64' else ('deb',)
-        expected[f'butler-app-{platform}'] = [f'butler-app-{version}-{"archlinux-x64" if ext == "pkg.tar.zst" else platform}.{ext}{suffix}'
-                                             for ext in extensions for suffix in ('', '.sha256')]
-    if 'app-windows-x64' in required(tag):
-        expected['app-windows-x64'] = ['app-update-manifest.json', 'RELEASES',
-                                      f'ButlerSetup-{version}-x64.exe']
-        if not list((root / 'app-windows-x64').glob('*-full.nupkg')):
-            expected['app-windows-x64'].append('*-full.nupkg')
-    if 'app-windows-x64' in expected:
-        expected['app-windows-x64'] += [file.name + '.sha256'
-            for file in (root / 'app-windows-x64').iterdir()
+        name = f'gpui-app-{platform}' if platform == 'linux-x64' else f'butler-app-{platform}'
+        expected[name] = [f'butler-app-{version}-{"archlinux-x64" if ext == "pkg.tar.zst" else platform}.{ext}{suffix}'
+                          for ext in extensions for suffix in ('', '.sha256')]
+    if 'gpui-app-windows-x64' in required(tag):
+        expected['gpui-app-windows-x64'] = ['app-update-manifest.json', 'RELEASES',
+                                           f'ButlerSetup-{version}-x64.exe']
+        if not list((root / 'gpui-app-windows-x64').glob('*-full.nupkg')):
+            expected['gpui-app-windows-x64'].append('*-full.nupkg')
+    if 'gpui-app-windows-x64' in expected:
+        expected['gpui-app-windows-x64'] += [file.name + '.sha256'
+            for file in (root / 'gpui-app-windows-x64').iterdir()
             if file.name == 'RELEASES' or file.suffix in ('.exe', '.nupkg', '.zip')]
     missing = [f'{name}/{file}' for name, files in expected.items()
                for file in files if not (root / name / file).is_file()]
@@ -125,7 +126,7 @@ def publish(root):
     linux = root / 'linux'
     linux.mkdir(exist_ok=True)
     for name in required(tag):
-        if name.startswith('butler-app-linux-'):
+        if name in ('gpui-app-linux-x64', 'butler-app-linux-arm64'):
             for file in (root / name).iterdir():
                 shutil.copyfile(file, linux / file.name)
     args = ['python3', 'deploy/app/merge-update-manifest.py', '--mac-manifest',
@@ -133,8 +134,8 @@ def publish(root):
             '--version', tag[1:], '--base-url',
             f'https://github.com/{os.environ["GH_REPO"]}/releases/download/{tag}',
             '--output', str(app_manifest)]
-    if 'app-windows-x64' in required(tag):
-        args += ['--windows-dir', str(root / 'app-windows-x64')]
+    if 'gpui-app-windows-x64' in required(tag):
+        args += ['--windows-dir', str(root / 'gpui-app-windows-x64')]
     run(*args)
     files = [Path('deploy/install.sh'), Path('deploy/install.ps1'), app_manifest]
     for name in required(tag):

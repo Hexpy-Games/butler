@@ -45,11 +45,11 @@ def fixtures(root):
                 filenames = [f'butler-app-{version}-darwin-arm64.{ext}' for ext in ('dmg', 'zip')]
                 (directory / 'app-release-manifest.json').write_text('{}')
                 platforms = ['darwin-arm64']
-            elif name == 'app-windows-x64':
+            elif name == 'gpui-app-windows-x64':
                 filenames = ['RELEASES', f'ButlerSetup-{version}-x64.exe', f'butler-{version}-full.nupkg']
                 platforms = ['windows-x64']
             else:
-                platform = name.removeprefix('butler-app-')
+                platform = name.removeprefix('butler-app-').removeprefix('gpui-app-')
                 filenames = [f'butler-app-{version}-{platform}.deb']
                 if platform == 'linux-x64':
                     filenames.append(f'butler-app-{version}-archlinux-x64.pkg.tar.zst')
@@ -113,7 +113,7 @@ class RecoveryTests(unittest.TestCase):
                 recovery.prepare()
             source['head_sha'] = 'abc'
             artifacts[-1]['expired'] = True
-            with self.assertRaisesRegex(ValueError, 'Missing required artifacts: app-windows-x64'):
+            with self.assertRaisesRegex(ValueError, 'Missing required artifacts: gpui-app-windows-x64'):
                 recovery.prepare()
             source['path'] = '.github/workflows/ci.yml'
             with self.assertRaisesRegex(ValueError, 'Expected a completed release.yml'):

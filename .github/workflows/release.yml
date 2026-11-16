@@ -312,15 +312,15 @@ jobs:
   app-linux-release:
     name: Attach Linux App packages to the draft release
     runs-on: ubuntu-latest
-    needs: [agent-release, app-linux-x64, app-linux-arm64]
+    needs: [agent-release, gpui-app-linux-x64, app-linux-arm64]
     if: ${{ always() && !cancelled() && needs.agent-release.result == 'success' }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download the Linux App packages
+      - name: Download the gpui linux-x64 and Electron linux-arm64 App packages
         uses: actions/download-artifact@v4
         with:
-          pattern: butler-app-linux-*
+          pattern: '{gpui-app-linux-x64,butler-app-linux-arm64}'
           path: dist/release/app-linux
           merge-multiple: true
 
@@ -330,17 +330,18 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: bash deploy/app/publish-release-artifacts.sh linux
 
+  # Since this cutover, the published Windows and linux-x64 App is gpui; Electron jobs remain until Electron is deleted one stable preview later.
   app-manifests:
     name: Publish successful Windows artifacts and merged App update manifest
     runs-on: ubuntu-latest
-    needs: [native-release, agent-release, app-linux-release, app-windows]
+    needs: [native-release, agent-release, app-linux-release, gpui-app-windows]
     if: ${{ always() && !cancelled() && needs.agent-release.result == 'success' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        if: needs.app-windows.result == 'success'
+        if: needs.gpui-app-windows.result == 'success'
         with:
-          name: app-windows-x64
+          name: gpui-app-windows-x64
           path: dist/release/app-windows
       - name: Merge only published platforms
         env:
