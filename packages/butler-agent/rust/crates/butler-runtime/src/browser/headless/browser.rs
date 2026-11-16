@@ -67,6 +67,12 @@ fn arguments(profile: &Path, proxy: &str) -> Vec<OsString> {
 
 fn prepare(root: &Path) -> std::io::Result<(PathBuf, PathBuf)> {
     std::fs::create_dir_all(root)?;
+    // Per-run profiles of earlier builds, left by a run that ended without its reap.
+    for entry in std::fs::read_dir(root)?.flatten() {
+        if entry.file_name().to_string_lossy().starts_with("profile-") {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
     let profile = root.join("profile");
     std::fs::create_dir_all(&profile)?;
     // A killed browser leaves Chrome's singleton lock behind. Only this agent's one browser uses
