@@ -36,11 +36,9 @@ fn open(session: &str, tab: &TabId, cx: &mut App) {
     }
 }
 fn move_tab(tab: &TabId, session: &str, show: bool, cx: &mut App) {
-    let value = cx.global_mut::<BrowserState>().move_tab(
-        tab,
-        Owner::Conversation(session.to_owned().into()),
-        0,
-    );
+    let value = cx.update_global::<BrowserState, _>(|model, cx| {
+        model.move_tab(tab, Owner::Conversation(session.to_owned().into()), 0, cx)
+    });
     if value.is_ok() {
         if show {
             open(session, tab, cx);

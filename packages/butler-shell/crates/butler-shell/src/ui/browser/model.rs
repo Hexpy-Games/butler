@@ -1,4 +1,6 @@
 //! The shell owns tab order and metadata; page engines report changes over a channel.
+use gpui::BorrowAppContext as _;
+
 use std::fmt;
 
 use futures::{StreamExt as _, channel::mpsc};
@@ -66,6 +68,7 @@ pub(crate) struct Tab {
     pub(crate) selections: Vec<super::pick::Item>,
     pub(crate) pick_hover: Option<super::pick::Hover>,
     pub(crate) pick: super::pick::Session,
+    pub(super) last_nav: Option<super::visits::Transition>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,7 +133,7 @@ impl BrowserState {
             while let Some(event) = receiver.next().await {
                 cx.update(|cx| {
                     super::pick::navigation(&event, cx);
-                    cx.global_mut::<Self>().apply(event);
+                    cx.update_global::<Self, _>(|model, cx| model.apply(event, cx));
                     super::popup_window::sync(cx);
                     cx.refresh_windows();
                 });
@@ -166,6 +169,8 @@ impl BrowserState {
         owner: Owner,
         url: Option<&str>,
         placeholder: bool,
+        activate: bool,
+        cx: &mut App,
     ) -> Result<Option<TabId>, BrowserError> {
         if !self.enabled() {
             return Err(BrowserError::BrowsingDisabled);
@@ -205,14 +210,20 @@ impl BrowserState {
             selections: Vec::new(),
             pick_hover: None,
             pick: Default::default(),
+            last_nav: None,
         });
-        self.activate(&id);
+        if activate {
+            self.activate(&id);
+        }
         if !url.is_empty() {
-            self.drop_placeholders(&tab_owner);
+            self.drop_placeholders(&tab_owner, cx);
         }
         self.engine
             .open(&id, &url, profile, &super::area::owner_key(&tab_owner));
         self.publisher.changed(&self.tabs);
+        if tab_owner == Owner::Mine {
+            super::restore::changed(cx);
+        }
         Ok(Some(id))
     }
 
@@ -222,21 +233,24 @@ impl BrowserState {
         }
     }
 
-    pub(crate) fn close(&mut self, id: &TabId) {
-        self.close_popups(id);
+    pub(crate) fn close(&mut self, id: &TabId, cx: &mut App) {
+        self.close_popups(id, cx);
         self.cancel_dialog(id, "tab_closed");
         let Some(index) = self.tabs.iter().position(|tab| &tab.id == id) else {
             return;
         };
         self.engine.close(id);
-        self.tabs.remove(index);
+        let removed = self.tabs.remove(index);
+        if removed.owner == Owner::Mine && !removed.popup {
+            super::restore::changed(cx);
+        }
         self.publisher.changed(&self.tabs);
         if self.active.as_ref() == Some(id) {
             self.active = self.tabs.last().map(|tab| tab.id.clone());
         }
     }
 
-    fn drop_placeholders(&mut self, owner: &Owner) {
+    fn drop_placeholders(&mut self, owner: &Owner, cx: &mut App) {
         let ids: Vec<_> = self
             .tabs
             .iter()
@@ -247,7 +261,7 @@ impl BrowserState {
             if self.active.as_ref() == Some(&id) {
                 self.active = None;
             }
-            self.close(&id);
+            self.close(&id, cx);
         }
     }
 
@@ -256,12 +270,14 @@ impl BrowserState {
         id: &TabId,
         to: Owner,
         index: isize,
+        cx: &mut App,
     ) -> Result<(), BrowserError> {
         let from = self
             .tabs
             .iter()
             .position(|tab| &tab.id == id)
             .ok_or(BrowserError::InvalidMove)?;
+        let mine = self.tabs[from].owner == Owner::Mine || to == Owner::Mine;
         let changed_owner = self.tabs[from].owner != to;
         if changed_owner
             && to == Owner::Mine
@@ -270,7 +286,7 @@ impl BrowserState {
             return Err(BrowserError::TabBudgetExhausted);
         }
         if changed_owner {
-            self.close_popups(id);
+            self.close_popups(id, cx);
             self.cancel_dialog(id, "owner_changed");
             self.engine.change_owner(id, &super::area::owner_key(&to));
         }
@@ -296,9 +312,12 @@ impl BrowserState {
         let has_url = !tab.url.is_empty();
         self.tabs.insert(before, tab);
         if changed_owner && has_url {
-            self.drop_placeholders(&new_owner);
+            self.drop_placeholders(&new_owner, cx);
         }
         self.publisher.changed(&self.tabs);
+        if mine {
+            super::restore::changed(cx);
+        }
         Ok(())
     }
 
@@ -309,6 +328,7 @@ impl BrowserState {
         };
         if let Some(tab) = self.tabs.iter_mut().find(|tab| &tab.id == id) {
             tab.placeholder = false;
+            tab.last_nav = Some(super::visits::Transition::Typed);
         }
         self.engine.command(id, PageCommand::Load(url));
         Ok(())
@@ -327,6 +347,7 @@ impl BrowserState {
     pub(crate) fn back(&mut self, id: &TabId) -> Result<(), BrowserError> {
         self.command_allowed(id)?;
         if self.tab(id).is_some_and(|tab| tab.can_back) {
+            self.nav_intent(id, super::visits::Transition::ForwardBack);
             self.engine.command(id, PageCommand::Back);
         }
         Ok(())
@@ -335,6 +356,7 @@ impl BrowserState {
     pub(crate) fn forward(&mut self, id: &TabId) -> Result<(), BrowserError> {
         self.command_allowed(id)?;
         if self.tab(id).is_some_and(|tab| tab.can_forward) {
+            self.nav_intent(id, super::visits::Transition::ForwardBack);
             self.engine.command(id, PageCommand::Forward);
         }
         Ok(())
@@ -342,6 +364,7 @@ impl BrowserState {
 
     pub(crate) fn reload(&mut self, id: &TabId) -> Result<(), BrowserError> {
         self.command_allowed(id)?;
+        self.nav_intent(id, super::visits::Transition::Reload);
         self.engine.command(id, PageCommand::Reload);
         Ok(())
     }
@@ -362,9 +385,15 @@ impl BrowserState {
         }
     }
 
-    pub(crate) fn apply(&mut self, event: PageEvent) {
+    fn nav_intent(&mut self, id: &TabId, transition: super::visits::Transition) {
+        if let Some(tab) = self.tabs.iter_mut().find(|tab| &tab.id == id) {
+            tab.last_nav = Some(transition);
+        }
+    }
+
+    pub(crate) fn apply(&mut self, event: PageEvent, cx: &mut App) {
         #[cfg(feature = "cef")]
-        if self.popup_event(&event) {
+        if self.popup_event(&event, cx) {
             self.publisher.changed(&self.tabs);
             return;
         }
@@ -373,7 +402,14 @@ impl BrowserState {
         };
         match event.change {
             PageChange::DevToolsEvent { .. } => {}
-            PageChange::Url(url) => tab.url = url,
+            PageChange::Url(url) => {
+                let changed = tab.url != url;
+                tab.url = url;
+                super::visits::committed(tab, cx);
+                if changed && tab.owner == Owner::Mine && !tab.popup {
+                    super::restore::changed(cx);
+                }
+            }
             PageChange::Title(title) => tab.title = title,
             PageChange::Favicon(favicon) => tab.favicon = favicon,
             PageChange::Loading(true) => tab.status = TabStatus::Loading,
