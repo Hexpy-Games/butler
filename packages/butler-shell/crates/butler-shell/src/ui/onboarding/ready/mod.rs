@@ -134,7 +134,7 @@ fn notice_row(copy: &Words, cx: &mut Context<Onboarding>) -> AnyElement {
         .cross(Cross::Center)
         .gap(Space::Sm)
         .wrap(true)
-        .child(Typo::caption(copy.plan_notice).tone(Tone::Secondary))
+        .child(Typo::caption(copy.plan_notice))
         .child(manage)
         .into_any_element()
 }
