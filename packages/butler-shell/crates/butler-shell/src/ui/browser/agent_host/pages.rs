@@ -1,5 +1,5 @@
 //! Page host calls: the Agent opens, holds and closes hosted pages and reports their use.
-use super::{Holder, Hosted, relay};
+use super::{Holder, Hosted, Stage, relay};
 use crate::ui::{
     browser::{
         area::owner_key,
@@ -59,8 +59,12 @@ pub(super) fn call(frame: &Value, cx: &mut App) {
         }
         Some(op @ ("use.started" | "use.ended")) => {
             let tab = tab_id(&frame["tab"]);
+            let session = frame["session"].as_str().unwrap_or_default().to_owned();
             cx.update_global::<BrowserState, _>(|model, _| {
                 model.use_changed(&tab, op == "use.started");
+                if op == "use.ended" {
+                    model.end_opening(&session);
+                }
             });
         }
         Some("owner.closed") => {
@@ -241,6 +245,7 @@ impl BrowserState {
         });
         self.engine
             .open(&id, "about:blank", profile, &key, &partition);
+        self.engine.keep_awake(&id, true);
         self.fix_hosted_size(&id);
         self.publisher.changed(&self.tabs);
         Ok(id)
@@ -301,13 +306,31 @@ impl BrowserState {
             return;
         };
         hosted.uses = if started {
+            hosted.stage = Stage::Open;
             hosted.uses.saturating_add(1)
         } else {
             hosted.uses.saturating_sub(1)
         };
-        let awake = hosted.uses > 0;
+        let awake = hosted.awake();
         self.engine.keep_awake(id, awake);
         self.publisher.changed(&self.tabs);
+    }
+
+    /// An opening call ended: the session's just-opened pages go back to the use count.
+    fn end_opening(&mut self, session: &str) {
+        let Ok(owner) = Owner::parse(&format!("conversation:{session}")) else {
+            return;
+        };
+        for tab in self.tabs.iter_mut().filter(|tab| tab.owner == owner) {
+            if let Some(hosted) = tab
+                .hosted
+                .as_mut()
+                .filter(|hosted| hosted.stage == Stage::Opening)
+            {
+                hosted.stage = Stage::Open;
+                self.engine.keep_awake(&tab.id, hosted.awake());
+            }
+        }
     }
 
     /// A popup of a hosted page is a hosted page itself; the Agent hears of it with its target.

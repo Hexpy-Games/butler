@@ -22,6 +22,14 @@ impl Holder {
     }
 }
 
+/// Where a hosted page is in its first use.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Stage {
+    /// Just opened and not yet used: the page stays awake until its opening call ends.
+    Opening,
+    Open,
+}
+
 /// What makes a tab a hosted page: the Agent opened it and drives it over raw DevTools.
 #[derive(Clone)]
 pub(crate) struct Hosted {
@@ -30,6 +38,7 @@ pub(crate) struct Hosted {
     pub(super) sticky: bool,
     pub(super) waiting: bool,
     pub(super) uses: u32,
+    pub(super) stage: Stage,
     pub(super) internal: bool,
     /// The size the pane last asked for; applied when the page stops being hosted.
     pub(super) pane: Option<(gpui::Size<gpui::Pixels>, f32)>,
@@ -39,6 +48,10 @@ impl Hosted {
     pub(super) fn driven(&self) -> bool {
         self.holder == Holder::Agent && self.uses > 0
     }
+    /// Whether the page must stay awake (not throttled as hidden): just opened, or in use.
+    pub(super) fn awake(&self) -> bool {
+        self.stage == Stage::Opening || self.uses > 0
+    }
     pub(super) fn agent(internal: bool) -> Self {
         Self {
             target: String::new(),
@@ -46,6 +59,7 @@ impl Hosted {
             sticky: false,
             waiting: false,
             uses: 0,
+            stage: Stage::Opening,
             internal,
             pane: None,
         }

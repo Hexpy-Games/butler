@@ -70,6 +70,7 @@ impl BrowserState {
         });
         self.engine.adopt(&id, child);
         if source.hosted.is_some() {
+            self.engine.keep_awake(&id, true);
             self.fix_hosted_size(&id);
         }
         Some(id)
