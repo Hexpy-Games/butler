@@ -31,7 +31,8 @@ export function TextField({
 }: TextFieldProps) {
   const t = useTokens();
   const [focusedNow, setFocusedNow] = useState(false);
-  const focused = focusedNow || useContext(ForcedState) === "focused";
+  const forced = useContext(ForcedState);
+  const focused = focusedNow || forced === "focused";
   const line = t.color("--line");
   const border = error
     ? t.color("--color-danger-border")

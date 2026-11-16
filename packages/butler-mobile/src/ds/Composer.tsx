@@ -19,8 +19,7 @@ export interface ComposerProps {
   onStop?: () => void;
   busy?: boolean;
   disabled?: boolean;
-  onAttach?: () => void;
-  attachLabel?: string;
+  attach?: { label: string; onPress: () => void };
   sendLabel: string;
   stopLabel: string;
   adjunct?: React.ReactNode;
@@ -33,7 +32,7 @@ const MAX_LINES = 8;
 const TOOLBAR_GAP = 2;
 
 export function Composer({
-  value, onChangeText, placeholder, canSend, onSend, mode = "send", onStop, busy, disabled, onAttach, attachLabel,
+  value, onChangeText, placeholder, canSend, onSend, mode = "send", onStop, busy, disabled, attach,
   sendLabel, stopLabel, adjunct, testID,
 }: ComposerProps) {
   const t = useTokens();
@@ -87,7 +86,7 @@ export function Composer({
           gap: TOOLBAR_GAP,
         }}
       >
-        {onAttach ? <IconButton icon={icons.Plus} label={attachLabel ?? ""} onPress={onAttach} disabled={disabled} /> : null}
+        {attach ? <IconButton icon={icons.Plus} label={attach.label} onPress={attach.onPress} disabled={disabled} /> : null}
         <View style={{ flex: 1 }} />
         <SendButton
           mode={mode}

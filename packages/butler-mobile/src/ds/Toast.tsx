@@ -131,7 +131,7 @@ export function ToastHost() {
     });
   };
 
-  if (!shown) return <View />;
+  if (!shown) return null;
   return (
     <View
       pointerEvents="box-none"

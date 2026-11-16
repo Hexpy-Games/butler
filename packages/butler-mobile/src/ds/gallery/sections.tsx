@@ -240,7 +240,7 @@ function LiveComposer() {
   const [value, setValue] = useState("");
   return (
     <Composer value={value} onChangeText={setValue} placeholder={en.message} canSend={value.length > 0} onSend={() => setValue("")}
-      sendLabel={en.send} stopLabel={en.stop} onAttach={noop} attachLabel={en.attach} />
+      sendLabel={en.send} stopLabel={en.stop} attach={{ label: en.attach, onPress: noop }} />
   );
 }
 
@@ -257,7 +257,7 @@ function ComposerSection() {
       {cell("stop", { mode: "stop", canSend: true })}
       {cell("busy", { value: en.sentence, busy: true })}
       {cell("disabled", { value: en.sentence, disabled: true, canSend: true })}
-      {cell("with attach", { onAttach: noop, attachLabel: en.attach })}
+      {cell("with attach", { attach: { label: en.attach, onPress: noop } })}
       {cell("with adjunct", { adjunct: <Text tone="secondary">{en.note}</Text> })}
       {cell("send pressed", { value: en.sentence, canSend: true }, "pressed")}
       <Cell name="Live"><Over><LiveComposer /></Over></Cell>

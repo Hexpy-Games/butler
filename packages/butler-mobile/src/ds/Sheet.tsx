@@ -86,6 +86,8 @@ export function Sheet({ open, onClose, dismissible = true, testID, ...panel }: S
   useEffect(() => {
     if (!mounted) return;
     const enter = open;
+    if (reduced) travel.setValue(0);
+    else fade.setValue(1);
     const motion = reduced
       ? [
           run(t, scrim, enter ? 1 : 0, enter ? "--motion-base" : "--motion-exit-slow", enter ? "--motion-ease-standard" : "--motion-ease-accelerate"),
