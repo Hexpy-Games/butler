@@ -33,8 +33,16 @@ pub(crate) struct Options {
     pub(crate) stage_width: Option<f32>,
     /// Render only these page ids (`--pages a,b`); all pages when unset.
     pub(crate) pages: Option<Vec<String>>,
-    /// Also write `<page>.parts.json`: every story canvas and the controls inside it.
-    pub(crate) parts: bool,
+    /// What a page writes besides its pictures.
+    pub(crate) extra: Extra,
+}
+
+/// What `--shots` writes besides the PNGs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Extra {
+    Nothing,
+    /// `--parts`: `<page>.parts.json`, every story canvas and the boxes inside it.
+    Parts,
 }
 
 impl Options {
@@ -76,7 +84,11 @@ impl Options {
             motion: args.iter().any(|arg| arg == "--motion"),
             stage_width: value("--stage-width")?.map(str::parse).transpose()?,
             pages: value("--pages")?.map(|ids| ids.split(',').map(str::to_owned).collect()),
-            parts: args.iter().any(|arg| arg == "--parts"),
+            extra: if args.iter().any(|arg| arg == "--parts") {
+                Extra::Parts
+            } else {
+                Extra::Nothing
+            },
         })
     }
 }
@@ -257,6 +269,21 @@ fn parts(
     Ok(parts)
 }
 
+/// Writes `<id>.parts.json` of the page as it is now.
+fn write_parts(
+    cx: &mut HeadlessAppContext,
+    handle: AnyWindowHandle,
+    window: WindowHandle<DsView>,
+    (options, id): (&Options, &str),
+) -> anyhow::Result<()> {
+    let parts = parts(cx, handle, window)?;
+    std::fs::write(
+        options.dir.join(format!("{id}.parts.json")),
+        serde_json::to_vec_pretty(&parts)?,
+    )?;
+    Ok(())
+}
+
 fn render_page(
     cx: &mut HeadlessAppContext,
     options: &Options,
@@ -283,11 +310,9 @@ fn render_page(
     let mut layout = Vec::new();
     let mut image = cx.capture_screenshot(handle)?;
     // Read before the story loop scrolls the page: every box is of this frame.
-    let parts = if options.parts {
-        Some(parts(cx, handle, window)?)
-    } else {
-        None
-    };
+    if options.extra == Extra::Parts {
+        write_parts(cx, handle, window, (options, id))?;
+    }
     let window_height = cx.update_window(handle, |_, window, _| {
         window.viewport_size().height.as_f32()
     })?;
@@ -327,12 +352,6 @@ fn render_page(
         options.dir.join(format!("{id}.layout.json")),
         serde_json::to_vec_pretty(&layout)?,
     )?;
-    if let Some(parts) = parts {
-        std::fs::write(
-            options.dir.join(format!("{id}.parts.json")),
-            serde_json::to_vec_pretty(&parts)?,
-        )?;
-    }
     println!(
         "saved {} ({}x{})",
         path.display(),

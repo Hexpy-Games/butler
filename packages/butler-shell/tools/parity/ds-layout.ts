@@ -37,7 +37,8 @@ const server = Bun.serve({
 const SELECTOR = "button, [role=\"button\"], [role=\"radio\"], [role=\"switch\"], input:not([type=hidden]):not([aria-hidden=true]), textarea, select, [tabindex=\"0\"]";
 /** Viewport height used to lay every story canvas out on screen (CSS px). */
 const TALL = 7000;
-const [width, height, theme] = [1280, 800, "light"];
+const [width, height] = [1280, 800];
+const theme = "light";
 const browser = await chromium.launch();
 try {
   const dir = join(resolve(output), "react", `${width}x${height}-${theme}`);
