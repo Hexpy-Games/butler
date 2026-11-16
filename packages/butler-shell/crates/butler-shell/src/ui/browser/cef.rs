@@ -1,4 +1,5 @@
 //! CEF pages share the shell's UI thread; callbacks enter through channels.
+mod change;
 mod config;
 mod devtools;
 mod ime;
@@ -6,11 +7,9 @@ mod input;
 mod surface;
 
 use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
-use super::page_dialog::{DialogAnswer, DialogKind, EngineChild, PageDialog};
+use super::page_dialog::{DialogAnswer, EngineChild};
 use super::popup_policy::{PopupGate, PopupSites, policy};
-use butler_cef_host::osr::{
-    OsrAnswer, OsrDialogKind, OsrEvent, OsrProfile, OsrRuntime, OsrSink, PopupBlock,
-};
+use butler_cef_host::osr::{OsrAnswer, OsrEvent, OsrProfile, OsrRuntime, OsrSink};
 use futures::{
     StreamExt as _,
     channel::mpsc,
@@ -131,7 +130,7 @@ impl CefEngine {
                     continue;
                 }
                 // Opening a window can render the opener synchronously. Release its state first.
-                let change = change(event, &mut state.borrow_mut());
+                let change = change::change(event, &mut state.borrow_mut());
                 if let Some(change) = change {
                     let event = PageEvent { page: tab, change };
                     if matches!(event.change, PageChange::PopupOpened { .. }) {
@@ -186,77 +185,6 @@ impl CefEngine {
 /// Windows CEF differs in its staged layout, key codes and wheel units (macOS otherwise).
 fn windows() -> bool {
     butler_platform::launcher::node_platform() == "win32"
-}
-fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
-    Some(match event {
-        OsrEvent::Url(url) => PageChange::Url(if url == "about:blank" {
-            String::new()
-        } else {
-            url
-        }),
-        OsrEvent::Title(title) => PageChange::Title(title),
-        OsrEvent::Favicon(url) => PageChange::Favicon(url),
-        OsrEvent::Loading(loading) => PageChange::Loading(loading),
-        OsrEvent::History {
-            can_back,
-            can_forward,
-        } => PageChange::History {
-            can_back,
-            can_forward,
-        },
-        OsrEvent::PopupNewTab { url } => PageChange::PopupNewTab(url),
-        OsrEvent::PopupBlocked { url, reason } => PageChange::PopupBlocked {
-            url,
-            reason: match reason {
-                PopupBlock::NoGesture => "no_gesture",
-                PopupBlock::TabBudget => "tab_budget_exhausted",
-            },
-        },
-        OsrEvent::PopupOpened { child, url } => PageChange::PopupOpened {
-            child: EngineChild(child),
-            url,
-        },
-        OsrEvent::CloseRequested => PageChange::CloseRequested,
-        OsrEvent::Dialog(dialog) => PageChange::Dialog(PageDialog {
-            id: dialog.id,
-            kind: match dialog.kind {
-                OsrDialogKind::Alert => DialogKind::Alert,
-                OsrDialogKind::Confirm => DialogKind::Confirm,
-                OsrDialogKind::Prompt => DialogKind::Prompt,
-                OsrDialogKind::BeforeUnload => DialogKind::BeforeUnload,
-                OsrDialogKind::Auth => DialogKind::Auth,
-                OsrDialogKind::File => DialogKind::File,
-            },
-            message: dialog.message,
-            default_prompt: dialog.default_prompt,
-            origin: dialog.origin,
-            accept_types: dialog.accept_types,
-            multiple: dialog.multiple,
-        }),
-        OsrEvent::DownloadStarted { .. }
-        | OsrEvent::DownloadProgress { .. }
-        | OsrEvent::DownloadDone { .. }
-        | OsrEvent::Frame
-        | OsrEvent::DevTools { .. } => return None,
-        #[cfg(feature = "cef")]
-        OsrEvent::DevToolsRaw { message } => PageChange::DevToolsRaw(message),
-        OsrEvent::Crashed => PageChange::Crashed,
-        OsrEvent::DevToolsEvent {
-            method,
-            params_json,
-        } => PageChange::DevToolsEvent {
-            method,
-            params: serde_json::from_str(&params_json).unwrap_or_default(),
-        },
-        OsrEvent::Cursor(cursor) => {
-            state.cursor = cursor;
-            return None;
-        }
-        OsrEvent::ImeBounds(bounds) => {
-            state.ime_bounds = bounds;
-            return None;
-        }
-    })
 }
 impl PageEngine for CefEngine {
     fn supports_devtools(&self) -> bool {
@@ -341,18 +269,16 @@ impl PageEngine for CefEngine {
         }
     }
 
-    fn adopt(&mut self, page: &TabId, child: EngineChild) {
+    fn adopt(&mut self, page: &TabId, child: EngineChild) -> bool {
         self.ids.insert(page.clone(), child.0);
-        if let Some(source) = self.gate.borrow().pages.get(&child.0) {
+        let gate = self.gate.borrow();
+        let source = gate.pages.get(&child.0);
+        if let Some(source) = source {
             self.downloads.page(child.0, page, &source.owner_key, 1);
         }
-        let input = self
-            .gate
-            .borrow()
-            .pages
-            .get(&child.0)
-            .map(|p| p.last_input.clone())
-            .unwrap_or_default();
+        let input = source.map(|p| p.last_input.clone()).unwrap_or_default();
+        let hosted = source.is_some_and(|p| p.hosted);
+        drop(gate);
         self.pages.borrow_mut().insert(
             child.0,
             (
@@ -364,6 +290,13 @@ impl PageEngine for CefEngine {
                 })),
             ),
         );
+        hosted
+    }
+    fn release_loads(&mut self, page: &TabId) -> Option<String> {
+        self.runtime.release_loads(*self.ids.get(page)?)
+    }
+    fn held_url(&self, page: &TabId) -> Option<String> {
+        self.runtime.held_url(*self.ids.get(page)?)
     }
     fn allow_popup(&mut self, page: &TabId, url: &str) {
         let Some(&id) = self.ids.get(page) else {

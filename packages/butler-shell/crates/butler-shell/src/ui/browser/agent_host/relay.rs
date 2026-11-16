@@ -1,10 +1,10 @@
 //! Raw DevTools messages between hosted pages and the Agent; up in order, one request at a time.
 use super::Hosted;
 #[cfg(feature = "cef")]
-use crate::ui::browser::engine::PageEngine;
+use crate::ui::browser::engine::PageCommand;
 use crate::ui::{
     browser::{
-        engine::{PageChange, TabId},
+        engine::{PageChange, PageEngine, TabId},
         model::Tab,
     },
     source::agent::Jobs,
@@ -131,11 +131,22 @@ pub(super) fn event(cx: &App, message: Value) {
     up(cx, None, message, size);
 }
 
-/// A hosted page's own raw DevTools message; bytes that are not JSON are dropped.
+/// A hosted page's own raw DevTools message; bytes that are not JSON are dropped. The success
+/// reply to the Agent's guard (`Fetch.enable` on the page itself) lets the page's held loads go:
+/// the URL its main frame tried meanwhile loads now, under the guard.
 #[cfg(feature = "cef")]
-fn raw(cx: &App, tab: &TabId, bytes: &[u8]) {
-    if let Ok(message) = serde_json::from_slice(bytes) {
-        up(cx, Some(tab), message, bytes.len());
+fn raw(cx: &App, tab: &TabId, hosted: &mut Hosted, engine: &mut dyn PageEngine, bytes: &[u8]) {
+    let Ok(message) = serde_json::from_slice::<Value>(bytes) else {
+        return;
+    };
+    let reply = message.get("sessionId").is_none() && hosted.guard.as_ref() == Some(&message["id"]);
+    if reply {
+        hosted.guard = None;
+    }
+    let guard_on = reply && message.get("result").is_some();
+    up(cx, Some(tab), message, bytes.len());
+    if guard_on && let Some(url) = engine.release_loads(tab) {
+        engine.command(tab, PageCommand::Load(url));
     }
 }
 
@@ -181,10 +192,13 @@ fn allowed(message: &Value) -> bool {
             || matches!(method, "Target.setAutoAttach" | "Target.detachFromTarget"))
 }
 
-/// A `cdp` frame of the Agent, sent unchanged to the hosted page it names.
+/// A `cdp` frame of the Agent, sent unchanged to the hosted page it names. A `Fetch.enable` on
+/// the page itself (a frame's session carries its `sessionId`) is the Agent's guard: its id is
+/// kept until the reply.
 #[cfg(feature = "cef")]
-pub(super) fn down(cx: &App, frame: &Value) {
+pub(super) fn down(cx: &mut App, frame: &Value) {
     use crate::ui::browser::model::BrowserState;
+    use gpui::BorrowAppContext as _;
     let (Some(tab), Some(message)) = (frame["tab"].as_str(), frame.get("message")) else {
         return;
     };
@@ -195,10 +209,20 @@ pub(super) fn down(cx: &App, frame: &Value) {
         return;
     };
     let tab = TabId(tab.to_owned().into());
-    let model = cx.global::<BrowserState>();
-    if model.tab(&tab).is_some_and(|tab| tab.hosted.is_some()) {
+    cx.update_global::<BrowserState, _>(|model, _| {
+        let Some(hosted) = model
+            .tabs
+            .iter_mut()
+            .find(|candidate| candidate.id == tab)
+            .and_then(|candidate| candidate.hosted.as_mut())
+        else {
+            return;
+        };
+        if message["method"] == "Fetch.enable" && message.get("sessionId").is_none() {
+            hosted.guard = Some(message["id"].clone());
+        }
         model.engine.devtools_raw(&tab, &bytes);
-    }
+    });
 }
 
 fn info(hosted: &Hosted, method: &str, url: &str, title: &str) -> Value {
@@ -207,13 +231,25 @@ fn info(hosted: &Hosted, method: &str, url: &str, title: &str) -> Value {
 }
 
 /// What a hosted page's engine change means to the Agent.
-pub(in crate::ui::browser) fn page_changed(cx: &App, tab: &Tab, change: &PageChange) {
-    let Some(hosted) = &tab.hosted else {
+pub(in crate::ui::browser) fn page_changed(
+    cx: &App,
+    tab: &mut Tab,
+    #[cfg_attr(
+        not(feature = "cef"),
+        expect(
+            unused_variables,
+            reason = "only raw DevTools messages reach the engine"
+        )
+    )]
+    engine: &mut dyn PageEngine,
+    change: &PageChange,
+) {
+    let Some(hosted) = tab.hosted.as_mut() else {
         return;
     };
     let message = match change {
         #[cfg(feature = "cef")]
-        PageChange::DevToolsRaw(bytes) => return raw(cx, &tab.id, bytes),
+        PageChange::DevToolsRaw(bytes) => return raw(cx, &tab.id, hosted, engine, bytes),
         PageChange::Url(url) if *url != tab.url => {
             info(hosted, "Target.targetInfoChanged", url, &tab.title)
         }

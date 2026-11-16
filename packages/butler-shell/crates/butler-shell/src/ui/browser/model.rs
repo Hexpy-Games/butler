@@ -426,7 +426,7 @@ impl BrowserState {
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == event.page) else {
             return;
         };
-        super::agent_host::page_changed(cx, tab, &event.change);
+        super::agent_host::page_changed(cx, tab, &mut *self.engine, &event.change);
         if event.change.is_quiet() {
             return;
         }

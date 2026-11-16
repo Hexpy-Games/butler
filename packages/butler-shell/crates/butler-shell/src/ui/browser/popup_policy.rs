@@ -27,7 +27,7 @@ pub(super) struct GatePage {
     pub(super) last_input: Rc<Cell<Option<Instant>>>,
     pub(super) allowance: Option<String>,
     /// The Agent's page, held by the Agent: its popups open as pages of the Agent's own, by
-    /// `agent_popup_allowed`.
+    /// `agent_popup_allowed`, created with their loads held. A popup is hosted as decided here.
     pub(super) hosted: bool,
     pub(super) popups: Rc<PopupSites>,
 }
@@ -58,19 +58,15 @@ pub(super) fn policy(gate: Rc<RefCell<PopupGate>>) -> butler_cef_host::osr::Popu
     Rc::new(move |request| {
         let mut gate = gate.borrow_mut();
         let decision = popup_decision(&gate, request, Instant::now());
-        if let PopupDecision::Allow { child } = decision
+        if let PopupDecision::Allow { child, held } = decision
             && let Some(source) = gate.pages.get_mut(&request.opener)
         {
-            let (owner, hosted, popups) = (
-                source.owner_key.clone(),
-                source.hosted,
-                source.popups.clone(),
-            );
+            let (owner, popups) = (source.owner_key.clone(), source.popups.clone());
             source.allowance = None;
             gate.next_id.set(child);
             gate.insert(child, owner, request.url.clone());
             if let Some(page) = gate.pages.get_mut(&child) {
-                page.hosted = hosted;
+                page.hosted = held;
                 page.popups = popups;
             }
         }
@@ -97,6 +93,7 @@ pub(super) fn popup_decision(
         } else {
             PopupDecision::Allow {
                 child: gate.next_id.get() + 1,
+                held: true,
             }
         };
     }
@@ -117,6 +114,7 @@ pub(super) fn popup_decision(
     if (web || request.url == "about:blank") && allowed {
         PopupDecision::Allow {
             child: gate.next_id.get() + 1,
+            held: false,
         }
     } else {
         PopupDecision::Block(PopupBlock::NoGesture)

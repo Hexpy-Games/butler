@@ -201,6 +201,8 @@ impl BrowserState {
         let pane = tab.hosted.take().and_then(|hosted| hosted.pane);
         #[cfg(feature = "cef")]
         relay::release(&*self.engine, id);
+        // The user's page now: it loads freely, and nothing it tried meanwhile is replayed.
+        self.engine.release_loads(id);
         self.engine.devtools_raw_end(id);
         self.engine.keep_awake(id, false);
         self.engine.set_hosted(id, false);
@@ -364,8 +366,9 @@ impl BrowserState {
         }
     }
 
-    /// A popup of a hosted page is a hosted page itself; the Agent hears of it with its target.
-    /// A popup whose target cannot be found is closed.
+    /// A popup of a hosted page is a hosted page itself; the Agent hears of it with its target
+    /// and the URL its held loads keep (else `url`). A popup whose target cannot be found is
+    /// closed.
     #[cfg(feature = "cef")]
     pub(in crate::ui::browser) fn announce_popup(
         &self,
@@ -395,16 +398,16 @@ impl BrowserState {
                     match (hosted, &target) {
                         (Some(hosted), Some(target)) => {
                             hosted.target.clone_from(target);
-                            true
+                            Some(model.engine.held_url(&id).unwrap_or(url))
                         }
                         (Some(_), None) => {
                             model.close(&id, cx);
-                            false
+                            None
                         }
-                        (None, _) => false,
+                        (None, _) => None,
                     }
                 });
-                if let (true, Some(target)) = (known, target) {
+                if let (Some(url), Some(target)) = (known, target) {
                     relay::event(
                         cx,
                         json!({"method":"Target.attachedToTarget","params":{
