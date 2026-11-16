@@ -75,11 +75,11 @@ impl Render for Page {
             .on_mouse_move(cx.listener(Self::mouse_move))
             .on_mouse_exit(cx.listener(Self::mouse_exit))
             .on_scroll_wheel(cx.listener(Self::wheel))
-            .on_key_down(cx.listener(|s, e: &KeyDownEvent, _, _| {
-                s.key(&e.keystroke, e.native, false);
+            .on_key_down(cx.listener(|s, e: &KeyDownEvent, _, cx| {
+                s.key(&e.keystroke, e.native, false, cx);
             }))
-            .on_key_up(cx.listener(|s, e: &KeyUpEvent, _, _| {
-                s.key(&e.keystroke, e.native, true);
+            .on_key_up(cx.listener(|s, e: &KeyUpEvent, _, cx| {
+                s.key(&e.keystroke, e.native, true, cx);
             }));
         let page = [MouseButton::Left, MouseButton::Middle, MouseButton::Right]
             .into_iter()

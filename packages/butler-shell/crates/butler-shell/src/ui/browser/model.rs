@@ -113,6 +113,7 @@ pub(crate) enum BrowserError {
     InvalidAddress,
     UnknownTab,
     InvalidMove,
+    AgentControl,
 }
 
 impl fmt::Display for BrowserError {
@@ -125,6 +126,7 @@ impl fmt::Display for BrowserError {
             Self::InvalidAddress => "invalid_address",
             Self::UnknownTab => "unknown_tab",
             Self::InvalidMove => "invalid_move",
+            Self::AgentControl => "agent_control",
         })
     }
 }
@@ -247,6 +249,7 @@ impl BrowserState {
 
     pub(crate) fn activate(&mut self, id: &TabId) {
         if self.tab(id).is_some() {
+            self.hand_over(id);
             self.active = Some(id.clone());
         }
     }
@@ -361,7 +364,7 @@ impl BrowserState {
         if !self.enabled() {
             return Err(BrowserError::BrowsingDisabled);
         }
-        Ok(())
+        self.agent_gate(id)
     }
 
     pub(crate) fn back(&mut self, id: &TabId) -> Result<(), BrowserError> {

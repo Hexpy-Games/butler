@@ -1,5 +1,5 @@
 //! Coalesced browser-host snapshots; a changed revision is sent after the in-flight request.
-use super::{engine::Profile, model::Tab};
+use super::{agent_host::Hosted, engine::Profile, model::Tab};
 use crate::ui::source::agent::Jobs;
 use futures::{
     StreamExt as _,
@@ -77,8 +77,9 @@ impl Publisher {
             "dialog":tab.dialog, "blockedPopup":tab.blocked_popup,
             "canBack":tab.can_back, "canForward":tab.can_forward,
             "agent":tab.hosted.is_some(),"driven":false,"sticky":tab.hosted.as_ref().is_some_and(|h| h.sticky),
-            "waiting":tab.hosted.as_ref().is_some_and(|h| h.waiting),"busy":false,
-            "inUse":tab.hosted.as_ref().is_some_and(|h| h.uses > 0),"paused":false,"privacyFrozen":false,"picking":false,"selectionCount":0,"stills":true
+            "waiting":tab.hosted.as_ref().is_some_and(|h| h.waiting),"busy":tab.hosted.as_ref().is_some_and(Hosted::busy),
+            "inUse":tab.hosted.as_ref().is_some_and(Hosted::in_use),"paused":tab.hosted.as_ref().is_some_and(|h| h.paused),
+            "signinStep":tab.hosted.as_ref().and_then(Hosted::signin_step),"payStep":tab.hosted.as_ref().and_then(Hosted::pay_step),"privacyFrozen":false,"picking":false,"selectionCount":0,"stills":true
         })).collect();
         let next = json!({"tabs":tabs,"still_backlog":0});
         let mut state = self.state.borrow_mut();

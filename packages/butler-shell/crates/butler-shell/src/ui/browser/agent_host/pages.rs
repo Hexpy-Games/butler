@@ -1,5 +1,5 @@
 //! Page host calls: the Agent opens, holds and closes hosted pages and reports their use.
-use super::{Holder, Hosted, relay};
+use super::{Holder, Hosted, Step, relay};
 use crate::ui::{
     browser::{
         area::owner_key,
@@ -59,9 +59,14 @@ pub(super) fn call(frame: &Value, cx: &mut App) {
         }
         Some(op @ ("use.started" | "use.ended")) => {
             let tab = tab_id(&frame["tab"]);
+            let turn = frame["turn_id"].as_str().filter(|_| op == "use.started");
             cx.update_global::<BrowserState, _>(|model, _| {
-                model.use_changed(&tab, op == "use.started");
+                model.use_changed(&tab, op == "use.started", turn);
             });
+        }
+        Some("use.finished") => {
+            let turn = frame["turn_id"].as_str().unwrap_or_default();
+            cx.update_global::<BrowserState, _>(|model, _| model.turn_finished(turn));
         }
         Some("owner.closed") => {
             let owner = Owner::parse(&format!(
@@ -267,31 +272,40 @@ impl BrowserState {
         }
     }
 
+    /// The Agent's hold: holder changes go through [`BrowserState::control`], then its waiting
+    /// and step apply.
     fn hold(&mut self, args: &Value) -> Value {
         let id = tab_id(&args["tab"]);
-        let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == id) else {
+        let Some(hosted) = self.tab(&id).and_then(|tab| tab.hosted.as_ref()) else {
             return unavailable("unknown_tab");
         };
-        let Some(hosted) = tab.hosted.as_mut() else {
-            return unavailable("unknown_tab");
-        };
+        let sticky = args["sticky"].as_bool().unwrap_or(hosted.sticky);
         let holder = match args["holder"].as_str() {
             Some("agent") => Some(Holder::Agent),
             Some("user") => Some(Holder::User),
             _ => None,
         };
         if let Some(holder) = holder.filter(|holder| *holder != hosted.holder) {
-            hosted.holder = holder;
-            tab.epoch += 1;
+            self.control(&id, holder, sticky);
         }
-        hosted.sticky = args["sticky"].as_bool().unwrap_or(hosted.sticky);
+        let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == id) else {
+            return unavailable("unknown_tab");
+        };
+        let Some(hosted) = tab.hosted.as_mut() else {
+            return unavailable("unknown_tab");
+        };
+        hosted.sticky = sticky;
         hosted.waiting = args["waiting"].as_bool().unwrap_or(hosted.waiting);
+        if let Some(step) = args.get("step") {
+            hosted.step = Step::parse(step);
+        }
         let epoch = tab.epoch;
         self.publisher.changed(&self.tabs);
         json!({"status":"ok","epoch":epoch})
     }
 
-    fn use_changed(&mut self, id: &TabId, started: bool) {
+    /// A call starts or ends on the page; a call's turn holds the page until it finishes.
+    fn use_changed(&mut self, id: &TabId, started: bool, turn: Option<&str>) {
         let Some(hosted) = self
             .tabs
             .iter_mut()
@@ -305,8 +319,32 @@ impl BrowserState {
         } else {
             hosted.uses.saturating_sub(1)
         };
-        let awake = hosted.uses > 0;
-        self.engine.keep_awake(id, awake);
+        if let Some(turn) = turn
+            && !hosted.turns.iter().any(|held| held == turn)
+        {
+            hosted.turns.push(turn.to_owned());
+        }
+        self.wake(id);
+        self.publisher.changed(&self.tabs);
+    }
+
+    /// The turn finished: it no longer holds any page, and a page it no longer pauses is
+    /// the user's own.
+    fn turn_finished(&mut self, turn: &str) {
+        let mut hosted_tabs = Vec::new();
+        for tab in &mut self.tabs {
+            let Some(hosted) = tab.hosted.as_mut() else {
+                continue;
+            };
+            hosted.turns.retain(|held| held != turn);
+            if hosted.turns.is_empty() {
+                hosted.paused = false;
+            }
+            hosted_tabs.push(tab.id.clone());
+        }
+        for id in hosted_tabs {
+            self.wake(&id);
+        }
         self.publisher.changed(&self.tabs);
     }
 

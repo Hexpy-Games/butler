@@ -31,7 +31,9 @@ impl Shell {
     }
     pub(super) fn sync_browser_visibility(&self, cx: &mut gpui::App) {
         if self.browser_owner(cx).is_none() {
-            cx.global_mut::<BrowserState>().show(None);
+            let model = cx.global_mut::<BrowserState>();
+            model.show(None);
+            model.release_unpinned();
         }
     }
     pub(super) fn browser_focus_address(
