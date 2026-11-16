@@ -21,9 +21,9 @@ path = "src/bin/butler-shell-shots/main.rs"
 required-features = ["shots"]
 
 [features]
-# The shell's `cef` cargo feature builds on macOS (CVPixelBuffer frames) and Windows (D3D11 shared
-# textures, `SurfaceSource::WindowsSharedTexture`). Linux waits for the software-paint job to add its
-# frame type to `butler_cef_host::osr` and the matching `SurfaceSource` conversion.
+# The shell's `cef` cargo feature builds on macOS (CVPixelBuffer frames), Windows (D3D11 shared
+# textures, `SurfaceSource::WindowsSharedTexture`) and Linux (CPU frames uploaded to a wgpu texture,
+# `SurfaceSource::Texture`).
 cef = ["dep:butler-cef"]
 shots = ["gpui/test-support", "dep:gpui_wgpu"]
 
@@ -53,6 +53,11 @@ percent-encoding = "2"
 uuid = { version = "1", features = ["v4"] }
 # The package updater checks the staged artifact's SHA-256 (lifecycle/app_update).
 sha2 = "=0.10.9"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Linux frames are uploaded to a texture on gpui's device: the shell names wgpu's types through
+# gpui_wgpu's re-export, the one wgpu gpui uses.
+gpui_wgpu = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true, features = ["executor"] }

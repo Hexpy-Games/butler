@@ -149,7 +149,7 @@ async fn cef_popup_without_gesture_is_blocked_then_allowed() -> Result<(), Harne
     shell
         .run(&[
             "click browser-popup-show",
-            "key cmd-w",
+            "key secondary-w",
             "wait-no-anchor browser-popup-window",
         ])
         .await?;
