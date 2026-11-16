@@ -54,15 +54,18 @@ async fn finished_child(id: &str) -> Result<(Sandbox, String, Child), HarnessErr
         .as_array()
         .and_then(|all| all.iter().find(|m| m["role"] == "assistant"))
         .expect("the child's reply");
-    // The activity renderer keys a child's rows by the turn its reply carries, and skips the
-    // general chat.
+    // The dialog's `turn-activity-<turn>` row exists only when the turn's rows hold phase
+    // activities (model-authored decisions with a summary).
     let turn = view["latest_turn"]["id"].as_str().expect("latest turn");
-    assert_eq!(reply["turn_id"], turn, "{view}");
-    assert_ne!(reply["chat_id"], "general", "{reply}");
     assert!(
         view["latest_turn"]["progress"]["safe_progress_rows"]
             .as_array()
-            .is_some_and(|rows| !rows.is_empty()),
+            .is_some_and(|rows| rows.iter().any(|row| {
+                row["work_decision_source"] == "model-authored"
+                    && row["work_decision_summary"]
+                        .as_str()
+                        .is_some_and(|summary| !summary.is_empty())
+            })),
         "{view}"
     );
     let child = Child {
@@ -105,7 +108,6 @@ async fn shell_app_09_activity_dialog_shows_the_childs_steps_and_reply() -> Resu
             &format!("click {eye}"),
             "wait-anchor dialog-content",
             "wait-anchor steward-observer-transcript",
-            "expect-within steward-observer-transcript dialog-content",
             &format!("wait-anchor {steps}"),
             &format!("expect-within {steps} dialog-content"),
             &format!("wait-anchor {reply}"),

@@ -59,6 +59,8 @@ pub(crate) struct TranscriptCtx<'a> {
     pub(crate) message_id: Option<&'a str>,
     pub(crate) steward: Rc<HashMap<String, usize>>,
     pub(crate) status_line: Option<Entity<activity::status::StatusLineView>>,
+    /// The delegated goal the next turn timeline shows on its first activity (`delegatedGoal`).
+    pub(crate) goal: Option<&'a str>,
 }
 
 /// Sends a text as a message.
@@ -108,6 +110,7 @@ impl<'a> TranscriptCtx<'a> {
             footer_meta,
             message_id: None,
             status_line: None,
+            goal: None,
             steward: Rc::default(),
         }
     }

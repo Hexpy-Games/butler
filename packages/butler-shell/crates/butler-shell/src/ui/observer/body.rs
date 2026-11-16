@@ -94,6 +94,11 @@ impl SessionObserver {
         t.status_line.clone_from(&self.status_line);
         let lang = Ds::get(cx).lang();
         let mut target = self.target.take();
+        // `delegatedGoal`: the first activity entry carries the child's title.
+        let mut goal = view
+            .relation
+            .as_ref()
+            .map(|relation| relation.safe_title.as_str());
         let mut column = Stack::new().gap(Space::Lg);
         for entry in &self.entries {
             let row = match entry {
@@ -108,6 +113,7 @@ impl SessionObserver {
                         target = None;
                         open_activity(rows, turn, lang, window, cx);
                     }
+                    t.goal = goal.take();
                     let panel = if *live {
                         turn_activity_panel(rows, Some(turn), &t, window, cx)
                     } else {

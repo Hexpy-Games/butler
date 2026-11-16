@@ -67,7 +67,10 @@ pub(crate) fn timeline(
         let views: Vec<AnyElement> = activities
             .iter()
             .enumerate()
-            .map(|(index, activity)| activity_view(activity, turn_id, index < last, t, window, cx))
+            .map(|(index, activity)| {
+                let goal = t.goal.filter(|_| index == 0);
+                activity_view(activity, (turn_id, goal), index < last, t, window, cx)
+            })
             .collect();
         body = body.child(Stack::new().gap(Space::Sm).children(views));
         body = body.child(
@@ -90,6 +93,7 @@ pub(crate) fn timeline(
             div()
                 .flex()
                 .flex_col()
+                .min_w_0()
                 .child(Stack::new().gap(Space::Xs).child(header).child(body)),
             &name,
         )
@@ -126,11 +130,14 @@ fn collapsed_step(
     cx: &mut App,
 ) -> Option<Stack> {
     let latest = activities.last()?.clone();
+    // `delegatedGoal={activities.length === 1 ? delegatedGoal : undefined}`.
+    let goal = t.goal.filter(|_| activities.len() == 1).map(str::to_owned);
     // The current step folds away with its spacing when the turn settles; the header stays.
     let item_key: SharedString = latest.id.clone().into();
     let tools = activity_tools(&latest, turn_id, t, window, cx);
     let step = RollingSwap::new(format!("{key}-swap"), item_key, move |_, cx| {
-        activity_block(&latest, false, false, Ds::get(cx).lang()).into_any_element()
+        activity_block(&latest, (false, false), goal.as_deref(), Ds::get(cx).lang())
+            .into_any_element()
     })
     .motion(live);
     let still =
@@ -201,7 +208,7 @@ pub(super) fn activity_tools(
 /// `ActivityBlock` of TurnActivityBlock.tsx: a compact work activity with its operations.
 fn activity_view(
     activity: &PhaseActivity,
-    turn: Option<&str>,
+    (turn, goal): (Option<&str>, Option<&str>),
     connected: bool,
     t: &TranscriptCtx,
     window: &mut Window,
@@ -211,7 +218,7 @@ fn activity_view(
     let tools = activity_tools(activity, turn, t, window, cx);
     Stack::new()
         .gap(Space::Xs)
-        .child(activity_block(activity, connected, false, lang))
+        .child(activity_block(activity, (connected, false), goal, lang))
         .children(tools)
         .into_any_element()
 }
@@ -219,8 +226,8 @@ fn activity_view(
 /// `ActivityBlock` of TurnActivityBlock.tsx without its toolchain.
 pub(super) fn activity_block(
     activity: &PhaseActivity,
-    connected: bool,
-    live: bool,
+    (connected, live): (bool, bool),
+    goal: Option<&str>,
     lang: Lang,
 ) -> WorkActivityBlock {
     let [content, intent, next] = locale_of(lang).strings().activity_detail_labels();
@@ -229,7 +236,7 @@ pub(super) fn activity_block(
         Some(time) => format!("{phase} · {time}"),
         None => phase.to_string(),
     };
-    let summary = delegated_request_goal(activity, lang);
+    let summary = delegated_request_goal(activity, goal, lang);
     let mut lines = vec![meta];
     if normalize(&activity.title) != normalize(&summary) {
         lines.push(format!("{content} {summary}"));
@@ -280,8 +287,11 @@ fn normalize(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// `delegatedRequestGoal` without a caller-supplied goal: the quoted original request.
-fn delegated_request_goal(activity: &PhaseActivity, lang: Lang) -> String {
+/// `delegatedRequestGoal`: the caller's goal, else the quoted original request.
+fn delegated_request_goal(activity: &PhaseActivity, goal: Option<&str>, lang: Lang) -> String {
+    if let Some(goal) = goal.map(str::trim).filter(|goal| !goal.is_empty()) {
+        return normalize(goal);
+    }
     let Some(end) = request_marker_end(&activity.summary) else {
         return activity.summary.clone();
     };
