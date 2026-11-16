@@ -70,6 +70,17 @@ jobs:
       version: ${{ github.ref_name }}
       release: true
 
+  gpui-app-macos:
+    needs: integration-proof
+    if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-preview.') }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/gpui-macos-package.yml
+    with:
+      version: ${{ github.ref_name }}
+      release: true
+
   native-release:
     needs: integration-proof
     if: ${{ !inputs.reuse_run_id && startsWith(github.ref, 'refs/tags/v') }}
