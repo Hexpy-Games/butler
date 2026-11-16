@@ -5,7 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
-use super::support::{admin, call, open, publish_as, selected, setup};
+use super::support::{admin, call, open, publish_as, selected, setup, shell};
 use butler_e2e::e2e::HarnessError;
 use serde_json::{Value, json};
 
@@ -38,12 +38,13 @@ async fn browser_identity_agrees_in_page_worker_and_frame() -> Result<(), Harnes
         .expect("complete identity report");
     let reports: Value = serde_json::from_str(line)?;
     let ua = reports["page"]["ua"].as_str().unwrap();
-    assert!(
-        !["Butler/", "Electron/", "HeadlessChrome/"]
-            .iter()
-            .any(|token| ua.contains(token)),
-        "{ua}"
-    );
+    // The shell is the Butler browser: its identity carries the Butler token.
+    let forbidden: &[&str] = if shell() {
+        &["Electron/", "HeadlessChrome/"]
+    } else {
+        &["Butler/", "Electron/", "HeadlessChrome/"]
+    };
+    assert!(!forbidden.iter().any(|token| ua.contains(token)), "{ua}");
     let full = ua
         .split("Chrome/")
         .nth(1)
@@ -55,6 +56,7 @@ async fn browser_identity_agrees_in_page_worker_and_frame() -> Result<(), Harnes
     for name in ["page", "worker", "frame"] {
         let report = &reports[name];
         assert_eq!(report["ua"], ua, "{name}");
+        assert!(!shell() || ua.contains("Butler/"), "{name}: {ua}");
         assert_eq!(report["data"], reports["page"]["data"], "{name}");
         for brand in ["Chromium", "Google Chrome"] {
             assert!(

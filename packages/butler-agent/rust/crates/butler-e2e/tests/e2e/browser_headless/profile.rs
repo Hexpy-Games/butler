@@ -6,7 +6,7 @@
     reason = "test assertions"
 )]
 use super::{
-    support::{admin, call, hidden_app, open, publish_as, selected, setup, state_root},
+    support::{admin, call, hidden_app, open, publish_as, selected, setup, shell, state_root},
     text,
 };
 use butler_e2e::e2e::{HarnessError, security::AdminClient};
@@ -27,8 +27,8 @@ async fn a_reused_profile_keeps_no_site_state() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
     butler_e2e::skip_unless!(
-        !hidden_app(),
-        "the hidden App host keeps its own throwaway profiles"
+        !hidden_app() && !shell(),
+        "the hidden App host and the shell keep their profiles elsewhere"
     );
     let mut s = setup("BROWSER-HEADLESS-PROFILE")?.start().await?;
     let (id, url) = publish_as(&s, "Publish profile fixture").await?;

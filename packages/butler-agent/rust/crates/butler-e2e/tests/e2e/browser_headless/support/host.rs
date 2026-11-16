@@ -1,6 +1,6 @@
 //! The gpui shell attached to a scenario's agent as its browser page host
 //! (`BUTLER_E2E_BROWSER_BACKEND=shell`): started once per agent, ended with the test.
-use crate::shell_app::driver::{SHOTS, Shell};
+use crate::shell_app::driver::{SERIAL, SHOTS, Shell};
 use butler_e2e::e2e::{
     HarnessError,
     config::nonempty,
@@ -14,7 +14,10 @@ use std::{
     ops::{Deref, DerefMut},
     time::{Duration, Instant},
 };
-use tokio::{sync::oneshot, task::JoinHandle};
+use tokio::{
+    sync::{MutexGuard, oneshot},
+    task::JoinHandle,
+};
 
 /// The shell is the App: it attaches to an agent the App supervises, with no Electron host.
 pub(crate) fn shell() -> bool {
@@ -49,11 +52,18 @@ impl Pending {
     }
 
     pub(crate) async fn start(self) -> Result<Hosted, HarnessError> {
+        // One shell (and CEF) at a time, like every scenario that drives the shell.
+        let serial = if shell() {
+            Some(SERIAL.lock().await)
+        } else {
+            None
+        };
         let scenario = self.0.start().await?;
         if !shell() {
             return Ok(Hosted {
                 pump: None,
                 scenario,
+                _serial: serial,
             });
         }
         // It must attach to the scenario's agent, never start one of its own.
@@ -70,6 +80,7 @@ impl Pending {
         Ok(Hosted {
             pump: Some(pump),
             scenario,
+            _serial: serial,
         })
     }
 }
@@ -85,16 +96,23 @@ impl Deref for Pending {
 pub(crate) struct Hosted {
     pump: Option<Pump>,
     scenario: Scenario,
+    /// Held until the shell has ended.
+    _serial: Option<MutexGuard<'static, ()>>,
 }
 
 impl Hosted {
     pub(crate) async fn finish(self) -> Result<(), HarnessError> {
-        let Self { pump, scenario } = self;
-        if let Some(pump) = pump {
+        let Self {
+            pump,
+            scenario,
+            _serial,
+        } = self;
+        let pumped = match pump {
             // `quit` only: `app-quit` waits for an Agent child the shell owns, and it owns none.
-            pump.stop().await?.finish().await?;
-        }
-        scenario.finish().await
+            Some(pump) => async { pump.stop().await?.finish().await }.await,
+            None => Ok(()),
+        };
+        pumped.and(scenario.finish().await)
     }
 }
 
@@ -123,9 +141,13 @@ impl Pump {
         let (stop, mut stopped) = oneshot::channel::<()>();
         let task = tokio::spawn(async move {
             // Checked between commands only: an answer is never left unread.
+            let mut ticked = Instant::now();
             while matches!(stopped.try_recv(), Err(oneshot::error::TryRecvError::Empty)) {
-                shell.run(&["wait 50"]).await?;
+                // The sleep only paces the loop; the shell's clock moves by real time.
                 tokio::time::sleep(Duration::from_millis(10)).await;
+                let elapsed = u64::try_from(ticked.elapsed().as_millis()).unwrap_or(u64::MAX);
+                ticked += Duration::from_millis(elapsed);
+                shell.run(&[&format!("tick {elapsed}")]).await?;
             }
             Ok(shell)
         });

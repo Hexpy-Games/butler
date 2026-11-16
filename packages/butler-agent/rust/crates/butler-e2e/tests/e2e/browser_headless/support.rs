@@ -20,13 +20,9 @@ use std::{path::PathBuf, time::Duration};
 mod host;
 pub(crate) use host::{Pending, shell};
 
-/// `BUTLER_E2E_BROWSER_BACKEND=headless` runs these scenarios on Chrome for
-/// Testing (the first run downloads the pinned build into a temp cache);
-/// `=hidden-app` runs them on the hidden App host: the in-worktree Electron
-/// named by `BUTLER_E2E_ELECTRON` with the App's own executor, no Chrome.
-/// `=cef` runs the scenarios on the headless backend driving the staged CEF host
-/// named by `BUTLER_E2E_CEF_HOST` (no Chrome, no Electron).
-/// `=shell` attaches the gpui shell (CEF) to the scenario's agent as its page host.
+/// `BUTLER_E2E_BROWSER_BACKEND`: `headless` is Chrome for Testing (the first run downloads it),
+/// `hidden-app` the Electron named by `BUTLER_E2E_ELECTRON`, `cef` the staged host named by
+/// `BUTLER_E2E_CEF_HOST`, `shell` the gpui shell (CEF) attached as the agent's page host.
 pub(crate) fn selected() -> bool {
     matches!(backend().as_deref(), Ok("headless" | "hidden-app" | "cef"))
         || (shell() && host::runnable())
@@ -39,6 +35,11 @@ fn backend() -> Result<String, std::env::VarError> {
 /// Whether the scenarios run on the hidden App host (Electron).
 pub(crate) fn hidden_app() -> bool {
     backend().as_deref() == Ok("hidden-app")
+}
+
+/// Whether the scenarios run on Chrome for Testing.
+pub(crate) fn chrome() -> bool {
+    backend().as_deref() == Ok("headless")
 }
 
 /// Selects the staged host so CEF scenarios cannot fall back to Chrome.
