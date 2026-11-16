@@ -399,6 +399,13 @@ jobs:
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun run typecheck
       - name: Test
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" bun test src
+      - name: Mobile design tokens match tokens.css
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3 .github/scripts/isolated.py packages/butler-mobile/scripts/tokens.sh --check || {
+            echo "::error::packages/butler-mobile/src/design/tokens.generated.json is stale. Regenerate: packages/butler-mobile/scripts/tokens.sh"
+            exit 1
+          }
 
   ds-approval:
     if: github.event_name == 'pull_request'
@@ -431,13 +438,6 @@ jobs:
         run: |
           if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then BASE=HEAD; fi
           python3 .github/scripts/isolated.py git diff --check "$BASE" HEAD
-      - name: Mobile design tokens match tokens.css
-        working-directory: ${{ github.workspace }}
-        run: |
-          python3 .github/scripts/isolated.py packages/butler-mobile/scripts/tokens.sh --check || {
-            echo "::error::packages/butler-mobile/src/design/tokens.generated.json is stale. Regenerate: packages/butler-mobile/scripts/tokens.sh"
-            exit 1
-          }
       - name: Keep work documents in the Project Ledger
         working-directory: ${{ github.workspace }}
         run: python3 .github/scripts/isolated.py python3 .github/scripts/work-docs-lint.py

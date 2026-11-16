@@ -25,6 +25,7 @@ from urllib.parse import urlencode
 GROUPS = ('shell', 'rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-package', 'workflows', 'licenses', 'signing', 'mobile')
 SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock*', 'bunfig.toml', 'tsconfig*.json',
           '*eslint*', '*stylelint*', '*prettier*')
+MOBILE_TOKENS_SOURCE = 'packages/butler-app/client/ui/src/libs/design-system/tokens.css'  # input of packages/butler-mobile/scripts/tokens.sh
 WINDOWS_BROWSER_INPUTS = ('tests/smoke/composer-permission-agent-smoke.ts',
                           'tests/support/smoke-browser*', 'tests/support/bun-child-stdio.ts')
 PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/electron/*',
@@ -158,6 +159,8 @@ def github_categories(path):
 
 
 def categories(path, event=None):
+    if path.startswith('packages/butler-shell/tools/ds-tokens/'):
+        return {'shell', 'mobile'}
     if path.startswith('packages/butler-shell/'):
         return {'shell'}
     if path.startswith('packages/butler-mobile/'):
@@ -204,6 +207,8 @@ def categories(path, event=None):
         result = set(GROUPS) - {'workflows', 'shell'}
     if path.startswith('packages/butler-agent/rust/tools/source-check/'):
         result.add('shell')
+    if path == MOBILE_TOKENS_SOURCE:
+        result.add('mobile')
     return result
 
 
