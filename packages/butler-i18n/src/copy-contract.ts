@@ -1441,6 +1441,7 @@ export interface AppCopy {
       usage: string;
       logs: string;
       personalization: string;
+      account: string;
       memory: string;
       privacy: string;
       connections: string;
@@ -1462,6 +1463,7 @@ export interface AppCopy {
       usage: string;
       logs: string;
       personalization: string;
+      account: string;
       memory: string;
       privacy: string;
       connections: string;
@@ -1483,6 +1485,7 @@ export interface AppCopy {
       usage: string[];
       logs: string[];
       personalization: string[];
+      account: string[];
       memory: string[];
       privacy: string[];
       connections: string[];

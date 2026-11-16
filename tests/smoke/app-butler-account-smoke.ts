@@ -58,9 +58,9 @@ const copy = appCopy.butlerAccount;
 const widths = [320, 375, 390, 430, 768, 1440];
 const section = (page: Page, id: string) => page.locator(`[data-settings-section-id="${id}"]`);
 
-async function openSecurity(page: Page) {
+async function openAccount(page: Page) {
   await page.getByRole("button", { name: appCopy.sidebar.settings, exact: true }).click();
-  await page.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).click();
+  await page.getByRole("button", { name: appCopy.settings.sections.account, exact: true }).click();
 }
 
 async function verifyLayouts(page: Page) {
@@ -68,7 +68,7 @@ async function verifyLayouts(page: Page) {
     await page.setViewportSize({ width, height: 900 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false, `page fits ${width}px`);
     const overflow = await page.locator("[data-settings-section-id]").evaluateAll((nodes) => nodes.some((node) => node.scrollWidth > node.clientWidth + 1));
-    assert.equal(overflow, false, `Security sections fit ${width}px`);
+    assert.equal(overflow, false, `Settings sections fit ${width}px`);
   }
 }
 
@@ -80,6 +80,19 @@ async function screenshot(page: Page, state: string, fullPage = true) {
     await page.emulateMedia({ colorScheme });
     for (const width of [390, 1280]) {
       await page.setViewportSize({ width, height: 900 });
+      if (state === "nav") {
+        if (width === 390) {
+          if (await page.locator('[data-test-class~="settings-view"]').getAttribute("data-compact-pane") === "detail") {
+            await page.locator('[data-test-class~="settings-view"]').getByRole("main")
+              .getByRole("button", { name: appCopy.settings.back, exact: true }).click();
+          }
+          await page.locator('[data-test-class="settings-sidebar"]')
+            .getByRole("button", { name: appCopy.settings.sections.account, exact: true }).waitFor();
+        } else {
+          await page.getByRole("button", { name: appCopy.settings.sections.account, exact: true }).click();
+          await section(page, "butler-account").getByRole("button", { name: copy.signIn, exact: true }).waitFor();
+        }
+      }
       await page.evaluate(() => Promise.all(document.getAnimations()
         .filter((animation) => animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => undefined))));
       await page.screenshot({ path: join(directory, `butler-account-${state}-${language}-${colorScheme}-${width}.png`), fullPage });
@@ -130,7 +143,7 @@ async function signedInFlow(page: Page, fake: Awaited<ReturnType<typeof startFak
   await screenshot(page, "signed-in");
   fake.state.plan = "plus";
   await page.reload();
-  await openSecurity(page);
+  await openAccount(page);
   await account.getByText(copy.plans.plus, { exact: true }).waitFor();
   await devices.getByRole("button", { name: copy.revokeDevice("Other"), exact: true }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: copy.revoke, exact: true }).click();
@@ -163,16 +176,26 @@ async function run(enabled: boolean, fake: Awaited<ReturnType<typeof startFakeCl
       const headers = path.startsWith("/setup/butler-account") || path.startsWith("/security") || path === "/settings" ? adminHeaders : server!.authHeaders;
       await route.continue({ headers: { ...route.request().headers(), ...headers } });
     });
-    await page.goto(server.url);
     const status = page.waitForResponse((response) => new URL(response.url()).pathname === "/setup/butler-account");
-    await openSecurity(page);
+    await page.goto(server.url);
+    await page.getByRole("button", { name: appCopy.sidebar.settings, exact: true }).click();
     assert.equal((await status).status(), enabled ? 200 : 404);
-    if (enabled) await signedInFlow(page, fake);
+    const navigation = page.locator('[data-test-class="settings-sidebar"]');
+    if (enabled) await screenshot(page, "nav");
     else {
-      await section(page, "butler-account").waitFor({ state: "hidden" });
-      assert.equal(await section(page, "butler-account").count(), 0);
-      await verifyLayouts(page);
+      assert.equal(await navigation.getByRole("button", { name: appCopy.settings.sections.account, exact: true }).count(), 0);
+      await page.setViewportSize({ width: 390, height: 900 });
+      await navigation.waitFor();
+      assert.equal(await navigation.getByRole("button", { name: appCopy.settings.sections.account, exact: true }).count(), 0);
+      await page.setViewportSize({ width: 1440, height: 900 });
     }
+    await navigation.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).click();
+    await page.getByRole("heading", { name: appCopy.settings.sections.security, exact: true }).waitFor();
+    assert.equal(await section(page, "butler-account").count(), 0);
+    if (enabled) {
+      await navigation.getByRole("button", { name: appCopy.settings.sections.account, exact: true }).click();
+      await signedInFlow(page, fake);
+    } else await verifyLayouts(page);
   } catch (error) {
     let message = String(error);
     for (const value of [secret, server?.token, "bct_fake"]) if (value) message = message.replaceAll(value, "[redacted]");
