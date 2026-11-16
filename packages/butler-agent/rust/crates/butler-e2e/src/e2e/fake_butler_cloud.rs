@@ -104,15 +104,15 @@ async fn route(
         )
             .into_response();
     }
-    authenticated(&state, method, path, account, device)
+    authenticated(&state, method, path, &account, &device)
 }
 
 fn authenticated(
     state: &State,
     method: Method,
     path: &str,
-    account: Value,
-    device: Value,
+    account: &Value,
+    device: &Value,
 ) -> Response {
     match (method, path) {
         (Method::GET, "/v1/me") => {
