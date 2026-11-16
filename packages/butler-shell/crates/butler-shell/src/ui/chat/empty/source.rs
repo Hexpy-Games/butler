@@ -73,7 +73,10 @@ async fn wallpaper_picture(
         return None;
     };
     let download = client.read_wallpaper_image(asset).await.ok()?;
-    decode_picture(&download.bytes)
+    tokio::task::spawn_blocking(move || decode_picture(&download.bytes))
+        .await
+        .ok()
+        .flatten()
 }
 
 fn find_project(navigation: Option<&Value>, project_id: Option<&str>) -> Option<Value> {
