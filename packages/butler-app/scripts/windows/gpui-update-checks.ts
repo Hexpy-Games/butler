@@ -74,7 +74,7 @@ type Registration = ReturnType<typeof readPostUpdateRegistration>;
 export function staleRegistrations(shortcuts: string[], env: NodeJS.ProcessEnv, powershell: PowerShell) {
   powershell(`$paths = ConvertFrom-Json $env:BUTLER_SMOKE_SHORTCUTS
     foreach ($path in $paths) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force } }
-    $command = 'HKCU:\Software\Classes\butler\shell\open\command'
+    $command = 'HKCU:\\Software\\Classes\\butler\\shell\\open\\command'
     if (-not (Test-Path -LiteralPath $command)) { New-Item -Path $command -Force | Out-Null }
     Set-Item -LiteralPath $command -Value '"stale" "%1"'
     foreach ($path in $paths) { if (Test-Path -LiteralPath $path) { throw "Shortcut still exists: $path" } }`,
