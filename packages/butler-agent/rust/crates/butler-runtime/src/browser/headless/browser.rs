@@ -269,7 +269,10 @@ impl Browser {
         )
         .await;
         let _ = tokio::time::timeout(Duration::from_secs(3), self.alive.cancelled()).await;
-        let process = process.lock().unwrap_or_else(PoisonError::into_inner).take();
+        let process = process
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
         let pid = process.map(|mut process| {
             let pid = process.pid();
             process.kill();
@@ -294,7 +297,11 @@ impl Drop for Browser {
             self.alive.cancel();
             return;
         };
-        if let Some(mut process) = process.lock().unwrap_or_else(PoisonError::into_inner).take() {
+        if let Some(mut process) = process
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+        {
             process.kill();
         }
     }
