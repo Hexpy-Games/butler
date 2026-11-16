@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 
 use serde_json::Value;
 
-use super::{ImageDim, WallpaperTone, brightness, default_dim};
+use super::{DIM_SKIP, ImageDim, WallpaperTone, brightness, default_dim};
 
 /// filters.rs wp_image: butler.image/shader.frag
 pub(super) const IMAGE_MODULE: u32 = 17;
@@ -74,25 +74,31 @@ fn modules() -> HashMap<String, Module> {
             photo!("butler.stipple", 0.14),
         ),
         (manifest!("butler.grain"), [16, 0], 0., None),
-        (manifest!("butler.image"), [IMAGE_MODULE, 0], 0., None),
         (manifest!("butler.cherry-blossom"), [18, 0], 37., None),
     ];
     entries
         .into_iter()
         .filter_map(|(json, shaders, still_time, photo)| {
-            let manifest: Value = serde_json::from_str(json).ok()?;
-            let id = manifest["id"].as_str()?.to_owned();
-            Some((
-                id,
-                Module {
-                    manifest,
-                    shaders,
-                    still_time,
-                    photo,
-                },
-            ))
+            let module = module(json, shaders, still_time, photo);
+            Some((module.manifest["id"].as_str()?.to_owned(), module))
         })
         .collect()
+}
+
+fn module(json: &str, shaders: [u32; 2], still_time: f32, photo: Option<Photo>) -> Module {
+    Module {
+        manifest: serde_json::from_str(json).unwrap_or_default(),
+        shaders,
+        still_time,
+        photo,
+    }
+}
+
+/// The built-in image module: not a selectable module (DS: `WALLPAPER_IMAGE_MODULE` stays out of
+/// `BUILTIN_WALLPAPER_MODULES`), so [`get`] does not know it.
+pub(super) fn image() -> &'static Module {
+    static IMAGE: OnceLock<Module> = OnceLock::new();
+    IMAGE.get_or_init(|| module(manifest!("butler.image"), [IMAGE_MODULE, 0], 0., None))
 }
 
 impl Module {
@@ -139,8 +145,9 @@ impl Module {
 
     /// DS: registry.ts wallpaperDefaultImageScene: the default dim of the bundled photo.
     pub(super) fn default_dim(&self) -> f32 {
-        self.photo
-            .as_ref()
-            .map_or(0., |photo| default_dim(Some(photo.luminance)))
+        self.photo.as_ref().map_or(0., |photo| {
+            let dim = default_dim(Some(photo.luminance));
+            if dim <= DIM_SKIP { 0. } else { dim }
+        })
     }
 }

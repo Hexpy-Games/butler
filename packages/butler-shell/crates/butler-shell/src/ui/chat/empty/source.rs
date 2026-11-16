@@ -1,11 +1,10 @@
 //! What the new chat reads from the server, and what it makes of it: the briefing
 //! (`/new-chat-briefing`), the epic and its group, the project, and the wallpaper
 //! (`mainScreenTheme.ts`, `projectWallpaper.ts`: the project's source, else the global one).
-use std::sync::Arc;
-
-use butler_ds::ui::blocks::wallpaper::{ImageFilter, ImageFit, WallpaperParams, WallpaperSource};
+use butler_ds::ui::blocks::wallpaper::{
+    ImageFilter, ImageFit, WallpaperImage, WallpaperParams, WallpaperSource, decode_picture,
+};
 use butler_shell_client::ShellClient;
-use gpui::{Image, ImageFormat};
 use serde_json::Value;
 
 use crate::ui::source::wire::NewChatBriefing;
@@ -30,7 +29,7 @@ pub(super) struct Fetched {
     navigation: Option<Value>,
     briefing: Option<Value>,
     epic: Option<EpicInfo>,
-    picture: Option<Arc<Image>>,
+    picture: Option<WallpaperImage>,
 }
 
 /// Runs the calls on the agent worker.
@@ -64,20 +63,17 @@ pub(super) async fn fetch(client: ShellClient, want: Want) -> Fetched {
     }
 }
 
-/// The image source's stored picture; `None` for other sources, an unknown media type or a
-/// failed request.
-async fn wallpaper_picture(client: &ShellClient, source: &WallpaperSource) -> Option<Arc<Image>> {
+/// The image source's stored picture, decoded here in the job; `None` for other sources or a
+/// failed request or decode.
+async fn wallpaper_picture(
+    client: &ShellClient,
+    source: &WallpaperSource,
+) -> Option<WallpaperImage> {
     let WallpaperSource::Image { asset, .. } = source else {
         return None;
     };
     let download = client.read_wallpaper_image(asset).await.ok()?;
-    let format = match download.content_type.as_deref()? {
-        "image/jpeg" => ImageFormat::Jpeg,
-        "image/png" => ImageFormat::Png,
-        "image/webp" => ImageFormat::Webp,
-        _ => return None,
-    };
-    Some(Arc::new(Image::from_bytes(format, download.bytes)))
+    decode_picture(&download.bytes)
 }
 
 fn find_project(navigation: Option<&Value>, project_id: Option<&str>) -> Option<Value> {
@@ -120,7 +116,7 @@ pub(super) struct Resolved {
     pub(super) epic: Option<EpicInfo>,
     pub(super) project_name: Option<String>,
     pub(super) wallpaper: WallpaperSource,
-    pub(super) wallpaper_picture: Option<Arc<Image>>,
+    pub(super) wallpaper_picture: Option<WallpaperImage>,
     pub(super) wallpaper_paused: bool,
     pub(super) wallpaper_pause_on_battery: bool,
 }

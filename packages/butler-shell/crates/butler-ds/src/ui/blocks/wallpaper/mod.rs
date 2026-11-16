@@ -24,10 +24,12 @@ use gpui::{
     RenderOnce, SharedString, Styled as _, StyledImage as _, Window, div, hsla, img,
 };
 
+pub use gpui::WallpaperImage;
 pub use image_cache::{ImageCache, ImageLoader, bundled_image, default_image_asset};
 pub use image_math::{
     DARK_DIM_STEP, DIM_SKIP, ImageDim, THUMBNAIL_EDGE, brightness, default_dim, unit, variant_for,
 };
+pub use live_image::decode_picture;
 pub use posters::{POSTER_SIZE, builtin_poster, poster_modules};
 pub use still::{StillCache, StillSize, still_key};
 
@@ -181,7 +183,7 @@ pub fn drifts(source: &WallpaperSource) -> bool {
 pub struct Wallpaper {
     source: WallpaperSource,
     tone: Option<WallpaperTone>,
-    picture: Option<Arc<Image>>,
+    picture: Option<WallpaperImage>,
     content_rect: Option<ContentRect>,
     content_rect2: Option<ContentRect>,
     day_phase: f32,
@@ -238,8 +240,8 @@ impl Wallpaper {
         self
     }
 
-    /// The decoded picture of an image source (from [`ImageCache::image`]).
-    pub fn picture(mut self, picture: Arc<Image>) -> Self {
+    /// The decoded picture of an image source (from [`decode_picture`]).
+    pub fn picture(mut self, picture: WallpaperImage) -> Self {
         self.picture = Some(picture);
         self
     }
@@ -288,10 +290,9 @@ impl RenderOnce for Wallpaper {
                 let Some(image) = self.picture else {
                     return layer;
                 };
-                match live::image_layer(image, fit, blur, dim, filter.as_ref(), frame, window, cx) {
-                    Some((drawn, remaining)) => dim_pass(layer.child(drawn), remaining),
-                    None => layer,
-                }
+                let (drawn, remaining) =
+                    live::image_layer(image, fit, blur, dim, filter.as_ref(), frame, window, cx);
+                dim_pass(layer.child(drawn), remaining)
             }
         }
     }

@@ -1,14 +1,12 @@
 //! Window-sized frames of the live modules. // DS: stillGpu.ts, glScene.ts.
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 
 use gpui::{
     AnyElement, App, Bounds, Corners, IntoElement as _, Pixels, Styled as _, WallpaperClock,
     WallpaperImage, WallpaperPaint, WallpaperPass, Window, canvas,
 };
 
-use super::live_image::ImageBytes;
 use super::live_modules::IMAGE_MODULE;
 use super::{
     ImageFilter, ImageFit, WallpaperHost, WallpaperParams, WallpaperTone, drift, live_image,
@@ -53,7 +51,7 @@ pub(super) fn layer(
         image: module
             .photo
             .as_ref()
-            .and_then(|photo| live_image::load(ImageBytes::Bundled(photo), cx)),
+            .and_then(|photo| live_image::load(photo, cx)),
         fit: ImageFit::Cover,
         blur: 0.,
     };
@@ -77,7 +75,7 @@ pub(super) fn layer(
     reason = "the source's fields, the frame and the window context"
 )]
 pub(super) fn image_layer(
-    picture: Arc<gpui::Image>,
+    picture: WallpaperImage,
     fit: ImageFit,
     blur: f32,
     dim: f32,
@@ -85,7 +83,7 @@ pub(super) fn image_layer(
     frame: LiveFrame,
     window: &mut Window,
     cx: &mut App,
-) -> Option<(AnyElement, f32)> {
+) -> (AnyElement, f32) {
     let filter = filter.and_then(|filter| {
         live_modules::get(&filter.module)
             .filter(|module| module.manifest["image"] != "none")
@@ -93,25 +91,22 @@ pub(super) fn image_layer(
     });
     let (module, values) = match filter {
         Some((module, filter)) => (module, filter.values.clone()),
-        None => (
-            live_modules::get("butler.image")?,
-            WallpaperParams::default(),
-        ),
+        None => (live_modules::image(), WallpaperParams::default()),
     };
     let params = live_params::resolve(&module.manifest, &values, frame.tone);
     let mut hash = DefaultHasher::new();
     module.manifest["id"].as_str().hash(&mut hash);
     frame.tone.as_str().hash(&mut hash);
-    picture.id().hash(&mut hash);
+    picture.id.hash(&mut hash);
     (fit == ImageFit::Contain).hash(&mut hash);
     filter.map(|(_, filter)| &filter.module).hash(&mut hash);
     let input = ImageInput {
-        image: live_image::load(ImageBytes::Picture(picture), cx),
+        image: Some(picture),
         fit,
         blur,
     };
     let drawn = draw(module, hash.finish(), input, params, frame, window, cx);
-    Some((drawn, module.brightness(dim, frame.tone)))
+    (drawn, module.brightness(dim, frame.tone))
 }
 
 fn draw(
