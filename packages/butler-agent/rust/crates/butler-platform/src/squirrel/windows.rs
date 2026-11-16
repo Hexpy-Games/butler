@@ -71,10 +71,17 @@ fn register_protocol(stub: &Path) -> Result<(), String> {
         (COMMAND_KEY, None, command),
     ] {
         HKEY::CURRENT_USER
-            .RegSetKeyValue(Some(key), name, RegistryValue::Sz(value))
+            .RegSetKeyValue(Some(key), name, registry_string(value))
             .map_err(|_| "Squirrel protocol registration failed")?;
     }
     Ok(())
+}
+
+/// A REG_SZ value winsafe can write. winsafe 0.0.29 allocates no buffer for an
+/// empty string, so `RegSetKeyValueW` gets a null pointer with a 2-byte length and
+/// fails; a lone NUL is stored as the same empty REG_SZ.
+fn registry_string(value: String) -> RegistryValue {
+    RegistryValue::Sz(if value.is_empty() { "\0".to_owned() } else { value })
 }
 
 fn unregister_protocol(stub: &Path) -> Result<(), String> {
@@ -184,5 +191,21 @@ fn shortcuts(stub: &Path, root: &Path, create: bool) -> Result<(), String> {
         Ok(())
     } else {
         Err("Squirrel shortcut operation failed".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_registry_strings_are_written_as_a_lone_nul() {
+        let mut buffer = winsafe::WString::new();
+        for value in ["", "URL:butler"] {
+            let data = registry_string(value.to_owned());
+            let (pointer, length) = data.as_ptr_with_len(&mut buffer);
+            assert!(!pointer.is_null(), "{value:?}");
+            assert_eq!(length as usize, (value.len() + 1) * 2, "{value:?}");
+        }
     }
 }
