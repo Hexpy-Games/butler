@@ -91,9 +91,8 @@ impl Hosted {
     pub(crate) async fn finish(self) -> Result<(), HarnessError> {
         let Self { pump, scenario } = self;
         if let Some(pump) = pump {
-            let mut shell = pump.stop().await?;
-            shell.run(&["app-quit"]).await?;
-            shell.finish().await?;
+            // `quit` only: `app-quit` waits for an Agent child the shell owns, and it owns none.
+            pump.stop().await?.finish().await?;
         }
         scenario.finish().await
     }
