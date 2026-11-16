@@ -69,17 +69,17 @@ async fn cef_target_blank_opens_a_tab() -> Result<(), HarnessError> {
     Ok(())
 }
 
-#[tokio::test]
-async fn cef_popup_without_gesture_is_blocked_then_allowed() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), "shell harness is not set");
-    butler_e2e::skip_unless!(
-        nonempty("BUTLER_CEF_DIR").is_some(),
-        "BUTLER_CEF_DIR is not set"
-    );
-    let _serial = SERIAL.lock().await;
-    let mut sandbox = Sandbox::new("cef_popup_without_gesture_is_blocked_then_allowed")?;
-    let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
+/// A page that opens a popup on load (blocked: no gesture), shown in the App's browser.
+async fn blocked_popup_page(
+    sandbox: &Sandbox,
+) -> Result<
+    (
+        Shell,
+        std::net::SocketAddr,
+        tokio_util::task::AbortOnDropHandle<()>,
+    ),
+    HarnessError,
+> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
     let pages = axum::Router::new().route("/", axum::routing::get(|| async {
@@ -87,10 +87,10 @@ async fn cef_popup_without_gesture_is_blocked_then_allowed() -> Result<(), Harne
     })).route("/child", axum::routing::get(|| async {
         axum::response::Html("<title>Sign in</title><script>window.opener.postMessage('Opener intact',location.origin)</script>")
     }));
-    let _server = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
+    let server = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(async move {
         axum::serve(listener, pages).await.unwrap();
     }));
-    let mut shell = Shell::start(&sandbox, &[]).await?;
+    let mut shell = Shell::start(sandbox, &[]).await?;
     shell
         .run(&[
             "agent running",
@@ -102,6 +102,21 @@ async fn cef_popup_without_gesture_is_blocked_then_allowed() -> Result<(), Harne
             "wait-anchor browser-band",
         ])
         .await?;
+    Ok((shell, address, server))
+}
+
+#[tokio::test]
+async fn cef_popup_without_gesture_is_blocked_then_allowed() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), "shell harness is not set");
+    butler_e2e::skip_unless!(
+        nonempty("BUTLER_CEF_DIR").is_some(),
+        "BUTLER_CEF_DIR is not set"
+    );
+    let _serial = SERIAL.lock().await;
+    let mut sandbox = Sandbox::new("cef_popup_without_gesture_is_blocked_then_allowed")?;
+    let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
+    let (mut shell, address, _server) = blocked_popup_page(&sandbox).await?;
     let state = shell.browser_state().await?;
     assert_eq!(state["tabs"].as_array().unwrap().len(), 1);
     assert_eq!(state["tabs"][0]["blocked_popup"]["reason"], "no_gesture");
@@ -231,6 +246,37 @@ async fn cef_page_dialogs() -> Result<(), HarnessError> {
         }
     }
     shell.run(&["app-quit"]).await?;
+    shell.finish().await?;
+    sandbox.mark_success();
+    Ok(())
+}
+
+/// The App window is a main window, not any window: with the main window closed and a browser
+/// popup window still open, the tray's Open brings a main window back.
+#[tokio::test]
+async fn closed_main_window_comes_back_beside_a_popup_window() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), "shell harness is not set");
+    butler_e2e::skip_unless!(
+        nonempty("BUTLER_CEF_DIR").is_some(),
+        "BUTLER_CEF_DIR is not set"
+    );
+    let _serial = SERIAL.lock().await;
+    let mut sandbox = Sandbox::new("closed_main_window_comes_back_beside_a_popup_window")?;
+    let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
+    let (mut shell, _address, _server) = blocked_popup_page(&sandbox).await?;
+    shell
+        .run(&[
+            "click browser-popup-allow",
+            "wait-anchor browser-popup-window",
+            "close-window",
+            "expect-no-anchor composer",
+            "expect-anchor browser-popup-window",
+            "tray-open",
+            "wait-anchor composer",
+            "app-quit",
+        ])
+        .await?;
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())

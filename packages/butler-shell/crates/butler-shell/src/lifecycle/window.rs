@@ -138,16 +138,10 @@ pub(crate) fn open_window(cx: &mut App, args: &[OsString]) -> anyhow::Result<()>
     Ok(())
 }
 
-/// The tray's Open and the dock's reopen: a new window when none is open, else bring the App
-/// forward.
+/// The tray's Open and the dock's reopen: the main window comes forward, or opens when there is
+/// none. A browser popup window is not one.
 pub(crate) fn reopen(cx: &mut App) {
-    if !cx.windows().is_empty() {
-        cx.activate(true);
-        return;
-    }
-    if let Err(error) = open_window(cx, &[]) {
-        eprintln!("butler-shell: {error:#}");
-    }
+    launched(cx, &[]);
 }
 
 /// A later launch (`second-instance`, main.mjs:455-465) and the tray's New Chat and recent
