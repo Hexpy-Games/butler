@@ -1,5 +1,6 @@
 //! The activity dialog (the eye on a steward card) through the native shell.
 use super::driver::{SERIAL, SHOTS, Shell};
+use super::live_turns::complete_onboarding;
 use super::*;
 use crate::steward_presentation::{setup, stub};
 
@@ -22,6 +23,7 @@ async fn finished_child(id: &str) -> Result<(Sandbox, String, Child), HarnessErr
     }
     *script.workspace.lock().unwrap() = setup.sandbox.data.display().to_string();
     let mut s = setup.start().await?;
+    complete_onboarding(&s.gw).await?;
     let created =
         s.gw.post("/sessions", json!({"kind": "chat", "title": "Compare"}))
             .await?;
@@ -104,6 +106,8 @@ async fn shell_app_09_activity_dialog_shows_the_childs_steps_and_reply() -> Resu
             "agent running",
             &row,
             &open,
+            // Tall enough that the card, and its eye, sit below the title bar's window controls.
+            "size 800 1400",
             &format!("wait-anchor {eye}"),
             &format!("click {eye}"),
             "wait-anchor dialog-content",
