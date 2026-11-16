@@ -17,14 +17,27 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use std::{path::PathBuf, time::Duration};
 
+mod host;
+pub(crate) use host::Pending;
+
 /// `BUTLER_E2E_BROWSER_BACKEND=headless` runs these scenarios on Chrome for
 /// Testing (the first run downloads the pinned build into a temp cache);
 /// `=hidden-app` runs them on the hidden App host: the in-worktree Electron
 /// named by `BUTLER_E2E_ELECTRON` with the App's own executor, no Chrome.
 /// `=cef` runs the scenarios on the headless backend driving the staged CEF host
 /// named by `BUTLER_E2E_CEF_HOST` (no Chrome, no Electron).
+/// `=shell` attaches the gpui shell (CEF) to the scenario's agent as its page host.
 pub(crate) fn selected() -> bool {
-    matches!(backend().as_deref(), Ok("headless" | "hidden-app" | "cef"))
+    match backend().as_deref() {
+        Ok("headless" | "hidden-app" | "cef") => true,
+        Ok("shell") => host::runnable(),
+        _ => false,
+    }
+}
+
+/// Whether the scenarios run on the gpui shell attached as page host.
+pub(crate) fn shell() -> bool {
+    backend().as_deref() == Ok("shell")
 }
 
 fn backend() -> Result<String, std::env::VarError> {
@@ -83,7 +96,11 @@ pub(crate) fn cache() -> PathBuf {
     )
 }
 
-pub(crate) fn setup(id: &str) -> Result<Setup, HarnessError> {
+pub(crate) fn setup(id: &str) -> Result<Pending, HarnessError> {
+    configured(id).map(Pending::new)
+}
+
+fn configured(id: &str) -> Result<Setup, HarnessError> {
     let setup = Setup::new(id)?
         .access(Access::FullAccess)
         .env("BUTLER_BROWSER_HEADLESS", "on")
@@ -102,10 +119,16 @@ pub(crate) fn setup(id: &str) -> Result<Setup, HarnessError> {
             .env("BUTLER_BROWSER_DOWNLOAD_BASE", "http://127.0.0.1:9/"));
     }
     if !hidden_app() {
-        return Ok(setup.env(
+        let setup = setup.env(
             "BUTLER_BROWSER_CACHE_DIR",
             cache().to_string_lossy().into_owned(),
-        ));
+        );
+        // The shell is the App: it attaches to an agent the App supervises, and no Electron host.
+        return Ok(if shell() {
+            setup.app_supervisor().env("BUTLER_BROWSER_APP", "off")
+        } else {
+            setup
+        });
     }
     // Agent launch clears inherited environment; Electron still needs the
     // selected display while its profile and home remain isolated.
