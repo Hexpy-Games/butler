@@ -193,14 +193,10 @@ impl Browser {
         })
     }
 
-    /// Closes the browser and ends its whole process tree; its reused profile stays.
+    /// Ends the browser's whole process tree; its reused profile stays.
     pub(crate) async fn stop(&self) {
-        let _ = tokio::time::timeout(
-            Duration::from_secs(2),
-            self.cdp.send("Browser.close", json!({}), None),
-        )
-        .await;
-        let _ = tokio::time::timeout(Duration::from_secs(3), self.alive.cancelled()).await;
+        // No `Browser.close` first: on Linux and Windows the CEF host keeps running after it, so it
+        // only delayed the kill, and the profile holds nothing a clean exit would save.
         let process = self
             .process
             .lock()
