@@ -149,7 +149,7 @@ async fn attached_app_serves_new_work_and_tasks_never_switch() -> Result<(), Har
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
     assert_eq!(first["status"], "ok", "{first}");
-    let prefix = first["tab"].as_str().unwrap()[..1].to_owned();
+    assert!(first["tab"].as_str().unwrap().starts_with('h'), "{first}");
     // The App attaches mid-task.
     let ops = Arc::new(Mutex::new(Vec::new()));
     let host = tokio::spawn(app_host(super::support::admin(&s), ops.clone()));
@@ -166,7 +166,7 @@ async fn attached_app_serves_new_work_and_tasks_never_switch() -> Result<(), Har
         )
         .await?;
         assert!(
-            again["tab"].as_str().unwrap().starts_with(&prefix),
+            again["tab"].as_str().unwrap().starts_with('h'),
             "{turn}: {again}"
         );
     }

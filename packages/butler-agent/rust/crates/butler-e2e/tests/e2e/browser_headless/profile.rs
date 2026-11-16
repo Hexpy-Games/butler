@@ -27,8 +27,8 @@ async fn a_reused_profile_keeps_no_site_state() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
     butler_e2e::skip_unless!(
-        !hidden_app() && !shell(),
-        "the hidden App host and the shell keep their profiles elsewhere"
+        !hidden_app(),
+        "the hidden App host keeps its own throwaway profiles"
     );
     let mut s = setup("BROWSER-HEADLESS-PROFILE")?.start().await?;
     let (id, url) = publish_as(&s, "Publish profile fixture").await?;
@@ -56,6 +56,10 @@ async fn a_reused_profile_keeps_no_site_state() -> Result<(), HarnessError> {
     assert!(seen.contains("found: none"), "{seen}");
     for (conversation, tab) in [("general", a), ("general", b), ("other", c)] {
         call(&admin(&s), conversation, "tab.close", &tab, json!({})).await?;
+    }
+    // The shell keeps its profile in the App's own folder, which a restart does not model.
+    if shell() {
+        return s.finish().await;
     }
     s.restart().await?;
     let view = s.gw.get(&format!("/outputs/{id}/view")).await?;

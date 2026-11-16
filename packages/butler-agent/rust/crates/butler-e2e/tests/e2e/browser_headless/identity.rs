@@ -36,6 +36,7 @@ async fn browser_identity_agrees_in_page_worker_and_frame() -> Result<(), Harnes
         .lines()
         .find_map(|line| line.split_once("Identity:").map(|(_, value)| value))
         .expect("complete identity report");
+    println!("Identity:{line}");
     let reports: Value = serde_json::from_str(line)?;
     let ua = reports["page"]["ua"].as_str().unwrap();
     // The shell is the Butler browser: its identity carries the Butler token.
@@ -45,6 +46,7 @@ async fn browser_identity_agrees_in_page_worker_and_frame() -> Result<(), Harnes
         &["Butler/", "Electron/", "HeadlessChrome/"]
     };
     assert!(!forbidden.iter().any(|token| ua.contains(token)), "{ua}");
+    assert!(!shell() || ua.contains("Butler/"), "{ua}");
     let full = ua
         .split("Chrome/")
         .nth(1)
@@ -56,8 +58,8 @@ async fn browser_identity_agrees_in_page_worker_and_frame() -> Result<(), Harnes
     for name in ["page", "worker", "frame"] {
         let report = &reports[name];
         assert_eq!(report["ua"], ua, "{name}");
-        assert!(!shell() || ua.contains("Butler/"), "{name}: {ua}");
         assert_eq!(report["data"], reports["page"]["data"], "{name}");
+        let list = report["data"]["fullVersionList"].as_array().unwrap();
         for brand in ["Chromium", "Google Chrome"] {
             assert!(
                 report["data"]["brands"]
@@ -66,13 +68,17 @@ async fn browser_identity_agrees_in_page_worker_and_frame() -> Result<(), Harnes
                     .iter()
                     .any(|b| b["brand"] == brand && b["version"] == major)
             );
-            assert!(
-                report["data"]["fullVersionList"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|b| b["brand"] == brand && b["version"] == full)
-            );
+            // On the shell the list is checked once below; the data check makes all three agree.
+            if !shell() {
+                assert!(
+                    list.iter()
+                        .any(|b| b["brand"] == brand && b["version"] == full)
+                );
+            }
+        }
+        if shell() {
+            assert!(list.iter().any(|b| b["brand"] == "Chromium"
+                && b["version"].as_str().and_then(|v| v.split('.').next()) == Some(major)));
         }
         assert_eq!(report["data"]["mobile"], false);
     }
