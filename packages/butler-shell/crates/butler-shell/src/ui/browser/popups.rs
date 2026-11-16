@@ -47,7 +47,7 @@ impl BrowserState {
             self.answer_dialog(id, dialog.id, DialogAnswer::default());
         }
     }
-    pub(super) fn close_popups(&mut self, opener: &TabId) {
+    pub(super) fn close_popups(&mut self, opener: &TabId, cx: &mut gpui::App) {
         let children: Vec<_> = self
             .tabs
             .iter()
@@ -55,7 +55,7 @@ impl BrowserState {
             .map(|t| t.id.clone())
             .collect();
         for child in children {
-            self.close(&child);
+            self.close(&child, cx);
         }
     }
     #[cfg(feature = "cef")]
@@ -85,15 +85,16 @@ impl BrowserState {
             selections: Vec::new(),
             pick_hover: None,
             pick: Default::default(),
+            last_nav: None,
         });
         self.engine.adopt(&id, child);
     }
     #[cfg(feature = "cef")]
-    pub(super) fn popup_event(&mut self, event: &PageEvent) -> bool {
+    pub(super) fn popup_event(&mut self, event: &PageEvent, cx: &mut gpui::App) -> bool {
         match &event.change {
             PageChange::PopupNewTab(url) => {
                 if let Some(owner) = self.tab(&event.page).map(|t| t.owner.clone()) {
-                    let _ = self.create(owner, Some(url), false);
+                    let _ = self.create(owner, Some(url), false, true, cx);
                 }
             }
             PageChange::PopupBlocked { url, reason } => {
@@ -111,7 +112,7 @@ impl BrowserState {
                 }
                 self.adopt_popup(&event.page, *child, url.clone());
             }
-            PageChange::CloseRequested => self.close(&event.page),
+            PageChange::CloseRequested => self.close(&event.page, cx),
             _ => return false,
         }
         true
