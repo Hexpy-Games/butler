@@ -1,6 +1,7 @@
 //! Main-thread, in-process CEF off-screen rendering. No gpui types cross this boundary.
 //! macOS copies frames into IOSurface-backed CoreVideo buffers (gpu.rs, frame_pool.rs);
-//! Windows copies them into pooled D3D11 shared textures (d3d.rs, d3d_pool.rs).
+//! Windows copies them into pooled D3D11 shared textures (d3d.rs, d3d_pool.rs);
+//! Linux copies the software `on_paint` buffer into CPU frames (soft.rs).
 #[cfg(cef_osr)]
 mod devtools;
 mod ime_state;
@@ -36,6 +37,8 @@ mod paint;
 mod popups;
 #[cfg(cef_osr)]
 mod pump;
+#[cfg(target_os = "linux")]
+mod soft;
 #[cfg(cef_osr)]
 mod state;
 
@@ -51,6 +54,10 @@ pub use d3d_pool::OsrFrame;
 use d3d_pool::OsrFrame as Frame;
 #[cfg(target_os = "macos")]
 pub use gpu::read_bgra_pixel;
+#[cfg(target_os = "linux")]
+use soft::OsrFrame as Frame;
+#[cfg(target_os = "linux")]
+pub use soft::{OsrFrame, read_bgra_pixel};
 #[cfg(cef_osr)]
 use state::{Events, Page, PageRef};
 #[cfg(cef_osr)]
@@ -73,7 +80,7 @@ pub trait OsrSink: 'static {
 }
 
 /// Called from any thread. Schedule a timer on the UI loop, then call `OsrRuntime::pump` there.
-/// Coalesce pending deadlines by keeping the earliest, including the visible-page fallback.
+/// Coalesce pending deadlines by keeping the earliest, including the visible-or-loading-page fallback.
 pub type PumpScheduler = std::sync::Arc<dyn Fn(std::time::Duration) + Send + Sync>;
 
 #[cfg(cef_osr)]
@@ -190,7 +197,15 @@ impl OsrRuntime {
         cef::do_message_loop_work();
         #[cfg(windows)]
         self.repaint_dropped();
-        if self.state.visible.get() > 0 {
+        // Pump while a page is visible or loading: CEF does not always announce the work of a starting load.
+        if self.state.visible.get() > 0
+            || self
+                .state
+                .pages
+                .borrow()
+                .values()
+                .any(|p| p.borrow().loading)
+        {
             (self.schedule)(FALLBACK);
         }
     }
@@ -237,7 +252,8 @@ impl OsrRuntime {
         let browser = cef::browser_host_create_browser_sync(
             Some(&cef::WindowInfo {
                 windowless_rendering_enabled: 1,
-                shared_texture_enabled: 1,
+                // Linux paints in software through `on_paint`.
+                shared_texture_enabled: i32::from(cfg!(not(target_os = "linux"))),
                 ..Default::default()
             }),
             Some(&mut client),
@@ -413,7 +429,7 @@ fn settings(config: OsrConfig) -> Result<cef::Settings, OsrError> {
         .canonicalize()
         .map_err(|e| OsrError(e.to_string()))?;
     // Not canonicalize: its Windows `\\?\` form never matches other paths; CEF needs an absolute path.
-    #[cfg(windows)]
+    #[cfg(not(target_os = "macos"))]
     let profile_dir = std::path::absolute(&profile_dir).map_err(|e| OsrError(e.to_string()))?;
     let profile = profile_dir
         .to_str()
@@ -426,9 +442,9 @@ fn settings(config: OsrConfig) -> Result<cef::Settings, OsrError> {
         cache_path: path(&profile_dir.join("cache")),
         #[cfg(target_os = "macos")]
         framework_dir_path: path(&framework_dir),
-        #[cfg(windows)]
+        #[cfg(not(target_os = "macos"))]
         resources_dir_path: path(&framework_dir),
-        #[cfg(windows)]
+        #[cfg(not(target_os = "macos"))]
         locales_dir_path: path(&framework_dir.join("locales")),
         browser_subprocess_path: path(&helper_path),
         locale: locale.as_str().into(),

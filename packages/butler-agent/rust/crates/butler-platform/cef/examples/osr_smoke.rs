@@ -1,6 +1,7 @@
-//! The OSR runtime end to end: first frame (centre pixel read on a separate GPU path), navigation
-//! events, shutdown. macOS: run inside the staged bundle. Windows: run from the stage.py output
-//! directory (libcef.dll and the `butler_cef_host.exe` helper beside this executable).
+//! The OSR runtime end to end: first frame (centre pixel read from the frame: a separate GPU path
+//! on macOS and Windows, the CPU frame on Linux), repaint, navigation events, shutdown. macOS: run inside the staged bundle. Windows: run from the stage.py output
+//! directory (libcef.dll and the `butler_cef_host.exe` helper beside this executable). Linux: run
+//! from the stage.py output directory (`libcef.so` and `butler-cef-host` beside this executable).
 #[cfg(cef_osr)]
 mod smoke {
     use butler_cef_host::osr::{OsrConfig, OsrEvent, OsrRuntime, OsrSink, read_bgra_pixel};
@@ -302,7 +303,16 @@ mod smoke {
                     .iter()
                     .any(|e| matches!(e, OsrEvent::History { can_back: true, .. }))
         })?;
-        println!("second navigation: Url({SECOND}), Title(OSR second), History(can_back=true)");
+        // A repaint into the existing frame.
+        wait(runtime, requests, || {
+            runtime.frame(1).is_some_and(|f| {
+                read_bgra_pixel(&f, f.get_width() / 2, f.get_height() / 2)
+                    .is_ok_and(|p| p == [20, 80, 140, 255])
+            })
+        })?;
+        println!(
+            "second navigation: Url({SECOND}), Title(OSR second), History(can_back=true), centre BGRA [20, 80, 140, 255]"
+        );
         Ok(())
     }
     #[cfg(target_os = "macos")]
@@ -319,6 +329,16 @@ mod smoke {
             "Macintosh; Intel Mac OS X 10_15_7",
         ))
     }
+    #[cfg(target_os = "linux")]
+    fn locations() -> Result<(PathBuf, PathBuf, &'static str), Box<dyn Error>> {
+        let exe = std::env::current_exe()?;
+        let dir = exe.parent().ok_or("missing executable directory")?;
+        Ok((
+            dir.to_path_buf(),
+            dir.join("butler-cef-host"),
+            "X11; Linux x86_64",
+        ))
+    }
     #[cfg(windows)]
     fn locations() -> Result<(PathBuf, PathBuf, &'static str), Box<dyn Error>> {
         let exe = std::env::current_exe()?;
@@ -329,7 +349,7 @@ mod smoke {
             "Windows NT 10.0; Win64; x64",
         ))
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(not(windows))]
     fn remove_profile(profile: &std::path::Path) -> std::io::Result<()> {
         std::fs::remove_dir_all(profile)
     }
@@ -404,10 +424,11 @@ mod smoke {
 }
 #[cfg(cef_osr)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    butler_cef_host::shorten_temp_path();
     smoke::run()
 }
 #[cfg(not(cef_osr))]
 fn main() {
-    eprintln!("osr_smoke requires macOS or Windows");
+    eprintln!("osr_smoke requires macOS, Windows or Linux");
     std::process::exit(1);
 }
