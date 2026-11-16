@@ -129,6 +129,8 @@ pub(crate) struct Tab {
     pub devtools: super::devtools::Devtools,
     /// The registered preview this tab shows (its own context and proxy).
     pub preview: Option<String>,
+    /// `signed_in` or `signed_out`: the profile the tab was opened with.
+    pub profile: &'static str,
     pub history_transition: Option<String>,
     /// The turn that last drove this tab: its page events go to that turn's
     /// calls, so parallel turns of one conversation (delegated work) never
@@ -176,6 +178,7 @@ impl Tab {
             hidden: None,
             diagnostics: None,
             preview: None,
+            profile: "signed_out",
             history_transition: Some("generated".into()),
             turn: None,
         }
@@ -197,7 +200,7 @@ impl Tab {
     pub(crate) fn snapshot(&self) -> Value {
         json!({"id":self.id,"owner":self.owner,"opener":self.opener,"dialog":self.public_dialog(),"url":self.url,
             "title":self.title,"status":if self.crashed {"crashed"} else if self.loading {"loading"} else {"idle"},
-            "agent":true,"driven":false,"profile":"signed_out","epoch":self.epoch,"holder":"agent","sticky":false,
+            "agent":true,"driven":false,"profile":self.profile,"epoch":self.epoch,"holder":"agent","sticky":false,
             "waiting":self.waiting,"busy":self.busy,"inUse":self.busy,"picking":false,"selectionCount":0,
             "stills":true,"preview":self.preview})
     }

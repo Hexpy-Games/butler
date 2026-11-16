@@ -144,7 +144,7 @@ impl HiddenPage {
     pub(crate) async fn open(browser: &Arc<Browser>, purpose: Purpose) -> Result<Self, String> {
         let created = browser
             .cdp
-            .send("Target.createBrowserContext", json!({"disposeOnDetach":true,"proxyServer":browser.proxy_url,"proxyBypassList":"<-loopback>"}), None)
+            .send("Target.createBrowserContext", json!({"disposeOnDetach":true,"proxyServer":browser.proxy_url(),"proxyBypassList":"<-loopback>"}), None)
             .await?;
         let context = created["browserContextId"]
             .as_str()
@@ -158,7 +158,13 @@ impl HiddenPage {
                 None,
             )
             .await;
-        let (target, session) = targets::create(&browser.cdp, &browser.shared, &context).await?;
+        let (target, session) = targets::create(
+            &browser.cdp,
+            &browser.shared,
+            None,
+            &targets::Opening::hidden(&context),
+        )
+        .await?;
         let id = {
             let mut state = browser.shared.lock();
             let id = short_id('x', |id| state.tabs.contains_key(id));
@@ -179,6 +185,7 @@ impl HiddenPage {
         let page = Page {
             cdp: browser.cdp.clone(),
             shared: browser.shared.clone(),
+            host: None,
             tab: id,
             session: session.clone(),
             target,

@@ -4,6 +4,7 @@
 use super::{
     browser::Browser,
     cdp::Cdp,
+    host::PageHost,
     state::{Shared, Tab},
 };
 use crate::browser::egress::{guard_preview_url, guard_url};
@@ -89,15 +90,17 @@ pub(crate) async fn context(
     owner: &str,
     preview: Option<&str>,
 ) -> Result<String, String> {
-    let (key, proxy) = match preview {
-        Some(id) => (
-            format!("{owner}:preview:{id}"),
-            browser
-                .preview_proxy_url
-                .clone()
-                .ok_or("navigation_denied")?,
-        ),
-        None => (owner.to_owned(), browser.proxy_url.clone()),
+    let key = match preview {
+        Some(id) => format!("{owner}:preview:{id}"),
+        None => owner.to_owned(),
+    };
+    // The App keeps each context's pages apart itself.
+    if browser.host().is_some() {
+        return Ok(key);
+    }
+    let proxy = match preview {
+        Some(_) => browser.preview_proxy_url().ok_or("navigation_denied")?,
+        None => browser.proxy_url().ok_or("browser_unavailable")?,
     };
     if let Some(id) = browser.shared.lock().contexts.get(&key).cloned() {
         return Ok(id);
@@ -131,12 +134,55 @@ pub(crate) async fn context(
     browser.shared.lock().contexts.insert(key, id.clone());
     Ok(id)
 }
-/// Creates a paused blank page in `context` and returns (target, session).
+/// What a new page is for: the App needs all of it, a launched browser only the context.
+pub(crate) struct Opening<'a> {
+    pub owner: &'a str,
+    /// `signed_in` or `signed_out`.
+    pub profile: &'a str,
+    pub context: &'a str,
+    /// Butler's own page, listed in no tab list.
+    pub internal: bool,
+}
+
+impl<'a> Opening<'a> {
+    /// A launched browser's helper page (hosted mode never opens one).
+    pub(crate) fn hidden(context: &'a str) -> Self {
+        Self {
+            owner: "butler:hidden",
+            profile: "signed_out",
+            context,
+            internal: false,
+        }
+    }
+}
+
+/// Asks the App for a page; its id is the target, the session and the tab id.
+async fn open_hosted(
+    host: &Arc<dyn PageHost>,
+    open: &Opening<'_>,
+) -> Result<(String, String), String> {
+    let args = json!({"owner":open.owner,"profile":open.profile,"context":open.context,"internal":open.internal});
+    let reply = host.call("page.open", args).await;
+    match reply
+        .as_ref()
+        .map(|r| (r["status"].as_str(), r["tab"].as_str()))
+    {
+        Ok((Some("ok"), Some(tab))) if !tab.is_empty() => Ok((tab.to_owned(), tab.to_owned())),
+        _ => Err("browser_unavailable".into()),
+    }
+}
+
+/// Creates a paused blank page and returns (target, session).
 pub(crate) async fn create(
     cdp: &Cdp,
     shared: &Shared,
-    context: &str,
+    host: Option<&Arc<dyn PageHost>>,
+    open: &Opening<'_>,
 ) -> Result<(String, String), String> {
+    if let Some(host) = host {
+        return open_hosted(host, open).await;
+    }
+    let context = open.context;
     shared.lock().creating += 1;
     // Width/height apply only to a new window (CEF reuses one otherwise; the headless shell always makes one).
     let created = cdp
@@ -158,22 +204,36 @@ pub(crate) async fn create(
 }
 
 /// The Butler-owned page that draws marks and encodes images.
-pub(crate) async fn utility(cdp: &Arc<Cdp>, shared: &Shared) -> Result<String, String> {
+pub(crate) async fn utility(
+    cdp: &Arc<Cdp>,
+    shared: &Shared,
+    host: Option<&Arc<dyn PageHost>>,
+) -> Result<String, String> {
     if let Some(session) = shared.lock().utility.clone() {
         return Ok(session);
     }
-    let created = cdp
-        .send(
-            "Target.createBrowserContext",
-            json!({"disposeOnDetach":true}),
-            None,
-        )
-        .await?;
-    let context = created["browserContextId"]
-        .as_str()
-        .unwrap_or("")
-        .to_owned();
-    let (_, session) = create(cdp, shared, &context).await?;
+    let context = if host.is_some() {
+        "butler:utility".to_owned()
+    } else {
+        let created = cdp
+            .send(
+                "Target.createBrowserContext",
+                json!({"disposeOnDetach":true}),
+                None,
+            )
+            .await?;
+        created["browserContextId"]
+            .as_str()
+            .unwrap_or("")
+            .to_owned()
+    };
+    let open = Opening {
+        owner: "butler:utility",
+        profile: "signed_out",
+        context: &context,
+        internal: true,
+    };
+    let (_, session) = create(cdp, shared, host, &open).await?;
     cdp.send("Runtime.runIfWaitingForDebugger", json!({}), Some(&session))
         .await?;
     let mut state = shared.lock();
@@ -210,16 +270,28 @@ pub(crate) async fn close(browser: &Browser, id: &str) {
     let Some(tab) = removed else {
         return;
     };
+    close_target(browser, &tab.target).await;
+    forget(browser, &tab).await;
+}
+
+/// Closes one page: the browser's target, or the App's page (its id is the target).
+pub(crate) async fn close_target(browser: &Browser, target: &str) {
+    if let Some(host) = browser.host() {
+        let _ = host.call("page.close", json!({"tab":target})).await;
+        return;
+    }
     let _ = browser
         .cdp
-        .send("Target.closeTarget", json!({"targetId":tab.target}), None)
+        .send("Target.closeTarget", json!({"targetId":target}), None)
         .await;
-    forget(browser, &tab).await;
 }
 
 /// A conversation's (or preview's) in-memory context ends with its last tab,
 /// as the App clears a conversation partition.
 pub(crate) async fn forget(browser: &Browser, tab: &Tab) {
+    if browser.host().is_some() {
+        return;
+    }
     let owner_left = {
         let mut state = browser.shared.lock();
         let left = !state.tabs.values().any(|t| t.context == tab.context);
@@ -278,10 +350,7 @@ pub(crate) async fn attached(browser: Arc<Browser>, parent: Option<String>, para
         .await
         .is_err()
     {
-        let _ = browser
-            .cdp
-            .send("Target.closeTarget", json!({"targetId":target}), None)
-            .await;
+        close_target(&browser, &target).await;
         return;
     }
     match kind {

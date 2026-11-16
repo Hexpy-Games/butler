@@ -1,5 +1,5 @@
 use super::super::state::short_id;
-use super::{Browser, Tab, close, make_room, setup_page, web_url};
+use super::{Browser, Tab, close, close_target, make_room, setup_page, web_url};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -17,11 +17,11 @@ pub(crate) async fn page_attached(
                 t.owner.clone(),
                 t.url.clone(),
                 t.policy.clone(),
-                (t.context.clone(), t.preview.clone()),
+                (t.context.clone(), t.preview.clone(), t.profile),
             )
         })
     });
-    let Some((opener, owner, parent_url, policy, (context, preview))) = opener else {
+    let Some((opener, owner, parent_url, policy, (context, preview, profile))) = opener else {
         claim_or_close(&browser, target, session).await;
         return;
     };
@@ -34,7 +34,12 @@ pub(crate) async fn page_attached(
     let admitted = {
         let mut state = browser.shared.lock();
         if room {
-            let id = short_id('h', |id| state.tabs.contains_key(id));
+            // The App names its pages: a popup's tab id is its target id.
+            let id = if browser.host().is_some() {
+                target.clone()
+            } else {
+                short_id('h', |id| state.tabs.contains_key(id))
+            };
             let mut tab = Tab::new(id.clone(), owner, target.clone(), session.clone());
             tab.turn = turn;
             tab.opener = Some(opener.clone());
@@ -42,6 +47,7 @@ pub(crate) async fn page_attached(
             tab.policy = policy;
             tab.context = context;
             tab.preview = preview;
+            tab.profile = profile;
             tab.url = web_url(&url).map(|u| u.to_string()).unwrap_or_default();
             state.tabs.insert(id.clone(), tab);
             state.sessions.insert(session.clone(), id.clone());
@@ -61,10 +67,7 @@ pub(crate) async fn page_attached(
     };
     browser.changed.notify_waiters();
     if admitted.is_none() {
-        let _ = browser
-            .cdp
-            .send("Target.closeTarget", json!({"targetId":target}), None)
-            .await;
+        close_target(&browser, &target).await;
         return;
     }
     if setup_page(&browser.cdp, &session).await.is_err()
@@ -87,9 +90,6 @@ async fn claim_or_close(browser: &Browser, target: String, session: String) {
     if claimed {
         browser.shared.attached.notify_waiters();
     } else {
-        let _ = browser
-            .cdp
-            .send("Target.closeTarget", json!({"targetId":target}), None)
-            .await;
+        close_target(browser, &target).await;
     }
 }
