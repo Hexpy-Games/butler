@@ -7,12 +7,14 @@
 //! `--headless` to run Chrome's headless mode without OS windows.
 //! The renderer sandbox stays on. On Windows, CEF's `bootstrapc.exe`, renamed
 //! to the DLL's stem, loads this DLL and passes sandbox info to `RunConsoleMain`.
-//! This crate is the audited CEF unsafe boundary (D-P2); its OSR GPU interop and bootstrap exports contain the audited unsafe code.
+//! This crate is the audited CEF unsafe boundary (D-P2); its OSR GPU interop, bootstrap exports and the Linux lifeline's borrowed descriptor contain the audited unsafe code.
 
 #[cfg(feature = "cef")]
 mod app;
 #[cfg(all(feature = "cef", windows))]
 mod boot;
+#[cfg(all(feature = "cef", target_os = "linux"))]
+mod lifeline;
 #[cfg(all(feature = "cef", target_os = "macos"))]
 mod mac;
 
@@ -37,6 +39,10 @@ pub fn run(sandbox_info: *mut u8) -> i32 {
     let code = cef::execute_process(Some(args.as_main_args()), Some(&mut app), sandbox_info);
     if code >= 0 {
         return code;
+    }
+    #[cfg(target_os = "linux")]
+    if std::env::args().any(|arg| arg == "--remote-debugging-pipe") {
+        lifeline::watch();
     }
 
     let Some(profile) =
