@@ -39,3 +39,4 @@ update_signature_unsupported
 update_stage_path_invalid
 update_stage_unavailable
 update_status_invalid
+updates_store_managed

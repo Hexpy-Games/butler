@@ -6,7 +6,7 @@ import type {
 } from "@/app/types.ts";
 import { UpdateStatusLine } from "./UpdateStatusLine";
 import { UpdateProgressPanel } from "./UpdateProgressPanel";
-import { Button, Field, FieldLabel, Stack, Typo } from "@/butler-ds";
+import { Button, Field, FieldLabel, Stack, Tooltip, Typo } from "@/butler-ds";
 import {
   bundledAgentVersionLabel,
   UPDATE_COMPONENTS,
@@ -22,6 +22,8 @@ export interface UpdateActionLabels {
   updateChecking: string;
   updateComponent: string;
   updateUnavailable: string;
+  updateFromStore: string;
+  updateFromStoreHint: string;
   upToDate: string;
 }
 
@@ -68,7 +70,11 @@ export function UpdateComponentRow({
             : stage === "ready" ? <Typo.Caption tone="secondary">{copy.ready}</Typo.Caption> : null}
           {unknownDownload && progress && <UpdateProgressPanel progress={progress} />}
         </Stack>
-        {!busy && (stage !== "downloading" || cancelling) && <Button
+        {status.check_state === "store" ? <Tooltip label={labels.updateFromStoreHint}>
+          <Button type="button" size="sm" variant="outline" disabled aria-label={labels.updateFromStoreHint}>
+            {labels.updateFromStore}
+          </Button>
+        </Tooltip> : !busy && (stage !== "downloading" || cancelling) && <Button
           type="button" size="sm"
           variant={cancelling || deferred || !status.update_available ? "outline" : "default"}
           disabled={deferred || (!status.update_available && stage !== "failed" && stage !== "ready" && !cancelling) || (applying !== null && stage !== "ready" && !cancelling)}

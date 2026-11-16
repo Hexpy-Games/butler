@@ -52,6 +52,7 @@ zip.workspace = true
 # contain command trees, paths without a needless `\\?\` prefix, and the
 # system time zone's IANA name.
 [target.'cfg(windows)'.dependencies]
+windows = { version = "=0.62.2", features = ["ApplicationModel", "Foundation_Collections"] }
 notify-windows-ledger = { path = "../../../../../third_party/notify-windows-ledger" }
 mxc-sdk = { git = "https://github.com/microsoft/mxc", rev = "2366ee9b1e0bed3a0f950ec49a509f92285239cf", default-features = false }
 windows-dpapi = "=0.2.0"

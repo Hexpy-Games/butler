@@ -58,6 +58,8 @@ export function UpdatesSettings() {
     if (unchecked) void check(true);
   }, [unchecked, check]);
 
+  const storeManaged = view?.components.some((item) => item.check_state === "store") ?? false;
+
   const rows = useMemo(
     () =>
       UPDATE_COMPONENTS.map((component) =>
@@ -69,7 +71,7 @@ export function UpdatesSettings() {
 
   return (
     <SettingsPage>
-      <UpdatePreviewSwitch disabled={loading || applying !== null} onChanged={check} />
+      {!storeManaged && <UpdatePreviewSwitch disabled={loading || applying !== null} onChanged={check} />}
       <SettingsSection
         id="updates"
         kind="list"
@@ -77,7 +79,7 @@ export function UpdatesSettings() {
         state={view ? "ready" : loadFailed ? "error" : "loading"}
         errorMessage={copy.errors.loadUpdates}
         onRetry={() => void load()}
-        actions={
+        actions={!storeManaged &&
           <Button type="button" size="sm" variant="outline" disabled={loading || applying !== null} onClick={() => void check()}>
             <RefreshCcw size="md" /> {loading ? copy.actions.updateChecking : copy.actions.checkUpdates}
           </Button>

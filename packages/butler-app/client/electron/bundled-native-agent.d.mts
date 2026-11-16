@@ -5,6 +5,7 @@ interface ResolveInput {
   resourcesPath?: string;
   execPath?: string;
   platform?: NodeJS.Platform;
+  storeBuild?: boolean;
   isPackaged?: boolean;
   env?: Record<string, string | undefined>;
 }

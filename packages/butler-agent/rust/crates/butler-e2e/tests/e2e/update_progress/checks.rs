@@ -130,3 +130,60 @@ async fn unsupported_local_build_has_no_update_progress() -> Result<(), HarnessE
     );
     s.finish().await
 }
+
+#[tokio::test]
+async fn store_build_never_checks_downloads_or_stages_app_updates() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = requests.clone();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let source = format!("http://{}/manifest", listener.local_addr()?);
+    let feed = axum::Router::new().route("/manifest", axum::routing::get(move || {
+        counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        async { axum::Json(json!({"artifacts":[{
+            "component":"app", "version":"99.0.0", "channel":"stable",
+            "platform":butler_platform::launcher::release_platform(),
+            "staging_policy":"butler-data-updates", "activation_policy":"user-installs-app-package",
+            "rollback_policy":"not-managed-by-butler"
+        }]})) }
+    }));
+    let task = tokio::spawn(async move {
+        let _ = axum::serve(listener, feed).await;
+    });
+    let s = Setup::new("UPDATE-STORE")?
+        .env("BUTLER_APP_VERSION", "1.0.0")
+        .env("BUTLER_APP_STORE_BUILD", "1")
+        .env("BUTLER_APP_UPDATE_MANIFEST", source)
+        .start()
+        .await?;
+    let request = json!({"component":"app"});
+    for response in [
+        s.gw.get("/updates").await?,
+        s.gw.post("/updates/check", request.clone()).await?,
+    ] {
+        assert_eq!(response.status, 200, "{}", response.text);
+        let view = response.data();
+        let status = &view["components"][0];
+        assert_eq!(status["check_state"], "store");
+        assert_eq!(status["updater_owner"], "store");
+        assert_eq!(status["update_available"], false);
+        assert_eq!(status["current_version"], "1.0.0");
+    }
+    assert_eq!(
+        s.gw.post("/updates/apply", request).await?.error_code(),
+        Some("updates_store_managed")
+    );
+    assert!(
+        s.gw.events_since(0)
+            .await?
+            .iter()
+            .all(|event| event["type"] != "updates.progress")
+    );
+    assert!(!s.sandbox.data.join("updates/status.json").exists());
+    assert!(!s.sandbox.data.join("updates/staged").exists());
+    s.finish().await?;
+    assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 0);
+    task.abort();
+    let _ = task.await;
+    Ok(())
+}

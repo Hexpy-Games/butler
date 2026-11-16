@@ -209,6 +209,12 @@ pub async fn main(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode
     if matches!(args.as_slice(), [flag] if flag == "--version" || flag == "-V") {
         return print_version();
     }
+    if args
+        .first()
+        .is_some_and(|arg| arg == "--package-startup-task")
+    {
+        return super::startup_task::run(&args[1..]).await;
+    }
     let (installation, command_args) = match installation(&args) {
         Ok(value) => value,
         Err(error) => {

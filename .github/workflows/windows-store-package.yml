@@ -1,0 +1,36 @@
+name: Windows Store package check
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  store-package:
+    name: Pack, install and verify the Store package
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/windows-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-windows-agent
+        with:
+          profile: ci-fast
+          cache-key: windows-store-package
+          version: '0.1.0-preview.0'
+          artifact-base-url: http://127.0.0.1/unused
+      - uses: ./.github/actions/package-windows-app
+        with:
+          version: '0.1.0-preview.0'
+      - name: Pack, install and verify
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"
+        run: |
+          $zip = @(Get-ChildItem dist/release/app-windows/butler-app-*-windows-x64-portable.zip)
+          if ($zip.Count -ne 1) { throw 'Expected one portable App zip' }
+          ./packages/butler-app/scripts/windows/store/verify-msix.ps1 -AppZip $zip[0].FullName -Out "$env:RUNNER_TEMP/store-check"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-store-package-check
+          path: ${{ runner.temp }}/store-check
+          if-no-files-found: warn
+          retention-days: 14

@@ -46,6 +46,7 @@ wire_codes! {
         UpdateStagePathInvalid = "update_stage_path_invalid",
         UpdateStageUnavailable = "update_stage_unavailable",
         UpdateStatusInvalid = "update_status_invalid",
+        UpdatesStoreManaged = "updates_store_managed",
     }
 }
 

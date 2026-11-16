@@ -24,6 +24,9 @@ impl AppUpdateService {
             .version
             .as_deref()
             .ok_or(UpdateCode::AppVersionUnavailable)?;
+        if self.store_managed {
+            return self.store_view(version).await;
+        }
         let previews = super::channel::previews(&self.data, None, self.version.as_deref()).await;
         let saved = self
             .saved()
@@ -63,6 +66,9 @@ impl AppUpdateService {
         if self.version.is_none() {
             return Err(UpdateCode::AppVersionUnavailable.into());
         }
+        if self.store_managed {
+            return self.current().await;
+        }
         let prior = self.progress.snapshot().await;
         if matches!(
             prior["stage"].as_str(),
@@ -82,6 +88,23 @@ impl AppUpdateService {
             }
             Err(error) => Err(error),
         }
+    }
+
+    async fn store_view(&self, version: &str) -> Result<Value, UpdateError> {
+        let request = UpdateRequest::default();
+        let mut status = self
+            .status(
+                &request,
+                &self.unchecked_artifact(&request, version),
+                "store",
+                None,
+            )
+            .await?;
+        status["update_policy"] = json!("store");
+        status["updater_owner"] = json!("store");
+        let mut view = self.view(&request, &status);
+        view["progress"] = self.progress.snapshot().await;
+        Ok(view)
     }
 
     pub(super) async fn resolved_request(&self, mut request: UpdateRequest) -> UpdateRequest {

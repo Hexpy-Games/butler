@@ -89,6 +89,7 @@ pub mod secure_fs;
 pub mod service_registration;
 pub mod shared_locks;
 pub mod sqlite;
+pub mod startup_task;
 pub mod stdio;
 pub mod storage_size;
 pub mod system_wake;

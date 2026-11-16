@@ -46,6 +46,8 @@ pub struct AppUpdateService {
     data: PathBuf,
     installation: PathBuf,
     version: Option<String>,
+    /// An install whose updates the OS store delivers: no manifest check, no download, no staging.
+    store_managed: bool,
     manifest: String,
     /// Downloads packages.
     client: butler_log::http::Client,
@@ -70,6 +72,7 @@ impl AppUpdateService {
         data: PathBuf,
         installation: PathBuf,
         version: Option<String>,
+        store_managed: bool,
     ) -> Result<Self, UpdateError> {
         if data.starts_with(&installation) || installation.starts_with(&data) {
             return Err(UpdateCode::ButlerDataOverlapsInstallation.into());
@@ -99,6 +102,7 @@ impl AppUpdateService {
             data,
             installation,
             version,
+            store_managed,
             manifest,
             client,
             manifest_client,
@@ -115,6 +119,9 @@ impl AppUpdateService {
     }
 
     pub async fn check(&self, request: UpdateRequest) -> Result<Value, UpdateError> {
+        if self.store_managed {
+            return self.current().await;
+        }
         let _check = self.checks.lock().await;
         self.check_now(self.resolved_request(request).await).await
     }
@@ -131,6 +138,9 @@ impl AppUpdateService {
         let _check = self.checks.lock().await;
         if self.version.is_none() {
             return Err(UpdateCode::AppVersionUnavailable.into());
+        }
+        if self.store_managed {
+            return Err(UpdateCode::UpdatesStoreManaged.into());
         }
         let prior = self.progress.snapshot().await;
         if prior["stage"] == "ready" && !request.dry_run {

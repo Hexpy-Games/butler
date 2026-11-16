@@ -2324,6 +2324,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       upToDate: "최신",
       updateChecking: "확인 중",
       updateUnavailable: "최신 정보를 확인할 수 없음",
+      updateFromStore: "Microsoft Store",
+      updateFromStoreHint: "Microsoft Store에서 업데이트",
       updateChoice: "업데이트를 위해 재시작합니다.",
       updateCheckpoint: "실행 중인 작업은 저장되며 재시작 후 재시도할 수 있습니다. 대기 입력은 이어서 처리합니다.",
       updateAfterWork: "작업이 끝나면 업데이트",
