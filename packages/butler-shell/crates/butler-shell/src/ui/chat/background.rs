@@ -17,15 +17,20 @@ use crate::ui::source::agent::Jobs;
 
 /// The decoded pictures of the image sources in use (`imageCache.ts`): one per asset, shared by
 /// every screen. `None` while the asset loads, and after a failed load (not retried while the
-/// asset stays in use).
+/// asset stays in use). In use: the assets the settings name, plus the latest requested asset
+/// they do not name (a project's own picture).
 #[derive(Default)]
-struct Pictures(HashMap<SharedString, Option<WallpaperImage>>);
+struct Pictures {
+    loaded: HashMap<SharedString, Option<WallpaperImage>>,
+    /// The latest requested image asset the settings do not name.
+    other: Option<SharedString>,
+}
 
 impl Global for Pictures {}
 
 /// The assets of the image sources the current settings name: the main wallpaper and the
 /// conversation background.
-fn assets_in_use(cx: &App) -> Vec<SharedString> {
+fn named_assets(cx: &App) -> Vec<SharedString> {
     let Some(settings) = AppSettings::get(cx) else {
         return Vec::new();
     };
@@ -38,22 +43,38 @@ fn assets_in_use(cx: &App) -> Vec<SharedString> {
         .collect()
 }
 
+/// `imageCache.ts` `retain`: forgets the pictures no longer in use; a requested asset the
+/// settings do not name becomes the kept other asset.
+fn retain(requested: Option<&SharedString>, cx: &mut App) {
+    let named = named_assets(cx);
+    let pictures = cx.default_global::<Pictures>();
+    if let Some(asset) = requested.filter(|asset| !named.contains(asset)) {
+        pictures.other = Some(asset.clone());
+    }
+    let other = pictures.other.clone();
+    pictures
+        .loaded
+        .retain(|kept, _| named.contains(kept) || other.as_ref() == Some(kept));
+}
+
 /// The decoded picture of an image source, loaded once per asset; never another asset's.
 pub(in crate::ui::chat) fn picture(
     source: &WallpaperSource,
     cx: &mut App,
 ) -> Option<WallpaperImage> {
-    let WallpaperSource::Image { asset, .. } = source else {
-        return None;
+    let asset = match source {
+        WallpaperSource::Image { asset, .. } => Some(asset),
+        _ => None,
     };
-    // `imageCache.ts` `retain`: forget the assets no longer in use.
-    let in_use = assets_in_use(cx);
-    let pictures = &mut cx.default_global::<Pictures>().0;
-    pictures.retain(|kept, _| kept == asset || in_use.contains(kept));
-    if let Some(picture) = pictures.get(asset) {
+    retain(asset, cx);
+    let asset = asset?;
+    if let Some(picture) = cx.default_global::<Pictures>().loaded.get(asset) {
         return picture.clone();
     }
-    pictures.insert(asset.clone(), None);
+    Jobs::client(cx)?;
+    cx.default_global::<Pictures>()
+        .loaded
+        .insert(asset.clone(), None);
     let job = {
         let source = source.clone();
         Jobs::run(cx, move |client| async move {
@@ -62,12 +83,19 @@ pub(in crate::ui::chat) fn picture(
     };
     let asset = asset.clone();
     cx.spawn(async move |cx| {
-        let picture = job.await.flatten();
+        let answer = job.await;
         cx.update(|cx| {
-            let Some(entry) = cx.default_global::<Pictures>().0.get_mut(&asset) else {
+            let loaded = &mut cx.default_global::<Pictures>().loaded;
+            // Only a pending entry: another load may have answered already.
+            if !matches!(loaded.get(&asset), Some(None)) {
+                return;
+            }
+            let Some(picture) = answer else {
+                // The job never answered (the agent detached): ask again on the next request.
+                loaded.remove(&asset);
                 return;
             };
-            *entry = picture;
+            loaded.insert(asset, picture);
             cx.refresh_windows();
         });
     })
