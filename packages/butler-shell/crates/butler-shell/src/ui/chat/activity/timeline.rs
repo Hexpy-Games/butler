@@ -24,6 +24,7 @@ use crate::ui::store::progress::activity::{
 };
 use crate::ui::store::progress::copy::copy;
 use crate::ui::store::progress::labels::phase_label;
+use crate::ui::widgets::anchor;
 
 /// `TurnActivityTimeline` for the phase activities of `rows`; `None` when there are none.
 /// `state` is the turn's current state (`currentState`).
@@ -82,12 +83,17 @@ pub(super) fn timeline(
     } else if let Some(step) = collapsed_step(&activities, &key, turn_id, live, t, window, cx) {
         body = body.child(step);
     }
+    // Anchored by turn, so a harness step finds this turn's steps among the timelines on screen.
+    let name = format!("turn-activity-{}", turn_id.unwrap_or_default());
     Some(
-        Stack::new()
-            .gap(Space::Xs)
-            .child(header)
-            .child(body)
-            .into_any_element(),
+        anchor(
+            div()
+                .flex()
+                .flex_col()
+                .child(Stack::new().gap(Space::Xs).child(header).child(body)),
+            &name,
+        )
+        .into_any_element(),
     )
 }
 
