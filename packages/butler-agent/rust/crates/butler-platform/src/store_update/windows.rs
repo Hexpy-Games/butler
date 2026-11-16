@@ -11,18 +11,19 @@ impl From<::windows::core::Error> for StoreUpdateError {
     }
 }
 
+/// The Store's answer for a package with no Store product (sideloaded or unsubmitted).
+const NO_STORE_PRODUCT: u32 = 0x803F_6107;
+
 pub(super) fn check() -> Result<Option<String>, StoreUpdateError> {
     let context = StoreContext::GetDefault()?;
     let product = context.GetStoreProductForCurrentAppAsync()?.join()?;
     let hresult = product.ExtendedError()?;
     if hresult.is_err() || product.Product().is_err() {
-        return Err(if hresult.0 as u32 == 0x803F6107 {
+        let code = hresult.0.cast_unsigned();
+        return Err(if code == NO_STORE_PRODUCT {
             StoreUpdateError::NotFromStore
         } else {
-            StoreUpdateError::Failed(format!(
-                "store product lookup failed: {:#010x}",
-                hresult.0 as u32
-            ))
+            StoreUpdateError::Failed(format!("store product lookup failed: {code:#010x}"))
         });
     }
     let family = Package::Current()?.Id()?.FamilyName()?;
