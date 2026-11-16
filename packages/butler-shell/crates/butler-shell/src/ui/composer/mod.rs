@@ -251,6 +251,9 @@ impl Composer {
         let menu = self.mention_menu(window, cx);
         let input = div()
             .relative()
+            // The editor's own text is no chrome (`focusDraftFromComposerChrome` skips
+            // `[contenteditable]`), whatever the button: a right press leaves focus and selection.
+            .on_any_mouse_down(|_, window, _| window.prevent_default())
             .child(input)
             .child(probe)
             .children(chips)
