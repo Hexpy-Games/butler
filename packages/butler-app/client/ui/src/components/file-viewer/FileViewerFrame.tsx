@@ -29,7 +29,7 @@ export interface FileViewerAction {
  * select) moves to its own line under the row.
  */
 export function FileViewerHeader({ title, meta, leading, actions = [], onClose, onBack }: {
-  title: string; meta?: string; leading?: ReactNode; actions?: FileViewerAction[]; onClose: () => void;
+  title: string; meta?: string; leading?: ReactNode; actions?: FileViewerAction[]; onClose?: () => void;
   /** Back to the chat (the viewer took the whole workspace). */
   onBack?: () => void;
 }) {
@@ -52,7 +52,7 @@ export function FileViewerHeader({ title, meta, leading, actions = [], onClose, 
               : <Button key={action.id} size="sm" variant="outline" iconStart={action.labelIcon ? action.icon : undefined} text={action.label}
                 aria-label={action.ariaLabel} data-test-class={`file-viewer-${action.id}`}
                 disabled={action.disabled} title={action.disabled ? action.disabledReason : undefined} onClick={action.run} />)}
-            <FileViewerCloseButton onClose={onClose} />
+            {onClose ? <FileViewerCloseButton onClose={onClose} /> : null}
           </ButtonContainer>
         </Stack>{compact ? leading : null}</Stack>
       </Box>
@@ -80,6 +80,11 @@ function useCompactHeader(node: HTMLElement | null): boolean {
     return () => observer.disconnect();
   }, [node]);
   return compact;
+}
+
+/** A fixed title band over the page: the row at the page's reading insets, then a hairline. */
+export function FileViewerTitleBand({ children, width = "full" }: { children: ReactNode; width?: "full" | "narrow" }) {
+  return <><PageContainer width={width} gutter="2xl"><Box paddingX="2xl" paddingY="md">{children}</Box></PageContainer><Separator space="none" /></>;
 }
 
 /**

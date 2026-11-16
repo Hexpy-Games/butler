@@ -32,7 +32,7 @@ export async function checkTrailing(page: Page, base: string, id: string) {
   }, id);
   const close = page.getByRole("button", { name: "Host close", exact: true });
   await close.waitFor();
-  const buttons = page.locator('[data-test-class="editable-document"] > :first-child button');
+  const buttons = page.locator('[data-test-class="document-title-row"] button');
   assert.deepEqual(await buttons.evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).map(node => node.getAttribute("aria-label"))), ["버전 기록", "원래 대화", "내보내기", "Host close"]);
   const rows = await buttons.evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).map(node => node.getBoundingClientRect().y));
   assert(rows.every(y => Math.abs(y - rows[0]!) < 1), JSON.stringify(rows));
@@ -154,7 +154,7 @@ export async function checkTitleLine(page: Page, options: {
   });
   if (stage !== "before") {
     if (!fullPage) {
-      assert(await document.locator('[data-test-class="file-viewer-close"]').isVisible());
+      assert(await page.locator(`${host} [data-test-class="file-viewer-close"]`).isVisible());
       if (width === 390) assert(await document.locator('[data-test-class="file-viewer-back"]').isVisible());
     }
     assert.equal(await document.locator('[data-slot="document-editor-actions"]').isVisible(), width !== 390);
@@ -186,7 +186,7 @@ export async function clickDocumentAction(page: Page, label: string) {
 }
 
 export async function measureHeader(page: Page, width: number, fullPage: boolean) {
-  const geometry = await page.locator('[data-test-class="editable-document"] > :first-child').evaluate(row => ({
+  const geometry = await page.locator('[data-test-class="document-title-row"]').evaluate(row => ({
     headerWidth: row.getBoundingClientRect().width,
     menu: Boolean(row.querySelector('[data-slot="document-editor-menu"] button')?.getClientRects().length),
   }));
@@ -203,7 +203,7 @@ async function menuCrop(page: Page, evidence: string, name: string) {
     });
   });
   const clip = await page.evaluate(() => {
-    const row = document.querySelector('[data-test-class="editable-document"] > :first-child')!.getBoundingClientRect();
+    const row = document.querySelector('[data-test-class="document-title-row"]')!.getBoundingClientRect();
     const overlay = document.querySelector('[role="menu"], [data-slot="version-history"]')?.getBoundingClientRect();
     const bottom = Math.min(innerHeight, Math.max(row.bottom + 40, (overlay?.bottom ?? 0) + 16));
     const y = Math.max(0, row.top - 16, bottom - 800);

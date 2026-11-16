@@ -107,10 +107,10 @@ async function open(page: Page, width = 1440, theme = "light", fullPage = false)
     const pane = page.locator('[data-test-class="file-viewer"]');
     await pane.locator('[data-slot="document-editor-page"]').waitFor();
     // One title row: the document's own, carrying the viewer's close (and back on a phone); the pane adds no header.
-    const row = pane.locator('[data-test-class="editable-document"] > :first-child');
+    const row = pane.locator('[data-test-class="document-title-row"]');
     assert.equal(await pane.locator('[data-test-class="file-viewer-header"]').count(), 0, "no pane title row over the document");
     assert.deepEqual(await pane.evaluate(node => [...node.querySelectorAll("h2")].filter(h => !h.closest('[role="textbox"]')).map(h => h.textContent)), [head.title], "the title shows once");
-    assert.equal(await row.locator('[data-test-class="file-viewer-close"]').count(), 1, "close sits in the document's title row");
+    assert.equal(await row.locator('[data-test-class="file-viewer-close"]').count(), 1, "close sits in the document's title row"); assert.equal(await pane.locator('[data-test-class="file-viewer-scroll"] [data-test-class="document-title-row"]').count(), 0, "the title row stays out of the scroll");
     if (width === 390 || width === 1440) assert.equal(await row.locator('[data-test-class="file-viewer-back"]').count(), width === 390 ? 1 : 0, "back sits in the title row on a phone");
     if (width === 1440) {
       const chat = await page.locator('[data-test-class~="conversation-scroll"]').boundingBox(), viewer = await pane.boundingBox();
@@ -203,7 +203,7 @@ async function closeAndFlush(page: Page) {
 }
 async function drawer(page: Page) {
   const viewer = page.locator('[data-test-class="library-region"] [data-test-class="file-viewer"]');
-  while (await viewer.count()) await viewer.locator('[data-test-class="file-viewer-close"]').click();
+  while (await viewer.count()) await page.locator('[data-test-class="titlebar-back"]').click();
   await page.evaluate(async () => { const path = "/src/components/library/libraryNav.ts"; (await import(/* @vite-ignore */ path)).openLibrary({ section: "document" }); });
   await page.locator('[data-library-item="doc_report"]').waitFor(); await page.locator('[data-library-item="file-report"]').waitFor();
 }
