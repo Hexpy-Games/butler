@@ -333,7 +333,7 @@ impl Render for SettingsView {
             .page_key(key)
             .page_order(order)
             .detail_navigation(
-                crate::ui::widgets::anchor(div().flex(), "settings-back").child(back),
+                crate::ui::widgets::anchor(div().flex(), "settings-detail-back").child(back),
             )
             .sidebar(sidebar)
             .detail_header(header)
