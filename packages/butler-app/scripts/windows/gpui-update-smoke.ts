@@ -7,7 +7,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { freePort } from "../../../../tests/support/native-app-server.ts";
 import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 import { windowsPackageVersion } from "../../client/electron/scripts/windows-package-version.mjs";
-import { measureIdleProcesses, readPostUpdateRegistration, rerunUpdatedHook } from "./gpui-update-checks.ts";
+import { assertIdle, assertRegistrations, measureIdleProcesses, readPostUpdateRegistration, rerunUpdatedHook, staleRegistrations } from "./gpui-update-checks.ts";
 import { assertShortcuts, powershell, preserveInstallerLogs, readJson, removeProfile, shortcutPaths, waitFor } from "./installer-smoke-support.ts";
 if (process.platform !== "win32" || process.env.GITHUB_ACTIONS !== "true" || process.env.RUNNER_ENVIRONMENT !== "github-hosted") {
   throw new Error("Registry/shortcut/installer smoke is restricted to disposable GitHub-hosted runners");
@@ -243,6 +243,7 @@ async function activateUpdate() {
   mkdirSync(folder, { recursive: true });
   const packagePath = join(folder, name);
   copyFileSync(join(candidate, name), packagePath);
+  staleRegistrations(shortcuts, env, powershell); // Only the gpui updated hook can restore these.
   const helperLog = openSync(join(root, "helper-stderr.log"), "a");
   helperClosed = false;
   const helper = spawn(join(dirname(oldApp), "resources/bundled-agent/bin/butler-agent.exe"),
@@ -308,17 +309,15 @@ async function proveGpui() {
   }, "updated gpui App and authenticated supervised Agent", 120_000);
   assert.equal(readFileSync(join(data, "sentinel.txt"), "utf8"), "retained");
   assert.ok(existsSync(join(data, "butler.config.json")), "User configuration missing");
-  console.log(JSON.stringify(await measureIdleProcesses(newFolder, env, powershell)));
+  const idle = await measureIdleProcesses(newFolder, env, powershell); console.log(JSON.stringify(idle)); assertIdle(idle);
+  const squirrelRegistration = readPostUpdateRegistration(shortcuts, env, powershell);
+  console.log(JSON.stringify({ squirrelUpdatedRegistration: squirrelRegistration })); assertRegistrations(squirrelRegistration, stub, installed, "Squirrel-run updated hook");
+  staleRegistrations(shortcuts, env, powershell);
   const { hook, updatedHook } = rerunUpdatedHook(newFolder, toPackage, env);
   console.log(JSON.stringify({ updatedHook }));
-  const postUpdateRegistration = readPostUpdateRegistration(shortcuts, env, powershell);
-  console.log(JSON.stringify({ postUpdateRegistration }));
   assert.equal(hook.status, 0, `Updated hook exitCode must be 0: ${hook.error?.message ?? hook.status}`);
-  for (const shortcut of postUpdateRegistration.shortcuts) {
-    assert.equal(shortcut.TargetPath?.toLowerCase(), stub.toLowerCase(), `Post-update shortcut TargetPath: ${shortcut.path}`);
-    assert.equal(shortcut.WorkingDirectory, installed, `Post-update shortcut WorkingDirectory: ${shortcut.path}`);
-  }
-  assert.equal(postUpdateRegistration.protocolCommand, `"${stub}" "%1"`, "Post-update butler protocol command");
+  const postUpdateRegistration = readPostUpdateRegistration(shortcuts, env, powershell);
+  console.log(JSON.stringify({ postUpdateRegistration })); assertRegistrations(postUpdateRegistration, stub, installed, "Rerun updated hook");
 }
 async function stopInstalled() {
   markProcessTrace("stopInstalled:begin");

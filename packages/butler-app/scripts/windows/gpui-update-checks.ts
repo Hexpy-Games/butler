@@ -1,3 +1,4 @@
+import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
@@ -65,4 +66,45 @@ export function readPostUpdateRegistration(shortcuts: string[], env: NodeJS.Proc
     @{ shortcuts = $shortcuts; protocolCommand = $command } | ConvertTo-Json -Compress -Depth 4`,
   { ...env, BUTLER_SMOKE_SHORTCUTS: JSON.stringify(shortcuts) }));
   return postUpdateRegistration;
+}
+
+type Registration = ReturnType<typeof readPostUpdateRegistration>;
+
+/** Removes the shortcuts and points the protocol at a bogus command, so only the updated hook can restore them. */
+export function staleRegistrations(shortcuts: string[], env: NodeJS.ProcessEnv, powershell: PowerShell) {
+  powershell(`$paths = ConvertFrom-Json $env:BUTLER_SMOKE_SHORTCUTS
+    foreach ($path in $paths) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force } }
+    $command = 'HKCU:\Software\Classes\butler\shell\open\command'
+    if (-not (Test-Path -LiteralPath $command)) { New-Item -Path $command -Force | Out-Null }
+    Set-Item -LiteralPath $command -Value '"stale" "%1"'
+    foreach ($path in $paths) { if (Test-Path -LiteralPath $path) { throw "Shortcut still exists: $path" } }`,
+  { ...env, BUTLER_SMOKE_SHORTCUTS: JSON.stringify(shortcuts) });
+}
+
+export function assertRegistrations(registration: Registration, stub: string, installed: string, label: string) {
+  for (const shortcut of registration.shortcuts) {
+    assert.notEqual(shortcut.TargetPath, null, `${label}: shortcut missing: ${shortcut.path}`);
+    assert.equal(shortcut.TargetPath?.toLowerCase(), stub.toLowerCase(), `${label}: shortcut TargetPath: ${shortcut.path}`);
+    assert.equal(shortcut.WorkingDirectory, installed, `${label}: shortcut WorkingDirectory: ${shortcut.path}`);
+  }
+  assert.equal(registration.protocolCommand, `"${stub}" "%1"`, `${label}: butler protocol command`);
+}
+
+// Hosted runners measure 0.13-0.17 s of CPU per 10 s idle window across all rows.
+const IDLE_CPU_SECONDS_BUDGET = 0.5;
+
+export function assertIdle(result: Awaited<ReturnType<typeof measureIdleProcesses>>) {
+  const rows = result.idleProcesses;
+  const named = (name: string) => rows.filter(row => row.name.toLowerCase() === name);
+  for (const name of ["butler.exe", "butler-agent.exe"]) {
+    assert.equal(named(name).length, 1, `Expected exactly one ${name}: ${JSON.stringify(named(name))}`);
+  }
+  const unmeasured = rows.filter(row => row.cpuSeconds === null);
+  assert.deepEqual(unmeasured, [], `A process started or restarted during the idle window: ${JSON.stringify(unmeasured)}`);
+  const hosts = named("butler_cef_host.exe");
+  const untyped = hosts.filter(row => row.type === null);
+  assert.deepEqual(untyped, [], `butler_cef_host.exe rows must be --type= subprocesses: ${JSON.stringify(untyped)}`);
+  assert.ok(hosts.length <= 3, `At most 3 butler_cef_host.exe processes expected: ${JSON.stringify(hosts)}`);
+  const total = rows.reduce((sum, row) => sum + (row.cpuSeconds ?? 0), 0);
+  assert.ok(total <= IDLE_CPU_SECONDS_BUDGET, `Idle CPU ${total}s over ${result.windowSeconds}s exceeds ${IDLE_CPU_SECONDS_BUDGET}s: ${JSON.stringify(rows)}`);
 }
