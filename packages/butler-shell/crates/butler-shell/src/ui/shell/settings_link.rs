@@ -56,9 +56,12 @@ impl Shell {
         cx.notify();
     }
 
-    /// `closeSettings`: back to the frame; the composer does not take focus.
-    fn close_settings(&mut self, cx: &mut Context<Self>) {
-        self.settings_view = None;
+    /// `closeSettings`: back to the frame. Focus goes to the shell root, where Electron's falls
+    /// to `body` and the app's shortcuts still work; the composer does not take it.
+    pub(super) fn close_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings_view.take().is_some() {
+            window.focus(&self.focus, cx);
+        }
         cx.notify();
     }
 
@@ -70,15 +73,15 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         match event {
-            SettingsEvent::Close => self.close_settings(cx),
+            SettingsEvent::Close => self.close_settings(window, cx),
             SettingsEvent::Changed(raw) => self.apply_settings(raw, cx),
             SettingsEvent::OpenSession(id) => {
-                self.close_settings(cx);
+                self.close_settings(window, cx);
                 self.navigate(Navigation::Session(id.to_string()), window, cx);
             }
             // `openHistory("settings")`: History with Settings › Browser as its parent.
             SettingsEvent::OpenHistory => {
-                self.close_settings(cx);
+                self.close_settings(window, cx);
                 self.set_view(
                     View::History {
                         from: HistoryFrom::Settings,
@@ -89,7 +92,7 @@ impl Shell {
             }
             // `RerunSetupField` `openRerun`: Settings closes and the setup shows again.
             SettingsEvent::RerunSetup => {
-                self.close_settings(cx);
+                self.close_settings(window, cx);
                 self.onboarding.rerun = true;
                 cx.notify();
             }
