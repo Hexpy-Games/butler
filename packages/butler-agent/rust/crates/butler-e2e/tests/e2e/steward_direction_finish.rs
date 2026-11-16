@@ -367,6 +367,13 @@ async fn stopped_child_does_not_take_up_its_direction_after_restart() -> Result<
         assert!(Instant::now() < deadline, "{}", s.agent.logs());
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
+    // The stop's result reaches the parent before the card shows it ended.
+    let delivered =
+        "SELECT count(*) FROM btcc_subsession_outbox WHERE relation_id=?1 AND status='delivered'";
+    while count(&db(&s), delivered, &relation) == 0 {
+        assert!(Instant::now() < deadline, "{}", s.agent.logs());
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
     let database = db(&s);
     assert_eq!(
         count(

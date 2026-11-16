@@ -10,7 +10,7 @@ const AUTHORED: &str = "Remember that my favorite fabric is linen.";
 async fn round_three_consolidation_excludes_connector_sources_and_keeps_user_input()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let setup = setup("PC3-CONSOLIDATION")?;
+    let setup = setup("PC3-CONSOLIDATION")?.env("BUTLER_MEMORY_SYNC_TRACE", "1");
     crate::memory_fixture::initialize_empty(&setup.sandbox.data)?;
     let root = package(&setup.sandbox.home, false)?;
     let s = setup.start().await?;
@@ -37,6 +37,8 @@ async fn round_three_consolidation_excludes_connector_sources_and_keeps_user_inp
     let (_, user) = s.turn("general", AUTHORED).await?;
     assert_eq!(user["state"], "delivered", "{user}");
     crate::memory_fixture::settle(&s.sandbox.data).await?;
+    // A manual operation admits once after the consumer releases its writer.
+    crate::memory_fixture::wait_parked(&s).await;
     let reply =
         s.gw.post(
             "/memory/consolidation",
