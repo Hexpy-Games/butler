@@ -133,9 +133,11 @@ fn error(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let ds = Ds::get(cx);
     let control = ComposerControl::new("cc-error", copy(lang).model_error)
         .icon(icon(Icon::AlertCircle, IconSize::Md, ds))
-        .tone(ControlTone::Danger)
-        .into_any_element();
-    fixture("cc-error-fixture", control, window, cx)
+        .tone(ControlTone::Danger);
+    // The web fixture is a block, so the control's `align-self: center` does nothing there. In a
+    // row `self_center` is vertical, as in the composer toolbar.
+    let body = Stack::row().child(control).into_any_element();
+    fixture("cc-error-fixture", body, window, cx)
 }
 
 fn permission(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {

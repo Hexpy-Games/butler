@@ -44,7 +44,7 @@ async fn browser_opens_a_page_and_navigates() -> Result<(), HarnessError> {
     assert_eq!(first["tabs"][0]["title"], "example.com");
     assert_eq!(first["active"], first["tabs"][0]["id"]);
     shell
-        .run(&["key cmd-l", "type example.org/a", "key enter"])
+        .run(&["key secondary-l", "type example.org/a", "key enter"])
         .await?;
     assert_eq!(
         shell.browser_state().await?["tabs"][0]["url"],
@@ -59,6 +59,18 @@ async fn browser_opens_a_page_and_navigates() -> Result<(), HarnessError> {
     assert_eq!(
         shell.browser_state().await?["tabs"][0]["url"],
         "https://example.org/a"
+    );
+    // The whole field is the click target, not only the text line.
+    shell
+        .run(&[
+            "click-at browser-address 0.5 0.12",
+            "type example.net",
+            "key enter",
+        ])
+        .await?;
+    assert_eq!(
+        shell.browser_state().await?["tabs"][0]["url"],
+        "https://example.net/"
     );
     shell.run(&["app-quit"]).await?;
     shell.finish().await?;
@@ -86,7 +98,7 @@ async fn browser_switches_tabs() -> Result<(), HarnessError> {
             "wait-anchor browser-area",
             "type example.com",
             "key enter",
-            "key cmd-t",
+            "key secondary-t",
             "type example.org",
             "key enter",
         ])
@@ -100,7 +112,7 @@ async fn browser_switches_tabs() -> Result<(), HarnessError> {
         shell.browser_state().await?["active"],
         tabs["tabs"][0]["id"]
     );
-    shell.run(&["key cmd-w"]).await?;
+    shell.run(&["key secondary-w"]).await?;
     let remaining = shell.browser_state().await?;
     assert_eq!(remaining["tabs"].as_array().unwrap().len(), 1);
     assert_eq!(remaining["active"], tabs["tabs"][1]["id"]);
@@ -223,7 +235,7 @@ async fn browser_moves_tabs_between_groups() -> Result<(), HarnessError> {
         .run(&[
             "browser",
             "click browser-address",
-            "key cmd-t",
+            "key secondary-t",
             "type example.org",
             "key enter",
         ])
