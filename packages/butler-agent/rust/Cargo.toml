@@ -122,8 +122,13 @@ codegen-units = 16
 debug = "line-tables-only"
 split-debuginfo = "packed"
 
+# Dependencies run optimized, as in the product. E2E checks the product's own
+# time budgets against the debug agent, and at opt-level 0 third-party engines
+# (Lance, Arrow, DataFusion, tokenizers) take several times longer than in the
+# release build (#2124). Workspace crates stay at opt-level 0 for fast rebuilds.
 [profile.dev.package."*"]
 debug = false
+opt-level = 1
 
 # Installing an Agent archive hashes and inflates a few hundred megabytes; at
 # opt-level 0 that takes minutes in the install scenarios. These leaf crates
