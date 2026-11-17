@@ -80,12 +80,16 @@ cef::wrap_life_span_handler! {
     pub(super) struct Life { shared: PageRef, events: Events, runtime: Weak<RuntimeState> }
     impl LifeSpanHandler {
         fn on_after_created(&self, browser: Option<&mut Browser>) {
-            let mut p = self.shared.borrow_mut();
-            p.browser = browser.cloned();
-            p.popup = None;
             // Quit already closed this page: a browser created after that must close too, or the
-            // teardown waits for it until the 3 s limit and skips cef::shutdown.
-            if p.closing && let Some(host) = p.browser.as_ref().and_then(cef::ImplBrowser::host) {
+            // teardown waits for it until the 3 s limit and skips cef::shutdown. The borrow ends
+            // first: a windowless page closes synchronously through `do_close`.
+            let host = {
+                let mut p = self.shared.borrow_mut();
+                p.browser = browser.cloned();
+                p.popup = None;
+                if p.closing { p.browser.as_ref().and_then(cef::ImplBrowser::host) } else { None }
+            };
+            if let Some(host) = host {
                 host.close_browser(1);
             }
         }

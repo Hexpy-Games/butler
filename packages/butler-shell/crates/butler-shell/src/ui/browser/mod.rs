@@ -51,7 +51,7 @@ pub(crate) fn shutdown(cx: &mut gpui::App) {
 /// A quitting process never drops the engine (AppKit `terminate:` exits without dropping globals),
 /// and dropping it would shut CEF down and hide a missing quit hook. The shot harness returns
 /// normally instead of exiting, so it leaks one strong reference to keep that behaviour.
-#[cfg(feature = "cef")]
+#[cfg(all(feature = "cef", feature = "shots"))]
 pub(crate) fn keep_runtime_alive(cx: &gpui::App) {
     if cx.has_global::<downloads::DownloadsRuntime>() {
         std::mem::forget(cx.global::<downloads::DownloadsRuntime>().0.clone());
