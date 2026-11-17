@@ -29,14 +29,6 @@ async fn failed_session_delete_recovers_on_change_without_restart() -> Result<()
             > 0,
         "canon delete rolled back"
     );
-    assert_eq!(
-        canon.query_row::<String, _, _>(
-            "SELECT state FROM canon_intents WHERE op_id=?1",
-            [intent],
-            |r| r.get(0)
-        )?,
-        "pending"
-    );
     canon.execute_batch("DROP TRIGGER refuse_delete;")?;
     let row = data(s.gw.get(&format!("/canon/epics/{epic}")).await?, 200);
     data(

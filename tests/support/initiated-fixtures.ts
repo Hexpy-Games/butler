@@ -9,9 +9,9 @@ import type { Page } from "playwright";
 import { installSmokeUiAssets } from "./smoke-ui-assets";
 
 export const proposal: PatternProposalPanel = { kind: "pattern_proposal", bundle_id: "bundle-1", candidates: [
-  { pattern_id: "pattern-1", state: "pending", title: "아침에 경제 소식을 자주 확인하셨어요", action: { title: "환율·미국 증시 정리", schedule: { type: "daily", time: "07:50" }, deliver_to: "chats" },
+  { pattern_id: "pattern-1", state: "pending", title: "아침에 경제 소식을 자주 확인하셨어요", action: { kind: "schedule", title: "환율·미국 증시 정리", schedule: { type: "daily", time: "07:50" }, deliver_to: "chats" },
     evidence: { count: 11, first_at: "2026-10-06T00:00:00Z", last_at: "2026-10-26T00:00:00Z" } },
-  { pattern_id: "pattern-2", state: "pending", title: "평일마다 일정을 살펴보셨어요", action: { title: "오늘 일정 정리", schedule: { type: "weekdays", time: "08:30" }, deliver_to: "chats" },
+  { pattern_id: "pattern-2", state: "pending", title: "평일마다 일정을 살펴보셨어요", action: { kind: "schedule", title: "오늘 일정 정리", schedule: { type: "weekdays", time: "08:30" }, deliver_to: "chats" },
     evidence: { count: 8, first_at: "2026-10-06T00:00:00Z", last_at: "2026-10-26T00:00:00Z" } },
 ] };
 export function initiatedMessage(kind: "proposal" | "report" | "pause", en = false): MessageRecord {

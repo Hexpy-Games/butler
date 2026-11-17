@@ -2,7 +2,7 @@ import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import type { SessionArtifactSummary } from "@/app/types.ts";
 import type { ReactNode } from "react";
-import { Button, ButtonContainer, Popup, Save, Tooltip } from "@/butler-ds";
+import { Button, ButtonContainer, Download, Popup, Tooltip } from "@/butler-ds";
 import { artifactUrl } from "./artifactDisplay";
 
 /** Name hint only; the gateway verifies content and may downgrade to reveal. */
@@ -41,7 +41,7 @@ export function artifactCardActions(
         id: "save",
         label: appCopy.artifacts.save,
         ariaLabel: `${appCopy.artifacts.save}: ${title}`,
-        icon: <Save size="sm" />,
+        icon: <Download size="sm" />,
         onClick: () => {
           void saveDesktopArtifact(artifact.file_id!, fileName);
         },
@@ -58,7 +58,7 @@ export function artifactCardActions(
             ariaLabel: `${appCopy.artifacts.save}: ${title}`,
             href: url,
             download: fileName,
-            icon: <Save size="sm" />,
+            icon: <Download size="sm" />,
           },
         ]
       : []),

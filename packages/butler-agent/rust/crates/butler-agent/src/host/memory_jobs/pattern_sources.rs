@@ -53,14 +53,8 @@ pub(super) fn read_page(
             .chars()
             .take(600)
             .collect();
-        let kind = if message.message.source_gateway.as_deref() == Some("automation") {
-            "schedule_run"
-        } else {
-            "user_message"
-        };
         events.push(PatternEvent {
             id: message.message.id,
-            kind: kind.into(),
             session: session_kind.into(),
             created_at,
             at_local: format!("{day} {weekday} {:02}:{:02}", minute / 60, minute % 60),
@@ -80,7 +74,7 @@ fn page_ids(
     let mut statement = db
         .prepare(
             "SELECT id FROM conversation_messages WHERE role='user' \
-        AND origin_kind <> 'connector' AND (origin_kind <> 'internal_control' OR source_gateway='automation') \
+        AND origin_kind NOT IN ('connector','internal_control') \
         AND created_at>=?1 ORDER BY created_at,seq,id LIMIT 200 OFFSET ?2",
         )
         .map_err(PatternError::port)?;

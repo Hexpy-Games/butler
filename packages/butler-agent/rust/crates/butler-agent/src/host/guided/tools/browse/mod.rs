@@ -18,6 +18,7 @@ struct Run {
     max_steps: usize,
     steps: usize,
     tab: Value,
+    given_tab: bool,
     observation: Value,
     url: Value,
     opened: Vec<Value>,
@@ -71,7 +72,7 @@ async fn start(
     model: &butler_runtime::web_access::BrowseModel,
     run: &mut Run,
 ) -> Result<JsonDocument, ToolExecutionError> {
-    if args.get("url").is_some() {
+    if !run.given_tab && args.get("url").is_some() {
         let result = step::open(owner, invocation, occurrence, run, &args["url"]).await?;
         if result["status"] == "needs_approval" {
             let mut result = result;
@@ -182,6 +183,9 @@ async fn request(
     if !browser::executor_admits(owner, "browser_act") {
         scope["page_actions"] = json!("unavailable");
     }
+    if run.given_tab {
+        scope["open"] = json!("unavailable");
+    }
     if run.notes_cut {
         scope["notes_notice"] = json!(
             "Your notes were cut at 2,000 characters. Rewrite them to retain the goal's evidence within that limit."
@@ -235,6 +239,7 @@ impl Run {
                 .unwrap_or(12),
             steps: 0,
             tab: args["tab"].clone(),
+            given_tab: args["tab"].as_str().is_some_and(|tab| !tab.is_empty()),
             observation: Value::Null,
             url: Value::Null,
             opened: vec![],

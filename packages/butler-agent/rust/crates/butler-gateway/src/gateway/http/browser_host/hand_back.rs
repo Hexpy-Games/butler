@@ -1,7 +1,7 @@
 //! A hand-back (the user gives a tab back to Butler) resumes that tab's
 //! durable wait: wait-for-user and sign-in hand-off requests.
 use super::{HttpError, HttpState};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 pub(super) async fn resume_waits(state: &HttpState, tabs: &[Value]) -> Result<(), HttpError> {
     for tab in tabs {
@@ -57,4 +57,19 @@ pub(super) fn tab_site(state: &HttpState, tab: &Value) -> String {
     });
     url.and_then(|url| butler_runtime::browser::site_of(&url))
         .unwrap_or_default()
+}
+
+/// A user message to a conversation gives back that conversation's tabs the
+/// user holds, as Give back does.
+pub(in crate::gateway::http) fn give_back_on_message(state: &HttpState, session: &str) {
+    if let Ok(hub) = state.browser.0.lock()
+        && let Some(host) = &hub.host
+        && hub
+            .tabs
+            .owned(session)
+            .iter()
+            .any(|id| hub.tabs.is_user(id))
+    {
+        let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"use.given_back","session":session,"args":{}}));
+    }
 }

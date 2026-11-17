@@ -221,3 +221,39 @@ async fn signed_in_once_does_not_grant_another_conversation() -> Result<(), Harn
     );
     s.finish().await
 }
+
+#[tokio::test]
+async fn browser_read_asks_for_a_signed_in_site() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("BROWSER-READ-SIGNIN")?
+        .access(Access::AskExceptReads)
+        .stub_cassette(cassette(vec![("browser_read", json!({"tab":"identity"}))])?)
+        .start()
+        .await?;
+    let admin = admin(&s);
+    let host = attach(
+        &s,
+        Arc::new(|frame: Value| {
+            Box::pin(async move {
+                if frame["op"] == "tabs.list" {
+                    return json!({"tabs":[tab("identity", "conversation:general", URL, "agent")]});
+                }
+                json!({"status":"ok","tab":frame["tab"],"url":URL,"html":"<p>Account</p>","epoch":1})
+            })
+        }),
+    )
+    .await?;
+    snapshot(
+        &admin,
+        json!([tab("identity", "conversation:general", URL, "agent")]),
+    )
+    .await?;
+    let id = begin(&s, "general").await?;
+    let card = super::tool::waiting_card(&s, &id).await?;
+    assert_eq!(card["approval"]["operation"]["allow_site"], "signed_in");
+    assert_eq!(card["approval"]["operation"]["targets"], json!([SITE]));
+    decide(&s, "general", &card, "once").await?;
+    delivered(&s, "general", &id).await?;
+    assert!(host.last("tab.read").is_some());
+    s.finish().await
+}

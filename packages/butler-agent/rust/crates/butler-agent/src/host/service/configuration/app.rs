@@ -25,6 +25,7 @@ pub(crate) struct AppServiceConfiguration {
     pub(crate) enabled: bool,
     pub(crate) folder_selection_secret: Option<String>,
     gateway: GatewayConfig,
+    butler_account_enabled: bool,
     content_port: Result<Option<u16>, String>,
     /// Why the token or the folder secret is unavailable; the gateway then
     /// refuses every client (`local_auth_unconfigured`).
@@ -42,6 +43,8 @@ struct TypedGatewaySettings {
     content_hosts: Vec<String>,
     /// `remoteAccessEnabled`: also listen on the LAN (Settings → Security).
     remote_access_enabled: bool,
+    /// `butlerAccountEnabled`: the Butler account (sign-in, plan, devices); off until the online service opens.
+    butler_account_enabled: bool,
     /// `headlessBrowser`: Chrome fallback on or off; absent
     /// means on, including when the App launched the Agent.
     headless_browser: Option<bool>,
@@ -63,6 +66,10 @@ impl TypedGatewaySettings {
                 .unwrap_or_default(),
             remote_access_enabled: config
                 .get("remoteAccessEnabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            butler_account_enabled: config
+                .get("butlerAccountEnabled")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
             headless_browser: config.get("headlessBrowser").and_then(Value::as_bool),
@@ -161,7 +168,9 @@ impl AppServiceConfiguration {
         let folder_secret = folder_secret
             .map_err(|error| credential_errors.push(error))
             .ok();
+        let settings = TypedGatewaySettings::read(config);
         Self {
+            butler_account_enabled: settings.butler_account_enabled,
             host,
             port,
             db_path,
@@ -169,7 +178,6 @@ impl AppServiceConfiguration {
             enabled,
             folder_selection_secret: folder_secret,
             gateway: {
-                let settings = TypedGatewaySettings::read(config);
                 let headless =
                     super::headless_browser::headless_browser(data_root, settings.headless_browser);
                 let mut gateway =
@@ -218,6 +226,10 @@ impl AppServiceConfiguration {
     /// `config.remoteAccessEnabled`: also listen on the LAN.
     pub(crate) fn remote_access_enabled(&self) -> bool {
         self.gateway.remote_access_enabled
+    }
+
+    pub(crate) fn butler_account_enabled(&self) -> bool {
+        self.butler_account_enabled
     }
 
     pub(crate) fn gateway_config(&self) -> GatewayConfig {

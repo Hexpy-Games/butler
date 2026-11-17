@@ -32,6 +32,7 @@ export type SubtaskReplay = {
   /** The approval also listed under 답을 기다리는 요청, as the gateway does (PA-03). */
   asksOn: boolean;
   resumed: { relation: string; parent: string }[];
+  cancelled: { relation: string; parent: string }[];
 };
 
 function approvalAsk(session: string, subtask: SubtaskView, title: string): SessionPendingAsks["asks"][number] {
@@ -87,10 +88,17 @@ export async function replaySubtasks(page: Page, replay: SubtaskReplay, origin: 
   await page.route("**/session-view?**", async route => {
     const id = new URL(route.request().url()).searchParams.get("session_id");
     const child = replay.subtasks.find(subtask => subtask.session_id === id);
-    if (child) return route.fulfill({ json: { protocol_version: "butler.app.v1", data: {
-      ...structuredClone(HARNESS_SS03_OBSERVER_VIEW), session_id: child.session_id, parent_session_id: parent,
-      relation: { ...HARNESS_SS03_SUMMARY.steward_children![0]!.relation, relation_id: child.relation_id, parent_session_id: parent, safe_title: child.title },
-    } } });
+    if (child) {
+      const view = structuredClone(HARNESS_SS03_OBSERVER_VIEW);
+      if (child.state === "paused") {
+        view.active_turn = null;
+        view.latest_turn = { ...view.latest_turn!, retryable: true };
+      }
+      return route.fulfill({ json: { protocol_version: "butler.app.v1", data: {
+        ...view, session_id: child.session_id, parent_session_id: parent,
+        relation: { ...HARNESS_SS03_SUMMARY.steward_children![0]!.relation, relation_id: child.relation_id, parent_session_id: parent, safe_title: child.title },
+      } } });
+    }
     if (id !== parent) return route.continue();
     const response = await forward(route);
     const real = await response.json() as { data?: SessionView };
@@ -110,6 +118,13 @@ export async function replaySubtasks(page: Page, replay: SubtaskReplay, origin: 
     replay.resumed.push({ relation, parent: body.parent_session_id });
     replay.subtasks = replay.subtasks.map(subtask => subtask.relation_id === relation ? { ...subtask, state: "working" } : subtask);
     return route.fulfill({ status: 202, json: { protocol_version: "butler.app.v1", data: { status: "resuming" } } });
+  });
+  await page.route("**/steward-relations/*/cancel", async route => {
+    const relation = decodeURIComponent(new URL(route.request().url()).pathname.split("/")[2]!);
+    const body = route.request().postDataJSON() as { parent_session_id: string };
+    replay.cancelled.push({ relation, parent: body.parent_session_id });
+    replay.subtasks = replay.subtasks.filter(subtask => subtask.relation_id !== relation);
+    return route.fulfill({ status: 202, json: { protocol_version: "butler.app.v1", data: { status: "cancelling" } } });
   });
 }
 

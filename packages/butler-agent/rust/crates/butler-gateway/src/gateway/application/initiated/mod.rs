@@ -4,6 +4,8 @@ pub(super) use attention::enqueue_attention;
 mod decisions;
 mod failures;
 mod gate;
+mod notes;
+pub(super) use notes::{read as suggestion_notes, since as notes_since};
 mod outbox;
 pub(in crate::gateway::application) use outbox::{
     enqueue as enqueue_canon, update_payload_with_text as update_canon_payload,
