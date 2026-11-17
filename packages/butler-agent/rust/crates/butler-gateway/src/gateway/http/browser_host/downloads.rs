@@ -1,4 +1,4 @@
-//! Main-only download publication: canonical session workspace, no caller roots.
+//! Page-host reports for a conversation tab: download publication and terminal tab events.
 use super::{HttpError, HttpState, error, pages};
 use axum::{http::StatusCode, response::Response};
 use butler_runtime::browser::{FILE_LIMIT, SESSION_LIMIT};
@@ -13,15 +13,18 @@ pub(super) async fn handle(state: Arc<HttpState>, args: Value) -> Result<Respons
     let tab = args["tab"]
         .as_str()
         .ok_or_else(|| error(400, "invalid_request"))?;
-    let link = {
+    let (link, user_held) = {
         let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
         hub.tabs
             .check(session, tab, "tab.selection")
             .map_err(|_| error(403, "not_your_tab"))?;
-        hub.pages.clone()
+        (hub.pages.clone(), hub.tabs.is_user(tab))
     };
     if args["op"] == "failed" {
         return failed(link.as_deref(), session, tab, &args["reason"]);
+    }
+    if args["op"] == "popup_blocked" {
+        return popup_blocked(link.as_deref(), user_held, session, tab, &args);
     }
     let context = context(&state, session).await?;
     if args["op"] == "prepare" {
@@ -80,6 +83,49 @@ fn failed(
     };
     link.executor
         .tab_event(&format!("conversation:{session}"), tab, kind, &data)
+        .map_err(|_| error(403, "not_your_tab"))?;
+    super::super::json(StatusCode::OK, json!({"ok":true}))
+}
+
+/// The page host refused an Agent tab's pop-up: the event the executor itself
+/// queues for it, with the opener's origin as `site`.
+fn popup_blocked(
+    link: Option<&pages::Link>,
+    user_held: bool,
+    session: &str,
+    tab: &str,
+    args: &Value,
+) -> Result<Response, HttpError> {
+    let link = link.ok_or_else(|| error(409, "no_page_host"))?;
+    if user_held {
+        return Err(error(403, "not_your_tab"));
+    }
+    let reason = match args["reason"].as_str() {
+        Some(r @ ("popup_policy" | "tab_budget_exhausted")) => r,
+        _ => return Err(error(400, "invalid_request")),
+    };
+    let invalid = || error(400, "invalid_request");
+    let raw = args["url"].as_str().ok_or_else(invalid)?;
+    let url = url::Url::parse(raw).map_err(|_| invalid())?;
+    let web = matches!(url.scheme(), "http" | "https")
+        && url.username().is_empty()
+        && url.password().is_none();
+    if !web && raw != "about:blank" {
+        return Err(invalid());
+    }
+    let site = args["site"].as_str().ok_or_else(invalid)?;
+    let origin = url::Url::parse(site).map_err(|_| invalid())?.origin();
+    if origin.ascii_serialization() != site {
+        return Err(invalid());
+    }
+    let data = json!({"url":url.to_string(),"site":site,"reason":reason});
+    link.executor
+        .tab_event(
+            &format!("conversation:{session}"),
+            tab,
+            "popup_blocked",
+            &data,
+        )
         .map_err(|_| error(403, "not_your_tab"))?;
     super::super::json(StatusCode::OK, json!({"ok":true}))
 }
