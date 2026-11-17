@@ -2,7 +2,7 @@ use super::{engine::TabId, model::BrowserState, page_dialog::DialogAnswer};
 #[cfg(feature = "cef")]
 use super::{
     engine::{PageChange, PageEvent},
-    model::{Tab, TabStatus},
+    model::Tab,
     page_dialog::{BlockedPopup, EngineChild},
 };
 
@@ -52,37 +52,32 @@ impl BrowserState {
         }
     }
     #[cfg(feature = "cef")]
-    pub(super) fn adopt_popup(&mut self, opener: &TabId, child: EngineChild, url: String) {
-        let Some(source) = self.tab(opener).cloned() else {
-            return;
-        };
+    pub(super) fn adopt_popup(
+        &mut self,
+        opener: &TabId,
+        child: EngineChild,
+        url: String,
+    ) -> Option<TabId> {
+        let source = self.tab(opener).cloned()?;
         self.next_id += 1;
         let id = TabId(format!("t{}", self.next_id).into());
+        // Hosted as the gate decided when the child was created, whoever holds the opener now.
+        let hosted = self
+            .engine
+            .adopt(&id, child)
+            .then(|| self.new_hosted(source.hosted.as_ref().is_some_and(|h| h.internal)));
+        let awake = hosted.as_ref().map(super::agent_host::Hosted::awake);
         self.tabs.push(Tab {
-            id: id.clone(),
-            owner: source.owner,
-            epoch: 1,
-            profile: source.profile,
-            url,
-            title: String::new(),
-            favicon: String::new(),
-            title_url: String::new(),
-            favicon_url: String::new(),
-            status: TabStatus::Idle,
-            can_back: false,
-            can_forward: false,
-            placeholder: false,
             opener: Some(opener.clone()),
-            popup: true,
-            blocked_popup: None,
-            dialog: None,
-            picking: false,
-            selections: Vec::new(),
-            pick_hover: None,
-            pick: Default::default(),
-            last_nav: None,
+            popup: hosted.is_none(),
+            hosted,
+            ..Tab::new(id.clone(), source.owner, source.profile, url)
         });
-        self.engine.adopt(&id, child);
+        if let Some(awake) = awake {
+            self.engine.keep_awake(&id, awake);
+            self.fix_hosted_size(&id);
+        }
+        Some(id)
     }
     #[cfg(feature = "cef")]
     pub(super) fn popup_event(&mut self, event: &PageEvent, cx: &mut gpui::App) -> bool {
@@ -93,7 +88,14 @@ impl BrowserState {
                 }
             }
             PageChange::PopupBlocked { url, reason } => {
-                if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == event.page) {
+                // The Agent's own block is no prompt for the user.
+                if let Some(tab) = self.tabs.iter_mut().find(|t| {
+                    t.id == event.page
+                        && !t
+                            .hosted
+                            .as_ref()
+                            .is_some_and(super::agent_host::Hosted::held_by_agent)
+                }) {
                     tab.blocked_popup = Some(BlockedPopup {
                         url: url.clone(),
                         site: site(&tab.url),
@@ -105,7 +107,9 @@ impl BrowserState {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == event.page) {
                     tab.blocked_popup = None;
                 }
-                self.adopt_popup(&event.page, *child, url.clone());
+                if let Some(id) = self.adopt_popup(&event.page, *child, url.clone()) {
+                    self.announce_popup(&id, &event.page, url, cx);
+                }
             }
             PageChange::CloseRequested => self.close(&event.page, cx),
             _ => return false,

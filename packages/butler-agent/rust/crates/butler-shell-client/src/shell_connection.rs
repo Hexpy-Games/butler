@@ -7,7 +7,7 @@ mod multipart;
 mod transport;
 mod types;
 
-pub use events::LiveEvents;
+pub use events::{BrowserHostEvents, LiveEvents};
 pub use live_logs::LiveLogs;
 pub use multipart::Upload;
 pub use transport::ShellClient;
