@@ -4,20 +4,20 @@ use super::driver::{SERIAL, SHOTS};
 use super::*;
 
 /// `conversationUtils.tsx` `COMPOSER_FLOAT_BOTTOM`: the composer's float offset from the card bottom.
-const COMPOSER_FLOAT_BOTTOM: f32 = 28.;
+const COMPOSER_FLOAT_BOTTOM: f64 = 28.;
 /// `conversationUtils.tsx` `COMPOSER_CONTENT_GAP`: the gap between the last message and the composer.
-const COMPOSER_CONTENT_GAP: f32 = 20.;
+const COMPOSER_CONTENT_GAP: f64 = 20.;
 /// The bubbles' and cards' maximum width (`min(440px, 90%)`).
-const BUBBLE_MAX: f32 = 440.;
+const BUBBLE_MAX: f64 = 440.;
 
-fn rect(layout: &Value, anchor: &str) -> (f32, f32, f32, f32) {
+fn rect(layout: &Value, anchor: &str) -> (f64, f64, f64, f64) {
     let item = layout
         .as_array()
         .expect("layout")
         .iter()
         .find(|item| item["anchor"] == anchor)
         .unwrap_or_else(|| panic!("no anchor {anchor} in {layout}"));
-    let f = |key: &str| item[key].as_f64().expect("number") as f32;
+    let f = |key: &str| item[key].as_f64().expect("number");
     (f("x"), f("y"), f("w"), f("h"))
 }
 
