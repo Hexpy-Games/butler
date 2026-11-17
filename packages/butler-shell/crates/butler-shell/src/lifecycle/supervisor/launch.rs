@@ -344,6 +344,8 @@ impl OwnedChild {
         let mut child = command.spawn()?;
         let lease = child.stdin.take().map(ChildStdin::from_std).transpose()?;
         let pid = child.id();
+        // Read before the wait thread starts: once it reaps the child the pid can be reused.
+        let started = instance::process_start(pid).ok().flatten();
         // The child's exit is observed by a blocking wait on a thread of its own, because CEF
         // resets SIGCHLD in this process and tokio would never hear of it.
         let (sender, exit) = oneshot::channel();
@@ -353,7 +355,7 @@ impl OwnedChild {
         Ok(Self {
             exit,
             pid,
-            started: instance::process_start(pid).ok().flatten(),
+            started,
             lease: Arc::new(Mutex::new(lease)),
         })
     }
@@ -366,7 +368,8 @@ impl OwnedChild {
         (&mut self.exit).await.unwrap_or_default()
     }
 
-    /// Kills the child's process group (our child only); without groups, the child itself.
+    /// Kills the child's process group (our child only); without groups, the child itself, and
+    /// only while it is still that process.
     pub(crate) fn kill_tree(&self) {
         let grouped = process_control::SIGNALS
             && process_control::signal_group(self.pid, GroupSignal::Kill).is_ok();
