@@ -107,7 +107,7 @@ impl RenderOnce for ElementChip {
                 .text_color(ds.color(color))
                 .child(text)
         };
-        let text = Tooltip::new((self.id.clone(), "tip")).label(tip).child(
+        let text = Tooltip::new((self.id.clone(), "tip")).label(tip).fill().child(
             div()
                 .flex()
                 .flex_col()
