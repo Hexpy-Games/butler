@@ -103,6 +103,30 @@ pub(super) async fn recall(s: &Scenario, chat: &str, ask: &str) -> Result<Value,
     Ok(result)
 }
 
+/// Holds the model's first reply to `ask` until this Agent start has loaded
+/// its embedding worker. Admitting the turn starts that load (turn prefetch),
+/// which a real provider's reply latency covers; the stub replies at once, so
+/// without the hold the first recall after a start would depend on how fast
+/// this host loads the model.
+pub(super) fn reply_after_load<'a>(
+    s: &'a Scenario,
+    ask: &str,
+) -> Result<impl std::future::Future<Output = Result<(), HarnessError>> + 'a, HarnessError> {
+    let reply = s.provider()?.hold_next_reply(ask);
+    Ok(async move {
+        while !s
+            .agent
+            .current_logs()
+            .await?
+            .contains("[embedding-worker] initialized")
+        {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        reply.release();
+        Ok(())
+    })
+}
+
 fn loaded(s: &Scenario) -> Result<(), HarnessError> {
     if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
         assert_eq!(workers.len(), 1);
