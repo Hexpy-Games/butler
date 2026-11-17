@@ -189,16 +189,32 @@ impl ProjectWorkRepository {
         &self,
         turn_id: String,
     ) -> Result<Option<WorkView>, BtccError> {
+        let hint = self.turn_binding_hint(&turn_id).await?;
+        self.bound_for_turn_hint(turn_id, hint).await
+    }
+
+    pub(super) async fn turn_binding_hint(
+        &self,
+        turn_id: &str,
+    ) -> Result<Option<String>, BtccError> {
         let located = self
             .shared
             .projection
             .locate_canonical_works(ProjectWorkLocateInput {
                 scope: self.scope.clone(),
                 session_id: None,
-                turn_id: Some(turn_id.clone()),
+                turn_id: Some(turn_id.to_owned()),
             })
             .await?;
-        let ids = match located.binding_work_id {
+        Ok(located.binding_work_id)
+    }
+
+    pub(super) async fn bound_for_turn_hint(
+        &self,
+        turn_id: String,
+        hint: Option<String>,
+    ) -> Result<Option<WorkView>, BtccError> {
+        let ids = match hint {
             Some(id) => vec![id],
             None => self.ids_for_turn(&turn_id).await?,
         };

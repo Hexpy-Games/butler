@@ -129,6 +129,11 @@ pub(in crate::project_ledger) fn read_generation(
     read_generation_path(&path(root).with_extension("generation"))
 }
 
+/// Whether a mutation or publication currently holds this Ledger's claim.
+pub(in crate::project_ledger) fn claim_held(root: &Path) -> bool {
+    !matches!(fs::symlink_metadata(path(root)), Err(error) if error.kind() == std::io::ErrorKind::NotFound)
+}
+
 fn read_generation_path(path: &Path) -> Result<String, ProjectWorkPublicationError> {
     match fs::read(path) {
         Ok(bytes) => serde_json::from_slice(&bytes).map_err(|source| io().with_source(source)),

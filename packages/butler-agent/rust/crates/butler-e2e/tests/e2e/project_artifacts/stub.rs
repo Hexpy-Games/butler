@@ -6,6 +6,9 @@ use serde_json::{Value, json};
 
 // Only scheduled briefings are handled here; artifact turns stay strict replay.
 pub(super) fn briefing_response(request: &Value) -> Option<ResponseRecord> {
+    if let Some(reply) = crate::memory_patterns::review(request) {
+        return Some(reply);
+    }
     let raw = request["input"]
         .as_str()
         .or_else(|| request["input"][0]["content"][0]["text"].as_str())?;

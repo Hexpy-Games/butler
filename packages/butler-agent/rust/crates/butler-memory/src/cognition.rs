@@ -38,6 +38,7 @@ mod migration;
 mod mutable_paths;
 mod paths;
 mod patterns;
+mod suggestions;
 pub use patterns::{
     PatternError, PatternEvent, PatternExtractionService, PatternFuture, PatternInput,
     PatternInputSource, PatternRepository,
@@ -64,9 +65,9 @@ pub use crate::cognition::legacy::session_sync::{
     read_legacy_new_lines,
 };
 pub use briefing::{
-    BriefingGenerationCode, BriefingGenerationError, BriefingGenerationService,
-    BriefingInputFuture, BriefingInputSnapshot, BriefingInputSource, BriefingPersona,
-    BriefingProjectSignal, BriefingSettings,
+    BriefingContextFuture, BriefingGenerationCode, BriefingGenerationError,
+    BriefingGenerationService, BriefingInputFuture, BriefingInputSnapshot, BriefingInputSource,
+    BriefingPersona, BriefingProjectSignal, BriefingSettings,
 };
 pub use briefing::{
     BriefingScope, BriefingSource, BriefingSuggestion, BriefingTitleVariants, NewChatBriefing,

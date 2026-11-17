@@ -2,6 +2,7 @@
 
 mod abandonment;
 mod binding;
+mod bound_cache;
 mod closeout;
 mod codec;
 mod handoff;
@@ -18,6 +19,8 @@ pub(super) use snapshot::{
 };
 
 use parking_lot::Mutex;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::oneshot;
@@ -49,6 +52,7 @@ struct Shared {
     results: Arc<dyn ProjectWorkResultRuntime>,
     legacy: Arc<dyn ProjectWorkLegacyRuntime>,
     mutations: MutationOwner,
+    bound: Mutex<HashMap<PathBuf, bound_cache::BoundTurns>>,
 }
 
 #[derive(Clone)]
@@ -83,6 +87,7 @@ impl ProjectWork {
                     closing: Mutex::new(false),
                     tasks: TaskTracker::new(),
                 })),
+                bound: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -254,7 +259,7 @@ impl DurableWorkRepository for ProjectWorkRepository {
         })
     }
     fn bound_work_for_turn(&self, turn_id: String) -> PortFuture<'_, Option<WorkView>> {
-        Box::pin(async move { self.bound_for_turn_impl(turn_id).await })
+        Box::pin(async move { self.cached_bound_for_turn(turn_id).await })
     }
     fn abandon_bound_work_for_turn(&self, turn_id: String) -> PortFuture<'_, Option<WorkView>> {
         let repo = self.clone();
