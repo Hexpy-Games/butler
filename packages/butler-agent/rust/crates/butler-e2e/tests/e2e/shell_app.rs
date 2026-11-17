@@ -28,11 +28,8 @@ use serde_json::{Value, json};
 pub(super) mod driver;
 pub(super) mod live_turns;
 use driver::{SERIAL, SHOTS, Shell};
-<<<<<<< HEAD
 mod composer_fold;
-=======
 mod composer_toolbar;
->>>>>>> 93d20268b
 mod focus_fallback;
 mod focus_selection;
 mod observer_dialog;
