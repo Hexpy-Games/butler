@@ -77,11 +77,6 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             settle(&mut h.cx, h.handle);
             Ok(())
         }
-        "tick" => {
-            h.cx.advance_clock(std::time::Duration::from_millis(arg.parse()?));
-            h.cx.run_until_parked();
-            Ok(())
-        }
         _ => anyhow::bail!("unknown frame command"),
     }
 }

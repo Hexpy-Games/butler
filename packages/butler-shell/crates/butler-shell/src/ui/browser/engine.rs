@@ -108,8 +108,19 @@ pub(crate) trait PageEngine: 'static {
     fn devtools_raw_end(&self, _page: &TabId) {}
     /// Keeps `page` not hidden while awake, even when it is not the shown page.
     fn keep_awake(&mut self, _page: &TabId, _awake: bool) {}
-    /// Whether `page` is the Agent's: its popups then open as pages of the Agent's own.
+    /// Whether `page` is the Agent's and held by it: its popups then open as pages of the Agent's own.
     fn set_hosted(&mut self, _page: &TabId, _hosted: bool) {}
+    /// Lets `page` load if it was created with its loads held; the URL its main frame last
+    /// tried to load meanwhile, if any.
+    fn release_loads(&mut self, _page: &TabId) -> Option<String> {
+        None
+    }
+    /// The URL `page`'s main frame last tried to load while its loads are held, if any.
+    fn held_url(&self, _page: &TabId) -> Option<String> {
+        None
+    }
+    /// The sites and exact hosts the Agent's policy lets `page`'s popups reach.
+    fn set_popup_sites(&mut self, _page: &TabId, _sites: Vec<String>, _hosts: Vec<String>) {}
     /// Whether this build can browse (Electron's `enabled`).
     fn enabled(&self) -> bool;
     /// A page for `page`; `url` is empty for a blank page. `owner` keys the popup gate and
@@ -119,8 +130,9 @@ pub(crate) trait PageEngine: 'static {
     /// The page's size in logical pixels and the device scale (from PageCard's bounds).
     fn resize(&mut self, page: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32);
     fn close(&mut self, page: &TabId);
+    /// Binds `page` to a popup the engine created; true when it was decided the Agent's own.
     #[cfg(feature = "cef")]
-    fn adopt(&mut self, page: &TabId, child: EngineChild);
+    fn adopt(&mut self, page: &TabId, child: EngineChild) -> bool;
     fn allow_popup(&mut self, page: &TabId, url: &str);
     fn answer_dialog(&mut self, page: &TabId, id: u64, answer: DialogAnswer);
     fn change_owner(&mut self, _page: &TabId, _owner: &str) {}
