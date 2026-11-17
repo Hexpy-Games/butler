@@ -30,6 +30,7 @@ pub(super) mod live_turns;
 use driver::{SERIAL, SHOTS, Shell};
 mod composer_toolbar;
 mod focus_fallback;
+mod focus_selection;
 mod observer_dialog;
 mod text_selection;
 mod text_size;

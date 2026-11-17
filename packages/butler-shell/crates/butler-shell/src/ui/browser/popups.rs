@@ -12,6 +12,26 @@ pub(super) fn site(url: &str) -> String {
         .map(|u| u.origin().ascii_serialization())
         .unwrap_or_default()
 }
+/// Tells the gateway of a pop-up the page host refused on a conversation's tab. A
+/// page without a web origin has no `site` to name, so it is not reported.
+#[cfg(feature = "cef")]
+fn tell_agent(tab: &Tab, url: &str, reason: &str, cx: &mut gpui::App) {
+    let key = super::area::owner_key(&tab.owner);
+    let Some(session) = key.strip_prefix("conversation:") else {
+        return;
+    };
+    if super::address::web_url(&tab.url).is_none() {
+        return;
+    }
+    let body = serde_json::json!({"op":"popup_blocked","session":session,"tab":tab.id.0.as_ref(),
+        "url":url,"site":site(&tab.url),"reason":reason});
+    drop(crate::ui::source::agent::Jobs::run(
+        cx,
+        move |client| async move {
+            let _ = client.browser_host_downloads(&body).await;
+        },
+    ));
+}
 impl BrowserState {
     pub(crate) fn allow_popup(&mut self, id: &TabId) {
         let Some(blocked) = self
@@ -88,19 +108,21 @@ impl BrowserState {
                 }
             }
             PageChange::PopupBlocked { url, reason } => {
-                // The Agent's own block is no prompt for the user.
-                if let Some(tab) = self.tabs.iter_mut().find(|t| {
-                    t.id == event.page
-                        && !t
-                            .hosted
-                            .as_ref()
-                            .is_some_and(super::agent_host::Hosted::held_by_agent)
-                }) {
-                    tab.blocked_popup = Some(BlockedPopup {
-                        url: url.clone(),
-                        site: site(&tab.url),
-                        reason,
-                    });
+                if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == event.page) {
+                    if tab
+                        .hosted
+                        .as_ref()
+                        .is_some_and(super::agent_host::Hosted::held_by_agent)
+                    {
+                        // The Agent's own block is no prompt for the user: the Agent hears of it.
+                        tell_agent(tab, url, reason, cx);
+                    } else {
+                        tab.blocked_popup = Some(BlockedPopup {
+                            url: url.clone(),
+                            site: site(&tab.url),
+                            reason,
+                        });
+                    }
                 }
             }
             PageChange::PopupOpened { child, url } => {

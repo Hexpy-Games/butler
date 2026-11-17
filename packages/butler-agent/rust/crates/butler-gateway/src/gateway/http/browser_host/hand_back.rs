@@ -50,11 +50,12 @@ fn waits_on(request: &Value, tab: &Value) -> bool {
 }
 /// The site of a tab for the wait card, which never shows the tab id ("" when unknown).
 pub(super) fn tab_site(state: &HttpState, tab: &Value) -> String {
-    let url = state.browser.0.lock().ok().and_then(|hub| {
-        hub.tabs
-            .get(tab.as_str().unwrap_or(""))
-            .and_then(|tab| tab["url"].as_str().map(str::to_owned))
-    });
+    let url = state
+        .browser
+        .0
+        .lock()
+        .ok()
+        .and_then(|hub| super::pages::current_url(&hub, tab.as_str().unwrap_or("")));
     url.and_then(|url| butler_runtime::browser::site_of(&url))
         .unwrap_or_default()
 }

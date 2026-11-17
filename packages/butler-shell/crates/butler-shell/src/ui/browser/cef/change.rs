@@ -29,6 +29,7 @@ pub(super) fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChang
             reason: match reason {
                 PopupBlock::NoGesture => "no_gesture",
                 PopupBlock::TabBudget => "tab_budget_exhausted",
+                PopupBlock::Policy => "popup_policy",
             },
         },
         OsrEvent::PopupOpened { child, url } => PageChange::PopupOpened {

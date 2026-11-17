@@ -20,7 +20,7 @@ pub use egress::{
 };
 pub use headless::{
     Headless, HeadlessConfig, InstallSource, PageHost, Rendered,
-    downloads::{DownloadPort, PortFuture},
+    downloads::{DownloadPort, FILE_LIMIT, PortFuture, SESSION_LIMIT},
     history::{HistoryPort, VisitFuture},
     reader as headless_reader,
 };
@@ -286,7 +286,11 @@ pub const POPUP_HOSTS: &[&str] = &[
 
 pub fn navigation_policy(content_origin: &str, raw: &str) -> Value {
     let site = site_scope(raw).unwrap_or_default();
-    let popup_site = site.strip_prefix("browser:signed_out:").unwrap_or("");
+    let popup_sites: Vec<&str> = site
+        .strip_prefix("browser:signed_out:")
+        .filter(|s| !s.is_empty())
+        .into_iter()
+        .collect();
     serde_json::json!({"content_origin":content_origin,"secure_keypads":SECURE_KEYPAD_MARKERS,
-        "sites":[site],"popup_sites":[popup_site],"popup_hosts":POPUP_HOSTS,"payment_sites":PAYMENT_SITES})
+        "sites":[site],"popup_sites":popup_sites,"popup_hosts":POPUP_HOSTS,"payment_sites":PAYMENT_SITES})
 }

@@ -200,11 +200,13 @@ fn dispatch(
             return response(count, refused).map(Some);
         }
         if super::usage::page_op(&op) {
+            let id = frame["tab"].as_str().unwrap_or("");
             let tab = hub
                 .tabs
-                .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
+                .check(&session, id, &op)
                 .map_err(|_| error(403, "not_your_tab"))?;
-            if tab["url"].as_str().is_some_and(|url| {
+            let url = super::pages::current_url(&hub, id);
+            if url.as_deref().is_some_and(|url| {
                 !permitted_url(state, &session, url) && !super::devtools::local_read(&op, url)
             }) {
                 return response(
@@ -216,7 +218,7 @@ fn dispatch(
             if frame["args"]["policy"]["mode"] != "signed_in" {
                 frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
                     &format!("http://127.0.0.1:{}", super::super::content::port(state)),
-                    tab["url"].as_str().unwrap_or(""),
+                    url.as_deref().unwrap_or(""),
                 );
             }
             if state

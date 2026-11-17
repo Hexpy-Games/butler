@@ -13,9 +13,10 @@ use std::sync::{Arc, Mutex};
 
 use butler_platform::process_control::{self, GroupSignal};
 use butler_platform::secure_fs::{self, Canonical};
-use butler_platform::{app_shell, launcher, user_dirs};
+use butler_platform::{app_shell, instance, launcher, user_dirs};
 use serde_json::Value;
-use tokio::process::{Child, ChildStdin};
+use tokio::process::ChildStdin;
+use tokio::sync::oneshot;
 
 use super::SupervisorError;
 
@@ -319,8 +320,9 @@ pub(crate) fn pick_port() -> u16 {
 
 /// Our child Agent: its stdin is the lease, closing it is the graceful stop.
 pub(crate) struct OwnedChild {
-    child: Child,
+    exit: oneshot::Receiver<ExitStatus>,
     pid: u32,
+    started: Option<String>,
     lease: Arc<Mutex<Option<ChildStdin>>>,
 }
 
@@ -339,12 +341,22 @@ impl OwnedChild {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit());
         process_control::isolate_group(&mut command);
-        let mut child = tokio::process::Command::from(command).spawn()?;
-        let lease = child.stdin.take();
+        let mut child = command.spawn()?;
+        let lease = child.stdin.take().map(ChildStdin::from_std).transpose()?;
+        let pid = child.id();
+        // Read before the wait thread starts: once it reaps the child the pid can be reused.
+        let started = instance::process_start(pid).ok().flatten();
+        // The child's exit is observed by a blocking wait on a thread of its own, because CEF
+        // resets SIGCHLD in this process and tokio would never hear of it.
+        let (sender, exit) = oneshot::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(child.wait().unwrap_or_default());
+        });
         Ok(Self {
-            pid: child.id().unwrap_or(0),
+            exit,
+            pid,
+            started,
             lease: Arc::new(Mutex::new(lease)),
-            child,
         })
     }
 
@@ -353,15 +365,16 @@ impl OwnedChild {
     }
 
     pub(crate) async fn exited(&mut self) -> ExitStatus {
-        self.child.wait().await.unwrap_or_default()
+        (&mut self.exit).await.unwrap_or_default()
     }
 
-    /// Kills the child's process group (our child only); without groups, the child itself.
-    pub(crate) fn kill_tree(&mut self) {
+    /// Kills the child's process group (our child only); without groups, the child itself, and
+    /// only while it is still that process.
+    pub(crate) fn kill_tree(&self) {
         let grouped = process_control::SIGNALS
             && process_control::signal_group(self.pid, GroupSignal::Kill).is_ok();
-        if !grouped {
-            let _ = self.child.start_kill();
+        if !grouped && let Some(started) = &self.started {
+            let _ = instance::terminate(self.pid, started);
         }
     }
 

@@ -41,7 +41,8 @@ pub(super) async fn open_hosted(
             .filter_map(Value::as_str)
             .collect()
     };
-    let popups = json!({"sites":list("popup_sites"),"hosts":list("popup_hosts")});
+    let sites: Vec<&str> = [list("popup_sites"), list("payment_sites")].concat();
+    let popups = json!({"sites":sites,"hosts":list("popup_hosts")});
     let args = json!({"owner":owner,"profile":profile,"context":context,"internal":internal,"popups":popups});
     let reply = host.call("page.open", args).await;
     let reply = reply.map_err(|_| "browser_unavailable".to_owned())?;
@@ -72,7 +73,8 @@ pub(super) fn tab_id(
 
 impl Headless {
     /// The backend over an App's pages: its one browser is connected from the
-    /// start, and nothing is installed, launched or reaped.
+    /// start, and nothing is installed, launched or reaped; only its utility page is released
+    /// after the idle grace.
     pub fn hosted(
         host: Arc<dyn PageHost>,
         incoming: mpsc::Receiver<Vec<u8>>,

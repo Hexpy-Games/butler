@@ -10,8 +10,12 @@ mod reveal;
 mod textarea;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 
-use gpui::{Action as _, App, Entity, FocusHandle, KeyBinding, Unbind, Window};
+use gpui::{
+    Action as _, App, Entity, EntityId, FocusHandle, KeyBinding, Unbind, WeakEntity,
+    WeakFocusHandle, Window,
+};
 use gpui_elements::editable_text::EditableTextState;
 use gpui_elements::editable_text::actions::{self, DEFAULT_INPUT_CONTEXT};
 
@@ -53,22 +57,22 @@ pub fn state(
     field::state_of(&id.into(), window, cx, "")
 }
 
-/// The fields drawn this frame, so a harness can reach the focused one.
+/// The live fields by editor, so the focused one can be reached. Both halves are weak: the
+/// registry keeps no editor and no focus slot alive.
 #[derive(Default)]
-struct Registry(RefCell<Vec<(FocusHandle, Entity<EditableTextState>)>>);
+struct Registry(RefCell<HashMap<EntityId, (WeakFocusHandle, WeakEntity<EditableTextState>)>>);
 
 impl gpui::Global for Registry {}
 
-/// Starts a frame: no field has drawn yet.
-pub(crate) fn reset(cx: &mut App) {
-    cx.default_global::<Registry>().0.borrow_mut().clear();
-}
-
-pub(crate) fn register(cx: &mut App, handle: FocusHandle, state: Entity<EditableTextState>) {
-    cx.default_global::<Registry>()
-        .0
-        .borrow_mut()
-        .push((handle, state));
+/// Records a field that draws. A field already known costs one lookup; a new one first drops
+/// the entries whose editor is gone.
+pub(crate) fn register(cx: &mut App, handle: &FocusHandle, state: &Entity<EditableTextState>) {
+    let mut fields = cx.default_global::<Registry>().0.borrow_mut();
+    if fields.contains_key(&state.entity_id()) {
+        return;
+    }
+    fields.retain(|_, (_, state)| state.upgrade().is_some());
+    fields.insert(state.entity_id(), (handle.downgrade(), state.downgrade()));
 }
 
 /// Focus has just moved onto a text field by Tab or by script: a browser selects an input's text
@@ -79,12 +83,13 @@ pub fn select_focused(window: &mut Window, cx: &mut App) {
     }
 }
 
-/// The editor of the focused field of the last frame.
+/// The editor of the focused field.
 pub fn focused(window: &Window, cx: &App) -> Option<Entity<EditableTextState>> {
+    let focused = window.focused(cx)?;
     let registry = cx.try_global::<Registry>()?;
     let fields = registry.0.borrow();
     fields
-        .iter()
-        .find(|(handle, _)| handle.is_focused(window))
-        .map(|(_, state)| state.clone())
+        .values()
+        .find(|(handle, _)| *handle == focused)
+        .and_then(|(_, state)| state.upgrade())
 }

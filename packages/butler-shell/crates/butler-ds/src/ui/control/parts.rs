@@ -76,6 +76,8 @@ pub enum Ring {
 
 /// Numbers the controls in render order (`control-<n>` geometry anchors), so a harness can
 /// address the nth control of a page like the React viewer's DOM order. Reset once per frame.
+/// Exists only once a page host has called [`reset_anchors`]; without it (the product) controls
+/// are not numbered and nothing is kept.
 #[derive(Default)]
 struct Anchors {
     next: std::cell::Cell<usize>,
@@ -93,7 +95,6 @@ pub fn reset_anchors(cx: &mut App) {
     anchors.handles.borrow_mut().clear();
     anchors.slots.borrow_mut().clear();
     crate::ui::focus::reset_hand_off(cx);
-    crate::ui::text::reset(cx);
 }
 
 /// The focus handle of control `n` of the last frame (`None` when it cannot take focus).
@@ -106,8 +107,10 @@ pub fn focus_handle(cx: &App, n: usize) -> Option<gpui::FocusHandle> {
         .map(|(_, handle)| handle.clone())
 }
 
-pub(crate) fn next_anchor(cx: &mut App, handle: Option<&gpui::FocusHandle>) -> SharedString {
-    let anchors = cx.default_global::<Anchors>();
+pub(crate) fn next_anchor(cx: &App, handle: Option<&gpui::FocusHandle>) -> SharedString {
+    let Some(anchors) = cx.try_global::<Anchors>() else {
+        return SharedString::new_static("control");
+    };
     let n = anchors.next.get();
     anchors.next.set(n + 1);
     if let Some(handle) = handle {

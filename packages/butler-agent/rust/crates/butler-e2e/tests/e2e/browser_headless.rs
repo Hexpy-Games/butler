@@ -369,5 +369,52 @@ async fn dialogs_and_popups(
     assert!(text(&seen).contains("Popup page"), "{seen}");
     let closed = call(admin, me, "tab.close", &popup, json!({})).await?;
     assert_eq!(closed["status"], "ok", "{closed}");
+    refused_popup(admin, me, tab).await
+}
+
+/// A pop-up the Agent's policy refuses is reported to the Agent as one event.
+async fn refused_popup(
+    admin: &butler_e2e::e2e::security::AdminClient,
+    me: &str,
+    tab: &Value,
+) -> Result<(), HarnessError> {
+    let seen = call(admin, me, "tab.observe", tab, json!({"settle":true})).await?;
+    let blocked = node(&seen, "button", "Open blocked popup")["ref"].clone();
+    let steps = json!([{"action":"click","ref":blocked}]);
+    let prepared = call(
+        admin,
+        me,
+        "tab.prepare",
+        tab,
+        json!({"observation":seen["obs"],"steps":steps}),
+    )
+    .await?;
+    let acted = call(
+        admin,
+        me,
+        "tab.act",
+        tab,
+        json!({"observation":seen["obs"],"steps":steps,"prepared_steps":prepared["steps"]}),
+    )
+    .await?;
+    let mut events = acted["events"].as_array().cloned().unwrap_or_default();
+    for _ in 0..50 {
+        let listed = call(admin, me, "tabs.list", &Value::Null, json!({})).await?;
+        events.extend(listed["events"].as_array().cloned().unwrap_or_default());
+        if events.iter().any(|e| e["type"] == "popup_blocked") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let refused: Vec<_> = events
+        .iter()
+        .filter(|e| e["type"] == "popup_blocked")
+        .collect();
+    assert_eq!(refused.len(), 1, "{events:?}");
+    assert_eq!(refused[0]["reason"], "popup_policy", "{refused:?}");
+    assert_eq!(
+        refused[0]["url"], "https://popup-blocked.invalid/",
+        "{refused:?}"
+    );
     Ok(())
 }

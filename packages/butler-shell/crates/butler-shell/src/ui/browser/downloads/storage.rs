@@ -75,10 +75,7 @@ async fn budget_changed(notices: &mpsc::UnboundedSender<Notice>, totals: Totals)
 pub(super) fn failure(reason: &str) -> Value {
     if matches!(
         reason,
-        "download_file_limit"
-            | "download_session_limit"
-            | "download_workspace_unavailable"
-            | "download_symlink_refused"
+        "download_file_limit" | "download_session_limit" | "download_workspace_unavailable"
     ) {
         json!({"type":"download_refused","reason":reason,"file_limit_bytes":FILE_LIMIT,"session_limit_bytes":SESSION_LIMIT})
     } else {
@@ -101,7 +98,7 @@ fn prepare(workspace: &str, source: &str) -> Result<(PathBuf, String), &'static 
         .map_err(|_| "download_storage_failed")?
         != directory
     {
-        return Err("download_symlink_refused");
+        return Err("download_workspace_unavailable");
     }
     let clean: String = source
         .chars()
