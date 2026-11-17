@@ -285,7 +285,7 @@ function LiveSheet({ initial }: { initial: boolean }) {
       <View style={{ flexDirection: "row" }}><Button label={en.sentence} onPress={() => setOpen(true)} /></View>
       <Sheet open={open} onClose={() => setOpen(false)} title={en.sentence} description={en.note} closeLabel={en.close}
         actions={<><Button label={en.cancel} variant="ghost" onPress={() => setOpen(false)} /><Button label={en.action} onPress={() => setOpen(false)} /></>}>
-        <Text>{en.note}</Text>
+        {Array.from({ length: 30 }, (_, i) => <Text key={i}>{`${i + 1}. ${en.note}`}</Text>)}
       </Sheet>
     </>
   );
