@@ -56,17 +56,24 @@ fn initial_taint(context: &Value, restored: Option<&AuthorityLoopContinuation>) 
     }
 }
 
-/// The web provenance a turn starts with: URLs in the user's message, plus
-/// what the turn found and the result ids it handed out before a suspension.
+/// The web provenance a turn starts with: URLs it was given (found exactly),
+/// the user's own words (trusted sites), plus what the turn found and the
+/// result ids it handed out before a suspension.
 pub(super) fn restore_web(
     session: &butler_runtime::web_access::WebSession,
     message: &str,
+    user_words: &str,
     restored: Option<&AuthorityLoopContinuation>,
 ) {
     if let Some(saved) = restored.and_then(|continuation| continuation.extensions.get(WEB_KEY)) {
         session.restore(saved);
     }
+    // Every URL the turn was given is found exactly; only the user's own
+    // words lend their site trust.
     for url in super::dispatch::web_provenance(message) {
+        session.discover(&url);
+    }
+    for url in super::dispatch::web_provenance(user_words) {
         session.discover_user(&url);
     }
 }

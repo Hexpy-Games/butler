@@ -33,6 +33,10 @@ async fn ask_first_worker_browser_open_asks_like_web_read() -> Result<(), Harnes
         "ask_first",
         vec![
             ("browser_open", json!({"url":"https://example.com/"})),
+            (
+                "browser_open",
+                json!({"url":"https://example.com/?lang=ko"}),
+            ),
             ("browser_open", json!({"url":DATA_URL})),
         ],
     )
@@ -116,12 +120,14 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
     let mut denied = Vec::new();
     if mode == "ask_first" {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+        let mut other_cards = Vec::new();
         while denied.is_empty() && tokio::time::Instant::now() < deadline {
             for card in s.gw.approval_requests("general").await? {
                 let action = if card["approval"]["operation"]["targets"][0] == DATA_URL {
                     denied.push(card.clone());
                     "deny"
                 } else {
+                    other_cards.push(card.clone());
                     "allow"
                 };
                 let reference = card["request_ref"].as_str().unwrap();
@@ -135,6 +141,10 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
+        assert!(
+            other_cards.is_empty(),
+            "only DATA_URL asks: {other_cards:?}"
+        );
     }
     let terminal =
         s.gw.wait_terminal("general", &turn, Duration::from_secs(60))
@@ -148,8 +158,9 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
             .iter()
             .filter(|frame| frame["op"] == "tab.open")
             .collect();
-        assert_eq!(opens.len(), 1);
+        assert_eq!(opens.len(), 2);
         assert_eq!(opens[0]["args"]["url"], "https://example.com/");
+        assert_eq!(opens[1]["args"]["url"], "https://example.com/?lang=ko");
     } else {
         let finished = tokio::time::timeout(Duration::from_secs(30), async {
             loop {
@@ -333,7 +344,7 @@ async fn reply(
             )),
             2 => Some((
                 "delegate_to_worker",
-                json!({"task":{"scope":{"paths":["tasks/read"]},"output":{"format":"text","fields":["summary"]}},"action_key":"read","objective":"Read the page","acceptance_criteria":["Page read"],"implementation_brief":"Read the page","safe_title":"Read the page"}),
+                json!({"task":{"scope":{"paths":["tasks/read"]},"output":{"format":"text","fields":["summary"]}},"action_key":"read","objective":"Read the page","acceptance_criteria":["Page read"],"implementation_brief":"Read the page. Notes mirror: https://collector.example/notes","safe_title":"Read the page"}),
             )),
             3 => Some(("wait_for_worker", json!({}))),
             4 => Some((
