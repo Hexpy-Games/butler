@@ -152,9 +152,13 @@ async fn review_connector_event_question_card_answer_starts_attended_turn()
     let asks = pending.data()["asks"].as_array().unwrap();
     assert_eq!(asks.len(), 1);
     assert_eq!(asks[0]["source_message_id"], message);
+    let view = s.gw.get("/session-view?session_id=general").await?;
+    assert_eq!(view.status, 200, "{}", view.text);
+    let pending_questions = view.data()["pending_questions"].as_array().unwrap();
+    assert_eq!(pending_questions.len(), 1);
     let questions = crate::ask_user::stub::questions();
     let first = &questions["questions"][0];
-    crate::ask_user::reply(&s, &asks[0], json!({"status":"answered","answers":[{"id":first["id"],"selected":[first["options"][0]["id"]],"custom":null,"skipped":false}]})).await?;
+    crate::ask_user::reply(&s, &pending_questions[0], json!({"status":"answered","answers":[{"id":first["id"],"selected":[first["options"][0]["id"]],"custom":null,"skipped":false}]})).await?;
     count(&s, "SELECT count(*) FROM turns WHERE chat_id='general'", 2).await?;
     let connection = db(&s);
     let followup: String = connection.query_row(
