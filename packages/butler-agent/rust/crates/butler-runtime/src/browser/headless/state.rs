@@ -203,7 +203,7 @@ impl Tab {
     pub(crate) fn snapshot(&self) -> Value {
         json!({"id":self.id,"owner":self.owner,"opener":self.opener,"dialog":self.public_dialog(),"url":self.url,
             "title":self.title,"status":if self.crashed {"crashed"} else if self.loading {"loading"} else {"idle"},
-            "agent":true,"driven":false,"profile":self.profile,"epoch":self.epoch,"holder":"agent","sticky":false,
+            "agent":true,"driven":false,"profile":self.profile,"epoch":self.epoch,"holder":if self.held {"user"} else {"agent"},"sticky":false,
             "waiting":self.waiting,"busy":self.busy,"inUse":self.busy,"picking":false,"selectionCount":0,
             "stills":true,"preview":self.preview})
     }
