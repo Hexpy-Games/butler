@@ -156,12 +156,36 @@ impl Shell {
         )?)?)
     }
 
-    /// The harness exits by itself after `quit`.
+    /// The harness exits by itself after `quit`, or already has (the App's own Quit ends it).
     pub(crate) async fn finish(mut self) -> Result<(), HarnessError> {
-        self.input.write_all(b"quit\n").await?;
+        // A harness that has exited cannot read it; its exit status is judged below.
+        let _ = self.input.write_all(b"quit\n").await;
         let status = tokio::time::timeout(Duration::from_secs(10), self.child.wait())
             .await
             .map_err(|_| harness_error("shell did not exit"))??;
+        if !status.success() {
+            return Err(harness_error(format!("shell exited with {status}")));
+        }
+        Ok(())
+    }
+}
+
+impl Shell {
+    /// Stops the App with SIGTERM: it must end by itself, successfully, as after Quit.
+    pub(crate) async fn terminate(mut self) -> Result<(), HarnessError> {
+        let pid = self
+            .child
+            .id()
+            .ok_or_else(|| harness_error("shell already exited"))?;
+        let sent = std::process::Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status()?;
+        if !sent.success() {
+            return Err(harness_error(format!("kill -TERM {pid}: {sent}")));
+        }
+        let status = tokio::time::timeout(Duration::from_secs(15), self.child.wait())
+            .await
+            .map_err(|_| harness_error("shell did not exit on SIGTERM"))??;
         if !status.success() {
             return Err(harness_error(format!("shell exited with {status}")));
         }

@@ -238,8 +238,28 @@ pub(super) fn run(
     h.update(|s, _, cx| s.attach(attachment, cx))?;
     println!("LIVE READY");
     io::stdout().flush()?;
-    for line in io::stdin().lock().lines() {
-        let line = line?;
+    // Commands arrive on a thread, so the App keeps running between them: a stop request (SIGTERM)
+    // ends it through the App's own Quit. Only real time passes; the fake clock stays put.
+    let (lines, input) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in io::stdin().lock().lines() {
+            if lines.send(line).is_err() {
+                return;
+            }
+        }
+    });
+    loop {
+        let line = match input.recv_timeout(Duration::from_millis(30)) {
+            Ok(line) => line?,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                h.cx.run_until_parked();
+                if quit_requested(&mut h) {
+                    return end(&mut h);
+                }
+                continue;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return end(&mut h),
+        };
         if line == "quit" {
             return end(&mut h);
         }
@@ -258,8 +278,19 @@ pub(super) fn run(
         }
         println!("LIVE OK");
         io::stdout().flush()?;
+        if quit_requested(&mut h) {
+            return end(&mut h);
+        }
     }
-    end(&mut h)
+}
+
+/// The App finished its Quit and asked gpui to quit (headless gpui's `quit` does nothing).
+fn quit_requested(h: &mut Harness) -> bool {
+    h.cx.update(|cx| {
+        super::lifecycle::runtime(cx).is_some_and(|runtime| {
+            runtime.read(cx).quit == super::lifecycle::QuitProgress::Requested
+        })
+    })
 }
 
 /// The App's Quit after `lifecycle::quit`: the quit observers run once (`App::shutdown` removes

@@ -419,6 +419,19 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
 /// profile only at shutdown or on a delay, and Quit ends the process without dropping anything.
 #[tokio::test]
 async fn browser_keeps_site_data_across_quit() -> Result<(), HarnessError> {
+    site_data_survives("browser_keeps_site_data_across_quit", false).await
+}
+
+/// The same data survives a SIGTERM: it ends the App exactly like the menu Quit.
+#[tokio::test]
+async fn browser_keeps_site_data_across_terminate() -> Result<(), HarnessError> {
+    butler_e2e::skip_unless!(cfg!(unix), "Windows has no SIGTERM");
+    site_data_survives("browser_keeps_site_data_across_terminate", true).await
+}
+
+/// Two launches on one data folder: the second finds what the first's page set. The first ends by
+/// the menu Quit, or by SIGTERM when `terminate`.
+async fn site_data_survives(name: &str, terminate: bool) -> Result<(), HarnessError> {
     use std::sync::{Arc, Mutex};
     butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
@@ -427,7 +440,7 @@ async fn browser_keeps_site_data_across_quit() -> Result<(), HarnessError> {
         "BUTLER_CEF_DIR is not set"
     );
     let _serial = SERIAL.lock().await;
-    let mut sandbox = Sandbox::new("browser_keeps_site_data_across_quit")?;
+    let mut sandbox = Sandbox::new(name)?;
     let _provider = ready_workspace(&sandbox, ChatBehavior::default()).await?;
     // The page reports what it found, then sets the cookie and the storage item if absent.
     let log = Arc::new(Mutex::new(Vec::<String>::new()));
@@ -482,8 +495,12 @@ async fn browser_keeps_site_data_across_quit() -> Result<(), HarnessError> {
         if launch == 0 {
             seen_before = log.lock().unwrap().len();
         }
-        shell.run(&["app-quit"]).await?;
-        shell.finish().await?;
+        if terminate && launch == 0 {
+            shell.terminate().await?;
+        } else {
+            shell.run(&["app-quit"]).await?;
+            shell.finish().await?;
+        }
     }
     let reports = log.lock().unwrap().clone();
     assert_eq!(reports[0], "c=&s=null", "{reports:?}");

@@ -15,6 +15,10 @@ cef = ["dep:cef", "dep:cef-dll-sys", "dep:objc2", "dep:objc2-app-kit", "dep:core
 cef = { version = "=156.2.0", default-features = false, features = ["sandbox"], optional = true }
 cef-dll-sys = { version = "=156.2.0", default-features = false, features = ["sandbox"], optional = true }
 
+[target.'cfg(unix)'.dependencies]
+# The quit signals (quit_signals.rs).
+nix = { workspace = true, features = ["fs", "signal"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6.3", optional = true }
 objc2-app-kit = { version = "0.3.2", optional = true, default-features = false, features = ["std", "NSApplication", "NSEvent", "NSResponder", "NSRunningApplication"] }

@@ -20,6 +20,7 @@ mod mac;
 
 #[cfg(feature = "cef")]
 pub mod osr;
+pub mod quit_signals;
 pub mod switches;
 
 /// Keep Chrome's singleton socket below the Unix socket path limit (104–108 bytes): a process that

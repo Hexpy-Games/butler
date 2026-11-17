@@ -128,6 +128,8 @@ impl BrowserState {
     pub(crate) fn init(adapter: Option<u64>, cx: &mut App) {
         let (sender, mut receiver) = mpsc::unbounded();
         let engine = Self::engine(sender, adapter, cx);
+        // After the engine: its start-up replaces the signal handlers (see `terminate::listen`).
+        crate::lifecycle::terminate::listen(cx);
         let publisher = super::host::Publisher::start(cx);
         cx.set_global(Self {
             publisher,

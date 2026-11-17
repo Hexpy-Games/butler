@@ -148,7 +148,7 @@ pub(crate) fn reopen(cx: &mut App) {
 /// conversations: `args` navigate in the open window, else open a new one, and the App comes
 /// forward. Nothing while quitting.
 pub(crate) fn launched(cx: &mut App, args: &[String]) {
-    if super::runtime(cx).is_some_and(|runtime| runtime.read(cx).quitting) {
+    if super::runtime(cx).is_some_and(|runtime| runtime.read(cx).quitting()) {
         return;
     }
     let shell = cx

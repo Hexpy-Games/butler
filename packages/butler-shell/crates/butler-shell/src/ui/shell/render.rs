@@ -235,7 +235,7 @@ impl Shell {
         let runtime = crate::lifecycle::runtime(cx);
         if runtime
             .as_ref()
-            .is_some_and(|runtime| runtime.read(cx).quitting)
+            .is_some_and(|runtime| runtime.read(cx).quitting())
         {
             return lifecycle_view::quit(lang, window, cx);
         }
