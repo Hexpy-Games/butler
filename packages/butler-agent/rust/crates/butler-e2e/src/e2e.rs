@@ -26,6 +26,7 @@ pub mod sandbox;
 pub mod sanitize;
 pub mod scenario;
 pub mod security;
+pub mod sshd;
 pub mod stop_intent;
 pub mod task_graph;
 

@@ -5,6 +5,7 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
     scenario::{Access, Setup},
+    sshd::TestSshd,
 };
 use std::{
     path::{Path, PathBuf},
@@ -50,47 +51,13 @@ fn wait_for(what: &str, ready: impl Fn() -> bool) -> Result<(), HarnessError> {
 /// A user-level sshd on a free loopback port that accepts `key`, and an
 /// agent holding it. Unix socket paths are short, so both live in a short
 /// temporary folder.
-fn servers(home: &Path, key: &Path) -> Result<(Children, u16, PathBuf), HarnessError> {
+fn servers(home: &Path, key: &Path) -> Result<(Children, TestSshd, PathBuf), HarnessError> {
     let short = std::env::temp_dir().join(format!("bsr-ssh-{}", std::process::id()));
     std::fs::create_dir_all(&short)?;
     let mut children = Children(Vec::new(), short.clone());
-    let fixture = home.join("sshd");
-    std::fs::create_dir_all(&fixture)?;
-    let host_key = fixture.join("host_key");
-    run(Command::new("ssh-keygen")
-        .args(["-q", "-t", "ed25519", "-N", "", "-f"])
-        .arg(&host_key))?;
-    std::fs::copy(key.with_extension("pub"), fixture.join("authorized_keys"))?;
-    let port = std::net::TcpListener::bind("127.0.0.1:0")?
-        .local_addr()?
-        .port();
-    let config = fixture.join("sshd_config");
-    std::fs::write(
-        &config,
-        format!(
-            "Port {port}\nListenAddress 127.0.0.1\nHostKey {}\nAuthorizedKeysFile {}\n\
-             PasswordAuthentication no\nKbdInteractiveAuthentication no\nUsePAM no\n\
-             StrictModes no\nPidFile {}\n",
-            host_key.display(),
-            fixture.join("authorized_keys").display(),
-            fixture.join("sshd.pid").display(),
-        ),
-    )?;
-    let log = std::fs::File::create(fixture.join("sshd.log"))?;
-    children.0.push(
-        Command::new("/usr/sbin/sshd")
-            .arg("-D")
-            .arg("-f")
-            .arg(&config)
-            .stdin(Stdio::null())
-            .stdout(log.try_clone()?)
-            .stderr(log)
-            .spawn()?,
-    );
-    wait_for("sshd", || {
-        std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
-    })?;
-    let host = std::fs::read_to_string(host_key.with_extension("pub"))?;
+    let sshd = TestSshd::start(&home.join("sshd"), &key.with_extension("pub"))?;
+    let port = sshd.port;
+    let host = std::fs::read_to_string(sshd.host_key.with_extension("pub"))?;
     let host: Vec<_> = host.split_whitespace().take(2).collect();
     std::fs::write(
         home.join(".ssh/known_hosts"),
@@ -112,7 +79,7 @@ fn servers(home: &Path, key: &Path) -> Result<(Children, u16, PathBuf), HarnessE
         .arg("-q")
         .arg(key)
         .env("SSH_AUTH_SOCK", &socket))?;
-    Ok((children, port, socket))
+    Ok((children, sshd, socket))
 }
 
 fn git(directory: &Path, arguments: &[&str]) -> Result<String, HarnessError> {
@@ -145,7 +112,8 @@ async fn git_over_ssh_authenticates_through_the_agent_only() -> Result<(), Harne
     run(Command::new("ssh-keygen")
         .args(["-q", "-t", "ed25519", "-N", "", "-f"])
         .arg(&key))?;
-    let (_children, port, socket) = servers(&home, &key)?;
+    let (_children, sshd, socket) = servers(&home, &key)?;
+    let port = sshd.port;
     let remote = home.join("remote.git");
     run(Command::new("git")
         .args(["init", "-q", "--bare"])
