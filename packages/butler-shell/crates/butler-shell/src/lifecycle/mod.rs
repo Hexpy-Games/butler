@@ -150,6 +150,7 @@ pub(crate) fn start(cx: &mut App, data: PathBuf, legacy: bool) {
         }
     })
     .detach();
+    terminate::listen(cx);
     // A forced OS quit still shuts the browser down and releases the lease: the Agent drains and exits by itself.
     cx.on_app_quit(|cx| {
         crate::ui::browser::restore::flush_now(cx);

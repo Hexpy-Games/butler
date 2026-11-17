@@ -5,12 +5,14 @@ use super::*;
 /// profile only at shutdown or on a delay, and Quit ends the process without dropping anything.
 #[tokio::test]
 async fn browser_keeps_site_data_across_quit() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     site_data_survives("browser_keeps_site_data_across_quit", false).await
 }
 
 /// The same data survives a SIGTERM: it ends the App exactly like the menu Quit.
 #[tokio::test]
 async fn browser_keeps_site_data_across_terminate() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
     butler_e2e::skip_unless!(cfg!(unix), "Windows has no SIGTERM");
     site_data_survives("browser_keeps_site_data_across_terminate", true).await
 }
@@ -19,7 +21,6 @@ async fn browser_keeps_site_data_across_terminate() -> Result<(), HarnessError> 
 /// the menu Quit, or by SIGTERM when `terminate`.
 async fn site_data_survives(name: &str, terminate: bool) -> Result<(), HarnessError> {
     use std::sync::{Arc, Mutex};
-    butler_e2e::gate!();
     butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
     butler_e2e::skip_unless!(
         nonempty("BUTLER_CEF_DIR").is_some(),

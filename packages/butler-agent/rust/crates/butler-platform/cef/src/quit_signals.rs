@@ -2,38 +2,22 @@
 //!
 //! CEF's start-up installs its own handlers for both, and a handler chained after them (as tokio's
 //! signal support does) lets Chromium's shutdown run beside ours: it kills the browser before our
-//! quit has flushed it. `install` replaces them instead. The handler only writes one byte to a
-//! pipe, which is async-signal-safe; a thread reads the pipe and calls the callback.
+//! quit has flushed it. [`replace_handlers`] replaces them instead. The handler only writes one
+//! byte to a pipe, which is async-signal-safe; a thread started by [`start`] reads the pipe and
+//! calls the callback.
 
-/// Calls `on_request` on a thread of its own for every SIGTERM or SIGINT this process receives from
-/// now on, replacing the handlers installed so far (CEF's included): call it after CEF started.
-/// Does nothing on Windows, which has no SIGTERM. Only the first call in a process has an effect.
+/// Starts the thread that calls `on_request` for every SIGTERM or SIGINT [`replace_handlers`]
+/// delivers. Only the first call in a process has an effect. Does nothing on Windows, which has no
+/// SIGTERM.
 #[cfg(unix)]
-pub fn install(on_request: impl Fn() + Send + 'static) -> std::io::Result<()> {
-    use std::ffi::c_int;
+pub fn start(on_request: impl Fn() + Send + 'static) -> std::io::Result<()> {
     use std::fs::File;
     use std::io::{self, Read as _};
-    use std::os::fd::{AsRawFd as _, BorrowedFd};
-    use std::sync::atomic::{AtomicI32, Ordering};
+    use std::os::fd::AsRawFd as _;
+    use std::sync::atomic::Ordering;
 
-    use nix::errno::Errno;
     use nix::fcntl::{FcntlArg, FdFlag, OFlag, fcntl};
-    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
-    use nix::unistd::{pipe, write};
-
-    static WRITE_END: AtomicI32 = AtomicI32::new(-1);
-
-    extern "C" fn request(_: c_int) {
-        let errno = Errno::last_raw();
-        let fd = WRITE_END.load(Ordering::Relaxed);
-        if fd >= 0 {
-            // SAFETY: the write end is stored once, below, and is never closed.
-            #[allow(unsafe_code, reason = "the descriptor outlives the process; see SAFETY")]
-            let end = unsafe { BorrowedFd::borrow_raw(fd) };
-            let _ = write(end, &[1]);
-        }
-        Errno::set_raw(errno);
-    }
+    use nix::unistd::pipe;
 
     let (read_end, write_end) = pipe()?;
     fcntl(&read_end, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC))?;
@@ -41,7 +25,12 @@ pub fn install(on_request: impl Fn() + Send + 'static) -> std::io::Result<()> {
     // A full pipe already holds a request; the handler must never block.
     fcntl(&write_end, FcntlArg::F_SETFL(OFlag::O_NONBLOCK))?;
     if WRITE_END
-        .compare_exchange(-1, write_end.as_raw_fd(), Ordering::SeqCst, Ordering::SeqCst)
+        .compare_exchange(
+            -1,
+            write_end.as_raw_fd(),
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        )
         .is_err()
     {
         return Ok(());
@@ -61,7 +50,41 @@ pub fn install(on_request: impl Fn() + Send + 'static) -> std::io::Result<()> {
                 }
             }
         })?;
-    let action = SigAction::new(SigHandler::Handler(request), SaFlags::SA_RESTART, SigSet::empty());
+    Ok(())
+}
+
+/// Makes SIGTERM and SIGINT requests for the thread [`start`] runs, replacing the handlers
+/// installed so far (CEF's included). Call it again after anything that may have replaced them.
+#[cfg(unix)]
+pub fn replace_handlers() -> std::io::Result<()> {
+    use std::ffi::c_int;
+    use std::os::fd::BorrowedFd;
+    use std::sync::atomic::Ordering;
+
+    use nix::errno::Errno;
+    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
+    use nix::unistd::write;
+
+    extern "C" fn request(_: c_int) {
+        let errno = Errno::last_raw();
+        let fd = WRITE_END.load(Ordering::Relaxed);
+        if fd >= 0 {
+            // SAFETY: the write end is stored once, by `start`, and is never closed.
+            #[allow(
+                unsafe_code,
+                reason = "the descriptor outlives the process; see SAFETY"
+            )]
+            let end = unsafe { BorrowedFd::borrow_raw(fd) };
+            let _ = write(end, &[1]);
+        }
+        Errno::set_raw(errno);
+    }
+
+    let action = SigAction::new(
+        SigHandler::Handler(request),
+        SaFlags::SA_RESTART,
+        SigSet::empty(),
+    );
     for signal in [Signal::SIGTERM, Signal::SIGINT] {
         // SAFETY: `request` only reads an atomic and calls `write` and the errno accessors.
         #[allow(unsafe_code, reason = "installing the handler; see SAFETY")]
@@ -72,7 +95,16 @@ pub fn install(on_request: impl Fn() + Send + 'static) -> std::io::Result<()> {
     Ok(())
 }
 
+/// The write end of the pipe, or -1 before [`start`].
+#[cfg(unix)]
+static WRITE_END: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+
 #[cfg(not(unix))]
-pub fn install(_on_request: impl Fn() + Send + 'static) -> std::io::Result<()> {
+pub fn start(_on_request: impl Fn() + Send + 'static) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub fn replace_handlers() -> std::io::Result<()> {
     Ok(())
 }
