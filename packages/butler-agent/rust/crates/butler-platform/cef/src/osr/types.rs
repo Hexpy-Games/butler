@@ -241,6 +241,7 @@ pub enum PopupDecision {
 pub enum PopupBlock {
     NoGesture,
     TabBudget,
+    Policy,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OsrDialogKind {
