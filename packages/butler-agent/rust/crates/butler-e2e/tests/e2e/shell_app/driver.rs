@@ -8,6 +8,10 @@ pub(crate) const SHOTS: &str = "BUTLER_SHELL_SHOTS_EXECUTABLE";
 /// The App's port for these runs (never the owner's 18765 or the demo's 19765).
 const PORT: &str = "28765";
 
+/// The time the App gets to end after a quit request: what the menu Quit has (the harness's
+/// `app-quit` 20 s plus `finish` 10 s). The App's own worst case is about 14 s, plus teardown.
+const QUIT_BUDGET: Duration = Duration::from_secs(30);
+
 /// One App on the fixed port at a time.
 pub(crate) static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -183,7 +187,7 @@ impl Shell {
         if !sent.success() {
             return Err(harness_error(format!("kill -TERM {pid}: {sent}")));
         }
-        let status = tokio::time::timeout(Duration::from_secs(15), self.child.wait())
+        let status = tokio::time::timeout(QUIT_BUDGET, self.child.wait())
             .await
             .map_err(|_| harness_error("shell did not exit on SIGTERM"))??;
         if !status.success() {

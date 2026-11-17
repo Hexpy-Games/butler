@@ -80,6 +80,11 @@ pub fn replace_handlers() -> std::io::Result<()> {
         Errno::set_raw(errno);
     }
 
+    // Without the pipe (`start` failed or has not run) a replaced handler would swallow the signal.
+    if WRITE_END.load(Ordering::Relaxed) < 0 {
+        return Ok(());
+    }
+
     let action = SigAction::new(
         SigHandler::Handler(request),
         SaFlags::SA_RESTART,
