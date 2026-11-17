@@ -288,6 +288,15 @@ pub(super) fn refusal(state: &HttpState, op: &str) -> Option<Value> {
     paged.then(|| json!({"status":"refused","reason":reason}))
 }
 
+/// The URL every page-host check reads for a tab: a page host's pages are driven by the
+/// Agent's own executor, whose URL is current (the host's snapshot can trail a navigation
+/// the executor has already finished); with no page host, or an unknown tab, the snapshot's.
+pub(super) fn current_url(hub: &super::Inner, id: &str) -> Option<String> {
+    let driven = hub.pages.as_ref().and_then(|link| link.executor.tab(id));
+    let tab = driven.or_else(|| hub.tabs.get(id).cloned())?;
+    tab["url"].as_str().map(str::to_owned)
+}
+
 /// `POST /internal/browser-host/cdp`: messages from the app's pages.
 pub(super) async fn cdp(
     state: Arc<HttpState>,

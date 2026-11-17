@@ -125,7 +125,8 @@ pub(super) fn preview_of(args: &Value) -> Option<&str> {
         .filter(|_| args["policy"]["preview"] == true)
 }
 
-/// Closes idle agent tabs and ends the process tree 60 s after the last tab.
+/// Closes idle agent tabs and ends the process tree 60 s after the last tab. A hosted executor
+/// (the App owns its pages) only releases its utility page after that grace.
 pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Browser>) {
     let mut empty_since: Option<Instant> = None;
     let hosted = browser.host().is_some();
@@ -160,7 +161,7 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
             empty_since = None;
             now
         };
-        let reaps = !hosted;
+        let reaps = !hosted || browser.shared.lock().utility.is_some();
         if empty && reaps && now.duration_since(since) >= REAP_AFTER {
             let Some(headless) = owner.upgrade() else {
                 browser.stop().await;
@@ -170,6 +171,10 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
             let idle = headless.in_flight.load(Ordering::SeqCst) == 0
                 && browser.shared.lock().tabs.is_empty();
             if idle {
+                if hosted {
+                    release_utility(&browser).await;
+                    continue;
+                }
                 headless.forget(&browser);
                 browser.stop().await;
                 return;
@@ -199,6 +204,14 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
                 return;
             },
         }
+    }
+}
+
+/// Closes the utility page of a hosted executor, if one was created.
+async fn release_utility(browser: &Browser) {
+    let session = browser.shared.lock().utility.take();
+    if let Some(session) = session {
+        targets::close_target(browser, "", &session).await;
     }
 }
 
