@@ -82,6 +82,11 @@ async fn browser_host_loss_restores_reader_with_reached_url_provenance() -> Resu
         let card = pending_card(&s).await?;
         assert_eq!(card["approval"]["action_kind"], "web_request", "{card}");
         assert_eq!(
+            card["approval"]["operation"]["access"], "read_only",
+            "{card}"
+        );
+        assert_eq!(card["approval"]["risk"], "medium", "{card}");
+        assert_eq!(
             card["approval"]["operation"]["targets"][0], target,
             "{card}"
         );

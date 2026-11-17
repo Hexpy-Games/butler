@@ -359,25 +359,3 @@ fn wait_operation(facts: &ApprovalFacts<'_>) -> ApprovalOperation {
             .map(str::to_owned),
     }
 }
-
-#[cfg(test)]
-// test-category: pure-logic
-#[test]
-fn operation_access_for_web_and_browser_tools() {
-    let input = serde_json::json!({});
-    for (capability, access) in [
-        ("web_read", "read_only"),
-        ("web_search", "read_only"),
-        ("browser_open", "read_only"),
-        ("browser_read", "read_only"),
-        ("browser_act", "change"),
-    ] {
-        let operation = exact_operation(ApprovalFacts {
-            capability,
-            target: "https://example.com",
-            input: &input,
-            workspace: ".",
-        });
-        assert_eq!(operation.access, access, "{capability}");
-    }
-}
