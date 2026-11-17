@@ -173,8 +173,9 @@ impl LocalModelSettings {
                 this.busy = None;
                 match result {
                     Ok(found) => this.discovered(found.models, cx),
-                    // CARVE-OUT(G-codes): React maps the error code; every failure shows the
-                    // discovery fallback.
+                    // CARVE-OUT(G-codes): React words this inline error by its code; the client
+                    // carries the code, but this site does not read it, so every failure shows
+                    // the discovery fallback.
                     Err(_) => this.discovery_error = Some(words(cx).discover_failed),
                 }
             },
@@ -222,9 +223,9 @@ impl LocalModelSettings {
                 this.busy = None;
                 match result {
                     Ok(saved) => this.registered(&saved.model, editing, cx),
-                    Err(_) => {
+                    Err(error) => {
                         let failed = words(cx).register_failed;
-                        this.notify(Toast::error(failed), cx);
+                        this.notify(crate::ui::i18n::errors::toast(cx, &error, failed), cx);
                     }
                 }
             },

@@ -13,7 +13,10 @@ use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::overlay::place::{Align, Side};
 use butler_ds::ui::popover::{MenuSize, Popover, PopoverContent};
 use butler_ds::ui::toast::{self, Toast};
-use gpui::{AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Window};
+use gpui::{
+    AnyElement, App, Entity, IntoElement as _, ParentElement as _, SharedString, Styled as _,
+    Window, div,
+};
 
 use super::documents::{PickDocument, load_documents, picker_filters, picker_groups};
 use crate::ui::i18n::composer::attachments::copy;
@@ -82,10 +85,9 @@ pub(crate) fn attachment_menu(
         window,
         cx,
     );
-    Stack::new()
-        .gap(Space::None)
-        .child(trigger)
-        .child(content)
+    let menu = Stack::new().gap(Space::None).child(trigger).child(content);
+    crate::ui::widgets::anchor(div().flex().flex_none(), "attachment-menu")
+        .child(menu)
         .into_any_element()
 }
 

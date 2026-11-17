@@ -16,6 +16,7 @@ use butler_ds::ui::{
         nav_drop::{DragRules, DropZone, DropZoneRules, NavDropScope, NavDropTarget},
         nav_row::NavRow,
     },
+    layout::{Cross, MinWidth, Space, Stack, WithItem as _},
     typo::Typo,
 };
 use gpui::{AnyElement, Context, SharedString, div, prelude::*};
@@ -350,17 +351,16 @@ impl Shell {
             cx,
         )?;
         Some(
-            div()
-                .flex()
-                .min_w_0()
-                .items_center()
-                .gap(butler_ds::ui::context::Ds::get(cx).len(butler_ds::tokens::Length::SpaceSm))
+            Stack::row()
+                .cross(Cross::Center)
+                .gap(Space::Sm)
                 .child(
-                    div()
-                        .min_w_0()
-                        .child(Typo::text(epic.title.clone()).truncate()),
+                    Typo::text(epic.title.clone())
+                        .truncate()
+                        .shrink(true)
+                        .min_width(MinWidth::Zero),
                 )
-                .child(div().flex_none().child(avatar))
+                .child(Stack::new().shrink(false).child(avatar))
                 .into_any_element(),
         )
     }

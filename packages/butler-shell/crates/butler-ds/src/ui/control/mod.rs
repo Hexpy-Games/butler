@@ -28,7 +28,7 @@ mod parts;
 pub use parts::{
     Blend, Disabled, DisabledLook, Ring, Underline, Width, focus_handle, over, reset_anchors,
 };
-pub(crate) use parts::{State, next_anchor};
+pub(crate) use parts::{State, next_anchor, slot_anchor};
 
 /// A control being built: geometry and colours resolved by its component.
 #[expect(

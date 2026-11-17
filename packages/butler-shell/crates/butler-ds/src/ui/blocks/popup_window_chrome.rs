@@ -13,7 +13,7 @@
 //! start (React has no fullscreen input: pop-ups there are never fullscreen).
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    SharedString, Styled as _, Window, WindowControlArea, div, px,
+    SharedString, Styled as _, Window, div, px,
 };
 
 use super::adaptive_shell::ShellPlatform;
@@ -139,23 +139,26 @@ impl PopupWindowChrome {
             .window_controls
             .take()
             .filter(|_| !darwin)
-            .map(|controls| div().flex().ml_auto().child(controls));
+            .map(|controls| {
+                crate::ui::window_drag::no_drag(div().flex().ml_auto().child(controls))
+            });
         strut::scope(
             false,
-            div()
-                .flex()
-                .flex_none()
-                .items_center()
-                .gap(ds.len(Length::SpaceSm))
-                .h(ds.len(Length::BrowserBandHeight))
-                .pl(start)
-                .pr(ds.len(Length::SpaceSm))
-                .text_size(ds.len(Length::FontSize2))
-                .line_height(ds.len(Length::TypoLabelLineHeight))
-                .window_control_area(WindowControlArea::Drag)
-                .child(lock)
-                .child(host)
-                .children(controls),
+            crate::ui::window_drag::area(
+                div()
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .gap(ds.len(Length::SpaceSm))
+                    .h(ds.len(Length::BrowserBandHeight))
+                    .pl(start)
+                    .pr(ds.len(Length::SpaceSm))
+                    .text_size(ds.len(Length::FontSize2))
+                    .line_height(ds.len(Length::TypoLabelLineHeight)),
+            )
+            .child(lock)
+            .child(host)
+            .children(controls),
         )
     }
 }

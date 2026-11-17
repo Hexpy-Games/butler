@@ -1,7 +1,6 @@
 //! DS Stack and Inline (Stack.tsx / Stack.module.css): a flex container with token gaps.
 use gpui::{
-    AnyElement, App, Div, IntoElement, ParentElement, RenderOnce, Styled as _, Window,
-    WindowControlArea, div, prelude::*,
+    AnyElement, App, Div, IntoElement, ParentElement, RenderOnce, Styled as _, Window, div,
 };
 
 use super::{ItemProps, Space, WithItem};
@@ -191,7 +190,7 @@ impl RenderOnce for Stack {
             el = el.flex_grow(1.).flex_shrink(1.).min_h_0();
         }
         if self.drag == WindowDrag::Drag {
-            el = el.window_control_area(WindowControlArea::Drag);
+            el = crate::ui::window_drag::area(el);
         }
         let stretch_column = self.align == Align::Column && self.cross == Cross::Stretch;
         strut::flex_scope(

@@ -1,6 +1,6 @@
 //! `components/images/imageSettingsState.ts` and `imageApi.ts`: one image settings store.
 use butler_ds::ui::context::Ds;
-use butler_ds::ui::toast::{Toast, ToastId};
+use butler_ds::ui::toast::ToastId;
 use butler_shell_client::Error;
 use gpui::{App, AppContext as _, Context, Entity, Global};
 use serde::Deserialize;
@@ -92,9 +92,13 @@ impl ImageSettingsState {
             |client| async move { client.get_image_model_settings().await },
             |this: &mut Self, result: Result<ImageSettings, Error>, cx| match result {
                 Ok(settings) => this.set(settings, cx),
-                Err(_) => {
+                Err(error) => {
                     let text = frame_words(Ds::get(cx).lang()).save_failed;
-                    notify(&mut this.toast, Toast::error(text), cx);
+                    notify(
+                        &mut this.toast,
+                        crate::ui::i18n::errors::toast(cx, &error, text),
+                        cx,
+                    );
                 }
             },
         );

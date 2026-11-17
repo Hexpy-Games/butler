@@ -86,7 +86,7 @@ pub(crate) fn assistant_message(
                 .iter()
                 .any(|row| row.safe_tool_name.as_deref() == Some("delegate_to_steward"))
         });
-    if !running && !awaiting_work_card {
+    if !running && !awaiting_work_card && t.answer_footer {
         parts.extend(response_footer(msg, t, steward, window, cx));
     }
     parts

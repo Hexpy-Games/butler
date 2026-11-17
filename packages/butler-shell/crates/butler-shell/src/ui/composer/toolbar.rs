@@ -88,7 +88,8 @@ impl Composer {
                 None => button,
             }
         };
-        let button = crate::ui::widgets::anchor(div().flex_none(), "send-button").child(button);
+        let button =
+            crate::ui::widgets::anchor(div().flex().flex_none(), "send-button").child(button);
         let expanded_only = self.disabled.is_none()
             && !self.inputs.reconnecting
             && !(send.active_turn && send.can_stop && !send.can_send);

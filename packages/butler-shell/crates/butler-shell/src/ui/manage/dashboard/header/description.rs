@@ -6,7 +6,7 @@ use butler_ds::ui::dialog::{Dialog, DialogContent, DialogFooter, DialogHeader, D
 use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Cross, Space, Stack, WithItem as _};
 use butler_ds::ui::text::Textarea;
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast;
 use butler_ds::ui::typo::{Tone, Typo, Wrap};
 use butler_shell_client::Error;
 use gpui::{
@@ -74,12 +74,17 @@ impl ProjectDescription {
             },
             |this: &mut Self, result: Result<Value, Error>, cx| {
                 this.saving = false;
-                if result.is_ok() {
-                    this.open = false;
-                    (this.updated)(cx);
-                } else {
-                    let copy = words(Ds::get(cx).lang());
-                    toast::show(cx, Toast::error(copy.dashboard_retry));
+                match result {
+                    Ok(_) => {
+                        this.open = false;
+                        (this.updated)(cx);
+                    }
+                    Err(error) => {
+                        let copy = words(Ds::get(cx).lang());
+                        let failure =
+                            crate::ui::i18n::errors::toast(cx, &error, copy.dashboard_retry);
+                        toast::show(cx, failure);
+                    }
                 }
             },
         );

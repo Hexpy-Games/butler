@@ -196,11 +196,22 @@ impl ConversationShell {
         } else {
             f32::from(ds.len(Length::TitlebarSafeAreaTop))
         };
+        let column_left = ((width - col) / 2. - shift).max(0.);
+        // `useColumnRect`'s `contentRight`, reported once motion has settled: a docked aside
+        // extends the right edge to its settled far edge (`aside.rs` `panel`: `right` is
+        // `SpaceLg` once the glide is over).
+        let column_right = if shown_aside == Some(AsideLayout::Docked) {
+            let docked_edge = width - f32::from(ds.len(Length::SpaceLg));
+            (column_left + col).max(docked_edge)
+        } else {
+            column_left + col
+        };
         let vars = ConversationVars {
             composer_reserve: self.composer_reserve,
             width,
             column_width: if width > 0. { col } else { 0. },
-            column_left: ((width - col) / 2. - shift).max(0.),
+            column_left,
+            column_right,
             column_shift: shift,
             motion_id: Some(self.id.clone()),
             top_reserve: top_reserve + rail_top(rail, width, ds),
@@ -269,7 +280,6 @@ impl RenderOnce for ConversationShell {
             .bg(convert::gradient(
                 ds.tokens().gradient(GradientToken::ConversationBg),
             ))
-            .children(backdrop)
             .child(scope::scoped(
                 Spec {
                     conversation: Some(vars),
@@ -278,6 +288,7 @@ impl RenderOnce for ConversationShell {
                 div()
                     .relative()
                     .size_full()
+                    .children(backdrop)
                     .children(std::mem::take(&mut self.children)),
             ))
             .children(rail_layer)

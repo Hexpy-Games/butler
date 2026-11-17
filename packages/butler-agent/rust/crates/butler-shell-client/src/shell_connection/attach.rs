@@ -84,7 +84,7 @@ impl ShellClient {
     /// Attach using explicit DATA, then BUTLER_DATA, then the platform home's
     /// `.butler` directory. Reads only metadata and never starts an agent.
     pub async fn attach(data: Option<PathBuf>) -> Result<AttachState, Error> {
-        // Client construction may also read the platform certificate store.
+        // Discovery reads the endpoint and token files.
         tokio::task::spawn_blocking(move || {
             let Some((data, endpoint, token, identity)) = discover(data)? else {
                 return Ok(AttachState::NotRunning);

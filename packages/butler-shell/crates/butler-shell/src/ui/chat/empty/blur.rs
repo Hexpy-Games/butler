@@ -14,7 +14,7 @@ struct Away {
     wake: Option<Task<()>>,
 }
 
-pub(super) fn level(window: &mut Window, cx: &mut App) -> u8 {
+pub(in crate::ui::chat) fn level(window: &mut Window, cx: &mut App) -> u8 {
     let away = window.use_keyed_state("wallpaper-blur", cx, |_, _| Away {
         since: None,
         wake: None,

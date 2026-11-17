@@ -55,12 +55,14 @@ impl EpicInspector {
                     }
                     // CARVE-OUT(G-codes): `running` and `conflict` are both a 409; the epic is
                     // read again, which tells which (`delete_blocked`).
-                    Err(Error::Http(409)) => {
+                    Err(Error::Http(409, _)) => {
                         toast::show(cx, Toast::error(words.conflict));
                         this.refresh(cx);
                     }
-                    Err(_) => {
-                        toast::show(cx, Toast::error(words.request_failed));
+                    Err(error) => {
+                        let failure =
+                            crate::ui::i18n::errors::toast(cx, &error, words.request_failed);
+                        toast::show(cx, failure);
                     }
                 }
             },
