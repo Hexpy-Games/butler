@@ -445,8 +445,11 @@ fn media_layout(
         .border_color(ds.color(Color::Line))
         .child(media.content);
     let target = match media.on_open {
+        // `.mediaTarget { display: block; width: var(--decision-media-width) }`: a block box, not an
+        // inline-level one that sits on a line in its wrapper.
         Some(open) => Clickable::new((id.clone(), "media"))
             .variant(ClickVariant::Text)
+            .stretch()
             .on_click(move |event, window, cx| open(event, window, cx))
             .child(target)
             .into_any_element(),

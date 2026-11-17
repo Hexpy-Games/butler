@@ -2,6 +2,6 @@
 # tools/source-check. Give the wrapper `.flex()` (or drop it) and regenerate with
 #   cargo run -p butler-source-check -- --bless ../../butler-shell
 # package<TAB>count
-crates/butler-ds	7
+crates/butler-ds	5
 crates/butler-ds-view	2
 crates/butler-shell	19
