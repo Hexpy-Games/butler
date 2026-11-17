@@ -102,6 +102,8 @@ pub struct OsrRuntime {
     _app: cef::App,
     #[cfg(target_os = "macos")]
     _framework: gpu::Framework,
+    #[cfg(windows)]
+    job: Option<crate::job::ChildJob>,
 }
 
 #[cfg(cef_osr)]
@@ -139,7 +141,16 @@ impl OsrRuntime {
         #[cfg(windows)]
         d3d::set_adapter(adapter);
         let settings = settings(config)?;
-        let mut app = pump::OsrApp::new(pump::Pump::new(schedule.clone()), adapter);
+        // Created before CEF starts; kept until the runtime drops, which ends any helper left.
+        #[cfg(windows)]
+        let job = crate::job::ChildJob::create()
+            .map_err(|error| eprintln!("no helper job: {error}"))
+            .ok();
+        #[cfg(windows)]
+        let job_name = job.as_ref().map(|job| job.name().to_owned());
+        #[cfg(not(windows))]
+        let job_name = None;
+        let mut app = pump::OsrApp::new(pump::Pump::new(schedule.clone(), job_name), adapter);
         let args = cef::args::Args::new();
         if cef::initialize(
             Some(args.as_main_args()),
@@ -169,7 +180,16 @@ impl OsrRuntime {
             _app: app,
             #[cfg(target_os = "macos")]
             _framework: framework,
+            // Last: it outlives the CEF shutdown in `Drop`.
+            #[cfg(windows)]
+            job,
         })
+    }
+
+    /// The App's kill-on-close helper job, when it was created.
+    #[cfg(windows)]
+    pub fn child_job_name(&self) -> Option<&str> {
+        self.job.as_ref().map(crate::job::ChildJob::name)
     }
 
     pub fn pump(&self) {
