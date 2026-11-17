@@ -51,6 +51,14 @@ impl CognitionCoordinationHost for Facts {
 
 struct Source(Mutex<BriefingInputSnapshot>);
 impl BriefingInputSource for Source {
+    fn suggestion_context<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        _: DateTime<Utc>,
+    ) -> BriefingContextFuture<'a> {
+        Box::pin(async { Ok(Arc::new(json!({"conversations":[]}))) })
+    }
     fn snapshot(&self) -> BriefingInputFuture<'_> {
         Box::pin(async { Ok(self.0.lock().unwrap().clone()) })
     }

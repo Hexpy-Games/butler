@@ -29,6 +29,7 @@ struct ScenarioMetrics {
     wal_bytes: u64,
     persist_p95_us: Option<u64>,
     view_p95_us: Option<u64>,
+    first_view_p95_us: Option<u64>,
 }
 
 fn answer() -> String {
@@ -184,6 +185,7 @@ fn storage_metrics(
     path: &std::path::Path,
     measure_latency: bool,
     mut view_samples: Vec<u64>,
+    mut first_views: Vec<u64>,
 ) -> Result<ScenarioMetrics, HarnessError> {
     let metrics: Value =
         serde_json::from_slice(&std::fs::read(path.with_extension("metrics.json"))?)?;
@@ -226,6 +228,7 @@ fn storage_metrics(
         wal_bytes: metrics["wal_bytes"].as_u64().unwrap(),
         persist_p95_us,
         view_p95_us,
+        first_view_p95_us: measure_latency.then(|| p95(&mut first_views)),
     })
 }
 
@@ -273,8 +276,8 @@ async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, H
             .map(|session| async { s.gw.say_turn(session, REQUEST).await }),
     )
     .await?;
-    let view_samples: Vec<u64> =
-        try_join_all(sessions.iter().zip(&turns).map(|(session, turn)| {
+    let (first_views, view_samples) = storage_concurrency_support::first_and_streaming(
+        &try_join_all(sessions.iter().zip(&turns).map(|(session, turn)| {
             views(
                 s.gw.clone(),
                 path.clone(),
@@ -283,10 +286,8 @@ async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, H
                 measure_latency,
             )
         }))
-        .await?
-        .into_iter()
-        .flatten()
-        .collect();
+        .await?,
+    );
     for (session, turn) in sessions.iter().zip(&turns) {
         let reply =
             s.gw.wait_terminal(session, turn, Duration::from_secs(10))
@@ -296,7 +297,7 @@ async fn run(baseline: bool, measure_latency: bool) -> Result<ScenarioMetrics, H
     s.agent.terminate().await?;
     verify_rows(&path, &sessions, &turns, DELTAS, REQUEST, &answer());
     storage_concurrency_support::report_history_load(&s.sandbox.logs)?;
-    let result = storage_metrics(&path, measure_latency, view_samples)?;
+    let result = storage_metrics(&path, measure_latency, view_samples, first_views)?;
     s.finish().await?;
     Ok(result)
 }
@@ -349,7 +350,8 @@ async fn perf_storage_concurrency_eight_streams_keep_exact_content_with_bounded_
     let persist_p95_us = metrics.persist_p95_us.unwrap();
     let view_p95_us = metrics.view_p95_us.unwrap();
     eprintln!(
-        "STORAGE PERF N=8 x 200; persist p95={persist_p95_us}us; session-view p95={view_p95_us}us"
+        "STORAGE PERF N=8 x 200; persist p95={persist_p95_us}us; session-view p95={view_p95_us}us; first-view p95={first}us (turn admission, reported only)",
+        first = metrics.first_view_p95_us.unwrap()
     );
     // Normal persistence p95 1.128 ms (PR #1358); incident at 50 ms, ~44x normal.
     butler_e2e::assert_wall_clock_budget!(

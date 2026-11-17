@@ -44,7 +44,7 @@ pub(super) fn setup_with_provider_delay(
     memory_stubs::extraction(&mut cassette, ASK)?;
     let setup = Setup::new(name)?;
     if name == "MEM-DAILY-BATCH" {
-        memory_stubs::daily_briefing(&mut cassette, &setup.sandbox.data)?;
+        memory_stubs::daily_persona(&setup.sandbox.data)?;
     }
     let setup = setup.stub_cassette(cassette).placeholder("NONCE", &code);
     assert!(
@@ -279,6 +279,8 @@ async fn mem_daily_window_defers_vectors_until_on_demand_load() -> Result<(), Ha
     butler_e2e::gate!();
     let (setup, remember, _) = setup("MEM-DAILY-BATCH")?;
     let mut s = setup.start().await?;
+    s.provider()?
+        .set_chat_responder(memory_stubs::daily_briefing);
     let pending = ordinary(&s, &remember).await?;
     s.agent
         .launch

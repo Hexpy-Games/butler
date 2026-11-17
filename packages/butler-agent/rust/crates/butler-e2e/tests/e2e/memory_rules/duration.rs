@@ -202,6 +202,9 @@ async fn chat_closure_retires_session_instruction_and_keeps_lasting_instruction(
 }
 
 fn behavior(request: &Value) -> Option<butler_e2e::e2e::cassette::ResponseRecord> {
+    if let Some(reply) = crate::memory_patterns::review(request) {
+        return Some(reply);
+    }
     let raw = request["input"]
         .as_str()
         .or_else(|| request["input"][0]["content"][0]["text"].as_str())

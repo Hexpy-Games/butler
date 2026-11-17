@@ -34,15 +34,29 @@ async fn consolidation_blocks_cleanup_and_every_reset() -> Result<(), HarnessErr
     assert_eq!(project.status, 201);
     let project = project.data()["project"]["id"].as_str().unwrap().to_owned();
     let held = s.provider()?.hold_next_reply("general_new_chat_briefing");
-    assert_eq!(
-        s.gw.post(
-            "/memory/consolidation",
-            json!({"operation_id":uuid::Uuid::new_v4()})
-        )
-        .await?
-        .status,
-        202
-    );
+    // The memory consumer takes short writer leases after startup; a refused run creates nothing.
+    tokio::time::timeout(Duration::from_secs(90), async {
+        loop {
+            let reply =
+                s.gw.post(
+                    "/memory/consolidation",
+                    json!({"operation_id":uuid::Uuid::new_v4()}),
+                )
+                .await?;
+            if reply.status == 202 {
+                return Ok::<_, HarnessError>(());
+            }
+            assert_eq!(
+                (reply.status, reply.error_code()),
+                (409, Some("memory_operation_unavailable")),
+                "{}",
+                reply.text
+            );
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("consolidation admitted")?;
     wait_calls(&s, 1).await;
     let revision = s.gw.get("/memory/inventory").await?.data()["revision"].clone();
     for path in [

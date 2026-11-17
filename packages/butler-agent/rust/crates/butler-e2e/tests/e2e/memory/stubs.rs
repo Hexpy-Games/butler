@@ -147,26 +147,24 @@ pub(super) fn ordinary(cassette: &mut Cassette) {
     }
 }
 
-/// The daily vector window also runs consolidation. Replay its real briefing
-/// request with a fixed persona and a complete synthetic response; no misses
-/// are suppressed and no scheduled work is disabled.
-pub(super) fn daily_briefing(
-    cassette: &mut Cassette,
-    data: &std::path::Path,
-) -> Result<(), HarnessError> {
-    const PERSONA: &str = "Daily embedding fixture persona.";
+/// The daily vector window also runs consolidation: a fixed persona for its briefing.
+pub(super) fn daily_persona(data: &std::path::Path) -> Result<(), HarnessError> {
     std::fs::create_dir_all(data.join("personas"))?;
-    std::fs::write(data.join("personas/active.md"), PERSONA)?;
-    let mut exchange = Cassette::load("MEM-04")?.exchanges.remove(0);
-    let mut input: serde_json::Value = serde_json::from_str(&exchange.request.key.user_request)?;
-    input["persona"] = json!({"id":"active", "excerpt":PERSONA});
-    exchange.request.key.user_request = serde_json::to_string_pretty(&input)?
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    exchange.response = response(&briefing_reply()?);
-    cassette.exchanges.push(exchange);
+    std::fs::write(
+        data.join("personas/active.md"),
+        "Daily embedding fixture persona.",
+    )?;
     Ok(())
+}
+
+/// Answers the daily briefing and its review by task; every other request stays strict replay.
+pub(super) fn daily_briefing(request: &serde_json::Value) -> Option<ResponseRecord> {
+    if let Some(reply) = crate::memory_patterns::review(request) {
+        return Some(reply);
+    }
+    (crate::memory_patterns::task(request)["task"] == "general_new_chat_briefing")
+        .then(|| briefing_reply().ok().map(|reply| response(&reply)))
+        .flatten()
 }
 
 fn briefing_reply() -> Result<serde_json::Value, HarnessError> {

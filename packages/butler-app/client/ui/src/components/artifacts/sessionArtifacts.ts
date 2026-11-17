@@ -1,6 +1,6 @@
 import type { MessageRecord, SessionArtifactSummary } from "@/app/types.ts";
 
-/** One result per workspace path and content; keep its latest delivery. */
+/** One result per workspace path and content; keep its latest delivery, newest first. */
 export function sessionArtifacts(
   summary: SessionArtifactSummary[], messages: MessageRecord[],
 ): SessionArtifactSummary[] {
@@ -13,7 +13,7 @@ export function sessionArtifacts(
     const previous = latest.get(key);
     if (!previous || artifact.created_at >= previous.created_at) latest.set(key, artifact);
   }
-  return [...latest.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return [...latest.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
 /** A running dev preview the gateway serves at /previews/<id>/view. */

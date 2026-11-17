@@ -109,6 +109,7 @@ async fn commands(
         {
             session_queue::route(state, request, uri).await
         }
+        Handler::Computers => computers::route(state, request).await,
         Handler::Mcp => mcp_servers::route(state, request, uri).await,
         Handler::Operation => required(operation_output::route(state, request, uri).await?),
         Handler::Retry => required(retry::route(state, request.method(), uri).await?),

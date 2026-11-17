@@ -380,3 +380,41 @@ async fn detach_with_pending_call(answer: bool) -> Result<(), HarnessError> {
     }
     s.finish().await
 }
+
+#[tokio::test]
+async fn user_message_gives_back_held_tabs() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("BROWSER-MESSAGE-GIVE-BACK")?.start().await?;
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let mut stream = reqwest::Client::new()
+        .get(format!("{}/internal/browser-host", s.gw.base))
+        .bearer_auth(&s.gw.token)
+        .header("x-butler-admin", &admin.admin)
+        .send()
+        .await?;
+    assert_eq!(stream.status(), 200);
+    let published = admin
+        .send(
+            Method::POST,
+            "/internal/browser-host/events",
+            Some(json!({"tabs":[{"id":"page","owner":"conversation:general",
+                "profile":"signed_out","epoch":1,"holder":"user","url":"https://example.com/"}]})),
+            &[],
+        )
+        .await?;
+    assert_eq!(published.status, 200, "{}", published.text);
+    let sent =
+        s.gw.post("/messages", json!({"chat_id":"general","text":"done"}))
+            .await?;
+    assert_eq!(sent.status, 202, "{}", sent.text);
+    let mut buffer = String::new();
+    loop {
+        let frame = super::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
+        if frame["op"] == "use.given_back" {
+            assert_eq!(frame["session"], "general");
+            break;
+        }
+    }
+    drop(stream);
+    s.finish().await
+}

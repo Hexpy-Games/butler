@@ -18,6 +18,22 @@ pub struct PatternRepository {
     changed: Arc<tokio::sync::Notify>,
 }
 impl PatternRepository {
+    /// Candidates offered since `since`, newest first, with the user's answer.
+    pub async fn offered_since(&self, since: DateTime<Utc>) -> Result<Vec<Value>, PatternError> {
+        let store = self.load().await?;
+        Ok(store
+            .bundles
+            .iter()
+            .rev()
+            .filter(|b| b.created_at >= since)
+            .flat_map(|b| {
+                b.candidates.iter().map(move |c| {
+                    json!({"date":b.created_at.format("%Y-%m-%d").to_string(),
+                "kind":c.action.kind,"title":c.title,"action":c.action.title,"answer":c.state})
+                })
+            })
+            .collect())
+    }
     /// Bind the repository to the data root and its write coordinator.
     pub fn new(root: PathBuf, coordinator: Arc<CognitionWriteCoordinator>) -> Self {
         Self {
