@@ -68,7 +68,10 @@ import {
   resolveAppManagedForegroundCommand,
   resolveAppManagedGatewayCommand,
 } from "./app-managed-runtime.mjs";
-import { resolveNativeAgentInstallation } from "./bundled-native-agent.mjs";
+import { resolveNativeAgentInstallation, resolveBundledNativeAgentInstallation } from "./bundled-native-agent.mjs";
+import { isStoreBuild } from "./butler-platform/store-build.mjs";
+import { createPackageStartupTask } from "./butler-platform/package-startup-task.mjs";
+import { requestAppSingleInstanceLock } from "./app-instance-lock.mjs";
 import {
   APP_FOREGROUND_LIFECYCLE_MODES,
   appForegroundInstancePath,
@@ -154,6 +157,10 @@ import {
   writeRendererStorageScript,
 } from "./app-renderer-storage-migration.mjs";
 
+const storeBuild = isStoreBuild();
+let storeLoginItemEnabled = false;
+let startupTask = null;
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
@@ -199,7 +206,7 @@ const windowsSquirrelLaunch = resolveWindowsSquirrelLaunch({
   argv: process.argv,
   execPath: process.execPath,
 });
-if (process.platform === "win32") {
+if (process.platform === "win32" && !storeBuild) {
   app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
 }
 if (windowsSquirrelLaunch.handled) {
@@ -429,7 +436,9 @@ if (isMenuBarHelperProcess || isQuitMenuBarHelperSignalProcess) {
 } else if (explicitElectronUserDataDir) {
   app.setPath("userData", explicitElectronUserDataDir);
 }
-const appSingleInstanceLock = app.requestSingleInstanceLock();
+const appSingleInstanceLock = isMenuBarHelperProcess || isQuitMenuBarHelperSignalProcess
+  ? app.requestSingleInstanceLock()
+  : requestAppSingleInstanceLock(app, appWritableDataRoot);
 appLogOwner = appSingleInstanceLock && !isMenuBarHelperProcess && !isQuitMainUiSignalProcess && !isQuitMenuBarHelperSignalProcess;
 if (appSingleInstanceLock) {
   recordAppStartupProgress("single_instance_acquired");
@@ -1012,7 +1021,7 @@ async function readSetupSettings() {
 function configureAppIdentity() {
   app.setName(appDisplayName);
   if (isWindows) {
-    app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
+    if (!storeBuild) app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
     configureWindowsProtocolRegistration();
   }
   app.setAboutPanelOptions({
@@ -1064,7 +1073,25 @@ function configureWindowsProtocolRegistration() {
   );
 }
 
+function getPackageStartupTask() {
+  if (!startupTask) {
+    const agentExecutable = resolveBundledNativeAgentInstallation({ butlerData: butlerDataRoot })?.command;
+    if (!agentExecutable) throw new Error("package_startup_task_agent_unavailable");
+    startupTask = createPackageStartupTask({ agentExecutable });
+  }
+  return startupTask;
+}
+
+async function readButlerLoginItemSettings() {
+  if (storeBuild) {
+    try { storeLoginItemEnabled = await getPackageStartupTask().read(); }
+    catch (error) { console.warn(`Package startup task read failed: ${safeErrorCode(error)}`); }
+  }
+  return getButlerLoginItemSettings();
+}
+
 function getButlerLoginItemSettings() {
+  if (storeBuild) return { openAtLogin: storeLoginItemEnabled };
   if (!isWindows || !app.isPackaged) return app.getLoginItemSettings();
   const settings = windowsLoginItemSettings({
     openAtLogin: false,
@@ -1081,7 +1108,15 @@ function getButlerLoginItemSettings() {
 // An explicit Settings toggle writes this App's own login item, the same
 // entry getButlerLoginItemSettings reads, so it is not limited to the default
 // profile. Only automatic registration at launch is.
-function setButlerLoginItemSettings(openAtLogin) {
+async function setButlerLoginItemSettings(openAtLogin) {
+  if (storeBuild) {
+    try { storeLoginItemEnabled = await getPackageStartupTask().set(openAtLogin); }
+    catch (error) {
+      console.warn(`Package startup task set failed: ${safeErrorCode(error)}`);
+      await readButlerLoginItemSettings();
+    }
+    return;
+  }
   if (!installShellRegistrationAllowed()) return;
   setInstallLoginItemSettings(windowsLoginItemSettings({
     openAtLogin,
@@ -1567,7 +1602,7 @@ async function refreshTrayMenu() {
           type: "checkbox",
           checked: getButlerLoginItemSettings().openAtLogin,
           click: (item) => {
-            setButlerLoginItemSettings(item.checked);
+            void setButlerLoginItemSettings(item.checked).then(refreshTrayMenu);
           },
         },
       ]
@@ -2561,12 +2596,12 @@ ipcMain.handle("butler:set-native-shell-preferences", async (_event, input) => {
   };
 });
 
-ipcMain.handle("butler:get-login-settings", () => ({
-  openAtLogin: getButlerLoginItemSettings().openAtLogin === true,
+ipcMain.handle("butler:get-login-settings", async () => ({
+  openAtLogin: (await readButlerLoginItemSettings()).openAtLogin === true,
 }));
 ipcMain.handle("butler:set-login-settings", async (_event, input) => {
   if (typeof input?.openAtLogin !== "boolean") throw new Error("invalid_login_settings");
-  setButlerLoginItemSettings(input.openAtLogin);
+  await setButlerLoginItemSettings(input.openAtLogin);
   await refreshTrayMenu();
   return { openAtLogin: getButlerLoginItemSettings().openAtLogin === true };
 });
@@ -2745,6 +2780,7 @@ if (appSingleInstanceLock) {
     .then(async () => {
       configureStartupActions({ retry: () => prepareStartupRetry(bundledAgentSupervisor, explicitServerUrl), exit: () => { isQuitting = true; finalQuitAllowed = true; app.quit(); }, diagnostics: () => bundledAgentSupervisor.diagnostics() });
       recordAppStartupProgress("electron_ready");
+      if (storeBuild) void readButlerLoginItemSettings().then(refreshTrayMenu);
       configureAppIdentity();
       configureWindowsAppUpdater();
       configureAppIcon();

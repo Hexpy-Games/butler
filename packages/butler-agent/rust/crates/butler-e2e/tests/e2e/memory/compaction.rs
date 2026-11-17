@@ -81,7 +81,8 @@ async fn fragmented_compaction_releases_write_lease_and_cancels_on_shutdown()
     s.agent.launch.unset_env("BUTLER_E2E_HOLD_POINT");
     s.agent.launch.unset_env("BUTLER_E2E_HOLD_RELEASE");
     s.gw = s.agent.start_again().await?;
-    let recalled = batch::recall(&s, "general", ASK).await?;
+    let loaded = batch::reply_after_load(&s, ASK)?;
+    let (recalled, ()) = tokio::try_join!(batch::recall(&s, "general", ASK), loaded)?;
     // Forget fences the old instruction immediately. Its physical vector is
     // retained until optimize prunes it, so recall reports that stale owner.
     assert_eq!(

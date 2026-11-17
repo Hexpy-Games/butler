@@ -132,6 +132,11 @@ pub fn host_name() -> io::Result<String> {
     sys::host_name()
 }
 
+/// The OS name as Rust reports it ("macos", "windows", "linux", ...).
+pub fn os_name() -> &'static str {
+    std::env::consts::OS
+}
+
 /// The operating system's release, lossily decoded: `uname -r` on Unix,
 /// `10.0.<build>` on Windows (as Node's `os.release()`).
 pub fn os_release() -> io::Result<String> {

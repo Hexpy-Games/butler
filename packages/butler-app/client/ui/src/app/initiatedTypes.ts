@@ -29,8 +29,10 @@ export interface PatternCandidate {
   pattern_id: string;
   state: "pending" | "accepted" | "declined";
   title: string;
-  action: { title: string; schedule: InitiatedSchedule; deliver_to: "chats" };
-  evidence: { count: number; first_at: string; last_at: string };
+  action:
+    | { kind: "schedule"; title: string; schedule: InitiatedSchedule; deliver_to: "chats" }
+    | { kind: "once"; title: string; deliver_to: "chats" };
+  evidence?: { count: number; first_at: string; last_at: string };
   automation_id?: string;
 }
 export interface PatternProposalPanel {

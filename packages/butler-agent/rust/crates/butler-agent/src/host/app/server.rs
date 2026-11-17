@@ -29,7 +29,7 @@ use crate::host::app::runtime_ports::{
     AppMemoryManagement, AppRuntimeInfo, AppSessionTitleGeneratorAdapter,
     AppSessionTopicClassifierAdapter,
 };
-use crate::host::app::runtime_ports::{AppSetup, AppSetupParts};
+use crate::host::app::runtime_ports::{AppSetup, AppSetupParts, ButlerAccount};
 use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
     AgentRuntime, AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
@@ -134,7 +134,13 @@ impl AppServer {
             BtccError::relayed("app_listener_address_failed", error.to_string())
         })?;
         let settings = Arc::new(open_settings(runtime, data_root, address, installation).await?);
-        let setup = owners.start_setup(runtime, settings.clone(), installation, data_root);
+        let setup = owners.start_setup(
+            runtime,
+            settings.clone(),
+            installation,
+            data_root,
+            app_config,
+        )?;
         let dependencies = composition::dependencies(
             composition::Context {
                 runtime,
@@ -384,8 +390,13 @@ impl AppServerOwners {
         settings: Arc<AppSettingsFactsAdapter>,
         installation: &ResolvedInstallation,
         data_root: &std::path::Path,
-    ) -> AppSetup {
-        AppSetup::start(AppSetupParts {
+        app_config: &AppServiceConfiguration,
+    ) -> Result<AppSetup, BtccError> {
+        Ok(AppSetup::start(AppSetupParts {
+            butler_account: app_config
+                .butler_account_enabled()
+                .then(|| ButlerAccount::new(data_root))
+                .transpose()?,
             plugins: runtime.plugins.clone(),
             configuration: runtime.models.configuration.clone(),
             settings,
@@ -393,7 +404,7 @@ impl AppServerOwners {
             data_root: data_root.to_path_buf(),
             executor: self.receipt.clone(),
             acquisition: runtime.memory_acquisition.clone(),
-        })
+        }))
     }
 }
 

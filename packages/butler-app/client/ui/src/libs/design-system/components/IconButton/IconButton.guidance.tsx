@@ -63,7 +63,7 @@ export const guidance: ShowcaseGuidance = {
     "pane names the pane a title-bar toggle opens: aside (세션 정보, --tinted-glass-tint), browser (--browser-pane-bg), viewer (a card pane such as the file viewer, --shell-card-bg). While pressed, the fill is that token made opaque, resolved where the button sits, so a shell's override (the cards frame's browser sheet) applies. Toggles that open a dialog or a menu (the task graph, ⋯) declare no pane.",
   ],
   accessibility: [
-    "label becomes aria-label; the Tooltip is skipped for menu triggers (aria-haspopup) so it never covers the menu.",
+    "label becomes aria-label and the tooltip; a button that opens a menu or popover hides its tooltip while that is open, so it never covers it.",
     "selected marks an open menu trigger; hit targets grow to 44px on touch.",
     "pressed sets aria-pressed; it paints a fill only with pane (the open pane's surface). The focus ring is unchanged in every tone and on the fill; hover lays --selection over the fill.",
   ],

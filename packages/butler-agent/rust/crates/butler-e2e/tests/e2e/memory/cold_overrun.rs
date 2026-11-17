@@ -33,8 +33,10 @@ async fn expired_embed_after_load_keeps_one_warm_worker() -> Result<(), HarnessE
     };
     let before = counts(&s.agent.current_logs().await?);
     let pid = s.agent.pid().unwrap();
+    let loaded = batch::reply_after_load(&s, ASK)?;
     let mut trace = super::drain_bounds::Trace::open(&s, 2).await?;
     let release_during_grace = async {
+        loaded.await?;
         trace.drain().await?;
         assert!(release.with_extension("held").exists());
         let held = usage::embedding_children(pid)?;

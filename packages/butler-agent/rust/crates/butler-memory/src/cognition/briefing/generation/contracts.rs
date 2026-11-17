@@ -1,5 +1,7 @@
 //! Inputs of new-chat briefing generation and the port that supplies them.
 
+use chrono::{DateTime, Utc};
+use std::sync::Arc;
 use std::{future::Future, pin::Pin};
 
 use serde::Serialize;
@@ -77,8 +79,19 @@ pub type BriefingInputFuture<'a> = Pin<
     Box<dyn Future<Output = Result<BriefingInputSnapshot, BriefingGenerationError>> + Send + 'a>,
 >;
 
+/// The pending suggestion context of a consolidation run.
+pub type BriefingContextFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Arc<Value>, BriefingGenerationError>> + Send + 'a>>;
+
 /// Supplies briefing inputs and local time.
 pub trait BriefingInputSource: Send + Sync {
+    /// The run's shared suggestion context, built once per run.
+    fn suggestion_context<'a>(
+        &'a self,
+        run_id: &'a str,
+        locale: &'a str,
+        now: DateTime<Utc>,
+    ) -> BriefingContextFuture<'a>;
     /// The current briefing inputs.
     fn snapshot(&self) -> BriefingInputFuture<'_>;
     /// Minute of the local day for `epoch_ms`.

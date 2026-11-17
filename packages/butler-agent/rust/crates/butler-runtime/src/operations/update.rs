@@ -46,6 +46,8 @@ pub struct AppUpdateService {
     data: PathBuf,
     installation: PathBuf,
     version: Option<String>,
+    /// An install whose App updates the Microsoft Store delivers.
+    store_managed: bool,
     manifest: String,
     /// Downloads packages.
     client: butler_log::http::Client,
@@ -70,6 +72,7 @@ impl AppUpdateService {
         data: PathBuf,
         installation: PathBuf,
         version: Option<String>,
+        store_managed: bool,
     ) -> Result<Self, UpdateError> {
         if data.starts_with(&installation) || installation.starts_with(&data) {
             return Err(UpdateCode::ButlerDataOverlapsInstallation.into());
@@ -99,6 +102,7 @@ impl AppUpdateService {
             data,
             installation,
             version,
+            store_managed,
             manifest,
             client,
             manifest_client,
@@ -205,22 +209,38 @@ impl AppUpdateService {
             // An available update is now being downloaded, including failures
             // opening the package source before the first bytes arrive.
             *attempted = true;
-            artifact_path = Some(
-                Box::pin(stage::download(
-                    &self.client,
-                    cancel,
+            artifact_path = if self.store_managed {
+                stage::store_download(
                     &self.data,
                     &self.installation,
-                    &artifact,
-                    Some(&self.progress),
-                ))
-                .await?,
-            );
+                    &artifact.version,
+                    &self.progress,
+                )
+                .await?
+                .map(|(label, hash)| {
+                    status["sha256"] = json!(hash);
+                    label
+                })
+            } else {
+                Some(
+                    Box::pin(stage::download(
+                        &self.client,
+                        cancel,
+                        &self.data,
+                        &self.installation,
+                        &artifact,
+                        Some(&self.progress),
+                    ))
+                    .await?,
+                )
+            };
         }
         let stage_status = if request.dry_run {
             "dry_run"
         } else if artifact_path.is_some() {
             "staged"
+        } else if status["update_available"] == true {
+            "opened_in_store"
         } else {
             "up_to_date"
         };
@@ -236,13 +256,8 @@ impl AppUpdateService {
         object.insert("planned_actions".into(), json!(actions));
         if !request.dry_run {
             let _write = self.writes.lock().await;
-            stage::write_json(
-                &self.data,
-                &self.installation,
-                "updates/staged/app.json",
-                &status,
-            )
-            .await?;
+            let stage_path = "updates/staged/app.json";
+            stage::write_json(&self.data, &self.installation, stage_path, &status).await?;
         }
         Ok(status)
     }
@@ -311,7 +326,7 @@ impl AppUpdateService {
             "integrity": {"digestAlgorithm":"sha256", "digest":artifact.sha256,"signature":null},
             "update_policy": "app-user-action",
             "restart_policy": "restart-app",
-            "updater_owner": "butler-app",
+            "updater_owner": if self.store_managed { "store" } else { "butler-app" },
             "payload_format": "platform-app-package",
             "staging_policy": "butler-data-updates",
             "activation_policy": "user-installs-app-package",
@@ -334,6 +349,22 @@ impl AppUpdateService {
     async fn artifact(&self, request: &UpdateRequest) -> Result<AppArtifact, UpdateError> {
         if self.version.is_none() {
             return Err(UpdateCode::AppVersionUnavailable.into());
+        }
+        if self.store_managed {
+            let found = tokio::task::spawn_blocking(butler_platform::store_update::check)
+                .await
+                .map_err(|error| UpdateError::caused(UpdateCode::UpdateStoreUnavailable, error))?
+                .map_err(stage::store_error)?;
+            let mut artifact = self.unchecked_artifact(
+                &UpdateRequest::default(),
+                self.version
+                    .as_deref()
+                    .ok_or(UpdateCode::AppVersionUnavailable)?,
+            );
+            if let Some(version) = found {
+                artifact.version = version;
+            }
+            return Ok(artifact);
         }
         let previews = channel::previews(
             &self.data,

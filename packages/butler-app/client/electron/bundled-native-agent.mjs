@@ -2,6 +2,7 @@ import { constants, accessSync, linkSync, rmSync, existsSync, readFileSync, real
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { processRoleFileNames } from "./scripts/process-role-names.mjs";
 import { preferNewerAgent, resolveCliInstalledAgent } from "./cli-installed-native-agent.mjs";
+import { isStoreBuild } from "./butler-platform/store-build.mjs";
 
 const manifestName = "native-agent-manifest.json";
 const roleLinkWarnings = new Set();
@@ -11,6 +12,7 @@ export function resolveBundledNativeAgentCommand({
   resourcesPath = process.resourcesPath,
   execPath = process.execPath,
   platform = process.platform,
+  storeBuild = isStoreBuild(),
   isPackaged = true,
   env = process.env,
 } = {}) {
@@ -19,6 +21,7 @@ export function resolveBundledNativeAgentCommand({
     resourcesPath,
     execPath,
     platform,
+    storeBuild,
     isPackaged,
     env,
   });
@@ -34,6 +37,7 @@ export function resolveBundledNativeAgentCommand({
     env: {
       ...installation.env,
       BUTLER_APP_FOREGROUND_LEASE: "1",
+      ...(storeBuild ? { BUTLER_APP_STORE_BUILD: "1" } : {}),
       BUTLER_APP_QUIT_WAIT_SAFELY: "1",
       BUTLER_SHUTDOWN_TRACE: "1",
     },
@@ -45,6 +49,7 @@ export function resolveBundledNativeAgentInstallation({
   resourcesPath = process.resourcesPath,
   execPath = process.execPath,
   platform = process.platform,
+  storeBuild = isStoreBuild(),
 } = {}) {
   if (platform === "win32") resourcesPath = join(dirname(resolve(execPath)), "resources");
   if (!resourcesPath) return null;
@@ -61,7 +66,8 @@ export function resolveBundledNativeAgentInstallation({
     : dirname(resolve(execPath));
   requireInside(installationRoot, binary);
   requireInside(installationRoot, resourceRoot);
-  if (platform === "win32") restoreWindowsRoleLinks(binary);
+  // A package install folder is read-only; each role runs the canonical executable (Rust falls back when the alias is missing).
+  if (platform === "win32" && !storeBuild) restoreWindowsRoleLinks(binary);
   return {
     command: binary,
     args: [
@@ -82,12 +88,13 @@ export function resolveNativeAgentInstallation({
   resourcesPath = process.resourcesPath,
   execPath = process.execPath,
   platform = process.platform,
+  storeBuild = isStoreBuild(),
   isPackaged = true,
   env = process.env,
 } = {}) {
   if (isPackaged) {
     const installation = resolveBundledNativeAgentInstallation({
-      butlerData, resourcesPath, execPath, platform,
+      butlerData, resourcesPath, execPath, platform, storeBuild,
     });
     if (!installation) throw new Error("Packaged Butler App is missing bundled native Agent resources.");
     // A newer CLI-installed Agent (AGENT_HOME/current) wins over the bundled one.

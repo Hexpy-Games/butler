@@ -14,7 +14,7 @@ async fn ss3_bundle_accept_decline_events_and_restart() -> Result<(), HarnessErr
     patterns::enable(&s).await?;
     let store = patterns::run(&s).await?;
     let row = proposal(&s).await?;
-    assert_eq!(row["text"], "Want me to get these ready before you ask?");
+    assert_eq!(row["text"], format!("{MESSAGE}\n\n{MESSAGE}"));
     let panel = &row["initiated"]["panel"];
     assert_eq!(panel["candidates"].as_array().unwrap().len(), 2);
     assert!(panel["candidates"][0]["action"]["prompt"].is_null());
@@ -151,5 +151,71 @@ async fn queued_proposal_and_report_follow_the_active_turn_and_followup() -> Res
         assert!(reply["cursor"].as_u64() < report["cursor"].as_u64());
         assert!(reply["cursor"].as_u64() < proposal["cursor"].as_u64());
     }
+    s.finish().await
+}
+
+const ONCE: &str =
+    "I noticed your recipes are spread across chats. Want me to gather them into one drawer group?";
+const WORK: &str = "Gather the recipes from our chats into one drawer group.";
+fn once_responder(request: &Value) -> Option<ResponseRecord> {
+    if patterns::task(request)["task"] == "pattern_proposal" {
+        return Some(title_response(
+            &json!({"candidates":[{"lens":"productivity","kind":"once","message":ONCE,
+            "title":"Gather recipes","action":{"title":"Recipe group","prompt":WORK}}]})
+            .to_string(),
+        ));
+    }
+    patterns::responder(request)
+}
+#[tokio::test]
+async fn once_suggestion_runs_in_chat_and_later_turns_read_it() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = patterns::setup("SS3-ONCE").await?;
+    s.provider()?.set_chat_responder(once_responder);
+    assert_eq!(
+        s.gw.patch("/settings", json!({"timezone":"Asia/Seoul"}))
+            .await?
+            .status,
+        200
+    );
+    patterns::seed(&s, 0, 8)?;
+    patterns::enable(&s).await?;
+    let store = patterns::run(&s).await?;
+    let row = proposal(&s).await?;
+    assert_eq!(row["text"], ONCE);
+    let candidate = row["initiated"]["panel"]["candidates"][0].clone();
+    assert_eq!(candidate["action"]["kind"], "once");
+    assert!(candidate["action"]["prompt"].is_null());
+    let path = format!(
+        "/memory/pattern-proposals/{}",
+        row["initiated"]["panel"]["bundle_id"].as_str().unwrap()
+    );
+    let accepted = s.gw.post(&path, json!({"pattern_id":candidate["pattern_id"],"decision":"accepted","expected_revision":store["revision"]})).await?;
+    assert_eq!(accepted.status, 200, "{}", accepted.text);
+    assert!(accepted.data()["automation_id"].is_null());
+    let turn = accepted.data()["turn_id"].as_str().unwrap().to_owned();
+    let work =
+        s.gw.wait_terminal("general", &turn, Duration::from_secs(90))
+            .await?;
+    assert_eq!(work["state"], "delivered", "{work}");
+    assert!(
+        s.gw.messages("general")
+            .await?
+            .iter()
+            .any(|m| m["role"] == "user" && m["text"] == WORK)
+    );
+    let (_, later) = s.turn("general", "Thanks.").await?;
+    assert_eq!(later["state"], "delivered", "{later}");
+    let requests = s.provider()?.requests();
+    let last = requests
+        .iter()
+        .rev()
+        .find(|r| r["tools"].is_array())
+        .unwrap()
+        .to_string();
+    assert!(
+        last.contains(ONCE) && last.contains("The user's answer: accepted"),
+        "{last}"
+    );
     s.finish().await
 }

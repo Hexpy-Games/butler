@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { appCopy } from "./copy";
+import { LIBRARY_VIEWER, useFileViewerState, useSessionFiles } from "./fileViewerState";
 import { useButlerStore } from "./store";
 import type { AppView } from "./types";
 import { libraryParent, libraryTitle } from "@/components/library/libraryNav";
@@ -25,9 +26,12 @@ export function nestedTitle(view: AppView): string | null {
 /** The titlebar back action for the current view, or none at the top level. */
 export function useTitlebarBack() {
   const view = useButlerStore((state) => state.view);
-  const parent = parentView(view);
+  const viewer = useSessionFiles(LIBRARY_VIEWER);
+  // A file open over the 서랍 is one level deeper: back returns to the 서랍 as it was.
+  const overLibrary = view.kind === "library" && viewer.shown && viewer.entries.length > 0;
+  const parent = overLibrary ? view : parentView(view);
   const key = parent ? JSON.stringify(parent) : "";
-  const back = parent ? { label: appCopy.library.back(nestedTitle(parent) ?? ""), onBack: () => useButlerStore.getState().setView(parent) } : undefined;
+  const back = parent ? { label: appCopy.library.back(nestedTitle(parent) ?? ""), onBack: () => leave(overLibrary, parent) } : undefined;
   useEffect(() => {
     if (!key) return;
     const target = JSON.parse(key) as AppView;
@@ -35,10 +39,12 @@ export function useTitlebarBack() {
       const editable = event.target instanceof HTMLElement && (event.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/u.test(event.target.tagName));
       const mac = (event.metaKey || event.ctrlKey) && event.key === "[";
       const alt = event.altKey && event.key === "ArrowLeft" && !editable;
-      if ((mac || alt) && !event.defaultPrevented) { event.preventDefault(); useButlerStore.getState().setView(target); }
+      if ((mac || alt) && !event.defaultPrevented) { event.preventDefault(); leave(overLibrary, target); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [key]);
+  }, [key, overLibrary]);
   return back;
 }
+
+function leave(overLibrary: boolean, parent: AppView) { if (overLibrary) useFileViewerState.getState().setShown(LIBRARY_VIEWER, false); else useButlerStore.getState().setView(parent); }

@@ -218,17 +218,26 @@ async fn mem_03_recall_optional_arguments_require_user_intent() -> Result<(), Ha
 
 // Synthetic local stub response; no recording or live provider call.
 fn memory_response(item: &Value) -> butler_e2e::e2e::cassette::ResponseRecord {
+    memory_calls_response(std::slice::from_ref(item))
+}
+
+/// One streamed model response that makes every call in `items`, in order.
+fn memory_calls_response(items: &[Value]) -> butler_e2e::e2e::cassette::ResponseRecord {
     use butler_e2e::e2e::cassette::{Chunk, ResponseRecord};
     use serde_json::json;
-    let events = [
+    let mut events = vec![
         json!({"type":"response.created","response":{"id":"resp_recall","status":"in_progress","output":[]}}),
-        json!({"type":"response.output_item.added","output_index":0,"item":item}),
-        json!({"type":"response.function_call_arguments.delta","item_id":item["id"],"output_index":0,"delta":item["arguments"]}),
-        json!({"type":"response.function_call_arguments.done","item_id":item["id"],"output_index":0,"arguments":item["arguments"]}),
-        json!({"type":"response.output_item.done","output_index":0,"item":item}),
-        json!({"type":"response.completed","response":{"id":"resp_recall","object":"response","status":"completed",
-            "model":"gpt-6-luna","output":[item],"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}),
     ];
+    for (index, item) in items.iter().enumerate() {
+        events.extend([
+            json!({"type":"response.output_item.added","output_index":index,"item":item}),
+            json!({"type":"response.function_call_arguments.delta","item_id":item["id"],"output_index":index,"delta":item["arguments"]}),
+            json!({"type":"response.function_call_arguments.done","item_id":item["id"],"output_index":index,"arguments":item["arguments"]}),
+            json!({"type":"response.output_item.done","output_index":index,"item":item}),
+        ]);
+    }
+    events.push(json!({"type":"response.completed","response":{"id":"resp_recall","object":"response","status":"completed",
+        "model":"gpt-6-luna","output":items,"usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}));
     ResponseRecord {
         status: 200,
         headers: vec![],

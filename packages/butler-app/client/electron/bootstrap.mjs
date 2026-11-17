@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { APP_RENDERER_SCHEME_PRIVILEGES } from "./app-renderer-protocol.mjs";
 import { startupTiming } from "./startup-timing.mjs";
 import { configureChromiumFeatures } from "./butler-platform/chromium-features.mjs";
+import { requestAppSingleInstanceLock } from "./app-instance-lock.mjs";
 import { webUserAgent } from "./butler-platform/browser-identity.mjs";
 
 // Electron's ESM facade evaluates every API getter, including nativeTheme.
@@ -35,7 +36,7 @@ if (process.argv.some((arg) => arg.startsWith("--butler-browser-host="))) {
   await import("./browser-host.mjs");
 } else if (backgroundLaunch) {
   await import("./main.mjs");
-} else if (!app.requestSingleInstanceLock()) {
+} else if (!requestAppSingleInstanceLock(app)) {
   app.quit();
 } else {
   // Do not top-level-await ready: Electron waits for ESM evaluation before ready.

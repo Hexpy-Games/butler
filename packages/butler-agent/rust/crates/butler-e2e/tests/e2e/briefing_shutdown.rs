@@ -348,7 +348,8 @@ async fn briefing_shutdown_keeps_published_targets_when_resuming_phase() -> Resu
         s.provider()?
             .requests()
             .iter()
-            .filter(|request| request.to_string().contains("general_new_chat_briefing"))
+            .filter(|request| super::memory_patterns::task(request)["task"]
+                == "general_new_chat_briefing")
             .count(),
         1
     );

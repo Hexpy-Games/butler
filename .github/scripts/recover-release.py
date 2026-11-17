@@ -16,10 +16,11 @@ def run(*args):
 
 
 def required(tag):
-    names = ['agent-darwin-arm64', 'agent-linux-x64', 'agent-linux-arm64',
+    names = ['agent-darwin-arm64', 'agent-linux-x64', 'agent-linux-arm64', 'agent-windows-x64',
              'app-darwin-arm64', 'butler-app-linux-x64', 'butler-app-linux-arm64']
+    # The stable Windows App ships through the Microsoft Store, not this release.
     if '-preview.' in tag:
-        names += ['agent-windows-x64', 'app-windows-x64']
+        names.append('app-windows-x64')
     return names
 
 

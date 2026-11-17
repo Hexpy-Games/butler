@@ -143,7 +143,7 @@ async fn label(s: &Scenario, id: &str, status: &str) -> Result<(), HarnessError>
     );
     Ok(())
 }
-async fn wait_label(s: &Scenario, id: &str, status: &str) -> Result<(), HarnessError> {
+pub(crate) async fn wait_label(s: &Scenario, id: &str, status: &str) -> Result<(), HarnessError> {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let epic = data(s.gw.get(&format!("/canon/epics/{id}")).await?, 200);

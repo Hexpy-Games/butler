@@ -1,7 +1,7 @@
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { MessageFileRef } from "@/app/types.ts";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, IconButton, Library, MoreHorizontal, Popup, Save } from "@/butler-ds";
+import { Download, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, IconButton, Library, MoreHorizontal, Popup } from "@/butler-ds";
 import { artifactCardActions } from "@/components/artifacts/artifactActions";
 import { addWorkingFileToLibrary } from "./workingFileActions";
 import { fileArtifact } from "./workingFiles";
@@ -20,7 +20,7 @@ export function WorkingFileMenu({ file, title }: { file: MessageFileRef; title: 
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={() => openArtifact(artifact)}><Popup size="sm" />{appCopy.artifacts.open}</DropdownMenuItem>
         {save && (
-          <DropdownMenuItem onSelect={() => save.href ? download(save.href, save.download) : save.onClick?.()}><Save size="sm" />{save.label}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => save.href ? download(save.href, save.download) : save.onClick?.()}><Download size="sm" />{save.label}</DropdownMenuItem>
         )}
         <DropdownMenuItem onSelect={() => void addWorkingFileToLibrary(file.file_id)}>
           <Library size="sm" />{appCopy.conversation.answerBlocks.saveToLibrary}
