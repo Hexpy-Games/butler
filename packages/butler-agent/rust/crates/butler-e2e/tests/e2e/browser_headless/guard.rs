@@ -172,11 +172,14 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
     })
     .await
     .expect("the browser process tree ends within 90 s");
-    assert!(
-        started.elapsed() >= Duration::from_secs(50),
-        "reaped after {:?}, before the 60 s grace",
-        started.elapsed()
-    );
+    // Shell tabs live in the shell's CEF; the matched process is the gateway's check browser, on its own clock.
+    if !shell() {
+        assert!(
+            started.elapsed() >= Duration::from_secs(50),
+            "reaped after {:?}, before the 60 s grace",
+            started.elapsed()
+        );
+    }
     let elapsed_ms = started.elapsed().as_millis();
     let before = backend::tree(&s.sandbox.data);
     tokio::time::sleep(Duration::from_secs(10)).await;
