@@ -111,8 +111,16 @@ async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(),
     );
     // The dialog is centred and grows with the details, so what stays is the list itself: the
     // control and the opened row keep their sizes and their distance, the next row moves down.
-    assert_eq!(group_at[2..], group_after[2..], "opening a tool resized the control");
-    assert_eq!(first[2..], first_after[2..], "opening a tool resized its own row");
+    assert_eq!(
+        group_at[2..],
+        group_after[2..],
+        "opening a tool resized the control"
+    );
+    assert_eq!(
+        first[2..],
+        first_after[2..],
+        "opening a tool resized its own row"
+    );
     assert_eq!(
         first[1] - group_at[1],
         first_after[1] - group_after[1],
