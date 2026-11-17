@@ -294,7 +294,10 @@ impl Downloads {
             };
             match outcome {
                 Ok(data) => Self::event(browser, &transfer, "download_completed", &data),
-                Err(reason) if reason.starts_with("download_") && reason.ends_with("limit") => {
+                Err(reason)
+                    if reason == "download_workspace_unavailable"
+                        || (reason.starts_with("download_") && reason.ends_with("limit")) =>
+                {
                     Self::event(
                         browser,
                         &transfer,
@@ -333,7 +336,7 @@ impl Downloads {
         let resolved =
             butler_platform::secure_fs::canonicalize(&directory).map_err(|e| e.to_string())?;
         if !butler_platform::secure_fs::same_path(&resolved, &directory) {
-            return Err("download_symlink_refused".into());
+            return Err("download_workspace_unavailable".into());
         }
         let mut name = clean_name(&transfer.source);
         if copy_new(staged, &directory.join(&name)).is_err() {
