@@ -1,7 +1,7 @@
 #![allow(clippy::transmute_ptr_to_ptr, reason = "cef-rs wrap macros")]
 use super::{
     OsrAnswer, OsrDialog, OsrDialogKind, OsrEvent, OsrRuntime,
-    state::{Events, PageRef},
+    state::{Events, PageRef, Phase},
 };
 use cef::*;
 
@@ -61,7 +61,7 @@ impl OsrRuntime {
 }
 pub(super) fn begin(shared: &PageRef, events: &Events, mut dialog: OsrDialog, callback: Callback) {
     let mut page = shared.borrow_mut();
-    if page.closing || page.dialog.is_some() {
+    if page.phase == Phase::Closing || page.dialog.is_some() {
         drop(page);
         callback.answer(OsrAnswer::default());
         return;
