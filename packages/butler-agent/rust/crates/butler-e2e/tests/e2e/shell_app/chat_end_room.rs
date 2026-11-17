@@ -40,8 +40,11 @@ async fn shell_app_16_chat_end_keeps_answers_inside_their_rows() -> Result<(), H
     onboarding["accepted_at"] = json!(now);
     onboarding["completed_at"] = json!(now);
     let done =
-        s.gw.patch("/settings", json!({"onboarding": onboarding}))
-            .await?;
+        s.gw.patch(
+            "/settings",
+            json!({"onboarding": onboarding, "chats_intro_seen": true}),
+        )
+        .await?;
     assert_eq!(done.status, 200, "{}", done.text);
     script
         .delegated
@@ -91,7 +94,7 @@ async fn shell_app_16_chat_end_keeps_answers_inside_their_rows() -> Result<(), H
             &format!("wait-anchor {footer}"),
             "reveal composer chat-card",
             "wait 500",
-            &format!("layout end {card} {footer} message-{id}-body chat-end-room"),
+            &format!("layout end {card} {footer} message-{id}-body chat-end-room chat-transcript"),
         ])
         .await?;
     let layout = shell.report("end.layout")?;
@@ -99,16 +102,27 @@ async fn shell_app_16_chat_end_keeps_answers_inside_their_rows() -> Result<(), H
     let (_, card_y, card_w, card_h) = rect(&layout, &card);
     let (_, footer_y, _, _) = rect(&layout, &footer);
     let (_, row_y, _, row_h) = rect(&layout, &format!("message-{id}"));
-    let (_, composer_y, _, composer_h) = rect(&layout, "composer");
     let (_, end_y, _, room) = rect(&layout, "chat-end-room");
+    let (_, view_y, _, view_h) = rect(&layout, "chat-transcript");
+    let (_, composer_y, _, composer_h) = rect(&layout, "composer");
     // The card's own 1px border sits inside the cap.
     let expected_w = BUBBLE_MAX.min(0.9 * body_w) - 2.;
     let (card_bottom, row_bottom) = (card_y + card_h, row_y + row_h);
-    let expected_room = (composer_h + COMPOSER_FLOAT_BOTTOM + COMPOSER_CONTENT_GAP).ceil();
+    let (view_bottom, end_bottom) = (view_y + view_h, end_y + room);
+    // The composer floats `float` above the viewport's bottom. The list ends with the end room,
+    // which is `composer_h + COMPOSER_FLOAT_BOTTOM + COMPOSER_CONTENT_GAP` tall, so at the tail
+    // the last row ends `reserve` above the viewport's bottom while the composer's top is
+    // `float + composer_h` above it: their difference is `FLOAT + GAP - float`, the content gap
+    // when the composer floats exactly `COMPOSER_FLOAT_BOTTOM` (the row's box includes its own
+    // bottom padding, which is why the row's box bottom is the reference).
+    let float = view_bottom - (composer_y + composer_h);
+    let gap = composer_y - row_bottom;
+    let expected_gap = COMPOSER_FLOAT_BOTTOM + COMPOSER_CONTENT_GAP - float;
     let measured = format!(
         "body {body_w}, card w {card_w} (expected {expected_w}), card bottom {card_bottom}, \
-         footer top {footer_y}, last row bottom {row_bottom}, composer top {composer_y}, \
-         end room {room} at {end_y} (expected {expected_room} at {row_bottom})"
+         footer top {footer_y}, last row bottom {row_bottom}, composer top {composer_y} and \
+         float {float}, gap above the composer {gap} (expected {expected_gap}), end room {room} \
+         ends at {end_bottom} (viewport {view_bottom})"
     );
     println!("SHELL-APP-16 {measured}");
     let mut failed = Vec::new();
@@ -120,10 +134,13 @@ async fn shell_app_16_chat_end_keeps_answers_inside_their_rows() -> Result<(), H
     if card_bottom > footer_y + 0.5 {
         failed.push("(b) card overlaps the footer");
     }
-    // (c) The room that closes the list is the composer's height plus its float offset plus the
-    // content gap (Electron's `composerReserve`).
-    if (room - expected_room).abs() > 1. {
-        failed.push("(c) end room");
+    // The list is pinned to its tail: the end room ends at the viewport's bottom.
+    if (end_bottom - view_bottom).abs() > 1. {
+        failed.push("(tail) list not at its end");
+    }
+    // (c) The last row ends `COMPOSER_CONTENT_GAP` above the composer (see above).
+    if (gap - expected_gap).abs() > 1. {
+        failed.push("(c) gap above the composer");
     }
     assert!(failed.is_empty(), "{failed:?}: {measured}");
     shell.run(&["app-quit"]).await?;

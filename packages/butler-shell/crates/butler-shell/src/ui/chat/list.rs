@@ -367,7 +367,7 @@ pub(crate) fn transcript(
     })
     .size_full();
     let jump = away.then(|| jump_button(&state, unread, cx));
-    div()
+    crate::ui::widgets::anchor(div(), "chat-transcript")
         .id("transcript")
         .relative()
         .size_full()
