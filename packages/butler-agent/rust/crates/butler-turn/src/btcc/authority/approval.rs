@@ -393,6 +393,9 @@ fn folder(path: String) -> ApprovalTarget {
 /// The workspace folder's name without control characters, as project
 /// labels are shown (at most 80 characters).
 fn workspace_label(workspace: &str) -> String {
+    if crate::workspace::is_chat_folder(Path::new(workspace)) {
+        return crate::workspace::CHAT_FOLDER_LABEL.to_owned();
+    }
     if Path::new(workspace)
         .file_name()
         .is_some_and(|name| name == ".butler")

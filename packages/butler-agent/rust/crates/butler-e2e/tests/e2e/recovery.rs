@@ -10,6 +10,7 @@
 )]
 
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use butler_e2e::e2e::events::{LiveEvents, event_turn_id};
@@ -215,13 +216,19 @@ enum CrashPoint {
     ResultJournaled,
 }
 
+enum Folder {
+    Chat,
+    Data,
+}
+
 /// Starts REC-03 from `cassette`, crashes at `point` after the command ran
-/// and restarts. Returns the scenario, turn id and marker.
+/// and restarts. Returns the scenario, turn id, marker and log path.
 async fn crash_after_effect(
     id: &str,
     cassette: &str,
     point: CrashPoint,
-) -> Result<(Scenario, String, String), HarnessError> {
+    folder: Folder,
+) -> Result<(Scenario, String, String, PathBuf), HarnessError> {
     let marker = nonce();
     let prompt = REC03.replace("{marker}", &marker);
     let mut s = Setup::new(id)?
@@ -229,7 +236,11 @@ async fn crash_after_effect(
         .placeholder("NONCE", &marker)
         .start()
         .await?;
-    let log = s.sandbox.data.join("log.txt");
+    let log = match folder {
+        Folder::Chat => s.sandbox.chat_folder("general")?,
+        Folder::Data => s.sandbox.data.clone(),
+    }
+    .join("log.txt");
     // Hold the model round that follows the command so the crash lands after
     // the effect and before the turn completes. (Record mode crashes at the
     // same point while that live round is in flight.)
@@ -257,12 +268,12 @@ async fn crash_after_effect(
         }
     }
     s.crash_and_restart().await?;
-    Ok((s, turn_id, marker))
+    Ok((s, turn_id, marker, log))
 }
 
 /// How often the REC-03 command's effect happened.
-fn effect_count(s: &Scenario, marker: &str) -> Result<usize, HarnessError> {
-    Ok(fs::read_to_string(s.sandbox.data.join("log.txt"))?
+fn effect_count(log: &Path, marker: &str) -> Result<usize, HarnessError> {
+    Ok(fs::read_to_string(log)?
         .lines()
         .filter(|line| line.contains(marker))
         .count())
@@ -275,8 +286,8 @@ fn effect_count(s: &Scenario, marker: &str) -> Result<usize, HarnessError> {
 #[tokio::test]
 async fn rec_03_crash_after_tool_effect_never_duplicates_it() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let (mut s, turn_id, marker) =
-        crash_after_effect("REC-03", "REC-03", CrashPoint::EffectVisible).await?;
+    let (mut s, turn_id, marker, log) =
+        crash_after_effect("REC-03", "REC-03", CrashPoint::EffectVisible, Folder::Chat).await?;
     let turn = settled(&mut s, &turn_id).await?;
     assert_eq!(
         turn_state(&turn),
@@ -291,7 +302,7 @@ async fn rec_03_crash_after_tool_effect_never_duplicates_it() -> Result<(), Harn
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
     s.supervise().await?;
-    let count = effect_count(&s, &marker)?;
+    let count = effect_count(&log, &marker)?;
     assert_eq!(count, 1, "tool effect executed {count} times");
     assert!(s.gw.healthy().await);
     let turn = s.gw.turn("general", &turn_id).await?.unwrap_or_default();
@@ -314,8 +325,13 @@ async fn rec_03_crash_after_tool_effect_ends_failed_retryable() -> Result<(), Ha
         butler_platform::command_sandbox::POSIX_SHELL,
         "this scenario replays commands recorded for a POSIX shell; the Windows shell is covered by butler-turn tests"
     );
-    let (mut s, turn_id, marker) =
-        crash_after_effect("REC-03-OWNER", "REC-03-OWNER", CrashPoint::ResultJournaled).await?;
+    let (mut s, turn_id, marker, log) = crash_after_effect(
+        "REC-03-OWNER",
+        "REC-03-OWNER",
+        CrashPoint::ResultJournaled,
+        Folder::Data,
+    )
+    .await?;
     let turn = settled(&mut s, &turn_id).await?;
     assert_eq!(turn_state(&turn), "failed", "{turn}");
     assert_eq!(turn["retryable"], true, "{turn}");
@@ -326,7 +342,7 @@ async fn rec_03_crash_after_tool_effect_ends_failed_retryable() -> Result<(), Ha
     assert_eq!(retry.status, 202, "{}", retry.text);
     let retried = settled(&mut s, &turn_id).await?;
     assert_eq!(turn_state(&retried), "delivered", "retry: {retried}");
-    assert_eq!(effect_count(&s, &marker)?, 1, "effect repeated on retry");
+    assert_eq!(effect_count(&log, &marker)?, 1, "effect repeated on retry");
     s.finish().await
 }
 
@@ -393,8 +409,13 @@ async fn rec_03_retry_waits_for_dispatch_readiness() -> Result<(), HarnessError>
         butler_platform::command_sandbox::POSIX_SHELL,
         "replays a command recorded for a POSIX shell"
     );
-    let (mut s, turn_id, marker) =
-        crash_after_effect("REC-03-READY", "REC-03-OWNER", CrashPoint::ResultJournaled).await?;
+    let (mut s, turn_id, marker, log) = crash_after_effect(
+        "REC-03-READY",
+        "REC-03-OWNER",
+        CrashPoint::ResultJournaled,
+        Folder::Data,
+    )
+    .await?;
     assert_eq!(turn_state(&settled(&mut s, &turn_id).await?), "failed");
     s.agent.terminate().await?;
     s.agent
@@ -431,6 +452,10 @@ async fn rec_03_retry_waits_for_dispatch_readiness() -> Result<(), HarnessError>
         assert_eq!(reply.status, 202, "{}", reply.text);
     }
     assert_eq!(turn_state(&settled(&mut s, &turn_id).await?), "delivered");
-    assert_eq!(effect_count(&s, &marker)?, 1, "retry repeated tool effect");
+    assert_eq!(
+        effect_count(&log, &marker)?,
+        1,
+        "retry repeated tool effect"
+    );
     s.finish().await
 }

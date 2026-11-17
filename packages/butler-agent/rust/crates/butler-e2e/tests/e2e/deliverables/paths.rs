@@ -48,7 +48,7 @@ async fn delivery_accepts_backslashes_and_raw_absolute_workspace_paths() -> Resu
     let setup = Setup::new("DELIVERABLE-PATHS")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
-    let absolute = setup.sandbox.data.join("report.md");
+    let absolute = setup.sandbox.chat_folder("general")?.join("report.md");
     *script.steps.lock().unwrap() = [
         write("nested/table.csv", "a,b"),
         write("report.md", "Report bytes"),

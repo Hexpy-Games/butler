@@ -121,7 +121,13 @@ async fn report_versions_preserve_title_and_unchanged_delivery_is_noop() -> Resu
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     for n in 0..3 {
-        std::fs::write(setup.sandbox.data.join(format!("fixture-{n}")), "Input")?;
+        std::fs::write(
+            setup
+                .sandbox
+                .chat_folder("general")?
+                .join(format!("fixture-{n}")),
+            "Input",
+        )?;
     }
     *script.steps.lock().unwrap() = [
         call("read_file", json!({"requests":[{"path":"fixture-0"}]})),
@@ -200,8 +206,11 @@ async fn working_files_promote_without_losing_bytes_on_card_delete() -> Result<(
     let setup = Setup::new("DELIVERABLE-PROMOTE")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
-    std::fs::create_dir_all(setup.sandbox.data.join("src"))?;
-    std::fs::write(setup.sandbox.data.join("src/b.rs"), "first")?;
+    std::fs::create_dir_all(setup.sandbox.chat_folder("general")?.join("src"))?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("src/b.rs"),
+        "first",
+    )?;
     let s = setup.start().await?;
     run_turn(&s, &script, "Change code.").await?;
     assert_eq!(documents(&s).await?, Vec::<Value>::new());

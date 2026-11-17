@@ -730,6 +730,7 @@ export const enUsCopy: AppCopy = {
       restartService: "Restart Butler?",
       createWorktree: "Create a worktree for this conversation?",
       switchFolder: "Move the working folder?",
+      chatFolder: "Chat folder",
       generic: "Allow this action?",
       more: count => `+${count} more`,
       risk: { low: "Low risk", medium: "Medium risk", high: "High risk" },

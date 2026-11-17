@@ -24,8 +24,11 @@ async fn shared_blob_survives_delete_before_backfill() -> Result<(), HarnessErro
         0
     );
     // Publish through the public tool path while the old output has no rows.
-    std::fs::create_dir_all(s.sandbox.data.join("site"))?;
-    std::fs::write(s.sandbox.data.join("site/index.html"), b"Shared")?;
+    std::fs::create_dir_all(s.sandbox.chat_folder(&new)?.join("site"))?;
+    std::fs::write(
+        s.sandbox.chat_folder(&new)?.join("site/index.html"),
+        b"Shared",
+    )?;
     let (_, turn) = s.turn(&new, "Again").await?;
     assert_eq!(turn["state"], "delivered");
     let path = blob(&s.sandbox.data, b"Shared")?;

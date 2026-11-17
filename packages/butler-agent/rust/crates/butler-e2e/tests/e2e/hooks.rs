@@ -130,10 +130,6 @@ async fn hooks_each_parent_event_payload_and_stop_continuation() -> Result<(), H
         path_for: Box::new(|_| "hook-input.txt".into()),
         final_text: "Done.".into(),
     });
-    fs::write(
-        setup.sandbox.data.join("hook-input.txt"),
-        "Exact tool content",
-    )?;
     configure(
         &setup,
         &[
@@ -153,6 +149,10 @@ async fn hooks_each_parent_event_payload_and_stop_continuation() -> Result<(), H
             .await?;
     assert_eq!(created.status, 201, "{created:?}");
     let chat = created.data()["session"]["id"].as_str().unwrap();
+    fs::write(
+        s.sandbox.chat_folder(chat)?.join("hook-input.txt"),
+        "Exact tool content",
+    )?;
     let prompt = "Read hook-input.txt, then finish.";
     let (turn_id, turn) = s.turn(chat, prompt).await?;
     assert_eq!(turn["state"], "delivered", "{turn}");

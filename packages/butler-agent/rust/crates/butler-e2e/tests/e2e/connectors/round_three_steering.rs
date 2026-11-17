@@ -154,7 +154,10 @@ async fn steer(tainted: bool, unattended: bool) -> Result<(), HarnessError> {
         }
         assert!(output.exists(), "approved command did not execute");
         assert!(
-            !s.sandbox.data.join("report.html").exists(),
+            !s.sandbox
+                .chat_folder("general")?
+                .join("report.html")
+                .exists(),
             "continuation persisted data without approval"
         );
     }

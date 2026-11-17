@@ -68,7 +68,10 @@ async fn execute(name: &str, args: Value) -> Result<Value, HarnessError> {
         ],
     )
     .await?;
-    std::fs::write(s.sandbox.data.join("sample.txt"), "first\nsecond\n")?;
+    std::fs::write(
+        s.sandbox.chat_folder("general")?.join("sample.txt"),
+        "first\nsecond\n",
+    )?;
     s.turn(
         "general",
         "Remember to use short answers and read sample.txt.",

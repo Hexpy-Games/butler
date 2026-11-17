@@ -47,9 +47,10 @@ pub use mutations::{net_changed_file_detail, prepare_exact_text};
 pub use path_guard::{PathForm, looks_sensitive, safe_workspace_path};
 pub use reference::WorkspaceReference;
 pub use session_folder::{
-    FolderInspection, FolderRefusal, FolderRelation, FolderRoots, SESSION_FOLDER_KEY,
-    SessionFolderMarker, SessionFolders, SwitchSessionFolder, SwitchSessionFolderResult,
-    active_session_folder, read_session_folder,
+    CHAT_FOLDER_LABEL, FolderInspection, FolderRefusal, FolderRelation, FolderRoots,
+    SESSION_FOLDER_KEY, SessionFolderMarker, SessionFolders, SwitchSessionFolder,
+    SwitchSessionFolderResult, active_session_folder, chat_folder, is_chat_folder,
+    read_session_folder, session_folder_marker,
 };
 pub use session_recovery::{
     ProjectGitStatus, ProjectWorkspaceInspection, SessionWorkspaceAuthority,

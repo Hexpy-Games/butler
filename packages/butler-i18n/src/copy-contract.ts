@@ -203,6 +203,8 @@ export interface ApprovalRequestCopy {
   restartService: string;
   createWorktree: string;
   switchFolder: string;
+  /** A chat's own working folder, shown in place of its internal name. */
+  chatFolder: string;
   /** Any kind this App does not know yet. */
   generic: string;
   /** The line after the examples. */

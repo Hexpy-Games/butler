@@ -40,3 +40,11 @@ export function approvalTargetsFromTransport(value: unknown): {
   });
   return { targets, relative };
 }
+
+/** The agent's label for a chat's own folder (Rust `CHAT_FOLDER_LABEL`); a folder below it is `<label>/<subfolder>`. */
+export const CHAT_FOLDER_LABEL = "@chat-folder";
+/** `text` with the chat folder's label shown as `name`. */
+export function chatFolderShown(text: string, name: string): string {
+  if (text === CHAT_FOLDER_LABEL) return name;
+  return text.startsWith(`${CHAT_FOLDER_LABEL}/`) ? `${name}${text.slice(CHAT_FOLDER_LABEL.length)}` : text;
+}
