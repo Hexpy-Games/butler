@@ -197,9 +197,14 @@ pub(in crate::host) fn open_app_update(
     let data = installation.validate_data_root(data)?;
     super::http_logs::prepare(&data);
     let version = installation.app_version();
-    AppUpdateService::new(data, installation.root().to_path_buf(), version)
-        .map_err(|error| error.code().to_owned())
-        .map_err(crate::host::HostError::from)
+    AppUpdateService::new(
+        data,
+        installation.root().to_path_buf(),
+        version,
+        installation.store_build(),
+    )
+    .map_err(|error| error.code().to_owned())
+    .map_err(crate::host::HostError::from)
 }
 
 fn parse(args: &[OsString]) -> Result<Options, crate::host::HostError> {

@@ -1,5 +1,8 @@
 //! Read-only App projections consumed by scheduled New Chat Briefing.
 
+mod suggestions;
+pub use suggestions::{AppSuggestionChat, AppSuggestionContext, read_suggestion_context};
+
 use butler_platform::sqlite;
 use std::{collections::HashSet, path::Path};
 

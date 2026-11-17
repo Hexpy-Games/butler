@@ -93,7 +93,6 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
     </Button>
   );
 
-  return props["aria-haspopup"] || props["aria-expanded"] !== undefined
-    ? button
-    : <Tooltip label={label}>{button}</Tooltip>;
+  const expanded = props["aria-expanded"] === true || props["aria-expanded"] === "true";
+  return <Tooltip label={label} open={expanded ? false : undefined}>{button}</Tooltip>;
 });

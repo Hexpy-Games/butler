@@ -78,6 +78,7 @@ pub(super) fn test_dependencies() -> AppApplicationDependencies {
                 root.join("update-data"),
                 root.join("installation"),
                 Some("1.0.0".into()),
+                false,
             )
             .unwrap(),
         ),

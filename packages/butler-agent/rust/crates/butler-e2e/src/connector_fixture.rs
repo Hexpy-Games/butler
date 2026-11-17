@@ -51,7 +51,7 @@ pub(crate) fn run() {
             if input["crash"] == true {
                 std::process::exit(3);
             }
-            if let Some(items) = input["events"].as_array() {
+            let queued = if let Some(items) = input["events"].as_array() {
                 if let Ok(mut q) = events.lock() {
                     for item in items {
                         let next = q["next"].as_u64().unwrap_or_default() + 1;
@@ -63,12 +63,18 @@ pub(crate) fn run() {
                     }
                     let _ = std::fs::write(&journal_control, q.to_string());
                 }
+                true
+            } else {
+                false
+            };
+            // Reply before the host can read: a crash marker may end the process on that read.
+            let _ = writeln!(stream, "{}", json!({"ok":true}));
+            if queued {
                 send(
                     &stdout,
                     &json!({"jsonrpc":"2.0","method":"notifications/resources/updated","params":{"uri":"connector://events"}}),
                 );
             }
-            let _ = writeln!(stream, "{}", json!({"ok":true}));
         }
     });
     let mut reads = 0;
