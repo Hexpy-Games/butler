@@ -1,4 +1,5 @@
 //! Live frame commands exercise the same input handlers as the native window.
+use super::clipboard::{expect_clipboard, expect_clipboard_contains, expect_clipboard_prefix};
 use super::{Harness, settle, ui};
 use anyhow::{Context as _, ensure};
 use gpui::{
@@ -111,41 +112,6 @@ fn expect_within(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             && a.right() <= b.right() + slack
             && a.bottom() <= b.bottom() + slack,
         "{inner} {a:?} is not inside {outer} {b:?}"
-    );
-    Ok(())
-}
-
-fn expect_clipboard_prefix(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
-    let expected: String = serde_json::from_str(arg)?;
-    let actual =
-        h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
-    ensure!(
-        actual
-            .as_ref()
-            .is_some_and(|text| text.starts_with(&expected)),
-        "clipboard {actual:?}, expected prefix {expected:?}"
-    );
-    Ok(())
-}
-
-fn expect_clipboard_contains(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
-    let expected: String = serde_json::from_str(arg)?;
-    let actual =
-        h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
-    ensure!(
-        actual.as_ref().is_some_and(|text| text.contains(&expected)),
-        "clipboard {actual:?}, expected substring {expected:?}"
-    );
-    Ok(())
-}
-
-fn expect_clipboard(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
-    let expected: Option<String> = serde_json::from_str(arg)?;
-    let actual =
-        h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
-    ensure!(
-        actual == expected,
-        "clipboard {actual:?}, expected {expected:?}"
     );
     Ok(())
 }

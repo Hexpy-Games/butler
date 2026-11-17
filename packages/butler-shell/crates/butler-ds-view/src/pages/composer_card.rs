@@ -358,7 +358,7 @@ fn folding(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
         .flex_col()
         .gap(ds.len(Length::Space3))
         .child(
-            div().child(
+            div().flex().child(
                 Button::new("cc-folding-toggle")
                     .variant(Variant::Outline)
                     .text(c.toggle)
