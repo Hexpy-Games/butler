@@ -209,6 +209,8 @@ bun packages/butler-shell/tools/parity/ds-layout-diff.ts --web $TMPDIR/ds-layout
   --gpui $TMPDIR/ds-layout/gpui/1280x800-light > $TMPDIR/ds-layout/diff.txt
 ```
 
+On Linux `ds-layout.ts` launches Chromium with `--font-render-hinting=none` so web text widths match macOS and gpui (hinted advances on headless Linux Chromium widen text and add false rows).
+
 `diff.txt` holds one JSON line per matched part (`dx dy dw dh` are gpui minus web), a summary line per story,
 the totals line and two tables: (A) stories whose canvas is off by more than 0.5 px, largest first, and
 (B) stories with equal control counts whose controls are off by more than 0.5 px (first offending control).
@@ -228,4 +230,5 @@ to `butler-ds-view` and `--only sidebar-shell,conversation-shell,scroll-area` to
 
 - page-card "No tab (empty)" dy +37 and "Crashed tab" dy +23: web-side difference. The web `Stack fill` sits in a block `.frame` (NativeViewSlot) and neither fills nor centres; gpui's centred result is intended. Not counted as a gpui bug.
 - page-card "Butler holds the tab (riso edge, fixed 1280×800 page)" control-0 dx +265, "You hold the tab" +212, "Waiting for approval (static amber)" +72.5: web-side difference. The web PageBand declares `container-type: inline-size`, so in these stories the fixed-page card collapses to ~22 px inside the shrink-wrapping story stage (page hidden, band text 0 wide); gpui keeps a usable card. Not counted as a gpui bug.
+- filtered-select-popover standalone stories: the web root is `width: max-content` (min 280, max 520) outside a popover but `width: auto` inside one; gpui always fills, which matches the product (the block is always in a popover), so the standalone stories' widths differ (Model picker search 273 web, 504 gpui). Not counted as a gpui bug.
 - Follow-up (not done): composer-question-panel puts the Tabs gap token above a body that sits outside Tabs, because gpui Tabs has no list-inset slot; the web structure (list inset inside `<Tabs>`, body as TabsContent with its tab stop and focus ring) would need a new Tabs prop. Raise only if a keyboard or focus difference shows up.

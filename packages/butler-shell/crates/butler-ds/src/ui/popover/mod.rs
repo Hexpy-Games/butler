@@ -145,7 +145,10 @@ impl Popover {
             wrapper
                 .track_focus(&popover.trigger_focus)
                 .tab_stop(false)
-                .child(popover.parts.trigger.probe())
+                .child(popover.parts.trigger.probe_while({
+                    let popover = popover.clone();
+                    move |cx| popover.is_open(cx)
+                }))
         });
         let wrapper = if fill { wrapper.fill() } else { wrapper };
         wrapper.into_any_element()

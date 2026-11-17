@@ -2,7 +2,7 @@
 use super::{
     OsrCursor, OsrEvent, RuntimeState,
     paint::Paint,
-    state::{Events, PageRef},
+    state::{Events, PageRef, Phase},
 };
 use cef::*;
 use std::rc::Weak;
@@ -13,12 +13,17 @@ type NativeCursor = *mut u8;
 type NativeCursor = CursorHandle;
 
 pub(super) fn client(shared: PageRef, events: Events, runtime: &Weak<RuntimeState>) -> Client {
+    let loads = shared.borrow().loads.clone();
     OsrClient::new(
         Paint::new(shared.clone(), events.clone()),
         Life::new(shared.clone(), events.clone(), runtime.clone()),
         Display::new(events.clone()),
         Load::new(shared.clone(), events.clone()),
-        Request::new(events.clone(), runtime.upgrade().map(|r| r.auth.clone())),
+        Request::new(
+            events.clone(),
+            runtime.upgrade().map(|r| r.auth.clone()),
+            loads,
+        ),
         PageDialogs {
             js: super::dialogs::Js::new(shared.clone(), events.clone()),
             files: super::dialogs::Files::new(shared, events.clone()),
@@ -33,8 +38,10 @@ fn retire(shared: &PageRef, page: u64, runtime: Option<&RuntimeState>) {
         let mut p = shared.borrow_mut();
         p.release_frames();
         p.browser = None;
-        let visible = p.visible;
-        p.visible = false;
+        let visible = p.phase == Phase::Visible;
+        if visible {
+            p.phase = Phase::Hidden;
+        }
         visible
     };
     if let Some(runtime) = runtime {
@@ -85,7 +92,7 @@ cef::wrap_life_span_handler! {
             p.popup = None;
         }
         fn do_close(&self, _browser: Option<&mut Browser>) -> i32 {
-            if !self.shared.borrow().closing { self.events.emit(OsrEvent::CloseRequested); }
+            if self.shared.borrow().phase != Phase::Closing { self.events.emit(OsrEvent::CloseRequested); }
             0
         }
         fn on_before_close(&self, _browser: Option<&mut Browser>) {
@@ -149,8 +156,17 @@ cef::wrap_load_handler! {
     }
 }
 cef::wrap_request_handler! {
-    pub(super) struct Request { events: Events, auth: Option<super::dialogs::AuthSender> }
+    pub(super) struct Request { events: Events, auth: Option<super::dialogs::AuthSender>, loads: super::hold::Loads }
     impl RequestHandler {
+        fn on_before_browse(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>,
+            request: Option<&mut cef::Request>, _gesture: i32, _redirect: i32) -> i32 {
+            i32::from(self.loads.cancels_navigation(frame, request))
+        }
+        fn resource_request_handler(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>,
+            _request: Option<&mut cef::Request>, is_navigation: i32, _download: i32,
+            _initiator: Option<&CefString>, _disable: Option<&mut i32>) -> Option<ResourceRequestHandler> {
+            self.loads.handler(frame, is_navigation)
+        }
         fn auth_credentials(&self, _browser: Option<&mut Browser>, url: Option<&CefString>,
             proxy: i32, _host: Option<&CefString>, _port: i32, realm: Option<&CefString>,
             _scheme: Option<&CefString>, callback: Option<&mut AuthCallback>) -> i32 {

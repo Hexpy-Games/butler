@@ -14,7 +14,7 @@
 use super::{
     OsrError, OsrFrame,
     d3d_pool::{FramePool, Target, failed, missing},
-    state::Page,
+    state::{Page, Phase},
 };
 use cef::{ImplBrowser, ImplBrowserHost};
 use std::{
@@ -312,7 +312,7 @@ impl super::OsrRuntime {
             let browser = {
                 let mut p = page.borrow_mut();
                 let gpu_ready = (p.gpu.as_ref()).is_none_or(|g| g.removed() || !g.busy());
-                if !p.pool.repaint_pending || !p.visible || p.closing || !gpu_ready {
+                if !p.pool.repaint_pending || p.phase != Phase::Visible || !gpu_ready {
                     continue;
                 }
                 if !p.pool.has_room() && !p.gpu.as_ref().is_some_and(GpuCopy::removed) {

@@ -1,5 +1,5 @@
 //! Tab creation and the idle lifecycle of the headless browser process.
-use super::{Headless, INSTALL_WAIT, browser::Browser, install::Progress, state, targets};
+use super::{Headless, INSTALL_WAIT, browser::Browser, host, install::Progress, state, targets};
 use serde_json::{Value, json};
 use std::{
     sync::{
@@ -20,11 +20,20 @@ pub(super) async fn open_tab(
     budget: Duration,
 ) -> Result<Value, String> {
     let preview = preview_of(args);
+    let profile = profile_of(args);
     let context = targets::context(browser, owner, preview).await?;
-    let (target, session) = targets::create(&browser.cdp, &browser.shared, &context).await?;
+    let (target, session) = match browser.host() {
+        Some(host) => {
+            host::open_hosted(host, owner, profile, &context, false, &args["policy"]).await?
+        }
+        None => targets::create(&browser.cdp, &browser.shared, &context).await?,
+    };
     let id = {
         let mut state = browser.shared.lock();
-        let id = state::short_id('h', |id| state.tabs.contains_key(id));
+        // A tab id the App reuses would replace a live tab: fail, close nothing.
+        let Some(id) = host::tab_id(browser, &state.tabs, &session) else {
+            return Err("browser_unavailable".into());
+        };
         let mut tab = state::Tab::new(
             id.clone(),
             owner.to_owned(),
@@ -34,6 +43,7 @@ pub(super) async fn open_tab(
         tab.policy = args["policy"].clone();
         tab.context = context;
         tab.preview = preview.map(str::to_owned);
+        tab.profile = profile;
         state.tabs.insert(id.clone(), tab);
         state.sessions.insert(session.clone(), id.clone());
         id
@@ -60,11 +70,7 @@ pub(super) async fn open_tab(
         return Ok(json!({"status":"unknown","reason":"navigation_failed"}));
     }
     let _ = tokio::time::timeout(budget, parsed.changed()).await;
-    let info = browser
-        .cdp
-        .send("Target.getTargetInfo", json!({"targetId":target}), None)
-        .await
-        .unwrap_or_default();
+    let info = target_info(browser, &id, &target, &session).await;
     let snapshot = browser.shared.with_tab(&id, |t| {
         if let Ok(u) = url::Url::parse(info["targetInfo"]["url"].as_str().unwrap_or(""))
             && matches!(u.scheme(), "http" | "https")
@@ -75,9 +81,40 @@ pub(super) async fn open_tab(
             t.title = title.to_owned();
         }
         t.last_call = Instant::now();
-        json!({"status":"ok","tab":t.id,"url":t.url,"title":t.title,"epoch":t.epoch,"profile":"signed_out"})
+        json!({"status":"ok","tab":t.id,"url":t.url,"title":t.title,"epoch":t.epoch,"profile":t.profile})
     });
     Ok(snapshot.unwrap_or_else(|| json!({"status":"unknown","reason":"navigation_failed"})))
+}
+
+/// The URL and title a fresh tab shows. The App has no browser-level target
+/// info: the tab's own state is current, and only a tab with no URL yet asks
+/// its page for its main frame.
+async fn target_info(browser: &Browser, id: &str, target: &str, session: &str) -> Value {
+    if browser.host().is_none() {
+        return browser
+            .cdp
+            .send("Target.getTargetInfo", json!({"targetId":target}), None)
+            .await
+            .unwrap_or_default();
+    }
+    if browser.shared.with_tab(id, |t| !t.url.is_empty()) != Some(false) {
+        return Value::Null;
+    }
+    let tree = browser
+        .cdp
+        .send("Page.getFrameTree", json!({}), Some(session))
+        .await
+        .unwrap_or_default();
+    json!({"targetInfo":{"url":tree["frameTree"]["frame"]["url"]}})
+}
+
+/// The profile a `tab.open` asks for.
+pub(super) fn profile_of(args: &Value) -> &'static str {
+    if args["profile"] == "signed_in" || args["signed_in"] == true {
+        "signed_in"
+    } else {
+        "signed_out"
+    }
 }
 
 /// The registered preview a `tab.open` shows: the gateway sets
@@ -88,9 +125,11 @@ pub(super) fn preview_of(args: &Value) -> Option<&str> {
         .filter(|_| args["policy"]["preview"] == true)
 }
 
-/// Closes idle agent tabs and ends the process tree 60 s after the last tab.
+/// Closes idle agent tabs and ends the process tree 60 s after the last tab. A hosted executor
+/// (the App owns its pages) only releases its utility page after that grace.
 pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Browser>) {
     let mut empty_since: Option<Instant> = None;
+    let hosted = browser.host().is_some();
     loop {
         let notified = browser.changed.notified();
         tokio::pin!(notified);
@@ -101,10 +140,16 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
             let expired: Vec<String> = state
                 .tabs
                 .values()
+                .filter(|t| !t.held)
                 .filter(|t| now.duration_since(t.last_call) >= TAB_IDLE)
                 .map(|t| t.id.clone())
                 .collect();
-            let earliest = state.tabs.values().map(|t| t.last_call + TAB_IDLE).min();
+            let earliest = state
+                .tabs
+                .values()
+                .filter(|t| !t.held)
+                .map(|t| t.last_call + TAB_IDLE)
+                .min();
             (expired, earliest, state.tabs.is_empty())
         };
         for id in expired {
@@ -116,7 +161,8 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
             empty_since = None;
             now
         };
-        if empty && now.duration_since(since) >= REAP_AFTER {
+        let reaps = !hosted || browser.shared.lock().utility.is_some();
+        if empty && reaps && now.duration_since(since) >= REAP_AFTER {
             let Some(headless) = owner.upgrade() else {
                 browser.stop().await;
                 return;
@@ -125,6 +171,10 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
             let idle = headless.in_flight.load(Ordering::SeqCst) == 0
                 && browser.shared.lock().tabs.is_empty();
             if idle {
+                if hosted {
+                    release_utility(&browser).await;
+                    continue;
+                }
                 headless.forget(&browser);
                 browser.stop().await;
                 return;
@@ -132,7 +182,7 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
             empty_since = Some(Instant::now());
             continue;
         }
-        let wake = if empty {
+        let wake = if empty && reaps {
             since + REAP_AFTER
         } else {
             earliest.unwrap_or(now + TAB_IDLE)
@@ -157,6 +207,14 @@ pub(super) async fn janitor(owner: std::sync::Weak<Headless>, browser: Arc<Brows
     }
 }
 
+/// Closes the utility page of a hosted executor, if one was created.
+async fn release_utility(browser: &Browser) {
+    let session = browser.shared.lock().utility.take();
+    if let Some(session) = session {
+        targets::close_target(browser, "", &session).await;
+    }
+}
+
 /// One call counted as in flight until it returns or its caller drops it
 /// (a gateway deadline), so an abandoned call never keeps the browser alive.
 pub(super) struct InFlight<'a>(&'a AtomicUsize);
@@ -178,6 +236,9 @@ impl Headless {
     pub(super) async fn ready(self: &Arc<Self>) -> Result<Arc<Browser>, Value> {
         if let Some(browser) = self.browser() {
             return Ok(browser);
+        }
+        if self.hosted {
+            return Err(json!({"status":"unavailable","reason":"browser_unavailable"}));
         }
         // A started launch completes and registers its browser (and its
         // reap) even when the caller is gone, e.g. past a gateway deadline:

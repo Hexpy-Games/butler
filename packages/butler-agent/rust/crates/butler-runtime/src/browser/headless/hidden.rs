@@ -142,9 +142,13 @@ pub(crate) struct HiddenPage {
 
 impl HiddenPage {
     pub(crate) async fn open(browser: &Arc<Browser>, purpose: Purpose) -> Result<Self, String> {
+        // The App owns the pages: a hosted executor never opens Butler's own.
+        if browser.host().is_some() {
+            return Err("browser_unavailable".into());
+        }
         let created = browser
             .cdp
-            .send("Target.createBrowserContext", json!({"disposeOnDetach":true,"proxyServer":browser.proxy_url,"proxyBypassList":"<-loopback>"}), None)
+            .send("Target.createBrowserContext", json!({"disposeOnDetach":true,"proxyServer":browser.proxy_url(),"proxyBypassList":"<-loopback>"}), None)
             .await?;
         let context = created["browserContextId"]
             .as_str()
@@ -179,6 +183,7 @@ impl HiddenPage {
         let page = Page {
             cdp: browser.cdp.clone(),
             shared: browser.shared.clone(),
+            host: None,
             tab: id,
             session: session.clone(),
             target,
