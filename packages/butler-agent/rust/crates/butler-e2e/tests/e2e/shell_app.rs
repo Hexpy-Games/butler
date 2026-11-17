@@ -286,7 +286,7 @@ fn hold_credential(
 /// the App's credential file out of reach for longer than the 120 s startup deadline, the App
 /// keeps its Agent (no stop, no failure state), shows the error while it keeps probing, and
 /// reaches Running with the same Agent once the file is back. The same holds for the Agent of an
-/// App Restart with the workspace shown (the error notice, no spinner), and a second Restart then
+/// App Restart with the workspace shown (the error notice, no spinner), and the notice's Retry then
 /// replaces it.
 #[tokio::test]
 async fn shell_app_15_a_ready_agent_survives_a_late_app_probe() -> Result<(), HarnessError> {
@@ -349,7 +349,7 @@ async fn shell_app_15_a_ready_agent_survives_a_late_app_probe() -> Result<(), Ha
 
     // With the workspace shown, the App's own Restart brings an Agent it cannot connect to: the
     // late start shows the error notice, not a spinner that never ends, and the App keeps the
-    // Agent. A second Restart while that start is still pending replaces it with a new Agent.
+    // Agent. Retry while that start is still pending restarts the Agent with a new one.
     live_turns::complete_onboarding(&gateway(&shell.launch)).await?;
     shell.run(&["app-quit"]).await?;
     shell.finish().await?;
@@ -386,11 +386,19 @@ async fn shell_app_15_a_ready_agent_survives_a_late_app_probe() -> Result<(), Ha
     let late = shell.report("respawn-late")?;
     assert_eq!(late["diagnostics"]["pid"], held_pid, "{late}");
     assert_eq!(late["diagnostics"]["agent_state"], "starting", "{late}");
-    assert_eq!(late["diagnostics"]["last_error_code"], "health_timeout");
+    assert_eq!(
+        late["diagnostics"]["last_error_code"], "health_timeout",
+        "{late}"
+    );
     assert_never_failed(&late);
 
     shell
-        .run(&["restart", "agent running", "diagnostics replaced"])
+        .run(&[
+            "click agent-notice-action",
+            "agent running",
+            "wait-no-anchor agent-notice",
+            "diagnostics replaced",
+        ])
         .await?;
     let replaced = shell.report("replaced")?;
     assert_ne!(replaced["diagnostics"]["pid"], held_pid, "{replaced}");
@@ -399,10 +407,11 @@ async fn shell_app_15_a_ready_agent_survives_a_late_app_probe() -> Result<(), Ha
         "{replaced}"
     );
     assert_never_failed(&replaced);
-    // Both Restarts answer Ok: the second replaced the start the first was waiting for.
+    // The Restart the notice's Retry ran replaced the start the first was waiting for: it
+    // answers Ok.
     shell.run(&["restart-answers"]).await?;
     let answers = shell.report("restarts")?;
-    assert_eq!(answers, json!(["ok", "ok"]), "{answers}");
+    assert_eq!(answers, json!(["ok"]), "{answers}");
     shell.run(&["app-quit"]).await?;
     shell.finish().await?;
     sandbox.mark_success();

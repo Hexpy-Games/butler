@@ -1,8 +1,8 @@
 //! The harness as the App (`--app`): the lifecycle starts and supervises the Agent as `main.rs`
 //! does, and these commands report what the supervisor did. `agent <state>` waits for the Agent
-//! state the windows show; `restart` is the tray's Restart and `restart-answers` waits for what each one answered; `diagnostics <name>` and `app-quit`
-//! (Quit, then the Agent's exit) write `<name>.json` with the supervisor's diagnostics and every
-//! state shown so far.
+//! state the windows show; `restart` is the tray's Restart and `restart-answers` waits for what
+//! each one answered; `diagnostics <name>` and `app-quit` (Quit, then the Agent's exit) write
+//! `<name>.json` with the supervisor's diagnostics and every state shown so far.
 use super::{Harness, lifecycle, settle};
 use anyhow::{Context as _, bail};
 use gpui::{App, Global};

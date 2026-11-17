@@ -187,10 +187,15 @@ pub(crate) fn quit(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement 
     page(card, cx)
 }
 
-/// `startAgent` with `notifyError(error, feedback.agentStartFailed)`: the failure toasts the
+/// `startAgent` (a Restart instead when `restart`: a start already under way is not joined,
+/// it is replaced) with `notifyError(error, feedback.agentStartFailed)`: the failure toasts the
 /// fallback copy; success leaves the notice to `AgentRuntime::state`.
-fn start(failed: &'static str, cx: &mut App) {
-    let started = lifecycle::resume(cx);
+fn start(failed: &'static str, restart: bool, cx: &mut App) {
+    let started = if restart {
+        lifecycle::run(cx, Supervisor::restart)
+    } else {
+        lifecycle::resume(cx)
+    };
     cx.spawn(async move |cx| {
         if started.await.is_err() {
             cx.update(|cx| {
@@ -214,6 +219,8 @@ pub(crate) fn agent_notice(
     let failed = runtime.state == AgentState::RestartFailed
         || (matches!(runtime.state, AgentState::Starting | AgentState::Restarting)
             && runtime.error.is_some());
+    // Retry on a start that is late or failing restarts it; `resume` would only join it.
+    let restart = failed && runtime.state != AgentState::RestartFailed;
     let (tone, message, action) = match runtime.state {
         AgentState::Stopped => (NoticeTone::Warning, words.agent_stopped, words.agent_start),
         _ if failed => (
@@ -238,11 +245,11 @@ pub(crate) fn agent_notice(
             .variant(Variant::Outline)
             .size(butler_ds::ui::button::Size::Sm)
             .text(action)
-            .on_click(move |_, _, cx| start(failed, cx));
+            .on_click(move |_, _, cx| start(failed, restart, cx));
         if runtime.resuming {
             button = button.disabled();
         }
-        notice = notice.action(button);
+        notice = notice.action(anchor(div(), "agent-notice-action").child(button));
     }
     let name = if spinning {
         "agent-notice-spinner"

@@ -94,9 +94,10 @@ pub(super) struct ExitInfo {
 #[derive(Clone, Copy)]
 pub(super) enum Startup {
     Failed(SupervisorError),
-    /// An intentional restart replaced the candidate; `ensure_ready` joins the replacement.
+    /// The candidate was replaced outside the App's own stops (a respawn, an awaited
+    /// replacement); `ensure_ready` joins the replacement when its restart generation moved.
     Restarting,
-    /// A restart (`stop(Restart)`) took the candidate away: every caller joins the replacement.
+    /// The App's own `stop(Restart)` took the candidate away: every caller joins the next startup.
     Replaced,
 }
 

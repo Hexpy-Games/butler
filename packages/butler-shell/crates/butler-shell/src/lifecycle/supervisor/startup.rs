@@ -48,7 +48,7 @@ impl Inner {
             if !replaced {
                 return Err(match failure {
                     Startup::Failed(error) => error,
-                    Startup::Restarting | Startup::Replaced => SupervisorError::EarlyExit,
+                    _ => SupervisorError::EarlyExit,
                 });
             }
         }
@@ -67,10 +67,7 @@ impl Inner {
         }
         .boxed_local()
         .shared();
-        self.mutate(|state| {
-            state.startup = Some(startup.clone());
-            state.last_stop = None;
-        });
+        self.mutate(|state| state.startup = Some(startup.clone()));
         startup
     }
 
@@ -112,6 +109,8 @@ impl Inner {
             state.port = Some(port);
             state.last_error = None;
             state.last_exit = None;
+            // Only a stop of the child spawned next can replace this startup.
+            state.last_stop = None;
             state.attached = None;
         });
         let Ok(child) = OwnedChild::spawn(&command, port) else {
