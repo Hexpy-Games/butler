@@ -205,11 +205,8 @@ fn dispatch(
                 .tabs
                 .check(&session, id, &op)
                 .map_err(|_| error(403, "not_your_tab"))?;
-            // A page host's pages are driven by the Agent's own executor, whose URL is current;
-            // the host's snapshot can trail a navigation the executor has already finished.
-            let driven = hub.pages.as_ref().and_then(|link| link.executor.tab(id));
-            let url = driven.as_ref().unwrap_or(tab)["url"].as_str();
-            if url.is_some_and(|url| {
+            let url = super::pages::current_url(&hub, id);
+            if url.as_deref().is_some_and(|url| {
                 !permitted_url(state, &session, url) && !super::devtools::local_read(&op, url)
             }) {
                 return response(
@@ -221,7 +218,7 @@ fn dispatch(
             if frame["args"]["policy"]["mode"] != "signed_in" {
                 frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
                     &format!("http://127.0.0.1:{}", super::super::content::port(state)),
-                    url.unwrap_or(""),
+                    url.as_deref().unwrap_or(""),
                 );
             }
             if state
