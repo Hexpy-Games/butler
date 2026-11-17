@@ -169,7 +169,7 @@ impl Shell {
         });
         let dark = theme_override.unwrap_or_else(|| system_dark(window));
         Self::install_ds(&options, dark, window, cx);
-        crate::ui::browser::init(window, cx);
+        crate::ui::browser::init_window(window, cx);
         let theme = Theme::new(
             dark,
             options.platform,

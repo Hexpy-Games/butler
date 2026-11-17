@@ -7,7 +7,7 @@
 )]
 use super::support::{admin, call, open, publish, selected, setup, shell};
 use butler_e2e::e2e::HarnessError;
-use serde_json::json;
+use serde_json::{Value, json};
 
 #[tokio::test]
 async fn the_page_host_outlives_the_window() -> Result<(), HarnessError> {
@@ -50,5 +50,32 @@ async fn the_page_host_returns_after_the_agent_restarts() -> Result<(), HarnessE
     assert_eq!(opened["status"], "ok", "{opened}");
     let observed = call(&admin, "general", "tab.observe", &opened["tab"], json!({})).await?;
     assert_eq!(observed["status"], "ok", "{observed}");
+    s.finish().await
+}
+
+#[tokio::test]
+async fn the_page_host_starts_cef_on_first_use_without_a_window() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        shell() && selected(),
+        "BUTLER_E2E_BROWSER_BACKEND=shell not set"
+    );
+    let mut s = setup("BROWSER-PAGE-HOST-LAZY")?.start().await?;
+    s.shell(&["close-window"]).await?;
+    s.attached().await?;
+    // CEF creates its profile folder when it starts (`cef/config.rs`).
+    let profile = s.sandbox.data.join("app/browser/profile");
+    assert!(!profile.exists(), "CEF started before any browser use");
+    let admin = admin(&s);
+    // A public address that passes the egress guard without DNS (TEST-NET-1: never routed).
+    let site = json!({"site":"192.0.2.1"});
+    let granted = call(&admin, "general", "signin.grant", &Value::Null, site).await?;
+    assert_eq!(granted["status"], "ok", "{granted}");
+    // Only a page host has signed-in pages (headless refuses them: `signed_in_unavailable`); it
+    // opened this one, whose unrouted address never loads.
+    let args = json!({"url":"https://192.0.2.1/account","signed_in":true});
+    let opened = call(&admin, "general", "tab.open", &Value::Null, args).await?;
+    assert_eq!(opened["reason"], "navigation_failed", "{opened}");
+    assert!(profile.is_dir(), "CEF started on the first page");
     s.finish().await
 }
