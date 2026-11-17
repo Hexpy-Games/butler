@@ -113,6 +113,11 @@ pub(super) async fn execute(
     next: &Value,
 ) -> Result<Value, ToolExecutionError> {
     if let Some(opened) = next.get("open") {
+        if run.given_tab {
+            return Ok(
+                json!({"status":"not_opened","url":opened["url"],"reason":"Stay in the given tab: reach other pages through its links and controls."}),
+            );
+        }
         if opened["url"].as_str().is_none() {
             return Ok(json!({"status":"invalid_url"}));
         }

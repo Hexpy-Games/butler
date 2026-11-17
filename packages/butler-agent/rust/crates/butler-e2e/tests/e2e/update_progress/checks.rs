@@ -130,3 +130,54 @@ async fn unsupported_local_build_has_no_update_progress() -> Result<(), HarnessE
     );
     s.finish().await
 }
+
+#[tokio::test]
+async fn store_build_checks_the_store_not_the_manifest() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = requests.clone();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let source = format!("http://{}/manifest", listener.local_addr()?);
+    let feed = axum::Router::new().route("/manifest", axum::routing::get(move || {
+        counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        async { axum::Json(json!({"artifacts":[{
+            "component":"app", "version":"99.0.0", "channel":"stable",
+            "platform":butler_platform::launcher::release_platform(),
+            "staging_policy":"butler-data-updates", "activation_policy":"user-installs-app-package",
+            "rollback_policy":"not-managed-by-butler"
+        }]})) }
+    }));
+    let task = tokio::spawn(async move {
+        let _ = axum::serve(listener, feed).await;
+    });
+    let s = Setup::new("UPDATE-STORE")?
+        .env("BUTLER_APP_VERSION", "1.0.0")
+        .env("BUTLER_APP_STORE_BUILD", "1")
+        .env("BUTLER_APP_UPDATE_MANIFEST", source)
+        .start()
+        .await?;
+    let request = json!({"component":"app"});
+    let response = s.gw.post("/updates/check", request.clone()).await?;
+    {
+        assert_eq!(response.status, 200, "{}", response.text);
+        let view = response.data();
+        let status = &view["components"][0];
+        assert_eq!(status["check_state"], "unavailable");
+        assert_eq!(status["check_error"], "update_store_unavailable");
+        assert_eq!(status["updater_owner"], "store");
+        assert_eq!(status["update_available"], false);
+        assert_eq!(status["current_version"], "1.0.0");
+    }
+    assert_eq!(
+        s.gw.post("/updates/apply", request).await?.error_code(),
+        Some("update_store_unavailable")
+    );
+    assert!(!s.sandbox.data.join("updates/staged").exists());
+    let artifacts = s.sandbox.data.join("updates/artifacts");
+    assert!(!artifacts.exists() || std::fs::read_dir(artifacts)?.next().is_none());
+    s.finish().await?;
+    assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 0);
+    task.abort();
+    let _ = task.await;
+    Ok(())
+}

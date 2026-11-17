@@ -63,9 +63,10 @@ async function appWindows(): Promise<number> {
 try {
   await until(() => startupStages().includes("agent_starting"), "Agent start");
   assert.equal(startupStages().includes("agent_ready"), false, "Agent became ready before the second launch");
-  // Same profile, so the single-instance lock hands this launch to the running App.
+  // Another install's profile, same data folder: the lock is keyed by the data
+  // folder, so this launch still hands off to the running App.
   const second = spawnElectron(executable, [directory, ...smokeBrowserArgs()], {
-    env, cleanupPaths: [], onOutput: bytes => { logs += bytes.toString(); },
+    env: { ...env, BUTLER_APP_ELECTRON_USER_DATA_DIR: join(root, "other-install-profile") }, cleanupPaths: [], onOutput: bytes => { logs += bytes.toString(); },
   });
   const secondExit = second.exitCode ?? await new Promise<number | null>(done => second.once("exit", code => done(code)));
   assert.equal(secondExit, 0, `Second launch did not hand off: ${logs}`);

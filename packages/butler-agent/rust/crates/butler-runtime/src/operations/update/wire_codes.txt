@@ -39,3 +39,5 @@ update_signature_unsupported
 update_stage_path_invalid
 update_stage_unavailable
 update_status_invalid
+update_store_unassociated
+update_store_unavailable

@@ -2,8 +2,10 @@ import type { ShowcaseGuidance } from "../../showcase";
 import { IconButton } from "../../components/IconButton";
 import { Download, History, X } from "../../components/Icons";
 import { Inline } from "../../components/Inline";
+import { Stack } from "../../components/Stack";
+import { ScrollArea } from "../ScrollArea";
 import { Typo } from "../../components/Typo";
-import { DocumentEditor, documentEditorClasses } from "./DocumentEditor";
+import { DocumentEditor, DocumentEditorHeader, documentEditorClasses } from "./DocumentEditor";
 
 // #region recipe: An editable document
 function Editable() {
@@ -32,14 +34,33 @@ function TitleLine() {
 }
 // #endregion
 
+// #region recipe: Fixed title row over a scrolling page
+function FixedTitleRow() {
+  return (
+    <Stack gap="lg">
+      <DocumentEditorHeader title={<Typo.PanelTitle as="h2" truncate>October budget</Typo.PanelTitle>} note="Saved" />
+      <ScrollArea maxHeight="xs">
+        <DocumentEditor title={null}>
+          <div className={documentEditorClasses.root} contentEditable suppressContentEditableWarning>
+            <h2>Summary</h2>
+            {Array.from({ length: 8 }, (_, index) => <p key={index}>Spending rose 8% this month, mostly from the trip. Fixed costs stayed flat; rent is due on the 25th.</p>)}
+          </div>
+        </DocumentEditor>
+      </ScrollArea>
+    </Stack>
+  );
+}
+// #endregion
+
 export const guidance: ShowcaseGuidance = {
   purpose: "The document editor: title row, one status line, header actions and the editable body in MarkdownContent's document typography, with block embeds and Butler's editing highlight.",
-  whenToUse: ["A 버틀러 document the user edits (서랍 문서, the side panel next to the chat)"],
+  whenToUse: ["A 버틀러 document the user edits (서랍 문서, the side panel next to the chat)", "Use DocumentEditorHeader when the host keeps the title row fixed and scrolls only the page."],
   whenNotToUse: [
     { when: "Reading a file or artifact", use: "DocumentReader" },
     { when: "Writing a message", use: "ComposerCard" },
   ],
-  recipes: [{ name: "An editable document", description: "The caller's editor engine renders into the page; `documentEditorClasses` names its node classes.", render: () => <Editable /> },
+  recipes: [{ name: "Fixed title row over a scrolling page", description: "Use DocumentEditorHeader when the host keeps the title row fixed and scrolls only the page.", render: () => <FixedTitleRow /> },
+    { name: "An editable document", description: "The caller's editor engine renders into the page; `documentEditorClasses` names its node classes.", render: () => <Editable /> },
     { name: "Title line", description: "The title line is one control tall (--control-height-md; --control-hit-target wherever controls grow to the touch target), and the title is centred on it with the actions at every width. The status line is a row under the title, so it never moves them. Below a 30rem title line, the document actions fold into ⋯ (menuActions, the same actions as flat items) and `controls` (close) stay; wider lines keep them inline.", render: () => <TitleLine /> },
   ],
   doDont: [

@@ -145,7 +145,8 @@ async function capture(page: Page, name: string) {
 
 async function closeViewer(page: Page) {
   const viewer = page.locator('[data-test-class="file-viewer"]');
-  await viewer.locator('[data-test-class="file-viewer-close"]').click();
+  assert.equal(await viewer.locator('[data-test-class="file-viewer-close"]').count(), 0, "the drawer viewer leaves by the titlebar back");
+  await page.locator('[data-test-class="titlebar-back"]').click();
   await viewer.waitFor({ state: "hidden" });
   await page.locator('[data-test-class="library-page"]').waitFor({ state: "visible" });
 }

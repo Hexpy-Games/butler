@@ -18,6 +18,16 @@ impl ProviderPromptPort for Scripted {
         _: ProviderPromptLifecycle<'a>,
     ) -> ProviderPromptFuture<'a> {
         self.0.lock().unwrap().push(request.prompt.to_owned());
+        if request.prompt.contains("general_new_chat_briefing_review") {
+            let text = json!({"reviews":[{"id":"card-one","keep":true,"reason":"r"},{"id":"card-3","keep":true,"reason":"r"},{"id":"card-4","keep":false,"reason":"r"}]}).to_string();
+            return Box::pin(async move {
+                Ok(ProviderPromptResult {
+                    text,
+                    model: String::new(),
+                    usage: None,
+                })
+            });
+        }
         let project = request.prompt.contains("project_new_chat_briefing");
         let mut output = json!({
             "moment": if project { json!(null) } else { json!("  Early   start ") },
