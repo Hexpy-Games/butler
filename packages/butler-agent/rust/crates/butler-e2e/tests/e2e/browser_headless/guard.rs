@@ -1,4 +1,4 @@
-//! Guard denials and the idle reap of the headless browser.
+//! Guard denials and the end of the headless browser: the idle reap and its Agent's death.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -7,7 +7,10 @@
 )]
 use super::{
     backend,
-    support::{admin, browser_processes, call, node, open, publish_as, selected, setup},
+    support::{
+        admin, browser_processes, call, hidden_app, node, open, publish, publish_as, selected,
+        setup,
+    },
     text,
 };
 use butler_e2e::e2e::HarnessError;
@@ -225,6 +228,35 @@ async fn blocked_frames_keep_the_page() -> Result<(), HarnessError> {
             .iter()
             .any(|t| t["id"] == tab),
         "{listed}"
+    );
+    s.finish().await
+}
+
+/// An Agent killed without cleanup leaves no browser process behind.
+#[tokio::test]
+async fn the_browser_ends_when_its_agent_is_killed() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
+    butler_e2e::skip_unless!(
+        !hidden_app(),
+        "the hidden App host is not the Agent's headless browser"
+    );
+    let mut s = setup("BROWSER-HEADLESS-AGENT-KILLED")?.start().await?;
+    let url = publish(&s).await?;
+    let opened = open(&admin(&s), "general", &url).await?;
+    assert_eq!(opened["status"], "ok", "{opened}");
+    let marker = s.sandbox.data.to_string_lossy().into_owned();
+    assert!(!browser_processes(&marker).is_empty(), "the browser runs");
+    s.agent.kill9()?;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let mut survivors = browser_processes(&marker);
+    while !survivors.is_empty() && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        survivors = browser_processes(&marker);
+    }
+    assert!(
+        survivors.is_empty(),
+        "the browser outlived its killed Agent by 10 s: {survivors:#?}"
     );
     s.finish().await
 }
