@@ -94,7 +94,7 @@ cef::wrap_life_span_handler! {
                 let mut p = self.shared.borrow_mut();
                 p.browser = browser.cloned();
                 p.popup = None;
-                if p.closing { p.browser.as_ref().and_then(cef::ImplBrowser::host) } else { None }
+                if p.phase == Phase::Closing { p.browser.as_ref().and_then(cef::ImplBrowser::host) } else { None }
             };
             if let Some(host) = host {
                 host.close_browser(1);
