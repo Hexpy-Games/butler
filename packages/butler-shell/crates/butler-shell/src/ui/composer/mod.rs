@@ -25,7 +25,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use butler_ds::ui::blocks::composer_card::{ComposerCard, ExpandedBody};
-use butler_ds::ui::popover::Popover;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Div, Entity, EventEmitter, FocusHandle, Focusable,
     KeyBinding, KeyDownEvent, SharedString, Window, actions, canvas, div, prelude::*, px,
@@ -37,10 +36,11 @@ use gpui_elements::editable_text::{EditableTextState, StringStorage, TextChanged
 use self::attachments::{Attachments, composer_attachments, file_drag_active, file_drop};
 use self::context::ComposerContextControl;
 use self::controls::Controls;
+use self::editor::ComposerEditor;
 use self::editor::clipboard::Paste;
-use self::editor::{ComposerEditor, FocusPlacement};
 use self::references::{MentionKey, References};
 use self::state::{ComposerState, image_refusal_label};
+use self::sync::Fold;
 use crate::ui::decisions::{DecisionCtx, decision_active, set_plan_gate};
 use crate::ui::field;
 use crate::ui::manage::ManageCtx;
@@ -100,26 +100,6 @@ pub(crate) enum ComposerEvent {
     OpenUsageSettings,
 }
 
-/// The popovers of the toolbar; the composer stays expanded while one is open
-/// (`protectedExpanded`).
-const POPOVERS: [&str; 4] = [
-    "composer-access-menu",
-    "composer-model-menu",
-    "composer-attachment-menu",
-    "composer-documents-menu",
-];
-
-/// What keeps the card unfolded.
-#[derive(Default)]
-struct Fold {
-    /// The field has been engaged and no click outside has folded it.
-    engaged: bool,
-    /// A toolbar popover is open.
-    protected: bool,
-    /// A decision waits in the transcript (`decision.plan || .authority || .question`).
-    decision: bool,
-}
-
 pub(crate) struct Composer {
     input: Entity<EditableTextState>,
     editor: ComposerEditor,
@@ -135,6 +115,9 @@ pub(crate) struct Composer {
     synced_revision: u64,
     /// Whether the card is unfolded.
     fold: Fold,
+    /// The card's container (Electron's `<form>`): focus anywhere inside it, a toolbar control
+    /// or a menu opened from it included, keeps the card engaged.
+    within: FocusHandle,
     theme: Theme,
     /// The open chat's view, for the decisions the transcript shows.
     decision_view: Option<Rc<SessionView>>,
@@ -143,8 +126,13 @@ pub(crate) struct Composer {
     git_notice_dismissed: bool,
     /// Why the composer cannot be used (shown as a tooltip), when it cannot.
     pub(crate) disabled: Option<SharedString>,
-    /// Where focus goes when a click outside folds the composer.
+    /// Where focus goes when a click outside folds the composer, or a chat opens.
     pub(crate) shell_focus: Option<FocusHandle>,
+    /// A chat opened: the field hands focus to the shell when it has or gets it, until a
+    /// deliberate focus (a pointer on the composer, `engage`, a focus request) clears this.
+    release_focus: bool,
+    /// The settings' `collapse_message_box`: the card folds while not engaged.
+    collapse: bool,
     /// The card's height as last drawn.
     height: Rc<Cell<f32>>,
     /// Where a dropped library card attaches; the shell sets it once built.
@@ -161,12 +149,9 @@ impl Composer {
         let mut editor = ComposerEditor::default();
         editor.bind(input.clone());
         let context_control = cx.new(|_| ComposerContextControl::new());
-        let subscriptions = vec![
-            cx.on_blur(&handle, window, |this: &mut Self, window, cx| {
-                this.editor.save_selection(window, cx);
-                this.fold.engaged = false;
-                cx.notify();
-            }),
+        let within = cx.focus_handle().tab_stop(false);
+        let mut subscriptions = Self::focus_listeners(&handle, &within, window, cx);
+        subscriptions.extend([
             cx.subscribe_in(&input, window, |this, _, _: &TextChanged, window, cx| {
                 this.on_text_changed(window, cx);
             }),
@@ -178,7 +163,7 @@ impl Composer {
                     this.editor.on_window_activated(window, cx);
                 }
             }),
-        ];
+        ]);
         Self {
             input,
             editor,
@@ -189,12 +174,15 @@ impl Composer {
             inputs: Inputs::default(),
             synced_revision: 0,
             fold: Fold::default(),
+            within,
             theme,
             decision_view: None,
             queue: Vec::new(),
             git_notice_dismissed: false,
             disabled: None,
             shell_focus: None,
+            release_focus: false,
+            collapse: true,
             height: Rc::new(Cell::new(48.)),
             manage: None,
             _subscriptions: subscriptions,
@@ -203,20 +191,6 @@ impl Composer {
 
     pub(crate) fn set_theme(&mut self, theme: Theme, _cx: &mut Context<Self>) {
         self.theme = theme;
-    }
-
-    /// `focusComposer`: expands the card and puts the caret back where it was.
-    pub(crate) fn engage(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.disabled.is_some() {
-            return;
-        }
-        self.fold.engaged = true;
-        self.editor.focus(FocusPlacement::Restore, window, cx);
-        cx.notify();
-    }
-
-    pub(crate) fn fold(&mut self) {
-        self.fold.engaged = false;
     }
 
     /// The card's measured height, shared with the conversation's composer reserve.
@@ -277,6 +251,9 @@ impl Composer {
         let menu = self.mention_menu(window, cx);
         let input = div()
             .relative()
+            // The editor's own text is no chrome (`focusDraftFromComposerChrome` skips
+            // `[contenteditable]`), whatever the button: a right press leaves focus and selection.
+            .on_any_mouse_down(|_, window, _| window.prevent_default())
             .child(input)
             .child(probe)
             .children(chips)
@@ -345,17 +322,6 @@ impl Composer {
                 }
             }))
     }
-
-    /// `useComposerPresentation`'s `protectedExpanded`.
-    fn popover_open(window: &mut Window, cx: &mut Context<Self>) -> bool {
-        let popover = POPOVERS
-            .iter()
-            .any(|id| Popover::new(*id, window, cx).is_open(cx));
-        // A session dragged over the composer keeps it open (`referenceDragging`).
-        popover
-            || cx.has_active_drag()
-            || ComposerState::read(cx, |draft| draft.context_popover_open)
-    }
 }
 
 impl Focusable for Composer {
@@ -394,7 +360,8 @@ impl Composer {
         // `Boolean(scope || decision...) || presentation.expanded`: the dashboard's scoped
         // composer (`draft_key`) is always unfolded, and is not `large` (`large={false}`).
         let scoped = self.inputs.draft_key.is_some();
-        let expanded = scoped || self.fold.engaged || self.fold.decision || self.fold.protected;
+        let fold = &self.fold;
+        let expanded = scoped || !self.collapse || fold.engaged || fold.decision || fold.protected;
         let mut card = ComposerCard::new("composer-card").expanded(expanded);
         if !scoped {
             card = card.large();
@@ -458,7 +425,10 @@ impl Render for Composer {
             }))
             .left(px(column.column_left))
             .w(px(column.column_width.max(0.)))
-            .id("composer");
+            .id("composer")
+            .track_focus(&self.within)
+            // `focusDraftFromComposerChrome`: a press no control took.
+            .on_any_mouse_down(cx.listener(|this, _, window, cx| this.press_chrome(window, cx)));
         file_drop(surface, move |files, _, cx| {
             let _ = dropped.update(cx, |this, cx| this.add_files(files, cx));
         })
@@ -471,11 +441,7 @@ impl Render for Composer {
         .on_drop(cx.listener(|this, drag: &CardDrag, _, cx| this.drop_cards(drag, cx)))
         .child(probe)
         .child(card)
-        .on_click(cx.listener(|this, _, window, cx| {
-            if !this.fold.engaged {
-                this.engage(window, cx);
-            }
-        }))
+        .capture_any_mouse_down(cx.listener(|this, _, _, _| this.release_focus = false))
         // useComposerPresentation: a pointer-down anywhere else folds the composer, unless a
         // toolbar popover is open or the IME is composing.
         .on_mouse_down_out(cx.listener(|this, _, window, cx| {

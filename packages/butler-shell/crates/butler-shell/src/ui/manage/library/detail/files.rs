@@ -96,6 +96,7 @@ pub(crate) fn open_detail(ctx: &ManageCtx, item: LibraryItem, from: &LibraryView
         group: from.group.clone(),
         item: Some(item.id.clone().into()),
         doc: None,
+        search: None,
     };
     cx.default_global::<LibraryNames>().item = Some(Rc::new(item));
     ctx.set_view(View::Library(view), cx);

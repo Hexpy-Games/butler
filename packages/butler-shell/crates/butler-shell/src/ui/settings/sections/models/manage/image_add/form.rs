@@ -267,7 +267,7 @@ impl ImageForm {
                     this.credentials.api_key.clear();
                     Self::register(&model_ref, name, &saved.credential.id, window, cx);
                 }
-                Err(_) => this.failed(cx),
+                Err(error) => this.failed(&error, cx),
             },
         );
     }
@@ -289,10 +289,14 @@ impl ImageForm {
         );
     }
 
-    fn failed(&mut self, cx: &mut Context<Self>) {
+    fn failed(&mut self, error: &Error, cx: &mut Context<Self>) {
         self.busy = false;
         let text = frame_words(Ds::get(cx).lang()).save_failed;
-        notify(&mut self.toast, Toast::error(text), cx);
+        notify(
+            &mut self.toast,
+            crate::ui::i18n::errors::toast(cx, error, text),
+            cx,
+        );
     }
 
     fn saved(
@@ -315,7 +319,7 @@ impl ImageForm {
                     });
                 });
             }
-            Err(_) => self.failed(cx),
+            Err(error) => self.failed(&error, cx),
         }
     }
 }

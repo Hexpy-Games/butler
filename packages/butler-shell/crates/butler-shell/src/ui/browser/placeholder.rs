@@ -78,7 +78,9 @@ impl PlaceholderEngine {
 
 impl PageEngine for PlaceholderEngine {
     #[cfg(feature = "cef")]
-    fn adopt(&mut self, _: &TabId, _: super::page_dialog::EngineChild) {}
+    fn adopt(&mut self, _: &TabId, _: super::page_dialog::EngineChild) -> bool {
+        false
+    }
     fn allow_popup(&mut self, _: &TabId, _: &str) {}
     fn answer_dialog(&mut self, _: &TabId, _: u64, _: super::page_dialog::DialogAnswer) {}
     fn enabled(&self) -> bool {

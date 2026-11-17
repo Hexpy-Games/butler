@@ -44,7 +44,7 @@ async fn browser_opens_a_page_and_navigates() -> Result<(), HarnessError> {
     assert_eq!(first["tabs"][0]["title"], "example.com");
     assert_eq!(first["active"], first["tabs"][0]["id"]);
     shell
-        .run(&["key cmd-l", "type example.org/a", "key enter"])
+        .run(&["key secondary-l", "type example.org/a", "key enter"])
         .await?;
     assert_eq!(
         shell.browser_state().await?["tabs"][0]["url"],
@@ -59,6 +59,18 @@ async fn browser_opens_a_page_and_navigates() -> Result<(), HarnessError> {
     assert_eq!(
         shell.browser_state().await?["tabs"][0]["url"],
         "https://example.org/a"
+    );
+    // The whole field is the click target, not only the text line.
+    shell
+        .run(&[
+            "click-at browser-address 0.5 0.12",
+            "type example.net",
+            "key enter",
+        ])
+        .await?;
+    assert_eq!(
+        shell.browser_state().await?["tabs"][0]["url"],
+        "https://example.net/"
     );
     shell.run(&["app-quit"]).await?;
     shell.finish().await?;
@@ -86,7 +98,7 @@ async fn browser_switches_tabs() -> Result<(), HarnessError> {
             "wait-anchor browser-area",
             "type example.com",
             "key enter",
-            "key cmd-t",
+            "key secondary-t",
             "type example.org",
             "key enter",
         ])
@@ -100,7 +112,7 @@ async fn browser_switches_tabs() -> Result<(), HarnessError> {
         shell.browser_state().await?["active"],
         tabs["tabs"][0]["id"]
     );
-    shell.run(&["key cmd-w"]).await?;
+    shell.run(&["key secondary-w"]).await?;
     let remaining = shell.browser_state().await?;
     assert_eq!(remaining["tabs"].as_array().unwrap().len(), 1);
     assert_eq!(remaining["active"], tabs["tabs"][1]["id"]);
@@ -223,7 +235,7 @@ async fn browser_moves_tabs_between_groups() -> Result<(), HarnessError> {
         .run(&[
             "browser",
             "click browser-address",
-            "key cmd-t",
+            "key secondary-t",
             "type example.org",
             "key enter",
         ])
@@ -372,7 +384,44 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
         );
         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
     }
-    shell.run(&["shot cef-browser", "app-quit"]).await?;
+    // The shot shows the page: its centre has the page's background (`#14508c`). The anchor's
+    // bounds are logical pixels; the shot is in device pixels.
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        shell
+            .run(&["shot cef-browser", "layout cef-browser browser-page"])
+            .await?;
+        let scale = shell.browser_frame().await?["scale"].as_f64().unwrap();
+        let layout = shell.report("cef-browser.layout")?;
+        let page = layout
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["anchor"] == "browser-page")
+            .unwrap();
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a pixel position inside the shot"
+        )]
+        let centre = |origin: &str, size: &str| {
+            let logical = page[origin].as_f64().unwrap() + page[size].as_f64().unwrap() / 2.;
+            (logical * scale).round() as u32
+        };
+        let image = image::open(sandbox.root.join("shell/cef-browser.png"))
+            .unwrap()
+            .to_rgb8();
+        let (x, y) = (centre("x", "w"), centre("y", "h"));
+        let pixel = image.get_pixel(x, y).0;
+        if pixel == [20, 80, 140] {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the shot does not show the page: {pixel:?} at ({x}, {y})"
+        );
+    }
+    shell.run(&["app-quit"]).await?;
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())

@@ -1,15 +1,9 @@
 //! The App following a chat's turn live: the sidebar row and the open transcript.
 use super::*;
 
-/// First launch: finish the onboarding through the Agent (`onboardingCompletedPatch`) and make
-/// a local model answering with `behavior` the default; the next launch opens the workspace.
-pub(crate) async fn ready_workspace(
-    sandbox: &Sandbox,
-    behavior: ChatBehavior,
-) -> Result<FakeServer, HarnessError> {
-    let mut shell = Shell::start(sandbox, &[]).await?;
-    shell.run(&["agent running"]).await?;
-    let gw = gateway(&shell.launch);
+/// Finish the onboarding through the Agent (Electron's onboarding-completed
+/// patch); the next launch opens the workspace.
+pub(crate) async fn complete_onboarding(gw: &Gateway) -> Result<(), HarnessError> {
     let now = "2026-01-01T00:00:00Z";
     let mut onboarding = gw.settings().await?["onboarding"].clone();
     onboarding["consent_version"] = json!(2);
@@ -19,6 +13,19 @@ pub(crate) async fn ready_workspace(
         .patch("/settings", json!({"onboarding": onboarding}))
         .await?;
     assert_eq!(done.status, 200, "{}", done.text);
+    Ok(())
+}
+
+/// First launch: finish the onboarding through the Agent (`onboardingCompletedPatch`) and make
+/// a local model answering with `behavior` the default; the next launch opens the workspace.
+pub(crate) async fn ready_workspace(
+    sandbox: &Sandbox,
+    behavior: ChatBehavior,
+) -> Result<FakeServer, HarnessError> {
+    let mut shell = Shell::start(sandbox, &[]).await?;
+    shell.run(&["agent running"]).await?;
+    let gw = gateway(&shell.launch);
+    complete_onboarding(&gw).await?;
     let model = default_to_local_model(&gw, behavior).await?;
     shell.run(&["app-quit"]).await?;
     shell.finish().await?;

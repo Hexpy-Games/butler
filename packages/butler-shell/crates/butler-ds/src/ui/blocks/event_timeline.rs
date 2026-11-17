@@ -21,15 +21,32 @@ impl EventTimelineItem {
     }
 }
 
+/// What the content starts with: a row (NavRow, default) or a caption line (a date); the marker
+/// centres on that first line.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub enum Lead {
+    #[default]
+    Row,
+    Caption,
+}
+
 /// Events, newest first.
 #[derive(IntoElement, Default)]
 pub struct EventTimeline {
     items: Vec<EventTimelineItem>,
+    lead: Lead,
 }
 
 impl EventTimeline {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// What the content starts with: a row (NavRow, default) or a caption line (a date); the
+    /// marker centres on that first line.
+    pub fn lead(mut self, lead: Lead) -> Self {
+        self.lead = lead;
+        self
     }
 
     pub fn item(mut self, item: EventTimelineItem) -> Self {
@@ -47,12 +64,20 @@ impl RenderOnce for EventTimeline {
             ds.len(Length::Space2xl),
             ds.len(Length::BorderHairline),
         );
+        let caption = ds.len(Length::TypoCaptionLineHeight);
+        let (marker_top, connector_top) = match self.lead {
+            Lead::Row => (gap, ds.len(Length::Space3xl)),
+            Lead::Caption => (
+                (caption - ds.len(Length::IconSizeSm)) / 2.,
+                caption + ds.len(Length::SpaceXs),
+            ),
+        };
         let events = self.items.into_iter().enumerate().map(|(index, item)| {
             let connector = (index + 1 < count).then(|| {
                 div()
                     .absolute()
                     .left(gap - edge)
-                    .top(ds.len(Length::Space3xl))
+                    .top(connector_top)
                     .bottom(-gap)
                     .w(edge)
                     .bg(ds.color(Color::Line))
@@ -68,7 +93,7 @@ impl RenderOnce for EventTimeline {
                         .flex_none()
                         .justify_center()
                         .w(slot)
-                        .pt(gap)
+                        .pt(marker_top)
                         .text_color(ds.color(Color::TextTertiary))
                         .child(item.marker),
                 )

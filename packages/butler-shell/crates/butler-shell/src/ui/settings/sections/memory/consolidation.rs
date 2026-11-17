@@ -147,7 +147,7 @@ impl MemoryPage {
                     }
                     Err(error) => {
                         this.consolidation.owned.remove(&id);
-                        if matches!(error, Error::Http(409)) {
+                        if matches!(error, Error::Http(409, _)) {
                             this.consolidation.lease_busy = true;
                             this.poll_consolidation(cx);
                         } else {

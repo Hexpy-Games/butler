@@ -115,16 +115,8 @@ impl BrowserState {
         // The page dialog was cancelled above.
         hosted.waiting = false;
         tab.epoch += 1;
-        self.wake(id);
-    }
-
-    /// The one awake rule: the Agent keeps a page awake while it acts in it; a page the user
-    /// holds is not (the shown page is awake anyway).
-    pub(super) fn wake(&mut self, id: &TabId) {
-        let awake = (self.tab(id))
-            .and_then(|tab| tab.hosted.as_ref())
-            .is_some_and(Hosted::busy);
-        self.engine.keep_awake(id, awake);
+        // The CEF gate's hosted flag is this holder: popups follow whoever holds the page.
+        self.engine.set_hosted(id, holder == Holder::Agent);
     }
 
     /// Selecting `id`, the active tab included: the page left returns to the Agent unless the

@@ -6,11 +6,13 @@ import styles from "./EventTimeline.module.css";
 export interface EventTimelineProps extends DsBaseProps<HTMLAttributes<HTMLDivElement>> {
   /** `EventTimelineItem`s, newest first. */
   children: ReactNode;
+  /** What the content starts with: a row (NavRow, default) or a caption line (a date); the marker centres on that first line. */
+  lead?: "row" | "caption";
 }
 
 /** A vertical run of dated events; each item's marker is joined to the next by a hairline. */
-export function EventTimeline({ children, className, ...props }: EventTimelineProps) {
-  return <div className={dsClass(styles.timeline, className)} {...props}>{children}</div>;
+export function EventTimeline({ children, lead = "row", className, ...props }: EventTimelineProps) {
+  return <div className={dsClass(styles.timeline, className)} data-lead={lead} {...props}>{children}</div>;
 }
 
 export interface EventTimelineItemProps {

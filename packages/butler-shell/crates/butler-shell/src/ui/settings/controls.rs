@@ -98,6 +98,7 @@ impl SettingsSwitch {
 
 impl RenderOnce for SettingsSwitch {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let name = format!("settings-switch-{}", self.id);
         let mut switch = Switch::new(self.id).checked(self.checked);
         if self.disabled {
             switch = switch.disabled();
@@ -109,6 +110,9 @@ impl RenderOnce for SettingsSwitch {
             switch =
                 switch.on_checked_change(move |checked, window, cx| handler(checked, window, cx));
         }
+        // The control column is a stretching flex column and the switch has a fixed width, so the
+        // wrapper is a flex box that sits at the start and takes the switch's size.
+        let switch = crate::ui::widgets::anchor(div().flex().self_start(), &name).child(switch);
         let mut field = SettingsField::new(self.label).control(switch);
         if let Some(description) = self.description {
             field = field.description(description);

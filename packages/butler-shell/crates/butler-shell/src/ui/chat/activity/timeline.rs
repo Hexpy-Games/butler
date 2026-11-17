@@ -24,10 +24,11 @@ use crate::ui::store::progress::activity::{
 };
 use crate::ui::store::progress::copy::copy;
 use crate::ui::store::progress::labels::phase_label;
+use crate::ui::widgets::anchor;
 
 /// `TurnActivityTimeline` for the phase activities of `rows`; `None` when there are none.
 /// `state` is the turn's current state (`currentState`).
-pub(super) fn timeline(
+pub(crate) fn timeline(
     rows: &[ProgressRow],
     turn_id: Option<&str>,
     state: Option<&str>,
@@ -42,7 +43,7 @@ pub(super) fn timeline(
     let latest = activities.last()?.clone();
     let state = state.map(str::to_string).or(projection.semantic_state);
     let key = format!("turn-activity-{}", activities[0].id);
-    let open = window.use_keyed_state(format!("{key}-expanded"), cx, |_, _| false);
+    let open = expanded_state(&activities[0].id, window, cx);
     let expanded = *open.read(cx);
     let current = phase_label(lang, state.as_deref().or(latest.phase.as_deref()));
     let strings = locale(cx).strings();
@@ -66,7 +67,10 @@ pub(super) fn timeline(
         let views: Vec<AnyElement> = activities
             .iter()
             .enumerate()
-            .map(|(index, activity)| activity_view(activity, turn_id, index < last, t, window, cx))
+            .map(|(index, activity)| {
+                let goal = t.goal.filter(|_| index == 0);
+                activity_view(activity, (turn_id, goal), index < last, t, window, cx)
+            })
             .collect();
         body = body.child(Stack::new().gap(Space::Sm).children(views));
         body = body.child(
@@ -82,13 +86,24 @@ pub(super) fn timeline(
     } else if let Some(step) = collapsed_step(&activities, &key, turn_id, live, t, window, cx) {
         body = body.child(step);
     }
+    // Anchored by turn, so a harness step finds this turn's steps among the timelines on screen.
+    let name = format!("turn-activity-{}", turn_id.unwrap_or_default());
     Some(
-        Stack::new()
-            .gap(Space::Xs)
-            .child(header)
-            .child(body)
-            .into_any_element(),
+        anchor(
+            div()
+                .flex()
+                .flex_col()
+                .min_w_0()
+                .child(Stack::new().gap(Space::Xs).child(header).child(body)),
+            &name,
+        )
+        .into_any_element(),
     )
+}
+
+/// The expanded flag of the timeline whose first activity is `first`.
+pub(crate) fn expanded_state(first: &str, window: &mut Window, cx: &mut App) -> Entity<bool> {
+    window.use_keyed_state(format!("turn-activity-{first}-expanded"), cx, |_, _| false)
 }
 
 /// Sets or flips the timeline's expanded state.
@@ -115,11 +130,14 @@ fn collapsed_step(
     cx: &mut App,
 ) -> Option<Stack> {
     let latest = activities.last()?.clone();
+    // `delegatedGoal={activities.length === 1 ? delegatedGoal : undefined}`.
+    let goal = t.goal.filter(|_| activities.len() == 1).map(str::to_owned);
     // The current step folds away with its spacing when the turn settles; the header stays.
     let item_key: SharedString = latest.id.clone().into();
     let tools = activity_tools(&latest, turn_id, t, window, cx);
     let step = RollingSwap::new(format!("{key}-swap"), item_key, move |_, cx| {
-        activity_block(&latest, false, false, Ds::get(cx).lang()).into_any_element()
+        activity_block(&latest, (false, false), goal.as_deref(), Ds::get(cx).lang())
+            .into_any_element()
     })
     .motion(live);
     let still =
@@ -190,7 +208,7 @@ pub(super) fn activity_tools(
 /// `ActivityBlock` of TurnActivityBlock.tsx: a compact work activity with its operations.
 fn activity_view(
     activity: &PhaseActivity,
-    turn: Option<&str>,
+    (turn, goal): (Option<&str>, Option<&str>),
     connected: bool,
     t: &TranscriptCtx,
     window: &mut Window,
@@ -200,7 +218,7 @@ fn activity_view(
     let tools = activity_tools(activity, turn, t, window, cx);
     Stack::new()
         .gap(Space::Xs)
-        .child(activity_block(activity, connected, false, lang))
+        .child(activity_block(activity, (connected, false), goal, lang))
         .children(tools)
         .into_any_element()
 }
@@ -208,8 +226,8 @@ fn activity_view(
 /// `ActivityBlock` of TurnActivityBlock.tsx without its toolchain.
 pub(super) fn activity_block(
     activity: &PhaseActivity,
-    connected: bool,
-    live: bool,
+    (connected, live): (bool, bool),
+    goal: Option<&str>,
     lang: Lang,
 ) -> WorkActivityBlock {
     let [content, intent, next] = locale_of(lang).strings().activity_detail_labels();
@@ -218,7 +236,7 @@ pub(super) fn activity_block(
         Some(time) => format!("{phase} · {time}"),
         None => phase.to_string(),
     };
-    let summary = delegated_request_goal(activity, lang);
+    let summary = delegated_request_goal(activity, goal, lang);
     let mut lines = vec![meta];
     if normalize(&activity.title) != normalize(&summary) {
         lines.push(format!("{content} {summary}"));
@@ -269,8 +287,11 @@ fn normalize(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// `delegatedRequestGoal` without a caller-supplied goal: the quoted original request.
-fn delegated_request_goal(activity: &PhaseActivity, lang: Lang) -> String {
+/// `delegatedRequestGoal`: the caller's goal, else the quoted original request.
+fn delegated_request_goal(activity: &PhaseActivity, goal: Option<&str>, lang: Lang) -> String {
+    if let Some(goal) = goal.map(str::trim).filter(|goal| !goal.is_empty()) {
+        return normalize(goal);
+    }
     let Some(end) = request_marker_end(&activity.summary) else {
         return activity.summary.clone();
     };

@@ -1,7 +1,7 @@
 //! One headless browser process tree: launched on demand, sandboxed, its
 //! egress through the guard proxy, its profile one reused directory; pages live in
 //! disposable contexts, so it holds no site state.
-use super::{cdp::Cdp, page::Page, state::Shared};
+use super::{cdp::Cdp, host::PageHost, page::Page, state::Shared};
 use crate::browser::egress::{ContentOrigin, EgressProxy};
 use butler_platform::browser_process::{self, PipeBrowser};
 use butler_platform::process_control::{Liveness, liveness};
@@ -12,16 +12,13 @@ use std::{
     sync::{Arc, Mutex, PoisonError},
     time::Duration,
 };
-use tokio::sync::Notify;
+use tokio::sync::{Notify, mpsc};
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct Browser {
     pub cdp: Arc<Cdp>,
     pub shared: Shared,
     pub content: Option<ContentOrigin>,
-    pub proxy_url: String,
-    /// The proxy of registered previews' tabs (their own contexts).
-    pub preview_proxy_url: Option<String>,
     /// Cancelled when the browser's pipe ends.
     pub alive: CancellationToken,
     /// Signals a change in the set of tabs (for expiry and the idle reap).
@@ -31,9 +28,24 @@ pub(crate) struct Browser {
     /// Held while a conversation's browser context is created, so tabs
     /// opened at once by one conversation share its one context.
     pub contexts_created: tokio::sync::Mutex<()>,
-    process: Mutex<Option<PipeBrowser>>,
-    _proxy: EgressProxy,
-    _preview_proxy: Option<EgressProxy>,
+    pages: Pages,
+}
+
+/// Where the pages come from: a process this crate launched, or the App that owns them.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "one per browser; the launched variant owns the process"
+)]
+enum Pages {
+    Own {
+        process: Mutex<Option<PipeBrowser>>,
+        _proxy: EgressProxy,
+        _preview_proxy: Option<EgressProxy>,
+        proxy_url: String,
+        /// The proxy of registered previews' tabs (their own contexts).
+        preview_proxy_url: Option<String>,
+    },
+    Hosted(Arc<dyn PageHost>),
 }
 
 const LOG_LIMIT: u64 = 1024 * 1024;
@@ -50,8 +62,9 @@ fn arguments(profile: &Path, proxy: &str) -> Vec<OsString> {
         "--force-webrtc-ip-handling-policy=disable_non_proxied_udp".into(),
         "--disable-quic".into(),
     ];
-    // Background services and Google calls off: the list the in-app browser shares.
-    args.extend(butler_cef_host::switches::quiet_args().map(OsString::from));
+    // Background services and Google calls off (the list the in-app browser shares), plus what
+    // only the headless host disables.
+    args.extend(butler_cef_host::switches::headless_args().map(OsString::from));
     args.extend(
         [
             "--password-store=basic",
@@ -67,6 +80,12 @@ fn arguments(profile: &Path, proxy: &str) -> Vec<OsString> {
 
 fn prepare(root: &Path) -> std::io::Result<(PathBuf, PathBuf)> {
     std::fs::create_dir_all(root)?;
+    // Per-run profiles of earlier builds, left by a run that ended without its reap.
+    for entry in std::fs::read_dir(root)?.flatten() {
+        if entry.file_name().to_string_lossy().starts_with("profile-") {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
     let profile = root.join("profile");
     std::fs::create_dir_all(&profile)?;
     // A killed browser leaves Chrome's singleton lock behind. Only this agent's one browser uses
@@ -131,16 +150,18 @@ impl Browser {
             cdp,
             shared: Shared::default(),
             content,
-            proxy_url,
-            preview_proxy_url: preview_proxy.as_ref().map(EgressProxy::url),
             alive: CancellationToken::new(),
             changed: Notify::new(),
             downloads: downloads.clone(),
             history,
             contexts_created: tokio::sync::Mutex::new(()),
-            process: Mutex::new(Some(process)),
-            _proxy: proxy,
-            _preview_proxy: preview_proxy,
+            pages: Pages::Own {
+                process: Mutex::new(Some(process)),
+                preview_proxy_url: preview_proxy.as_ref().map(EgressProxy::url),
+                _proxy: proxy,
+                _preview_proxy: preview_proxy,
+                proxy_url,
+            },
         });
         let _ = std::fs::create_dir_all(&downloads.stage);
         downloads.attach(&browser);
@@ -151,6 +172,55 @@ impl Browser {
             return Err(reason);
         }
         Ok(browser)
+    }
+
+    /// A browser whose pages the App owns: CDP per page over the given channels.
+    pub(crate) fn connect(
+        incoming: mpsc::Receiver<Vec<u8>>,
+        outgoing: mpsc::Sender<Vec<u8>>,
+        host: Arc<dyn PageHost>,
+        content: Option<ContentOrigin>,
+        downloads: Arc<super::downloads::Downloads>,
+        history: Arc<super::history::History>,
+    ) -> Arc<Self> {
+        let (cdp, events) = Cdp::start(incoming, outgoing);
+        let browser = Arc::new(Self {
+            cdp,
+            shared: Shared::default(),
+            content,
+            alive: CancellationToken::new(),
+            changed: Notify::new(),
+            downloads,
+            history,
+            contexts_created: tokio::sync::Mutex::new(()),
+            pages: Pages::Hosted(host),
+        });
+        tokio::spawn(super::events::run(browser.clone(), events));
+        browser
+    }
+
+    /// The App that owns this browser's pages, in hosted mode.
+    pub(crate) fn host(&self) -> Option<&Arc<dyn PageHost>> {
+        match &self.pages {
+            Pages::Hosted(host) => Some(host),
+            Pages::Own { .. } => None,
+        }
+    }
+
+    pub(crate) fn proxy_url(&self) -> Option<&str> {
+        match &self.pages {
+            Pages::Own { proxy_url, .. } => Some(proxy_url),
+            Pages::Hosted(_) => None,
+        }
+    }
+
+    pub(crate) fn preview_proxy_url(&self) -> Option<&str> {
+        match &self.pages {
+            Pages::Own {
+                preview_proxy_url, ..
+            } => preview_proxy_url.as_deref(),
+            Pages::Hosted(_) => None,
+        }
     }
 
     async fn attach_root(&self) -> Result<(), String> {
@@ -187,22 +257,22 @@ impl Browser {
         Some(Page {
             cdp: self.cdp.clone(),
             shared: self.shared.clone(),
+            host: self.host().cloned(),
             tab: entry.id.clone(),
             session: entry.session.clone(),
             target: entry.target.clone(),
         })
     }
 
-    /// Closes the browser and ends its whole process tree; its reused profile stays.
+    /// Ends the browser's whole process tree; its reused profile stays.
     pub(crate) async fn stop(&self) {
-        let _ = tokio::time::timeout(
-            Duration::from_secs(2),
-            self.cdp.send("Browser.close", json!({}), None),
-        )
-        .await;
-        let _ = tokio::time::timeout(Duration::from_secs(3), self.alive.cancelled()).await;
-        let process = self
-            .process
+        let Pages::Own { process, .. } = &self.pages else {
+            self.alive.cancel();
+            return;
+        };
+        // No `Browser.close` first: on Linux and Windows the CEF host keeps running after it, so it
+        // only delayed the kill, and the profile holds nothing a clean exit would save.
+        let process = process
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
@@ -226,8 +296,11 @@ impl Browser {
 
 impl Drop for Browser {
     fn drop(&mut self) {
-        if let Some(mut process) = self
-            .process
+        let Pages::Own { process, .. } = &self.pages else {
+            self.alive.cancel();
+            return;
+        };
+        if let Some(mut process) = process
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take()

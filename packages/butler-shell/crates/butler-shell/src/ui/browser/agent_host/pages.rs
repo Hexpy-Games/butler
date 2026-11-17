@@ -1,5 +1,5 @@
 //! Page host calls: the Agent opens, holds and closes hosted pages and reports their use.
-use super::{Holder, Hosted, Step, relay};
+use super::{Holder, Hosted, Stage, Step, relay};
 use crate::ui::{
     browser::{
         area::owner_key,
@@ -62,6 +62,7 @@ pub(super) fn call(frame: &Value, cx: &mut App) {
             let turn = frame["turn_id"].as_str().filter(|_| op == "use.started");
             cx.update_global::<BrowserState, _>(|model, _| {
                 model.use_changed(&tab, op == "use.started", turn);
+                model.call_changed(op == "use.started");
             });
         }
         Some("use.finished") => {
@@ -106,7 +107,7 @@ fn reply(id: String, value: Value, cx: &mut App) {
 }
 
 fn open(id: String, args: &Value, deadline: Duration, cx: &mut App) {
-    let created = cx.update_global::<BrowserState, _>(|model, _| model.open_hosted(args));
+    let created = cx.update_global::<BrowserState, _>(|model, cx| model.open_hosted(args, cx));
     let tab = match created {
         Ok(tab) => tab,
         Err(reason) => return reply(id, unavailable(reason), cx),
@@ -159,6 +160,7 @@ pub(super) fn reset(cx: &mut App) {
                 model.end_hosting(&id, cx);
             }
         }
+        model.calls = 0;
         model.publisher.changed(&model.tabs);
     });
     relay::clear(cx);
@@ -204,8 +206,11 @@ impl BrowserState {
         let pane = tab.hosted.take().and_then(|hosted| hosted.pane);
         #[cfg(feature = "cef")]
         relay::release(&*self.engine, id);
+        // The user's page now: it loads freely, and nothing it tried meanwhile is replayed.
+        self.engine.release_loads(id);
         self.engine.devtools_raw_end(id);
         self.engine.keep_awake(id, false);
+        self.engine.set_hosted(id, false);
         if let Some((size, scale)) = pane {
             self.resize(id, size, scale);
         }
@@ -213,7 +218,8 @@ impl BrowserState {
     }
 
     /// A real page at once: `about:blank` at the fixed size the Agent's tools measure against.
-    fn open_hosted(&mut self, args: &Value) -> Result<TabId, &'static str> {
+    fn open_hosted(&mut self, args: &Value, cx: &mut App) -> Result<TabId, &'static str> {
+        self.start_engine(cx);
         if !self.engine.enabled() || !self.engine.supports_devtools() {
             return Err("no_browser");
         }
@@ -240,12 +246,26 @@ impl BrowserState {
         };
         self.next_id += 1;
         let id = TabId(format!("t{}", self.next_id).into());
+        let hosted = self.new_hosted(internal);
+        let awake = hosted.awake();
         self.tabs.push(Tab {
-            hosted: Some(Hosted::agent(internal)),
+            hosted: Some(hosted),
             ..Tab::new(id.clone(), owner, profile, String::new())
         });
         self.engine
             .open(&id, "about:blank", profile, &key, &partition);
+        self.engine.set_hosted(&id, true);
+        let list = |key: &str| -> Vec<String> {
+            args["popups"][key]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        };
+        self.engine
+            .set_popup_sites(&id, list("sites"), list("hosts"));
+        self.engine.keep_awake(&id, awake);
         self.fix_hosted_size(&id);
         self.publisher.changed(&self.tabs);
         Ok(id)
@@ -324,6 +344,7 @@ impl BrowserState {
             return;
         };
         hosted.uses = if started {
+            hosted.stage = Stage::Open;
             hosted.uses.saturating_add(1)
         } else {
             hosted.uses.saturating_sub(1)
@@ -333,7 +354,8 @@ impl BrowserState {
         {
             hosted.turns.push(turn.to_owned());
         }
-        self.wake(id);
+        let awake = hosted.awake();
+        self.engine.keep_awake(id, awake);
         self.publisher.changed(&self.tabs);
     }
 
@@ -341,7 +363,7 @@ impl BrowserState {
     /// longer pauses is the user's own, and its wait ends; a page the user holds pinned for
     /// that wait returns to the Agent.
     fn turn_finished(&mut self, turn: &str) {
-        let mut hosted_tabs = Vec::new();
+        let mut released = Vec::new();
         for tab in &mut self.tabs {
             let Some(hosted) = tab.hosted.as_mut() else {
                 continue;
@@ -356,23 +378,57 @@ impl BrowserState {
                 hosted.step = None;
                 hosted.waiting_turn = None;
             }
-            let release = waited && hosted.holder == Holder::User && hosted.sticky;
-            hosted_tabs.push((tab.id.clone(), release));
-        }
-        for (id, release) in hosted_tabs {
-            if release {
-                self.set_holder(&id, Holder::Agent, false);
+            if waited && hosted.holder == Holder::User && hosted.sticky {
+                released.push(tab.id.clone());
             }
-            self.wake(&id);
+        }
+        for id in released {
+            self.set_holder(&id, Holder::Agent, false);
         }
         self.publisher.changed(&self.tabs);
     }
 
-    /// A popup of a hosted page is a hosted page itself; the Agent hears of it with its target.
-    /// A popup whose target cannot be found is closed.
+    /// A call started or ended; the opening of every hosted page ends with the last call.
+    fn call_changed(&mut self, started: bool) {
+        if started {
+            self.calls = self.calls.saturating_add(1);
+            return;
+        }
+        self.calls = self.calls.saturating_sub(1);
+        if self.calls > 0 {
+            return;
+        }
+        for tab in &mut self.tabs {
+            if let Some(hosted) = tab
+                .hosted
+                .as_mut()
+                .filter(|hosted| hosted.stage == Stage::Opening)
+            {
+                hosted.stage = Stage::Open;
+                self.engine.keep_awake(&tab.id, hosted.awake());
+            }
+        }
+    }
+
+    /// A new hosted page: still opening while any call is in flight.
+    pub(in crate::ui::browser) fn new_hosted(&self, internal: bool) -> Hosted {
+        let stage = if self.calls > 0 {
+            Stage::Opening
+        } else {
+            Stage::Open
+        };
+        Hosted {
+            stage,
+            ..Hosted::agent(internal)
+        }
+    }
+
+    /// A popup of a hosted page is a hosted page itself; the Agent hears of it with its target
+    /// and the URL its held loads keep (else `url`). A popup whose target cannot be found is
+    /// closed, and so is one whose opener is no longer hosted.
     #[cfg(feature = "cef")]
     pub(in crate::ui::browser) fn announce_popup(
-        &self,
+        &mut self,
         id: &TabId,
         opener: &TabId,
         url: &str,
@@ -383,6 +439,9 @@ impl BrowserState {
             .and_then(|tab| tab.hosted.as_ref())
             .map(|hosted| hosted.target.clone())
         else {
+            if self.tab(id).is_some_and(|tab| tab.hosted.is_some()) {
+                self.close(id, cx);
+            }
             return;
         };
         let target = self.engine.devtools(id, "Target.getTargetInfo", &json!({}));
@@ -399,16 +458,16 @@ impl BrowserState {
                     match (hosted, &target) {
                         (Some(hosted), Some(target)) => {
                             hosted.target.clone_from(target);
-                            true
+                            Some(model.engine.held_url(&id).unwrap_or(url))
                         }
                         (Some(_), None) => {
                             model.close(&id, cx);
-                            false
+                            None
                         }
-                        (None, _) => false,
+                        (None, _) => None,
                     }
                 });
-                if let (true, Some(target)) = (known, target) {
+                if let (Some(url), Some(target)) = (known, target) {
                     relay::event(
                         cx,
                         json!({"method":"Target.attachedToTarget","params":{

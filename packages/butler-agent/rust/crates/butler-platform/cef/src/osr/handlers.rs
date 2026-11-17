@@ -9,22 +9,54 @@ use std::rc::Weak;
 
 #[cfg(target_os = "macos")]
 type NativeCursor = *mut u8;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 type NativeCursor = CursorHandle;
 
 pub(super) fn client(shared: PageRef, events: Events, runtime: &Weak<RuntimeState>) -> Client {
+    let loads = shared.borrow().loads.clone();
     OsrClient::new(
         Paint::new(shared.clone(), events.clone()),
         Life::new(shared.clone(), events.clone(), runtime.clone()),
         Display::new(events.clone()),
-        Load::new(events.clone()),
-        Request::new(events.clone(), runtime.upgrade().map(|r| r.auth.clone())),
+        Load::new(shared.clone(), events.clone()),
+        Request::new(
+            events.clone(),
+            runtime.upgrade().map(|r| r.auth.clone()),
+            loads,
+        ),
         PageDialogs {
             js: super::dialogs::Js::new(shared.clone(), events.clone()),
             files: super::dialogs::Files::new(shared, events.clone()),
         },
         super::downloads::Downloads::new(events, runtime.clone()),
     )
+}
+
+/// A page leaves the runtime: its browser closed or CEF aborted its popup creation.
+fn retire(shared: &PageRef, page: u64, runtime: Option<&RuntimeState>) {
+    let visible = {
+        let mut p = shared.borrow_mut();
+        p.release_frames();
+        p.browser = None;
+        let visible = p.visible;
+        p.visible = false;
+        visible
+    };
+    if let Some(runtime) = runtime {
+        if visible {
+            runtime.visible.set(runtime.visible.get() - 1);
+        }
+        runtime.pages.borrow_mut().remove(&page);
+        if let Some(owner) = &shared.borrow().signed_out_owner {
+            let mut contexts = runtime.contexts.borrow_mut();
+            if let Some((_, count)) = contexts.get_mut(owner) {
+                *count -= 1;
+                if *count == 0 {
+                    contexts.remove(owner);
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -53,40 +85,36 @@ cef::wrap_life_span_handler! {
     pub(super) struct Life { shared: PageRef, events: Events, runtime: Weak<RuntimeState> }
     impl LifeSpanHandler {
         fn on_after_created(&self, browser: Option<&mut Browser>) {
-            self.shared.borrow_mut().browser = browser.cloned();
+            let mut p = self.shared.borrow_mut();
+            p.browser = browser.cloned();
+            p.popup = None;
         }
         fn do_close(&self, _browser: Option<&mut Browser>) -> i32 {
             if !self.shared.borrow().closing { self.events.emit(OsrEvent::CloseRequested); }
             0
         }
         fn on_before_close(&self, _browser: Option<&mut Browser>) {
-            let visible = {
-                let mut p = self.shared.borrow_mut();
-                p.release_frames();
-                p.browser = None;
-                let visible = p.visible;
-                p.visible = false;
-                visible
-            };
-            if let Some(runtime) = self.runtime.upgrade() {
-                if visible { runtime.visible.set(runtime.visible.get() - 1); }
-                runtime.pages.borrow_mut().remove(&self.events.page);
-                if let Some(owner) = &self.shared.borrow().signed_out_owner {
-                    let mut contexts = runtime.contexts.borrow_mut();
-                    if let Some((_, count)) = contexts.get_mut(owner) {
-                        *count -= 1;
-                        if *count == 0 { contexts.remove(owner); }
-                    }
-                }
-            }
+            retire(&self.shared, self.events.page, self.runtime.upgrade().as_deref());
         }
         fn on_before_popup(&self, _browser: Option<&mut Browser>, _frame: Option<&mut Frame>,
-            _id: i32, url: Option<&CefString>, _name: Option<&CefString>,
+            id: i32, url: Option<&CefString>, _name: Option<&CefString>,
             disposition: WindowOpenDisposition, gesture: i32, _features: Option<&PopupFeatures>,
             info: Option<&mut WindowInfo>, client: Option<&mut Option<Client>>,
             _settings: Option<&mut BrowserSettings>, _extra: Option<&mut Option<DictionaryValue>>,
             _access: Option<&mut i32>) -> i32 {
-            super::popups::before(&self.shared, &self.events, &self.runtime, url, disposition, gesture, info, client)
+            super::popups::before(&self.shared, &self.events, &self.runtime, id, url, disposition, gesture, info, client)
+        }
+        // CEF failed to create a popup child it allowed; that child never gets its own callbacks.
+        fn on_before_popup_aborted(&self, _browser: Option<&mut Browser>, popup_id: i32) {
+            let Some(runtime) = self.runtime.upgrade() else { return; };
+            let popup = Some((self.events.page, popup_id));
+            let child = runtime.pages.borrow().iter()
+                .find(|(_, p)| p.borrow().popup == popup)
+                .map(|(page, shared)| (*page, shared.clone()));
+            if let Some((page, shared)) = child {
+                retire(&shared, page, Some(&*runtime));
+                Events { page, sink: self.events.sink.clone() }.emit(OsrEvent::CloseRequested);
+            }
         }
     }
 }
@@ -116,17 +144,27 @@ cef::wrap_display_handler! {
     }
 }
 cef::wrap_load_handler! {
-    pub(super) struct Load { events: Events }
+    pub(super) struct Load { shared: PageRef, events: Events }
     impl LoadHandler {
         fn on_loading_state_change(&self, _browser: Option<&mut Browser>, loading: i32, back: i32, forward: i32) {
+            self.shared.borrow_mut().loading = loading != 0;
             self.events.emit(OsrEvent::Loading(loading != 0));
             self.events.emit(OsrEvent::History { can_back: back != 0, can_forward: forward != 0 });
         }
     }
 }
 cef::wrap_request_handler! {
-    pub(super) struct Request { events: Events, auth: Option<super::dialogs::AuthSender> }
+    pub(super) struct Request { events: Events, auth: Option<super::dialogs::AuthSender>, loads: super::hold::Loads }
     impl RequestHandler {
+        fn on_before_browse(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>,
+            request: Option<&mut cef::Request>, _gesture: i32, _redirect: i32) -> i32 {
+            i32::from(self.loads.cancels_navigation(frame, request))
+        }
+        fn resource_request_handler(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>,
+            _request: Option<&mut cef::Request>, is_navigation: i32, _download: i32,
+            _initiator: Option<&CefString>, _disable: Option<&mut i32>) -> Option<ResourceRequestHandler> {
+            self.loads.handler(frame, is_navigation)
+        }
         fn auth_credentials(&self, _browser: Option<&mut Browser>, url: Option<&CefString>,
             proxy: i32, _host: Option<&CefString>, _port: i32, realm: Option<&CefString>,
             _scheme: Option<&CefString>, callback: Option<&mut AuthCallback>) -> i32 {

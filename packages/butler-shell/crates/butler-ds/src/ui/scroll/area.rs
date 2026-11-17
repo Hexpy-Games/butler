@@ -13,6 +13,7 @@ use super::bar;
 use super::engine::{self, Axis, Config};
 use crate::tokens::{Color, Length};
 use crate::ui::context::Ds;
+use crate::ui::control::slot_anchor;
 use crate::ui::{convert, strut};
 
 /// Cap the height; the area scrolls beyond it.
@@ -181,7 +182,10 @@ impl RenderOnce for ScrollArea {
             .min_height
             .map(|_| ds.len(Length::ScrollAreaMinHeightXs));
         let content = self.content(&metrics);
+        let scroller_anchor = slot_anchor(cx, "scroll-area");
+        let frame_anchor = slot_anchor(cx, "scroll-area:frame");
         let mut scroller = div()
+            .debug_selector(move || scroller_anchor.to_string())
             .flex()
             .flex_col()
             .w_full()
@@ -206,6 +210,7 @@ impl RenderOnce for ScrollArea {
         let built = engine::scroller(&config, scroller, window, cx);
         let mut frame = div()
             .id(self.id.clone())
+            .debug_selector(move || frame_anchor.to_string())
             .relative()
             .min_w_0()
             .min_h_0()

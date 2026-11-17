@@ -154,7 +154,7 @@ impl SecurityAuthority {
                         Toast::success(words.revoke_unconfirmed)
                     }
                     Ok(_) => Toast::success(words.signed_out),
-                    Err(_) => Toast::error(words.sign_out_error),
+                    Err(error) => crate::ui::i18n::errors::toast(cx, &error, words.sign_out_error),
                 };
                 announce(&mut this.accounts.toast, toast, cx);
                 this.load_accounts(true, cx);
