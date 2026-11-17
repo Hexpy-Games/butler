@@ -18,7 +18,7 @@ mod answer_drafts;
 mod authority_permissions;
 mod authority_recovery;
 mod automations;
-mod briefing_snapshot;
+pub(super) mod briefing_snapshot;
 mod connectors;
 mod context_details;
 mod contracts;

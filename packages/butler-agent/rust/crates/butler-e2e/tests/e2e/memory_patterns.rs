@@ -33,8 +33,23 @@ fn candidate(id: &Value) -> Value {
     json!({"pattern_id":id,"title":"Prepare your morning report", "action":{"title":"Morning report",
         "prompt":"Research and summarize the latest information.","schedule":{"type":"weekdays","time":"07:25"}}})
 }
+pub(super) fn review(request: &Value) -> Option<ResponseRecord> {
+    let t = task(request);
+    if !t["task"].as_str()?.ends_with("_review") {
+        return None;
+    }
+    let reviews: Vec<_> = t["candidates"]
+        .as_array()?
+        .iter()
+        .map(|c| json!({"id":c["id"],"keep":true,"reason":"Useful."}))
+        .collect();
+    Some(title_response(&json!({"reviews":reviews}).to_string()))
+}
 pub(super) fn responder(request: &Value) -> Option<ResponseRecord> {
     let task = task(request);
+    if let Some(reply) = review(request) {
+        return Some(reply);
+    }
     let content = match task["task"].as_str() {
         Some("pattern_extraction") => {
             let ids: Vec<_> = task["events"]
