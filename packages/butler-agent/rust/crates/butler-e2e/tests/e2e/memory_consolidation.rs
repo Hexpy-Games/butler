@@ -26,6 +26,7 @@ async fn setup(id: &str) -> Result<(Scenario, String), HarnessError> {
     let mut cassette = Cassette::load("TOOL-01")?;
     cassette.exchanges.clear();
     let setup = Setup::new(id)?
+        .env("BUTLER_MEMORY_SYNC_TRACE", "1")
         .stub_cassette(cassette)
         .env("TZ", "UTC")
         .env("BUTLER_E2E_APP_NOW", "2026-10-02T03:59:00.000Z")
@@ -236,6 +237,7 @@ async fn manual_result_and_events_do_not_consume_the_scheduled_day() -> Result<(
     let (s, _) = setup("MEM-CONSOLIDATION-MANUAL").await?;
     let before = state(&s)["lastRunDate"].clone();
     let id = uuid::Uuid::new_v4().to_string();
+    super::memory_fixture::wait_parked(&s).await;
     let reply =
         s.gw.post("/memory/consolidation", json!({"operation_id":id}))
             .await?;
@@ -322,6 +324,7 @@ async fn failed_manual_run_does_not_prevent_tomorrows_schedule() -> Result<(), H
     assert_eq!(turn["state"], "delivered", "{turn}");
     // Wait for turn memory completion to release the writer before running consolidation.
     super::memory_fixture::settle(&s.sandbox.data).await?;
+    super::memory_fixture::wait_parked(&s).await;
     let reply =
         s.gw.post(
             "/memory/consolidation",
