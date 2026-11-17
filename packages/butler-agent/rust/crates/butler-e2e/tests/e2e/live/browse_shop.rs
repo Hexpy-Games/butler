@@ -81,35 +81,20 @@ async fn run_shop(
     );
     let started = std::time::Instant::now();
     let id = s.gw.say_turn("general", &prompt).await?;
-    let waited =
-        s.gw.wait_turn(
-            "general",
-            &id,
-            &["waiting_for_form", "delivered", "failed"],
-            Duration::from_secs(300),
-        )
-        .await;
+    let outcome = wait_card(&s, &id, started).await?;
     let wall_seconds = started.elapsed().as_secs_f64();
     let clip = |text: &str| text.chars().take(600).collect::<String>();
-    let (turn, timeout) = match waited {
-        Ok(turn) => (turn, None),
-        Err(error) => (
-            s.gw.turn("general", &id).await?.unwrap_or(Value::Null),
-            Some(clip(&error.to_string())),
-        ),
-    };
-    let success = timeout.is_none() && verify(&s, &turn).await?;
+    let timeout = outcome.timeout.as_deref().map(clip);
+    let turn = &outcome.parent;
+    let success = outcome.card_seconds.is_some() && verify(&s).await?;
     let usage = s.gw.get("/session-view?session_id=general").await?;
     let usage = &usage.data()["usage"];
-    let rounds = rounds(&s, &id)?;
-    let reply =
-        s.gw.messages("general")
-            .await?
-            .into_iter()
-            .rev()
-            .find(|m| m["turn_id"] == id.as_str() && m["role"] == "assistant")
-            .unwrap_or(Value::Null);
-    let record = json!({"setting":setting,"run":run,"success":success,"rounds":rounds,
+    let table = round_table(&s)?;
+    let parent_rounds = table.iter().filter(|r| r["turn"] == id.as_str()).count();
+    let reply = last_reply(&s, &id).await?;
+    let record = json!({"setting":setting,"run":run,"success":success,
+        "rounds":table.len(),"parent_rounds":parent_rounds,"round_table":table,
+        "delegated":outcome.delegated,"card_seconds":outcome.card_seconds,
         "state": if timeout.is_some() { json!("timeout") } else { turn["state"].clone() },
         "turn_state":turn["state"],"status_label":turn["safe_status_label"],
         "error_code":turn["safe_error_code"],"timeout_error":timeout,
@@ -117,24 +102,13 @@ async fn run_shop(
         "reply_error_code":reply["safe_error_code"],
         "tools":tools(&s, &id)?,"wall_seconds":wall_seconds,
         "executor_requests":usage["by_role"]["browse"]["request_count"].as_u64().unwrap_or(0),
+        "usage_by_role":usage["by_role"],
         "input_tokens":usage["input_tokens"],"output_tokens":usage["output_tokens"],
         "list_price_cost":usage["cost"]});
     // A timed-out turn may not have finished a model request yet; usage is
-    // asserted for every run that reached a waited-for state, as before.
+    // asserted for every run that ended before the deadline, as before.
     if timeout.is_none() {
-        assert!(usage["input_tokens"].as_u64().is_some_and(|n| n > 0));
-        assert!(usage["output_tokens"].as_u64().is_some_and(|n| n > 0));
-        // A subscription plan has no list price; require it where the catalog publishes one.
-        if priced {
-            assert_eq!(
-                usage["cost"]["available"], true,
-                "list-price usage required"
-            );
-            assert!(
-                usage["cost"]["usd"].as_f64().is_some(),
-                "list-price USD required"
-            );
-        }
+        assert_usage(usage, priced);
     }
     if success {
         // Never allow a card: scenario teardown cancels the pending turn.
@@ -149,10 +123,7 @@ async fn run_shop(
     Ok(record)
 }
 
-async fn verify(s: &Scenario, turn: &Value) -> Result<bool, HarnessError> {
-    if turn["state"] != "waiting_for_form" {
-        return Ok(false);
-    }
+async fn verify(s: &Scenario) -> Result<bool, HarnessError> {
     // The public turn state can arrive just before the approval projection.
     let mut cards = Vec::new();
     for _ in 0..100 {
@@ -186,13 +157,117 @@ async fn verify(s: &Scenario, turn: &Value) -> Result<bool, HarnessError> {
         && text.contains("Order not placed"))
 }
 
-fn rounds(s: &Scenario, turn: &str) -> Result<u64, HarnessError> {
+/// Every accepted model round in the sandbox, in acceptance order: the
+/// turn, its policy role (butler, steward or worker), model and acceptance time.
+fn round_table(s: &Scenario) -> Result<Vec<Value>, HarnessError> {
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-    Ok(db.query_row(
-        "SELECT COUNT(*) FROM btcc_model_round_acceptances WHERE turn_id=?1",
-        [turn],
-        |r| r.get(0),
-    )?)
+    let mut query = db.prepare(
+        "SELECT a.turn_id, json_extract(t.context_json,'$.executionPolicy.role'), \
+         a.model_ref, a.created_at FROM btcc_model_round_acceptances a \
+         LEFT JOIN btcc_turns t ON t.turn_id=a.turn_id ORDER BY a.created_at, a.rowid",
+    )?;
+    let rows = query.query_map([], |r| {
+        let (turn, role, model, at): (String, Option<String>, String, String) =
+            (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?);
+        Ok(json!({"turn":turn,"role":role,"model":model,"accepted_at":at}))
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// How the user's request ended in the chat.
+struct Outcome {
+    parent: Value,
+    delegated: bool,
+    card_seconds: Option<f64>,
+    timeout: Option<String>,
+}
+
+/// Polls the chat once a second from the user's message until an approval
+/// card waits in it, no work for this request can still raise one, or 300 s
+/// pass. Children's cards are owned by the root chat, so one read covers the
+/// parent turn and any Steward it delegated to.
+async fn wait_card(
+    s: &Scenario,
+    id: &str,
+    started: std::time::Instant,
+) -> Result<Outcome, HarnessError> {
+    let deadline = Duration::from_secs(300);
+    let mut idle_polls = 0;
+    loop {
+        let parent = s.gw.turn("general", id).await?.unwrap_or(Value::Null);
+        let view = s.gw.get("/session-view?session_id=general").await?;
+        let view = view.data();
+        let children = view["steward_children"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let outcome = |card_seconds, timeout| Outcome {
+            parent: parent.clone(),
+            delegated: !children.is_empty(),
+            card_seconds,
+            timeout,
+        };
+        if !s.gw.approval_requests("general").await?.is_empty() {
+            return Ok(outcome(Some(started.elapsed().as_secs_f64()), None));
+        }
+        // A child still works unless it has its result, a retryable fault or no live turn.
+        let working = children.iter().any(|c| {
+            c["terminal"] != true
+                && c["latest_turn"]["retryable"] != true
+                && c["result_missing"] != true
+        });
+        let settled = matches!(
+            view["latest_turn"]["state"].as_str(),
+            Some("delivered" | "waiting_for_form" | "failed" | "runtime_fault" | "cancelled")
+        );
+        // Two idle reads a second apart: a Steward's result queues the parent's
+        // follow-up turn just after the child turns terminal.
+        idle_polls = if settled && !working {
+            idle_polls + 1
+        } else {
+            0
+        };
+        let failed = matches!(
+            parent["state"].as_str(),
+            Some("failed" | "runtime_fault" | "cancelled")
+        );
+        if failed || idle_polls == 2 {
+            return Ok(outcome(None, None));
+        }
+        if started.elapsed() > deadline {
+            let last = format!("no approval card within {deadline:?}; last turn: {parent}");
+            return Ok(outcome(None, Some(last)));
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
+/// Usage of a run that ended before the deadline.
+fn assert_usage(usage: &Value, priced: bool) {
+    assert!(usage["input_tokens"].as_u64().is_some_and(|n| n > 0));
+    assert!(usage["output_tokens"].as_u64().is_some_and(|n| n > 0));
+    // A subscription plan has no list price; require it where the catalog publishes one.
+    if priced {
+        assert_eq!(
+            usage["cost"]["available"], true,
+            "list-price usage required"
+        );
+        assert!(
+            usage["cost"]["usd"].as_f64().is_some(),
+            "list-price USD required"
+        );
+    }
+}
+
+/// The parent turn's last assistant message, or null.
+async fn last_reply(s: &Scenario, id: &str) -> Result<Value, HarnessError> {
+    Ok(s.gw
+        .messages("general")
+        .await?
+        .into_iter()
+        .rev()
+        .find(|m| m["turn_id"] == id && m["role"] == "assistant")
+        .unwrap_or(Value::Null))
 }
 
 /// The turn's tool calls in call order, as `name:status[:error_code]`.
