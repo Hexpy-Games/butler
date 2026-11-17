@@ -42,7 +42,7 @@ async fn execute_mode(
     executor: bool,
 ) -> Result<JsonDocument, ToolExecutionError> {
     let mut arguments = Value::Object(call.arguments.clone());
-    let live = match read_page(owner, &invocation, call, call_id, &mut arguments).await? {
+    let live = match read_page(owner, &invocation, call, call_id, &mut arguments, executor).await? {
         Ok(live) => live,
         Err(result) => return super::encoded(&result),
     };
@@ -104,6 +104,7 @@ async fn read_page(
     call: &ModelRoundToolCall,
     occurrence: &str,
     arguments: &mut Value,
+    executor: bool,
 ) -> Result<Result<Option<butler_runtime::web_access::LivePage>, Value>, ToolExecutionError> {
     if call.name != ToolName::WebRead && call.name != ToolName::BrowserRead {
         return Ok(Ok(None));
@@ -116,7 +117,9 @@ async fn read_page(
             json!({"ok":false,"error":{"code":"tab_or_url_required","message":"browser_read needs a tab or a url."}}),
         ));
     }
-    let live = super::super::browser::live_page(owner, invocation, arguments).await;
+    let live =
+        super::super::browser::live_page(owner, invocation, arguments, call, occurrence, executor)
+            .await?;
     if call.name == ToolName::BrowserRead
         && matches!(live, Ok(None))
         && let Some(url) = arguments["url"].as_str()
@@ -129,7 +132,10 @@ async fn read_page(
             Ok(tab) => arguments["tab"] = json!(tab),
             Err(result) => return Ok(Err(result)),
         }
-        return Ok(super::super::browser::live_page(owner, invocation, arguments).await);
+        return super::super::browser::live_page(
+            owner, invocation, arguments, call, occurrence, executor,
+        )
+        .await;
     }
     Ok(live)
 }
