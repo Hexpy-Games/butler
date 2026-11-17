@@ -80,9 +80,14 @@ export function finishUse(browser, session, turn, closeReadTabs = false) {
 /** An agent tab the finished turn opened and only read: no step acted in it or
  * handed it over, nobody has viewed it, and nothing else holds it. */
 function readOnlyTab(browser, tab, session, turn) {
+  return idleReadTab(browser, tab, session, turn) && !tabInUse(browser, tab);
+}
+/** A tab this turn opened and only read, with no call on it now and no other turn holding it. */
+export function idleReadTab(browser, tab, session, turn) {
   return tab.owner === `conversation:${session}` && tab.openedTurn === turn && tab.agent && tab.holder === "agent" && !tab.acted
     && !tab.viewed && !tab.userViewed && !tab.sticky && !tab.preview && tab.profile !== "signed_in" && !tab.dialog && !tab.waiting
-    && !tab.pausedTurns && !tab.busy && !tab.closing && !tabInUse(browser, tab);
+    && !tab.pausedTurns && !tab.busy && !tab.closing && !activeCalls(browser, tab)
+    && [...(browser.holds.get(tab.id)?.keys() ?? [])].every(held => held === turn);
 }
 export function resetUse(browser) {
   browser.holds.clear();
