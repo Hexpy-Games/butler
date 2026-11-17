@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 use super::support::{admin, call, open, publish, selected, setup, shell};
+use crate::shell_app::live_turns::complete_onboarding;
 use butler_e2e::e2e::HarnessError;
 use serde_json::{Value, json};
 
@@ -77,5 +78,51 @@ async fn the_page_host_starts_cef_on_first_use_without_a_window() -> Result<(), 
     let opened = call(&admin, "general", "tab.open", &Value::Null, args).await?;
     assert_eq!(opened["reason"], "navigation_failed", "{opened}");
     assert!(profile.is_dir(), "CEF started on the first page");
+    s.finish().await
+}
+
+#[tokio::test]
+async fn a_waiting_hand_off_shows_the_band_and_gives_back() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        shell() && selected(),
+        "BUTLER_E2E_BROWSER_BACKEND=shell not set"
+    );
+    let mut s = setup("BROWSER-PAGE-HOST-HAND-OFF")?.start().await?;
+    let url = publish(&s).await?;
+    let admin = admin(&s);
+    let opened = open(&admin, "general", &url).await?;
+    assert_eq!(opened["status"], "ok", "{opened}");
+    let tab = &opened["tab"];
+    // A new window opens the workspace once the onboarding is done.
+    complete_onboarding(&s.gw).await?;
+    s.shell(&[
+        "close-window",
+        "tray-open",
+        "wait-anchor composer",
+        "browser",
+        "wait-anchor browser-area",
+    ])
+    .await?;
+    // The Agent hands the tab to the user: the band shows, and the Agent is locked out.
+    let waited = call(
+        &admin,
+        "general",
+        "tab.wait",
+        tab,
+        json!({"reason":"other"}),
+    )
+    .await?;
+    assert_eq!(waited["status"], "user_control", "{waited}");
+    s.shell(&["wait-anchor browser-band", "wait-anchor browser-control"])
+        .await?;
+    let locked = call(&admin, "general", "tab.observe", tab, json!({})).await?;
+    assert_eq!(locked["reason"], "user_control", "{locked}");
+    // Give back from the band: the band goes and the Agent has the page again.
+    s.shell(&["click browser-control", "wait-no-anchor browser-band"])
+        .await?;
+    let observed = call(&admin, "general", "tab.observe", tab, json!({})).await?;
+    assert_eq!(observed["status"], "ok", "{observed}");
+    call(&admin, "general", "tab.close", tab, json!({})).await?;
     s.finish().await
 }
