@@ -65,7 +65,9 @@ impl View<'_> {
                     .px(self.placement.inset(ds))
                     .child(tabs),
             )
-            .child(panel)
+            // Web: .tabInset wraps the TabsList inside <Tabs> and the body is TabsContent, so the body
+            // gets the Tabs root gap; gpui Tabs has no list-inset slot, so the gap is applied here.
+            .child(panel.mt(ds.len(Length::Space3)))
             .into_any_element()
     }
 

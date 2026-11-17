@@ -62,7 +62,7 @@ export function ScrollArea({
       <div
         ref={ref}
         className={styles.scroll}
-        data-slot={dataSlot}
+        data-slot={dataSlot ?? "scroll-area"}
         data-test-class={dataTestClass}
       >
         <div

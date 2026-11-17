@@ -23,6 +23,10 @@ impl ClientBuilder {
             purpose,
         }
     }
+    pub(super) fn without_trust_roots(mut self) -> Self {
+        self.inner = self.inner.tls_built_in_root_certs(false);
+        self
+    }
     pub fn build(self) -> Result<Client, reqwest::Error> {
         Ok(Client {
             inner: self.inner.build()?,

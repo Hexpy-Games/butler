@@ -39,7 +39,7 @@ pub(crate) enum ProjectCommand {
     Delete,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(crate) enum DraftTarget {
     Project(String),
     Group { id: String, project: Option<String> },

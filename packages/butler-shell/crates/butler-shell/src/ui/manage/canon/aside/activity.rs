@@ -6,7 +6,7 @@ use butler_ds::ui::button::{self, Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::layout::{Justify, Space, Stack};
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast;
 use butler_ds::ui::typo::{Typo, Wrap};
 use butler_shell_client::Error;
 use gpui::{
@@ -146,9 +146,10 @@ impl EpicInspector {
                         merge(&mut this.activity.rows, older.activity);
                         this.activity.before = older.activity_before;
                     }
-                    Err(_) => {
+                    Err(error) => {
                         let text = Self::words(cx).request_failed;
-                        toast::show(cx, Toast::error(text));
+                        let failure = crate::ui::i18n::errors::toast(cx, &error, text);
+                        toast::show(cx, failure);
                     }
                 }
             },

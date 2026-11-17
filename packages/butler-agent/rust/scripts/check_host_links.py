@@ -12,7 +12,7 @@ MACHO_MAGICS = {
     b'\xfe\xed\xfa\xce', b'\xce\xfa\xed\xfe', b'\xfe\xed\xfa\xcf', b'\xcf\xfa\xed\xfe',
     b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca', b'\xca\xfe\xba\xbf', b'\xbf\xba\xfe\xca',
 }
-LOAD_COMMANDS = {'LC_LOAD_DYLIB', 'LC_LOAD_WEAK_DYLIB', 'LC_REEXPORT_DYLIB', 'LC_LOAD_UPWARD_DYLIB'}
+LOAD_COMMANDS = {'LC_LOAD_DYLIB', 'LC_LOAD_WEAK_DYLIB', 'LC_REEXPORT_DYLIB', 'LC_LOAD_UPWARD_DYLIB', 'LC_LAZY_LOAD_DYLIB'}
 DYLIB_PREFIXES = ('/usr/lib/', '/System/Library/', '@rpath/', '@executable_path/', '@loader_path/')
 RPATH_PREFIXES = ('@executable_path/', '@loader_path/')
 
@@ -22,13 +22,8 @@ def reject(file, path, rule):
 
 
 def check_macho(file, libraries, commands):
-    # Strip only the metadata suffix: framework and executable names contain spaces.
-    for line in libraries.splitlines():
-        if not line.startswith((' ', '\t')) or ' (compatibility version ' not in line:
-            continue
-        path = line.strip().rsplit(' (compatibility version ', 1)[0]
-        if not path.startswith(DYLIB_PREFIXES):
-            reject(file, path, 'dylib outside allowed load roots')
+    # A dylib's own install name (LC_ID_DYLIB, listed first by otool -L) is not a load path.
+    own_id = None
     command = None
     for line in commands.splitlines():
         text = line.strip()
@@ -36,6 +31,8 @@ def check_macho(file, libraries, commands):
             command = None
         if text.startswith('cmd '):
             command = text[4:]
+        if command == 'LC_ID_DYLIB' and text.startswith('name '):
+            own_id = text[5:].rsplit(' (offset ', 1)[0]
         if command in LOAD_COMMANDS and text.startswith('name '):
             path = text[5:].rsplit(' (offset ', 1)[0]
             if not path.startswith(DYLIB_PREFIXES):
@@ -44,6 +41,13 @@ def check_macho(file, libraries, commands):
             path = text[5:].rsplit(' (offset ', 1)[0]
             if not path.startswith(RPATH_PREFIXES):
                 reject(file, path, 'LC_RPATH must be executable/loader relative')
+    # Strip only the metadata suffix: framework and executable names contain spaces.
+    for line in libraries.splitlines():
+        if not line.startswith((' ', '\t')) or ' (compatibility version ' not in line:
+            continue
+        path = line.strip().rsplit(' (compatibility version ', 1)[0]
+        if path != own_id and not path.startswith(DYLIB_PREFIXES):
+            reject(file, path, 'dylib outside allowed load roots')
 
 
 def check_elf(file, dynamic):

@@ -82,12 +82,12 @@ impl McpPage {
             |client| async move { client.list_mcp_servers().await },
             |this: &mut Self, result: Result<ServerList, Error>, cx| match result {
                 Ok(list) => this.servers = Load::Ready(list.servers),
-                Err(_) => {
+                Err(error) => {
                     if !matches!(this.servers, Load::Ready(_)) {
                         this.servers = Load::Failed;
                     }
                     let message = words(Ds::get(cx).lang()).err_unavailable;
-                    actions::toast_error(cx, message);
+                    actions::toast_error(cx, &error, message);
                 }
             },
         );

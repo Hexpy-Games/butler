@@ -357,7 +357,7 @@ impl RenderOnce for Typo {
                 el.text_style().letter_spacing = Some(px(spacing));
             }
             trim = Some(Self::trim_offset(&family, size, cx, weight));
-            if self.role.is_inline() && strut::active(cx) && !flow {
+            if self.inline_box() && strut::active(cx) && !flow {
                 let (line, shift) = Self::strut_line(ds, (&family, size, line_height, weight), cx);
                 el = el.line_height(px(line));
                 trim = Some(shift);
@@ -388,12 +388,18 @@ impl RenderOnce for Typo {
         } else {
             styled.into_any_element()
         };
+        // The glyphs move down by a top margin that the bottom margin gives back, so the box keeps
+        // its size and layout reports the baseline where the glyphs are drawn. A flex column keeps
+        // the margins from collapsing through the Typo.
         let body: AnyElement = match trim.filter(|_| !flow && self.line_clamp.is_none()) {
-            Some(offset) => div()
-                .relative()
-                .top(px(offset))
-                .child(styled)
-                .into_any_element(),
+            Some(offset) => {
+                el = el.flex().flex_col();
+                div()
+                    .mt(px(offset))
+                    .mb(px(-offset))
+                    .child(styled)
+                    .into_any_element()
+            }
             None => styled.into_any_element(),
         };
         self.item.apply(el, ds).child(body)
@@ -406,12 +412,16 @@ impl Typo {
     /// container's strut setting the minimum line height. Block props make it a block.
     fn flows(&self, cx: &App) -> bool {
         self.selectable.is_none()
-            && self.role.is_inline()
+            && self.inline_box()
             && strut::active(cx)
-            && !self.truncate
-            && self.line_clamp.is_none()
             && !self.align_with_control
             && self.align == TextAlign::Start
+    }
+
+    /// Whether the web draws this Typo as an inline box, the only kind a container's strut
+    /// reaches: an inline role, not truncated (`display: block`) or clamped (`-webkit-box`).
+    fn inline_box(&self) -> bool {
+        self.role.is_inline() && !self.truncate && self.line_clamp.is_none()
     }
 
     /// Truncation, clamping, wrapping and the control-row padding.

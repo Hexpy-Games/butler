@@ -33,6 +33,16 @@ pub(crate) struct Options {
     pub(crate) stage_width: Option<f32>,
     /// Render only these page ids (`--pages a,b`); all pages when unset.
     pub(crate) pages: Option<Vec<String>>,
+    /// What a page writes besides its pictures.
+    pub(crate) extra: Extra,
+}
+
+/// What `--shots` writes besides the PNGs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Extra {
+    Nothing,
+    /// `--parts`: `<page>.parts.json`, every story canvas and the boxes inside it.
+    Parts,
 }
 
 impl Options {
@@ -74,6 +84,11 @@ impl Options {
             motion: args.iter().any(|arg| arg == "--motion"),
             stage_width: value("--stage-width")?.map(str::parse).transpose()?,
             pages: value("--pages")?.map(|ids| ids.split(',').map(str::to_owned).collect()),
+            extra: if args.iter().any(|arg| arg == "--parts") {
+                Extra::Parts
+            } else {
+                Extra::Nothing
+            },
         })
     }
 }
@@ -179,6 +194,96 @@ const MAX_WINDOW_HEIGHT: f32 = 6400.;
 /// Where a scrolled story's canvas is put under the window's top edge.
 const SCROLL_MARGIN: f32 = 16.;
 
+/// The scrollers the layout diff compares, by the web `data-slot` (`data-test-class` for the sidebar's):
+/// each publishes `slot:<name>#<k>` (the scrolling element) and `slot:<name>:frame#<k>` (its parent)
+/// per frame (`butler_ds::ui::control::slot_anchor`).
+const SCROLLERS: [&str; 4] = [
+    "sidebar-scroll",
+    "conversation-aside-scroll",
+    "management-page-aside-scroll",
+    "scroll-area",
+];
+
+/// The `k`th `slot:<name><suffix>#k`; a shell that has one instance names it plain, `slot:<name><suffix>`.
+fn slot_bounds(
+    cx: &mut HeadlessAppContext,
+    handle: AnyWindowHandle,
+    name: &str,
+    suffix: &str,
+    k: usize,
+) -> anyhow::Result<Option<gpui::Bounds<gpui::Pixels>>> {
+    let numbered = cx.debug_bounds(handle, &format!("slot:{name}{suffix}#{k}"))?;
+    if numbered.is_none() && k == 0 {
+        return cx.debug_bounds(handle, &format!("slot:{name}{suffix}"));
+    }
+    Ok(numbered)
+}
+
+/// Each story canvas and the controls whose centre lies inside it, relative to the canvas.
+/// `control-<n>` is numbered per frame over the whole page (`butler_ds::ui::control::parts`);
+/// inside a story it counts again from 0, in the same order.
+fn parts(
+    cx: &mut HeadlessAppContext,
+    handle: AnyWindowHandle,
+    window: WindowHandle<DsView>,
+) -> anyhow::Result<Vec<serde_json::Value>> {
+    let mut controls = Vec::new();
+    while let Some(b) = cx.debug_bounds(handle, &format!("control-{}", controls.len()))? {
+        controls.push(b);
+    }
+    let mut scrollers = Vec::new();
+    for name in SCROLLERS {
+        let mut pairs = Vec::new();
+        while let (Some(scroller), Some(frame)) = (
+            slot_bounds(cx, handle, name, "", pairs.len())?,
+            slot_bounds(cx, handle, name, ":frame", pairs.len())?,
+        ) {
+            pairs.push((scroller, frame));
+        }
+        scrollers.push((name, pairs));
+    }
+    let mut parts = Vec::new();
+    for name in story_anchors(cx, window) {
+        let Some(canvas) = cx.debug_bounds(handle, &format!("story-{name}"))? else {
+            continue;
+        };
+        let part = |key: String, b: &gpui::Bounds<gpui::Pixels>| {
+            serde_json::json!({"story": name, "key": key,
+                "x": (b.origin.x - canvas.origin.x).as_f32(),
+                "y": (b.origin.y - canvas.origin.y).as_f32(),
+                "w": b.size.width.as_f32(), "h": b.size.height.as_f32()})
+        };
+        parts.push(part("canvas".to_owned(), &canvas));
+        let inside = controls.iter().filter(|b| canvas.contains(&b.center()));
+        for (n, b) in inside.enumerate() {
+            parts.push(part(format!("control-{n}"), b));
+        }
+        for (slot, pairs) in &scrollers {
+            let inside = pairs.iter().filter(|(s, _)| canvas.contains(&s.center()));
+            for (n, (scroller, frame)) in inside.enumerate() {
+                parts.push(part(format!("slot:{slot}#{n}"), scroller));
+                parts.push(part(format!("slot:{slot}:frame#{n}"), frame));
+            }
+        }
+    }
+    Ok(parts)
+}
+
+/// Writes `<id>.parts.json` of the page as it is now.
+fn write_parts(
+    cx: &mut HeadlessAppContext,
+    handle: AnyWindowHandle,
+    window: WindowHandle<DsView>,
+    (options, id): (&Options, &str),
+) -> anyhow::Result<()> {
+    let parts = parts(cx, handle, window)?;
+    std::fs::write(
+        options.dir.join(format!("{id}.parts.json")),
+        serde_json::to_vec_pretty(&parts)?,
+    )?;
+    Ok(())
+}
+
 fn render_page(
     cx: &mut HeadlessAppContext,
     options: &Options,
@@ -204,6 +309,10 @@ fn render_page(
     }
     let mut layout = Vec::new();
     let mut image = cx.capture_screenshot(handle)?;
+    // Read before the story loop scrolls the page: every box is of this frame.
+    if options.extra == Extra::Parts {
+        write_parts(cx, handle, window, (options, id))?;
+    }
     let window_height = cx.update_window(handle, |_, window, _| {
         window.viewport_size().height.as_f32()
     })?;

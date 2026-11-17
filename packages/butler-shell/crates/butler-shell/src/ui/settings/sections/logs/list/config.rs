@@ -145,7 +145,11 @@ impl LogList {
                             show(&mut this.level_toast, Toast::success(text), cx);
                         }
                     }
-                    Err(_) => show(&mut this.level_toast, Toast::error(saved.save_failed), cx),
+                    Err(error) => show(
+                        &mut this.level_toast,
+                        crate::ui::i18n::errors::toast(cx, &error, saved.save_failed),
+                        cx,
+                    ),
                 }
             },
         );
