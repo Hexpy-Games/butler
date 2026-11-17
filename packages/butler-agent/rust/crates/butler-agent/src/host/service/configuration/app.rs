@@ -3,6 +3,7 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
@@ -11,7 +12,7 @@ use serde_json::Value;
 
 use butler_core::json::number_from_string;
 use butler_core::public_text::trim_js_whitespace;
-use butler_gateway::gateway::{GatewayConfig, LocalAuthConfig};
+use butler_gateway::gateway::{GatewayConfig, LocalAuthConfig, RemoteSocket, SocketActivity};
 
 use super::local_credentials::{CredentialFiles, LocalCredentialError, LocalCredentials};
 
@@ -161,7 +162,7 @@ impl AppServiceConfiguration {
         let folder_secret = folder_secret
             .map_err(|error| credential_errors.push(error))
             .ok();
-        Self {
+        let mut configuration = Self {
             host,
             port,
             db_path,
@@ -180,7 +181,9 @@ impl AppServiceConfiguration {
             },
             credential_errors,
             content_port,
-        }
+        };
+        apply_remote(&mut configuration, data_root);
+        configuration
     }
 
     pub(crate) fn validate(&self) -> Result<(), butler_turn::btcc::BtccError> {
@@ -220,6 +223,10 @@ impl AppServiceConfiguration {
         self.gateway.remote_access_enabled
     }
 
+    pub(crate) fn remote_socket(&self) -> Option<&RemoteSocket> {
+        self.gateway.remote_socket.as_ref()
+    }
+
     pub(crate) fn gateway_config(&self) -> GatewayConfig {
         GatewayConfig {
             local_auth: self.gateway.local_auth.clone(),
@@ -238,8 +245,39 @@ impl AppServiceConfiguration {
             static_ui_root: self.gateway.static_ui_root.clone(),
             favicon_cache_root: self.gateway.favicon_cache_root.clone(),
             headless_browser: self.gateway.headless_browser.clone(),
+            remote_socket: self.gateway.remote_socket.clone(),
         }
     }
+}
+
+fn apply_remote(config: &mut AppServiceConfiguration, data_root: &Path) {
+    if !env::args_os().any(|arg| arg == "--remote") {
+        return;
+    }
+    config.host = "127.0.0.1".to_owned();
+    config.port = normalize_port(Some(0.0), true);
+    config.gateway.headless_browser = None;
+    config.gateway.remote_socket = Some(remote_socket(data_root));
+}
+
+fn remote_socket(data_root: &Path) -> RemoteSocket {
+    static SOCKET: OnceLock<RemoteSocket> = OnceLock::new();
+    SOCKET
+        .get_or_init(|| RemoteSocket {
+            path: data_root.join("remote/agent.sock"),
+            activity: Arc::new(SocketActivity::default()),
+            idle: idle_timeout(),
+        })
+        .clone()
+}
+
+fn idle_timeout() -> Duration {
+    Duration::from_secs(
+        env::var("BUTLER_REMOTE_IDLE_SECONDS")
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .unwrap_or(300),
+    )
 }
 
 fn env_trimmed(name: &str) -> Option<String> {
@@ -329,6 +367,7 @@ fn gateway_config(
         static_ui_root: None,
         favicon_cache_root: None,
         headless_browser: None,
+        remote_socket: None,
     }
 }
 

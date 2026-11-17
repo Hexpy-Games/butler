@@ -176,6 +176,7 @@ mod quota_gating;
 mod reader_tab;
 mod recovery;
 mod reduce_motion;
+mod remote_mode;
 mod research_eval;
 mod sandbox_installation;
 mod schedule_calendar;

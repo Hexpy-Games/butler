@@ -16,7 +16,7 @@ mod image_models;
 mod library;
 mod pending_asks;
 mod start;
-pub(super) use start::serve;
+pub(super) use start::{Listeners, serve};
 mod access_log;
 mod agent_import;
 mod automations;
@@ -191,20 +191,24 @@ async fn dispatch_inner(state: Arc<HttpState>, request: Request<Body>) -> Respon
     let connect_form =
         request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH;
     let html_connect_form = connect_form && static_ui::accepts_html(request.headers());
-    let origin =
-        match state
-            .security
-            .admit(request.method(), request.uri().path(), request.headers())
-        {
-            Ok(origin) => origin,
-            Err(error) => {
-                return if html_connect_form {
-                    security::GatewaySecurity::connect_error_response(&error)
-                } else {
-                    error_response(&error)
-                };
-            }
-        };
+    let origin = match state.security.admit(
+        request.method(),
+        request.uri().path(),
+        request.headers(),
+        request
+            .extensions()
+            .get::<listeners::LocalSocketPeer>()
+            .is_some(),
+    ) {
+        Ok(origin) => origin,
+        Err(error) => {
+            return if html_connect_form {
+                security::GatewaySecurity::connect_error_response(&error)
+            } else {
+                error_response(&error)
+            };
+        }
+    };
     if request.method() == Method::OPTIONS && origin.allowed().is_some() {
         return security::preflight(&origin);
     }
@@ -265,7 +269,11 @@ async fn authorized_route(
         .map(|info| info.0);
     let client = Client {
         access: grant.access,
-        local: security::is_local_client(peer, request.headers(), origin),
+        local: request
+            .extensions()
+            .get::<listeners::LocalSocketPeer>()
+            .is_some()
+            || security::is_local_client(peer, request.headers(), origin),
         admin: state.security.is_admin(request.headers()),
         keys: grant.keys,
     };

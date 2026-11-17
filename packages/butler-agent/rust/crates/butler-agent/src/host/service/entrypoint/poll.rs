@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use tokio::{sync::oneshot, task::JoinSet};
 
+use butler_gateway::gateway::RemoteSocket;
 use butler_runtime::operations::ServiceReadiness;
 use butler_turn::btcc::BtccError;
 
@@ -72,6 +73,7 @@ pub(super) async fn poll_service(
     let queue_changes = watch_queue(&queue, &config.data_root).await?;
     let mut storage_changes = progress.subscribe_changes();
     let mut dispatch_ready = false;
+    let remote = config.app.remote_socket();
     let result = loop {
         storage_changes.borrow_and_update();
         if stop.requested() || stop.flag_requested(&shutdown_flag) {
@@ -101,7 +103,9 @@ pub(super) async fn poll_service(
         if let Err(error) = injected_service_failure(&config.data_root).await {
             break Err(error);
         }
+        let idle_armed = idle_armed(remote, dispatcher, deferred).await;
         tokio::select! {
+            () = remote_idle(remote), if idle_armed => { stop.request(); break Ok(()); }
             () = stop.wait() => break Ok(()),
             lease = wait_for_foreground_close(foreground_lease.as_ref()), if foreground_lease.is_some() => {
                 // The App released its lease: a requested stop.
@@ -116,6 +120,24 @@ pub(super) async fn poll_service(
         }
     };
     result.and(join_maintenance(stop_maintenance, maintenance).await)
+}
+
+async fn idle_armed(
+    remote: Option<&RemoteSocket>,
+    dispatcher: &IngressDispatcher,
+    deferred: Option<Duration>,
+) -> bool {
+    match remote {
+        Some(_) => dispatcher.is_idle().await && deferred.is_none(),
+        None => false,
+    }
+}
+
+async fn remote_idle(remote: Option<&RemoteSocket>) {
+    match remote {
+        Some(socket) => socket.activity.idle_elapsed(socket.idle).await,
+        None => std::future::pending().await,
+    }
 }
 
 async fn watch_queue(

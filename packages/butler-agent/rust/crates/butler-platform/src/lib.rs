@@ -78,6 +78,7 @@ pub mod host_file_behavior;
 pub mod install_link;
 pub mod instance;
 pub mod launcher;
+pub mod local_socket;
 pub mod memory;
 pub mod network;
 pub mod powershell_text;

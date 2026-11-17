@@ -30,6 +30,8 @@ pub use pending_asks_port::GatewayPendingAsks;
 mod published_event;
 mod rate_limit;
 mod remote_computers;
+mod remote_socket;
+pub use remote_socket::{RemoteSocket, SocketActivity};
 mod security_settings;
 pub use devices::{GatewayDevices, PairedDevice};
 mod server;
