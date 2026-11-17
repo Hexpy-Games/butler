@@ -112,7 +112,7 @@ install_electron() {
       "$repo/deploy/macos/sign-and-notarize.sh" sign-app "$install" >&2
     echo 'baseline re-signed ad-hoc: the candidate is an ad-hoc build and the updater requires one signing team'
   fi
-  "$exe" >> "$app_log" 2>&1 &
+  "$exe" --use-mock-keychain --password-store=basic >> "$app_log" 2>&1 &
   app_pid=$!
   deadline=$((SECONDS + 120))
   until jq -e '.state == "ready" and (.pid > 0)' "$record" >/dev/null 2>&1 && alive "$(jq -r .pid "$record")"; do
@@ -130,7 +130,7 @@ update() {
   mkfifo "$root/helper.fifo"
   "$agent_exe" --installation-root "$install" \
     --resource-root "$install/Contents/Resources/bundled-agent/resources" \
-    app-update-install "$gpui" "$exe" "$app_pid" --use-mock-keychain \
+    app-update-install "$gpui" "$exe" "$app_pid" --use-mock-keychain --password-store=basic \
     < "$root/helper.fifo" > "$root/helper.out" 2> "$root/helper.log" &
   helper_pid=$!
   exec 3> "$root/helper.fifo"
@@ -230,7 +230,7 @@ prove_host() {
   open --env BUTLER_DATA="$BUTLER_DATA" --env HOME="$HOME" --env TMPDIR="$TMPDIR" \
     --env BUTLER_E2E_TIER=stub --env BUTLER_SECRET_STORE=file --env BUTLER_APP_SERVER_HOST=127.0.0.1 \
     --env BUTLER_APP_SERVER_PORT="$BUTLER_APP_SERVER_PORT" --env BUTLER_APP_UPDATE_MANIFEST="$BUTLER_APP_UPDATE_MANIFEST" \
-    --env BUTLER_APP_DISABLE_SHELL_REGISTRATION=1 "$install" --args --use-mock-keychain
+    --env BUTLER_APP_DISABLE_SHELL_REGISTRATION=1 "$install" --args --use-mock-keychain --password-store=basic
   deadline=$((SECONDS + 60))
   until gpui_ready; do
     [ "$SECONDS" -lt "$deadline" ] || fail "opening the App did not start it while its CEF host was running (pending: $gpui_wait)"

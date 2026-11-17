@@ -37,6 +37,8 @@ impl Shots {
         cmd.arg(dir)
             .arg("--data")
             .arg(data)
+            // A temporary home has no login keychain: the in-app browser must not ask for one.
+            .args(["--use-mock-keychain", "--password-store=basic"])
             .stdin(Stdio::piped())
             .stdout(Stdio::from(stdout))
             .stderr(Stdio::from(stderr))
