@@ -324,22 +324,65 @@ fn activity_time(value: &str) -> String {
     clock_time(value, true)
 }
 
+/// How a locale writes the time of day.
+#[derive(Debug, PartialEq)]
+enum Clock {
+    /// `오전 12:48:13`
+    Korean12,
+    /// `12:48:13 AM`
+    English12,
+    /// `00:48:13`
+    Hour24,
+}
+
+/// English regions whose ICU locale (`en-XX`) is 24-hour; the other English locales, and `en`
+/// itself, are 12-hour (`Intl.DateTimeFormat("en-XX").resolvedOptions().hourCycle` of ICU).
+const ENGLISH_24H: [&str; 70] = [
+    "AI", "AT", "BE", "BI", "BW", "BZ", "CC", "CH", "CK", "CM", "CX", "CZ", "DD", "DE", "DG", "DK",
+    "EE", "ES", "FI", "FK", "FR", "FX", "GB", "GE", "GG", "GI", "GS", "HU", "ID", "IE", "IL", "IM",
+    "IO", "IT", "JE", "JP", "KE", "LT", "LV", "MG", "MS", "MT", "MU", "MV", "NF", "NG", "NL", "NO",
+    "NR", "NU", "PL", "PN", "PT", "RH", "RO", "RW", "SC", "SE", "SH", "SI", "SK", "SX", "TK", "TV",
+    "TZ", "UA", "UG", "UK", "ZA", "ZW",
+];
+
+/// The clock of the OS locale as Chromium resolves it for `Intl.DateTimeFormat(undefined)`: the
+/// tag is normalised (`ko_KR.UTF-8`, `en_GB@euro`, `zh-Hans-CN`), the language picks the style
+/// (ko is 12-hour, other languages 24-hour as CLDR's default), and English follows its region;
+/// no tag or an unknown region resolves to `en`/`en-US`, 12-hour.
+fn clock_of(tag: &str) -> Clock {
+    let tag = tag.split(['.', '@']).next().unwrap_or_default();
+    let mut parts = tag.split(['-', '_']).filter(|part| !part.is_empty());
+    let language = parts.next().unwrap_or("en").to_ascii_lowercase();
+    let region = parts
+        .find(|part| part.len() == 2 && part.chars().all(|c| c.is_ascii_alphabetic()))
+        .map(str::to_ascii_uppercase);
+    match language.as_str() {
+        "ko" => Clock::Korean12,
+        "en" if region.is_some_and(|region| ENGLISH_24H.contains(&region.as_str())) => {
+            Clock::Hour24
+        }
+        "en" => Clock::English12,
+        _ => Clock::Hour24,
+    }
+}
+
 /// Shared local clock for `workPlanPresentation.ts` and `formatActivityTime`.
 pub(super) fn clock_time(value: &str, seconds: bool) -> String {
     let Ok(at) = chrono::DateTime::parse_from_rfc3339(value) else {
         return value.to_string();
     };
     let at = at.with_timezone(&chrono::Local);
-    let locale = sys_locale::get_locale().unwrap_or_default().to_lowercase();
-    let format = if locale.starts_with("ko") {
-        if seconds { "%p %I:%M:%S" } else { "%p %I:%M" }
-    } else if locale.starts_with("en-us") || locale == "en" {
-        if seconds { "%I:%M:%S %p" } else { "%I:%M %p" }
-    } else {
-        if seconds { "%H:%M:%S" } else { "%H:%M" }
+    let tag = sys_locale::get_locale().unwrap_or_default();
+    let format = match (clock_of(&tag), seconds) {
+        (Clock::Korean12, true) => "%p %I:%M:%S",
+        (Clock::Korean12, false) => "%p %I:%M",
+        (Clock::English12, true) => "%I:%M:%S %p",
+        (Clock::English12, false) => "%I:%M %p",
+        (Clock::Hour24, true) => "%H:%M:%S",
+        (Clock::Hour24, false) => "%H:%M",
     };
     let text = at.format(format).to_string();
-    if locale.starts_with("ko") {
+    if clock_of(&tag) == Clock::Korean12 {
         text.replace("AM", "오전").replace("PM", "오후")
     } else {
         text
@@ -414,4 +457,26 @@ pub(crate) fn turn_activity_panel(
             .children(status)
             .into_any_element(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Clock, clock_of};
+
+    // test-category: pure-logic
+    #[test]
+    fn the_os_locale_resolves_to_the_clock_intl_uses() {
+        for (tag, clock) in [
+            ("ko-KR", Clock::Korean12),
+            ("ko_KR.UTF-8", Clock::Korean12),
+            ("en-US", Clock::English12),
+            ("en_GB", Clock::Hour24),
+            ("en-KR", Clock::English12),
+            ("", Clock::English12),
+            ("ja-JP", Clock::Hour24),
+            ("zh-Hans-CN", Clock::Hour24),
+        ] {
+            assert_eq!(clock_of(tag), clock, "{tag}");
+        }
+    }
 }
