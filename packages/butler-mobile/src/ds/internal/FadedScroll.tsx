@@ -3,7 +3,7 @@ import { Platform, ScrollView, View, type ViewProps } from "react-native";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import MaskedView from "@react-native-masked-view/masked-view";
-import { alpha } from "../../design/tokens";
+import { alpha, opaque } from "../../design/tokens";
 import { useTokens } from "../../design/useTokens";
 import { GLASS_BLUR_IOS } from "./GlassFill";
 
@@ -18,7 +18,7 @@ export function FadedScroll({ children }: { children: React.ReactNode }) {
   const [scrolled, setScrolled] = useState(false);
   const [more, setMore] = useState(false);
   const size = t.length("--tinted-glass-edge-size");
-  const fill = alpha(t.color("--popover"), 1); // the opaque Android sheet panel fill (a Modal cannot blur)
+  const fill = opaque(t.color("--popover")); // the opaque Android sheet panel fill (a Modal cannot blur)
   const clear = alpha(fill, 0);
   const blur = Platform.OS === "ios";
   const update = () => {

@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
-import { alpha, linearEasing, mix } from "./tokens";
+import { alpha, linearEasing, mix, opaque } from "./tokens";
 
 // test-category: pure-logic
 test("derived colours match CSS color-mix", () => {
   const cases: [string, string][] = [
     [alpha("rgba(190, 56, 54, 1)", 0.12), "rgba(190, 56, 54, 0.12)"],
     [alpha("rgba(255, 255, 255, 0.96)", 0.86), "rgba(255, 255, 255, 0.8256)"],
+    [opaque("rgba(37, 38, 41, 0.98)"), "rgba(37, 38, 41, 1)"],
     [mix("rgba(0, 122, 255, 1)", 0.52, "rgba(233, 234, 236, 1)"), "rgba(112, 176, 246, 1)"],
     [mix("rgba(0, 122, 255, 1)", 0.52, "rgba(255, 255, 255, 0.1)"), "rgba(22, 133, 255, 0.568)"],
   ];

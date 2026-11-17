@@ -67,6 +67,12 @@ export function alpha(color: string, factor: number): string {
   return format([r, g, b, a * factor]);
 }
 
+/** The same colour at full opacity. */
+export function opaque(color: string): string {
+  const [r, g, b] = parse(color);
+  return format([r, g, b, 1]);
+}
+
 /** `color-mix(in srgb, a <weight*100>%, b)`, premultiplied like CSS. */
 export function mix(a: string, weight: number, b: string): string {
   const [ar, ag, ab, aa] = parse(a);

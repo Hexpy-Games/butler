@@ -2,7 +2,7 @@ import { createContext, useContext, type ComponentRef, type RefObject } from "re
 import { PixelRatio, Platform, StyleSheet, View } from "react-native";
 import { BlurView } from "expo-blur";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
-import { alpha, type Tokens } from "../../design/tokens";
+import { opaque, type Tokens } from "../../design/tokens";
 import { useTokens } from "../../design/useTokens";
 
 export interface Radii { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number }
@@ -41,7 +41,7 @@ export function GlassFill({ radii }: { radii: Radii }) {
     );
   }
   return (
-    <View pointerEvents="none" style={{ ...box, backgroundColor: canBlur ? undefined : alpha(t.color("--popover"), 1) }}>
+    <View pointerEvents="none" style={{ ...box, backgroundColor: canBlur ? undefined : opaque(t.color("--popover")) }}>
       {canBlur ? (
         <>
           <BlurView
