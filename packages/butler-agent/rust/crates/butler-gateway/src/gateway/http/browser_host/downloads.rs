@@ -113,8 +113,9 @@ fn popup_blocked(
         return Err(invalid());
     }
     let site = args["site"].as_str().ok_or_else(invalid)?;
-    let origin = url::Url::parse(site).map_err(|_| invalid())?.origin();
-    if origin.ascii_serialization() != site {
+    let parsed = url::Url::parse(site).map_err(|_| invalid())?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.origin().ascii_serialization() != site
+    {
         return Err(invalid());
     }
     let data = json!({"url":url.to_string(),"site":site,"reason":reason});
