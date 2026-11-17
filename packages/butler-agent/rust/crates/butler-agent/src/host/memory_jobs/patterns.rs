@@ -5,7 +5,6 @@ use butler_memory::{
         BriefingSettings, PatternError, PatternEvent, PatternExtractionService, PatternFuture,
         PatternInput, PatternInputSource, PatternRepository,
     },
-    coordination::CognitionWriteCoordinator,
     profile::{ProfileService, ProfilingMode},
 };
 use butler_models::models::{ModelConfiguration, ModelProvider};
@@ -21,13 +20,12 @@ struct Source {
 }
 pub(super) fn compose(
     root: PathBuf,
-    coordinator: Arc<CognitionWriteCoordinator>,
+    repository: PatternRepository,
     provider: Arc<ModelProvider>,
     models: Arc<ModelConfiguration>,
     profile: Arc<ProfileService>,
     gate: Arc<ConsolidationRunGate>,
 ) -> PatternExtractionService {
-    let repository = PatternRepository::new(root.clone(), coordinator);
     PatternExtractionService::new(
         root.clone(),
         repository,
