@@ -188,6 +188,7 @@ impl RenderOnce for AnimatedNumber {
             .grid()
             .grid_cols_max_content(1)
             .grid_rows(1)
+            .items_baseline() // the number's baseline (taffy: only from baseline-aligned cells)
             .child(cell(format(sizer)).invisible())
             .child(cell(format(self.value)).invisible());
         match run {

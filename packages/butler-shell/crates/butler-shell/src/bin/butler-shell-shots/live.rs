@@ -145,11 +145,19 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             h.update(|s, _, cx| s.stop(cx))?;
             wait(h, |s, _| s.store.running().is_none())
         }
+        "titlebar-grid" => super::frame::titlebar_grid(h, dir, arg),
         "shot" => h.shot(dir, arg),
         "expect-fresh" => super::frame::expect_fresh(h, dir),
         "layout" => h.layout(dir, arg),
+        "tick" => tick(h, arg),
         _ => super::frame::command(h, command, arg),
     }
+}
+/// `tick <ms>`: advances the clock and runs what is due, without `wait`'s settle.
+fn tick(h: &mut Harness, ms: &str) -> anyhow::Result<()> {
+    h.cx.advance_clock(Duration::from_millis(ms.parse()?));
+    h.cx.run_until_parked();
+    Ok(())
 }
 /// The tray's Open, then follows the main window (root `Shell`) it left open.
 fn tray_open(h: &mut Harness) -> anyhow::Result<()> {

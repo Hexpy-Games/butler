@@ -30,7 +30,27 @@ pub(super) fn executes(op: &str) -> bool {
             | "autofill.fill"
     )
 }
+/// Ops that act on a tab's page: its URL must be permitted and its policy is sent.
+pub(super) fn page_op(op: &str) -> bool {
+    matches!(
+        op,
+        "tab.observe"
+            | "tab.read"
+            | "tab.zoom"
+            | "tab.screenshot"
+            | "tab.image_collect"
+            | "tab.devtools"
+            | "tab.prepare"
+            | "tab.act"
+            | "tab.dialog"
+            | "signin.fill"
+            | "pay.inspect"
+            | "pay.fill"
+            | "autofill.fill"
+    )
+}
 pub(super) fn dispatch(
+    state: &Arc<HttpState>,
     hub: &mut Inner,
     frame: Value,
     sender: oneshot::Sender<Value>,
@@ -58,6 +78,12 @@ pub(super) fn dispatch(
         );
     }
     let reply = super::PendingReply::agent(sender, &frame);
+    if let Some(link) = hub.pages.clone() {
+        // A page host owns pages only: the Agent's executor serves the call.
+        hub.pending.insert(id.clone(), reply);
+        link.serve(Arc::downgrade(state), id, frame);
+        return Ok(());
+    }
     if host.try_send(frame).is_err() {
         // A failed control delivery closes the stream; the App resets on loss.
         hub.detach();
@@ -76,6 +102,9 @@ fn end(hub: &mut Inner, id: &str, abort: bool) {
     };
     let frame = json!({"op":"use.ended","session":use_.session,"turn_id":use_.turn,"tab":use_.tab,"args":{"id":id,"abort":abort}});
     send(hub, frame);
+    if abort && let Some(link) = hub.pages.clone() {
+        link.run(json!({"op":"tab.cancel","session":use_.session,"tab":use_.tab,"args":{"call_id":use_.call}}));
+    }
 }
 fn send(hub: &mut Inner, frame: Value) {
     if hub

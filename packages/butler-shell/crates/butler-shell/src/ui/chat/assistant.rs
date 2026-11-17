@@ -64,16 +64,15 @@ fn initiated_kind(message: &MessageRecord) -> Option<&str> {
         .map(|origin| origin.kind.as_str())
 }
 
-/// The assistant message: its body, then the response footer once it settled
-/// (`MessageContent`).
+/// The assistant message: its body parts, then the response footer once it settled
+/// (`MessageContent`). The parts are the row body's own children, spaced by its gap as on the web.
 pub(crate) fn assistant_message(
     msg: &Arc<MessageRecord>,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
 ) -> Vec<AnyElement> {
-    let (body, steward) = assistant_body(msg, t, window, cx);
-    let mut parts = vec![body];
+    let (mut parts, steward) = assistant_body(msg, t, window, cx);
     let running = t.live_message == Some(msg.id.as_str())
         || matches!(msg.status.as_deref(), Some("streaming" | "pending"));
     // In 대화 a reply with no text is its Steward work card; its footer waits for the card.
@@ -86,7 +85,7 @@ pub(crate) fn assistant_message(
                 .iter()
                 .any(|row| row.safe_tool_name.as_deref() == Some("delegate_to_steward"))
         });
-    if !running && !awaiting_work_card {
+    if !running && !awaiting_work_card && t.answer_footer {
         parts.extend(response_footer(msg, t, steward, window, cx));
     }
     parts
@@ -132,13 +131,13 @@ fn response_footer(
     )
 }
 
-/// The assistant message body, and whether it shows steward progress.
+/// The assistant message body parts, and whether it shows steward progress.
 fn assistant_body(
     msg: &MessageRecord,
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
-) -> (AnyElement, bool) {
+) -> (Vec<AnyElement>, bool) {
     let mut steward = false;
     let bubble = is_general_chat(msg.chat_id.as_deref());
     let failure = failure_message(msg);
@@ -167,11 +166,7 @@ fn assistant_body(
     if t.live_message == Some(msg.id.as_str()) {
         parts.extend(super::activity::status::current_turn_status(t, cx));
     }
-    let body = Stack::new()
-        .gap(Space::Lg)
-        .children(parts)
-        .into_any_element();
-    (body, steward)
+    (parts, steward)
 }
 
 /// The `general` chat: the answer in a bubble, steward progress, then files and cards under it.

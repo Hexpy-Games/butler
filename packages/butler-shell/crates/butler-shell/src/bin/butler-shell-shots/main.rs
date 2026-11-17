@@ -20,8 +20,10 @@ mod ui;
 mod lifecycle;
 
 mod app;
+mod clipboard;
 mod fixture;
 mod frame;
+mod glide;
 mod live;
 
 use std::path::{Path, PathBuf};
@@ -321,6 +323,9 @@ impl Options {
 }
 
 fn main() -> ExitCode {
+    // CEF runs in this process.
+    #[cfg(feature = "cef")]
+    butler_cef_host::shorten_temp_path();
     let result = (|| {
         let args: Vec<_> = std::env::args_os().collect();
         let dir = args.get(1).map(PathBuf::from).context(

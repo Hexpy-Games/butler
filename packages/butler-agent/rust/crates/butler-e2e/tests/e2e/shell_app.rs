@@ -28,10 +28,16 @@ use serde_json::{Value, json};
 pub(super) mod driver;
 pub(super) mod live_turns;
 use driver::{SERIAL, SHOTS, Shell};
+mod chat_end_room;
+mod composer_fold;
+mod composer_toolbar;
 mod focus_fallback;
+mod focus_selection;
 mod narrow_window;
+mod observer_dialog;
 mod text_selection;
 mod text_size;
+mod titlebar_drag;
 
 /// The gateway of the Agent the App started, with the token it created.
 /// Registers a local fake model answering with `behavior` and makes it the default model.
@@ -242,6 +248,96 @@ async fn shell_app_02_restart_and_quit_through_the_supervisor() -> Result<(), Ha
     assert_eq!(intent["reason"], "stop", "{intent}");
     assert_eq!(intent["instance_id"], second["nonce"], "{intent}");
     assert_eq!(intent["pid"], second["pid"], "{intent}");
+    shell.finish().await?;
+    sandbox.mark_success();
+    Ok(())
+}
+
+/// SHELL-APP-15 — An Agent that reported ready outlives an App that cannot connect to it: with
+/// the App's credential file out of reach for longer than the 120 s startup deadline, the App
+/// keeps its Agent (no stop, no failure state), shows the error while it keeps probing, and
+/// reaches Running with the same Agent once the file is back.
+#[tokio::test]
+async fn shell_app_15_a_ready_agent_survives_a_late_app_probe() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(nonempty(SHOTS).is_some(), format!("{SHOTS} is not set"));
+    let _serial = SERIAL.lock().await;
+    let mut sandbox = Sandbox::new("SHELL-APP-15")?;
+    let data = sandbox.data.clone();
+    let auth = data.join(butler_platform::data_paths::LOCAL_AUTH);
+    let held = auth.with_extension("held");
+    // The Agent reads its credential file once at startup, right after writing it, so taking
+    // the file earlier races its own write and leaves it without a token for good. It logs
+    // `[native-app] ready` once the token is loaded, before it reports ready to the App's
+    // probe (the file's only other reader): take the file then, even before the shell
+    // reports it started. The Agent's output goes straight into the shell's stdout file.
+    let taken = Instant::now();
+    let stdout = sandbox.logs.join("shell.stdout");
+    let take = tokio::spawn({
+        let (auth, held) = (auth.clone(), held.clone());
+        async move {
+            loop {
+                let log = std::fs::read(&stdout).unwrap_or_default();
+                let log = String::from_utf8_lossy(&log);
+                assert!(
+                    !log.contains("local_auth_unconfigured"),
+                    "the Agent has no token: {log}"
+                );
+                if log.contains("[native-app] ready") {
+                    break;
+                }
+                butler_e2e::assert_wall_clock_budget!(
+                    taken.elapsed(),
+                    Duration::from_secs(60),
+                    "Agent gateway ready"
+                );
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            std::fs::rename(&auth, &held).expect("credential file taken");
+        }
+    });
+    let mut shell = Shell::start(&sandbox, &[]).await?;
+    take.await.expect("credential file taken");
+    let mut ready = None;
+    while ready.is_none() {
+        butler_e2e::assert_wall_clock_budget!(
+            taken.elapsed(),
+            Duration::from_secs(60),
+            "Agent ready"
+        );
+        ready = instance_record(&data).filter(|record| record["state"] == "ready");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let ready = ready.expect("ready record");
+    let pid = ready["pid"].as_u64().expect("pid");
+
+    tokio::time::sleep(Duration::from_secs(125)).await;
+    shell.run(&["diagnostics late"]).await?;
+    let late = shell.report("late")?;
+    let diagnostics = &late["diagnostics"];
+    assert_eq!(diagnostics["pid"], pid, "{late}");
+    assert_eq!(diagnostics["agent_state"], "starting", "{late}");
+    assert_eq!(diagnostics["last_error_code"], "health_timeout", "{late}");
+    assert_never_failed(&late);
+    assert!(
+        !matches!(
+            butler_platform::process_control::liveness(u32::try_from(pid).expect("pid")),
+            butler_platform::process_control::Liveness::Gone
+        ),
+        "the App ended its Agent"
+    );
+    assert!(
+        read_intent(&data).is_none(),
+        "the App asked the Agent to stop"
+    );
+
+    std::fs::rename(&held, &auth)?;
+    shell.run(&["agent running", "diagnostics running"]).await?;
+    let running = shell.report("running")?;
+    assert_eq!(running["diagnostics"]["pid"], pid, "{running}");
+    assert!(running["diagnostics"]["last_error"].is_null(), "{running}");
+    assert_never_failed(&running);
+    shell.run(&["app-quit"]).await?;
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())

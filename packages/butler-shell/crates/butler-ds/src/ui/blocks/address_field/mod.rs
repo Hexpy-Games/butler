@@ -271,7 +271,6 @@ impl AddressField {
             .flex_auto()
             .min_w_0()
             .h_full()
-            .items_center()
             .child(click)
             .into_any_element()
     }

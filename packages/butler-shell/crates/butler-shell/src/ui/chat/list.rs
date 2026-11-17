@@ -367,7 +367,7 @@ pub(crate) fn transcript(
     })
     .size_full();
     let jump = away.then(|| jump_button(&state, unread, cx));
-    div()
+    crate::ui::widgets::anchor(div(), "chat-transcript")
         .id("transcript")
         .relative()
         .size_full()
@@ -441,7 +441,10 @@ fn render_row(state: &Entity<State>, ix: usize, window: &mut Window, cx: &mut Ap
         Row::Top => return top_row(state, cx),
         // The list renders its rows while it prepaints, after the conversation scope has
         // popped: the reserve is the one `sync` took in during render.
-        Row::Reserve => return div().h(px(state.read(cx).reserve)).into_any_element(),
+        Row::Reserve => {
+            let room = div().h(px(state.read(cx).reserve));
+            return crate::ui::widgets::anchor(room, "chat-end-room").into_any_element();
+        }
         Row::Seed => match session_branch_seed(&t, window, cx) {
             Some(seed) => seed,
             None => return div().into_any_element(),

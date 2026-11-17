@@ -77,7 +77,7 @@ return true; })()";
 
 /// Calls `butlerImage.<method>(...args)` on the utility page.
 pub(crate) async fn call(page: &Page, method: &str, args: &[Value]) -> Option<Value> {
-    let session = super::targets::utility(&page.cdp, &page.shared)
+    let session = super::targets::utility(&page.cdp, &page.shared, page.host.as_ref())
         .await
         .ok()?;
     let ready = page

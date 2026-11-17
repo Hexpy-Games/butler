@@ -4,7 +4,7 @@ name: CEF browser
 # is an engine of the headless browser executor. These jobs run browser_headless
 # scenarios on it (BUTLER_E2E_BROWSER_BACKEND=cef). Windows runs on relevant PRs;
 # Linux and macOS run only on demand (dispatch, or the `cef:linux` / `cef:macos` PR labels)
-# until the host is the default.
+# until the host is the default. `osr-smoke` runs the in-process OSR smoke on Linux every time.
 
 on:
   pull_request:
@@ -126,6 +126,33 @@ jobs:
           fi
           cargo test --locked --target ${{ matrix.target }} -p butler-e2e --test e2e browser_headless -- --test-threads 2
 
+      - name: Install the gpui build packages
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-dev \
+            libx11-xcb-dev libxcb1-dev libwayland-dev wayland-protocols \
+            libfontconfig-dev libvulkan-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-randr0-dev libxcb-xinput-dev libegl1-mesa-dev libgles2-mesa-dev libglib2.0-dev \
+            mesa-vulkan-drivers libvulkan1
+
+      - name: Build the shell's headless harness with CEF
+        if: matrix.os == 'linux'
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/shell
+        run: |
+          cargo build --locked --manifest-path "$GITHUB_WORKSPACE/packages/butler-shell/Cargo.toml" \
+            -p butler-shell --features shots,cef --bin butler-shell-shots
+          cp "$CARGO_TARGET_DIR/debug/butler-shell-shots" "$RUNNER_TEMP/cef-host/"
+
+      - name: Run the shell browser flows on CEF
+        if: matrix.os == 'linux'
+        run: |
+          export HOME=$(mktemp -d "$RUNNER_TEMP/cef-home.XXXXXX") BUTLER_DATA=$(mktemp -d "$RUNNER_TEMP/cef-data.XXXXXX")
+          export TMPDIR=$(mktemp -d "$RUNNER_TEMP/cef-tmp.XXXXXX")
+          export BUTLER_SHELL_SHOTS_EXECUTABLE="$RUNNER_TEMP/cef-host/butler-shell-shots" BUTLER_CEF_DIR="$RUNNER_TEMP/cef-host"
+          xvfb-run -a cargo test --locked --target ${{ matrix.target }} -p butler-e2e --test e2e shell_browser -- --test-threads 1
+
       - name: Preserve CEF failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
@@ -136,3 +163,54 @@ jobs:
             ${{ runner.temp }}/**/state/browser/headless/browser.log
           retention-days: 7
           if-no-files-found: ignore
+
+  osr-smoke:
+    name: OSR smoke (linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/butler-agent/rust
+        shell: bash
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/packages/butler-agent/rust/target
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Locate the CEF archive cache
+        run: echo "CEF_PATH=$RUNNER_TEMP/cef" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/rust-agent-setup
+        with:
+          native-deps: protoc
+          cache-key: cef-osr-smoke-linux
+          restore-cargo-target: 'false'
+          save-cargo-cache: 'false'
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/cef
+          key: cef-linux-${{ hashFiles('packages/butler-agent/rust/crates/butler-platform/cef/fetch.py') }}
+
+      - name: Fetch the pinned CEF
+        run: |
+          py=$(command -v python3 || command -v python)
+          "$py" crates/butler-platform/cef/fetch.py --dest "$CEF_PATH"
+
+      - name: Let Chromium's renderer sandbox create its namespaces
+        # Ubuntu 24.04 restricts user namespaces through AppArmor; keep the
+        # host's renderer sandbox enabled by allowing them on this runner.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Build the CEF host and the smoke example
+        run: |
+          cargo build --locked -p butler-cef --features cef --bin butler-cef-host --example osr_smoke --target x86_64-unknown-linux-gnu
+
+      - name: Stage and run the OSR smoke
+        run: |
+          py=$(command -v python3 || command -v python)
+          debug="$CARGO_TARGET_DIR/x86_64-unknown-linux-gnu/debug"
+          "$py" crates/butler-platform/cef/stage.py --cef "$CEF_PATH" --target "$debug" --out "$RUNNER_TEMP/cef-host"
+          cp "$debug/examples/osr_smoke" "$RUNNER_TEMP/cef-host/"
+          export HOME=$(mktemp -d "$RUNNER_TEMP/cef-home.XXXXXX") TMPDIR=$(mktemp -d "$RUNNER_TEMP/cef-tmp.XXXXXX")
+          xvfb-run -a "$RUNNER_TEMP/cef-host/osr_smoke"

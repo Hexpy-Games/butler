@@ -27,7 +27,11 @@ impl RenderPort for ReaderPort {
 }
 
 fn attached(state: &HttpState) -> bool {
-    state.browser.0.lock().is_ok_and(|hub| hub.host.is_some())
+    state
+        .browser
+        .0
+        .lock()
+        .is_ok_and(|hub| hub.host.is_some() && hub.pages.is_none())
 }
 
 async fn render(

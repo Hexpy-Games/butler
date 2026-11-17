@@ -1,6 +1,7 @@
 //! Main-thread, in-process CEF off-screen rendering. No gpui types cross this boundary.
 //! macOS copies frames into IOSurface-backed CoreVideo buffers (gpu.rs, frame_pool.rs);
-//! Windows copies them into pooled D3D11 shared textures (d3d.rs, d3d_pool.rs).
+//! Windows copies them into pooled D3D11 shared textures (d3d.rs, d3d_pool.rs);
+//! Linux copies the software `on_paint` buffer into CPU frames (soft.rs).
 #[cfg(cef_osr)]
 mod devtools;
 mod ime_state;
@@ -27,6 +28,8 @@ mod gpu;
 #[cfg(cef_osr)]
 mod handlers;
 #[cfg(cef_osr)]
+mod hold;
+#[cfg(cef_osr)]
 mod ime;
 #[cfg(cef_osr)]
 mod input;
@@ -36,6 +39,8 @@ mod paint;
 mod popups;
 #[cfg(cef_osr)]
 mod pump;
+#[cfg(target_os = "linux")]
+mod soft;
 #[cfg(cef_osr)]
 mod state;
 
@@ -51,8 +56,12 @@ pub use d3d_pool::OsrFrame;
 use d3d_pool::OsrFrame as Frame;
 #[cfg(target_os = "macos")]
 pub use gpu::read_bgra_pixel;
+#[cfg(target_os = "linux")]
+use soft::OsrFrame as Frame;
+#[cfg(target_os = "linux")]
+pub use soft::{OsrFrame, read_bgra_pixel};
 #[cfg(cef_osr)]
-use state::{Events, Page, PageRef};
+use state::{Events, Page, PageRef, Phase};
 #[cfg(cef_osr)]
 use std::{
     cell::{Cell, RefCell},
@@ -66,6 +75,10 @@ use std::{
 static STARTED: AtomicBool = AtomicBool::new(false);
 #[cfg(cef_osr)]
 const FALLBACK: Duration = Duration::from_nanos(1_000_000_000 / 30);
+#[cfg(cef_osr)]
+const KEYCHAIN_SERVICE: &str = "Butler Safe Storage";
+#[cfg(cef_osr)]
+const KEYCHAIN_ACCOUNT: &str = "Butler Key";
 
 /// All runtime methods and sink events run on the UI thread.
 pub trait OsrSink: 'static {
@@ -73,7 +86,7 @@ pub trait OsrSink: 'static {
 }
 
 /// Called from any thread. Schedule a timer on the UI loop, then call `OsrRuntime::pump` there.
-/// Coalesce pending deadlines by keeping the earliest, including the visible-page fallback.
+/// Coalesce pending deadlines by keeping the earliest, including the visible-or-loading-page fallback.
 pub type PumpScheduler = std::sync::Arc<dyn Fn(std::time::Duration) + Send + Sync>;
 
 #[cfg(cef_osr)]
@@ -95,6 +108,8 @@ pub struct OsrRuntime {
     _app: cef::App,
     #[cfg(target_os = "macos")]
     _framework: gpu::Framework,
+    #[cfg(windows)]
+    job: Option<crate::job::ChildJob>,
 }
 
 #[cfg(cef_osr)]
@@ -132,7 +147,16 @@ impl OsrRuntime {
         #[cfg(windows)]
         d3d::set_adapter(adapter);
         let settings = settings(config)?;
-        let mut app = pump::OsrApp::new(pump::Pump::new(schedule.clone()), adapter);
+        // Created before CEF starts; kept until the runtime drops, which ends any helper left.
+        #[cfg(windows)]
+        let job = crate::job::ChildJob::create()
+            .map_err(|error| eprintln!("no helper job: {error}"))
+            .ok();
+        #[cfg(windows)]
+        let job_name = job.as_ref().map(|job| job.name().to_owned());
+        #[cfg(not(windows))]
+        let job_name = None;
+        let mut app = pump::OsrApp::new(pump::Pump::new(schedule.clone(), job_name), adapter);
         let args = cef::args::Args::new();
         if cef::initialize(
             Some(args.as_main_args()),
@@ -162,7 +186,16 @@ impl OsrRuntime {
             _app: app,
             #[cfg(target_os = "macos")]
             _framework: framework,
+            // Last: it outlives the CEF shutdown in `Drop`.
+            #[cfg(windows)]
+            job,
         })
+    }
+
+    /// The App's kill-on-close helper job, when it was created.
+    #[cfg(windows)]
+    pub fn child_job_name(&self) -> Option<&str> {
+        self.job.as_ref().map(crate::job::ChildJob::name)
     }
 
     pub fn pump(&self) {
@@ -170,7 +203,15 @@ impl OsrRuntime {
         cef::do_message_loop_work();
         #[cfg(windows)]
         self.repaint_dropped();
-        if self.state.visible.get() > 0 {
+        // Pump while a page is visible or loading: CEF does not always announce the work of a starting load.
+        if self.state.visible.get() > 0
+            || self
+                .state
+                .pages
+                .borrow()
+                .values()
+                .any(|p| p.borrow().loading)
+        {
             (self.schedule)(FALLBACK);
         }
     }
@@ -217,7 +258,8 @@ impl OsrRuntime {
         let browser = cef::browser_host_create_browser_sync(
             Some(&cef::WindowInfo {
                 windowless_rendering_enabled: 1,
-                shared_texture_enabled: 1,
+                // Linux paints in software through `on_paint`.
+                shared_texture_enabled: i32::from(cfg!(not(target_os = "linux"))),
                 ..Default::default()
             }),
             Some(&mut client),
@@ -308,10 +350,14 @@ impl OsrRuntime {
         };
         {
             let mut p = p.borrow_mut();
-            if p.visible == visible || p.closing {
+            if p.phase == Phase::Closing || (p.phase == Phase::Visible) == visible {
                 return;
             }
-            p.visible = visible;
+            p.phase = if visible {
+                Phase::Visible
+            } else {
+                Phase::Hidden
+            };
             if visible {
                 self.state.visible.set(self.state.visible.get() + 1);
             } else {
@@ -334,12 +380,12 @@ impl OsrRuntime {
         };
         {
             let mut p = p.borrow_mut();
-            if p.closing {
+            if p.phase == Phase::Closing {
                 return;
             }
-            p.closing = true;
-            if p.visible {
-                p.visible = false;
+            let was_visible = p.phase == Phase::Visible;
+            p.phase = Phase::Closing;
+            if was_visible {
                 self.state.visible.set(self.state.visible.get() - 1);
             }
             p.release_frames();
@@ -393,7 +439,7 @@ fn settings(config: OsrConfig) -> Result<cef::Settings, OsrError> {
         .canonicalize()
         .map_err(|e| OsrError(e.to_string()))?;
     // Not canonicalize: its Windows `\\?\` form never matches other paths; CEF needs an absolute path.
-    #[cfg(windows)]
+    #[cfg(not(target_os = "macos"))]
     let profile_dir = std::path::absolute(&profile_dir).map_err(|e| OsrError(e.to_string()))?;
     let profile = profile_dir
         .to_str()
@@ -406,15 +452,20 @@ fn settings(config: OsrConfig) -> Result<cef::Settings, OsrError> {
         cache_path: path(&profile_dir.join("cache")),
         #[cfg(target_os = "macos")]
         framework_dir_path: path(&framework_dir),
-        #[cfg(windows)]
+        #[cfg(not(target_os = "macos"))]
         resources_dir_path: path(&framework_dir),
-        #[cfg(windows)]
+        #[cfg(not(target_os = "macos"))]
         locales_dir_path: path(&framework_dir.join("locales")),
         browser_subprocess_path: path(&helper_path),
         locale: locale.as_str().into(),
         user_agent: user_agent.as_str().into(),
         log_file: path(&profile_dir.join("cef.log")),
         log_severity: cef::LogSeverity::WARNING,
+        // The names are the Electron App's, including Electron's " Key" account suffix,
+        // so its existing Keychain item is reused and the macOS prompt names Butler.
+        // Chromium reads them on macOS only.
+        keychain_service_name: KEYCHAIN_SERVICE.into(),
+        keychain_account_name: KEYCHAIN_ACCOUNT.into(),
         ..Default::default()
     })
 }

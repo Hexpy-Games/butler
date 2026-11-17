@@ -10,9 +10,12 @@ pub struct OsrConfig {
     /// macOS: absolute path to Chromium Embedded Framework.framework.
     /// Windows: the CEF runtime directory (resources, `locales`). libcef.dll itself is linked at
     /// load time, so it must also be on the process's DLL search path (beside the executable).
+    /// Linux: the CEF runtime directory (resources, `locales`). `libcef.so` is linked at load time
+    /// and found through the executable's `$ORIGIN` rpath, so it lies beside the executable.
     pub framework_dir: PathBuf,
     /// The CEF subprocess executable. macOS: the staged `butler-cef-host Helper`;
-    /// Windows: the staged `butler_cef_host.exe` (CEF's bootstrapc.exe, see stage.py).
+    /// Windows: the staged `butler_cef_host.exe` (CEF's bootstrapc.exe, see stage.py);
+    /// Linux: the staged `butler-cef-host`.
     pub helper_path: PathBuf,
     pub profile_dir: PathBuf,
     pub locale: String,
@@ -25,6 +28,10 @@ pub struct OsrConfig {
     pub adapter_luid: Option<u64>,
 }
 
+/// Ids below this belong to `devtools()`; raw senders use ids at or above it, so the two never
+/// collide on one page.
+pub const RAW_ID_BASE: i32 = 1 << 30;
+
 #[derive(Debug)]
 pub enum OsrEvent {
     DevTools {
@@ -34,6 +41,10 @@ pub enum OsrEvent {
     DevToolsEvent {
         method: String,
         params_json: String,
+    },
+    /// One raw CDP message (reply or event, with `sessionId` when present) of a raw-mode page.
+    DevToolsRaw {
+        message: Vec<u8>,
     },
     Url(String),
     Title(String),
@@ -179,7 +190,8 @@ pub struct OsrWheel {
 #[derive(Clone, Copy, Debug)]
 pub struct OsrKey {
     /// The platform key code: macOS, the virtual key code; Windows, the `WM_KEYDOWN` lParam
-    /// (scan code in bits 16..24, extended-key flag in bit 24), which sets the DOM `code`.
+    /// (scan code in bits 16..24, extended-key flag in bit 24), which sets the DOM `code`;
+    /// Linux, the X11 keycode.
     pub native_key_code: i32,
     /// The Windows virtual key code (CEF requires it on every platform).
     pub windows_key_code: i32,
@@ -219,12 +231,17 @@ pub enum PopupDisposition {
 pub enum PopupDecision {
     NewTab,
     Block(PopupBlock),
-    Allow { child: u64 },
+    /// `held`: the child is created with its loads held until `OsrRuntime::release_loads`.
+    Allow {
+        child: u64,
+        held: bool,
+    },
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PopupBlock {
     NoGesture,
     TabBudget,
+    Policy,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OsrDialogKind {

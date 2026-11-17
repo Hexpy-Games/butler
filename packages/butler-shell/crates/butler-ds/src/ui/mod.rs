@@ -76,5 +76,6 @@ pub mod toast;
 pub mod tooltip;
 pub mod typo;
 pub mod unread_dot;
+pub mod window_drag;
 
 pub use icons_generated::Icon;

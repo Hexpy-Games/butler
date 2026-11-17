@@ -1,4 +1,4 @@
-//! Guard denials and the idle reap of the headless browser.
+//! Guard denials and the end of the headless browser: the idle reap and its Agent's death.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -7,7 +7,10 @@
 )]
 use super::{
     backend,
-    support::{admin, browser_processes, call, node, open, publish_as, selected, setup},
+    support::{
+        admin, browser_processes, call, hidden_app, node, open, publish, publish_as, selected,
+        setup, shell,
+    },
     text,
 };
 use butler_e2e::e2e::HarnessError;
@@ -21,7 +24,7 @@ pub(super) async fn guard_denials(
     url: &str,
 ) -> Result<(), HarnessError> {
     let me = "general";
-    // No signed-in headless: the profile is in-memory and signed-out only.
+    // Headless has no signed-in profile (signed_in_unavailable); the shell host has them and demands a grant.
     let signed = call(
         admin,
         me,
@@ -30,7 +33,12 @@ pub(super) async fn guard_denials(
         json!({"url":url,"signed_in":true}),
     )
     .await?;
-    assert_eq!(signed["reason"], "signed_in_unavailable", "{signed}");
+    let expected = if shell() {
+        "signed_in_grant_required"
+    } else {
+        "signed_in_unavailable"
+    };
+    assert_eq!(signed["reason"], expected, "{signed}");
     // Another conversation never reaches this tab.
     let foreign = call(admin, "other", "tab.observe", tab, json!({})).await?;
     assert_eq!(foreign["reason"], "not_your_tab", "{foreign}");
@@ -167,11 +175,14 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
     })
     .await
     .expect("the browser process tree ends within 90 s");
-    assert!(
-        started.elapsed() >= Duration::from_secs(50),
-        "reaped after {:?}, before the 60 s grace",
-        started.elapsed()
-    );
+    // Shell tabs live in the shell's CEF; the matched process is the gateway's check browser, on its own clock.
+    if !shell() {
+        assert!(
+            started.elapsed() >= Duration::from_secs(50),
+            "reaped after {:?}, before the 60 s grace",
+            started.elapsed()
+        );
+    }
     let elapsed_ms = started.elapsed().as_millis();
     let before = backend::tree(&s.sandbox.data);
     tokio::time::sleep(Duration::from_secs(10)).await;
@@ -225,6 +236,35 @@ async fn blocked_frames_keep_the_page() -> Result<(), HarnessError> {
             .iter()
             .any(|t| t["id"] == tab),
         "{listed}"
+    );
+    s.finish().await
+}
+
+/// An Agent killed without cleanup leaves no browser process behind.
+#[tokio::test]
+async fn the_browser_ends_when_its_agent_is_killed() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(selected(), "BUTLER_E2E_BROWSER_BACKEND=headless not set");
+    butler_e2e::skip_unless!(
+        !hidden_app(),
+        "the hidden App host is not the Agent's headless browser"
+    );
+    let mut s = setup("BROWSER-HEADLESS-AGENT-KILLED")?.start().await?;
+    let url = publish(&s).await?;
+    let opened = open(&admin(&s), "general", &url).await?;
+    assert_eq!(opened["status"], "ok", "{opened}");
+    let marker = s.sandbox.data.to_string_lossy().into_owned();
+    assert!(!browser_processes(&marker).is_empty(), "the browser runs");
+    s.agent.kill9()?;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let mut survivors = browser_processes(&marker);
+    while !survivors.is_empty() && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        survivors = browser_processes(&marker);
+    }
+    assert!(
+        survivors.is_empty(),
+        "the browser outlived its killed Agent by 10 s: {survivors:#?}"
     );
     s.finish().await
 }

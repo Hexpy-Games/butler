@@ -171,7 +171,10 @@ impl Dialog {
             wrapper
                 .track_focus(&dialog.trigger_focus)
                 .tab_stop(false)
-                .child(dialog.trigger.probe())
+                .child(dialog.trigger.probe_while({
+                    let dialog = dialog.clone();
+                    move |cx| dialog.is_open(cx)
+                }))
         })
         .into_any_element()
     }

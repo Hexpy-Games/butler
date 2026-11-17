@@ -10,6 +10,7 @@ use tokio::time::{Instant, sleep};
 
 use super::attach::probe;
 use super::launch::{self, OwnedChild};
+use super::records::read_instance;
 use super::state::{Inner, OwnedState, Phase, Startup, StartupFuture, State};
 use super::{StopReason, SupervisorError};
 use crate::lifecycle::logs;
@@ -18,6 +19,15 @@ use crate::lifecycle::logs;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(120);
 /// `startupDelayMs`.
 const STARTUP_STEP: Duration = Duration::from_millis(150);
+
+/// What a startup that never saw the child ready reports: it answered health or it did not.
+fn timeout_error(healthy: bool) -> SupervisorError {
+    if healthy {
+        SupervisorError::ReadinessTimeout
+    } else {
+        SupervisorError::HealthTimeout
+    }
+}
 
 impl Inner {
     /// `ensureReady`. A restart that replaces the candidate mid-startup hands the caller its
@@ -146,9 +156,11 @@ impl Inner {
     }
 
     /// `adoptOwnedChild`: probe every 150 ms until our child (the instance record names its pid)
-    /// is healthy and ready, it exits, or 120 s pass.
+    /// is healthy and ready, it exits, or 120 s pass. At the deadline a child whose own record
+    /// says ready is kept: the notice shows and probing goes on (this App may be the one that
+    /// cannot connect); any other child is stopped.
     pub(super) async fn wait_ready(self: &Rc<Self>, pid: u32) -> Result<(), Startup> {
-        let deadline = Instant::now() + STARTUP_TIMEOUT;
+        let mut deadline = Some(Instant::now() + STARTUP_TIMEOUT);
         let mut healthy = false;
         loop {
             self.check_candidate(pid)?;
@@ -165,18 +177,31 @@ impl Inner {
                 });
                 return Ok(());
             }
-            let left = deadline.saturating_duration_since(Instant::now());
-            if left.is_zero() {
-                break;
-            }
-            sleep(STARTUP_STEP.min(left)).await;
+            let left = deadline.map(|at| at.saturating_duration_since(Instant::now()));
+            let step = match left {
+                Some(left) if left.is_zero() => {
+                    let ready = read_instance(&self.data)
+                        .is_some_and(|record| record.pid == pid && record.state == "ready");
+                    if !ready {
+                        break;
+                    }
+                    logs::app_log(
+                        "INFO",
+                        "lifecycle",
+                        "agent.readiness_late",
+                        json!({ "pid": pid }),
+                    );
+                    self.update(|state| state.last_error = Some(timeout_error(healthy)));
+                    deadline = None;
+                    STARTUP_STEP
+                }
+                Some(left) => STARTUP_STEP.min(left),
+                None => STARTUP_STEP,
+            };
+            sleep(step).await;
         }
         let _ = self.stop(StopReason::Stop).await;
-        let error = if healthy {
-            SupervisorError::ReadinessTimeout
-        } else {
-            SupervisorError::HealthTimeout
-        };
+        let error = timeout_error(healthy);
         self.record_error(error);
         Err(Startup::Failed(error))
     }

@@ -113,7 +113,9 @@ impl RenderOnce for ChromeFloatingToggle {
         );
         cover()
             .id(self.id)
-            .child(div().absolute().top(px(top)).left(px(left)).child(toggle))
+            .child(crate::ui::window_drag::no_drag(
+                div().absolute().top(px(top)).left(px(left)).child(toggle),
+            ))
     }
 }
 
