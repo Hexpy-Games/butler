@@ -5,9 +5,10 @@
 //! The message shows one provider stream at a time (`turn_stream_drafts`):
 //! deltas of the current stream are appended, the first delta of a new stream
 //! (the next model round) replaces the text. A stream the runtime discards
-//! (`model.stream.completed` with status `discarded`: its round called tools,
-//! or its answer candidate was sent back) stays visible until the next stream
-//! replaces it, but it is never kept as a stopped turn's partial answer.
+//! (`model.stream.completed` with status `discarded`: its round called tools
+//! other than answer_blocks, or its answer candidate was sent back) stays
+//! visible until the next stream replaces it, but it is never kept as a
+//! stopped turn's partial answer.
 
 use crate::gateway::application::storage::CachedSql;
 use rusqlite::{Connection, OptionalExtension, params};
