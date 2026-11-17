@@ -5,7 +5,7 @@ Electron app and is not shipped.
 
 - Its own Cargo workspace (not part of `packages/butler-agent/rust`), with the same
   toolchain and lints.
-- gpui comes from the Butler fork of gpui-ce, pinned to branch `butler/lens` (rev `dac39a2`)
+- gpui comes from the Butler fork of gpui-ce, pinned to a rev of branch `butler/lens` (the `rev` in `Cargo.toml`, currently `3faa60b`)
   (`https://github.com/Hexpy-Games/gpui-ce`). The fork adds the Liquid Glass lens and
   the Acrylic window material (Windows Acrylic, the macOS sidebar vibrancy).
 - The UI reads data through `source::Source`, backed by `butler-shell-client`.
@@ -56,7 +56,7 @@ to add its frame type to `butler_cef_host::osr` and the matching `SurfaceSource`
 
 ### macOS
 
-Run these commands from the repository root to launch a signed development bundle: unbundled `cargo run` cannot work because CEF helpers rendezvous through the bundle's Mach ports. The `--use-mock-keychain` switch belongs only in development/test launch arguments.
+Run these commands from the repository root to launch a signed development bundle: unbundled `cargo run` cannot work because CEF helpers rendezvous through the bundle's Mach ports. The `--use-mock-keychain --password-store=basic` switches belong only in development/test launch arguments.
 
 ```sh
 export CEF_PATH="${CEF_PATH:-$PWD/target/cef}"
@@ -67,7 +67,7 @@ python3 packages/butler-agent/rust/crates/butler-platform/cef/stage.py --cef "$C
 cp packages/butler-shell/target/debug/butler-shell target/cef-shell/ButlerCefHost.app/Contents/MacOS/butler-shell
 /usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable butler-shell' target/cef-shell/ButlerCefHost.app/Contents/Info.plist
 codesign --force --deep --sign - target/cef-shell/ButlerCefHost.app
-BUTLER_CEF_DIR="$PWD/target/cef-shell/ButlerCefHost.app/Contents/Frameworks" target/cef-shell/ButlerCefHost.app/Contents/MacOS/butler-shell --use-mock-keychain
+BUTLER_CEF_DIR="$PWD/target/cef-shell/ButlerCefHost.app/Contents/Frameworks" target/cef-shell/ButlerCefHost.app/Contents/MacOS/butler-shell --use-mock-keychain --password-store=basic
 ```
 
 ### Windows

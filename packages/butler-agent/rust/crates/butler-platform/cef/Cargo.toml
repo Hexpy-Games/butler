@@ -8,7 +8,7 @@ publish.workspace = true
 
 # Off by default: workspace builds and CI never need the CEF archive. `--features cef` with CEF_PATH from fetch.py.
 [features]
-cef = ["dep:cef", "dep:cef-dll-sys", "dep:objc2", "dep:objc2-app-kit", "dep:core-video", "dep:core-foundation", "dep:metal", "dep:objc", "dep:foreign-types", "dep:windows"]
+cef = ["dep:cef", "dep:cef-dll-sys", "dep:objc2", "dep:objc2-app-kit", "dep:core-video", "dep:core-foundation", "dep:metal", "dep:objc", "dep:foreign-types", "dep:windows", "dep:rustix"]
 
 [dependencies]
 # Pinned together: `cef =156.2.0` alone resolves cef-dll-sys 156.4 (CEF 156.0.26).
@@ -25,9 +25,13 @@ metal = { version = "0.33", optional = true }
 objc = { version = "0.2", optional = true }
 foreign-types = { version = "0.5", optional = true }
 
+# The Linux host watches its Agent's DevTools pipe (lifeline.rs).
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { workspace = true, optional = true, features = ["event", "process"] }
+
 # The Windows OSR paint path: D3D11 shared textures and fences (crate version as in Cargo.lock).
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", optional = true, features = ["Win32_Foundation", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Security", "Win32_System_Threading"] }
+windows = { version = "0.62.2", optional = true, features = ["Win32_Foundation", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [[example]]
 name = "osr_smoke"

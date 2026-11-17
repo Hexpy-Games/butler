@@ -76,10 +76,14 @@ pub enum Ring {
 
 /// Numbers the controls in render order (`control-<n>` geometry anchors), so a harness can
 /// address the nth control of a page like the React viewer's DOM order. Reset once per frame.
+/// Exists only once a page host has called [`reset_anchors`]; without it (the product) controls
+/// are not numbered and nothing is kept.
 #[derive(Default)]
 struct Anchors {
     next: std::cell::Cell<usize>,
     handles: std::cell::RefCell<Vec<(usize, gpui::FocusHandle)>>,
+    /// How many `slot:<name>` anchors of each name this frame has handed out.
+    slots: std::cell::RefCell<std::collections::HashMap<String, usize>>,
 }
 
 impl gpui::Global for Anchors {}
@@ -89,8 +93,8 @@ pub fn reset_anchors(cx: &mut App) {
     let anchors = cx.default_global::<Anchors>();
     anchors.next.set(0);
     anchors.handles.borrow_mut().clear();
+    anchors.slots.borrow_mut().clear();
     crate::ui::focus::reset_hand_off(cx);
-    crate::ui::text::reset(cx);
 }
 
 /// The focus handle of control `n` of the last frame (`None` when it cannot take focus).
@@ -103,14 +107,27 @@ pub fn focus_handle(cx: &App, n: usize) -> Option<gpui::FocusHandle> {
         .map(|(_, handle)| handle.clone())
 }
 
-pub(crate) fn next_anchor(cx: &mut App, handle: Option<&gpui::FocusHandle>) -> SharedString {
-    let anchors = cx.default_global::<Anchors>();
+pub(crate) fn next_anchor(cx: &App, handle: Option<&gpui::FocusHandle>) -> SharedString {
+    let Some(anchors) = cx.try_global::<Anchors>() else {
+        return SharedString::new_static("control");
+    };
     let n = anchors.next.get();
     anchors.next.set(n + 1);
     if let Some(handle) = handle {
         anchors.handles.borrow_mut().push((n, handle.clone()));
     }
     SharedString::from(format!("control-{n}"))
+}
+
+/// `slot:<name>#<k>`: the geometry anchor of the kth element of this frame that stands for the web
+/// element with `data-slot="<name>"`, so the layout diff can pair them. Reset once per frame.
+pub(crate) fn slot_anchor(cx: &mut App, name: &str) -> SharedString {
+    let anchors = cx.default_global::<Anchors>();
+    let mut slots = anchors.slots.borrow_mut();
+    let k = slots.entry(name.to_owned()).or_default();
+    let anchor = SharedString::from(format!("slot:{name}#{k}"));
+    *k += 1;
+    anchor
 }
 
 /// `top` painted over `bottom` (source-over, as stacked backgrounds).

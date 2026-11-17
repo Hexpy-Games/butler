@@ -28,6 +28,10 @@ pub struct OsrConfig {
     pub adapter_luid: Option<u64>,
 }
 
+/// Ids below this belong to `devtools()`; raw senders use ids at or above it, so the two never
+/// collide on one page.
+pub const RAW_ID_BASE: i32 = 1 << 30;
+
 #[derive(Debug)]
 pub enum OsrEvent {
     DevTools {
@@ -37,6 +41,10 @@ pub enum OsrEvent {
     DevToolsEvent {
         method: String,
         params_json: String,
+    },
+    /// One raw CDP message (reply or event, with `sessionId` when present) of a raw-mode page.
+    DevToolsRaw {
+        message: Vec<u8>,
     },
     Url(String),
     Title(String),
@@ -223,12 +231,17 @@ pub enum PopupDisposition {
 pub enum PopupDecision {
     NewTab,
     Block(PopupBlock),
-    Allow { child: u64 },
+    /// `held`: the child is created with its loads held until `OsrRuntime::release_loads`.
+    Allow {
+        child: u64,
+        held: bool,
+    },
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PopupBlock {
     NoGesture,
     TabBudget,
+    Policy,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OsrDialogKind {

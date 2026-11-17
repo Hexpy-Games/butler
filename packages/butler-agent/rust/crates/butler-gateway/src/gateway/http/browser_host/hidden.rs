@@ -16,6 +16,7 @@ use std::{
 
 /// The launch id a hidden host attaches with; the App sends none.
 const LAUNCH_HEADER: &str = "x-butler-browser-host";
+const KIND_HEADER: &str = "x-butler-browser-host-kind";
 const APP_PID_HEADER: &str = "x-butler-app-pid";
 const REAP_AFTER: Duration = Duration::from_secs(60);
 
@@ -24,6 +25,15 @@ pub(super) fn launch_of(headers: &HeaderMap) -> Option<String> {
         .get(LAUNCH_HEADER)
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned)
+}
+
+/// Whether the attach is a page host (the native app, which owns pages only).
+pub(super) fn pages_of(headers: &HeaderMap, launch: Option<&str>) -> Result<bool, HttpError> {
+    match headers.get(KIND_HEADER).map(|v| v.to_str()) {
+        None => Ok(false),
+        Some(Ok("pages")) if launch.is_none() => Ok(true),
+        Some(_) => Err(error(400, "invalid_request")),
+    }
 }
 
 pub(super) fn app_pid_of(headers: &HeaderMap) -> Option<u32> {

@@ -17,8 +17,8 @@ mod stage;
 mod wizard;
 
 use gpui::{
-    AnyElement, App, Bounds, ElementId, Global, InteractiveElement as _, IntoElement,
-    ParentElement, Pixels, RenderOnce, SharedString, Styled as _, Window, WindowControlArea, div,
+    AnyElement, App, Bounds, ElementId, Global, IntoElement, ParentElement, Pixels, RenderOnce,
+    SharedString, Styled as _, Window, div,
 };
 
 pub use content::{ContentWidth, SetupWizardContent, SetupWizardList};
@@ -235,10 +235,12 @@ fn chrome(ds: &Ds, controls: Option<AnyElement>) -> (impl IntoElement, Option<im
         .top_0()
         .left_0()
         .w_full()
-        .h(ds.len(Length::TitlebarHeight) + ds.len(Length::SpaceMd)) // DS: SetupWizardShell.module.css:35
-        .window_control_area(WindowControlArea::Drag);
+        .h(ds.len(Length::TitlebarHeight) + ds.len(Length::SpaceMd)); // DS: SetupWizardShell.module.css:35
+    let lane = crate::ui::window_drag::area(lane);
     let room = ds.len(Length::SpaceSm);
-    let controls = controls.map(|controls| div().absolute().top(room).right(room).child(controls));
+    let controls = controls.map(|controls| {
+        crate::ui::window_drag::no_drag(div().absolute().top(room).right(room).child(controls))
+    });
     (lane, controls)
 }
 
@@ -336,6 +338,6 @@ impl RenderOnce for SetupWizardShell {
                 cx,
             )
         };
-        strut::scope(true, screen.child(body).child(drag).children(controls))
+        strut::scope(true, screen.child(drag).child(body).children(controls))
     }
 }

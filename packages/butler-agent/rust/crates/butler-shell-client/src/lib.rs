@@ -6,7 +6,7 @@
 mod shell_connection;
 
 pub use shell_connection::{
-    AttachState, AuthorityDecision, AuthorityPage, AuthorityRequest, Download, Error, EventKind,
-    EventPage, FailureKind, LiveEvent, LiveEvents, LiveLogs, MessagePage, Page, PageRequest,
-    ShellClient, Upload,
+    AttachState, AuthorityDecision, AuthorityPage, AuthorityRequest, BrowserHostEvents, Download,
+    Error, EventKind, EventPage, FailureKind, LiveEvent, LiveEvents, LiveLogs, MessagePage, Page,
+    PageRequest, ShellClient, Upload,
 };

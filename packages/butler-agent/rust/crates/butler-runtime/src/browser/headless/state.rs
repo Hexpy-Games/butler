@@ -113,6 +113,8 @@ pub(crate) struct Tab {
     pub cancelled: bool,
     pub call_id: Option<String>,
     pub waiting: bool,
+    /// The user holds this page in the App; never reclaimed or expired while true.
+    pub held: bool,
     pub waiting_turn: Option<String>,
     pub last_call: Instant,
     pub crashed: bool,
@@ -129,6 +131,8 @@ pub(crate) struct Tab {
     pub devtools: super::devtools::Devtools,
     /// The registered preview this tab shows (its own context and proxy).
     pub preview: Option<String>,
+    /// `signed_in` or `signed_out`: the profile the tab was opened with.
+    pub profile: &'static str,
     pub history_transition: Option<String>,
     /// The turn that last drove this tab: its page events go to that turn's
     /// calls, so parallel turns of one conversation (delegated work) never
@@ -166,6 +170,7 @@ impl Tab {
             cancelled: false,
             call_id: None,
             waiting: false,
+            held: false,
             waiting_turn: None,
             last_call: Instant::now(),
             crashed: false,
@@ -176,6 +181,7 @@ impl Tab {
             hidden: None,
             diagnostics: None,
             preview: None,
+            profile: "signed_out",
             history_transition: Some("generated".into()),
             turn: None,
         }
@@ -197,7 +203,7 @@ impl Tab {
     pub(crate) fn snapshot(&self) -> Value {
         json!({"id":self.id,"owner":self.owner,"opener":self.opener,"dialog":self.public_dialog(),"url":self.url,
             "title":self.title,"status":if self.crashed {"crashed"} else if self.loading {"loading"} else {"idle"},
-            "agent":true,"driven":false,"profile":"signed_out","epoch":self.epoch,"holder":"agent","sticky":false,
+            "agent":true,"driven":false,"profile":self.profile,"epoch":self.epoch,"holder":"agent","sticky":false,
             "waiting":self.waiting,"busy":self.busy,"inUse":self.busy,"picking":false,"selectionCount":0,
             "stills":true,"preview":self.preview})
     }
@@ -299,7 +305,9 @@ impl State {
     pub(crate) fn reclaimable(&self, keep: &[&str], turn: Option<&str>) -> Option<String> {
         self.tabs
             .values()
-            .filter(|t| t.hidden.is_none() && t.admitted && !t.busy && !t.waiting && !t.closing)
+            .filter(|t| {
+                t.hidden.is_none() && t.admitted && !t.busy && !t.waiting && !t.held && !t.closing
+            })
             .filter(|t| t.dialog.is_none() && !keep.contains(&t.id.as_str()))
             .filter(|t| turn.is_none() || t.turn.as_deref() != turn)
             .min_by_key(|t| t.last_call)

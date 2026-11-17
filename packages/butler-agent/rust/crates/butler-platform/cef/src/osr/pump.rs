@@ -4,10 +4,24 @@ use cef::*;
 use std::time::Duration;
 
 cef::wrap_browser_process_handler! {
-    pub(super) struct Pump { schedule: PumpScheduler }
+    pub(super) struct Pump { schedule: PumpScheduler, job: Option<String> }
     impl BrowserProcessHandler {
         fn on_schedule_message_pump_work(&self, delay_ms: i64) {
             (self.schedule)(Duration::from_millis(u64::try_from(delay_ms).unwrap_or(0)));
+        }
+        // Every helper joins the App's kill-on-close job (`crate::job`), so none outlives the App.
+        fn on_before_child_process_launch(&self, command: Option<&mut CommandLine>) {
+            if let (Some(name), Some(command)) = (&self.job, command) {
+                for (switch, value) in [
+                    (crate::switches::OSR_JOB, name.clone()),
+                    (crate::switches::OSR_APP, std::process::id().to_string()),
+                ] {
+                    command.append_switch_with_value(
+                        Some(&switch.into()),
+                        Some(&CefString::from(value.as_str())),
+                    );
+                }
+            }
         }
     }
 }
@@ -20,6 +34,8 @@ cef::wrap_app! {
             if process.is_none_or(|value| value.to_string().is_empty()) && let Some(command) = command {
                 // The shell's synchronous policy must see automatic requests too.
                 command.append_switch(Some(&"disable-popup-blocking".into()));
+                // Electron parity (main.mjs:361, on every platform): without it CEF ends the whole process after 3 GPU crashes.
+                command.append_switch(Some(&"disable-gpu-process-crash-limit".into()));
                 quiet(command);
                 if let Some(luid) = self.adapter {
                     adapter(command, luid);

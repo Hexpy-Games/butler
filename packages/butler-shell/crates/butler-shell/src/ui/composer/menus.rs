@@ -167,7 +167,7 @@ pub(crate) fn access_mode_menu(
         window,
         cx,
     );
-    div()
+    crate::ui::widgets::anchor(div(), "access-menu")
         .flex()
         .child(trigger)
         .child(content)
@@ -361,7 +361,7 @@ pub(crate) fn model_menu(props: ModelMenuProps, window: &mut Window, cx: &mut Ap
         window,
         cx,
     );
-    div()
+    crate::ui::widgets::anchor(div(), "model-menu")
         .flex()
         .child(trigger)
         .child(content)

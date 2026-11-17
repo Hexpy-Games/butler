@@ -7,6 +7,9 @@ use std::{collections::VecDeque, pin::Pin, time::Duration};
 /// A pull-driven stream. Dropping it cancels reconnect waits and closes its socket.
 pub type LiveEvents = Pin<Box<dyn Stream<Item = Result<LiveEvent, Error>> + Send>>;
 
+/// Decoded server-sent events of the browser host channel: (event name, data).
+pub type BrowserHostEvents = Pin<Box<dyn Stream<Item = Result<(String, String), Error>> + Send>>;
+
 impl ShellClient {
     /// Subscribe after a durable cursor. Reconnects with exponential backoff,
     /// suppresses replay duplicates, and pages /events on reconcile or a gap.
@@ -193,10 +196,19 @@ impl State {
 pub(super) struct Decoder {
     bytes: Vec<u8>,
     data: Vec<String>,
-    heartbeat: bool,
+    event: Option<String>,
 }
 impl Decoder {
+    /// Decoded `data` payloads; heartbeats are skipped.
     pub(super) fn push(&mut self, bytes: &[u8]) -> Result<Vec<Value>, Error> {
+        self.frames(bytes)?
+            .into_iter()
+            .filter(|(event, _)| event != "heartbeat")
+            .map(|(_, data)| serde_json::from_str(&data).map_err(|_| Error::Protocol))
+            .collect()
+    }
+    /// Complete frames as (event name, data); comments and empty frames are skipped.
+    pub(super) fn frames(&mut self, bytes: &[u8]) -> Result<Vec<(String, String)>, Error> {
         self.bytes.extend_from_slice(bytes);
         let mut output = Vec::new();
         let mut consumed = 0;
@@ -209,18 +221,16 @@ impl Decoder {
                 .trim_end_matches('\r');
             consumed = index + 1;
             if line.is_empty() {
-                if !self.data.is_empty() && !self.heartbeat {
-                    output.push(
-                        serde_json::from_str(&self.data.join("\n")).map_err(|_| Error::Protocol)?,
-                    );
+                let event = self.event.take().unwrap_or_else(|| "message".into());
+                if !self.data.is_empty() {
+                    output.push((event, self.data.join("\n")));
                 }
                 self.data.clear();
-                self.heartbeat = false;
             } else if let Some(data) = line.strip_prefix("data:") {
                 self.data
                     .push(data.strip_prefix(' ').unwrap_or(data).into());
-            } else if line == "event: heartbeat" {
-                self.heartbeat = true;
+            } else if let Some(event) = line.strip_prefix("event:") {
+                self.event = Some(event.strip_prefix(' ').unwrap_or(event).into());
             }
         }
         self.bytes.drain(..consumed);

@@ -52,28 +52,38 @@ pub(super) fn before(
             events.emit(OsrEvent::PopupBlocked { url, reason });
             1
         }
-        PopupDecision::Allow { child } => {
+        PopupDecision::Allow { child, held } => {
             let (Some(info), Some(client)) = (info, client) else {
                 return 1;
             };
-            allow(opener, events, &runtime, child, id, info, client);
+            allow(opener, events, &runtime, child, id, held, info, client);
             events.emit(OsrEvent::PopupOpened { child, url });
             0
         }
     }
 }
 
+/// The child page (CEF's popup `id` of this opener), held from before its first request when
+/// `held`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "CEF's synchronous popup callback"
+)]
 fn allow(
     opener: &PageRef,
     events: &Events,
     runtime: &Rc<RuntimeState>,
     child: u64,
     id: i32,
+    held: bool,
     info: &mut WindowInfo,
     client: &mut Option<Client>,
 ) {
     let source = opener.borrow();
     let mut page = Page::new(source.size, source.scale);
+    if held {
+        page.loads = super::hold::Loads::held();
+    }
     page.signed_out_owner = source.signed_out_owner.clone();
     page.popup = Some((events.page, id));
     if let Some(owner) = &page.signed_out_owner
