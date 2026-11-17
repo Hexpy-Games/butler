@@ -48,8 +48,7 @@ pub struct NewChatBriefing {
     pub description: String,
     /// Greetings per time of day (general briefings only).
     pub title_variants: Option<BriefingTitleVariants>,
-    /// At least four suggested conversation starters; an item that is not
-    /// an object reads with every field absent.
+    /// Up to six suggested conversation starters; an item that is not an object reads with every field absent.
     pub suggestions: Vec<BriefingSuggestion>,
     /// Where the briefing came from.
     pub source: BriefingSource,
@@ -176,8 +175,7 @@ impl StoredTitleVariants {
 impl StoredBriefing {
     /// The briefing when it is the requested one: the schema, scope, locale
     /// and project match, the title is not empty, raw text is marked absent,
-    /// at least four suggestions are listed, and greetings, when present,
-    /// are all non-empty.
+    /// and greetings, when present, are all non-empty.
     pub(super) fn checked(
         self,
         scope: BriefingScope,
@@ -195,7 +193,7 @@ impl StoredBriefing {
         {
             return None;
         }
-        let suggestions = self.suggestions.filter(|items| items.len() >= 4)?;
+        let suggestions = self.suggestions?;
         let title_variants = match self.title_variants {
             Arg::Missing => None,
             Arg::Valid(Obj(variants)) => Some(variants.checked()?),
