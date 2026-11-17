@@ -17,6 +17,7 @@ use gpui::{
 };
 
 use crate::ui::i18n::file_viewer::FileViewerStrings;
+use crate::ui::widgets::anchor;
 
 pub(crate) type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 
@@ -60,7 +61,8 @@ impl RenderOnce for FileViewerHeader {
             .cross(Cross::Center);
         for action in self.actions {
             let run = action.run;
-            buttons = buttons.child(if compact || action.icon_only {
+            let name = format!("file-viewer-{}", action.id);
+            let control = if compact || action.icon_only {
                 IconButton::new(format!("file-viewer-{}", action.id), action.label)
                     .glyph(action.icon)
                     .on_click(move |_, window, cx| run(window, cx))
@@ -75,9 +77,14 @@ impl RenderOnce for FileViewerHeader {
                     button = button.icon_start(icon(action.icon, IconSize::Md, ds));
                 }
                 button.into_any_element()
-            });
+            };
+            // A flex wrapper: a plain block would put the inline-flex control on a text line.
+            buttons = buttons.child(anchor(div().flex(), &name).child(control));
         }
-        buttons = buttons.child(file_viewer_close_button(self.on_close, cx));
+        buttons = buttons.child(
+            anchor(div().flex(), "file-viewer-close")
+                .child(file_viewer_close_button(self.on_close, cx)),
+        );
         let mut text = Stack::new()
             .gap(Space::None)
             .grow()
@@ -90,11 +97,13 @@ impl RenderOnce for FileViewerHeader {
             .cross(Cross::Center)
             .gap(Space::Md)
             .wrap(false)
-            .children(self.on_back.map(|back| file_viewer_back_button(back, cx)))
+            .children(self.on_back.map(|back| {
+                anchor(div().flex(), "file-viewer-back").child(file_viewer_back_button(back, cx))
+            }))
             .child(text)
             .children(self.leading)
             .child(buttons);
-        crate::ui::widgets::anchor(
+        anchor(
             div().id("file-viewer-header").relative(),
             "file-viewer-header",
         )

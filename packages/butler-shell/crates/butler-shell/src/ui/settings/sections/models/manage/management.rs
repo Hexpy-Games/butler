@@ -123,7 +123,11 @@ impl ManagementPage {
                         let text = (copy.deleted_status)(&name);
                         notify(&mut this.toast, Toast::success(text), cx);
                     }
-                    Err(_) => notify(&mut this.toast, Toast::error(copy.error_delete), cx),
+                    Err(error) => notify(
+                        &mut this.toast,
+                        crate::ui::i18n::errors::toast(cx, &error, copy.error_delete),
+                        cx,
+                    ),
                 }
             },
         );

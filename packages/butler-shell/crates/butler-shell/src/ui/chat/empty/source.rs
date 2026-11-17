@@ -25,16 +25,13 @@ pub(super) struct EpicInfo {
 
 /// The raw answers (`None`: the call failed).
 pub(super) struct Fetched {
-    settings: Option<Value>,
     navigation: Option<Value>,
     briefing: Option<Value>,
     epic: Option<EpicInfo>,
-    picture: Option<WallpaperImage>,
 }
 
 /// Runs the calls on the agent worker.
 pub(super) async fn fetch(client: ShellClient, want: Want) -> Fetched {
-    let settings = client.get_settings().await.ok();
     let navigation = match want.project_id {
         Some(_) => client.list_navigation().await.ok(),
         None => None,
@@ -51,21 +48,16 @@ pub(super) async fn fetch(client: ShellClient, want: Want) -> Fetched {
         Some(id) => epic_info(&client, &id).await,
         None => None,
     };
-    let project = find_project(navigation.as_ref(), want.project_id.as_deref());
-    let source = wallpaper_source(settings.as_ref(), project.as_ref());
-    let picture = wallpaper_picture(&client, &source).await;
     Fetched {
-        settings,
         navigation,
         briefing,
         epic,
-        picture,
     }
 }
 
 /// The image source's stored picture, decoded here in the job; `None` for other sources or a
 /// failed request or decode.
-async fn wallpaper_picture(
+pub(in crate::ui::chat) async fn wallpaper_picture(
     client: &ShellClient,
     source: &WallpaperSource,
 ) -> Option<WallpaperImage> {
@@ -87,13 +79,6 @@ fn find_project(navigation: Option<&Value>, project_id: Option<&str>) -> Option<
         .iter()
         .find(|project| project.get("id").and_then(Value::as_str) == Some(id))
         .cloned()
-}
-
-/// `mainScreenWallpaper`: the project's own source, else the global one.
-fn wallpaper_source(settings: Option<&Value>, project: Option<&Value>) -> WallpaperSource {
-    project
-        .and_then(|project| parse_source(project.get("wallpaper")?))
-        .unwrap_or_else(|| global_source(settings.unwrap_or(&Value::Null)))
 }
 
 fn title_of(value: &Value) -> Option<String> {
@@ -118,10 +103,8 @@ pub(super) struct Resolved {
     pub(super) briefing: Option<NewChatBriefing>,
     pub(super) epic: Option<EpicInfo>,
     pub(super) project_name: Option<String>,
-    pub(super) wallpaper: WallpaperSource,
-    pub(super) wallpaper_picture: Option<WallpaperImage>,
-    pub(super) wallpaper_paused: bool,
-    pub(super) wallpaper_pause_on_battery: bool,
+    /// `mainScreenWallpaper`: the project's own source; the global one is read live.
+    pub(super) project_wallpaper: Option<WallpaperSource>,
 }
 
 pub(super) fn resolve(fetched: Fetched, project_id: Option<&str>) -> Resolved {
@@ -133,22 +116,19 @@ pub(super) fn resolve(fetched: Fetched, project_id: Option<&str>) -> Resolved {
         .as_ref()
         .and_then(|project| project.get("display_name")?.as_str().map(str::to_owned))
         .or_else(|| briefing.as_ref()?.source.as_ref()?.project_name.clone());
-    let wallpaper = wallpaper_source(fetched.settings.as_ref(), project.as_ref());
-    let settings = fetched.settings.unwrap_or(Value::Null);
-    let wallpaper_paused = settings["wallpaper"]["motion"] == "paused";
+    let project_wallpaper = project
+        .as_ref()
+        .and_then(|project| parse_source(project.get("wallpaper")?));
     Resolved {
         briefing,
         epic: fetched.epic,
         project_name,
-        wallpaper,
-        wallpaper_picture: fetched.picture,
-        wallpaper_paused,
-        wallpaper_pause_on_battery: settings["wallpaper"]["pauseOnBattery"] == true,
+        project_wallpaper,
     }
 }
 
 /// `mainScreenWallpaper`: the `wallpaper` setting's source, or the legacy keys'.
-fn global_source(settings: &Value) -> WallpaperSource {
+pub(in crate::ui::chat) fn global_source(settings: &Value) -> WallpaperSource {
     settings
         .get("wallpaper")
         .and_then(|wallpaper| parse_source(wallpaper.get("source")?))
@@ -175,7 +155,7 @@ fn params_of(value: &Value) -> Option<WallpaperParams> {
 }
 
 /// `parseWallpaperSource`.
-fn parse_source(value: &Value) -> Option<WallpaperSource> {
+pub(in crate::ui::chat) fn parse_source(value: &Value) -> Option<WallpaperSource> {
     match value.get("kind")?.as_str()? {
         "none" => Some(WallpaperSource::None),
         "live" => {

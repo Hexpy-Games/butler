@@ -145,9 +145,6 @@ jobs:
             packages/butler-agent/rust -> ../../../target/gpui-package
           key: gpui-package-linux-x64
           save-if: ${{ github.event_name == 'push' }}
-      - name: Build release shell
-        # The shell's cef feature awaits the Linux software-paint job.
-        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release --bin butler-shell
       - name: Locate CEF cache
         run: echo "CEF_PATH=$RUNNER_TEMP/cef" >> "$GITHUB_ENV"
       - uses: actions/cache@v4
@@ -157,6 +154,8 @@ jobs:
       - name: Fetch pinned CEF
         working-directory: packages/butler-agent/rust
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" python3 crates/butler-platform/cef/fetch.py --dest "$CEF_PATH"
+      - name: Build release shell
+        run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release --features cef --bin butler-shell
       - name: Build CEF host
         working-directory: packages/butler-agent/rust
         run: python3 "$GITHUB_WORKSPACE/.github/scripts/isolated.py" cargo build --locked --release -p butler-cef --features cef --target x86_64-unknown-linux-gnu

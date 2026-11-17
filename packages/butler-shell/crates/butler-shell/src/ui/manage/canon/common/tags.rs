@@ -54,23 +54,26 @@ pub(super) fn chip(tag: &EpicTag) -> Tag {
     .tone(Tone::Label(label_tone(tag.color)))
 }
 
-/// `canonWriteFailure` without codes (G-codes): a 409 is the conflict (true: the caller reads
-/// again), anything else React's fallback copy.
+/// `canonWriteFailure`: a 409 is the conflict, told by its status (true: the caller reads
+/// again); anything else shows its code's sentence, else React's fallback copy.
 pub(super) fn write_failure(error: &Error, cx: &mut App) -> bool {
     let copy = words(Ds::get(cx).lang());
-    let conflict = matches!(error, Error::Http(409));
+    let conflict = matches!(error, Error::Http(409, _));
     let text = if conflict {
-        copy.conflict
+        Toast::error(copy.conflict)
     } else {
-        copy.request_failed
+        crate::ui::i18n::errors::toast(cx, error, copy.request_failed)
     };
-    toast::show(cx, Toast::error(text));
+    toast::show(cx, text);
     conflict
 }
 
 /// `notifyError(error, appCopy.interfaceFeedback.requestFailed)`
-fn request_failed(cx: &mut App) {
-    toast::show(cx, Toast::error(words(Ds::get(cx).lang()).request_failed));
+fn request_failed(error: &Error, cx: &mut App) {
+    toast::show(
+        cx,
+        crate::ui::i18n::errors::toast(cx, error, words(Ds::get(cx).lang()).request_failed),
+    );
 }
 
 /// `CanonTagList`
@@ -168,7 +171,7 @@ impl CanonTags {
                     this.refresh(cx);
                     done(Some(tag), cx);
                 }
-                Err(Error::Http(409)) => this.select_existing(&input.name, done, cx),
+                Err(Error::Http(409, _)) => this.select_existing(&input.name, done, cx),
                 Err(error) => {
                     write_failure(&error, cx);
                     done(None, cx);
@@ -193,12 +196,13 @@ impl CanonTags {
                         .cloned();
                     this.tags = tags;
                     if existing.is_none() {
-                        request_failed(cx);
+                        let copy = words(Ds::get(cx).lang());
+                        toast::show(cx, Toast::error(copy.request_failed));
                     }
                     done(existing, cx);
                 }
-                Err(_) => {
-                    request_failed(cx);
+                Err(error) => {
+                    request_failed(&error, cx);
                     done(None, cx);
                 }
             },
@@ -222,8 +226,8 @@ impl CanonTags {
                         this.tags = tags;
                         changed
                     }
-                    Err(_) => {
-                        request_failed(cx);
+                    Err(error) => {
+                        request_failed(&error, cx);
                         false
                     }
                 }

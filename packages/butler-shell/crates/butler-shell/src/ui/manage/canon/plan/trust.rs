@@ -10,7 +10,7 @@ use butler_ds::ui::dialog::{
 };
 use butler_ds::ui::layout::{Justify, Space, Stack};
 use butler_ds::ui::scroll::ScrollArea;
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast;
 use butler_ds::ui::typo::Typo;
 use butler_shell_client::Error;
 use gpui::{Context, Entity, IntoElement, ParentElement as _, Render, Window};
@@ -87,9 +87,10 @@ impl CanonTrustDialog {
                     });
                     std::mem::replace(&mut this.grants, grants) != this.grants
                 }
-                Err(_) => {
+                Err(error) => {
                     let copy = words(Ds::get(cx).lang());
-                    toast::show(cx, Toast::error(copy.request_failed));
+                    let failure = crate::ui::i18n::errors::toast(cx, &error, copy.request_failed);
+                    toast::show(cx, failure);
                     false
                 }
             },
@@ -118,9 +119,11 @@ impl CanonTrustDialog {
                 this.busy = false;
                 match result {
                     Ok(_) => Self::refresh(cx),
-                    Err(_) => {
+                    Err(error) => {
                         let copy = words(Ds::get(cx).lang());
-                        toast::show(cx, Toast::error(copy.request_failed));
+                        let failure =
+                            crate::ui::i18n::errors::toast(cx, &error, copy.request_failed);
+                        toast::show(cx, failure);
                     }
                 }
             },

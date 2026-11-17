@@ -17,7 +17,8 @@ use butler_ds::ui::select::{Position, Select, SelectContent, SelectItem};
 use butler_ds::ui::tag::Tag;
 use butler_ds::ui::tooltip::{Align, Side, Tooltip};
 use gpui::{
-    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Window, div,
+    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Styled as _,
+    Window, div,
 };
 
 pub(crate) use model::{
@@ -166,7 +167,11 @@ pub(crate) fn access_mode_menu(
         window,
         cx,
     );
-    div().child(trigger).child(content).into_any_element()
+    crate::ui::widgets::anchor(div(), "access-menu")
+        .flex()
+        .child(trigger)
+        .child(content)
+        .into_any_element()
 }
 
 /// `ComposerPlanModeBadge`: nothing unless plan mode is on. Its remove button turns it off
@@ -244,7 +249,7 @@ pub(crate) fn workspace_select(
         .child(SelectItem::new("worktree", worktree));
     let trigger = select.control_trigger(trigger.into_any_element(), &content);
     let list = select.content(&content, window, cx);
-    Some(div().child(trigger).child(list).into_any_element())
+    Some(div().flex().child(trigger).child(list).into_any_element())
 }
 
 /// `ComposerModelStatusButton`: the model control while there is no model to pick: still
@@ -356,5 +361,9 @@ pub(crate) fn model_menu(props: ModelMenuProps, window: &mut Window, cx: &mut Ap
         window,
         cx,
     );
-    div().child(trigger).child(content).into_any_element()
+    crate::ui::widgets::anchor(div(), "model-menu")
+        .flex()
+        .child(trigger)
+        .child(content)
+        .into_any_element()
 }

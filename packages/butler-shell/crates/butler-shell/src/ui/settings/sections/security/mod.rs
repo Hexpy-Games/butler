@@ -109,7 +109,7 @@ impl SecurityPage {
                         Some(access) => this.access = access,
                         None => {
                             let failed = words(Ds::get(cx).lang()).update_failed;
-                            this.notify(Toast::error(failed), cx);
+                            this.notify(crate::ui::i18n::errors::toast(cx, &error, failed), cx);
                         }
                     },
                 }

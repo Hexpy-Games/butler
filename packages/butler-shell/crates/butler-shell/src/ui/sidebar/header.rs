@@ -80,7 +80,6 @@ impl Shell {
         let mut new = NavRow::new("p-new", s.new_chat)
             .glyph(Icon::PencilLine)
             .on_click(cx.listener(|s, _, w, cx| {
-                s.sidebar.new_chat_parent = None;
                 s.open_chat(None, w, cx);
             }));
         let view = self.view(cx);
