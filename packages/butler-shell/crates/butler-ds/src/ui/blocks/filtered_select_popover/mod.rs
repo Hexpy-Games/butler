@@ -14,6 +14,7 @@ use gpui::{
 use crate::tokens::{Color, Length, Number};
 use crate::ui::context::Ds;
 use crate::ui::scroll::ScrollArea;
+use crate::ui::strut;
 use parts::Change;
 
 type Select = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -243,8 +244,9 @@ fn group_title(text: SharedString, ds: &Ds) -> gpui::Div {
         .child(text)
 }
 
-/// The popover's outer column, sized by `width` within the viewport `room`.
-fn root(width: Width, room: f32, ds: &Ds) -> gpui::Div {
+/// The popover's outer column, sized by `width` within the viewport `room`; a fit-width column
+/// (`shrink`: its container stretches its items) holds its content's width.
+fn root(width: Width, room: f32, shrink: bool, ds: &Ds) -> gpui::Div {
     let root = div()
         .flex()
         .flex_col()
@@ -257,10 +259,12 @@ fn root(width: Width, room: f32, ds: &Ds) -> gpui::Div {
     }
     match width {
         Width::Fixed => root.w(px(320_f32.min(room))), // DS: FilteredSelectPopover.module.css:15
-        Width::Default => root
-            .w_full()
-            .min_w(px(280_f32.min(room)))
-            .max_w(px(520_f32.min(room))),
+        Width::Default => {
+            let root = root
+                .min_w(px(280_f32.min(room)))
+                .max_w(px(520_f32.min(room)));
+            if shrink { root } else { root.w_full() }
+        }
     }
 }
 
@@ -383,7 +387,8 @@ impl RenderOnce for FilteredSelectPopover {
                     .child(content),
             );
         let footer = footer(&self.id, self.footer_title, self.footer_options, ds);
-        root(self.width, room, ds)
+        let shrink = strut::shrink_wrap(cx) && self.width == Width::Default && !ds.compact();
+        let body = root(self.width, room, shrink, ds)
             .child(heading(self.title, ds))
             .child(search)
             .children(filters)
@@ -395,8 +400,15 @@ impl RenderOnce for FilteredSelectPopover {
                     .flex_col()
                     .gap(ds.len(Length::SpaceSm))
                     .mt(-ds.len(Length::SpaceSm))
-                    .child(divider(ds))
+                    // CSS: `.results + .divider` has margin-top -space-sm in an auto grid row, so the
+                    // divider's box stretches to space-sm (its margin) and the region gap follows it.
+                    .child(divider(ds).h(ds.len(Length::SpaceSm)))
                     .child(footer)
-            }))
+            }));
+        if shrink {
+            strut::max_content(body)
+        } else {
+            body.into_any_element()
+        }
     }
 }
