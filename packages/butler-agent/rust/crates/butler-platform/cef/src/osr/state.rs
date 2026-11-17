@@ -27,6 +27,7 @@ pub(super) struct Page {
     pub(super) next_devtools: i32,
     pub(super) devtools_raw: Rc<Cell<bool>>,
     pub(super) downloads: super::downloads::Transfers,
+    pub(super) loads: super::hold::Loads,
 }
 impl Page {
     pub(super) fn new(size: (u32, u32), scale: f32) -> Self {
@@ -48,6 +49,7 @@ impl Page {
             next_devtools: 0,
             devtools_raw: Rc::default(),
             downloads: super::downloads::Transfers::default(),
+            loads: super::hold::Loads::default(),
         }
     }
     pub(super) fn release_frames(&mut self) {

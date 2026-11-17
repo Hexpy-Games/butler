@@ -201,6 +201,8 @@ impl BrowserState {
         let pane = tab.hosted.take().and_then(|hosted| hosted.pane);
         #[cfg(feature = "cef")]
         relay::release(&*self.engine, id);
+        // The user's page now: it loads freely, and nothing it tried meanwhile is replayed.
+        self.engine.release_loads(id);
         self.engine.devtools_raw_end(id);
         self.engine.keep_awake(id, false);
         self.engine.set_hosted(id, false);
@@ -238,14 +240,26 @@ impl BrowserState {
         };
         self.next_id += 1;
         let id = TabId(format!("t{}", self.next_id).into());
+        let hosted = self.new_hosted(internal);
+        let awake = hosted.awake();
         self.tabs.push(Tab {
-            hosted: Some(self.new_hosted(internal)),
+            hosted: Some(hosted),
             ..Tab::new(id.clone(), owner, profile, String::new())
         });
         self.engine
             .open(&id, "about:blank", profile, &key, &partition);
         self.engine.set_hosted(&id, true);
-        self.engine.keep_awake(&id, true);
+        let list = |key: &str| -> Vec<String> {
+            args["popups"][key]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        };
+        self.engine
+            .set_popup_sites(&id, list("sites"), list("hosts"));
+        self.engine.keep_awake(&id, awake);
         self.fix_hosted_size(&id);
         self.publisher.changed(&self.tabs);
         Ok(id)
@@ -288,6 +302,7 @@ impl BrowserState {
         if let Some(holder) = holder.filter(|holder| *holder != hosted.holder) {
             hosted.holder = holder;
             tab.epoch += 1;
+            self.engine.set_hosted(&id, holder == Holder::Agent);
         }
         hosted.sticky = args["sticky"].as_bool().unwrap_or(hosted.sticky);
         hosted.waiting = args["waiting"].as_bool().unwrap_or(hosted.waiting);
@@ -351,11 +366,12 @@ impl BrowserState {
         }
     }
 
-    /// A popup of a hosted page is a hosted page itself; the Agent hears of it with its target.
-    /// A popup whose target cannot be found is closed.
+    /// A popup of a hosted page is a hosted page itself; the Agent hears of it with its target
+    /// and the URL its held loads keep (else `url`). A popup whose target cannot be found is
+    /// closed, and so is one whose opener is no longer hosted.
     #[cfg(feature = "cef")]
     pub(in crate::ui::browser) fn announce_popup(
-        &self,
+        &mut self,
         id: &TabId,
         opener: &TabId,
         url: &str,
@@ -366,6 +382,9 @@ impl BrowserState {
             .and_then(|tab| tab.hosted.as_ref())
             .map(|hosted| hosted.target.clone())
         else {
+            if self.tab(id).is_some_and(|tab| tab.hosted.is_some()) {
+                self.close(id, cx);
+            }
             return;
         };
         let target = self.engine.devtools(id, "Target.getTargetInfo", &json!({}));
@@ -382,16 +401,16 @@ impl BrowserState {
                     match (hosted, &target) {
                         (Some(hosted), Some(target)) => {
                             hosted.target.clone_from(target);
-                            true
+                            Some(model.engine.held_url(&id).unwrap_or(url))
                         }
                         (Some(_), None) => {
                             model.close(&id, cx);
-                            false
+                            None
                         }
-                        (None, _) => false,
+                        (None, _) => None,
                     }
                 });
-                if let (true, Some(target)) = (known, target) {
+                if let (Some(url), Some(target)) = (known, target) {
                     relay::event(
                         cx,
                         json!({"method":"Target.attachedToTarget","params":{

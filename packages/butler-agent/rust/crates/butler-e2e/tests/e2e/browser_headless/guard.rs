@@ -7,7 +7,7 @@
 )]
 use super::{
     backend,
-    support::{admin, browser_processes, call, node, open, publish_as, selected, setup},
+    support::{admin, browser_processes, call, node, open, publish_as, selected, setup, shell},
     text,
 };
 use butler_e2e::e2e::HarnessError;
@@ -21,7 +21,7 @@ pub(super) async fn guard_denials(
     url: &str,
 ) -> Result<(), HarnessError> {
     let me = "general";
-    // No signed-in headless: the profile is in-memory and signed-out only.
+    // Headless has no signed-in profile (signed_in_unavailable); the shell host has them and demands a grant.
     let signed = call(
         admin,
         me,
@@ -30,7 +30,12 @@ pub(super) async fn guard_denials(
         json!({"url":url,"signed_in":true}),
     )
     .await?;
-    assert_eq!(signed["reason"], "signed_in_unavailable", "{signed}");
+    let expected = if shell() {
+        "signed_in_grant_required"
+    } else {
+        "signed_in_unavailable"
+    };
+    assert_eq!(signed["reason"], expected, "{signed}");
     // Another conversation never reaches this tab.
     let foreign = call(admin, "other", "tab.observe", tab, json!({})).await?;
     assert_eq!(foreign["reason"], "not_your_tab", "{foreign}");
@@ -167,11 +172,14 @@ pub(super) async fn idle_reap(s: &butler_e2e::e2e::scenario::Scenario) -> Result
     })
     .await
     .expect("the browser process tree ends within 90 s");
-    assert!(
-        started.elapsed() >= Duration::from_secs(50),
-        "reaped after {:?}, before the 60 s grace",
-        started.elapsed()
-    );
+    // Shell tabs live in the shell's CEF; the matched process is the gateway's check browser, on its own clock.
+    if !shell() {
+        assert!(
+            started.elapsed() >= Duration::from_secs(50),
+            "reaped after {:?}, before the 60 s grace",
+            started.elapsed()
+        );
+    }
     let elapsed_ms = started.elapsed().as_millis();
     let before = backend::tree(&s.sandbox.data);
     tokio::time::sleep(Duration::from_secs(10)).await;
