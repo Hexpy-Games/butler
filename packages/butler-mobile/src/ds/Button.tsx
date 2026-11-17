@@ -29,7 +29,6 @@ export interface IconButtonProps {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
-  shape?: "default" | "pill";
   loading?: boolean;
   disabled?: boolean;
   testID?: string;
@@ -67,7 +66,7 @@ export function Button({
           paddingVertical: (t.length("--control-hit-target") - lineHeight) / 2,
           paddingStart: iconStart ? inlineIcon : inline,
           paddingEnd: iconEnd ? inlineIcon : inline,
-          borderRadius: t.length("--radius-control-touch"),
+          borderRadius: t.length("--radius-pill"),
           borderWidth: t.length("--border-hairline"),
           borderColor: colors.border,
           backgroundColor: colors.background,
@@ -104,7 +103,7 @@ export function Button({
 }
 
 export function IconButton({
-  icon, label, onPress, variant = "ghost", shape = "default", loading, disabled, testID,
+  icon, label, onPress, variant = "ghost", loading, disabled, testID,
 }: IconButtonProps) {
   const t = useTokens();
   const press = usePress({ scale: true, disabled: disabled || loading });
@@ -124,7 +123,7 @@ export function IconButton({
         {
           width: target,
           height: target,
-          borderRadius: t.length(shape === "pill" ? "--radius-pill" : "--radius-control-touch"),
+          borderRadius: t.length("--radius-pill"),
           borderWidth: t.length("--border-hairline"),
           borderColor: colors.border,
           backgroundColor: colors.background,

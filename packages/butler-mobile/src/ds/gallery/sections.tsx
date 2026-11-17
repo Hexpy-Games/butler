@@ -130,15 +130,13 @@ function ButtonSection() {
       <Cell name="icon start"><View style={{ flexDirection: "row" }}><Button label={en.action} onPress={noop} iconStart={icons.Plus} /></View></Cell>
       <Cell name="icon end"><View style={{ flexDirection: "row" }}><Button label={en.action} onPress={noop} iconEnd={icons.ChevronRight} /></View></Cell>
       <Cell name="stretch"><Button label={en.action} onPress={noop} stretch /></Cell>
-      {(["default", "pill"] as const).flatMap((shape) => [
-        ...states.map(([name, forced]) => (
-          <Cell key={`${shape}-${name}`} name={`icon button ${shape} · ${name}`}>
-            <Forcing state={forced}><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} shape={shape} /></View></Forcing>
-          </Cell>
-        )),
-        <Cell key={`${shape}-disabled`} name={`icon button ${shape} · disabled`}><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} shape={shape} disabled /></View></Cell>,
-        <Cell key={`${shape}-loading`} name={`icon button ${shape} · loading`}><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} shape={shape} loading /></View></Cell>,
-      ])}
+      {states.map(([name, forced]) => (
+        <Cell key={name} name={`icon button · ${name}`}>
+          <Forcing state={forced}><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} /></View></Forcing>
+        </Cell>
+      ))}
+      <Cell name="icon button · disabled"><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} disabled /></View></Cell>
+      <Cell name="icon button · loading"><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} loading /></View></Cell>
       {sets.map(([name, s]) => (
         <Cell key={name} name={`action row · ${name}`}>
           <Row><Button label={s.cancel} onPress={noop} variant="ghost" /><Button label={s.action} onPress={noop} /></Row>
