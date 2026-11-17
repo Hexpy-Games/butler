@@ -2,9 +2,10 @@
 //! runs, as `model.stream.text_delta` events coalesced to one event per
 //! stream per [`COALESCE`] window, so the durable progress path and the App
 //! see a bounded frame rate. When the loop discards a round's text (the round
-//! called tools, or its candidate was sent back or replaced) the relay
-//! publishes `model.stream.completed` with status `discarded` for that stream,
-//! after its deltas.
+//! called tools other than answer_blocks, or its candidate was sent back or
+//! replaced) the relay publishes `model.stream.completed` with status
+//! `discarded` for that stream, after its deltas. When the loop retains a
+//! round's text for the next round, the next stream starts with it.
 
 mod partial;
 
@@ -114,12 +115,12 @@ impl ProviderStreamObserver for RelayObserver {
         if text.is_empty() {
             return;
         }
-        self.partial.lock().delta(stream_id, text);
+        let shown = self.partial.lock().delta(stream_id, text);
         // A closed queue means the loop has finished; late deltas are dropped.
         let _ = self.sender.send(Relayed::Delta {
             stream_id: stream_id.to_owned(),
             sequence: event.get("sequence").and_then(Value::as_u64).unwrap_or(0),
-            text: text.to_owned(),
+            text: shown,
         });
     }
 
