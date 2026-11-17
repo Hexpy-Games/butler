@@ -20,7 +20,7 @@ pub use egress::{
 };
 pub use headless::{
     Headless, HeadlessConfig, InstallSource, PageHost, Rendered,
-    downloads::{DownloadPort, PortFuture},
+    downloads::{DownloadPort, FILE_LIMIT, PortFuture, SESSION_LIMIT},
     history::{HistoryPort, VisitFuture},
     reader as headless_reader,
 };
