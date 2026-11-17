@@ -1,18 +1,20 @@
 //! Only simple, known read-only command forms are low risk. Anything the
-//! classifier cannot prove from this explicit table is high risk.
+//! classifier cannot prove from this explicit table is high risk. `echo` and
+//! `printf` only print their words, so quotes may group them; any other shell
+//! syntax still makes them high risk.
 use super::ApprovalRisk;
 
 pub(in crate::btcc) fn command_risk(line: &str) -> ApprovalRisk {
+    let words: Vec<_> = line.split_ascii_whitespace().collect();
+    let prints = matches!(words.first(), Some(&("echo" | "printf")));
     // Fail closed on shell evaluation, redirection, quoting and control syntax.
-    if line
-        .chars()
-        .any(|c| c.is_control() || "|&;<>$`\\\"'(){}*?[]~!%^".contains(c))
-    {
+    if line.chars().any(|c| {
+        c.is_control() || "|&;<>$`\\(){}*?[]~!%^".contains(c) || !prints && "\"'".contains(c)
+    }) {
         return ApprovalRisk::High;
     }
-    let words: Vec<_> = line.split_ascii_whitespace().collect();
     let low = match words.as_slice() {
-        ["ls" | "cat" | "head" | "tail" | "wc" | "pwd"] => true,
+        ["echo" | "printf", ..] | ["ls" | "cat" | "head" | "tail" | "wc" | "pwd"] => true,
         // File operands require filesystem knowledge (including symlinks),
         // which this lexical classifier cannot prove. Git also executes
         // configured external diffs, textconv and filesystem monitors.
@@ -33,10 +35,29 @@ pub(super) mod pinned {
     use super::*;
 
     pub(in crate::btcc::authority) fn assert_command_risks() {
-        for line in ["ls", "ls -la", "pwd"] {
+        for line in [
+            "ls",
+            "ls -la",
+            "pwd",
+            "echo ok",
+            "echo",
+            "echo \"hello world\"",
+            "printf 'done'",
+        ] {
             assert_eq!(command_risk(line), ApprovalRisk::Low, "{line}");
         }
         for line in [
+            "echo ok > out.txt",
+            "echo ok | sh",
+            "echo ok; rm -rf build",
+            "echo $HOME",
+            "echo \"$(id)\"",
+            "echo `id`",
+            "echo ok\nrm x",
+            "printf '%s' x",
+            "echo ~",
+            "\"echo\" ok",
+            "cat 'README.md'",
             "kubectl delete pod app",
             "kubectl apply -f app.yaml",
             "npm publish",
