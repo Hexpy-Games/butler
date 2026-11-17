@@ -1,7 +1,7 @@
 import { verifySessionInfoWorkers } from "../support/session-info-workers.ts";
 import { verifySessionInlineEdit } from "../support/session-inline-edit.ts";
 import { verifyNewChatSessionInfo } from "../support/session-info-new-chat.ts";
-import { verifyTaskOrder, verifyCompactContext, verifyDashboardTask } from "../support/session-pane-followups.ts";
+import { verifyTaskOrder, verifyCompactContext, verifyDashboardTask, verifyResultsList } from "../support/session-pane-followups.ts";
 import { verifyInlineTriggerRings } from "../support/session-pane-focus.ts";
 import { verifySessionPaneMotion, verifyTitleActionsAfterSubtitle } from "../support/session-pane-motion.ts";
 import { verifyPaneToggleFill } from "../support/pane-toggle-fill.ts";
@@ -103,6 +103,7 @@ try {
     assert.equal(await aside.getByText("작업 대기열", { exact: true }).count(), 0);
     await aside.locator('[data-session-section="schedules"]').scrollIntoViewIfNeeded();
     await capture("available-sections-bottom");
+    await verifyResultsList(aside, capture);
     await aside.getByText("환경", { exact: true }).scrollIntoViewIfNeeded();
     const context = aside.locator('[data-test-class="session-context"]');
     assert.equal(await context.getByRole("button").first().getAttribute("aria-expanded"), "false");

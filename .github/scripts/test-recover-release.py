@@ -89,6 +89,12 @@ def checksum_dry_run(assets):
 
 
 class RecoveryTests(unittest.TestCase):
+    # test-category: pure-logic
+    def test_stable_tags_require_the_windows_agent_but_not_the_squirrel_app(self):
+        self.assertIn('agent-windows-x64', recovery.required('v0.1.0'))
+        self.assertNotIn('app-windows-x64', recovery.required('v0.1.0'))
+        self.assertIn('app-windows-x64', recovery.required(TAG))
+
     # test-category: security
     def test_prepare_rejects_mismatches_and_names_missing_artifacts(self):
         source = dict(path='.github/workflows/release.yml', event='push', status='completed',

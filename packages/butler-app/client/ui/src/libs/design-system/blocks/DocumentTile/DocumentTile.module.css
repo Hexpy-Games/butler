@@ -38,12 +38,6 @@
   justify-content: flex-end;
 }
 
-.actionIcon {
-  display: inline-flex;
-  align-items: center;
-  line-height: 1;
-}
-
 @media (width <= 520px) {
   .tile {
     grid-template-columns: minmax(0, 1fr);

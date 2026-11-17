@@ -278,9 +278,7 @@ pub(super) async fn setup_briefing(
     let settings =
         s.gw.patch(
             "/settings",
-            json!({
-                "consolidation_model":format!("anthropic/{MODEL}")
-            }),
+            json!({"model":format!("anthropic/{MODEL}"),"consolidation_model":format!("anthropic/{MODEL}")}),
         )
         .await?;
     assert_eq!(settings.status, 200, "{}", settings.text);

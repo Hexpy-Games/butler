@@ -6,25 +6,35 @@ use store::runtime::ProjectViews;
 #[derive(Clone)]
 pub(super) struct ProjectReader {
     ledger: ProjectLedger,
-    unreadable: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    /// Unreadable Work -> start order of the latest read that found it unreadable.
+    unreadable: Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>,
+    reads: Arc<std::sync::atomic::AtomicU64>,
 }
 impl ProjectReader {
     pub(super) fn new(ledger: ProjectLedger) -> Self {
         Self {
             ledger,
             unreadable: Arc::default(),
+            reads: Arc::default(),
         }
     }
-    fn observed(&self, id: &str, failure: Option<String>) {
+    fn observed(&self, id: &str, started: u64, failure: Option<String>) {
         let Ok(mut unreadable) = self.unreadable.lock() else {
             return;
         };
-        if let Some(error) = failure {
-            if unreadable.insert(id.to_owned()) {
+        match (failure, unreadable.get(id).copied()) {
+            (Some(error), None) => {
+                unreadable.insert(id.to_owned(), started);
                 butler_core::diagnostic!("Canon project Work read failed work_id={id}: {error}");
             }
-        } else {
-            unreadable.remove(id);
+            (Some(_), Some(seen)) => {
+                unreadable.insert(id.to_owned(), seen.max(started));
+            }
+            // A read that began before the latest failure says nothing about the file now.
+            (None, Some(seen)) if started > seen => {
+                unreadable.remove(id);
+            }
+            (None, _) => {}
         }
     }
 }
@@ -49,14 +59,21 @@ pub(super) async fn views(
                 .to_owned(),
             work_id: id.to_owned(),
         };
+        let started = reader
+            .reads
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let view = match reader.ledger.read_project_work_view(input).await {
             Ok(view) => view,
             Err(error) => {
-                reader.observed(id, Some(error.to_string()));
+                reader.observed(id, started, Some(error.to_string()));
                 continue;
             }
         };
-        reader.observed(id, view.is_none().then(|| "Work view missing".to_owned()));
+        reader.observed(
+            id,
+            started,
+            view.is_none().then(|| "Work view missing".to_owned()),
+        );
         if let Some(view) = view {
             views.insert(
                 id.to_owned(),

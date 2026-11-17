@@ -60,6 +60,7 @@ interface TooltipTriggerProps {
   "aria-describedby"?: string;
   onBlur?: FocusEventHandler<HTMLElement>;
   onFocus?: FocusEventHandler<HTMLElement>;
+  onPointerDown?: PointerEventHandler<HTMLElement>;
   onPointerEnter?: PointerEventHandler<HTMLElement>;
   onPointerLeave?: PointerEventHandler<HTMLElement>;
 }
@@ -231,6 +232,7 @@ export function Tooltip({
       ref: composeRefs(element.props.ref, triggerRef),
       onBlur: composeEventHandlers(element.props.onBlur, hide),
       onFocus: composeEventHandlers(element.props.onFocus, showForKeyboardFocus),
+      onPointerDown: composeEventHandlers(element.props.onPointerDown, hide),
       onPointerEnter: composeEventHandlers(
         element.props.onPointerEnter,
         showAfterDelay,
@@ -254,6 +256,7 @@ export function Tooltip({
       }}
       onBlur={hide}
       onFocus={showForKeyboardFocus}
+      onPointerDown={hide}
       onPointerEnter={showAfterDelay}
       onPointerLeave={hide}
     >

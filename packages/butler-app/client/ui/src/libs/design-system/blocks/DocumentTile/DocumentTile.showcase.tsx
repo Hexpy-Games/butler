@@ -1,5 +1,5 @@
 import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../showcase";
-import { FileText, Save } from "../../components/Icons";
+import { Download, FileText } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
 import { DocumentTile } from "./DocumentTile";
 
@@ -35,7 +35,7 @@ export const stories: ShowcaseStory[] = [
       return (
         <DocumentTile icon={<FileText size="md" />} title={title} description={text(context).document} meta={text(context).ago}
           clickTarget="tile" ariaLabel={`${text(context).open}: ${title}`} onOpen={() => undefined}
-          actions={[{ id: "save", label: text(context).save, icon: <Save size="sm" />, onClick: () => undefined }]} />
+          actions={[{ id: "save", label: text(context).save, icon: <Download size="sm" />, onClick: () => undefined }]} />
       );
     },
   },

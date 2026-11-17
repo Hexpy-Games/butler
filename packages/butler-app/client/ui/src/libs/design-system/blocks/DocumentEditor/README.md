@@ -23,6 +23,8 @@ role taller than a control grows the line and the actions stay centred on it.
 The status line (`note`) is a second row under the title, so showing or
 hiding it never moves the title or the actions.
 
+Use DocumentEditorHeader when the host keeps the title row fixed and scrolls only the page.
+
 ## Narrow title line
 Pass `menuActions`, the same document actions as flat `OverflowActionMenu`
 items, with `menuLabel`. When the title line is narrower than 30rem (a

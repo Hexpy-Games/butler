@@ -4,7 +4,7 @@
 use super::super::GuidedTools;
 use super::client::Client;
 use butler_runtime::web_access::LivePage;
-use butler_turn::btcc::GuidedInvocation;
+use butler_turn::btcc::{GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 use serde_json::{Value, json};
 
 /// `Ok(None)` when no open tab shows the page (the reader fetches it);
@@ -13,11 +13,14 @@ pub(in crate::host::guided::tools) async fn page(
     owner: &GuidedTools,
     invocation: &GuidedInvocation<'_>,
     args: &Value,
-) -> Result<Option<LivePage>, Value> {
+    call: &ModelRoundToolCall,
+    occurrence: &str,
+    executor: bool,
+) -> Result<Result<Option<LivePage>, Value>, ToolExecutionError> {
     let named = args["tab"].as_str().filter(|tab| !tab.trim().is_empty());
     let url = args["url"].as_str().filter(|url| !url.trim().is_empty());
     if named.is_none() && url.is_none() {
-        return Err(failure("web_read needs a url or an open tab."));
+        return Ok(Err(failure("web_read needs a url or an open tab.")));
     }
     // Only a turn that may use the browser reads its tabs.
     let browsing = owner.authorized("browser_open");
@@ -26,39 +29,47 @@ pub(in crate::host::guided::tools) async fn page(
     } else {
         None
     };
-    let Some(client) = client else {
-        return match named {
+    let Some(mut client) = client else {
+        return Ok(match named {
             Some(_) => Err(failure(
                 "The browser is unavailable; read the page by url with web_read.",
             )),
             None => Ok(None),
-        };
+        });
     };
+    client.approval_handoff = executor;
     let Some(tab) = find(owner, invocation, &client, named, url).await else {
-        return match named {
+        return Ok(match named {
             Some(_) => Err(unreadable(&json!("not_your_tab"))),
             None => Ok(None),
-        };
+        });
     };
-    let read = client
-        .call(
-            "tab.read",
-            &json!(tab.id),
-            &json!({}),
-            invocation.cancellation,
-        )
-        .await;
+    let read = super::grant::call(
+        owner,
+        call,
+        occurrence,
+        &client,
+        ("tab.read", &json!(tab.id), &json!({})),
+        invocation.cancellation,
+    )
+    .await?;
     let html = read["html"].as_str().filter(|_| read["status"] == "ok");
-    match (html, read["url"].as_str()) {
+    Ok(match (html, read["url"].as_str()) {
         (Some(html), Some(final_url)) => Ok(Some(LivePage {
             tab: tab.id,
             epoch: read["epoch"].as_u64().unwrap_or(tab.epoch),
             final_url: final_url.to_owned(),
             html: html.to_owned(),
         })),
-        _ if named.is_some() => Err(unreadable(&read["reason"])),
+        _ if named.is_some()
+            && read["reason"].is_string()
+            && read["status"] != "needs_approval" =>
+        {
+            Err(unreadable(&read["reason"]))
+        }
+        _ if named.is_some() => Err(read),
         _ => Ok(None),
-    }
+    })
 }
 
 struct OpenTab {

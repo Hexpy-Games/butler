@@ -3,14 +3,14 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::contracts::{
     BriefingGenerationError, BriefingInputSnapshot, BriefingProjectSignal, error,
 };
 use super::prompt;
 use crate::cognition::BriefingGenerationCode;
-use crate::lenient::{self, Obj};
+use crate::lenient::{self, Obj, set_field};
 
 #[derive(Clone, Copy)]
 pub(super) struct BriefingArtifactContext<'a> {
@@ -44,6 +44,33 @@ pub(super) struct BriefingArtifact<'a> {
     title_variants: Option<TitleVariants>,
 }
 
+impl BriefingArtifact<'_> {
+    /// The cards as the reviewer reads them.
+    pub(super) fn review_items(&self) -> Vec<Value> {
+        self.suggestions
+            .iter()
+            .map(|card| {
+                let mut item = card.notes.clone();
+                set_field(&mut item, "id", card.id.clone().into());
+                set_field(&mut item, "title", card.title.clone().into());
+                set_field(&mut item, "description", card.description.clone().into());
+                set_field(&mut item, "text", card.text.clone().into());
+                item
+            })
+            .collect()
+    }
+    pub(super) fn has_suggestions(&self) -> bool {
+        !self.suggestions.is_empty()
+    }
+    /// Keeps the reviewed cards; with none left the sub-headline has nothing to describe.
+    pub(super) fn retain(&mut self, kept: &std::collections::HashSet<String>) {
+        self.suggestions.retain(|card| kept.contains(&card.id));
+        if self.suggestions.is_empty() {
+            self.description.clear();
+        }
+    }
+}
+
 /// One suggested conversation starter.
 #[derive(Serialize)]
 struct Suggestion {
@@ -52,6 +79,8 @@ struct Suggestion {
     description: String,
     text: String,
     source_kind: &'static str,
+    #[serde(skip)]
+    notes: Value,
 }
 
 /// Where the briefing came from.
@@ -106,6 +135,12 @@ struct RawSuggestion {
     text: Option<String>,
     #[serde(deserialize_with = "lenient::option")]
     source_kind: Option<String>,
+    #[serde(deserialize_with = "lenient::option")]
+    lens: Option<String>,
+    evidence: Option<Value>,
+    related_existing: Option<Value>,
+    #[serde(deserialize_with = "lenient::option")]
+    what_is_new: Option<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -155,9 +190,6 @@ pub(super) fn from_model<'a>(
     let mut suggestions = suggestions(parsed.suggestions.unwrap_or_default(), scope);
     if let Some(project) = project {
         suggestions = without_excluded_topics(suggestions, &project.excluded_topics)?;
-    }
-    if suggestions.len() < 4 {
-        return Err(invalid("at least four valid suggestions"));
     }
     let locale = prompt::locale(input);
     let moment = optional_text(parsed.moment.as_deref())
@@ -252,6 +284,7 @@ fn suggestions(items: Vec<Option<RawSuggestion>>, scope: &str) -> Vec<Suggestion
         if !seen.insert(id.clone()) {
             continue;
         }
+        let notes = json!({"lens":item.lens,"evidence":item.evidence,"related_existing":item.related_existing,"what_is_new":item.what_is_new});
         let source_kind = item
             .source_kind
             .and_then(|kind| SOURCE_KINDS.iter().copied().find(|known| *known == kind))
@@ -266,6 +299,7 @@ fn suggestions(items: Vec<Option<RawSuggestion>>, scope: &str) -> Vec<Suggestion
             description,
             text,
             source_kind,
+            notes,
         });
         if out.len() == 6 {
             break;

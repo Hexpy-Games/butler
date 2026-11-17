@@ -446,6 +446,7 @@ pub(super) fn test_updates() -> Arc<butler_runtime::operations::AppUpdateService
             root.join("data"),
             root.join("installation"),
             Some("1.0.0".into()),
+            false,
         )
         .unwrap(),
     )

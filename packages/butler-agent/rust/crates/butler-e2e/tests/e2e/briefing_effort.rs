@@ -31,6 +31,9 @@ pub(super) fn briefing_task(request: &Value) -> bool {
 }
 
 pub(super) fn briefing(request: &Value) -> Option<ResponseRecord> {
+    if let Some(reply) = super::memory_patterns::review(request) {
+        return Some(reply);
+    }
     if !briefing_task(request) {
         return None;
     }
@@ -126,16 +129,10 @@ pub(super) fn general_briefing(data: &Path) -> Option<Value> {
 }
 
 #[tokio::test]
-async fn briefing_with_unlisted_effort_uses_the_model_default() -> Result<(), HarnessError> {
+async fn pattern_extraction_with_unlisted_effort_uses_the_model_default() -> Result<(), HarnessError>
+{
     butler_e2e::gate!();
-    let mut cassette = Cassette::load("TOOL-01")?;
-    cassette.exchanges.clear();
-    let mut s = Setup::new("BRIEFING-EFFORT")?
-        .stub_cassette(cassette)
-        .env("BUTLER_E2E_APP_NOW", NOW)
-        .start()
-        .await?;
-    s.provider()?.set_chat_responder(briefing);
+    let s = super::memory_patterns::setup("PATTERN-EFFORT").await?;
     let (model, omitted, default) = unlisted_effort(&s).await?;
     let model_ref = model["model_ref"].as_str().unwrap();
     // Settings keep the stored effort; only the runtime admits it per model.
@@ -146,18 +143,19 @@ async fn briefing_with_unlisted_effort_uses_the_model_default() -> Result<(), Ha
         )
         .await?;
     assert_eq!(reply.status, 200, "{}", reply.text);
-    next_daily_cycle(&mut s).await?;
-    let stored = general_briefing(&s.sandbox.data)
-        .unwrap_or_else(|| panic!("{model_ref} at unlisted {omitted} produced no briefing"));
-    assert_eq!(stored["source"]["model_ref"], model_ref, "{stored}");
-    assert_eq!(stored["source"]["reasoning_effort"], default, "{stored}");
+    super::memory_patterns::enable(&s).await?;
+    super::memory_patterns::seed(&s, 0, 8)?;
+    super::memory_patterns::run(&s).await?;
     let sent: Vec<Value> = s
         .provider()?
         .requests()
         .into_iter()
-        .filter(briefing_task)
+        .filter(|r| super::memory_patterns::task(r)["task"] == "pattern_extraction")
         .collect();
-    assert!(!sent.is_empty(), "no briefing request reached the provider");
+    assert!(
+        !sent.is_empty(),
+        "no pattern extraction request reached the provider"
+    );
     for request in &sent {
         assert_eq!(request["model"], model["model_id"], "{request}");
         assert_eq!(
@@ -167,7 +165,7 @@ async fn briefing_with_unlisted_effort_uses_the_model_default() -> Result<(), Ha
         );
     }
     eprintln!(
-        "BRIEFING-EFFORT model={model_ref} stored={omitted} sent={default} requests={}",
+        "PATTERN-EFFORT model={model_ref} stored={omitted} sent={default} requests={}",
         sent.len()
     );
     s.finish().await
@@ -203,4 +201,66 @@ async fn truncated_prompt_is_not_stored_as_briefing() -> Result<(), HarnessError
     s.finish().await?;
     server.abort();
     Ok(())
+}
+
+#[tokio::test]
+async fn review_keeps_fewer_than_four_cards() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut cassette = Cassette::load("TOOL-01")?;
+    cassette.exchanges.clear();
+    let setup = Setup::new("BRIEFING-REVIEW")?
+        .stub_cassette(cassette)
+        .env("BUTLER_E2E_APP_NOW", NOW);
+    butler_e2e::e2e::fixtures::onboarding_complete(&setup.sandbox.data)?;
+    let mut s = setup.start().await?;
+    s.provider()?.set_chat_responder(|request| {
+        let task = super::memory_patterns::task(request);
+        let content = match task["task"].as_str() {
+            Some("general_new_chat_briefing") => json!({"moment":"Today","title":"Welcome","description":"Topics",
+                "suggestions":(0..3).map(|n| json!({"id":format!("topic-{n}"),"title":format!("Topic {n}"),"description":"Why","text":"Discuss this","lens":"creativity"})).collect::<Vec<_>>(),
+                "title_variants":{"morning":"Welcome","afternoon":"Welcome","evening":"Welcome","night":"Welcome"}}),
+            Some("general_new_chat_briefing_review") => json!({"reviews":[{"id":"topic-0","keep":true,"reason":"r"},{"id":"topic-1","keep":false,"reason":"r"},{"id":"topic-2","keep":true,"reason":"r"}]}),
+            _ => return briefing(request).or_else(|| Some(title_response("Done."))),
+        };
+        Some(title_response(&content.to_string()))
+    });
+    let created = s.gw.post("/automations", json!({"title":"Morning report","prompt_body":"Summarize the news.","target_session_id":"general","interval_seconds":86400})).await?;
+    assert_eq!(created.status, 201, "{}", created.text);
+    next_daily_cycle(&mut s).await?;
+    let stored = general_briefing(&s.sandbox.data).expect("generated briefing");
+    let ids: Vec<_> = stored["suggestions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["id"].clone())
+        .collect();
+    assert_eq!(ids, [json!("topic-0"), json!("topic-2")]);
+    let view = s.gw.get("/new-chat-briefing").await?;
+    assert_eq!(
+        view.data()["source"]["content_origin"],
+        "generated",
+        "{}",
+        view.text
+    );
+    assert_eq!(view.data()["suggestions"].as_array().unwrap().len(), 2);
+    let tasks: Vec<Value> = s
+        .provider()?
+        .requests()
+        .iter()
+        .map(super::memory_patterns::task)
+        .collect();
+    let general = tasks
+        .iter()
+        .find(|t| t["task"] == "general_new_chat_briefing")
+        .unwrap();
+    assert_eq!(
+        general["context"]["schedules"][0]["title"],
+        "Morning report"
+    );
+    let review = tasks
+        .iter()
+        .find(|t| t["task"] == "general_new_chat_briefing_review")
+        .unwrap();
+    assert_eq!(review["candidates"].as_array().unwrap().len(), 3);
+    s.finish().await
 }

@@ -89,8 +89,10 @@ pub mod secure_fs;
 pub mod service_registration;
 pub mod shared_locks;
 pub mod sqlite;
+pub mod startup_task;
 pub mod stdio;
 pub mod storage_size;
+pub mod store_update;
 pub mod system_wake;
 pub mod time_zone;
 pub mod tool_paths;
@@ -101,6 +103,7 @@ pub mod user_dirs;
 mod process_table;
 
 pub mod hook_process;
+pub mod remote_ssh;
 
 pub mod preview_process;
 

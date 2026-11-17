@@ -4,7 +4,7 @@ import { appCopy } from "@/app/copy";
 import { refreshSessionFileUrls } from "@/app/messageFileRefresh";
 import { useButlerStore } from "@/app/store";
 import type { SessionArtifactSummary } from "@/app/types";
-import { ArtifactPreview, FolderOpen, Globe2, Library, Popup, RefreshCcw, Save } from "@/butler-ds";
+import { ArtifactPreview, Download, FolderOpen, Globe2, Library, Popup, RefreshCcw } from "@/butler-ds";
 import { ArtifactBody, revisionArtifact } from "../artifacts/ArtifactBody";
 import { ArtifactRevisionSelect } from "../artifacts/ArtifactViewer";
 import { artifactCardActions, canOpenInApp, openInApp } from "../artifacts/artifactActions";
@@ -15,7 +15,7 @@ import { clearFilters, setFilters } from "../library/libraryFilters";
 import { openLibrary } from "../library/libraryNav";
 import { FileViewerHeader, FileViewerPage, type FileViewerAction } from "./FileViewerFrame";
 
-interface FileViewerArtifactProps { sessionId: string; artifact: SessionArtifactSummary; onClose: () => void; onBack?: () => void }
+interface FileViewerArtifactProps { sessionId: string; artifact: SessionArtifactSummary; onClose?: () => void; onBack?: () => void }
 
 /** A stored file in the viewer: its header (version, 서랍, save, close) and its content, filling the pane. */
 export function FileViewerArtifact(props: FileViewerArtifactProps) {
@@ -71,7 +71,7 @@ function fileActions(latest: SessionArtifactSummary, artifact: SessionArtifactSu
   if (outsideLibrary && latest.deliverable) actions.push({ id: "open-in-library", label: c.openInLibrary, ariaLabel: `${c.openInLibrary}: ${latest.title}`,
     icon: <Library size="sm" />, labelIcon: true, run: () => openInLibrary(latest.title) });
   const save = artifactCardActions(artifact).find((action) => action.id === "save");
-  if (save) actions.push({ id: "save", label: c.save, ariaLabel: save.ariaLabel, icon: <Save size="sm" />,
+  if (save) actions.push({ id: "save", label: c.save, ariaLabel: save.ariaLabel, icon: <Download size="sm" />,
     run: save.onClick ?? (() => download(save.href!, save.download)) });
   const fileId = artifact.file_id;
   if (fileId && typeof window !== "undefined" && typeof window.butlerApp?.openMessageFile === "function") {

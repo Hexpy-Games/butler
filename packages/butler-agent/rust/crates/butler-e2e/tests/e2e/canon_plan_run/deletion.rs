@@ -12,6 +12,7 @@ async fn session_delete_removes_queue_and_bindings() -> Result<(), HarnessError>
         std::time::Duration::from_secs(60),
     )
     .await?;
+    crate::canon_link::wait_label(&s, &first, "in_review").await?;
     let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
     let links: i64 = db.query_row("SELECT count(*) FROM canon_epic_work_links", [], |r| {
         r.get(0)

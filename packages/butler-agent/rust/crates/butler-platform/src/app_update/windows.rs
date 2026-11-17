@@ -15,6 +15,12 @@ pub(super) fn install(
     parent: u32,
     arguments: &[OsString],
 ) -> Result<(), String> {
+    if artifact
+        .file_name()
+        .is_some_and(|name| name.to_string_lossy().ends_with(".store-update"))
+    {
+        return activate_store(parent, arguments);
+    }
     if std::env::var("BUTLER_APP_DISABLE_SHELL_REGISTRATION").as_deref() == Ok("1") {
         return Err("Squirrel updates require shell registration.".into());
     }
@@ -128,4 +134,20 @@ fn quote_argument(value: &str) -> String {
     output.push_str(&"\\".repeat(slashes * 2));
     output.push('"');
     output
+}
+
+/// Windows may close this helper too while replacing the package; relaunch is
+/// then up to Windows (unverified until the first Store submission).
+fn activate_store(parent: u32, _arguments: &[OsString]) -> Result<(), String> {
+    let aumid = crate::store_update::app_user_model_id().map_err(|error| format!("{error:?}"))?;
+    println!("app-update-ready");
+    super::await_activation()?;
+    super::wait_for_parent(parent)?;
+    match crate::store_update::install() {
+        Err(crate::store_update::StoreUpdateError::NotSilent) => {
+            let _ = crate::store_update::open_updates_page();
+        }
+        result => result.map_err(|error| format!("{error:?}"))?,
+    }
+    super::run(Command::new("explorer.exe").arg(format!("shell:AppsFolder\\{aumid}")))
 }
