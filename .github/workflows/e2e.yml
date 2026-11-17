@@ -187,15 +187,15 @@ jobs:
 
       # The harness keeps the last failed sandboxes (agent logs, btcc.sqlite).
       - name: Upload live E2E failures and report
-        if: failure() && env.RUNNER_JOB_ROOT != ''
+        if: failure() && env.TEMP != ''
         uses: actions/upload-artifact@v4
         with:
           name: e2e-live-failures-${{ github.run_attempt }}
           path: |
             ${{ env.RUNNER_JOB_ROOT }}/e2e-live-report.txt
-            ${{ env.RUNNER_JOB_ROOT }}/tmp/butler-e2e/failures
-            !${{ env.RUNNER_JOB_ROOT }}/tmp/butler-e2e/failures/**/install
-            !${{ env.RUNNER_JOB_ROOT }}/tmp/butler-e2e/failures/**/cache/models
+            ${{ env.TEMP }}/butler-e2e/failures
+            !${{ env.TEMP }}/butler-e2e/failures/**/install
+            !${{ env.TEMP }}/butler-e2e/failures/**/cache/models
           if-no-files-found: ignore
           retention-days: 14
 
