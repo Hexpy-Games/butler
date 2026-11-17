@@ -152,8 +152,9 @@ impl MessageRow {
         self
     }
 
-    /// Inside a `MessageTurnGroup`: its gap replaces the row's bottom padding.
-    pub(super) fn grouped(mut self) -> Self {
+    /// Inside a `MessageTurnGroup` (a `--space-lg` stack of rows): the stack's gap replaces the
+    /// row's bottom padding.
+    pub fn grouped(mut self) -> Self {
         self.grouped = true;
         self
     }

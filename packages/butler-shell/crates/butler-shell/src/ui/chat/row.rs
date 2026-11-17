@@ -33,12 +33,32 @@ pub(crate) fn message_row(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
+    message_row_in(msg, t, false, window, cx)
+}
+
+/// `message_row` as a row of a `MessageTurnGroup`: the group's gap replaces its bottom padding.
+pub(crate) fn grouped_message_row(
+    msg: &Arc<MessageRecord>,
+    t: &TranscriptCtx,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    message_row_in(msg, t, true, window, cx)
+}
+
+fn message_row_in(
+    msg: &Arc<MessageRecord>,
+    t: &TranscriptCtx,
+    grouped: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
     if let Some(question) = &msg.question_answer
         && let UserQuestionResponse::Answered { answers } = &question.response
     {
         return question_card(msg, question, answers, cx);
     }
-    virtual_message_row(msg, t, window, cx)
+    virtual_message_row(msg, t, grouped, window, cx)
 }
 
 /// `MessageItem`: an answered question is its own user-side card.
@@ -204,6 +224,7 @@ fn row_role(role: &MessageRecordRole) -> Role {
 fn virtual_message_row(
     msg: &Arc<MessageRecord>,
     t: &TranscriptCtx,
+    grouped: bool,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -217,6 +238,9 @@ fn virtual_message_row(
         .selection(selection.clone())
         .tone(message_tone(msg))
         .entering(entering(msg, t));
+    if grouped {
+        row = row.grouped();
+    }
     if msg.role == MessageRecordRole::Assistant && msg.chat_id.as_deref() == Some("general") {
         row = row.bubble();
     }
