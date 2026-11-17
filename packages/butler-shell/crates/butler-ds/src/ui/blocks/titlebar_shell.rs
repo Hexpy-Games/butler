@@ -5,9 +5,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, WindowControlArea, div, px,
-    relative,
+    AnyElement, App, ClickEvent, Div, ElementId, IntoElement, ParentElement as _, RenderOnce,
+    SharedString, Styled as _, Window, div, px, relative,
 };
 
 use super::scope::{self, ActionScale, ShellVars, Spec};
@@ -17,6 +16,7 @@ use crate::ui::blocks::adaptive_shell::frame::clamp_chat_width;
 use crate::ui::context::Ds;
 use crate::ui::icon_button::IconButton;
 use crate::ui::typo::{Role, Typo};
+use crate::ui::window_drag;
 
 type BackHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -241,12 +241,14 @@ fn actions(content: AnyElement, scale: ActionScale) -> AnyElement {
             action: Some(scale),
             ..Spec::default()
         },
-        div()
-            .flex_none()
-            .flex()
-            .items_center()
-            .self_center()
-            .child(content),
+        window_drag::no_drag(
+            div()
+                .flex_none()
+                .flex()
+                .items_center()
+                .self_center()
+                .child(content),
+        ),
     )
     .into_any_element()
 }
@@ -312,7 +314,7 @@ fn leading(bar: &mut TitlebarShell, m: &Metrics, ds: &Ds) -> Option<AnyElement> 
     if bar.leading_visibility == LeadingVisibility::Narrow && !m.compact {
         return None;
     }
-    let slot = div().flex().flex_none().items_center().justify_center();
+    let slot = window_drag::no_drag(div().flex().flex_none().items_center().justify_center());
     Some(
         match (bar.leading_size, bar.leading_visibility, m.compact) {
             (LeadingSize::Auto, _, _) => slot
@@ -341,11 +343,13 @@ fn identity(bar: &mut TitlebarShell, m: &Metrics, ds: &Ds) -> Div {
         let button = IconButton::new((bar.id.clone(), "back"), label)
             .glyph(Icon::ArrowLeft)
             .on_click(move |event, window, cx| on_back(event, window, cx));
-        div()
-            .flex()
-            .flex_none()
-            .ml(-ds.len(Length::SpaceXs))
-            .child(button)
+        window_drag::no_drag(
+            div()
+                .flex()
+                .flex_none()
+                .ml(-ds.len(Length::SpaceXs))
+                .child(button),
+        )
     });
     div()
         .flex()
@@ -438,7 +442,7 @@ impl RenderOnce for TitlebarShell {
             .children(trailing)
             .children(controls);
         if self.drag_region {
-            bar = bar.window_control_area(WindowControlArea::Drag);
+            bar = window_drag::area(bar);
         }
         bar
     }

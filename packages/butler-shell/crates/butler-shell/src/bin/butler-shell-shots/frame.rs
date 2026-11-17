@@ -256,6 +256,77 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
     pointer_sequence(h, handle, start, end, button, command == "drag")
 }
 
+/// `titlebar-grid <step>`: a left press every `<step>` px over the title bar (the release lands
+/// below the bar; a dropdown trigger still toggles on press), and whether the press reached
+/// the window drag (propagated) or a control took it. Written to `titlebar-grid.json` with the
+/// bounds of the controls in the bar.
+pub(super) fn titlebar_grid(
+    h: &mut Harness,
+    dir: &std::path::Path,
+    arg: &str,
+) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let step: f32 = arg.parse()?;
+    let bar =
+        h.cx.debug_bounds(h.handle, "titlebar")?
+            .context("no titlebar")?;
+    let release = point(bar.left(), bar.bottom() + px(step));
+    let (mut drag, mut control) = (Vec::new(), Vec::new());
+    let mut y = bar.top() + px(step / 2.);
+    while y < bar.bottom() {
+        let mut x = bar.left() + px(step / 2.);
+        while x < bar.right() {
+            let position = point(x, y);
+            let press = PlatformInput::MouseDown(MouseDownEvent {
+                button: MouseButton::Left,
+                position,
+                modifiers: Default::default(),
+                click_count: 1,
+                first_mouse: false,
+            });
+            let up = PlatformInput::MouseUp(MouseUpEvent {
+                button: MouseButton::Left,
+                position: release,
+                modifiers: Default::default(),
+                click_count: 1,
+            });
+            let propagated = h.cx.update_window(h.handle, |_, w, cx| {
+                let propagated = w.dispatch_event(press, cx).propagate;
+                w.dispatch_event(up, cx);
+                propagated
+            })?;
+            let at = [f32::from(x), f32::from(y)];
+            if propagated { &mut drag } else { &mut control }.push(at);
+            x += px(step);
+        }
+        y += px(step);
+    }
+    let mut bounds = serde_json::Map::new();
+    for name in [
+        "sidebar-toggle",
+        "session-menu-trigger",
+        "session-info-toggle",
+        "titlebar-browser-toggle",
+        "titlebar-file-viewer-toggle",
+        "wc-min",
+        "wc-max",
+        "wc-close",
+    ] {
+        if let Some(b) = h.cx.debug_bounds(h.handle, name)? {
+            let edges = [b.left(), b.top(), b.right(), b.bottom()].map(f32::from);
+            bounds.insert(name.into(), serde_json::json!(edges));
+        }
+    }
+    println!(
+        "titlebar-grid: {} drag, {} control",
+        drag.len(),
+        control.len()
+    );
+    let report = serde_json::json!({ "drag": drag, "control": control, "controls": bounds });
+    std::fs::write(dir.join("titlebar-grid.json"), serde_json::to_vec(&report)?)?;
+    Ok(())
+}
+
 fn pointer_button(button: Option<&str>) -> anyhow::Result<MouseButton> {
     match button.unwrap_or("left") {
         "left" => Ok(MouseButton::Left),

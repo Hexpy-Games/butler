@@ -35,14 +35,28 @@ use crate::ui::Icon;
 /// `lifecycle-assets/copy.json` slow hint: shown once the quit has run this long.
 const SLOW_AFTER: Duration = Duration::from_secs(4);
 
+/// The top band that moves the window: these pages have no title bar of their own.
+fn drag_lane(ds: &Ds) -> gpui::Div {
+    butler_ds::ui::window_drag::area(
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .h(ds.len(Length::TitlebarHeight)),
+    )
+}
+
 /// The window-filling page the boot and quit cards sit on, centred: a flex column, since the
 /// card's `fill` grows only inside one.
 fn page(content: impl gpui::IntoElement, cx: &App) -> AnyElement {
+    let ds = Ds::get(cx);
     div()
         .size_full()
         .flex()
         .flex_col()
-        .bg(Ds::get(cx).color(Color::Background))
+        .bg(ds.color(Color::Background))
+        .child(drag_lane(ds))
         .child(
             Stack::new()
                 .fill()

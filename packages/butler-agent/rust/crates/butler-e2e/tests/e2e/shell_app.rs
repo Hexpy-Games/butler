@@ -32,6 +32,7 @@ mod composer_toolbar;
 mod focus_fallback;
 mod text_selection;
 mod text_size;
+mod titlebar_drag;
 
 /// The gateway of the Agent the App started, with the token it created.
 /// Registers a local fake model answering with `behavior` and makes it the default model.
