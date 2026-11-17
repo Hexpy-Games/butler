@@ -74,11 +74,17 @@ try {
   await modelTrigger.click();
   await page.getByRole("option", { name: "Model default Follows the target chat's model.", exact: true }).click();
   assert(await modelTrigger.locator('[data-slot="select-value-label"]').innerText() === "Model default", "an explicit model can return to default");
+  const savedToast = page.locator('[data-sonner-toast][data-type="success"]').filter({ hasText: "Schedule saved" });
+  await savedToast.waitFor({ state: "hidden" });
+  await page.getByRole("switch", { name: "Use sign-in info", exact: true }).click();
   const cleared = page.waitForResponse((response) => response.request().method() === "PATCH" && response.url().includes("/automations/"));
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const clearResponse = await cleared;
   assert(clearResponse.request().postDataJSON().model === "", "save sends the cleared override");
   assert(clearResponse.ok(), "clearing the model succeeds");
+  await savedToast.waitFor();
+  const signin = await server.api<{ automation: { browser_signin: boolean } }>(`/automations/${data.automations[0]!.id}`);
+  assert(signin.automation.browser_signin === true, "saving keeps the sign-in switch");
   await page.getByRole("button", { name: "Back to schedules", exact: true }).click();
   await page.getByText("Daily eight", { exact: true }).click();
   await modelTrigger.getByText("Model default", { exact: true }).waitFor();

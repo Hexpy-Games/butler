@@ -1625,40 +1625,18 @@ const butlerApp = Object.freeze({
     return requestJson(query ? `/automations?${query}` : "/automations");
   },
   getAutomation: ({ automationId }) => requestJson(`/automations/${encodeURIComponent(automationId)}`),
-  // Schedule saves return the bridge envelope so a refused save keeps its
-  // code and status (the form shows 400s inline). An omitted accessMode lets
-  // the gateway use the target conversation's current mode.
-  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds, accessMode, model, schedule, scheduleType, runAt, startAt }) => requestBridgeResult("/automations", {
+  // Schedule saves carry the renderer's request body unchanged and return the
+  // bridge envelope so a refused save keeps its code and status (the form shows
+  // 400s inline). An omitted access_mode lets the gateway use the target
+  // conversation's current mode.
+  createAutomation: (body) => requestBridgeResult("/automations", {
     method: "POST",
-    body: JSON.stringify({
-      title,
-      prompt_body: promptBody,
-      target_session_id: targetSessionId,
-      interval_seconds: intervalSeconds,
-      access_mode: accessMode,
-      model,
-      schedule,
-      schedule_type: scheduleType,
-      run_at: runAt,
-      start_at: startAt,
-    }),
+    body: JSON.stringify(body),
   }),
-  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state, accessMode, model, schedule, scheduleType, runAt, startAt }) =>
+  updateAutomation: ({ automationId, ...body }) =>
     requestBridgeResult(`/automations/${encodeURIComponent(automationId)}`, {
       method: "PATCH",
-      body: JSON.stringify({
-        title,
-        prompt_body: promptBody,
-        target_session_id: targetSessionId,
-        interval_seconds: intervalSeconds,
-        state,
-        access_mode: accessMode,
-        model,
-        schedule,
-        schedule_type: scheduleType,
-        run_at: runAt,
-        start_at: startAt,
-      }),
+      body: JSON.stringify(body),
     }),
   deleteAutomation: ({ automationId }) => requestJson(`/automations/${encodeURIComponent(automationId)}`, {
     method: "DELETE",

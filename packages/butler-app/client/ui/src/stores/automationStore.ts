@@ -4,7 +4,7 @@ import { appCopy } from "@/app/copy.ts";
 import type { FormEvent } from "react";
 import { create } from "zustand";
 import { api } from "@/app/api.ts";
-import { notifyError } from "@/app/notifications.ts";
+import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import type {
   CalendarSchedule,
   AccessMode,
@@ -231,7 +231,7 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
       }
       await onSaved();
       if (isNew) void hintScheduleLogin();
-      onStatus({ label: appCopy.automations.saved, tone: "ok" });
+      notifyStatus(appCopy.automations.saved, { tone: "ok", id: `automation-save-${automationId}` });
     } catch (error) {
       // A refused field is shown on that field; anything else stays a toast.
       const saveError = automationSaveError(error);
