@@ -82,6 +82,6 @@ pub(in crate::gateway::http) async fn connect_request(
     Ok(response)
 }
 
-fn invalid_code() -> HttpError {
+pub(super) fn invalid_code() -> HttpError {
     HttpError::public(401, "invalid_connection_code", "That code is not valid.")
 }

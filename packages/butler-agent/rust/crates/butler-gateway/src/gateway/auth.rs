@@ -59,7 +59,7 @@ pub(super) fn bearer_matches(headers: &HeaderMap, expected: &str) -> bool {
         .is_some_and(|candidate| constant_time_eq(candidate.as_bytes(), expected.as_bytes()))
 }
 
-fn bearer_token(value: &str) -> Option<&str> {
+pub(super) fn bearer_token(value: &str) -> Option<&str> {
     let separator = value.find(char::is_whitespace)?;
     let (scheme, remainder) = value.split_at(separator);
     if !scheme.eq_ignore_ascii_case("bearer") {
