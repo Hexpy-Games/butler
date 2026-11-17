@@ -9,6 +9,7 @@ use serde_json::{Map, Value, json};
 
 use butler_core::json::JsonDocument;
 use butler_core::tool_protocol::ToolName;
+use butler_runtime::context::{DocumentTextError, document_text};
 use butler_turn::btcc::{ApprovalExemptAction, ModelRoundToolCall, ToolExecutionError};
 
 use super::GuidedTools;
@@ -77,7 +78,8 @@ async fn search(owner: &GuidedTools, args: &Map<String, Value>) -> Value {
 }
 
 /// One 서랍 item's text by its id: a document through the verified file
-/// reader, an output's latest entry file, or a scrap's saved text.
+/// reader, an output's latest entry file, or a scrap's saved text; PDF and
+/// Office files as their text.
 async fn read(owner: &GuidedTools, id: &str, cursor: Option<&str>) -> Value {
     let item = match call(owner, Method::GET, &format!("/library/{id}"), &[], None).await {
         Ok(item) => item,
@@ -119,11 +121,18 @@ async fn read(owner: &GuidedTools, id: &str, cursor: Option<&str>) -> Value {
         Some("scrap") => item["text"].as_str().map(|text| text.as_bytes().to_vec()),
         _ => None,
     };
-    let Some(text) = bytes.and_then(|bytes| String::from_utf8(bytes).ok()) else {
+    let Some(bytes) = bytes else {
         return failure(
             "library_unreadable",
             "This item has no text to read: a doc opens with document_read, a picture by its img id.",
         );
+    };
+    let text = match tokio::task::spawn_blocking(move || document_text(bytes))
+        .await
+        .unwrap_or(Err(DocumentTextError::Damaged))
+    {
+        Ok(text) => text,
+        Err(error) => return failure("library_unreadable", &error.to_string()),
     };
     let start = cursor.and_then(|c| c.parse::<usize>().ok()).unwrap_or(0);
     if start > text.len() || !text.is_char_boundary(start) {

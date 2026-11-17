@@ -273,6 +273,7 @@ async function assertVideoDeferred(browser: Browser, server: NativeAppServerHand
     await openSession(page, name);
     const others = fixtures.filter((file) => !file.mimeType.startsWith("video/"));
     const files = [...others, ...others.map((file) => ({ ...file, name: `2-${file.name}` })), fixtures.find((file) => file.mimeType.startsWith("video/"))!];
+    await page.waitForFunction(() => document.querySelector('[data-test-class~="composer-card"]')?.textContent?.includes("Stub") ?? false);
     await page.setInputFiles("input[type='file']", files.map(({ name: fileName, mimeType, buffer }) => ({ name: fileName, mimeType, buffer })));
     const row = '[data-test-class~="composer-card"] [data-layout="row"]';
     await page.waitForFunction((selector) => document.querySelectorAll(`${selector} [data-slot="attachment-tile"]`).length === 11, row);

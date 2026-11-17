@@ -1,4 +1,5 @@
 pub(crate) mod cli;
+pub(crate) mod device_token;
 pub(crate) mod helpers;
 pub(crate) mod https;
 pub(crate) mod idle;

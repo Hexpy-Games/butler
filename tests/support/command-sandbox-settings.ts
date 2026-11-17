@@ -34,12 +34,24 @@ export async function commandSandboxSettings(page: Page, server: NativeAppServer
   await toggle.waitFor();
   assert.equal(await toggle.isDisabled(), true);
   assert.equal(await toggle.isChecked(), false, "unavailable containment never displays as enabled");
+  // Hover only once the field stops moving, so the reason opens at the field's final place.
+  const field = page.locator('[data-setting-id="command-sandbox"]');
+  await page.evaluate(() => document.fonts.ready);
+  await field.evaluate((node) => new Promise<void>((done) => {
+    let last = "";
+    const frame = () => {
+      const { x, y, width, height } = node.getBoundingClientRect();
+      const now = `${x},${y},${width},${height}`;
+      if (now === last) done();
+      else { last = now; requestAnimationFrame(frame); }
+    };
+    requestAnimationFrame(frame);
+  }));
   await toggle.hover();
   const tooltip = page.getByRole("tooltip", { name: copy.settings.descriptions.commandSandboxUnavailable, exact: true });
   await tooltip.waitFor();
   await tooltip.evaluate((node) => Promise.all(node.getAnimations().map((animation) => animation.finished)));
   // The reason opens beside the switch: it covers neither the label nor the description and stays on screen.
-  const field = page.locator('[data-setting-id="command-sandbox"]');
   const [tip, label, description] = await Promise.all([
     tooltip.boundingBox(),
     field.locator("label").first().boundingBox(),

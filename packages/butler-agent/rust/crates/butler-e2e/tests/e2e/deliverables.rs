@@ -6,6 +6,7 @@
     reason = "test assertions"
 )]
 pub(super) mod delegation;
+mod drawer_formats;
 mod handoff;
 mod handoff_lifetime;
 mod migration;

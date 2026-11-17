@@ -1,5 +1,5 @@
-//! Browser-reached URL provenance survives host loss: the next round offers
-//! web_read, while composed URLs still need the exact outside-content approval.
+//! Browser-reached URL provenance survives host loss: reached pages are found
+//! exactly but lend no trust; a search-result site is trusted, an opened one is not.
 use super::stub::{self, call};
 use super::{approve, assert_counts, delivered, paused};
 use butler_e2e::e2e::{
@@ -20,6 +20,8 @@ const NAVIGATED: &str =
     "https://seller.example.co.kr/shop/product_detail.html?pd_no=165236&service_id=pcdn";
 const LATER: &str = "https://seller.example.co.kr/shop/cart.html";
 const COMPOSED: &str = "https://collector.example/report?note=external-note";
+const BARE: &str = "https://collector.example/";
+const RESULT_SITE: &str = "https://example.com/butler-web-search?lang=ko";
 
 #[tokio::test]
 async fn browser_host_loss_restores_reader_with_reached_url_provenance() -> Result<(), HarnessError>
@@ -59,6 +61,7 @@ async fn browser_host_loss_restores_reader_with_reached_url_provenance() -> Resu
         PROMPT.into(),
         vec![
             call("open", "browser_open", &json!({"url":SHOP})),
+            call("bare", "browser_open", &json!({"url":BARE})),
             call(
                 "click",
                 "browser_act",
@@ -72,6 +75,7 @@ async fn browser_host_loss_restores_reader_with_reached_url_provenance() -> Resu
                 "web_search",
                 &json!({"query":"RTX 5060 Ti 16GB 가격 비교 다나와 최저가 판매처"}),
             ),
+            read("result_site", RESULT_SITE),
             read("composed", COMPOSED),
             read("again", BRIDGE),
             read("edited", &edited),
@@ -108,6 +112,8 @@ async fn browser_host_loss_restores_reader_with_reached_url_provenance() -> Resu
     );
     let inputs = requests.last().unwrap()["input"].clone();
     for (id, asked) in [
+        ("bare", false),
+        ("result_site", false),
         ("popup", false),
         ("blocked", false),
         ("navigated", false),

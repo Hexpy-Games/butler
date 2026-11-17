@@ -31,7 +31,7 @@ mod published_event;
 mod rate_limit;
 mod remote_computers;
 mod security_settings;
-pub use devices::{GatewayDevices, PairedDevice};
+pub use devices::{DeviceKind, GatewayDevices, PairedDevice};
 mod server;
 mod session_references;
 mod shutdown_trace;
