@@ -170,18 +170,23 @@ impl RenderOnce for WorkActivityBlock {
             .min_h(line)
             .child(lead)
             .child(heading);
+        // One line per `\n`, a `--space-xs` apart (`<Stack gap="xs">` of lines).
         let description = self.description.map(|text| {
-            let typo = if self.compact {
-                Typo::caption(text)
-            } else {
-                Typo::body(text)
-            };
-            div().text_color(Look::muted(ds)).child(
+            let lines = text.split('\n').map(|line| {
+                let line = SharedString::from(line.to_owned());
+                let typo = if self.compact {
+                    Typo::caption(line)
+                } else {
+                    Typo::body(line)
+                };
                 typo.selectable(Break::Line)
                     .tone(Tone::Inherit)
                     .weight(Weight::Regular)
-                    .wrap(Wrap::Anywhere),
-            )
+                    .wrap(Wrap::Anywhere)
+            });
+            div()
+                .text_color(Look::muted(ds))
+                .child(Stack::new().gap(Space::Xs).children(lines))
         });
         let tools = (!self.tools.is_empty()).then(|| {
             let group = tools::group(&self.id, self.tools, look, window, cx);
