@@ -336,8 +336,8 @@ impl Downloads {
         .map_err(|_| "download_workspace_unavailable")?;
         let directory = root.join(butler_platform::data_paths::DOWNLOADS);
         std::fs::create_dir_all(&directory).map_err(|_| "download_workspace_unavailable")?;
-        let resolved =
-            butler_platform::secure_fs::canonicalize(&directory).map_err(|e| e.to_string())?;
+        let resolved = butler_platform::secure_fs::canonicalize(&directory)
+            .map_err(|_| "download_workspace_unavailable")?;
         if !butler_platform::secure_fs::same_path(&resolved, &directory) {
             return Err("download_workspace_unavailable".into());
         }
