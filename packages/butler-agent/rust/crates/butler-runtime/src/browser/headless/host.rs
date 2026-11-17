@@ -23,15 +23,26 @@ pub trait PageHost: Send + Sync {
 }
 
 /// Asks the App for a page: (target, session). The session is the tab id; the
-/// target is the page's real CDP target id.
+/// target is the page's real CDP target id. The App decides the page's popups
+/// before they open, by the lists `popup_allowed` reads from `policy`.
 pub(super) async fn open_hosted(
     host: &Arc<dyn PageHost>,
     owner: &str,
     profile: &str,
     context: &str,
     internal: bool,
+    policy: &Value,
 ) -> Result<(String, String), String> {
-    let args = json!({"owner":owner,"profile":profile,"context":context,"internal":internal});
+    let list = |key: &str| -> Vec<&str> {
+        policy[key]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect()
+    };
+    let popups = json!({"sites":list("popup_sites"),"hosts":list("popup_hosts")});
+    let args = json!({"owner":owner,"profile":profile,"context":context,"internal":internal,"popups":popups});
     let reply = host.call("page.open", args).await;
     let reply = reply.map_err(|_| "browser_unavailable".to_owned())?;
     match (
