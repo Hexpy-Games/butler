@@ -69,6 +69,7 @@ try {
     return result?.ok === true ? result.data : result;
   }, { method, input });
   await bridge("updateSettings", { onboarding: { consent_version: 2, accepted_at: now, completed_at: now }, model: "openai/gpt-6-luna", language: "ko", access_mode: "ask_first" });
+  await bridge("declineButlerVault");
   const { session } = await bridge("createSession", { kind: "chat", title: "Permission smoke" });
   await page.reload();
   await page.locator('[data-slot="composer-compact-preview"]').waitFor();
