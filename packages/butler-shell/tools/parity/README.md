@@ -191,3 +191,41 @@ Interactive states, all through the live harness:
 - ImageViewer: `click 0` opens the modal; `key right`, `key left`, `key +`, `key -`, `key 0` and `key escape` drive it;
   `dragto` pans a zoomed picture; the surface names `iv-modal-surface`, `iv-first-stage` and the like as anchors.
 - Attachments: `hover @tile-<id>` shows a tile's remove dot (its id is the item id).
+
+### Per-control layout diff
+
+Finds every box difference between the React DS Viewer and the native pages at once, down to the controls
+inside each story (no screenshots). Both sides record, per story, the canvas box (`canvas`) and its controls
+(`control-<n>`, counted again from 0 in each story), in logical px relative to the canvas.
+The native `control-<n>` is the control numbering of `butler_ds::ui::control::parts`; a control belongs to the
+story whose canvas contains its centre, and the web side applies the same rule over the whole document
+(controls in no canvas are dropped). Light, ko, 1280x800, scale 2, reduced motion; run both sides on the same Mac.
+
+```sh
+bun packages/butler-shell/tools/parity/ds-layout.ts --site $TMPDIR/ds-site --out $TMPDIR/ds-layout
+butler-ds-view --shots $TMPDIR/ds-layout/gpui/1280x800-light --parts --scale 2 --size 1280x800 \
+  --canvas-width <canvas-width> --full
+bun packages/butler-shell/tools/parity/ds-layout-diff.ts --web $TMPDIR/ds-layout/react/1280x800-light \
+  --gpui $TMPDIR/ds-layout/gpui/1280x800-light > $TMPDIR/ds-layout/diff.txt
+```
+
+`diff.txt` holds one JSON line per matched part (`dx dy dw dh` are gpui minus web), a summary line per story,
+the totals line and two tables: (A) stories whose canvas is off by more than 0.5 px, largest first, and
+(B) stories with equal control counts whose controls are off by more than 0.5 px (first offending control).
+A story whose web and gpui control counts differ prints one `count-mismatch` line and no control rows.
+
+Scrollers are recorded too: every web element with computed `overflow-y` auto or scroll (key `slot:<data-slot>#<n>`,
+`data-test-class` when it has no data-slot, `scroll:<n>` otherwise; its parent is `slot:<name>:frame#<n>`; also
+`client_h` and `scroll_h`) and, natively, the elements that publish `butler_ds::ui::control::slot_anchor` (the list `SCROLLERS` in
+`shots.rs`: `sidebar-scroll`, `conversation-aside-scroll`, `management-page-aside-scroll`, `scroll-area`; a single instance may be named plain, `slot:<name>`), both assigned to stories by canvas
+containment. The diff adds one row per scroller pair, `{web:{h, frame_h, max_offset}, gpui:{h, frame_h}, dh, frame_dh, web_flag, gpui_flag}` (`dh`, `frame_dh`: gpui minus web),
+where the flag is `scroller>frame` when the scroller is taller than its frame (it grows with its content and the frame only
+clips it: no scrolling), `scroller<frame` when it is shorter, and `=` within 0.5 px, a table (C) with the mismatched flags first, and scroller counts in the totals
+(`matched`, `web_only`, `gpui_only`, `flag_mismatch`, `dh_over_tolerance`). Run only the pages with scrollers by adding `--pages sidebar-shell,conversation-shell,scroll-area`
+to `butler-ds-view` and `--only sidebar-shell,conversation-shell,scroll-area` to `ds-layout.ts`.
+
+### Known differences
+
+- page-card "No tab (empty)" dy +37 and "Crashed tab" dy +23: web-side difference. The web `Stack fill` sits in a block `.frame` (NativeViewSlot) and neither fills nor centres; gpui's centred result is intended. Not counted as a gpui bug.
+- page-card "Butler holds the tab (riso edge, fixed 1280×800 page)" control-0 dx +265, "You hold the tab" +212, "Waiting for approval (static amber)" +72.5: web-side difference. The web PageBand declares `container-type: inline-size`, so in these stories the fixed-page card collapses to ~22 px inside the shrink-wrapping story stage (page hidden, band text 0 wide); gpui keeps a usable card. Not counted as a gpui bug.
+- Follow-up (not done): composer-question-panel puts the Tabs gap token above a body that sits outside Tabs, because gpui Tabs has no list-inset slot; the web structure (list inset inside `<Tabs>`, body as TabsContent with its tab stop and focus ring) would need a new Tabs prop. Raise only if a keyboard or focus difference shows up.
