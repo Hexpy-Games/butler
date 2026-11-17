@@ -40,8 +40,9 @@ async fn first_recall_after_restart_history_is_complete() -> Result<(), HarnessE
     if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
         assert!(workers.is_empty(), "startup spawned an embedding worker");
     }
+    let loaded = batch::reply_after_load(&s, ASK)?;
     let started = Instant::now();
-    let first = batch::recall(&s, "general", ASK).await?;
+    let (first, ()) = tokio::try_join!(batch::recall(&s, "general", ASK), loaded)?;
     let turn_ms = started.elapsed().as_millis();
     let tool_ms = recall_tool_ms(&s.sandbox.data);
     // Emit evidence before assertions so a baseline failure retains its timings.

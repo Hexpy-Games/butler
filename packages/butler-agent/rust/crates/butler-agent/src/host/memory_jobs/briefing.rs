@@ -24,6 +24,7 @@ use butler_memory::cognition::BriefingGenerationCode;
 
 pub(in crate::host) struct BriefingGeneration {
     generator: BriefingGenerationService,
+    context: Arc<super::suggestion_context::SuggestionContextBuilder>,
 }
 
 struct BriefingSource {
@@ -71,10 +72,16 @@ impl BriefingGeneration {
             profile,
             ledger,
             date_parser,
-            context,
+            context: context.clone(),
         });
         let generator = BriefingGenerationService::new(data_root, coordinator, provider, source);
-        Self { generator }
+        Self { generator, context }
+    }
+
+    pub(in crate::host) fn suggestions(
+        &self,
+    ) -> Arc<super::suggestion_context::SuggestionContextBuilder> {
+        self.context.clone()
     }
 
     pub(in crate::host) async fn generate(

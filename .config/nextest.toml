@@ -1,15 +1,18 @@
 [profile.default]
 slow-timeout = { period = "60s", terminate-after = 3 }
 
-# Each test loads its own bge-m3 worker. Concurrent loads of both starved the
-# other's 750 ms vector search on CI runners (#1493); one agent never loads
-# two, and alone each search stays far below its window.
+# Every E2E that installs the bge-m3 model (fixtures::embedding_assets) loads
+# its own ~1.1 GB worker. Concurrent loads starve each other past recall's
+# fixed vector deadline on CI runners (#1493, #2124), so these tests run one
+# at a time. A new test that installs the model belongs in this group.
 [test-groups]
 bge-m3 = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = 'binary(=e2e) and (test(=memory_wiring_more::wiring_more_correction_supersedes_previous_rule_in_next_prompt) or test(=memory_wiring_more::forget::rules_forget_and_correction_preserve_other_bindings_after_restart))'
+filter = 'binary(=e2e) and (test(/^memory::(cold_recall|batch|compact|hook_context|reset_vectors|recall_judge)::/) or test(=memory::mem_01_chat_memory_source_survives_restart) or test(=memory_existing::existing_generation_metadata_survives_native_writes_and_recall) or test(=access::acc_02_memory_save_proceeds_without_approval_in_ask_first) or test(=memory_wiring_more::wiring_more_correction_supersedes_previous_rule_in_next_prompt) or test(=memory_wiring_more::forget::rules_forget_and_correction_preserve_other_bindings_after_restart))'
 test-group = 'bge-m3'
+# The serial chain starts first so it overlaps the rest of the shard.
+priority = 10
 
 [[profile.default.overrides]]
 filter = 'test(/(^|::)ins_/)'

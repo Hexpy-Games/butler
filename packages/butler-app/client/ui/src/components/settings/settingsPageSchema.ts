@@ -115,6 +115,10 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
     { id: "purchase-sites", kind: "form", fields: [] },
     { id: "browser-import", kind: "form", fields: ["browser-import-data"] },
   ],
+  account: [
+    { id: "butler-account", kind: "form", fields: [] },
+    { id: "butler-account-devices", kind: "list", fields: [], optional: true },
+  ],
   // Remote-only controls hide when refused. Authority and keys stay visible.
   security: [
     { id: "remote-access", kind: "form", fields: ["remote-access-enabled", "lan-urls"] },

@@ -8,15 +8,23 @@ pub(super) struct Partial {
 }
 
 impl Partial {
-    pub(super) fn delta(&mut self, stream: &str, text: &str) {
+    /// The text to publish for a delta. The first delta of a new stream after
+    /// retained answer text starts with that text up to its last line, which a
+    /// continuation repeats (see `join_cut`), so the shown answer keeps it.
+    pub(super) fn delta(&mut self, stream: &str, text: &str) -> String {
         if self.cut.is_empty() {
-            return;
+            return text.to_owned();
         }
+        let mut shown = String::new();
         if self.stream != stream {
             self.stream = stream.to_owned();
             self.round.clear();
+            let line = self.cut.rfind('\n').map_or(0, |index| index + 1);
+            shown.push_str(&self.cut[..line]);
         }
         self.round.push_str(text);
+        shown.push_str(text);
+        shown
     }
 
     pub(super) fn retain(&mut self, text: &str) {

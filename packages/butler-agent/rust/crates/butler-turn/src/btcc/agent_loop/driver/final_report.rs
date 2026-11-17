@@ -5,7 +5,7 @@ use butler_core::tool_protocol::ToolName;
 
 /// Answer blocks are part of the final reply itself, not further execution:
 /// a reply round that only shows them still runs.
-fn reply_part(reply: &Reply) -> bool {
+pub(super) fn reply_part(reply: &Reply) -> bool {
     reply.text_call_names.is_empty()
         && reply
             .calls

@@ -11,5 +11,7 @@ mod blocks_only_answer;
 mod common;
 #[path = "loop_review/failed_command_result.rs"]
 mod failed_command_result;
+#[path = "loop_review/reply_beside_blocks.rs"]
+mod reply_beside_blocks;
 #[path = "loop_review/tool_feedback_order.rs"]
 mod tool_feedback_order;

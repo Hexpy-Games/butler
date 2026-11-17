@@ -22,7 +22,7 @@ pub(super) async fn settle_answer(
     }
     let mut text = if state.answer_continuation {
         state.answer_continuation = false;
-        std::mem::take(&mut state.cut_answer)
+        std::mem::take(&mut state.cut_answer).trim_end().to_owned()
     } else {
         reply.text.clone()
     };
