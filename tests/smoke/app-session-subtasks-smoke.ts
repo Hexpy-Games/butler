@@ -246,8 +246,13 @@ async function verifyStopPaused(page: Page, replay: SubtaskReplay) {
   assert.deepEqual(replay.cancelled, [{ relation: "relation-paused", parent: replay.parentId }]);
   assert.equal(replay.resumed.length, resumed);
   await page.keyboard.press("Escape");
-  await rows.nth(2).waitFor({ state: "detached" });
-  assert.equal(await rows.count(), 2);
+  // The gateway announces the closed relation, as it does for any finished subtask.
+  await page.evaluate(parent => {
+    const emit = (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent;
+    emit({ id: 203, type: "subsession.changed", payload: { session_id: parent, child_session_id: "steward-subtask-paused" } });
+  }, replay.parentId);
+  await page.waitForFunction(() => document.querySelectorAll('[data-test-class="subtask-row"]').length === 2
+    && document.querySelectorAll('[data-test-class="subtask-line"]').length === 2);
   assert.equal(await aside(page).locator('[data-test-class="subtask-row"][data-subtask-state="paused"]').count(), 0);
   await shot(aside(page), "info-after-stop");
 }
