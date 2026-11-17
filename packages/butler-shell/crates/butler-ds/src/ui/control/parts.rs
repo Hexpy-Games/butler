@@ -80,6 +80,8 @@ pub enum Ring {
 struct Anchors {
     next: std::cell::Cell<usize>,
     handles: std::cell::RefCell<Vec<(usize, gpui::FocusHandle)>>,
+    /// How many `slot:<name>` anchors of each name this frame has handed out.
+    slots: std::cell::RefCell<std::collections::HashMap<String, usize>>,
 }
 
 impl gpui::Global for Anchors {}
@@ -89,6 +91,7 @@ pub fn reset_anchors(cx: &mut App) {
     let anchors = cx.default_global::<Anchors>();
     anchors.next.set(0);
     anchors.handles.borrow_mut().clear();
+    anchors.slots.borrow_mut().clear();
     crate::ui::focus::reset_hand_off(cx);
     crate::ui::text::reset(cx);
 }
@@ -111,6 +114,17 @@ pub(crate) fn next_anchor(cx: &mut App, handle: Option<&gpui::FocusHandle>) -> S
         anchors.handles.borrow_mut().push((n, handle.clone()));
     }
     SharedString::from(format!("control-{n}"))
+}
+
+/// `slot:<name>#<k>`: the geometry anchor of the kth element of this frame that stands for the web
+/// element with `data-slot="<name>"`, so the layout diff can pair them. Reset once per frame.
+pub(crate) fn slot_anchor(cx: &mut App, name: &str) -> SharedString {
+    let anchors = cx.default_global::<Anchors>();
+    let mut slots = anchors.slots.borrow_mut();
+    let k = slots.entry(name.to_owned()).or_default();
+    let anchor = SharedString::from(format!("slot:{name}#{k}"));
+    *k += 1;
+    anchor
 }
 
 /// `top` painted over `bottom` (source-over, as stacked backgrounds).
