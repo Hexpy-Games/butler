@@ -23,88 +23,10 @@ use crate::standins_window::{
     browser_pane, demo, demo_chat, demo_sidebar, file_viewer, scaled_frame,
 };
 
+mod copy;
+use copy::{Copy, copy};
+
 type Toggle = std::rc::Rc<dyn Fn(&mut Window, &mut App)>;
-
-struct Copy {
-    title: &'static str,
-    split_title: &'static str,
-    split_project: &'static str,
-    split_branch: &'static str,
-    project: &'static str,
-    branch: &'static str,
-    show_left: &'static str,
-    show_right: &'static str,
-    menu: &'static str,
-    minimize: &'static str,
-    maximize: &'static str,
-    close: &'static str,
-    browser: &'static str,
-    conversation: &'static str,
-    open_conversation: &'static str,
-    browser_active: &'static str,
-    nested: &'static str,
-    back: &'static str,
-    session_info: &'static str,
-    session_info_pending: &'static str,
-    show_browser: &'static str,
-    hide_browser: &'static str,
-    viewer: &'static str,
-}
-
-fn copy(lang: Lang) -> Copy {
-    lang.pick(
-        Copy {
-            title: "Token page review",
-            split_title: "Shortcut conflicts",
-            split_project: "Butler app",
-            split_branch: "Local",
-            project: "butler",
-            branch: "ui/ds-viewer-complete",
-            show_left: "Show left panel",
-            show_right: "Show right panel",
-            menu: "Session actions",
-            minimize: "Minimize window",
-            maximize: "Maximize window",
-            close: "Close window",
-            browser: "Browser",
-            conversation: "Office chair order",
-            open_conversation: "Open conversation",
-            browser_active: "Butler is browsing",
-            nested: "Travel",
-            back: "Back to Scraps",
-            session_info: "Session info",
-            session_info_pending: "Session info · requests waiting for your answer",
-            show_browser: "Show browser",
-            hide_browser: "Hide browser",
-            viewer: "File viewer",
-        },
-        Copy {
-            title: "토큰 페이지 검토",
-            split_title: "단축키 충돌 정리",
-            split_project: "버틀러 앱",
-            split_branch: "로컬",
-            project: "butler",
-            branch: "ui/ds-viewer-complete",
-            show_left: "왼쪽 패널 보기",
-            show_right: "오른쪽 패널 보기",
-            menu: "세션 작업",
-            minimize: "창 최소화",
-            maximize: "창 최대화",
-            close: "창 닫기",
-            browser: "브라우저",
-            conversation: "사무용 의자 주문",
-            open_conversation: "대화 열기",
-            browser_active: "버틀러가 브라우저 사용 중",
-            nested: "여행",
-            back: "스크랩으로 돌아가기",
-            session_info: "세션 정보",
-            session_info_pending: "세션 정보 · 답을 기다리는 요청 있음",
-            show_browser: "브라우저 열기",
-            hide_browser: "브라우저 닫기",
-            viewer: "파일 보기",
-        },
-    )
-}
 
 pub(super) fn stories() -> Vec<Story> {
     let names = [
