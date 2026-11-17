@@ -1,7 +1,7 @@
 //! Answer blocks: timeline, checklist, progress, text, image, quote, facts, metrics, callout, actions
 //! (`AnswerLeafBlocks.tsx` and the facts, metrics, callout and actions branches of `AnswerBlocks.tsx`).
 use butler_ds::ui::Icon;
-use butler_ds::ui::blocks::event_timeline::{EventTimeline, EventTimelineItem};
+use butler_ds::ui::blocks::event_timeline::{EventTimeline, EventTimelineItem, Lead};
 use butler_ds::ui::blocks::key_value_row::KeyValueRow;
 use butler_ds::ui::blocks::markdown_content::{Density, MarkdownContent};
 use butler_ds::ui::blocks::metric_card::{MetricCard, Trend};
@@ -97,7 +97,7 @@ fn timeline(
     items: &[crate::ui::source::wire::AnswerBlockTimelineItemsItem],
     cx: &mut App,
 ) -> AnyElement {
-    let mut events = EventTimeline::new();
+    let mut events = EventTimeline::new().lead(Lead::Caption);
     for (index, item) in items.iter().enumerate() {
         let marker = icon(Icon::Circle, IconSize::Sm, Ds::get(cx));
         let mut text = Stack::new()

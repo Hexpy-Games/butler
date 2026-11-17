@@ -72,7 +72,7 @@ impl SecurityAuthority {
 
 /// `isMissingRoute`: the agent has no such route.
 fn missing_route(error: &Error) -> bool {
-    matches!(error, Error::Http(404) | Error::Incompatible)
+    matches!(error, Error::Http(404, _) | Error::Incompatible)
 }
 
 /// A DS icon at a token size.

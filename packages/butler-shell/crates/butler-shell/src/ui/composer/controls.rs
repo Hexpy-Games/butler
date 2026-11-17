@@ -239,9 +239,14 @@ impl Composer {
                     }
                     _ => this.load_session_controls(true, cx),
                 },
-                Err(_) => {
+                Err(error) => {
                     let lang = Ds::get(cx).lang();
-                    toast::show(cx, Toast::error(words(lang).model_refresh_failed));
+                    let toast = crate::ui::i18n::errors::toast(
+                        cx,
+                        &error,
+                        words(lang).model_refresh_failed,
+                    );
+                    toast::show(cx, toast);
                 }
             });
         })

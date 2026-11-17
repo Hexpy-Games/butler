@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use butler_ds::ui::context::Ds;
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast;
 use butler_shell_client::Error;
 use gpui::{
     AnyElement, AnyView, App, AppContext as _, Context, Entity, IntoElement, ParentElement as _,
@@ -82,12 +82,13 @@ impl SchedulesPage {
                     }
                     changed
                 }
-                Err(_) => {
+                Err(error) => {
                     let changed = !page.loaded;
                     page.loaded = true;
                     if !page.failed {
                         let text = list::copy::words(Ds::get(cx).lang()).load_failed;
-                        toast::show(cx, Toast::error(text));
+                        let failure = crate::ui::i18n::errors::toast(cx, &error, text);
+                        toast::show(cx, failure);
                     }
                     page.failed = true;
                     changed

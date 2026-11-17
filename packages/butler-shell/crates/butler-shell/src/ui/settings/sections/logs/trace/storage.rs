@@ -189,7 +189,7 @@ impl LogStorage {
                         let size = format_bytes(cleared.agent_freed_bytes);
                         Toast::success(copy.cleared.replace("{size}", &size))
                     }
-                    Err(_) => Toast::error(copy.clear_failed),
+                    Err(error) => crate::ui::i18n::errors::toast(cx, &error, copy.clear_failed),
                 };
                 announce(&mut this.clear_toast, next, cx);
             },

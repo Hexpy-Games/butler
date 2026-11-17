@@ -156,12 +156,15 @@ pub fn frame(
                 .border_color(ds.color(Color::ColorActionPrimary)),
         );
     }
+    // `.surface` is a grid: the panel's parts are its items (blockified), so their text takes no
+    // strut from the composer glass or the card around the panel.
+    let surface = strut::grid_scope(surface);
     match placement {
         Placement::Composer => surface.into_any_element(),
         Placement::Conversation => Card::new((keys.id, "card"))
             .padding(CardPadding::None)
             .radius(CardRadius::Lg)
-            .child(strut::grid_scope(surface))
+            .child(surface)
             .into_any_element(),
     }
 }

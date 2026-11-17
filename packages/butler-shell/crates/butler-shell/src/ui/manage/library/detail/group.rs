@@ -156,7 +156,7 @@ impl GroupDialog {
             Err(error) => {
                 let copy = words(Ds::get(cx).lang());
                 // The server answers a taken name with a conflict (G-codes: by status only).
-                let message = if matches!(error, Error::Http(409)) {
+                let message = if matches!(error, Error::Http(409, _)) {
                     copy.group_exists
                 } else {
                     copy.failed

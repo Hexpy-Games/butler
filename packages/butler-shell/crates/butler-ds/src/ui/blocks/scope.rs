@@ -70,6 +70,9 @@ pub struct ConversationVars {
     /// The message column's width and its left edge, once measured.
     pub column_width: f32,
     pub column_left: f32,
+    /// The reading column's right edge in the shell's px (`ConversationColumnRect.right`): the
+    /// column's own right edge, or a docked aside's far edge.
+    pub column_right: f32,
     /// `--conversation-column-shift` (animated): how far the column has moved aside.
     pub column_shift: f32,
     /// The top padding of the message list (the title bar's room, or the card's inset).

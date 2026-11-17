@@ -37,6 +37,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             );
             Ok(())
         }
+        "expect-within" => expect_within(h, arg),
         "expect-toasts" => {
             settle(&mut h.cx, h.handle);
             let expected: usize = arg.parse()?;
@@ -55,6 +56,12 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             );
             cx.notify();
         }),
+        "expect-palette" => h.cx.update(|cx| {
+            h.window.update(cx, |shell, _, cx| {
+                ensure!(shell.palette().read(cx).is_open(), "palette not open");
+                Ok(())
+            })
+        })?,
         "expect-composer-focus" => h.cx.update(|cx| {
             h.window.update(cx, |shell, window, cx| {
                 ensure!(
@@ -64,18 +71,47 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
                 Ok(())
             })
         })?,
+        "expect-composer-menu" => expect_composer_menu(h, arg),
         "wait" => {
             h.cx.advance_clock(std::time::Duration::from_millis(arg.parse()?));
             settle(&mut h.cx, h.handle);
             Ok(())
         }
-        "tick" => {
-            h.cx.advance_clock(std::time::Duration::from_millis(arg.parse()?));
-            h.cx.run_until_parked();
-            Ok(())
-        }
         _ => anyhow::bail!("unknown frame command"),
     }
+}
+
+fn expect_composer_menu(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let open = h.cx.update(|cx| {
+        h.window
+            .update(cx, |shell, _, cx| shell.composer.read(cx).menu_open())
+    })?;
+    ensure!(open == (arg == "open"), "composer menu open is {open}");
+    Ok(())
+}
+
+/// `expect-within <inner> <outer>`: both anchors show, `inner` has a size and lies inside `outer`.
+fn expect_within(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let (inner, outer) = arg
+        .split_once(' ')
+        .context("expect-within <inner> <outer>")?;
+    let (_, a) = find_anchor(h, inner)?.with_context(|| format!("missing {inner}"))?;
+    let (_, b) = find_anchor(h, outer)?.with_context(|| format!("missing {outer}"))?;
+    let slack = px(0.5);
+    ensure!(
+        a.size.width > px(0.) && a.size.height > px(0.),
+        "{inner} has no size: {a:?}"
+    );
+    ensure!(
+        a.left() + slack >= b.left()
+            && a.top() + slack >= b.top()
+            && a.right() <= b.right() + slack
+            && a.bottom() <= b.bottom() + slack,
+        "{inner} {a:?} is not inside {outer} {b:?}"
+    );
+    Ok(())
 }
 
 fn expect_clipboard_prefix(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
@@ -242,6 +278,77 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
     let end = point(center.x + px(dx), center.y + px(dy));
     let start = if command == "drag" { center } else { end };
     pointer_sequence(h, handle, start, end, button, command == "drag")
+}
+
+/// `titlebar-grid <step>`: a left press every `<step>` px over the title bar (the release lands
+/// below the bar; a dropdown trigger still toggles on press), and whether the press reached
+/// the window drag (propagated) or a control took it. Written to `titlebar-grid.json` with the
+/// bounds of the controls in the bar.
+pub(super) fn titlebar_grid(
+    h: &mut Harness,
+    dir: &std::path::Path,
+    arg: &str,
+) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let step: f32 = arg.parse()?;
+    let bar =
+        h.cx.debug_bounds(h.handle, "titlebar")?
+            .context("no titlebar")?;
+    let release = point(bar.left(), bar.bottom() + px(step));
+    let (mut drag, mut control) = (Vec::new(), Vec::new());
+    let mut y = bar.top() + px(step / 2.);
+    while y < bar.bottom() {
+        let mut x = bar.left() + px(step / 2.);
+        while x < bar.right() {
+            let position = point(x, y);
+            let press = PlatformInput::MouseDown(MouseDownEvent {
+                button: MouseButton::Left,
+                position,
+                modifiers: Default::default(),
+                click_count: 1,
+                first_mouse: false,
+            });
+            let up = PlatformInput::MouseUp(MouseUpEvent {
+                button: MouseButton::Left,
+                position: release,
+                modifiers: Default::default(),
+                click_count: 1,
+            });
+            let propagated = h.cx.update_window(h.handle, |_, w, cx| {
+                let propagated = w.dispatch_event(press, cx).propagate;
+                w.dispatch_event(up, cx);
+                propagated
+            })?;
+            let at = [f32::from(x), f32::from(y)];
+            if propagated { &mut drag } else { &mut control }.push(at);
+            x += px(step);
+        }
+        y += px(step);
+    }
+    let mut bounds = serde_json::Map::new();
+    for name in [
+        "sidebar-toggle",
+        "session-menu-trigger",
+        "session-info-toggle",
+        "titlebar-browser-toggle",
+        "titlebar-file-viewer-toggle",
+        "wc-min",
+        "wc-max",
+        "wc-close",
+    ] {
+        if let Some(b) = h.cx.debug_bounds(h.handle, name)? {
+            let edges = [b.left(), b.top(), b.right(), b.bottom()].map(f32::from);
+            bounds.insert(name.into(), serde_json::json!(edges));
+        }
+    }
+    println!(
+        "titlebar-grid: {} drag, {} control",
+        drag.len(),
+        control.len()
+    );
+    let report = serde_json::json!({ "drag": drag, "control": control, "controls": bounds });
+    std::fs::write(dir.join("titlebar-grid.json"), serde_json::to_vec(&report)?)?;
+    Ok(())
 }
 
 fn pointer_button(button: Option<&str>) -> anyhow::Result<MouseButton> {

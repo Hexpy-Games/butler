@@ -2,6 +2,7 @@
 import { normalizeMacBundle, signMacBundle, signMacDmg, runMacSigning, verifyMacBundleIcon } from "./native-mac-signing.ts";
 import { isPreviewRelease } from "./preview-policy.ts";
 import { stageElectronPackageSource } from "./electron-package-source.ts";
+import { stageGpuiMacBundle } from "./gpui-mac-bundle.ts";
 import { createHash } from "node:crypto";
 import {
   chmodSync, constants, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync,
@@ -19,6 +20,7 @@ import {
   createNativeMacReleaseManifest,
   validateNativeMacReleaseManifest,
   verifyNativeMacBundle,
+  type MacAppShell,
   type NativeMacReleaseManifest,
   type NativeMacDependencyClosure,
 } from "./native-mac-manifest.ts";
@@ -28,6 +30,7 @@ export interface AppReleasePackageOptions {
   outDir: string;
   artifactBaseUrl?: string | null;
   platforms?: AppReleasePlatform[];
+  shell?: MacAppShell;
 }
 
 export interface AppReleasePackageArtifact {
@@ -97,7 +100,7 @@ function createNativeMacReleasePackage(options: AppReleasePackageOptions): AppRe
   try {
     const bundledAgent = prepareBundledAgentResource(root, workDir, "darwin-arm64");
     const artifact = packagePlatform({
-      root, outDir, workDir, platform: "darwin-arm64", manifest,
+      root, outDir, workDir, platform: "darwin-arm64", manifest, shell: options.shell ?? "electron",
       bundledAgentResourceDir: bundledAgent.resourceDir,
     });
     const item = manifest.artifacts[0]!;
@@ -155,28 +158,33 @@ function packagePlatform(input: {
   platform: "darwin-arm64";
   manifest: NativeMacReleaseManifest;
   bundledAgentResourceDir: string;
+  shell: MacAppShell;
 }): AppReleasePackageArtifact {
   const artifact = input.manifest.artifacts[0];
   if (!artifact) throw new Error("missing native mac App artifact definition");
 
   const packageOut = join(input.workDir, input.platform);
   mkdirSync(packageOut, { recursive: true });
-  runElectronPackager(
-    input.root,
-    packageOut,
-    input.platform,
-    input.bundledAgentResourceDir,
-  );
+  if (input.shell === "gpui") {
+    stageGpuiMacBundle({ root: input.root, packageOut, bundledAgentResourceDir: input.bundledAgentResourceDir });
+  } else {
+    runElectronPackager(
+      input.root,
+      packageOut,
+      input.platform,
+      input.bundledAgentResourceDir,
+    );
+  }
   const packagedDir = join(packageOut, packageDirectoryName());
   if (!existsSync(packagedDir)) {
-    throw new Error(`electron package directory was not created: ${packagedDir}`);
+    throw new Error(`${input.shell} package directory was not created: ${packagedDir}`);
   }
 
   const artifactName = artifact.artifactName;
   const artifactPath = join(input.outDir, artifactName);
   const appBundle = join(packagedDir, "Butler.app");
   if (!existsSync(appBundle)) throw new Error(`mac app bundle not found: ${appBundle}`);
-  normalizeMacBundle(input.root, appBundle);
+  normalizeMacBundle(input.root, appBundle, input.shell);
   verifyMacBundleIcon(appReleaseIconPath(input.root), appBundle);
   signMacBundle(input.root, appBundle);
   const hostLinks = spawnSync(process.env.PYTHON3 || "python3", [
@@ -187,8 +195,8 @@ function packagePlatform(input: {
     throw new Error(`App host-link guard failed: ${hostLinks.stderr || hostLinks.error || hostLinks.stdout}`);
   }
   process.stdout.write(hostLinks.stdout);
-  const nativeClosure = closureFromNativeMacBundle(appBundle, input.manifest);
-  verifyNativeMacBundle(appBundle, nativeClosure);
+  const nativeClosure = closureFromNativeMacBundle(appBundle, input.manifest, input.shell);
+  verifyNativeMacBundle(appBundle, nativeClosure, input.shell);
   runMacSigning(input.root, "notarize", appBundle);
   createMacDmg({ appBundle, artifactPath });
   signMacDmg(input.root, artifactPath);
@@ -423,11 +431,13 @@ function parseCliArgs(args: string[]): {
   outDir: string;
   artifactBaseUrl?: string | null;
   platforms?: AppReleasePlatform[];
+  shell: MacAppShell;
   json: boolean;
 } {
   let outDir = join(process.cwd(), "dist", "release", "app");
   let artifactBaseUrl: string | null | undefined;
   let platforms: AppReleasePlatform[] | undefined;
+  let shell: MacAppShell = "electron";
   let json = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -462,10 +472,24 @@ function parseCliArgs(args: string[]): {
       platforms = [...(platforms ?? []), parsePlatform(arg.slice("--platform=".length))];
       continue;
     }
+    if (arg === "--shell") {
+      shell = parseShell(args[index + 1] ?? "");
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--shell=")) {
+      shell = parseShell(arg.slice("--shell=".length));
+      continue;
+    }
     throw new Error(`unknown option: ${arg}`);
   }
   if (!outDir.trim()) throw new Error("--out requires a path");
-  return { outDir, artifactBaseUrl, platforms, json };
+  return { outDir, artifactBaseUrl, platforms, shell, json };
+}
+
+function parseShell(value: string): MacAppShell {
+  if (value !== "electron" && value !== "gpui") throw new Error(`--shell must be electron or gpui, got ${value}`);
+  return value;
 }
 
 function parsePlatform(value: string): AppReleasePlatform {
@@ -480,6 +504,7 @@ if (import.meta.main) {
       outDir: args.outDir,
       artifactBaseUrl: args.artifactBaseUrl,
       platforms: args.platforms,
+      shell: args.shell,
     });
     if (args.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

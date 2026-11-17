@@ -13,7 +13,7 @@ use std::ffi::OsString;
 use gpui::App;
 use gpui_platform::application;
 
-use ui::shell::{Quit, Shell};
+use ui::shell::Quit;
 
 /// Electron's Windows AppUserModelID (main.mjs:203); a no-op elsewhere.
 const APP_ID: &str = butler_platform::app_shell::WINDOWS_APP_ID;
@@ -58,6 +58,9 @@ fn single_instance(args: &[OsString]) -> Option<tokio::sync::mpsc::UnboundedRece
 }
 
 fn main() {
+    // CEF runs in this process.
+    #[cfg(feature = "cef")]
+    butler_cef_host::shorten_temp_path();
     let args: Vec<OsString> = std::env::args_os().collect();
     if let Some(event) = butler_platform::squirrel::event(&args) {
         let data = lifecycle::data_root(&args);
@@ -89,21 +92,13 @@ fn main() {
         cx.spawn(async move |cx| {
             use futures::StreamExt as _;
             while let Some(urls) = incoming.next().await {
-                let request = urls
-                    .iter()
-                    .find_map(|url| ui::shell::navigation::Navigation::from_url(url));
-                if let Some(request) = request {
-                    cx.update(|cx| {
-                        // Closed to the tray: the link opens the window first.
-                        lifecycle::window::reopen(cx);
-                        if let Some(window) = cx
-                            .windows()
-                            .first()
-                            .and_then(gpui::AnyWindowHandle::downcast::<Shell>)
-                        {
-                            let _ = window.update(cx, |s, w, cx| s.navigate(request, w, cx));
-                        }
-                    });
+                // A link Butler reads opens its conversation in the main window, opening one if
+                // it is closed.
+                if let Some(url) = urls
+                    .into_iter()
+                    .find(|url| ui::shell::navigation::Navigation::from_url(url).is_some())
+                {
+                    cx.update(|cx| lifecycle::window::launched(cx, &[url]));
                 }
             }
         })
@@ -114,7 +109,11 @@ fn main() {
             let failed = serde_json::json!({});
             lifecycle::logs::app_log("ERROR", "lifecycle", "app.start_failed", failed);
             lifecycle::logs::quit();
-            cx.quit();
+            // A start that failed is not a clean exit: the quit observers still run first (the
+            // Agent's lease is released), then the process ends with 1. The quit runs as a task,
+            // because Linux's event loop drops a stop requested before it starts.
+            cx.on_app_quit(|_| async { std::process::exit(1) }).detach();
+            cx.spawn(async move |cx| cx.update(|cx| cx.quit())).detach();
             return;
         }
         // Later launches are read only once the first window exists.
