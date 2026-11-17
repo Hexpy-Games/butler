@@ -1,5 +1,5 @@
 import type { ShowcaseGuidance } from "../../showcase";
-import { FileText, Save } from "../../components/Icons";
+import { Download, FileText } from "../../components/Icons";
 import { Card } from "../../components/Card";
 import { Typo } from "../../components/Typo";
 import { DocumentTile } from "./DocumentTile";
@@ -9,7 +9,7 @@ function ArtifactTile() {
   return (
     <DocumentTile icon={<FileText size="md" />} title="release-notes.md" description="document / 4.2 KB" meta="2d ago"
       clickTarget="tile" ariaLabel="Open: release-notes.md" onOpen={() => undefined}
-      actions={[{ id: "save", label: "Save", icon: <Save size="sm" />, onClick: () => undefined }]} />
+      actions={[{ id: "save", label: "Save", icon: <Download size="sm" />, onClick: () => undefined }]} />
   );
 }
 // #endregion
