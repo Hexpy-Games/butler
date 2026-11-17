@@ -108,6 +108,15 @@ pub(crate) fn handoff_tab(session: &str, cx: &gpui::App) -> Option<engine::TabId
         .map(|(id, _)| (*id).clone())
 }
 
+/// Electron `openHandoffTab`: the conversation's browser on its hand-off tab, else the
+/// conversation itself.
+pub(crate) fn open_handoff(session: &str, cx: &mut gpui::App) {
+    match handoff_tab(session, cx) {
+        Some(tab) => open_tab(session, tab, cx),
+        None => shell_state::open_conversation(session, cx),
+    }
+}
+
 /// Opens the conversation's browser on `tab`.
 pub(crate) fn open_tab(session: &str, tab: engine::TabId, cx: &mut gpui::App) {
     cx.global_mut::<shell_state::BrowserShell>()

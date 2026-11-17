@@ -9,7 +9,6 @@ pub(crate) struct BrowserHandoff {
     pub(crate) eyebrow: &'static str,
     pub(crate) sign_in_title: &'static str,
     pub(crate) in_tab: &'static str,
-    pub(crate) on_desktop: &'static str,
     pub(crate) open_tab: &'static str,
     pub(crate) stop: &'static str,
     /// interfaceTemplates.approvalRequest.payHandoff
@@ -28,7 +27,6 @@ const KO: BrowserHandoff = BrowserHandoff {
     eyebrow: "브라우저",
     sign_in_title: "로그인 확인 필요",
     in_tab: "탭에서 마친 뒤 버틀러에게 돌려주세요",
-    on_desktop: "PC의 버틀러에서 확인해 주세요",
     open_tab: "열어서 확인",
     stop: "작업 중지",
     pay_title: "결제 확인 필요",
@@ -43,7 +41,6 @@ const EN: BrowserHandoff = BrowserHandoff {
     eyebrow: "Browser",
     sign_in_title: "Sign-in needs you",
     in_tab: "Finish in the tab, then give it back to Butler",
-    on_desktop: "Finish this on your computer",
     open_tab: "Open to check",
     stop: "Stop task",
     pay_title: "Payment needs you",

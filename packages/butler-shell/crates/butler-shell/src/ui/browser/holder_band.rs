@@ -105,6 +105,7 @@ fn holder_band(
         .or_else(|| {
             (hosted.pay_step()).map(|step| BrowserHandoff::pay_step(lang, step).to_owned())
         });
+    let mark = anchor(div(), "browser-band").child(mark).into_any_element();
     let mut band = PageBand::new(id, tone, label).icon(mark);
     if let Some(detail) = detail {
         band = band.detail(detail);

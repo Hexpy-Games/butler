@@ -13,7 +13,7 @@ use gpui::{AnyElement, App, IntoElement as _, SharedString, Window};
 use serde_json::{Value, json};
 
 use super::DecisionCtx;
-use crate::ui::browser::{handoff_tab, open_tab};
+use crate::ui::browser::open_handoff;
 use crate::ui::i18n::browser_handoff::BrowserHandoff;
 use crate::ui::source::agent::Jobs;
 use butler_shell_client::ShellClient;
@@ -27,14 +27,8 @@ struct HandoffView {
     sign_in: bool,
 }
 
-/// `browserHandoffView`: the place is the tab when the conversation has one to open, else the
-/// desktop line.
-fn handoff_view(
-    request: &Value,
-    lang: Lang,
-    copy: &BrowserHandoff,
-    in_tab: bool,
-) -> Option<HandoffView> {
+/// `browserHandoffView`: the desktop app always has a browser, so the place is the tab.
+fn handoff_view(request: &Value, lang: Lang, copy: &BrowserHandoff) -> Option<HandoffView> {
     let operation = request.pointer("/approval/operation")?;
     let field = |name: &str| operation.get(name).and_then(Value::as_str);
     let site = operation
@@ -48,7 +42,7 @@ fn handoff_view(
         Some(site) => format!("{site} · {step}"),
         None => step.to_owned(),
     };
-    let place = if in_tab { copy.in_tab } else { copy.on_desktop }.to_owned();
+    let place = copy.in_tab.to_owned();
     match field("tool")? {
         "browser_sign_in_wait" => {
             let step =
@@ -151,8 +145,7 @@ pub(crate) fn browser_surface(
     let request = *requests.first()?;
     let copy = BrowserHandoff::get(cx);
     let session = ctx.view.session_id.clone();
-    let tab = handoff_tab(&session, cx);
-    let handoff = handoff_view(request, Ds::get(cx).lang(), copy, tab.is_some())?;
+    let handoff = handoff_view(request, Ds::get(cx).lang(), copy)?;
     let turn = ctx.view.active_turn.as_ref().map(|turn| turn.id.clone());
     let target = request
         .get("source_session_id")
@@ -172,9 +165,6 @@ pub(crate) fn browser_surface(
         .get("request_ref")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let open =
-        tab.map(|tab| move |_: &mut Window, cx: &mut App| open_tab(&session, tab.clone(), cx));
-    let title_open = open.clone();
     let mut panel = ComposerDecisionPanel::new(
         SharedString::from(format!("browser-handoff-{reference}")),
         if handoff.sign_in {
@@ -183,11 +173,8 @@ pub(crate) fn browser_surface(
             Icon::Globe2
         },
         handoff.title,
-        move |_, window, cx| {
-            if let Some(open) = &title_open {
-                open(window, cx);
-            }
-        },
+        // Electron `onOpenSource` scrolls to the turn; the shell has no such action.
+        |_, _, _| {},
     )
     .placement(placement)
     .eyebrow(copy.eyebrow)
@@ -198,9 +185,11 @@ pub(crate) fn browser_surface(
         })
         .icon(Icon::Square),
     );
-    if let Some(open) = open {
-        panel = panel.action(Action::new(copy.open_tab, Variant::Default, open));
-    }
+    panel = panel.action(Action::new(
+        copy.open_tab,
+        Variant::Default,
+        move |_, cx| open_handoff(&session, cx),
+    ));
     if requests.len() > 1 {
         panel = panel.aside(Typo::caption(format!("+{}", requests.len() - 1)));
     }
