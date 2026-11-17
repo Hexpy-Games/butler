@@ -296,7 +296,7 @@ function SheetSection({ state }: { state?: string }) {
   const panel = (name: string, props: Partial<React.ComponentProps<typeof SheetPanel>>, s: Strings = en) => (
     <Cell key={name} name={name}>
       <GlassBackdrop overlay={<View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}><SheetPanel title={s.sentence} closeLabel={s.close} onClose={noop} actions={actions(s)} {...props} /></View>}>
-        {[0, 1, 2, 3].map((i) => <Text key={i}>{`${en.note}. ${long.note}. ${en.sentence}. ${long.sentence}.`}</Text>)}
+        {Array.from({ length: 12 }, (_, i) => <Text key={i}>{`${en.note}. ${long.note}. ${en.sentence}. ${long.sentence}.`}</Text>)}
       </GlassBackdrop>
     </Cell>
   );
