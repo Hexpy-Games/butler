@@ -49,7 +49,11 @@ const CONTROLS: &[&str] = &[
 /// Functions that hand their element argument back as it is (`scoped(spec, control)`,
 /// `anchored(control, name)`).
 const PASS_THROUGH: &[&str] = &["scoped", "anchored"];
-/// Methods that wrap their argument in a menu `TriggerBox`.
+/// Methods that wrap an element in a menu `TriggerBox` (inline-flex). Dropdown, popover and dialog
+/// `.trigger(|toggle| ..)` take a `FnOnce(Toggle)` builder, so only a closure argument counts.
+/// `ContextMenu::trigger(child)` and `Select::trigger(SelectTrigger, ..)` take an element and are
+/// block-level (the Select trigger box uses the `fill` path, `flex().w_full()`), so neither sits
+/// on a text line.
 const TRIGGERS: &[&str] = &["trigger", "trigger_fill"];
 /// Methods that set the display of a gpui element.
 const DISPLAYS: &[&str] = &[
@@ -265,10 +269,10 @@ impl Sites {
         let root = match expression {
             Expr::MethodCall(call) => {
                 let (calls, root) = chain(call);
-                if calls
-                    .iter()
-                    .any(|call| TRIGGERS.contains(&call.method.to_string().as_str()))
-                {
+                if calls.iter().any(|call| {
+                    TRIGGERS.contains(&call.method.to_string().as_str())
+                        && matches!(call.args.first(), Some(Expr::Closure(_)))
+                }) {
                     return true;
                 }
                 root

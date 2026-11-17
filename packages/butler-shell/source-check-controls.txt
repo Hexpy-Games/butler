@@ -4,4 +4,4 @@
 # package<TAB>count
 crates/butler-ds	5
 crates/butler-ds-view	2
-crates/butler-shell	19
+crates/butler-shell	14
