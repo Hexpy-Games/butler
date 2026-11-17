@@ -246,12 +246,15 @@ pub(crate) fn user_footer(msg: &MessageRecord, cx: &App) -> MessageFooter {
                 .tabular()
                 .into_any_element()
         }))
-        .child(
-            CopyButton::new(
-                SharedString::from(format!("copy-{}", msg.id)),
-                strings.copy_message,
-                strings.copied,
-            )
-            .text(msg.text.clone()),
-        )
+        .child(crate::ui::widgets::anchor(
+            gpui::div().flex().child(
+                CopyButton::new(
+                    SharedString::from(format!("copy-{}", msg.id)),
+                    strings.copy_message,
+                    strings.copied,
+                )
+                .text(msg.text.clone()),
+            ),
+            &format!("user-copy-{}", msg.id),
+        ))
 }

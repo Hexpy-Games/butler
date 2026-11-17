@@ -75,8 +75,11 @@ impl Render for Page {
             .on_mouse_move(cx.listener(Self::mouse_move))
             .on_mouse_exit(cx.listener(Self::mouse_exit))
             .on_scroll_wheel(cx.listener(Self::wheel))
-            .on_key_down(cx.listener(|s, e: &KeyDownEvent, _, _| {
+            // The page takes every key it is sent and moves its own focus on Tab; the shell's
+            // Tab navigation must not take focus off it.
+            .on_key_down(cx.listener(|s, e: &KeyDownEvent, _, cx| {
                 s.key(&e.keystroke, e.native, false);
+                cx.stop_propagation();
             }))
             .on_key_up(cx.listener(|s, e: &KeyUpEvent, _, _| {
                 s.key(&e.keystroke, e.native, true);

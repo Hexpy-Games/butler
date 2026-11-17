@@ -21,6 +21,7 @@ mod lifecycle;
 
 mod app;
 mod fixture;
+mod focus;
 mod frame;
 mod live;
 

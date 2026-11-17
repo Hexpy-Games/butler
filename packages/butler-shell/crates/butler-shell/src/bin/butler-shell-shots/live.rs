@@ -146,6 +146,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             wait(h, |s, _| s.store.running().is_none())
         }
         "titlebar-grid" => super::frame::titlebar_grid(h, dir, arg),
+        "expect-focus-ring" | "expect-no-focus-ring" => super::focus::expect_ring(h, command, arg),
         "shot" => h.shot(dir, arg),
         "expect-fresh" => super::frame::expect_fresh(h, dir),
         "layout" => h.layout(dir, arg),
