@@ -225,8 +225,7 @@ async fn restart_keeps_worker_and_deferred_vectors_idle_until_demand() -> Result
             .contains("[embedding-worker] ready")
     );
     assert_eq!(memory_stubs::unit_states(&s.sandbox.data)?, before);
-    let loaded = batch::reply_after_load(&s, ASK)?;
-    let (first, ()) = tokio::try_join!(batch::recall(&s, "general", ASK), loaded)?;
+    let first = batch::recall(&s, "general", ASK).await?;
     assert_complete(&first, &code, 3);
     memory_stubs::vectors_complete(&s.sandbox.data, 4).await?;
     eprintln!(
