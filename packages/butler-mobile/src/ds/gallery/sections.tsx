@@ -209,7 +209,7 @@ function TextFieldSection() {
       <Cell name="error">{field({ value: en.sentence, error: en.error })}</Cell>
       <Cell name="disabled">{field({ value: en.sentence, disabled: true })}</Cell>
       <Cell name="with description">{field({ description: en.note })}</Cell>
-      <Cell name="address, literal">{field({ value: "192.168.0.7:18765", literal: true, keyboardType: "url" })}</Cell>
+      <Cell name="address, literal">{field({ value: "192.0.2.7:18765", literal: true, keyboardType: "url" })}</Cell>
       <Cell name="code, numeric">{field({ value: "1234 5678", numeric: "tabular", keyboardType: "number-pad" })}</Cell>
       {sets.slice(1).map(([name, s]) => <Cell key={name} name={`error · ${name}`}>{field({ label: s.message, value: s.sentence, error: s.error })}</Cell>)}
       <Cell name="Live"><LiveField /></Cell>
