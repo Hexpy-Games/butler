@@ -1,4 +1,6 @@
 //! Raw DevTools messages between hosted pages and the Agent; up in order, one request at a time.
+#[cfg(feature = "cef")]
+use super::Holder;
 use super::Hosted;
 #[cfg(feature = "cef")]
 use crate::ui::browser::engine::PageCommand;
@@ -213,22 +215,33 @@ pub(super) fn down(cx: &mut App, frame: &Value) {
         return;
     };
     let tab = TabId(tab.to_owned().into());
-    cx.update_global::<BrowserState, _>(|model, _| {
-        let Some(hosted) = model
+    let refused = cx.update_global::<BrowserState, _>(|model, _| {
+        let hosted = model
             .tabs
             .iter_mut()
             .find(|candidate| candidate.id == tab)
-            .and_then(|candidate| candidate.hosted.as_mut())
-        else {
-            return;
-        };
+            .and_then(|candidate| candidate.hosted.as_mut())?;
+        // The user holds the page: the Agent's traffic stops (Electron `user_control`).
+        if hosted.holder == Holder::User {
+            return Some(());
+        }
         if message["method"] == "Runtime.runIfWaitingForDebugger"
             && message.get("sessionId").is_none()
         {
             hosted.start = Some(message["id"].clone());
         }
         model.engine.devtools_raw(&tab, &bytes);
+        None
     });
+    if refused.is_some() {
+        let mut reply = json!({"id": message["id"],
+            "error": {"code": -32000, "message": "user_control"}});
+        if let Some(session) = message.get("sessionId") {
+            reply["sessionId"] = session.clone();
+        }
+        let size = reply.to_string().len();
+        up(cx, Some(&tab), reply, size);
+    }
 }
 
 fn info(hosted: &Hosted, method: &str, url: &str, title: &str) -> Value {
