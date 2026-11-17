@@ -72,7 +72,7 @@ impl Shell {
     ) -> AnyElement {
         let menu = DropdownMenu::new("sidebar-create", window, cx);
         let trigger = menu.trigger(|toggle| {
-            crate::ui::widgets::anchor(div(), "sidebar-create-trigger")
+            crate::ui::widgets::anchor(div().flex(), "sidebar-create-trigger")
                 .child(
                     IconButton::new(
                         "sidebar-create-trigger",
@@ -114,6 +114,7 @@ impl Shell {
         let content = menu.content(content, window, cx);
         div()
             .flex()
+            .gap(Ds::get(cx).len(Length::SpaceXs) / 2.)
             .child(
                 IconButton::new("browse-new-chat", self.theme.strings.new_chat)
                     .glyph(Icon::PencilLine)
