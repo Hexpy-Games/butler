@@ -1,6 +1,6 @@
 import { useContext, useState } from "react";
 import { Text as RNText, TextInput, View } from "react-native";
-import { alpha, mix } from "../design/tokens";
+import { alpha, mix, RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { Text } from "./Text";
 import { ForcedState } from "./internal/press";
@@ -68,7 +68,7 @@ export function TextField({
           minHeight: t.length("--control-hit-target"),
           paddingVertical: (t.length("--control-hit-target") - t.length("--typo-body-line-height")) / 2,
           paddingHorizontal: t.length("--space-md"),
-          borderRadius: t.length("--radius-control-touch"),
+          borderRadius: t.length(RADIUS),
           borderWidth: t.length("--border-hairline"),
           borderColor: border,
           backgroundColor: disabled ? t.color("--color-disabled-bg") : alpha(t.color("--surface-raised"), 0.92),

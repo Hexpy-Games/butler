@@ -25,6 +25,10 @@ export interface Tokens {
   shadow(name: Key<"Shadow">): ShadowToken[]; // valid as RN `boxShadow`
 }
 
+// Mobile shape set (owner 2026-11-17); desktop adopts by pointing its containers at the same token.
+export const RADIUS = "--adaptive-composer-radius" as const;
+export const PILL = "--radius-pill" as const;
+
 const cache: Partial<Record<Scheme, Tokens>> = {};
 
 export function tokens(scheme: Scheme): Tokens {

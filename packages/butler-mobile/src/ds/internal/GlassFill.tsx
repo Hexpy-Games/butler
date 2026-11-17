@@ -1,9 +1,8 @@
-import { createContext, useContext, useState, type ComponentRef, type RefObject } from "react";
+import { createContext, useContext, type ComponentRef, type RefObject } from "react";
 import { PixelRatio, Platform, StyleSheet, View } from "react-native";
 import { BlurView } from "expo-blur";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
-import { LinearGradient } from "expo-linear-gradient";
-import { alpha, type Tokens } from "../../design/tokens";
+import type { Tokens } from "../../design/tokens";
 import { useTokens } from "../../design/useTokens";
 
 export interface Radii { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number }
@@ -14,64 +13,46 @@ export const GlassTarget = createContext<RefObject<ComponentRef<typeof View> | n
 /** True where the platform has Liquid Glass (iOS 26+); glass then uses that material instead of our tint. */
 export const liquidGlass = Platform.OS === "ios" && isLiquidGlassAvailable();
 
-// `--tinted-glass-blur` (4px) as a fraction of the ~30pt system blur.
-const GLASS_BLUR_IOS = 14;
+// Mobile glass sits over text; owner asked for more blur than the web's 4px (2026-11-17).
+export const GLASS_BLUR_IOS = 50; // UIVisualEffectView intensity
+export const GLASS_BLUR_DP = 16; // Android fallback blur radius in dp
 
-/** The glass layers: a blur, a fill and one tint gradient with edge fades. Without a blur it is a plain --popover fill. */
-export function GlassFill({ radii, fadeTop = true, fadeBottom = true }: { radii: Radii; fadeTop?: boolean; fadeBottom?: boolean }) {
+/** The glass layers: a blur and one uniform tint. Without a blur it is a plain --popover fill. */
+export function GlassFill({ radii }: { radii: Radii }) {
   const t = useTokens();
   const target = useContext(GlassTarget);
-  const [h, setH] = useState(0);
   const canBlur = Platform.OS === "ios" || (Platform.OS === "android" && Number(Platform.Version) >= 31 && target != null);
-  const edge = t.length("--tinted-glass-edge-size");
   const border = t.length("--border-hairline");
-  const tint = t.color("--tinted-glass-tint");
-  const clear = alpha(tint, 0);
+  const box = {
+    ...StyleSheet.absoluteFill,
+    overflow: "hidden",
+    borderTopLeftRadius: Math.max(radii.topLeft - border, 0),
+    borderTopRightRadius: Math.max(radii.topRight - border, 0),
+    borderBottomRightRadius: Math.max(radii.bottomRight - border, 0),
+    borderBottomLeftRadius: Math.max(radii.bottomLeft - border, 0),
+  } as const;
+  const tint = t.scheme === "dark" ? "systemUltraThinMaterialDark" : "systemUltraThinMaterialLight";
   if (liquidGlass) {
     return (
-      <GlassView
-        pointerEvents="none"
-        style={{
-          ...StyleSheet.absoluteFill,
-          borderTopLeftRadius: Math.max(radii.topLeft - border, 0),
-          borderTopRightRadius: Math.max(radii.topRight - border, 0),
-          borderBottomRightRadius: Math.max(radii.bottomRight - border, 0),
-          borderBottomLeftRadius: Math.max(radii.bottomLeft - border, 0),
-        }}
-        glassEffectStyle="regular"
-        colorScheme={t.scheme}
-      />
+      <View pointerEvents="none" style={box}>
+        <BlurView style={StyleSheet.absoluteFill} intensity={GLASS_BLUR_IOS} tint={tint} />
+        <GlassView style={StyleSheet.absoluteFill} glassEffectStyle="regular" colorScheme={t.scheme} />
+      </View>
     );
   }
   return (
-    <View
-      pointerEvents="none"
-      onLayout={(event) => setH(event.nativeEvent.layout.height)}
-      style={{
-        ...StyleSheet.absoluteFill,
-        overflow: "hidden",
-        borderTopLeftRadius: Math.max(radii.topLeft - border, 0),
-        borderTopRightRadius: Math.max(radii.topRight - border, 0),
-        borderBottomRightRadius: Math.max(radii.bottomRight - border, 0),
-        borderBottomLeftRadius: Math.max(radii.bottomLeft - border, 0),
-        backgroundColor: canBlur ? t.color("--tinted-glass-bg") : t.color("--popover"),
-      }}
-    >
+    <View pointerEvents="none" style={{ ...box, backgroundColor: canBlur ? undefined : t.color("--popover") }}>
       {canBlur ? (
-        <BlurView
-          style={StyleSheet.absoluteFill}
-          tint={t.scheme === "dark" ? "systemUltraThinMaterialDark" : "systemUltraThinMaterialLight"}
-          intensity={Platform.OS === "ios" ? GLASS_BLUR_IOS : t.length("--tinted-glass-blur") * PixelRatio.get()}
-          blurMethod="dimezisBlurViewSdk31Plus"
-          blurTarget={target ?? undefined}
-        />
-      ) : null}
-      {canBlur && h > 0 ? (
-        <LinearGradient
-          style={StyleSheet.absoluteFill}
-          colors={[fadeTop ? clear : tint, tint, tint, fadeBottom ? clear : tint]}
-          locations={[0, fadeTop ? Math.min(edge / h, 0.5) : 0, 1 - (fadeBottom ? Math.min(edge / h, 0.5) : 0), 1]}
-        />
+        <>
+          <BlurView
+            style={StyleSheet.absoluteFill}
+            tint={tint}
+            intensity={Platform.OS === "ios" ? GLASS_BLUR_IOS : GLASS_BLUR_DP * PixelRatio.get()}
+            blurMethod="dimezisBlurViewSdk31Plus"
+            blurTarget={target ?? undefined}
+          />
+          <View style={{ ...StyleSheet.absoluteFill, backgroundColor: t.color("--tinted-glass-bg") }} />
+        </>
       ) : null}
     </View>
   );

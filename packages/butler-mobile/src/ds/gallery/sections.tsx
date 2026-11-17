@@ -154,11 +154,8 @@ function SurfaceSection() {
     <>
       <Cell name="base"><Surface variant="base" padding="md">{body}</Surface></Cell>
       <Cell name="raised"><Surface variant="raised" padding="md">{body}</Surface></Cell>
-      <Cell name="card · control"><Surface variant="card" radius="control">{body}</Surface></Cell>
-      <Cell name="card · lg"><Surface variant="card" radius="lg">{body}</Surface></Cell>
-      {(["panel", "popover", "composer"] as const).map((radius) => (
-        <Cell key={radius} name={`glass · ${radius}`}><Floating height={reserve}><Surface variant="glass" radius={radius}>{body}</Surface></Floating></Cell>
-      ))}
+      <Cell name="card"><Surface variant="card">{body}</Surface></Cell>
+      <Cell name="glass"><Floating height={reserve}><Surface variant="glass">{body}</Surface></Floating></Cell>
       <Cell name="glass, no blur target"><Over><Surface variant="glass">{body}</Surface></Over></Cell>
     </>
   );
@@ -294,21 +291,13 @@ function LiveSheet({ initial }: { initial: boolean }) {
   );
 }
 
-function ScrimFill() {
-  const t = useTokens();
-  return <View style={{ flex: 1, backgroundColor: t.color("--dialog-overlay-bg") }} />;
-}
-
 function SheetSection({ state }: { state?: string }) {
-  const { height } = useWindowDimensions();
   const actions = (s: Strings) => <><Button label={s.cancel} variant="ghost" onPress={noop} /><Button label={s.action} onPress={noop} /></>;
   const panel = (name: string, props: Partial<React.ComponentProps<typeof SheetPanel>>, s: Strings = en) => (
     <Cell key={name} name={name}>
-      <View style={{ height }}>
-        <GlassBackdrop overlay={<View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}><SheetPanel title={s.sentence} closeLabel={s.close} onClose={noop} actions={actions(s)} {...props} /></View>}>
-          <ScrimFill />
-        </GlassBackdrop>
-      </View>
+      <GlassBackdrop overlay={<View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}><SheetPanel title={s.sentence} closeLabel={s.close} onClose={noop} actions={actions(s)} {...props} /></View>}>
+        {[0, 1, 2, 3].map((i) => <Text key={i}>{`${en.note}. ${long.note}. ${en.sentence}. ${long.sentence}.`}</Text>)}
+      </GlassBackdrop>
     </Cell>
   );
   const lines = Array.from({ length: 30 }, (_, i) => <Text key={i}>{`${i + 1}. ${en.note}`}</Text>);

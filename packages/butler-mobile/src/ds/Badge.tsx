@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, Text as RNText, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { alpha } from "../design/tokens";
+import { alpha, PILL } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import type { IconGlyph } from "./icons";
 import { run, useReducedMotion } from "./internal/motion";
@@ -38,7 +38,7 @@ export function Badge({ label, tone = "neutral", icon }: BadgeProps) {
         paddingHorizontal: t.length("--tag-padding-inline-sm"),
         borderWidth: t.length("--border-hairline"),
         borderColor: colors.border,
-        borderRadius: t.length("--radius-pill"),
+        borderRadius: t.length(PILL),
         backgroundColor: colors.fill,
       }}
     >
@@ -96,7 +96,7 @@ export function UnreadDot({ label, present = true }: UnreadDotProps) {
           style={{
             width: size / 2,
             height: size / 2,
-            borderRadius: t.length("--radius-pill"),
+            borderRadius: t.length(PILL),
             backgroundColor: t.color("--accent"),
             opacity,
             transform: reduced ? undefined : [{ scale }],

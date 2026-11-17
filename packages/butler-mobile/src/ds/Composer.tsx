@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { IconButton } from "./Button";
 import { icons } from "./icons";
@@ -36,7 +37,7 @@ export function Composer({
   sendLabel, stopLabel, adjunct, testID,
 }: ComposerProps) {
   const t = useTokens();
-  const radius = t.length("--adaptive-composer-radius");
+  const radius = t.length(RADIUS);
   const divider = t.color("--composer-glass-divider");
   const lineHeight = useScaledLine(t.length("--typo-body-line-height"));
   const padding = t.length("--space-3");

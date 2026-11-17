@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Animated, Pressable } from "react-native";
+import { PILL } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { run, useReducedMotion } from "./internal/motion";
 import { usePress } from "./internal/press";
@@ -48,7 +49,7 @@ export function Switch({ value, onValueChange, label, disabled, testID }: Switch
         width: TRACK_WIDTH,
         height: TRACK_HEIGHT,
         padding: TRACK_PADDING,
-        borderRadius: t.length("--radius-pill"),
+        borderRadius: t.length(PILL),
         backgroundColor: value ? t.color("--accent") : t.color("--switch-track-bg"),
         opacity: disabled ? 0.5 : 1,
         boxShadow: press.focused ? t.shadow("--focus-ring") : undefined,
@@ -58,7 +59,7 @@ export function Switch({ value, onValueChange, label, disabled, testID }: Switch
         style={{
           width: THUMB,
           height: THUMB,
-          borderRadius: t.length("--radius-pill"),
+          borderRadius: t.length(PILL),
           backgroundColor: t.color("--switch-thumb"),
           boxShadow: t.shadow("--shadow-control"),
           transform: [{ translateX: x }],

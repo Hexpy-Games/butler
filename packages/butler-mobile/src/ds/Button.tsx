@@ -1,5 +1,6 @@
 import { StyleSheet, Text as RNText, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
+import { PILL } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import type { IconGlyph } from "./icons";
 import { IconSlot } from "./internal/IconSlot";
@@ -66,7 +67,7 @@ export function Button({
           paddingVertical: (t.length("--control-hit-target") - lineHeight) / 2,
           paddingStart: iconStart ? inlineIcon : inline,
           paddingEnd: iconEnd ? inlineIcon : inline,
-          borderRadius: t.length("--radius-pill"),
+          borderRadius: t.length(PILL),
           borderWidth: t.length("--border-hairline"),
           borderColor: colors.border,
           backgroundColor: colors.background,
@@ -123,7 +124,7 @@ export function IconButton({
         {
           width: target,
           height: target,
-          borderRadius: t.length("--radius-pill"),
+          borderRadius: t.length(PILL),
           borderWidth: t.length("--border-hairline"),
           borderColor: colors.border,
           backgroundColor: colors.background,

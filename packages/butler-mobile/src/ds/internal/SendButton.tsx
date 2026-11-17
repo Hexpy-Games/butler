@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Animated } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
+import { PILL } from "../../design/tokens";
 import { useTokens } from "../../design/useTokens";
 import { icons } from "../icons";
 import { SpinnerArc } from "../Spinner";
@@ -40,7 +41,7 @@ export function SendButton({ mode, enabled, busy, label, onPress }: SendButtonPr
         style={[
           {
             width: target, height: target, alignItems: "center", justifyContent: "center",
-            borderRadius: t.length("--radius-pill"), backgroundColor: background, opacity: press.opacity,
+            borderRadius: t.length(PILL), backgroundColor: background, opacity: press.opacity,
           },
           press.scaleStyle,
           press.focused ? { boxShadow: t.shadow("--focus-ring") } : null,

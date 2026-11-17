@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text as RNText, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
+import { RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import type { IconGlyph } from "./icons";
 import { IconSlot, useScaledLine } from "./internal/IconSlot";
@@ -40,7 +41,7 @@ export function ListRow({
 
   const titleLine = t.length("--typo-app-title-line-height");
   const trailingHeight = useScaledLine(titleLine);
-  const radius = t.length("--radius-control");
+  const radius = t.length(RADIUS);
   const fg = (key: "--text-primary" | "--text-secondary" | "--text-tertiary") =>
     t.color(disabled ? "--interactive-disabled-fg" : key);
   const titleColor = fg("--text-primary");

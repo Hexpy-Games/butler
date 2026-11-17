@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, KeyboardAvoidingView, Modal, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { IconButton } from "./Button";
 import { Text } from "./Text";
@@ -34,7 +35,7 @@ export function SheetPanel({ onClose, title, description, children, actions, clo
   useEffect(() => {
     if (focusTitle && titleRef.current) AccessibilityInfo.sendAccessibilityEvent(titleRef.current, "focus");
   }, [focusTitle]);
-  const radius = t.length("--adaptive-composer-radius");
+  const radius = t.length(RADIUS);
   const space = t.length("--space-4");
   const pull = -(space - t.length("--space-2"));
   return (
@@ -52,7 +53,7 @@ export function SheetPanel({ onClose, title, description, children, actions, clo
         gap: space,
       }}
     >
-      <GlassFill radii={{ topLeft: radius, topRight: radius, bottomRight: 0, bottomLeft: 0 }} fadeBottom={false} />
+      <GlassFill radii={{ topLeft: radius, topRight: radius, bottomRight: 0, bottomLeft: 0 }} />
       <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
         <View style={{ flex: 1, gap: t.length("--space-2") }}>
           <View ref={titleRef} accessible>

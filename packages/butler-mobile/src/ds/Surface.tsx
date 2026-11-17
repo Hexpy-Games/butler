@@ -1,5 +1,6 @@
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { GlassFill, glassShadow, liquidGlass } from "./internal/GlassFill";
 
@@ -8,27 +9,20 @@ type Edge = "top" | "bottom" | "left" | "right";
 export interface SurfaceProps {
   children?: React.ReactNode;
   variant?: "base" | "raised" | "card" | "glass";
-  radius?: "control" | "lg" | "panel" | "popover" | "composer";
   padding?: "none" | "sm" | "md" | "lg";
   grow?: boolean;
   edges?: readonly Edge[];
 }
 
-const radii = {
-  control: "--radius-control",
-  lg: "--radius-popover",
-  panel: "--radius-panel",
-  popover: "--radius-popover",
-  composer: "--adaptive-composer-radius",
-} as const;
 const paddings = { sm: "--space-2", md: "--space-3", lg: "--space-4" } as const;
 
-export function Surface({ children, variant = "base", radius, padding, grow, edges = [] }: SurfaceProps) {
+export function Surface({ children, variant = "base", padding, grow, edges = [] }: SurfaceProps) {
   const t = useTokens();
   const insets = useSafeAreaInsets();
   const framed = variant === "card" || variant === "glass";
-  const chosen = radius ?? (variant === "card" ? "control" : variant === "glass" ? "panel" : undefined);
-  const corner = chosen ? t.length(radii[chosen]) : 0;
+  const corner = variant === "base" ? 0 : t.length(RADIUS);
+  const round = (a: Edge, b: Edge) => (edges.includes(a) || edges.includes(b) ? 0 : corner);
+  const radii = { topLeft: round("top", "left"), topRight: round("top", "right"), bottomRight: round("bottom", "right"), bottomLeft: round("bottom", "left") };
   const pad = padding ?? (framed ? "md" : "none");
   const inset = pad === "none" ? 0 : t.length(paddings[pad]);
   const background =
@@ -41,7 +35,10 @@ export function Surface({ children, variant = "base", radius, padding, grow, edg
       style={{
         flex: grow ? 1 : undefined,
         backgroundColor: background,
-        borderRadius: corner,
+        borderTopLeftRadius: radii.topLeft,
+        borderTopRightRadius: radii.topRight,
+        borderBottomRightRadius: radii.bottomRight,
+        borderBottomLeftRadius: radii.bottomLeft,
         borderWidth: framed && !(variant === "glass" && liquidGlass) ? t.length("--border-hairline") : 0,
         borderColor: variant === "glass" ? t.color("--tinted-glass-border") : t.color("--line"),
         boxShadow: variant === "glass" ? glassShadow(t) : undefined,
@@ -52,7 +49,7 @@ export function Surface({ children, variant = "base", radius, padding, grow, edg
       }}
     >
       {variant === "glass" ? (
-        <GlassFill radii={{ topLeft: corner, topRight: corner, bottomRight: corner, bottomLeft: corner }} />
+        <GlassFill radii={radii} />
       ) : null}
       {children}
     </View>

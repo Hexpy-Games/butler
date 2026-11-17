@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text as RNText, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Tokens } from "../design/tokens";
+import { RADIUS, type Tokens } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { icons, type IconGlyph } from "./icons";
@@ -46,7 +46,7 @@ const tones: Record<ToastTone, null | { bg: ColorKey; border: ColorKey; text: Co
 /** The toast surface without motion or position: exported for the gallery only. */
 export function ToastView({ message, tone = "neutral", onPress }: { message: string; tone?: ToastTone; onPress?: () => void }) {
   const t = useTokens();
-  const radius = t.length("--radius-panel");
+  const radius = t.length(RADIUS);
   const palette = tones[tone];
   const text = t.color(palette?.text ?? "--text-primary");
   return (

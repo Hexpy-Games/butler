@@ -8,6 +8,7 @@
     "test": "bun test src"
   },
   "dependencies": {
+    "@expo/ui": "~58.0.28",
     "@hugeicons/core-free-icons": "4.1.4",
     "@hugeicons/react-native": "^1.0.17",
     "expo": "~58.0.0",
