@@ -2,9 +2,11 @@ import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { Card } from "../../components/Card";
+import { IconButton } from "../../components/IconButton";
 import { Inline } from "../../components/Inline";
 import { Stack } from "../../components/Stack";
 import { Tag } from "../../components/Tag";
+import { Tooltip } from "../../components/Tooltip";
 import { Typo } from "../../components/Typo";
 import styles from "./DocumentTile.module.css";
 import { dsClass } from "../../lib/internal";
@@ -122,31 +124,19 @@ function DocumentTileActionButton({ action }: { action: DocumentTileAction }) {
 
   if (action.href) {
     return (
-      <Button asChild size="xs" variant="outline">
-        <a
-          aria-label={action.ariaLabel ?? action.label}
-          download={action.download}
-          href={action.href}
-          onClick={handleClick}
-        >
-          {action.icon ? (
-            <span className={styles.actionIcon}>{action.icon}</span>
-          ) : null}
-          {action.label}
-        </a>
-      </Button>
+      <Tooltip label={action.label}>
+        <Button asChild size="icon-sm" variant="ghost">
+          <a aria-label={action.ariaLabel ?? action.label} download={action.download} href={action.href} onClick={handleClick}>
+            {action.icon}
+          </a>
+        </Button>
+      </Tooltip>
     );
   }
 
   return (
-    <Button
-      aria-label={action.ariaLabel ?? action.label}
-      iconStart={action.icon}
-      size="xs"
-      text={action.label}
-      type="button"
-      variant="outline"
-      onClick={handleClick}
-    />
+    <IconButton label={action.label} aria-label={action.ariaLabel ?? action.label} onClick={handleClick}>
+      {action.icon}
+    </IconButton>
   );
 }

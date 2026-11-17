@@ -66,6 +66,8 @@ export async function verifyResultsList(aside: Locator, capture: (name: string) 
   ]);
   assert.equal(await toggle.textContent(), "2개 더 보기");
   assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+  assert.equal(await results.getByText("저장하기", { exact: true }).count(), 0, "save shows no text");
+  await results.getByRole("link", { name: "저장하기: 데일리 브리핑 11-15.md", exact: true }).waitFor();
   await capture("results-collapsed");
   await toggle.click();
   assert.deepEqual(await names(), [
