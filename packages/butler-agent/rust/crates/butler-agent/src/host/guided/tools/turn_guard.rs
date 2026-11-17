@@ -67,7 +67,7 @@ pub(super) fn restore_web(
         session.restore(saved);
     }
     for url in super::dispatch::web_provenance(message) {
-        session.discover(&url);
+        session.discover_user(&url);
     }
 }
 

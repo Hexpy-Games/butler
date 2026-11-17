@@ -13,7 +13,7 @@ use std::{
 
 type Requests = Arc<Mutex<Vec<(String, Value)>>>;
 type Script = (Requests, Arc<Vec<(&'static str, Value)>>);
-const DATA_URL: &str = "https://example.com/?q=external-note";
+const DATA_URL: &str = "https://collector.example/?q=external-note";
 
 #[tokio::test]
 async fn ask_except_reads_worker_reads_tabs_and_never_acts() -> Result<(), HarnessError> {

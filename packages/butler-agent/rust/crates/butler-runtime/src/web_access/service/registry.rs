@@ -22,6 +22,8 @@ pub(super) struct Registry {
     reads: HashMap<String, Arc<tokio::sync::Mutex<()>>>,
     /// Exact URLs (fragment kept) the turn found outside its search results.
     discovered: HashSet<String>,
+    /// Exact URLs from the user's message: their origins are trusted, like search results'.
+    user: HashSet<String>,
 }
 
 /// One search result as `browser_open` opens it.
@@ -140,12 +142,32 @@ impl WebSession {
         }
     }
 
-    /// Whether this turn found `url` itself: a search result, a URL in the
-    /// user's message, or a page it already read or opened.
+    /// Records a URL from the user's message: found, and its origin trusted.
+    pub fn discover_user(&self, url: &str) {
+        self.discover(url);
+        let mut state = self.state.lock();
+        let registry = &mut state.registry;
+        if registry.user.len() < MAX_DISCOVERED {
+            registry.user.insert(exact_key(url));
+        }
+    }
+
+    /// Whether `url` is on a trusted site: the origin of a URL in the user's
+    /// message or of a search result. Pages only opened, landed on, clicked or
+    /// reached by popup lend no trust.
+    pub fn trusted(&self, url: &str) -> bool {
+        self.state.lock().registry.trusts(url)
+    }
+
+    /// Whether this turn found `url` itself (a search result, a URL in the user's
+    /// message, or a page it read or opened), or `url` is on a trusted site:
+    /// requesting it sends nothing to an untrusted site.
     pub fn discovered(&self, url: &str) -> bool {
         let key = exact_key(url);
         let state = self.state.lock();
-        state.registry.discovered.contains(&key) || state.registry.is_result(&key)
+        state.registry.discovered.contains(&key)
+            || state.registry.is_result(&key)
+            || state.registry.trusts(url)
     }
 
     /// The result ids, found URLs, opened tabs and planner state this turn
@@ -155,6 +177,7 @@ impl WebSession {
         let registry = &state.registry;
         if registry.results.is_empty()
             && registry.discovered.is_empty()
+            && registry.user.is_empty()
             && registry.opened.is_empty()
             && !state.first_search_consumed
         {
@@ -167,6 +190,8 @@ impl WebSession {
             .collect::<Vec<_>>();
         let mut discovered = registry.discovered.iter().collect::<Vec<_>>();
         discovered.sort_unstable();
+        let mut user = registry.user.iter().collect::<Vec<_>>();
+        user.sort_unstable();
         let mut opened = registry
             .opened
             .iter()
@@ -176,6 +201,7 @@ impl WebSession {
         Some(json!({
             "results": results,
             "discovered": discovered,
+            "user": user,
             "opened": opened,
             "planned": state.first_search_consumed,
         }))
@@ -206,6 +232,12 @@ impl WebSession {
                 registry.discovered.insert(url.to_owned());
             }
         }
+        let user = snapshot["user"].as_array().into_iter().flatten();
+        for url in user.filter_map(Value::as_str) {
+            if registry.user.len() < MAX_DISCOVERED {
+                registry.user.insert(url.to_owned());
+            }
+        }
         for item in snapshot["opened"].as_array().into_iter().flatten() {
             let (requested, tab, landed) = (text(item, 0), text(item, 1), text(item, 2));
             if !requested.is_empty() && !tab.is_empty() {
@@ -231,6 +263,15 @@ impl WebSession {
 }
 
 impl Registry {
+    /// Whether `url` shares an origin with a user-message URL or a search result.
+    fn trusts(&self, url: &str) -> bool {
+        self.user
+            .iter()
+            .map(String::as_str)
+            .chain(self.results.iter().map(|result| result.url.as_str()))
+            .any(|found| butler_turn::btcc::same_origin(url, found))
+    }
+
     /// Whether the exact URL `key` is one of this turn's search results.
     fn is_result(&self, key: &str) -> bool {
         self.by_url

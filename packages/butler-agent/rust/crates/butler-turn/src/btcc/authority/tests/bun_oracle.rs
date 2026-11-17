@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::super::{admission, identity, permission};
 use super::AuthorityAdmissionInput;
@@ -119,4 +119,62 @@ fn actual_bun_principal_admission_identity_and_permission_match() {
         assert_eq!(actual.description, case.permission["description"]);
         assert_eq!(case.scope["title"], actual.title);
     }
+    site_data_grant_is_separate_from_commits(&collation);
+}
+
+/// Opening, reading and typing share one per-site grant; commits keep theirs.
+fn site_data_grant_is_separate_from_commits(collation: &LocaleCollation) {
+    let admission = |capability: &str, target: &str, normalized: Value| {
+        let case = json!({"ownerSessionId":"s","sourceSessionId":"s","sourceTurnId":"t",
+            "sourceWorkId":"","workspacePath":"/w","planRevisionId":"","actionKey":"a",
+            "authorityGeneration":1,"capability":capability,"target":target,"modelRef":"m",
+            "reasoningEffort":"medium","category":"reviewed_effect","normalizedInput":normalized});
+        permission::for_admission(&input(&case), collation).unwrap()
+    };
+    let site = "browser:signed_out:example.com";
+    let open = |capability: &str, url: &str, data_site: &str| {
+        admission(
+            capability,
+            url,
+            json!({"navigation":true,"urls":[url],
+            "data_site":data_site,"arguments":{"url":url},
+            "resolved_steps":[{"action":"navigate","value_preview":url}]}),
+        )
+    };
+    let act = |steps: Value, commit: bool| {
+        admission(
+            "browser_act",
+            site,
+            json!({"tab":"t","steps":steps,"commit":commit,
+            "always_confirm":false,"data_site":site}),
+        )
+    };
+    let opened = open("browser_open", "https://www.example.com/a?hl=en", site);
+    let typed = act(
+        json!([{"action":"click","ref":"e1"},{"action":"type","value":"x"}]),
+        false,
+    );
+    let committed = act(json!([{"action":"click","ref":"e2","commits":true}]), true);
+    let clicked = act(json!([{"action":"click","ref":"e3"}]), false);
+    assert_eq!(opened.target, site);
+    // Navigation and typing on one site share a grant.
+    assert_eq!(
+        open("browser_read", "https://shop.example.com/b?q=1", site).grant_ref,
+        opened.grant_ref
+    );
+    assert_eq!(typed.grant_ref, opened.grant_ref);
+    // Neither covers commits, and a commit grant covers neither.
+    assert_ne!(committed.grant_ref, opened.grant_ref);
+    assert_ne!(committed.grant_ref, typed.grant_ref);
+    // Commit and plain act grants keep today's browser_act key.
+    assert_eq!(committed.grant_ref, clicked.grant_ref);
+    assert_ne!(
+        open(
+            "browser_open",
+            "https://www.example.org/a",
+            "browser:signed_out:example.org"
+        )
+        .grant_ref,
+        opened.grant_ref
+    );
 }
