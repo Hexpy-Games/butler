@@ -13,7 +13,10 @@ async fn browser_keeps_site_data_across_quit() -> Result<(), HarnessError> {
 #[tokio::test]
 async fn browser_keeps_site_data_across_terminate() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    butler_e2e::skip_unless!(cfg!(unix), "Windows has no SIGTERM");
+    butler_e2e::skip_unless!(
+        butler_platform::process_control::SIGNALS,
+        "Windows has no SIGTERM"
+    );
     site_data_survives("browser_keeps_site_data_across_terminate", true).await
 }
 
