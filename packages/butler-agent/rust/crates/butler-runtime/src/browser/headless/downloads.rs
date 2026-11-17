@@ -326,13 +326,16 @@ impl Downloads {
             .strip_prefix("conversation:")
             .unwrap_or("")
             .to_owned();
-        let context = port.prepare(session.clone()).await?;
+        let context = port
+            .prepare(session.clone())
+            .await
+            .map_err(|_| "download_workspace_unavailable")?;
         let root = butler_platform::secure_fs::canonicalize(
             context["workspace_path"].as_str().unwrap_or(""),
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|_| "download_workspace_unavailable")?;
         let directory = root.join(butler_platform::data_paths::DOWNLOADS);
-        std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&directory).map_err(|_| "download_workspace_unavailable")?;
         let resolved =
             butler_platform::secure_fs::canonicalize(&directory).map_err(|e| e.to_string())?;
         if !butler_platform::secure_fs::same_path(&resolved, &directory) {
