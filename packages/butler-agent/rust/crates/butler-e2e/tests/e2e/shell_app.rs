@@ -28,6 +28,7 @@ use serde_json::{Value, json};
 pub(super) mod driver;
 pub(super) mod live_turns;
 use driver::{SERIAL, SHOTS, Shell};
+mod chat_end_room;
 mod composer_toolbar;
 mod focus_fallback;
 mod focus_selection;
