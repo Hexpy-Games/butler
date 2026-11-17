@@ -155,7 +155,8 @@ impl Select {
 
     /// A zero-cost layer that measures the element it is placed in as the trigger's box.
     pub(crate) fn trigger_probe(&self) -> gpui::Div {
-        self.parts.trigger.probe()
+        let select = self.clone();
+        self.parts.trigger.probe_while(move |cx| select.is_open(cx))
     }
 
     pub fn is_open(&self, cx: &App) -> bool {
