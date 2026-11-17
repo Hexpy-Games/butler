@@ -32,10 +32,13 @@ async fn stolen_cookie_expires_on_server_and_stays_expired_after_restart()
     assert_eq!(pairing::read(&s.gw, &browser, &cookie).await?, 200);
     pairing::advance(&pairing::admin(&s), 3600).await?;
     assert_eq!(pairing::read(&s.gw, &browser, &cookie).await?, 401);
+    // An expired pairing is not a paired device: the list drops it at once and after restart.
+    assert_eq!(pairing::devices(&pairing::admin(&s)).await?, json!([]));
     s.agent.terminate().await?;
     age_devices(&s, 3600);
     s.gw = s.agent.start_again().await?;
     assert_eq!(pairing::read(&s.gw, &browser, &cookie).await?, 401);
+    assert_eq!(pairing::devices(&pairing::admin(&s)).await?, json!([]));
     pairing::assert_no_secrets(&s, &[&cookie])?;
     s.finish().await
 }
