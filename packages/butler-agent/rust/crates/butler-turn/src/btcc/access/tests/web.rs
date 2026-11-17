@@ -75,6 +75,10 @@ pub(super) fn boundaries() {
             true,
         ),
         (
+            serde_json::json!([{"action":"press","value":"Shift+Insert"}]),
+            true,
+        ),
+        (
             serde_json::json!([{"action":"press","value":"Enter"}, {"action":"click","ref":"e1"}]),
             false,
         ),
