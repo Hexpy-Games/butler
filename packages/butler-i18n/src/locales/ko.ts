@@ -1439,6 +1439,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     browser: { title: "브라우저", signin: "로그인 정보 사용", signinDescription: "허용한 사이트에 로그인 상태로 접속합니다.", payment: "결제 정보 사용", paymentDescription: "확인 없이 결제로 둔 사이트에서 결제합니다.", unavailable: "이 컴퓨터에서 사용 불가" },
     needsPermissionNotify: "예약 작업이 권한이 필요한 단계를 건너뛰었습니다.",
     saveFailed: "예약 작업 저장 실패",
+    actionDone: { run: "실행 시작됨", pause: "일시정지됨", resume: "재개됨" },
+    actionFailed: { run: "실행 실패", pause: "일시정지 실패", resume: "재개 실패" },
     errors: {
       title: "제목을 입력해 주세요.",
       prompt: "프롬프트를 입력해 주세요.",

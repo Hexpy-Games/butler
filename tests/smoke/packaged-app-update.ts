@@ -240,8 +240,8 @@ async function smoke() {
     assert.equal(await Bun.file(join(data, "cognition/memory/active-generation.json")).exists(), false);
     // An enabled future schedule is configuration, not running user work.
     const scheduled = await page.expression<{ ok: boolean }>(`window.butlerApp.createAutomation(${JSON.stringify({
-      title: "Future schedule", promptBody: "Scheduled stub", targetSessionId: session.id,
-      scheduleType: "once", runAt: "2099-10-03T00:00:00Z", accessMode: "ask_first",
+      title: "Future schedule", prompt_body: "Scheduled stub", target_session_id: session.id,
+      schedule_type: "once", run_at: "2099-10-03T00:00:00Z", access_mode: "ask_first",
     })})`);
     assert.equal(scheduled.ok, true, "future schedule was accepted");
     await page.expression("window.butlerApp.quitApp()");
