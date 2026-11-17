@@ -40,7 +40,7 @@ pub fn types_text(steps: &serde_json::Value) -> bool {
             Some("press") => step["value"]
                 .as_str()
                 .and_then(|chord| chord.rsplit('+').next())
-                .is_some_and(|key| key.chars().count() == 1),
+                .is_some_and(|key| key == "Insert" || key.chars().count() == 1),
             _ => false,
         })
 }

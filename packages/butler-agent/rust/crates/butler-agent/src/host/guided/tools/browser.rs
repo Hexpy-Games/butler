@@ -320,7 +320,7 @@ fn approval_input(
         "signed_out"
     };
     let commit = authority::commits(args, prepared);
-    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"url":prepared["url"],"site":scope,"mode":mode,"always_confirm":always,"merchant_site":if payment { prepared["merchant_site"].clone() } else { Value::Null },"commit":commit,"allow_site":if allow_site { Some("payment") } else { None }})
+    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"url":prepared["url"],"data_site":butler_runtime::browser::site_scope(prepared["url"].as_str().unwrap_or("")).ok(),"site":scope,"mode":mode,"always_confirm":always,"merchant_site":if payment { prepared["merchant_site"].clone() } else { Value::Null },"commit":commit,"allow_site":if allow_site { Some("payment") } else { None }})
 }
 /// The act's authority target: the page's site under its tab profile.
 fn act_scope(prepared: &Value) -> String {
