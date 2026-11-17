@@ -293,3 +293,54 @@ async fn caller_url_that_needs_approval_returns_its_url() -> Result<(), HarnessE
     let _ = host.await;
     s.finish().await
 }
+
+#[tokio::test]
+async fn given_tab_stays_in_that_tab() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let replies = [
+        json!({"notes":"","next":{"open":{"url":"https://store.example/other"}}}),
+        json!({"notes":"Price 12","next":{"done":{"fields":{"price":"12"},"evidence":[{"field":"price","quote":"Price 12"}],"summary":"Found price."}}}),
+    ]
+    .map(|reply| reply.to_string());
+    let mut c = cassette("https://store.example/product-b", &replies)?;
+    c.exchanges[0].response = stub::response(&[stub::call(
+        "browse",
+        &json!({"goal":"Inspect page","tab":"product-b","url":"https://store.example/other","fields":["price"]}),
+        "recover",
+    )]);
+    let s = Setup::new("BROWSE-GIVEN-TAB")?
+        .stub_cassette(c)
+        .start()
+        .await?;
+    let reply =
+        s.gw.patch("/settings", json!({"browser":{"browsing_agent":"auto"}}))
+            .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let (host, _) = host::start(&s).await?;
+    // The conversation already has the tab, as one the user just acted in.
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let opened = admin
+        .send(
+            reqwest::Method::POST,
+            "/internal/browser/calls",
+            Some(json!({"op":"tab.open","session":"general","args":{"url":"https://store.example/product-b"}})),
+            &[],
+        )
+        .await?;
+    assert_eq!(opened.status, 200, "{}", opened.text);
+    let (_, turn) = s.turn("general", "Recover page task").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let requests = s.provider()?.requests();
+    let result = outputs(requests.last().unwrap()).pop().unwrap().0["output"].clone();
+    assert_eq!(result["status"], "done", "{result}");
+    // Any open would have made the opened page the task's tab.
+    assert_eq!(result["tab"], "product-b", "{result}");
+    let second = requests.iter().filter(|r| executor(r)).nth(1).unwrap();
+    let text = second["input"][0]["content"][0]["text"].as_str().unwrap();
+    let scope: Value = serde_json::from_str(text.split_once("Current scope:\n").unwrap().1)?;
+    assert_eq!(scope["open"], "unavailable");
+    assert!(scope["action_log"].to_string().contains("not_opened"));
+    host.abort();
+    let _ = host.await;
+    s.finish().await
+}
