@@ -185,6 +185,9 @@ impl InlineReference {
 }
 
 /// The favicon slot: the globe at once, the favicon fading in over it once decoded.
+///
+/// Like the web's `vertical-align: -0.2em`: the favicon (a box without text, baseline = its
+/// bottom) sits 0.2em below the text baseline, now that the label row aligns real baselines.
 fn favicon_slot(
     id: &ElementId,
     source: Option<&ImageSource>,
@@ -260,8 +263,6 @@ fn favicon_slot(
         .flex_none()
         .size(side)
         .mr(ds.len(Length::Space1))
-        // Like the web's `vertical-align: -0.2em`: the favicon (a box without text, baseline = its
-        // bottom) sits 0.2em below the text baseline, now that the label row aligns real baselines.
         .top(em * 0.2)
         .child(globe)
         .children(plate)
