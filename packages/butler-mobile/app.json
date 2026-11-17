@@ -18,7 +18,12 @@
     "locales": { "ko": "./locales/ko.json" },
     "plugins": [
       "expo-router",
-      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }]
+      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }],
+      ["expo-font", { "fonts": [
+        "./node_modules/pretendard/dist/public/static/Pretendard-Regular.otf",
+        "./node_modules/pretendard/dist/public/static/Pretendard-Medium.otf",
+        "./node_modules/pretendard/dist/public/static/Pretendard-SemiBold.otf"
+      ] }]
     ]
   }
 }
