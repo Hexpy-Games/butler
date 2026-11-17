@@ -39,7 +39,8 @@ const SELECTOR = "button, [role=\"button\"], [role=\"radio\"], [role=\"switch\"]
 const TALL = 7000;
 const [width, height] = [1280, 800];
 const theme = "light";
-const browser = await chromium.launch();
+// Linux headless Chromium hints glyph advances (text a few percent wider than macOS and gpui); unhint to match.
+const browser = await chromium.launch(process.platform === "linux" ? { args: ["--font-render-hinting=none"] } : {});
 try {
   const dir = join(resolve(output), "react", `${width}x${height}-${theme}`);
   mkdirSync(dir, { recursive: true });

@@ -73,7 +73,8 @@ pub(super) fn tab_id(
 
 impl Headless {
     /// The backend over an App's pages: its one browser is connected from the
-    /// start, and nothing is installed, launched or reaped.
+    /// start, and nothing is installed, launched or reaped; only its utility page is released
+    /// after the idle grace.
     pub fn hosted(
         host: Arc<dyn PageHost>,
         incoming: mpsc::Receiver<Vec<u8>>,

@@ -61,7 +61,7 @@ use soft::OsrFrame as Frame;
 #[cfg(target_os = "linux")]
 pub use soft::{OsrFrame, read_bgra_pixel};
 #[cfg(cef_osr)]
-use state::{Events, Page, PageRef};
+use state::{Events, Page, PageRef, Phase};
 #[cfg(cef_osr)]
 use std::{
     cell::{Cell, RefCell},
@@ -358,10 +358,14 @@ impl OsrRuntime {
         };
         {
             let mut p = p.borrow_mut();
-            if p.visible == visible || p.closing {
+            if p.phase == Phase::Closing || (p.phase == Phase::Visible) == visible {
                 return;
             }
-            p.visible = visible;
+            p.phase = if visible {
+                Phase::Visible
+            } else {
+                Phase::Hidden
+            };
             if visible {
                 self.state.visible.set(self.state.visible.get() + 1);
             } else {
@@ -384,12 +388,12 @@ impl OsrRuntime {
         };
         {
             let mut p = p.borrow_mut();
-            if p.closing {
+            if p.phase == Phase::Closing {
                 return;
             }
-            p.closing = true;
-            if p.visible {
-                p.visible = false;
+            let was_visible = p.phase == Phase::Visible;
+            p.phase = Phase::Closing;
+            if was_visible {
                 self.state.visible.set(self.state.visible.get() - 1);
             }
             p.release_frames();

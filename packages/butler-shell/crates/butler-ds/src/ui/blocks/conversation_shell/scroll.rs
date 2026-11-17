@@ -311,6 +311,6 @@ impl RenderOnce for ConversationScrollToBottomButton {
             .pr(px(side / 2. + 2. * vars.column_shift))
             .flex()
             .justify_center()
-            .child(div().min_w_0().child(pill))
+            .child(div().flex().min_w_0().child(pill))
     }
 }

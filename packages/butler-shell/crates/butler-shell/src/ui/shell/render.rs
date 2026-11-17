@@ -21,6 +21,11 @@ use crate::ui::onboarding::{self, gate::Gate};
 use crate::ui::settings::SettingsView;
 use crate::ui::widgets::anchor;
 
+/// The composer's float offset from the card bottom.
+const COMPOSER_FLOAT_BOTTOM: f32 = 28.; // DS: conversationUtils.tsx:18
+/// The gap between the last message and the composer.
+const COMPOSER_CONTENT_GAP: f32 = 20.; // DS: conversationUtils.tsx:19
+
 /// `Conversation.tsx`'s `contentGutter` while the new chat shows: the title icon
 /// (`clamp(40px, 5.333vw, 54px)`) twice plus its 10px gap, so the column, the composer and the
 /// prompt list share the new chat's narrower width.
@@ -44,7 +49,7 @@ impl Shell {
                 ))
                 .into_any_element()
         };
-        let reserve = self.composer_h.get() + f32::from(Ds::get(cx).len(Length::SpaceLg)) * 2.;
+        let reserve = (self.composer_h.get() + COMPOSER_FLOAT_BOTTOM + COMPOSER_CONTENT_GAP).ceil();
         let gutter = if self.chat.read(cx).shows_empty() {
             new_chat_gutter(Ds::get(cx))
         } else {
@@ -289,7 +294,6 @@ impl Shell {
             .chrome_environment(ChromeEnvironment::Electron)
             .platform(platform)
             .left_open(open)
-            .compact_sidebar_full_width(true)
             .panel_widths(width, 376.)
             .resizing(self.frame.resize_start.is_some())
             .peek(peek)

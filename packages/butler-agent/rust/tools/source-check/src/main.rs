@@ -1,5 +1,6 @@
 mod animation_frames;
 mod architecture;
+mod block_controls;
 mod e2e_gate;
 mod e2e_hooks;
 mod function_length;
@@ -86,6 +87,7 @@ fn scan(root: &Path, mode: Mode) -> Result<bool, String> {
     has_violations |= wall_clock::check(root, &sources)?;
     has_violations |= animation_frames::check(root, &sources)?;
     has_violations |= architecture::check(root)?;
+    has_violations |= block_controls::check(root, &sources, mode)?;
     has_violations |= model_literals::check(root, &sources)?;
     has_violations |= e2e_gate::check(root, &sources)?;
     has_violations |= e2e_hooks::check(root, &sources, mode)?;
