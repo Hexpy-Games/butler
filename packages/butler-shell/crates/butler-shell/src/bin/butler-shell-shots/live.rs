@@ -252,14 +252,7 @@ pub(super) fn run(
     io::stdout().flush()?;
     // Commands arrive on a thread, so the App keeps running between them: a stop request (SIGTERM)
     // ends it through the App's own Quit. Only real time passes; the fake clock stays put.
-    let (lines, input) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        for line in io::stdin().lock().lines() {
-            if lines.send(line).is_err() {
-                return;
-            }
-        }
-    });
+    let input = stdin_lines();
     loop {
         let line = match input.recv_timeout(Duration::from_millis(30)) {
             Ok(line) => line?,
@@ -294,6 +287,19 @@ pub(super) fn run(
             return end(&mut h);
         }
     }
+}
+
+/// Standard input's lines, read on a thread.
+fn stdin_lines() -> std::sync::mpsc::Receiver<io::Result<String>> {
+    let (lines, input) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in io::stdin().lock().lines() {
+            if lines.send(line).is_err() {
+                return;
+            }
+        }
+    });
+    input
 }
 
 /// The App finished its Quit and asked gpui to quit (headless gpui's `quit` does nothing).
