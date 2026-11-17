@@ -100,9 +100,8 @@ fn popup_blocked(
     if user_held {
         return Err(error(403, "not_your_tab"));
     }
-    let reason = match args["reason"].as_str() {
-        Some(r @ ("popup_policy" | "tab_budget_exhausted")) => r,
-        _ => return Err(error(400, "invalid_request")),
+    let Some(reason @ ("popup_policy" | "tab_budget_exhausted")) = args["reason"].as_str() else {
+        return Err(error(400, "invalid_request"));
     };
     let invalid = || error(400, "invalid_request");
     let raw = args["url"].as_str().ok_or_else(invalid)?;
