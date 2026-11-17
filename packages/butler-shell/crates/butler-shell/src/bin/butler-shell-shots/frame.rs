@@ -37,6 +37,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
             );
             Ok(())
         }
+        "expect-within" => expect_within(h, arg),
         "expect-toasts" => {
             settle(&mut h.cx, h.handle);
             let expected: usize = arg.parse()?;
@@ -87,6 +88,29 @@ fn expect_composer_menu(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             .update(cx, |shell, _, cx| shell.composer.read(cx).menu_open())
     })?;
     ensure!(open == (arg == "open"), "composer menu open is {open}");
+    Ok(())
+}
+
+/// `expect-within <inner> <outer>`: both anchors show, `inner` has a size and lies inside `outer`.
+fn expect_within(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let (inner, outer) = arg
+        .split_once(' ')
+        .context("expect-within <inner> <outer>")?;
+    let (_, a) = find_anchor(h, inner)?.with_context(|| format!("missing {inner}"))?;
+    let (_, b) = find_anchor(h, outer)?.with_context(|| format!("missing {outer}"))?;
+    let slack = px(0.5);
+    ensure!(
+        a.size.width > px(0.) && a.size.height > px(0.),
+        "{inner} has no size: {a:?}"
+    );
+    ensure!(
+        a.left() + slack >= b.left()
+            && a.top() + slack >= b.top()
+            && a.right() <= b.right() + slack
+            && a.bottom() <= b.bottom() + slack,
+        "{inner} {a:?} is not inside {outer} {b:?}"
+    );
     Ok(())
 }
 
