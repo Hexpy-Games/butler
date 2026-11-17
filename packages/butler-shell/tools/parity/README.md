@@ -84,6 +84,8 @@ parity-diff $TMPDIR/ds-parity/react/1280x800-light $TMPDIR/ds-parity/gpui/1280x8
   $TMPDIR/ds-parity/diff/1280x800-light
 ```
 
+On Linux the web dump launches Chromium with `--font-render-hinting=none`, because hinted glyph advances make web text wider than on macOS and gpui.
+
 ### B2 pages, state shots and the summary
 
 `scenes/ds-view.json` lists the B1 and B2 pages. `ds-view-states.ts` captures the interactive
