@@ -1,4 +1,5 @@
 //! CEF pages share the shell's UI thread; callbacks enter through channels.
+mod change;
 mod config;
 mod devtools;
 mod ime;
@@ -6,11 +7,9 @@ mod input;
 mod surface;
 
 use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
-use super::page_dialog::{DialogAnswer, DialogKind, EngineChild, PageDialog};
-use super::popup_policy::{PopupGate, policy};
-use butler_cef_host::osr::{
-    OsrAnswer, OsrDialogKind, OsrEvent, OsrProfile, OsrRuntime, OsrSink, PopupBlock,
-};
+use super::page_dialog::{DialogAnswer, EngineChild};
+use super::popup_policy::{PopupGate, PopupSites, policy};
+use butler_cef_host::osr::{OsrAnswer, OsrEvent, OsrProfile, OsrRuntime, OsrSink};
 use futures::{
     StreamExt as _,
     channel::mpsc,
@@ -20,7 +19,7 @@ use gpui::BorrowAppContext as _;
 use gpui::{AnyElement, App, Window};
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     rc::Rc,
     sync::Arc,
     time::Instant,
@@ -40,6 +39,7 @@ pub(crate) struct CefEngine {
     pages: Pages,
     ids: HashMap<TabId, u64>,
     shown: Rc<Cell<Option<u64>>>,
+    awake: HashSet<u64>,
     next_id: Rc<Cell<u64>>,
     gate: Rc<RefCell<PopupGate>>,
     pending: HashMap<u64, OsrProfile>,
@@ -74,11 +74,16 @@ impl CefEngine {
             pages,
             ids: HashMap::new(),
             shown,
+            awake: HashSet::new(),
             next_id: gate.borrow().next_id.clone(),
             gate: gate.clone(),
             pending: HashMap::new(),
             downloads,
         })
+    }
+    /// The one place that decides a page's visibility: shown, or kept awake.
+    fn visible(&self, id: u64) -> bool {
+        self.shown.get() == Some(id) || self.awake.contains(&id)
     }
     fn materialize(&mut self, id: u64, url: &str) {
         let Some(profile) = self.pending.get(&id) else {
@@ -87,7 +92,7 @@ impl CefEngine {
         match self.runtime.open(id, url, (1, 1), 1., profile.clone()) {
             Ok(()) => {
                 self.pending.remove(&id);
-                self.runtime.set_visible(id, self.shown.get() == Some(id));
+                self.runtime.set_visible(id, self.visible(id));
             }
             Err(error) => eprintln!("CEF open failed: {error}"),
         }
@@ -125,7 +130,7 @@ impl CefEngine {
                     continue;
                 }
                 // Opening a window can render the opener synchronously. Release its state first.
-                let change = change(event, &mut state.borrow_mut());
+                let change = change::change(event, &mut state.borrow_mut());
                 if let Some(change) = change {
                     let event = PageEvent { page: tab, change };
                     if matches!(event.change, PageChange::PopupOpened { .. }) {
@@ -181,75 +186,6 @@ impl CefEngine {
 fn windows() -> bool {
     butler_platform::launcher::node_platform() == "win32"
 }
-fn change(event: OsrEvent, state: &mut PageState) -> Option<PageChange> {
-    Some(match event {
-        OsrEvent::Url(url) => PageChange::Url(if url == "about:blank" {
-            String::new()
-        } else {
-            url
-        }),
-        OsrEvent::Title(title) => PageChange::Title(title),
-        OsrEvent::Favicon(url) => PageChange::Favicon(url),
-        OsrEvent::Loading(loading) => PageChange::Loading(loading),
-        OsrEvent::History {
-            can_back,
-            can_forward,
-        } => PageChange::History {
-            can_back,
-            can_forward,
-        },
-        OsrEvent::PopupNewTab { url } => PageChange::PopupNewTab(url),
-        OsrEvent::PopupBlocked { url, reason } => PageChange::PopupBlocked {
-            url,
-            reason: match reason {
-                PopupBlock::NoGesture => "no_gesture",
-                PopupBlock::TabBudget => "tab_budget_exhausted",
-            },
-        },
-        OsrEvent::PopupOpened { child, url } => PageChange::PopupOpened {
-            child: EngineChild(child),
-            url,
-        },
-        OsrEvent::CloseRequested => PageChange::CloseRequested,
-        OsrEvent::Dialog(dialog) => PageChange::Dialog(PageDialog {
-            id: dialog.id,
-            kind: match dialog.kind {
-                OsrDialogKind::Alert => DialogKind::Alert,
-                OsrDialogKind::Confirm => DialogKind::Confirm,
-                OsrDialogKind::Prompt => DialogKind::Prompt,
-                OsrDialogKind::BeforeUnload => DialogKind::BeforeUnload,
-                OsrDialogKind::Auth => DialogKind::Auth,
-                OsrDialogKind::File => DialogKind::File,
-            },
-            message: dialog.message,
-            default_prompt: dialog.default_prompt,
-            origin: dialog.origin,
-            accept_types: dialog.accept_types,
-            multiple: dialog.multiple,
-        }),
-        OsrEvent::DownloadStarted { .. }
-        | OsrEvent::DownloadProgress { .. }
-        | OsrEvent::DownloadDone { .. }
-        | OsrEvent::Frame
-        | OsrEvent::DevTools { .. } => return None,
-        OsrEvent::Crashed => PageChange::Crashed,
-        OsrEvent::DevToolsEvent {
-            method,
-            params_json,
-        } => PageChange::DevToolsEvent {
-            method,
-            params: serde_json::from_str(&params_json).unwrap_or_default(),
-        },
-        OsrEvent::Cursor(cursor) => {
-            state.cursor = cursor;
-            return None;
-        }
-        OsrEvent::ImeBounds(bounds) => {
-            state.ime_bounds = bounds;
-            return None;
-        }
-    })
-}
 impl PageEngine for CefEngine {
     fn shutdown(&mut self) {
         self.runtime.shutdown();
@@ -265,10 +201,47 @@ impl PageEngine for CefEngine {
     ) -> super::engine::DevToolsReply {
         devtools::send(self, page, method, params)
     }
+    fn devtools_raw(&self, page: &TabId, message: &[u8]) {
+        if let Some(&id) = self.ids.get(page) {
+            let _ = self.runtime.devtools_raw(id, message);
+        }
+    }
+    fn devtools_raw_end(&self, page: &TabId) {
+        if let Some(&id) = self.ids.get(page) {
+            self.runtime.devtools_raw_end(id);
+        }
+    }
+    fn keep_awake(&mut self, page: &TabId, awake: bool) {
+        let Some(&id) = self.ids.get(page) else {
+            return;
+        };
+        if awake {
+            self.awake.insert(id);
+        } else {
+            self.awake.remove(&id);
+        }
+        if !self.pending.contains_key(&id) {
+            self.runtime.set_visible(id, self.visible(id));
+        }
+    }
+    fn set_hosted(&mut self, page: &TabId, hosted: bool) {
+        if let Some(id) = self.ids.get(page)
+            && let Some(source) = self.gate.borrow_mut().pages.get_mut(id)
+        {
+            source.hosted = hosted;
+        }
+    }
+    fn set_popup_sites(&mut self, page: &TabId, sites: Vec<String>, hosts: Vec<String>) {
+        if let Some(id) = self.ids.get(page)
+            && let Some(source) = self.gate.borrow_mut().pages.get_mut(id)
+        {
+            source.popups = Rc::new(PopupSites { sites, hosts });
+        }
+    }
     fn enabled(&self) -> bool {
         true
     }
-    fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str) {
+    fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str, partition: &str) {
         let id = self.next_id.get() + 1;
         self.next_id.set(id);
         self.gate
@@ -291,7 +264,7 @@ impl PageEngine for CefEngine {
             id,
             match profile {
                 Profile::SignedIn => OsrProfile::SignedIn,
-                Profile::SignedOut => OsrProfile::SignedOut(owner.to_owned()),
+                Profile::SignedOut => OsrProfile::SignedOut(partition.to_owned()),
             },
         );
         if !url.is_empty() {
@@ -299,18 +272,16 @@ impl PageEngine for CefEngine {
         }
     }
 
-    fn adopt(&mut self, page: &TabId, child: EngineChild) {
+    fn adopt(&mut self, page: &TabId, child: EngineChild) -> bool {
         self.ids.insert(page.clone(), child.0);
-        if let Some(source) = self.gate.borrow().pages.get(&child.0) {
+        let gate = self.gate.borrow();
+        let source = gate.pages.get(&child.0);
+        if let Some(source) = source {
             self.downloads.page(child.0, page, &source.owner_key, 1);
         }
-        let input = self
-            .gate
-            .borrow()
-            .pages
-            .get(&child.0)
-            .map(|p| p.last_input.clone())
-            .unwrap_or_default();
+        let input = source.map(|p| p.last_input.clone()).unwrap_or_default();
+        let hosted = source.is_some_and(|p| p.hosted);
+        drop(gate);
         self.pages.borrow_mut().insert(
             child.0,
             (
@@ -322,6 +293,13 @@ impl PageEngine for CefEngine {
                 })),
             ),
         );
+        hosted
+    }
+    fn release_loads(&mut self, page: &TabId) -> Option<String> {
+        self.runtime.release_loads(*self.ids.get(page)?)
+    }
+    fn held_url(&self, page: &TabId) -> Option<String> {
+        self.runtime.held_url(*self.ids.get(page)?)
     }
     fn allow_popup(&mut self, page: &TabId, url: &str) {
         let Some(&id) = self.ids.get(page) else {
@@ -413,7 +391,7 @@ impl PageEngine for CefEngine {
             return;
         }
         if let Some(old) = old {
-            self.runtime.set_visible(old, false);
+            self.runtime.set_visible(old, self.visible(old));
         }
         if let Some(next) = next {
             self.runtime.set_visible(next, true);
@@ -425,6 +403,7 @@ impl PageEngine for CefEngine {
             self.downloads.remove_page(id);
             self.pending.remove(&id);
             self.gate.borrow_mut().remove(id);
+            self.awake.remove(&id);
             self.runtime.close(id);
             self.pages.borrow_mut().remove(&id);
             if self.shown.get() == Some(id) {

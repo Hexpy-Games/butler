@@ -5,7 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
-use super::support::{admin, call, open, publish_as, selected, setup};
+use super::support::{admin, call, open, publish_as, selected, setup, shell};
 use butler_e2e::e2e::HarnessError;
 use serde_json::{Value, json};
 
@@ -36,14 +36,17 @@ async fn browser_identity_agrees_in_page_worker_and_frame() -> Result<(), Harnes
         .lines()
         .find_map(|line| line.split_once("Identity:").map(|(_, value)| value))
         .expect("complete identity report");
+    println!("Identity:{line}");
     let reports: Value = serde_json::from_str(line)?;
     let ua = reports["page"]["ua"].as_str().unwrap();
-    assert!(
-        !["Butler/", "Electron/", "HeadlessChrome/"]
-            .iter()
-            .any(|token| ua.contains(token)),
-        "{ua}"
-    );
+    // The shell is the Butler browser: its identity carries the Butler token.
+    let forbidden: &[&str] = if shell() {
+        &["Electron/", "HeadlessChrome/"]
+    } else {
+        &["Butler/", "Electron/", "HeadlessChrome/"]
+    };
+    assert!(!forbidden.iter().any(|token| ua.contains(token)), "{ua}");
+    assert!(!shell() || ua.contains("Butler/"), "{ua}");
     let full = ua
         .split("Chrome/")
         .nth(1)
@@ -56,21 +59,29 @@ async fn browser_identity_agrees_in_page_worker_and_frame() -> Result<(), Harnes
         let report = &reports[name];
         assert_eq!(report["ua"], ua, "{name}");
         assert_eq!(report["data"], reports["page"]["data"], "{name}");
-        for brand in ["Chromium", "Google Chrome"] {
+        let brands = report["data"]["brands"].as_array().unwrap();
+        // The shell (CEF) lists only Chromium; its full version list is empty.
+        let names: &[&str] = if shell() {
+            &["Chromium"]
+        } else {
+            &["Chromium", "Google Chrome"]
+        };
+        for brand in names {
             assert!(
-                report["data"]["brands"]
-                    .as_array()
-                    .unwrap()
+                brands
                     .iter()
-                    .any(|b| b["brand"] == brand && b["version"] == major)
+                    .any(|b| b["brand"] == *brand && b["version"] == major),
+                "{name}: {brand}"
             );
-            assert!(
-                report["data"]["fullVersionList"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|b| b["brand"] == brand && b["version"] == full)
-            );
+        }
+        if !shell() {
+            let list = report["data"]["fullVersionList"].as_array().unwrap();
+            for brand in names {
+                assert!(
+                    list.iter()
+                        .any(|b| b["brand"] == *brand && b["version"] == full)
+                );
+            }
         }
         assert_eq!(report["data"]["mobile"], false);
     }

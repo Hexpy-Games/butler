@@ -57,6 +57,18 @@ impl OsrRuntime {
     pub fn devtools(&self, _: u64, _: &str, _: &str) -> Result<i32, OsrError> {
         match self.never {}
     }
+    pub fn devtools_raw(&self, _: u64, _: &[u8]) -> Result<(), OsrError> {
+        match self.never {}
+    }
+    pub fn devtools_raw_end(&self, _: u64) {
+        match self.never {}
+    }
+    pub fn release_loads(&self, _: u64) -> Option<String> {
+        match self.never {}
+    }
+    pub fn held_url(&self, _: u64) -> Option<String> {
+        match self.never {}
+    }
     pub fn eval(&self, _: u64, _: &str) {
         match self.never {}
     }

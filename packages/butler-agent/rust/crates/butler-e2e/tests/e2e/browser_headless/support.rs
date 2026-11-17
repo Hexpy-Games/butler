@@ -17,14 +17,15 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use std::{path::PathBuf, time::Duration};
 
-/// `BUTLER_E2E_BROWSER_BACKEND=headless` runs these scenarios on Chrome for
-/// Testing (the first run downloads the pinned build into a temp cache);
-/// `=hidden-app` runs them on the hidden App host: the in-worktree Electron
-/// named by `BUTLER_E2E_ELECTRON` with the App's own executor, no Chrome.
-/// `=cef` runs the scenarios on the headless backend driving the staged CEF host
-/// named by `BUTLER_E2E_CEF_HOST` (no Chrome, no Electron).
+mod host;
+pub(crate) use host::{Pending, shell};
+
+/// `BUTLER_E2E_BROWSER_BACKEND`: `headless` is Chrome for Testing (the first run downloads it),
+/// `hidden-app` the Electron named by `BUTLER_E2E_ELECTRON`, `cef` the staged host named by
+/// `BUTLER_E2E_CEF_HOST`, `shell` the gpui shell (CEF) attached as the agent's page host.
 pub(crate) fn selected() -> bool {
     matches!(backend().as_deref(), Ok("headless" | "hidden-app" | "cef"))
+        || (shell() && host::runnable())
 }
 
 fn backend() -> Result<String, std::env::VarError> {
@@ -34,6 +35,11 @@ fn backend() -> Result<String, std::env::VarError> {
 /// Whether the scenarios run on the hidden App host (Electron).
 pub(crate) fn hidden_app() -> bool {
     backend().as_deref() == Ok("hidden-app")
+}
+
+/// Whether the scenarios run on Chrome for Testing.
+pub(crate) fn chrome() -> bool {
+    backend().as_deref() == Ok("headless")
 }
 
 /// Selects the staged host so CEF scenarios cannot fall back to Chrome.
@@ -83,7 +89,11 @@ pub(crate) fn cache() -> PathBuf {
     )
 }
 
-pub(crate) fn setup(id: &str) -> Result<Setup, HarnessError> {
+pub(crate) fn setup(id: &str) -> Result<Pending, HarnessError> {
+    configured(id).map(Pending::new)
+}
+
+fn configured(id: &str) -> Result<Setup, HarnessError> {
     let setup = Setup::new(id)?
         .access(Access::FullAccess)
         .env("BUTLER_BROWSER_HEADLESS", "on")
@@ -102,10 +112,15 @@ pub(crate) fn setup(id: &str) -> Result<Setup, HarnessError> {
             .env("BUTLER_BROWSER_DOWNLOAD_BASE", "http://127.0.0.1:9/"));
     }
     if !hidden_app() {
-        return Ok(setup.env(
+        let setup = setup.env(
             "BUTLER_BROWSER_CACHE_DIR",
             cache().to_string_lossy().into_owned(),
-        ));
+        );
+        return Ok(if shell() {
+            setup.app_supervisor().env("BUTLER_BROWSER_APP", "off")
+        } else {
+            setup
+        });
     }
     // Agent launch clears inherited environment; Electron still needs the
     // selected display while its profile and home remain isolated.
@@ -267,6 +282,7 @@ const INDEX: &str = r#"<!doctype html><meta charset="utf-8"><title>Headless fixt
 <button id="submit" onclick="document.querySelector('#typed').textContent='Typed '+document.querySelector('#q').value">Submit</button><p id="typed">Typed nothing</p>
 <button id="ask" onclick="document.querySelector('#answer').textContent=confirm('Proceed?')?'Accepted':'Declined'">Ask</button><p id="answer">No answer</p>
 <button id="popup" onclick="window.open('./popup.html','_blank')">Open popup</button>
+<button id="blocked" onclick="window.open('https://popup-blocked.invalid/','_blank')">Open blocked popup</button>
 <p><a id="rebind" href="http://localhost.:{{GATEWAY_PORT}}/health">Loopback by name</a></p>
 <p><a id="private" href="http://10.0.0.1/">Private address</a></p><!-- privacy-hygiene: allow-private-ip (LAN-denial fixture) -->
 <p><a id="local" href="file:///etc/hosts">Local file</a></p>

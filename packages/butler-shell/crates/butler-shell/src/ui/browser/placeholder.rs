@@ -78,14 +78,16 @@ impl PlaceholderEngine {
 
 impl PageEngine for PlaceholderEngine {
     #[cfg(feature = "cef")]
-    fn adopt(&mut self, _: &TabId, _: super::page_dialog::EngineChild) {}
+    fn adopt(&mut self, _: &TabId, _: super::page_dialog::EngineChild) -> bool {
+        false
+    }
     fn allow_popup(&mut self, _: &TabId, _: &str) {}
     fn answer_dialog(&mut self, _: &TabId, _: u64, _: super::page_dialog::DialogAnswer) {}
     fn enabled(&self) -> bool {
         true
     }
 
-    fn open(&mut self, page: &TabId, url: &str, _: Profile, _: &str) {
+    fn open(&mut self, page: &TabId, url: &str, _: Profile, _: &str, _: &str) {
         let state = self.pages.entry(page.clone()).or_default();
         if !url.is_empty() {
             state.load(url.to_owned());

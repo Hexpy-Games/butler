@@ -113,6 +113,9 @@ async fn signed_in_call(
             .await
             .map(Some);
     }
+    if let Some(refused) = super::pages::refusal(state, op) {
+        return Ok(Some(refused));
+    }
     if let Some(refused) = super::signed_in::admit(state, frame, op, session).await? {
         return Ok(Some(refused));
     }
@@ -196,7 +199,7 @@ fn dispatch(
             }
             return response(count, refused).map(Some);
         }
-        if page_op(&op) {
+        if super::usage::page_op(&op) {
             let tab = hub
                 .tabs
                 .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
@@ -233,28 +236,9 @@ fn dispatch(
         }
         frame["id"] = json!(id);
         frame["deadline_ms"] = json!(deadline);
-        super::usage::dispatch(&mut hub, frame, sender)?;
+        super::usage::dispatch(state, &mut hub, frame, sender)?;
     }
     Ok(None)
-}
-/// Ops that act on a tab's page: its URL must be permitted and its policy is sent.
-fn page_op(op: &str) -> bool {
-    matches!(
-        op,
-        "tab.observe"
-            | "tab.read"
-            | "tab.zoom"
-            | "tab.screenshot"
-            | "tab.image_collect"
-            | "tab.devtools"
-            | "tab.prepare"
-            | "tab.act"
-            | "tab.dialog"
-            | "signin.fill"
-            | "pay.inspect"
-            | "pay.fill"
-            | "autofill.fill"
-    )
 }
 pub(super) fn response(count: usize, value: Value) -> Result<Response, HttpError> {
     super::super::json(
@@ -315,6 +299,7 @@ pub(super) fn enforce_result_policy(
             && let Some(host) = &hub.host
         {
             let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"use.revoked","session":session,"tab":tab,"args":{}}));
+            hub.pages.iter().for_each(|link| link.revoke(session, tab));
         }
     }
     *result = json!({"status":if op == "tab.act" {"unknown"} else {"not_dispatched"},"reason":"navigation_denied"});
@@ -323,7 +308,7 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
     let tabs = value["tabs"]
         .as_array()
         .ok_or_else(|| error(400, "invalid_snapshot"))?;
-    let (handed_back, handovers) = {
+    let (handed_back, handovers, link) = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
         hub.still_backlog = value["still_backlog"].as_u64().unwrap_or(0);
         let handovers = hub.tabs.handovers(tabs);
@@ -340,8 +325,14 @@ pub(super) async fn events(state: Arc<HttpState>, value: Value) -> Result<Respon
             .replace(tabs)
             .map_err(|_| error(400, "invalid_snapshot"))?;
         super::hidden::hand_over(&state, &mut hub);
-        (changed, handovers)
+        (changed, handovers, hub.pages.clone())
     };
+    // Outside the hub lock: the executor keeps a page the user holds.
+    if let Some(link) = link {
+        for tab in tabs {
+            link.hold(tab["id"].as_str().unwrap_or(""), tab["holder"] == "user");
+        }
+    }
     state.browser.2.notify_waiters();
     super::signed_in::record_handovers(&state, handovers).await?;
     super::hand_back::resume_waits(&state, &handed_back).await?;
@@ -360,6 +351,7 @@ pub(in crate::gateway::http) async fn close_owner(
         && let Some(host) = &hub.host
     {
         let _ = host.try_send(json!({"id":uuid::Uuid::new_v4().to_string(),"op":"owner.closed","session":session,"args":{},"deadline_ms":5000}));
+        hub.pages.iter().for_each(|link| link.close_owner(session));
     }
     stopped.map_err(|reason| error(500, reason))
 }

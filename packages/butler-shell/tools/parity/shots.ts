@@ -22,7 +22,7 @@ export async function shots(binary: string, out: string, name: string, data: str
   };
   const watcher = watch(log, drain);
   const home = mkdtempSync(join(tmpdir(), "butler-parity-shots-"));
-  const process = spawnTrackedProcess(binary, [join(out, "gpui"), "--data", data, "--app", "--scale", String(scale), "--size", size, ...(dark ? ["--dark"] : [])], { stdio: ["pipe", writer, writer], cleanupPaths: [home], env: { ...globalThis.process.env, HOME: home, BUTLER_DATA: data, BUTLER_E2E_TIER: "stub" } });
+  const process = spawnTrackedProcess(binary, [join(out, "gpui"), "--data", data, "--app", "--use-mock-keychain", "--password-store=basic", "--scale", String(scale), "--size", size, ...(dark ? ["--dark"] : [])], { stdio: ["pipe", writer, writer], cleanupPaths: [home], env: { ...globalThis.process.env, HOME: home, BUTLER_DATA: data, BUTLER_E2E_TIER: "stub" } });
   closeSync(writer);
   writeFileSync(join(out, "logs", `${name}-shots.pid`), String(process.pid));
   let error: Error | undefined;

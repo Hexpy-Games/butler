@@ -6,10 +6,12 @@ pub(super) mod downloads;
 pub(super) mod fill;
 mod hand_back;
 pub(super) mod hidden;
+mod pages;
 mod pay;
 mod payment_scope;
 mod previews;
 pub(super) mod reader;
+mod relay;
 mod report;
 mod shots;
 pub(super) mod signed_in;
@@ -21,7 +23,7 @@ use axum::{
     http::{Method, Request, StatusCode},
     response::{
         Response,
-        sse::{Event, KeepAlive, Sse},
+        sse::{KeepAlive, Sse},
     },
 };
 use futures_util::stream;
@@ -80,6 +82,8 @@ fn channel_frames() -> usize {
 #[derive(Default)]
 struct Inner {
     host: Option<mpsc::Sender<Value>>,
+    /// The attached host is a page host: its link to the executor.
+    pages: Option<Arc<pages::Link>>,
     /// The App that last attached or asked to (pid, process start); kept across detaches.
     app: Option<(u32, String)>,
     pending: HashMap<String, PendingReply>,
@@ -137,6 +141,7 @@ impl Inner {
     /// Forgets the attached host and everything it served.
     fn detach(&mut self) {
         self.host = None;
+        self.pages = None;
         self.hidden = false;
         self.still_backlog = 0;
         self.app_waiting = false;
@@ -152,16 +157,21 @@ impl Inner {
 struct HostStream {
     state: Arc<HttpState>,
     receiver: mpsc::Receiver<Value>,
+    relay: Option<mpsc::Receiver<Value>>,
     generation: u64,
     _subscription: Box<dyn crate::gateway::EventSubscription>,
 }
 impl Drop for HostStream {
     fn drop(&mut self) {
-        if let Ok(mut hub) = self.state.browser.0.lock()
-            && hub.generation == self.generation
-        {
-            hidden::detached(&self.state, &mut hub);
-        }
+        detach_generation(&self.state, self.generation);
+    }
+}
+/// Ends attach `generation` unless a newer one took over.
+fn detach_generation(state: &HttpState, generation: u64) {
+    if let Ok(mut hub) = state.browser.0.lock()
+        && hub.generation == generation
+    {
+        hidden::detached(state, &mut hub);
     }
 }
 fn error(status: u16, code: &'static str) -> HttpError {
@@ -188,6 +198,10 @@ pub(super) async fn route(
     match (request.method(), path.as_str()) {
         (&Method::GET, "/internal/browser-host") => {
             attach(state, client.keys.live_streams(), request.headers()).await
+        }
+        // Reached through the `/internal/browser` prefix fallback into this router; the router table has no entry of its own.
+        (&Method::POST, "/internal/browser-host/cdp") => {
+            pages::cdp(state, read_json(request).await?).await
         }
         (&Method::POST, "/internal/browser-host/downloads") => {
             downloads::handle(state, read_json(request).await?).await
@@ -229,20 +243,28 @@ pub(super) async fn route(
                 || p.starts_with("/internal/browser-host/renders/")
                 || p.starts_with("/internal/browser-host/images/") =>
         {
-            let id = p
-                .trim_start_matches("/internal/browser-host/results/")
-                .trim_start_matches("/internal/browser-host/renders/")
-                .trim_start_matches("/internal/browser-host/images/");
-            let body = read_json(request).await?;
-            let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-            let Some(reply) = hub.pending.remove(id) else {
-                return Err(error(409, "browser_call_expired"));
-            };
-            reply.deliver(&hub, body);
-            super::json(StatusCode::OK, json!({"ok":true}))
+            host_reply(&state, p, request).await
         }
         _ => Err(error(404, "not_found")),
     }
+}
+/// The host's answer to a pending call (a result, a render or an image upload).
+async fn host_reply(
+    state: &HttpState,
+    path: &str,
+    request: Request<Body>,
+) -> Result<Response, HttpError> {
+    let id = path
+        .trim_start_matches("/internal/browser-host/results/")
+        .trim_start_matches("/internal/browser-host/renders/")
+        .trim_start_matches("/internal/browser-host/images/");
+    let body = read_json(request).await?;
+    let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+    let Some(reply) = hub.pending.remove(id) else {
+        return Err(error(409, "browser_call_expired"));
+    };
+    reply.deliver(&hub, body);
+    super::json(StatusCode::OK, json!({"ok":true}))
 }
 async fn attach(
     state: Arc<HttpState>,
@@ -251,8 +273,10 @@ async fn attach(
 ) -> Result<Response, HttpError> {
     let launch = hidden::launch_of(headers);
     let launch = launch.as_deref();
+    let pages = hidden::pages_of(headers, launch)?;
     let (sender, receiver) = mpsc::channel(channel_frames());
-    let generation = register_host(&state, sender, launch, hidden::app_pid_of(headers)).await?;
+    let (generation, relay) =
+        register_host(&state, sender, launch, hidden::app_pid_of(headers), pages).await?;
     if launch.is_some() {
         hidden::watch(&state, generation);
     }
@@ -295,6 +319,7 @@ async fn attach(
         HostStream {
             state,
             receiver,
+            relay,
             generation,
             _subscription: subscription,
         },
@@ -303,16 +328,18 @@ async fn attach(
             let rotated = rotated.clone();
             async move {
                 tokio::select! {
+                    biased;
                     () = shutdown.cancelled() => None,
                     () = rotated.cancelled() => None,
-                    frame = host.receiver.recv() => frame.map(|v| (Ok::<_, std::convert::Infallible>(Event::default().event("call").data(v.to_string())), host)),
+                    frame = host.receiver.recv() => frame.map(|v| (pages::sse("call", &v), host)),
+                    Some(frame) = pages::next_relay(&mut host.relay) => Some((pages::sse("cdp", &frame), host)),
                 }
             }
         },
     );
     use axum::response::IntoResponse;
     Ok(Sse::new(stream)
-        .keep_alive(KeepAlive::new().interval(Duration::from_secs(60)))
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(if pages { 15 } else { 60 })))
         .into_response())
 }
 async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response, HttpError> {
@@ -330,25 +357,23 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
     args["url"] = view["url"].clone();
     args["revision"] = view["revision"].clone();
     hidden::ensure(&state, None).await;
-    let attached = state
-        .browser
-        .0
-        .lock()
-        .map_err(|_| HttpError::Internal)?
-        .host
-        .is_some();
-    if !attached && let Some(headless) = state.headless.clone().filter(|h| h.enabled()) {
+    // A page host owns pages only: it serves no check, as if no App were attached.
+    let app = {
+        let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
+        hub.host.is_some() && hub.pages.is_none()
+    };
+    if !app && let Some(headless) = state.headless.clone().filter(|h| h.enabled()) {
         // No App: Butler's own browser checks the output, same policy and shape.
         let origin = format!("http://127.0.0.1:{}", super::content::port(&state));
         let value = headless.output_check(&args, &origin).await;
-        return super::json(StatusCode::OK, checked(&value, &args));
+        return super::json(StatusCode::OK, report::checked(&value, &args));
     }
     let id = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = oneshot::channel();
     let _slot = state.browser.3.acquire().await?;
     {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-        let Some(host) = hub.host.as_ref() else {
+        let Some(host) = hub.host.as_ref().filter(|_| app) else {
             return super::json(
                 StatusCode::OK,
                 json!({"status":"unavailable","reason":"no_browser"}),
@@ -365,33 +390,12 @@ async fn call(state: Arc<HttpState>, request: Request<Body>) -> Result<Response,
     let result = tokio::select! {
         () = state.shutdown.cancelled() => json!({"status":"unknown","reason":"browser_host_lost"}),
         result = tokio::time::timeout(Duration::from_secs(8), receiver) => match result {
-            Ok(Ok(value)) => checked(&value, &args),
+            Ok(Ok(value)) => report::checked(&value, &args),
             Ok(Err(_)) => json!({"status":"unknown","reason":"browser_host_lost"}),
             Err(_) => json!({"status":"unknown","reason":"timeout"}),
         }
     };
     super::json(StatusCode::OK, result)
-}
-
-/// An executor's check result as the tool reports it, whichever browser ran it.
-fn checked(value: &Value, args: &Value) -> Value {
-    if value["status"] == "ok" && !allowed_result_url(value, args) {
-        return json!({"status":"navigation_denied"});
-    }
-    let mut report = report::shape(value);
-    if args["include_image"] != true
-        && let Some(r) = report.as_object_mut()
-    {
-        r.remove("image");
-    }
-    if args["include_image"] == true
-        && report.get("image").is_none()
-        && report["status"] != "unknown"
-    {
-        report["status"] = json!("unknown");
-        report["reason"] = json!("image_unavailable");
-    }
-    report
 }
 
 async fn read_json(request: Request<Body>) -> Result<Value, HttpError> {
@@ -403,6 +407,8 @@ async fn read_json(request: Request<Body>) -> Result<Value, HttpError> {
         || path.starts_with("/internal/browser-host/images/")
     {
         12 * 1024 * 1024
+    } else if path == "/internal/browser-host/cdp" {
+        16 * 1024 * 1024
     } else if path.starts_with("/internal/browser-host/results/") {
         256 * 1024
     } else {
@@ -426,27 +432,25 @@ impl Drop for PendingCall {
     }
 }
 
-fn allowed_result_url(value: &Value, args: &Value) -> bool {
-    let parse = |v: &Value| v.as_str().and_then(|s| url::Url::parse(s).ok());
-    parse(&value["url"])
-        .zip(parse(&args["url"]))
-        .is_some_and(|(reported, expected)| {
-            reported.origin() == expected.origin() && reported.path().starts_with("/__o/")
-        })
-}
-
 mod assets;
 
 mod calls_validation;
 
 async fn register_host(
-    state: &HttpState,
+    state: &Arc<HttpState>,
     sender: mpsc::Sender<Value>,
     launch: Option<&str>,
     app_pid: Option<u32>,
-) -> Result<u64, HttpError> {
+    pages: bool,
+) -> Result<(u64, Option<mpsc::Receiver<Value>>), HttpError> {
     let app = if launch.is_none() {
         app_pid.and_then(hidden::identify)
+    } else {
+        None
+    };
+    // Built off the hub lock (it reads files); dropped if admission fails.
+    let link = if pages {
+        Some(pages::open(state).await?)
     } else {
         None
     };
@@ -476,14 +480,20 @@ async fn register_host(
             () = state.shutdown.cancelled() => return Err(error(503, "gateway_closing")),
         }
     }
-    let generation = {
+    let (generation, relay) = {
         let mut hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
         hub.host = Some(sender);
         hub.hidden = launch.is_some();
         hub.app_waiting = false;
         hub.generation += 1;
-        hub.generation
+        let generation = hub.generation;
+        let relay = link.map(|(link, relay)| {
+            link.bind(generation);
+            hub.pages = Some(link);
+            relay
+        });
+        (generation, relay)
     };
     state.browser.2.notify_waiters();
-    Ok(generation)
+    Ok((generation, relay))
 }

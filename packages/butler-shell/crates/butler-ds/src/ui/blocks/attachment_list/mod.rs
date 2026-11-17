@@ -333,7 +333,9 @@ fn row(item: &AttachmentItem, list: &AttachmentList, chip: Option<f32>, ds: &Ds)
     row = row
         .child(preview(item, ds))
         .child(name(item, list.on_open.clone(), ds));
+    let mut cells = 2;
     if let Some(remove) = list.on_remove.clone() {
+        cells += 1;
         let which = item.id.clone();
         let label = (list.remove_label)(&item.name);
         row = row.child(
@@ -348,14 +350,22 @@ fn row(item: &AttachmentItem, list: &AttachmentList, chip: Option<f32>, ds: &Ds)
     }
     let narrow = chip.is_some_and(|width| width <= CHIP_META_HIDDEN);
     if let (Some(meta), false) = (item.meta.clone(), narrow) {
+        cells += 1;
         row = row.child(
             div()
                 .flex_none()
                 .child(Typo::text(meta).tone(Tone::Tertiary).truncate()),
         );
     }
+    // The grid keeps all its tracks: an unused one is empty but its gap stays.
+    for _ in cells..ITEM_TRACKS {
+        row = row.child(div());
+    }
     row.into_any_element()
 }
+
+/// `grid-template-columns: auto minmax(0, 1fr) auto auto`: preview, name, remove, size.
+const ITEM_TRACKS: usize = 4; // DS: AttachmentList.module.css:11
 
 /// `@container attachment-chip (width <= 192px)`: the size hides first in a narrow chip.
 const CHIP_META_HIDDEN: f32 = 192.; // DS: AttachmentList.module.css:136

@@ -48,14 +48,14 @@ impl Shell {
             .arg("--data")
             .arg(&sandbox.data)
             .arg("--app")
+            // A temporary home has no login keychain: the in-app browser must not ask for one.
+            .args(["--use-mock-keychain", "--password-store=basic"])
             .stdin(Stdio::piped())
             .stdout(std::fs::File::create(&stdout)?)
             .stderr(std::fs::File::create(sandbox.logs.join("shell.stderr"))?);
         if let Some(directory) = nonempty("BUTLER_CEF_DIR") {
             prepend_path(&mut command, &directory)?;
-            command
-                .env("BUTLER_CEF_DIR", directory)
-                .arg("--use-mock-keychain");
+            command.env("BUTLER_CEF_DIR", directory);
             // CEF's Linux platform connects to the session's display server; the isolated
             // environment otherwise carries none.
             for name in [
