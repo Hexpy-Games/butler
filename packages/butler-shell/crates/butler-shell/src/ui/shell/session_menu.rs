@@ -106,7 +106,10 @@ impl Shell {
         let content = menu.content(content, window, cx);
         div()
             .flex()
-            .child(crate::ui::widgets::anchor(div(), "session-menu-trigger").child(trigger))
+            .child(crate::ui::widgets::anchored(
+                trigger,
+                "session-menu-trigger",
+            ))
             .child(content)
             .into_any_element()
     }
