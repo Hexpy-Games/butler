@@ -21,7 +21,7 @@ const CLOCK: &str =
 /// Delegated outcome criteria are met with evidence, a failed route is a step
 /// (a page the reader got only part of goes to a tab first), and the report
 /// carries only gaps that survived.
-const OWN_THE_GAPS: &str = "Meet each outcome criterion with tool evidence; Goal, Deliver, Next, Assumed and Presentation are guidance, not criteria. Plan only what the request asks. A tool error or failed run is a step: follow next_action or fix the call, open a page the reader could not show in a browser tab first, and report what still fails and what you tried. Check outputs as the user would (publish, run, or send one approved test request) and fix what you see. A Worker's sourced result is evidence: re-check it only on conflict. Report the result, and for a change what changed and why. When a criterion asks for limits, naming a surviving gap that matters once satisfies it.";
+const OWN_THE_GAPS: &str = "Meet each outcome criterion with tool evidence; Goal, Deliver, Next, Assumed and Presentation are guidance, not criteria. Plan only what the request asks. A tool error or failed run is a step: follow next_action or fix the call, open a page the reader could not show in a browser tab first, and report what still fails and what you tried. Check outputs as the user would (publish, run, or send one approved test request) and fix what you see. A Worker's result is evidence: use it, and do not reopen pages it read unless results conflict. Report the result, and for a change what changed and why. When a criterion asks for limits, naming a surviving gap that matters once satisfies it.";
 
 pub(in crate::btcc::subsessions::service) fn render_steward_input(
     packet: &SubsessionPacket,
@@ -34,17 +34,18 @@ pub(in crate::btcc::subsessions::service) fn render_steward_input(
         None => format!("request: {}", packet.objective),
     };
     let scope = if packet.user_request.is_some() {
-        " Where Butler's reading differs from the user's own words, the user's words decide scope and output form: deliver what they asked for, in the form they asked for."
+        " Where Butler's reading differs from the user's own words, the user's words decide scope and output form: only what they asked for is a deliverable, in the form they asked for."
     } else {
         ""
     };
     format!(
-        "role: steward\n{}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{scope}{}{} {NEEDED_FACTS} {CLOCK} {OWN_THE_GAPS}",
+        "role: steward\n{}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{scope}{}{} {NEEDED_FACTS} {photos} {CLOCK} {OWN_THE_GAPS}",
         request,
         criteria(packet),
         prior::excerpt(packet.prior_context.as_deref()),
         planned_intent(packet),
-        planned_presentation(packet)
+        planned_presentation(packet),
+        photos = SubsessionPacket::ITEM_PHOTOS
     )
 }
 

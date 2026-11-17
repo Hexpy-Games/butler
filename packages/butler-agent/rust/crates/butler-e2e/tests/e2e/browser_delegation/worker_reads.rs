@@ -196,6 +196,7 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 assert!(
                     names.contains(&"browse")
                         && names.contains(&"browser_read")
+                        && names.contains(&"image_collect")
                         && !names.contains(&"browser_act")
                         && !names.contains(&"browser_open"),
                     "worker browser surface: {names:?}"
@@ -215,6 +216,23 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 workers[0].1["input"]
                     .to_string()
                     .contains("Choose the page reader by what you need.")
+            );
+            let photos = "collect one photo per item with image_collect";
+            assert!(
+                workers[0].1["input"].to_string().contains(photos)
+                    && workers[0].1["input"]
+                        .to_string()
+                        .contains("Give each fact with the page it came from")
+            );
+            let steward = requests
+                .iter()
+                .find(|(role, body)| {
+                    role == "steward" && body["input"].to_string().contains("role: steward")
+                })
+                .expect("steward input");
+            assert!(
+                steward.1["input"].to_string().contains(photos),
+                "one-call steward input carries the photo line"
             );
             let output = workers.last().unwrap().1["input"]
                 .as_array()
