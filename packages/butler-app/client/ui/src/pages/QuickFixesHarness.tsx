@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AdaptiveShell, AdaptiveShellSidebar, AdaptiveShellWorkspace, Button, ButtonContainer, ComposerCard, Stack, Typo } from "@/butler-ds";
+import { AdaptiveShell, AdaptiveShellSidebar, AdaptiveShellWorkspace, Button, ButtonContainer, ComposerCard, ScrollArea, Stack, Typo } from "@/butler-ds";
 import { ComposerTextArea } from "@/components/conversation/ComposerTextArea";
 import { useComposerStore } from "@/components/conversation/composerStore";
 import { useComposerKeyboard } from "@/components/conversation/hooks/useComposerKeyboard";
@@ -74,7 +74,7 @@ export function QuickFixesHarness() {
   }, [language, theme]);
   return <AdaptiveShell leftOpen={false} rightOpen={false} theme={appShellTheme(settings)}>
     <AdaptiveShellSidebar open={false} />
-    <AdaptiveShellWorkspace><Stack gap="md" data-harness-ready={ready}>
+    <AdaptiveShellWorkspace><ScrollArea fill><Stack gap="md" data-harness-ready={ready}>
       {mode === "composer" ? <>
         <ComposerCard><ComposerTextArea /></ComposerCard>
         <Typo.Body data-submissions={JSON.stringify(sent)}>{sent.at(-1)}</Typo.Body>
@@ -84,6 +84,6 @@ export function QuickFixesHarness() {
           useButlerStore.setState({ observerSessionId: "steward-fixture" })} /></ButtonContainer>
         <SessionObserverDialog />
       </>}
-    </Stack></AdaptiveShellWorkspace>
+    </Stack></ScrollArea></AdaptiveShellWorkspace>
   </AdaptiveShell>;
 }

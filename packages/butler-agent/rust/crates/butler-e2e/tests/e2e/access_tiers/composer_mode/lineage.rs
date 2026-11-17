@@ -133,8 +133,9 @@ async fn existing_and_future_workers_and_parent_use_the_answered_revision()
             [],
             |row| row.get(0),
         )?;
+        let executed: u64 = db.query_row("SELECT count(*) FROM btcc_guided_tool_calls WHERE tool_name='run_command' AND status='completed' AND json_extract(result_json,'$.ok')=1", [], |row| row.get(0))?;
         drop(db);
-        if finished >= 3 {
+        if finished >= 3 && executed >= 6 {
             break;
         }
         assert!(

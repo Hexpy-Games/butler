@@ -230,6 +230,7 @@ async fn cn_17_completed_epic_never_starts_the_next_in_plan() -> Result<(), Harn
         std::time::Duration::from_secs(60),
     )
     .await?;
+    crate::canon_link::wait_label(&s, &first, "in_review").await?;
     let epic = data(s.gw.get(&format!("/canon/epics/{first}")).await?, 200);
     assert_eq!(epic["canon_status"], "in_review", "{epic}");
     data(
