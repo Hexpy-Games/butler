@@ -234,17 +234,13 @@ impl RenderOnce for AdaptiveShellSplit {
         let cards = vars.is_some_and(|v| v.cards_docked);
         let card = cards.then(|| vars.is_some_and(|v| v.transparent_workspace));
         let chat = self.chat.take();
-        let mut split = div()
-            .relative()
-            .flex()
-            .h_full()
-            .min_h_0()
-            .min_w_0()
-            .child(recorder);
+        let mut split = div().relative().flex().h_full().min_h_0().min_w_0();
         let Some(pane) = self.pane.take().filter(|_| present) else {
             let column = chat_column(self.id, chat, ds, card, layout, None);
             return strut::scope(false, split.child(column));
         };
+        // Only the pane layout reads the split's width (`split_width` while the pane closes).
+        split = split.child(recorder);
         // Lay out the final chat width; layout motion retains the changing box.
         let split_width = f32::from(measured.width);
         let chat_now = if self.pane_open { width } else { split_width };
