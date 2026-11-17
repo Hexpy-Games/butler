@@ -169,6 +169,12 @@ pub(super) async fn act_gate(
     target: &str,
 ) -> Result<Gate, ToolExecutionError> {
     let decision = super::super::access::for_kind(owner, outward_kind(input));
+    let typing = typing_decision(owner, input);
+    if matches!(typing, AccessDecision::Deny(_)) {
+        return Ok(Gate::Pending(
+            json!({"status":"not_dispatched","reason":"read_only"}),
+        ));
+    }
     if owner.taint() == TurnTaint::ConnectorEvent && matches!(decision, AccessDecision::Deny(_)) {
         return Ok(Gate::Pending(
             json!({"status":"not_dispatched","reason":"read_only"}),
@@ -177,6 +183,7 @@ pub(super) async fn act_gate(
     let tainted_review =
         owner.taint() == TurnTaint::ConnectorEvent && matches!(decision, AccessDecision::Ask(_));
     if tainted_review
+        || matches!(typing, AccessDecision::Ask(_))
         || reviews(&owner.access_mode(), input)
         || resume_reference(owner, occurrence).is_some()
     {
@@ -204,6 +211,17 @@ fn outward_kind(input: &Value) -> CapabilityKind {
         // a model-declared commit. Unknown browser effects need fresh consent.
         CapabilityKind::OtherEffect
     }
+}
+
+/// After outside content, a batch that types model-written text into a page on
+/// an untrusted site is checked like a data-carrying request (owner rule
+/// "① 신뢰 사이트 규칙").
+pub(super) fn typing_decision(owner: &GuidedTools, input: &Value) -> AccessDecision {
+    let page = input["url"].as_str().unwrap_or("");
+    if !butler_turn::btcc::types_text(&input["steps"]) || owner.web_session.trusted(page) {
+        return AccessDecision::Allow;
+    }
+    super::super::access::for_kind(owner, CapabilityKind::WebRequest { carries_data: true })
 }
 
 /// Which batches a tier asks about: payment and upload steps on every tier,
