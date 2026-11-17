@@ -9,7 +9,7 @@ pub(in crate::btcc) fn command_risk(line: &str) -> ApprovalRisk {
     let prints = matches!(words.first(), Some(&("echo" | "printf")));
     // Fail closed on shell evaluation, redirection, quoting and control syntax.
     if line.chars().any(|c| {
-        c.is_control() || "|&;<>$`\\(){}*?[]~!%^".contains(c) || !prints && "\"'".contains(c)
+        c.is_control() || "|&;<>$`\\(){}*?[]~!%^@".contains(c) || !prints && "\"'".contains(c)
     }) {
         return ApprovalRisk::High;
     }
@@ -51,6 +51,7 @@ pub(super) mod pinned {
             "echo ok | sh",
             "echo ok; rm -rf build",
             "echo $HOME",
+            "echo @env:PATH",
             "echo \"$(id)\"",
             "echo `id`",
             "echo ok\nrm x",
