@@ -8,7 +8,6 @@ import {
   Database,
   Lock,
   Globe2,
-  IdCard,
   MagicWand,
   McpServer,
   Palette,
@@ -55,7 +54,6 @@ function createSettingsSectionMap(
     usage: section("usage", settingsCopy.sections.usage, <Database />),
     logs: section("logs", settingsCopy.sections.logs, <Terminal />),
     personalization: section("personalization", settingsCopy.sections.personalization, <UserRound />),
-    account: section("account", settingsCopy.sections.account, <IdCard />),
     connections: section("connections", settingsCopy.sections.connections, <Blocks />),
     browser: section("browser", settingsCopy.sections.browser, <Globe2 />),
     security: section("security", settingsCopy.sections.security, <Lock />),
@@ -68,10 +66,9 @@ function createSettingsSectionMap(
 export function createSettingsSections(
   settingsCopy: SettingsCopy,
   developerModeEnabled = false,
-  accountEnabled = false,
 ): SettingsSectionDescriptor[] {
   const sections = createSettingsSectionMap(settingsCopy);
-  return visibleSettingsSectionIds(developerModeEnabled, accountEnabled).map((id) => sections[id]);
+  return visibleSettingsSectionIds(developerModeEnabled).map((id) => sections[id]);
 }
 
 type SettingsSectionGroupDefinition = {
@@ -84,7 +81,7 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
   {
     id: "general",
     label: "preferences",
-    sectionIds: ["general", "appearance", "personalization", "account", "memory", "models", "connections"],
+    sectionIds: ["general", "appearance", "personalization", "memory", "models", "connections"],
   },
   {
     id: "app-and-system",
@@ -111,10 +108,9 @@ const SETTINGS_SECTION_GROUPS: SettingsSectionGroupDefinition[] = [
 export function createSettingsSectionGroups(
   settingsCopy: SettingsCopy,
   developerModeEnabled = false,
-  accountEnabled = false,
 ): SettingsSectionGroupDescriptor[] {
   const sections = createSettingsSectionMap(settingsCopy);
-  const visibleIds = new Set(visibleSettingsSectionIds(developerModeEnabled, accountEnabled));
+  const visibleIds = new Set(visibleSettingsSectionIds(developerModeEnabled));
 
   return SETTINGS_SECTION_GROUPS.map((group) => ({
     id: group.id,

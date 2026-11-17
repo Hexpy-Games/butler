@@ -23,15 +23,12 @@ const BASE_SETTINGS_SECTION_IDS: SettingsSectionId[] = [
 
 export function visibleSettingsSectionIds(
   developerModeEnabled = false,
-  accountEnabled = false,
 ): SettingsSectionId[] {
-  const sectionIds = [...BASE_SETTINGS_SECTION_IDS];
-  if (accountEnabled) sectionIds.splice(sectionIds.indexOf("personalization") + 1, 0, "account");
-  if (!developerModeEnabled) return sectionIds;
-  const afterUsage = sectionIds.indexOf("usage") + 1;
+  if (!developerModeEnabled) return [...BASE_SETTINGS_SECTION_IDS];
+  const afterUsage = BASE_SETTINGS_SECTION_IDS.indexOf("usage") + 1;
   return [
-    ...sectionIds.slice(0, afterUsage),
+    ...BASE_SETTINGS_SECTION_IDS.slice(0, afterUsage),
     "logs",
-    ...sectionIds.slice(afterUsage),
+    ...BASE_SETTINGS_SECTION_IDS.slice(afterUsage),
   ];
 }

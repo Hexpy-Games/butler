@@ -179,7 +179,6 @@ jobs:
               ;;
             ui-settings)
               smoke app-security-pairing-smoke
-              smoke app-butler-account-smoke
               smoke app-full-reset-smoke
               smoke schedule-ux-smoke
               smoke settings-security-approvals-smoke

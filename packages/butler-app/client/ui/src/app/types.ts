@@ -21,7 +21,6 @@ export type SettingsSectionId =
   | "usage"
   | "logs"
   | "personalization"
-  | "account"
   | "memory"
   | "browser"
   | "security"

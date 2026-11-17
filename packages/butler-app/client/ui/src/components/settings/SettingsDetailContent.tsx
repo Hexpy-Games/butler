@@ -1,7 +1,6 @@
 import type { SettingsSectionId } from "@/app/types.ts";
 import { ConnectionsSettings } from "./connections/ConnectionsSettings";
 import { AboutSettings } from "./AboutSettings";
-import { AccountSettings } from "./AccountSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { ArchivesSettings } from "./ArchivesSettings";
 import { GeneralSettings } from "./GeneralSettings";
@@ -22,11 +21,9 @@ import { UsageSettings } from "./UsageSettings";
 export function SettingsDetailContent({
   activeSection,
   developerModeEnabled,
-  accountEnabled,
 }: {
   activeSection: SettingsSectionId;
   developerModeEnabled: boolean;
-  accountEnabled: boolean;
 }) {
   return (
     <>
@@ -44,7 +41,6 @@ export function SettingsDetailContent({
       {activeSection === "logs" && developerModeEnabled && (
         <LogsSettings />
       )}
-      {activeSection === "account" && accountEnabled && <AccountSettings />}
       {activeSection === "browser" && <BrowserSettings />}
       {activeSection === "security" && <SecuritySettings />}
       {activeSection === "system" && <SystemEventsSettings />}

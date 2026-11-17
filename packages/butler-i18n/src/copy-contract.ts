@@ -693,46 +693,6 @@ export interface AppCopy {
     notificationUpdated: string;
 
   };
-  butlerAccount: {
-    name: string;
-    intro: string;
-    dialogTitle: string;
-    dialogIntro: string;
-    cancel: string;
-    signedIn: string;
-    notSignedIn: string;
-    email: string;
-    sendCode: string;
-    code: string;
-    codeSent: (email: string) => string;
-    changeEmail: string;
-    resend: string;
-    resent: string;
-    signIn: string;
-    account: string;
-    plan: string;
-    renews: (date: string) => string;
-    plans: { free: string; plus: string; pro: string; enterprise: string; [plan: string]: string };
-    signOut: string;
-    signOutConfirm: string;
-    signedOut: string;
-    devices: string;
-    thisDevice: string;
-    platforms: { macos: string; windows: string; linux: string; ios: string; android: string; [platform: string]: string };
-    revoke: string;
-    revokeDevice: (name: string) => string;
-    revokeConfirm: (name: string) => string;
-    revoked: string;
-    working: string;
-    codeInvalid: string;
-    codeExpired: string;
-    tooSoon: string;
-    unavailableNow: string;
-    offline: string;
-    emailInvalid: string;
-    failed: string;
-    loadFailed: string;
-  };
   butlerVault: {
     passwordIntro: string;
     masterPassword: string;
@@ -1441,7 +1401,6 @@ export interface AppCopy {
       usage: string;
       logs: string;
       personalization: string;
-      account: string;
       memory: string;
       privacy: string;
       connections: string;
@@ -1463,7 +1422,6 @@ export interface AppCopy {
       usage: string;
       logs: string;
       personalization: string;
-      account: string;
       memory: string;
       privacy: string;
       connections: string;
@@ -1485,7 +1443,6 @@ export interface AppCopy {
       usage: string[];
       logs: string[];
       personalization: string[];
-      account: string[];
       memory: string[];
       privacy: string[];
       connections: string[];

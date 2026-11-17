@@ -14,7 +14,6 @@ import { useLogTraceRoute } from "@/stores/logTraceStore.ts";
 import { SettingsSidebar } from "./SettingsSidebar";
 import { createSettingsSectionGroups } from "./settingsSections";
 import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
-import { useButlerAccountAvailable } from "./hooks/useButlerAccountAvailable";
 import { useCompactSettingsPaneEntry } from "./useCompactSettingsPaneEntry";
 import { ArrowLeft, IconButton, SettingsShell } from "@/butler-ds";
 
@@ -71,8 +70,10 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
 
   const settingsCopy = appCopy.settings;
   const developerModeEnabled = useDeveloperMode();
-  const accountEnabled = useButlerAccountAvailable();
-  const sectionGroups = createSettingsSectionGroups(settingsCopy, developerModeEnabled, accountEnabled);
+  const sectionGroups = createSettingsSectionGroups(
+    settingsCopy,
+    developerModeEnabled,
+  );
   const sections = sectionGroups.flatMap((group) => group.sections);
   const activeDescriptor = sections.find((item) => item.id === activeSection);
   const title = activeDescriptor?.label ?? settingsCopy.title;
@@ -150,7 +151,6 @@ export function SettingsView({ initialSection, onClose, isActive = false }: Sett
         <SettingsDetailContent
           activeSection={activeSection}
           developerModeEnabled={developerModeEnabled}
-          accountEnabled={accountEnabled}
         />
       }
     />

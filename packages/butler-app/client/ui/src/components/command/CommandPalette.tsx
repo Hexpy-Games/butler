@@ -20,7 +20,6 @@ import { useOrganization } from "@/app/space/organization";
 import { commandResultSubtitle, commandResultTitle } from "./commandPaletteLabels";
 import { createSettingsSections, matchesSettingsSection } from "../settings/settingsSections";
 import { useDeveloperMode } from "@/hooks/useDeveloperMode.ts";
-import { useButlerAccountAvailable } from "../settings/hooks/useButlerAccountAvailable";
 import { useCommandPaletteFocus } from "./useCommandPaletteFocus";
 import { LOG_TRACE_COMMAND_ID, logTraceCommandResults, openLatestLogTrace } from "./logTraceCommand";
 
@@ -49,7 +48,7 @@ export function CommandPalette({
   const [retry, setRetry] = useState(0);
   const status = searchState.query === query ? searchState.status : "loading";
   const english = getAppCopy("en-US").settings.sections;
-  const settingsResults: CommandPaletteResult[] = createSettingsSections(appCopy.settings, developerMode, useButlerAccountAvailable())
+  const settingsResults: CommandPaletteResult[] = createSettingsSections(appCopy.settings, developerMode)
     .filter((section) => matchesSettingsSection(section, query, [english[section.id]]))
     .map((section) => ({ id: `settings:${section.id}`, kind: "settings", title: section.label,
       subtitle: appCopy.commandPalette.kindLabels.settings, route: `settings:${section.id}` }));

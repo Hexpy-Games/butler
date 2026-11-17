@@ -383,22 +383,6 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (method === "POST" && url.pathname === "/setup/chatgpt-account/sign-out") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "signOutChatGpt"));
   }
-  if (method === "GET" && url.pathname === "/setup/butler-account") {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getButlerAccount"));
-  }
-  if (method === "POST" && url.pathname === "/setup/butler-account") {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "postButlerAccount", parseBody(options.body)));
-  }
-  if (method === "DELETE" && url.pathname === "/setup/butler-account") {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "signOutButlerAccount"));
-  }
-  if (method === "GET" && url.pathname === "/setup/butler-account/devices") {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "listButlerAccountDevices"));
-  }
-  const accountDevice = url.pathname.match(/^\/setup\/butler-account\/devices\/([^/]+)$/u);
-  if (method === "DELETE" && accountDevice) {
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "revokeButlerAccountDevice", { id: decodeURIComponent(accountDevice[1]!) }));
-  }
   if (method === "GET" && url.pathname === "/setup/butler-vault") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getButlerVault"));
   }

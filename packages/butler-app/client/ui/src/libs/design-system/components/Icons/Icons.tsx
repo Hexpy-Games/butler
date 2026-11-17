@@ -16,7 +16,7 @@ import {
   CheckListIcon, CheckmarkCircle02Icon, CircleIcon, Clock03Icon, CollapseIcon, CommandIcon, ComputerIcon,
   Copy01Icon, Heading01Icon, LeftToRightListBulletIcon, TextBoldIcon, CubeIcon, Eraser01Icon, DatabaseIcon, Delete02Icon, DragDropVerticalIcon, ExpandIcon, File02Icon,
   FilterIcon, Flag02Icon, FloppyDiskIcon, Folder01Icon, Folder02Icon, FolderAddIcon, GitBranchIcon,
-  Globe02Icon, IdentityCardIcon, Image01Icon, LayoutGridIcon, LockIcon, MagicWand01Icon, McpServerIcon, Message01Icon,
+  Globe02Icon, Image01Icon, LayoutGridIcon, LockIcon, MagicWand01Icon, McpServerIcon, Message01Icon,
   MessageAdd01Icon, MinusSignIcon, Moon02Icon, MoreHorizontalIcon as MoreHorizontalGlyph,
   Note01Icon, PaintBrush02Icon, PaintBrush04Icon, PanelLeftIcon, PanelLeftOpenIcon, PanelRightCloseIcon,
   PanelRightIcon, PencilEdit01Icon, PencilEdit02Icon, PinIcon, PlayIcon, ReloadIcon,
@@ -145,8 +145,6 @@ export const Sun = createIcon(Sun03Icon);
 export const Terminal = createIcon(TerminalIcon);
 export const Trash2 = createIcon(Delete02Icon);
 export const Undo = createIcon(Undo02Icon);
-/** An ID card: the Settings › Account page. */
-export const IdCard = createIcon(IdentityCardIcon);
 export const UserRound = createIcon(UserCircleIcon);
 export const Wrench = createIcon(Wrench01Icon);
 export const ZoomIn = createIcon(ZoomInAreaIcon);
