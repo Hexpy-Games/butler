@@ -316,7 +316,9 @@ impl BrowserState {
             return unavailable("unknown_tab");
         };
         hosted.sticky = sticky;
-        hosted.waiting = args["waiting"].as_bool().unwrap_or(hosted.waiting);
+        hosted.waiting = args["waiting"]
+            .as_bool()
+            .unwrap_or(hosted.waiting || holder == Some(Holder::User));
         // The turn a wait or a hand-over to the user belongs to; a wait that ends drops it.
         match args["turn"].as_str() {
             Some(turn) if hosted.waiting || holder == Some(Holder::User) => {
@@ -350,6 +352,7 @@ impl BrowserState {
             hosted.uses.saturating_sub(1)
         };
         if let Some(turn) = turn
+            && hosted.holder == Holder::Agent
             && !hosted.turns.iter().any(|held| held == turn)
         {
             hosted.turns.push(turn.to_owned());
