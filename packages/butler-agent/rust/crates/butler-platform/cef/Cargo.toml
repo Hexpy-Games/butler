@@ -35,7 +35,7 @@ rustix = { workspace = true, optional = true, features = ["event", "process"] }
 
 # The Windows OSR paint path: D3D11 shared textures and fences (crate version as in Cargo.lock).
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.2", optional = true, features = ["Win32_Foundation", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Security", "Win32_System_Threading"] }
+windows = { version = "0.62.2", optional = true, features = ["Win32_Foundation", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [[example]]
 name = "osr_smoke"
