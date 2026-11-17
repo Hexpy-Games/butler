@@ -76,6 +76,7 @@ async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(),
             &format!("click {group}"),
             &format!("wait-anchor {}", tool(0)),
             &format!("wait-anchor {}", tool(1)),
+            // The list folds open over the motion's duration; no harness command waits for that.
             "wait 500",
             &format!("layout listed {group} {} {}", tool(0), tool(1)),
             &format!("click {}", tool(0)),
@@ -86,6 +87,14 @@ async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(),
         .await?;
     let rest = shell.report("rest.layout")?;
     let hovered = shell.report("hovered.layout")?;
+    // Electron's pill hugs its text (`width: fit-content`): narrower than the column, as rest
+    // and hovered.
+    for layout in [&rest, &hovered] {
+        assert!(
+            bounds(layout, &group)[2] < bounds(layout, &timeline)[2],
+            "the group control spans the timeline's width\n{layout}"
+        );
+    }
     assert_eq!(
         bounds(&rest, &group),
         bounds(&hovered, &group),

@@ -67,7 +67,8 @@ impl ToolItem {
         self
     }
 
-    /// Content the row opens, built the first time it opens and kept after.
+    /// Content the row opens. It is built while the row is open and, once opened, after it
+    /// closes (the closing fold shows it); a row never opened builds nothing.
     pub fn details_with(
         mut self,
         build: impl FnOnce(&mut Window, &mut App) -> AnyElement + 'static,
@@ -182,6 +183,24 @@ fn slot(look: Look, child: impl gpui::IntoElement) -> gpui::Div {
         .child(child)
 }
 
+/// A tool without details: `<div class="tool">`, the outline at rest with no hover, pointer or
+/// focus (only `button.tool` takes those).
+fn plain_pill(children: Vec<AnyElement>, look: Look, ds: &Ds) -> AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(ds.len(Length::Space2))
+        .px(ds.len(Length::Space2))
+        .py(px(look.tool_pad_y))
+        .border(ds.len(Length::BorderHairline))
+        .border_color(ds.color(Color::Line))
+        .rounded(ds.len(Length::RadiusControl))
+        .bg(convert::with_alpha(ds.color(Color::Surface), 0.74))
+        .text_color(Look::muted(ds))
+        .children(children)
+        .into_any_element()
+}
+
 /// The chevron after a nested row's title: down while its details are open.
 fn detail_chevron(open: bool, look: Look, ds: &Ds) -> AnyElement {
     let icon = if open {
@@ -202,9 +221,7 @@ fn opened_body(
     window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
-    if open {
-        seen.update(cx, |seen, _| *seen = true);
-    }
+    // `toggle` marks the first open as seen.
     if !open && !*seen.read(cx) {
         return None;
     }
@@ -261,15 +278,19 @@ fn tool_row(
             row.into_any_element()
         }
     } else {
-        let mut control = outline(format!("{}-tool", tool.id), open, look, ds);
-        control.children = lead.into_iter().chain([name.into_any_element()]).collect();
-        if has_details {
+        let children: Vec<AnyElement> = lead.into_iter().chain([name.into_any_element()]).collect();
+        let pill = if has_details {
+            let mut control = outline(format!("{}-tool", tool.id), open, look, ds);
+            control.children = children;
             control.on_click(Some(std::rc::Rc::new(toggle(state.clone(), Some(seen)))));
-        }
+            control.into_any_element()
+        } else {
+            plain_pill(children, look, ds)
+        };
         div()
             .flex()
             .max_w(px(MAX_WIDTH))
-            .child(control)
+            .child(pill)
             .into_any_element()
     };
     let detail = body.map(|body| {
