@@ -3,7 +3,7 @@ use super::consolidation::ConsolidationRunGate;
 use butler_memory::{
     cognition::{
         BriefingSettings, PatternError, PatternEvent, PatternExtractionService, PatternFuture,
-        PatternInput, PatternInputSource, PatternRepository,
+        PatternInput, PatternInputSource,
     },
     profile::{ProfileService, ProfilingMode},
 };
@@ -13,6 +13,7 @@ use serde_json::Value;
 use std::{path::PathBuf, sync::Arc};
 
 struct Source {
+    context: Arc<super::suggestion_context::SuggestionContextBuilder>,
     root: PathBuf,
     models: Arc<ModelConfiguration>,
     profile: Arc<ProfileService>,
@@ -20,17 +21,19 @@ struct Source {
 }
 pub(super) fn compose(
     root: PathBuf,
-    repository: PatternRepository,
+    context: Arc<super::suggestion_context::SuggestionContextBuilder>,
     provider: Arc<ModelProvider>,
     models: Arc<ModelConfiguration>,
     profile: Arc<ProfileService>,
     gate: Arc<ConsolidationRunGate>,
 ) -> PatternExtractionService {
+    let repository = context.patterns();
     PatternExtractionService::new(
         root.clone(),
         repository,
         provider,
         Arc::new(Source {
+            context,
             root,
             models,
             profile,
@@ -39,6 +42,19 @@ pub(super) fn compose(
     )
 }
 impl PatternInputSource for Source {
+    fn suggestion_context<'a>(
+        &'a self,
+        run_id: &'a str,
+        locale: &'a str,
+        now: DateTime<Utc>,
+    ) -> PatternFuture<'a, Arc<Value>> {
+        Box::pin(async move {
+            self.context
+                .context(run_id, locale, now)
+                .await
+                .map_err(PatternError::port)
+        })
+    }
     fn learning_depth(&self) -> PatternFuture<'_, Option<String>> {
         Box::pin(async move {
             let consent = self
@@ -80,6 +96,18 @@ impl PatternInputSource for Source {
                 locale,
                 model,
                 reasoning: reasoning_effort,
+                suggestion_model: match super::briefing::conversation_settings(
+                    &read.config,
+                    Some(&app),
+                    &read.catalog,
+                ) {
+                    BriefingSettings::Configured {
+                        model,
+                        reasoning_effort,
+                        ..
+                    } => Some((model, reasoning_effort)),
+                    BriefingSettings::Unavailable { .. } => None,
+                },
                 timezone: read
                     .config
                     .pointer("/user/timezone")

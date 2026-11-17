@@ -99,7 +99,6 @@ impl DailyCognitionJobs {
             coordinator.clone(),
         ));
         let cycle_metrics = Arc::new(CycleMetrics::new(metrics));
-        let repository = PatternRepository::new(data_root.clone(), coordinator.clone());
         let briefing = Arc::new(BriefingGeneration::from_runtime(
             data_root.clone(),
             coordinator.clone(),
@@ -109,15 +108,15 @@ impl DailyCognitionJobs {
             ledger,
             date_parser,
             paths.clone(),
-            repository.clone(),
+            PatternRepository::new(data_root.clone(), coordinator.clone()),
         ));
         let phases = CyclePhases {
             briefing_at: SystemTime::now().into(),
             metrics: cycle_metrics,
-            briefing,
+            briefing: briefing.clone(),
             patterns: Arc::new(super::patterns::compose(
                 data_root.clone(),
-                repository,
+                briefing.suggestions(),
                 provider,
                 configuration,
                 profile.clone(),

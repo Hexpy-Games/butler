@@ -29,7 +29,7 @@ impl PatternRepository {
             .flat_map(|b| {
                 b.candidates.iter().map(move |c| {
                     json!({"date":b.created_at.format("%Y-%m-%d").to_string(),
-                "kind":c.action.kind,"title":c.title,"action":c.action.title,"answer":c.state})
+                "kind":c.action.kind,"title":c.title,"message":c.message,"action":c.action.title,"answer":c.state})
                 })
             })
             .collect())
@@ -176,7 +176,7 @@ impl PatternRepository {
                 return Err(PatternError::Conflict);
             }
             candidate.state = decision.clone();
-            if decision == "declined" {
+            if decision == "declined" && s.patterns.iter().any(|p| p.id == pattern) {
                 remove(s, &pattern, "declined", now)?;
             }
             Ok(())
