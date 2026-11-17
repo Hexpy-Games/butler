@@ -7378,7 +7378,7 @@
       "definition": {
         "type": "function",
         "name": "browse",
-        "description": "Do one page task in a browser tab with a fast browsing agent and get back only the result: the requested fields with quoted evidence, a short summary and the tab. Use it to find, compare, check prices or options, fill a form up to its submit step, or reach a cart or checkout. Give a concrete goal and the fields you need; pass url or an open tab. Run independent browse calls in one round. A result with status needs_approval carries the exact steps that order, pay, submit or sign in: run them with browser_act so the user approves them. stuck and step_limit say what was reached; follow up with a narrower goal or use browser tools directly.",
+        "description": "Do one page task in a browser tab with a fast browsing agent and get back only the result: the requested fields with quoted evidence, a short summary and the tab. Use it to find, compare, check prices or options, fill a form up to its submit step, or reach a cart or checkout. Give a concrete goal and the fields you need. Pass tab to work in an open tab: the agent stays in it, keeping its sign-in and state. Pass url (without tab) to open the page in a new tab. Run independent browse calls in one round. A result with status needs_approval carries the exact steps that order, pay, submit or sign in: run them with browser_act so the user approves them. stuck and step_limit say what was reached; follow up with a narrower goal or use browser tools directly.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -13910,7 +13910,7 @@
     "browse": {
       "type": "function",
       "name": "browse",
-      "description": "Do one page task in a browser tab with a fast browsing agent and get back only the result: the requested fields with quoted evidence, a short summary and the tab. Use it to find, compare, check prices or options, fill a form up to its submit step, or reach a cart or checkout. Give a concrete goal and the fields you need; pass url or an open tab. Run independent browse calls in one round. A result with status needs_approval carries the exact steps that order, pay, submit or sign in: run them with browser_act so the user approves them. stuck and step_limit say what was reached; follow up with a narrower goal or use browser tools directly.",
+      "description": "Do one page task in a browser tab with a fast browsing agent and get back only the result: the requested fields with quoted evidence, a short summary and the tab. Use it to find, compare, check prices or options, fill a form up to its submit step, or reach a cart or checkout. Give a concrete goal and the fields you need. Pass tab to work in an open tab: the agent stays in it, keeping its sign-in and state. Pass url (without tab) to open the page in a new tab. Run independent browse calls in one round. A result with status needs_approval carries the exact steps that order, pay, submit or sign in: run them with browser_act so the user approves them. stuck and step_limit say what was reached; follow up with a narrower goal or use browser tools directly.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

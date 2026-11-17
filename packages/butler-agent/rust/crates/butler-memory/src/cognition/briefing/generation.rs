@@ -24,8 +24,9 @@ use butler_models::models::{
 };
 
 pub use contracts::{
-    BriefingGenerationCode, BriefingGenerationError, BriefingInputFuture, BriefingInputSnapshot,
-    BriefingInputSource, BriefingPersona, BriefingProjectSignal, BriefingSettings,
+    BriefingContextFuture, BriefingGenerationCode, BriefingGenerationError, BriefingInputFuture,
+    BriefingInputSnapshot, BriefingInputSource, BriefingPersona, BriefingProjectSignal,
+    BriefingSettings,
 };
 use contracts::{error, prepared_fingerprint};
 use usage::Usage;
@@ -33,6 +34,7 @@ use usage::Usage;
 #[derive(Clone, Copy)]
 struct BriefingRunContext<'a> {
     input: &'a BriefingInputSnapshot,
+    pack: &'a Value,
     project: Option<&'a BriefingProjectSignal>,
     run_id: &'a str,
     now: DateTime<Utc>,
@@ -151,8 +153,11 @@ impl BriefingGenerationService {
             }
         };
         let local_minute = self.source.local_minute(now.timestamp_millis())?;
+        let locale = prompt::locale(&input).to_owned();
+        let pack = self.source.suggestion_context(run_id, &locale, now).await?;
         let context = |project| BriefingRunContext {
             input: &input,
+            pack: &pack,
             project,
             run_id,
             now,
@@ -216,7 +221,7 @@ impl BriefingGenerationService {
             return Ok(path.to_string_lossy().into_owned());
         }
         let reply = self.ask_model(&context, usage).await?;
-        let artifact = artifact::from_model(
+        let mut artifact = artifact::from_model(
             &reply,
             artifact::BriefingArtifactContext {
                 input: context.input,
@@ -228,6 +233,10 @@ impl BriefingGenerationService {
                 reasoning: context.reasoning.as_str(),
             },
         )?;
+        if context.project.is_none() && artifact.has_suggestions() {
+            let kept = self.review(&context, &artifact, usage).await?;
+            artifact.retain(&kept);
+        }
         self.commit(&context, &path, &artifact).await?;
         Ok(path.to_string_lossy().into_owned())
     }
@@ -244,11 +253,16 @@ impl BriefingGenerationService {
             run_id,
             now,
             local_minute,
-            model,
-            reasoning,
-            cancellation,
+            ..
         } = *context;
-        let prompt = prompt::prompt(input, project, now, local_minute, run_id);
+        let prompt = prompt::prompt(
+            input,
+            project,
+            now,
+            local_minute,
+            run_id,
+            project.is_none().then_some(context.pack),
+        );
         let instructions = prompt::instructions(
             prompt::locale(input),
             input
@@ -268,17 +282,32 @@ impl BriefingGenerationService {
                 .map(|project| format!(":{}", write::safe_segment(&project.id)))
                 .unwrap_or_default()
         );
+        self.call(context, &prompt, &instructions, &cache_scope, usage)
+            .await
+    }
+
+    async fn call(
+        &self,
+        context: &BriefingRunContext<'_>,
+        prompt: &str,
+        instructions: &str,
+        cache_scope: &str,
+        usage: &mut Usage,
+    ) -> Result<String, BriefingGenerationError> {
+        let model = context.model;
+        let reasoning = context.reasoning;
+        let cancellation = context.cancellation;
         let root = self.data_root.to_string_lossy().into_owned();
         let response = self
             .provider
             .run_prompt(
                 ProviderPromptRequest {
-                    prompt: &prompt,
+                    prompt,
                     model: Some(model),
                     reasoning_effort: Some(&reasoning),
-                    instructions: Some(&instructions),
+                    instructions: Some(instructions),
                     response_format: None,
-                    cache_scope: Some(&cache_scope),
+                    cache_scope: Some(cache_scope),
                     cache_boundary: None,
                     cancellation: cancellation.clone(),
                     attachments: &[],
@@ -309,6 +338,38 @@ impl BriefingGenerationService {
             response.usage.as_ref(),
         );
         Ok(response.text)
+    }
+
+    /// The reviewer's kept card ids for the general briefing.
+    async fn review(
+        &self,
+        context: &BriefingRunContext<'_>,
+        artifact: &artifact::BriefingArtifact<'_>,
+        usage: &mut Usage,
+    ) -> Result<std::collections::HashSet<String>, BriefingGenerationError> {
+        let prompt = crate::cognition::suggestions::review_prompt(
+            "general_new_chat_briefing_review",
+            prompt::locale(context.input),
+            context.now,
+            context.pack,
+            &artifact.review_items(),
+        );
+        let scope = format!("cognition:{}:new_chat_briefing:review", context.run_id);
+        let reply = self
+            .call(
+                context,
+                &prompt,
+                crate::cognition::suggestions::SUGGESTION_INSTRUCTIONS,
+                &scope,
+                usage,
+            )
+            .await?;
+        crate::cognition::suggestions::kept(&reply).ok_or_else(|| {
+            error(
+                BriefingGenerationCode::NewChatBriefingInvalidModelOutput,
+                "New chat briefing review omitted reviews",
+            )
+        })
     }
 
     /// Writes the artifact under the consolidation lock, provided the

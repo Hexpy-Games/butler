@@ -304,6 +304,19 @@ pub(super) fn instrument(
     )
 }
 
+/// Each session's first view (taken at turn admission), apart from the views taken while streaming.
+pub(super) fn first_and_streaming(per_session: &[Vec<u64>]) -> (Vec<u64>, Vec<u64>) {
+    let first = per_session
+        .iter()
+        .filter_map(|s| s.first().copied())
+        .collect();
+    let streaming = per_session
+        .iter()
+        .flat_map(|s| s.iter().skip(1).copied())
+        .collect();
+    (first, streaming)
+}
+
 pub(super) fn p95(samples: &mut [u64]) -> u64 {
     samples.sort_unstable();
     samples[(samples.len() * 95).div_ceil(100) - 1]

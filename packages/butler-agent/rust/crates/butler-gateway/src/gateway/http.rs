@@ -389,6 +389,7 @@ async fn post_message(
             "Too many messages. Please wait before sending again.",
         ));
     }
+    browser_host::give_back_on_message(&state, &chat_id);
     let result = state
         .application
         .send_message(SendMessageCommand {

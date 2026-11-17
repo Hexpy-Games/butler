@@ -63,7 +63,8 @@ async fn schedules_consolidation_and_chat_inherit_main_model() -> Result<(), Har
         s.gw.settings().await?["effective_consolidation_model"],
         FEATURE
     );
-    consolidation(&s, FEATURE).await?;
+    // Briefings follow the chat model whatever the memory model is.
+    consolidation(&s, MAIN).await?;
     schedule(&s, MAIN).await?;
     s.patch_settings(
         json!({"consolidation_model":"default"}),

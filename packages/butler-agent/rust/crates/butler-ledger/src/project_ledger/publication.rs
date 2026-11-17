@@ -7,6 +7,7 @@ mod occurrence;
 mod record;
 pub(crate) mod timing;
 mod transaction;
+pub(in crate::project_ledger) use transaction::claim::{claim_held, read_generation};
 
 use std::future::Future;
 use std::sync::Arc;

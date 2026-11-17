@@ -21,8 +21,8 @@ const shots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? join(tmpdir(), "bu
 mkdirSync(shots, { recursive: true });
 const copy = SESSION_INFO_COPY[lang === "ko" ? "ko-KR" : "en-US"];
 const text = lang === "ko"
-  ? { working: "작업 중", resume: "이어서 진행", attention: "확인 필요", ask: COPY.ko.ask, showSidebar: "사이드바 보기" }
-  : { working: "Working", resume: "Resume", attention: "Needs attention", ask: COPY.en.ask, showSidebar: "Show sidebar" };
+  ? { working: "작업 중", resume: "이어서 진행", stop: "중지", attention: "확인 필요", ask: COPY.ko.ask, showSidebar: "사이드바 보기" }
+  : { working: "Working", resume: "Resume", stop: "Stop", attention: "Needs attention", ask: COPY.en.ask, showSidebar: "Show sidebar" };
 const name = (shot: string) => join(shots, `${baseline ? "main-" : ""}${shot}-${theme}-${lang}.png`);
 const aside = (page: Page) => page.getByRole("complementary", { name: copy.title, exact: true });
 const sidebar = (page: Page) => page.locator('[data-test-class="app-sidebar"]');
@@ -81,7 +81,7 @@ async function openPage(active: string, replay: SubtaskReplay, width = 1440, hei
 
 /** Sidebar and panel without subtasks, plus the canon inline-edit hover: compared against main. */
 async function unchangedScreens(epicSession: string, parentId: string) {
-  const page = await openPage(epicSession, { parentId, lang, subtasks: [], asksOn: false, resumed: [] });
+  const page = await openPage(epicSession, { parentId, lang, subtasks: [], asksOn: false, resumed: [], cancelled: [] });
   assert.equal(await page.locator('[data-test-class="subtask-lines"]').count(), 0);
   await shot(sidebar(page), "none-sidebar");
   await page.locator('[data-test-class="session-info-toggle"]').click();
@@ -96,7 +96,7 @@ async function unchangedScreens(epicSession: string, parentId: string) {
 }
 
 async function subtaskScreens(parentId: string) {
-  const replay: SubtaskReplay = { parentId, lang, subtasks: subtaskFixtures(lang), asksOn: false, resumed: [] };
+  const replay: SubtaskReplay = { parentId, lang, subtasks: subtaskFixtures(lang), asksOn: false, resumed: [], cancelled: [] };
   let page = await openPage(parentId, replay);
   const toggle = page.locator('[data-test-class="session-info-toggle"]');
   // The approval reaches the dot through the subtask alone.
@@ -110,6 +110,7 @@ async function subtaskScreens(parentId: string) {
   assert.equal(await page.locator('[data-test-class="steward-composer-capsules"]').count(), 0, "the composer has no subtask capsules");
   await verifyResumeAndObserver(page, replay);
   await verifyFinished(page, replay);
+  await verifyStopPaused(page, replay);
   await page.close();
   replay.subtasks = subtaskFixtures(lang);
   page = await openPage(parentId, replay, 390, 844);
@@ -221,4 +222,37 @@ async function verifyFinished(page: Page, replay: SubtaskReplay) {
   await aside(page).locator('[data-session-section="subtasks"]').waitFor({ state: "detached" });
   await sidebar(page).locator('[data-test-class="subtask-lines"]').waitFor({ state: "detached" });
   assert.equal(await page.locator('[data-test-class="session-info-toggle"] [data-slot="icon-button-indicator"]').count(), 0, "the dot clears");
+}
+
+async function verifyStopPaused(page: Page, replay: SubtaskReplay) {
+  replay.subtasks = subtaskFixtures(lang);
+  await page.evaluate(parent => {
+    const emit = (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent;
+    emit({ id: 202, type: "subsession.changed", payload: { session_id: parent, child_session_id: "steward-subtask-paused" } });
+  }, replay.parentId);
+  const rows = aside(page).locator('[data-test-class="subtask-row"]');
+  await rows.nth(2).waitFor();
+  assert.equal(await rows.count(), 3);
+  await rows.nth(1).locator('[data-test-class="subtask-title"]').click();
+  const dialog = page.locator('[data-test-class="steward-observer-dialog"]');
+  await dialog.waitFor();
+  const footer = dialog.locator('[data-slot="dialog-footer"]');
+  assert.deepEqual(await footer.locator("button").evaluateAll(buttons => buttons.map(button => button.textContent?.trim())), [text.stop, text.resume]);
+  await shot(dialog, "observer-paused");
+  const resumed = replay.resumed.length;
+  const cancelled = page.waitForResponse(response => response.url().includes("/steward-relations/") && response.url().endsWith("/cancel"));
+  await footer.getByRole("button", { name: text.stop, exact: true }).click();
+  await cancelled;
+  assert.deepEqual(replay.cancelled, [{ relation: "relation-paused", parent: replay.parentId }]);
+  assert.equal(replay.resumed.length, resumed);
+  await page.keyboard.press("Escape");
+  // The gateway announces the closed relation, as it does for any finished subtask.
+  await page.evaluate(parent => {
+    const emit = (window as unknown as { __emitWorkEvent: (event: unknown) => void }).__emitWorkEvent;
+    emit({ id: 203, type: "subsession.changed", payload: { session_id: parent, child_session_id: "steward-subtask-paused" } });
+  }, replay.parentId);
+  await page.waitForFunction(() => document.querySelectorAll('[data-test-class="subtask-row"]').length === 2
+    && document.querySelectorAll('[data-test-class="subtask-line"]').length === 2);
+  assert.equal(await aside(page).locator('[data-test-class="subtask-row"][data-subtask-state="paused"]').count(), 0);
+  await shot(aside(page), "info-after-stop");
 }
