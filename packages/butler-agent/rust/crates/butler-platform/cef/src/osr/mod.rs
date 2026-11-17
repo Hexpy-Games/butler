@@ -73,6 +73,8 @@ use std::{
 static STARTED: AtomicBool = AtomicBool::new(false);
 #[cfg(cef_osr)]
 const FALLBACK: Duration = Duration::from_nanos(1_000_000_000 / 30);
+#[cfg(cef_osr)]
+const KEYCHAIN_NAME: &str = "Butler";
 
 /// All runtime methods and sink events run on the UI thread.
 pub trait OsrSink: 'static {
@@ -451,6 +453,10 @@ fn settings(config: OsrConfig) -> Result<cef::Settings, OsrError> {
         user_agent: user_agent.as_str().into(),
         log_file: path(&profile_dir.join("cef.log")),
         log_severity: cef::LogSeverity::WARNING,
+        // The names match the Electron App's, so its existing Keychain item is reused
+        // and the macOS prompt names Butler. Chromium reads them on macOS only.
+        keychain_service_name: format!("{KEYCHAIN_NAME} Safe Storage").as_str().into(),
+        keychain_account_name: KEYCHAIN_NAME.into(),
         ..Default::default()
     })
 }
