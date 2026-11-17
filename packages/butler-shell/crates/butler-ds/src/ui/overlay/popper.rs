@@ -33,13 +33,20 @@ impl Anchor {
     }
 
     /// A zero-cost layer that measures the element it is placed in (its parent's box). Put it
-    /// inside the trigger or anchor element.
+    /// inside the anchor element of a surface that is open while it is measured.
     pub fn probe(&self) -> gpui::Div {
+        self.probe_while(|_| true)
+    }
+
+    /// [`Anchor::probe`] for a trigger that is on screen while its surface is closed: the bounds
+    /// are always recorded (the surface reads them on its first frame), a frame is requested
+    /// only while `open` holds.
+    pub(crate) fn probe_while(&self, open: impl Fn(&App) -> bool + 'static) -> gpui::Div {
         let cell = self.0.clone();
         div().absolute().top_0().left_0().size_full().child(
             canvas(
-                move |bounds, window, _| {
-                    if cell.replace(Some(bounds)) != Some(bounds) {
+                move |bounds, window, cx| {
+                    if cell.replace(Some(bounds)) != Some(bounds) && open(cx) {
                         crate::ui::motion::remeasure(window);
                     }
                 },

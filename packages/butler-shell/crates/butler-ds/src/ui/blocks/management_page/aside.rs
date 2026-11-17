@@ -13,6 +13,7 @@ use crate::tokens::Length;
 use crate::ui::blocks::conversation_shell::{AsideContent, AsideLayout, next_layout};
 use crate::ui::context::Ds;
 use crate::ui::scroll::engine::{self, Axis, Config};
+use crate::ui::scroll::frame as scroll_frame;
 use crate::ui::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
 
 /// The page width from which the aside docks beside the content (a floating one docks again 32px
@@ -80,16 +81,19 @@ fn scroll(slot: &Slot, content: AnyElement, window: &mut Window, cx: &mut App) -
         .flex()
         .flex_col()
         .w_full()
-        .flex_none()
         .py(fade)
         .px(side)
         .child(content);
-    let built = engine::scroller(&config, body.min_w_0().flex_auto().min_h_0(), window, cx);
-    let frame = div()
+    let built = engine::scroller(
+        &config,
+        scroll_frame::body(body.min_w_0(), "management-page-aside-scroll"),
+        window,
+        cx,
+    );
+    let frame = scroll_frame::frame("management-page-aside-scroll")
         .relative()
         .flex_auto()
         .min_w_0()
-        .min_h_0()
         .overflow_hidden();
     match slot.layout {
         AsideLayout::Docked => frame.mx(-room).child(built.element),

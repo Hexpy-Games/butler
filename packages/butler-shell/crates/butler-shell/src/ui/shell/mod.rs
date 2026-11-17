@@ -99,6 +99,8 @@ pub(crate) struct Shell {
     live_task: Option<gpui::Task<()>>,
     connection_task: Option<gpui::Task<()>>,
     rediscover: Option<tokio::sync::mpsc::UnboundedSender<crate::ui::source::agent::MonitorSignal>>,
+    /// The window's latest attach change, until the app's `Jobs` reaches the same Agent.
+    attaching: Option<(Option<Rc<dyn Source>>, crate::ui::source::agent::Jobs)>,
     /// Whether the open chat's latest window is being read again.
     refresh: Refresh,
     /// The management view, its page, the observer and the live topics.
@@ -167,7 +169,7 @@ impl Shell {
         });
         let dark = theme_override.unwrap_or_else(|| system_dark(window));
         Self::install_ds(&options, dark, window, cx);
-        crate::ui::browser::init(window, cx);
+        crate::ui::browser::init_window(window, cx);
         let theme = Theme::new(
             dark,
             options.platform,
@@ -182,6 +184,7 @@ impl Shell {
         subscriptions.push(palette_events);
         let (manage, manage_events) = Self::new_manage(window, cx);
         subscriptions.push(manage_events);
+        subscriptions.push(cx.observe_global::<crate::ui::source::agent::Jobs>(Self::adopt));
         let onboarding = onboarding_link::OnboardingState::new(options.source.is_some());
         let vault_prompt = Self::new_vault_prompt(&mut subscriptions, cx);
         let composer_h = composer.read(cx).height_cell();
@@ -211,6 +214,7 @@ impl Shell {
             live_task: None,
             connection_task: None,
             rediscover: None,
+            attaching: None,
             refresh: Refresh::Idle,
             manage,
             settings_view: None,

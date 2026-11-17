@@ -172,10 +172,7 @@ impl Select {
 
     fn wrap(&self, fill: bool, rows: std::rc::Rc<Vec<Row>>, child: AnyElement) -> AnyElement {
         let (press, typing, focus) = (self.clone(), self.clone(), self.trigger_focus.clone());
-        let inner = div()
-            .relative()
-            .child(child)
-            .child(self.parts.trigger.probe());
+        let inner = div().relative().child(child).child(self.trigger_probe());
         let inner = if fill { inner.w_full() } else { inner };
         let mut boxed = TriggerBox::new(inner.into_any_element(), move |wrapper| {
             wrapper

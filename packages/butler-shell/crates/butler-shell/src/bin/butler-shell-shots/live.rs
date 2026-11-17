@@ -242,6 +242,10 @@ pub(super) fn run(
         let first = serde_json::json!({ "dark": dark });
         std::fs::write(dir.join("first-frame.json"), serde_json::to_vec(&first)?)?;
     }
+    if !app {
+        // Without `--app` nothing runs `lifecycle::start`, the only writer of `Jobs`.
+        h.cx.update(|cx| ui::source::agent::Jobs::keep_current(data.clone(), cx));
+    }
     let attachment = Attachment::start(Some(data));
     h.update(|s, _, cx| s.attach(attachment, cx))?;
     println!("LIVE READY");

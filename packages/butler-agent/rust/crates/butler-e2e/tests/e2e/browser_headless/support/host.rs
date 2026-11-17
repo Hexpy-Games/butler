@@ -101,6 +101,23 @@ pub(crate) struct Hosted {
 }
 
 impl Hosted {
+    /// Runs shell commands with the pump paused, then resumes it.
+    pub(crate) async fn shell(&mut self, cmds: &[&str]) -> Result<(), HarnessError> {
+        let pump = self
+            .pump
+            .take()
+            .ok_or_else(|| harness_error("the shell is not running"))?;
+        let mut shell = pump.stop().await?;
+        let ran = shell.run(cmds).await;
+        self.pump = Some(Pump::start(shell));
+        ran
+    }
+
+    /// Waits until a page host is attached to the scenario's agent.
+    pub(crate) async fn attached(&self) -> Result<(), HarnessError> {
+        attached(&self.scenario).await
+    }
+
     pub(crate) async fn finish(self) -> Result<(), HarnessError> {
         let Self {
             pump,

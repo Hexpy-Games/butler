@@ -138,6 +138,8 @@ pub(crate) fn start(cx: &mut App, data: PathBuf, legacy: bool) {
         supervisor,
     });
     cx.set_global(GlobalAgentRuntime(entity.clone()));
+    crate::ui::source::agent::Jobs::keep_current(entity.read(cx).data.clone(), cx);
+    crate::ui::browser::init(cx);
     let weak = entity.downgrade();
     cx.spawn(async move |cx| {
         while let Some(status) = statuses.next().await {

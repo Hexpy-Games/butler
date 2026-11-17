@@ -2,7 +2,7 @@
 use super::{
     OsrCursor, OsrEvent, RuntimeState,
     paint::Paint,
-    state::{Events, PageRef},
+    state::{Events, PageRef, Phase},
 };
 use cef::*;
 use std::rc::Weak;
@@ -38,8 +38,10 @@ fn retire(shared: &PageRef, page: u64, runtime: Option<&RuntimeState>) {
         let mut p = shared.borrow_mut();
         p.release_frames();
         p.browser = None;
-        let visible = p.visible;
-        p.visible = false;
+        let visible = p.phase == Phase::Visible;
+        if visible {
+            p.phase = Phase::Hidden;
+        }
         visible
     };
     if let Some(runtime) = runtime {
@@ -92,14 +94,14 @@ cef::wrap_life_span_handler! {
                 let mut p = self.shared.borrow_mut();
                 p.browser = browser.cloned();
                 p.popup = None;
-                if p.closing { p.browser.as_ref().and_then(cef::ImplBrowser::host) } else { None }
+                if p.phase == Phase::Closing { p.browser.as_ref().and_then(cef::ImplBrowser::host) } else { None }
             };
             if let Some(host) = host {
                 host.close_browser(1);
             }
         }
         fn do_close(&self, _browser: Option<&mut Browser>) -> i32 {
-            if !self.shared.borrow().closing { self.events.emit(OsrEvent::CloseRequested); }
+            if self.shared.borrow().phase != Phase::Closing { self.events.emit(OsrEvent::CloseRequested); }
             0
         }
         fn on_before_close(&self, _browser: Option<&mut Browser>) {

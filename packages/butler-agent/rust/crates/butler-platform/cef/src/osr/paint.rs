@@ -11,7 +11,7 @@ use super::{
 };
 use super::{
     OsrEvent,
-    state::{Events, PageRef},
+    state::{Events, PageRef, Phase},
 };
 use cef::*;
 
@@ -35,7 +35,7 @@ cef::wrap_render_handler! {
             if buffer.is_null() || width <= 0 || height <= 0 { return; }
             {
                 let mut p = self.shared.borrow_mut();
-                if !p.visible || p.closing { return; }
+                if p.phase != Phase::Visible { return; }
                 let len = width.unsigned_abs() as usize * height.unsigned_abs() as usize * 4;
                 #[allow(unsafe_code, reason = "CEF's paint buffer is a raw pointer")]
                 // SAFETY: CEF passes a `width * height * 4`-byte BGRA buffer valid for the callback.
@@ -51,7 +51,7 @@ cef::wrap_render_handler! {
             if kind != PaintElementType::VIEW { return; }
             let accepted = {
                 let mut p = self.shared.borrow_mut();
-                if !p.visible || p.closing { return; }
+                if p.phase != Phase::Visible { return; }
                 let Some(info) = info else { return; };
                 // Ok(false): the frame was dropped (no free pooled texture on Windows).
                 match copy_frame(&mut p, info) {

@@ -4,7 +4,11 @@ use super::{
     model::{BrowserError, BrowserState, Owner, Tab, TabStatus},
     shell_state::BrowserShell,
 };
-use crate::ui::{i18n::browser::BrowserStrings, manage, widgets::anchor};
+use crate::ui::{
+    i18n::browser::BrowserStrings,
+    manage,
+    widgets::{anchor, anchored},
+};
 use butler_ds::ui::blocks::{
     browser_pane::{BrowserPane, PanePlacement},
     empty_line::EmptyLine,
@@ -273,18 +277,17 @@ fn popup_band(tab: &Tab, cx: &App) -> Option<PageBand> {
         let mut band =
             PageBand::new("browser-band", PageBandTone::Info, c.popup_blocked).icon(popup_icon(cx));
         if blocked.reason == "no_gesture" {
-            band = band.actions(
-                anchor(div(), "browser-popup-allow").child(
-                    Button::new("browser-popup-allow")
-                        .size(butler_ds::ui::button::Size::Xs)
-                        .variant(Variant::Ghost)
-                        .text(c.allow)
-                        .on_click(move |_, _, cx| {
-                            cx.global_mut::<BrowserState>().allow_popup(&id);
-                            cx.refresh_windows();
-                        }),
-                ),
-            );
+            band = band.actions(anchored(
+                Button::new("browser-popup-allow")
+                    .size(butler_ds::ui::button::Size::Xs)
+                    .variant(Variant::Ghost)
+                    .text(c.allow)
+                    .on_click(move |_, _, cx| {
+                        cx.global_mut::<BrowserState>().allow_popup(&id);
+                        cx.refresh_windows();
+                    }),
+                "browser-popup-allow",
+            ));
         }
         return Some(band);
     }
@@ -302,15 +305,14 @@ fn popup_band(tab: &Tab, cx: &App) -> Option<PageBand> {
         PageBand::new("browser-band", PageBandTone::Info, c.popup_opened)
             .icon(popup_icon(cx))
             .detail(host)
-            .actions(
-                anchor(div(), "browser-popup-show").child(
-                    Button::new("browser-popup-show")
-                        .size(butler_ds::ui::button::Size::Xs)
-                        .variant(Variant::Ghost)
-                        .text(c.show_popup)
-                        .on_click(move |_, _, cx| super::popup_window::focus(&child, cx)),
-                ),
-            ),
+            .actions(anchored(
+                Button::new("browser-popup-show")
+                    .size(butler_ds::ui::button::Size::Xs)
+                    .variant(Variant::Ghost)
+                    .text(c.show_popup)
+                    .on_click(move |_, _, cx| super::popup_window::focus(&child, cx)),
+                "browser-popup-show",
+            )),
     )
 }
 

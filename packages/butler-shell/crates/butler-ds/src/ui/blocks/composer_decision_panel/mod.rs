@@ -451,6 +451,8 @@ fn media_layout(
         }])
         .child(media.content);
     let target = match media.on_open {
+        // `.mediaTarget { display: block; width: var(--decision-media-width) }`: a block box, not an
+        // inline-level one that sits on a line in its wrapper.
         Some(open) => Clickable::new((id.clone(), "media"))
             .variant(ClickVariant::Text)
             .stretch() // DS: ComposerDecisionPanel.module.css:90, a block as wide as the column

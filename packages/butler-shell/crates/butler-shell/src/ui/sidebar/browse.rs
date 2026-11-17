@@ -72,16 +72,15 @@ impl Shell {
     ) -> AnyElement {
         let menu = DropdownMenu::new("sidebar-create", window, cx);
         let trigger = menu.trigger(|toggle| {
-            crate::ui::widgets::anchor(div(), "sidebar-create-trigger")
-                .child(
-                    IconButton::new(
-                        "sidebar-create-trigger",
-                        self.copy("Space menu", "공간 메뉴"),
-                    )
-                    .glyph(Icon::FolderPlus)
-                    .on_click(toggle.on_click()),
+            crate::ui::widgets::anchored(
+                IconButton::new(
+                    "sidebar-create-trigger",
+                    self.copy("Space menu", "공간 메뉴"),
                 )
-                .into_any_element()
+                .glyph(Icon::FolderPlus)
+                .on_click(toggle.on_click()),
+                "sidebar-create-trigger",
+            )
         });
         let mut content = DropdownMenuContent::new();
         for (label, dialog) in [
