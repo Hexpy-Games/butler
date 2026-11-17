@@ -84,8 +84,6 @@ parity-diff $TMPDIR/ds-parity/react/1280x800-light $TMPDIR/ds-parity/gpui/1280x8
   $TMPDIR/ds-parity/diff/1280x800-light
 ```
 
-On Linux the web dump launches Chromium with `--font-render-hinting=none`, because hinted glyph advances make web text wider than on macOS and gpui.
-
 ### B2 pages, state shots and the summary
 
 `scenes/ds-view.json` lists the B1 and B2 pages. `ds-view-states.ts` captures the interactive
@@ -210,6 +208,8 @@ butler-ds-view --shots $TMPDIR/ds-layout/gpui/1280x800-light --parts --scale 2 -
 bun packages/butler-shell/tools/parity/ds-layout-diff.ts --web $TMPDIR/ds-layout/react/1280x800-light \
   --gpui $TMPDIR/ds-layout/gpui/1280x800-light > $TMPDIR/ds-layout/diff.txt
 ```
+
+On Linux `ds-layout.ts` launches Chromium with `--font-render-hinting=none` so web text widths match macOS and gpui (hinted advances on headless Linux Chromium widen text and add false rows).
 
 `diff.txt` holds one JSON line per matched part (`dx dy dw dh` are gpui minus web), a summary line per story,
 the totals line and two tables: (A) stories whose canvas is off by more than 0.5 px, largest first, and
