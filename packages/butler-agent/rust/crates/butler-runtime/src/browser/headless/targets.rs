@@ -318,6 +318,9 @@ pub(crate) fn popup_allowed(policy: &Value, parent: &str, raw: &str) -> bool {
         || in_list("popup_sites", &|site| {
             host == site || host.ends_with(&format!(".{site}"))
         })
+        || in_list("payment_sites", &|site| {
+            host == site || host.ends_with(&format!(".{site}"))
+        })
         || in_list("popup_hosts", &|h| h == host)
 }
 
