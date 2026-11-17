@@ -1,7 +1,7 @@
 //! `TurnActivityTimeline/Panel/Block/Pending/Message`, `MessageTurnActivity`, `CompletedWorkBlocks`.
 pub(crate) mod blocks;
-pub(crate) mod clock;
 pub(crate) mod child_views;
+pub(crate) mod clock;
 pub(crate) mod operation;
 pub(crate) mod status;
 pub(crate) mod steward;
