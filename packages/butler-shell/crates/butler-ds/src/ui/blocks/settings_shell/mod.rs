@@ -7,7 +7,7 @@ mod page;
 
 use gpui::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, RenderOnce, SharedString, Styled as _, Window, WindowControlArea, div, point, px,
+    Pixels, RenderOnce, SharedString, Styled as _, Window, div, point, px,
 };
 
 pub use page::{SettingsPageCopy, repeats_settings_copy, settings_page, settings_page_provider};
@@ -425,28 +425,27 @@ impl RenderOnce for SettingsShell {
         if !cards {
             shell = shell.bg(ds.color(Color::SettingsBg));
         }
-        shell = match (compact, self.compact_pane) {
-            (false, _) => shell.child(sidebar).child(detail),
-            (true, CompactPane::Master) => shell.child(sidebar),
-            (true, CompactPane::Detail) => shell.child(detail),
-        };
         if self.active {
-            // The title-row drag lane over both panes.
+            // The title-row drag lane under both panes, so their controls win the press.
             let height = if compact {
                 Length::TitlebarSafeAreaTop
             } else {
                 Length::TitlebarHeight
             };
-            shell = shell.child(
+            shell = shell.child(crate::ui::window_drag::area(
                 div()
                     .absolute()
                     .top_0()
                     .left_0()
                     .right_0()
-                    .h(ds.len(height))
-                    .window_control_area(WindowControlArea::Drag),
-            );
+                    .h(ds.len(height)),
+            ));
         }
+        shell = match (compact, self.compact_pane) {
+            (false, _) => shell.child(sidebar).child(detail),
+            (true, CompactPane::Master) => shell.child(sidebar),
+            (true, CompactPane::Detail) => shell.child(detail),
+        };
         let rows = cards.then_some((Color::SidebarHoverBg, Color::SidebarSelectedBg));
         let spec = Spec {
             nav_fills: rows,

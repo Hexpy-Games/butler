@@ -12,6 +12,8 @@ pub(crate) struct ArtifactViewerCopy {
     pub(crate) unsupported: &'static str,
     /// artifacts.loadFailed
     pub(crate) load_failed: &'static str,
+    /// artifacts.openInAppFailed
+    pub(crate) open_in_app_failed: &'static str,
 }
 
 const KO: ArtifactViewerCopy = ArtifactViewerCopy {
@@ -19,6 +21,7 @@ const KO: ArtifactViewerCopy = ArtifactViewerCopy {
     loading: "아티팩트를 불러오는 중",
     unsupported: "앱 안에서 미리 볼 수 없는 아티팩트입니다",
     load_failed: "아티팩트를 불러오지 못했습니다",
+    open_in_app_failed: "파일을 열지 못했습니다",
 };
 
 const EN: ArtifactViewerCopy = ArtifactViewerCopy {
@@ -26,6 +29,7 @@ const EN: ArtifactViewerCopy = ArtifactViewerCopy {
     loading: "Loading artifact",
     unsupported: "This artifact cannot be previewed in the app",
     load_failed: "Could not load artifact",
+    open_in_app_failed: "Could not open file",
 };
 
 impl ArtifactViewerCopy {

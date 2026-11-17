@@ -11,12 +11,14 @@ use gpui::{
 
 use super::Shell;
 use super::navigation::Navigation;
+use crate::ui::composer::Composer;
 use crate::ui::i18n::manage::words;
 use crate::ui::manage::canon::plan::CanonTrustDialog;
 use crate::ui::manage::{
     self, LibraryView, ManageCtx, ManageEvent, ManageLive, ManageState, Proceed, Topic, View, route,
 };
 use crate::ui::observer::{ObserverEvent, SessionObserver};
+use crate::ui::source::ChatRef;
 use crate::ui::source::sidebar::DraftTarget;
 use crate::ui::source::wire::{AppEventEnvelope, ProjectDashboardDocument};
 use crate::ui::viewer;
@@ -31,6 +33,11 @@ struct Observer {
     history: Vec<Observed>,
     _events: Subscription,
 }
+
+/// The open chat or draft (Electron's `activeChatId`).
+pub(crate) type ChatKey = (Option<ChatRef>, Option<DraftTarget>);
+/// The composer's editor as Electron keys it: the view, and the open chat or draft.
+pub(super) type ComposerKey = (View, ChatKey);
 
 /// The management side of the shell.
 pub(super) struct Manage {
@@ -81,6 +88,15 @@ impl Shell {
         self.manage.state.read(cx).view == View::Session
     }
 
+    pub(crate) fn chat_key(&self) -> ChatKey {
+        let parent = self.sidebar.new_chat_parent.clone();
+        (self.store.selected().cloned(), parent)
+    }
+
+    pub(super) fn composer_key(&self, cx: &App) -> ComposerKey {
+        (self.manage.state.read(cx).view.clone(), self.chat_key())
+    }
+
     /// `routeActiveChatId`: the open session while the conversation is the view.
     pub(crate) fn route_chat(&self, cx: &App) -> Option<&str> {
         self.store
@@ -121,7 +137,6 @@ impl Shell {
                 crate::ui::browser::open_conversation_link(session.as_deref(), url, cx);
             }
             ManageEvent::OpenNewChat => {
-                self.sidebar.new_chat_parent = None;
                 self.open_chat(None, window, cx);
             }
             ManageEvent::OpenProjectChat(project) => {
@@ -205,7 +220,8 @@ impl Shell {
         rebuild && key.is_some()
     }
 
-    /// Shows `view` now (past the guard). The conversation takes the composer back.
+    /// Shows `view` now (past the guard). Back on the conversation, which Electron mounts anew
+    /// (`AppShell.tsx`), focus goes to the shell root and the composer stays folded.
     fn show_view_now(&mut self, view: &View, window: &mut Window, cx: &mut Context<Self>) {
         let was_session = self.on_session(cx);
         if self.store_view(view.clone(), cx) {
@@ -213,14 +229,20 @@ impl Shell {
             self.manage.page = manage::page_key(view).zip(manage::page(view, ctx, window, cx));
         }
         if !was_session && *view == View::Session {
-            self.composer.update(cx, |c, cx| c.engage(window, cx));
+            window.focus(&self.focus, cx);
         }
     }
 
-    /// A chat was opened (`openSession`): the conversation is the view and the observer closes.
-    pub(crate) fn chat_opened(&mut self, cx: &mut Context<Self>) {
+    /// A chat was opened (`openSession`) in place of `before`: the conversation is the view and
+    /// the observer closes. Electron rebuilds the composer only when `activeChatId` changed or
+    /// the conversation was not the view (`AppShell.tsx` mounts it for `session` only).
+    pub(crate) fn chat_opened(&mut self, before: &ChatKey, cx: &mut Context<Self>) {
+        let rebuilt = !self.on_session(cx) || self.chat_key() != *before;
         self.manage.observer = None;
         self.store_view(View::Session, cx);
+        if rebuilt {
+            self.composer.update(cx, Composer::chat_opened);
+        }
     }
 
     /// `openProjectDashboard`: the dashboard's activation moves its topic, and the sidebar

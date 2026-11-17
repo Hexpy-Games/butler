@@ -187,11 +187,13 @@ assert_signed() {
   fi
 }
 
-# The executable a bundle's own signature covers; it is signed with the bundle.
+# The executable a bundle's own signature covers (the one its Info.plist names); it is signed with the bundle.
 is_bundle_main() {
   local f=$1 name rest
   case "$f" in
-    */Contents/MacOS/*) return 0 ;;
+    */Contents/MacOS/*)
+      [ "${f##*/}" = "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${f%/MacOS/*}/Info.plist" 2>/dev/null)" ] && return 0
+      ;;
     *.framework/Versions/*/*)
       name=${f%%.framework/*}
       name=${name##*/}

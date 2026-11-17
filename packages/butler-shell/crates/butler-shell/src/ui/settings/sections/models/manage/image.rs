@@ -5,7 +5,7 @@ use butler_ds::ui::blocks::settings_field::{ControlWidth, SettingsFieldGroup};
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
-use butler_ds::ui::toast::{Toast, ToastId};
+use butler_ds::ui::toast::ToastId;
 use butler_shell_client::Error;
 use gpui::{
     AnyElement, Context, Entity, IntoElement, ParentElement as _, Render, SharedString, Window,
@@ -59,9 +59,10 @@ impl ImageModels {
                 this.busy = false;
                 match result {
                     Ok(settings) => this.state.update(cx, |state, cx| state.set(settings, cx)),
-                    Err(_) => {
+                    Err(error) => {
                         let text = frame_words(Ds::get(cx).lang()).save_failed;
-                        notify(&mut this.toast, Toast::error(text), cx);
+                        let next = crate::ui::i18n::errors::toast(cx, &error, text);
+                        notify(&mut this.toast, next, cx);
                     }
                 }
             },

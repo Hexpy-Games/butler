@@ -7,16 +7,16 @@ use gpui::App;
 use super::copy::words;
 
 /// `canonWriteFailure`: toasts the failure and answers whether the caller must read again.
-// G-codes: the client returns no error codes, so only a 409 is told apart (`conflict`); every
-// other refusal takes React's `requestFailed` fallback.
+// A 409 is told apart by its status (`conflict`); every other refusal shows its code's sentence,
+// else React's `requestFailed` fallback.
 pub(super) fn write_failure(error: &Error, cx: &mut App) -> bool {
     let copy = words(Ds::get(cx).lang());
-    let conflict = matches!(error, Error::Http(409));
+    let conflict = matches!(error, Error::Http(409, _));
     let message = if conflict {
-        copy.conflict
+        Toast::error(copy.conflict)
     } else {
-        copy.request_failed
+        crate::ui::i18n::errors::toast(cx, error, copy.request_failed)
     };
-    toast::show(cx, Toast::error(message));
+    toast::show(cx, message);
     conflict
 }

@@ -57,7 +57,7 @@ pub(super) async fn restore(client: ShellClient, id: String, rev: u64) -> Result
         let expected = head["rev"].as_u64().ok_or(Error::Protocol)?;
         let body = json!({ "rev": rev, "expected_rev": expected, "author": "user" });
         match client.restore_document(&id, &body).await {
-            Err(Error::Http(409)) => {}
+            Err(Error::Http(409, _)) => {}
             answer => return answer,
         }
     }

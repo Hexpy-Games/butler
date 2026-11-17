@@ -97,6 +97,10 @@ impl CommandPalette {
         cx.notify();
     }
 
+    pub(crate) fn is_open(&self) -> bool {
+        self.open
+    }
+
     /// `useCommandPaletteHotkey`: mod+K toggles.
     pub(crate) fn toggle(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.open {

@@ -16,6 +16,7 @@ pub(super) fn before(
     opener: &PageRef,
     events: &Events,
     runtime: &Weak<RuntimeState>,
+    id: i32,
     url: Option<&CefString>,
     disposition: WindowOpenDisposition,
     gesture: i32,
@@ -55,7 +56,7 @@ pub(super) fn before(
             let (Some(info), Some(client)) = (info, client) else {
                 return 1;
             };
-            allow(opener, events, &runtime, child, info, client);
+            allow(opener, events, &runtime, child, id, info, client);
             events.emit(OsrEvent::PopupOpened { child, url });
             0
         }
@@ -67,12 +68,14 @@ fn allow(
     events: &Events,
     runtime: &Rc<RuntimeState>,
     child: u64,
+    id: i32,
     info: &mut WindowInfo,
     client: &mut Option<Client>,
 ) {
     let source = opener.borrow();
     let mut page = Page::new(source.size, source.scale);
     page.signed_out_owner = source.signed_out_owner.clone();
+    page.popup = Some((events.page, id));
     if let Some(owner) = &page.signed_out_owner
         && let Some((_, count)) = runtime.contexts.borrow_mut().get_mut(owner)
     {
@@ -82,7 +85,8 @@ fn allow(
     let shared = Rc::new(RefCell::new(page));
     *info = WindowInfo {
         windowless_rendering_enabled: 1,
-        shared_texture_enabled: 1,
+        // Linux paints in software through `on_paint`.
+        shared_texture_enabled: i32::from(cfg!(not(target_os = "linux"))),
         ..Default::default()
     };
     *client = Some(super::handlers::client(

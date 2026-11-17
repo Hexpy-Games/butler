@@ -2,7 +2,6 @@
 //! state read from the agent's setup readiness.
 use butler_ds::ui::blocks::settings_section::{SettingsSection, SettingsSectionKind};
 use butler_ds::ui::context::Lang;
-use butler_ds::ui::toast::Toast;
 use butler_ds::ui::typo::{Tone, Typo};
 use butler_shell_client::Error;
 use gpui::{Context, ParentElement as _};
@@ -107,11 +106,15 @@ impl MemoryPage {
                             this.poll_model(cx);
                         }
                     }
-                    Err(_) => {
+                    Err(error) => {
                         let copy = words(lang(cx));
                         this.notify(
                             "memory-model-choice",
-                            Toast::error(copy.memory_choice_save_failed),
+                            crate::ui::i18n::errors::toast(
+                                cx,
+                                &error,
+                                copy.memory_choice_save_failed,
+                            ),
                             cx,
                         );
                     }

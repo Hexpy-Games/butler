@@ -55,7 +55,7 @@ impl MemoryPage {
                     this.instructions.rows = Load::Ready(list.instructions);
                 }
                 Err(error) if !quiet => {
-                    this.instructions.unavailable = matches!(error, Error::Http(404));
+                    this.instructions.unavailable = matches!(error, Error::Http(404, _));
                     this.instructions.rows = Load::Failed;
                 }
                 Err(_) => {}

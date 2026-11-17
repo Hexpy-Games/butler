@@ -23,7 +23,8 @@ use butler_ds::ui::overlay::place::Side;
 use butler_ds::ui::popover::{Popover, PopoverContent, Width};
 use gpui::{
     AnyElement, App, ClickEvent, Context, Entity, EventEmitter, InteractiveElement as _,
-    IntoElement as _, ParentElement as _, Render, StatefulInteractiveElement as _, Window, div,
+    IntoElement as _, ParentElement as _, Render, StatefulInteractiveElement as _, Styled as _,
+    Window, div,
 };
 
 use self::popover::{Props, usage_popover};
@@ -351,6 +352,7 @@ impl Render for ComposerContextControl {
                     .expanded(open)
                     .on_click(move |_, _, cx| click.update(cx, ComposerContextControl::toggle_pin));
                 div()
+                    .flex()
                     .id("context-donut-hover")
                     .on_hover(move |hovered, _, cx| {
                         hover.update(cx, |c, cx| c.hover(*hovered, cx));
@@ -369,6 +371,10 @@ impl Render for ComposerContextControl {
             window,
             cx,
         );
-        div().child(trigger).child(content).into_any_element()
+        div()
+            .flex()
+            .child(trigger)
+            .child(content)
+            .into_any_element()
     }
 }

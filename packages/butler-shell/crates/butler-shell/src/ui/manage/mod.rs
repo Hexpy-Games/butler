@@ -37,13 +37,15 @@ pub(crate) enum LibraryKind {
 }
 
 /// `LibraryView`: the main screen, a kind's full view (`section`), a group in it (`group`: an id
-/// or "none" for ungrouped), a scrap's detail (`item`) and a document (`doc`).
+/// or "none" for ungrouped), a scrap's detail (`item`) and a document (`doc`); `search` is the
+/// search `openInLibrary` opens it with.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct LibraryView {
     pub(crate) section: Option<LibraryKind>,
     pub(crate) group: Option<SharedString>,
     pub(crate) item: Option<SharedString>,
     pub(crate) doc: Option<SharedString>,
+    pub(crate) search: Option<SharedString>,
 }
 
 /// Where the history page was opened from (its titlebar parent).

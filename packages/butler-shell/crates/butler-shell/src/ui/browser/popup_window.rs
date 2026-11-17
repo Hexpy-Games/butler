@@ -80,6 +80,8 @@ fn open(id: TabId, cx: &mut App) {
             appears_transparent: true,
             traffic_light_position: Some(scaled_traffic_lights(POPUP.buttons, scale)),
         }),
+        // AppKit neither drags a strip nor delays title-bar clicks; the bands move the window.
+        app_owns_titlebar_drag: true,
         ..WindowOptions::default()
     };
     match cx.open_window(options, |window, cx| {

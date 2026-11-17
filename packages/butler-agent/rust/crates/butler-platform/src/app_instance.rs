@@ -82,6 +82,9 @@ fn listen(
                         return;
                     }
                 }
+                // The endpoint keeps the folder claimed: dropped, it would let a later launch
+                // start a second App.
+                std::future::pending::<()>().await;
             });
         })?;
     Ok(handed)

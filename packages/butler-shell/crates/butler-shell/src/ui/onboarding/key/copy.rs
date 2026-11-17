@@ -18,9 +18,9 @@ pub(super) struct Words {
     pub(super) key_stored: &'static str,
     /// firstRun.getKey
     pub(super) get_key: &'static str,
-    /// firstRun.keyErrors.{invalid, network, unavailable, badrequest, savefailed}, in
-    /// `Failure` order
-    pub(super) key_errors: [&'static str; 5],
+    /// firstRun.keyErrors.{invalid, noaccess, network, ratelimited, unavailable, unsupported,
+    /// badrequest, savefailed}, in `Failure` order
+    pub(super) key_errors: [&'static str; 8],
     /// firstRun.next
     pub(super) next: &'static str,
     /// firstRun.connectFirst
@@ -78,8 +78,11 @@ const KO: Words = Words {
     get_key: "키 발급받기",
     key_errors: [
         "이 키로 연결할 수 없습니다. 키를 다시 복사해 붙여 넣으세요.",
+        "이 키로는 모델을 쓸 수 없습니다. 결제나 사용 권한을 확인하세요.",
         "서비스에 연결할 수 없습니다. 인터넷 연결을 확인하세요.",
+        "요청이 너무 많습니다. 잠시 후 다시 시도하세요.",
         "서비스가 응답하지 않습니다. 잠시 후 다시 시도하세요.",
+        "이 서비스의 키는 아직 확인할 수 없습니다.",
         "키를 확인하지 못했습니다. 다시 붙여 넣으세요.",
         "키를 저장하지 못했습니다. 다시 시도하세요.",
     ],
@@ -124,8 +127,11 @@ const EN: Words = Words {
     get_key: "Get a key",
     key_errors: [
         "This key can't connect. Copy it again and paste it.",
+        "This key can't use models. Check billing or access.",
         "Can't reach the service. Check your connection.",
+        "Too many tries. Wait a moment, then try again.",
         "The service isn't responding. Try again later.",
+        "Butler can't check keys for this service yet.",
         "Couldn't check this key. Paste it again.",
         "Couldn't save the key. Try again.",
     ],
