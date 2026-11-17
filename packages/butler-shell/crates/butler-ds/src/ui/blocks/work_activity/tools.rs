@@ -189,6 +189,8 @@ fn plain_pill(children: Vec<AnyElement>, look: Look, ds: &Ds) -> AnyElement {
     div()
         .flex()
         .items_center()
+        .min_w_0()
+        .overflow_hidden()
         .gap(ds.len(Length::Space2))
         .px(ds.len(Length::Space2))
         .py(px(look.tool_pad_y))

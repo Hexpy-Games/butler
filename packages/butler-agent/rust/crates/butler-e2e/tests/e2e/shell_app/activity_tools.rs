@@ -87,14 +87,6 @@ async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(),
         .await?;
     let rest = shell.report("rest.layout")?;
     let hovered = shell.report("hovered.layout")?;
-    // Electron's pill hugs its text (`width: fit-content`): narrower than the column, as rest
-    // and hovered.
-    for layout in [&rest, &hovered] {
-        assert!(
-            bounds(layout, &group)[2] < bounds(layout, &timeline)[2],
-            "the group control spans the timeline's width\n{layout}"
-        );
-    }
     assert_eq!(
         bounds(&rest, &group),
         bounds(&hovered, &group),
@@ -108,6 +100,11 @@ async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(),
         bounds(&listed, &group),
         bounds(&listed, &tool(0)),
         bounds(&listed, &tool(1)),
+    );
+    // Electron's pill hugs its text (`width: fit-content`); the rows are as wide as the column.
+    assert!(
+        group_at[2] < first[2],
+        "the group control is as wide as the column\n{listed}"
     );
     assert!(
         first[1] >= group_at[1] + group_at[3] && second[1] >= first[1] + first[3],
