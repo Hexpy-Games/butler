@@ -263,11 +263,11 @@ pub(super) fn run(
     end(&mut h)
 }
 
-/// The App's Quit after `lifecycle::quit`: the quit observers run once (`App::shutdown` removes
-/// them, so `HeadlessAppContext::drop` runs none), then the CEF runtime is kept from dropping as
-/// AppKit's `terminate:` would, and the harness returns so the leak check and `Harness::drop` run.
+/// The App's Quit after `lifecycle::quit`: the CEF runtime is kept from dropping as AppKit's
+/// `terminate:` would, and the harness returns normally. `Harness::drop` settles the window
+/// first, then `HeadlessAppContext::drop` calls `App::shutdown` once, which runs the quit
+/// observers (the shell closes its pages and shuts CEF down through its own handle).
 fn end(h: &mut Harness) -> anyhow::Result<()> {
-    h.cx.update(gpui::App::shutdown);
     #[cfg(feature = "cef")]
     h.cx.update(|cx| ui::browser::keep_runtime_alive(cx));
     io::stdout().flush()?;
