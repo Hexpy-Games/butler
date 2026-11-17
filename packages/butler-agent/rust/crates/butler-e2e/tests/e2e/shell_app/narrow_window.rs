@@ -22,7 +22,7 @@ fn near(a: f64, b: f64) -> bool {
 /// SHELL-APP-10 — At 400 px wide the App never takes the phone form: the sidebar overlays at its
 /// own panel width without moving the conversation, session info floats shorter than the space
 /// between the titlebar and the composer, the command palette is as wide as at 1200 px, and the
-/// send button keeps its desktop size.
+/// send button keeps its desktop size. At 700 px with no pane open the sidebar stays docked.
 #[tokio::test]
 async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -87,6 +87,12 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
             "expect-palette",
             "wait 600",
             &format!("layout palette1200 {anchors} dialog-content"),
+            "key escape",
+            "size 700 700",
+            "wait 600",
+            "compose",
+            "wait-anchor send-button",
+            &format!("layout docked700 {anchors}"),
             "app-quit",
         ])
         .await?;
@@ -134,6 +140,18 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
     assert!(
         near(small[2], large[2]) && near(small[3], large[3]),
         "{small:?} {large:?}"
+    );
+    // (e) At 700 px with no pane open the sidebar stays docked, like Electron: it sits at the same
+    // left inset as at 1200 px and the conversation starts to its right. The peek overlay has no
+    // anchor, so a closed sidebar (which turns the peek on) shows as no `sidebar` anchor.
+    let (docked, wide_sidebar) = (
+        bounds(&shell, "docked700", "sidebar"),
+        get("wide", "sidebar"),
+    );
+    let card = get("docked700", "chat-card");
+    assert!(
+        docked.is_some_and(|d| near(d[0], wide_sidebar[0]) && card[0] >= d[0] + d[2] - 0.5),
+        "docked700 sidebar {docked:?}, wide sidebar {wide_sidebar:?}, chat card {card:?}"
     );
     shell.finish().await?;
     sandbox.mark_success();
