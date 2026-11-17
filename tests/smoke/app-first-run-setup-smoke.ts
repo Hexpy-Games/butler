@@ -225,6 +225,8 @@ async function main(): Promise<void> {
     CODEX_HOME: join(smokeHome, ".codex"),
     BUTLER_APP_GATEWAY_PID_FILE: "off",
     BUTLER_NATIVE_AGENT_EXECUTABLE: nativeAgentExecutable,
+    // File secret store: Butler Vault is password-only and never touches this machine's keychain.
+    BUTLER_SECRET_STORE: "file",
     BUTLER_APP_SERVER_PORT: String(serverPort),
     LANG: "ko_KR.UTF-8",
     LC_ALL: "ko_KR.UTF-8",
@@ -401,16 +403,24 @@ async function verifyMemoryStep(client: CdpClient): Promise<void> {
   await evaluateBoolean(client, "(() => { document.querySelector('[data-memory-choice=off]')?.click(); return true; })()");
   await waitForExpression(client, continueDisabled.replace("=== true", "=== false"), "Continue after a choice");
   await clickButton(client, "계속");
-  // A fresh install offers Butler Vault next. 사용 안 함 asks once more; the dialog's own 사용 안 함 declines it.
+  // A fresh install offers Butler Vault next. 사용 안 함 asks once more; 취소 keeps the step, and 계속 turns it on.
   await waitForHeading(client, "버틀러 금고");
   await clickButton(client, "사용 안 함");
   await waitForHeading(client, "버틀러 금고를 쓰지 않을까요?");
+  await clickButton(client, "취소");
+  await waitForText(client, "이 컴퓨터는 키체인이 없어 마스터 비밀번호로 금고를 잠급니다.");
   assert(await evaluateBoolean(client, `(() => {
-    const confirm = Array.from(document.querySelectorAll("[role=dialog] button, [role=alertdialog] button"))
-      .find((button) => button.textContent?.trim() === "사용 안 함");
-    confirm?.click();
-    return Boolean(confirm);
-  })()`), "vault decline confirmed in its dialog");
+    const inputs = Array.from(document.querySelectorAll('[data-first-run-screen="vault"] input[type=password]'));
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    for (const input of inputs) {
+      setter?.call(input, "butler-smoke-vault-1");
+      input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    }
+    return inputs.length === 2;
+  })()`), "both vault password fields typed");
+  await clickButton(client, "계속");
+  await waitForText(client, "버틀러 금고 설정이 완료되었습니다. 앞으로 사용자의 정보를 안전하게 보관합니다.");
+  await clickButton(client, "계속");
   await waitForHeading(client, "어떤 AI와 일할까요?");
   const config = JSON.parse(readFileSync(join(dataDir, "butler.config.json"), "utf8")) as { memory?: { embeddings?: string } };
   assert(config.memory?.embeddings === "off", "memory choice saved as off");
