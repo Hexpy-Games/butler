@@ -8,7 +8,7 @@ use gpui::{AppContext as _, BorrowAppContext as _, Context, Entity, Window};
 use serde_json::Value;
 
 use super::navigation::Navigation;
-use super::{Shell, appearance};
+use super::{AppSettings, Shell, appearance};
 use crate::lifecycle::ui_state::UiState;
 use crate::ui::chat::{self, AssistantHooks};
 use crate::ui::i18n::Locale;
@@ -56,10 +56,9 @@ impl Shell {
         cx.notify();
     }
 
-    /// `closeSettings`: back to the frame, the composer engaged.
-    fn close_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// `closeSettings`: back to the frame.
+    pub(super) fn close_settings(&mut self, cx: &mut Context<Self>) {
         self.settings_view = None;
-        self.composer.update(cx, |c, cx| c.engage(window, cx));
         cx.notify();
     }
 
@@ -71,15 +70,15 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         match event {
-            SettingsEvent::Close => self.close_settings(window, cx),
+            SettingsEvent::Close => self.close_settings(cx),
             SettingsEvent::Changed(raw) => self.apply_settings(raw, cx),
             SettingsEvent::OpenSession(id) => {
-                self.close_settings(window, cx);
+                self.close_settings(cx);
                 self.navigate(Navigation::Session(id.to_string()), window, cx);
             }
             // `openHistory("settings")`: History with Settings › Browser as its parent.
             SettingsEvent::OpenHistory => {
-                self.close_settings(window, cx);
+                self.close_settings(cx);
                 self.set_view(
                     View::History {
                         from: HistoryFrom::Settings,
@@ -90,7 +89,7 @@ impl Shell {
             }
             // `RerunSetupField` `openRerun`: Settings closes and the setup shows again.
             SettingsEvent::RerunSetup => {
-                self.close_settings(window, cx);
+                self.close_settings(cx);
                 self.onboarding.rerun = true;
                 cx.notify();
             }
@@ -120,7 +119,7 @@ impl Shell {
             move |this: &mut Self, result: Result<Value, butler_shell_client::Error>, cx| {
                 match result {
                     Ok(saved) => this.merge_settings(&saved, cx),
-                    Err(_) => {
+                    Err(error) => {
                         let raw = previous
                             .clone()
                             .unwrap_or_else(|| Rc::new(serde_json::json!({})));
@@ -130,10 +129,8 @@ impl Shell {
                         crate::lifecycle::window::zoom_windows(previous_scale, cx);
                         cx.refresh_windows();
                         let copy = crate::ui::i18n::settings::words(Ds::get(cx).lang());
-                        butler_ds::ui::toast::show(
-                            cx,
-                            butler_ds::ui::toast::Toast::error(copy.save_failed),
-                        );
+                        let toast = crate::ui::i18n::errors::toast(cx, &error, copy.save_failed);
+                        butler_ds::ui::toast::show(cx, toast);
                     }
                 }
             },
@@ -141,8 +138,9 @@ impl Shell {
     }
 
     /// What the app does with new settings: the copy follows `language`
-    /// (`setAppCopyLanguage`), the transcript reads `chats_intro_seen` and developer mode, and
-    /// AppShell applies `text_size` and `appearance_theme` (unless the theme is forced).
+    /// (`setAppCopyLanguage`), the transcript reads `chats_intro_seen` and developer mode, the
+    /// composer reads `collapse_message_box`, and AppShell applies `text_size` and
+    /// `appearance_theme` (unless the theme is forced).
     pub(super) fn apply_settings(&mut self, raw: &Rc<Value>, cx: &mut Context<Self>) {
         let flag = |key: &str| raw.get(key).and_then(Value::as_bool);
         let text = |key: &str| raw.get(key).and_then(Value::as_str);
@@ -151,6 +149,10 @@ impl Shell {
         }
         if let Some(seen) = flag("chats_intro_seen") {
             chat::set_chats_intro_seen(cx, seen);
+        }
+        if let Some(collapse) = flag("collapse_message_box") {
+            self.composer
+                .update(cx, |c, cx| c.set_collapse(collapse, cx));
         }
         let developer = flag("diagnostics_enabled") == Some(true);
         cx.update_global(|hooks: &mut AssistantHooks, _| hooks.developer_mode = developer);
@@ -177,7 +179,12 @@ impl Shell {
             crate::lifecycle::ui_state::save(cx, &saved);
             self.ui_state = saved;
         }
+        let changed = self.settings_raw.as_deref() != Some(&**raw);
         self.settings_raw = Some(raw.clone());
+        AppSettings::set(cx, raw.clone());
+        if changed {
+            cx.refresh_windows();
+        }
         cx.notify();
     }
 }

@@ -28,3 +28,14 @@
   padding-top: var(--space-md);
   color: var(--text-tertiary);
 }
+
+/* A caption-led item (a dated answer timeline): the marker centres on the caption line. */
+.timeline[data-lead="caption"] .marker {
+  padding-top: calc(
+    (var(--typo-caption-line-height) - var(--icon-size-sm)) / 2
+  );
+}
+
+.timeline[data-lead="caption"] .event:not(:last-child)::before {
+  top: calc(var(--typo-caption-line-height) + var(--space-xs));
+}

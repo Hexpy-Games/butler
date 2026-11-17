@@ -99,7 +99,7 @@ impl MemoryPage {
                         this.notify("pattern", Toast::success(copy.pattern_deleted), cx);
                     }
                     Err(error) => {
-                        if matches!(error, Error::Http(409)) {
+                        if matches!(error, Error::Http(409, _)) {
                             Self::reload_patterns(cx);
                         }
                         this.notify("pattern", Toast::error(copy.delete_failed), cx);

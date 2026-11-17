@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { verifyMacPackageMetadata } from "./native-mac-package-smoke.ts";
+import { verifyGpuiMacPackage, verifyMacPackageMetadata } from "./native-mac-package-smoke.ts";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -15,9 +15,10 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { verifyNativeMacBundle, type NativeMacDependencyClosure } from "../../packages/butler-app/scripts/release/native-mac-manifest.ts";
+import { verifyNativeMacBundle, type MacAppShell, type NativeMacDependencyClosure } from "../../packages/butler-app/scripts/release/native-mac-manifest.ts";
 
 const outDir = resolve(optionValue("--out") ?? "dist/release/app");
+const shell = parseShell();
 const nativeMac = process.argv.includes("--platform=darwin-arm64") ||
   process.argv.some((arg, index) => arg === "--platform" && process.argv[index + 1] === "darwin-arm64");
 const macDmg = findOne(/^butler-app-.*-darwin-arm64\.dmg$/u);
@@ -96,6 +97,20 @@ function optionValue(name: string): string | null {
   const index = process.argv.indexOf(name);
   if (index === -1) return null;
   return process.argv[index + 1] ?? null;
+}
+
+function parseShell(): MacAppShell {
+  const index = process.argv.findIndex((arg) => arg === "--shell" || arg.startsWith("--shell="));
+  if (index === -1) return "electron";
+  const arg = process.argv[index]!;
+  const value = arg === "--shell" ? process.argv[index + 1] : arg.slice("--shell=".length);
+  if (value !== "electron" && value !== "gpui") throw new Error(`--shell must be electron or gpui, got ${String(value)}`);
+  return value;
+}
+
+function verifyMacShellPackage(appPath: string, hardLinks: boolean): void {
+  if (shell === "gpui") verifyGpuiMacPackage(appPath, releaseManifest.version, hardLinks);
+  else verifyMacPackageMetadata(appPath, releaseManifest.version, hardLinks);
 }
 
 function findOne(pattern: RegExp): string {
@@ -207,8 +222,8 @@ function verifyMacDmg(path: string, mode: MacReleaseSmokeMode, closure: NativeMa
       throw new Error("Mac App DMG is missing the Applications link");
     }
     const appPath = join(mountPoint, "Butler.app");
-    if (closure) verifyNativeMacBundle(appPath, closure);
-    if (closure) verifyMacPackageMetadata(appPath, releaseManifest.version, true);
+    if (closure) verifyNativeMacBundle(appPath, closure, shell);
+    if (closure) verifyMacShellPackage(appPath, true);
     verifyMacCodeSignature(appPath, "Mac App DMG Butler.app");
     if (mode === "production") {
       verifyMacStapling(appPath, "Mac App DMG Butler.app");
@@ -240,9 +255,9 @@ function verifyMacZip(path: string, mode: MacReleaseSmokeMode, closure: NativeMa
     }
     const appPath = join(extractDir, "Butler.app");
     if (!existsSync(appPath)) throw new Error("Mac App zip is missing Butler.app");
-    if (closure) verifyNativeMacBundle(appPath, closure);
+    if (closure) verifyNativeMacBundle(appPath, closure, shell);
     // ZIP stores copies; the verified App update activation restores hard links.
-    if (closure) verifyMacPackageMetadata(appPath, releaseManifest.version, false);
+    if (closure) verifyMacShellPackage(appPath, false);
     verifyMacCodeSignature(appPath, "Mac App ZIP Butler.app");
     if (mode === "production") {
       verifyMacStapling(appPath, "Mac App ZIP Butler.app");

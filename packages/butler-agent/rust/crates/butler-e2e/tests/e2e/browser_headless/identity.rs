@@ -59,26 +59,29 @@ async fn browser_identity_agrees_in_page_worker_and_frame() -> Result<(), Harnes
         let report = &reports[name];
         assert_eq!(report["ua"], ua, "{name}");
         assert_eq!(report["data"], reports["page"]["data"], "{name}");
-        let list = report["data"]["fullVersionList"].as_array().unwrap();
-        for brand in ["Chromium", "Google Chrome"] {
+        let brands = report["data"]["brands"].as_array().unwrap();
+        // The shell (CEF) lists only Chromium; its full version list is empty.
+        let names: &[&str] = if shell() {
+            &["Chromium"]
+        } else {
+            &["Chromium", "Google Chrome"]
+        };
+        for brand in names {
             assert!(
-                report["data"]["brands"]
-                    .as_array()
-                    .unwrap()
+                brands
                     .iter()
-                    .any(|b| b["brand"] == brand && b["version"] == major)
+                    .any(|b| b["brand"] == *brand && b["version"] == major),
+                "{name}: {brand}"
             );
-            // On the shell the list is checked once below; the data check makes all three agree.
-            if !shell() {
+        }
+        if !shell() {
+            let list = report["data"]["fullVersionList"].as_array().unwrap();
+            for brand in names {
                 assert!(
                     list.iter()
-                        .any(|b| b["brand"] == brand && b["version"] == full)
+                        .any(|b| b["brand"] == *brand && b["version"] == full)
                 );
             }
-        }
-        if shell() {
-            assert!(list.iter().any(|b| b["brand"] == "Chromium"
-                && b["version"].as_str().and_then(|v| v.split('.').next()) == Some(major)));
         }
         assert_eq!(report["data"]["mobile"], false);
     }

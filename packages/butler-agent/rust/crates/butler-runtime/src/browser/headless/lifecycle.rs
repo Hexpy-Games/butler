@@ -23,7 +23,9 @@ pub(super) async fn open_tab(
     let profile = profile_of(args);
     let context = targets::context(browser, owner, preview).await?;
     let (target, session) = match browser.host() {
-        Some(host) => host::open_hosted(host, owner, profile, &context, false).await?,
+        Some(host) => {
+            host::open_hosted(host, owner, profile, &context, false, &args["policy"]).await?
+        }
         None => targets::create(&browser.cdp, &browser.shared, &context).await?,
     };
     let id = {

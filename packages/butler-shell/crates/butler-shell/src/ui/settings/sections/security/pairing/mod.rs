@@ -8,7 +8,7 @@ use butler_ds::ui::blocks::settings_section::{SettingsSection, SettingsSectionKi
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Cross, Space, Stack};
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast;
 use butler_ds::ui::tooltip::Tooltip;
 use butler_ds::ui::typo::{Tone, Typo, Wrap};
 use butler_shell_client::Error;
@@ -82,7 +82,7 @@ impl SecurityPage {
                 this.pairing.busy = false;
                 match result {
                     Ok(code) => this.set_code(code, cx),
-                    Err(_) => this.pairing_failed(cx),
+                    Err(error) => this.pairing_failed(&error, cx),
                 }
             },
         );
@@ -95,13 +95,14 @@ impl SecurityPage {
         self.schedule_poll(cx);
     }
 
-    fn pairing_failed(&mut self, cx: &mut Context<Self>) {
+    fn pairing_failed(&mut self, error: &Error, cx: &mut Context<Self>) {
         self.pairing.code = None;
         self.pairing.busy = false;
         self.pairing.timer = None;
         self.pairing.epoch += 1;
         let failed = words(Ds::get(cx).lang()).pairing_failed;
-        toast::show(cx, Toast::error(failed));
+        let next = crate::ui::i18n::errors::toast(cx, error, failed);
+        toast::show(cx, next);
     }
 
     /// The next status read in a second.
@@ -146,7 +147,7 @@ impl SecurityPage {
                         let invalidated = status.is_some_and(|s| s.invalidated_by.is_some());
                         this.replace_code(epoch, invalidated, cx);
                     }
-                    Err(_) => this.pairing_failed(cx),
+                    Err(error) => this.pairing_failed(&error, cx),
                 }
                 true
             },
@@ -169,7 +170,7 @@ impl SecurityPage {
                         this.pairing.invalidated = invalidated;
                         this.set_code(code, cx);
                     }
-                    Err(_) => this.pairing_failed(cx),
+                    Err(error) => this.pairing_failed(&error, cx),
                 }
             },
         );

@@ -277,7 +277,9 @@ impl Readiness {
                         this.agent =
                             Agent::View(ReadinessView::from_value(&raw).unwrap_or_default());
                     }
-                    Err(Error::Http(404) | Error::Incompatible) => this.agent = Agent::Unsupported,
+                    Err(Error::Http(404, _) | Error::Incompatible) => {
+                        this.agent = Agent::Unsupported;
+                    }
                     Err(_) => {}
                 }
                 this.recompute(cx);

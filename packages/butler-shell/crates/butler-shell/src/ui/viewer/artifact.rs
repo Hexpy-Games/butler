@@ -3,6 +3,7 @@
 //! code/text).
 mod display;
 mod files;
+mod open;
 
 use butler_ds::ui::Icon;
 use butler_ds::ui::blocks::artifact_preview::{
@@ -28,8 +29,10 @@ use super::frame::{
     FileViewerAction, FileViewerHeader, FileViewerPage, Run, file_viewer_close_button,
 };
 use crate::ui::i18n::artifact_viewer::ArtifactViewerCopy;
+use crate::ui::i18n::file_viewer::FileViewerStrings;
 use crate::ui::i18n::media::Media;
-use crate::ui::manage::documents;
+use crate::ui::manage::library::LIBRARY_VIEWER;
+use crate::ui::manage::{self, LibraryKind, LibraryView, View, documents};
 use crate::ui::shell::image_viewer::loader::{PictureId, is_pending, picture};
 use crate::ui::source::wire::SessionArtifactSummary;
 
@@ -40,11 +43,12 @@ pub(crate) fn artifact_viewer(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
+    let outside_library = session != LIBRARY_VIEWER;
     let (id, session) = (entry.id().to_owned(), session.to_owned());
     let on_close: Run = Rc::new(move |_, cx| super::close(cx, &session, &id));
     match entry {
         FileViewerEntry::Artifact { artifact, .. } => {
-            file_viewer_artifact(artifact, on_close, window, cx)
+            file_viewer_artifact(artifact, outside_library, on_close, window, cx)
         }
         FileViewerEntry::Document { id, title } => document_viewer(id, title, on_close, window, cx),
     }
@@ -86,29 +90,18 @@ pub(super) fn is_image_artifact(artifact: &SessionArtifactSummary) -> bool {
     preview_mode(artifact) == Mode::Image
 }
 
-/// `FileViewerArtifact`: a stored file in the viewer: its header (version, save, close) and its
-/// content as a reading page.
+/// `FileViewerArtifact`: a stored file in the viewer: its header (version, 서랍, save, close) and
+/// its content as a reading page.
 fn file_viewer_artifact(
     latest: &SessionArtifactSummary,
+    outside_library: bool,
     on_close: Run,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
     let index = revision_index(latest, window, cx);
     let artifact = revision_artifact(latest, index);
-    // The Library link and "open in the default app" have no route in the shell yet.
-    let mut actions = Vec::new();
-    if let Some(file_id) = artifact.file_id.clone() {
-        let name = file_name(&artifact);
-        actions.push(FileViewerAction {
-            id: "save",
-            label: Media::get(cx).save.into(),
-            icon: Icon::Save,
-            label_icon: false,
-            icon_only: false,
-            run: Rc::new(move |_, cx| save_file(file_id.clone(), &name, cx)),
-        });
-    }
+    let actions = file_actions(latest, &artifact, outside_library, cx);
     let select = revision_select(latest, index, window, cx);
     Stack::new()
         .fill()
@@ -123,6 +116,72 @@ fn file_viewer_artifact(
         })
         .child(FileViewerPage::new().child(artifact_body(&artifact, Surface::Page, window, cx)))
         .into_any_element()
+}
+
+/// `fileActions`: 서랍에서 열기 for a delivered file outside the 서랍's own viewer, then save and
+/// open-in-app (or show-in-folder) for a stored file.
+fn file_actions(
+    latest: &SessionArtifactSummary,
+    artifact: &SessionArtifactSummary,
+    outside_library: bool,
+    cx: &App,
+) -> Vec<FileViewerAction> {
+    let mut actions = Vec::new();
+    // Only a delivered file is filed in the 서랍 (as a document); the 문서 section opens
+    // searched to it.
+    if outside_library && latest.deliverable == Some(true) {
+        let title = SharedString::from(latest.title.clone());
+        actions.push(FileViewerAction {
+            id: "open-in-library",
+            label: FileViewerStrings::get(cx).open_in_library.into(),
+            icon: Icon::Library,
+            label_icon: true,
+            icon_only: false,
+            run: Rc::new(move |_, cx| open_in_library(title.clone(), cx)),
+        });
+    }
+    if let Some(file_id) = artifact.file_id.clone() {
+        let name = file_name(artifact);
+        actions.push(FileViewerAction {
+            id: "save",
+            label: Media::get(cx).save.into(),
+            icon: Icon::Save,
+            label_icon: false,
+            icon_only: false,
+            run: Rc::new(move |_, cx| save_file(file_id.clone(), &name, cx)),
+        });
+    }
+    if let Some(file_id) = artifact.file_id.clone() {
+        let (label, icon) = if open::can_open_in_app(&file_name(artifact)) {
+            (FileViewerStrings::get(cx).open_in_default_app, Icon::Popup)
+        } else {
+            (FileViewerStrings::get(cx).show_in_folder, Icon::FolderOpen)
+        };
+        actions.push(FileViewerAction {
+            id: "open-external",
+            label: label.into(),
+            icon,
+            label_icon: false,
+            icon_only: true,
+            run: Rc::new(move |_, cx| open::open_in_app(file_id.clone(), cx)),
+        });
+    }
+    actions
+}
+
+/// `openInLibrary`: the 서랍's own viewer closes and the 서랍 opens at its documents, searched to
+/// the file.
+fn open_in_library(title: SharedString, cx: &mut App) {
+    super::set_shown(cx, LIBRARY_VIEWER, false);
+    let Some(ctx) = manage::window_ctx(cx) else {
+        return;
+    };
+    let view = LibraryView {
+        section: Some(LibraryKind::Document),
+        search: Some(title),
+        ..LibraryView::default()
+    };
+    ctx.set_view(View::Library(view), cx);
 }
 
 /// The name a saved copy keeps: its own path label, else the title.

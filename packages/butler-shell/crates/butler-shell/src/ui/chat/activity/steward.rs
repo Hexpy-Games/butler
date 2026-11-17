@@ -17,7 +17,8 @@ use butler_ds::ui::scroll::{MaxHeight, ScrollArea};
 use butler_ds::ui::selectable::Break;
 use butler_ds::ui::typo::Typo;
 use gpui::{
-    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Window,
+    AnyElement, App, ElementId, IntoElement as _, ParentElement as _, SharedString, Styled as _,
+    Window, div,
 };
 use std::rc::Rc;
 
@@ -29,6 +30,7 @@ use self::presentation::{
 use super::timeline::timeline;
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::source::wire::{MessageRecord, ProgressRow, SessionView, StewardSessionSummaryView};
+use crate::ui::widgets::anchor;
 
 /// The card is narrow below this content width (`useWorkCardNarrow`).
 const NARROW_WIDTH: f32 = 480.;
@@ -179,20 +181,23 @@ fn header(
         buttons = buttons.child(resume);
     }
     let session = child.session_id.clone();
-    buttons = buttons.child(
-        IconButton::new(
-            SharedString::from(format!("steward-observer-{session}")),
-            if ko {
-                "진행 상세 보기"
-            } else {
-                "View progress details"
-            },
-        )
-        .glyph(Icon::Eye)
-        .on_click(move |_, _, cx| {
-            super::tools::worker::open_observer(&session, cx);
-        }),
-    );
+    let eye = IconButton::new(
+        SharedString::from(format!("steward-observer-{session}")),
+        if ko {
+            "진행 상세 보기"
+        } else {
+            "View progress details"
+        },
+    )
+    .glyph(Icon::Eye)
+    .on_click({
+        let session = session.clone();
+        move |_, _, cx| super::tools::worker::open_observer(&session, cx)
+    });
+    buttons = buttons.child(anchor(
+        div().flex().child(eye),
+        &format!("steward-observer-open-{session}"),
+    ));
     Stack::row()
         .justify(Justify::Between)
         .cross(Cross::Start)
