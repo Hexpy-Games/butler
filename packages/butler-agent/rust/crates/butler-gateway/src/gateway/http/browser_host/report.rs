@@ -88,3 +88,33 @@ pub(super) fn shape(value: &Value) -> Value {
     }
     result
 }
+
+/// An executor's check result as the tool reports it, whichever browser ran it.
+pub(super) fn checked(value: &Value, args: &Value) -> Value {
+    if value["status"] == "ok" && !allowed_result_url(value, args) {
+        return json!({"status":"navigation_denied"});
+    }
+    let mut report = shape(value);
+    if args["include_image"] != true
+        && let Some(r) = report.as_object_mut()
+    {
+        r.remove("image");
+    }
+    if args["include_image"] == true
+        && report.get("image").is_none()
+        && report["status"] != "unknown"
+    {
+        report["status"] = json!("unknown");
+        report["reason"] = json!("image_unavailable");
+    }
+    report
+}
+
+fn allowed_result_url(value: &Value, args: &Value) -> bool {
+    let parse = |v: &Value| v.as_str().and_then(|s| url::Url::parse(s).ok());
+    parse(&value["url"])
+        .zip(parse(&args["url"]))
+        .is_some_and(|(reported, expected)| {
+            reported.origin() == expected.origin() && reported.path().starts_with("/__o/")
+        })
+}

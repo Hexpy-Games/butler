@@ -9,12 +9,26 @@ use butler_ds::ui::scroll::ScrollArea;
 use butler_ds::ui::separator::{Separator, SeparatorTone};
 use butler_ds::ui::text::{Input, InputVariant};
 use butler_ds::ui::typo::Typo;
+use butler_ds::ui::window_drag::no_drag;
 use gpui::{AnyElement, Context, IntoElement as _, ParentElement as _, Styled as _, div};
 
 use super::sections::{self, Group, SectionId};
 use super::{SettingsEvent, SettingsView};
 use crate::ui::Icon;
 use crate::ui::i18n::settings::{search_empty, words};
+
+/// The back row: a control in the drag band, so it takes the press.
+fn back_row(label: &'static str, cx: &mut Context<SettingsView>) -> impl gpui::IntoElement {
+    no_drag(crate::ui::widgets::anchor(
+        div().flex().w_full(),
+        "settings-back",
+    ))
+    .child(
+        NavRow::new("settings-back", label)
+            .glyph(Icon::ArrowLeft)
+            .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::Close))),
+    )
+}
 
 pub(super) fn settings_sidebar(
     active: SectionId,
@@ -28,11 +42,7 @@ pub(super) fn settings_sidebar(
     let header = Stack::row()
         .cross(Cross::Center)
         .window_drag(WindowDrag::Drag)
-        .child(
-            NavRow::new("settings-back", copy.back)
-                .glyph(Icon::ArrowLeft)
-                .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::Close))),
-        );
+        .child(back_row(copy.back, cx));
     let view = cx.entity().downgrade();
     let search = Input::new("settings-navigation-search")
         .variant(InputVariant::Quiet)

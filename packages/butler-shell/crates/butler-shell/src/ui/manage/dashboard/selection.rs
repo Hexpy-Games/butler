@@ -74,7 +74,8 @@ impl DashboardPage {
             (document.project_id.clone(), document.revision.clone())
         else {
             if document.markdown.is_empty() {
-                Self::documents_failed(cx);
+                let copy = words(Ds::get(cx).lang());
+                toast::show(cx, Toast::error(copy.documents_failed));
             } else {
                 self.selection.document = Some(document);
                 cx.notify();
@@ -95,16 +96,19 @@ impl DashboardPage {
                 }
                 match result {
                     Ok(page) => this.selection.document = Some(page),
-                    Err(_) => Self::documents_failed(cx),
+                    Err(error) => Self::documents_failed(&error, cx),
                 }
             },
         );
     }
 
     /// `notifyError(error, projectDocumentsFailed)`
-    fn documents_failed(cx: &mut App) {
+    fn documents_failed(error: &Error, cx: &mut App) {
         let copy = words(Ds::get(cx).lang());
-        toast::show(cx, Toast::error(copy.documents_failed));
+        toast::show(
+            cx,
+            crate::ui::i18n::errors::toast(cx, error, copy.documents_failed),
+        );
     }
 
     /// The dialog's close.
@@ -146,7 +150,7 @@ impl DashboardPage {
                         this.selection.document =
                             Some(ProjectDashboardDocument { markdown, ..next });
                     }
-                    Err(_) => Self::documents_failed(cx),
+                    Err(error) => Self::documents_failed(&error, cx),
                 }
             },
         );
@@ -182,10 +186,15 @@ impl DashboardPage {
                     .await
             },
             move |_: &mut Self, result: Result<Attached, Error>, cx| {
-                let Ok(Attached { file }) = result else {
-                    let copy = words(Ds::get(cx).lang());
-                    toast::show(cx, Toast::error(copy.dashboard_retry));
-                    return;
+                let file = match result {
+                    Ok(Attached { file }) => file,
+                    Err(error) => {
+                        let copy = words(Ds::get(cx).lang());
+                        let failure =
+                            crate::ui::i18n::errors::toast(cx, &error, copy.dashboard_retry);
+                        toast::show(cx, failure);
+                        return;
+                    }
                 };
                 let key = format!("dashboard:{draft}");
                 let copy = words(Ds::get(cx).lang());

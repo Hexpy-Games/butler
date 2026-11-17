@@ -9,6 +9,8 @@ export const NATIVE_MAC_RESOURCES = "bundled-agent/resources";
 export const NATIVE_MAC_PAYLOAD_MANIFEST = "bundled-agent/native-agent-manifest.json";
 export const NATIVE_MAC_RENDERER = "app-client";
 
+export type MacAppShell = "electron" | "gpui";
+
 export interface NativeMacReleaseManifest {
   schema: "butler.app-native-mac-release.v1";
   name: "butler-app";
@@ -108,10 +110,10 @@ export interface NativeMacDependencyClosure {
   binary: { path: typeof NATIVE_MAC_BINARY; sha256: string };
   resources: { path: typeof NATIVE_MAC_RESOURCES; sha256: string };
   payloadManifest: { path: typeof NATIVE_MAC_PAYLOAD_MANIFEST; sha256: string };
-  renderer: { path: typeof NATIVE_MAC_RENDERER; sha256: string };
+  renderer?: { path: typeof NATIVE_MAC_RENDERER; sha256: string };
 }
 
-export function nativeMacDependencyClosure(input: { version: string; appVersion: string; binarySha256: string; resourcesSha256: string; payloadManifestSha256: string; rendererSha256: string }): NativeMacDependencyClosure {
+export function nativeMacDependencyClosure(input: { version: string; appVersion: string; binarySha256: string; resourcesSha256: string; payloadManifestSha256: string; rendererSha256?: string }): NativeMacDependencyClosure {
   return {
     schema: "butler.app-native-mac-dependency-closure.v1",
     product: "butler-app",
@@ -122,24 +124,24 @@ export function nativeMacDependencyClosure(input: { version: string; appVersion:
     binary: { path: NATIVE_MAC_BINARY, sha256: input.binarySha256 },
     resources: { path: NATIVE_MAC_RESOURCES, sha256: input.resourcesSha256 },
     payloadManifest: { path: NATIVE_MAC_PAYLOAD_MANIFEST, sha256: input.payloadManifestSha256 },
-    renderer: { path: NATIVE_MAC_RENDERER, sha256: input.rendererSha256 },
+    ...(input.rendererSha256 === undefined ? {} : { renderer: { path: NATIVE_MAC_RENDERER, sha256: input.rendererSha256 } }),
   };
 }
 
-export function verifyNativeMacBundle(appPath: string, closure: NativeMacDependencyClosure): void {
-  if (!closure || closure.schema !== "butler.app-native-mac-dependency-closure.v1" || closure.product !== "butler-app" || closure.lifecycleMode !== "app-foreground" || closure.registersUserService !== false || closure.binary?.path !== NATIVE_MAC_BINARY || closure.resources?.path !== NATIVE_MAC_RESOURCES || closure.payloadManifest?.path !== NATIVE_MAC_PAYLOAD_MANIFEST || closure.renderer?.path !== NATIVE_MAC_RENDERER) throw new Error("native mac dependency closure is invalid");
+export function verifyNativeMacBundle(appPath: string, closure: NativeMacDependencyClosure, shell: MacAppShell = "electron"): void {
+  if (!closure || closure.schema !== "butler.app-native-mac-dependency-closure.v1" || closure.product !== "butler-app" || closure.lifecycleMode !== "app-foreground" || closure.registersUserService !== false || closure.binary?.path !== NATIVE_MAC_BINARY || closure.resources?.path !== NATIVE_MAC_RESOURCES || closure.payloadManifest?.path !== NATIVE_MAC_PAYLOAD_MANIFEST || (shell === "electron" ? closure.renderer?.path !== NATIVE_MAC_RENDERER : closure.renderer !== undefined)) throw new Error("native mac dependency closure is invalid");
   const resources = join(appPath, "Contents", "Resources");
   for (const entry of [closure.binary, closure.payloadManifest]) {
     const path = join(resources, entry.path);
     if (!existsSync(path) || !statSync(path).isFile() || sha256File(path) !== entry.sha256) throw new Error(`native mac bundle file mismatch: ${entry.path}`);
   }
-  for (const entry of [closure.resources, closure.renderer]) {
+  for (const entry of shell === "electron" ? [closure.resources, closure.renderer!] : [closure.resources]) {
     const path = join(resources, entry.path);
     if (!existsSync(path) || !statSync(path).isDirectory() || sha256Tree(path) !== entry.sha256) throw new Error(`native mac bundle directory mismatch: ${entry.path}`);
   }
   const payload = JSON.parse(readFileSync(join(resources, NATIVE_MAC_PAYLOAD_MANIFEST), "utf8"));
   if (payload.schema !== "butler.native-agent-payload.v1" || payload.version !== closure.version || payload.appVersion !== closure.appVersion || payload.platform !== "darwin" || payload.architecture !== "arm64" || payload.binary !== "bin/butler-agent" || payload.resources !== "resources") throw new Error("native mac payload manifest mismatch");
-  if (!existsSync(join(resources, NATIVE_MAC_RENDERER, "index.html"))) throw new Error("native mac renderer index is missing");
+  if (shell === "electron" && !existsSync(join(resources, NATIVE_MAC_RENDERER, "index.html"))) throw new Error("native mac renderer index is missing");
   if ((statSync(join(resources, NATIVE_MAC_BINARY)).mode & 0o111) === 0) throw new Error("native mac Agent is not executable");
   for (const entry of [NATIVE_MAC_BINARY, NATIVE_MAC_PAYLOAD_MANIFEST]) {
     if ((statSync(join(resources, entry)).mode & 0o222) !== 0) throw new Error(`native mac payload is writable: ${entry}`);
@@ -152,6 +154,7 @@ export function verifyNativeMacBundle(appPath: string, closure: NativeMacDepende
 export function closureFromNativeMacBundle(
   appPath: string,
   release: Pick<NativeMacReleaseManifest, "version" | "bundledAgentVersion">,
+  shell: MacAppShell = "electron",
 ): NativeMacDependencyClosure {
   const resources = join(appPath, "Contents", "Resources");
   return nativeMacDependencyClosure({
@@ -160,7 +163,7 @@ export function closureFromNativeMacBundle(
     binarySha256: sha256File(join(resources, NATIVE_MAC_BINARY)),
     resourcesSha256: sha256Tree(join(resources, NATIVE_MAC_RESOURCES)),
     payloadManifestSha256: sha256File(join(resources, NATIVE_MAC_PAYLOAD_MANIFEST)),
-    rendererSha256: sha256Tree(join(resources, NATIVE_MAC_RENDERER)),
+    rendererSha256: shell === "electron" ? sha256Tree(join(resources, NATIVE_MAC_RENDERER)) : undefined,
   });
 }
 

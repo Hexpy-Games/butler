@@ -74,6 +74,12 @@ pub(in crate::ui::browser) enum Gate {
 impl BrowserState {
     /// Electron `controlTab`: nothing for a page the Agent does not host or an internal one.
     pub(crate) fn control(&mut self, id: &TabId, holder: Holder, sticky: bool) {
+        self.set_holder(id, holder, sticky);
+        self.publisher.changed(&self.tabs);
+    }
+
+    /// [`Self::control`] without publishing the snapshot.
+    pub(super) fn set_holder(&mut self, id: &TabId, holder: Holder, sticky: bool) {
         if (self.tab(id))
             .and_then(|tab| tab.hosted.as_ref())
             .is_none_or(|hosted| hosted.internal)
@@ -84,12 +90,14 @@ impl BrowserState {
         let Some(tab) = self.tabs.iter_mut().find(|tab| &tab.id == id) else {
             return;
         };
-        let waiting = tab.dialog.is_some();
         let Some(hosted) = tab.hosted.as_mut() else {
             return;
         };
         match holder {
-            Holder::User if hosted.holder == Holder::Agent => hosted.paused = hosted.in_use(),
+            // Electron `pauseHold`: only the turns holding the page pause it.
+            Holder::User if hosted.holder == Holder::Agent => {
+                hosted.paused = !hosted.turns.is_empty();
+            }
             Holder::User => {}
             Holder::Agent => {
                 if hosted.holder == Holder::User {
@@ -102,28 +110,17 @@ impl BrowserState {
         }
         hosted.holder = holder;
         hosted.sticky = sticky;
-        hosted.waiting = waiting;
+        // The page dialog was cancelled above.
+        hosted.waiting = false;
         tab.epoch += 1;
-        self.wake(id);
-        self.publisher.changed(&self.tabs);
+        // The CEF gate's hosted flag is this holder: popups follow whoever holds the page.
+        self.engine.set_hosted(id, holder == Holder::Agent);
     }
 
-    /// The one awake rule: the Agent keeps a page awake while it acts in it; a page the user
-    /// holds is not (the shown page is awake anyway).
-    pub(super) fn wake(&mut self, id: &TabId) {
-        let awake = (self.tab(id))
-            .and_then(|tab| tab.hosted.as_ref())
-            .is_some_and(Hosted::busy);
-        self.engine.keep_awake(id, awake);
-    }
-
-    /// Selecting `id`: the page left returns to the Agent unless the user pinned it; a page the
-    /// Agent waits on passes to the user.
+    /// Selecting `id`, the active tab included: the page left returns to the Agent unless the
+    /// user pinned it; a page the Agent waits on passes to the user.
     pub(in crate::ui::browser) fn hand_over(&mut self, id: &TabId) {
-        if self.active.as_ref() == Some(id) {
-            return;
-        }
-        if let Some(left) = self.active.clone()
+        if let Some(left) = self.active.clone().filter(|left| left != id)
             && (self.tab(&left).and_then(|tab| tab.hosted.as_ref()))
                 .is_some_and(|hosted| hosted.holder == Holder::User && !hosted.sticky)
         {
@@ -139,8 +136,38 @@ impl BrowserState {
         }
     }
 
-    /// The browser is no longer shown: every page the user holds without pinning it returns to
-    /// the Agent.
+    /// The active tab closed: the last tab becomes active through the same hand-over as a
+    /// selection.
+    pub(in crate::ui::browser) fn reselect(&mut self, closed: &TabId) {
+        if self.active.as_ref() != Some(closed) {
+            return;
+        }
+        self.active = None;
+        if let Some(next) = self.tabs.last().map(|tab| tab.id.clone()) {
+            self.activate(&next);
+        }
+    }
+
+    /// The browser area stopped being shown (Electron `hide`): a page with an open dialog
+    /// waits, and every page the user holds without pinning it returns to the Agent. Only the
+    /// change from shown runs it.
+    pub(crate) fn hide(&mut self) {
+        self.engine.show(None);
+        if !std::mem::take(&mut self.area_shown) {
+            return;
+        }
+        for tab in &mut self.tabs {
+            if tab.dialog.is_some()
+                && let Some(hosted) = tab.hosted.as_mut()
+            {
+                hosted.waiting = true;
+            }
+        }
+        self.release_unpinned();
+        self.publisher.changed(&self.tabs);
+    }
+
+    /// Every page the user holds without pinning it returns to the Agent.
     pub(crate) fn release_unpinned(&mut self) {
         let held: Vec<_> = (self.tabs.iter())
             .filter(|tab| {

@@ -7,18 +7,40 @@
 //! `--headless` to run Chrome's headless mode without OS windows.
 //! The renderer sandbox stays on. On Windows, CEF's `bootstrapc.exe`, renamed
 //! to the DLL's stem, loads this DLL and passes sandbox info to `RunConsoleMain`.
-//! This crate is the audited CEF unsafe boundary (D-P2); its OSR GPU interop and bootstrap exports contain the audited unsafe code.
+//! This crate is the audited CEF unsafe boundary (D-P2); its OSR GPU interop, bootstrap exports and the Linux lifeline's borrowed descriptor contain the audited unsafe code.
 
 #[cfg(feature = "cef")]
 mod app;
 #[cfg(all(feature = "cef", windows))]
 mod boot;
+#[cfg(all(feature = "cef", windows))]
+mod job;
+#[cfg(all(feature = "cef", target_os = "linux"))]
+mod lifeline;
 #[cfg(all(feature = "cef", target_os = "macos"))]
 mod mac;
 
 #[cfg(feature = "cef")]
 pub mod osr;
 pub mod switches;
+
+/// Keep Chrome's singleton socket below the Unix socket path limit (104–108 bytes): a process that
+/// runs CEF calls this first in `main`, before any thread exists. Linux only; elsewhere it does
+/// nothing. Chrome removes its own temporary entries when it exits.
+pub fn shorten_temp_path() {
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("TMPDIR").is_none_or(|path| path.len() > 60) {
+        // SAFETY: the caller contract is that this runs first in `main`, before any thread exists,
+        // so no other thread can read the environment while it changes.
+        #[allow(
+            unsafe_code,
+            reason = "std::env::set_var before any thread exists; see SAFETY"
+        )]
+        unsafe {
+            std::env::set_var("TMPDIR", "/tmp");
+        }
+    }
+}
 
 /// Run a CEF browser or helper process, passing bootstrap sandbox info through.
 #[cfg(feature = "cef")]
@@ -32,11 +54,20 @@ pub fn run(sandbox_info: *mut u8) -> i32 {
             return 1;
         }
     };
+    // An OSR helper joins the App's job first; one whose App is gone ends at once.
+    #[cfg(windows)]
+    if let Some(code) = job::join_from_command_line() {
+        return code;
+    }
     let _ = cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0);
     let mut app = app::HostApp::new();
     let code = cef::execute_process(Some(args.as_main_args()), Some(&mut app), sandbox_info);
     if code >= 0 {
         return code;
+    }
+    #[cfg(target_os = "linux")]
+    if std::env::args().any(|arg| arg == "--remote-debugging-pipe") {
+        lifeline::watch();
     }
 
     let Some(profile) =

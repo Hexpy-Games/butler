@@ -169,7 +169,14 @@ impl Downloads {
 
     fn event(browser: &Browser, transfer: &Transfer, kind: &str, data: &Value) {
         let mut state = browser.shared.lock();
-        owner_event(&mut state, transfer, kind, data);
+        owner_event(
+            &mut state,
+            &transfer.owner,
+            &transfer.tab,
+            transfer.epoch,
+            kind,
+            data,
+        );
     }
 
     async fn refuse(&self, browser: &Browser, guid: &str, reason: &str) {
@@ -287,7 +294,10 @@ impl Downloads {
             };
             match outcome {
                 Ok(data) => Self::event(browser, &transfer, "download_completed", &data),
-                Err(reason) if reason.starts_with("download_") && reason.ends_with("limit") => {
+                Err(reason)
+                    if reason == "download_workspace_unavailable"
+                        || (reason.starts_with("download_") && reason.ends_with("limit")) =>
+                {
                     Self::event(
                         browser,
                         &transfer,
@@ -316,17 +326,20 @@ impl Downloads {
             .strip_prefix("conversation:")
             .unwrap_or("")
             .to_owned();
-        let context = port.prepare(session.clone()).await?;
+        let context = port
+            .prepare(session.clone())
+            .await
+            .map_err(|_| "download_workspace_unavailable")?;
         let root = butler_platform::secure_fs::canonicalize(
             context["workspace_path"].as_str().unwrap_or(""),
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|_| "download_workspace_unavailable")?;
         let directory = root.join(butler_platform::data_paths::DOWNLOADS);
-        std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
-        let resolved =
-            butler_platform::secure_fs::canonicalize(&directory).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&directory).map_err(|_| "download_workspace_unavailable")?;
+        let resolved = butler_platform::secure_fs::canonicalize(&directory)
+            .map_err(|_| "download_workspace_unavailable")?;
         if !butler_platform::secure_fs::same_path(&resolved, &directory) {
-            return Err("download_symlink_refused".into());
+            return Err("download_workspace_unavailable".into());
         }
         let mut name = clean_name(&transfer.source);
         if copy_new(staged, &directory.join(&name)).is_err() {
@@ -364,14 +377,37 @@ impl Downloads {
     }
 }
 
-fn owner_event(state: &mut State, transfer: &Transfer, kind: &str, data: &Value) {
-    let mut event = json!({"type":kind,"tab":transfer.tab,"epoch":transfer.epoch});
+fn owner_event(state: &mut State, owner: &str, tab: &str, epoch: u64, kind: &str, data: &Value) {
+    let mut event = json!({"type":kind,"tab":tab,"epoch":epoch});
     if let (Some(target), Some(data)) = (event.as_object_mut(), data.as_object()) {
         target.extend(data.clone());
     }
     state
         .events
-        .entry(transfer.owner.clone())
+        .entry(owner.to_owned())
         .or_default()
         .push(event);
+}
+
+impl super::Headless {
+    /// Queues `kind` for the owner of `tab`, as the download events of a
+    /// transfer this executor runs itself are; a tab it does not know is an error.
+    pub fn tab_event(
+        &self,
+        owner: &str,
+        tab: &str,
+        kind: &str,
+        data: &Value,
+    ) -> Result<(), String> {
+        let browser = self.browser().ok_or("browser_unavailable")?;
+        let mut state = browser.shared.lock();
+        let epoch = state
+            .tabs
+            .get(tab)
+            .filter(|t| t.owner == owner)
+            .map(|t| t.epoch)
+            .ok_or("unknown_tab")?;
+        owner_event(&mut state, owner, tab, epoch, kind, data);
+        Ok(())
+    }
 }

@@ -28,6 +28,7 @@ pub(super) struct LiveFrame {
     pub(super) day_phase: f32,
     pub(super) content_rect: Option<ContentRect>,
     pub(super) content_rect2: Option<ContentRect>,
+    pub(super) column: Option<[f32; 3]>,
 }
 
 /// A picture to draw under a module, with how to fit and blur it.

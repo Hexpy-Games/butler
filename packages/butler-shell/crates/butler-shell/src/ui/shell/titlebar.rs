@@ -159,15 +159,15 @@ pub(crate) fn window_controls(lang: Lang) -> AnyElement {
         ),
     ] {
         row = row.child(
-            div().window_control_area(area).child(
-                IconButton::new(id, label)
-                    .glyph(glyph)
-                    .on_click(move |_, w, _| match area {
+            crate::ui::widgets::anchor(div(), id)
+                .window_control_area(area)
+                .child(IconButton::new(id, label).glyph(glyph).on_click(
+                    move |_, w, _| match area {
                         WindowControlArea::Min => w.minimize_window(),
                         WindowControlArea::Max => w.zoom_window(),
                         _ => w.remove_window(),
-                    }),
-            ),
+                    },
+                )),
         );
     }
     row.into_any_element()

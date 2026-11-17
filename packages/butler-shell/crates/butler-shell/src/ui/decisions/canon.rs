@@ -102,7 +102,7 @@ pub(super) fn run_decision<F, Fut>(
     cx.spawn(async move |cx| {
         let result = request.await;
         let ok = matches!(result, Some(Ok(())));
-        let conflict = matches!(result, Some(Err(Error::Http(409))));
+        let conflict = matches!(result, Some(Err(Error::Http(409, _))));
         cx.update(|cx| {
             state.update(cx, |state, cx| {
                 state.busy = false;

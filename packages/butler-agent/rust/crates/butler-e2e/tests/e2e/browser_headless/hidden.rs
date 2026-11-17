@@ -11,7 +11,7 @@
 use super::{
     backend::{attach_app, serve_app},
     support::{
-        admin, browser_processes, call, hidden_app, no_chrome_cache, open, publish, setup,
+        admin, browser_processes, call, hidden_app, no_chrome_cache, open, publish, setup, shell,
         state_root,
     },
 };
@@ -385,6 +385,10 @@ async fn hidden_outbox_backlog_blocks_retirement_until_drained() -> Result<(), H
 #[tokio::test]
 async fn app_reconnect_keeps_one_tab_set() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !shell(),
+        "the shell is the page host, so a second attach is refused"
+    );
     let not_electron = butler_e2e::e2e::binary::mcp_fixture_binary()?;
     let s = setup("BROWSER-APP-RECONNECT")?
         .env(

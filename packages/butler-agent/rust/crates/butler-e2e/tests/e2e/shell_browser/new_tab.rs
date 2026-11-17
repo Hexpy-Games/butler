@@ -55,7 +55,7 @@ async fn browser_address_suggestions_from_history() -> Result<(), HarnessError> 
             "wait-anchor browser-area",
             "type alpha.example/first",
             "key enter",
-            "key cmd-l",
+            "key secondary-l",
             "type bravo.example/second",
             "key enter",
         ])
@@ -80,7 +80,7 @@ async fn browser_address_suggestions_from_history() -> Result<(), HarnessError> 
     }
     shell
         .run(&[
-            "key cmd-t",
+            "key secondary-t",
             "type alph",
             "wait-anchor browser-suggestion-0-https://alpha.example/first",
             "key down",
@@ -115,7 +115,7 @@ async fn browser_tabs_restore_after_restart() -> Result<(), HarnessError> {
             "wait-anchor browser-area",
             "type example.com/first",
             "key enter",
-            "key cmd-t",
+            "key secondary-t",
             "type example.org/second",
             "key enter",
             "app-quit",

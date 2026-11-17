@@ -1,17 +1,36 @@
+use super::{engine::TabId, model::BrowserState, page_dialog::DialogAnswer};
 #[cfg(feature = "cef")]
 use super::{
-    agent_host::Hosted,
     engine::{PageChange, PageEvent},
     model::Tab,
     page_dialog::{BlockedPopup, EngineChild},
 };
-use super::{engine::TabId, model::BrowserState, page_dialog::DialogAnswer};
 
 #[cfg(feature = "cef")]
 pub(super) fn site(url: &str) -> String {
     url::Url::parse(url)
         .map(|u| u.origin().ascii_serialization())
         .unwrap_or_default()
+}
+/// Tells the gateway of a pop-up the page host refused on a conversation's tab. A
+/// page without a web origin has no `site` to name, so it is not reported.
+#[cfg(feature = "cef")]
+fn tell_agent(tab: &Tab, url: &str, reason: &str, cx: &mut gpui::App) {
+    let key = super::area::owner_key(&tab.owner);
+    let Some(session) = key.strip_prefix("conversation:") else {
+        return;
+    };
+    if super::address::web_url(&tab.url).is_none() {
+        return;
+    }
+    let body = serde_json::json!({"op":"popup_blocked","session":session,"tab":tab.id.0.as_ref(),
+        "url":url,"site":site(&tab.url),"reason":reason});
+    drop(crate::ui::source::agent::Jobs::run(
+        cx,
+        move |client| async move {
+            let _ = client.browser_host_downloads(&body).await;
+        },
+    ));
 }
 impl BrowserState {
     pub(crate) fn allow_popup(&mut self, id: &TabId) {
@@ -62,14 +81,20 @@ impl BrowserState {
         let source = self.tab(opener).cloned()?;
         self.next_id += 1;
         let id = TabId(format!("t{}", self.next_id).into());
+        // Hosted as the gate decided when the child was created, whoever holds the opener now.
+        let hosted = self
+            .engine
+            .adopt(&id, child)
+            .then(|| self.new_hosted(source.hosted.as_ref().is_some_and(|h| h.internal)));
+        let awake = hosted.as_ref().map(super::agent_host::Hosted::awake);
         self.tabs.push(Tab {
             opener: Some(opener.clone()),
-            popup: source.hosted.is_none(),
-            hosted: source.hosted.as_ref().map(|h| Hosted::agent(h.internal)),
+            popup: hosted.is_none(),
+            hosted,
             ..Tab::new(id.clone(), source.owner, source.profile, url)
         });
-        self.engine.adopt(&id, child);
-        if source.hosted.is_some() {
+        if let Some(awake) = awake {
+            self.engine.keep_awake(&id, awake);
             self.fix_hosted_size(&id);
         }
         Some(id)
@@ -84,11 +109,20 @@ impl BrowserState {
             }
             PageChange::PopupBlocked { url, reason } => {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == event.page) {
-                    tab.blocked_popup = Some(BlockedPopup {
-                        url: url.clone(),
-                        site: site(&tab.url),
-                        reason,
-                    });
+                    if tab
+                        .hosted
+                        .as_ref()
+                        .is_some_and(super::agent_host::Hosted::held_by_agent)
+                    {
+                        // The Agent's own block is no prompt for the user: the Agent hears of it.
+                        tell_agent(tab, url, reason, cx);
+                    } else {
+                        tab.blocked_popup = Some(BlockedPopup {
+                            url: url.clone(),
+                            site: site(&tab.url),
+                            reason,
+                        });
+                    }
                 }
             }
             PageChange::PopupOpened { child, url } => {

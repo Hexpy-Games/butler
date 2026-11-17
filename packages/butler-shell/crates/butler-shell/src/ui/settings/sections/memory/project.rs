@@ -73,7 +73,7 @@ impl MemoryPage {
                     this.project.memory = Load::Ready(info);
                 }
                 Err(error) => {
-                    this.project.missing = matches!(error, Error::Http(404));
+                    this.project.missing = matches!(error, Error::Http(404, _));
                     this.project.memory = Load::Failed;
                 }
             },

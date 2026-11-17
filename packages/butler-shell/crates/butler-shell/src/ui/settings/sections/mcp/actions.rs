@@ -1,7 +1,8 @@
 //! `useMcpSettingsActions.ts`: save, remove, toggle and probe, one at a time (`inFlight`).
-//! The client returns no error codes (G-codes), so the form's inline command and URL errors
-//! that React maps from `mcp_command_required` / `mcp_url_required` are not shown: a refused
-//! save shows the `mcpErrors.save` toast.
+//! A failure shows the sentence of the API error code the client carries, else the action's
+//! fallback (`notifyError`). The form's inline command and URL errors that React shows for
+//! `mcp_command_required` / `mcp_url_required` are not ported: those codes show their sentence
+//! in the save toast.
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::toast::{self, Toast};
 use butler_shell_client::Error;
@@ -15,8 +16,9 @@ use super::{McpPage, Words};
 use crate::ui::settings::confirm::Request;
 use crate::ui::settings::state::{Load, fetch};
 
-pub(super) fn toast_error(cx: &mut App, message: &'static str) {
-    toast::show(cx, Toast::error(message));
+pub(super) fn toast_error(cx: &mut App, error: &Error, message: &'static str) {
+    let next = crate::ui::i18n::errors::toast(cx, error, message);
+    toast::show(cx, next);
 }
 
 /// `McpServerMutationResult`
@@ -130,7 +132,7 @@ impl McpPage {
                         this.editing = None;
                         this.form = FormState::empty();
                     }
-                    Err(_) => toast_error(cx, w.err_save),
+                    Err(error) => toast_error(cx, &error, w.err_save),
                 }
             },
         );
@@ -173,7 +175,7 @@ impl McpPage {
                             servers.retain(|server| server.id != id);
                         }
                     }
-                    Err(_) => toast_error(cx, w.err_remove),
+                    Err(error) => toast_error(cx, &error, w.err_remove),
                 }
             },
         );
@@ -195,7 +197,7 @@ impl McpPage {
                 let w = Self::words(cx);
                 match result {
                     Ok(saved) => this.upsert(saved.server),
-                    Err(_) => toast_error(cx, w.err_toggle),
+                    Err(error) => toast_error(cx, &error, w.err_toggle),
                 }
             },
         );
@@ -231,7 +233,7 @@ impl McpPage {
                         let message = message.unwrap_or_else(|| w.action_failed.to_owned());
                         toast::show(cx, Toast::error(message));
                     }
-                    Err(_) => toast_error(cx, w.err_probe),
+                    Err(error) => toast_error(cx, &error, w.err_probe),
                 }
             },
         );

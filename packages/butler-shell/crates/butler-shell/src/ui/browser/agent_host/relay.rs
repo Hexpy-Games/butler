@@ -1,10 +1,12 @@
 //! Raw DevTools messages between hosted pages and the Agent; up in order, one request at a time.
+#[cfg(feature = "cef")]
+use super::Holder;
 use super::Hosted;
 #[cfg(feature = "cef")]
-use crate::ui::browser::engine::PageEngine;
+use crate::ui::browser::engine::PageCommand;
 use crate::ui::{
     browser::{
-        engine::{PageChange, TabId},
+        engine::{PageChange, PageEngine, TabId},
         model::Tab,
     },
     source::agent::Jobs,
@@ -131,11 +133,26 @@ pub(super) fn event(cx: &App, message: Value) {
     up(cx, None, message, size);
 }
 
-/// A hosted page's own raw DevTools message; bytes that are not JSON are dropped.
+/// A hosted page's own raw DevTools message; bytes that are not JSON are dropped. The success
+/// reply to the Agent's `Runtime.runIfWaitingForDebugger` on the page itself, the last step of
+/// its setup, lets the page's held loads go: the URL its main frame tried meanwhile loads now,
+/// if it is a web address.
 #[cfg(feature = "cef")]
-fn raw(cx: &App, tab: &TabId, bytes: &[u8]) {
-    if let Ok(message) = serde_json::from_slice(bytes) {
-        up(cx, Some(tab), message, bytes.len());
+fn raw(cx: &App, tab: &TabId, hosted: &mut Hosted, engine: &mut dyn PageEngine, bytes: &[u8]) {
+    let Ok(message) = serde_json::from_slice::<Value>(bytes) else {
+        return;
+    };
+    let reply = message.get("sessionId").is_none() && hosted.start.as_ref() == Some(&message["id"]);
+    if reply {
+        hosted.start = None;
+    }
+    let started = reply && message.get("result").is_some();
+    up(cx, Some(tab), message, bytes.len());
+    if started
+        && let Some(url) = engine.release_loads(tab)
+        && let Some(url) = crate::ui::browser::address::web_url(&url)
+    {
+        engine.command(tab, PageCommand::Load(url));
     }
 }
 
@@ -181,10 +198,13 @@ fn allowed(message: &Value) -> bool {
             || matches!(method, "Target.setAutoAttach" | "Target.detachFromTarget"))
 }
 
-/// A `cdp` frame of the Agent, sent unchanged to the hosted page it names.
+/// A `cdp` frame of the Agent, sent unchanged to the hosted page it names. A
+/// `Runtime.runIfWaitingForDebugger` on the page itself (a frame's session carries its
+/// `sessionId`) lets the page run: its id is kept until the reply.
 #[cfg(feature = "cef")]
-pub(super) fn down(cx: &App, frame: &Value) {
+pub(super) fn down(cx: &mut App, frame: &Value) {
     use crate::ui::browser::model::BrowserState;
+    use gpui::BorrowAppContext as _;
     let (Some(tab), Some(message)) = (frame["tab"].as_str(), frame.get("message")) else {
         return;
     };
@@ -195,9 +215,32 @@ pub(super) fn down(cx: &App, frame: &Value) {
         return;
     };
     let tab = TabId(tab.to_owned().into());
-    let model = cx.global::<BrowserState>();
-    if model.tab(&tab).is_some_and(|tab| tab.hosted.is_some()) {
+    let refused = cx.update_global::<BrowserState, _>(|model, _| {
+        let hosted = model
+            .tabs
+            .iter_mut()
+            .find(|candidate| candidate.id == tab)
+            .and_then(|candidate| candidate.hosted.as_mut())?;
+        // The user holds the page: the Agent's traffic stops (Electron `user_control`).
+        if hosted.holder == Holder::User {
+            return Some(());
+        }
+        if message["method"] == "Runtime.runIfWaitingForDebugger"
+            && message.get("sessionId").is_none()
+        {
+            hosted.start = Some(message["id"].clone());
+        }
         model.engine.devtools_raw(&tab, &bytes);
+        None
+    });
+    if refused.is_some() {
+        let mut reply = json!({"id": message["id"],
+            "error": {"code": -32000, "message": "user_control"}});
+        if let Some(session) = message.get("sessionId") {
+            reply["sessionId"] = session.clone();
+        }
+        let size = reply.to_string().len();
+        up(cx, Some(&tab), reply, size);
     }
 }
 
@@ -207,13 +250,25 @@ fn info(hosted: &Hosted, method: &str, url: &str, title: &str) -> Value {
 }
 
 /// What a hosted page's engine change means to the Agent.
-pub(in crate::ui::browser) fn page_changed(cx: &App, tab: &Tab, change: &PageChange) {
-    let Some(hosted) = &tab.hosted else {
+pub(in crate::ui::browser) fn page_changed(
+    cx: &App,
+    tab: &mut Tab,
+    #[cfg_attr(
+        not(feature = "cef"),
+        expect(
+            unused_variables,
+            reason = "only raw DevTools messages reach the engine"
+        )
+    )]
+    engine: &mut dyn PageEngine,
+    change: &PageChange,
+) {
+    let Some(hosted) = tab.hosted.as_mut() else {
         return;
     };
     let message = match change {
         #[cfg(feature = "cef")]
-        PageChange::DevToolsRaw(bytes) => return raw(cx, &tab.id, bytes),
+        PageChange::DevToolsRaw(bytes) => return raw(cx, &tab.id, hosted, engine, bytes),
         PageChange::Url(url) if *url != tab.url => {
             info(hosted, "Target.targetInfoChanged", url, &tab.title)
         }

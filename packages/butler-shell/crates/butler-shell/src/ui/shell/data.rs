@@ -7,7 +7,7 @@ use gpui::{Context, Window};
 use super::Shell;
 use super::region::Touched;
 use crate::ui::manage::Topic;
-use crate::ui::source::agent::MonitorSignal;
+use crate::ui::source::agent::{Jobs, MonitorSignal};
 use crate::ui::source::{ChatRef, EventCursor, Fetch, SourceError};
 use crate::ui::store::{Applied, ChatsLoad};
 
@@ -42,15 +42,14 @@ impl Shell {
     ) {
         self.rediscover = Some(attachment.retry.clone());
         self.connection_task = Some(cx.spawn(async move |this, cx| {
-            while let Some((source, jobs)) = attachment.next().await {
+            while let Some(change) = attachment.next().await {
                 if this
                     .update(cx, |this, cx| {
-                        cx.set_global(jobs);
-                        this.lost(cx);
-                        this.incompatible = false;
-                        this.source = source;
-                        this.sync_composer(cx);
-                        this.connect(cx);
+                        if !change.1.current(cx) {
+                            Jobs::rediscover(cx);
+                        }
+                        this.attaching = Some(change);
+                        this.adopt(cx);
                     })
                     .is_err()
                 {
@@ -58,6 +57,23 @@ impl Shell {
                 }
             }
         }));
+    }
+
+    /// Applies the window's attach change once the app's [`Jobs`] reaches the same Agent: the
+    /// reads `connect` starts go through it.
+    pub(super) fn adopt(&mut self, cx: &mut Context<Self>) {
+        let Some((source, jobs)) = self.attaching.take() else {
+            return;
+        };
+        if !jobs.current(cx) {
+            self.attaching = Some((source, jobs));
+            return;
+        }
+        self.lost(cx);
+        self.incompatible = false;
+        self.source = source;
+        self.sync_composer(cx);
+        self.connect(cx);
     }
 
     /// A fresh snapshot: the first page of chats, then live updates after its cursor.
@@ -135,10 +151,12 @@ impl Shell {
             _ => None,
         };
         // `settings.updated` carries the changed subset; it is merged over the current settings
-        // and applied (`settingsFromLiveEvent`).
+        // and applied (`settingsFromLiveEvent`). Before the first `/settings` answer there is
+        // nothing to merge into, and that read brings the saved value.
         if let crate::ui::source::LiveUpdate::NavigationEvent(e) = &event.update
             && e.r#type == "settings.updated"
             && e.payload["settings"].is_object()
+            && self.settings_raw.is_some()
         {
             self.merge_settings(&e.payload["settings"], cx);
         }
@@ -188,13 +206,14 @@ impl Shell {
     pub(crate) fn open_chat(
         &mut self,
         chat: Option<ChatRef>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.source.is_none() {
             return;
         }
         let new_chat = chat.is_none();
+        let before = self.chat_key();
         self.session_menu.rename = None;
         if let Some(chat) = &chat {
             self.load_summary(chat, cx);
@@ -202,21 +221,14 @@ impl Shell {
             self.session_menu.summary = None;
         }
         self.store.open(chat);
-        self.chat_opened(cx);
         self.chat.update(cx, |c, _| c.set_new_chat(new_chat));
         if let Some(id) = self.store.selected().map(|c| c.session.0.to_string()) {
             self.mark_sidebar_read(&id, cx);
         } else {
             self.sidebar.new_chat_parent = None;
         }
+        self.chat_opened(&before, cx);
         self.show_view(false, cx);
-        self.composer.update(cx, |c, cx| {
-            if new_chat {
-                c.engage(window, cx);
-            } else {
-                c.fold();
-            }
-        });
         self.reload_open_chat(cx);
         self.sync_composer(cx);
         cx.notify();
@@ -227,20 +239,14 @@ impl Shell {
         parent: Option<crate::ui::source::sidebar::DraftTarget>,
         cx: &mut Context<Self>,
     ) {
+        let before = self.chat_key();
         self.session_menu.rename = None;
         self.session_menu.summary = None;
         self.store.open(None);
-        self.chat_opened(cx);
         self.sidebar.new_chat_parent = parent;
+        self.chat_opened(&before, cx);
         self.show_view(false, cx);
-        self.composer.update(cx, |_, cx| cx.notify());
         self.sync_composer(cx);
-        if let Some(handle) = self.sidebar.window_handle {
-            let composer = self.composer.clone();
-            let _ = handle.update(cx, move |_, window, cx| {
-                composer.update(cx, |c, cx| c.engage(window, cx));
-            });
-        }
         cx.notify();
     }
     /// Reloads the open chat's latest window and its authority requests.
@@ -361,8 +367,11 @@ impl Shell {
                 // A request found the agent gone while its record may still name it: look again.
                 let attached = self.source.is_some();
                 self.lost(cx);
-                if attached && let Some(retry) = &self.rediscover {
-                    let _ = retry.send(MonitorSignal::Retry);
+                if attached {
+                    if let Some(retry) = &self.rediscover {
+                        let _ = retry.send(MonitorSignal::Retry);
+                    }
+                    Jobs::rediscover(cx);
                 }
             }
             SourceError::Incompatible => {

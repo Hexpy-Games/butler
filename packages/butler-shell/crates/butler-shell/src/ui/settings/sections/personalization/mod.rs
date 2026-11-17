@@ -124,9 +124,10 @@ impl PersonalizationPage {
                     this.draft = Draft::from(&view);
                     this.personalization = Some(view);
                 }
-                Err(_) => {
+                Err(error) => {
                     let copy = words(Ds::get(cx).lang());
-                    toast::show(cx, Toast::error(copy.err_load));
+                    let next = crate::ui::i18n::errors::toast(cx, &error, copy.err_load);
+                    toast::show(cx, next);
                 }
             },
         );
@@ -152,7 +153,9 @@ impl PersonalizationPage {
                         this.personalization = Some(saved);
                         Toast::success(crate::ui::i18n::settings::words(lang).saved)
                     }
-                    Err(_) => Toast::error(words(lang).err_update),
+                    Err(error) => {
+                        crate::ui::i18n::errors::toast(cx, &error, words(lang).err_update)
+                    }
                 };
                 notify(&mut this.update_toast, toast, cx);
             },

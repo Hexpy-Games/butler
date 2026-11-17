@@ -147,9 +147,10 @@ impl HooksPage {
                         this.settings = Some(saved);
                         this.editing = None;
                     }
-                    Err(_) => {
+                    Err(error) => {
                         let text = Self::copy(cx).request_failed;
-                        toast::show(cx, Toast::error(text));
+                        let next = crate::ui::i18n::errors::toast(cx, &error, text);
+                        toast::show(cx, next);
                         Self::refresh(cx);
                     }
                 }
@@ -203,8 +204,9 @@ impl HooksPage {
                         );
                         Self::refresh(cx);
                     }
-                    Err(_) => {
-                        toast::show(cx, Toast::error(copy.request_failed));
+                    Err(error) => {
+                        let next = crate::ui::i18n::errors::toast(cx, &error, copy.request_failed);
+                        toast::show(cx, next);
                     }
                 }
             },
