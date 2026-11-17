@@ -29,7 +29,9 @@ let step = 0;
 const provider = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
   const body = await request.json();
   const memory = body.text?.format?.name === "memory_meaning_v4";
-  const call = !memory && step++ === 0;
+  // Background requests (memory, smart-group) carry no tools; the turn's first round calls the tool once.
+  const call = !memory && (body.tools?.length ?? 0) > 0 && !(body.input ?? []).some((item: any) => item.type === "function_call_output");
+  if (call) step += 1;
   const response = { id: `resp_${crypto.randomUUID()}`, object: "response", status: "completed", model: "gpt-6-luna",
     output: call ? [{ type: "function_call", id: `fc_${crypto.randomUUID()}`, call_id: `call_${crypto.randomUUID()}`,
       name: "write_file", arguments: JSON.stringify({ path: toolPath, content: "permission-smoke", overwrite: false }) }]
