@@ -407,6 +407,16 @@ async fn planner_uses_turn_context_executes_plan_then_uses_direct_follow_up() {
             .contains("already ran")
     );
     drop(prompts);
+    // Search results and user-message URLs lend their origin; opened pages do not.
+    assert!(session.discovered("https://example.com/other?lang=ko"));
+    session.discover("https://collector.example/");
+    assert!(!session.discovered("https://collector.example/?d=note"));
+    session.discover_user("https://user.example/start");
+    let resumed = access.session_for_turn(String::new());
+    resumed.restore(&session.snapshot().unwrap());
+    assert!(resumed.trusted("https://user.example/next?q=1"));
+    assert!(resumed.trusted("https://example.com/other?lang=ko"));
+    assert!(!resumed.trusted("https://collector.example/"));
     drop(session);
     let _ = fs::remove_dir_all(root);
 }

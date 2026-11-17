@@ -15,6 +15,36 @@ pub fn web_read_carries_data(value: &str, discovered: bool) -> bool {
         || path.split('/').any(data_like_segment)
 }
 
+/// Whether `url` has the origin (scheme, exact host, port) of `found`.
+/// Opaque origins (about:, data:, file:) match nothing.
+pub fn same_origin(url: &str, found: &str) -> bool {
+    let origin = |value: &str| {
+        url::Url::parse(value.trim())
+            .ok()
+            .map(|parsed| parsed.origin())
+            .filter(url::Origin::is_tuple)
+    };
+    origin(url).is_some_and(|own| origin(found) == Some(own))
+}
+
+/// Whether browser_act `steps` put model-written text into the page: fill,
+/// type, or a one-character key ("a", "Shift+a"). Clicks, selects (an
+/// existing option only) and named keys type nothing.
+pub fn types_text(steps: &serde_json::Value) -> bool {
+    steps
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|step| match step["action"].as_str() {
+            Some("fill" | "type") => true,
+            Some("press") => step["value"]
+                .as_str()
+                .and_then(|chord| chord.rsplit('+').next())
+                .is_some_and(|key| key.chars().count() == 1),
+            _ => false,
+        })
+}
+
 fn data_like_segment(segment: &str) -> bool {
     // Slug separators end a word; slash boundaries are handled by the caller.
     segment.chars().count() >= 40

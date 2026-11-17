@@ -52,7 +52,17 @@ pub(super) async fn execute(
         .iter()
         .map(|url| json!({"action":"navigate","value_preview":url}))
         .collect();
-    let input = json!({"navigation":true,"urls":urls,"arguments":args,"resolved_steps":steps});
+    let mut input = json!({"navigation":true,"urls":urls,"arguments":args,"resolved_steps":steps});
+    // One site's pages share the per-site data grant (navigation and typing).
+    let sites: Vec<_> = urls
+        .iter()
+        .map(|url| butler_runtime::browser::site_scope(url).ok())
+        .collect();
+    if let [Some(site), rest @ ..] = sites.as_slice()
+        && rest.iter().all(|other| other.as_ref() == Some(site))
+    {
+        input["data_site"] = json!(site);
+    }
     if client.approval_handoff {
         return encoded(&handoff(&args, "approval_required"));
     }
