@@ -6,11 +6,17 @@ use super::{frame_pool::FramePool, gpu::GpuCopy};
 use std::{cell::RefCell, rc::Rc};
 
 pub(super) type PageRef = Rc<RefCell<Page>>;
+/// Whether the page is shown; once closing it stays hidden and ignores visibility changes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Phase {
+    Hidden,
+    Visible,
+    Closing,
+}
 pub(super) struct Page {
     pub(super) size: (u32, u32),
     pub(super) scale: f32,
-    pub(super) visible: bool,
-    pub(super) closing: bool,
+    pub(super) phase: Phase,
     /// Loading from creation; then as CEF reports it.
     pub(super) loading: bool,
     pub(super) signed_out_owner: Option<String>,
@@ -37,8 +43,7 @@ impl Page {
         Self {
             size,
             scale,
-            visible: true,
-            closing: false,
+            phase: Phase::Visible,
             loading: true,
             browser: None,
             signed_out_owner: None,
