@@ -19,7 +19,7 @@ pub use egress::{
     ContentOrigin, EgressProxy, LoopbackFixtures, fetch_permitted, guard_url, guarded_client,
 };
 pub use headless::{
-    Headless, HeadlessConfig, InstallSource, Rendered,
+    Headless, HeadlessConfig, InstallSource, PageHost, Rendered,
     downloads::{DownloadPort, PortFuture},
     history::{HistoryPort, VisitFuture},
     reader as headless_reader,

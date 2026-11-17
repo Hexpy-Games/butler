@@ -7,6 +7,8 @@ use std::{sync::Arc, time::Duration};
 pub(crate) struct Page {
     pub cdp: Arc<Cdp>,
     pub shared: Shared,
+    /// The App owning the pages, in hosted mode.
+    pub host: Option<Arc<dyn super::host::PageHost>>,
     pub tab: String,
     pub session: String,
     pub target: String,
