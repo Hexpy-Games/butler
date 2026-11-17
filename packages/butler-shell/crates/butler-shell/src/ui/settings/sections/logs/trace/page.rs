@@ -87,7 +87,7 @@ impl TracePage {
                 self.open = model::initial_open(&steps);
                 Load::Ready(Some(Loaded { trace, steps }))
             }
-            Err(Error::Http(404)) => Load::Ready(None),
+            Err(Error::Http(404, _)) => Load::Ready(None),
             Err(_) => Load::Failed,
         };
     }

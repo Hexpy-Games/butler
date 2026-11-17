@@ -34,8 +34,10 @@ pub use posters::{POSTER_SIZE, builtin_poster, poster_modules};
 pub use still::{StillCache, StillSize, still_key};
 
 use self::live::{LiveFrame, STILL_DAY_PHASE};
+use crate::tokens::Color;
 use crate::ui::blocks::prompt_suggestion_list::ContentRect;
 use crate::ui::context::Ds;
+use crate::ui::convert;
 
 /// The first-run intro's dried end frame. // DS: intro/introFrame.ts
 pub fn intro_print(tone: WallpaperTone, card: Option<ContentRect>) -> AnyElement {
@@ -186,9 +188,11 @@ pub struct Wallpaper {
     picture: Option<WallpaperImage>,
     content_rect: Option<ContentRect>,
     content_rect2: Option<ContentRect>,
+    column: Option<[f32; 3]>,
     day_phase: f32,
     paused: bool,
     host: WallpaperHost,
+    paper: f32,
 }
 
 impl Wallpaper {
@@ -199,9 +203,11 @@ impl Wallpaper {
             picture: None,
             content_rect: None,
             content_rect2: None,
+            column: None,
             day_phase: STILL_DAY_PHASE,
             paused: false,
             host: WallpaperHost::default(),
+            paper: 0.,
         }
     }
 
@@ -214,6 +220,14 @@ impl Wallpaper {
     /// The composer a live module keeps clear of (`contentRect2`), in window px; none by default.
     pub fn content_rect2(mut self, rect: Option<ContentRect>) -> Self {
         self.content_rect2 = rect;
+        self
+    }
+
+    /// `u_col`: the reading column a print keeps its ink out of — its left and right edges and its
+    /// top, in px from this wallpaper's own top-left corner (Electron `columnRect`, already made
+    /// canvas-relative as engineDrift.ts does); none by default (new chat).
+    pub fn column(mut self, left: f32, right: f32, top: f32) -> Self {
+        self.column = Some([left, right, top]);
         self
     }
 
@@ -231,6 +245,13 @@ impl Wallpaper {
 
     pub fn host(mut self, host: WallpaperHost) -> Self {
         self.host = host;
+        self
+    }
+
+    /// `paperOverlay`: one uniform layer of the theme's paper over the whole wallpaper, 0..0.95;
+    /// none by default.
+    pub fn paper_overlay(mut self, amount: f32) -> Self {
+        self.paper = amount;
         self
     }
 
@@ -259,6 +280,7 @@ impl Wallpaper {
             day_phase: self.day_phase,
             content_rect: self.content_rect,
             content_rect2: self.content_rect2,
+            column: self.column,
         }
     }
 }
@@ -269,7 +291,15 @@ impl RenderOnce for Wallpaper {
         let tone = self.tone.unwrap_or(WallpaperTone::from_dark(ds.dark()));
         let layer = div().relative().size_full().overflow_hidden();
         let frame = self.live_frame(tone, window, cx);
-        match self.source {
+        let paper = self.paper.clamp(0., 0.95);
+        let paper_fill = convert::with_alpha(
+            ds.color(match tone {
+                WallpaperTone::Light => Color::RisoPaperDay,
+                WallpaperTone::Dark => Color::RisoPaperNight,
+            }),
+            paper,
+        );
+        let layer = match self.source {
             WallpaperSource::None => layer,
             WallpaperSource::Live { module, values } => {
                 match live::layer(&module, &values, frame, window, cx) {
@@ -286,14 +316,27 @@ impl RenderOnce for Wallpaper {
                 blur,
                 filter,
                 ..
-            } => {
-                let Some(image) = self.picture else {
-                    return layer;
-                };
-                let (drawn, remaining) =
-                    live::image_layer(image, fit, blur, dim, filter.as_ref(), frame, window, cx);
-                dim_pass(layer.child(drawn), remaining)
-            }
+            } => match self.picture {
+                None => layer,
+                Some(image) => {
+                    let (drawn, remaining) = live::image_layer(
+                        image,
+                        fit,
+                        blur,
+                        dim,
+                        filter.as_ref(),
+                        frame,
+                        window,
+                        cx,
+                    );
+                    dim_pass(layer.child(drawn), remaining)
+                }
+            },
+        };
+        if paper > 0. {
+            layer.child(div().absolute().top_0().left_0().size_full().bg(paper_fill))
+        } else {
+            layer
         }
     }
 }

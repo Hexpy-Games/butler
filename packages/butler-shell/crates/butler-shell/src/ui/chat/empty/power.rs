@@ -39,7 +39,7 @@ impl Battery {
 
 /// Electron's power source is event-driven; the OS notifications need `unsafe`, which the
 /// workspace forbids, so this polls while it is read.
-pub(super) fn state(window: &mut Window, cx: &mut App) -> PowerState {
+pub(in crate::ui::chat) fn state(window: &mut Window, cx: &mut App) -> PowerState {
     window
         .use_keyed_state("wallpaper-on-battery", cx, |_, cx| Battery::new(cx))
         .read(cx)

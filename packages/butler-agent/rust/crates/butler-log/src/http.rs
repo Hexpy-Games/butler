@@ -108,10 +108,13 @@ pub fn external(purpose: Purpose) -> ClientBuilder {
 }
 /// Only Butler-to-Butler traffic uses this category (local models are external).
 pub fn loopback() -> ClientBuilder {
+    // Plain http to this machine: never touch the OS trust store, which blocks while a
+    // keychain prompt is pending.
     ClientBuilder::new(Purpose {
         name: "butler".into(),
         category: "http.local".into(),
     })
+    .without_trust_roots()
 }
 
 /// Execute one attempt and every permitted redirect through the same boundary.

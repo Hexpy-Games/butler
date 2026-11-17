@@ -178,9 +178,10 @@ impl UpdatesPage {
                 this.loading = false;
                 match result {
                     Ok(status) => this.receive_status(status, cx),
-                    Err(_) if !silent => {
+                    Err(error) if !silent => {
                         let copy = words(Ds::get(cx).lang());
-                        this.notify(Toast::error(copy.check_failed), cx);
+                        let next = crate::ui::i18n::errors::toast(cx, &error, copy.check_failed);
+                        this.notify(next, cx);
                     }
                     Err(_) => {}
                 }
@@ -253,7 +254,10 @@ impl UpdatesPage {
                         }
                         this.load(cx);
                     }
-                    Err(_) => this.notify(Toast::error(copy.apply_failed), cx),
+                    Err(error) => {
+                        let next = crate::ui::i18n::errors::toast(cx, &error, copy.apply_failed);
+                        this.notify(next, cx);
+                    }
                 }
             },
         );

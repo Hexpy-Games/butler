@@ -248,7 +248,9 @@ impl RootPage {
     fn budget_saved(&mut self, result: Result<Saved, Error>, ratio: f64, cx: &mut Context<Self>) {
         let words = super::copy::get(cx);
         let notice = match result {
-            Err(_) => Toast::error(words.update_local_budget_failed),
+            Err(error) => {
+                crate::ui::i18n::errors::toast(cx, &error, words.update_local_budget_failed)
+            }
             Ok(saved) => {
                 self.ctx.reload_catalog(cx);
                 let settings: Option<Slice> = self.ctx.state.read(cx).slice();

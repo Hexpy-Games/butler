@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use butler_ds::ui::context::Lang;
 use chrono::{DateTime, Datelike as _, Local, SecondsFormat, TimeZone as _, Utc};
-use gpui::Context;
+use gpui::{Context, SharedString};
 
 use super::LibraryPage;
 use crate::ui::source::fetch::sleep;
@@ -141,6 +141,21 @@ impl LibraryPage {
             },
             cx,
         );
+    }
+
+    /// `openInLibrary`'s `clearFilters` then `setFilters({ text, q })` for a view that carries a
+    /// search; a view without one leaves the filters as they are. The caller reads the lists.
+    pub(crate) fn search_for(&mut self, search: Option<SharedString>) {
+        let Some(search) = search else {
+            return;
+        };
+        self.search = None;
+        self.filters = Filters {
+            text: search.to_string(),
+            q: search.to_string(),
+            sort: self.filters.sort,
+            ..Filters::default()
+        };
     }
 
     /// `typeSearch`
