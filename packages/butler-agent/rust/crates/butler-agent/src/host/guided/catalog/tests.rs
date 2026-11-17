@@ -417,16 +417,17 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
                 );
                 assert_eq!(has("browse"), browsing_agent);
                 assert!(!(browsing_agent && (has("browser_open") || has("browser_act"))));
-                for name in [
-                    "browser_open",
-                    "browser_observe",
-                    "browser_close",
-                    "image_collect",
-                ] {
+                for name in ["browser_open", "browser_observe", "browser_close"] {
                     assert!(selection.authorized_names.iter().any(|tool| tool == name));
                     if browsing_agent {
                         assert!(!has_provider_tool(&selection.provider_tools, name));
                     }
+                }
+                if browsing_agent && flag == "on" {
+                    assert!(has_provider_tool(
+                        &selection.provider_tools,
+                        "image_collect"
+                    ));
                 }
                 if browsing_agent {
                     assert_eq!(

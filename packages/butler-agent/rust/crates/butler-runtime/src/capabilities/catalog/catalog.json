@@ -4691,7 +4691,7 @@
       "definition": {
         "type": "function",
         "name": "delegate_to_steward",
-        "description": "Hand work to a Steward, who plans it, runs Workers and reports back while you stay available to the user; your route rules say which work to hand over. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also receives the user's message verbatim, project context and bounded conversation. Write request as your reading of the message, in the user's scope and output form, adding no format they did not ask for. safe_title is optional and defaults to the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id instead of asking the user to restart. When a result hands back capability_unavailable_in_child, finish its requested_action in that result Turn with your own tools and normal approval, or grant the tool when you delegate again; the user never handles it.",
+        "description": "Hand work to a Steward, who plans it, runs Workers and reports back while you stay available to the user; your route rules say which work to hand over. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also receives the user's message verbatim, project context and bounded conversation. Write request as the user's ask as given, adding no topics, details, checks or format they did not ask for. safe_title is optional and defaults to the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id instead of asking the user to restart. When a result hands back capability_unavailable_in_child, finish its requested_action in that result Turn with your own tools and normal approval, or grant the tool when you delegate again; the user never handles it.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -4709,7 +4709,7 @@
                 "maxLength": 500
               },
               "maxItems": 8,
-              "description": "Outcomes the delivered result must show, each observable with a tool. Make each explicit constraint in the request its own check (a requested count, dates or ranges, other stated limits). They become the Steward's acceptance criteria. Write outcomes, never a check to list caveats."
+              "description": "Outcomes the delivered result must show, each observable with a tool. Make each explicit constraint in the request its own check (a requested count, dates or ranges, other stated limits); checks cover only what the user asked. They become the Steward's acceptance criteria. Write outcomes, never a check to list caveats."
             },
             "epic_ref": {
               "type": "string",
@@ -10706,7 +10706,7 @@
     "delegate_to_steward": {
       "type": "function",
       "name": "delegate_to_steward",
-      "description": "Hand work to a Steward, who plans it, runs Workers and reports back while you stay available to the user; your route rules say which work to hand over. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also receives the user's message verbatim, project context and bounded conversation. Write request as your reading of the message, in the user's scope and output form, adding no format they did not ask for. safe_title is optional and defaults to the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id instead of asking the user to restart. When a result hands back capability_unavailable_in_child, finish its requested_action in that result Turn with your own tools and normal approval, or grant the tool when you delegate again; the user never handles it.",
+      "description": "Hand work to a Steward, who plans it, runs Workers and reports back while you stay available to the user; your route rules say which work to hand over. This one call is the whole handoff: the runtime records the Work and its Plan from these arguments, so no start_work, replace_work_plan or Plan Review comes first. The Steward also receives the user's message verbatim, project context and bounded conversation. Write request as the user's ask as given, adding no topics, details, checks or format they did not ask for. safe_title is optional and defaults to the request's first line. For a new request after a prior delegation closed, call this again in the same turn with previous_relation_id instead of asking the user to restart. When a result hands back capability_unavailable_in_child, finish its requested_action in that result Turn with your own tools and normal approval, or grant the tool when you delegate again; the user never handles it.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,
@@ -10724,7 +10724,7 @@
               "maxLength": 500
             },
             "maxItems": 8,
-            "description": "Outcomes the delivered result must show, each observable with a tool. Make each explicit constraint in the request its own check (a requested count, dates or ranges, other stated limits). They become the Steward's acceptance criteria. Write outcomes, never a check to list caveats."
+            "description": "Outcomes the delivered result must show, each observable with a tool. Make each explicit constraint in the request its own check (a requested count, dates or ranges, other stated limits); checks cover only what the user asked. They become the Steward's acceptance criteria. Write outcomes, never a check to list caveats."
           },
           "epic_ref": {
             "type": "string",
