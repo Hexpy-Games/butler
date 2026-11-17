@@ -249,7 +249,7 @@ pub(crate) fn agent_notice(
         if runtime.resuming {
             button = button.disabled();
         }
-        notice = notice.action(anchor(div(), "agent-notice-action").child(button));
+        notice = notice.action(anchor(div().flex(), "agent-notice-action").child(button));
     }
     let name = if spinning {
         "agent-notice-spinner"
