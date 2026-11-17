@@ -244,7 +244,15 @@ async fn ask_first_reads_the_project_and_asks_for_the_rest() -> Result<(), Harne
         [s.sandbox.data.to_string_lossy()],
     )?;
     s.gw = s.agent.start_again().await?;
-    let id = paused(&s, "general", "List general directory.").await?;
+    script.rounds.lock().unwrap().insert(
+        "List the data folder.".into(),
+        vec![call(
+            "ls-data",
+            "run_command",
+            &json!({"command":"ls","summary":"List files","state_effect":"read_only"}),
+        )],
+    );
+    let id = paused(&s, "general", "List the data folder.").await?;
     assert_counts(&s, &id, 1, 1)?;
     approve(&s, "general", "allow").await?;
     delivered(&s, "general", &id).await?;
