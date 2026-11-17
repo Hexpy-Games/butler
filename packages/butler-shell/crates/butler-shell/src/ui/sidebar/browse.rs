@@ -62,7 +62,10 @@ impl Shell {
             })
             .compact_gap(Space::Lg)
             .child(top)
-            .child(NavSectionHeading::new(title).actions(actions))
+            .child(
+                crate::ui::widgets::anchor(div(), "sidebar-space-header")
+                    .child(NavSectionHeading::new(title).actions(actions)),
+            )
             .into_any_element()
     }
     pub(super) fn browse_actions(

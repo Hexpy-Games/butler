@@ -32,6 +32,7 @@ mod composer_toolbar;
 mod focus_fallback;
 mod focus_selection;
 mod observer_dialog;
+mod space_header;
 mod text_selection;
 mod text_size;
 mod titlebar_drag;
