@@ -251,7 +251,7 @@ async fn shell_app_02_restart_and_quit_through_the_supervisor() -> Result<(), Ha
 }
 
 /// Takes the App's credential file once the Agent has logged `[native-app] ready` `ready` times
-/// in the shell's output.
+/// in the shell's output (it relies on `shell.stdout` being truncated by each `Shell::start`).
 fn hold_credential(
     stdout: &std::path::Path,
     auth: &std::path::Path,
@@ -385,7 +385,7 @@ async fn shell_app_15_a_ready_agent_survives_a_late_app_probe() -> Result<(), Ha
         .await?;
     let late = shell.report("respawn-late")?;
     assert_eq!(late["diagnostics"]["pid"], held_pid, "{late}");
-    assert_eq!(late["diagnostics"]["agent_state"], "restarting", "{late}");
+    assert_eq!(late["diagnostics"]["agent_state"], "starting", "{late}");
     assert_eq!(late["diagnostics"]["last_error_code"], "health_timeout");
     assert_never_failed(&late);
 
@@ -394,7 +394,15 @@ async fn shell_app_15_a_ready_agent_survives_a_late_app_probe() -> Result<(), Ha
         .await?;
     let replaced = shell.report("replaced")?;
     assert_ne!(replaced["diagnostics"]["pid"], held_pid, "{replaced}");
+    assert!(
+        replaced["diagnostics"]["last_error"].is_null(),
+        "{replaced}"
+    );
     assert_never_failed(&replaced);
+    // Both Restarts answer Ok: the second replaced the start the first was waiting for.
+    shell.run(&["restart-answers"]).await?;
+    let answers = shell.report("restarts")?;
+    assert_eq!(answers, json!(["ok", "ok"]), "{answers}");
     shell.run(&["app-quit"]).await?;
     shell.finish().await?;
     sandbox.mark_success();

@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use tokio::process::ChildStdin;
 
 use super::launch::{AgentCommand, AgentSource};
-use super::{AgentState, AgentStatus, Requester, SupervisorError};
+use super::{AgentState, AgentStatus, Requester, StopReason, SupervisorError};
 
 /// `AGENT_RECOVERY_BUDGET`: unexpected exits recovered per window.
 const RECOVERY_MAX: usize = 3;
@@ -96,6 +96,8 @@ pub(super) enum Startup {
     Failed(SupervisorError),
     /// An intentional restart replaced the candidate; `ensure_ready` joins the replacement.
     Restarting,
+    /// A restart (`stop(Restart)`) took the candidate away: every caller joins the replacement.
+    Replaced,
 }
 
 pub(super) type StartupFuture = Shared<LocalBoxFuture<'static, Result<(), Startup>>>;
@@ -115,6 +117,9 @@ pub(super) struct State {
     pub(super) exit_generation: u64,
     pub(super) restart_generation: u64,
     pub(super) respawning: bool,
+    /// Why the App last stopped its child, until the next startup is created: after a Restart
+    /// the startup still waiting on that child is replaced.
+    pub(super) last_stop: Option<StopReason>,
     pub(super) quitting: bool,
     pub(super) last_exited: Option<Exited>,
     pub(super) poll_epoch: u64,
@@ -140,6 +145,7 @@ impl State {
             exit_generation: 0,
             restart_generation: 0,
             respawning: false,
+            last_stop: None,
             quitting: false,
             last_exited: None,
             poll_epoch: 0,

@@ -29,12 +29,7 @@ impl Inner {
     /// `restart`: stop for a restart, wait, then ensure ready.
     pub(super) async fn restart(self: &Rc<Self>) -> Result<(), SupervisorError> {
         self.stop(StopReason::Restart).await?;
-        self.update(|state| {
-            state.halt = None;
-            // Our own respawn: a startup still waiting on the old child hands over to a new one.
-            state.restart_generation += 1;
-            state.respawning = true;
-        });
+        self.update(|state| state.halt = None);
         self.ensure_ready().await
     }
 
@@ -47,8 +42,6 @@ impl Inner {
             state.last_error = None;
             state.last_exit = None;
             state.phase = Phase::Idle;
-            state.restart_generation += 1;
-            state.respawning = true;
         });
         self.ensure_ready().await
     }
@@ -63,6 +56,7 @@ impl Inner {
             state.poll_epoch += 1;
             state.poll_active = false;
             state.respawning = false;
+            state.last_stop = Some(reason);
             state.attached = None;
         });
         let running = self.read(|state| {
