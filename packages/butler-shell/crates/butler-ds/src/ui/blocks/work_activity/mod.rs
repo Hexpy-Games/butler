@@ -13,7 +13,7 @@ use gpui::{
 };
 
 pub use disclosure::WorkActivityDisclosure;
-pub use tools::ToolItem;
+pub use tools::{ToolDetails, ToolItem};
 
 use crate::tokens::{Color, Length};
 use crate::ui::context::Ds;

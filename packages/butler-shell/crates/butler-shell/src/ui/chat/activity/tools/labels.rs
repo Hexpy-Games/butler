@@ -301,6 +301,50 @@ pub(super) fn summary_label(row: &ProgressRow, lang: Lang) -> String {
     toolchain_label(row, lang)
 }
 
+/// toolchainGroupLabel: the noun a tool row is counted under in a group's summary.
+pub(super) fn group_label(row: &ProgressRow, lang: Lang) -> String {
+    let name = nonempty(row.safe_tool_name.as_deref());
+    if name == Some("ask_user") {
+        return public_operation_title("ask_user", lang).to_owned();
+    }
+    if name == Some("delegate_to_worker") {
+        return text(lang, "st.workerCall").to_owned();
+    }
+    if row.bridge_phase.as_deref() == Some("btcc_operation") {
+        let key = match name {
+            Some("web_search") => "st.search",
+            Some("web_read" | "browser_read" | "read_file" | "list_files" | "grep_files") => {
+                "st.lookup"
+            }
+            Some("edit_file" | "write_file") => "st.edit",
+            Some("run_command") => "st.command",
+            _ => return public_tool_label(row, lang),
+        };
+        return text(lang, key).to_owned();
+    }
+    let tool = row.safe_tool_name.as_deref().map(str::trim);
+    let kind = row.kind.as_deref();
+    if kind == Some("searched") || tool == Some("Web search") {
+        return text(lang, "st.search").to_owned();
+    }
+    if tool == Some("Bash") {
+        return "Bash".to_owned();
+    }
+    match kind {
+        Some("ran_command") => return text(lang, "st.command").to_owned(),
+        Some("read") => return text(lang, "st.read").to_owned(),
+        Some("edited") => return text(lang, "st.edit").to_owned(),
+        _ => {}
+    }
+    if tool.is_some_and(|tool| !tool.is_empty()) {
+        return public_tool_label(row, lang);
+    }
+    if kind == Some("dispatch") {
+        return text(lang, "tool.fallback").to_owned();
+    }
+    text(lang, "st.review").to_owned()
+}
+
 /// The `btcc_operation` branch of toolchainSummaryLabel.
 fn operation_label(row: &ProgressRow, lang: Lang) -> String {
     if nonempty(row.safe_input_label.as_deref()).is_some() {

@@ -1,6 +1,6 @@
 //! `TurnActivityTimeline`, `TurnActivityPanel`, `TurnActivityBlock`, `TurnActivityPending`.
 use butler_ds::ui::Icon;
-use butler_ds::ui::blocks::work_activity::WorkActivityBlock;
+use butler_ds::ui::blocks::work_activity::{ToolItem, WorkActivityBlock};
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::collapsible::Collapsible;
 use butler_ds::ui::context::{Ds, Lang};
@@ -12,10 +12,10 @@ use gpui::{
     Window, div, px,
 };
 
-use super::blocks::{content_x, locale, locale_of, work_blocks};
+use super::blocks::{locale, locale_of, work_blocks};
 use super::is_general_chat;
 use super::status::current_turn_status;
-use super::tools::{is_browser_step, tool_column};
+use super::tools::{is_browser_step, tool_items};
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::decisions::{browser_step_still, turn_decision_row};
 use crate::ui::source::wire::ProgressRow;
@@ -134,9 +134,13 @@ fn collapsed_step(
     let goal = t.goal.filter(|_| activities.len() == 1).map(str::to_owned);
     // The current step folds away with its spacing when the turn settles; the header stays.
     let item_key: SharedString = latest.id.clone().into();
-    let tools = activity_tools(&latest, turn_id, t, window, cx);
-    let step = RollingSwap::new(format!("{key}-swap"), item_key, move |_, cx| {
+    // The block and its tools swap together; the frame owns what it builds them from.
+    let view = t.shared.clone();
+    let turn = turn_id.map(str::to_owned);
+    let step = RollingSwap::new(format!("{key}-swap"), item_key, move |window, cx| {
+        let tools = tool_items(&latest.operations, None, turn.as_deref(), &view, window, cx);
         activity_block(&latest, (false, false), goal.as_deref(), Ds::get(cx).lang())
+            .tools(tools)
             .into_any_element()
     })
     .motion(live);
@@ -145,7 +149,6 @@ fn collapsed_step(
             browser_step_still(&turn, &call, &result, None, window, cx)
         });
     let gap = still.is_some().then(|| div().h(Space::Sm.px(Ds::get(cx))));
-    let step = Stack::new().gap(Space::Xs).child(step).children(tools);
     let step = Stack::new().gap(Space::None).children(gap).child(step);
     Some(
         Stack::new()
@@ -193,16 +196,8 @@ pub(super) fn activity_tools(
     t: &TranscriptCtx,
     window: &mut Window,
     cx: &mut App,
-) -> Option<AnyElement> {
-    tool_column(
-        &activity.operations,
-        None,
-        turn,
-        content_x(true),
-        t,
-        window,
-        cx,
-    )
+) -> Vec<ToolItem> {
+    tool_items(&activity.operations, None, turn, t.view, window, cx)
 }
 
 /// `ActivityBlock` of TurnActivityBlock.tsx: a compact work activity with its operations.
@@ -216,14 +211,12 @@ fn activity_view(
 ) -> AnyElement {
     let lang = Ds::get(cx).lang();
     let tools = activity_tools(activity, turn, t, window, cx);
-    Stack::new()
-        .gap(Space::Xs)
-        .child(activity_block(activity, (connected, false), goal, lang))
-        .children(tools)
+    activity_block(activity, (connected, false), goal, lang)
+        .tools(tools)
         .into_any_element()
 }
 
-/// `ActivityBlock` of TurnActivityBlock.tsx without its toolchain.
+/// `ActivityBlock` of TurnActivityBlock.tsx; the caller adds its toolchain.
 pub(super) fn activity_block(
     activity: &PhaseActivity,
     (connected, live): (bool, bool),
