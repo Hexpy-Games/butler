@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useWindowDimensions, View } from "react-native";
+import { Platform, useWindowDimensions, View } from "react-native";
 import { useTokens } from "../../design/useTokens";
 import { Badge, UnreadDot } from "../Badge";
 import { Button, IconButton, type ButtonVariant } from "../Button";
@@ -291,13 +291,16 @@ function LiveSheet({ initial }: { initial: boolean }) {
   );
 }
 
+// A real Android sheet opens in a Modal, where nothing can blur: no blur target there.
+const Backdrop = Platform.OS === "ios" ? GlassBackdrop : ({ children, overlay }: React.ComponentProps<typeof GlassBackdrop>) => <View>{children}{overlay}</View>;
+
 function SheetSection({ state }: { state?: string }) {
   const actions = (s: Strings) => <><Button label={s.cancel} variant="ghost" onPress={noop} /><Button label={s.action} onPress={noop} /></>;
   const panel = (name: string, props: Partial<React.ComponentProps<typeof SheetPanel>>, s: Strings = en) => (
     <Cell key={name} name={name}>
-      <GlassBackdrop overlay={<View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}><SheetPanel title={s.sentence} closeLabel={s.close} onClose={noop} actions={actions(s)} {...props} /></View>}>
+      <Backdrop overlay={<View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}><SheetPanel title={s.sentence} closeLabel={s.close} onClose={noop} actions={actions(s)} {...props} /></View>}>
         {Array.from({ length: 12 }, (_, i) => <Text key={i}>{`${en.note}. ${long.note}. ${en.sentence}. ${long.sentence}.`}</Text>)}
-      </GlassBackdrop>
+      </Backdrop>
     </Cell>
   );
   const lines = Array.from({ length: 30 }, (_, i) => <Text key={i}>{`${i + 1}. ${en.note}`}</Text>);
