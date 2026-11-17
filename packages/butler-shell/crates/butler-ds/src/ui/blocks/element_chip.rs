@@ -107,15 +107,18 @@ impl RenderOnce for ElementChip {
                 .text_color(ds.color(color))
                 .child(text)
         };
-        let text = Tooltip::new((self.id.clone(), "tip")).label(tip).fill().child(
-            div()
-                .flex()
-                .flex_col()
-                .flex_auto()
-                .min_w_0()
-                .child(line_text(self.title.clone(), Color::TextPrimary))
-                .child(line_text(self.site, Color::TextTertiary)),
-        );
+        let text = Tooltip::new((self.id.clone(), "tip"))
+            .label(tip)
+            .fill()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_auto()
+                    .min_w_0()
+                    .child(line_text(self.title.clone(), Color::TextPrimary))
+                    .child(line_text(self.site, Color::TextTertiary)),
+            );
         let removable = self.remove.is_some();
         let height = ds.len(Length::ControlHeightMd) + ds.len(Length::SpaceSm) - strong;
         let mut chip = div()
