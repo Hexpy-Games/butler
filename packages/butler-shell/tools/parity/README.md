@@ -209,6 +209,8 @@ bun packages/butler-shell/tools/parity/ds-layout-diff.ts --web $TMPDIR/ds-layout
   --gpui $TMPDIR/ds-layout/gpui/1280x800-light > $TMPDIR/ds-layout/diff.txt
 ```
 
+On Linux `ds-layout.ts` launches Chromium with `--font-render-hinting=none` so web text widths match macOS and gpui (hinted advances on headless Linux Chromium widen text and add false rows).
+
 `diff.txt` holds one JSON line per matched part (`dx dy dw dh` are gpui minus web), a summary line per story,
 the totals line and two tables: (A) stories whose canvas is off by more than 0.5 px, largest first, and
 (B) stories with equal control counts whose controls are off by more than 0.5 px (first offending control).
