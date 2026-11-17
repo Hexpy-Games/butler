@@ -100,6 +100,7 @@ async fn the_user_takes_an_idle_agent_page_by_input() -> Result<(), HarnessError
         rect["x"].as_f64().unwrap() + rect["width"].as_f64().unwrap() / 2.0,
         rect["y"].as_f64().unwrap() + rect["height"].as_f64().unwrap() / 2.0,
     );
+    // `page-click` maps window pixels x window zoom, but the observed rect is in page coordinates: this runs at zoom 1.
     // The Agent's tab is the shown one; a press in its input makes the user the holder.
     complete_onboarding(&s.gw).await?;
     s.shell(&[
@@ -117,6 +118,11 @@ async fn the_user_takes_an_idle_agent_page_by_input() -> Result<(), HarnessError
         let refused = call(&admin, "general", "tab.observe", tab, json!({})).await?;
         if refused["status"] == "not_dispatched" {
             assert_eq!(refused["reason"], "user_control", "{refused}");
+            let listed = call(&admin, "general", "tabs.list", &Value::Null, json!({})).await?;
+            let held = listed["tabs"]
+                .as_array()
+                .and_then(|t| t.iter().find(|t| t["id"] == *tab));
+            assert_eq!(held.map(|t| &t["holder"]), Some(&json!("user")), "{listed}");
             break;
         }
         assert!(std::time::Instant::now() < deadline, "{refused}");
@@ -124,6 +130,7 @@ async fn the_user_takes_an_idle_agent_page_by_input() -> Result<(), HarnessError
     }
     // The user's text still reaches the page.
     s.shell(&["type typed"]).await?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
         let listed = call(&admin, "general", "tabs.list", &Value::Null, json!({})).await?;
         if listed["tabs"][0]["title"] == "typed" {
