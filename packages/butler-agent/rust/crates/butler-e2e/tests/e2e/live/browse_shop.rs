@@ -52,7 +52,7 @@ async fn run_shop(
 ) -> Result<Value, HarnessError> {
     live::spend_turn()?;
     let priced = published_price(&provider.choice.model);
-    let s = Setup::new("LIVE-BROWSE-SHOP")?
+    let mut s = Setup::new("LIVE-BROWSE-SHOP")?
         .live(provider)
         .access(Access::AskExceptReads)
         .env("BUTLER_BROWSER_HEADLESS", "on")
@@ -79,38 +79,73 @@ async fn run_shop(
     let prompt = format!(
         "At {url}, compare the two products and add the cheaper one to the cart. Continue to checkout and request approval to place the order, showing the exact action. Do not approve or place the order."
     );
+    let started = std::time::Instant::now();
     let id = s.gw.say_turn("general", &prompt).await?;
-    let turn =
+    let waited =
         s.gw.wait_turn(
             "general",
             &id,
             &["waiting_for_form", "delivered", "failed"],
             Duration::from_secs(300),
         )
-        .await?;
-    let success = verify(&s, &turn).await?;
+        .await;
+    let wall_seconds = started.elapsed().as_secs_f64();
+    let clip = |text: &str| text.chars().take(600).collect::<String>();
+    let (turn, timeout) = match waited {
+        Ok(turn) => (turn, None),
+        Err(error) => (
+            s.gw.turn("general", &id).await?.unwrap_or(Value::Null),
+            Some(clip(&error.to_string())),
+        ),
+    };
+    let success = timeout.is_none() && verify(&s, &turn).await?;
     let usage = s.gw.get("/session-view?session_id=general").await?;
     let usage = &usage.data()["usage"];
     let rounds = rounds(&s, &id)?;
+    let reply =
+        s.gw.messages("general")
+            .await?
+            .into_iter()
+            .rev()
+            .find(|m| m["turn_id"] == id.as_str() && m["role"] == "assistant")
+            .unwrap_or(Value::Null);
     let record = json!({"setting":setting,"run":run,"success":success,"rounds":rounds,
+        "state": if timeout.is_some() { json!("timeout") } else { turn["state"].clone() },
+        "turn_state":turn["state"],"status_label":turn["safe_status_label"],
+        "error_code":turn["safe_error_code"],"timeout_error":timeout,
+        "reply":reply["text"].as_str().map(clip),"reply_status":reply["status"],
+        "reply_error_code":reply["safe_error_code"],
+        "tools":tools(&s, &id)?,"wall_seconds":wall_seconds,
         "executor_requests":usage["by_role"]["browse"]["request_count"].as_u64().unwrap_or(0),
         "input_tokens":usage["input_tokens"],"output_tokens":usage["output_tokens"],
         "list_price_cost":usage["cost"]});
-    assert!(usage["input_tokens"].as_u64().is_some_and(|n| n > 0));
-    assert!(usage["output_tokens"].as_u64().is_some_and(|n| n > 0));
-    // A subscription plan has no list price; require it where the catalog publishes one.
-    if priced {
-        assert_eq!(
-            usage["cost"]["available"], true,
-            "list-price usage required"
-        );
-        assert!(
-            usage["cost"]["usd"].as_f64().is_some(),
-            "list-price USD required"
-        );
+    // A timed-out turn may not have finished a model request yet; usage is
+    // asserted for every run that reached a waited-for state, as before.
+    if timeout.is_none() {
+        assert!(usage["input_tokens"].as_u64().is_some_and(|n| n > 0));
+        assert!(usage["output_tokens"].as_u64().is_some_and(|n| n > 0));
+        // A subscription plan has no list price; require it where the catalog publishes one.
+        if priced {
+            assert_eq!(
+                usage["cost"]["available"], true,
+                "list-price usage required"
+            );
+            assert!(
+                usage["cost"]["usd"].as_f64().is_some(),
+                "list-price USD required"
+            );
+        }
     }
-    // Never allow a card: scenario teardown cancels the pending turn.
-    s.finish().await?;
+    if success {
+        // Never allow a card: scenario teardown cancels the pending turn.
+        s.finish().await?;
+    } else {
+        // Keep the failed sandbox (no mark_success). Stop the agent first so
+        // its browser releases the profile before Drop moves the sandbox.
+        if let Err(error) = s.agent.terminate().await {
+            eprintln!("LIVE-BROWSE-SHOP: agent stop before retention: {error}");
+        }
+    }
     Ok(record)
 }
 
@@ -158,6 +193,24 @@ fn rounds(s: &Scenario, turn: &str) -> Result<u64, HarnessError> {
         [turn],
         |r| r.get(0),
     )?)
+}
+
+/// The turn's tool calls in call order, as `name:status[:error_code]`.
+fn tools(s: &Scenario, turn: &str) -> Result<Vec<String>, HarnessError> {
+    let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
+    let mut query = db.prepare(
+        "SELECT tool_name, status, error_code FROM btcc_guided_tool_calls \
+         WHERE turn_id=?1 ORDER BY started_at, turn_sequence, rowid",
+    )?;
+    let rows = query.query_map([turn], |r| {
+        let (name, status, code): (String, String, Option<String>) =
+            (r.get(0)?, r.get(1)?, r.get(2)?);
+        Ok(match code {
+            Some(code) => format!("{name}:{status}:{code}"),
+            None => format!("{name}:{status}"),
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
 }
 
 /// Whether the catalog publishes a list price for `model` (`provider/model`).
