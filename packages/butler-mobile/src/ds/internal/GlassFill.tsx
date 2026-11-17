@@ -2,7 +2,7 @@ import { createContext, useContext, type ComponentRef, type RefObject } from "re
 import { PixelRatio, Platform, StyleSheet, View } from "react-native";
 import { BlurView } from "expo-blur";
 import { GlassView, isLiquidGlassAvailable } from "expo-glass-effect";
-import type { Tokens } from "../../design/tokens";
+import { alpha, type Tokens } from "../../design/tokens";
 import { useTokens } from "../../design/useTokens";
 
 export interface Radii { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number }
@@ -17,7 +17,7 @@ export const liquidGlass = Platform.OS === "ios" && isLiquidGlassAvailable();
 export const GLASS_BLUR_IOS = 50; // UIVisualEffectView intensity
 export const GLASS_BLUR_DP = 16; // Android fallback blur radius in dp
 
-/** The glass layers: a blur and one uniform tint. Without a blur it is a plain --popover fill. */
+/** The glass layers: a blur and one uniform tint. Without a blur it is a plain, fully opaque --popover fill. */
 export function GlassFill({ radii }: { radii: Radii }) {
   const t = useTokens();
   const target = useContext(GlassTarget);
@@ -41,7 +41,7 @@ export function GlassFill({ radii }: { radii: Radii }) {
     );
   }
   return (
-    <View pointerEvents="none" style={{ ...box, backgroundColor: canBlur ? undefined : t.color("--popover") }}>
+    <View pointerEvents="none" style={{ ...box, backgroundColor: canBlur ? undefined : alpha(t.color("--popover"), 1) }}>
       {canBlur ? (
         <>
           <BlurView

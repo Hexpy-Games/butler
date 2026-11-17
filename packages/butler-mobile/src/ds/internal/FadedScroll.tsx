@@ -1,23 +1,24 @@
-import { useRef, useState, type ComponentRef } from "react";
-import { Platform, ScrollView, View } from "react-native";
-import { BlurTargetView, BlurView } from "expo-blur";
+import { useRef, useState, type ComponentType, type ReactElement } from "react";
+import { Platform, ScrollView, View, type ViewProps } from "react-native";
+import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { MaskedView } from "@expo/ui/community/masked-view";
+import MaskedView from "@react-native-masked-view/masked-view";
 import { alpha } from "../../design/tokens";
 import { useTokens } from "../../design/useTokens";
 import { GLASS_BLUR_IOS } from "./GlassFill";
 
-/** A scrolling body whose clipped edges blur on iOS (colour fade on Android), so a cut-off edge signals more content. */
+const Mask = MaskedView as unknown as ComponentType<ViewProps & { maskElement: ReactElement }>; // 0.3.2 class typings predate @types/react 19
+
+/** A scrolling body whose clipped edges fade into the surface (with a blur on iOS), so a cut-off edge signals more content. */
 export function FadedScroll({ children }: { children: React.ReactNode }) {
   const t = useTokens();
-  const target = useRef<ComponentRef<typeof View>>(null);
   const viewport = useRef(0);
   const content = useRef(0);
   const offset = useRef(0);
   const [scrolled, setScrolled] = useState(false);
   const [more, setMore] = useState(false);
   const size = t.length("--tinted-glass-edge-size");
-  const fill = t.color("--popover"); // the Android sheet panel fill (a Modal cannot blur)
+  const fill = alpha(t.color("--popover"), 1); // the opaque Android sheet panel fill (a Modal cannot blur)
   const clear = alpha(fill, 0);
   const blur = Platform.OS === "ios";
   const update = () => {
@@ -30,18 +31,17 @@ export function FadedScroll({ children }: { children: React.ReactNode }) {
       return <LinearGradient pointerEvents="none" colors={side === "top" ? [fill, clear] : [clear, fill]} style={place} />;
     }
     return (
-      <MaskedView
+      <Mask
         pointerEvents="none"
         style={place}
-        maskElement={<LinearGradient colors={side === "top" ? ["black", "transparent"] : ["transparent", "black"]} style={{ flex: 1 }} />}
+        maskElement={<LinearGradient colors={["transparent", "black", "transparent"]} style={{ flex: 1 }} />}
       >
         <BlurView
           style={{ flex: 1 }}
           tint={t.scheme === "dark" ? "systemUltraThinMaterialDark" : "systemUltraThinMaterialLight"}
           intensity={GLASS_BLUR_IOS}
-          blurTarget={target}
         />
-      </MaskedView>
+      </Mask>
     );
   };
   const scroll = (
@@ -64,9 +64,17 @@ export function FadedScroll({ children }: { children: React.ReactNode }) {
       {children}
     </ScrollView>
   );
+  // iOS: the content itself fades to transparent at a clipped edge, so the surface underneath shows and nothing ends in a cut.
+  const mask = (
+    <View style={{ flex: 1 }}>
+      {scrolled ? <LinearGradient colors={["transparent", "black"]} style={{ height: size }} /> : null}
+      <View style={{ flex: 1, backgroundColor: "black" }} />
+      {more ? <LinearGradient colors={["black", "transparent"]} style={{ height: size }} /> : null}
+    </View>
+  );
   return (
     <View style={{ flexShrink: 1 }}>
-      {blur ? <BlurTargetView ref={target} style={{ flexShrink: 1 }}>{scroll}</BlurTargetView> : scroll}
+      {blur ? <Mask style={{ flexShrink: 1 }} maskElement={mask}>{scroll}</Mask> : scroll}
       {scrolled ? edge("top") : null}
       {more ? edge("bottom") : null}
     </View>
