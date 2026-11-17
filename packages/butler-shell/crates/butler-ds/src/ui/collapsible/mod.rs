@@ -6,9 +6,8 @@
 //! is layout, as in CSS: while it moves, each frame lays out the eased height, so the parents
 //! (a card's glass, a toolbar below) follow it. The clip paints `--focus-ring-room` past the box
 //! (`overflow-clip-margin`) without taking layout room.
-//! Reduced motion: no frame loop and no timer. The height snaps at once (opening mounts and
-//! fades in over `--motion-fast`, closing unmounts or collapses in the same pass), and the exit
-//! handler of closed content runs deferred.
+//! Reduced motion: the height never animates; opening snaps it and fades in over
+//! `--motion-fast`, closing fades out first and only then snaps shut.
 mod clip;
 mod list;
 
@@ -120,9 +119,7 @@ impl State {
         }
     }
 
-    /// Whether a pending reveal starts (a timer arms), whether closed content has exited at
-    /// once (reduced motion), and the timing.
-    fn step(&mut self, open: bool, keep: KeepMounted, ds: &Ds) -> (bool, bool, Timing) {
+    fn step(&mut self, open: bool, ds: &Ds) -> (bool, Timing) {
         let reduced = ds.reduced_motion();
         let timing = if open {
             Timing::token(
@@ -145,19 +142,12 @@ impl State {
             self.started = false;
             self.generation += 1;
         }
-        let exited = reduced && self.phase == Phase::Closing && keep == KeepMounted::No;
-        if reduced && self.phase != Phase::Settled {
-            self.phase = Phase::Settled;
-            self.mounted = open || keep != KeepMounted::No;
-            self.generation += 1;
-        }
         let start = !self.started
             && self.phase != Phase::Settled
             && (self.phase == Phase::Closing || self.natural.get().is_some());
         self.started |= start;
-        (start, exited, timing)
+        (start, timing)
     }
-
     fn advance(
         state: &gpui::Entity<Self>,
         keep: KeepMounted,
@@ -214,7 +204,9 @@ impl RenderOnce for Collapsible {
         let state = window.use_keyed_state(self.id.clone(), cx, move |_, _| {
             State::new(open, keep, appear)
         });
-        let (start, exited, timing) = state.update(cx, |s, cx| s.step(open, keep, Ds::get(cx)));
+        let ds = Ds::get(cx);
+        let reduced = ds.reduced_motion();
+        let (start, timing) = state.update(cx, |s, cx| s.step(open, Ds::get(cx)));
         let s = state.read(cx);
         let (mounted, phase, started) = (s.mounted, s.phase, s.started);
         let natural = s.natural.clone();
@@ -226,9 +218,6 @@ impl RenderOnce for Collapsible {
             window,
             cx,
         );
-        if exited && let Some(handler) = self.on_exit.clone() {
-            window.defer(cx, move |window, cx| handler(window, cx));
-        }
         if start {
             State::advance(&state, keep, &timing, self.on_exit, window, cx);
         }
@@ -248,8 +237,9 @@ impl RenderOnce for Collapsible {
                     .map(|child| strut::scope(true, child)),
             );
         let mut frame = div().id((self.id, "height")).min_h_0().child(content);
-        let collapsed = !open || (phase == Phase::Opening && !started);
-        if phase != Phase::Settled && opacity.moving(&timing) {
+        let collapsed =
+            !(open || reduced && phase == Phase::Closing) || (phase == Phase::Opening && !started);
+        if !reduced && phase != Phase::Settled && opacity.moving(&timing) {
             // CSS transitions height and opacity on one curve: the height is the natural height
             // at the opacity's eased progress, laid out again each frame until it lands.
             let natural = natural.get().unwrap_or(0.);
