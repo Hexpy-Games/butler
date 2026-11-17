@@ -24,7 +24,12 @@ pub(super) async fn execute(
         }
     };
     if owner.unattended() {
-        return encode(&super::turn_guard::unattended_question());
+        if owner.taint() != butler_turn::btcc::TurnTaint::ConnectorEvent {
+            return encode(&super::turn_guard::unattended_question());
+        }
+        if wait {
+            return encode(&super::turn_guard::unattended_question_needs_nonblocking());
+        }
     }
     let admitted = owner
         .authority

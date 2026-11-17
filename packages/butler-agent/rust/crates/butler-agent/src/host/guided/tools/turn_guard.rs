@@ -242,6 +242,16 @@ pub(super) fn unattended_question() -> Value {
     }})
 }
 
+/// A connector-event run cannot wait, but may leave an open question card.
+pub(super) fn unattended_question_needs_nonblocking() -> Value {
+    json!({"ok":false,"error":{
+        "code":"unattended_question_needs_nonblocking",
+        "message":"This run cannot wait for the user's answer.",
+        "recoverable":true,
+        "next_action":super::feedback::repair("unattended_question_needs_nonblocking"),
+    }})
+}
+
 /// A denied scheduled action needs a different mode, rather than a waiting review.
 pub(super) async fn unattended_denial(
     owner: &GuidedTools,

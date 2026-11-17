@@ -138,3 +138,30 @@ pub(crate) fn find_spec(value: &Value) -> Option<Value> {
         _ => None,
     }
 }
+
+pub(super) fn ask(body: &Value) -> Option<ResponseRecord> {
+    if body
+        .to_string()
+        .contains("Answers to your deferred questions")
+    {
+        return send(body);
+    }
+    let input = body["input"].as_array()?;
+    let done = |id: &str| {
+        input
+            .iter()
+            .any(|v| v["type"] == "function_call_output" && v["call_id"] == id)
+    };
+    let (id, wait) = if !done("ask_wait") {
+        ("ask_wait", true)
+    } else if !done("call_ask") {
+        ("call_ask", false)
+    } else {
+        return Some(answer());
+    };
+    let mut args = crate::ask_user::stub::questions();
+    args["wait"] = wait.into();
+    Some(response(
+        &json!({"type":"function_call","id":id,"call_id":id,"name":"ask_user","status":"completed","arguments":args.to_string()}),
+    ))
+}

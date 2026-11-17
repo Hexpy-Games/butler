@@ -20,6 +20,7 @@ pub(super) const SOLVABLE: &[&str] = &[
     "schedule_signin_off",
     "schedule_payment_off",
     "schedule_question_unavailable",
+    "unattended_question_needs_nonblocking",
     "delegation_reviewed_plan_required",
     "delegation_allowed_effects_required",
     "delegation_mutation_scope_required",
@@ -184,6 +185,9 @@ pub(super) fn repair(code: &str) -> &'static str {
         }
         "schedule_question_unavailable" => {
             return "This scheduled run cannot ask the user. Proceed on a reasonable assumption you state in the report, or skip the step and report what needs the user.";
+        }
+        "unattended_question_needs_nonblocking" => {
+            return "Call ask_user again with wait false: the card stays open and its answer arrives as a later message. Otherwise proceed without the answer.";
         }
         _ => {}
     }

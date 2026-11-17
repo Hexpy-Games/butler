@@ -103,3 +103,79 @@ async fn review_attended_origin_requires_card_and_user_full_access_still_execute
     );
     s.finish().await
 }
+
+#[tokio::test]
+async fn review_connector_event_question_card_answer_starts_attended_turn()
+-> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let setup = setup("PC-ORIGIN-QUESTION")?.access(Access::AskAlways);
+    let root = package(&setup.sandbox.home, false)?;
+    let s = setup.start().await?;
+    install(&s, &root).await?;
+    let id = connect(&s, "immediate", 10.0).await?;
+    account(&s, &id, "connected").await?;
+    s.provider()?.set_chat_responder(stub::ask);
+    emit(&s, &id, vec![event("asked")]).await?;
+    count(
+        &s,
+        "SELECT count(*) FROM turns WHERE state IN ('delivered','failed','cancelled')",
+        1,
+    )
+    .await?;
+    let connection = db(&s);
+    let turns: i64 = connection.query_row("SELECT count(*) FROM turns WHERE json_extract(execution_controls_json,'$.schedule_run.unattended')=1 AND json_extract(execution_controls_json,'$.schedule_run.connector_event')=1", [], |r| r.get(0))?;
+    assert_eq!(turns, 1);
+    let (turn, state): (String, String) = connection.query_row("SELECT id,state FROM turns WHERE json_extract(execution_controls_json,'$.schedule_run.unattended')=1 AND json_extract(execution_controls_json,'$.schedule_run.connector_event')=1", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    assert_eq!(state, "delivered");
+    let message: String = connection.query_row(
+        "SELECT id FROM messages WHERE chat_id='general' AND turn_id=?1 AND role='assistant'",
+        [&turn],
+        |r| r.get(0),
+    )?;
+    drop(connection);
+    assert!(
+        s.provider()?
+            .requests()
+            .iter()
+            .any(|r| r["input"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["type"] == "function_call_output"
+                    && item["call_id"] == "ask_wait"
+                    && item["output"].as_str().is_some_and(
+                        |output| output.contains("unattended_question_needs_nonblocking")
+                    )))
+    );
+    let pending = s.gw.get("/sessions/general/pending-asks").await?;
+    assert_eq!(pending.status, 200, "{}", pending.text);
+    let asks = pending.data()["asks"].as_array().unwrap();
+    assert_eq!(asks.len(), 1);
+    assert_eq!(asks[0]["source_message_id"], message);
+    let questions = crate::ask_user::stub::questions();
+    let first = &questions["questions"][0];
+    crate::ask_user::reply(&s, &asks[0], json!({"status":"answered","answers":[{"id":first["id"],"selected":[first["options"][0]["id"]],"custom":null,"skipped":false}]})).await?;
+    count(&s, "SELECT count(*) FROM turns WHERE chat_id='general'", 2).await?;
+    let connection = db(&s);
+    let followup: String = connection.query_row(
+        "SELECT id FROM turns WHERE chat_id='general' AND id!=?1",
+        [&turn],
+        |r| r.get(0),
+    )?;
+    let queued: i64 = connection.query_row("SELECT count(*) FROM session_queued_messages WHERE chat_id='general' AND json_extract(control_resolution_json,'$.message_origin')='question_followup'", [], |r| r.get(0))?;
+    assert_eq!(queued, 1);
+    drop(connection);
+    let waited =
+        s.gw.wait_turn(
+            "general",
+            &followup,
+            &["waiting_for_form", "failed", "delivered"],
+            Duration::from_secs(30),
+        )
+        .await?;
+    assert_eq!(waited["state"], "waiting_for_form", "{waited}");
+    let cards = serde_json::to_string(&s.gw.approval_requests("general").await?)?;
+    assert!(cards.contains("mcp:source/events/send"), "{cards}");
+    assert!(!data(&s).join(format!("{id}-calls")).exists());
+    s.finish().await
+}
