@@ -95,6 +95,11 @@ impl ResolvedInstallation {
             .map_or_else(|| self.installation_root.clone(), Path::to_path_buf)
     }
 
+    /// The App sets this for a Store package install, whose updates come from the Store.
+    pub(crate) fn store_build(&self) -> bool {
+        std::env::var("BUTLER_APP_STORE_BUILD").as_deref() == Ok("1")
+    }
+
     pub(crate) fn app_version(&self) -> Option<String> {
         if let Ok(value) = std::env::var("BUTLER_APP_VERSION")
             && !value.trim().is_empty()

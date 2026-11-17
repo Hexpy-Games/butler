@@ -58,6 +58,8 @@ export function UpdatesSettings() {
     if (unchecked) void check(true);
   }, [unchecked, check]);
 
+  const storeManaged = view?.components.some((item) => item.updater_owner === "store") ?? false;
+
   const rows = useMemo(
     () =>
       UPDATE_COMPONENTS.map((component) =>
@@ -69,7 +71,7 @@ export function UpdatesSettings() {
 
   return (
     <SettingsPage>
-      <UpdatePreviewSwitch disabled={loading || applying !== null} onChanged={check} />
+      {!storeManaged && <UpdatePreviewSwitch disabled={loading || applying !== null} onChanged={check} />}
       <SettingsSection
         id="updates"
         kind="list"

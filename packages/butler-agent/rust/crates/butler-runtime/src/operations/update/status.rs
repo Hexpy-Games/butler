@@ -173,7 +173,7 @@ impl AppUpdateService {
     }
 
     /// What is known of the installed version when the manifest is not.
-    fn unchecked_artifact(&self, request: &UpdateRequest, version: &str) -> AppArtifact {
+    pub(super) fn unchecked_artifact(&self, request: &UpdateRequest, version: &str) -> AppArtifact {
         AppArtifact {
             version: version.into(),
             channel: request.channel.clone().unwrap_or_else(|| "stable".into()),
@@ -211,6 +211,8 @@ fn error_is_calm(code: &str) -> bool {
             "update_signature_unsupported"
                 | "update_http_unavailable"
                 | "update_artifact_source_invalid"
+                | "update_store_unassociated"
+                | "update_store_unavailable"
         )
 }
 
