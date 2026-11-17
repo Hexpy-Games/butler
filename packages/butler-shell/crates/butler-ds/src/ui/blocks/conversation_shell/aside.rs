@@ -235,6 +235,13 @@ fn layer(
         .read(cx)
         .clone()
         .filter(|_| alpha.target() > 0. || alpha.moving(&timing))?;
+    // The exit ends on compositor ticks, which re-render nothing: wake this view at its end so
+    // the leaving aside is removed then, not at some later unrelated render.
+    if !on && alpha.moving(&timing) {
+        let elapsed = gpui::animation_time_ms().wrapping_sub(alpha.start_ms);
+        let left = timing.ms().saturating_sub(elapsed) + 1;
+        crate::ui::motion::wake_after(window, cx, std::time::Duration::from_millis(left.into()));
+    }
     let scroller = scroll(slot, layout, content(layout), window, cx);
     let panel = panel(
         slot,
