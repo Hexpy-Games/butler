@@ -208,15 +208,16 @@ fn assert_surface(request: &Value) {
         })
         .filter_map(|tool| tool["name"].as_str())
         .collect();
-    for name in ["browse", "browser_act", "web_search", "browser_read"] {
-        assert!(names.contains(&name), "{names:?}");
-    }
     for name in [
-        "browser_open",
-        "browser_observe",
-        "browser_close",
+        "browse",
+        "browser_act",
+        "web_search",
+        "browser_read",
         "image_collect",
     ] {
+        assert!(names.contains(&name), "{names:?}");
+    }
+    for name in ["browser_open", "browser_observe", "browser_close"] {
         assert!(!names.contains(&name), "{names:?}");
     }
 }

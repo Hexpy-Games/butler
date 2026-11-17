@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Kills the writer on every way out of the scenario.
 struct Writer(Child);
@@ -403,11 +403,7 @@ fn a_killed_writer_leaves_an_openable_vault_with_every_acknowledged_save() -> Ou
     let identity = fixture.identity()?;
     let auth = fixture.folder.path().join("auth");
     let mut acknowledged = 0_u64;
-    // Keeps killing until the leftovers prove both writes of a save were cut
-    // short: the copy to `.prev`, and the new `vault.age`.
-    let mut rounds = 0_u32;
-    while !both_writes_interrupted(fixture.folder.path())? || rounds < 8 {
-        assert!(rounds < 300, "no kill landed inside a save");
+    for rounds in 0..8_u32 {
         let mut writer = Writer(
             Command::new(fixture_binary("e2e-vault")?)
                 .arg("write")
@@ -433,12 +429,49 @@ fn a_killed_writer_leaves_an_openable_vault_with_every_acknowledged_save() -> Ou
         for (path, bytes) in files_under(fixture.folder.path())? {
             assert!(!contains(&bytes, b"e2e-vault-secret"), "{}", path.display());
         }
-        rounds += 1;
     }
-    eprintln!("vault crash scenario: {rounds} kills, {acknowledged} saves acknowledged");
+    kill_inside_each_write(&fixture, &auth, acknowledged)?;
+    eprintln!("vault crash scenario: {acknowledged} saves acknowledged");
     // The dead writers' locks are gone, and their leftovers are ignored.
     fixture.vault.put(item("after", "1"))?;
     assert!(fixture.vault.get("after")?.is_some());
+    Ok(())
+}
+
+/// Kills a writer held inside each write of a save: the copy to `.prev`,
+/// then the new `vault.age`. Both leave a temporary the vault ignores.
+fn kill_inside_each_write(fixture: &Fixture, auth: &Path, acknowledged: u64) -> Outcome {
+    let identity = fixture.identity()?;
+    for (index, file) in ["vault.age.prev", "vault.age"].into_iter().enumerate() {
+        let release = fixture.folder.path().join(format!("release-{index}"));
+        let writer = Writer(
+            Command::new(fixture_binary("e2e-vault")?)
+                .arg("write")
+                .arg(auth)
+                .arg(PASSWORD)
+                .arg(file)
+                .env("BUTLER_E2E_HOLD_POINT", format!("before_rename:{file}"))
+                .env("BUTLER_E2E_HOLD_RELEASE", &release)
+                .stdout(Stdio::null())
+                .spawn()?,
+        );
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while !release.with_extension("held").exists() {
+            assert!(
+                Instant::now() < deadline,
+                "writer never reached the {file} write"
+            );
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        drop(writer);
+        let payload = fixture.vault.read()?;
+        assert!(payload.seq > acknowledged);
+        age::decrypt(&identity, &std::fs::read(fixture.paths.previous())?)?;
+        for (path, bytes) in files_under(fixture.folder.path())? {
+            assert!(!contains(&bytes, b"e2e-vault-secret"), "{}", path.display());
+        }
+    }
+    assert!(both_writes_interrupted(fixture.folder.path())?);
     Ok(())
 }
 

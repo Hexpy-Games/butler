@@ -30,7 +30,8 @@ pub(super) struct State {
     pub iteration: u32,
     pub empty_recovery_used: bool,
     pub automatic_continuations: u32,
-    /// Answer text cut off at the output token limit, awaiting its continuation.
+    /// Answer text the next round continues: cut off at the output token
+    /// limit, or written beside answer blocks.
     pub cut_answer: String,
     pub answer_continuation: bool,
     pub stop_hook_active: bool,

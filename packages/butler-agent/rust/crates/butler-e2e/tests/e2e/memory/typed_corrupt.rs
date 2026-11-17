@@ -74,6 +74,7 @@ async fn damaged_rule(missing: bool) -> Result<(), HarnessError> {
     let s = start().await?;
     let saved = rules::tool(&s, "general", SAVE, "update_explicit_memory").await?;
     assert_eq!(saved["ok"], true, "{saved}");
+    rules::committed(&s.sandbox.data, &saved).await;
     let rule = rules::active_rules(&s.sandbox.data).pop().unwrap();
     rules::projection(&s.sandbox.data, &rule).await;
     let data = &s.sandbox.data;
@@ -169,6 +170,7 @@ async fn repair(
         std::fs::write(path, "Keep this durable instruction.")?;
         let edited = rules::tool(s, "general", REPAIRED, "update_explicit_memory").await?;
         assert_eq!(edited["ok"], true, "{edited}");
+        rules::committed(data, &edited).await;
         let current = rules::active_rules(data).pop().unwrap();
         assert_eq!(current["record_id"], rule["record_id"]);
         assert_ne!(current["revision"], rule["revision"]);
