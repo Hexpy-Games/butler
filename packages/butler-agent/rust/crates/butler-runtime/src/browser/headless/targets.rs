@@ -4,6 +4,7 @@
 use super::{
     browser::Browser,
     cdp::Cdp,
+    host::{PageHost, open_hosted},
     state::{Shared, Tab},
 };
 use crate::browser::egress::{guard_preview_url, guard_url};
@@ -89,15 +90,17 @@ pub(crate) async fn context(
     owner: &str,
     preview: Option<&str>,
 ) -> Result<String, String> {
-    let (key, proxy) = match preview {
-        Some(id) => (
-            format!("{owner}:preview:{id}"),
-            browser
-                .preview_proxy_url
-                .clone()
-                .ok_or("navigation_denied")?,
-        ),
-        None => (owner.to_owned(), browser.proxy_url.clone()),
+    let key = match preview {
+        Some(id) => format!("{owner}:preview:{id}"),
+        None => owner.to_owned(),
+    };
+    // The App keeps each context's pages apart itself.
+    if browser.host().is_some() {
+        return Ok(key);
+    }
+    let proxy = match preview {
+        Some(_) => browser.preview_proxy_url().ok_or("navigation_denied")?,
+        None => browser.proxy_url().ok_or("browser_unavailable")?,
     };
     if let Some(id) = browser.shared.lock().contexts.get(&key).cloned() {
         return Ok(id);
@@ -158,30 +161,58 @@ pub(crate) async fn create(
 }
 
 /// The Butler-owned page that draws marks and encodes images.
-pub(crate) async fn utility(cdp: &Arc<Cdp>, shared: &Shared) -> Result<String, String> {
+pub(crate) async fn utility(
+    cdp: &Arc<Cdp>,
+    shared: &Shared,
+    host: Option<&Arc<dyn PageHost>>,
+) -> Result<String, String> {
     if let Some(session) = shared.lock().utility.clone() {
         return Ok(session);
     }
-    let created = cdp
-        .send(
-            "Target.createBrowserContext",
-            json!({"disposeOnDetach":true}),
-            None,
-        )
-        .await?;
-    let context = created["browserContextId"]
-        .as_str()
-        .unwrap_or("")
-        .to_owned();
-    let (_, session) = create(cdp, shared, &context).await?;
-    cdp.send("Runtime.runIfWaitingForDebugger", json!({}), Some(&session))
-        .await?;
-    let mut state = shared.lock();
-    if let Some(existing) = state.utility.clone() {
-        return Ok(existing);
+    let context = if host.is_some() {
+        "butler:utility".to_owned()
+    } else {
+        let created = cdp
+            .send(
+                "Target.createBrowserContext",
+                json!({"disposeOnDetach":true}),
+                None,
+            )
+            .await?;
+        created["browserContextId"]
+            .as_str()
+            .unwrap_or("")
+            .to_owned()
+    };
+    let (_, session) = match host {
+        Some(host) => open_hosted(host, "butler:utility", "signed_out", &context, true).await?,
+        None => create(cdp, shared, &context).await?,
+    };
+    if let Err(error) = cdp
+        .send("Runtime.runIfWaitingForDebugger", json!({}), Some(&session))
+        .await
+    {
+        if let Some(host) = host {
+            let _ = host.call("page.close", json!({"tab":session})).await;
+        }
+        return Err(error);
     }
-    state.utility = Some(session.clone());
-    Ok(session)
+    let existing = {
+        let mut state = shared.lock();
+        let existing = state.utility.clone();
+        if existing.is_none() {
+            state.utility = Some(session.clone());
+        }
+        existing
+    };
+    let Some(existing) = existing else {
+        return Ok(session);
+    };
+    // The App's page of the losing caller would otherwise stay open.
+    if let Some(host) = host {
+        let _ = host.call("page.close", json!({"tab":session})).await;
+    }
+    Ok(existing)
 }
 
 /// Room for one more conversation tab: when every tab memory allows is open,
@@ -210,16 +241,28 @@ pub(crate) async fn close(browser: &Browser, id: &str) {
     let Some(tab) = removed else {
         return;
     };
+    close_target(browser, &tab.target, &tab.session).await;
+    forget(browser, &tab).await;
+}
+
+/// Closes one page: the browser's target, or the App's page (its tab id is the session).
+pub(crate) async fn close_target(browser: &Browser, target: &str, session: &str) {
+    if let Some(host) = browser.host() {
+        let _ = host.call("page.close", json!({"tab":session})).await;
+        return;
+    }
     let _ = browser
         .cdp
-        .send("Target.closeTarget", json!({"targetId":tab.target}), None)
+        .send("Target.closeTarget", json!({"targetId":target}), None)
         .await;
-    forget(browser, &tab).await;
 }
 
 /// A conversation's (or preview's) in-memory context ends with its last tab,
 /// as the App clears a conversation partition.
 pub(crate) async fn forget(browser: &Browser, tab: &Tab) {
+    if browser.host().is_some() {
+        return;
+    }
     let owner_left = {
         let mut state = browser.shared.lock();
         let left = !state.tabs.values().any(|t| t.context == tab.context);
@@ -274,14 +317,14 @@ pub(crate) async fn attached(browser: Arc<Browser>, parent: Option<String>, para
     let info = &params["targetInfo"];
     let target = info["targetId"].as_str().unwrap_or("").to_owned();
     let kind = info["type"].as_str().unwrap_or("");
-    if super::identity::apply(&browser.cdp, &session, kind)
+    if super::identity::apply(&browser.cdp, &session, kind, browser.host().is_some())
         .await
         .is_err()
     {
-        let _ = browser
-            .cdp
-            .send("Target.closeTarget", json!({"targetId":target}), None)
-            .await;
+        // The App's child sessions (frames, workers) are no pages of its own to close.
+        if browser.host().is_none() || kind == "page" {
+            close_target(&browser, &target, &session).await;
+        }
         return;
     }
     match kind {
@@ -354,18 +397,12 @@ pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value)
                     main && t.opener.is_some(),
                     t.popup_parent_url.clone().unwrap_or_default(),
                     t.policy.clone(),
+                    t.held,
                 )
             })
     };
-    let Some((tab, main, popup, parent, policy)) = facts else {
-        let _ = browser
-            .cdp
-            .send(
-                "Fetch.failRequest",
-                json!({"requestId":request,"errorReason":"BlockedByClient"}),
-                Some(&session),
-            )
-            .await;
+    let Some((tab, main, popup, parent, policy, held)) = facts else {
+        fail_request(&browser, &session, &request).await;
         return;
     };
     let popup_violation = popup && !popup_allowed(&policy, &parent, &url);
@@ -385,14 +422,7 @@ pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value)
             .await;
         return;
     }
-    let _ = browser
-        .cdp
-        .send(
-            "Fetch.failRequest",
-            json!({"requestId":request,"errorReason":"BlockedByClient"}),
-            Some(&session),
-        )
-        .await;
+    fail_request(&browser, &session, &request).await;
     if !main {
         return;
     }
@@ -409,9 +439,24 @@ pub(crate) async fn guard(browser: Arc<Browser>, session: String, params: Value)
             entry.changed();
         }
     }
+    // The user is driving this page in the App: the request failed, the tab stays.
+    if held {
+        return;
+    }
     let _ = browser
         .cdp
         .send("Page.stopLoading", json!({}), Some(&session))
         .await;
     close(&browser, &tab).await;
+}
+
+async fn fail_request(browser: &Browser, session: &str, request: &Value) {
+    let _ = browser
+        .cdp
+        .send(
+            "Fetch.failRequest",
+            json!({"requestId":request,"errorReason":"BlockedByClient"}),
+            Some(session),
+        )
+        .await;
 }
