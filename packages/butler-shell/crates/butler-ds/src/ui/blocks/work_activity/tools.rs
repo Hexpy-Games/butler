@@ -20,10 +20,13 @@ use crate::ui::typo::{Tone, Typo, Weight};
 /// The widest a tool control gets. // DS: WorkActivityBlock.module.css:206
 const MAX_WIDTH: f32 = 760.;
 
+/// Content built when a row is first opened.
+pub type BuildDetails = Box<dyn FnOnce(&mut Window, &mut App) -> AnyElement>;
+
 /// What a tool opens: text, or content built when the row is first opened (`details: ReactNode`).
 pub enum ToolDetails {
     Text(SharedString),
-    Built(Box<dyn FnOnce(&mut Window, &mut App) -> AnyElement>),
+    Built(BuildDetails),
 }
 
 /// One tool call of a work activity.
@@ -179,6 +182,18 @@ fn slot(look: Look, child: impl gpui::IntoElement) -> gpui::Div {
         .child(child)
 }
 
+/// The chevron after a nested row's title: down while its details are open.
+fn detail_chevron(open: bool, look: Look, ds: &Ds) -> AnyElement {
+    let icon = if open {
+        Icon::ChevronDown
+    } else {
+        Icon::ChevronRight
+    };
+    slot(look, icon_px(icon, ds.len(Length::IconSizeSm)))
+        .text_color(ds.color(Color::TextTertiary))
+        .into_any_element()
+}
+
 /// The details a row shows: built from the first open on, so a stored output is read only then.
 fn opened_body(
     tool: &mut ToolItem,
@@ -217,16 +232,7 @@ fn tool_row(
     // A non-nested row always reserves the icon slot; a nested one only draws a given icon.
     let lead =
         glyph.or_else(|| (!nested).then(|| div().flex_none().size(look.line()).into_any_element()));
-    let chevron = (nested && has_details).then(|| {
-        let icon = if open {
-            Icon::ChevronDown
-        } else {
-            Icon::ChevronRight
-        };
-        slot(look, icon_px(icon, ds.len(Length::IconSizeSm)))
-            .text_color(ds.color(Color::TextTertiary))
-            .into_any_element()
-    });
+    let chevron = (nested && has_details).then(|| detail_chevron(open, look, ds));
     let name = title(tool.title.clone(), look);
     let head = if nested {
         let row = div()
@@ -248,8 +254,7 @@ fn tool_row(
                 Some(anchor) => row.debug_selector(move || anchor.to_string()),
                 None => row,
             };
-            row
-                .cursor_pointer()
+            row.cursor_pointer()
                 .on_click(toggle(state.clone(), Some(seen.clone())))
                 .into_any_element()
         } else {
