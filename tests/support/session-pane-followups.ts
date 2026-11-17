@@ -54,6 +54,31 @@ export async function verifyCompactContext(context: Locator, capture: (name: str
   assert.equal(await context.locator("[data-context-group]").count(), 5);
 }
 
+export async function verifyResultsList(aside: Locator, capture: (name: string) => Promise<unknown>) {
+  const results = aside.locator('[data-session-section="artifacts"]');
+  await results.scrollIntoViewIfNeeded();
+  assert.equal(await results.getByText("5", { exact: true }).count(), 1);
+  const tiles = results.getByRole("button", { name: /^열기: 데일리 브리핑 11-/u });
+  const names = () => tiles.evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-label")));
+  const toggle = results.locator('[data-test-class="results-toggle"]');
+  assert.deepEqual(await names(), [
+    "열기: 데일리 브리핑 11-15.md", "열기: 데일리 브리핑 11-14.md", "열기: 데일리 브리핑 11-13.md",
+  ]);
+  assert.equal(await toggle.textContent(), "2개 더 보기");
+  assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+  await capture("results-collapsed");
+  await toggle.click();
+  assert.deepEqual(await names(), [
+    "열기: 데일리 브리핑 11-15.md", "열기: 데일리 브리핑 11-14.md", "열기: 데일리 브리핑 11-13.md",
+    "열기: 데일리 브리핑 11-12.md", "열기: 데일리 브리핑 11-11.md",
+  ]);
+  assert.equal(await toggle.textContent(), "접기");
+  assert.equal(await toggle.getAttribute("aria-expanded"), "true");
+  await capture("results-expanded");
+  await toggle.click();
+  assert.equal(await tiles.count(), 3);
+}
+
 export async function verifyDashboardTask(page: Page, epicId: string, capture: (name: string) => Promise<unknown>, server: NativeAppServerHandle) {
   await page.getByRole("button", { name: "버틀러 앱 프로젝트 대시보드", exact: true }).click();
   await page.getByRole("tab", { name: "보드", exact: true }).click();
