@@ -261,6 +261,7 @@ interface ConversationCopy {
     workFailed: (state: "retrying" | "failed" | undefined, reasonCode: string | undefined) => string;
     noThanks: string; soundsGood: string;
     created: (action: string) => string; skipped: (action: string) => string;
+    onceAccepted: (title: string) => string; onceSkipped: (title: string) => string;
     continuing: (action: string) => string; paused: (action: string) => string;
     alreadyHandled: string; failed: string;
     dailyAt: (time: string) => string; weekdaysAt: (time: string) => string;

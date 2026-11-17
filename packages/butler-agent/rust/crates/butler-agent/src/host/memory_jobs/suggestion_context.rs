@@ -52,6 +52,10 @@ impl SuggestionContextBuilder {
         }
     }
 
+    pub(in crate::host) fn patterns(&self) -> PatternRepository {
+        self.patterns.clone()
+    }
+
     pub(in crate::host) async fn context(
         &self,
         run_id: &str,

@@ -33,7 +33,19 @@ function DecisionActions({ busy, onDecide }: { busy: boolean; onDecide: (accept:
   </ButtonContainer>;
 }
 
+async function decideProposal(panel: PatternProposalPanel, candidate: PatternCandidate, accept: boolean) {
+  const view = await api<{ revision: number }>("/memory/pattern-proposals");
+  await api(`/memory/pattern-proposals/${encodeURIComponent(panel.bundle_id)}`, { method: "POST", body: JSON.stringify({
+    pattern_id: candidate.pattern_id, decision: accept ? "accepted" : "declined", expected_revision: view.revision,
+  }) });
+}
+
 function Proposal({ panel, candidate }: { panel: PatternProposalPanel; candidate: PatternCandidate }) {
+  return candidate.action.kind === "once" ? <OnceProposal panel={panel} candidate={candidate} />
+    : <ScheduleProposal panel={panel} candidate={{ ...candidate, action: candidate.action }} />;
+}
+
+function ScheduleProposal({ panel, candidate }: { panel: PatternProposalPanel; candidate: PatternCandidate & { action: { kind: "schedule" } } }) {
   useAppLocale();
   const timezone = useButlerStore(state => state.settings.timezone);
   const [next, setNext] = useState<string>();
@@ -48,21 +60,27 @@ function Proposal({ panel, candidate }: { panel: PatternProposalPanel; candidate
     }
     return () => { alive = false; };
   }, [candidate.state, candidate.automation_id]);
-  const revision = () => api<{ revision: number }>("/memory/pattern-proposals");
-  const decide = (accept: boolean) => { void decision.run(async () => {
-    const view = await revision();
-    await api(`/memory/pattern-proposals/${encodeURIComponent(panel.bundle_id)}`, { method: "POST", body: JSON.stringify({
-      pattern_id: candidate.pattern_id, decision: accept ? "accepted" : "declined", expected_revision: view.revision,
-    }) });
-  }, () => useButlerStore.getState().refreshSessionView("general")); };
+  const decide = (accept: boolean) => { void decision.run(() => decideProposal(panel, candidate, accept),
+    () => useButlerStore.getState().refreshSessionView("general")); };
   const action = initiatedAction(candidate.action.title, candidate.action.schedule, timezone, candidate.state !== "accepted" || Boolean(next), next);
   if (candidate.state !== "pending") return <SettledSuggestion
     text={candidate.state === "accepted" ? copy.created(action) : copy.skipped(action)}
     automationId={candidate.state === "accepted" ? candidate.automation_id : undefined} />;
   return <ComposerDecisionPanel placement="conversation" icon={<Clock3 size="lg" />} data-test-class="initiated-proposal"
-    title={action} details={[candidate.title, patternMeta({ ...candidate, id: candidate.pattern_id })]}
+    title={action} details={[candidate.title, ...(candidate.evidence ? [patternMeta({ ...candidate, evidence: candidate.evidence, id: candidate.pattern_id })] : [])]}
     onOpen={() => openSchedule()}
     actions={<DecisionActions busy={decision.busy} onDecide={decide} />} />;
+}
+
+function OnceProposal({ panel, candidate }: { panel: PatternProposalPanel; candidate: PatternCandidate }) {
+  useAppLocale();
+  const decision = useDecision();
+  const copy = appCopy.conversation.initiated;
+  const decide = (accept: boolean) => { void decision.run(() => decideProposal(panel, candidate, accept),
+    () => useButlerStore.getState().refreshSessionView("general")); };
+  if (candidate.state !== "pending") return <SettledSuggestion
+    text={candidate.state === "accepted" ? copy.onceAccepted(candidate.action.title) : copy.onceSkipped(candidate.action.title)} />;
+  return <DecisionActions busy={decision.busy} onDecide={decide} />;
 }
 
 function Pause({ panel }: { panel: SchedulePausePanel }) {

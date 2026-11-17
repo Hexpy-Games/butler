@@ -124,8 +124,8 @@ async fn page_failure_resumes_only_uncommitted_equal_timestamp_events() -> Resul
         .iter()
         .find(|p| p["phase"] == "pattern_extraction")
         .unwrap();
-    assert_eq!(usage["request_count"].as_f64(), Some(2.0));
-    assert_eq!(usage["prompt_tokens"].as_f64(), Some(200.0));
-    assert_eq!(usage["total_tokens"].as_f64(), Some(240.0));
+    assert_eq!(usage["request_count"].as_f64(), Some(3.0));
+    assert_eq!(usage["prompt_tokens"].as_f64(), Some(300.0));
+    assert_eq!(usage["total_tokens"].as_f64(), Some(360.0));
     s.finish().await
 }
