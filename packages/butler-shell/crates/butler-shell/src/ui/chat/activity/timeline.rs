@@ -353,14 +353,15 @@ const ENGLISH_GB_REGIONS: [&str; 111] = [
 
 /// The languages of Chromium's desktop UI locales (`all_chrome_locales` minus
 /// `extended_locales` in `build/config/locales.gni`, the `locales/*.pak` Electron ships).
-/// Besides `ko` and `en` (mapped to their own text), the languages listed here are drawn 24-hour, which
-/// is right for all but their 12-hour CLDR locales (am, ar, bn, el, es-419, fil, gu, hi, kn, ml,
-/// mr, ms, ta, te, ur, zh-TW), whose AM/PM text Butler does not format. A language Chromium does
-/// not ship has no match and the application locale falls back to `en-US`.
+/// Besides `ko` and `en` (mapped to their own text), the languages listed here are drawn 24-hour,
+/// which is right for all but their 12-hour CLDR locales (am, ar, bn, el, es-419, fil, gu, hi, kn,
+/// ml, mr, ms, ta, te, ur, zh-TW), whose AM/PM text Butler does not format. A language Chromium
+/// does not ship has no match and the application locale falls back to `en-US`.
 const UI_LANGUAGES: [&str; 48] = [
-    "am", "ar", "bg", "bn", "ca", "cs", "da", "de", "el", "es", "et", "fa", "fi", "fil", "fr", "gu",
-    "he", "hi", "hr", "hu", "id", "it", "ja", "kn", "lt", "lv", "ml", "mr", "ms", "nb", "nl", "pl",
-    "pt", "ro", "ru", "sk", "sl", "sr", "sv", "sw", "ta", "te", "th", "tr", "uk", "ur", "vi", "zh",
+    "am", "ar", "bg", "bn", "ca", "cs", "da", "de", "el", "es", "et", "fa", "fi", "fil", "fr",
+    "gu", "he", "hi", "hr", "hu", "id", "it", "ja", "kn", "lt", "lv", "ml", "mr", "ms", "nb", "nl",
+    "pl", "pt", "ro", "ru", "sk", "sl", "sr", "sv", "sw", "ta", "te", "th", "tr", "uk", "ur", "vi",
+    "zh",
 ];
 
 /// The clock of the application locale Chromium resolves from the OS preferred language
