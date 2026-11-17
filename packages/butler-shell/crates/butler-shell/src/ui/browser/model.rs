@@ -146,6 +146,8 @@ pub(crate) struct BrowserState {
     pub(super) active: Option<TabId>,
     pub(super) next_id: u64,
     pub(super) publisher: super::host::Publisher,
+    /// The Agent's calls in flight; hosted pages stay awake while it is above zero and they open.
+    pub(super) calls: u32,
 }
 
 impl Global for BrowserState {}
@@ -162,6 +164,7 @@ impl BrowserState {
             tabs: Vec::new(),
             active: None,
             next_id: 0,
+            calls: 0,
         });
         super::agent_host::start(cx);
         cx.spawn(async move |cx| {
@@ -423,7 +426,7 @@ impl BrowserState {
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == event.page) else {
             return;
         };
-        super::agent_host::page_changed(cx, tab, &event.change);
+        super::agent_host::page_changed(cx, tab, &mut *self.engine, &event.change);
         if event.change.is_quiet() {
             return;
         }

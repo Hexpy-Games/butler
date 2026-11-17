@@ -1,6 +1,7 @@
 //! The session observer dialog (`layout/SessionObserverDialog.tsx`, `Header`, `Body`,
 //! `Controls`, `Timeline`): another session's view over the current one. The shell keeps its
 //! back history (`store.ts:1116-1133`).
+mod body;
 mod controls;
 mod copy;
 
@@ -14,18 +15,20 @@ use butler_ds::ui::dialog::{
 };
 use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Cross, Space, Stack};
+use butler_ds::ui::scroll::ScrollArea;
 use butler_ds::ui::typo::Typo;
 use butler_shell_client::Error;
 use gpui::{
-    AnyElement, AppContext as _, Context, Entity, EventEmitter, InteractiveElement as _,
-    IntoElement as _, ParentElement as _, SharedString, Styled as _, Subscription, Window, div,
+    AnyElement, Context, Entity, EventEmitter, IntoElement as _, ParentElement as _, SharedString,
+    Styled as _, Subscription, Window, div,
 };
 
+use self::body::{Entry, entries};
 use self::copy::{Words, words};
-use crate::ui::chat::Chat;
+use crate::ui::chat::activity::status::StatusLineView;
 use crate::ui::manage::{ManageLive, Topic};
 use crate::ui::source::fetch::{Flight, fetch_if};
-use crate::ui::source::wire::{MessageRecordRole, SessionView, SessionViewStatus};
+use crate::ui::source::wire::{SessionView, SessionViewStatus};
 use crate::ui::widgets::anchor;
 
 /// The most messages one window carries (the gateway's `session-view` maximum).
@@ -44,8 +47,12 @@ pub(crate) struct SessionObserver {
     /// The session topic's revision as of the last read (`useSessionViewSubscription`).
     revision: u64,
     view: Option<Rc<SessionView>>,
-    /// The observed transcript: the conversation's own list over the observed view.
-    chat: Entity<Chat>,
+    /// The rows the body shows of `view`, in order.
+    entries: Vec<Entry>,
+    /// The running turn's live status line.
+    status_line: Option<Entity<StatusLineView>>,
+    /// The turn the dialog opened for: its activity opens (`observerTargetTurnId`).
+    target: Option<SharedString>,
     flight: Flight,
     /// `observerHistory.length > 0`, set by the shell.
     can_go_back: bool,
@@ -61,16 +68,11 @@ impl EventEmitter<ObserverEvent> for SessionObserver {}
 impl SessionObserver {
     pub(crate) fn new(
         session: SharedString,
-        _turn: Option<&SharedString>,
+        turn: Option<&SharedString>,
         live: Entity<ManageLive>,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let chat = cx.new(|_| {
-            let mut chat = Chat::new();
-            chat.set_new_chat(false);
-            chat
-        });
         let follow = cx.observe(&live, |this, live, cx| {
             let revision = live
                 .read(cx)
@@ -86,7 +88,9 @@ impl SessionObserver {
             live,
             revision,
             view: None,
-            chat,
+            entries: Vec::new(),
+            status_line: None,
+            target: turn.cloned(),
             flight: Flight::default(),
             can_go_back: false,
             parent: None,
@@ -94,8 +98,8 @@ impl SessionObserver {
             resuming: false,
             _live: follow,
         };
-        // CARVE-OUT(G-ds): the target turn is expanded and scrolled to in React
-        // (`data-turn-id`, smooth); the transcript list has no scroll-to-turn yet.
+        // CARVE-OUT(G-ds): React also scrolls the target turn to the top (smooth); the DS
+        // ScrollArea takes a handle but the dialog does not track its rows' offsets yet.
         // ANIM-MIGRATE(smooth scroll to the target turn)
         observer.refresh(cx);
         observer
@@ -105,9 +109,10 @@ impl SessionObserver {
     pub(crate) fn show(
         &mut self,
         session: SharedString,
-        _turn: Option<SharedString>,
+        turn: Option<SharedString>,
         cx: &mut Context<Self>,
     ) {
+        self.target = turn;
         if self.session != session {
             self.revision = self
                 .live
@@ -115,7 +120,7 @@ impl SessionObserver {
                 .revision(&Topic::Session(session.clone()));
             self.session = session;
             self.view = None;
-            self.sync_chat(cx);
+            self.sync(cx);
             self.refresh(cx);
         }
         cx.notify();
@@ -155,7 +160,7 @@ impl SessionObserver {
                     && this.view.as_deref() != Some(&view)
                 {
                     this.view = Some(Rc::new(view));
-                    this.sync_chat(cx);
+                    this.sync(cx);
                     changed = true;
                 }
                 if again {
@@ -166,21 +171,19 @@ impl SessionObserver {
         );
     }
 
-    /// Hands the transcript the observed view: a steward's own prompt is hidden
-    /// (`message.role !== "user"` when it has a relation), and nothing pages older.
-    fn sync_chat(&self, cx: &mut Context<Self>) {
-        let shown = self.view.as_deref().map(|view| {
-            let mut view = view.clone();
-            if view.relation.is_some() {
-                view.messages
-                    .retain(|message| message.role != MessageRecordRole::User);
-            }
-            view.message_window.previous_cursor = None;
-            view.message_window.previous_cursor_token = None;
-            Rc::new(view)
-        });
-        self.chat
-            .update(cx, |chat, cx| chat.set_view(shown, true, cx));
+    /// Builds the body's rows from the observed view (`SessionObserverTimeline`).
+    fn sync(&mut self, cx: &mut Context<Self>) {
+        let lang = Ds::get(cx).lang();
+        self.entries = self
+            .view
+            .as_deref()
+            .map(|view| entries(view, lang))
+            .unwrap_or_default();
+        match self.view.clone() {
+            Some(view) => StatusLineView::sync(&mut self.status_line, &view, cx),
+            None => self.status_line = None,
+        }
+        cx.notify();
     }
 
     fn header(&self, copy: &Words, cx: &Context<Self>) -> DialogHeader {
@@ -205,13 +208,13 @@ impl SessionObserver {
             .child(DialogDescription::new(copy.activity))
     }
 
-    /// `SessionObserverBody`: the transcript, or what an empty session says.
-    fn body(&self, copy: &Words) -> AnyElement {
-        let Some(view) = self.view.as_deref() else {
+    /// `SessionObserverBody`: the rows, or what an empty session says.
+    fn body(&mut self, copy: &Words, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        let Some(view) = self.view.clone() else {
             return Typo::caption(copy.pending).into_any_element();
         };
         let waiting = view.waiting_for_children == Some(true);
-        if view.messages.is_empty() && view.active_turn.is_none() && !waiting {
+        if self.entries.is_empty() && view.active_turn.is_none() && !waiting {
             let label = match view.status {
                 SessionViewStatus::Delivered => copy.delivered,
                 SessionViewStatus::Failed => copy.failed,
@@ -220,9 +223,7 @@ impl SessionObserver {
             };
             return Typo::caption(label).into_any_element();
         }
-        let mut body = Stack::new()
-            .gap(Space::Lg)
-            .child(div().flex_1().min_h_0().child(self.chat.clone()));
+        let mut body = self.transcript(&view, window, cx);
         if waiting && view.active_turn.is_none() {
             body = body.child(
                 MessageRow::new("steward-observer-worker-wait", Role::Assistant)
@@ -248,19 +249,19 @@ impl SessionObserver {
                     me.update(cx, |_, cx| cx.emit(ObserverEvent::Close));
                 }
             });
+        let body = self.body(copy, window, cx);
         let mut content = DialogContent::new()
             .layout(Layout::ScrollBody)
             .max_height(MaxHeight::ThreeFifths)
-            .full_height()
             .header(self.header(copy, cx))
-            .child(anchor(
-                div()
-                    .id("steward-observer-transcript")
-                    .flex_1()
-                    .min_h_0()
-                    .child(self.body(copy)),
-                "steward-observer-transcript",
-            ));
+            .child(
+                ScrollArea::new("steward-observer-scroll")
+                    .fill()
+                    .child(anchor(
+                        div().flex().flex_col().w_full().child(body),
+                        "steward-observer-transcript",
+                    )),
+            );
         if let Some(footer) = self
             .view
             .as_deref()

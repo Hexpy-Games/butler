@@ -98,11 +98,12 @@ impl Shell {
                 cx.stop_propagation();
                 s.open_project_dashboard(project.clone(), w, cx);
             }));
+            // Electron `ButtonContainer`: each button is a flex item, with no line box around it.
             gpui::div()
                 .flex()
                 .child(
                     crate::ui::widgets::anchor(
-                        div(),
+                        div().flex(),
                         &format!("sidebar-dashboard-{}", row.node.entityId),
                     )
                     .child(dashboard),

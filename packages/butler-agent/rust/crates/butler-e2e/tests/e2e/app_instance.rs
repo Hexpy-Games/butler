@@ -13,7 +13,8 @@ use butler_e2e::e2e::sandbox::Sandbox;
 use butler_platform::app_instance::{Launch, claim};
 
 /// APP-INSTANCE-01 — the first launch on a data folder owns it; a second launch on the same
-/// folder reports that it handed over, and its arguments reach the first unchanged.
+/// folder reports that it handed over, and every later launch's arguments reach the first
+/// unchanged.
 #[tokio::test]
 async fn app_instance_01_second_launch_hands_over_its_arguments() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -28,18 +29,22 @@ async fn app_instance_01_second_launch_hands_over_its_arguments() -> Result<(), 
     let Launch::First(mut handed) = first else {
         panic!("the first launch did not own the folder");
     };
-    let args = vec!["--butler-open-session=대화 1".to_owned()];
-    let second = {
-        let args = args.clone();
-        tokio::task::spawn_blocking(move || claim(&data, &args))
+    for args in [
+        vec!["--butler-open-session=대화 1".to_owned()],
+        vec!["--butler-new-chat".to_owned()],
+    ] {
+        let launch = {
+            let (data, args) = (data.clone(), args.clone());
+            tokio::task::spawn_blocking(move || claim(&data, &args))
+                .await
+                .unwrap()?
+        };
+        assert!(matches!(launch, Launch::Forwarded));
+        let received = tokio::time::timeout(Duration::from_secs(10), handed.recv())
             .await
-            .unwrap()?
-    };
-    assert!(matches!(second, Launch::Forwarded));
-    let received = tokio::time::timeout(Duration::from_secs(10), handed.recv())
-        .await
-        .expect("the first launch received nothing");
-    assert_eq!(received, Some(args));
+            .expect("the first launch received nothing");
+        assert_eq!(received, Some(args));
+    }
     sandbox.mark_success();
     Ok(())
 }

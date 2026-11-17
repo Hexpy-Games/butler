@@ -225,7 +225,7 @@ enum Outcome {
 async fn send(client: butler_shell_client::ShellClient, id: String, input: Value) -> Outcome {
     match client.edit_canon_queue(&id, &input).await {
         Ok(value) => parse(value).map_or(Outcome::Failed, Outcome::Next),
-        Err(Error::Http(409)) => client
+        Err(Error::Http(409, _)) => client
             .get_canon_queue(&id)
             .await
             .ok()

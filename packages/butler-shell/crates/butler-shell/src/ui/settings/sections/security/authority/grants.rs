@@ -253,7 +253,7 @@ impl SecurityAuthority {
                 this.grants.busy.remove(&key);
                 let words = Self::words(cx);
                 // The agent no longer has the approval (`authority_permission_not_found`).
-                if matches!(result, Ok(_) | Err(Error::Http(404))) {
+                if matches!(result, Ok(_) | Err(Error::Http(404, _))) {
                     this.grants.revision += 1;
                     if let Load::Ready(rows) = &mut this.grants.rows {
                         rows.retain(|row| row.key != key);

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use butler_ds::ui::blocks::notice::{Notice, NoticeTone};
 use butler_ds::ui::button::{Button, Variant};
 use butler_ds::ui::context::Ds;
-use butler_ds::ui::toast::{self, Toast};
+use butler_ds::ui::toast;
 use butler_shell_client::Error;
 use gpui::{App, ClickEvent, Context, Global, SharedString, Window};
 use serde_json::{Value, json};
@@ -173,9 +173,10 @@ pub(super) fn save_pins<P: 'static>(
             Ok(_) => cx.defer(move |cx| {
                 let _ = handle.update(cx, |_, window, cx| updated(window, cx));
             }),
-            Err(_) => {
+            Err(error) => {
                 let message = words(Ds::get(cx).lang()).dashboard_retry;
-                toast::show(cx, Toast::error(message));
+                let failure = crate::ui::i18n::errors::toast(cx, &error, message);
+                toast::show(cx, failure);
             }
         },
     );

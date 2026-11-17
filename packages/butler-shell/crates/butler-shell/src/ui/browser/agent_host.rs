@@ -42,6 +42,9 @@ pub(crate) struct Hosted {
     pub(super) internal: bool,
     /// The size the pane last asked for; applied when the page stops being hosted.
     pub(super) pane: Option<(gpui::Size<gpui::Pixels>, f32)>,
+    /// The id of the Agent's `Runtime.runIfWaitingForDebugger` on the page until its reply: the
+    /// Agent letting the page run.
+    pub(super) start: Option<serde_json::Value>,
 }
 impl Hosted {
     /// The Agent is acting in the page right now.
@@ -51,6 +54,10 @@ impl Hosted {
     /// Whether the page must stay awake (not throttled as hidden): just opened, or in use.
     pub(super) fn awake(&self) -> bool {
         self.stage == Stage::Opening || self.uses > 0
+    }
+    /// The Agent holds the page: its popups follow the Agent's rule, not the user's.
+    pub(super) fn held_by_agent(&self) -> bool {
+        self.holder == Holder::Agent
     }
     pub(super) fn agent(internal: bool) -> Self {
         Self {
@@ -62,6 +69,7 @@ impl Hosted {
             stage: Stage::Opening,
             internal,
             pane: None,
+            start: None,
         }
     }
 }

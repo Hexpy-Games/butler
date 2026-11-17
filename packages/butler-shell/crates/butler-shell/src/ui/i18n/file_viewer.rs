@@ -7,28 +7,44 @@ pub(crate) struct FileViewerStrings {
     pub(crate) title: &'static str,
     /// fileViewer.files
     pub(crate) files: &'static str,
+    /// fileViewer.openInLibrary
+    pub(crate) open_in_library: &'static str,
     /// fileViewer.close
     pub(crate) close: &'static str,
     /// fileViewer.closeFile
     pub(crate) close_file: &'static str,
     /// fileViewer.backToChat
     pub(crate) back_to_chat: &'static str,
+    /// fileViewer.openInDefaultApp
+    pub(crate) open_in_default_app: &'static str,
+    /// fileViewer.originalNotFound
+    pub(crate) original_not_found: &'static str,
+    /// fileViewer.showInFolder
+    pub(crate) show_in_folder: &'static str,
 }
 
 const KO: FileViewerStrings = FileViewerStrings {
     title: "파일 보기",
     files: "파일",
+    open_in_library: "서랍에서 열기",
     close: "닫기",
     close_file: "파일 닫기",
     back_to_chat: "대화로 돌아가기",
+    open_in_default_app: "기본 앱으로 열기",
+    original_not_found: "원본을 찾지 못했습니다",
+    show_in_folder: "폴더에서 보기",
 };
 
 const EN: FileViewerStrings = FileViewerStrings {
     title: "View files",
     files: "Files",
+    open_in_library: "Open in Library",
     close: "Close",
     close_file: "Close file",
     back_to_chat: "Back to chat",
+    open_in_default_app: "Open in default app",
+    original_not_found: "Original not found",
+    show_in_folder: "Show in folder",
 };
 
 impl FileViewerStrings {

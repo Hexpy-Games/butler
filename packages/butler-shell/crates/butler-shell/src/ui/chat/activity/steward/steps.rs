@@ -202,8 +202,8 @@ impl Steps<'_, '_> {
                             .gap(Space::Xs)
                             .child(activity::activity_block(
                                 &item.phase,
-                                index < last,
-                                pulse,
+                                (index < last, pulse),
+                                None,
                                 Ds::get(cx).lang(),
                             ))
                             .children(tools),

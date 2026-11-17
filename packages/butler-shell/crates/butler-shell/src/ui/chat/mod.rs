@@ -4,6 +4,7 @@
 pub(crate) mod activity;
 pub(crate) mod answers;
 mod assistant;
+mod background;
 mod content;
 pub(crate) mod empty;
 pub(crate) mod files;
@@ -13,6 +14,7 @@ mod list;
 mod message_markdown;
 mod queue;
 mod row;
+pub(crate) use row::message_row;
 mod user;
 
 use std::collections::{HashMap, HashSet};
@@ -31,6 +33,7 @@ use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{QueuedMessageRecord, SessionQueueView, SessionView};
 
 pub(crate) use assistant::AssistantHooks;
+pub(crate) use background::ConversationBackground;
 pub(crate) use intro::set_seen as set_chats_intro_seen;
 pub(crate) use list::{OlderRequest, on_load_older};
 pub(crate) use queue::{on_queue_changed, queue_changed};
@@ -56,6 +59,11 @@ pub(crate) struct TranscriptCtx<'a> {
     pub(crate) message_id: Option<&'a str>,
     pub(crate) steward: Rc<HashMap<String, usize>>,
     pub(crate) status_line: Option<Entity<activity::status::StatusLineView>>,
+    /// The delegated goal the next turn timeline shows on its first activity (`delegatedGoal`).
+    pub(crate) goal: Option<&'a str>,
+    /// Whether a settled answer shows its footer: Electron renders it only for a caller that
+    /// passes `onCopyAssistantMessage` (the session observer does not).
+    pub(crate) answer_footer: bool,
 }
 
 /// Sends a text as a message.
@@ -105,6 +113,8 @@ impl<'a> TranscriptCtx<'a> {
             footer_meta,
             message_id: None,
             status_line: None,
+            goal: None,
+            answer_footer: true,
             steward: Rc::default(),
         }
     }

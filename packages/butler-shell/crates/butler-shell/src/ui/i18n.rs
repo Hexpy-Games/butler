@@ -8,6 +8,7 @@ pub(crate) mod browser_handoff;
 pub(crate) mod canon_order;
 pub(crate) mod canon_proposal;
 pub(crate) mod composer;
+pub(crate) mod errors;
 pub(crate) mod file_viewer;
 pub(crate) mod initiated;
 pub(crate) mod inspector_artifacts;

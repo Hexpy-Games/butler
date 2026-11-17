@@ -131,10 +131,10 @@ pub(super) struct StepActivity {
     pub(super) action: Option<String>,
 }
 
-struct ActivitySource<'a> {
-    turn: &'a str,
-    at: Option<&'a str>,
-    rows: &'a [ProgressRow],
+pub(crate) struct ActivitySource<'a> {
+    pub(crate) turn: &'a str,
+    pub(crate) at: Option<&'a str>,
+    pub(crate) rows: &'a [ProgressRow],
 }
 
 /// `observerActivitySources.ts`: Map replacement keeps a turn's original insertion order.
@@ -152,7 +152,7 @@ fn set_source<'a>(
 }
 
 /// `observerActivitySources.ts`: messages override history; the active turn overrides all.
-fn sources(view: &SessionView) -> Vec<ActivitySource<'_>> {
+pub(crate) fn sources(view: &SessionView) -> Vec<ActivitySource<'_>> {
     let mut sources = Vec::new();
     let mut indices = HashMap::new();
     for source in view.activity_history.iter().flatten() {

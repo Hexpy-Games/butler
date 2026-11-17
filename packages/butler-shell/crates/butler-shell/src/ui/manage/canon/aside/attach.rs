@@ -285,7 +285,7 @@ fn upload<P: 'static>(
         move |this: &mut P, result: Result<Uploaded, Error>, cx| {
             let stored = result.map(|u| u.file).map_err(|error| match error {
                 // CARVE-OUT(G-codes): `file_too_large` is told from other refusals by status.
-                Error::Http(413) => UploadError::TooLarge,
+                Error::Http(413, _) => UploadError::TooLarge,
                 _ => UploadError::Failed,
             });
             done(this, stored, cx);
