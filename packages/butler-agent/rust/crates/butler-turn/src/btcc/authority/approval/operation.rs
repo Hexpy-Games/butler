@@ -98,11 +98,13 @@ pub(in crate::btcc::authority) fn exact_operation(facts: ApprovalFacts<'_>) -> A
             )
             .collect()
     };
-    let read_only = matches!(facts.capability, "read_file" | "list_files" | "grep_files")
-        || matches!(
-            input["state_effect"].as_str(),
-            Some("read_only" | "validation")
-        );
+    let read_only = matches!(
+        facts.capability,
+        "read_file" | "list_files" | "grep_files" | "browser_read" | "web_read" | "web_search"
+    ) || matches!(
+        input["state_effect"].as_str(),
+        Some("read_only" | "validation")
+    );
     ApprovalOperation {
         tool: facts.capability.into(),
         access: if read_only { "read_only" } else { "change" }.into(),
@@ -177,7 +179,12 @@ fn browser_operation(facts: ApprovalFacts<'_>) -> ApprovalOperation {
     }
     ApprovalOperation {
         tool: facts.capability.into(),
-        access: "change".into(),
+        access: if facts.capability == "browser_open" {
+            "read_only"
+        } else {
+            "change"
+        }
+        .into(),
         targets,
         command: None,
         allow_conversation: Some(facts.input["always_confirm"] != true),
@@ -350,5 +357,27 @@ fn wait_operation(facts: &ApprovalFacts<'_>) -> ApprovalOperation {
             .pointer("/wait/reason")
             .and_then(Value::as_str)
             .map(str::to_owned),
+    }
+}
+
+#[cfg(test)]
+// test-category: pure-logic
+#[test]
+fn operation_access_for_web_and_browser_tools() {
+    let input = serde_json::json!({});
+    for (capability, access) in [
+        ("web_read", "read_only"),
+        ("web_search", "read_only"),
+        ("browser_open", "read_only"),
+        ("browser_read", "read_only"),
+        ("browser_act", "change"),
+    ] {
+        let operation = exact_operation(ApprovalFacts {
+            capability,
+            target: "https://example.com",
+            input: &input,
+            workspace: ".",
+        });
+        assert_eq!(operation.access, access, "{capability}");
     }
 }
