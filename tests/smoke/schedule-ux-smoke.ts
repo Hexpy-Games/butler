@@ -85,6 +85,13 @@ try {
   await savedToast.waitFor();
   const signin = await server.api<{ automation: { browser_signin: boolean } }>(`/automations/${data.automations[0]!.id}`);
   assert(signin.automation.browser_signin === true, "saving keeps the sign-in switch");
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Pause", exact: true }).click();
+  await page.locator('[data-sonner-toast][data-type="success"]').filter({ hasText: "Schedule paused" }).waitFor();
+  await page.locator('[role="menu"]').waitFor({ state: "detached" }); // the Pause menu finishes closing first
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Resume", exact: true }).click();
+  await page.locator('[data-sonner-toast][data-type="success"]').filter({ hasText: "Schedule resumed" }).waitFor();
   await page.getByRole("button", { name: "Back to schedules", exact: true }).click();
   await page.getByText("Daily eight", { exact: true }).click();
   await modelTrigger.getByText("Model default", { exact: true }).waitFor();

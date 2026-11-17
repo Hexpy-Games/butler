@@ -1278,6 +1278,9 @@ export interface AppCopy {
     paymentOffNotify: string;
     browser: { title: string; signin: string; signinDescription: string; payment: string; paymentDescription: string; unavailable: string };
     saveFailed: string;
+    /** Toast after 지금 실행 / 일시정지 / 재개, by action. */
+    actionDone: Record<"run" | "pause" | "resume", string>;
+    actionFailed: Record<"run" | "pause" | "resume", string>;
     /** Inline messages for a save the gateway refused (400). */
     errors: {
       title: string;

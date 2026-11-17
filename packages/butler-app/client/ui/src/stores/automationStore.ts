@@ -258,9 +258,9 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         body: JSON.stringify({}),
       });
       await onSaved();
-      onStatus({ label: appCopy.automations.saved, tone: "ok" });
+      notifyStatus(appCopy.automations.actionDone[action], { tone: "ok", id: `automation-${action}-${automationId}` });
     } catch (error) {
-      notifyError(error, `${action} failed`, {
+      notifyError(error, appCopy.automations.actionFailed[action], {
         id: `automation-${action}-${automationId}`,
       });
       onStatus({ label: "ready", tone: "ok" });

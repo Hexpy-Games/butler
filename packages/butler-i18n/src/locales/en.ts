@@ -1391,6 +1391,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     browser: { title: "Browser", signin: "Use sign-in info", signinDescription: "Opens sites you allowed, signed in.", payment: "Use payment info", paymentDescription: "Pays on sites set to pay without asking.", unavailable: "Unavailable on this computer" },
     needsPermissionNotify: "A schedule skipped a step that needs your permission.",
     saveFailed: "Schedule save failed",
+    actionDone: { run: "Run started", pause: "Schedule paused", resume: "Schedule resumed" },
+    actionFailed: { run: "Run failed", pause: "Pause failed", resume: "Resume failed" },
     errors: {
       title: "Enter a title.",
       prompt: "Enter a prompt.",
