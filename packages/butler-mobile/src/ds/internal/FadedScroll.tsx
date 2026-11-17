@@ -17,8 +17,8 @@ export function FadedScroll({ children }: { children: React.ReactNode }) {
   const [scrolled, setScrolled] = useState(false);
   const [more, setMore] = useState(false);
   const size = t.length("--tinted-glass-edge-size");
-  const tint = t.color("--tinted-glass-tint");
-  const clear = alpha(tint, 0);
+  const fill = t.color("--popover"); // the Android sheet panel fill (a Modal cannot blur)
+  const clear = alpha(fill, 0);
   const blur = Platform.OS === "ios";
   const update = () => {
     setScrolled(offset.current > 0);
@@ -27,7 +27,7 @@ export function FadedScroll({ children }: { children: React.ReactNode }) {
   const edge = (side: "top" | "bottom") => {
     const place = { position: "absolute", left: 0, right: 0, [side]: 0, height: size } as const;
     if (!blur) {
-      return <LinearGradient pointerEvents="none" colors={side === "top" ? [tint, clear] : [clear, tint]} style={place} />;
+      return <LinearGradient pointerEvents="none" colors={side === "top" ? [fill, clear] : [clear, fill]} style={place} />;
     }
     return (
       <MaskedView
