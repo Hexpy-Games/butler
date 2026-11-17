@@ -40,9 +40,9 @@ impl RenderOnce for TriggerBox {
         let wrapper = if self.fill {
             wrapper.flex().w_full()
         } else if strut::shrink_wrap(cx) {
-            wrapper.inline_flex().flex_none().self_start()
+            wrapper.inline_flex().flex_none().self_start().justify_self_start()
         } else {
-            wrapper.inline_flex().flex_none()
+            wrapper.inline_flex().flex_none().justify_self_start()
         };
         (self.wire)(wrapper).child(self.child)
     }

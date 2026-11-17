@@ -252,9 +252,11 @@ impl Control {
             el = el.justify_center();
         }
         el = match self.width {
-            // `width: max-content` is not stretched by a column's `align-items: stretch`.
-            Width::Auto if shrink => el.self_start(),
-            Width::Auto | Width::Stretch => el,
+            // `width: max-content` is not stretched by a column's `align-items: stretch` nor,
+            // as a grid item, by the default `justify-self`.
+            Width::Auto if shrink => el.self_start().justify_self_start(),
+            Width::Auto => el.justify_self_start(),
+            Width::Stretch => el,
             Width::Fixed(width) => el.w(px(width)),
             Width::Full => el.w_full(),
             Width::Grow => el.flex_1(),
