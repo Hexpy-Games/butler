@@ -31,6 +31,7 @@ use self::copy::words;
 use crate::lifecycle::supervisor::{AgentState, Supervisor, SupervisorError};
 use crate::lifecycle::{self, AgentRuntime};
 use crate::ui::Icon;
+use crate::ui::widgets::anchor;
 
 /// `lifecycle-assets/copy.json` slow hint: shown once the quit has run this long.
 const SLOW_AFTER: Duration = Duration::from_secs(4);
@@ -209,18 +210,23 @@ pub(crate) fn agent_notice(
 ) -> Option<AnyElement> {
     let _ = window;
     let words = words(lang);
+    // The boot screen's rule: an error while starting is the failed notice, not a spinner.
+    let failed = runtime.state == AgentState::RestartFailed
+        || (matches!(runtime.state, AgentState::Starting | AgentState::Restarting)
+            && runtime.error.is_some());
     let (tone, message, action) = match runtime.state {
         AgentState::Stopped => (NoticeTone::Warning, words.agent_stopped, words.agent_start),
-        AgentState::Restarting => (NoticeTone::Info, words.agent_restarting, ""),
-        AgentState::RestartFailed => (
+        _ if failed => (
             NoticeTone::Error,
             words.agent_restart_failed,
             words.notice_retry,
         ),
+        AgentState::Restarting => (NoticeTone::Info, words.agent_restarting, ""),
         _ => return None,
     };
     let ds = Ds::get(cx);
-    let lead: AnyElement = if runtime.state == AgentState::Restarting {
+    let spinning = runtime.state == AgentState::Restarting && !failed;
+    let lead: AnyElement = if spinning {
         Spinner::new("agent-notice-spinner").into_any_element()
     } else {
         icon(Icon::AlertCircle, IconSize::Lg, ds).into_any_element()
@@ -238,8 +244,13 @@ pub(crate) fn agent_notice(
         }
         notice = notice.action(button);
     }
+    let name = if spinning {
+        "agent-notice-spinner"
+    } else {
+        "agent-notice"
+    };
     Some(
-        div()
+        anchor(div(), name)
             .px(ds.len(Length::SpaceMd))
             .py(ds.len(Length::SpaceSm))
             .child(notice)

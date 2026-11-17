@@ -83,7 +83,9 @@ fn decide(h: &mut Harness, allow: bool) -> anyhow::Result<()> {
 fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
     let (command, arg) = line.split_once(' ').unwrap_or((line, ""));
     match command {
-        "agent" | "diagnostics" | "app-quit" => super::app::command(h, dir, command, arg),
+        "agent" | "restart" | "diagnostics" | "app-quit" => {
+            super::app::command(h, dir, command, arg)
+        }
         "connected" => wait(h, |s, _| {
             s.disconnected().is_none() && s.store.cursor.is_some() && !s.store.chats.is_empty()
         }),
