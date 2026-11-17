@@ -87,7 +87,7 @@ pub(super) fn popup_decision(
     // The Agent's page follows the Agent's rule alone: any disposition, no gesture.
     if source.hosted {
         return if !agent_popup_allowed(&source.popups, &source.url, &request.url) {
-            PopupDecision::Block(PopupBlock::NoGesture)
+            PopupDecision::Block(PopupBlock::Policy)
         } else if full {
             PopupDecision::Block(PopupBlock::TabBudget)
         } else {
@@ -122,7 +122,8 @@ pub(super) fn popup_decision(
 }
 
 /// The Agent's popup rule, as the executor's `popup_allowed`: `about:blank`, a page of the
-/// opener's origin, a site or subdomain of one of `popups.sites`, or one of `popups.hosts`.
+/// opener's origin, a site or subdomain of one of `popups.sites` (the popup sites and the
+/// payment sites), or one of `popups.hosts`.
 fn agent_popup_allowed(popups: &PopupSites, parent: &str, raw: &str) -> bool {
     let web = |raw: &str| super::address::web_url(raw).and_then(|url| Url::parse(&url).ok());
     let Some(target) = web(raw) else {
