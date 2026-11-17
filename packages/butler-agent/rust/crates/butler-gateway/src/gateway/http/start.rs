@@ -26,12 +26,17 @@ pub(in crate::gateway) fn serve(
         let remote =
             listeners::RemoteAccess::new(local_addr, content_addr, config.allowed_hosts.clone());
         let app_host = app_host(config.headless_browser.as_ref(), &shutdown);
+        let hosted_root = hosted_root(
+            config.headless_browser.as_ref(),
+            config.output_data.as_deref(),
+        );
         clear_opened_files(config.output_data.clone()).await;
         let headless = headless(config.headless_browser, &remote, &shutdown);
         let state = Arc::new(HttpState {
             browser: Arc::new(super::browser_host::Hub::default()),
             headless,
             app_host,
+            hosted_root,
             previews: butler_runtime::previews::Previews::default(),
             preview_lifetime_started: parking_lot::Mutex::new(false),
             application,
@@ -126,6 +131,22 @@ fn headless(
         },
         shutdown.clone(),
     ))
+}
+
+/// A page host's executor root: beside the headless browser's own, else
+/// under the data dir. `None` when the gateway has neither.
+fn hosted_root(
+    browser: Option<&crate::gateway::HeadlessBrowserConfig>,
+    data: Option<&std::path::Path>,
+) -> Option<std::path::PathBuf> {
+    browser
+        .map(|browser| browser.root.with_file_name("hosted"))
+        .or_else(|| {
+            data.map(|data| {
+                data.join(butler_platform::data_paths::HEADLESS_BROWSER)
+                    .with_file_name("browser-hosted")
+            })
+        })
 }
 
 /// The hidden App host, where the browser without the App may use one.

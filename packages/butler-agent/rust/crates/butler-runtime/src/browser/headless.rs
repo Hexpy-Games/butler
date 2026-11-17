@@ -26,6 +26,7 @@ mod events;
 mod frames;
 mod hidden;
 pub mod history;
+mod host;
 mod identity;
 mod imaging;
 mod input;
@@ -47,6 +48,7 @@ mod validate;
 
 use super::egress::{ContentOrigin, guard_preview_url, guard_url};
 use browser::Browser;
+pub use host::PageHost;
 pub use install::InstallSource;
 use install::Installer;
 pub use render::{Rendered, reader};
@@ -84,6 +86,8 @@ pub struct Headless {
     reports: check::SharedReports,
     downloads: Arc<downloads::Downloads>,
     history: Arc<history::History>,
+    /// The App owns the pages: nothing here installs, launches or reaps a browser.
+    hosted: bool,
 }
 
 fn refused(reason: &str) -> Value {
@@ -101,7 +105,14 @@ fn valid_session(session: &str) -> bool {
 impl Headless {
     /// The backend; nothing runs or downloads until the first `tab.open`.
     pub fn new(config: HeadlessConfig, shutdown: CancellationToken) -> Arc<Self> {
-        let headless = Arc::new(Self {
+        let headless = Self::assemble(config, false);
+        render::register(&headless);
+        headless.stop_on(shutdown);
+        headless
+    }
+
+    fn assemble(config: HeadlessConfig, hosted: bool) -> Arc<Self> {
+        Arc::new(Self {
             installer: Installer::new(config.install.clone()),
             enabled: std::sync::atomic::AtomicBool::new(config.enabled),
             reports: check::SharedReports::default(),
@@ -112,16 +123,18 @@ impl Headless {
             starting: tokio::sync::Mutex::new(()),
             closing: tokio::sync::Mutex::new(()),
             in_flight: AtomicUsize::new(0),
-        });
-        render::register(&headless);
-        let weak = Arc::downgrade(&headless);
+            hosted,
+        })
+    }
+
+    fn stop_on(self: &Arc<Self>, shutdown: CancellationToken) {
+        let weak = Arc::downgrade(self);
         tokio::spawn(async move {
             shutdown.cancelled().await;
             if let Some(headless) = weak.upgrade() {
                 headless.shutdown().await;
             }
         });
-        headless
     }
 
     /// Hook for private browsing; it suppresses both commits and metadata.
@@ -301,7 +314,7 @@ impl Headless {
         deadline_ms: u64,
         turn: Option<&str>,
     ) -> Value {
-        if args["profile"] == "signed_in" || args["signed_in"] == true {
+        if !self.hosted && lifecycle::profile_of(args) == "signed_in" {
             return refused("signed_in_unavailable");
         }
         if !self.enabled() {
@@ -364,20 +377,8 @@ impl Headless {
                 });
                 return json!({"status":"ok"});
             }
-            "tab.wait" => {
-                page.shared.with_tab(id, |t| {
-                    t.waiting_turn = turn;
-                    t.waiting = t.dialog.is_some();
-                });
-                return json!({"status":"ready","tab":id,"epoch":epoch});
-            }
-            "tab.waiting" => {
-                page.shared.with_tab(id, |t| {
-                    t.waiting_turn = turn;
-                    t.waiting = t.dialog.is_some() || args["value"] == true;
-                });
-                return json!({"status":"ok"});
-            }
+            "tab.wait" => return host::wait(&browser, &page, args, turn, epoch).await,
+            "tab.waiting" => return host::waiting(&browser, &page, args, turn).await,
             "tab.close" => return dialogs::request_close(&browser, &page).await,
             // No signed-in headless: nothing here can fill or grant a sign-in.
             _ if op.starts_with("signin.") => return refused("signed_in_unavailable"),

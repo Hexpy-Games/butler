@@ -5,7 +5,7 @@
     clippy::panic,
     reason = "test assertions"
 )]
-use super::support::{admin, browser_processes, call, cef, publish, setup};
+use super::support::{admin, browser_processes, call, cef, publish, setup, shell};
 use butler_e2e::e2e::HarnessError;
 use reqwest::Method;
 use serde_json::{Value, json};
@@ -39,25 +39,32 @@ async fn settings_rejects_the_removed_browser_toggle() -> Result<(), HarnessErro
         "{}",
         view.text
     );
-    let opened = call(
-        &admin,
-        "general",
-        "tab.open",
-        &Value::Null,
-        json!({"url":"https://example.test"}),
-    )
-    .await?;
-    assert_eq!(opened["reason"], "no_browser", "{opened}");
-    assert_eq!(
-        browser_processes(&s.sandbox.data.to_string_lossy()),
-        Vec::<String>::new()
-    );
+    // With the shell attached a browser exists, so there is no "no browser" to see.
+    if !shell() {
+        let opened = call(
+            &admin,
+            "general",
+            "tab.open",
+            &Value::Null,
+            json!({"url":"https://example.test"}),
+        )
+        .await?;
+        assert_eq!(opened["reason"], "no_browser", "{opened}");
+        assert_eq!(
+            browser_processes(&s.sandbox.data.to_string_lossy()),
+            Vec::<String>::new()
+        );
+    }
     s.finish().await
 }
 
 #[tokio::test]
 async fn browser_config_and_environment_remain_operator_controls() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        !shell(),
+        "the attached shell is a browser whatever the operator turns off"
+    );
     let setup = setup("BROWSER-HEADLESS-CONFIG")?
         .env("BUTLER_BROWSER_HEADLESS", "")
         .env("BUTLER_BROWSER_APP", "off")
