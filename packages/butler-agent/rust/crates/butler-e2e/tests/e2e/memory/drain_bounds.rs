@@ -143,7 +143,9 @@ async fn expired_query_grace_kills_and_reaps_a_wedged_worker() -> Result<(), Har
     let (s, code, _release) = prepare("MEM-DRAIN-EXPIRY", true).await?;
     let mut trace = Trace::open(&s, 2).await?;
     let answer = s.provider()?.hold_after_tool(ASK);
+    let loaded = batch::reply_after_load(&s, ASK)?;
     let observe = async {
+        loaded.await?;
         let grace = trace.drain().await?;
         let pid = worker(&s)?;
         let elapsed = reaped(pid, Duration::from_millis(grace + 200)).await?;
@@ -174,7 +176,9 @@ async fn owner_close_during_query_drain_reaps_without_waiting_for_grace() -> Res
     let (mut s, _code, _release) = prepare("MEM-DRAIN-CLOSE", true).await?;
     let mut trace = Trace::open(&s, 2).await?;
     let answer = s.provider()?.hold_after_tool(ASK);
+    let loaded = batch::reply_after_load(&s, ASK)?;
     s.gw.say("general", ASK).await?;
+    loaded.await?;
     let grace = trace.drain().await?;
     let pid = worker(&s)?;
     let started = Instant::now();
@@ -213,7 +217,9 @@ async fn recall_arriving_during_drain_reuses_the_loaded_worker() -> Result<(), H
     let mut trace = Trace::open(&s, 2).await?;
     let first_request = s.provider()?.requests().len();
     let answer = s.provider()?.hold_after_tool(ASK);
+    let loaded = batch::reply_after_load(&s, ASK)?;
     let arriving = async {
+        loaded.await?;
         let grace = trace.drain().await?;
         // The drain is held at its start with its grace not yet running, so the
         // second recall's arrival cannot depend on how fast the host is.
@@ -275,7 +281,9 @@ async fn recall_arriving_after_the_drain_deadline_finds_the_worker_reaped()
     let chat = chat.data()["session"]["id"].as_str().unwrap().to_owned();
     let mut trace = Trace::open(&s, 2).await?;
     let answer = s.provider()?.hold_after_tool(ASK);
+    let loaded = batch::reply_after_load(&s, ASK)?;
     let expire = async {
+        loaded.await?;
         let grace = trace.drain().await?;
         let pid = worker(&s)?;
         trace.until("drain_end=deadline").await?;

@@ -29,6 +29,7 @@ mod protocol;
 pub use pending_asks_port::GatewayPendingAsks;
 mod published_event;
 mod rate_limit;
+mod remote_computers;
 mod security_settings;
 pub use devices::{GatewayDevices, PairedDevice};
 mod server;
@@ -48,10 +49,14 @@ pub use crate::gateway::inbound_queue::{
     InboundSettlementListener, QueuedInboundEvent,
 };
 pub use crate::gateway::message_file_store::AppMessageFiles;
+pub use application::briefing_snapshot::{
+    AppSuggestionChat, AppSuggestionContext, read_suggestion_context,
+};
 pub use application::settings::{
     browsing_agent_setting, command_sandbox_enabled, diagnostics_enabled_readonly,
     producer_log_config, startup_log_config, stored_ui_language_readonly,
 };
+pub use application::setup::butler_account::{ButlerAccountRequest, butler_account_disabled};
 pub use application::setup::{ButlerVaultCounts, ButlerVaultView};
 pub use application::{
     APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppImageUsageCommand,

@@ -12,6 +12,9 @@ use butler_e2e::e2e::{
 use serde_json::{Value, json};
 use std::time::Duration;
 
+pub(super) const MESSAGE: &str =
+    "I noticed you ask for the report most mornings. Want me to prepare it?";
+
 fn responder(request: &Value) -> Option<ResponseRecord> {
     let task = patterns::task(request);
     if task["task"] != "pattern_proposal" {
@@ -26,7 +29,7 @@ fn responder(request: &Value) -> Option<ResponseRecord> {
             .map(|p| p["id"].clone())
             .collect()
     };
-    let candidates:Vec<_> = ids.iter().map(|id| json!({"pattern_id":id,"title":"Prepare a report",
+    let candidates:Vec<_> = ids.iter().map(|id| json!({"pattern_id":id,"kind":"schedule","lens":"productivity","message":MESSAGE,"title":"Prepare a report",
         "action":{"title":"Morning report","prompt":"Prepare the latest report.","schedule":{"type":"daily","time":"07:50"}}})).collect();
     Some(title_response(
         &json!({"candidates":candidates}).to_string(),

@@ -24,6 +24,7 @@ use butler_memory::cognition::BriefingGenerationCode;
 
 pub(in crate::host) struct BriefingGeneration {
     generator: BriefingGenerationService,
+    context: Arc<super::suggestion_context::SuggestionContextBuilder>,
 }
 
 struct BriefingSource {
@@ -34,12 +35,13 @@ struct BriefingSource {
     profile: Arc<ProfileService>,
     ledger: ProjectLedger,
     date_parser: Arc<DateParser>,
+    context: Arc<super::suggestion_context::SuggestionContextBuilder>,
 }
 
 impl BriefingGeneration {
     #[expect(
         clippy::too_many_arguments,
-        reason = "runtime composition supplies eight required existing domain owners"
+        reason = "runtime composition supplies nine required existing domain owners"
     )]
     pub(in crate::host) fn from_runtime(
         data_root: PathBuf,
@@ -50,7 +52,15 @@ impl BriefingGeneration {
         ledger: ProjectLedger,
         date_parser: Arc<DateParser>,
         cognition_paths: CognitionPathEnvironment,
+        patterns: butler_memory::cognition::PatternRepository,
     ) -> Self {
+        let context = Arc::new(super::suggestion_context::SuggestionContextBuilder::new(
+            data_root.clone(),
+            cognition_paths.clone(),
+            ledger.clone(),
+            patterns,
+            profile.clone(),
+        ));
         let app_database_path =
             crate::host::service::configuration::AppServiceConfiguration::capture(&data_root)
                 .db_path;
@@ -62,9 +72,16 @@ impl BriefingGeneration {
             profile,
             ledger,
             date_parser,
+            context: context.clone(),
         });
         let generator = BriefingGenerationService::new(data_root, coordinator, provider, source);
-        Self { generator }
+        Self { generator, context }
+    }
+
+    pub(in crate::host) fn suggestions(
+        &self,
+    ) -> Arc<super::suggestion_context::SuggestionContextBuilder> {
+        self.context.clone()
     }
 
     pub(in crate::host) async fn generate(
@@ -78,6 +95,25 @@ impl BriefingGeneration {
 }
 
 impl BriefingInputSource for BriefingSource {
+    fn suggestion_context<'a>(
+        &'a self,
+        run_id: &'a str,
+        locale: &'a str,
+        now: DateTime<Utc>,
+    ) -> butler_memory::cognition::BriefingContextFuture<'a> {
+        Box::pin(async move {
+            self.context
+                .context(run_id, locale, now)
+                .await
+                .map_err(|source| {
+                    BriefingGenerationError::new(
+                        BriefingGenerationCode::NewChatBriefingAppReadFailed,
+                        "Suggestion context could not be read",
+                    )
+                    .with_source(source)
+                })
+        })
+    }
     fn local_minute(&self, epoch_ms: i64) -> Result<u16, BriefingGenerationError> {
         self.date_parser
             .local_day_and_minute(epoch_ms)
@@ -110,7 +146,7 @@ impl BriefingInputSource for BriefingSource {
                         )
                         .with_source(source)
                     })?;
-            let settings = settings(&read.config, Some(&app_settings), &read.catalog);
+            let settings = conversation_settings(&read.config, Some(&app_settings), &read.catalog);
             if matches!(settings, BriefingSettings::Unavailable { .. }) {
                 return Ok(BriefingInputSnapshot {
                     settings,
@@ -135,51 +171,12 @@ impl BriefingInputSource for BriefingSource {
                     .with_source(failure)
                 })?;
             let app_path = self.app_database_path.clone();
-            let app_projects =
-                tokio::task::spawn_blocking(move || read_new_chat_briefing_projects(&app_path))
-                    .await
-                    .map_err(|source| {
-                        BriefingGenerationError::new(
-                            BriefingGenerationCode::NewChatBriefingAppReadFailed,
-                            "App project read worker failed",
-                        )
-                        .with_source(source)
-                    })?
-                    .map_err(|source| {
-                        BriefingGenerationError::new(
-                            BriefingGenerationCode::NewChatBriefingAppReadFailed,
-                            "App project snapshot could not be read",
-                        )
-                        .with_source(source)
-                    })?;
-            let targets = app_projects.map(|projects| {
-                projects
-                    .into_iter()
-                    .map(|project| ProjectBriefingTarget {
-                        id: project.id.clone(),
-                        display_name: project.display_name,
-                        ledger_project_id: project
-                            .ledger_project_id
-                            .filter(|id| !id.is_empty())
-                            .unwrap_or(project.id),
-                        recent_session_titles: project.recent_session_titles,
-                    })
-                    .collect()
-            });
             let consolidation_root = self
                 .cognition_paths
                 .cognition_root(&self.data_root)
                 .join("consolidation");
-            let projects = self
-                .ledger
-                .briefing_signals(targets, consolidation_root)
-                .await
-                .map_err(|failure| {
-                    BriefingGenerationError::new(
-                        BriefingGenerationCode::NewChatBriefingLedgerFailed,
-                        format!("{failure:?}"),
-                    )
-                })?
+            let projects = project_signals(app_path, &self.ledger, consolidation_root)
+                .await?
                 .into_iter()
                 .map(|project| BriefingProjectSignal {
                     id: project.id,
@@ -202,13 +199,95 @@ impl BriefingInputSource for BriefingSource {
     }
 }
 
+/// Active projects and their Ledger signals, the read project briefings use.
+pub(super) async fn project_signals(
+    app_path: PathBuf,
+    ledger: &ProjectLedger,
+    consolidation_root: PathBuf,
+) -> Result<Vec<butler_ledger::project_ledger::ProjectBriefingSignal>, BriefingGenerationError> {
+    let app_projects =
+        tokio::task::spawn_blocking(move || read_new_chat_briefing_projects(&app_path))
+            .await
+            .map_err(|source| {
+                BriefingGenerationError::new(
+                    BriefingGenerationCode::NewChatBriefingAppReadFailed,
+                    "App project read worker failed",
+                )
+                .with_source(source)
+            })?
+            .map_err(|source| {
+                BriefingGenerationError::new(
+                    BriefingGenerationCode::NewChatBriefingAppReadFailed,
+                    "App project snapshot could not be read",
+                )
+                .with_source(source)
+            })?;
+    let targets = app_projects.map(|projects| {
+        projects
+            .into_iter()
+            .map(|project| ProjectBriefingTarget {
+                id: project.id.clone(),
+                display_name: project.display_name,
+                ledger_project_id: project
+                    .ledger_project_id
+                    .filter(|id| !id.is_empty())
+                    .unwrap_or(project.id),
+                recent_session_titles: project.recent_session_titles,
+            })
+            .collect()
+    });
+    ledger
+        .briefing_signals(targets, consolidation_root)
+        .await
+        .map_err(|failure| {
+            BriefingGenerationError::new(
+                BriefingGenerationCode::NewChatBriefingLedgerFailed,
+                format!("{failure:?}"),
+            )
+        })
+}
+
 pub(super) fn settings(
     config: &Value,
     app_settings: Option<&Value>,
     catalog: &butler_models::models::ModelCatalogSnapshot,
 ) -> BriefingSettings {
+    resolve(
+        config,
+        app_settings,
+        catalog,
+        model_preference(config, app_settings),
+        reasoning_preference(config, app_settings),
+    )
+}
+
+/// The user's own conversation model and effort, for calls that think the way a conversation does.
+pub(super) fn conversation_settings(
+    config: &Value,
+    app_settings: Option<&Value>,
+    catalog: &butler_models::models::ModelCatalogSnapshot,
+) -> BriefingSettings {
+    let effort = first_non_null([
+        app_settings.and_then(|s| s.get("reasoning_effort")),
+        config.get("reasoning_effort"),
+    ]);
+    resolve(
+        config,
+        app_settings,
+        catalog,
+        conversation_model(config, app_settings),
+        effort,
+    )
+}
+
+fn resolve(
+    config: &Value,
+    app_settings: Option<&Value>,
+    catalog: &butler_models::models::ModelCatalogSnapshot,
+    selected: Option<&Value>,
+    effort: Option<&Value>,
+) -> BriefingSettings {
     let locale = locale_preference(config, app_settings);
-    let selected = model_preference(config, app_settings);
     let Some(selected) = selected
         .and_then(Value::as_str)
         .map(str::trim)
@@ -220,7 +299,6 @@ pub(super) fn settings(
     if selected.model_id.is_empty() {
         return unavailable(locale, "missing_model");
     }
-    let effort = reasoning_preference(config, app_settings);
     let Some(effort) = effort.filter(|value| !value.is_null()) else {
         return unavailable(locale, "missing_reasoning_effort");
     };
@@ -295,15 +373,19 @@ pub(super) fn model_preference<'a>(
         app_settings.and_then(|settings| settings.get("consolidation_model")),
     ]);
     if selected.is_none_or(is_default_model_sentinel) {
-        first_non_null([
-            app_settings.and_then(|settings| settings.get("model")),
-            config.pointer("/system/butlerModel"),
-            config.pointer("/system/defaultModel"),
-            config.get("model"),
-        ])
+        conversation_model(config, app_settings)
     } else {
         selected
     }
+}
+
+fn conversation_model<'a>(config: &'a Value, app_settings: Option<&'a Value>) -> Option<&'a Value> {
+    first_non_null([
+        app_settings.and_then(|settings| settings.get("model")),
+        config.pointer("/system/butlerModel"),
+        config.pointer("/system/defaultModel"),
+        config.get("model"),
+    ])
 }
 
 fn reasoning_preference<'a>(

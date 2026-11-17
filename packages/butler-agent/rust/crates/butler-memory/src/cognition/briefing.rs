@@ -2,9 +2,9 @@
 
 mod generation;
 pub use generation::{
-    BriefingGenerationCode, BriefingGenerationError, BriefingGenerationService,
-    BriefingInputFuture, BriefingInputSnapshot, BriefingInputSource, BriefingPersona,
-    BriefingProjectSignal, BriefingSettings,
+    BriefingContextFuture, BriefingGenerationCode, BriefingGenerationError,
+    BriefingGenerationService, BriefingInputFuture, BriefingInputSnapshot, BriefingInputSource,
+    BriefingPersona, BriefingProjectSignal, BriefingSettings,
 };
 
 mod stored;

@@ -8,8 +8,9 @@ use butler_ledger::project_ledger::ProjectLedger;
 use butler_memory::cognition::{
     CognitionPathEnvironment, ConfiguredCycleOptions, ConfiguredCycleResult,
     ConfiguredCycleService, CycleService, CycleStatus, GraphConsolidationService, KnowHowService,
-    LegacyMetadataIntegrityService, MemoryHealthService, MemorySyncConsumer, ProjectCapsuleService,
-    RunCycle, VectorOptimizeService, active_memory_descriptor_exists, resolve_active_generation,
+    LegacyMetadataIntegrityService, MemoryHealthService, MemorySyncConsumer, PatternRepository,
+    ProjectCapsuleService, RunCycle, VectorOptimizeService, active_memory_descriptor_exists,
+    resolve_active_generation,
 };
 use butler_memory::coordination::CognitionWriteCoordinator;
 use butler_memory::profile::ProfileService;
@@ -107,14 +108,15 @@ impl DailyCognitionJobs {
             ledger,
             date_parser,
             paths.clone(),
+            PatternRepository::new(data_root.clone(), coordinator.clone()),
         ));
         let phases = CyclePhases {
             briefing_at: SystemTime::now().into(),
             metrics: cycle_metrics,
-            briefing,
+            briefing: briefing.clone(),
             patterns: Arc::new(super::patterns::compose(
                 data_root.clone(),
-                coordinator.clone(),
+                briefing.suggestions(),
                 provider,
                 configuration,
                 profile.clone(),

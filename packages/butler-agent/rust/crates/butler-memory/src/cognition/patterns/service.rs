@@ -3,7 +3,9 @@ use super::usage::Usage;
 use super::{
     PatternError, PatternInput, PatternInputSource, PatternRepository, ensure_active, merge, prompt,
 };
-use butler_models::models::{ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest};
+use butler_models::models::{
+    ProviderPromptLifecycle, ProviderPromptPort, ProviderPromptRequest, ReasoningEffort,
+};
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{Map, Value};
 use std::{path::PathBuf, sync::Arc};
@@ -26,6 +28,12 @@ struct Metrics {
     bundle: Option<String>,
     candidates: usize,
     usage: Usage,
+}
+struct Call<'a> {
+    model: &'a str,
+    reasoning: ReasoningEffort,
+    instructions: &'a str,
+    scope: String,
 }
 impl Metrics {
     fn view(self, enabled: bool, patterns: usize) -> Map<String, Value> {
@@ -82,9 +90,13 @@ impl PatternExtractionService {
             }
             let reply = self
                 .ask(
-                    &input,
-                    prompt::prompt(&input, &store, Some(&page), now),
-                    run_id,
+                    &Call {
+                        model: &input.model,
+                        reasoning: input.reasoning,
+                        instructions: prompt::PATTERN_INSTRUCTIONS,
+                        scope: format!("cognition:{run_id}:pattern_extraction:{}", metrics.pages),
+                    },
+                    prompt::prompt(&input, &store, &page, now),
                     token,
                     &mut metrics,
                 )
@@ -112,27 +124,69 @@ impl PatternExtractionService {
             store.revision += 1;
         }
         if input.level != "off"
-            && store.patterns.iter().any(|p| p.proposed_at.is_none())
             && !store.bundles.iter().any(|b| b.run_id == run_id)
+            && let Some((model, reasoning)) = input.suggestion_model.clone()
         {
-            ensure_active(token)?;
-            let reply = self
-                .ask(
-                    &input,
-                    prompt::prompt(&input, &store, None, now),
-                    run_id,
-                    token,
-                    &mut metrics,
-                )
-                .await?;
-            let candidates = merge::reply(&reply, "candidates")?;
-            metrics.bundle = merge::propose(&mut store, candidates, run_id, &input.level, now);
-            if metrics.bundle.is_some() {
-                metrics.candidates = store.bundles.last().map_or(0, |b| b.candidates.len());
-                self.commit(&store, token).await?;
-            }
+            self.propose(
+                &input,
+                &mut store,
+                Call {
+                    model: &model,
+                    reasoning,
+                    instructions: crate::cognition::suggestions::SUGGESTION_INSTRUCTIONS,
+                    scope: format!("cognition:{run_id}:pattern_proposal"),
+                },
+                (run_id, now, token, &mut metrics),
+            )
+            .await?;
         }
         Ok(metrics.view(true, store.patterns.len()))
+    }
+    async fn propose(
+        &self,
+        input: &PatternInput,
+        store: &mut super::PatternStore,
+        mut call: Call<'_>,
+        (run_id, now, token, metrics): (&str, DateTime<Utc>, &CancellationToken, &mut Metrics),
+    ) -> Result<(), PatternError> {
+        let context = self
+            .source
+            .suggestion_context(run_id, &input.locale, now)
+            .await?;
+        let reply = self
+            .ask(
+                &call,
+                prompt::proposal_prompt(input, store, &context, now),
+                token,
+                metrics,
+            )
+            .await?;
+        let candidates = merge::candidates(store, merge::reply(&reply, "candidates")?);
+        if candidates.is_empty() {
+            return Ok(());
+        }
+        let items: Vec<_> = candidates.iter().map(|(_, item)| item.clone()).collect();
+        call.scope = format!("cognition:{run_id}:pattern_proposal_review");
+        let review = crate::cognition::suggestions::review_prompt(
+            "pattern_proposal_review",
+            &input.locale,
+            now,
+            &context,
+            &items,
+        );
+        let reply = self.ask(&call, review, token, metrics).await?;
+        let kept = crate::cognition::suggestions::kept(&reply).ok_or(PatternError::InvalidReply)?;
+        let kept = candidates
+            .into_iter()
+            .map(|(c, _)| c)
+            .filter(|c| kept.contains(&c.pattern_id))
+            .collect();
+        metrics.bundle = merge::bundle(store, kept, run_id, &input.level, now);
+        if metrics.bundle.is_some() {
+            metrics.candidates = store.bundles.last().map_or(0, |b| b.candidates.len());
+            self.commit(store, token).await?;
+        }
+        Ok(())
     }
     async fn commit(
         &self,
@@ -149,25 +203,23 @@ impl PatternExtractionService {
     }
     async fn ask(
         &self,
-        input: &PatternInput,
+        call: &Call<'_>,
         prompt: String,
-        run_id: &str,
         token: &CancellationToken,
         metrics: &mut Metrics,
     ) -> Result<String, PatternError> {
         ensure_active(token)?;
         let root = self.root.to_string_lossy();
-        let scope = format!("cognition:{run_id}:pattern_extraction:{}", metrics.pages);
         let response = self
             .provider
             .run_prompt(
                 ProviderPromptRequest {
                     prompt: &prompt,
-                    model: Some(&input.model),
-                    reasoning_effort: Some(&input.reasoning),
-                    instructions: Some(prompt::PATTERN_INSTRUCTIONS),
+                    model: Some(call.model),
+                    reasoning_effort: Some(&call.reasoning),
+                    instructions: Some(call.instructions),
                     response_format: None,
-                    cache_scope: Some(&scope),
+                    cache_scope: Some(&call.scope),
                     cache_boundary: None,
                     cancellation: token.clone(),
                     attachments: &[],
@@ -185,7 +237,7 @@ impl PatternExtractionService {
             .await
             .map_err(PatternError::port)?;
         ensure_active(token)?;
-        metrics.usage.push(&input.model, response.usage.as_ref());
+        metrics.usage.push(call.model, response.usage.as_ref());
         Ok(response.text)
     }
 }

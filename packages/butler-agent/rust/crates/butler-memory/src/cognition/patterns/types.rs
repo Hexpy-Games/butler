@@ -44,16 +44,21 @@ pub(super) struct Action {
     pub(super) kind: String,
     pub(super) title: String,
     pub(super) prompt: String,
-    pub(super) schedule: Schedule,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) schedule: Option<Schedule>,
     pub(super) deliver_to: String,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) struct Candidate {
+    /// Candidate key in its bundle: the source pattern for a schedule candidate, `once_<uuid>` for one-time work.
     pub(super) pattern_id: String,
     pub(super) state: String,
     pub(super) title: String,
+    #[serde(default)]
+    pub(super) message: String,
     pub(super) action: Action,
-    pub(super) evidence: Evidence,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) evidence: Option<Evidence>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) struct Bundle {
@@ -93,8 +98,6 @@ impl Default for PatternStore {
 pub struct PatternEvent {
     /// Canonical message identity.
     pub id: String,
-    /// Structural message origin kind.
-    pub kind: String,
     /// Structural session kind: chats, project or work.
     pub session: String,
     #[serde(skip)]

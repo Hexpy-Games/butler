@@ -97,7 +97,7 @@ fn platform_dependencies(domain: &str) -> Option<&'static [&'static str]> {
         | "storage_size" | "stdio" | "time_zone" | "user_auth" | "user_dirs" | "diagnostics"
         | "account_dirs" | "process_priority" | "download_mark" | "plugin_files" | "plugin_git"
         | "shared_locks" | "powershell_text" | "host_file_behavior" | "startup_task"
-        | "store_update" => &[],
+        | "store_update" | "remote_ssh" => &[],
         "secure_fs" => &["data_paths", "user_dirs"],
         // SQLite synchronization, credentials, install pointers and post-run
         // quarantine consume the secure filesystem facade.

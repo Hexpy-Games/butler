@@ -3,6 +3,7 @@ use super::super::{
     AppApplication, AppMemoryCommand, GatewayApplicationError, app_error, events, public,
 };
 use super::outbox;
+use crate::gateway::GatewayApplication;
 use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -27,7 +28,6 @@ impl AppApplication {
             return Ok(());
         }
         let bundles = bundles.clone();
-        let language = self.briefing_language().await?;
         let clock = self.dependencies.identity_clock.clone();
         self.storage
             .execute(move |db| {
@@ -39,11 +39,16 @@ impl AppApplication {
                     if !candidates.iter().any(|c| c["state"] == "pending") {
                         continue;
                     }
-                    let text = match (language.as_str(), candidates.len()) {
-                        ("ko", _) => "자주 찾으시는 걸 미리 준비해 둘까요?",
-                        (_, 1) => "Want me to get this ready before you ask?",
-                        _ => "Want me to get these ready before you ask?",
-                    };
+                    let text = candidates
+                        .iter()
+                        .filter(|c| c["state"] == "pending")
+                        .filter_map(|c| c["message"].as_str())
+                        .filter(|m| !m.trim().is_empty())
+                        .collect::<Vec<_>>()
+                        .join("\n\n");
+                    if text.is_empty() {
+                        continue;
+                    }
                     let mut panel =
                         json!({"kind":"pattern_proposal","bundle_id":id,"candidates":candidates});
                     redact(&mut panel);
@@ -52,7 +57,7 @@ impl AppApplication {
                         (&clock.new_uuid(), "general"),
                         &format!("pattern-bundle:{id}"),
                         "pattern_proposal",
-                        text,
+                        &text,
                         &json!({"panel":panel}),
                         &clock.now_iso(),
                     )?;
@@ -90,7 +95,12 @@ impl AppApplication {
                 "This suggestion was already handled.",
             ));
         }
-        let automation = if decision == "accepted" {
+        let schedule = candidate["action"]["kind"] == "schedule";
+        let prompt = candidate["action"]["prompt"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let automation = if decision == "accepted" && schedule {
             Some(self.create_proposal_schedule(candidate).await?)
         } else {
             None
@@ -116,12 +126,41 @@ impl AppApplication {
                 return Err(error);
             }
         };
-        self.update_proposal_panel(bundle_id, pattern_id, decision, automation.clone())
-            .await?;
+        self.update_proposal_panel(
+            bundle_id.clone(),
+            pattern_id.clone(),
+            decision.clone(),
+            automation.clone(),
+        )
+        .await?;
+        if decision == "accepted" && !schedule {
+            response["turn_id"] =
+                json!(self.run_suggestion(&bundle_id, &pattern_id, prompt).await?);
+        }
         if let Some(id) = automation {
             response["automation_id"] = json!(id);
         }
         Ok(response)
+    }
+
+    /// Agreed one-time work runs at once in 대화, sent as the user's request like a home card.
+    async fn run_suggestion(
+        &self,
+        bundle: &str,
+        key: &str,
+        prompt: String,
+    ) -> Result<Option<String>, GatewayApplicationError> {
+        let sent = self
+            .send_message(crate::gateway::SendMessageCommand {
+                chat_id: "general".into(),
+                request: crate::gateway::MessageSendRequest {
+                    text: Some(json!(prompt)),
+                    client_message_id: Some(json!(format!("suggestion-{bundle}-{key}"))),
+                    ..Default::default()
+                },
+            })
+            .await?;
+        Ok(sent.turn.map(|turn| turn.id))
     }
 
     async fn create_proposal_schedule(

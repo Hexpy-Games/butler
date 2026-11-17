@@ -2,7 +2,7 @@
 use super::{PatternError, types::*};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Deserialize)]
@@ -128,64 +128,116 @@ pub(super) fn valid_time(time: &str) -> bool {
 }
 #[derive(Deserialize)]
 struct Proposal {
-    pattern_id: String,
+    kind: String,
+    #[serde(default)]
+    pattern_id: Option<String>,
+    message: String,
     title: String,
     action: ProposedAction,
+    #[serde(default)]
+    lens: String,
+    #[serde(default)]
+    evidence: Vec<Value>,
+    #[serde(default)]
+    related_existing: Vec<Value>,
+    #[serde(default)]
+    what_is_new: String,
 }
 #[derive(Deserialize)]
 struct ProposedAction {
     title: String,
     prompt: String,
-    schedule: Schedule,
+    #[serde(default)]
+    schedule: Option<Schedule>,
 }
 
-pub(super) fn propose(
-    store: &mut PatternStore,
-    values: Vec<Value>,
-    run_id: &str,
-    level: &str,
-    now: DateTime<Utc>,
-) -> Option<String> {
-    if store.bundles.iter().any(|b| b.run_id == run_id) {
-        return None;
-    }
+/// Valid candidates (at most three), each with the item the reviewer reads.
+pub(super) fn candidates(store: &PatternStore, values: Vec<Value>) -> Vec<(Candidate, Value)> {
     let mut candidates = Vec::new();
+    let mut used = HashSet::new();
     for value in values {
         let Ok(p) = serde_json::from_value::<Proposal>(value) else {
             continue;
         };
-        if p.title.trim().is_empty()
+        if p.message.trim().is_empty()
+            || p.title.trim().is_empty()
             || p.action.title.trim().is_empty()
             || p.action.prompt.trim().is_empty()
-            || !matches!(p.action.schedule.r#type.as_str(), "daily" | "weekdays")
-            || !valid_time(&p.action.schedule.time)
         {
             continue;
         }
-        let Some(pattern) = store
-            .patterns
-            .iter_mut()
-            .find(|pattern| pattern.id == p.pattern_id && pattern.proposed_at.is_none())
-        else {
-            continue;
+        let (key, schedule, evidence) = match p.kind.as_str() {
+            "schedule" => {
+                let Some(pattern) = store.patterns.iter().find(|pattern| {
+                    Some(&pattern.id) == p.pattern_id.as_ref() && pattern.proposed_at.is_none()
+                }) else {
+                    continue;
+                };
+                let Some(schedule) = p.action.schedule else {
+                    continue;
+                };
+                if !matches!(schedule.r#type.as_str(), "daily" | "weekdays")
+                    || !valid_time(&schedule.time)
+                    || !used.insert(pattern.id.clone())
+                {
+                    continue;
+                }
+                (
+                    pattern.id.clone(),
+                    Some(schedule),
+                    Some(pattern.evidence.clone()),
+                )
+            }
+            "once" => (format!("once_{}", uuid::Uuid::new_v4()), None, None),
+            _ => continue,
         };
-        pattern.proposed_at = Some(now);
-        candidates.push(Candidate {
-            pattern_id: p.pattern_id,
-            state: "pending".into(),
-            title: p.title,
-            action: Action {
-                kind: "schedule".into(),
-                title: p.action.title,
-                prompt: p.action.prompt,
-                schedule: p.action.schedule,
-                deliver_to: "chats".into(),
+        let item = json!({"id":key,"kind":p.kind,"lens":p.lens,"message":p.message,
+            "title":p.title,"action":{"title":p.action.title,"prompt":p.action.prompt,"schedule":schedule},
+            "evidence":p.evidence,"related_existing":p.related_existing,"what_is_new":p.what_is_new});
+        candidates.push((
+            Candidate {
+                pattern_id: key,
+                state: "pending".into(),
+                title: p.title,
+                message: p.message,
+                action: Action {
+                    kind: p.kind,
+                    title: p.action.title,
+                    prompt: p.action.prompt,
+                    schedule,
+                    deliver_to: "chats".into(),
+                },
+                evidence,
             },
-            evidence: pattern.evidence.clone(),
-        });
+            item,
+        ));
+        if candidates.len() == 3 {
+            break;
+        }
     }
-    if candidates.is_empty() {
+    candidates
+}
+
+/// Publishes the kept candidates as this run's bundle.
+pub(super) fn bundle(
+    store: &mut PatternStore,
+    candidates: Vec<Candidate>,
+    run_id: &str,
+    level: &str,
+    now: DateTime<Utc>,
+) -> Option<String> {
+    if candidates.is_empty() || store.bundles.iter().any(|b| b.run_id == run_id) {
         return None;
+    }
+    for candidate in &candidates {
+        if candidate.action.kind == "schedule"
+            && let Some(pattern) = store
+                .patterns
+                .iter_mut()
+                .find(|p| p.id == candidate.pattern_id)
+        {
+            pattern.proposed_at = Some(now);
+        }
     }
     let id = format!("bundle_{run_id}");
     store.bundles.push(Bundle {
