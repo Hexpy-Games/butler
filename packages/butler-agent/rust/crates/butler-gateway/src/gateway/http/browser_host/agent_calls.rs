@@ -200,11 +200,16 @@ fn dispatch(
             return response(count, refused).map(Some);
         }
         if super::usage::page_op(&op) {
+            let id = frame["tab"].as_str().unwrap_or("");
             let tab = hub
                 .tabs
-                .check(&session, frame["tab"].as_str().unwrap_or(""), &op)
+                .check(&session, id, &op)
                 .map_err(|_| error(403, "not_your_tab"))?;
-            if tab["url"].as_str().is_some_and(|url| {
+            // A page host's pages are driven by the Agent's own executor, whose URL is current;
+            // the host's snapshot can trail a navigation the executor has already finished.
+            let driven = hub.pages.as_ref().and_then(|link| link.executor.tab(id));
+            let url = driven.as_ref().unwrap_or(tab)["url"].as_str();
+            if url.is_some_and(|url| {
                 !permitted_url(state, &session, url) && !super::devtools::local_read(&op, url)
             }) {
                 return response(
@@ -216,7 +221,7 @@ fn dispatch(
             if frame["args"]["policy"]["mode"] != "signed_in" {
                 frame["args"]["policy"] = butler_runtime::browser::navigation_policy(
                     &format!("http://127.0.0.1:{}", super::super::content::port(state)),
-                    tab["url"].as_str().unwrap_or(""),
+                    url.unwrap_or(""),
                 );
             }
             if state
