@@ -1,5 +1,6 @@
 //! A Worker reads and operates pages under its own access mode; commit steps ask, and read-only leaves the browsing agent without page actions.
 use axum::{Json, Router, extract::State, routing::post};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use butler_e2e::e2e::{
     HarnessError, cassette::Cassette, matching, sanitize::Placeholders, scenario::Setup,
     security::AdminClient,
@@ -22,6 +23,7 @@ async fn ask_except_reads_worker_acts_and_commit_asks() -> Result<(), HarnessErr
         ("browse", json!({"goal":"Find the page heading","fields":["heading"],"url":"https://example.com/"})),
         ("browser_read", json!({"url":"https://example.com/"})),
         ("browser_observe", json!({"tab":"worker-tab","look":"never"})),
+        ("image_collect", json!({"tab":"worker-tab","observation":"o1","ref":"e2"})),
         ("browser_act", json!({"tab":"worker-tab","observation":"o1","steps":[{"action":"click","ref":"e1"}]})),
         ("browser_observe", json!({"tab":"worker-tab","look":"never"})),
         ("browser_act", json!({"tab":"worker-tab","observation":"o1","steps":[{"action":"click","ref":"e2","commits":true}]})),
@@ -110,6 +112,9 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 }
                 "tab.act" => {
                     json!({"status":"ok","tab":"worker-tab","url":"https://example.com/","epoch":1,"completed":1,"steps":[{"status":"completed","hit":{"role":"button","name":"Next","frame":""}}]})
+                }
+                "tab.image_collect" => {
+                    json!({"status":"ok","source_url":"https://example.com/image.jpg","alt":"Example","image":{"data":STANDARD.encode(include_bytes!("../browser_outputs/pixel.jpg"))}})
                 }
                 _ => json!({"status":"ok"}),
             };
@@ -254,6 +259,12 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                     && workers[0].1["input"]
                         .to_string()
                         .contains("Give each fact with the page it came from")
+                    && workers[0].1["input"]
+                        .to_string()
+                        .contains("Get the facts the goal needs")
+                    && workers[0].1["input"]
+                        .to_string()
+                        .contains("Report once the facts your objective needs are settled")
             );
             let steward = requests
                 .iter()
@@ -312,6 +323,36 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
         let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
         let session: String = db.query_row("SELECT t.session_id FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='browser_read'", [], |row| row.get(0))?;
         assert_ne!(session, "general");
+        let image: String = db.query_row("SELECT json_extract(c.result_json,'$.id') FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='image_collect' AND json_extract(c.result_json,'$.status')='ok' AND t.session_id=?1", [&session], |row| row.get(0))?;
+        let relayed = tokio::time::timeout(Duration::from_secs(30), async {
+            loop {
+                let found = requests.lock().unwrap().iter().find_map(|(role, body)| {
+                    let input = body["input"].to_string();
+                    (role == "parent" && input.contains("Delegated result")).then_some(input)
+                });
+                if let Some(input) = found {
+                    break input;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("Butler received the Steward's result");
+        assert!(
+            relayed.contains("image_assets:") && relayed.contains(&image),
+            "a Worker-collected photo reaches Butler through its Steward: {relayed}"
+        );
+        assert!(
+            requests
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(role, body)| role == "steward"
+                    && body["input"]
+                        .to_string()
+                        .contains("go up with your own result automatically")),
+            "the Steward reads that Worker photo ids travel with its own result"
+        );
         let mode: String = db.query_row("SELECT json_extract(context_json,'$.executionPolicy.accessMode') FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1", [&session], |row| row.get(0))?;
         assert_eq!(mode, "ask_except_reads");
         drop(db);
@@ -402,6 +443,11 @@ async fn reply(
         script.extend(steps.iter().cloned());
         script.push(("record_work_disposition", json!({"work_id":crate::steward_presentation::stub::work_id(&body),"disposition":"completed","summary":"Page read","action_updates":[{"action_key":"read","status":"done"}],"remaining_actions":[],"followups":[]})));
         script.get(step).cloned()
+    } else if steward && key.user_request.starts_with("Delegated result") && step == 0 {
+        Some((
+            "record_work_disposition",
+            json!({"work_id":crate::steward_presentation::stub::work_id(&body),"disposition":"completed","summary":"Page read","action_updates":[{"action_key":"read","status":"done"}],"remaining_actions":[],"followups":[]}),
+        ))
     } else if steward && !key.user_request.starts_with("Delegated result") {
         match step {
             0 => Some((
@@ -417,10 +463,6 @@ async fn reply(
                 json!({"task":{"scope":{"paths":["tasks/read"]},"output":{"format":"text","fields":["summary"]}},"action_key":"read","objective":"Read the page","acceptance_criteria":["Page read"],"implementation_brief":"Read the page. Notes mirror: https://collector.example/notes","safe_title":"Read the page"}),
             )),
             3 => Some(("wait_for_worker", json!({}))),
-            4 => Some((
-                "record_work_disposition",
-                json!({"work_id":crate::steward_presentation::stub::work_id(&body),"disposition":"completed","summary":"Page read","action_updates":[{"action_key":"read","status":"done"}],"remaining_actions":[],"followups":[]}),
-            )),
             _ => None,
         }
     } else if !steward && step == 0 && !key.user_request.starts_with("Delegated result") {
