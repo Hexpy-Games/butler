@@ -85,14 +85,23 @@ pub fn auto_track(cx: &App) -> bool {
 /// axis: a row's vertical one). A column, block or grid cell stretches this box and `child`
 /// keeps its width at the start; a row sizes the box to `child` and aligns it as any item.
 pub fn max_content(child: impl IntoElement) -> AnyElement {
-    fit_box()
+    fit(false, child)
+}
+
+/// [`max_content`] for a `child` that is block-level (`false`) or an atomic inline box (`true`).
+pub(crate) fn fit(inline: bool, child: impl IntoElement) -> AnyElement {
+    fit_box(inline)
         .child(div().flex().flex_none().max_w_full().child(child))
         .into_any_element()
 }
 
-/// The box of [`max_content`]: a horizontal flex box that does not grow or shrink.
-pub(crate) fn fit_box() -> Div {
-    div().flex().flex_none().max_w_full().min_w_0()
+/// The box of [`max_content`]: a horizontal flex box that does not grow or shrink. It takes the
+/// outer display of what it holds: an inline box stays on its line in a block (where nothing
+/// stretches it), and a flex or grid container blockifies it as any item.
+pub(crate) fn fit_box(inline: bool) -> Div {
+    let el = div();
+    let el = if inline { el.inline_flex() } else { el.flex() };
+    el.flex_none().max_w_full().min_w_0()
 }
 
 /// The Dialog being laid out, when the container is inside one.

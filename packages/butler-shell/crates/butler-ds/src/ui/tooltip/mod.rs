@@ -242,7 +242,7 @@ impl RenderOnce for Tooltip {
         if self.fill {
             wrapper.into_any_element()
         } else {
-            strut::max_content(wrapper)
+            strut::fit(true, wrapper)
         }
     }
 }

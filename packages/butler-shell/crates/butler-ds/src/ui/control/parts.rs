@@ -177,7 +177,7 @@ pub enum Width {
 /// constrains only its width, whichever axis the container lays out.
 pub(super) fn place(
     el: Stateful<Div>,
-    width: Width,
+    (width, inline): (Width, bool),
     outer: Option<super::Outer>,
     id: &ElementId,
 ) -> AnyElement {
@@ -186,7 +186,8 @@ pub(super) fn place(
         None => el,
     };
     if width == Width::Auto {
-        restyle(strut::fit_box().id((id.clone(), "fit")).child(el)).into_any_element()
+        let fit = strut::fit_box(inline).id((id.clone(), "fit"));
+        restyle(fit.child(el)).into_any_element()
     } else {
         restyle(el).into_any_element()
     }

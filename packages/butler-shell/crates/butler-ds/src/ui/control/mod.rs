@@ -204,7 +204,8 @@ impl RenderOnce for Control {
             Some((handle, reach)) => el.child(focus::publish(handle, reach)),
             None => el,
         };
-        parts::place(el.children(self.children), self.width, outer, &self.id)
+        let fit = (self.width, self.inline);
+        parts::place(el.children(self.children), fit, outer, &self.id)
     }
 }
 

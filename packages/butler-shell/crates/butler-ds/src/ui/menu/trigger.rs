@@ -42,7 +42,10 @@ impl RenderOnce for TriggerBox {
                 .child(self.child)
                 .into_any_element()
         } else {
-            strut::max_content((self.wire)(wrapper.inline_flex().flex_none()).child(self.child))
+            strut::fit(
+                true,
+                (self.wire)(wrapper.inline_flex().flex_none()).child(self.child),
+            )
         }
     }
 }
