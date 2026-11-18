@@ -1,16 +1,16 @@
-# Packs the PR's App as MSIX with a placeholder identity, signs it with a
-# certificate created in the job, installs it and checks Store-build behaviour.
+# Signs a copy of the supplied MSIX with a certificate created in the job,
+# installs it and checks Store-build behaviour against the unpacked App.
 # Trusts a certificate and installs a package: disposable GitHub-hosted runners only.
-param([Parameter(Mandatory)][string]$AppZip, [Parameter(Mandatory)][string]$Out)
+param([Parameter(Mandatory)][string]$AppDir, [Parameter(Mandatory)][string]$Msix, [Parameter(Mandatory)][string]$Out)
 if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'MSIX verification requires a disposable GitHub-hosted runner' }
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Out = [IO.Path]::GetFullPath($Out)
 $Work = Join-Path $env:RUNNER_TEMP ('butler-msix-check-' + [guid]::NewGuid())
-New-Item -ItemType Directory -Force $Out, "$Work\app" | Out-Null
+New-Item -ItemType Directory -Force $Out, $Work | Out-Null
 $script:Failures = 0
-$Identity = 'HexpyGames.ButlerStoreCheck'
-$Version = '0.1.0.0'
+$id = Get-Content -Raw "$PSScriptRoot\identity.json" | ConvertFrom-Json
+$Identity = $id.name
 $Data = "$env:USERPROFILE\.butler"
 
 function Check([string]$Name, [bool]$Ok, [string]$Detail) {
@@ -76,21 +76,15 @@ function Find-SdkTool([string]$Name) {
     $hit.FullName
 }
 
-Expand-Archive -LiteralPath $AppZip -DestinationPath "$Work\app"
-$AppDir = (Get-ChildItem "$Work\app" -Recurse -Filter Butler.exe | Select-Object -First 1).DirectoryName
-$Repo = (Resolve-Path "$PSScriptRoot\..\..\..\..\..").Path
-$Msix = "$Work\Butler.msix"
-& bun run "$Repo\packages\butler-app\scripts\windows\store\pack-msix.ts" --app $AppDir --out $Msix `
-    --identity-name $Identity --publisher 'CN=ButlerStoreCheck' --publisher-display-name 'Butler store check' --version $Version
-if ($LASTEXITCODE -ne 0) { throw "MSIX packing exited $LASTEXITCODE" }
-$cert = New-SelfSignedCertificate -Type Custom -Subject 'CN=ButlerStoreCheck' -KeyUsage DigitalSignature `
+Copy-Item -LiteralPath $Msix -Destination "$Work\Butler.msix"
+$cert = New-SelfSignedCertificate -Type Custom -Subject $id.publisher -KeyUsage DigitalSignature `
     -FriendlyName 'Butler store check' -CertStoreLocation 'Cert:\CurrentUser\My' `
     -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
 Export-Certificate -Cert $cert -FilePath "$Work\store-check.cer" | Out-Null
 Import-Certificate -FilePath "$Work\store-check.cer" -CertStoreLocation 'Cert:\LocalMachine\TrustedPeople' | Out-Null
-& (Find-SdkTool 'signtool.exe') sign /fd SHA256 /sha1 $cert.Thumbprint /s My $Msix
+& (Find-SdkTool 'signtool.exe') sign /fd SHA256 /sha1 $cert.Thumbprint /s My "$Work\Butler.msix"
 if ($LASTEXITCODE -ne 0) { throw "MSIX signing exited $LASTEXITCODE" }
-Add-AppxPackage -Path $Msix
+Add-AppxPackage -Path "$Work\Butler.msix"
 $pkg = Get-AppxPackage -Name $Identity
 $pfn = $pkg.PackageFamilyName
 $Install = $pkg.InstallLocation
