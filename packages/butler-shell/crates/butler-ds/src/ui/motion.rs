@@ -292,6 +292,13 @@ pub fn remeasure(window: &mut Window) {
     window.request_animation_frame();
 }
 
+/// Requests the next layout frame, only while a Collapsible's height transition is moving:
+/// a CSS height transition is layout, so the browser lays out every frame of it. Nothing at
+/// rest or under reduced motion calls it; every other motion stays a retained `LayerMotion`.
+pub fn layout_transition_frame(window: &mut Window) {
+    window.request_animation_frame();
+}
+
 /// Requests a frame while ongoing input drives a wheel glide or drag edge auto-scroll.
 pub fn input_frame(window: &mut Window) {
     window.request_animation_frame();

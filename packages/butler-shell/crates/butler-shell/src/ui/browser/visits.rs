@@ -1,5 +1,6 @@
 //! Change-driven, single-flight history commits (`browser/history.mjs`).
 use super::{
+    agent_host::Hosted,
     engine::TabId,
     model::{BrowserState, Owner, Tab},
 };
@@ -50,7 +51,7 @@ pub(super) fn committed(tab: &mut Tab, cx: &mut App) {
     add(
         json!({"_tab": tab.id.0.as_ref(), "url":tab.url, "title":tab.url, "favicon":"", "visitedAt":chrono::Utc::now().to_rfc3339(),
         "transition":transition, "tabKind":if conversation.is_some() {"conversation"} else {"mine"},
-        "conversationId":conversation, "butlerDriven":false, "background":false, "source":"butler"}),
+        "conversationId":conversation, "butlerDriven":tab.hosted.as_ref().is_some_and(Hosted::driven), "background":false, "source":"butler"}),
         cx,
     );
 }

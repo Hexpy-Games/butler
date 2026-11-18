@@ -91,13 +91,18 @@ impl Cdp {
             .insert(id, sender);
         let mut bytes = message.to_string().into_bytes();
         bytes.push(0);
-        if self.outgoing.send(bytes).await.is_err() {
-            self.forget(id);
-            return Err("browser_closed".into());
-        }
-        match tokio::time::timeout(COMMAND_TIMEOUT, receiver).await {
-            Ok(Ok(result)) => result,
-            Ok(Err(_)) => Err("browser_closed".into()),
+        // Sending can wait on a reader that stalled: it shares the reply's budget.
+        let exchange = async {
+            if self.outgoing.send(bytes).await.is_err() {
+                self.forget(id);
+                return Err("browser_closed".into());
+            }
+            receiver
+                .await
+                .unwrap_or_else(|_| Err("browser_closed".into()))
+        };
+        match tokio::time::timeout(COMMAND_TIMEOUT, exchange).await {
+            Ok(result) => result,
             Err(_) => {
                 self.forget(id);
                 Err("protocol_timeout".into())

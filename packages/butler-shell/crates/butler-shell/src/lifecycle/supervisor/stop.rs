@@ -56,6 +56,7 @@ impl Inner {
             state.poll_epoch += 1;
             state.poll_active = false;
             state.respawning = false;
+            state.last_stop = Some(reason);
             state.attached = None;
         });
         let running = self.read(|state| {

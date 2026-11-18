@@ -47,7 +47,7 @@ pub(super) async fn call(state: Arc<HttpState>, frame: Value) -> Result<Response
 async fn close_on_host(state: &Arc<HttpState>, session: &str, id: &str) {
     let call = uuid::Uuid::new_v4().to_string();
     let (sender, receiver) = tokio::sync::oneshot::channel();
-    {
+    let pages = {
         let Ok(mut hub) = state.browser.0.lock() else {
             return;
         };
@@ -61,11 +61,15 @@ async fn close_on_host(state: &Arc<HttpState>, session: &str, id: &str) {
             return;
         }
         hub.pending.insert(call.clone(), sender.into());
-    }
+        hub.pages.clone()
+    };
     let _pending = super::PendingCall {
         state: state.clone(),
         id: call,
     };
+    if let Some(link) = pages {
+        link.executor.close_preview(session, id).await;
+    }
     let _ = tokio::time::timeout(std::time::Duration::from_secs(5), receiver).await;
 }
 async fn start(

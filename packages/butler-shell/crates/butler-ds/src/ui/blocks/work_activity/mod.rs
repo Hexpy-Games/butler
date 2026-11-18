@@ -8,8 +8,9 @@ mod tools;
 
 use crate::ui::selectable::Break;
 use gpui::{
-    AnyElement, App, ElementId, Hsla, IntoElement, ParentElement as _, Pixels, RenderOnce,
-    SharedString, Styled as _, Window, div, px,
+    AnyElement, App, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
+    Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
+    px,
 };
 
 pub use disclosure::WorkActivityDisclosure;
@@ -206,12 +207,18 @@ impl RenderOnce for WorkActivityBlock {
     }
 }
 
-/// WorkActivityOutput: a tool's output in a bounded, wrapping, monospace block.
-pub fn output(text: impl Into<SharedString>, cx: &App) -> impl IntoElement {
+/// WorkActivityOutput: a tool's output in a bounded, wrapping, monospace block that scrolls
+/// past its cap.
+pub fn output(
+    id: impl Into<ElementId>,
+    text: impl Into<SharedString>,
+    cx: &App,
+) -> impl IntoElement {
     let ds = Ds::get(cx);
     div()
-        .max_h(px(320.)) // DS: WorkActivityBlock.module.css:131
-        .overflow_hidden()
+        .id(id)
+        .max_h(px(320.)) // DS: WorkActivityBlock.module.css:141
+        .overflow_y_scroll()
         .p(ds.len(Length::Space2))
         .border(ds.len(Length::BorderHairline))
         .border_color(ds.color(Color::Line))

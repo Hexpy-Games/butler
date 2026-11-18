@@ -6,6 +6,7 @@
 //! Differences from React, all the toolkit's: gpui has no data attributes, so `drop_id` becomes the
 //! element id of the tile's outer box (the App finds the tile's bounds by it), and no accessible
 //! names are drawn (`label` is accepted for the owner's accessibility tree and not drawn).
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -293,9 +294,7 @@ fn empty_box(ds: &Ds) -> Div {
 
 /// The accent ring of a drag over the tile, drawn over the media.
 fn drop_ring(ds: &Ds) -> AnyElement {
-    div()
-        .absolute()
-        .size_full()
+    cover()
         .rounded(ds.len(Length::RadiusControl))
         .border(ds.len(Length::BorderWidthStrong))
         .border_color(ds.color(Color::Accent))
@@ -354,7 +353,11 @@ fn mosaic(previews: &[GroupTilePreview], empty_label: &SharedString, ds: &Ds) ->
             track(true, rows, ds)
         }
     };
-    root.absolute().size_full().into_any_element()
+    root.absolute()
+        .size_full()
+        .top_0()
+        .left_0()
+        .into_any_element()
 }
 
 /// A row (or column) of equal tracks, `BorderWidthStrong` apart.

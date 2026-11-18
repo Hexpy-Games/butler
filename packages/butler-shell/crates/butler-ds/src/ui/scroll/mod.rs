@@ -3,6 +3,7 @@
 mod area;
 pub(crate) mod bar;
 pub mod engine;
+pub mod frame;
 mod linger;
 
 pub(crate) use area::overlay;

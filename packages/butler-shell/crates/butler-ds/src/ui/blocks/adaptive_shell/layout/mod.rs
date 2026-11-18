@@ -170,7 +170,7 @@ pub(super) fn render(mut shell: AdaptiveShell, window: &mut Window, cx: &mut App
         inspector_open,
         peeking,
         reduced: ds.reduced_motion(),
-        borderless: drawer && shell.window.width <= responsive::COMPACT_MAX,
+        borderless: drawer && shell.window.width <= responsive::COMPACT_MAX && !ds.desktop_only(),
     };
     let remap = platform_remap(shell.environment, shell.platform);
     let root = if let Some(settings) = shell.settings.take() {

@@ -324,6 +324,13 @@ impl Downloads {
         let Some(session) = origin.owner.strip_prefix("conversation:") else {
             return;
         };
+        if event["type"] != "download_completed" {
+            // A published file is the gateway's own signal; a failure is ours to tell.
+            let body = json!({"op":"failed","session":session,"tab":origin.tab.0.as_ref(),"reason":event["reason"]});
+            drop(Jobs::run(cx, move |client| async move {
+                let _ = client.browser_host_downloads(&body).await;
+            }));
+        }
         if super::area::title(session, cx).is_none() {
             return;
         }

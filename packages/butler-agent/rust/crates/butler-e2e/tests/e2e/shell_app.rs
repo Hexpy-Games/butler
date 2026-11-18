@@ -28,9 +28,12 @@ use serde_json::{Value, json};
 pub(super) mod driver;
 pub(super) mod live_turns;
 use driver::{SERIAL, SHOTS, Shell};
+mod chat_end_room;
+mod composer_fold;
 mod composer_toolbar;
 mod focus_fallback;
 mod focus_selection;
+mod narrow_window;
 mod observer_dialog;
 mod space_header;
 mod text_selection;
@@ -251,10 +254,44 @@ async fn shell_app_02_restart_and_quit_through_the_supervisor() -> Result<(), Ha
     Ok(())
 }
 
+/// Takes the App's credential file once the Agent has logged `[native-app] ready` `ready` times
+/// in the shell's output (it relies on `shell.stdout` being truncated by each `Shell::start`).
+fn hold_credential(
+    stdout: &std::path::Path,
+    auth: &std::path::Path,
+    held: &std::path::Path,
+    ready: usize,
+) -> tokio::task::JoinHandle<()> {
+    let (stdout, auth, held) = (stdout.to_owned(), auth.to_owned(), held.to_owned());
+    let taken = Instant::now();
+    tokio::spawn(async move {
+        loop {
+            let log = std::fs::read(&stdout).unwrap_or_default();
+            let log = String::from_utf8_lossy(&log);
+            assert!(
+                !log.contains("local_auth_unconfigured"),
+                "the Agent has no token: {log}"
+            );
+            if log.matches("[native-app] ready").count() >= ready {
+                break;
+            }
+            butler_e2e::assert_wall_clock_budget!(
+                taken.elapsed(),
+                Duration::from_secs(60),
+                "Agent gateway ready"
+            );
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        std::fs::rename(&auth, &held).expect("credential file taken");
+    })
+}
+
 /// SHELL-APP-15 — An Agent that reported ready outlives an App that cannot connect to it: with
 /// the App's credential file out of reach for longer than the 120 s startup deadline, the App
 /// keeps its Agent (no stop, no failure state), shows the error while it keeps probing, and
-/// reaches Running with the same Agent once the file is back.
+/// reaches Running with the same Agent once the file is back. The same holds for the Agent of an
+/// App Restart with the workspace shown (the error notice, no spinner), and the notice's Retry then
+/// replaces it.
 #[tokio::test]
 async fn shell_app_15_a_ready_agent_survives_a_late_app_probe() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -264,22 +301,14 @@ async fn shell_app_15_a_ready_agent_survives_a_late_app_probe() -> Result<(), Ha
     let data = sandbox.data.clone();
     let auth = data.join(butler_platform::data_paths::LOCAL_AUTH);
     let held = auth.with_extension("held");
-    // The credential file appears before the Agent reports ready: take it from the App's probe
-    // (its only reader) the moment it exists, even before the shell reports it started.
+    // The Agent reads its credential file once at startup, right after writing it, so taking
+    // the file earlier races its own write and leaves it without a token for good. It logs
+    // `[native-app] ready` once the token is loaded, before it reports ready to the App's
+    // probe (the file's only other reader): take the file then, even before the shell
+    // reports it started. The Agent's output goes straight into the shell's stdout file.
     let taken = Instant::now();
-    let take = tokio::spawn({
-        let (auth, held) = (auth.clone(), held.clone());
-        async move {
-            while std::fs::rename(&auth, &held).is_err() {
-                butler_e2e::assert_wall_clock_budget!(
-                    taken.elapsed(),
-                    Duration::from_secs(60),
-                    "credential file"
-                );
-                tokio::time::sleep(Duration::from_millis(1)).await;
-            }
-        }
-    });
+    let stdout = sandbox.logs.join("shell.stdout");
+    let take = hold_credential(&stdout, &auth, &held, 1);
     let mut shell = Shell::start(&sandbox, &[]).await?;
     take.await.expect("credential file taken");
     let mut ready = None;
@@ -321,6 +350,72 @@ async fn shell_app_15_a_ready_agent_survives_a_late_app_probe() -> Result<(), Ha
     assert_eq!(running["diagnostics"]["pid"], pid, "{running}");
     assert!(running["diagnostics"]["last_error"].is_null(), "{running}");
     assert_never_failed(&running);
+
+    // With the workspace shown, the App's own Restart brings an Agent it cannot connect to: the
+    // late start shows the error notice, not a spinner that never ends, and the App keeps the
+    // Agent. Retry while that start is still pending restarts the Agent with a new one.
+    live_turns::complete_onboarding(&gateway(&shell.launch)).await?;
+    shell.run(&["app-quit"]).await?;
+    shell.finish().await?;
+    let mut shell = Shell::start(&sandbox, &[]).await?;
+    shell
+        .run(&["agent running", "wait-anchor composer"])
+        .await?;
+    let first = instance_record(&data).expect("instance record")["pid"].clone();
+    let take = hold_credential(&stdout, &auth, &held, 2);
+    shell.run(&["restart"]).await?;
+    take.await.expect("credential file taken");
+    let taken = Instant::now();
+    let mut next = None;
+    while next.is_none() {
+        butler_e2e::assert_wall_clock_budget!(
+            taken.elapsed(),
+            Duration::from_secs(60),
+            "restarted Agent ready"
+        );
+        next = instance_record(&data)
+            .filter(|record| record["state"] == "ready" && record["pid"] != first);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let held_pid = next.expect("ready record")["pid"].clone();
+
+    tokio::time::sleep(Duration::from_secs(125)).await;
+    shell
+        .run(&[
+            "diagnostics respawn-late",
+            "wait-anchor agent-notice",
+            "expect-no-anchor agent-notice-spinner",
+        ])
+        .await?;
+    let late = shell.report("respawn-late")?;
+    assert_eq!(late["diagnostics"]["pid"], held_pid, "{late}");
+    assert_eq!(late["diagnostics"]["agent_state"], "starting", "{late}");
+    assert_eq!(
+        late["diagnostics"]["last_error_code"], "health_timeout",
+        "{late}"
+    );
+    assert_never_failed(&late);
+
+    shell
+        .run(&[
+            "click agent-notice-action",
+            "agent running",
+            "wait-no-anchor agent-notice",
+            "diagnostics replaced",
+        ])
+        .await?;
+    let replaced = shell.report("replaced")?;
+    assert_ne!(replaced["diagnostics"]["pid"], held_pid, "{replaced}");
+    assert!(
+        replaced["diagnostics"]["last_error"].is_null(),
+        "{replaced}"
+    );
+    assert_never_failed(&replaced);
+    // The Restart the notice's Retry ran replaced the start the first was waiting for: it
+    // answers Ok.
+    shell.run(&["restart-answers"]).await?;
+    let answers = shell.report("restarts")?;
+    assert_eq!(answers, json!(["ok"]), "{answers}");
     shell.run(&["app-quit"]).await?;
     shell.finish().await?;
     sandbox.mark_success();

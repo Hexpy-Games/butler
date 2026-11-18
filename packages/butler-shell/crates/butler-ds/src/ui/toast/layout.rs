@@ -155,7 +155,9 @@ pub(super) fn resolve(
         |_, _| (target.y, target.scale, height),
     );
     if *before.read(cx) != (target.y, target.scale, height) {
-        window.animate_layout(timing.ms());
+        if !reduced {
+            window.animate_layout(timing.ms());
+        }
         before.update(cx, |value, _| *value = (target.y, target.scale, height));
     }
     let mut value = |name: &'static str, target: f32, jump: bool, time: &Timing| {

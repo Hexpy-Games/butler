@@ -31,6 +31,7 @@ ALLOW = (
     'packages/butler-agent/rust/source-check-tests.txt',
     'packages/butler-agent/rust/source-check-e2e-hooks.txt',
     'packages/butler-shell/source-check-tests.txt',
+    'packages/butler-shell/source-check-controls.txt',
     'packages/butler-agent/rust/crates/*/source-check-baseline.txt',
     'packages/butler-agent/rust/crates/*/os-specific-baseline.txt',
     'packages/butler-shell/crates/*/os-specific-baseline.txt',

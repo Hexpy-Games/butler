@@ -31,6 +31,7 @@ use self::copy::words;
 use crate::lifecycle::supervisor::{AgentState, Supervisor, SupervisorError};
 use crate::lifecycle::{self, AgentRuntime};
 use crate::ui::Icon;
+use crate::ui::widgets::anchor;
 
 /// `lifecycle-assets/copy.json` slow hint: shown once the quit has run this long.
 const SLOW_AFTER: Duration = Duration::from_secs(4);
@@ -186,10 +187,15 @@ pub(crate) fn quit(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement 
     page(card, cx)
 }
 
-/// `startAgent` with `notifyError(error, feedback.agentStartFailed)`: the failure toasts the
+/// `startAgent` (a Restart instead when `restart`: a start already under way is not joined,
+/// it is replaced) with `notifyError(error, feedback.agentStartFailed)`: the failure toasts the
 /// fallback copy; success leaves the notice to `AgentRuntime::state`.
-fn start(failed: &'static str, cx: &mut App) {
-    let started = lifecycle::resume(cx);
+fn start(failed: &'static str, restart: bool, cx: &mut App) {
+    let started = if restart {
+        lifecycle::run(cx, Supervisor::restart)
+    } else {
+        lifecycle::resume(cx)
+    };
     cx.spawn(async move |cx| {
         if started.await.is_err() {
             cx.update(|cx| {
@@ -209,18 +215,25 @@ pub(crate) fn agent_notice(
 ) -> Option<AnyElement> {
     let _ = window;
     let words = words(lang);
+    // The boot screen's rule: an error while starting is the failed notice, not a spinner.
+    let failed = runtime.state == AgentState::RestartFailed
+        || (matches!(runtime.state, AgentState::Starting | AgentState::Restarting)
+            && runtime.error.is_some());
+    // Retry on a start that is late or failing restarts it; `resume` would only join it.
+    let restart = failed && runtime.state != AgentState::RestartFailed;
     let (tone, message, action) = match runtime.state {
         AgentState::Stopped => (NoticeTone::Warning, words.agent_stopped, words.agent_start),
-        AgentState::Restarting => (NoticeTone::Info, words.agent_restarting, ""),
-        AgentState::RestartFailed => (
+        _ if failed => (
             NoticeTone::Error,
             words.agent_restart_failed,
             words.notice_retry,
         ),
+        AgentState::Restarting => (NoticeTone::Info, words.agent_restarting, ""),
         _ => return None,
     };
     let ds = Ds::get(cx);
-    let lead: AnyElement = if runtime.state == AgentState::Restarting {
+    let spinning = runtime.state == AgentState::Restarting && !failed;
+    let lead: AnyElement = if spinning {
         Spinner::new("agent-notice-spinner").into_any_element()
     } else {
         icon(Icon::AlertCircle, IconSize::Lg, ds).into_any_element()
@@ -232,14 +245,19 @@ pub(crate) fn agent_notice(
             .variant(Variant::Outline)
             .size(butler_ds::ui::button::Size::Sm)
             .text(action)
-            .on_click(move |_, _, cx| start(failed, cx));
+            .on_click(move |_, _, cx| start(failed, restart, cx));
         if runtime.resuming {
             button = button.disabled();
         }
-        notice = notice.action(button);
+        notice = notice.action(anchor(div().flex(), "agent-notice-action").child(button));
     }
+    let name = if spinning {
+        "agent-notice-spinner"
+    } else {
+        "agent-notice"
+    };
     Some(
-        div()
+        anchor(div(), name)
             .px(ds.len(Length::SpaceMd))
             .py(ds.len(Length::SpaceSm))
             .child(notice)

@@ -195,6 +195,8 @@ fn info_changed(browser: &Arc<Browser>, info: &Value) {
             && url.password().is_none()
         {
             tab.url = url.to_string();
+        } else {
+            tab.url.clear();
         }
         tab.title = info["title"].as_str().unwrap_or("").to_owned();
     }

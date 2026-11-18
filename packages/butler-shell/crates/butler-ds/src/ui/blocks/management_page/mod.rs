@@ -5,6 +5,7 @@
 mod aside;
 mod panel;
 
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, Pixels,
     RenderOnce, ScrollHandle, SharedString, Styled as _, Window, div, px,
@@ -241,19 +242,8 @@ impl ManagementPage {
     fn backdrop(&mut self, ds: &Ds) -> Option<AnyElement> {
         let calm = self.treatment == BackgroundTreatment::Calm;
         self.background.take().map(|layer| {
-            let veil = calm.then(|| {
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .bg(ds.color(Color::ManagementPageVeil))
-            });
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
+            let veil = calm.then(|| cover().bg(ds.color(Color::ManagementPageVeil)));
+            cover()
                 .overflow_hidden()
                 .child(layer)
                 .children(veil)
