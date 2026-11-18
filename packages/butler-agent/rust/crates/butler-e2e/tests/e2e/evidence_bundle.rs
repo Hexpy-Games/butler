@@ -141,6 +141,15 @@ async fn evb_01_large_result_has_a_bounded_mechanical_manifest() -> Result<(), H
     assert!(line.len() <= 3 * 1024, "{} bytes", line.len());
     assert!(line.contains("web_read 253 from 7 sites"), "{line}");
     assert!(line.contains("web_search 252"), "{line}");
+    let pages = input
+        .lines()
+        .find(|l| l.starts_with("Pages read: "))
+        .unwrap();
+    assert_eq!(pages.matches("https://host").count(), 20, "{pages}");
+    assert!(
+        pages.ends_with(" and 233 more in the bundle") && pages.len() <= 3 * 1024,
+        "{pages}"
+    );
     assert!(run.refs.len() >= ITEMS);
     assert!(!input.contains(&serde_json::to_string(&run.refs)?));
     assert!(!input.contains("evidence_refs: ["));

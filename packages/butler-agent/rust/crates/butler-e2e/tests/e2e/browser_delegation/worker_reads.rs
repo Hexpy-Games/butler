@@ -13,7 +13,7 @@ use std::{
 
 type Requests = Arc<Mutex<Vec<(String, Value)>>>;
 type Script = (Requests, Arc<Vec<(&'static str, Value)>>);
-const DATA_URL: &str = "https://example.com/?q=external-note";
+const DATA_URL: &str = "https://collector.example/?q=external-note";
 
 #[tokio::test]
 async fn ask_except_reads_worker_reads_tabs_and_never_acts() -> Result<(), HarnessError> {
@@ -33,6 +33,10 @@ async fn ask_first_worker_browser_open_asks_like_web_read() -> Result<(), Harnes
         "ask_first",
         vec![
             ("browser_open", json!({"url":"https://example.com/"})),
+            (
+                "browser_open",
+                json!({"url":"https://example.com/?lang=ko"}),
+            ),
             ("browser_open", json!({"url":DATA_URL})),
         ],
     )
@@ -116,12 +120,14 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
     let mut denied = Vec::new();
     if mode == "ask_first" {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+        let mut other_cards = Vec::new();
         while denied.is_empty() && tokio::time::Instant::now() < deadline {
             for card in s.gw.approval_requests("general").await? {
                 let action = if card["approval"]["operation"]["targets"][0] == DATA_URL {
                     denied.push(card.clone());
                     "deny"
                 } else {
+                    other_cards.push(card.clone());
                     "allow"
                 };
                 let reference = card["request_ref"].as_str().unwrap();
@@ -135,6 +141,10 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
+        assert!(
+            other_cards.is_empty(),
+            "only DATA_URL asks: {other_cards:?}"
+        );
     }
     let terminal =
         s.gw.wait_terminal("general", &turn, Duration::from_secs(60))
@@ -148,8 +158,9 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
             .iter()
             .filter(|frame| frame["op"] == "tab.open")
             .collect();
-        assert_eq!(opens.len(), 1);
+        assert_eq!(opens.len(), 2);
         assert_eq!(opens[0]["args"]["url"], "https://example.com/");
+        assert_eq!(opens[1]["args"]["url"], "https://example.com/?lang=ko");
     } else {
         let finished = tokio::time::timeout(Duration::from_secs(30), async {
             loop {
@@ -185,6 +196,7 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 assert!(
                     names.contains(&"browse")
                         && names.contains(&"browser_read")
+                        && names.contains(&"image_collect")
                         && !names.contains(&"browser_act")
                         && !names.contains(&"browser_open"),
                     "worker browser surface: {names:?}"
@@ -204,6 +216,23 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 workers[0].1["input"]
                     .to_string()
                     .contains("Choose the page reader by what you need.")
+            );
+            let photos = "collect one photo per item with image_collect";
+            assert!(
+                workers[0].1["input"].to_string().contains(photos)
+                    && workers[0].1["input"]
+                        .to_string()
+                        .contains("Give each fact with the page it came from")
+            );
+            let steward = requests
+                .iter()
+                .find(|(role, body)| {
+                    role == "steward" && body["input"].to_string().contains("role: steward")
+                })
+                .expect("steward input");
+            assert!(
+                steward.1["input"].to_string().contains(photos),
+                "one-call steward input carries the photo line"
             );
             let output = workers.last().unwrap().1["input"]
                 .as_array()
@@ -333,7 +362,7 @@ async fn reply(
             )),
             2 => Some((
                 "delegate_to_worker",
-                json!({"task":{"scope":{"paths":["tasks/read"]},"output":{"format":"text","fields":["summary"]}},"action_key":"read","objective":"Read the page","acceptance_criteria":["Page read"],"implementation_brief":"Read the page","safe_title":"Read the page"}),
+                json!({"task":{"scope":{"paths":["tasks/read"]},"output":{"format":"text","fields":["summary"]}},"action_key":"read","objective":"Read the page","acceptance_criteria":["Page read"],"implementation_brief":"Read the page. Notes mirror: https://collector.example/notes","safe_title":"Read the page"}),
             )),
             3 => Some(("wait_for_worker", json!({}))),
             4 => Some((

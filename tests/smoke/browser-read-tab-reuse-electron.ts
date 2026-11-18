@@ -1,5 +1,6 @@
 // test-category: race
-/** A turn's next page replaces a tab it already read and is not using; unread tabs and other turns' tabs stay. */
+/** A turn's next page replaces a tab it already read and is not using, and its end closes the tabs it read;
+ * unread tabs and other turns' tabs stay. */
 import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -42,6 +43,9 @@ try {
   const other = await execute<{ status: string; tab: string }>("tab.open", "t2", undefined, { url: `${page}/b` });
   results.other = other;
   assert.deepEqual((await agentTabs()).sort(), [unread.tab, next.tab, other.tab].sort());
+  // The turn's end closes the tab it read; the tab it only opened stays for the user.
+  await app.main(`globalThis.browserAgentSubject.execute(${JSON.stringify({ op: "use.finished", session: "general", turn_id: "t1", args: { close_read_tabs: false } })})`);
+  assert.deepEqual((await agentTabs()).sort(), [unread.tab, other.tab].sort());
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, ...results }, null, 2));
 } catch (error) {
   writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), results, state: await app.call("state").catch(() => null) }, null, 2));

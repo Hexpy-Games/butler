@@ -1,6 +1,13 @@
 import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { ToastHost } from "@/ds";
 
-// Screens arrive with the mobile design system; this is only the navigation root.
 export default function RootLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <>
+      <StatusBar style="auto" />
+      <Stack screenOptions={{ headerShown: false }} />
+      <ToastHost />
+    </>
+  );
 }

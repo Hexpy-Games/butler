@@ -113,6 +113,19 @@ fn permission(facts: PermissionFacts<'_>) -> AuthorityResult<ConversationPermiss
     })
 }
 
+/// The site whose data grant answers this request: a navigation to one site,
+/// or a browser_act batch that only types (no commit, no always-confirm step).
+/// Commit grants keep browser_act's own key.
+fn data_site<'a>(capability: &str, input: &'a Value) -> Option<&'a str> {
+    let typing = capability == "browser_act"
+        && input["always_confirm"] != true
+        && input["commit"] != true
+        && crate::btcc::types_text(&input["steps"]);
+    (input["navigation"] == true || typing)
+        .then(|| input["data_site"].as_str())
+        .flatten()
+}
+
 fn permission_scope_key(
     facts: PermissionFacts<'_>,
     file_edit: bool,
@@ -126,7 +139,10 @@ fn permission_scope_key(
         collation,
         ..
     } = facts;
-    let scope = if capability == "browser_act" && input["always_confirm"] != true {
+    let scope = if let Some(site) = data_site(capability, input) {
+        // Opening, reading and typing on a site share one grant; commits do not.
+        json!({"kind":"browser_site","capability":"browser_site_data","target":site})
+    } else if capability == "browser_act" && input["always_confirm"] != true {
         json!({"kind":"browser_site","capability":capability,"target":target})
     } else if file_edit {
         json!({"kind":"file_operation","capability":capability,"target":target,"input":input})
@@ -244,6 +260,9 @@ fn permission_description(file_edit: bool, command: bool, executable: Option<&st
 }
 
 fn permission_target(facts: PermissionFacts<'_>, command: bool) -> String {
+    if let Some(site) = data_site(facts.capability, facts.input) {
+        return site.into();
+    }
     let keys: &[&str] = if command {
         &["command"]
     } else {

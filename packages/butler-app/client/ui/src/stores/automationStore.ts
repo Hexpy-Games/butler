@@ -4,7 +4,7 @@ import { appCopy } from "@/app/copy.ts";
 import type { FormEvent } from "react";
 import { create } from "zustand";
 import { api } from "@/app/api.ts";
-import { notifyError } from "@/app/notifications.ts";
+import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import type {
   CalendarSchedule,
   AccessMode,
@@ -231,7 +231,7 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
       }
       await onSaved();
       if (isNew) void hintScheduleLogin();
-      onStatus({ label: appCopy.automations.saved, tone: "ok" });
+      notifyStatus(appCopy.automations.saved, { tone: "ok", id: `automation-save-${automationId}` });
     } catch (error) {
       // A refused field is shown on that field; anything else stays a toast.
       const saveError = automationSaveError(error);
@@ -258,9 +258,9 @@ export const useAutomationStore = create<AutomationStore>((set, get) => ({
         body: JSON.stringify({}),
       });
       await onSaved();
-      onStatus({ label: appCopy.automations.saved, tone: "ok" });
+      notifyStatus(appCopy.automations.actionDone[action], { tone: "ok", id: `automation-${action}-${automationId}` });
     } catch (error) {
-      notifyError(error, `${action} failed`, {
+      notifyError(error, appCopy.automations.actionFailed[action], {
         id: `automation-${action}-${automationId}`,
       });
       onStatus({ label: "ready", tone: "ok" });

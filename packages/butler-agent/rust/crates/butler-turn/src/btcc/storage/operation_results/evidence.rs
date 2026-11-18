@@ -7,6 +7,11 @@ use super::super::{StorageError, StorageResult};
 use super::contracts::*;
 use crate::btcc::StorageCode;
 
+/// Tools whose evidence item is a page the child read.
+const PAGE_READS: [&str; 4] = ["web_read", "browser_read", "browser_open", "browse"];
+/// The manifest stays bounded (EVB-01); pages past this many stay in the bundle.
+const PAGES_SHOWN: usize = 20;
+
 fn invalid() -> StorageError {
     error(StorageCode::OperationResultMissingOrScopeMismatch)
 }
@@ -167,20 +172,41 @@ pub(crate) fn manifest(
     if refs.is_empty() {
         return Ok("evidence: none".into());
     }
-    let counts = counts(db, refs)?;
+    let (counts, pages) = counts(db, refs)?;
     let line = format!(
         "evidence: evidence:{result} — {} items ({counts})",
         refs.len()
     );
     let cited = cited(db, result, refs, summary)?;
     Ok(format!(
-        "{line}{}\nEvidence is bundled; read any item exactly with list_operation_results evidence=<id>.",
+        "{line}{}{}\nEvidence is bundled; read any item exactly with list_operation_results evidence=<id>.",
+        pages_line(&pages),
         if cited.is_empty() {
             String::new()
         } else {
             format!("\ncited: {}", cited.join(", "))
         }
     ))
+}
+
+fn pages_line(pages: &[String]) -> String {
+    if pages.is_empty() {
+        return String::new();
+    }
+    let shown = pages.len().min(PAGES_SHOWN);
+    let more = match pages.len() - shown {
+        0 => String::new(),
+        n => format!(" and {n} more in the bundle"),
+    };
+    format!(
+        "\nPages read: {}{more}",
+        pages
+            .iter()
+            .take(PAGES_SHOWN)
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }
 
 fn mentions(text: &str, reference: &str) -> bool {
@@ -192,16 +218,27 @@ fn mentions(text: &str, reference: &str) -> bool {
     })
 }
 
-fn counts(db: &Connection, refs: &[String]) -> StorageResult<String> {
+fn counts(db: &Connection, refs: &[String]) -> StorageResult<(String, Vec<String>)> {
     let mut counts = BTreeMap::<String, usize>::new();
     let mut sites = BTreeSet::new();
+    let mut pages = Vec::new();
     for reference in refs {
         let item = item(db, reference)?;
         *counts.entry(item.tool.clone()).or_default() += 1;
-        if item.tool == "web_read"
-            && let Some(host) = site_host(db, &item)?
+        if PAGE_READS.contains(&item.tool.as_str())
+            && item.status == "completed"
+            && let Some(page) = page_url(db, &item)?
         {
-            sites.insert(host);
+            if item.tool == "web_read"
+                && let Some(host) = url::Url::parse(&page)
+                    .ok()
+                    .and_then(|u| u.host_str().map(str::to_owned))
+            {
+                sites.insert(host);
+            }
+            if !pages.contains(&page) {
+                pages.push(page);
+            }
         }
     }
     let counts = counts
@@ -215,7 +252,7 @@ fn counts(db: &Connection, refs: &[String]) -> StorageResult<String> {
         })
         .collect::<Vec<_>>()
         .join(", ");
-    Ok(counts)
+    Ok((counts, pages))
 }
 
 fn cited(
@@ -254,12 +291,13 @@ fn result_hash(db: &Connection, item: &Item) -> StorageResult<String> {
     Ok(format!("{:x}", Sha256::digest(body.as_bytes())))
 }
 
-fn site_host(db: &Connection, item: &Item) -> StorageResult<Option<String>> {
+fn page_url(db: &Connection, item: &Item) -> StorageResult<Option<String>> {
     let source: Option<String> = db
         .query_row(
             "SELECT COALESCE(NULLIF(json_extract(result_json,'$.source_url'),''),
                          NULLIF(json_extract(result_json,'$.final_url'),''),
-                         json_extract(arguments_json,'$.url'))
+                         NULLIF(json_extract(result_json,'$.url'),''),
+                         NULLIF(json_extract(arguments_json,'$.url'),''))
          FROM btcc_guided_tool_calls WHERE call_id=?1",
             [&item.call],
             |row| row.get::<_, Option<String>>(0),
@@ -267,7 +305,5 @@ fn site_host(db: &Connection, item: &Item) -> StorageResult<Option<String>> {
         .optional()
         .map_err(StorageError::sqlite)?
         .flatten();
-    Ok(source
-        .and_then(|url| url::Url::parse(&url).ok())
-        .and_then(|url| url.host_str().map(str::to_owned)))
+    Ok(source)
 }

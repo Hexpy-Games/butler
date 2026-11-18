@@ -26,8 +26,7 @@ GROUPS = ('shell', 'rust', 'ui', 'site', 'ds', 'package', 'install', 'linux-pack
 SHARED = ('VERSION', 'LICENSE', 'package.json', 'bun.lock*', 'bunfig.toml', 'tsconfig*.json',
           '*eslint*', '*stylelint*', '*prettier*')
 MOBILE_TOKENS_SOURCE = 'packages/butler-app/client/ui/src/libs/design-system/tokens.css'  # input of packages/butler-mobile/scripts/tokens.sh
-WINDOWS_BROWSER_INPUTS = ('tests/smoke/composer-permission-agent-smoke.ts',
-                          'tests/support/smoke-browser*', 'tests/support/bun-child-stdio.ts')
+WINDOWS_BROWSER_INPUTS = ('tests/smoke/composer-permission-agent-smoke.ts', 'tests/support/electron-page-cdp*')
 PACKAGING = ('packages/butler-app/client/electron/*', 'packages/butler-app/electron/*',
              'packages/butler-app/main/*', 'packages/butler-app/scripts/release/*',
              'packages/butler-app/scripts/windows/*', 'deploy/*',

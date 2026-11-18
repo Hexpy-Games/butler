@@ -6,7 +6,8 @@ use super::*;
 /// everyday tools are offered directly instead of through tool search, which
 /// cost browsing tasks extra search and describe rounds before the first page.
 /// Collecting an image of what a page shows belongs to the same everyday set:
-/// answers that present visual items need it without an extra search.
+/// answers that present visual items need it without an extra search; when
+/// `browse` drives tabs, image_collect stays direct: it is not a tab driver.
 const BROWSER_CORE: [&str; 5] = [
     "browser_open",
     "browser_observe",
@@ -84,7 +85,7 @@ pub(super) fn provider_candidates(
 }
 
 pub(super) fn deferred_browser(name: &str) -> bool {
-    BROWSER_CORE.contains(&name) && name != "browser_act"
+    BROWSER_CORE.contains(&name) && !matches!(name, "browser_act" | "image_collect")
 }
 
 /// Initial tools of the public-web, workspace (outside the direct phase),

@@ -94,10 +94,10 @@ test("a new schedule preselects the schedule default from settings and sends it 
   const create = calls.find((call) => call.method === "createAutomation");
   expect(create?.input).toMatchObject({
     title: "Morning brief",
-    promptBody: "Summarize my day.",
-    targetSessionId: "chat-a",
-    intervalSeconds: 1800,
-    accessMode: "full_access",
+    prompt_body: "Summarize my day.",
+    target_session_id: "chat-a",
+    interval_seconds: 1800,
+    access_mode: "full_access",
   });
 });
 
@@ -135,8 +135,8 @@ test("editing preselects the schedule's own mode and sends the chosen mode on sa
   const update = calls.find((call) => call.method === "updateAutomation");
   expect(update?.input).toMatchObject({
     automationId: "automation-1",
-    targetSessionId: "chat-b",
-    accessMode: "ask_first",
+    target_session_id: "chat-b",
+    access_mode: "ask_first",
   });
 });
 

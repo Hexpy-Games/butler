@@ -225,9 +225,11 @@ async fn restart_keeps_worker_and_deferred_vectors_idle_until_demand() -> Result
             .contains("[embedding-worker] ready")
     );
     assert_eq!(memory_stubs::unit_states(&s.sandbox.data)?, before);
-    let first = batch::recall(&s, "general", ASK).await?;
-    assert_complete(&first, &code, 3);
+    // The first recall is the demand: it warms the worker, then the consumer embeds the deferred unit.
+    batch::recall(&s, "general", ASK).await?;
     memory_stubs::vectors_complete(&s.sandbox.data, 4).await?;
+    let warm = batch::recall(&s, "general", ASK).await?;
+    assert_complete(&warm, &code, 4);
     eprintln!(
         "RESTART-DEFERRED startup_workers=0 idle_pending=1 demand_pending=0 complete_results=4"
     );

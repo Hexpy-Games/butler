@@ -203,7 +203,8 @@ const same = (expression: string, name: string) => `(${expression})?.normalize("
  * the extension), no line of a single character, the rest clipped behind the ellipsis, and the whole name in its tooltip.
  */
 async function assertLongName(app: App, scope: string, name: string) {
-  const facts = await app.page.expression<{ clamp: string; lines: string[]; clipped: boolean; box: number[] } | null>(`(() => {
+  let facts = null as { clamp: string; lines: string[]; clipped: boolean; box: number[] } | null;
+  await waitBrowser(async () => (facts = await app.page.expression<typeof facts>(`(() => {
     const button = ${tileButton(scope, name)};
     const text = [...(button?.querySelectorAll('[data-line-clamp],[data-truncate]') ?? [])].find((node) => ${same("node.textContent", name)});
     if (!text) return null; const box = text.getBoundingClientRect(); const range = document.createRange(); const lines = new Map();
@@ -213,7 +214,8 @@ async function assertLongName(app: App, scope: string, name: string) {
       if (!r || r.bottom > box.bottom + 1) continue; const top = Math.round(r.top); lines.set(top, (lines.get(top) ?? "") + node.data[i]); }
     const r = button.getBoundingClientRect();
     return { clamp: getComputedStyle(text).webkitLineClamp, lines: [...lines.values()], clipped: text.scrollHeight > text.clientHeight + 1,
-      box: [r.x + r.width / 2, r.y + r.height / 2] }; })()`);
+      box: [r.x + r.width / 2, r.y + r.height / 2] }; })()`)) !== null,
+    "long name tile laid out");
   const [first, second] = facts?.lines ?? [];
   const boundary = Boolean(first && second && (/[_\- ]$/u.test(first) || second.startsWith(".")));
   const orphan = facts?.lines.some((line) => [...line].length < 2) ?? true;

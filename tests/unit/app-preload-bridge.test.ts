@@ -66,7 +66,7 @@ test("renderer bridge forwards a schedule's access mode on create and update", a
   const inputs: Array<{ method: string; input: Record<string, unknown> }> = [];
   const capture = (method: string) => async (input: Record<string, unknown>) => {
     inputs.push({ method, input });
-    return { ok: true, data: { automation: { id: "automation-1", access_mode: input.accessMode } } };
+    return { ok: true, data: { automation: { id: "automation-1", access_mode: input.access_mode } } };
   };
   await withBridge({ createAutomation: capture("createAutomation"), updateAutomation: capture("updateAutomation") }, async () => {
     const created = await api<{ automation: { access_mode: string } }>("/automations", {
@@ -77,8 +77,8 @@ test("renderer bridge forwards a schedule's access mode on create and update", a
     await api("/automations/automation-1", { method: "PATCH", body: JSON.stringify({ access_mode: "ask_first" }) });
   });
   expect(inputs).toEqual([
-    { method: "createAutomation", input: expect.objectContaining({ targetSessionId: "general", accessMode: "read_only" }) },
-    { method: "updateAutomation", input: expect.objectContaining({ automationId: "automation-1", accessMode: "ask_first" }) },
+    { method: "createAutomation", input: expect.objectContaining({ target_session_id: "general", access_mode: "read_only" }) },
+    { method: "updateAutomation", input: expect.objectContaining({ automationId: "automation-1", access_mode: "ask_first" }) },
   ]);
 });
 
@@ -109,12 +109,12 @@ test("actual Electron preload sends access_mode and returns a bounded envelope f
     };
     require(${JSON.stringify(preloadPath)});
     (async () => {
-      const base = { title: "T", promptBody: "P", targetSessionId: "general", intervalSeconds: 3600 };
+      const base = { title: "T", prompt_body: "P", target_session_id: "general", interval_seconds: 3600 };
       const results = [
-        await bridge.createAutomation({ ...base, accessMode: "full_access" }),
+        await bridge.createAutomation({ ...base, access_mode: "full_access" }),
         await bridge.createAutomation(base),
-        await bridge.updateAutomation({ automationId: "automation-1", accessMode: "read_only" }),
-        await bridge.createAutomation({ ...base, accessMode: "sometimes" }),
+        await bridge.updateAutomation({ automationId: "automation-1", access_mode: "read_only" }),
+        await bridge.createAutomation({ ...base, access_mode: "sometimes" }),
       ];
       process.stdout.write(JSON.stringify({ calls, results }));
     })().catch(error => { console.error(error); process.exitCode = 1; });
@@ -127,6 +127,7 @@ test("actual Electron preload sends access_mode and returns a bounded envelope f
   expect(calls[0].body.access_mode).toBe("full_access");
   expect("access_mode" in calls[1].body).toBe(false);
   expect(calls[2].body.access_mode).toBe("read_only");
+  expect("automationId" in calls[2].body).toBe(false);
   expect(results[0]).toEqual({ ok: true, data: { automation: { access_mode: "full_access" } } });
   expect(results[3]).toEqual({ ok: false, error: { schema: "butler.app.bridge-error.v1", code: "invalid_json", status: 400 } });
 });

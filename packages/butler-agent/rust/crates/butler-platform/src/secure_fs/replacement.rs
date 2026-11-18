@@ -71,6 +71,16 @@ fn replace<E>(
             timing.mark("synced");
         }
         drop(file);
+        // E2E: a writer killed here leaves the complete temporary unrenamed.
+        #[cfg(feature = "test-support")]
+        super::hold_point(
+            &format!(
+                "before_rename:{}",
+                path.file_name().unwrap_or_default().to_string_lossy()
+            ),
+            || false,
+        )
+        .map_err(&io_error)?;
         rename(&temporary, path).map_err(&io_error)?;
         timing.mark("renamed");
         Ok(())

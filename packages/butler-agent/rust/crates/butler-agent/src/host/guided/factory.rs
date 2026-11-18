@@ -98,6 +98,27 @@ impl GuidedTurnFactoryAdapter {
         }
     }
 
+    async fn trusted_user_message(
+        &self,
+        turn: &butler_turn::btcc::TurnRecord,
+        role: &butler_turn::btcc::PolicyRole,
+    ) -> Result<String, BtccError> {
+        // A Steward's or Worker's input is a packet with model-written briefs and upstream
+        // summaries; only the user's own words in it lend site trust.
+        if matches!(
+            role,
+            butler_turn::btcc::PolicyRole::Steward | butler_turn::btcc::PolicyRole::Worker
+        ) {
+            Ok(self
+                .subsessions
+                .user_request(&turn.session_id)
+                .await?
+                .unwrap_or_default())
+        } else {
+            Ok(turn.original_message.clone())
+        }
+    }
+
     async fn skill_catalog(&self, project_id: Option<String>) -> Result<String, BtccError> {
         self.capabilities
             .compact_skill_catalog(project_id)
@@ -176,17 +197,14 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
             let language = resolve_guided_response_language(start.turn, &self.documents).await;
             let (work, work_tools) =
                 self.work_adapters(start.turn, &phase, &work_scope, language.clone())?;
-            let activity = Arc::new(GuidedActivity::new(
+            let activity = restore_activity(
                 start.turn.turn_id.clone(),
                 source_revision.clone(),
-                initial_work
-                    .context
-                    .as_ref()
-                    .filter(|_| initial_work.bound)
-                    .map(|context| &context.work),
-            ));
-            restore_activity(&activity, semantic.authority.as_ref())?;
+                &initial_work,
+                semantic.authority.as_ref(),
+            )?;
             let hooks = self.hook_binding(start.turn, &phase).await?.map(Arc::new);
+            let trusted_user_message = self.trusted_user_message(start.turn, &policy.role).await?;
             let tools = Arc::new(GuidedTools::new(
                 self.capabilities.clone(),
                 self.command.clone(),
@@ -243,6 +261,7 @@ impl GuidedTurnFactory for GuidedTurnFactoryAdapter {
                     turn_guard: TurnGuard::new(&start.turn.context, semantic.authority.as_ref()),
                     hooks: hooks.clone(),
                     current_user_message: start.turn.original_message.clone(),
+                    trusted_user_message,
                     memory: memory_binding(start.turn, &phase),
                     project_id: policy.project_id.clone(),
                     project_folder: project_folder(&workspace, &phase),
@@ -446,13 +465,23 @@ fn memory_binding(
     }
 }
 
-/// Restores the activity a suspended execution had shown.
+/// Creates the activity, restoring what a suspended execution had shown.
 fn restore_activity(
-    activity: &GuidedActivity,
+    turn_id: String,
+    source_revision: butler_turn::btcc::GuidedSourceRevision,
+    work: &butler_turn::btcc::GuidedWork,
     saved: Option<&butler_turn::btcc::AuthorityLoopContinuation>,
-) -> Result<(), BtccError> {
+) -> Result<Arc<GuidedActivity>, BtccError> {
+    let activity = Arc::new(GuidedActivity::new(
+        turn_id,
+        source_revision,
+        work.context
+            .as_ref()
+            .filter(|_| work.bound)
+            .map(|context| &context.work),
+    ));
     if let Some(saved) = saved.and_then(|value| value.presentation.as_ref()) {
         activity.restore(&saved.activity)?;
     }
-    Ok(())
+    Ok(activity)
 }

@@ -17,7 +17,10 @@ pub(super) fn revision(db: &Connection, key: &str) -> Result<u64, AppStorageErro
         .unwrap_or(0))
 }
 
-pub(super) fn read_json(db: &Connection, key: &str) -> Result<Option<Value>, AppStorageError> {
+pub(in crate::gateway::application) fn read_json(
+    db: &Connection,
+    key: &str,
+) -> Result<Option<Value>, AppStorageError> {
     let value = db
         .query_row_cached(
             "SELECT value_json FROM app_settings WHERE key=?1",

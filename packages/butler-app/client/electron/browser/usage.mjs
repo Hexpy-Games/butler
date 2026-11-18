@@ -73,7 +73,8 @@ export function finishUse(browser, session, turn, closeReadTabs = false) {
     if (tab.pausedTurns?.delete(turn) && !tab.pausedTurns.size) tab.pausedTurns = null;
     if (affected.has(tab.id) && !tabInUse(browser, tab)) tab.pointer = null;
   }
-  if (closeReadTabs) for (const tab of [...browser.tabs.values()]) if (readOnlyTab(browser, tab, session, turn)) browser.close(tab.id);
+  // A turn's end closes the tabs it opened and read; a delegated turn also closes the ones it only opened.
+  for (const tab of [...browser.tabs.values()]) if ((closeReadTabs || tab.wasRead) && readOnlyTab(browser, tab, session, turn)) browser.close(tab.id);
   browser.publish();
   return released;
 }

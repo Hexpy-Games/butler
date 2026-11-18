@@ -368,7 +368,7 @@ export interface BrowserCopy {
   tabCount: string; newTabIn: string; moreTabs: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
   reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;
-  openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
+  openOutput: string; output: string; show: string; hide: string; openConversation: string; moveToConversation: string;
   newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
   bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
   zoom: string; print: string; openExternal: string; settings: string; secure: string; notSecure: string; butlerOutput: string; preview: string;
@@ -384,8 +384,8 @@ export interface BrowserCopy {
   viewAll: string; scrapped: string; scrapsSaved: (count: number) => string; view: string; all: string; elements: string; views: string;
   element: string; viewKind: string; document: string; attach: string; openSource: string; openSourcePage: string; remove: string; archivedClosed: (count: number) => string;
   pageSays: string; authNeeded: string; username: string; password: string; signIn: string; ok: string; cancel: string; leaveTitle: string;
-  stay: string; leave: string; viewInBrowser: string; toolOpen: string; toolAct: string; toolSelection: string; sectionTitle: string; enabled: string;
-  enabledHelp: string; shareSignIn: string; shareSignInHelp: string; signIns: string; signInsHelp: string; addSignIn: string; fillPolicy: string;
+  stay: string; leave: string; viewInBrowser: string; toolOpen: string; toolAct: string; toolSelection: string;
+  shareSignIn: string; shareSignInHelp: string; signIns: string; signInsHelp: string; addSignIn: string; fillPolicy: string;
   ask: string; always: string; never: string; standing: string; lastUsed: string; deletePassword: string; signOutSite: string; revoke: string;
   usedTimes: (count: number) => string; filled: string; askedApproved: string;
   /** The live tab rail beside the conversation (TabRail, LiveTabCard). */
@@ -1319,6 +1319,9 @@ export interface AppCopy {
     paymentOffNotify: string;
     browser: { title: string; signin: string; signinDescription: string; payment: string; paymentDescription: string; unavailable: string };
     saveFailed: string;
+    /** Toast after 지금 실행 / 일시정지 / 재개, by action. */
+    actionDone: Record<"run" | "pause" | "resume", string>;
+    actionFailed: Record<"run" | "pause" | "resume", string>;
     /** Inline messages for a save the gateway refused (400). */
     errors: {
       title: string;

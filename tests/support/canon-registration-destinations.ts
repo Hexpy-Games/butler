@@ -21,7 +21,8 @@ export async function captureDestinationVariants(page: Page, server: NativeAppSe
     const card = page.locator(`[data-proposal-id="${create}"]`);
     await card.getByRole("combobox", { name: "프로젝트", exact: true }).selectOption(project);
     await card.getByRole("button", { name: "등록", exact: true }).click();
-    await card.getByText("등록함", { exact: true }).waitFor();
+    // An applied change joins the reply's receipt; its own card leaves.
+    await card.waitFor({ state: "detached" });
   } else await server.api(`/canon/proposals/${create}`, { method: "POST", body: JSON.stringify({ outcome: "accepted", project_id: project }) });
   const board = await server.api<{ backlog: Array<{ title: string }> }>(`/projects/${project}/canon`);
   assert(board.backlog.some(epic => epic.title === "다른 프로젝트의 과제"));
