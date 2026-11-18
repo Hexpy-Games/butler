@@ -250,10 +250,23 @@ pub(super) fn run(
     h.update(|s, _, cx| s.attach(attachment, cx))?;
     println!("LIVE READY");
     io::stdout().flush()?;
-    for line in io::stdin().lock().lines() {
-        let line = line?;
+    // Commands arrive on a thread, so the App keeps running between them: a stop request (SIGTERM)
+    // ends it through the App's own Quit. Only real time passes; the fake clock stays put.
+    let input = stdin_lines();
+    loop {
+        let line = match input.recv_timeout(Duration::from_millis(30)) {
+            Ok(line) => line?,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                h.cx.run_until_parked();
+                if quit_requested(&mut h) {
+                    return end(&mut h);
+                }
+                continue;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return end(&mut h),
+        };
         if line == "quit" {
-            return Ok(());
+            return end(&mut h);
         }
         if let Err(error) = command(&mut h, dir, &line) {
             let _ = h.shot(dir, "failure");
@@ -270,7 +283,42 @@ pub(super) fn run(
         }
         println!("LIVE OK");
         io::stdout().flush()?;
+        if quit_requested(&mut h) {
+            return end(&mut h);
+        }
     }
+}
+
+/// Standard input's lines, read on a thread.
+fn stdin_lines() -> std::sync::mpsc::Receiver<io::Result<String>> {
+    let (lines, input) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in io::stdin().lock().lines() {
+            if lines.send(line).is_err() {
+                return;
+            }
+        }
+    });
+    input
+}
+
+/// The App finished its Quit and asked gpui to quit (headless gpui's `quit` does nothing).
+fn quit_requested(h: &mut Harness) -> bool {
+    h.cx.update(|cx| {
+        super::lifecycle::runtime(cx).is_some_and(|runtime| {
+            runtime.read(cx).quit == super::lifecycle::QuitProgress::Requested
+        })
+    })
+}
+
+/// The App's Quit after `lifecycle::quit`: the CEF runtime is kept from dropping as AppKit's
+/// `terminate:` would, and the harness returns normally. `Harness::drop` settles the window
+/// first, then `HeadlessAppContext::drop` calls `App::shutdown` once, which runs the quit
+/// observers (the shell closes its pages and shuts CEF down through its own handle).
+fn end(h: &mut Harness) -> anyhow::Result<()> {
+    #[cfg(feature = "cef")]
+    h.cx.update(|cx| ui::browser::keep_runtime_alive(cx));
+    io::stdout().flush()?;
     Ok(())
 }
 

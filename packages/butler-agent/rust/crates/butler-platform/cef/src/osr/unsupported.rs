@@ -102,7 +102,7 @@ impl OsrRuntime {
     pub fn frame(&self, _: u64) -> Option<OsrFrame> {
         match self.never {}
     }
-    pub fn shutdown(self) {
+    pub fn shutdown(&self) {
         match self.never {}
     }
     pub fn mouse(&self, _: u64, _: OsrMouse) {

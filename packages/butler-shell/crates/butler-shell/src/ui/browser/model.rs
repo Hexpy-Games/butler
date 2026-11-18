@@ -154,6 +154,10 @@ pub(crate) struct BrowserState {
 impl Global for BrowserState {}
 
 impl BrowserState {
+    pub(crate) fn shutdown(&mut self) {
+        self.engine.shutdown();
+    }
+
     pub(crate) fn init(cx: &mut App) {
         let (sender, mut receiver) = mpsc::unbounded();
         let publisher = super::host::Publisher::start(cx);
