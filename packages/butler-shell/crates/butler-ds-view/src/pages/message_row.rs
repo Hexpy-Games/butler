@@ -265,9 +265,7 @@ fn default_turn(lang: Lang, cx: &App) -> AnyElement {
             MessageRow::new("mr-default-assistant", Role::Assistant)
                 .child(
                     // A bare `<p>`: the user agent's one-em block margins.
-                    div()
-                        .my(ds.len(Length::FontSize3))
-                        .child(c.summary),
+                    div().my(ds.len(Length::FontSize3)).child(c.summary),
                 )
                 .child(footer)
                 .child(status),
