@@ -47,7 +47,17 @@ async fn hanging_git_times_out_without_blocking_configuration_writes() -> Result
         );
         let elapsed = start.elapsed();
         // Always release the transport, including on the unfixed host, before asserting.
-        let eof = tokio::time::timeout(Duration::from_secs(8), socket.read(&mut request)).await;
+        let eof = tokio::time::timeout(Duration::from_secs(8), async {
+            // The request may arrive in several writes; the transport ends at 0 bytes or a reset.
+            loop {
+                match socket.read(&mut request).await {
+                    Ok(0) => return Ok(0),
+                    Ok(_) => {}
+                    Err(error) => return Err(error),
+                }
+            }
+        })
+        .await;
         (disable, settings, elapsed, eof)
     };
     let (inspection, (disable, settings, elapsed, eof)) = tokio::join!(inspect, exercise);

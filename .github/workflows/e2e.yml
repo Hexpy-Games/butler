@@ -185,6 +185,20 @@ jobs:
             'no report' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
           }
 
+      # The harness keeps the last failed sandboxes (agent logs, btcc.sqlite).
+      - name: Upload live E2E failures and report
+        if: failure() && env.TEMP != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-live-failures-${{ github.run_attempt }}
+          path: |
+            ${{ env.RUNNER_JOB_ROOT }}/e2e-live-report.txt
+            ${{ env.TEMP }}/butler-e2e/failures
+            !${{ env.TEMP }}/butler-e2e/failures/**/install
+            !${{ env.TEMP }}/butler-e2e/failures/**/cache/models
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Check runner registration and remove job profile
         if: always() && env.RUNNER_JOB_ROOT != ''
         working-directory: ${{ github.workspace }}
