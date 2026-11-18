@@ -61,10 +61,12 @@ async fn shell_app_03_sidebar_row_follows_a_live_turn() -> Result<(), HarnessErr
         .as_str()
         .expect("session id")
         .to_owned();
+    // Eight lines: more than the user bubble shows collapsed, so it carries a "Show more" toggle.
+    let long = (1..=8).map(|n| format!("Line {n}")).collect::<Vec<_>>().join("\n");
     let sent = gw
         .post(
             "/messages",
-            json!({"chat_id": id, "text": "Hello", "client_message_id": "shell-app-03"}),
+            json!({"chat_id": id, "text": long, "client_message_id": "shell-app-03"}),
         )
         .await?;
     assert_eq!(sent.status, 202, "{}", sent.text);
@@ -73,9 +75,24 @@ async fn shell_app_03_sidebar_row_follows_a_live_turn() -> Result<(), HarnessErr
         .run(&[
             &format!("wait-anchor {running}"),
             &format!("wait-no-anchor {running}"),
-            "app-quit",
+            &format!("open {id}"),
+            "wait-anchor user-toggle",
+            "layout collapsed user-text",
+            "click user-toggle",
+            "wait 300",
+            "layout expanded user-text",
         ])
         .await?;
+    // The toggle expands the long message: its text box grows.
+    let height = |name: &str| -> Result<f64, HarnessError> {
+        Ok(shell.report(name)?[0]["h"].as_f64().expect("text height"))
+    };
+    let (collapsed, expanded) = (height("collapsed.layout")?, height("expanded.layout")?);
+    assert!(
+        expanded > collapsed + 1.,
+        "collapsed {collapsed}, expanded {expanded}"
+    );
+    shell.run(&["app-quit"]).await?;
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())
