@@ -24,7 +24,7 @@ function Demo({ context, kind = "single", initial = "open", step = 0 }: {
   const [replied, setReplied] = useState(false);
   const [revision, setRevision] = useState(0);
   return <Stack gap="md">
-    <Typo.Body>{kind === "onboarding" ? (ko ? "안녕하세요, 버틀러예요. 세 가지만 여쭤볼게요." : "Hello, I’m Butler. Let’s start with three questions.") : (ko ? "준비됐어요. 몇 가지만 정해 주세요." : "Ready. Choose a few details.")}</Typo.Body>
+    <Typo.Body>{kind === "onboarding" ? (ko ? "안녕하십니까, 버틀러입니다. 세 가지만 여쭤보겠습니다." : "Hello, I’m Butler. Let’s start with three questions.") : (ko ? "준비됐습니다. 몇 가지만 정해 주십시오." : "Ready. Choose a few details.")}</Typo.Body>
     {(answers || skipped || replied) ? <>
       <QuestionAnswerCard questions={questions} answers={answers ?? []} variant={replied ? "message" : skipped ? "skipped" : "answered"} message={message}
         labels={ko ? { answered: "답변 완료", skipped: "건너뜀", message: "메시지로 답함" } : undefined} />
@@ -38,7 +38,7 @@ function Demo({ context, kind = "single", initial = "open", step = 0 }: {
           value={message} onChange={(e) => setMessage(e.target.value)} /><ComposerCardToolbar><Button size="sm" disabled={!message.trim()} onClick={() => setReplied(true)}>{ko ? "보내기" : "Send"}</Button></ComposerCardToolbar></>
           : <ComposerQuestionPanel key={revision} questions={questions} state={state} defaultStep={draft.current.step} onDraftChange={saveDraft}
             defaultAnswers={draft.current.answers ?? (initial === "error" || step === questions.length ? questions.map((q) => ({ id: q.id, selected: q.type === "text" ? [] : [0], text: q.type === "text" ? (ko ? "민수" : "Alex") : "", other: "", skipped: false })) : undefined)}
-            labels={ko ? koLabels : undefined} error={ko ? "보내지 못했습니다. 다시 시도하세요." : "Could not send. Try again."}
+            labels={ko ? koLabels : undefined} error={ko ? "보내지 못했습니다. 다시 시도하십시오." : "Could not send. Try again."}
             onSubmit={(values) => setAnswers(values)} onSkip={() => setSkipped(true)} onCollapse={() => setState("collapsed")} />}
       </ComposerCard>
     </>}

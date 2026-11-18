@@ -74,7 +74,7 @@ pub(crate) fn copy(lang: Lang) -> BrowserCopy {
             pay_step: "129,000원 결제",
             review: "승인 보기",
             need_you: "직접 입력 필요",
-            keypad: "보안 키패드 · 직접 입력해 주세요",
+            keypad: "보안 키패드 · 직접 입력해 주십시오",
             pick_mode: "요소 선택 중",
             pick_hint: "⇧ 여러 개 · ⌥ 영역",
             drag_to_chat: "끌어서 대화에 놓기",

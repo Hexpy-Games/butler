@@ -72,7 +72,7 @@ pub(super) fn copy(lang: Lang) -> Copy {
             ],
             attach: "\u{2018}9월 청구서 받기\u{2019}에 첨부",
             save: "서랍에 스크랩으로 저장",
-            invalid: "여기에는 놓을 수 없어요",
+            invalid: "여기에는 놓을 수 없습니다",
             more: [
                 "여행 계획",
                 "읽을거리",

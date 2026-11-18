@@ -13,7 +13,7 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": { save: "Save to library", saved: "Saved to library", copy: "Copy", copied: "Copied" },
-  "ko-KR": { save: "서랍에 저장", saved: "서랍에 저장했어요", copy: "복사", copied: "복사했어요" },
+  "ko-KR": { save: "서랍에 저장", saved: "서랍에 저장했습니다", copy: "복사", copied: "복사했습니다" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {

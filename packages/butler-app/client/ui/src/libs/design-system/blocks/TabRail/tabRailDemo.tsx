@@ -38,7 +38,7 @@ export function Rail({ locale, states, ...props }: { locale: AppLocale; states: 
 
 const chat = {
   "en-US": ["Find three campgrounds near the city for this weekend and compare them.", "I started browsing for candidates; I'll sum them up when done.", "Ask Butler anything"],
-  "ko-KR": ["이번 주말에 갈 만한 서울 근교 캠핑장 세 곳만 찾아서 비교해줘", "브라우저로 후보를 찾아 비교하는 작업을 시작했습니다. 끝나면 정리해 드릴게요.", "버틀러에게 무엇이든 물어보세요"],
+  "ko-KR": ["이번 주말에 갈 만한 서울 근교 캠핑장 세 곳만 찾아서 비교해줘", "브라우저로 후보를 찾아 비교하는 작업을 시작했습니다. 끝나면 정리해 드리겠습니다.", "버틀러에게 무엇이든 물어보십시오"],
 } as const;
 
 /** The rail in a conversation: the mode follows the stage's width; the column moves only as far as needed. */

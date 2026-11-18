@@ -18,7 +18,7 @@ export const ROLE_COMPONENTS: Record<string, [ComponentType<TypoProps>, string]>
 
 /** Where each role appears in Butler, and a line worth setting in it. */
 export const ROLE_COPY: Record<string, { use: string; en: string; ko: string }> = {
-  "new-chat-title": { use: "New-chat greeting, hero lines", en: "What should we build today?", ko: "오늘은 무엇을 만들어 볼까요?" },
+  "new-chat-title": { use: "New-chat greeting, hero lines", en: "What should we build today?", ko: "오늘은 무엇을 만들어 보시겠습니까?" },
   h1: { use: "Document and page titles", en: "Project overview", ko: "프로젝트 개요" },
   h2: { use: "Settings page titles, document sections", en: "Weekly summary", ko: "주간 요약" },
   "dashboard-title": { use: "Dashboard header", en: "Butler dashboard", ko: "버틀러 대시보드" },
@@ -33,7 +33,7 @@ export const ROLE_COPY: Record<string, { use: string; en: string; ko: string }> 
   body: { use: "Messages, descriptions, paragraphs", en: "Butler reads the repository, plans the change and asks before it writes.", ko: "버틀러는 저장소를 읽고 변경을 계획한 뒤, 쓰기 전에 먼저 묻습니다." },
   label: { use: "Field labels, row labels", en: "Translucent sidebar", ko: "반투명 사이드바" },
   "section-title": { use: "Sidebar and menu group titles", en: "Pinned", ko: "고정됨" },
-  code: { use: "Commands, paths, token names", en: "bun run lint:ds", ko: "const 인사 = \"안녕하세요\";" },
+  code: { use: "Commands, paths, token names", en: "bun run lint:ds", ko: "const 인사 = \"안녕하십시오\";" },
   caption: { use: "Metadata, hints, timestamps", en: "Edited 3 minutes ago · 2 files", ko: "3분 전 수정 · 파일 2개" },
 };
 

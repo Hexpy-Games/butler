@@ -50,7 +50,7 @@ fn three(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
         ),
         (
             "지출",
-            "월세는 25일에 나가요.",
+            "월세는 25일에 나갑니다.",
             "요금제",
             "가족",
             "좌석",

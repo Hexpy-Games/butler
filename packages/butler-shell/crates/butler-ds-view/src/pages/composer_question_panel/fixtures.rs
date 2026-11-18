@@ -71,7 +71,7 @@ fn single_question(lang: Lang) -> Question {
         "save",
         lang.pick(
             ("Save location", "Where should I save it?"),
-            ("저장 위치", "어디에 저장할까요?"),
+            ("저장 위치", "어디에 저장하시겠습니까?"),
         ),
         QuestionKind::Single,
         vec![
@@ -111,7 +111,7 @@ fn multi_question(lang: Lang) -> Question {
         "notifications",
         lang.pick(
             ("Notifications", "Which notifications do you want?"),
-            ("알림", "어떤 알림을 받을까요?"),
+            ("알림", "어떤 알림을 받으시겠습니까?"),
         ),
         QuestionKind::Multi,
         options(names, |i| (i < 4).then_some(note), |i| i == 1),
@@ -123,7 +123,7 @@ fn text_question(lang: Lang) -> Question {
         "name",
         lang.pick(
             ("Project name", "Choose a name"),
-            ("프로젝트 이름", "이름을 정해 주세요"),
+            ("프로젝트 이름", "이름을 정해 주십시오"),
         ),
         QuestionKind::Text,
         Vec::new(),
@@ -139,7 +139,7 @@ fn schedule_questions(lang: Lang, single: &Question, multi: &Question) -> Vec<Qu
             "frequency",
             lang.pick(
                 ("Frequency", "When should it run?"),
-                ("주기", "언제 실행할까요?"),
+                ("주기", "언제 실행하시겠습니까?"),
             ),
             options(
                 lang.pick(
@@ -155,7 +155,7 @@ fn schedule_questions(lang: Lang, single: &Question, multi: &Question) -> Vec<Qu
             "scope",
             lang.pick(
                 ("Scope", "What should I summarize?"),
-                ("범위", "무엇을 요약할까요?"),
+                ("범위", "무엇을 요약하시겠습니까?"),
             ),
             options(
                 lang.pick(
@@ -171,7 +171,7 @@ fn schedule_questions(lang: Lang, single: &Question, multi: &Question) -> Vec<Qu
             destination.id = "destination".into();
             destination.header = lang.pick("Destination", "받을 곳").into();
             destination.text = lang
-                .pick("Where should I send it?", "어디로 보낼까요?")
+                .pick("Where should I send it?", "어디로 보내시겠습니까?")
                 .into();
             destination
         },
@@ -182,7 +182,7 @@ fn onboarding_questions(lang: Lang, single: &Question, text: &Question) -> Vec<Q
     let mut name = text.clone();
     name.header = lang.pick("Name", "호칭").into();
     name.text = lang
-        .pick("What should I call you?", "어떻게 불러 드릴까요?")
+        .pick("What should I call you?", "어떻게 불러 드리면 되겠습니까?")
         .into();
     name.placeholder = Some(lang.pick("Name or nickname", "이름이나 별명").into());
     let detail = lang.pick("Documents, schedules and tasks", "문서·일정·작업");
@@ -193,7 +193,7 @@ fn onboarding_questions(lang: Lang, single: &Question, text: &Question) -> Vec<Q
             "purpose",
             lang.pick(
                 ("Purpose", "How will you use Butler?"),
-                ("주 용도", "버틀러를 어디에 쓰실 건가요?"),
+                ("주 용도", "버틀러를 어디에 쓰시겠습니까?"),
             ),
             options(
                 lang.pick(
@@ -209,7 +209,7 @@ fn onboarding_questions(lang: Lang, single: &Question, text: &Question) -> Vec<Q
             "language",
             lang.pick(
                 ("Language", "Which tone do you prefer?"),
-                ("언어·말투", "어떤 말투가 편하세요?"),
+                ("언어·말투", "어떤 말투가 편하십니까?"),
             ),
             options(
                 lang.pick(

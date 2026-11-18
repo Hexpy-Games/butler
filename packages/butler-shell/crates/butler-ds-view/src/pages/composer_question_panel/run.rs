@@ -63,9 +63,9 @@ fn intro(lang: Lang, kind: Kind) -> &'static str {
             "Ready. Choose a few details."
         },
         if kind == Kind::Onboarding {
-            "안녕하세요, 버틀러예요. 세 가지만 여쭤볼게요."
+            "안녕하십니까, 버틀러입니다. 세 가지만 여쭤보겠습니다."
         } else {
-            "준비됐어요. 몇 가지만 정해 주세요."
+            "준비됐습니다. 몇 가지만 정해 주십시오."
         },
     )
 }
@@ -201,7 +201,7 @@ fn panel(
     .default_step(step)
     .error(lang.pick(
         "Could not send. Try again.",
-        "보내지 못했습니다. 다시 시도하세요.",
+        "보내지 못했습니다. 다시 시도하십시오.",
     ))
     .on_skip(move |_, cx| {
         let answers = skip_questions
