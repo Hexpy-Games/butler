@@ -196,7 +196,7 @@ impl RenderOnce for SegmentedControl {
         if self.stretch {
             track.into_any_element()
         } else {
-            strut::max_content(track)
+            strut::fit_content(track)
         }
     }
 }

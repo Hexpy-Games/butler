@@ -240,7 +240,7 @@ impl TabsList {
                 .rounded(ds.len(Length::RadiusControl))
                 .bg(ds.color(Color::Surface))
         };
-        // The boxed list takes `width: max-content` unless it stretches.
+        // The boxed list takes `width: fit-content` unless it stretches.
         let fit = !self.stretch && !line;
         list = match (self.stretch, line) {
             (true, false) => list.w_full(),
@@ -258,7 +258,7 @@ impl TabsList {
             };
             scroll::scroller(&config, list.child(content), window, cx).element
         };
-        if fit { strut::max_content(list) } else { list }
+        if fit { strut::fit_content(list) } else { list }
     }
 }
 

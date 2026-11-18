@@ -77,7 +77,7 @@ impl RenderOnce for Label {
             // `overflow-wrap: anywhere` lets the label's text item shrink below its longest word
             // (its min-content width is one character); gpui measures min-content unwrapped, so
             // each item gets `min-width: 0` instead.
-            strut::max_content(
+            strut::fit_content(
                 el.children(
                     self.children
                         .into_iter()
