@@ -7,6 +7,8 @@
 )]
 #[path = "loop_review/blocks_only_answer.rs"]
 mod blocks_only_answer;
+#[path = "loop_review/card_source_url.rs"]
+mod card_source_url;
 #[path = "loop_review/common.rs"]
 mod common;
 #[path = "loop_review/failed_command_result.rs"]

@@ -1,4 +1,5 @@
-//! Normalization and replacement semantics shared by acceptance and durable closeout.
+//! Normalization and replacement semantics shared by acceptance and durable
+//! closeout; source URLs end where an autolink ends.
 use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
 
@@ -21,9 +22,28 @@ pub(super) fn trim(value: &mut Value) {
             for field in fields.values_mut() {
                 trim(field);
             }
+            if let Some(Value::String(source)) = fields.get_mut("source") {
+                let end = autolink_end(source).len();
+                source.truncate(end);
+            }
         }
         _ => {}
     }
+}
+
+/// A source URL ends where an autolink would (GFM): trailing punctuation and a
+/// closing parenthesis without a matching opening one belong to the prose
+/// around a copied link, not to the URL.
+fn autolink_end(url: &str) -> &str {
+    let mut end = url;
+    while let Some(last) = end.chars().last() {
+        let unmatched = last == ')' && end.matches(')').count() > end.matches('(').count();
+        if !unmatched && !"?!.,:*_~".contains(last) {
+            break;
+        }
+        end = &end[..end.len() - last.len_utf8()];
+    }
+    end
 }
 
 pub fn sources(spec: &Value) -> Vec<String> {
