@@ -20,7 +20,7 @@ use butler_ds::ui::icon::{IconSize, icon, icon_px};
 use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::spinner::Spinner;
-use butler_ds::ui::typo::{Role as TypoRole, Tone, Typo};
+use butler_ds::ui::typo::{Role as TypoRole, Typo};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, Window, div, px};
 
 use super::Story;
@@ -267,7 +267,7 @@ fn default_turn(lang: Lang, cx: &App) -> AnyElement {
                     // A bare `<p>`: the user agent's one-em block margins.
                     div()
                         .my(ds.len(Length::FontSize3))
-                        .child(Typo::body(c.summary).tone(Tone::Inherit)),
+                        .child(c.summary),
                 )
                 .child(footer)
                 .child(status),
