@@ -4,13 +4,14 @@
 //! prepaints, which runs before the deferred layers prepaint. The resolved position is published
 //! for the content (side, available size, transform origin) and, once a close starts, frozen
 //! (card section 0.6): a surface that is closing keeps the position it had.
+use crate::ui::cover::cover;
 use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, Bounds, Display, Element, ElementId, GlobalElementId, InspectorElementId,
     IntoElement, LayoutId, ParentElement as _, Pixels, Position, RenderOnce, Style, Styled as _,
-    Window, canvas, deferred, div, point, px,
+    Window, canvas, deferred, point, px,
 };
 
 use super::place::{self, Options, Rect, Resolved};
@@ -43,7 +44,7 @@ impl Anchor {
     /// only while `open` holds.
     pub(crate) fn probe_while(&self, open: impl Fn(&App) -> bool + 'static) -> gpui::Div {
         let cell = self.0.clone();
-        div().absolute().top_0().left_0().size_full().child(
+        cover().child(
             canvas(
                 move |bounds, window, cx| {
                     if cell.replace(Some(bounds)) != Some(bounds) && open(cx) {

@@ -8,7 +8,6 @@ use gpui::{AnyElement, App, Global, SharedString, Window};
 
 use super::address::{AddressError, address_url, web_url};
 use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
-use super::placeholder::PlaceholderEngine;
 
 // Mirrors butler-runtime/src/browser/capacity.rs.
 const USER_TABS: usize = 30;
@@ -142,6 +141,8 @@ impl From<AddressError> for BrowserError {
 
 pub(crate) struct BrowserState {
     pub(super) engine: Box<dyn PageEngine>,
+    /// What the engine starts with, until its first use starts it (`lazy.rs`).
+    pub(super) starter: Option<(mpsc::UnboundedSender<PageEvent>, Option<u64>)>,
     pub(super) tabs: Vec<Tab>,
     pub(super) active: Option<TabId>,
     pub(super) next_id: u64,
@@ -153,14 +154,17 @@ pub(crate) struct BrowserState {
 impl Global for BrowserState {}
 
 impl BrowserState {
-    /// `adapter`: the LUID of the GPU adapter that draws the page frames (`browser::init`).
-    pub(crate) fn init(adapter: Option<u64>, cx: &mut App) {
+    pub(crate) fn shutdown(&mut self) {
+        self.engine.shutdown();
+    }
+
+    pub(crate) fn init(cx: &mut App) {
         let (sender, mut receiver) = mpsc::unbounded();
-        let engine = Self::engine(sender, adapter, cx);
         let publisher = super::host::Publisher::start(cx);
         cx.set_global(Self {
             publisher,
-            engine,
+            engine: Box::new(super::lazy::Unstarted),
+            starter: Some((sender, None)),
             tabs: Vec::new(),
             active: None,
             next_id: 0,
@@ -182,18 +186,11 @@ impl BrowserState {
         .detach();
     }
 
-    fn engine(
-        sender: mpsc::UnboundedSender<PageEvent>,
-        adapter: Option<u64>,
-        cx: &mut App,
-    ) -> Box<dyn PageEngine> {
-        #[cfg(feature = "cef")]
-        match super::cef::CefEngine::start(sender.clone(), adapter, cx) {
-            Ok(engine) => return Box::new(engine),
-            Err(error) => eprintln!("CEF unavailable: {error}"),
+    /// The GPU adapter a window draws with; the engine follows it if it has not started yet.
+    pub(crate) fn note_adapter(&mut self, luid: Option<u64>) {
+        if let Some((_, adapter)) = &mut self.starter {
+            *adapter = luid;
         }
-        let _ = (adapter, cx);
-        Box::new(PlaceholderEngine::new(sender))
     }
 
     pub(crate) fn show(&mut self, id: Option<&TabId>) {
@@ -211,6 +208,7 @@ impl BrowserState {
         activate: bool,
         cx: &mut App,
     ) -> Result<Option<TabId>, BrowserError> {
+        self.start_engine(cx);
         if !self.enabled() {
             return Err(BrowserError::BrowsingDisabled);
         }

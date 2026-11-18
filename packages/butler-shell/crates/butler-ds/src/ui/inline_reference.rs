@@ -4,6 +4,7 @@
 //! [`InlineFlow`]: a wrapping, baseline-aligned run whose text is cut into words and whose
 //! references are cut the way the CSS breaks them (the icon and the first character of an
 //! external label never part; the rest of the label wraps anywhere).
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -218,9 +219,7 @@ fn favicon_slot(
     let ds = Ds::get(cx);
     let side = em * 1.125; // DS: InlineReference.module.css:75
     let radius = ds.len(Length::RadiusControl) / 2.;
-    let globe = div()
-        .absolute()
-        .size_full()
+    let globe = cover()
         .flex()
         .items_center()
         .justify_center()
@@ -234,9 +233,7 @@ fn favicon_slot(
         },
     );
     let plate = data.map(|data| {
-        div()
-            .absolute()
-            .size_full()
+        cover()
             .rounded(radius)
             .bg(ds.color(Color::FaviconPlate))
             .border(ds.len(Length::BorderHairline))

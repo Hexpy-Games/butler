@@ -8,6 +8,7 @@ pub(crate) mod network;
 pub(crate) mod reset;
 pub(crate) mod setup;
 pub(crate) mod supervisor;
+pub(crate) mod terminate;
 pub(crate) mod tray;
 pub(crate) mod ui_state;
 pub(crate) mod window;
@@ -62,8 +63,8 @@ pub(crate) struct AgentRuntime {
     pub(crate) state: AgentState,
     pub(crate) requested_by: Option<Requester>,
     pub(crate) error: Option<SupervisorError>,
-    /// Quit is running: every window shows the quit card in place of its frame.
-    pub(crate) quitting: bool,
+    /// While Quit runs, every window shows the quit card in place of its frame.
+    pub(crate) quit: QuitProgress,
     /// `AgentStatusNotice`'s own Start is running ([`resume`]).
     pub(crate) resuming: bool,
     pub(crate) data: PathBuf,
@@ -71,7 +72,20 @@ pub(crate) struct AgentRuntime {
     pub(crate) supervisor: Supervisor,
 }
 
+/// How far Quit has come ([`quit`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum QuitProgress {
+    Idle,
+    Running,
+    /// The Agent has stopped and gpui was asked to quit: the last step.
+    Requested,
+}
+
 impl AgentRuntime {
+    pub(crate) fn quitting(&self) -> bool {
+        self.quit != QuitProgress::Idle
+    }
+
     /// A status pushed by the supervisor; windows re-render only when it differs.
     fn apply(&mut self, status: &AgentStatus, cx: &mut Context<Self>) {
         if self.state == status.state
@@ -117,13 +131,15 @@ pub(crate) fn start(cx: &mut App, data: PathBuf, legacy: bool) {
         state: AgentState::Idle,
         requested_by: None,
         error: None,
-        quitting: false,
+        quit: QuitProgress::Idle,
         resuming: false,
         data,
         legacy,
         supervisor,
     });
     cx.set_global(GlobalAgentRuntime(entity.clone()));
+    crate::ui::source::agent::Jobs::keep_current(entity.read(cx).data.clone(), cx);
+    crate::ui::browser::init(cx);
     let weak = entity.downgrade();
     cx.spawn(async move |cx| {
         while let Some(status) = statuses.next().await {
@@ -136,9 +152,11 @@ pub(crate) fn start(cx: &mut App, data: PathBuf, legacy: bool) {
         }
     })
     .detach();
-    // A forced OS quit still releases the lease: the Agent drains and exits by itself.
+    terminate::listen(cx);
+    // A forced OS quit still shuts the browser down and releases the lease: the Agent drains and exits by itself.
     cx.on_app_quit(|cx| {
         crate::ui::browser::restore::flush_now(cx);
+        crate::ui::browser::shutdown(cx);
         if let Some(entity) = runtime(cx) {
             entity.read(cx).supervisor.release_lease_now();
         }
@@ -217,18 +235,21 @@ pub(crate) fn quit(cx: &mut App) {
         cx.quit();
         return;
     };
-    if entity.read(cx).quitting {
+    if entity.read(cx).quitting() {
         return;
     }
     entity.update(cx, |runtime, cx| {
-        runtime.quitting = true;
+        runtime.quit = QuitProgress::Running;
         cx.notify();
     });
     let stop = entity.read(cx).supervisor.stop(StopReason::Quit);
     cx.spawn(async move |cx| {
         let _ = stop.await;
         cx.background_executor().spawn(async { logs::quit() }).await;
-        cx.update(|cx| cx.quit());
+        cx.update(|cx| {
+            entity.update(cx, |runtime, _| runtime.quit = QuitProgress::Requested);
+            cx.quit();
+        });
     })
     .detach();
 }

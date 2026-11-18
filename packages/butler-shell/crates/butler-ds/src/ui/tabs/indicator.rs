@@ -4,6 +4,7 @@
 //! trigger land without sliding (`data-indicator-ready`); nothing shows while no trigger is
 //! active. Boxes are measured while painting, relative to the list's content origin, so the bar
 //! scrolls with the triggers.
+use crate::ui::cover::cover;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -28,7 +29,7 @@ impl Measure {
     /// A canvas that records `slot`'s box (or the content's, for `None`).
     pub(super) fn probe(shared: &Shared, slot: Option<usize>) -> Div {
         let shared = shared.clone();
-        div().absolute().top_0().left_0().size_full().child(
+        cover().child(
             canvas(
                 |_, _, _| (),
                 move |bounds, (), window, _| {
@@ -52,7 +53,9 @@ impl Measure {
                 },
             )
             .absolute()
-            .size_full(),
+            .size_full()
+            .top_0()
+            .left_0(),
         )
     }
 }

@@ -102,7 +102,7 @@ fn reply(id: String, value: Value, cx: &mut App) {
 }
 
 fn open(id: String, args: &Value, deadline: Duration, cx: &mut App) {
-    let created = cx.update_global::<BrowserState, _>(|model, _| model.open_hosted(args));
+    let created = cx.update_global::<BrowserState, _>(|model, cx| model.open_hosted(args, cx));
     let tab = match created {
         Ok(tab) => tab,
         Err(reason) => return reply(id, unavailable(reason), cx),
@@ -213,7 +213,8 @@ impl BrowserState {
     }
 
     /// A real page at once: `about:blank` at the fixed size the Agent's tools measure against.
-    fn open_hosted(&mut self, args: &Value) -> Result<TabId, &'static str> {
+    fn open_hosted(&mut self, args: &Value, cx: &mut App) -> Result<TabId, &'static str> {
+        self.start_engine(cx);
         if !self.engine.enabled() || !self.engine.supports_devtools() {
             return Err("no_browser");
         }

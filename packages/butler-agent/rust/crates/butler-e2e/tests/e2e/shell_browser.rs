@@ -428,6 +428,7 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
 }
 
 mod new_tab;
+mod site_data;
 
 /// Waits until the tab shows `url`, titled `title`, and has finished loading.
 async fn wait_for_page(shell: &mut Shell, title: &str, url: &str) -> Result<(), HarnessError> {

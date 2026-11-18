@@ -155,7 +155,9 @@ impl UserMessageText {
                     |_, (), _, _| {},
                 )
                 .absolute()
-                .size_full(),
+                .size_full()
+                .top_0()
+                .left_0(),
             )
     }
 }
