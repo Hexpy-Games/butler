@@ -2,6 +2,7 @@
 //! the corner radius, shown on keyboard focus only, except in text fields (a browser treats any
 //! focus of an input as focus-visible). A container that clips its content must leave
 //! [`room`] around it.
+use crate::ui::cover::cover;
 use std::cell::{Cell, RefCell};
 
 use gpui::{
@@ -74,7 +75,7 @@ impl gpui::Global for Published {}
 /// A zero-cost layer for a focused control: records its box (and `ring`, the reach of its ring)
 /// while it paints, so a scroller that clips it can keep the ring clear of its fades.
 pub fn publish(handle: FocusHandle, ring: Pixels) -> Div {
-    gpui::div().absolute().size_full().top_0().left_0().child(
+    cover().child(
         canvas(
             |bounds, _, _| bounds,
             move |_, bounds, _, cx| {
@@ -86,7 +87,9 @@ pub fn publish(handle: FocusHandle, ring: Pixels) -> Div {
             },
         )
         .absolute()
-        .size_full(),
+        .size_full()
+        .top_0()
+        .left_0(),
     )
 }
 

@@ -216,6 +216,8 @@ impl BrowserPane {
                 )
                 .absolute()
                 .size_full()
+                .top_0()
+                .left_0()
                 .into_any_element(),
             ));
         }

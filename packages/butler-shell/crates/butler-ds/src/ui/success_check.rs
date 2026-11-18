@@ -2,6 +2,7 @@
 //! check pops over `--motion-base` (opacity and `--motion-scale-check`), the ring stroke draws
 //! over `--motion-slow` and the check mark follows one `--motion-menu` beat later. Reduced
 //! motion keeps only the fade. Strokes are drawn as paths in the inherited text colour.
+use crate::ui::cover::cover;
 use gpui::{
     App, Bounds, Div, ElementId, Hsla, IntoElement, LayerMotion, ParentElement as _, PathBuilder,
     Pixels, RenderOnce, Styled as _, Window, animation_time_ms, canvas, div, point, px,
@@ -235,9 +236,7 @@ impl RenderOnce for SuccessCheck {
                         ring: step(0., slow),
                         mark: step(menu, slow),
                     };
-                    div()
-                        .absolute()
-                        .size_full()
+                    cover()
                         .motion(LayerMotion {
                             visible: (i as f32 / n as f32, (i + 1) as f32 / n as f32),
                             ..timing.motion(start_ms)

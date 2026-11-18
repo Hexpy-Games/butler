@@ -8,6 +8,7 @@
 mod edge;
 mod parts;
 
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, Styled as _, Window, div,
     px,
@@ -138,16 +139,7 @@ impl ComposerCard {
             .padding(GlassPadding::None)
             .composer();
         if let Some(decoration) = self.decoration.take() {
-            glass = glass.child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .overflow_hidden()
-                    .rounded(radius)
-                    .child(decoration),
-            );
+            glass = glass.child(cover().overflow_hidden().rounded(radius).child(decoration));
         }
         glass
     }
@@ -250,11 +242,7 @@ fn drop_ring(ds: &Ds, radius: gpui::Pixels) -> AnyElement {
         spread_radius: px(3.),
         inset: false,
     };
-    div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
+    cover()
         .rounded(radius)
         .border(ds.len(Length::BorderHairline))
         .border_color(ds.color(Color::ColorBorderInteractive))

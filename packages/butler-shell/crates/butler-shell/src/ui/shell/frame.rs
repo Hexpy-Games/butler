@@ -91,6 +91,7 @@ impl Shell {
         let display = butler_platform::display_accessibility::read();
         let reduced = cx.reduce_motion() || display.reduce_motion;
         Ds::update(cx, |ds| {
+            ds.set_desktop_only(true);
             ds.set_viewport(size.width.into(), size.height.into());
             ds.set_platform(platform);
             ds.set_dark(self.theme.dark);

@@ -73,6 +73,8 @@ fn cell(content: AnyElement, dy: f32, opacity: f32, height: Option<Rc<Cell<f32>>
         )
         .absolute()
         .size_full()
+        .top_0()
+        .left_0()
     });
     div()
         .relative()

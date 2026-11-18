@@ -67,6 +67,10 @@ struct DisplaySettings {
 }
 
 /// Token context plus the app-level inputs that are not tokens.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent display and motion switches"
+)]
 pub struct Ds {
     tokens: TokenContext,
     platform: Platform,
@@ -75,6 +79,8 @@ pub struct Ds {
     app_reduced_motion: bool,
     /// The OS display settings Liquid Glass reads.
     display: DisplaySettings,
+    /// The desktop app: a narrow window never takes the phone compact form.
+    desktop_only: bool,
     lang: Lang,
     body_font: SharedString,
     code_font: Font,
@@ -102,6 +108,7 @@ impl Ds {
             os_reduced_motion: false,
             app_reduced_motion: false,
             display: DisplaySettings::default(),
+            desktop_only: false,
             lang: Lang::default(),
             body_font,
             code_font,
@@ -237,13 +244,28 @@ impl Ds {
     /// The DS viewer's touch-size preview: the compact ramp on a wide window. The app never sets it.
     pub fn set_touch_preview(&mut self, on: bool) {
         self.display.touch_preview = on;
-        self.tokens.compact = self.tokens.viewport.0 <= COMPACT_MAX_WIDTH || on;
+        self.tokens.compact = self.narrow_compact(self.tokens.viewport.0) || on;
+    }
+
+    /// The desktop app: a narrow window keeps the desktop ramp and layout (no phone compact form).
+    pub fn set_desktop_only(&mut self, on: bool) {
+        self.desktop_only = on;
+        self.tokens.compact =
+            self.narrow_compact(self.tokens.viewport.0) || self.display.touch_preview;
+    }
+
+    pub fn desktop_only(&self) -> bool {
+        self.desktop_only
+    }
+
+    fn narrow_compact(&self, width: f32) -> bool {
+        width <= COMPACT_MAX_WIDTH && !self.desktop_only
     }
 
     /// The window's content size: it drives the mobile ramp and viewport-relative lengths.
     pub fn set_viewport(&mut self, width: f32, height: f32) {
         self.tokens.viewport = (width, height);
-        self.tokens.compact = width <= COMPACT_MAX_WIDTH || self.display.touch_preview;
+        self.tokens.compact = self.narrow_compact(width) || self.display.touch_preview;
     }
 
     /// Reduced motion is the OS setting or the app setting.

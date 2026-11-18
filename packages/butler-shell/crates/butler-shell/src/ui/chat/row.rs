@@ -230,18 +230,34 @@ fn virtual_message_row(
         row = row.avatar(MessageAvatarBlock::new().role(AvatarRole::System));
     }
     let row = row.children(message_content(msg, t, window, cx));
+    // The selection as the menu opened: a press on its Copy item clears the selection first.
+    let selected =
+        window.use_keyed_state(
+            format!("message-copy-{}", msg.id),
+            cx,
+            |_, _| None::<String>,
+        );
     let menu = ContextMenu::new(
         SharedString::from(format!("message-menu-{}", msg.id)),
         window,
         cx,
-    );
+    )
+    .on_open_change({
+        let (selection, selected) = (selection.clone(), selected.clone());
+        move |open, _, cx| {
+            if open {
+                let text = selection.text(cx);
+                selected.update(cx, |s, _| *s = text);
+            }
+        }
+    });
     let markdown = message_markdown(msg, cx);
     let label = transcript(Ds::get(cx).lang()).copy;
     let content = menu.content(
         ContextMenuContent::new().child(Item::new(label).icon(Icon::Copy).on_select(
             move |_, cx| {
                 cx.write_to_clipboard(ClipboardItem::new_string(
-                    selection.text(cx).unwrap_or_else(&markdown),
+                    selected.read(cx).clone().unwrap_or_else(&markdown),
                 ));
             },
         )),

@@ -395,7 +395,9 @@ impl RenderOnce for FilteredSelectPopover {
                     .flex_col()
                     .gap(ds.len(Length::SpaceSm))
                     .mt(-ds.len(Length::SpaceSm))
-                    .child(divider(ds))
+                    // CSS: `.results + .divider` has margin-top -space-sm in an auto grid row, so the
+                    // divider's box stretches to space-sm (its margin) and the region gap follows it.
+                    .child(divider(ds).h(ds.len(Length::SpaceSm)))
                     .child(footer)
             }))
     }

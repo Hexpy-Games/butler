@@ -16,6 +16,7 @@ use crate::tokens::{Color, Density, Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
 use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::scroll::engine::{self, Axis, Config};
+use crate::ui::scroll::frame as scroll_frame;
 use crate::ui::{convert, strut};
 
 /// The scrollbar's lane past the rows (`--sidebar-scrollbar-offset`).
@@ -225,7 +226,12 @@ impl SidebarShell {
             .children(padded_header)
             .children(parts.sticky)
             .children(parts.rows);
-        let built = engine::scroller(&config, content.flex_none(), window, cx);
+        let built = engine::scroller(
+            &config,
+            scroll_frame::body(div().child(content), "sidebar-scroll"),
+            window,
+            cx,
+        );
         if let Some(slot) = &self.scroll_slot {
             *slot.borrow_mut() = Some(built.handle.clone());
         }
@@ -238,11 +244,10 @@ impl SidebarShell {
             window,
             cx,
         );
-        div()
+        scroll_frame::frame("sidebar-scroll")
             .id((self.id.clone(), "scroll-frame"))
             .relative()
             .min_w_0()
-            .min_h_0()
             .flex_auto()
             .overflow_hidden()
             .ml(-room)

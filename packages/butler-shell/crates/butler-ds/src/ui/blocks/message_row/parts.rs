@@ -2,6 +2,7 @@
 //! footer, the status row and its label (with the thinking shimmer), the bubble and the files
 //! under it, and the group of rows of one turn.
 
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, IntoElement, ParentElement, RenderOnce, SharedString, Styled as _, Window,
     div, px, relative,
@@ -255,7 +256,7 @@ fn shimmer_text(
         .text_color(secondary)
         .child(div().child(text.clone()));
     if Loop::Decorative.runs(ds) {
-        let mut overlay = div().absolute().top_0().left_0().size_full();
+        let mut overlay = cover();
         let timing = Timing::linear(ds.duration(crate::tokens::Duration::ShimmerDuration));
         for (at, character) in text.char_indices() {
             for bounds in line

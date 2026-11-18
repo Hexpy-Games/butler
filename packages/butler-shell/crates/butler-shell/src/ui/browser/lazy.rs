@@ -51,7 +51,8 @@ fn engine(
     #[cfg(feature = "cef")]
     match super::cef::CefEngine::start(sender.clone(), adapter, cx) {
         Ok(engine) => {
-            // SIGTERM listener (fix/sigterm-quits-the-app) is installed here once CEF has started.
+            // CEF's start-up replaces the signal handlers; Quit on SIGTERM needs them back.
+            crate::lifecycle::terminate::listen(cx);
             return Box::new(engine);
         }
         Err(error) => eprintln!("CEF unavailable: {error}"),

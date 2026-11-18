@@ -81,7 +81,9 @@ impl RenderOnce for OptionMenu {
             MenuFit::Default => menu.min_w(px(
                 320_f32.min(f32::from(window.viewport_size().width) - 32.)
             )),
-            MenuFit::Fit => menu.max_w(window.viewport_size().width - px(32.)),
+            MenuFit::Fit => menu
+                .max_w(window.viewport_size().width - px(32.))
+                .justify_self_start(),
         }
         .children(self.children)
     }
