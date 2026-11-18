@@ -127,6 +127,13 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
             "expect-palette",
             "wait 600",
             &format!("layout palette1200 {anchors} dialog-content"),
+            "key escape",
+            "size 700 700",
+            "wait 600",
+            "browser-link https://example.com/",
+            "wait-anchor browser-area",
+            "wait 600",
+            "layout split chat-card browser-area",
             "app-quit",
         ])
         .await?;
@@ -193,6 +200,18 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
     // which makes the panel taller.
     let (closed, open) = (get("info", "inspector"), get("infoopen", "inspector"));
     assert!(open[3] > closed[3] + 0.5, "{closed:?} {open:?}");
+    // (g) With the browser pane beside the chat at 700 px, the chat keeps the width the web gives it,
+    // max(340, min(room - 375, 400)), so the pane keeps its 375 px minimum. `room` is what the chat
+    // column and the pane share: the chat column's width plus the pane's. The chat-card anchor is
+    // inset by the card's 1 px border on each side.
+    let (chat, pane) = (get("split", "chat-card"), get("split", "browser-area"));
+    let chat_width = chat[2] + 2.;
+    let room = chat_width + pane[2];
+    let expected = (room - 375.).min(400.).max(340.);
+    assert!(
+        (chat_width - expected).abs() <= 1. && pane[2] >= room - chat_width - 0.5,
+        "chat {chat:?}, pane {pane:?}, room {room}, expected chat {expected}"
+    );
     shell.finish().await?;
     sandbox.mark_success();
     Ok(())
