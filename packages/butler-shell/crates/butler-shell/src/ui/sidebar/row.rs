@@ -259,7 +259,10 @@ impl Shell {
         )
         .glyph(space_glyph(row))
         .indented()
-        .actions(actions)
+        .actions(crate::ui::widgets::anchored(
+            actions,
+            &format!("sidebar-group-actions-{}", row.node.entityId),
+        ))
         .on_toggle(cx.listener(move |s, _, _, cx| {
             if s.sidebar.take_long_press(&click_instance) {
                 return;
