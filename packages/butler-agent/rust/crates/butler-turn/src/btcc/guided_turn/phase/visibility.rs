@@ -57,7 +57,7 @@ pub(super) fn legacy_authorized<'a>(
     names.insert("output_check".into());
     authorize_schedules(&mut names, policy, scope);
     apply_access_mode(&mut names, catalog, policy, scope);
-    browser::authorize(&mut names, catalog, policy, scope.worker);
+    browser::authorize(&mut names, catalog, policy);
     image_calls(&mut names, policy);
     names.retain(|name| {
         !catalog.project_mutations.contains(name)
