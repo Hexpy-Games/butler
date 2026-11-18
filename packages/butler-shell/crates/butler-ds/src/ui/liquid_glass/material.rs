@@ -39,12 +39,9 @@ pub enum Place {
     OnGlass,
 }
 
-/// What changes the material beyond the element's size: how far it has materialized and the
-/// OS display settings.
+/// What changes the material beyond the element's size: the OS display settings.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Settings {
-    /// 0..=1: the lens ramps from identity to the full material (LG research §5 Appear/disappear).
-    pub(super) materialize: f32,
     /// OS Reduce Transparency (LG research §6).
     pub(super) reduce_transparency: bool,
     /// OS Increase Contrast (LG research §6).
@@ -193,7 +190,7 @@ pub(super) fn material(
         hair_side,
         hair_top,
         shadow: if place == Place::Content {
-            shadow(dark, s, settings.materialize.clamp(0., 1.))
+            shadow(dark, s)
         } else {
             None
         },
@@ -234,35 +231,15 @@ fn adapt(m: &mut Material, dark: bool, place: Place, settings: Settings) {
         m.fold *= 0.5;
         m.depth_pt *= 0.5;
     }
-    materialize(m, settings.materialize);
 }
 
 /// The lens at identity (the tone curve that leaves the backdrop as it is).
 const IDENTITY: [f32; 3] = [0., 1., 0.];
 
-/// Ramp the lens from identity to `m` by `t`: refraction, rim, halo, blur, shadow and hairline
-/// scale with it (the shadow is built with it) and the tone moves from identity (LG research §5 Appear/disappear, §8.1.6).
-fn materialize(m: &mut Material, t: f32) {
-    let t = t.clamp(0., 1.);
-    if t >= 1. {
-        return;
-    }
-    m.fold *= t;
-    m.depth_pt *= t;
-    m.rim *= t;
-    m.halo *= t;
-    m.blur *= t;
-    m.detail_blur *= t;
-    m.hair_side *= t;
-    m.hair_top *= t;
-    m.tone = [0, 1, 2].map(|i| lerp(IDENTITY[i], m.tone[i], t));
-}
-
 /// Native shadow by size: none below 64 pt, then up to a 520 x 360 panel's; dark 1.5x.
-fn shadow(dark: bool, s: f32, materialized: f32) -> Option<BoxShadow> {
+fn shadow(dark: bool, s: f32) -> Option<BoxShadow> {
     let grow = table(&[(64., 0.), (96., 0.38), (140., 0.77), (200., 1.)], s);
-    // The alpha follows how far the glass has materialized (LG research §5, §8.1.6).
-    let alpha = lerp(0.02, 0.12, grow) * (1. + if dark { 0.5 * grow } else { 0. }) * materialized;
+    let alpha = lerp(0.02, 0.12, grow) * (1. + if dark { 0.5 * grow } else { 0. });
     if alpha <= 0.001 {
         return None;
     }
@@ -322,22 +299,9 @@ pub(super) fn paint(
     let radii = radii.map(|r| px((r.as_f32() + grow).min(w / 2.).min(h / 2.)));
     if let Some(shadow) = &m.shadow {
         if let Some((_, motion)) = &appear {
-            let maximum = motion.opacity.0.max(motion.opacity.1);
-            window.with_motion(
-                gpui::LayerMotion {
-                    opacity: (motion.opacity.0 / maximum, motion.opacity.1 / maximum),
-                    ..*motion
-                },
-                shape,
-                |window| {
-                    window.paint_drop_shadows_outside(
-                        shape,
-                        radii,
-                        0.,
-                        std::slice::from_ref(shadow),
-                    );
-                },
-            );
+            window.with_motion(*motion, shape, |window| {
+                window.paint_drop_shadows_outside(shape, radii, 0., std::slice::from_ref(shadow));
+            });
         } else {
             window.paint_drop_shadows_outside(shape, radii, 0., std::slice::from_ref(shadow));
         }

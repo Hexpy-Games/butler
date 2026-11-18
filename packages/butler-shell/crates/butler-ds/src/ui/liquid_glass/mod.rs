@@ -32,8 +32,8 @@ pub struct LiquidGlass {
     pub lift: f32,
     /// Growth per side while pressed (pt), about the centre.
     pub grow: f32,
-    /// 0..=1: how far the glass has materialized (LG research §5 Appear/disappear): the lens
-    /// ramps from identity instead of the glass fading. 1 is the full material.
+    /// The glass appears and leaves by this presence's opacity only, at the full material, on
+    /// the same motion as its content (a glass is never faded by a parent's opacity).
     pub materialize: Presence,
     /// Which tuning paints the glass.
     profile: Profile,
@@ -77,14 +77,8 @@ impl LiquidGlass {
         }
     }
 
-    /// How far the glass has materialized (an overlay's presence progress).
-    pub fn materialize(mut self, progress: f32) -> Self {
-        self.materialize = Presence::Static(progress);
-        self
-    }
-
     /// Follow the OS Reduce Transparency, Increase Contrast and Reduce Motion settings
-    /// (LG research §6, §8.1.8). Under Reduce Motion the glass materializes instantly.
+    /// (LG research §6, §8.1.8). Under Reduce Motion the glass is present at once.
     pub fn adapt(mut self, ds: &Ds) -> Self {
         self.reduce_transparency = ds.reduced_transparency();
         self.increase_contrast = ds.increased_contrast();
@@ -117,11 +111,10 @@ pub fn paint(
     } else {
         glass.materialize
     };
+    if matches!(presence, Presence::Static(t) if t <= 0.) {
+        return;
+    }
     let settings = Settings {
-        materialize: match presence {
-            Presence::Static(t) => t,
-            Presence::Moving { from, to, .. } => from.max(to),
-        },
         reduce_transparency: glass.reduce_transparency,
         increase_contrast: glass.increase_contrast,
     };
@@ -136,9 +129,8 @@ pub fn paint(
         } => {
             // The glass appears and leaves by opacity only, at full material, so the lens
             // fades with its content exactly as a backdrop-filter under CSS opacity.
-            let m_from = material::material(dark, (w, h), circle, glass.place, settings);
             Some((
-                m_from,
+                m.clone(),
                 gpui::LayerMotion {
                     opacity: (from, to),
                     ..timing.motion(start_ms)

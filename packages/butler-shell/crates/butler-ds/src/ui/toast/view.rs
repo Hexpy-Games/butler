@@ -69,10 +69,10 @@ fn tone(kind: Kind, ds: &Ds) -> Tone {
     }
 }
 
-/// The glass behind a toast: Liquid Glass over the content, materialized by `progress` (the
-/// toast's presence; the lens draws its own shadow, rim and hairline), then the kind's
-/// translucent fill and 1px border (Toast.module.css:45-80) over it. The glass is not faded
-/// with the content: it ramps its lensing instead (LG research §5, §8.1.6).
+/// The glass behind a toast: Liquid Glass over the content at full material (the lens draws its
+/// own shadow, rim and hairline), then the kind's translucent fill and 1px border
+/// (Toast.module.css:45-80) over it. The glass fades by the toast's presence (opacity only), on
+/// the same motion as the content.
 fn surface(tone: &Tone, resolved: &Resolved, ds: &Ds) -> gpui::Div {
     let radius = ds.len(Length::RadiusPanel);
     let dark = ds.dark();
