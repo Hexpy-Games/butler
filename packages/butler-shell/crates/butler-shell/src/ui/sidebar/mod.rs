@@ -219,7 +219,6 @@ impl Shell {
                     .scroll_header(header)
                     .sticky_header(browse)
                     .scroll_slot(self.sidebar.scroll.clone())
-                    .child(Self::sidebar_sticky(window, cx).recorder())
                     .child(tree)
                     .footer(footer),
             )
