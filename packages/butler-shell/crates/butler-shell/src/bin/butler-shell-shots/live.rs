@@ -318,11 +318,19 @@ fn quit_requested(h: &mut Harness) -> bool {
 /// first, then `HeadlessAppContext::drop` calls `App::shutdown` once, which runs the quit
 /// observers (the shell closes its pages and shuts CEF down through its own handle).
 fn end(h: &mut Harness) -> anyhow::Result<()> {
-    #[cfg(feature = "cef")]
-    h.cx.update(|cx| ui::browser::keep_runtime_alive(cx));
+    keep_cef_alive(h);
     io::stdout().flush()?;
     Ok(())
 }
+
+/// AppKit terminate never drops the CEF runtime, so the harness keeps it from dropping too.
+#[cfg(feature = "cef")]
+fn keep_cef_alive(h: &mut Harness) {
+    h.cx.update(|cx| ui::browser::keep_runtime_alive(cx));
+}
+
+#[cfg(not(feature = "cef"))]
+fn keep_cef_alive(_: &mut Harness) {}
 
 /// Both rows must be present, in the requested sidebar order.
 fn before(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
