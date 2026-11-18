@@ -6,9 +6,9 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 import { assertFirstRunContrast, assertFirstRunLayout } from "../support/first-run-visual.ts";
 import { firstRunCopy } from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
 
-const matrix = [320, 375, 768, 1280, 1440].flatMap(width =>
+const matrix = [...[320, 375, 768, 1280, 1440].flatMap(width =>
   ["ko", "en"].flatMap(language => ["light", "dark"].flatMap(theme =>
-    ["fresh", "renewal"].map(mode => `${width}-${language}-${theme}-${mode}`))));
+    ["fresh", "renewal"].map(mode => `${width}-${language}-${theme}-${mode}`)))), "vault-update"];
 if (await runSmokeCases(matrix, "BUTLER_CONSENT_CASE", import.meta.path)) process.exit(0);
 
 const screenshots = resolve(process.env.BUTLER_SMOKE_SCREENSHOTS ?? process.env.TMPDIR ?? "/tmp", "consent");
@@ -16,7 +16,8 @@ let textNodes = 0;
 let minimumContrast = Infinity;
 mkdirSync(screenshots, { recursive: true });
 // The vault offer stays open: a consent renewal must not raise the update prompt over setup.
-const server = await createNativeAppServer({ onboardingComplete: false, vaultUndecided: true });
+// File secret store: Butler Vault is password-only and never touches this machine's keychain.
+const server = await createNativeAppServer({ onboardingComplete: false, vaultUndecided: true, env: { BUTLER_SECRET_STORE: "file" } });
 const browser = await launchSmokeBrowser();
 const fresh = { consent_version: null, accepted_at: null, completed_at: null };
 
@@ -152,6 +153,27 @@ async function runCase(width: number, language: "ko" | "en", theme: "light" | "d
   await context.close();
 }
 
+/** An install that finished setup before this version: the workspace offers Butler Vault once, and 계속 turns it on. */
+async function runVaultUpdate() {
+  const completed = "2026-06-01T00:00:00Z";
+  await server.api("/settings", { method: "PATCH", body: JSON.stringify({ language: "ko", appearance_theme: "light", onboarding: { consent_version: 2, accepted_at: completed, completed_at: completed } }) });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: "ko", colorScheme: "light" });
+  await server.signIn(context);
+  const page = await context.newPage();
+  await page.goto(server.url);
+  const dialog = page.getByRole("dialog", { name: "버틀러 금고", exact: true });
+  await dialog.getByText("이 컴퓨터는 키체인이 없어 마스터 비밀번호로 금고를 잠급니다.", { exact: true }).waitFor();
+  await dialog.getByLabel("마스터 비밀번호", { exact: true }).fill("butler-smoke-vault-1");
+  await dialog.getByLabel("비밀번호 확인", { exact: true }).fill("butler-smoke-vault-1");
+  await dialog.getByRole("button", { name: "계속", exact: true }).click();
+  await dialog.getByText("버틀러 금고 설정이 완료되었습니다. 앞으로 사용자의 정보를 안전하게 보관합니다.", { exact: true }).waitFor();
+  await dialog.getByRole("button", { name: "계속", exact: true }).click();
+  await dialog.waitFor({ state: "hidden" });
+  const vault = await server.api<{ state: string; unlock: string | null }>("/setup/butler-vault");
+  assert(vault.state === "protected" && vault.unlock === "password", `vault on with the master password: ${JSON.stringify(vault)}`);
+  await context.close();
+}
+
 try {
   let cases = 0;
   for (const width of [320, 375, 768, 1280, 1440]) {
@@ -164,6 +186,10 @@ try {
         }
       }
     }
+  }
+  if (!process.env.BUTLER_CONSENT_CASE || process.env.BUTLER_CONSENT_CASE === "vault-update") {
+    await runVaultUpdate();
+    cases += 1;
   }
   console.log(JSON.stringify({ ok: true, cases, textNodes, minimumContrast, screenshots, transport: "browser/native-app", modelCalls: server.stubModelCalls.length }));
 } finally {
