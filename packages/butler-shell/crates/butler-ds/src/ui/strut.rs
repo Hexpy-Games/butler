@@ -105,18 +105,14 @@ pub(crate) fn fit_box(inline: bool) -> Div {
 }
 
 /// An item with `width: fit-content` and the default `flex: 0 1 auto`: as [`max_content`], but a
-/// row too narrow for it shrinks the box and `child` with it (down to `child`'s own minimum
-/// width). Always block-level: gpui measures an atomic inline box at its max-content width, so
-/// an inline box could not fit a narrow block.
-pub(crate) fn fit_content(child: impl IntoElement) -> AnyElement {
-    div()
-        .flex()
-        .flex_grow_0()
-        .flex_shrink_1()
-        .min_w_0()
-        .max_w_full()
-        .child(child)
-        .into_any_element()
+/// row too narrow for it shrinks the box and `child` with it. `min_zero` is the item's
+/// `min-width: 0`; without it the box keeps its automatic minimum, `child`'s min-content width.
+/// Always block-level: gpui measures an atomic inline box at its max-content width, so an inline
+/// box could not fit a narrow block.
+pub(crate) fn fit_content(min_zero: bool, child: impl IntoElement) -> AnyElement {
+    let el = div().flex().flex_grow_0().flex_shrink_1().max_w_full();
+    let el = if min_zero { el.min_w_0() } else { el };
+    el.child(child).into_any_element()
 }
 
 /// The Dialog being laid out, when the container is inside one.

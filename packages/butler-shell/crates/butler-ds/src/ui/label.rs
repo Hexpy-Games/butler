@@ -78,6 +78,7 @@ impl RenderOnce for Label {
             // (its min-content width is one character); gpui measures min-content unwrapped, so
             // each item gets `min-width: 0` instead.
             strut::fit_content(
+                true,
                 el.children(
                     self.children
                         .into_iter()

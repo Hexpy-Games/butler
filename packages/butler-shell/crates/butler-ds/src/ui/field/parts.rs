@@ -190,7 +190,7 @@ impl RenderOnce for FieldTitle {
             .gap(ds.len(Length::Space2))
             .text_size(ds.len(Length::FontSize3))
             .font_weight(FontWeight(ds.number(Number::FontWeightMedium)));
-        strut::fit_content(el.children(self.children))
+        strut::fit_content(false, el.children(self.children))
     }
 }
 

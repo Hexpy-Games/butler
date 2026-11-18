@@ -258,7 +258,11 @@ impl TabsList {
             };
             scroll::scroller(&config, list.child(content), window, cx).element
         };
-        if fit { strut::fit_content(list) } else { list }
+        if fit {
+            strut::fit_content(true, list)
+        } else {
+            list
+        }
     }
 }
 
