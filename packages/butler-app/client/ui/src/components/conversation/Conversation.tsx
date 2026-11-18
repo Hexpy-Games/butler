@@ -34,12 +34,13 @@ export function Conversation() {
   const infoOpen = useButlerStore(state => state.sessionInfoOpen);
   const { ids: infoIds, settled: infoSettled } = useSessionSectionsModel();
   const hasContent = infoIds.length > 0;
-  const infoHeld = useButlerStore(state => state.sessionInfoHeld);
+  const infoHeld = useButlerStore(state => state.sessionInfoHeldChat === state.activeChatId);
   const infoShown = infoOpen && hasContent && !infoHeld;
   // A conversation entered with nothing to show keeps its pane closed until the user opens it.
   useEffect(() => {
-    if (infoSettled && !hasContent && !useButlerStore.getState().sessionInfoHeld) useButlerStore.setState({ sessionInfoHeld: true });
-  }, [infoSettled, hasContent]);
+    const state = useButlerStore.getState();
+    if (infoSettled && !hasContent && state.sessionInfoHeldChat !== activeChatId) useButlerStore.setState({ sessionInfoHeldChat: activeChatId });
+  }, [infoSettled, hasContent, activeChatId]);
   const browserOpen = useBrowserShellState(state => Boolean(state.conversations[activeChatId]?.open));
   const viewerShown = useRightSlot(activeChatId) === "viewer";
   const branchProjectId = useButlerStore((state) => {

@@ -141,8 +141,8 @@ export interface NavigationSetOptions {
 interface ButlerStore {
   leftOpen: boolean;
   sessionInfoOpen: boolean;
-  /** This visit entered the conversation with nothing to show: the pane stays closed until the user opens it. Reset by openSession. */
-  sessionInfoHeld: boolean;
+  /** The conversation this visit entered with nothing to show: its pane stays closed until the user opens it. Cleared by openSession. */
+  sessionInfoHeldChat: string | null;
   taskGraphEnabled: boolean;
   leftPanelWidth: number;
   sidebarChatsCollapsed: boolean;
@@ -954,7 +954,7 @@ setAppCopyLanguage(initialSettings.language);
 export const useButlerStore = create<ButlerStore>()((set, get) => ({
   leftOpen: false,
   sessionInfoOpen: false,
-  sessionInfoHeld: false,
+  sessionInfoHeldChat: null,
   taskGraphEnabled: false,
   leftPanelWidth: DEFAULT_LEFT_PANEL_WIDTH,
   sidebarChatsCollapsed: false,
@@ -1272,7 +1272,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         : sessionMessageViews;
       return {
         activeChatId: chatId,
-        sessionInfoHeld: false,
+        sessionInfoHeldChat: null,
         activeChatTitle: sessionTitle,
         leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded"
           ? state.leftOpen : false,
@@ -1783,6 +1783,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         tone: "muted",
       },
       activeChatId: optimisticStart?.id ?? state.activeChatId,
+      sessionInfoHeldChat: optimisticStart && state.sessionInfoHeldChat === state.activeChatId ? optimisticStart.id : state.sessionInfoHeldChat,
       view: optimisticStart && !dashboardTarget ? { kind: "session" } : state.view,
       navigation: optimisticStart
         ? navigationWithOptimisticSession(state.navigation, optimisticStart)
