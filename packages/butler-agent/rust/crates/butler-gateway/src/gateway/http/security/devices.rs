@@ -23,6 +23,11 @@ const SESSION_TTL: u64 = 30 * 24 * 60 * 60;
 
 const DEVICE_TOKEN_PREFIX: &str = "bdt_";
 
+/// A browser credential past its fixed lifetime can never authenticate again.
+fn expired(device: &PairedDevice, now: u64) -> bool {
+    device.kind == DeviceKind::Browser && now >= device.created_at.saturating_add(SESSION_TTL)
+}
+
 /// A paired device's credential on this request: its stream closer, and
 /// whether it came as a device token (else the cookie).
 pub(in crate::gateway::http) struct DeviceAuth {
@@ -56,9 +61,15 @@ impl DeviceRegistry {
         shutdown: CancellationToken,
     ) -> Result<Self, HttpError> {
         let butler_id = application.butler_id().await?;
-        let entries = application
-            .load_devices()
-            .await?
+        let now = super::unix_seconds(std::time::SystemTime::now());
+        let mut devices = application.load_devices().await?;
+        for device in devices.iter().filter(|device| expired(device, now)) {
+            application
+                .revoke_devices(Some(device.id.clone()), now)
+                .await?;
+        }
+        devices.retain(|device| !expired(device, now));
+        let entries = devices
             .into_iter()
             .map(|device| {
                 let entry = Arc::new(Entry {
@@ -229,8 +240,7 @@ impl DeviceRegistry {
                     && entry.device.kind == DeviceKind::Browser
                     && !entry.closed.is_cancelled()
                 {
-                    let now = self.now();
-                    if now >= entry.device.created_at.saturating_add(SESSION_TTL) {
+                    if expired(&entry.device, self.now()) {
                         entry.closed.cancel();
                         continue;
                     }
@@ -294,10 +304,12 @@ impl DeviceRegistry {
     }
 
     pub(in crate::gateway::http) fn list(&self) -> Vec<PairedDevice> {
+        let now = self.now();
         let mut devices: Vec<_> = self
             .entries
             .read()
             .values()
+            .filter(|entry| !expired(&entry.device, now))
             .map(|entry| {
                 let mut device = entry.device.clone();
                 device.last_seen_at = entry.seen.load(Ordering::Relaxed);
