@@ -4,8 +4,8 @@ use butler_ds::ui::context::{Ds, Lang};
 use gpui::App;
 
 pub(crate) struct BrowserHandoff {
-    /// interfaceTemplates.approvalRequest.signInHandoff: eyebrow, title, inTab, onDesktop,
-    /// openTab, stop
+    /// interfaceTemplates.approvalRequest.signInHandoff: eyebrow, title, inTab, openTab,
+    /// stop
     pub(crate) eyebrow: &'static str,
     pub(crate) sign_in_title: &'static str,
     pub(crate) in_tab: &'static str,
