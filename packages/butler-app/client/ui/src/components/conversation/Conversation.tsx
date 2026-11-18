@@ -1,11 +1,11 @@
 import { CanonInlineDraftProvider } from "../canon/CanonInlineDraft.tsx";
 import { ConversationRequestProvider } from "./ConversationRequestContext.tsx";
-import { useSessionInfoHasContent } from "../session-info/useSessionSectionsModel.ts";
+import { useSessionSectionsModel } from "../session-info/useSessionSectionsModel.ts";
 import { SessionSections } from "../session-info/SessionSections.tsx";
 import { ComposerCrashFallback } from "./ComposerCrashFallback.tsx";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
 import { useAppLocale } from "@/app/copy.ts";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { activeChatFromNavigation } from "@/app/utils.ts";
 import { appCopy } from "@/app/copy.ts";
 import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
@@ -17,12 +17,7 @@ import { useConversationMessages } from "./useConversationMessages.ts";
 import { useChatsIntroVisible } from "./ChatsIntro";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
-import {
-  DEFAULT_COMPOSER_RESERVE,
-  COMPOSER_FLOAT_BOTTOM,
-  COMPOSER_CONTENT_GAP,
-  resolveButlerMarkTheme,
-} from "./conversationUtils";
+import { DEFAULT_COMPOSER_RESERVE, COMPOSER_FLOAT_BOTTOM, COMPOSER_CONTENT_GAP, resolveButlerMarkTheme } from "./conversationUtils";
 import { ConversationScroll, ConversationShell } from "@/butler-ds";
 import { useSessionViewSubscription } from
   "@/components/layout/hooks/useSessionViewSubscription.ts";
@@ -37,8 +32,14 @@ export function Conversation() {
   const locale = useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const infoOpen = useButlerStore(state => state.sessionInfoOpen);
-  const hasContent = useSessionInfoHasContent();
-  const infoShown = infoOpen && hasContent;
+  const { ids: infoIds, settled: infoSettled } = useSessionSectionsModel();
+  const hasContent = infoIds.length > 0;
+  const infoHeld = useButlerStore(state => state.sessionInfoHeld);
+  const infoShown = infoOpen && hasContent && !infoHeld;
+  // A conversation entered with nothing to show keeps its pane closed until the user opens it.
+  useEffect(() => {
+    if (infoSettled && !hasContent && !useButlerStore.getState().sessionInfoHeld) useButlerStore.setState({ sessionInfoHeld: true });
+  }, [infoSettled, hasContent]);
   const browserOpen = useBrowserShellState(state => Boolean(state.conversations[activeChatId]?.open));
   const viewerShown = useRightSlot(activeChatId) === "viewer";
   const branchProjectId = useButlerStore((state) => {

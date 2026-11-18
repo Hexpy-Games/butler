@@ -141,6 +141,8 @@ export interface NavigationSetOptions {
 interface ButlerStore {
   leftOpen: boolean;
   sessionInfoOpen: boolean;
+  /** This visit entered the conversation with nothing to show: the pane stays closed until the user opens it. Reset by openSession. */
+  sessionInfoHeld: boolean;
   taskGraphEnabled: boolean;
   leftPanelWidth: number;
   sidebarChatsCollapsed: boolean;
@@ -952,6 +954,7 @@ setAppCopyLanguage(initialSettings.language);
 export const useButlerStore = create<ButlerStore>()((set, get) => ({
   leftOpen: false,
   sessionInfoOpen: false,
+  sessionInfoHeld: false,
   taskGraphEnabled: false,
   leftPanelWidth: DEFAULT_LEFT_PANEL_WIDTH,
   sidebarChatsCollapsed: false,
@@ -1269,6 +1272,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         : sessionMessageViews;
       return {
         activeChatId: chatId,
+        sessionInfoHeld: false,
         activeChatTitle: sessionTitle,
         leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded"
           ? state.leftOpen : false,

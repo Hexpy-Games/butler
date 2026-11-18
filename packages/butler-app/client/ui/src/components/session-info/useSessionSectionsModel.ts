@@ -49,7 +49,7 @@ export function useSessionSectionsModel() {
     if (attachments.length > 0) ids.push("attachments");
     if (schedules.length > 0) ids.push("schedules");
   }
-  return { order, notDone, ids, sessionId, summary, epic, asks, subtasks, browserTabs, previews, branch, folder, artifacts, attachments, schedules };
+  return { order, notDone, ids, settled: !summaryPending, sessionId, summary, epic, asks, subtasks, browserTabs, previews, branch, folder, artifacts, attachments, schedules };
 }
 
 export function useSessionInfoHasContent() {
