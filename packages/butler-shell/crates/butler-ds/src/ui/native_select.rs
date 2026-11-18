@@ -313,14 +313,7 @@ impl RenderOnce for NativeSelect {
             on_change: self.on_change.clone(),
             anchor,
         });
-        assemble(
-            &self,
-            label,
-            menu,
-            handle,
-            (focused, ring),
-            (layer, cx),
-        )
+        assemble(&self, label, menu, handle, (focused, ring), (layer, cx))
     }
 }
 
