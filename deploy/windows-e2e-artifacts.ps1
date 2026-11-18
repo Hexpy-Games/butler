@@ -27,6 +27,10 @@ if ($Mode -eq 'Export') {
     $env:TMP = if ($env:BUTLER_E2E_TMP_ROOT) { $env:BUTLER_E2E_TMP_ROOT } else { Join-Path $env:PREVIEW_ROOT 'tmp' }
     $env:TEMP = $env:TMP
     New-Item -ItemType Directory -Force $env:TMP | Out-Null
+    # The hosted tool caches sit on the C: OS disk too: an interpreter's first
+    # launch reads it cold (seconds, past 25 s seen), which a user's machine has
+    # long done. Start the ones the command E2Es call once, outside their limits.
+    foreach ($tool in @('node', 'python')) { & $tool --version | Out-Null }
     $fixtures = Join-Path $env:TMP 'butler-e2e'
     foreach ($test in $Tests) {
         $env:HOME = Join-Path $env:PREVIEW_ROOT ([guid]::NewGuid())
