@@ -27,9 +27,12 @@ async fn drawer_pdf_and_office_files_are_read_as_text() -> Result<(), HarnessErr
     let setup = Setup::new("DELIVERABLE-DRAWER-FORMATS")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
-    std::fs::write(setup.sandbox.data.join("report.pdf"), PDF)?;
     std::fs::write(
-        setup.sandbox.data.join("plan.docx"),
+        setup.sandbox.chat_folder("general")?.join("report.pdf"),
+        PDF,
+    )?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("plan.docx"),
         package(&[
             (
                 "[Content_Types].xml",
@@ -45,7 +48,7 @@ async fn drawer_pdf_and_office_files_are_read_as_text() -> Result<(), HarnessErr
         ]),
     )?;
     std::fs::write(
-        setup.sandbox.data.join("costs.xlsx"),
+        setup.sandbox.chat_folder("general")?.join("costs.xlsx"),
         package(&[
             (
                 "[Content_Types].xml",
