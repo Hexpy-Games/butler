@@ -88,6 +88,8 @@ export interface SpecNode {
   criteria: SpecCriterion[];
   children: SpecNode[];
 }
+/** GET /canon/specs/{node_id}: the published body; null until the node has a publication. */
+export interface CanonSpecDetail { id: string; title: string; revision: number; body: string | null; criteria: unknown[] }
 export interface WorkTask {
   id: string;
   work_id: string;
