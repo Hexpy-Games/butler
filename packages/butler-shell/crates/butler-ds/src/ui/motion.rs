@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use gpui::{
     App, AppContext as _, ElementId, LayerMotion, MotionEasing, MotionRepeat, Pixels, Point,
-    Styled, Window, animation_time_ms, point,
+    Styled, Window, animation_time_ms, point, px,
 };
 
 use super::context::Ds;
@@ -27,7 +27,7 @@ impl Loop {
 }
 
 /// One timed animation: its duration and token easing curve.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Timing {
     pub duration: Duration,
     pub(super) ease: Ease,
@@ -290,6 +290,54 @@ pub fn looping<E: Styled>(
 /// Requests one layout frame after a measured size or position changes. Stop once it settles.
 pub fn remeasure(window: &mut Window) {
     window.request_animation_frame();
+}
+
+/// A FLIP glide on x (ConversationColumnGlide): the element is laid out at its new place and paints the travel
+/// still to cover, back to 0, on the transition's own clock. Retained LayerMotion: no view code while it moves,
+/// nothing held at rest. A retarget starts from the on-screen value with a full duration, as Electron's restart does.
+#[derive(Clone, Copy, Debug)]
+pub struct Glide {
+    pub transition: Transition,
+    pub timing: Timing,
+}
+
+impl Glide {
+    /// Offset = target - value (laid out at `target`, painted at `value`); 0 at rest.
+    pub fn follow<E: Styled>(&self, el: E) -> E {
+        let t = self.transition.target();
+        self.transition.apply(
+            el,
+            &self.timing,
+            &Props {
+                offset: Some((point(px(t), px(0.)), point(px(t - 1.), px(0.)))),
+                ..Default::default()
+            },
+        )
+    }
+
+    /// A docked aside leaving with the column (`fill: forwards`): offset = from - value, from 0 to the whole travel.
+    /// Only while moving; at rest it returns `el` unchanged (an exited aside is unmounted by its wake).
+    pub fn trail<E: Styled>(&self, el: E) -> E {
+        if !self.transition.moving(&self.timing) {
+            return el;
+        }
+        let from = self.transition.from;
+        self.transition.apply(
+            el,
+            &self.timing,
+            &Props {
+                offset: Some((point(px(from), px(0.)), point(px(from - 1.), px(0.)))),
+                ..Default::default()
+            },
+        )
+    }
+}
+
+/// Requests the next frame for a size that animates per frame (a CSS width transition is layout every frame), waking
+/// only `view`: the smallest view whose layout reads that size. Call it on each render while the motion moves;
+/// nothing calls it at rest or under reduced motion.
+pub fn layout_frame_for(window: &mut Window, view: gpui::EntityId) {
+    window.on_next_frame(move |_, cx| cx.notify(view));
 }
 
 /// Requests the next layout frame, only while a Collapsible's height transition is moving:
