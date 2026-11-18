@@ -77,6 +77,9 @@ pub struct ConversationVars {
     pub column_shift: f32,
     /// The top padding of the message list (the title bar's room, or the card's inset).
     pub top_reserve: f32,
+    /// The column's glide while the aside docks or the rail's room comes or goes: what the
+    /// column's elements follow so they travel from their old place (`None` before measured).
+    pub column_glide: Option<crate::ui::motion::Glide>,
 }
 
 #[derive(Default)]

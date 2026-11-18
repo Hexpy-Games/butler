@@ -12,7 +12,7 @@ use std::rc::Rc;
 use crate::tokens::{Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
 use crate::ui::liquid_glass::{Presence, with_presence};
-use crate::ui::motion::{Props, Timing, transition};
+use crate::ui::motion::{Glide, Props, Timing, transition};
 use crate::ui::scroll::engine::{self, Axis, Config};
 use crate::ui::scroll::frame as scroll_frame;
 use crate::ui::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
@@ -87,8 +87,8 @@ pub(super) struct Slot {
     pub(super) float_open: bool,
     pub(super) top: f32,
     pub(super) composer_reserve: f32,
-    /// How far the docked aside rides in with the column's glide.
-    pub(super) glide: f32,
+    /// The column's glide, which the docked aside rides in and out with.
+    pub(super) glide: Option<Glide>,
 }
 
 /// The aside's scroller: ring room, the shared edge fade, an inline inset on glass.
@@ -160,7 +160,7 @@ fn panel(
     match layout {
         AsideLayout::Docked => aside
             .top(px(slot.top))
-            .right(px(space(Length::SpaceLg) - slot.glide))
+            .right(px(space(Length::SpaceLg)))
             .bottom(px(space(Length::SpaceLg)))
             .w(px(super::column::ASIDE_WIDTH))
             .child(scroller)
@@ -273,7 +273,20 @@ fn layer(
         ),
         AsideLayout::Floating => layer,
     };
-    Some(layer.child(panel).into_any_element())
+    let layer = layer.child(panel);
+    Some(match (layout, slot.glide) {
+        // The docked aside glides with the column: in with it on open, out with it on close.
+        (AsideLayout::Docked, Some(glide)) => {
+            let glided = cover().child(layer);
+            if on {
+                glide.follow(glided)
+            } else {
+                glide.trail(glided)
+            }
+            .into_any_element()
+        }
+        _ => layer.into_any_element(),
+    })
 }
 
 /// Both layouts as Presence fades; the last content stays for the exit.

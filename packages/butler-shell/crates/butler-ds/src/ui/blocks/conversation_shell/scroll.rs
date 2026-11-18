@@ -206,6 +206,10 @@ impl RenderOnce for MessageListSurface {
                 .max_w(px(super::column::CONTENT_MAX))
                 .mx_auto()
         };
+        let column = match vars.column_glide {
+            Some(glide) => glide.follow(column),
+            None => column,
+        };
         let rows = match self.height {
             Some(height) => column.relative().h(px(height)).children(self.children),
             None => column
@@ -296,7 +300,7 @@ impl RenderOnce for ConversationScrollToBottomButton {
             crate::tokens::Duration::MotionSlow,
             crate::tokens::Easing::MotionEaseEmphasized,
         );
-        div()
+        let outer = div()
             .id((self.id, "column"))
             .layout_motion(gpui::LayoutMotion {
                 duration_ms: if ds.reduced_motion() { 0 } else { timing.ms() },
@@ -311,6 +315,10 @@ impl RenderOnce for ConversationScrollToBottomButton {
             .pr(px(side / 2. + 2. * vars.column_shift))
             .flex()
             .justify_center()
-            .child(div().flex().min_w_0().child(pill))
+            .child(div().flex().min_w_0().child(pill));
+        match vars.column_glide {
+            Some(glide) => glide.follow(outer),
+            None => outer,
+        }
     }
 }

@@ -25,7 +25,7 @@ use super::measure;
 use super::scope::{self, ConversationVars, Spec};
 use crate::tokens::{Duration as DsDuration, Easing, GradientToken, Length};
 use crate::ui::context::Ds;
-use crate::ui::motion::{Props, Timing, transition};
+use crate::ui::motion::{Glide, Props, Timing, transition};
 use crate::ui::{convert, strut};
 use column::{KeepOut, Narrow};
 
@@ -150,15 +150,15 @@ fn rail_top(rail: rail::Rail, width: f32, ds: &Ds) -> f32 {
 
 impl ConversationShell {
     /// What the transcript, the message list and the jump button read: the column's width and
-    /// place (animated as the aside docks or the rail's room comes and goes), and how far the
-    /// docked aside still has to ride in.
+    /// place (the layout is at the target at once; the elements glide to it as the aside docks or
+    /// the rail's room comes and goes), and the glide the docked aside rides in with.
     fn column_facts(
         &self,
         (width, cards): (f32, bool),
         (shown_aside, rail): (Option<AsideLayout>, rail::Rail),
         window: &mut Window,
         cx: &mut App,
-    ) -> (ConversationVars, f32) {
+    ) -> (ConversationVars, Option<Glide>) {
         let ds = Ds::get(cx);
         let hairline = f32::from(ds.len(Length::BorderHairline));
         // The workspace container is the card's box: its border widens it by two hairlines.
@@ -174,23 +174,20 @@ impl ConversationShell {
         };
         let content = column::content_width(width, self.gutter, narrow);
         let (col, target) = column::column(width, content, keep_out(shown_aside, rail, width, ds));
-        let glide = Timing::token(ds, DsDuration::MotionSlow, Easing::MotionEaseEmphasized);
+        let timing = Timing::token(ds, DsDuration::MotionSlow, Easing::MotionEaseEmphasized);
         let jump = ds.reduced_motion() || width <= 0.;
         let motion = transition(
             (self.id.clone(), "column-shift"),
             (target, jump),
-            &glide,
+            &timing,
             window,
             cx,
         );
-        let seen = window.use_keyed_state((self.id.clone(), "column-target"), cx, |_, _| target);
-        if *seen.read(cx) != target {
-            if !jump {
-                window.animate_layout(glide.ms());
-            }
-            seen.update(cx, |value, _| *value = target);
-        }
         let shift = motion.target();
+        let glide = Glide {
+            transition: motion,
+            timing,
+        };
         let ds = Ds::get(cx);
         let top_reserve = if cards {
             f32::from(ds.len(Length::SpaceLg))
@@ -216,8 +213,9 @@ impl ConversationShell {
             column_shift: shift,
             motion_id: Some(self.id.clone()),
             top_reserve: top_reserve + rail_top(rail, width, ds),
+            column_glide: (width > 0.).then_some(glide),
         };
-        (vars, target - shift)
+        (vars, (width > 0.).then_some(glide))
     }
 }
 

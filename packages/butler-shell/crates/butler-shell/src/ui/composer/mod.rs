@@ -426,11 +426,15 @@ impl Render for Composer {
                 34.
             }))
             .left(px(column.column_left))
-            .w(px(column.column_width.max(0.)))
-            .id("composer")
-            .track_focus(&self.within)
-            // `focusDraftFromComposerChrome`: a press no control took.
-            .on_any_mouse_down(cx.listener(|this, _, window, cx| this.press_chrome(window, cx)));
+            .w(px(column.column_width.max(0.)));
+        let surface = match column.column_glide {
+            Some(glide) => glide.follow(surface),
+            None => surface,
+        }
+        .id("composer")
+        .track_focus(&self.within)
+        // `focusDraftFromComposerChrome`: a press no control took.
+        .on_any_mouse_down(cx.listener(|this, _, window, cx| this.press_chrome(window, cx)));
         file_drop(surface, move |files, _, cx| {
             let _ = dropped.update(cx, |this, cx| this.add_files(files, cx));
         })
