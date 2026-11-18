@@ -20,7 +20,7 @@ const copy = {
     reply: "Here is today's order: finish the review, then the release notes.",
   },
   "ko-KR": {
-    title: "오늘은 어디서 시작하시겠습니까",
+    title: "오늘은 어디서 시작할까요",
     suggestions: [["plan", "오늘 순서 세우기", "열린 일을 실행 순서로 정리합니다."], ["review", "위험한 변경 보기", "최근 작업에서 빠진 검증을 찾습니다."]],
     reply: "오늘 순서입니다. 리뷰를 마치고 릴리스 노트를 씁니다.",
   },

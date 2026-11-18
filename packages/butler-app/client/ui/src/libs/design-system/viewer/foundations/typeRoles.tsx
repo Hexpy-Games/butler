@@ -18,7 +18,7 @@ export const ROLE_COMPONENTS: Record<string, [ComponentType<TypoProps>, string]>
 
 /** Where each role appears in Butler, and a line worth setting in it. */
 export const ROLE_COPY: Record<string, { use: string; en: string; ko: string }> = {
-  "new-chat-title": { use: "New-chat greeting, hero lines", en: "What should we build today?", ko: "오늘은 무엇을 만들어 보시겠습니까?" },
+  "new-chat-title": { use: "New-chat greeting, hero lines", en: "What should we build today?", ko: "오늘은 무엇을 만들어 볼까요?" },
   h1: { use: "Document and page titles", en: "Project overview", ko: "프로젝트 개요" },
   h2: { use: "Settings page titles, document sections", en: "Weekly summary", ko: "주간 요약" },
   "dashboard-title": { use: "Dashboard header", en: "Butler dashboard", ko: "버틀러 대시보드" },

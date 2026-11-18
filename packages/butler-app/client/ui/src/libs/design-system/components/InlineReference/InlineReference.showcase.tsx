@@ -24,7 +24,7 @@ const copy = {
   },
   "ko-KR": {
     before: "이전", conversation: "보험 보장 비교", after: "내용과",
-    document: "3분기 계획 메모", end: "를 참고해 주십시오.",
+    document: "3분기 계획 메모", end: "를 참고해 주세요.",
     gone: "삭제된", removed: "초안 문서", tail: "도 기록에는 흐리게 남습니다.",
     extBefore: "수정은", pr: "PR #539: 릴리스 재게시", extMid: "에 들어갔고, 추적은", extAnd: "에서 합니다.", guide: "처음 실행 안내서", extEnd: "도 참고하십시오.",
     longBefore: "참고 자료:", longTitle: "신뢰할 수 없는 모델 출력의 링크를 여는 데스크톱 앱 보안 강화하기", longMid: "그리고 원본 보고서",

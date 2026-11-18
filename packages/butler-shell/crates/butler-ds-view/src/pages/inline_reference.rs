@@ -71,7 +71,7 @@ fn copy(lang: Lang) -> Copy {
             conversation: "보험 보장 비교",
             after: "내용과",
             document: "3분기 계획 메모",
-            end: "를 참고해 주십시오.",
+            end: "를 참고해 주세요.",
             gone: "삭제된",
             removed: "초안 문서",
             tail: "도 기록에는 흐리게 남습니다.",

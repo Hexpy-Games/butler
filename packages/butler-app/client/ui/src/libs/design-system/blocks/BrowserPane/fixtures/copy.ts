@@ -24,7 +24,7 @@ export const BROWSER_DEMO_COPY = {
     agentUsing: "버틀러가 조작 중", step: "‘메쉬 사무용 의자 M2’ 클릭", takeOver: "직접 조작", stopTask: "작업 중지",
     userControl: "직접 조작 중", butlerWaits: "버틀러가 기다리는 중", giveBack: "버틀러에게 돌려주기",
     waiting: "승인 대기", payStep: "129,000원 결제", review: "승인 보기",
-    needYou: "직접 입력 필요", keypad: "보안 키패드 · 직접 입력해 주십시오",
+    needYou: "직접 입력 필요", keypad: "보안 키패드 · 직접 입력해 주세요",
     pickMode: "요소 선택 중", pickHint: "⇧ 여러 개 · ⌥ 영역", dragToChat: "끌어서 대화에 놓기", finish: "끝내기",
     popupBlocked: "팝업 차단됨", popupHost: "id.example.com", allow: "허용", info: "팝업 열림", showPopup: "팝업 보기",
     picked: (count: number) => `${count}개 선택됨`, attach: "대화에 첨부", saveImage: "이미지로 저장", copyText: "텍스트 복사", clear: "선택 해제",

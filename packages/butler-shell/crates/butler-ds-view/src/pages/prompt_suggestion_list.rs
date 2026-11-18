@@ -69,7 +69,7 @@ fn copy(lang: Lang) -> Copy {
             reply: "Here is today's order: finish the review, then the release notes.",
         },
         Copy {
-            title: "오늘의 일을 같이 펼쳐 보시겠습니까",
+            title: "오늘의 일을 같이 펼쳐볼까요",
             description: "흩어진 맥락을 한곳에 모으고, 지금 붙잡을 수 있는 다음 일을 골라 보십시오.",
             moment: "오후 2:10",
             suggestions: [
