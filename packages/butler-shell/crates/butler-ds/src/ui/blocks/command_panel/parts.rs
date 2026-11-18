@@ -139,7 +139,7 @@ fn bare_input(
         state.update(cx, |state, cx| state.emplace(value, cx));
     }
     let handle = focus::tab_stop(&state.read(cx).focus_handle(cx), true);
-    text::register(cx, &handle, &state);
+    text::register(cx, &handle, &state, false);
     let ds = Ds::get(cx);
     let primary = ds.color(Color::TextPrimary);
     let mut editor = text_input((id, "edit"))

@@ -60,36 +60,61 @@ pub fn state(
 /// The live fields by editor, so the focused one can be reached. Both halves are weak: the
 /// registry keeps no editor and no focus slot alive.
 #[derive(Default)]
-struct Registry(RefCell<HashMap<EntityId, (WeakFocusHandle, WeakEntity<EditableTextState>)>>);
+struct Registry(RefCell<HashMap<EntityId, Field>>);
+
+/// A registered field: its focus slot, its editor and whether it takes several lines.
+struct Field {
+    handle: WeakFocusHandle,
+    state: WeakEntity<EditableTextState>,
+    multiline: bool,
+}
 
 impl gpui::Global for Registry {}
 
 /// Records a field that draws. A field already known costs one lookup; a new one first drops
 /// the entries whose editor is gone.
-pub(crate) fn register(cx: &mut App, handle: &FocusHandle, state: &Entity<EditableTextState>) {
+pub(crate) fn register(
+    cx: &mut App,
+    handle: &FocusHandle,
+    state: &Entity<EditableTextState>,
+    multiline: bool,
+) {
     let mut fields = cx.default_global::<Registry>().0.borrow_mut();
     if fields.contains_key(&state.entity_id()) {
         return;
     }
-    fields.retain(|_, (_, state)| state.upgrade().is_some());
-    fields.insert(state.entity_id(), (handle.downgrade(), state.downgrade()));
+    fields.retain(|_, field| field.state.upgrade().is_some());
+    fields.insert(
+        state.entity_id(),
+        Field {
+            handle: handle.downgrade(),
+            state: state.downgrade(),
+            multiline,
+        },
+    );
 }
 
-/// Focus has just moved onto a text field by Tab or by script: a browser selects an input's text
-/// then (a mouse press does not). Call it after moving focus; it does nothing off a field.
+/// Focus has just moved onto a text field by Tab or by script (a mouse press does not select).
+/// Tab into a single-line field selects its text, as a browser's input does; a multi-line field
+/// keeps its selection, as a textarea does. Call it after moving focus; it does nothing off a
+/// field.
 pub fn select_focused(window: &mut Window, cx: &mut App) {
-    if focused(window, cx).is_some() {
+    if focused_field(window, cx).is_some_and(|(_, multiline)| !multiline) {
         window.dispatch_action(actions::SelectAll.boxed_clone(), cx);
     }
 }
 
 /// The editor of the focused field.
 pub fn focused(window: &Window, cx: &App) -> Option<Entity<EditableTextState>> {
+    focused_field(window, cx).map(|(state, _)| state)
+}
+
+fn focused_field(window: &Window, cx: &App) -> Option<(Entity<EditableTextState>, bool)> {
     let focused = window.focused(cx)?;
     let registry = cx.try_global::<Registry>()?;
     let fields = registry.0.borrow();
     fields
         .values()
-        .find(|(handle, _)| *handle == focused)
-        .and_then(|(_, state)| state.upgrade())
+        .find(|field| field.handle == focused)
+        .and_then(|field| Some((field.state.upgrade()?, field.multiline)))
 }
