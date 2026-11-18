@@ -113,7 +113,8 @@ def trusted(metadata, publishing=False):
         raise ValueError('Cargo snapshot is not a same-repository main/release push')
     if not publishing and run['status'] != 'completed':
         raise UnsuccessfulProducer('Cargo snapshot producer is not complete yet')
-    jobs = api(endpoint + '/jobs?per_page=100')['jobs']
+    # Pages of 50: GitHub answers 502 for 100-job pages of large runs.
+    jobs = api(endpoint + '/jobs?per_page=50')['jobs']
     producer = metadata['producer_name']
     identity = metadata['identity']
     platform = identity['platform']

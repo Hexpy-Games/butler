@@ -137,7 +137,7 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             ApprovalActionKind::WebRequest,
             ApprovalTargetKind::Other,
             facts.target,
-            ApprovalRisk::High,
+            ApprovalRisk::Medium,
         ),
         "generate_image" | "edit_image" => single(
             if facts.capability == "generate_image" {
@@ -172,6 +172,12 @@ pub(super) fn summarize(facts: ApprovalFacts<'_>) -> AuthorityApproval {
             ApprovalActionKind::SwitchFolder,
             ApprovalTargetKind::Outside,
             facts.target.strip_prefix("folder:").unwrap_or(facts.target),
+            ApprovalRisk::Medium,
+        ),
+        "browser_open" | "browser_read" => single(
+            ApprovalActionKind::Other,
+            ApprovalTargetKind::Other,
+            facts.target,
             ApprovalRisk::Medium,
         ),
         "browser_act" | "browser_close" => single(

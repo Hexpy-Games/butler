@@ -107,13 +107,17 @@ def latest_full_run(pr, repository):
     return None
 
 
+def run_jobs(run, repository):
+    # Pages of 50: GitHub answers 502 for 100-job pages of large runs.
+    pages = json.loads(command('gh', 'api', f'repos/{repository}/actions/runs/{run["id"]}'
+                               f'/attempts/{run["run_attempt"]}/jobs?per_page=50', '--paginate', '--slurp'))
+    return [job for page in pages for job in page['jobs']]
+
+
 def full_run_passed(run, repository):
-    jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')
-    if jobs['total_count'] != len(jobs['jobs']):
-        return False
     return any(job['name'] == 'gate' and any(
         step['name'] == 'Require every selected check' and step['conclusion'] == 'success'
-        for step in job.get('steps', [])) for job in jobs['jobs'])
+        for step in job.get('steps', [])) for job in run_jobs(run, repository))
 
 
 def poll(call, sleep, clock, deadline):

@@ -120,6 +120,7 @@ impl PatternInputSource for Source {
                     .and_then(Value::as_str)
                     .unwrap_or("sometimes")
                     .into(),
+                persona: butler_memory::profile::active_briefing_persona(&self.root).1,
             })
         })
     }
