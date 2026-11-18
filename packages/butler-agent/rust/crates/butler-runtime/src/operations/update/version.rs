@@ -14,6 +14,7 @@ pub fn version_newer(available: &str, current: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::version_newer;
+    use butler_platform::store_update::app_version;
 
     // test-category: pure-logic
     #[test]
@@ -25,5 +26,17 @@ mod tests {
         assert!(version_newer("0.1.0", "0.1.0-preview.99"));
         assert!(!version_newer("0.1.0-preview.99", "0.1.0"));
         assert!(!version_newer("invalid", "0.1.0"));
+        assert_eq!(app_version(1, 1, 17).as_deref(), Some("0.1.0-preview.17"));
+        assert_eq!(app_version(1, 1, 999).as_deref(), Some("0.1.0"));
+        assert_eq!(app_version(1, 1, 1001).as_deref(), Some("0.1.1-preview.1"));
+        assert!(version_newer(
+            &app_version(1, 1, 999).unwrap(),
+            &app_version(1, 1, 17).unwrap()
+        ));
+        assert!(version_newer(
+            &app_version(1, 1, 1001).unwrap(),
+            &app_version(1, 1, 999).unwrap()
+        ));
+        assert_eq!(app_version(0, 1, 999), None);
     }
 }
