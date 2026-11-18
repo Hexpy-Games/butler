@@ -3,6 +3,7 @@
 //! the workspace aside, above it the workspace narrows beside it. The inspector's docked form
 //! lives here too, as it shares the panel's slide. In the desktop app (`Ds::desktop_only`) the
 //! panels overlay at their own width with no dim.
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, Styled as _,
     div, px,
@@ -94,7 +95,7 @@ pub(super) fn root(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -> AnyEle
         .map(|dismiss| {
             let open = shell.left_open || ctx.inspector_open;
             t.scrim.apply(
-                div().absolute().size_full().child(parts::scrim(
+                cover().child(parts::scrim(
                     (shell.id.clone(), "scrim"),
                     f32::from(!ds.desktop_only()),
                     open.then_some(dismiss),

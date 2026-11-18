@@ -3,6 +3,7 @@
 //! actions. The actions share the name's row while the name keeps a readable width; on a
 //! narrower card they wrap to their own row at the right edge. The list's own width decides
 //! the row's icon size, as the container query does.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -193,11 +194,7 @@ fn button_row(
         .clone();
     let ds = Ds::get(cx);
     let ring = focus::visible(ds, handle.is_focused(window), false).then(|| {
-        div()
-            .absolute()
-            .size_full()
-            .top_0()
-            .left_0()
+        cover()
             .border(ds.len(Length::FocusRingWidth))
             .border_color(ds.color(Color::ColorActionPrimary))
     });

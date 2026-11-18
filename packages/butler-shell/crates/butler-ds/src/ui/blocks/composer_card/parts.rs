@@ -1,5 +1,6 @@
 //! The toolbar, the editor slots and the controls of the composer card (ComposerCard.tsx,
 //! ComposerCardEditor.tsx, ComposerSendButton.tsx, ComposerPlanToggle.tsx).
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -435,11 +436,7 @@ pub fn editor(children: impl IntoIterator<Item = AnyElement>) -> gpui::Div {
 /// `ComposerCardPlaceholder`: the placeholder over an empty editor, inside the card's padding.
 pub fn placeholder(text: impl Into<SharedString>, cx: &App) -> AnyElement {
     let (ds, vars) = (Ds::get(cx), vars(cx));
-    div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
+    cover()
         .px(px(vars.padding.0))
         .py(px(vars.padding.1))
         .text_color(ds.color(Color::Placeholder))

@@ -51,7 +51,9 @@ pub(super) fn reveal_row(
         },
     )
     .absolute()
-    .size_full();
+    .size_full()
+    .top_0()
+    .left_0();
     div()
         .relative()
         .child(probe)

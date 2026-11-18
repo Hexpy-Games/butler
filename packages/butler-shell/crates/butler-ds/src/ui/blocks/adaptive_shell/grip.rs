@@ -2,6 +2,7 @@
 //! over a divider. A 4x64 pill grabber shows on hover, focus and drag, and with a hint a
 //! two-line tooltip beside it after about the Tooltip delay (2 x `--motion-deliberate`), on the
 //! workspace side of the divider.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -319,12 +320,7 @@ impl RenderOnce for ResizeHandle {
             .filter(|_| shown.hint.0.target() > 0. || shown.hint.0.moving(&shown.hint.1))
             .map(|hint| {
                 shown.hint.0.apply(
-                    div().absolute().size_full().child(hint_view(
-                        self.label.clone(),
-                        hint,
-                        self.hint_side,
-                        ds,
-                    )),
+                    cover().child(hint_view(self.label.clone(), hint, self.hint_side, ds)),
                     &shown.hint.1,
                     &Props {
                         opacity: Some((0., 1.)),
@@ -374,7 +370,9 @@ impl RenderOnce for ResizeHandle {
             },
         )
         .absolute()
-        .size_full();
+        .size_full()
+        .top_0()
+        .left_0();
         strut::scope(false, el.child(recorder))
     }
 }

@@ -3,6 +3,7 @@
 //! focus ring, selected look) and adds the round check indicator, centred on the card at the end:
 //! checked fills the ring with the accent from the centre and draws the check. A blocked card
 //! (`disabled`, or a `disabled_reason`) stays focusable so the reason can be read in a tooltip.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -211,7 +212,7 @@ fn indicator(id: ElementId, checked: bool, window: &mut Window, cx: &mut App) ->
             .rounded(ds.len(Length::RadiusPill))
             .child(fill)
             .child(div().relative().child(mark));
-        let layer = div().absolute().size_full().child(frame);
+        let layer = cover().child(frame);
         if moving {
             layer.motion(gpui::LayerMotion {
                 visible: (i as f32 / n as f32, (i + 1) as f32 / n as f32),

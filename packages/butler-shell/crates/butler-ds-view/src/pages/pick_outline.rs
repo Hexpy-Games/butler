@@ -5,6 +5,7 @@
 use butler_ds::tokens::{Color, Length};
 use butler_ds::ui::blocks::pick_outline::{PickOutline, PickOutlinePick, PickRect};
 use butler_ds::ui::context::Ds;
+use butler_ds::ui::cover::cover;
 use butler_ds::ui::layout::{Columns, Grid, Space, Stack};
 use butler_ds::ui::typo::{Tone, Typo};
 use gpui::{
@@ -167,7 +168,7 @@ fn block(rect: PickRect) -> Div {
 /// The page stand-in: the shop's header and product cards, a plain colour, or a photo-like
 /// gradient with discs.
 fn page_surface(page: Page) -> Div {
-    let fill = |hex| div().absolute().size_full().bg(rgb(hex));
+    let fill = |hex| cover().bg(rgb(hex));
     match page {
         Page::White => fill(0x00ff_ffff),
         Page::Black => fill(0x0000_0000),
@@ -178,9 +179,7 @@ fn page_surface(page: Page) -> Div {
                     .bg(rgb(hex))
                     .opacity(0.9)
             };
-            div()
-                .absolute()
-                .size_full()
+            cover()
                 .bg(gpui::linear_gradient(
                     135.,
                     gpui::linear_color_stop(rgb(0x0087_a8c4), 0.),

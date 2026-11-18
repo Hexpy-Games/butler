@@ -308,7 +308,11 @@ impl RenderOnce for ButlerThinkingMark {
             blue,
             pink,
         };
-        let drawing = layer(key, snapshot, look, reduced).absolute().size_full();
+        let drawing = layer(key, snapshot, look, reduced)
+            .absolute()
+            .size_full()
+            .top_0()
+            .left_0();
         let stack = div().relative().size_full().child(drawing);
         let stack = if breathing {
             looping(

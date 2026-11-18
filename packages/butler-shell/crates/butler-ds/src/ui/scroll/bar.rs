@@ -2,6 +2,7 @@
 //! column, shown while the pointer is in the lane, while it drags and for a moment after the
 //! content scrolls, like an overlay scrollbar. The track is 8px with a 2px transparent border
 //! (ScrollArea.module.css `::-webkit-scrollbar`), so the thumb is 4px across.
+use crate::ui::cover::cover;
 use gpui::{
     Bounds, DispatchPhase, Hsla, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
     Point, ScrollHandle, Window, canvas, div, point, px,
@@ -87,13 +88,15 @@ pub(crate) fn drag_layer(
     axis: Axis,
     grab: gpui::Entity<Option<f32>>,
 ) -> gpui::Div {
-    div().absolute().size_full().top_0().left_0().child(
+    cover().child(
         canvas(
             |_, _, _| (),
             move |bounds, (), window, _| install(bounds, &handle, axis, &grab, window),
         )
         .absolute()
-        .size_full(),
+        .size_full()
+        .top_0()
+        .left_0(),
     )
 }
 

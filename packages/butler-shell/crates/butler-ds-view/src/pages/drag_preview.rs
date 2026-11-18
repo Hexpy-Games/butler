@@ -261,6 +261,8 @@ fn record_area(
     )
     .absolute()
     .size_full()
+    .top_0()
+    .left_0()
 }
 
 /// A drag area whose right third refuses the drop: the floating preview follows the pointer in

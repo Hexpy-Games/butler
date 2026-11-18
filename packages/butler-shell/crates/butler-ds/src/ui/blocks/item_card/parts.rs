@@ -1,4 +1,5 @@
 //! The parts of an ItemCard: body, picture, text with its Show more, and the footer.
+use crate::ui::cover::cover;
 use crate::ui::selectable::Break;
 use gpui::{
     AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
@@ -266,7 +267,9 @@ fn text_block(
                 |_, (), _, _| {},
             )
             .absolute()
-            .size_full(),
+            .size_full()
+            .top_0()
+            .left_0(),
         );
     let mut block = div()
         .relative()
@@ -310,14 +313,7 @@ pub(super) fn media(
     let Some(open) = card.on_media_open.clone() else {
         return media;
     };
-    let dim = hovered.then(|| {
-        div()
-            .absolute()
-            .size_full()
-            .top_0()
-            .left_0()
-            .bg(convert::with_alpha(gpui::black(), DIM))
-    });
+    let dim = hovered.then(|| cover().bg(convert::with_alpha(gpui::black(), DIM)));
     let picture = div().relative().w_full().child(media).children(dim);
     let button = Clickable::new((id.clone(), "media"))
         .variant(ClickVariant::Text)
