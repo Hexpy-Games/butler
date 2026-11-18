@@ -1,4 +1,4 @@
-//! Sidebar chats delegate all work; projects and schedule runs keep direct Work.
+//! Sidebar chats delegate all work, with no helper-choice line; projects and schedule runs keep direct Work and the line; the Steward keeps its line.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -87,12 +87,27 @@ async fn chat_routes_work_to_steward_while_projects_and_schedules_keep_direct_wo
         let request = first_request(&script, text);
         assert!(request.contains(stub::CHAT_ROUTE), "{request}");
         assert!(!request.contains(stub::DEFAULT_ROUTE), "{request}");
+        assert!(!request.contains(stub::HELPER_CHOICE), "{request}");
     }
     for text in [stub::PROJECT, stub::SCHEDULED] {
         let request = first_request(&script, text);
         assert!(request.contains(stub::DEFAULT_ROUTE), "{request}");
         assert!(!request.contains(stub::CHAT_ROUTE), "{request}");
+        assert!(request.contains(stub::HELPER_CHOICE), "{request}");
     }
+    let steward = script
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|body| {
+            matching::key("/v1/responses", body, &Placeholders::default())
+                .user_request
+                .starts_with("role: steward")
+        })
+        .map(ToString::to_string)
+        .unwrap();
+    assert!(steward.contains(stub::STEWARD_CHOICE), "{steward}");
     s.finish().await?;
     server.abort();
     Ok(())
