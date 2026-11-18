@@ -37,6 +37,29 @@ pub(super) fn call(name: &str, args: impl serde::Serialize) -> Value {
 pub(super) fn done() -> Value {
     json!({"type":"message","id":"answer","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Done.","annotations":[]}]})
 }
+/// Tool outputs of the newest request that carries any, unwrapped as the model reads
+/// them. Background model calls (chat grouping, memory extraction) reach the stub too
+/// and may arrive after the turn's last request.
+pub(super) fn tool_outputs(script: &Script) -> Vec<Value> {
+    let requests = script.requests.lock().unwrap();
+    requests
+        .iter()
+        .rev()
+        .filter_map(|request| request["input"].as_array())
+        .map(|input| {
+            input
+                .iter()
+                .filter(|item| item["type"] == "function_call_output")
+                .map(|item| {
+                    let output: Value =
+                        serde_json::from_str(item["output"].as_str().unwrap()).unwrap();
+                    output.get("output").cloned().unwrap_or(output)
+                })
+                .collect::<Vec<_>>()
+        })
+        .find(|outputs| !outputs.is_empty())
+        .unwrap_or_default()
+}
 async fn reply(
     State(script): State<Arc<Script>>,
     Json(body): Json<Value>,
