@@ -130,7 +130,8 @@ fn work_link_row(msg: &MessageRecord, cx: &App) -> Option<ArtifactItem> {
     Some(
         ArtifactItem::new(origin.work_title.clone().unwrap_or_default())
             .description(Media::get(cx).view_work)
-            .icon(Icon::Eye),
+            .icon(Icon::Eye)
+            .anchor(format!("work-card-{}", msg.id)),
     )
 }
 

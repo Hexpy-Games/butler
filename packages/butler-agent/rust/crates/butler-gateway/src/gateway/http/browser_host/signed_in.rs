@@ -75,9 +75,13 @@ pub(super) async fn admit(
         frame["args"]["policy"] = signed_in_policy(&content_origin(state), &sites);
         return Ok(None);
     }
-    let tab = {
+    let (tab, url) = {
         let hub = state.browser.0.lock().map_err(|_| HttpError::Internal)?;
-        hub.tabs.get(frame["tab"].as_str().unwrap_or("")).cloned()
+        let id = frame["tab"].as_str().unwrap_or("");
+        (
+            hub.tabs.get(id).cloned(),
+            super::pages::current_url(&hub, id).unwrap_or_default(),
+        )
     };
     let Some(tab) = tab.filter(|tab| tab["profile"] == "signed_in") else {
         return Ok(None);
@@ -88,20 +92,21 @@ pub(super) async fn admit(
     if let Some(refusal) = schedule_refusal(frame) {
         return Ok(Some(refusal));
     }
-    if super::devtools::local_read(op, tab["url"].as_str().unwrap_or("")) {
+    if super::devtools::local_read(op, &url) {
         return Ok(None);
     }
-    let url = tab["url"].as_str().unwrap_or("");
     let sites = granted_sites(state, session, turn.as_deref(), &frame["schedule_browser"]).await?;
-    let place = signed_in_place(url, &sites);
+    let place = signed_in_place(&url, &sites);
     let refused = match place {
         SignedInPlace::Granted | SignedInPlace::Payment => false,
         SignedInPlace::Identity => !READS.contains(&op),
         SignedInPlace::Denied => true,
     };
     if refused {
-        return Ok(Some(match site_of(url) {
-            Some(site) if butler_runtime::browser::public_url(url).is_ok() => grant_required(&site),
+        return Ok(Some(match site_of(&url) {
+            Some(site) if butler_runtime::browser::public_url(&url).is_ok() => {
+                grant_required(&site)
+            }
             _ => json!({"status":"not_dispatched","reason":"navigation_denied"}),
         }));
     }

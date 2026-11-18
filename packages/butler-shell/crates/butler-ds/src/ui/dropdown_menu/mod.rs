@@ -164,7 +164,13 @@ impl DropdownMenu {
         let child = div()
             .flex()
             .child(build(Toggle(self.clone())))
-            .child(self.menu.parts.reference.probe())
+            .child({
+                let menu = self.clone();
+                self.menu
+                    .parts
+                    .reference
+                    .probe_while(move |cx| menu.is_open(cx))
+            })
             .relative();
         TriggerBox::new(child.into_any_element(), move |wrapper| {
             wrapper

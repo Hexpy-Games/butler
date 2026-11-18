@@ -28,6 +28,8 @@ mod gpu;
 #[cfg(cef_osr)]
 mod handlers;
 #[cfg(cef_osr)]
+mod hold;
+#[cfg(cef_osr)]
 mod ime;
 #[cfg(cef_osr)]
 mod input;
@@ -59,7 +61,7 @@ use soft::OsrFrame as Frame;
 #[cfg(target_os = "linux")]
 pub use soft::{OsrFrame, read_bgra_pixel};
 #[cfg(cef_osr)]
-use state::{Events, Page, PageRef};
+use state::{Events, Page, PageRef, Phase};
 #[cfg(cef_osr)]
 use std::{
     cell::{Cell, RefCell},
@@ -73,6 +75,10 @@ use std::{
 static STARTED: AtomicBool = AtomicBool::new(false);
 #[cfg(cef_osr)]
 const FALLBACK: Duration = Duration::from_nanos(1_000_000_000 / 30);
+#[cfg(cef_osr)]
+const KEYCHAIN_SERVICE: &str = "Butler Safe Storage";
+#[cfg(cef_osr)]
+const KEYCHAIN_ACCOUNT: &str = "Butler Key";
 
 /// All runtime methods and sink events run on the UI thread.
 pub trait OsrSink: 'static {
@@ -344,10 +350,14 @@ impl OsrRuntime {
         };
         {
             let mut p = p.borrow_mut();
-            if p.visible == visible || p.closing {
+            if p.phase == Phase::Closing || (p.phase == Phase::Visible) == visible {
                 return;
             }
-            p.visible = visible;
+            p.phase = if visible {
+                Phase::Visible
+            } else {
+                Phase::Hidden
+            };
             if visible {
                 self.state.visible.set(self.state.visible.get() + 1);
             } else {
@@ -370,12 +380,12 @@ impl OsrRuntime {
         };
         {
             let mut p = p.borrow_mut();
-            if p.closing {
+            if p.phase == Phase::Closing {
                 return;
             }
-            p.closing = true;
-            if p.visible {
-                p.visible = false;
+            let was_visible = p.phase == Phase::Visible;
+            p.phase = Phase::Closing;
+            if was_visible {
                 self.state.visible.set(self.state.visible.get() - 1);
             }
             p.release_frames();
@@ -451,6 +461,11 @@ fn settings(config: OsrConfig) -> Result<cef::Settings, OsrError> {
         user_agent: user_agent.as_str().into(),
         log_file: path(&profile_dir.join("cef.log")),
         log_severity: cef::LogSeverity::WARNING,
+        // The names are the Electron App's, including Electron's " Key" account suffix,
+        // so its existing Keychain item is reused and the macOS prompt names Butler.
+        // Chromium reads them on macOS only.
+        keychain_service_name: KEYCHAIN_SERVICE.into(),
+        keychain_account_name: KEYCHAIN_ACCOUNT.into(),
         ..Default::default()
     })
 }

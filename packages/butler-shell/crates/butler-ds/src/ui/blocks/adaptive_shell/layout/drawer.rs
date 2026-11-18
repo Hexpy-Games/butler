@@ -1,7 +1,8 @@
 //! The drawer layout (AdaptiveShell.module.css `[data-panel-layout="drawer"]`): the sidebar and
 //! the inspector slide in over the workspace under a scrim; below 641px the open sidebar pushes
 //! the workspace aside, above it the workspace narrows beside it. The inspector's docked form
-//! lives here too, as it shares the panel's slide.
+//! lives here too, as it shares the panel's slide. In the desktop app (`Ds::desktop_only`) the
+//! panels overlay at their own width with no dim.
 use gpui::{
     AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, Styled as _,
     div, px,
@@ -37,7 +38,7 @@ fn inspector_width(shell: &AdaptiveShell, compact: bool, ds: &Ds) -> f32 {
 pub(super) fn root(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -> AnyElement {
     let ds = Ds::get(cx);
     let t = &ctx.t;
-    let compact = shell.window.width <= COMPACT_MAX;
+    let compact = shell.window.width <= COMPACT_MAX && !ds.desktop_only();
     let (dw, iw) = (
         sidebar_width(shell, compact, ds),
         inspector_width(shell, compact, ds),
@@ -52,7 +53,8 @@ pub(super) fn root(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -> AnyEle
         duration_ms: if reduced { 0 } else { timing.ms() },
         easing: timing.easing(),
     };
-    let spacer = if !compact && shell.left_open { dw } else { 0. };
+    let pushes = !compact && !ds.desktop_only();
+    let spacer = if pushes && shell.left_open { dw } else { 0. };
     let workspace = workspace_box(shell, ctx, (0., 0.), ds);
     let cell = div()
         .id((shell.id.clone(), "drawer-workspace"))
@@ -94,7 +96,7 @@ pub(super) fn root(shell: &mut AdaptiveShell, ctx: &Ctx, cx: &mut App) -> AnyEle
             t.scrim.apply(
                 div().absolute().size_full().child(parts::scrim(
                     (shell.id.clone(), "scrim"),
-                    1.,
+                    f32::from(!ds.desktop_only()),
                     open.then_some(dismiss),
                     ds,
                 )),

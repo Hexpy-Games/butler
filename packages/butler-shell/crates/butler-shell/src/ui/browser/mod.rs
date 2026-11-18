@@ -2,6 +2,7 @@
 use gpui::BorrowAppContext as _;
 
 pub(crate) mod address;
+mod agent_host;
 pub(crate) mod area;
 mod bookmarks;
 #[cfg(feature = "cef")]

@@ -120,15 +120,23 @@ async fn normalize(version: &Value, observed: &Value) -> Result<Value, String> {
 }
 
 /// Applies before running any page, OOPIF, worker or nested worker.
-pub(super) async fn apply(cdp: &Cdp, session: &str, kind: &str) -> Result<(), String> {
-    let identity = cdp.identity.get().ok_or("identity_unavailable")?.clone();
-    let method = if kind.contains("worker") {
-        cdp.send("Network.enable", json!({}), Some(session)).await?;
-        "Network.setUserAgentOverride"
-    } else {
-        "Emulation.setUserAgentOverride"
-    };
-    cdp.send(method, identity, Some(session)).await?;
+pub(super) async fn apply(
+    cdp: &Cdp,
+    session: &str,
+    kind: &str,
+    hosted: bool,
+) -> Result<(), String> {
+    // Hosted: the App's own browser identity applies. A launched browser fails closed.
+    if !hosted {
+        let identity = cdp.identity.get().ok_or("identity_unavailable")?.clone();
+        let method = if kind.contains("worker") {
+            cdp.send("Network.enable", json!({}), Some(session)).await?;
+            "Network.setUserAgentOverride"
+        } else {
+            "Emulation.setUserAgentOverride"
+        };
+        cdp.send(method, identity, Some(session)).await?;
+    }
     cdp.send(
         "Target.setAutoAttach",
         json!({"autoAttach":true,"waitForDebuggerOnStart":true,"flatten":true}),

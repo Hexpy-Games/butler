@@ -28,9 +28,13 @@ use serde_json::{Value, json};
 pub(super) mod driver;
 pub(super) mod live_turns;
 use driver::{SERIAL, SHOTS, Shell};
+mod chat_end_room;
+mod composer_fold;
 mod composer_toolbar;
 mod focus_fallback;
 mod focus_tab;
+mod focus_selection;
+mod narrow_window;
 mod observer_dialog;
 mod text_selection;
 mod text_size;
@@ -263,20 +267,34 @@ async fn shell_app_15_a_ready_agent_survives_a_late_app_probe() -> Result<(), Ha
     let data = sandbox.data.clone();
     let auth = data.join(butler_platform::data_paths::LOCAL_AUTH);
     let held = auth.with_extension("held");
-    // The credential file appears before the Agent reports ready: take it from the App's probe
-    // (its only reader) the moment it exists, even before the shell reports it started.
+    // The Agent reads its credential file once at startup, right after writing it, so taking
+    // the file earlier races its own write and leaves it without a token for good. It logs
+    // `[native-app] ready` once the token is loaded, before it reports ready to the App's
+    // probe (the file's only other reader): take the file then, even before the shell
+    // reports it started. The Agent's output goes straight into the shell's stdout file.
     let taken = Instant::now();
+    let stdout = sandbox.logs.join("shell.stdout");
     let take = tokio::spawn({
         let (auth, held) = (auth.clone(), held.clone());
         async move {
-            while std::fs::rename(&auth, &held).is_err() {
+            loop {
+                let log = std::fs::read(&stdout).unwrap_or_default();
+                let log = String::from_utf8_lossy(&log);
+                assert!(
+                    !log.contains("local_auth_unconfigured"),
+                    "the Agent has no token: {log}"
+                );
+                if log.contains("[native-app] ready") {
+                    break;
+                }
                 butler_e2e::assert_wall_clock_budget!(
                     taken.elapsed(),
                     Duration::from_secs(60),
-                    "credential file"
+                    "Agent gateway ready"
                 );
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
+            std::fs::rename(&auth, &held).expect("credential file taken");
         }
     });
     let mut shell = Shell::start(&sandbox, &[]).await?;

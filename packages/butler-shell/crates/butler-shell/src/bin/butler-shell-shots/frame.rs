@@ -1,4 +1,5 @@
 //! Live frame commands exercise the same input handlers as the native window.
+use super::clipboard::{expect_clipboard, expect_clipboard_contains, expect_clipboard_prefix};
 use super::{Harness, settle, ui};
 use anyhow::{Context as _, ensure};
 use gpui::{
@@ -29,6 +30,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "reveal" => reveal(h, arg),
         "wait-anchor" | "wait-no-anchor" => wait_anchor(h, arg, command == "wait-anchor"),
         "wait-theme" => wait_theme(h, arg),
+        "expect-click-glide" => super::glide::expect_click_glide(h, arg),
         "expect-anchor" | "expect-no-anchor" => {
             settle(&mut h.cx, h.handle);
             ensure!(
@@ -110,41 +112,6 @@ fn expect_within(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             && a.right() <= b.right() + slack
             && a.bottom() <= b.bottom() + slack,
         "{inner} {a:?} is not inside {outer} {b:?}"
-    );
-    Ok(())
-}
-
-fn expect_clipboard_prefix(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
-    let expected: String = serde_json::from_str(arg)?;
-    let actual =
-        h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
-    ensure!(
-        actual
-            .as_ref()
-            .is_some_and(|text| text.starts_with(&expected)),
-        "clipboard {actual:?}, expected prefix {expected:?}"
-    );
-    Ok(())
-}
-
-fn expect_clipboard_contains(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
-    let expected: String = serde_json::from_str(arg)?;
-    let actual =
-        h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
-    ensure!(
-        actual.as_ref().is_some_and(|text| text.contains(&expected)),
-        "clipboard {actual:?}, expected substring {expected:?}"
-    );
-    Ok(())
-}
-
-fn expect_clipboard(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
-    let expected: Option<String> = serde_json::from_str(arg)?;
-    let actual =
-        h.cx.update(|cx| cx.read_from_clipboard().and_then(|item| item.text()));
-    ensure!(
-        actual == expected,
-        "clipboard {actual:?}, expected {expected:?}"
     );
     Ok(())
 }
@@ -459,7 +426,7 @@ fn pointer_sequence(
     Ok(())
 }
 
-fn move_pointer(
+pub(super) fn move_pointer(
     h: &mut Harness,
     handle: gpui::AnyWindowHandle,
     position: gpui::Point<gpui::Pixels>,
@@ -477,7 +444,7 @@ fn move_pointer(
     })
 }
 
-fn find_anchor(
+pub(super) fn find_anchor(
     h: &mut Harness,
     anchor: &str,
 ) -> anyhow::Result<Option<(gpui::AnyWindowHandle, gpui::Bounds<gpui::Pixels>)>> {

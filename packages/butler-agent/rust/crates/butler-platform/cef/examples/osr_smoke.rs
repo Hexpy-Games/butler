@@ -252,17 +252,18 @@ mod smoke {
             1.,
             butler_cef_host::osr::OsrProfile::SignedIn,
         )?;
+        // CEF can deliver a transparent first paint before the page body paints.
+        let last = std::cell::Cell::new(None);
         wait(runtime, requests, LIMIT, || {
-            sink.events
-                .borrow()
-                .iter()
-                .any(|e| matches!(e, OsrEvent::Frame))
-        })?;
+            runtime.frame(1).is_some_and(|f| {
+                let pixel = read_bgra_pixel(&f, f.get_width() / 2, f.get_height() / 2).ok();
+                last.set(pixel);
+                pixel == Some([140, 80, 20, 255])
+            })
+        })
+        .map_err(|e| format!("{e}; last centre BGRA {:?}", last.get()))?;
         let frame = runtime.frame(1).ok_or("Frame event had no frame")?;
         let pixel = read_bgra_pixel(&frame, frame.get_width() / 2, frame.get_height() / 2)?;
-        if pixel != [140, 80, 20, 255] {
-            return Err(format!("centre BGRA mismatch: {pixel:?}").into());
-        }
         println!(
             "first Frame: {}x{}, centre BGRA {pixel:?}, {} ms",
             frame.get_width(),

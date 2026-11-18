@@ -441,12 +441,21 @@ fn media_layout(
     let target = div()
         .overflow_hidden()
         .rounded(ds.len(Length::RadiusControl))
-        .border(ds.len(Length::BorderHairline))
-        .border_color(ds.color(Color::Line))
+        .shadow(vec![gpui::BoxShadow {
+            // DS: ComposerDecisionPanel.module.css:97, a ring that takes no layout.
+            color: ds.color(Color::Line).into(),
+            offset: gpui::point(px(0.), px(0.)),
+            blur_radius: px(0.),
+            spread_radius: ds.len(Length::BorderHairline),
+            inset: false,
+        }])
         .child(media.content);
     let target = match media.on_open {
+        // `.mediaTarget { display: block; width: var(--decision-media-width) }`: a block box, not an
+        // inline-level one that sits on a line in its wrapper.
         Some(open) => Clickable::new((id.clone(), "media"))
             .variant(ClickVariant::Text)
+            .stretch() // DS: ComposerDecisionPanel.module.css:90, a block as wide as the column
             .on_click(move |event, window, cx| open(event, window, cx))
             .child(target)
             .into_any_element(),
