@@ -33,7 +33,7 @@ export const ROLE_COPY: Record<string, { use: string; en: string; ko: string }> 
   body: { use: "Messages, descriptions, paragraphs", en: "Butler reads the repository, plans the change and asks before it writes.", ko: "버틀러는 저장소를 읽고 변경을 계획한 뒤, 쓰기 전에 먼저 묻습니다." },
   label: { use: "Field labels, row labels", en: "Translucent sidebar", ko: "반투명 사이드바" },
   "section-title": { use: "Sidebar and menu group titles", en: "Pinned", ko: "고정됨" },
-  code: { use: "Commands, paths, token names", en: "bun run lint:ds", ko: "const 인사 = \"안녕하십시오\";" },
+  code: { use: "Commands, paths, token names", en: "bun run lint:ds", ko: "const 인사 = \"안녕하십니까\";" },
   caption: { use: "Metadata, hints, timestamps", en: "Edited 3 minutes ago · 2 files", ko: "3분 전 수정 · 파일 2개" },
 };
 

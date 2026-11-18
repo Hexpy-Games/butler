@@ -33,7 +33,7 @@ const copy = {
   },
   "ko-KR": {
     label: "세션 정보", prompt: "이 과제에 대해 말해 보십시오",
-    chat: [["user", "릴리스 노트 초안도 만들어줘."], ["assistant", "프리뷰 14 릴리스 노트 초안을 docs/release/preview-14.md에 만들었습니다. 읽어 보시고 커밋해 주세요."]],
+    chat: [["user", "릴리스 노트 초안도 만들어줘."], ["assistant", "프리뷰 14 릴리스 노트 초안을 docs/release/preview-14.md에 만들었습니다. 읽어 보시고 커밋해 주십시오."]],
     asks: ["답을 기다리는 요청", [[<ShieldQuestion size="sm" />, "릴리스 노트 초안 커밋", "승인 · 2분 전"],
       [<MessageSquare size="sm" />, "릴리스 노트에 넣을지", "질문 · 나중에 답하기로 함"],
       [<Flag size="sm" />, "단축키 입력창 충돌", "과제 초안 · 8분 전"]]],

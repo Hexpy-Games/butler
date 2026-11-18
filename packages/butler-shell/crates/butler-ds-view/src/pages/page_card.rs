@@ -302,7 +302,7 @@ fn demo(spec: Demo, lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement
             "waiting for the first frame",
         ),
         (
-            "새 탭을 열어보십시오",
+            "새 탭을 열어 보십시오",
             "새 탭",
             "탭이 중단됨",
             "새로고침",
