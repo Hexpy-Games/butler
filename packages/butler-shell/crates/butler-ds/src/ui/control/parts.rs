@@ -1,9 +1,12 @@
 //! The value types a control is described with, its hover state and the harness anchors.
 use std::time::Instant;
 
-use gpui::{App, Hsla, SharedString};
+use gpui::{
+    AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement as _,
+    ParentElement as _, SharedString, Stateful,
+};
 
-use crate::ui::convert;
+use crate::ui::{convert, strut};
 
 /// How a control is disabled.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -167,6 +170,26 @@ pub enum Width {
     Stretch,
     /// `flex: 1 1 0` with `min-width: 0`: equal shares of a row.
     Grow,
+}
+
+/// The control in its container, with the last restyle (`outer`) on the outermost box. A
+/// `max-content` control sits in [`strut::fit_box`]: the CSS width belongs to the control and
+/// constrains only its width, whichever axis the container lays out.
+pub(super) fn place(
+    el: Stateful<Div>,
+    width: Width,
+    outer: Option<super::Outer>,
+    id: &ElementId,
+) -> AnyElement {
+    let restyle = |el: Stateful<Div>| match outer {
+        Some(outer) => outer(el),
+        None => el,
+    };
+    if width == Width::Auto {
+        restyle(strut::fit_box().id((id.clone(), "fit")).child(el)).into_any_element()
+    } else {
+        restyle(el).into_any_element()
+    }
 }
 
 /// Hover and press state of one control.

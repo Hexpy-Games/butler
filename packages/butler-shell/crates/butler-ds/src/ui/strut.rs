@@ -11,8 +11,8 @@
 use super::context::Ds;
 use super::typo::Role;
 use gpui::{
-    AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
-    LayoutId, ParentElement as _, Pixels, Styled as _, Window, div,
+    AnyElement, App, Bounds, Div, Element, ElementId, GlobalElementId, InspectorElementId,
+    IntoElement, LayoutId, ParentElement as _, Pixels, Styled as _, Window, div,
 };
 
 /// The strut of a block container: the root's body font at its line height. An inline `Typo`
@@ -80,16 +80,19 @@ pub fn auto_track(cx: &App) -> bool {
         .is_some_and(|frame| frame.auto_track)
 }
 
-/// An item with `width: max-content` in a container that stretches its items: a full-width row
-/// that holds `child` at its content width. gpui has no `justify-self`, which is what a grid
-/// item needs to opt out of the stretch (`align-self` is the other axis there).
+/// An item with `width: max-content`: `child` at its content width, whatever the container. The
+/// value constrains only the width, so it cannot be `align-self` (that is the parent's cross
+/// axis: a row's vertical one). A column, block or grid cell stretches this box and `child`
+/// keeps its width at the start; a row sizes the box to `child` and aligns it as any item.
 pub fn max_content(child: impl IntoElement) -> AnyElement {
-    div()
-        .flex()
-        .w_full()
-        .min_w_0()
+    fit_box()
         .child(div().flex().flex_none().max_w_full().child(child))
         .into_any_element()
+}
+
+/// The box of [`max_content`]: a horizontal flex box that does not grow or shrink.
+pub(crate) fn fit_box() -> Div {
+    div().flex().flex_none().max_w_full().min_w_0()
 }
 
 /// The Dialog being laid out, when the container is inside one.
