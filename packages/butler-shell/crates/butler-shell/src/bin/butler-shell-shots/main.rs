@@ -25,6 +25,7 @@ mod fixture;
 mod frame;
 mod glide;
 mod live;
+mod titlebar_grid;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

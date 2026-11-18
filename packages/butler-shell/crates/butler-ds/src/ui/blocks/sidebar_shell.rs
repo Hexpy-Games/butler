@@ -265,14 +265,19 @@ fn scroll_position(config: &Config, window: &mut Window, cx: &mut App) -> f32 {
     f32::from(-fade.handle.offset().y).max(0.)
 }
 
+/// The title row is a window drag band, as Electron's `.titlebar` (`app-region: drag`); it spans
+/// the shell's inline padding too.
 fn title_row(titlebar: AnyElement, ds: &Ds, leading: f32) -> AnyElement {
-    div()
+    let pad = ds.len(Length::SidebarPaddingInline);
+    crate::ui::window_drag::area(div())
         .flex()
         .flex_none()
         .items_center()
         .h(ds.len(Length::TitlebarHeight))
         .gap(ds.len(Length::Space2))
-        .pl(px(leading))
+        .mx(-pad)
+        .pl(px(leading) + pad)
+        .pr(pad)
         .child(titlebar)
         .into_any_element()
 }
