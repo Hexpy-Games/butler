@@ -183,7 +183,7 @@ impl RenderOnce for UserMessageText {
             let state = state.clone();
             let button = Button::new(SharedString::from(format!("{}-toggle", self.id)))
                 .variant(Variant::Inline)
-                .child(if expanded {
+                .text(if expanded {
                     strings.show_less
                 } else {
                     strings.show_more
