@@ -1,6 +1,6 @@
 import { CanonInlineDraftProvider } from "../canon/CanonInlineDraft.tsx";
 import { ConversationRequestProvider } from "./ConversationRequestContext.tsx";
-import { useSessionSectionsModel } from "../session-info/useSessionSectionsModel.ts";
+import { useSessionInfoHasContent } from "../session-info/useSessionSectionsModel.ts";
 import { SessionSections } from "../session-info/SessionSections.tsx";
 import { ComposerCrashFallback } from "./ComposerCrashFallback.tsx";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary.tsx";
@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { activeChatFromNavigation } from "@/app/utils.ts";
 import { appCopy } from "@/app/copy.ts";
 import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
+import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import { useAppearanceTheme } from "@/stores/appearanceStore.ts";
 import { useConversationWallpaper } from "./hooks/useConversationWallpaper";
 import { EmptyState } from "./EmptyState";
@@ -32,15 +33,15 @@ export function Conversation() {
   const locale = useAppLocale();
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const infoOpen = useButlerStore(state => state.sessionInfoOpen);
-  const { ids: infoIds, settled: infoSettled } = useSessionSectionsModel();
-  const hasContent = infoIds.length > 0;
+  const hasContent = useSessionInfoHasContent();
   const infoHeld = useButlerStore(state => state.sessionInfoHeldChat === state.activeChatId);
   const infoShown = infoOpen && hasContent && !infoHeld;
-  // A conversation entered with nothing to show keeps its pane closed until the user opens it.
+  // A new conversation starts with its pane closed; its first send does not open it, only the user's click does.
   useEffect(() => {
-    const state = useButlerStore.getState();
-    if (infoSettled && !hasContent && state.sessionInfoHeldChat !== activeChatId) useButlerStore.setState({ sessionInfoHeldChat: activeChatId });
-  }, [infoSettled, hasContent, activeChatId]);
+    if (!isServerBackedSessionId(activeChatId) && useButlerStore.getState().sessionInfoHeldChat !== activeChatId) {
+      useButlerStore.setState({ sessionInfoHeldChat: activeChatId });
+    }
+  }, [activeChatId]);
   const browserOpen = useBrowserShellState(state => Boolean(state.conversations[activeChatId]?.open));
   const viewerShown = useRightSlot(activeChatId) === "viewer";
   const branchProjectId = useButlerStore((state) => {

@@ -141,7 +141,7 @@ export interface NavigationSetOptions {
 interface ButlerStore {
   leftOpen: boolean;
   sessionInfoOpen: boolean;
-  /** The conversation this visit entered with nothing to show: its pane stays closed until the user opens it. Cleared by openSession. */
+  /** A new conversation whose pane stays closed until the user opens it (carried to the session its first send creates). Cleared by openSession. */
   sessionInfoHeldChat: string | null;
   taskGraphEnabled: boolean;
   leftPanelWidth: number;
@@ -1877,6 +1877,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
             state.activeChatId === previousChatId
               ? targetChatId
               : state.activeChatId,
+          sessionInfoHeldChat: state.sessionInfoHeldChat === previousChatId ? targetChatId : state.sessionInfoHeldChat,
           sendingChatId:
             state.sendingChatId === previousChatId
               ? targetChatId
