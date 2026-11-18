@@ -5,6 +5,7 @@
 //!
 //! The press `scale` is gpui's element scale about the centre: the whole control, content
 //! included, shrinks over `--motion-instant` and is released over `--motion-fast`.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -252,9 +253,11 @@ impl Control {
             el = el.justify_center();
         }
         el = match self.width {
-            // `width: max-content` is not stretched by a column's `align-items: stretch`.
-            Width::Auto if shrink => el.self_start(),
-            Width::Auto | Width::Stretch => el,
+            // `width: max-content` is not stretched by a column's `align-items: stretch` nor,
+            // as a grid item, by the default `justify-self`.
+            Width::Auto if shrink => el.self_start().justify_self_start(),
+            Width::Auto => el.justify_self_start(),
+            Width::Stretch => el,
             Width::Fixed(width) => el.w(px(width)),
             Width::Full => el.w_full(),
             Width::Grow => el.flex_1(),
@@ -404,15 +407,9 @@ impl Control {
             ..Default::default()
         };
         for (selection, fill, border) in std::iter::once(base).chain(tone) {
-            let mut group = div().absolute().top_0().left_0().size_full();
+            let mut group = cover();
             for (value, fade) in [(0., None), (1., Some(hover))] {
-                let mut layer = div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .rounded(self.radius)
-                    .bg(fill.at(value, pressed));
+                let mut layer = cover().rounded(self.radius).bg(fill.at(value, pressed));
                 if self.square[0] {
                     layer = layer.rounded_tl(px(0.)).rounded_bl(px(0.));
                 }
@@ -460,7 +457,7 @@ impl Control {
 
 /// The ring's spread shadows over the box, painted outside it.
 pub(crate) fn ring_layer(ring: Vec<BoxShadow>, radius: Pixels) -> Div {
-    div().absolute().top_0().left_0().size_full().child(
+    cover().child(
         gpui::canvas(
             |_, _, _| (),
             move |bounds, (), window, _| {
@@ -471,7 +468,9 @@ pub(crate) fn ring_layer(ring: Vec<BoxShadow>, radius: Pixels) -> Div {
             },
         )
         .absolute()
-        .size_full(),
+        .size_full()
+        .top_0()
+        .left_0(),
     )
 }
 

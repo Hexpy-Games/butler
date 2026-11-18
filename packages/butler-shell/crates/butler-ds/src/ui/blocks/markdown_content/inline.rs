@@ -2,6 +2,7 @@
 //! wraps like the browser and can be selected); a paragraph with a code chip, an external link,
 //! an image or a task box is a flow of words and boxes, because gpui has no inline element
 //! inside text.
+use crate::ui::cover::cover;
 use std::ops::Range;
 
 use gpui::{
@@ -240,12 +241,8 @@ fn text(nodes: &[Inline], env: &Env, cx: &App) -> Text {
                 })
                 .collect::<Vec<_>>();
             value.apply(
-                gpui::div()
+                cover()
                     // Inset 0: an absolute box in a block sits below the base text otherwise.
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
                     .flex()
                     .flex_col()
                     .child(StyledText::new(content.clone()).with_highlights(highlights)),

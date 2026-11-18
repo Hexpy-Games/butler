@@ -1,5 +1,6 @@
 //! The layers of a PageCard: surface and shadow, holder edge, the inner box with the load line
 //! and the band row, the page slot and the reporter of the page's rect.
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, Bounds, BoxShadow, Corners, Div, Edges, Entity, Hsla, IntoElement,
     ParentElement as _, Pixels, SharedString, Size, Styled as _, Window, div, point, px, size,
@@ -50,7 +51,7 @@ pub(super) fn body(card: &mut PageCard, seen: Size<Pixels>, cx: &App) -> AnyElem
 
 /// `.slot`: the page fills the area, or is fitted in it over the `--muted` letterbox.
 fn page_slot(card: &PageCard, page: Option<AnyElement>, seen: Size<Pixels>, ds: &Ds) -> AnyElement {
-    let slot = div().absolute().top_0().left_0().size_full();
+    let slot = cover();
     let Some(view) = card.viewport else {
         return slot.children(page).into_any_element();
     };

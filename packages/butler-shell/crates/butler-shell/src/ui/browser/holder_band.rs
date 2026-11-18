@@ -8,7 +8,7 @@ use super::{
 use crate::ui::{
     decisions::stop_conversation,
     i18n::{browser::BrowserStrings, browser_handoff::BrowserHandoff},
-    widgets::anchor,
+    widgets::{anchor, anchored},
 };
 use butler_ds::ui::{
     Icon,
@@ -173,8 +173,8 @@ fn holder_actions(
         });
     button::container(Size::Xs)
         .children(popup)
-        .child(anchor(div(), "browser-control").child(toggle))
-        .child(anchor(div(), "browser-stop-task").child(stop))
+        .child(anchored(toggle, "browser-control"))
+        .child(anchored(stop, "browser-stop-task"))
 }
 
 /// Electron `popupNotice`: a blocked pop-up, else the pop-up this tab opened.
@@ -183,18 +183,17 @@ fn popup_notice(tab: &Tab, cx: &App) -> Option<Notice> {
     let id = tab.id.clone();
     if let Some(blocked) = &tab.blocked_popup {
         let action = (blocked.reason == "no_gesture").then(|| {
-            anchor(div(), "browser-popup-allow")
-                .child(
-                    Button::new("browser-popup-allow")
-                        .size(Size::Xs)
-                        .variant(Variant::Ghost)
-                        .text(c.allow)
-                        .on_click(move |_, _, cx| {
-                            cx.global_mut::<BrowserState>().allow_popup(&id);
-                            cx.refresh_windows();
-                        }),
-                )
-                .into_any_element()
+            anchored(
+                Button::new("browser-popup-allow")
+                    .size(Size::Xs)
+                    .variant(Variant::Ghost)
+                    .text(c.allow)
+                    .on_click(move |_, _, cx| {
+                        cx.global_mut::<BrowserState>().allow_popup(&id);
+                        cx.refresh_windows();
+                    }),
+                "browser-popup-allow",
+            )
         });
         return Some(Notice {
             label: c.popup_blocked,
@@ -215,17 +214,14 @@ fn popup_notice(tab: &Tab, cx: &App) -> Option<Notice> {
     Some(Notice {
         label: c.popup_opened,
         detail: (!host.is_empty()).then_some(host),
-        action: Some(
-            anchor(div(), "browser-popup-show")
-                .child(
-                    Button::new("browser-popup-show")
-                        .size(Size::Xs)
-                        .variant(Variant::Ghost)
-                        .text(c.show_popup)
-                        .on_click(move |_, _, cx| super::popup_window::focus(&child, cx)),
-                )
-                .into_any_element(),
-        ),
+        action: Some(anchored(
+            Button::new("browser-popup-show")
+                .size(Size::Xs)
+                .variant(Variant::Ghost)
+                .text(c.show_popup)
+                .on_click(move |_, _, cx| super::popup_window::focus(&child, cx)),
+            "browser-popup-show",
+        )),
     })
 }
 

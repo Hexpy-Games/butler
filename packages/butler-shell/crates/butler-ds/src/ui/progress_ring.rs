@@ -3,6 +3,7 @@
 //! twelve o'clock and growing clockwise with round caps, the sweep gliding over `--motion-fast`
 //! (none under reduced motion). Indeterminate: the DS Spinner in the same square.
 
+use crate::ui::cover::cover;
 use gpui::{
     App, ElementId, IntoElement, ParentElement as _, RenderOnce, Styled as _, Window, canvas, div,
     px,
@@ -155,7 +156,7 @@ impl RenderOnce for ProgressRing {
             } else {
                 sweep.to
             };
-            let frame = div().absolute().size_full().child(
+            let frame = cover().child(
                 canvas(
                     |_, _, _| (),
                     move |bounds, (), window, _| {

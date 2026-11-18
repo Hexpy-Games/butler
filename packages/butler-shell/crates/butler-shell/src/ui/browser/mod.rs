@@ -43,6 +43,23 @@ pub(crate) fn init(cx: &mut gpui::App) {
     cx.set_global(shell_state::BrowserShell::default());
 }
 
+/// The App is quitting: the engine closes its pages and flushes the profile.
+pub(crate) fn shutdown(cx: &mut gpui::App) {
+    if cx.has_global::<model::BrowserState>() {
+        cx.update_global::<model::BrowserState, _>(|model, _| model.shutdown());
+    }
+}
+
+/// A quitting process never drops the engine (AppKit `terminate:` exits without dropping globals),
+/// and dropping it would shut CEF down and hide a missing quit hook. The shot harness returns
+/// normally instead of exiting, so it leaks one strong reference to keep that behaviour.
+#[cfg(all(feature = "cef", feature = "shots"))]
+pub(crate) fn keep_runtime_alive(cx: &gpui::App) {
+    if cx.has_global::<downloads::DownloadsRuntime>() {
+        std::mem::forget(cx.global::<downloads::DownloadsRuntime>().0.clone());
+    }
+}
+
 /// `window` is the shell's main window, whose renderer already exists. Its GPU adapter is where
 /// page frames are consumed: gpui draws all windows, popups included, with one shared device, so
 /// the page engine produces its frames on that adapter (shared GPU resources cannot cross one).

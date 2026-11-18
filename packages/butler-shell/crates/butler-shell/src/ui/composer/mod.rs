@@ -246,7 +246,9 @@ impl Composer {
         let field = self.references.field.clone();
         let probe = canvas(move |b, _, _| field.set(Some(b)), |_, (), _, _| {})
             .absolute()
-            .size_full();
+            .size_full()
+            .top_0()
+            .left_0();
         let chips = self.atom_chips(window, cx);
         let menu = self.mention_menu(window, cx);
         let input = div()

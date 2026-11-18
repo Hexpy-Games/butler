@@ -147,18 +147,15 @@ impl RenderOnce for ElementChip {
             let button = IconButton::new((self.id, "remove"), format!("{label}: {}", self.title))
                 .icon(icon(Icon::X, IconSize::Sm, ds))
                 .on_click(move |event, window, cx| handler(event, window, cx));
-            chip = chip.child(
-                div()
-                    .flex_none()
-                    .mr(ds.len(Length::SpaceXs))
-                    .child(scope::scoped(
-                        scope::Spec {
-                            action: Some(small),
-                            ..scope::Spec::default()
-                        },
-                        button,
-                    )),
-            );
+            chip = chip.child(div().flex().flex_none().mr(ds.len(Length::SpaceXs)).child(
+                scope::scoped(
+                    scope::Spec {
+                        action: Some(small),
+                        ..scope::Spec::default()
+                    },
+                    button,
+                ),
+            ));
         }
         chip
     }

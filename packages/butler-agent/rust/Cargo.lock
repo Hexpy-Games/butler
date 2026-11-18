@@ -1099,6 +1099,7 @@ dependencies = [
  "core-video",
  "foreign-types",
  "metal",
+ "nix 0.31.3",
  "objc",
  "objc2",
  "objc2-app-kit",

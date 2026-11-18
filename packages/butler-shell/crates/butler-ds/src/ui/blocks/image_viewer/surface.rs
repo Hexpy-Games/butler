@@ -214,7 +214,9 @@ fn stage(
         },
     )
     .absolute()
-    .size_full();
+    .size_full()
+    .top_0()
+    .left_0();
     let anchor = format!("{id}-stage");
     let mut el = div()
         .id((id.clone(), "stage"))
@@ -362,7 +364,7 @@ impl RenderOnce for ImageViewerSurface {
             .pt(top)
             .pb(gutter)
             .track_focus(&handle)
-            .children((!self.contained).then(|| scrim(ds).absolute().size_full()))
+            .children((!self.contained).then(|| scrim(ds).absolute().size_full().top_0().left_0()))
             .child(header)
             .child(stage_el)
             .children(caption(&self.image, ds));

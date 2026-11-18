@@ -8,6 +8,7 @@ mod column;
 mod rail;
 mod scroll;
 
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, ElementId, IntoElement, ParentElement as _, RenderOnce, SharedString,
     Styled as _, Window, div,
@@ -252,15 +253,10 @@ impl RenderOnce for ConversationShell {
         };
         let aside_layers = aside::render(&slot, (width, f32::from(size.height)), window, cx);
         let ds = Ds::get(cx);
-        let backdrop = self.background.take().map(|layer| {
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
-                .overflow_hidden()
-                .child(layer)
-        });
+        let backdrop = self
+            .background
+            .take()
+            .map(|layer| cover().overflow_hidden().child(layer));
         let rail_layer = self.rail.take().filter(|_| !rail.held).map(|el| {
             rail.release.apply(
                 div().child(el),

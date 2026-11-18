@@ -3,6 +3,7 @@
 //! dot on hover or focus. `row` is 64px in one sideways-scrolling row (composer), `wrap` 96px
 //! and wrapping (a sent message). The tile's enter and exit motion and the slide into a gap
 //! are not reproduced.
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ObjectFit, ParentElement,
     SharedString, StatefulInteractiveElement as _, Styled as _, StyledImage as _, Window, div, img,
@@ -130,29 +131,21 @@ fn face(item: &AttachmentItem, wrap: bool, ds: &Ds) -> AnyElement {
                 .into_any_element(),
             Upload::Failed => icon(Icon::AlertCircle, IconSize::Sm, ds).into_any_element(),
         };
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .size(side)
-                    .rounded(ds.len(Length::RadiusPill))
-                    .bg(ds.color(Color::ComposerGlassControlBg))
-                    .text_color(ds.color(if status == Upload::Failed {
-                        Color::Danger
-                    } else {
-                        Color::TextPrimary
-                    }))
-                    .child(mark),
-            )
+        cover().flex().items_center().justify_center().child(
+            div()
+                .flex()
+                .items_center()
+                .justify_center()
+                .size(side)
+                .rounded(ds.len(Length::RadiusPill))
+                .bg(ds.color(Color::ComposerGlassControlBg))
+                .text_color(ds.color(if status == Upload::Failed {
+                    Color::Danger
+                } else {
+                    Color::TextPrimary
+                }))
+                .child(mark),
+        )
     });
     div()
         .relative()

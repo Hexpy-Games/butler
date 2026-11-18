@@ -150,7 +150,9 @@ fn measuring_copy(text: SharedString, state: &Entity<State>, ds: &Ds) -> gpui::D
                 |_, (), _, _| {},
             )
             .absolute()
-            .size_full(),
+            .size_full()
+            .top_0()
+            .left_0(),
         )
 }
 

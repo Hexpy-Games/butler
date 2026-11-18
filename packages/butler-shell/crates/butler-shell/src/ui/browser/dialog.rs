@@ -4,7 +4,10 @@ use super::{
     model::BrowserState,
     page_dialog::{DialogAnswer, DialogKind, PageDialog},
 };
-use crate::ui::{i18n::browser::BrowserStrings, widgets::anchor};
+use crate::ui::{
+    i18n::browser::BrowserStrings,
+    widgets::{anchor, anchored},
+};
 use butler_ds::{
     tokens::Length,
     ui::{
@@ -142,19 +145,18 @@ fn footer(tab: &TabId, value: &PageDialog, state: &Entity<DialogAnswer>, cx: &Ap
     let id = value.id;
     if value.kind != DialogKind::Alert {
         let tab = tab.clone();
-        footer = footer.child(
-            anchor(div(), "browser-dialog-cancel").child(
-                Button::new("browser-dialog-cancel")
-                    .size(Size::Sm)
-                    .variant(Variant::Outline)
-                    .text(if value.kind == DialogKind::BeforeUnload {
-                        c.stay
-                    } else {
-                        c.cancel
-                    })
-                    .on_click(move |_, _, cx| answer(&tab, id, DialogAnswer::default(), cx)),
-            ),
-        );
+        footer = footer.child(anchored(
+            Button::new("browser-dialog-cancel")
+                .size(Size::Sm)
+                .variant(Variant::Outline)
+                .text(if value.kind == DialogKind::BeforeUnload {
+                    c.stay
+                } else {
+                    c.cancel
+                })
+                .on_click(move |_, _, cx| answer(&tab, id, DialogAnswer::default(), cx)),
+            "browser-dialog-cancel",
+        ));
     }
     let tab = tab.clone();
     let state = state.clone();
@@ -179,7 +181,7 @@ fn footer(tab: &TabId, value: &PageDialog, state: &Entity<DialogAnswer>, cx: &Ap
                 .child(ok.disabled()),
         );
     } else {
-        footer = footer.child(anchor(div(), "browser-dialog-ok").child(ok));
+        footer = footer.child(anchored(ok, "browser-dialog-ok"));
     }
     footer
 }

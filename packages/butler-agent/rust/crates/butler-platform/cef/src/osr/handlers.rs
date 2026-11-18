@@ -2,7 +2,7 @@
 use super::{
     OsrCursor, OsrEvent, RuntimeState,
     paint::Paint,
-    state::{Events, PageRef},
+    state::{Events, PageRef, Phase},
 };
 use cef::*;
 use std::rc::Weak;
@@ -38,8 +38,10 @@ fn retire(shared: &PageRef, page: u64, runtime: Option<&RuntimeState>) {
         let mut p = shared.borrow_mut();
         p.release_frames();
         p.browser = None;
-        let visible = p.visible;
-        p.visible = false;
+        let visible = p.phase == Phase::Visible;
+        if visible {
+            p.phase = Phase::Hidden;
+        }
         visible
     };
     if let Some(runtime) = runtime {
@@ -85,12 +87,21 @@ cef::wrap_life_span_handler! {
     pub(super) struct Life { shared: PageRef, events: Events, runtime: Weak<RuntimeState> }
     impl LifeSpanHandler {
         fn on_after_created(&self, browser: Option<&mut Browser>) {
-            let mut p = self.shared.borrow_mut();
-            p.browser = browser.cloned();
-            p.popup = None;
+            // Quit already closed this page: a browser created after that must close too, or the
+            // teardown waits for it until the 3 s limit and skips cef::shutdown. The borrow ends
+            // first: a windowless page closes synchronously through `do_close`.
+            let host = {
+                let mut p = self.shared.borrow_mut();
+                p.browser = browser.cloned();
+                p.popup = None;
+                if p.phase == Phase::Closing { p.browser.as_ref().and_then(cef::ImplBrowser::host) } else { None }
+            };
+            if let Some(host) = host {
+                host.close_browser(1);
+            }
         }
         fn do_close(&self, _browser: Option<&mut Browser>) -> i32 {
-            if !self.shared.borrow().closing { self.events.emit(OsrEvent::CloseRequested); }
+            if self.shared.borrow().phase != Phase::Closing { self.events.emit(OsrEvent::CloseRequested); }
             0
         }
         fn on_before_close(&self, _browser: Option<&mut Browser>) {

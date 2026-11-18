@@ -1,4 +1,5 @@
 //! The simple members of the Field family.
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, FontWeight, IntoElement, ParentElement, RenderOnce, SharedString, Styled as _,
     Window, div, px,
@@ -309,11 +310,7 @@ const SEPARATOR_HEIGHT: f32 = 20.;
 impl RenderOnce for FieldSeparator {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
-        let rule = div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
+        let rule = cover()
             .flex()
             .items_center()
             .child(Separator::new().space(Space::Xs));

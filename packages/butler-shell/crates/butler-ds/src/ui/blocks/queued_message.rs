@@ -2,6 +2,7 @@
 //! sent yet. The bubble matches the MessageRow user bubble (width rule, radius, padding, type) so
 //! a delivered message resolves in place; a dashed hairline sits inside its box. Long text clamps
 //! to five lines behind a toggle, as a sent user message does.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -230,11 +231,7 @@ impl RenderOnce for QueuedMessage {
             .font_weight(FontWeight(ds.number(Number::FontWeightRegular)))
             .child(recorder)
             .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
+                cover()
                     .rounded(radius)
                     .border(ds.len(Length::BorderHairline))
                     .border_dashed()

@@ -1,6 +1,7 @@
 //! DS GlyphToggle (GlyphToggle.tsx / GlyphToggle.module.css): a row glyph that doubles as a
 //! toggle. It keeps the glyph's column width, shows the toggle glyph on hover and keyboard
 //! focus, keeps a full hit target and rings the visible icon surface, not the target.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -84,11 +85,7 @@ impl RenderOnce for GlyphToggle {
         let showing = *hover.read(cx)
             || (handle.contains_focused(window, cx) && ds.modality().focus_visible());
         let glyph = |content: Option<AnyElement>, visible: bool| {
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
+            cover()
                 .flex()
                 .items_center()
                 .justify_center()

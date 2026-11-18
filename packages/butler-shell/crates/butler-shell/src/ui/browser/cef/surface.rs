@@ -112,6 +112,8 @@ impl Render for Page {
             surface(frame)
                 .object_fit(ObjectFit::Fill)
                 .size_full()
+                .top_0()
+                .left_0()
                 .absolute()
         }))
         .child(
