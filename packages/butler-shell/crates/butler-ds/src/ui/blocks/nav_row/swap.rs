@@ -2,6 +2,7 @@
 //! status, a disclosure chevron) at rest and swaps in row actions on row hover or keyboard
 //! focus (a fade on `--motion-fast`). Phones keep the rest content (row menus open with a long
 //! press). Clicks inside never reach the row.
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, RenderOnce, StatefulInteractiveElement as _, Styled as _, Window, div,
@@ -83,14 +84,7 @@ impl RenderOnce for NavRowSwap {
             .children(self.rest.map(|rest| {
                 reveal
                     .apply(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .size_full()
-                            .flex()
-                            .items_center()
-                            .justify_center(),
+                        cover().flex().items_center().justify_center(),
                         &timing,
                         &Props {
                             opacity: Some((1., 0.)),

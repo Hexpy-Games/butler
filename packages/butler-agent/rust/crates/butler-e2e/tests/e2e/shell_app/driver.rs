@@ -8,6 +8,10 @@ pub(crate) const SHOTS: &str = "BUTLER_SHELL_SHOTS_EXECUTABLE";
 /// The App's port for these runs (never the owner's 18765 or the demo's 19765).
 const PORT: &str = "28765";
 
+/// The time the App gets to end after a quit request: what the menu Quit has (the harness's
+/// `app-quit` 20 s plus `finish` 10 s). The App's own worst case is about 14 s, plus teardown.
+const QUIT_BUDGET: Duration = Duration::from_secs(30);
+
 /// One App on the fixed port at a time.
 pub(crate) static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -156,12 +160,36 @@ impl Shell {
         )?)?)
     }
 
-    /// The harness exits by itself after `quit`.
+    /// The harness exits by itself after `quit`, or already has (the App's own Quit ends it).
     pub(crate) async fn finish(mut self) -> Result<(), HarnessError> {
-        self.input.write_all(b"quit\n").await?;
+        // A harness that has exited cannot read it; its exit status is judged below.
+        let _ = self.input.write_all(b"quit\n").await;
         let status = tokio::time::timeout(Duration::from_secs(10), self.child.wait())
             .await
             .map_err(|_| harness_error("shell did not exit"))??;
+        if !status.success() {
+            return Err(harness_error(format!("shell exited with {status}")));
+        }
+        Ok(())
+    }
+}
+
+impl Shell {
+    /// Stops the App with SIGTERM: it must end by itself, successfully, as after Quit.
+    pub(crate) async fn terminate(mut self) -> Result<(), HarnessError> {
+        let pid = self
+            .child
+            .id()
+            .ok_or_else(|| harness_error("shell already exited"))?;
+        let sent = std::process::Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status()?;
+        if !sent.success() {
+            return Err(harness_error(format!("kill -TERM {pid}: {sent}")));
+        }
+        let status = tokio::time::timeout(QUIT_BUDGET, self.child.wait())
+            .await
+            .map_err(|_| harness_error("shell did not exit on SIGTERM"))??;
         if !status.success() {
             return Err(harness_error(format!("shell exited with {status}")));
         }

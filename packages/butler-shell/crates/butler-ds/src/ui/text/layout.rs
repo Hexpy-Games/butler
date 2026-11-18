@@ -1,5 +1,6 @@
 //! How a field is put together around its editor: the bordered box (default and quiet), the
 //! underline, and the line-snapped underline textarea with its scroll fade.
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, Div, Entity, InteractiveElement as _, IntoElement as _, OverflowWrap,
     ParentElement as _, Pixels, ScrollHandle, StatefulInteractiveElement as _, Styled, Window, div,
@@ -183,21 +184,13 @@ fn tab_stop(p: &Parts) -> Option<Div> {
 /// The box behind a bordered field: fill and border, and the ring around it.
 fn surface(p: &Parts, cx: &App) -> (Div, Option<Div>) {
     let ds = Ds::get(cx);
-    let fill = div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
+    let fill = cover()
         .rounded(p.m.radius)
         .bg(p.c.fill)
         .border(p.m.border)
         .border_color(p.c.border);
     let fill = if p.spec.look == Look::Quiet {
-        let overlay = div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
+        let overlay = cover()
             .rounded(p.m.radius)
             .bg(p.focused_colors.fill)
             .border(p.m.border)

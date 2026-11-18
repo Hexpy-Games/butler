@@ -1,12 +1,14 @@
 //! The harness as the App (`--app`): the lifecycle starts and supervises the Agent as `main.rs`
 //! does, and these commands report what the supervisor did. `agent <state>` waits for the Agent
-//! state the windows show; `diagnostics <name>` and `app-quit` (Quit, then the Agent's exit)
-//! write `<name>.json` with the supervisor's diagnostics and every state shown so far.
+//! state the windows show; `restart` is the tray's Restart and `restart-answers` waits for what
+//! each one answered; `diagnostics <name>` and `app-quit` (Quit, then the Agent's exit) write
+//! `<name>.json` with the supervisor's diagnostics and every state shown so far.
 use super::{Harness, lifecycle, settle};
 use anyhow::{Context as _, bail};
 use gpui::{App, Global};
-use lifecycle::supervisor::AgentState;
+use lifecycle::supervisor::{AgentState, Supervisor};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Every Agent state the windows were shown, in order.
@@ -14,6 +16,14 @@ use std::time::{Duration, Instant};
 struct Seen(Vec<AgentState>);
 
 impl Global for Seen {}
+
+/// The answer of every `restart` command, once the supervisor gives it.
+#[derive(Default)]
+struct Restarts(Vec<Answer>);
+
+type Answer = Arc<Mutex<Option<Result<(), String>>>>;
+
+impl Global for Restarts {}
 
 /// `main.rs`'s startup before the window: the App's lifecycle and the Agent, without the window
 /// and tray rules.
@@ -38,6 +48,37 @@ pub(super) fn command(h: &mut Harness, dir: &Path, command: &str, arg: &str) -> 
             Ok(h.cx
                 .update(|cx| lifecycle::runtime(cx).is_some_and(|r| name(r.read(cx).state) == arg)))
         }),
+        "restart" => {
+            h.cx.update(|cx| {
+                let slot = Arc::new(Mutex::new(None));
+                cx.default_global::<Restarts>().0.push(slot.clone());
+                let answer = lifecycle::run(cx, Supervisor::restart);
+                cx.spawn(async move |_| {
+                    let answer = answer.await.map_err(|error| format!("{error:?}"));
+                    if let Ok(mut slot) = slot.lock() {
+                        *slot = Some(answer);
+                    }
+                })
+                .detach();
+            });
+            Ok(())
+        }
+        // Waits for every Restart's answer and writes them (`ok` or the error) to `restarts.json`.
+        "restart-answers" => {
+            let slots = h.cx.update(|cx| cx.default_global::<Restarts>().0.clone());
+            until(h, Duration::from_secs(120), |_| {
+                Ok(slots
+                    .iter()
+                    .all(|slot| slot.lock().is_ok_and(|a| a.is_some())))
+            })?;
+            let answers: Vec<String> = slots
+                .iter()
+                .filter_map(|slot| slot.lock().ok()?.clone())
+                .map(|answer| answer.err().unwrap_or_else(|| "ok".to_owned()))
+                .collect();
+            std::fs::write(dir.join("restarts.json"), serde_json::to_vec(&answers)?)?;
+            Ok(())
+        }
         "diagnostics" => report(h, dir, arg),
         "app-quit" => {
             h.cx.update(lifecycle::quit);

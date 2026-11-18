@@ -43,6 +43,8 @@ mod pump;
 mod soft;
 #[cfg(cef_osr)]
 mod state;
+#[cfg(cef_osr)]
+mod teardown;
 
 #[cfg(cef_osr)]
 use cef::{ImplBrowser, ImplBrowserHost, ImplFrame};
@@ -105,6 +107,7 @@ pub struct OsrRuntime {
     sink: Rc<dyn OsrSink>,
     schedule: PumpScheduler,
     auth_requests: std::sync::mpsc::Receiver<dialogs::AuthRequest>,
+    shut: Cell<bool>,
     _app: cef::App,
     #[cfg(target_os = "macos")]
     _framework: gpu::Framework,
@@ -183,6 +186,7 @@ impl OsrRuntime {
             }),
             sink,
             schedule,
+            shut: Cell::new(false),
             _app: app,
             #[cfg(target_os = "macos")]
             _framework: framework,
@@ -199,6 +203,9 @@ impl OsrRuntime {
     }
 
     pub fn pump(&self) {
+        if self.shut.get() {
+            return;
+        }
         self.receive_auth();
         cef::do_message_loop_work();
         #[cfg(windows)]
@@ -224,6 +231,9 @@ impl OsrRuntime {
         scale: f32,
         profile: OsrProfile,
     ) -> Result<(), OsrError> {
+        if self.shut.get() {
+            return Err(OsrError("CEF is shut down".into()));
+        }
         if self.state.pages.borrow().contains_key(&page) {
             return Err(OsrError("page already exists".into()));
         }
@@ -396,26 +406,6 @@ impl OsrRuntime {
     }
     pub fn frame(&self, page: u64) -> Option<Frame> {
         self.page(page).and_then(|p| p.borrow().frame.clone())
-    }
-    pub fn shutdown(self) {
-        drop(self);
-    }
-}
-
-#[cfg(cef_osr)]
-impl Drop for OsrRuntime {
-    fn drop(&mut self) {
-        let pages: Vec<_> = self.state.pages.borrow().keys().copied().collect();
-        for page in pages {
-            self.close(page);
-        }
-        // CEF requires every on_before_close before shutdown. Only pump during this teardown.
-        while !self.state.pages.borrow().is_empty() {
-            cef::do_message_loop_work();
-        }
-        cef::shutdown();
-        #[cfg(windows)]
-        d3d::release_device();
     }
 }
 

@@ -22,7 +22,7 @@ fn near(a: f64, b: f64) -> bool {
 /// SHELL-APP-10 — At 400 px wide the App never takes the phone form: the sidebar overlays at its
 /// own panel width without moving the conversation, session info floats shorter than the space
 /// between the titlebar and the composer, the command palette is as wide as at 1200 px, and the
-/// send button keeps its desktop size.
+/// send button keeps its desktop size. At 700 px with no pane open the sidebar stays docked.
 #[tokio::test]
 async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -130,6 +130,9 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
             "key escape",
             "size 700 700",
             "wait 600",
+            "compose",
+            "wait-anchor send-button",
+            &format!("layout docked700 {anchors}"),
             "browser-link https://example.com/",
             "wait-anchor browser-area",
             "wait 600",
@@ -216,7 +219,19 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
     // which makes the panel taller.
     let (closed, open) = (get("info", "inspector"), get("infoopen", "inspector"));
     assert!(open[3] > closed[3] + 0.5, "{closed:?} {open:?}");
-    // (g) With the browser pane beside the chat at 700 px, the chat keeps the width the web gives it,
+    // (g) At 700 px with no pane open the sidebar stays docked, like Electron: it sits at the same
+    // left inset as at 1200 px and the conversation starts to its right. The peek overlay has no
+    // anchor, so a closed sidebar (which turns the peek on) shows as no `sidebar` anchor.
+    let (docked, wide_sidebar) = (
+        bounds(&shell, "docked700", "sidebar"),
+        get("wide", "sidebar"),
+    );
+    let card = get("docked700", "chat-card");
+    assert!(
+        docked.is_some_and(|d| near(d[0], wide_sidebar[0]) && card[0] >= d[0] + d[2] - 0.5),
+        "docked700 sidebar {docked:?}, wide sidebar {wide_sidebar:?}, chat card {card:?}"
+    );
+    // (h) With the browser pane beside the chat at 700 px, the chat keeps the width the web gives it,
     // max(340, min(room - 375, 400)), so the pane keeps its 375 px minimum. `room` is what the chat
     // column and the pane share: the chat column's width plus the pane's. The chat-card anchor is
     // inset by the card's 1 px border on each side.
@@ -228,7 +243,7 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
         (chat_width - expected).abs() <= 1. && pane[2] >= room - chat_width - 0.5,
         "chat {chat:?}, pane {pane:?}, room {room}, expected chat {expected}"
     );
-    // (h) At 1200 px both minimums can hold. The split handle is the 7th tab stop after the
+    // (i) At 1200 px both minimums can hold. The split handle is the 7th tab stop after the
     // composer. End puts the chat at room - 375 (the pane keeps its minimum) and Home at 340; a
     // drag far past the limit stops at room - 375 too. The chat then keeps that width when the
     // window grows to 1300 px (the pane takes the extra 100): the clamped width went back to the

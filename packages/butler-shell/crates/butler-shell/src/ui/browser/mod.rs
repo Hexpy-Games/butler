@@ -12,6 +12,7 @@ mod dialog;
 pub(crate) mod downloads;
 pub(crate) mod engine;
 mod host;
+mod lazy;
 pub(crate) mod model;
 mod new_tab;
 mod page_dialog;
@@ -29,17 +30,42 @@ mod toolbar;
 pub(crate) mod transfer;
 mod visits;
 
-/// `window` is the shell's main window, whose renderer already exists. Its GPU adapter is where
-/// page frames are consumed: gpui draws all windows, popups included, with one shared device, so
-/// the page engine produces its frames on that adapter (shared GPU resources cannot cross one).
-pub(crate) fn init(window: &gpui::Window, cx: &mut gpui::App) {
+/// The browser and the Agent's page host, for the life of the App (no window needed); the page
+/// engine starts on its first use.
+pub(crate) fn init(cx: &mut gpui::App) {
     if cx.has_global::<model::BrowserState>() {
         return;
     }
     visits::init(cx);
     restore::init(cx);
-    model::BrowserState::init(window.gpu_adapter_luid(), cx);
+    model::BrowserState::init(cx);
     cx.set_global(shell_state::BrowserShell::default());
+}
+
+/// The App is quitting: the engine closes its pages and flushes the profile.
+pub(crate) fn shutdown(cx: &mut gpui::App) {
+    if cx.has_global::<model::BrowserState>() {
+        cx.update_global::<model::BrowserState, _>(|model, _| model.shutdown());
+    }
+}
+
+/// A quitting process never drops the engine (AppKit `terminate:` exits without dropping globals),
+/// and dropping it would shut CEF down and hide a missing quit hook. The shot harness returns
+/// normally instead of exiting, so it leaks one strong reference to keep that behaviour.
+#[cfg(all(feature = "cef", feature = "shots"))]
+pub(crate) fn keep_runtime_alive(cx: &gpui::App) {
+    if cx.has_global::<downloads::DownloadsRuntime>() {
+        std::mem::forget(cx.global::<downloads::DownloadsRuntime>().0.clone());
+    }
+}
+
+/// `window` is the shell's main window, whose renderer already exists. Its GPU adapter is where
+/// page frames are consumed: gpui draws all windows, popups included, with one shared device, so
+/// the page engine produces its frames on that adapter (shared GPU resources cannot cross one).
+pub(crate) fn init_window(window: &gpui::Window, cx: &mut gpui::App) {
+    init(cx);
+    cx.global_mut::<model::BrowserState>()
+        .note_adapter(window.gpu_adapter_luid());
 }
 
 /// Electron's `openLink`: a user-owned tab in the standalone browser.

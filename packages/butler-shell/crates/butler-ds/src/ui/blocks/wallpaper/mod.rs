@@ -17,6 +17,7 @@ mod posters;
 mod still;
 mod watchdog;
 
+use crate::ui::cover::cover;
 use std::sync::Arc;
 
 use gpui::{
@@ -334,7 +335,7 @@ impl RenderOnce for Wallpaper {
             },
         };
         if paper > 0. {
-            layer.child(div().absolute().top_0().left_0().size_full().bg(paper_fill))
+            layer.child(cover().bg(paper_fill))
         } else {
             layer
         }
@@ -350,12 +351,5 @@ fn dim_pass(layer: Div, brightness: f32) -> Div {
     if brightness >= 1. {
         return layer;
     }
-    layer.child(
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .bg(hsla(0., 0., 0., 1. - brightness)),
-    )
+    layer.child(cover().bg(hsla(0., 0., 0., 1. - brightness)))
 }
