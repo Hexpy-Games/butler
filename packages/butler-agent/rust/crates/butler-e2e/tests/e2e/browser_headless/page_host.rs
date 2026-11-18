@@ -76,7 +76,12 @@ async fn the_page_host_starts_cef_on_first_use_without_a_window() -> Result<(), 
     // opened this one, whose unrouted address never loads.
     let args = json!({"url":"https://192.0.2.1/account","signed_in":true});
     let opened = call(&admin, "general", "tab.open", &Value::Null, args).await?;
-    assert_eq!(opened["reason"], "navigation_failed", "{opened}");
+    // An unrouted address fails as a refusal (`navigation_failed`) or a connect hang (`timeout`).
+    let reason = opened["reason"].as_str().unwrap_or_default();
+    assert!(
+        matches!(reason, "navigation_failed" | "timeout"),
+        "{opened}"
+    );
     assert!(profile.is_dir(), "CEF started on the first page");
     s.finish().await
 }
