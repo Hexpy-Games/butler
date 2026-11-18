@@ -1,5 +1,5 @@
 //! AdaptiveShellSplit (AdaptiveShellSplit.tsx, AdaptiveShellSplitMotion.ts): the conversation
-//! frame's split slot, chat | pane, the chat column resizable between 340 and 560px. The pane
+//! frame's split slot, chat | pane, the chat column resizable from 340px, leaving the pane its 375px minimum. The pane
 //! opens and closes on one motion: it holds its final size and only travels in from the
 //! split's end, while the chat card's edge follows it.
 use std::rc::Rc;
@@ -11,9 +11,7 @@ use gpui::{
 
 use gpui::prelude::FluentBuilder as _;
 
-use super::frame::{
-    CHAT_WIDTH_DEFAULT, CHAT_WIDTH_MAX, CHAT_WIDTH_MIN, KEY_STEP, clamp_chat_width,
-};
+use super::frame::{CHAT_WIDTH_DEFAULT, CHAT_WIDTH_MIN, KEY_STEP, clamp_chat_width};
 use super::grip::{Drag, HANDLE_WIDTH, HintSide, ResizeHandle};
 use super::parts::card_surface;
 use crate::tokens::{Duration as DsDuration, Easing, Length};
@@ -68,7 +66,7 @@ impl AdaptiveShellSplit {
         self
     }
 
-    /// The chat column's width in px while the pane is open (340 to 560).
+    /// The chat column's width in px while the pane is open (at least 340, leaving the pane 375).
     pub fn chat_width(mut self, width: f32) -> Self {
         self.chat_width = width;
         self
@@ -97,7 +95,7 @@ impl AdaptiveShellSplit {
 }
 
 /// The key a handle answers to: arrows step, Home and End jump to the ends (Shift triples a step).
-fn keyed_width(event: &KeyDownEvent, width: f32) -> Option<f32> {
+fn keyed_width(event: &KeyDownEvent, width: f32, room: f32) -> Option<f32> {
     let step = if event.keystroke.modifiers.shift {
         KEY_STEP * 3.
     } else {
@@ -107,7 +105,7 @@ fn keyed_width(event: &KeyDownEvent, width: f32) -> Option<f32> {
         "left" => Some(width - step),
         "right" => Some(width + step),
         "home" => Some(CHAT_WIDTH_MIN),
-        "end" => Some(CHAT_WIDTH_MAX),
+        "end" => Some(clamp_chat_width(f32::INFINITY, room)),
         _ => None,
     }
 }
@@ -118,6 +116,7 @@ impl AdaptiveShellSplit {
         window: &mut Window,
         cx: &mut App,
         width: f32,
+        room: f32,
         cards: bool,
         layout: gpui::LayoutMotion,
     ) -> AnyElement {
@@ -137,13 +136,13 @@ impl AdaptiveShellSplit {
                     Drag::Begin => start.update(cx, |start, _| *start = width),
                     Drag::Move(dx) => {
                         let from = *start.read(cx);
-                        change(clamp_chat_width(from + dx), window, cx);
+                        change(clamp_chat_width(from + dx, room), window, cx);
                     }
                     Drag::End => {}
                 })
                 .on_key_down(move |event, window, cx| {
-                    if let Some(next) = keyed_width(event, width) {
-                        keyed(clamp_chat_width(next), window, cx);
+                    if let Some(next) = keyed_width(event, width, room) {
+                        keyed(clamp_chat_width(next, room), window, cx);
                         cx.stop_propagation();
                     }
                 })
@@ -191,6 +190,17 @@ fn chat_column(
     }
 }
 
+/// The width the chat column and the pane share: the split less the handle's box (the card gap
+/// in the cards frame), as `AdaptiveShellSplit.tsx` measures it. Unbounded until the split has
+/// been measured.
+fn shared_room(split_width: f32, cards: bool, ds: &Ds) -> f32 {
+    if split_width <= 0. {
+        return f32::INFINITY;
+    }
+    let (handle, lead, trail) = handle_geometry(cards, ds);
+    split_width - (handle + lead + trail)
+}
+
 /// The divider's grab zone takes no width of its own outside the cards frame: it overlaps the
 /// chat and the pane by 4px and 5px; in the cards frame it is the gap between the cards.
 fn handle_geometry(cards: bool, ds: &Ds) -> (f32, f32, f32) {
@@ -217,7 +227,6 @@ impl RenderOnce for AdaptiveShellSplit {
             open: self.pane_open,
             chat_width: self.chat_width,
         });
-        let width = clamp_chat_width(self.chat_width);
         let ds = Ds::get(cx);
         let timing = Timing::token(
             ds,
@@ -243,6 +252,8 @@ impl RenderOnce for AdaptiveShellSplit {
         split = split.child(recorder);
         // Lay out the final chat width; layout motion retains the changing box.
         let split_width = f32::from(measured.width);
+        let room = shared_room(split_width, cards, ds);
+        let width = clamp_chat_width(self.chat_width, room);
         let chat_now = if self.pane_open { width } else { split_width };
         let reduced = ds.reduced_motion();
         split = split
@@ -254,7 +265,7 @@ impl RenderOnce for AdaptiveShellSplit {
                 layout,
                 Some(chat_now),
             ))
-            .child(self.handle(window, cx, width, cards, layout));
+            .child(self.handle(window, cx, width, room, cards, layout));
         let pane_box = div()
             .id((self.id.clone(), "pane"))
             .layout_motion(layout)
@@ -281,6 +292,12 @@ impl RenderOnce for AdaptiveShellSplit {
                     },
                 )
             });
+        // The clamped width goes back to the owner, as the web writes it back.
+        if width != self.chat_width
+            && let Some(change) = self.on_chat_width_change.clone()
+        {
+            window.defer(cx, move |window, cx| change(width, window, cx));
+        }
         strut::scope(false, split.child(pane_box))
     }
 }
