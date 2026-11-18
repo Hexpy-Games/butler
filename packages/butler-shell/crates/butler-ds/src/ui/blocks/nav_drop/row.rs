@@ -265,7 +265,9 @@ pub(super) fn render(
         .children(layers);
     let record = recorder(target.key.clone(), ctx.boxes.clone())
         .absolute()
-        .size_full();
+        .size_full()
+        .top_0()
+        .left_0();
     let mut outer = div().relative().w_full().child(record).child(inner);
     if let (Some(NavDropPosition::Outside), Some(text)) = (drop, target.hint.take()) {
         let measured = ctx.boxes.borrow().get(&target.key).copied();

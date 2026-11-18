@@ -240,7 +240,7 @@ impl Shell {
         let runtime = crate::lifecycle::runtime(cx);
         if runtime
             .as_ref()
-            .is_some_and(|runtime| runtime.read(cx).quitting)
+            .is_some_and(|runtime| runtime.read(cx).quitting())
         {
             return lifecycle_view::quit(lang, window, cx);
         }
@@ -273,7 +273,8 @@ impl Shell {
         // `useSidebarAutoCollapse`: a pane beside the chat folds the sidebar when the page gets
         // too narrow; the toggle then peeks instead (`AppShell.tsx` WindowChromeLayer onToggle).
         let auto = !drawer && self.sidebar_auto_collapsed(input.width, cx);
-        let open = self.sidebar_open && (drawer || (input.width >= 720. && !auto));
+        // AppShell.tsx effectiveLeftOpen: docked unless a drawer or auto-collapsed beside a pane.
+        let open = self.sidebar_open && (drawer || !auto);
         let peek = SidebarPeek::new("sidebar-peek", !drawer && !open, window, cx);
         let toggle = self.sidebar_toggle(open, auto.then(|| peek.clone()), cx);
         let dismiss = cx.entity().downgrade();

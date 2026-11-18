@@ -4,6 +4,7 @@ pub(super) mod blur;
 pub(super) mod power;
 pub(super) mod source;
 
+use butler_ds::ui::cover::cover;
 use std::sync::{Arc, OnceLock};
 
 use butler_ds::ui::blocks::conversation_shell::ConversationScroll;
@@ -143,15 +144,7 @@ pub(crate) fn empty_state(ctx: EmptyCtx<'_>, window: &mut Window, cx: &mut App) 
     div()
         .relative()
         .size_full()
-        .child(
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
-                .overflow_hidden()
-                .child(wallpaper),
-        )
+        .child(cover().overflow_hidden().child(wallpaper))
         .child(
             ConversationScroll::new("new-chat-scroll")
                 .masked(false)

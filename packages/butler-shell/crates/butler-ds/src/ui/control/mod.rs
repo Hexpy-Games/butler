@@ -5,6 +5,7 @@
 //!
 //! The press `scale` is gpui's element scale about the centre: the whole control, content
 //! included, shrinks over `--motion-instant` and is released over `--motion-fast`.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -403,15 +404,9 @@ impl Control {
             ..Default::default()
         };
         for (selection, fill, border) in std::iter::once(base).chain(tone) {
-            let mut group = div().absolute().top_0().left_0().size_full();
+            let mut group = cover();
             for (value, fade) in [(0., None), (1., Some(hover))] {
-                let mut layer = div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .rounded(self.radius)
-                    .bg(fill.at(value, pressed));
+                let mut layer = cover().rounded(self.radius).bg(fill.at(value, pressed));
                 if self.square[0] {
                     layer = layer.rounded_tl(px(0.)).rounded_bl(px(0.));
                 }
@@ -459,7 +454,7 @@ impl Control {
 
 /// The ring's spread shadows over the box, painted outside it.
 pub(crate) fn ring_layer(ring: Vec<BoxShadow>, radius: Pixels) -> Div {
-    div().absolute().top_0().left_0().size_full().child(
+    cover().child(
         gpui::canvas(
             |_, _, _| (),
             move |bounds, (), window, _| {
@@ -470,7 +465,9 @@ pub(crate) fn ring_layer(ring: Vec<BoxShadow>, radius: Pixels) -> Div {
             },
         )
         .absolute()
-        .size_full(),
+        .size_full()
+        .top_0()
+        .left_0(),
     )
 }
 

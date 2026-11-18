@@ -15,6 +15,7 @@ mod guard;
 mod hidden;
 mod identity;
 mod images;
+mod page_host;
 mod parallel;
 mod preview;
 mod profile;

@@ -2,6 +2,7 @@
 //! composerPanel.module.css): a frame, a subject header with an icon, an eyebrow, the title and
 //! an aside, a scrolling body and an actions row. `composer` placement sits in place of the
 //! composer input; `conversation` sits in the transcript inside a flat bordered Card.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -146,11 +147,7 @@ pub fn frame(
     );
     if focused {
         surface = surface.child(
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
+            cover()
                 .rounded(radius)
                 .border(ds.len(Length::FocusRingWidth))
                 .border_color(ds.color(Color::ColorActionPrimary)),

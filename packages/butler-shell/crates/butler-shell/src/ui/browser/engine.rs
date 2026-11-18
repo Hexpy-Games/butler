@@ -123,6 +123,8 @@ pub(crate) trait PageEngine: 'static {
     fn set_popup_sites(&mut self, _page: &TabId, _sites: Vec<String>, _hosts: Vec<String>) {}
     /// Whether this build can browse (Electron's `enabled`).
     fn enabled(&self) -> bool;
+    /// The App is quitting: flush and stop the engine.
+    fn shutdown(&mut self) {}
     /// A page for `page`; `url` is empty for a blank page. `owner` keys the popup gate and
     /// downloads; `partition` keys the in-memory profile of a signed-out page.
     fn open(&mut self, page: &TabId, url: &str, profile: Profile, owner: &str, partition: &str);

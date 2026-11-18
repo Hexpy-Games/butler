@@ -141,7 +141,9 @@ fn no_entry(color: gpui::Hsla) -> AnyElement {
         },
     )
     .absolute()
-    .size_full();
+    .size_full()
+    .top_0()
+    .left_0();
     div()
         .relative()
         .size(px(12.))

@@ -4,6 +4,7 @@
 //! accent on any focus). Opening asks the window for the OS popup menu (`Window::popup_menu`);
 //! where the platform has none (Linux, where Chromium draws its own `<select>` popup too) the
 //! DS Select's list opens over the trigger instead.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -430,11 +431,7 @@ fn field(
         line
     };
     let size = ds.len(Length::FontSize3);
-    let surface = div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
+    let surface = cover()
         .rounded(radius)
         .bg(convert::with_alpha(ds.color(Color::SurfaceRaised), 0.92))
         .border(ds.len(Length::BorderHairline))

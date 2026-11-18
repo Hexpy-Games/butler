@@ -3,6 +3,7 @@
 //! border with a dot in its ink, or the check when chosen. The arrows move and select (Home and
 //! End jump) and wrap; only the chosen swatch is a tab stop. The chosen ring, the hover ring and
 //! the focus ring all draw inside the swatch's own box, so no clipping container cuts them.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -224,14 +225,7 @@ fn ring(
     } else {
         (ds.len(Length::BorderHairline), ds.color(Color::LineStrong))
     };
-    let ring = div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
-        .rounded_full()
-        .border(width)
-        .border_color(color);
+    let ring = cover().rounded_full().border(width).border_color(color);
     if focused || checked {
         ring
     } else {
