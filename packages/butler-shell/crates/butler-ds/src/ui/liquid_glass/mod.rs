@@ -120,12 +120,12 @@ pub fn paint(
     let settings = Settings {
         materialize: match presence {
             Presence::Static(t) => t,
-            Presence::Moving { to, .. } => to,
+            Presence::Moving { from, to, .. } => from.max(to),
         },
         reduce_transparency: glass.reduce_transparency,
         increase_contrast: glass.increase_contrast,
     };
-    let mut m = material::material(dark, (w, h), circle, glass.place, settings);
+    let m = material::material(dark, (w, h), circle, glass.place, settings);
     let appear = match presence {
         Presence::Static(_) => None,
         Presence::Moving {
@@ -134,28 +134,9 @@ pub fn paint(
             start_ms,
             timing,
         } => {
-            let m_from = material::material(
-                dark,
-                (w, h),
-                circle,
-                glass.place,
-                Settings {
-                    materialize: from,
-                    ..settings
-                },
-            );
-            let maximum = from.max(to);
-            m.shadow = material::material(
-                dark,
-                (w, h),
-                circle,
-                glass.place,
-                Settings {
-                    materialize: maximum,
-                    ..settings
-                },
-            )
-            .shadow;
+            // The glass appears and leaves by opacity only, at full material, so the lens
+            // fades with its content exactly as a backdrop-filter under CSS opacity.
+            let m_from = material::material(dark, (w, h), circle, glass.place, settings);
             Some((
                 m_from,
                 gpui::LayerMotion {
