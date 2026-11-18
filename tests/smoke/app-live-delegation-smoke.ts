@@ -38,6 +38,12 @@ try {
   assert(activityLabel !== null && activityLabel.trim().length > 0, "delegated activity label is present");
   assert(!/tool\s*usage|tool\s*use|use tool|working|work in progress|도구 사용|작업 중|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/iu.test(activityLabel),
     `delegated activity names the current work without a generic label or internal id: ${activityLabel}`);
+  // The chat's status line carries the delegated work while the parent has no turn of its own.
+  await page.waitForFunction(() => {
+    const line = document.querySelector('[data-test-class~="delegated-turn-status"] [data-test-class="turn-chat-activity"]')?.textContent ?? "";
+    const latest = document.querySelector('[data-test-class~="steward-parent-progress-card"] [data-slot="rolling-swap"] > :not([data-motion="outgoing"]) [data-test-class="work-activity-tail-latest"]')?.children[1]?.textContent ?? "";
+    return latest.length > 0 && line.startsWith(`${latest} · `);
+  });
   const parent = await server.api<{ active_turn: unknown; steward_children: unknown[]; subtasks: { state: string }[] }>("/session-view?session_id=general");
   assert.equal(parent.active_turn, null, "parent has ended while child runs");
   assert.equal(parent.steward_children.length, 1);
