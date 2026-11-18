@@ -48,13 +48,12 @@ impl ParentElement for Label {
 
 impl RenderOnce for Label {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let shrink = strut::shrink_wrap(cx);
         let ds = Ds::get(cx);
         let size = ds.len(Length::FontSize3);
-        let (line, fit) = if self.field {
-            (ds.len(Length::TypoLabelLineHeight), shrink)
+        let line = if self.field {
+            ds.len(Length::TypoLabelLineHeight)
         } else {
-            (size, false)
+            size
         };
         let el = div()
             .flex()
@@ -74,18 +73,19 @@ impl RenderOnce for Label {
         } else {
             el
         };
-        let el = if fit { el.self_start() } else { el };
         if self.field {
             // `overflow-wrap: anywhere` lets the label's text item shrink below its longest word
             // (its min-content width is one character); gpui measures min-content unwrapped, so
             // each item gets `min-width: 0` instead.
-            el.children(
-                self.children
-                    .into_iter()
-                    .map(|child| div().min_w_0().child(child)),
+            strut::max_content(
+                el.children(
+                    self.children
+                        .into_iter()
+                        .map(|child| div().min_w_0().child(child)),
+                ),
             )
         } else {
-            el.children(self.children)
+            el.children(self.children).into_any_element()
         }
     }
 }

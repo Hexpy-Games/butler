@@ -209,7 +209,6 @@ impl TabsList {
         };
         let ds = Ds::get(cx);
         let room = focus::room(ds);
-        let shrink = strut::shrink_wrap(cx);
         let space1 = ds.len(Length::Space1);
         let mut content = div()
             .relative()
@@ -241,21 +240,25 @@ impl TabsList {
                 .rounded(ds.len(Length::RadiusControl))
                 .bg(ds.color(Color::Surface))
         };
-        list = match (self.stretch, line, shrink) {
-            (true, false, _) => list.w_full(),
-            (false, false, true) => list.self_start().max_w_full(),
+        // The boxed list takes `width: max-content` unless it stretches.
+        let fit = !self.stretch && !line;
+        list = match (self.stretch, line) {
+            (true, false) => list.w_full(),
+            (false, false) => list.max_w_full(),
             _ => list,
         };
-        if ctx.vertical {
-            return list.child(content).into_any_element();
-        }
-        let config = scroll::Config {
-            id: ElementId::from(SharedString::from(format!("{}-list", ctx.id))),
-            axis: Axis::X,
-            size: ds.len(Length::ScrollFadeSize),
-            guard: px(0.),
+        let list = if ctx.vertical {
+            list.child(content).into_any_element()
+        } else {
+            let config = scroll::Config {
+                id: ElementId::from(SharedString::from(format!("{}-list", ctx.id))),
+                axis: Axis::X,
+                size: ds.len(Length::ScrollFadeSize),
+                guard: px(0.),
+            };
+            scroll::scroller(&config, list.child(content), window, cx).element
         };
-        scroll::scroller(&config, list.child(content), window, cx).element
+        if fit { strut::max_content(list) } else { list }
     }
 }
 
