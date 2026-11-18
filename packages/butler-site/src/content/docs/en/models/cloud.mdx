@@ -157,6 +157,8 @@ The macOS release stores API keys in the macOS Keychain, and the app shows **Sto
 
 On Windows and Linux too, running `butler config set secrets.store system` stores API keys in the system store, shown as **Stored in Credential Manager** or **Stored in the system keyring**. Keys already in the file move to the system store.
 
+If you turned on Butler Vault and it opens without a password on this computer (for example with the Keychain), API keys are stored in the vault and the app shows **Stored in Butler Vault**. Turning the vault on moves keys you already saved into it. On a computer where only the master password opens the vault, API keys stay in the locations above.
+
 If keys saved by an earlier version remain in `model-provider-credentials.json`, Butler Agent moves them to the storage location when it starts.
 
 Butler renews the ChatGPT sign-in data automatically when it is close to expiring.
