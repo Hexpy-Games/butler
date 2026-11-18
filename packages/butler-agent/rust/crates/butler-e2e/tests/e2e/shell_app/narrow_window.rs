@@ -207,7 +207,7 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
     let (chat, pane) = (get("split", "chat-card"), get("split", "browser-area"));
     let chat_width = chat[2] + 2.;
     let room = chat_width + pane[2];
-    let expected = (room - 375.).min(400.).max(340.);
+    let expected = (room - 375.).clamp(340., 400.);
     assert!(
         (chat_width - expected).abs() <= 1. && pane[2] >= room - chat_width - 0.5,
         "chat {chat:?}, pane {pane:?}, room {room}, expected chat {expected}"

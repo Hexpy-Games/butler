@@ -111,6 +111,17 @@ fn keyed_width(event: &KeyDownEvent, width: f32, room: f32) -> Option<f32> {
 }
 
 impl AdaptiveShellSplit {
+    /// The clamped width goes back to the owner, as the web writes it back.
+    fn write_back(&self, width: f32, window: &mut Window, cx: &mut App) {
+        if let Some(change) = self
+            .on_chat_width_change
+            .clone()
+            .filter(|_| width != self.chat_width)
+        {
+            window.defer(cx, move |window, cx| change(width, window, cx));
+        }
+    }
+
     fn handle(
         &self,
         window: &mut Window,
@@ -292,12 +303,7 @@ impl RenderOnce for AdaptiveShellSplit {
                     },
                 )
             });
-        // The clamped width goes back to the owner, as the web writes it back.
-        if width != self.chat_width
-            && let Some(change) = self.on_chat_width_change.clone()
-        {
-            window.defer(cx, move |window, cx| change(width, window, cx));
-        }
+        self.write_back(width, window, cx);
         strut::scope(false, split.child(pane_box))
     }
 }
