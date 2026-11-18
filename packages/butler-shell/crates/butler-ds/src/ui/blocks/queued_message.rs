@@ -162,7 +162,7 @@ impl QueuedMessage {
         Some(
             Button::new((self.id.clone(), "toggle"))
                 .variant(Variant::Inline)
-                .child(if open { less } else { more })
+                .text(if open { less } else { more })
                 .on_click(move |_, _, cx| {
                     on.update(cx, |open, cx| {
                         *open = !*open;
