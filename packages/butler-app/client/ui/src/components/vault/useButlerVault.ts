@@ -63,3 +63,8 @@ export function useButlerVault() {
     changePassword: (current: string, next: string) => update(() => changeButlerVaultPassword(current, next)),
   };
 }
+
+/** Why only a master password can lock the vault here. */
+export function passwordIntro(view: ButlerVaultView | null): string {
+  return view?.password_reason === "unsigned_build" ? appCopy.butlerVault.unsignedBuild : appCopy.butlerVault.passwordIntro;
+}

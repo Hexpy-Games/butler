@@ -2,7 +2,7 @@ import { useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { Button, ButtonContainer, Input, SettingsField, SettingsSection, Typo } from "@/butler-ds";
-import { useButlerVault } from "../vault/useButlerVault";
+import { passwordIntro, useButlerVault } from "../vault/useButlerVault";
 import { VaultPasswordFields } from "../vault/VaultPasswordFields";
 
 export function ButlerVaultSection() {
@@ -48,7 +48,7 @@ export function ButlerVaultSection() {
     <SettingsSection id="butler-vault" kind="form" title={copy.name} description={locked ? copy.lockedPassword : copy[view.state]}>
       {changing && kinds && <SettingsField id="butler-vault-stored" label={copy.stored} control={<Typo.Body>{kinds}</Typo.Body>} />}
       {view.state === "off" && !editing && <SettingsField id="butler-vault-turn-on" label={copy.turnOnLabel}
-        description={passwordOnly ? copy.passwordIntro : copy.intro}
+        description={passwordOnly ? passwordIntro(view) : copy.intro}
         control={<Button disabled={vault.busy} aria-busy={vault.busy} onClick={() => void turnOn()}>{copy.turnOn}</Button>} />}
       {changing && view.unlock === "password" && !editing && <SettingsField label={copy.masterPassword}
         control={<Button onClick={() => setEditing(true)}>{copy.change}</Button>} />}
