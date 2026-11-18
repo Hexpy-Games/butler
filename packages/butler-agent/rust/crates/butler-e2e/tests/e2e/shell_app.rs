@@ -33,6 +33,7 @@ mod composer_fold;
 mod composer_toolbar;
 mod focus_fallback;
 mod focus_selection;
+mod focus_tab;
 mod narrow_window;
 mod observer_dialog;
 mod text_selection;
