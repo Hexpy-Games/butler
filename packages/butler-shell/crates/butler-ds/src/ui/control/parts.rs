@@ -205,14 +205,27 @@ pub(crate) struct State {
 }
 
 impl State {
-    pub(super) fn set_pressed(&mut self, on: bool, _now: Instant) {
-        self.pressed = on;
+    /// Sets the press; whether it changed.
+    pub(super) fn set_pressed(&mut self, on: bool) -> bool {
+        std::mem::replace(&mut self.pressed, on) != on
     }
 
-    pub(crate) fn retarget(&mut self, hovered: bool, now: Instant, at: f32) {
+    /// Sets the press and notifies the view only when it changed.
+    pub(super) fn press(state: &gpui::Entity<Self>, on: bool, cx: &mut App) {
+        state.update(cx, |s, cx| {
+            if s.set_pressed(on) {
+                cx.notify();
+            }
+        });
+    }
+
+    /// Retargets the hover blend; whether the hover changed.
+    pub(crate) fn retarget(&mut self, hovered: bool, now: Instant, at: f32) -> bool {
+        let changed = self.hovered != hovered;
         self.from = at;
         self.hovered = hovered;
         self.since = Some(now);
+        changed
     }
 
     /// The hover blend now, and whether it is still moving.

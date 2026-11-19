@@ -199,7 +199,7 @@ impl RenderOnce for Control {
             );
         }
         let outer = self.outer.take();
-        let el = self.interact(el, &state, handle.as_ref(), live);
+        let el = self.interact(el, &state, handle.as_ref(), (live, pressed));
         let el = self.finish(el, (hover_motion, fade), pressed, focused, ds);
         let el = match publish {
             Some((handle, reach)) => el.child(focus::publish(handle, reach)),
@@ -319,7 +319,7 @@ impl Control {
         el: gpui::Stateful<Div>,
         state: &gpui::Entity<State>,
         handle: Option<&gpui::FocusHandle>,
-        live: bool,
+        (live, pressed): (bool, bool),
     ) -> gpui::Stateful<Div> {
         let mut el = if live {
             el.cursor_pointer()
@@ -335,40 +335,28 @@ impl Control {
             let hover = state.clone();
             let press = state.clone();
             let release = state.clone();
-            let release_out = state.clone();
             el = el
                 .on_hover(move |on, _, cx| {
                     let now = cx.background_executor().now();
                     hover.update(cx, |s, cx| {
                         let at = s.mix;
-                        s.retarget(*on, now, at);
-                        if !*on {
-                            s.set_pressed(false, now);
+                        if s.retarget(*on, now, at) | (!*on && s.set_pressed(false)) {
+                            cx.notify();
                         }
-                        cx.notify();
                     });
                 })
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                    let now = cx.background_executor().now();
-                    press.update(cx, |s, cx| {
-                        s.set_pressed(true, now);
-                        cx.notify();
-                    });
+                    State::press(&press, true, cx);
                 })
-                .on_mouse_up(MouseButton::Left, move |_, _, cx| {
-                    let now = cx.background_executor().now();
-                    release.update(cx, |s, cx| {
-                        s.set_pressed(false, now);
-                        cx.notify();
-                    });
-                })
-                .on_mouse_up_out(MouseButton::Left, move |_, _, cx| {
-                    let now = cx.background_executor().now();
-                    release_out.update(cx, |s, cx| {
-                        s.set_pressed(false, now);
-                        cx.notify();
-                    });
+                .on_mouse_up(MouseButton::Left, {
+                    let release = release.clone();
+                    move |_, _, cx| State::press(&release, false, cx)
                 });
+            if pressed {
+                el = el.on_mouse_up_out(MouseButton::Left, move |_, _, cx| {
+                    State::press(&release, false, cx);
+                });
+            }
             if let Some(handler) = self.on_click.clone() {
                 el = el.on_click(move |event, window, cx| handler(event, window, cx));
             }
