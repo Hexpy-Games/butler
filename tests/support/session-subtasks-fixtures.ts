@@ -2,7 +2,7 @@
 // subscriptions run; only the parent chat's /navigation row and /session-view,
 // its pending asks and the resume endpoint answer from these renderer-only fixtures.
 import type { Locator, Page, Route } from "playwright";
-import type { SessionPendingAsks } from "../../packages/butler-protocol/src/pending-asks-contracts.ts";
+import type { SessionPendingAsks } from "../../packages/butler-app/client/shared/pending-asks-contracts.ts";
 import { HARNESS_SS03_OBSERVER_VIEW, HARNESS_SS03_SUMMARY } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
 import type { MessageRecord, NavigationView, SessionView, SubtaskView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 

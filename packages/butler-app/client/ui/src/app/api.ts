@@ -1,5 +1,5 @@
 import { pendingAsksBridgeInput } from "./pendingAsksBridge.ts";
-import type { PendingAsksBridge } from "../../../../../butler-protocol/src/pending-asks-contracts.ts";
+import type { PendingAsksBridge } from "../../../shared/pending-asks-contracts.ts";
 import { canonBridgeInput } from "./canonBridge.ts";
 import { taskGraphBridgeInput } from "./taskGraphBridge.ts";
 import { appCopy } from "./copy.ts";

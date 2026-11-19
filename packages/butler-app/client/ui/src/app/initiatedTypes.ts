@@ -1,4 +1,4 @@
-import type { CanonHoldPanel, CanonTakeHerePanel } from "../../../../../butler-protocol/src/canon-queue-contracts.ts";
+import type { CanonHoldPanel, CanonTakeHerePanel } from "../../../shared/canon-queue-contracts.ts";
 
 /** Open origin kind allows future initiated work and connector messages. */
 export interface InitiatedOrigin {

@@ -6,8 +6,8 @@ import { join, resolve } from "node:path";
 import type { Page } from "playwright";
 import { createServer } from "../../packages/butler-app/client/ui/node_modules/vite/dist/node/index.js";
 import { launchSmokeBrowser } from "../support/smoke-browser";
-import { toMarkdown } from "../../packages/butler-protocol/src/answer-blocks-markdown";
-import type { AnswerBlocks } from "../../packages/butler-protocol/src/app-contracts";
+import { toMarkdown } from "../../packages/butler-app/client/shared/answer-blocks-markdown";
+import type { AnswerBlocks } from "../../packages/butler-app/client/shared/app-contracts";
 
 const root = process.cwd(), stage = process.env.BUTLER_BLOCK_STAGE ?? "after";
 const evidence = process.env.BUTLER_SMOKE_EVIDENCE ?? resolve(".tmp/block-scraps-ui");

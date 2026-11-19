@@ -5,8 +5,8 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
 import { BlockActionFrame, DocumentBlockEmbed, MediaFrame } from "@/butler-ds";
 import { AnswerBlocks } from "../conversation/AnswerBlocks";
-import type { AnswerBlocksView } from "../../../../../../butler-protocol/src/answer-blocks-view";
-import { toMarkdown } from "../../../../../../butler-protocol/src/answer-blocks-markdown";
+import type { AnswerBlocksView } from "../../../../shared/answer-blocks-view";
+import { toMarkdown } from "../../../../shared/answer-blocks-markdown";
 import { appCopy } from "@/app/copy";
 import { api } from "@/app/api";
 import { gatewayImageSource } from "@/app/messageFileUrls";

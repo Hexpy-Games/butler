@@ -1,5 +1,5 @@
 import { memo, useMemo, useRef, useState } from "react";
-import type { AnswerCardsView, AnswerCardView } from "../../../../../../butler-protocol/src/answer-blocks-view";
+import type { AnswerCardsView, AnswerCardView } from "../../../../shared/answer-blocks-view";
 import { Button, Collapsible, CopyButton, DoneIconButton, Grid, ItemCard, Library, MediaFrame, ItemCardSkeleton, Stack } from "@/butler-ds";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { openConversationLink } from "../browser/browserBridge";

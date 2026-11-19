@@ -1,7 +1,7 @@
 import { api } from "./api.ts";
-import type { CanonProposal } from "../../../../../butler-protocol/src/canon-proposal-contracts.ts";
+import type { CanonProposal } from "../../../shared/canon-proposal-contracts.ts";
 import type { TimelineEvent } from "./types.ts";
-export type { CanonProposal, CanonProposalAnchor } from "../../../../../butler-protocol/src/canon-proposal-contracts.ts";
+export type { CanonProposal, CanonProposalAnchor } from "../../../shared/canon-proposal-contracts.ts";
 const listeners = new Map<string, Set<() => void>>();
 const path = (id: string) => `/canon/proposals/${encodeURIComponent(id)}`;
 export const getCanonProposal = (id: string, signal?: AbortSignal) => api<CanonProposal>(path(id), { signal });

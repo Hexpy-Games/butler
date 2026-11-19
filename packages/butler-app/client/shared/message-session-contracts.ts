@@ -2,7 +2,7 @@
 import type {
   InterfaceContentReferences,
   InterfaceTextReference,
-} from "../../butler-i18n/src/index.ts";
+} from "../../../butler-i18n/src/index.ts";
 
 /** App wire contracts shared by the UI, Electron declarations, and server. */
 
@@ -369,24 +369,3 @@ export interface AppEventEnvelope {
 }
 
 export const WORKER_PROFILE_ID_PATTERN = /^(?:default|w[1-9]\d*)$/u;
-
-export type MessageFileKind = "text" | "image" | "generic";
-
-export interface MessageFileRef {
-  /** Workspace label the file was produced under; null on legacy rows. */
-  source_label?: string | null;
-  /** Handed to the user as a finished file (it is in the Library). */
-  deliverable?: boolean;
-  file_id: string;
-  kind: MessageFileKind;
-  mime_type: string;
-  safe_name: string;
-  size_bytes: number;
-  sha256: string;
-  url: string;
-  /** Short-lived `url` with `?expires=..&signature=..` for token-less loads. */
-  signed_url?: string;
-  created_at: string;
-  width?: number | null;
-  height?: number | null;
-}

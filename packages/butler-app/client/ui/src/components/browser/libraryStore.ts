@@ -1,4 +1,4 @@
-import type { AnswerBlocksView } from "../../../../../../butler-protocol/src/answer-blocks-view";
+import type { AnswerBlocksView } from "../../../../shared/answer-blocks-view";
 import { useCallback, useEffect, useState } from "react";
 import { libraryChanged, useLibraryVersion } from "@/app/libraryEvents";
 import { assetSource } from "../images/imageApi";
@@ -6,7 +6,7 @@ import { api, uploadMessageFile } from "@/app/api";
 import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
 import { useButlerStore } from "@/app/store";
-import type { ElementFileRef } from "../../../../../../butler-protocol/src/browser-element";
+import type { ElementFileRef } from "../../../../shared/browser-element";
 import { messageFileUrl } from "../conversation/messageMedia";
 import { attachElements, attachLibraryReference, type PickedElement, type ScrapSnapshot } from "./browserElements";
 import type { ArtifactRevision, LibraryKind } from "@/app/types";

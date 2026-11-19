@@ -1,10 +1,10 @@
 import { ChatEpicCards } from "../canon/ChatEpicCards";
 import { memo, useMemo } from "react";
-import type { AnswerBlockSet } from "../../../../../../butler-protocol/src/app-contracts";
-import type { AnswerBlockView } from "../../../../../../butler-protocol/src/answer-blocks-view";
-import type { CanonProposalAnchor } from "../../../../../../butler-protocol/src/canon-proposal-contracts";
-import { parseAnswerBlocks } from "../../../../../../butler-protocol/src/answer-blocks-parse";
-import { answerMetricTrend } from "../../../../../../butler-protocol/src/answer-metric-trend";
+import type { AnswerBlockSet } from "../../../../shared/app-contracts";
+import type { AnswerBlockView } from "../../../../shared/answer-blocks-view";
+import type { CanonProposalAnchor } from "../../../../shared/canon-proposal-contracts";
+import { parseAnswerBlocks } from "../../../../shared/answer-blocks-parse";
+import { answerMetricTrend } from "../../../../shared/answer-metric-trend";
 import { Button, Popup, Inline, KeyValueRow, MetricCard, MetricGrid, Notice, PillButton, Presence, usePresence, Reply, ItemCardSkeleton, Skeleton, Stack } from "@/butler-ds";
 import { useAppLocale } from "@/app/copy";
 import { useButlerStore } from "@/app/store";

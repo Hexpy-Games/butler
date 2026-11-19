@@ -94,15 +94,9 @@
         "postcss": "8.5.13",
       },
     },
-    "packages/butler-i18n": {
-      "name": "@butler/i18n",
-    },
     "packages/butler-progress-projection": {
       "name": "@butler/progress-projection",
       "version": "0.0.21",
-    },
-    "packages/butler-protocol": {
-      "name": "@butler/protocol",
     },
     "packages/butler-site": {
       "name": "@butler/site",
@@ -219,13 +213,9 @@
 
     "@bruits/satteri-win32-x64-msvc": ["@bruits/satteri-win32-x64-msvc@0.10.5", "", { "os": "win32", "cpu": "x64" }, "sha512-C3IfPvfvMXmlzBxaMPKFS1XiuV9pu2mC7YqkPk7PSvTgPZ8gbdASIpHpztDLvTTQjqZ0z1Ol8tK5X+V6XXC0wQ=="],
 
-    "@butler/i18n": ["@butler/i18n@workspace:packages/butler-i18n"],
-
     "@butler/progress-projection": ["@butler/progress-projection@workspace:packages/butler-progress-projection"],
 
     "@butler/project-ledger": ["@butler/project-ledger@workspace:packages/project-ledger"],
-
-    "@butler/protocol": ["@butler/protocol@workspace:packages/butler-protocol"],
 
     "@butler/site": ["@butler/site@workspace:packages/butler-site"],
 

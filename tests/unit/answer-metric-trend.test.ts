@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { answerMetricTrend } from "../../packages/butler-protocol/src/answer-metric-trend";
-import type { AnswerBlocksView } from "../../packages/butler-protocol/src/answer-blocks-view";
-import { parseAnswerBlocks } from "../../packages/butler-protocol/src/answer-blocks-parse";
+import { answerMetricTrend } from "../../packages/butler-app/client/shared/answer-metric-trend";
+import type { AnswerBlocksView } from "../../packages/butler-app/client/shared/answer-blocks-view";
+import { parseAnswerBlocks } from "../../packages/butler-app/client/shared/answer-blocks-parse";
 
 // test-category: pure-logic
 test("metric color follows sign and direction, with the stored v1 default", () => {

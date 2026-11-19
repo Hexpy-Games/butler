@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { CanonQueueView } from "../../packages/butler-protocol/src/canon-queue-contracts.ts";
+import type { CanonQueueView } from "../../packages/butler-app/client/shared/canon-queue-contracts.ts";
 import { apiOrderEdit, orderChat, orderShape, postOrder, readOrder, requestOrder, seedOrderPlan, stopOrderTurn, waitOrder } from "./session-order-fixtures.ts";
 
 /** Includes accessible names, titles and the hidden text referenced by descriptions. */

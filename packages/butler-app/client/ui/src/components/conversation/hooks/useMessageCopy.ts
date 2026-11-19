@@ -3,8 +3,8 @@ import { appCopy } from "@/app/copy";
 import { notifyError } from "@/app/notifications";
 import type { MessageRecord } from "@/app/types";
 
-import { parseAnswerBlocks } from "../../../../../../../butler-protocol/src/answer-blocks-parse";
-import { toMarkdown } from "../../../../../../../butler-protocol/src/answer-blocks-markdown";
+import { parseAnswerBlocks } from "../../../../../shared/answer-blocks-parse";
+import { toMarkdown } from "../../../../../shared/answer-blocks-markdown";
 
 import { gatewayImageSource } from "@/app/messageFileUrls";
 

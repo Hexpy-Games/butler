@@ -1,4 +1,4 @@
-import schema from "../../butler-agent/rust/crates/butler-runtime/src/capabilities/catalog/answer-blocks.schema.json";
+import schema from "../../../butler-agent/rust/crates/butler-runtime/src/capabilities/catalog/answer-blocks.schema.json";
 import type { AnswerBlockView, AnswerBlocksView } from "./answer-blocks-view";
 
 type Rule = { $ref?: string; const?: unknown; enum?: unknown[]; type?: string | string[];

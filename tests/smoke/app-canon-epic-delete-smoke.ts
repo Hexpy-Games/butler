@@ -9,7 +9,7 @@ import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { captureDeleteCards, captureDeleteMenu, type DeleteTool } from "../support/canon-delete-card-crops.ts";
 import { closeCanonAside } from "../support/canon-board-aside.ts";
 import { openPlan, showCanonSidebar } from "../support/canon-sidebar-scenarios.ts";
-import type { CanonOverview, EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
+import type { CanonOverview, EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
 const baseline = process.env.BUTLER_SMOKE_BASELINE === "1";
 const shots = process.env.BUTLER_SMOKE_SCREENSHOTS ?? "/tmp/canon-epic-delete-screenshots";

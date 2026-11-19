@@ -23,8 +23,7 @@ class Paths(unittest.TestCase):
     def test_responsible_jobs_and_workflow_fail_closed(self):
         cases = {
             'packages/butler-app/client/ui/src/app.tsx': {'ui', 'site', 'ds'},
-            'packages/butler-i18n/src/locale.ts': {'ui', 'site', 'ds', 'mobile'},
-            'packages/butler-protocol/src/index.ts': {'ui', 'ds', 'mobile'},
+            'packages/butler-i18n/src/locale.ts': {'ui', 'site', 'ds'},
             'packages/project-ledger/src/index.ts': {'ui', 'ds'},
             'packages/butler-mobile/src/connection/probe.ts': {'mobile'},
             'packages/butler-mobile/bun.lock': {'mobile'},

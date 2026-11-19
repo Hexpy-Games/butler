@@ -6,9 +6,7 @@
   "workspaces": [
     "packages/butler-app/client/electron",
     "packages/butler-app/client/ui",
-    "packages/butler-i18n",
     "packages/butler-progress-projection",
-    "packages/butler-protocol",
     "packages/project-ledger",
     "packages/butler-site"
   ],
@@ -25,8 +23,8 @@
     "format": "${BUTLER_BUN:-bun} run lint:fix && ${BUTLER_BUN:-bun} run format:css",
     "format:css": "prettier --write \"packages/butler-app/client/ui/src/**/*.css\"",
     "format:css:check": "prettier --check \"packages/butler-app/client/ui/src/**/*.css\" --log-level warn",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p packages/butler-protocol/tsconfig.json --noEmit && npm --prefix packages/butler-app/client/ui run --silent typecheck",
-    "test:ui": "${BUTLER_BUN:-bun} test packages/butler-app/client/ui/src packages/butler-i18n packages/butler-protocol tests/smoke/cdp-timeout.test.ts tests/smoke/browser-act-main.test.ts tests/smoke/browser-dialog-settlement.test.ts tests/smoke/browser-still-recovery.test.ts tests/smoke/browser-still-outbox.test.ts tests/smoke/electron-main-close.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && npm --prefix packages/butler-app/client/ui run --silent typecheck",
+    "test:ui": "${BUTLER_BUN:-bun} test packages/butler-app/client/ui/src packages/butler-i18n tests/smoke/cdp-timeout.test.ts tests/smoke/browser-act-main.test.ts tests/smoke/browser-dialog-settlement.test.ts tests/smoke/browser-still-recovery.test.ts tests/smoke/browser-still-outbox.test.ts tests/smoke/electron-main-close.test.ts",
     "test:unit": "${BUTLER_BUN:-bun} run --silent tools/validation/validate.ts test:unit:run",
     "test:unit:run": "${BUTLER_BUN:-bun} test tests/unit/*.test.ts",
     "test:unit:fast": "${BUTLER_BUN:-bun} run --silent tools/validation/validate.ts test:unit:fast:run",

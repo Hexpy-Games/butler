@@ -1,7 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
-import type { ChartBlock, TableBlock } from "../../../../../../butler-protocol/src/app-contracts";
-import type { AnswerGalleryView } from "../../../../../../butler-protocol/src/answer-blocks-view";
+import type { ChartBlock, TableBlock } from "../../../../shared/app-contracts";
+import type { AnswerGalleryView } from "../../../../shared/answer-blocks-view";
 import { Button, ButtonContainer, ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, CHART_COLORS, chartColor,
   animateMotion, motionDuration, Clickable, Collapsible, CopyButton, DoneIconButton, Library, MarkdownContent, MarkdownTable, MediaFrame, ScrollArea, Skeleton, Stack, Typo } from "@/butler-ds";
 import { AnswerItem, useAnswerItemRef } from "./AnswerItem";

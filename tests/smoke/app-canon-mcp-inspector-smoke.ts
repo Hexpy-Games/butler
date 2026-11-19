@@ -9,7 +9,7 @@ import { Database } from "bun:sqlite";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { assertAssigneeLayout, mcpFocusAudit, runMcpMatrix } from "../support/canon-mcp-matrix.ts";
-import type { EpicDetail, PlanDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
+import type { EpicDetail, PlanDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 const cases = [1440, 390].flatMap(w => ["light", "dark"].flatMap(t => ["plain", "wallpaper"].map(bg => `${w}-${t}-${bg}`)));
 if (await runMcpMatrix(cases, "BUTLER_CANON_MCP_INSPECTOR_CASE", import.meta.path)) process.exit(0);
 const [widthText, theme, background] = process.env.BUTLER_CANON_MCP_INSPECTOR_CASE!.split("-");

@@ -2,7 +2,7 @@
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
+import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 import { inlineShot, assertFocused } from "./canon-inline-edit-flows.ts";
 import { probeFocusRing } from "./focus-ring-clipping.ts";
 

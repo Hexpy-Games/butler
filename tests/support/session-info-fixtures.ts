@@ -1,7 +1,7 @@
-import type { SessionPendingAsks } from "../../packages/butler-protocol/src/pending-asks-contracts.ts";
+import type { SessionPendingAsks } from "../../packages/butler-app/client/shared/pending-asks-contracts.ts";
 import { probeFocusRingFrames, type FocusRingClip } from "./focus-ring-clipping.ts";
 import type { Locator, Page, Route } from "playwright";
-import type { EpicProgressSnapshot } from "../../packages/butler-protocol/src/canon-contracts.ts";
+import type { EpicProgressSnapshot } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 import type { QueuedMessageRecord, SessionView, SessionViewTurn, SubtaskView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 import { HARNESS_SUMMARY } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
 

@@ -11,7 +11,7 @@ import { createNativeAppServer, type NativeAppServerHandle } from "../support/na
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { COPY, hoverInset, installSubtaskPage, replaySubtasks, subtaskFixtures, densityDeltas, markDeltas, titleDeltas, type SubtaskReplay } from "../support/session-subtasks-fixtures.ts";
 import { SESSION_INFO_COPY } from "../../packages/butler-i18n/src/locales/session-info.ts";
-import type { EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
+import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
 const cells = ["light-ko", "dark-ko", "light-en", "dark-en"];
 if (await runSmokeCases(cells, "BUTLER_SUBTASKS_CELL", import.meta.path, { isolate: true })) process.exit(0);

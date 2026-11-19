@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
-import type { TaskGraphSnapshot, TaskGraphsPage } from "../../packages/butler-protocol/src/task-graph-contracts.ts";
+import type { TaskGraphSnapshot, TaskGraphsPage } from "../../packages/butler-app/client/shared/task-graph-contracts.ts";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 import { assertTaskGraphIdle } from "./task-graph-idle.ts";
 import { finishGraphWorkers, reviseTaskGraph, advanceGraphPhase, planChildGraph } from "./task-graph-seed.ts";

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { seedCanonBoard, openCanonBoard } from "../support/canon-board-scenarios.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
-import type { CanonOverview, EpicProgressSnapshot } from "../../packages/butler-protocol/src/canon-contracts.ts";
+import type { CanonOverview, EpicProgressSnapshot } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
 const shots = process.env.BUTLER_SMOKE_SCREENSHOTS ?? "/tmp/canon-link-progress-screenshots";
 mkdirSync(shots, { recursive: true });

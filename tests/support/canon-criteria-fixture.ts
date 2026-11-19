@@ -3,7 +3,7 @@ import { strict as assert } from "node:assert";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-import type { EpicDetail, PlanDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
+import type { EpicDetail, PlanDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 export const criteriaText = "변경 내용을 기준별로 확인할 수 있다";

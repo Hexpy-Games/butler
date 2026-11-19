@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
+import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
 
 import { verifyInlineBleed, verifyInlineKeyboardRing } from "./inline-bleed-geometry.ts";
 

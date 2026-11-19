@@ -1,5 +1,5 @@
 import type { MessageContent } from "@/app/messageContent";
-import type { ElementAttachment } from "../../../../../../butler-protocol/src/browser-element";
+import type { ElementAttachment } from "../../../../shared/browser-element";
 
 /** The image follows normal upload admission; its source data travels with the message. */
 export function captureContent(content: MessageContent | undefined, text: string, elements: ElementAttachment[]): MessageContent | undefined {
