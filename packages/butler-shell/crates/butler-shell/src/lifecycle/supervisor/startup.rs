@@ -73,7 +73,7 @@ impl Inner {
 
     async fn ensure_ready_once(self: &Rc<Self>) -> Result<(), Startup> {
         self.reconcile_attached_exit();
-        if self.read(|state| state.quitting) {
+        if self.quitting() {
             return Err(Startup::Failed(SupervisorError::ShuttingDown));
         }
         if let Some(error) = self.read(State::halt_error) {
@@ -211,7 +211,7 @@ impl Inner {
 
     /// `throwIfCandidateFailed`: our child must still be the one we are waiting for.
     fn check_candidate(&self, pid: u32) -> Result<(), Startup> {
-        let (alive, stopped, replaced, restarting, quitting) = self.read(|state| {
+        let (alive, stopped, replaced, restarting) = self.read(|state| {
             (
                 state.child_pid() == Some(pid),
                 state
@@ -220,7 +220,6 @@ impl Inner {
                     .is_some_and(|h| h.reason == super::state::HaltReason::Stop),
                 state.last_stop == Some(StopReason::Restart),
                 state.restarting(),
-                state.quitting,
             )
         });
         if alive {
@@ -235,7 +234,7 @@ impl Inner {
         if restarting {
             return Err(Startup::Restarting);
         }
-        if quitting {
+        if self.quitting() {
             return Err(Startup::Failed(SupervisorError::ShuttingDown));
         }
         self.record_error(SupervisorError::EarlyExit);
