@@ -200,7 +200,7 @@ pub(crate) fn close_editor(cx: &mut App) {
 }
 
 /// `ImageEditor` in the right slot, while [`editor_target`] names the open conversation.
-pub(crate) fn editor_pane(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+pub(crate) fn editor_view(window: &mut Window, cx: &mut App) -> Option<gpui::AnyView> {
     let target = editor_target(cx)?;
     let view = match cx
         .try_global::<Editor>()
@@ -213,7 +213,7 @@ pub(crate) fn editor_pane(window: &mut Window, cx: &mut App) -> Option<AnyElemen
             view
         }
     };
-    Some(view.into_any_element())
+    Some(view.into())
 }
 
 /// `GeneratedImageActions` for the image viewer (`media/ImageViewerHost.tsx:23`): edit, save to

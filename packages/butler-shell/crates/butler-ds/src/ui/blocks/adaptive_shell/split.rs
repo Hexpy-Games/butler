@@ -22,6 +22,7 @@ use crate::ui::motion::{Props, Timing, layout_frame_for};
 use crate::ui::strut;
 
 type WidthHandler = Rc<dyn Fn(f32, &mut Window, &mut App)>;
+type ExitHandler = Rc<dyn Fn(&mut Window, &mut App)>;
 
 #[derive(IntoElement)]
 pub struct AdaptiveShellSplit {
@@ -31,6 +32,7 @@ pub struct AdaptiveShellSplit {
     pane_open: bool,
     chat_width: f32,
     on_chat_width_change: Option<WidthHandler>,
+    on_pane_exit: Option<ExitHandler>,
     resize_label: SharedString,
     resize_hint: Option<SharedString>,
     frame_view: Option<EntityId>,
@@ -45,6 +47,7 @@ impl AdaptiveShellSplit {
             pane_open: false,
             chat_width: CHAT_WIDTH_DEFAULT,
             on_chat_width_change: None,
+            on_pane_exit: None,
             resize_label: "Resize conversation".into(),
             resize_hint: None,
             frame_view: None,
@@ -80,6 +83,13 @@ impl AdaptiveShellSplit {
         handler: impl Fn(f32, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_chat_width_change = Some(Rc::new(handler));
+        self
+    }
+
+    /// Called once the split drops a pane it was given (Presence `onExited`): the pane has closed and
+    /// its leaving motion has ended, or it closed with no motion. The owner stops passing that pane.
+    pub fn on_pane_exit(mut self, f: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_pane_exit = Some(Rc::new(f));
         self
     }
 
@@ -312,12 +322,17 @@ impl RenderOnce for AdaptiveShellSplit {
             easing: timing.easing(),
         };
         let present = self.pane_open || motion.motion.is_some_and(|m| m.moving(&timing));
+        let given = self.pane.is_some();
         let cards = vars.is_some_and(|v| v.cards_docked);
         let card = cards.then(|| vars.is_some_and(|v| v.transparent_workspace));
         let chat = self.chat.take();
         let split = div().relative().flex().h_full().min_w_0().min_h_0();
         let Some(pane) = self.pane.take().filter(|_| present) else {
             let column = chat_column(self.id, chat, ds, card, Some(layout), None);
+            // A pane given but no longer drawn: its leave is over; the owner stops passing it.
+            if given && let Some(exit) = self.on_pane_exit.take() {
+                window.defer(cx, move |window, cx| exit(window, cx));
+            }
             return strut::scope(false, split.child(column));
         };
         // The room the chat and the pane share: the split's room less the handle's box.
