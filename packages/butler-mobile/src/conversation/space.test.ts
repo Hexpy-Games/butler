@@ -12,9 +12,10 @@ test("spaceTree projects live nodes in order and visibleRows collapses descendan
   const project = { id: "project", display_name: "Project", status: "active" as const,
     last_activity_at: session.last_activity_at, active_session_count: 2, pinned: false,
     archived: false, workspace_label: "", safe_path_label: "",
-    sessions: [{ ...session, id: "live" }, { ...session, id: "archived", archived: true }, { ...session, id: "nested" }] };
+    sessions: [{ ...session, id: "live" }, { ...session, id: "archived", archived: true }, { ...session, id: "nested" },
+      { ...session, id: "unplaced-project", project_id: "project" }] };
   const view: NavigationView = {
-    chats: [{ ...session, id: "general", title: "My conversation" }, session],
+    chats: [{ ...session, id: "general", title: "My conversation" }, session, { ...session, id: "unplaced-chat" }],
     projects: [project, { ...project, id: "old-project", archived: true, sessions: [{ ...session, id: "hidden" }] }],
     space: { revision: 0, groups: [{ id: "group", title: "Group", scopeProjectId: "project", origin: "manual" }],
       nodes: [
@@ -33,8 +34,9 @@ test("spaceTree projects live nodes in order and visibleRows collapses descendan
   expect(tree.general?.title).toBe("My conversation");
   expect(visibleRows(tree, new Set()).map(row => [row.key, row.depth])).toEqual([
     ["s:root", 0], ["p:project", 0], ["s:live", 1], ["g:group", 1], ["s:nested", 2],
+    ["s:unplaced-project", 1], ["s:unplaced-chat", 0],
   ]);
   expect(visibleRows(tree, new Set(["p:project"])).map(row => [row.key, row.depth])).toEqual([
-    ["s:root", 0], ["p:project", 0],
+    ["s:root", 0], ["p:project", 0], ["s:unplaced-chat", 0],
   ]);
 });

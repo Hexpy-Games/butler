@@ -14,6 +14,7 @@ export function useAttachments(sessionId: string) {
   const copy = useMobileCopy();
   const [items, setItems] = useState<Attachment[]>([]);
   const remove = (key: string) => setItems(previous => previous.filter(item => item.key !== key));
+  const removeMany = (keys: string[]) => setItems(previous => previous.filter(item => !keys.includes(item.key)));
   const upload = async (file: { uri: string; name: string; mimeType: string }) => {
     if (!pairing) return;
     const key = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -42,5 +43,5 @@ export function useAttachments(sessionId: string) {
       }
     } catch { showToast({ message: copy.chat.uploadFailed, tone: "error" }); }
   };
-  return { items, pick, remove, clear: () => setItems([]) };
+  return { items, pick, remove, removeMany };
 }

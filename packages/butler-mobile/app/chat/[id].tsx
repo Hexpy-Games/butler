@@ -9,6 +9,7 @@ import { RADIUS } from "@/design/tokens";
 import { reasoningEffortLabel } from "../../../butler-i18n/src/reasoning-effort.ts";
 import { Badge, Button, ButtonGroup, Composer, ComposerDock, ContextRing, EdgeFade, IconButton, icons, ListRow, Markdown, Sheet, showToast, Spinner, Surface, Text, useHeaderInset, useHeaderOptions, useTokens } from "@/ds";
 import { useConversation } from "@/conversation/live";
+import type { Pairing } from "@/connection/pairings";
 import { SESSION_PAGE, useSessionView } from "@/conversation/useSessionView";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 
@@ -121,13 +122,14 @@ function ChatComposer({ id, view, onHeightChange, onSend }: {
     if (!client || busy || !canSend) return;
     onSend();
     setBusy(true);
+    const keys = attachments.items.filter(item => item.status === "ready" && item.file).map(item => item.key);
     const body: MessageSendRequest = { chat_id: id, text: text.trim(),
       client_message_id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
       attachments: ready.map(file => ({ file_id: file.file_id })), queue_policy: "send_now" };
     try {
       await client.request("/messages", { body });
       setText("");
-      attachments.clear();
+      attachments.removeMany(keys);
     } catch {
       showToast({ message: copy.chat.sendFailed, tone: "error" });
     } finally { setBusy(false); }
@@ -168,7 +170,7 @@ function Message({ message, latestTurn }: { message: ConversationMessage; latest
   if (message.role === "user") return <View style={{ alignSelf: "flex-end", maxWidth: "85%", gap: t.length("--space-1") }}>
     <View style={{ backgroundColor: t.color("--user-message-bg"), borderRadius: t.length(RADIUS),
       paddingVertical: t.length("--space-3"), paddingHorizontal: t.length("--space-4"), gap: t.length("--space-2") }}>
-      {message.attachments?.map(file => <MessageAttachment key={file.file_id} file={file} origin={pairing?.origin} />)}
+      {message.attachments?.map(file => <MessageAttachment key={file.file_id} file={file} pairing={pairing} />)}
       {message.text ? <Text selectable>{message.text}</Text> : null}
     </View>
     <MessageInfo message={message} />
@@ -188,6 +190,7 @@ function Message({ message, latestTurn }: { message: ConversationMessage; latest
 }
 
 function MessageInfo({ message, retryable }: { message: ConversationMessage; retryable?: boolean }) {
+  const [retrying, setRetrying] = useState(false);
   const copy = useMobileCopy();
   const locale = useAppLocale();
   const t = useTokens();
@@ -203,22 +206,24 @@ function MessageInfo({ message, retryable }: { message: ConversationMessage; ret
     showToast({ message: copy.chat.copied, tone: "success" });
   };
   const retry = async () => {
+    setRetrying(true);
     try { await client?.request(`/turns/${encodeURIComponent(message.turn_id!)}/retry`, { body: {} }); }
     catch { showToast({ message: copy.chat.retryFailed, tone: "error" }); }
+    finally { setRetrying(false); }
   };
   return <View style={{ flexDirection: "row", alignItems: "center", justifyContent: user ? "flex-end" : "flex-start", gap: t.length("--space-1") }}>
-    {retryable ? <Button variant="secondary" iconStart={icons.Retry} label={copy.chat.retry} onPress={retry} /> : null}
+    {retryable ? <Button variant="secondary" iconStart={icons.Retry} label={copy.chat.retry} onPress={retry} disabled={retrying} /> : null}
     {user ? time : null}
     <IconButton icon={icons.Copy} variant="ghost" label={copy.chat.copy} onPress={copyText} />
     {user ? null : time}
   </View>;
 }
 
-function MessageAttachment({ file, origin }: { file: MessageFileRef; origin?: string }) {
+function MessageAttachment({ file, pairing }: { file: MessageFileRef; pairing: Pairing | null }) {
   const t = useTokens();
   if (file.kind !== "image" && !file.mime_type.startsWith("image/")) return <Badge icon={icons.File} label={file.safe_name} />;
-  const url = file.signed_url ?? file.url;
+  if (!pairing) return null;
   const width = Math.min(file.width ?? 220, 220);
-  return <Image source={{ uri: origin ? new URL(url, origin).href : url }} accessibilityLabel={file.safe_name}
+  return <Image source={{ uri: new URL(file.url, pairing.origin).href, headers: { Authorization: `Bearer ${pairing.deviceToken}` } }} accessibilityLabel={file.safe_name}
     style={{ width, maxWidth: 220, height: file.width && file.height ? width * file.height / file.width : 160, borderRadius: t.length(RADIUS) }} />;
 }

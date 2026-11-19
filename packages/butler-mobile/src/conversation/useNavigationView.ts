@@ -16,13 +16,15 @@ export function useNavigationView() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const request = async (immediate = false): Promise<void> => {
       if (closed) return;
-      pending = true;
-      if (active) {
-        if (immediate) { await active; return request(true); }
-        return;
+      if (immediate) {
+        const since = Date.now();
+        while (active) await active;
+        if (closed || last >= since) return;
+        clearTimeout(timer); timer = undefined;
+      } else {
+        pending = true;
+        if (active || timer) return;
       }
-      if (immediate) { clearTimeout(timer); timer = undefined; }
-      else if (timer) return;
       const delay = last + 1000 - Date.now();
       if (!immediate && delay > 0) {
         timer = setTimeout(() => { timer = undefined; void request(); }, delay);

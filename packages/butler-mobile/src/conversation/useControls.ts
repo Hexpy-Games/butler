@@ -49,7 +49,8 @@ export function useControls(sessionId: string) {
       patch = { ...patch, reasoning_effort: model.default_reasoning_effort };
     }
     try {
-      setView(await client.request<SessionControlsView>(`/sessions/${encodeURIComponent(sessionId)}/controls`, { method: "PATCH", body: patch }));
+      const next = await client.request<SessionControlsView>(`/sessions/${encodeURIComponent(sessionId)}/controls`, { method: "PATCH", body: patch });
+      setView(previous => previous && next.revision < previous.revision ? previous : next);
     } catch { showToast({ message: copy.chat.modelFailed, tone: "error" }); }
   };
   return { controls, models, current, apply };
