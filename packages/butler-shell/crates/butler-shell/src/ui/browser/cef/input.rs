@@ -54,7 +54,7 @@ impl Page {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.admit(Input::Press, cx) {
+        if !self.admit(Input::MouseDown, cx) {
             return;
         }
         self.state
@@ -164,7 +164,7 @@ impl Page {
         up: bool,
         cx: &mut App,
     ) {
-        if !self.admit(if up { Input::Other } else { Input::Press }, cx) {
+        if !self.admit(if up { Input::Other } else { Input::KeyPress }, cx) {
             return;
         }
         let Some(runtime) = self.runtime.upgrade() else {

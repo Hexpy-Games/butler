@@ -189,3 +189,59 @@ async fn the_user_takes_an_idle_agent_page_by_input() -> Result<(), HarnessError
     }
     s.finish().await
 }
+
+#[tokio::test]
+async fn the_user_takes_a_turn_held_page_by_press() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        shell() && selected(),
+        "BUTLER_E2E_BROWSER_BACKEND=shell not set"
+    );
+    let mut s = setup("BROWSER-PAGE-HOST-TURN-HELD-PRESS")?.start().await?;
+    let url = publish(&s).await?;
+    let admin = admin(&s);
+    let opened = open(&admin, "general", &url).await?;
+    assert_eq!(opened["status"], "ok", "{opened}");
+    let tab = &opened["tab"];
+    let reply = admin
+        .send(
+            reqwest::Method::POST,
+            "/internal/browser/calls",
+            Some(json!({"op":"tab.observe","session":"general","tab":tab,
+                "args":{"include_image":false},"turn_id":"turn-held-press"})),
+            &[],
+        )
+        .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let page = reply.body;
+    assert_eq!(page["status"], "ok", "{page}");
+    let rect = &node(&page, "textbox", "Search")["rect"];
+    let (x, y) = (
+        rect["x"].as_f64().unwrap() + rect["width"].as_f64().unwrap() / 2.0,
+        rect["y"].as_f64().unwrap() + rect["height"].as_f64().unwrap() / 2.0,
+    );
+    complete_onboarding(&s.gw).await?;
+    s.shell(&[
+        "close-window",
+        "tray-open",
+        "wait-anchor composer",
+        "browser",
+        "wait-anchor browser-area",
+        "click browser-tab-0",
+    ])
+    .await?;
+    s.shell(&[&format!("page-click {x} {y}")]).await?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let listed = call(&admin, "general", "tabs.list", &Value::Null, json!({})).await?;
+        let held = listed["tabs"]
+            .as_array()
+            .and_then(|t| t.iter().find(|t| t["id"] == *tab));
+        if held.map(|t| &t["holder"]) == Some(&json!("user")) {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{listed}");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    s.finish().await
+}

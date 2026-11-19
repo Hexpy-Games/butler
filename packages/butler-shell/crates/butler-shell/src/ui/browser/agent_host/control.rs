@@ -60,7 +60,8 @@ pub(crate) fn shown_holder(tab: &Tab) -> ShownHolder {
 #[cfg(feature = "cef")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(in crate::ui::browser) enum Input {
-    Press,
+    MouseDown,
+    KeyPress,
     Other,
 }
 
@@ -203,10 +204,10 @@ impl BrowserState {
         if hosted.holder == Holder::User {
             return Gate::Forward;
         }
-        if hosted.in_use() {
+        if hosted.in_use() && input != Input::MouseDown {
             return Gate::Block;
         }
-        if input == Input::Press {
+        if matches!(input, Input::MouseDown | Input::KeyPress) {
             self.control(id, Holder::User, false);
         }
         Gate::Forward

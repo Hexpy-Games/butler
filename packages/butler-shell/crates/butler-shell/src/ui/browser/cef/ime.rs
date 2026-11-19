@@ -38,7 +38,7 @@ impl EntityInputHandler for Page {
         if let Some(runtime) = self.runtime.upgrade()
             && let Some(ime) = runtime.ime(self.id)
             && ime.marked.is_some()
-            && self.admit(Input::Press, cx)
+            && self.admit(Input::KeyPress, cx)
         {
             runtime.ime_commit(self.id, &ime.composition);
         }
@@ -50,7 +50,7 @@ impl EntityInputHandler for Page {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.admit(Input::Press, cx)
+        if self.admit(Input::KeyPress, cx)
             && let Some(runtime) = self.runtime.upgrade()
         {
             runtime.ime_commit(self.id, text);
@@ -65,7 +65,7 @@ impl EntityInputHandler for Page {
         cx: &mut Context<Self>,
     ) {
         let length = text.encode_utf16().count();
-        if self.admit(Input::Press, cx)
+        if self.admit(Input::KeyPress, cx)
             && let Some(runtime) = self.runtime.upgrade()
             && let Some(selected) = cef_range(selected.unwrap_or(length..length))
         {
