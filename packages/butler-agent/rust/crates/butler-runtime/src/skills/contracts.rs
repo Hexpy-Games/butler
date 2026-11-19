@@ -2,6 +2,13 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
+pub struct NewSkill {
+    pub name: String,
+    pub description: String,
+    pub applicability: String,
+    pub instructions: String,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct SkillSummary {
     pub name: String,
