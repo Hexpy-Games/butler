@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Platform, ScrollView, SectionList, View } from "react-native";
 import { router, Stack, useFocusEffect } from "expo-router";
-import { Badge, Button, ButtonGroup, EdgeFade, ListRow, showToast, Spinner, Surface, Text, UnreadDot, useHeaderOptions, useTokens } from "@/ds";
+import { Badge, Button, ButtonGroup, EdgeFade, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useHeaderOptions, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
 import { probe } from "@/connection/probe";
 import type { Problem } from "@/connection/problems";
@@ -93,7 +93,7 @@ function Conversations() {
       renderItem={({ item }) => {
         const mark = sessionMark(item);
         const title = item.title.trim() ? item.title : copy.conversations.untitled;
-        return <ListRow title={title} description={item.last_message_preview} descriptionLines={1}
+        return <ListRow title={title} description={item.last_message_preview ? markdownPlainText(item.last_message_preview) : undefined} descriptionLines={1}
           meta={timeLabel(item.last_activity_at, locale, new Date())}
           trailing={mark === "attention" ? <Badge tone="warning" label={copy.conversations.needsAttention} />
             : mark === "working" ? <Spinner label={copy.conversations.working} />

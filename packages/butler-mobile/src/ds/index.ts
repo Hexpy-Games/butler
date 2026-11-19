@@ -14,6 +14,6 @@ export { Switch, type SwitchProps } from "./Switch";
 export { Text, type TextProps, type TextTone, type TextVariant } from "./Text";
 export { TextField, type TextFieldProps } from "./TextField";
 export { showToast, ToastHost, type ToastTone } from "./Toast";
-export { Markdown } from "./Markdown";
+export { Markdown, markdownPlainText } from "./Markdown";
 export { EdgeFade } from "./EdgeFade";
 export { useHeaderInset, useHeaderOptions } from "./header";

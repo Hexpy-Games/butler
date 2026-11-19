@@ -92,3 +92,15 @@ function Table({ token, tone }: { token: Tokens.Table; tone: TextTone }) {
     </View>)}
   </View></ScrollView>;
 }
+
+/** The words of a Markdown text without its syntax, on one line (list previews). */
+export function markdownPlainText(text: string): string {
+  const words = (tokens: Token[]): string => tokens.map((generic) => {
+    const token = generic as Tokens.Generic;
+    if (token.type === "list") return words((token as Tokens.List).items);
+    if (token.type === "code" || token.type === "codespan") return token.text;
+    if (token.tokens) return words(token.tokens);
+    return token.type === "space" || token.type === "hr" ? " " : token.text ?? "";
+  }).join(" ");
+  return words(marked.lexer(text, { gfm: true })).replace(/\s+/g, " ").trim();
+}

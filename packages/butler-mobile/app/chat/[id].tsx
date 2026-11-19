@@ -28,6 +28,7 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
     if (typeof edgeRef === "function") edgeRef(node);
   }, [edgeRef]);
   const first = useRef(true);
+  const count = useRef(0);
   const atBottom = useRef(true);
   const [bottom, setBottom] = useState(true);
   const [scrolled, setScrolled] = useState(false);
@@ -55,8 +56,11 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
       onMomentumScrollEnd={({ nativeEvent }) => { atBottom.current = nearEnd(nativeEvent); }}
       onContentSizeChange={() => {
         if (!messages.length) return;
-        if (first.current || atBottom.current) list.current?.getNativeScrollRef()?.scrollToEnd({ animated: !first.current });
+        if (first.current || atBottom.current) {
+          list.current?.getNativeScrollRef()?.scrollToEnd({ animated: !first.current && messages.length !== count.current });
+        }
         first.current = false;
+        count.current = messages.length;
       }}
       ListHeaderComponent={loadingEarlier ? <Spinner label={copy.chat.earlier} /> : undefined}
       ListFooterComponent={<View style={{ paddingBottom: dockHeight }}>{view ? <TurnStatus view={view} /> : null}</View>}
