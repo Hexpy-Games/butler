@@ -9,8 +9,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId,
-    IntoElement, LayoutId, ParentElement as _, Pixels, Styled as _, Window, div,
+    AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
+    LayoutId, ParentElement as _, Pixels, Styled as _, Window, div,
 };
 
 use super::row::{self, Boxes, Ctx, Slot};
@@ -205,7 +205,11 @@ fn place_row(
         shift: follows,
         boxes: &frame.shared.boxes,
     };
-    (row::render(target, &ctx, window, cx), follows || before, opens)
+    (
+        row::render(target, &ctx, window, cx),
+        follows || before,
+        opens,
+    )
 }
 
 /// A row outside any scope: drawn as it is, with no slot.
@@ -262,7 +266,13 @@ impl Element for Placed {
             What::Row(target) => place_row(target, &frame, follows, window, cx),
             What::Other(id, element) => {
                 let goal = if follows { frame.slot.gap } else { 0. };
-                let el = row::slide(&id, goal, div().flex().flex_col().child(element), window, cx);
+                let el = row::slide(
+                    &id,
+                    goal,
+                    div().flex().flex_col().child(element),
+                    window,
+                    cx,
+                );
                 (el.into_any_element(), follows, false)
             }
         };

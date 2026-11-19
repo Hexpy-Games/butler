@@ -56,8 +56,10 @@ fn travelled(rest: &image::RgbaImage, held: &image::RgbaImage, box_: [f64; 4], s
                 break;
             }
             for &col in &xs {
-                let (a, b) = (rest.get_pixel(col, row).0, held.get_pixel(col, moved).0);
-                diff += (0..3).map(|c| u64::from(a[c].abs_diff(b[c]))).sum::<u64>();
+                let (before, after) = (rest.get_pixel(col, row).0, held.get_pixel(col, moved).0);
+                diff += (0..3)
+                    .map(|c| u64::from(before[c].abs_diff(after[c])))
+                    .sum::<u64>();
             }
         }
         if diff < best.0 {
@@ -158,8 +160,12 @@ async fn shell_app_23_sidebar_drag_opens_a_gap_and_reorders() -> Result<(), Harn
         ])
         .await?;
     let shots = sandbox.root.join("shell");
-    let rest = image::open(shots.join("rest.png")).expect("shot").to_rgba8();
-    let held = image::open(shots.join("held.png")).expect("shot").to_rgba8();
+    let rest = image::open(shots.join("rest.png"))
+        .expect("shot")
+        .to_rgba8();
+    let held = image::open(shots.join("held.png"))
+        .expect("shot")
+        .to_rgba8();
     let scale = f64::from(rest.width()) / 1000.;
     let at = |anchor: &str| rect(&shell, "rest", anchor);
     // The gap: one row and the row spacing, the pitch of the group's rows.
@@ -169,8 +175,14 @@ async fn shell_app_23_sidebar_drag_opens_a_gap_and_reorders() -> Result<(), Harn
         .map(|anchor| travelled(&rest, &held, at(anchor), scale))
         .collect();
     println!("SHELL-APP-23 gap {gap}, travelled (first, target, next, folder): {moved:?}");
-    assert!(moved[0].abs() <= 1., "the row before the gap moved: {moved:?}");
-    for (name, value) in ["target", "next row", "next folder"].iter().zip(&moved[1..]) {
+    assert!(
+        moved[0].abs() <= 1.,
+        "the row before the gap moved: {moved:?}"
+    );
+    for (name, value) in ["target", "next row", "next folder"]
+        .iter()
+        .zip(&moved[1..])
+    {
         assert!(
             (value - gap).abs() <= 1.,
             "{name} travelled {value}, gap {gap}: {moved:?}"
@@ -194,7 +206,11 @@ async fn shell_app_23_sidebar_drag_opens_a_gap_and_reorders() -> Result<(), Harn
         if children(&space, &group) == expected {
             break;
         }
-        assert!(Instant::now() < deadline, "order {:?}", children(&space, &group));
+        assert!(
+            Instant::now() < deadline,
+            "order {:?}",
+            children(&space, &group)
+        );
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     // The sidebar shows the new order once the move's event lands.

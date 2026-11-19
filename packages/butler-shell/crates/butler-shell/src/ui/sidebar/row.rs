@@ -316,15 +316,10 @@ impl Shell {
             cx,
         ));
         if children.len() > limit {
-            group = group.child(nav_drop::neighbour(
-                SharedString::from(format!("more-{}", row.node.key)),
-                self.sidebar_session_load_more(
-                    Some(row.node.key.clone()),
-                    children.len() - limit,
-                    limit,
-                    cx,
-                ),
-            ));
+            let (rest, key) = (children.len() - limit, row.node.key.clone());
+            let more = self.sidebar_session_load_more(Some(key.clone()), rest, limit, cx);
+            let id = SharedString::from(format!("more-{key}"));
+            group = group.child(nav_drop::neighbour(id, more));
         }
         group.into_any_element()
     }

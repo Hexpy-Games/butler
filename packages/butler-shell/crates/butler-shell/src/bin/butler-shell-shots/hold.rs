@@ -3,7 +3,7 @@
 use super::frame::move_pointer;
 use super::{Harness, settle};
 use anyhow::Context as _;
-use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput, Pixels, Point, point};
+use gpui::{MouseButton, MouseDownEvent, MouseUpEvent, Pixels, PlatformInput, Point, point};
 
 /// The point at fractions (`fx`, `fy`) of the next anchor's bounds in `parts`.
 fn at<'a>(

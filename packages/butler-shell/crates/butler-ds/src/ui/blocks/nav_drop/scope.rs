@@ -31,9 +31,8 @@ use crate::ui::blocks::nav_row::metrics::{density_of, metrics};
 use crate::ui::context::Ds;
 
 pub(super) type Hit = DropZoneHit<SharedString>;
-type Drive = Box<
-    dyn FnOnce(Stateful<gpui::Div>, Rc<Shared>, Option<ScrollHandle>) -> Stateful<gpui::Div>,
->;
+type Drive =
+    Box<dyn FnOnce(Stateful<gpui::Div>, Rc<Shared>, Option<ScrollHandle>) -> Stateful<gpui::Div>>;
 type Zones<T> = Rc<dyn Fn(&T, &str) -> Option<DropZoneRules>>;
 type CanDrop<T> = Rc<dyn Fn(&T, &Hit) -> bool>;
 type OnDrop<T> = Rc<dyn Fn(&T, Hit, &mut Window, &mut App)>;
