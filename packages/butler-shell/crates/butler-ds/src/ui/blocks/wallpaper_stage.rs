@@ -56,7 +56,7 @@ impl RenderOnce for WallpaperStage {
             .child(strut::scope(true, div().children(self.children)));
         strut::scope(
             true,
-            strut::container(div(), ds)
+            div()
                 .relative()
                 .size_full()
                 .flex()

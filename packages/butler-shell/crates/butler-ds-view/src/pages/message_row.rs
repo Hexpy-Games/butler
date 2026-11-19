@@ -19,6 +19,7 @@ use butler_ds::ui::copy_button::CopyButton;
 use butler_ds::ui::icon::{IconSize, icon, icon_px};
 use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Space, Stack};
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::spinner::Spinner;
 use butler_ds::ui::typo::{Role as TypoRole, Typo};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, Window, div, px};
@@ -85,7 +86,7 @@ fn assistant_footer(id: &str, text: &str, time: &'static str, l: Footer) -> [Any
             // The mark fills its 18px box (`.statusMark svg`).
             icon_px(Icon::CheckCircle2, px(18.)),
         )
-        .child(Typo::caption(l.completed)),
+        .child(Typo::caption(l.completed).selectable(Break::Line)),
     );
     [footer.into_any_element(), status.into_any_element()]
 }

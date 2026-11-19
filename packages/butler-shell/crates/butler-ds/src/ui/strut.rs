@@ -6,26 +6,21 @@
 //!
 //! The block containers of the DS (Box, Card, TintedGlass, item wrappers) wrap their subtree in
 //! [`scope`] with `true` and Stack with `false`; an inline `Typo` reads [`active`] while it
-//! renders. The strut is the root's body line (`--typo-body-*`), which every DS container
-//! inherits unless an ancestor sets another.
-use super::context::Ds;
-use super::typo::Role;
+//! renders. The strut is the inherited font at the inherited line height, so each window root
+//! sets the body text style (`--typo-body-*`) as the CSS `body` rule does.
 use gpui::{
     AnyElement, App, Bounds, Div, Element, ElementId, GlobalElementId, InspectorElementId,
     IntoElement, LayoutId, ParentElement as _, Pixels, Styled as _, Window, div,
 };
 
-/// The strut of a block container: the root's body font at its line height. An inline `Typo`
-/// flowing in the container takes line boxes at least this tall.
-pub fn container<E: gpui::Styled>(el: E, ds: &Ds) -> E {
-    let body = Role::Body.tokens();
-    let mut el = el.font_family(ds.body_font().clone());
-    if let Some(body) = body {
-        el = el
-            .text_size(ds.len(body.size))
-            .line_height(ds.len(body.line_height));
-    }
-    el
+use crate::tokens::Length;
+use crate::ui::context::Ds;
+
+/// A root (window or drag view) starts the text-style stack at the body font, as the CSS `body` rule does.
+pub(crate) fn body_root<E: gpui::Styled>(el: E, ds: &Ds) -> E {
+    el.font_family(ds.body_font().clone())
+        .text_size(ds.len(Length::TypoBodySize))
+        .line_height(ds.len(Length::TypoBodyLineHeight))
 }
 
 /// One container being laid out: whether it is a block (inline children get a strut) and whether
