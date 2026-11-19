@@ -1,7 +1,6 @@
 //! Saved user skills are loadable within the same conversation turn.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
-#[path = "skills_cleanup/stub.rs"]
-mod stub;
+use super::skills_cleanup::stub;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
 use serde_json::json;
 
