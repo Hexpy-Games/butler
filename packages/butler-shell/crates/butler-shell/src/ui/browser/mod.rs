@@ -1,5 +1,10 @@
 //! Shell-owned browser tabs, address policy and page engine boundary.
 use gpui::BorrowAppContext as _;
+use gpui::{ElementId, SharedString, div, prelude::*};
+
+use crate::ui::i18n::{browser::BrowserStrings, browser_handoff::BrowserHandoff};
+use butler_ds::ui::blocks::composer_decision_panel::Media;
+use butler_ds::ui::media_frame::{Aspect, MediaFrame};
 
 pub(crate) mod address;
 mod agent_host;
@@ -123,6 +128,43 @@ pub(crate) fn handoff_tab(session: &str, cx: &gpui::App) -> Option<engine::TabId
         .or_else(|| hosted.iter().find(|(_, hosted)| hosted.waiting))
         .or(hosted.first())
         .map(|(id, _)| (*id).clone())
+}
+
+pub(crate) fn handoff_media(
+    session: &str,
+    tab: &str,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) -> Option<Media> {
+    let owner = model::Owner::Conversation(session.to_owned().into());
+    let state = cx.try_global::<model::BrowserState>()?;
+    let tab = state
+        .tabs()
+        .iter()
+        .find(|item| item.id.0.as_ref() == tab && item.owner == owner)?;
+    let mut placeholder = MediaFrame::new((ElementId::Name(tab.id.0.clone()), "handoff-frame"))
+        .aspect(Aspect::SixteenTen)
+        .placeholder();
+    if !tab.favicon.is_empty() {
+        placeholder = placeholder.placeholder_icon(SharedString::from(tab.favicon.clone()));
+    }
+    let content = div()
+        .relative()
+        .w_full()
+        .aspect_ratio(16. / 10.)
+        .child(placeholder)
+        .children(state.engine.thumbnail(&tab.id, window));
+    let title = if tab.title.is_empty() {
+        BrowserStrings::get(cx).new_tab
+    } else {
+        &tab.title
+    };
+    let label = format!("{} · {title}", BrowserHandoff::get(cx).open_tab);
+    let session = session.to_owned();
+    let tab = tab.id.clone();
+    Some(Media::new(content, label).on_open(move |_, _, cx| {
+        open_tab(&session, tab.clone(), cx);
+    }))
 }
 
 /// Electron `openHandoffTab`: the conversation's browser on its hand-off tab, else the

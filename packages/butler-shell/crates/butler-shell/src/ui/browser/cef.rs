@@ -423,4 +423,11 @@ impl PageEngine for CefEngine {
         let state = self.pages.borrow().get(&id)?.1.clone();
         Some(surface::element(id, &self.runtime, state, window, cx))
     }
+    fn thumbnail(&self, page: &TabId, window: &mut Window) -> Option<AnyElement> {
+        let id = *self.ids.get(page)?;
+        if self.pending.contains_key(&id) {
+            return None;
+        }
+        surface::thumbnail(self.runtime.frame(id)?, window)
+    }
 }

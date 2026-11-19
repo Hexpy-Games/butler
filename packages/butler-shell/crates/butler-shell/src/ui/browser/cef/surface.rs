@@ -134,6 +134,31 @@ impl Render for Page {
         )
     }
 }
+pub(super) fn thumbnail(
+    #[cfg(target_os = "macos")] frame: impl Into<SurfaceSource>,
+    #[cfg(not(target_os = "macos"))] frame: butler_cef_host::osr::OsrFrame,
+    window: &mut Window,
+) -> Option<AnyElement> {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = (frame, window);
+        None
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let src = source(frame, window)?;
+        Some(
+            surface(src)
+                .object_fit(ObjectFit::Cover)
+                .size_full()
+                .absolute()
+                .top_0()
+                .left_0()
+                .into_any_element(),
+        )
+    }
+}
+
 /// The macOS frame: an IOSurface-backed CoreVideo buffer.
 #[cfg(target_os = "macos")]
 #[expect(

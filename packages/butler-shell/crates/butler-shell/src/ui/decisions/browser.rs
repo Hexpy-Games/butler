@@ -138,7 +138,7 @@ pub(crate) fn stop_conversation(session: &str, cx: &mut App) {
 pub(crate) fn browser_surface(
     ctx: DecisionCtx<'_>,
     placement: Placement,
-    _window: &mut Window,
+    window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
     let requests = super::authority::valid_requests(ctx.view.authority_requests.as_deref()?);
@@ -185,6 +185,17 @@ pub(crate) fn browser_surface(
         })
         .icon(Icon::Square),
     );
+    if request
+        .pointer("/approval/operation/tool")
+        .and_then(Value::as_str)
+        .is_some_and(|tool| tool.starts_with("browser_"))
+        && let Some(tab) = request
+            .pointer("/approval/operation/browser_tab")
+            .and_then(Value::as_str)
+        && let Some(media) = crate::ui::browser::handoff_media(&session, tab, window, cx)
+    {
+        panel = panel.media(media);
+    }
     panel = panel.action(Action::new(
         copy.open_tab,
         Variant::Default,
