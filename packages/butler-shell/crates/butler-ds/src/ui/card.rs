@@ -216,7 +216,8 @@ impl RenderOnce for Card {
         let ds = Ds::get(cx);
         strut::scope(
             true,
-            strut::container(self.item.apply(el, ds), ds)
+            self.item
+                .apply(el, ds)
                 .children(self.children)
                 .children(ring),
         )
