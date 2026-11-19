@@ -88,7 +88,13 @@ async fn shell_app_03_sidebar_row_follows_a_live_turn() -> Result<(), HarnessErr
         .await?;
     // The toggle expands the long message: its text box grows.
     let height = |name: &str| -> Result<f64, HarnessError> {
-        Ok(shell.report(name)?[0]["h"].as_f64().expect("text height"))
+        let layout = shell.report(name)?;
+        let item = layout
+            .as_array()
+            .and_then(|items| items.iter().find(|item| item["anchor"] == "user-text"));
+        Ok(item.expect("user-text anchor")["h"]
+            .as_f64()
+            .expect("text height"))
     };
     let (collapsed, expanded) = (height("collapsed.layout")?, height("expanded.layout")?);
     assert!(
