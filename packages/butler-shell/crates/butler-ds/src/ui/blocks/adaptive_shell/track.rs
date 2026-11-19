@@ -112,7 +112,11 @@ fn split_motion(
         DsDuration::AdaptivePanelDuration,
         Easing::AdaptivePanelEasing,
     );
-    let fade = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
+    let fade = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
+    );
     let reduced = ds.reduced_motion();
     let id = &shell.id;
     let progress = transition(
@@ -129,13 +133,6 @@ fn split_motion(
         window,
         cx,
     );
-    let before = window.use_keyed_state((id.clone(), "split-target"), cx, |_, _| split.open);
-    if *before.read(cx) != split.open {
-        if !reduced && !jump {
-            window.animate_layout(panel.ms());
-        }
-        before.update(cx, |value, _| *value = split.open);
-    }
     Some(SplitMotion {
         progress: progress.target(),
         fade: faded.target(),
@@ -143,6 +140,7 @@ fn split_motion(
         fade_motion: Some(faded),
         open: split.open,
         chat_width: split.chat_width,
+        room: 0.,
     })
 }
 

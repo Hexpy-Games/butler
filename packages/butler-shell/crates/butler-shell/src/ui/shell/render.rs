@@ -282,11 +282,14 @@ impl Shell {
         self.frame.open = open;
         let sidebar = self.regions.sidebar.clone().cached(region::fill());
         // The workspace first: the titlebar follows the split it builds.
+        let mut split = None;
         let workspace = match self.manage_workspace(window, cx) {
             Some(page) => page,
             None => {
                 let conversation = self.regions.conversation.clone().cached(region::fill());
-                self.workspace(conversation.into_any_element(), window, cx)
+                let workspace = self.workspace(conversation.into_any_element(), window, cx);
+                split = self.split_config();
+                workspace
             }
         };
         let title = self.regions.titlebar.clone().cached(region::fill());
@@ -311,6 +314,9 @@ impl Shell {
                     cx.notify();
                 });
             });
+        if let Some(split) = split {
+            shell = shell.split(split);
+        }
         if open && !drawer {
             shell = shell.resize_handle(
                 HandleSide::Left,

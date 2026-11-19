@@ -157,7 +157,7 @@ pub(super) fn render(mut shell: AdaptiveShell, window: &mut Window, cx: &mut App
     } else {
         0.
     };
-    let ctx = Ctx {
+    let mut ctx = Ctx {
         drawer,
         cards: vars.cards_docked,
         electron,
@@ -172,6 +172,8 @@ pub(super) fn render(mut shell: AdaptiveShell, window: &mut Window, cx: &mut App
         reduced: ds.reduced_motion(),
         borderless: drawer && shell.window.width <= responsive::COMPACT_MAX && !ds.desktop_only(),
     };
+    let room = split_room(&shell, &ctx, Ds::get(cx));
+    ctx.vars.split = ctx.vars.split.map(|s| scope::SplitMotion { room, ..s });
     let remap = platform_remap(shell.environment, shell.platform);
     let root = if let Some(settings) = shell.settings.take() {
         root_box(&shell, &ctx, Ds::get(cx))
@@ -236,6 +238,40 @@ fn title_slot(shell: &mut AdaptiveShell, ctx: &Ctx, right_track: f32) -> Option<
     )
 }
 
+/// The workspace's left and right border, then its left and right padding (the cards frame's room
+/// for cards): what its content box loses to the left and right.
+fn workspace_edges(ctx: &Ctx, left_track: f32, ds: &Ds) -> (f32, f32, f32, f32) {
+    let hairline = f32::from(ds.len(Length::BorderHairline));
+    let border = if ctx.borderless { 0. } else { hairline };
+    let border_r = if ctx.inspector_open && !ctx.cards {
+        0.
+    } else {
+        border
+    };
+    let inset = f32::from(ds.len(Length::ShellCardInset)) - hairline;
+    let (pad_l, pad_r) = match (ctx.cards, left_track > 0.) {
+        (false, _) => (0., 0.),
+        (true, true) => (0., inset),
+        (true, false) => (inset, inset),
+    };
+    (border, border_r, pad_l, pad_r)
+}
+
+/// The width of the split's room: the window less the root padding, the docked tracks and the
+/// workspace's edges (the drawer layout has no tracks).
+fn split_room(shell: &AdaptiveShell, ctx: &Ctx, ds: &Ds) -> f32 {
+    let (left, right) = if ctx.drawer {
+        (0., 0.)
+    } else {
+        (
+            ctx.t.left.target() * ctx.left_w,
+            ctx.t.right.target() * ctx.right_w,
+        )
+    };
+    let (border_l, border_r, pad_l, pad_r) = workspace_edges(ctx, left, ds);
+    shell.window.width - 2. * ctx.inset - left - right - border_l - border_r - pad_l - pad_r
+}
+
 /// The workspace: the title row's room, the body, the title slot over the first row.
 pub(super) fn workspace_box(
     shell: &mut AdaptiveShell,
@@ -257,7 +293,7 @@ pub(super) fn workspace_box(
         .min_w_0()
         .min_h_0()
         .children(shell.workspace.take());
-    let right_open = ctx.inspector_open;
+    let (_, border_r, pad_l, pad_r) = workspace_edges(ctx, left_track, ds);
     let mut ws = div()
         .relative()
         .size_full()
@@ -268,18 +304,13 @@ pub(super) fn workspace_box(
         .border_l(border)
         .border_t(border)
         .border_b(border)
-        .border_r(if right_open && !ctx.cards {
-            px(0.)
-        } else {
-            border
-        });
+        .border_r(px(border_r));
     ws = if ctx.cards {
         // The cards frame: the workspace is only the shell's room for cards.
-        let left = if left_track > 0. { 0. } else { inset };
         ws.border_color(gpui::transparent_black())
-            .pr(px(inset))
+            .pr(px(pad_r))
             .pb(px(inset))
-            .pl(px(left))
+            .pl(px(pad_l))
     } else {
         let radius = if !ctx.electron && left_track > 0. {
             WORKSPACE_RADIUS / ds.tokens().ui_scale

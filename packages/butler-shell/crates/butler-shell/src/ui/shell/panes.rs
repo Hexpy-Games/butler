@@ -3,8 +3,11 @@
 //! task graph dialog (`SessionInfoActions`), and the file viewer or the image editor beside the
 //! chat (`ConversationBrowserFrame`).
 use std::cell::Cell;
+use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 use std::rc::Rc;
 
+use butler_ds::ui::blocks::adaptive_shell::SplitConfig;
+use butler_ds::ui::blocks::adaptive_shell::frame::CHAT_WIDTH_DEFAULT;
 use butler_ds::ui::blocks::adaptive_shell::split::AdaptiveShellSplit;
 use butler_ds::ui::blocks::conversation_shell::AsideLayout;
 use butler_ds::ui::context::Ds;
@@ -234,6 +237,20 @@ impl Shell {
         self.panes.split
     }
 
+    /// The shell's split: open with the pane, at the chat width, keyed by the conversation so another
+    /// conversation places the pane at once (`splitOpen`, `contextKey`).
+    pub(super) fn split_config(&self) -> Option<SplitConfig> {
+        let mut key = DefaultHasher::new();
+        self.store.selected()?.session.0.hash(&mut key);
+        let open = self.panes.split;
+        let width = open.or(self.panes.chat_width);
+        Some(
+            SplitConfig::new(open.is_some())
+                .chat_width(width.unwrap_or(CHAT_WIDTH_DEFAULT))
+                .context_key(key.finish()),
+        )
+    }
+
     /// A management view has no split beside it.
     pub(super) fn clear_split(&mut self) {
         self.panes.split = None;
@@ -319,6 +336,7 @@ impl Shell {
         if let Some(width) = self.panes.chat_width {
             split = split.chat_width(width);
         }
+        split = split.frame_view(self.regions.titlebar.entity_id());
         let editor = editing.then(|| images::editor_pane(window, cx)).flatten();
         if let Some(editor) = editor {
             split = split.pane(editor);
