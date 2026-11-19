@@ -22,6 +22,7 @@ mod lifecycle;
 mod app;
 mod clipboard;
 mod fixture;
+mod focus;
 mod frame;
 mod glide;
 mod hold;

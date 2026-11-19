@@ -27,6 +27,7 @@ impl ClipMargin {
                 ),
             ),
             fade_out: Edges::default(),
+            ..ContentMask::default()
         }
     }
 }
