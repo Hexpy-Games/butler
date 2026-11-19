@@ -1,6 +1,6 @@
-import { ScrollView, View } from "react-native";
+import { ScrollView } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { Button, Sheet, Surface, Text, TextField, useTokens } from "@/ds";
+import { Button, ButtonGroup, Sheet, Surface, Text, TextField, useTokens } from "@/ds";
 import { usePairForm } from "@/connection/usePairForm";
 import { useMobileCopy } from "@/i18n";
 
@@ -11,7 +11,7 @@ export default function Pair() {
   return (
     <Surface variant="base" grow edges={["top", "bottom", "left", "right"]} padding="lg">
       <ScrollView keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ gap: t.length("--space-4") }}>
-        <Text variant="h3">{copy.pair.title}</Text>
+        <Text variant="h1">{copy.pair.title}</Text>
         <Text tone="secondary">{copy.pair.lede}</Text>
         <TextField
           label={copy.pair.address} value={form.address} onChangeText={form.setAddress} error={form.addressError}
@@ -22,14 +22,14 @@ export default function Pair() {
           disabled={form.connecting} numeric="tabular" keyboardType="number-pad" autoComplete="one-time-code"
           returnKeyType="go" onSubmitEditing={form.connect} testID="pair-code"
         />
-        <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+        <ButtonGroup>
           <Button label={copy.pair.connect} onPress={form.connect} loading={form.connecting} testID="pair-connect" />
-        </View>
+        </ButtonGroup>
       </ScrollView>
       <Sheet
         open={form.explainer} onClose={form.closeExplainer} title={copy.localNetwork.title}
-        description={copy.localNetwork.body} closeLabel={copy.localNetwork.close}
-        actions={<Button label={copy.localNetwork.retry} onPress={form.retry} />}
+        description={copy.localNetwork.body} cancelLabel={copy.localNetwork.cancel}
+        action={<Button label={copy.localNetwork.retry} onPress={form.retry} />}
       />
     </Surface>
   );

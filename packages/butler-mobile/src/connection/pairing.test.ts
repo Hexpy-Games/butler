@@ -2,25 +2,44 @@ import { expect, test } from "bun:test";
 import { readEnvelope, type FetchLike } from "../../../butler-protocol/src/client/index.ts";
 import { isLocalNetworkHost } from "./localNetwork";
 import { pairDevice, pairDeviceName } from "./pair";
-import { parsePairLink, type PairLink, type PairLinkParams } from "./pairLink";
+import { pairParamsFromUrl, parsePairLink, type PairLink, type PairLinkParams } from "./pairLink";
 import { createPairingStore } from "./pairings";
 import { problemFrom, type Problem } from "./problems";
+import { resolveOrigin } from "./resolve";
 
 // test-category: pure-logic
 test("parsePairLink", () => {
   const origin = "http://192.0.2.5:18765";
+  const second = "http://192.0.2.6:18765";
   const code = "12345678";
   const cases: [PairLinkParams, PairLink | null][] = [
     [{}, null],
-    [{ v: "1", a: origin, c: code }, { kind: "pair", origin, code }],
-    [{ v: "1", a: "https://butler.example.com", c: code, x: "later" }, { kind: "pair", origin: "https://butler.example.com", code }],
+    [{ v: "1", a: origin, c: code }, { kind: "pair", origins: [origin], code }],
+    [{ v: "1", a: "https://butler.example.com", c: code, x: "later" }, { kind: "pair", origins: ["https://butler.example.com"], code }],
     [{ v: "2", a: origin, c: code }, { kind: "update_app" }],
     [{ v: "2" }, { kind: "update_app" }],
     [{ a: origin, c: code }, { kind: "invalid", origin, code }],
     [{ v: "1", a: origin + "/app", c: "1234" }, { kind: "invalid", origin: null, code: null }],
-    [{ v: "1", a: [origin], c: code }, { kind: "invalid", origin: null, code }],
+    [{ v: "1", a: [origin, second], c: code }, { kind: "pair", origins: [origin, second], code }],
+    [{ v: "1", a: [origin, origin + "/"], c: code }, { kind: "pair", origins: [origin], code }],
+    [{ v: "1", a: [origin, second, origin, second, origin], c: code }, { kind: "invalid", origin, code }],
+    [{ v: "1", a: [origin, origin + "/app"], c: code }, { kind: "invalid", origin, code }],
+    [{ v: "1", a: [], c: code }, { kind: "invalid", origin: null, code }],
   ];
   for (const [params, expected] of cases) expect(parsePairLink(params)).toEqual(expected);
+  const scanned = (text: string) => {
+    const params = pairParamsFromUrl(text);
+    return params ? parsePairLink(params) : null;
+  };
+  const query = `a=${encodeURIComponent(origin)}&c=${code}`;
+  const urls: [string, PairLink | null][] = [
+    [`butler://pair?v=1&${query}`, { kind: "pair", origins: [origin], code }],
+    [`butler://pair?v=1&a=${encodeURIComponent(second)}&${query}`, { kind: "pair", origins: [second, origin], code }],
+    [`https://butler.example.com/pair?v=1&${query}`, null],
+    ["hello", null],
+    [`butler://pair?v=2&${query}`, { kind: "update_app" }],
+  ];
+  for (const [text, expected] of urls) expect(scanned(text)).toEqual(expected);
 });
 
 // test-category: pure-logic
@@ -126,4 +145,23 @@ test("pairDeviceName and isLocalNetworkHost", () => {
     ["[2001:db8::1]", false],
   ];
   for (const [host, expected] of cases) expect(isLocalNetworkHost(`http://${host}`)).toBe(expected);
+});
+
+// test-category: pure-logic
+test("resolveOrigin", async () => {
+  const envelope = (status: number, body: unknown) => ({ status, ok: status < 300, body: null, json: async () => body });
+  const error = (code: string) => ({ protocol_version: "butler.app.v1", error: { code, message: "m" } });
+  const stub = (answers: Record<string, () => Promise<ReturnType<typeof envelope>>>): FetchLike =>
+    async url => answers[url.replace("/health", "")]();
+  const [a, b] = ["http://192.0.2.5:18765", "http://192.0.2.6:18765"];
+  const hang = () => new Promise<never>(() => {});
+  const ok = async () => envelope(200, { protocol_version: "butler.app.v1", data: { ok: true } });
+  expect(await resolveOrigin([a, b], stub({ [a]: hang, [b]: ok }), 200)).toEqual({ ok: true, origin: b });
+  expect(await resolveOrigin([a], stub({ [a]: async () => envelope(401, error("local_auth_required")) }))).toEqual({ ok: true, origin: a });
+  const refused = async () => envelope(403, error("host_not_allowed"));
+  expect(await resolveOrigin([a, b], stub({ [a]: refused, [b]: refused }))).toEqual({ ok: false, problem: "hostNotAllowed" });
+  const down = async () => { throw new TypeError("Network request failed"); };
+  expect(await resolveOrigin([a, b], stub({ [a]: down, [b]: refused }))).toEqual({ ok: false, problem: "unreachable" });
+  const notButler = async () => envelope(404, error("not_butler"));
+  expect(await resolveOrigin([a, b], stub({ [a]: notButler, [b]: notButler }))).toEqual({ ok: false, problem: "notButler" });
 });

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { Badge, Button, showToast, Spinner, Surface, Text, useTokens } from "@/ds";
+import { Badge, Button, ButtonGroup, showToast, Spinner, Surface, Text, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
 import { probe } from "@/connection/probe";
 import type { Problem } from "@/connection/problems";
@@ -35,9 +35,9 @@ export default function Home() {
   useFocusEffect(useCallback(() => { void check(); }, [check]));
   return (
     <Surface variant="base" grow edges={["top", "bottom", "left", "right"]} padding="lg">
-      <ScrollView keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ gap: t.length("--space-4") }}>
-        <View style={{ gap: t.length("--space-4") }}>
-          <Text variant="h3">{copy.appName}</Text>
+      <View style={{ flex: 1, gap: t.length("--space-4") }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: t.length("--space-4") }}>
+          <Text variant="h1">{copy.appName}</Text>
           {status.origin ? <Text tone="secondary" literal selectable>{status.origin}</Text> : null}
           {status.kind === "checking" ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
@@ -49,12 +49,12 @@ export default function Home() {
             <View style={{ flexDirection: "row" }}><Badge tone="success" label={copy.home.connected} /></View>
           ) : null}
           {status.kind === "problem" ? <Text tone="danger">{copy.problems[status.problem]}</Text> : null}
-          <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: t.length("--space-2"), flexWrap: "wrap" }}>
-            <Button variant="secondary" label={copy.home.pairAgain} onPress={() => router.push("/pair")} />
-            {status.kind === "problem" ? <Button label={copy.home.retry} onPress={check} /> : null}
-          </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+        <ButtonGroup>
+          {status.kind === "problem" ? <Button label={copy.home.retry} onPress={check} /> : null}
+          <Button variant="secondary" label={copy.home.pairAgain} onPress={() => router.push("/pair")} />
+        </ButtonGroup>
+      </View>
     </Surface>
   );
 }

@@ -1,18 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Platform } from "react-native";
 import { router } from "expo-router";
 import type { MobileCopy } from "../../../butler-i18n/src/index.ts";
 import { showToast } from "@/ds";
-import { thisDevice } from "./device";
-import { isLocalNetworkHost } from "./localNetwork";
-import { nativeFetch } from "./nativeFetch";
-import { codeDigits, pairDevice } from "./pair";
+import { explainLocalNetwork, pairAndOpenHome, prefillOrigin } from "./connect";
+import { codeDigits } from "./pair";
 import { parsePairLink, type PairLinkParams } from "./pairLink";
 import { butlerOrigin } from "./probe";
-import { pairingStore } from "./store";
-
-// iOS may refuse the first local-network connection while it asks for permission: explain once per app run.
-let localNetworkExplained = false;
 
 export function usePairForm(copy: MobileCopy, params: PairLinkParams) {
   const [address, setAddress] = useState("");
@@ -28,26 +21,13 @@ export function usePairForm(copy: MobileCopy, params: PairLinkParams) {
     setCodeError(valid ? undefined : copy.pair.codeInvalid);
     if (!origin || !valid) return;
     setConnecting(true);
-    const result = await pairDevice({ origin, code: typedCode, device: thisDevice(), fetch: nativeFetch });
-    if (result.ok) {
-      try {
-        await pairingStore.save(result.pairing);
-      } catch {
-        setConnecting(false);
-        setAddressError(copy.problems.failed);
-        return;
-      }
-      router.canGoBack() ? router.back() : router.replace("/home");
-      return;
-    }
+    const problem = await pairAndOpenHome(origin, typedCode);
+    if (!problem) return;
     setConnecting(false);
-    if (result.problem === "invalidCode") setCodeError(copy.problems.invalidCode);
+    if (problem === "invalidCode") setCodeError(copy.problems.invalidCode);
     else {
-      setAddressError(copy.problems[result.problem]);
-      if (result.problem === "unreachable" && Platform.OS === "ios" && !localNetworkExplained && isLocalNetworkHost(origin)) {
-        localNetworkExplained = true;
-        setExplainer(true);
-      }
+      setAddressError(copy.problems[problem]);
+      if (explainLocalNetwork(problem, origin)) setExplainer(true);
     }
   }, [copy]);
   const { v, a, c } = params;
@@ -59,9 +39,13 @@ export function usePairForm(copy: MobileCopy, params: PairLinkParams) {
       showToast({ message: copy.pair.updateApp, tone: "warning" });
       return;
     }
-    setAddress(link.origin ?? "");
     setCode(link.code ?? "");
-    if (link.kind !== "pair") showToast({ message: copy.pair.linkInvalid, tone: "warning" });
+    if (link.kind === "pair") {
+      void prefillOrigin(link.origins).then(origin => setAddress(current => current === "" ? origin : current));
+      return;
+    }
+    setAddress(link.origin ?? "");
+    showToast({ message: copy.pair.linkInvalid, tone: "warning" });
   }, [v, a, c, copy, submit]);
   return {
     address, code, addressError, codeError, connecting, explainer,
