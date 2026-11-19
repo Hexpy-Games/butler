@@ -41,6 +41,9 @@ pub(crate) fn changed(width: f32, cx: &mut App) {
         return;
     }
     let state = cx.global_mut::<SplitWidth>();
+    if state.width == Some(width) && !state.dirty {
+        return;
+    }
     state.width = Some(width);
     state.dirty = true;
     state.timer = None;
@@ -56,34 +59,19 @@ fn flush(cx: &mut App) {
     if !state.dirty {
         return;
     }
-    state.dirty = false;
-    let (path, width) = (state.path.clone(), state.width.unwrap_or_default());
-    let write = cx
-        .background_executor()
-        .spawn(async move { write(&path, width) });
-    cx.spawn(async move |cx| {
-        if let Err(error) = write.await {
-            eprintln!("browser split width write failed: {error}");
-            cx.update(|cx| cx.global_mut::<SplitWidth>().dirty = true);
-        }
-    })
-    .detach();
+    if let Err(error) = write(&state.path, state.width.unwrap_or_default()) {
+        eprintln!("browser split width write failed: {error}");
+    } else {
+        state.dirty = false;
+    }
 }
 
 pub(crate) fn flush_now(cx: &mut App) {
     if !cx.has_global::<SplitWidth>() {
         return;
     }
-    let state = cx.global_mut::<SplitWidth>();
-    if !state.dirty {
-        return;
-    }
-    state.timer = None;
-    if let Err(error) = write(&state.path, state.width.unwrap_or_default()) {
-        eprintln!("browser split width write failed: {error}");
-    } else {
-        state.dirty = false;
-    }
+    cx.global_mut::<SplitWidth>().timer = None;
+    flush(cx);
 }
 
 fn write(path: &Path, width: f32) -> io::Result<()> {

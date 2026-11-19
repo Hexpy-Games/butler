@@ -53,7 +53,7 @@ async fn shell_app_25_split_width_survives_a_restart() -> Result<(), HarnessErro
             "wait-anchor browser-area",
             "wait 600",
             "layout before chat-card",
-            "drag split-handle -150 0",
+            "drag split-handle 150 0",
             "wait 600",
             "layout dragged chat-card",
             "app-quit",
@@ -81,7 +81,7 @@ async fn shell_app_25_split_width_survives_a_restart() -> Result<(), HarnessErro
     let restored = width(&shell, "restored");
     shell.finish().await?;
     assert!(
-        dragged <= before - 100.,
+        dragged >= before + 100.,
         "before {before}, dragged {dragged}"
     );
     assert!(
