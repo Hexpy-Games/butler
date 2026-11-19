@@ -55,6 +55,7 @@ try {
         if (width === 375) assert(Math.abs(measured.bubble!.width - measured.maxWidth) < 1, "a long reply fills the 90% cap on a phone");
         assert.equal(measured.document!.radius, "12px");
         assert.equal(measured.document!.top - measured.bubble!.bottom, 16, "the wrapper owns the lg gap");
+        assert(Math.abs(measured.footerTop - measured.document!.bottom - measured.userFooterGap) < 0.5, "Butler's footer sits under its bubble like the user footer");
         assert(Math.abs(measured.document!.left - measured.bubble!.left) < 1, "document aligns to bubble");
         assert(measured.document!.width <= measured.maxWidth + 0.5, "document respects bubble cap");
         assert(Math.abs(measured.actionLayout!.rightGap) < 1, "document actions align to the card's right edge");
@@ -248,6 +249,8 @@ async function measure(page: Page) {
       workedFor: /작업|Worked for|worked for/u.test(footer.textContent ?? ""),
       timeCount: footer.querySelectorAll("time").length,
       copyCount: footer.querySelectorAll('[aria-label="답변 복사"], [aria-label="Copy assistant response"]').length,
+      footerTop: footer.getBoundingClientRect().top,
+      userFooterGap: document.querySelector('[data-test-class~="message"][data-test-class~="user"] [data-test-class~="user-message-footer"]')!.getBoundingClientRect().top - user.getBoundingClientRect().bottom,
     };
   });
 }

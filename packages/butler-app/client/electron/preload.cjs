@@ -1549,6 +1549,7 @@ const butlerApp = Object.freeze({
     return requestCanonWrite(`/canon/mcp-grants/${encodeURIComponent(id)}/${action}`, "POST", {});
   },
   checkCanonCriterion: ({ id, criterionId, body }) => requestCanonWrite(`/canon/specs/${encodeURIComponent(id)}/criteria/${encodeURIComponent(criterionId)}`, "POST", body),
+  getCanonSpec: ({ id }) => requestBridgeResult(`/canon/specs/${encodeURIComponent(id)}`),
   getCanonActivity: ({ id, before }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}/activity${before == null ? "" : `?before=${encodeURIComponent(before)}`}`),
   getCanonProposal: ({ id }) => requestBridgeResult(`/canon/proposals/${encodeURIComponent(id)}`),
   resolveCanonProposal: ({ id, body }) => requestCanonWrite(`/canon/proposals/${encodeURIComponent(id)}`, "POST", body),
