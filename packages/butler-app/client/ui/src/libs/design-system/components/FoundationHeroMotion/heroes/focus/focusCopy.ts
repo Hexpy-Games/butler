@@ -28,7 +28,7 @@ export const FOCUS_COPY = {
     continue: "계속", name: "버틀러", week: "주", month: "월", autoSave: "자동 저장",
     app: "Butler", newChat: "새 대화", search: "검색", recent: "최신",
     chat: "주간 회고", settings: "설정",
-    ask: "이번 주에 뭐가 바뀌었어?", reply: "월요일 이후 세 가지가 바뀌었습니다. 사이드바 밀도, 컴포저 도구 막대, 릴리스 노트입니다.",
+    ask: "이번 주에 뭐가 바뀌었어?", reply: "월요일 이후 세 가지가 바뀌었어요. 사이드바 밀도, 컴포저 도구 막대, 릴리스 노트입니다.",
     placeholder: "버틀러에게 무엇이든 물어보십시오", typed: "요약해 줘", more: "추가 기능", access: "먼저 확인", model: "GPT-5.1", send: "전송",
     day: "일", range: "기간", apply: "적용",
     roving: "roving focus", regions: ["사이드바", "목록", "컴포저"],

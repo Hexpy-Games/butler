@@ -14,7 +14,7 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": { spend: "Spending", income: "Income", note: "Rent is due on the 25th.", plan: "Plan", planValue: "Family", seats: "Seats", seatsValue: "4 of 6" },
-  "ko-KR": { spend: "지출", income: "수입", note: "월세는 25일에 나갑니다.", plan: "요금제", planValue: "가족", seats: "좌석", seatsValue: "6개 중 4개" },
+  "ko-KR": { spend: "지출", income: "수입", note: "월세는 25일에 나가요.", plan: "요금제", planValue: "가족", seats: "좌석", seatsValue: "6개 중 4개" },
 } as const;
 
 function Two({ context }: { context: ShowcaseRenderContext }) {

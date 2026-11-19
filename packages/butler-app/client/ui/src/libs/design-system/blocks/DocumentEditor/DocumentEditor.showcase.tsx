@@ -21,7 +21,7 @@ const labels = {
   "en-US": { title: "October budget", saved: "Saved", editing: "Butler is editing", versions: "Versions", export: "Export", close: "Close", chat: "Original chat", markdown: "Export as Markdown", pdf: "Export as PDF", more: "More", heading: "Summary",
     first: "Spending rose 8% this month, mostly from the trip.", second: "Fixed costs stayed flat; rent is due on the 25th.", spend: "Spending", income: "Income", replay: "Replay" },
   "ko-KR": { title: "10월 예산", saved: "저장됨", editing: "버틀러가 수정 중", versions: "버전 기록", export: "내보내기", close: "닫기", chat: "원래 대화", markdown: "Markdown으로 내보내기", pdf: "PDF로 내보내기", more: "더보기", heading: "요약",
-    first: "이번 달 지출은 여행 때문에 8% 늘었습니다.", second: "고정비는 그대로이고, 월세는 25일에 나갑니다.", spend: "지출", income: "수입", replay: "다시 재생" },
+    first: "이번 달 지출은 여행 때문에 8% 늘었어요.", second: "고정비는 그대로이고, 월세는 25일에 나가요.", spend: "지출", income: "수입", replay: "다시 재생" },
 } as const;
 
 function Page({ context, editing }: { context: ShowcaseRenderContext; editing: boolean }) {

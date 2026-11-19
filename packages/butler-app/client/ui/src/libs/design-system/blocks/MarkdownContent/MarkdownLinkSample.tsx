@@ -21,7 +21,7 @@ const REPLY = {
 ### Notes from [the changelog](https://docs.example.com/changelog)
 
 Questions go to [support@example.com](mailto:support@example.com); see also the [notes below](#notes).`,
-  "ko-KR": `릴리스와 문서를 확인했습니다.
+  "ko-KR": `릴리스와 문서를 확인했어요.
 
 - 수정은 [PR #539: 릴리스 재게시](https://github.com/example-org/notes/pull/539)에 들어갔고, 추적 이슈는 https://github.com/example-org/notes/issues/512 입니다.
 - 참고 자료: [Electron 보안 체크리스트](https://www.electronjs.org/docs/latest/tutorial/security)와 [MDN의 rel=noopener](https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/noopener).
@@ -34,7 +34,7 @@ Questions go to [support@example.com](mailto:support@example.com); see also the 
 
 ### [변경 기록](https://docs.example.com/changelog) 메모
 
-문의는 [support@example.com](mailto:support@example.com)로 보내고, [아래 메모](#notes)도 함께 보십시오.`,
+문의는 [support@example.com](mailto:support@example.com)로 보내고, [아래 메모](#notes)도 함께 보세요.`,
 } as const;
 
 const COMPONENTS = { a: MarkdownLink, table: MarkdownTable };

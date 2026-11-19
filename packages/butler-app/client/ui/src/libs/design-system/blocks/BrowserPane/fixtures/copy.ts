@@ -29,7 +29,7 @@ export const BROWSER_DEMO_COPY = {
     popupBlocked: "팝업 차단됨", popupHost: "id.example.com", allow: "허용", info: "팝업 열림", showPopup: "팝업 보기",
     picked: (count: number) => `${count}개 선택됨`, attach: "대화에 첨부", saveImage: "이미지로 저장", copyText: "텍스트 복사", clear: "선택 해제",
     pickEmpty: "요소를 눌러 선택하십시오", pickFirst: "먼저 요소를 선택하십시오",
-    chat: ["지난주에 보던 의자들 기억나? 허리 받침 있는 걸로.", "네, 요추 지지대가 있는 메쉬 의자 세 개를 보셨습니다. 가격대는 12~19만원이었습니다.",
+    chat: ["지난주에 보던 의자들 기억나? 허리 받침 있는 걸로.", "네, 요추 지지대가 있는 메쉬 의자 세 개를 보셨어요. 가격대는 12~19만원이었습니다.",
       "그중에 내일 도착하는 제일 싼 걸로 주문해줘."],
     signedIn: "로그인 사용", output: "버틀러 출력물",
     peekEdge: "사이드바 살짝 보기", nativePointer: "포인터가 네이티브 페이지로 이동", peekOpen: "열림", peekClosed: "닫힘",

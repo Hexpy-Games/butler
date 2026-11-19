@@ -62,7 +62,7 @@ const COPY = {
   },
   ko: {
     section: "화면 설정", sectionLead: "모든 창에 적용됩니다.", field: "반투명 사이드바", fieldHint: "사이드바 뒤로 바탕 화면을 비춥니다.",
-    ask: "릴리스 브랜치에서 무엇이 바뀌었는지 요약해 줄래요?", answer: "월요일 이후 세 가지가 반영됐습니다. 설정 간격, 새 포커스 링, 한국어 줄바꿈 수정입니다.",
+    ask: "릴리스 브랜치에서 무엇이 바뀌었는지 요약해 줄래요?", answer: "월요일 이후 세 가지가 반영됐어요. 설정 간격, 새 포커스 링, 한국어 줄바꿈 수정입니다.",
     command: "git log --oneline main..release", meta: "오후 1:25 · 파일 2개",
     dash: "이번 주", metric: "1,284", metricLabel: "완료한 작업", change: "+12%", pinned: "고정됨", row: "디자인 시스템 검토", open: "열기",
   },
