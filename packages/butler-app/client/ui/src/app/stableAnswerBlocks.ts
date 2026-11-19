@@ -1,4 +1,4 @@
-import type { AnswerBlockSet } from "../../../shared/app-contracts";
+import type { AnswerBlockSet } from "../../../../../butler-protocol/src/app-contracts";
 import type { MessageRecord } from "./types";
 
 // Snapshots are immutable. Cache the raw wire-spec serialization, not a second

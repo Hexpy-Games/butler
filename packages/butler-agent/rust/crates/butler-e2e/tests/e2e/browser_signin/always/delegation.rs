@@ -153,8 +153,7 @@ async fn reply(
             .as_str()
             .unwrap_or("")
             .contains("You run one delegated Work for Butler");
-    // Worker mutation tools are outside its default surface. Exercise payment
-    // refusal in the steward and still prepare a worker to check both flags.
+    // Exercise payment refusal in the steward and still prepare a worker to check both flags.
     let call = if worker {
         if payment {
             None

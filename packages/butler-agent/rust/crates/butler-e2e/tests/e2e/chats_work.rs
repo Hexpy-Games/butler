@@ -43,7 +43,7 @@ async fn setup_with_failures(
         .env("BUTLER_CHATGPT_API_BASE_URL", url);
     crate::memory_fixture::initialize_empty(&setup.sandbox.data)?;
     std::fs::write(
-        setup.sandbox.data.join("report.md"),
+        setup.sandbox.chat_folder("general")?.join("report.md"),
         "# Evidence\nComplete evidence document.\n",
     )?;
     let s = setup.start().await?;

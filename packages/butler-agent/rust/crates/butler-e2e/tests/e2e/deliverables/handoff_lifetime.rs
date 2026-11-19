@@ -12,7 +12,10 @@ async fn cancelled_and_delivered_handoffs_return_to_baseline() -> Result<(), Har
     let setup = Setup::new("DELIVERABLE-CANCELLED-HANDOFF")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
-    std::fs::write(setup.sandbox.data.join("report.md"), "Complete attachment")?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("report.md"),
+        "Complete attachment",
+    )?;
     let s = setup.start().await?;
     let host = Host::attach(&s).await?;
     let started = Instant::now();
@@ -86,7 +89,10 @@ async fn cancellation_during_handoff_promotion_finishes_and_reclaims() -> Result
     let setup = setup
         .env("BUTLER_E2E_HOLD_POINT", "message_handoff_owner")
         .env("BUTLER_E2E_HOLD_RELEASE", release.to_str().unwrap());
-    std::fs::write(setup.sandbox.data.join("report.md"), "Complete attachment")?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("report.md"),
+        "Complete attachment",
+    )?;
     *script.prompt.lock().unwrap() = "Deliver then pause".into();
     *script.steps.lock().unwrap() = [
         deliver("report.md", "Report"),
@@ -160,7 +166,10 @@ async fn kill_during_handoff_publication_leaves_no_ownerless_folder() -> Result<
     let setup = setup
         .env("BUTLER_E2E_HOLD_POINT", "message_handoff_owner")
         .env("BUTLER_E2E_HOLD_RELEASE", release.to_str().unwrap());
-    std::fs::write(setup.sandbox.data.join("report.md"), "Complete attachment")?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("report.md"),
+        "Complete attachment",
+    )?;
     *script.prompt.lock().unwrap() = "Deliver".into();
     *script.steps.lock().unwrap() = [deliver("report.md", "Report"), done()].into();
     let mut s = setup.start().await?;

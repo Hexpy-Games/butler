@@ -35,7 +35,7 @@ async fn rejected_candidate_turn(id: &str) -> Result<Scenario, HarnessError> {
         .replay_only();
     butler_platform::secure_fs::fixture_links::directory_alias(
         &setup.sandbox.home,
-        &setup.sandbox.data.join("link"),
+        &setup.sandbox.chat_folder("general")?.join("link"),
     )?;
     std::fs::create_dir_all(setup.sandbox.home.join("escaped.txt"))?;
     let s = setup.start().await?;
@@ -131,7 +131,7 @@ async fn turn_01_next_round_replaces_a_rejected_candidates_text() -> Result<(), 
     );
     assert!(s.sandbox.home.join("escaped.txt").is_dir());
     assert_eq!(
-        std::fs::read(s.sandbox.data.join("inside.txt"))?,
+        std::fs::read(s.sandbox.chat_folder("general")?.join("inside.txt"))?,
         b"hello-e2e"
     );
     s.finish().await

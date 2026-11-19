@@ -1,0 +1,9 @@
+{
+  "name": "@butler/protocol",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client/index.ts"
+  }
+}

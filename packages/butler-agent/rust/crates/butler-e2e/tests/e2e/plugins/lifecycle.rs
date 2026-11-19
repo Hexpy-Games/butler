@@ -300,9 +300,10 @@ async fn plugin_skill_allowed_tools_cannot_grant_command_approval() -> Result<()
     );
     let cards = s.gw.approval_requests("general").await?;
     assert!(
-        cards.iter().any(
-            |c| c["executable"] == "run_command" && c.to_string().contains("echo plugin-skill")
-        ),
+        cards
+            .iter()
+            .any(|c| c["approval"]["operation"]["tool"] == "run_command"
+                && c.to_string().contains("echo plugin-skill")),
         "{cards:?}"
     );
     s.finish().await

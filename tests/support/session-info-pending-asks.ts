@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { strict as assert } from "node:assert";
 import type { Browser } from "playwright";
 import type { NativeAppServerHandle, NativeAppServerOptions } from "./native-app-server.ts";
-import type { SessionPendingAsks } from "../../packages/butler-app/client/shared/pending-asks-contracts.ts";
+import type { SessionPendingAsks } from "../../packages/butler-protocol/src/pending-asks-contracts.ts";
 
 /** The pending-asks proof deliberately has no HTTP or event replay. */
 export function sessionInfoStub(): NativeAppServerOptions {

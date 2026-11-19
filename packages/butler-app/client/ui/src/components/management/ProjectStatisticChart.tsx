@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, Inline, Section, Stack, Typo, Box, chartColor, type ChartColor } from "@/butler-ds";
-import type { DashboardStatisticSeries } from "../../../../shared/app-contracts.ts";
+import type { DashboardStatisticSeries } from "../../../../../../butler-protocol/src/app-contracts.ts";
 import { ProjectStatisticSources } from "./ProjectStatisticSources.tsx";
 
 /** Series colors: bars and the legend share these DS chart tokens. */

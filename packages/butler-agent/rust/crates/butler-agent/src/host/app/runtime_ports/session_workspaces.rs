@@ -227,14 +227,17 @@ impl AppSessionWorkspaceProvisioner for AppSessionWorkspaces {
                         "workspace_status":"unavailable"
                     }),
                 },
-                SessionWorkspaceAuthority::SessionFolder { workspace_path, .. } => {
+                SessionWorkspaceAuthority::SessionFolder { workspace_path, .. }
+                    if !butler_turn::workspace::is_chat_folder(Path::new(&workspace_path)) =>
+                {
                     let mut value =
                         folder_info(&recovery, &workspace_path, "session_folder", cancellation)
                             .await?;
                     value["workspace_path"] = workspace_path.into();
                     value
                 }
-                SessionWorkspaceAuthority::Project { .. } => {
+                SessionWorkspaceAuthority::Project { .. }
+                | SessionWorkspaceAuthority::SessionFolder { .. } => {
                     let Some(path) = query.project_workspace_path.as_deref() else {
                         return Ok(serde_json::json!({
                             "available":false,"workspace_mode":"none","safe_status":"No project workspace"

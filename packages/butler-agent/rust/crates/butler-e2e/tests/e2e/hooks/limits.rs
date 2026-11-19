@@ -5,7 +5,7 @@ async fn hooks_full_large_response_and_nonmatching_handlers() -> Result<(), Harn
     let setup = Setup::new("HOOK-LARGE")?.stub_cassette(Cassette::load("TOOL-01")?);
     let content = "한글 and exact bytes ".repeat(35000);
     for name in ["large-a.txt", "large-b.txt"] {
-        fs::write(setup.sandbox.data.join(name), &content)?;
+        fs::write(setup.sandbox.chat_folder("general")?.join(name), &content)?;
     }
     let mut hooks = vec![observer(&setup, "PostToolUse")];
     for index in 0..16 {

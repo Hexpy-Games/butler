@@ -54,7 +54,12 @@ async fn held_user_result_uses_current_read_only_controls_and_denies_mutation()
     wait_count(&s, "work_result", 1).await?;
     let mode: String = app(&s)?.query_row("SELECT json_extract(execution_controls_json,'$.access_mode') FROM turns ORDER BY rowid DESC LIMIT 1", [], |r| r.get(0))?;
     assert_eq!(mode, "read_only");
-    assert!(!s.sandbox.data.join("notice.txt").exists());
+    assert!(
+        !s.sandbox
+            .chat_folder("general")?
+            .join("notice.txt")
+            .exists()
+    );
     assert!(!s.sandbox.workspace.join("notice.txt").exists());
     let requests = script.requests.lock().unwrap().clone();
     let refused = requests

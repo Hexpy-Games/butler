@@ -9,12 +9,18 @@ async fn pruned_revision_blob_is_reclaimed() -> Result<(), HarnessError> {
     let s = setup.start().await?;
     completed(&s).await?;
     let owner = chat(&s).await?;
-    std::fs::create_dir_all(s.sandbox.data.join("site"))?;
+    std::fs::create_dir_all(s.sandbox.chat_folder(&owner)?.join("site"))?;
     let mut paths = Vec::new();
     for n in 0..6 {
         let body = format!("Revision {n}");
-        std::fs::write(s.sandbox.data.join("site/index.html"), &body)?;
-        std::fs::write(s.sandbox.data.join("site/shared.txt"), b"Shared")?;
+        std::fs::write(
+            s.sandbox.chat_folder(&owner)?.join("site/index.html"),
+            &body,
+        )?;
+        std::fs::write(
+            s.sandbox.chat_folder(&owner)?.join("site/shared.txt"),
+            b"Shared",
+        )?;
         let (_, turn) = s.turn(&owner, "Again").await?;
         assert_eq!(turn["state"], "delivered");
         paths.push(
@@ -47,8 +53,11 @@ async fn manifest_is_never_persisted_before_blob_rows() -> Result<(), HarnessErr
     seed(&setup.sandbox.data, "general", "old", b"Old", true)?;
     db(&setup.sandbox.data)?.execute_batch("CREATE TRIGGER reject_protection BEFORE INSERT ON output_blobs BEGIN SELECT RAISE(ABORT,'protection failed'); END;")?;
     let s = setup.start().await?;
-    std::fs::create_dir_all(s.sandbox.data.join("site"))?;
-    std::fs::write(s.sandbox.data.join("site/index.html"), b"New")?;
+    std::fs::create_dir_all(s.sandbox.chat_folder("general")?.join("site"))?;
+    std::fs::write(
+        s.sandbox.chat_folder("general")?.join("site/index.html"),
+        b"New",
+    )?;
     s.turn("general", "Again").await?;
     let sha = hash(b"New");
     assert!(

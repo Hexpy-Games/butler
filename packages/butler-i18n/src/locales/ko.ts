@@ -6,7 +6,6 @@ import { TASK_GRAPH_COPY } from "./task-graph.ts";
 import { lifecycleCopy } from "../lifecycle.ts";
 import { additionalToolLabels } from "./tool-labels-ko.ts";
 import type { AppCopy, BriefingFallbackCopy, NewChatBriefingSuggestion } from "../copy-contract.ts";
-import { nativeContextMenuCopy } from "../../../butler-app/client/electron/i18n/native-context-menu.mjs";
 
 /** 허용 요청이 작업할 곳: 따옴표로 감싼 작업 폴더 이름, 없으면 이 작업 폴더. */
 const workspaceName = (workspace: string | null) => workspace ? `'${workspace}'` : "이 작업 폴더";
@@ -116,6 +115,7 @@ const butlerAccount: AppCopy["butlerAccount"] = {
 
 const butlerVault: AppCopy["butlerVault"] = {
   passwordIntro: "이 컴퓨터는 키체인이 없어 마스터 비밀번호로 금고를 잠급니다.",
+  unsignedBuild: "서명되지 않은 개발 빌드는 키체인을 쓰지 않아 마스터 비밀번호로 금고를 잠급니다.",
   masterPassword: "마스터 비밀번호",
   confirmPassword: "비밀번호 확인",
   currentPassword: "지금 비밀번호",
@@ -432,7 +432,6 @@ export const koKrCopy: AppCopy = {
   taskGraph: TASK_GRAPH_COPY["ko-KR"],
   lifecycle: lifecycleCopy.ko,
   browser: {
-    contextMenu: nativeContextMenuCopy("ko-KR"),
     siteData: { title: "사이트 데이터", label: "쿠키 및 캐시", description: "모든 사이트에서 로그아웃돼요. 저장한 로그인은 남아요.", clear: "지우기", confirmTitle: "쿠키 및 캐시를 지울까요?", confirmMessage: "버틀러 브라우저의 모든 사이트에서 로그아웃돼요.", items: "지울 항목", itemList: "쿠키와 사이트 데이터\n캐시된 이미지와 파일", kept: "저장한 로그인, 결제 수단, 방문 기록, 북마크는 그대로예요.", cleared: "쿠키 및 캐시를 지웠어요", failed: "지우지 못했어요", desktopOnly: "데스크톱 앱에서만 할 수 있어요" },
     history: { erase: "지우기", title: "방문 기록", search: "방문 기록 검색", clear: "방문 기록 지우기", butlerOnly: "버틀러가 방문", empty: "방문 기록 없음", hour: "지난 1시간", today: "오늘", week: "지난 7일", all: "전체", suggestions: "주소 추천", pageLabel: "방문한 페이지", pageDescription: "버틀러 브라우저에서 연 페이지 기록을 보거나 지웁니다." },
     tabCount: "탭 {count}개", newTabIn: "{group}에 새 탭", moreTabs: "+{count}", tabMoved: "{title}: {group}, {position}번째", agentControl: "버틀러가 사용 중", handBack: "버틀러에게 돌려주기", stills: "단계 이미지", still: "브라우저 단계", stillFailure: {"dialog_pending": "대화상자 열림", "dispatch_interrupted": "입력 중단", "timeout": "입력 시간 초과", "stills_disabled": "단계 이미지 꺼짐", "document_changed": "페이지 변경", "capture_unavailable": "캡처 불가", "capture_failed": "캡처 실패", "pixels_not_captured": "캡처되지 않음", "file_deleted": "이미지 삭제됨", "control_changed": "제어권 변경", "browser_host_lost": "브라우저 연결 끊김", "gateway_restarted": "버틀러 재시작"}, stillPending: "이미지 저장 중", stillUnavailable: "이미지 없음",
@@ -464,6 +463,7 @@ export const koKrCopy: AppCopy = {
     rail: { region: "버틀러의 탭", openToCheck: "열어서 확인", needsCheck: "확인 필요", pageError: "페이지 오류", error: "오류", more: (count) => `탭 ${count}개 더 · 브라우저에서 보기` },
     glow: { busy: "브라우저 보기 · 버틀러가 사용 중", attention: "브라우저 보기 · 직접 확인 필요", error: "브라우저 보기 · 오류" },
   },
+  mobile: { appName: "버틀러" },
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
     remaining: "남은 일은 어디에 있나요", remainingHelp: "선택한 기간과 관계없이 현재 작업 보드의 단계를 보여줍니다.",
@@ -727,6 +727,7 @@ export const koKrCopy: AppCopy = {
       restartService: "버틀러를 다시 시작할까요?",
       createWorktree: "이 대화용 워크트리를 만들까요?",
       switchFolder: "작업 폴더를 옮길까요?",
+      chatFolder: "대화 폴더",
       generic: "이 작업을 허용할까요?",
       more: count => `외 ${count}개`,
       risk: { low: "위험 낮음", medium: "위험 보통", high: "위험 높음" },

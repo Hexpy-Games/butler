@@ -113,7 +113,10 @@ async fn hooks_context_json_form_order_and_events_that_add_nothing() -> Result<(
         path_for: Box::new(|_| "hook-input.txt".into()),
         final_text: "Done.".into(),
     });
-    fs::write(setup.sandbox.data.join("hook-input.txt"), "Tool content")?;
+    fs::write(
+        setup.sandbox.chat_folder("general")?.join("hook-input.txt"),
+        "Tool content",
+    )?;
     let added = |text: &str| {
         json!({"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":text}})
             .to_string()

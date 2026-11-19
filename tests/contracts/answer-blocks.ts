@@ -3,9 +3,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Project } from "ts-morph";
-import type { AnswerBlocks } from "../../packages/butler-app/client/shared/app-contracts.ts";
-import { parseAnswerBlocks } from "../../packages/butler-app/client/shared/answer-blocks-parse.ts";
-import { toMarkdown } from "../../packages/butler-app/client/shared/answer-blocks-markdown.ts";
+import type { AnswerBlocks } from "../../packages/butler-protocol/src/app-contracts.ts";
+import { parseAnswerBlocks } from "../../packages/butler-protocol/src/answer-blocks-parse.ts";
+import { toMarkdown } from "../../packages/butler-protocol/src/answer-blocks-markdown.ts";
 
 interface Rule {
   $ref?: string;
@@ -46,7 +46,7 @@ function type(rule: Rule): string {
 }
 
 const project = new Project({ useInMemoryFileSystem: true });
-const actual = project.createSourceFile("actual.ts", readFileSync("packages/butler-app/client/shared/app-contracts.ts", "utf8"));
+const actual = project.createSourceFile("actual.ts", readFileSync("packages/butler-protocol/src/app-contracts.ts", "utf8"));
 const expectedTypes: Record<string, string> = {};
 for (const key of Object.keys(schema.$defs!)) {
   names[key] ??= `${key[0].toUpperCase()}${key.slice(1)}Block`;

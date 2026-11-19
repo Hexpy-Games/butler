@@ -107,6 +107,8 @@ pub struct PatternInput {
     pub reasoning: ReasoningEffort,
     /// The user's conversation model and effort for suggestion calls; None skips suggestions.
     pub suggestion_model: Option<(String, ReasoningEffort)>,
+    /// The active persona text; proposals word `message` and `title` in it. None keeps neutral wording.
+    pub persona: Option<String>,
 }
 fn ensure_active(token: &CancellationToken) -> Result<(), PatternError> {
     if token.is_cancelled() {

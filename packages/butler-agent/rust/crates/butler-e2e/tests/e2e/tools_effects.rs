@@ -49,7 +49,7 @@ async fn tool_02_write_edit_and_read_only() -> Result<(), HarnessError> {
         )
         .await?;
     assert_eq!(turn_state(&turn), "delivered", "{turn}");
-    let out = s.sandbox.data.join("out.txt");
+    let out = s.sandbox.chat_folder("general")?.join("out.txt");
     assert_eq!(
         fs::read_to_string(&out)?.trim_end(),
         format!("beta {marker}")
@@ -78,7 +78,7 @@ async fn tool_02_write_edit_and_read_only() -> Result<(), HarnessError> {
         "read-only turn: {turn}"
     );
     assert!(
-        !s.sandbox.data.join("ro.txt").exists(),
+        !s.sandbox.chat_folder("general")?.join("ro.txt").exists(),
         "read-only mode wrote a file"
     );
     assert_eq!(
@@ -116,7 +116,7 @@ async fn tool_06_command_timeout_kills_the_process_tree() -> Result<(), HarnessE
         output.contains("timeout") || output.contains("timed out") || run["state"] != "delivered",
         "timeout not reported: {run} {output}"
     );
-    let pids = fs::read_to_string(s.sandbox.data.join("pids.txt"))?;
+    let pids = fs::read_to_string(s.sandbox.chat_folder("general")?.join("pids.txt"))?;
     let deadline = Instant::now() + Duration::from_secs(10);
     for pid in pids
         .lines()
@@ -372,7 +372,7 @@ async fn tool_07_ask_first_waits_for_approval() -> Result<(), HarnessError> {
         .replay_only()
         .start()
         .await?;
-    let target = s.sandbox.data.join("approved.txt");
+    let target = s.sandbox.chat_folder("general")?.join("approved.txt");
     let turn_id = send(&s, TOOL_07_PROMPT, "ask_first").await?;
     pending_request(&s, &turn_id, &target).await?;
     assert!(s.gw.healthy().await);
@@ -386,7 +386,7 @@ async fn tool_07_ask_first_waits_for_approval() -> Result<(), HarnessError> {
 async fn tool_07_authority_allow_restart_and_revoke() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = Setup::new("TOOL-07")?.cassette("TOOL-07").start().await?;
-    let target = s.sandbox.data.join("approved.txt");
+    let target = s.sandbox.chat_folder("general")?.join("approved.txt");
     let turn_id = send(&s, TOOL_07_PROMPT, "ask_first").await?;
     let reference = pending_request(&s, &turn_id, &target).await?;
 
@@ -416,7 +416,7 @@ async fn tool_07_authority_deny() -> Result<(), HarnessError> {
         .cassette("TOOL-07-DENY")
         .start()
         .await?;
-    let target = s.sandbox.data.join("denied.txt");
+    let target = s.sandbox.chat_folder("general")?.join("denied.txt");
     let turn_id = send(
         &s,
         "Create denied.txt in your workspace containing exactly: should-not-exist",

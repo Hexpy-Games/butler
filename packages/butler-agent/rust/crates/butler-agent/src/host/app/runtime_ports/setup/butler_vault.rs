@@ -3,8 +3,12 @@ use crate::host::{plugins::Plugins, runtime::vault_switch};
 use butler_gateway::gateway::{
     ApplicationFuture, ButlerVaultCounts, ButlerVaultView, GatewayApplicationError,
 };
-use butler_models::models::{FileOverride, SecretStoreFacts, vault_uses_system_store};
-use butler_platform::secrets::{SecretStore, SecretText, sealed_available};
+use butler_models::models::{
+    FileOverride, SecretStoreFacts, StoreReason, credential_store_policy, vault_uses_system_store,
+};
+use butler_platform::secrets::{
+    SYSTEM_STORE_CHECKS_SIGNATURE, SecretStore, SecretText, sealed_available,
+};
 use butler_vault::vault::{ItemKind, VaultError, shared};
 use std::{path::PathBuf, sync::Arc};
 
@@ -41,9 +45,16 @@ pub(super) fn view(root: PathBuf) -> ApplicationFuture<ButlerVaultView> {
             } else {
                 vault.unattended()
             };
+            // On macOS only a Developer ID signed build keeps the keychain.
+            let password_reason = (!available
+                && SYSTEM_STORE_CHECKS_SIGNATURE
+                && credential_store_policy(&root, SecretStoreFacts::for_data_root(&root)).reason
+                    == StoreReason::UnsignedBuild)
+                .then_some("unsigned_build");
             ButlerVaultView {
                 state,
                 available,
+                password_reason,
                 declined,
                 counts,
                 unlock: vault.unlock_kind(),

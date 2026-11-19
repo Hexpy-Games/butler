@@ -33,7 +33,10 @@ async fn start(id: &str, rounds: usize, access: Access) -> Result<Scenario, Test
             path_for: Box::new(|_| "approval.txt".into()),
             final_text: "shell answer".into(),
         });
-    std::fs::write(setup.sandbox.data.join("approval.txt"), "reviewed content")?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("approval.txt"),
+        "reviewed content",
+    )?;
     let mut s = setup.start().await?;
     // The first bind uses port 0; later restarts keep the discovered listener.
     s.agent

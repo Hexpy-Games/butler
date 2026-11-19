@@ -23,12 +23,31 @@ async fn delivery_refuses_credentials_and_stages_validated_content() -> Result<(
     }
     std::fs::hard_link(
         setup.sandbox.data.join("auth/login"),
-        setup.sandbox.data.join("alias"),
+        setup.sandbox.chat_folder("general")?.join("alias"),
     )?;
     *script.steps.lock().unwrap() = [
-        deliver("auth/login", "Denied"),
-        deliver("state/app-gateway/project-folder-token-secret", "Denied"),
-        deliver("sandbox-quarantine/entry", "Denied"),
+        deliver(
+            setup.sandbox.data.join("auth/login").to_str().unwrap(),
+            "Denied",
+        ),
+        deliver(
+            setup
+                .sandbox
+                .data
+                .join("state/app-gateway/project-folder-token-secret")
+                .to_str()
+                .unwrap(),
+            "Denied",
+        ),
+        deliver(
+            setup
+                .sandbox
+                .data
+                .join("sandbox-quarantine/entry")
+                .to_str()
+                .unwrap(),
+            "Denied",
+        ),
         deliver("alias", "Denied"),
         call(
             "run_command",
@@ -45,7 +64,7 @@ async fn delivery_refuses_credentials_and_stages_validated_content() -> Result<(
         done(),
     ]
     .into();
-    let report = setup.sandbox.data.join("report.txt");
+    let report = setup.sandbox.chat_folder("general")?.join("report.txt");
     let s = setup.start().await?;
     run_turn(&s, &script, "Deliver the report.").await?;
     assert_eq!(std::fs::read_to_string(report)?, "complete-after");
@@ -82,10 +101,11 @@ async fn redelivery_of_hard_linked_package_replaces_drawer_and_consumes_stage()
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let data = setup.sandbox.data.clone();
+    let folder = setup.sandbox.chat_folder("general")?;
     let source = "node_modules/.pnpm/pkg/node_modules/pkg/index.js";
-    std::fs::create_dir_all(data.join(source).parent().unwrap())?;
-    std::fs::write(data.join("package-store"), "complete-before")?;
-    std::fs::hard_link(data.join("package-store"), data.join(source))?;
+    std::fs::create_dir_all(folder.join(source).parent().unwrap())?;
+    std::fs::write(folder.join("package-store"), "complete-before")?;
+    std::fs::hard_link(folder.join("package-store"), folder.join(source))?;
     *script.steps.lock().unwrap() = [
         call("read_file", json!({"requests":[{"path":source}]})),
         call(

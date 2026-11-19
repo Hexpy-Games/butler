@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { CanonOverview } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { CanonOverview } from "../../packages/butler-protocol/src/canon-contracts.ts";
 const planChooser = (page: Page) => page.locator('[data-slot="filtered-select-popover"][aria-label="계획"]');
 export async function selectBoardPlan(page: Page, title: string) {
   await page.locator('[data-test-class="canon-board"]').getByRole("button", { name: "계획", exact: true }).click();

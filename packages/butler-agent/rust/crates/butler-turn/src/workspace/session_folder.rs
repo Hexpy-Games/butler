@@ -129,6 +129,55 @@ pub fn active_session_folder(binding: &StoredSessionBinding) -> Option<SessionFo
         .filter(|marker| marker.path == binding.workspace_path)
 }
 
+/// What approval cards show for a chat's own folder (see [`is_chat_folder`]);
+/// the App shows its localized name instead. A label below it is
+/// `<label>/<subfolder>`. Never a folder name: no real folder is called this
+/// and also sits where `is_chat_folder` looks.
+pub const CHAT_FOLDER_LABEL: &str = "@chat-folder";
+
+/// A general chat's own working folder, `<data>/chats/<name>`: the App chat
+/// id when it is made only of ASCII letters, digits, `-` and `_`, prefixed
+/// `chat-` unless it already is. `None` for any other id: such a chat keeps
+/// the data folder.
+pub fn chat_folder(data_root: &Path, chat_id: &str) -> Option<PathBuf> {
+    let plain = !chat_id.is_empty()
+        && chat_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'));
+    let name = if chat_id.starts_with("chat-") {
+        chat_id.to_owned()
+    } else {
+        format!("chat-{chat_id}")
+    };
+    plain.then(|| data_root.join("chats").join(name))
+}
+
+/// Whether `path` is a chat's own folder as [`chat_folder`] names it: a
+/// `chat-` folder directly inside a `chats` folder. Read from the path alone,
+/// because the approval card and the title bar have the folder but not the
+/// data root.
+pub fn is_chat_folder(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with("chat-"))
+        && path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == "chats")
+}
+
+/// The stored marker of a working folder.
+pub fn session_folder_marker(
+    path: &str,
+    origin_path: &str,
+    consented: bool,
+    relation: FolderRelation,
+    switched_at: &str,
+) -> Value {
+    json!({"schema": SCHEMA, "path": path, "originPath": origin_path, "consented": consented,
+        "relation": relation.as_str(), "switchedAt": switched_at})
+}
+
 /// One move of a session's working folder.
 pub struct SwitchSessionFolder {
     pub session_id: String,
@@ -301,14 +350,7 @@ impl SessionFolders {
         let mut metadata = binding.metadata.clone().unwrap_or_default();
         metadata.insert(
             SESSION_FOLDER_KEY.into(),
-            json!({
-                "schema": SCHEMA,
-                "path": input.path,
-                "originPath": origin,
-                "consented": input.consented,
-                "relation": input.relation.as_str(),
-                "switchedAt": now,
-            }),
+            session_folder_marker(&input.path, &origin, input.consented, input.relation, &now),
         );
         let previous_path = binding.workspace_path.clone();
         let result = self

@@ -1,7 +1,7 @@
 import { api } from "./api.ts";
 import type { TimelineEvent } from "./types.ts";
-import type { CanonHoldDecision, CanonQueueEdit, CanonQueueView } from "../../../shared/canon-queue-contracts.ts";
-export type { CanonQueueItem, CanonQueueEdit, CanonQueueView } from "../../../shared/canon-queue-contracts.ts";
+import type { CanonHoldDecision, CanonQueueEdit, CanonQueueView } from "../../../../../butler-protocol/src/canon-queue-contracts.ts";
+export type { CanonQueueItem, CanonQueueEdit, CanonQueueView } from "../../../../../butler-protocol/src/canon-queue-contracts.ts";
 
 type Snapshot = { view: CanonQueueView | null; busy: boolean };
 type Reader = { snapshot: Snapshot; listeners: Set<() => void>; controller?: AbortController; revision: number; queued: boolean; dirty: boolean };

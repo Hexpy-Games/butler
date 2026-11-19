@@ -98,7 +98,10 @@ async fn start_with(
         setup = setup.env(key, *value);
     }
     std::fs::write(
-        setup.sandbox.data.join("cache-input.txt"),
+        setup
+            .sandbox
+            .chat_folder("general")?
+            .join("cache-input.txt"),
         "complete cache tool fixture",
     )?;
     let s = setup.start().await?;

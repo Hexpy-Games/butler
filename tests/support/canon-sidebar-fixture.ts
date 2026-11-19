@@ -1,4 +1,4 @@
-import type { CanonOverview, CanonSidebar, EpicCard } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { CanonOverview, CanonSidebar, EpicCard } from "../../packages/butler-protocol/src/canon-contracts.ts";
 /** Offline focus traversal fixture; product reads the same wire contracts as native smoke. */
 const epic: EpicCard = {
   tags: [],

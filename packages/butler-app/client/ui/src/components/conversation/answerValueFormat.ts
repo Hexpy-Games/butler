@@ -1,5 +1,5 @@
 import type { AppLocale } from "@/app/copy";
-import type { CardValue } from "../../../../shared/app-contracts";
+import type { CardValue } from "../../../../../../butler-protocol/src/app-contracts";
 
 /** Currencies a language names with its own unit word after the number ("76,390원", "1,200엔"). */
 const CURRENCY_WORDS: Partial<Record<AppLocale, Readonly<Record<string, string>>>> = {

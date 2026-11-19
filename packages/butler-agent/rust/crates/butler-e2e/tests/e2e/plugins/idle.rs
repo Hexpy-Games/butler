@@ -65,7 +65,11 @@ async fn perf_pg6_registry_startup_p95_with_100_plugins() -> Result<(), HarnessE
         "PG6: registry startup p95 zero={baseline} us, 100={loaded} us, growth={} us, inventory=100/100",
         loaded.saturating_sub(baseline)
     );
-    assert!(loaded.saturating_sub(baseline) <= 50_000);
+    butler_e2e::assert_wall_clock_budget!(
+        Duration::from_micros(loaded.saturating_sub(baseline)),
+        Duration::from_millis(50),
+        "PG6 registry startup growth (100 plugins)"
+    );
     s.finish().await
 }
 async fn measure(s: &mut Scenario, count: usize) -> Result<u64, HarnessError> {

@@ -47,6 +47,18 @@ async fn schedule_override_never_becomes_the_mode_of_turns_without_controls() {
         let request = bind_and_request(&scheduled, &bindings, &root, &root)
             .await
             .unwrap();
+        assert_eq!(
+            request.route.workspace_path,
+            root.join("chats/chat-1").to_string_lossy()
+        );
+        assert!(root.join("chats/chat-1").is_dir());
+        assert!(
+            butler_turn::workspace::active_session_folder(
+                &bindings.get_by_session_id(SESSION).await.unwrap().unwrap()
+            )
+            .unwrap()
+            .consented
+        );
         let controls = request.execution_controls.as_ref().unwrap().as_json();
         assert_eq!(
             controls["access_mode"],
@@ -58,6 +70,10 @@ async fn schedule_override_never_becomes_the_mode_of_turns_without_controls() {
         let request = bind_and_request(&later, &bindings, &root, &root)
             .await
             .unwrap();
+        assert_eq!(
+            request.route.workspace_path,
+            root.join("chats/chat-1").to_string_lossy()
+        );
         assert!(request.execution_controls.is_none());
         let binding = bindings.get_by_session_id(SESSION).await.unwrap().unwrap();
         assert_eq!(
@@ -67,6 +83,45 @@ async fn schedule_override_never_becomes_the_mode_of_turns_without_controls() {
         );
         remove(&root);
     }
+    let root = std::env::temp_dir().join(format!(
+        "butler-ingress-bind-access-{}",
+        uuid::Uuid::new_v4()
+    ));
+    let bindings = SessionBindingStore::open(SessionBindingStoreConfig {
+        path: root.join("sessions.sqlite"),
+        storage_profile: WorkspaceStorageProfile::Durable,
+        clock: Arc::new(crate::host::SystemIdentity),
+    })
+    .await
+    .unwrap();
+    let first = app_envelope(
+        "turn-1",
+        &AccessMode::AskExceptReads,
+        &AccessMode::AskExceptReads,
+    );
+    bind_and_request(&first, &bindings, &root, &root)
+        .await
+        .unwrap();
+    butler_platform::sqlite::open(root.join("sessions.sqlite")).unwrap().execute(
+        "UPDATE session_bindings SET workspace_path=?1, metadata_json=json_remove(metadata_json,'$.sessionFolder')",
+        [root.to_string_lossy()],
+    ).unwrap();
+    let later = app_envelope(
+        "turn-2",
+        &AccessMode::AskExceptReads,
+        &AccessMode::AskExceptReads,
+    );
+    let request = bind_and_request(&later, &bindings, &root, &root)
+        .await
+        .unwrap();
+    assert_eq!(request.route.workspace_path, root.to_string_lossy());
+    assert!(
+        butler_turn::workspace::active_session_folder(
+            &bindings.get_by_session_id(SESSION).await.unwrap().unwrap()
+        )
+        .is_none()
+    );
+    remove(&root);
 }
 
 /// An App turn whose controls carry `turn_access` as a message override, in

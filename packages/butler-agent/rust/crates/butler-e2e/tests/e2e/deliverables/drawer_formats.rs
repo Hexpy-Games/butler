@@ -27,9 +27,12 @@ async fn drawer_pdf_and_office_files_are_read_as_text() -> Result<(), HarnessErr
     let setup = Setup::new("DELIVERABLE-DRAWER-FORMATS")?
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
-    std::fs::write(setup.sandbox.data.join("report.pdf"), PDF)?;
     std::fs::write(
-        setup.sandbox.data.join("plan.docx"),
+        setup.sandbox.chat_folder("general")?.join("report.pdf"),
+        PDF,
+    )?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("plan.docx"),
         package(&[
             (
                 "[Content_Types].xml",
@@ -45,7 +48,7 @@ async fn drawer_pdf_and_office_files_are_read_as_text() -> Result<(), HarnessErr
         ]),
     )?;
     std::fs::write(
-        setup.sandbox.data.join("costs.xlsx"),
+        setup.sandbox.chat_folder("general")?.join("costs.xlsx"),
         package(&[
             (
                 "[Content_Types].xml",
@@ -96,16 +99,7 @@ async fn drawer_pdf_and_office_files_are_read_as_text() -> Result<(), HarnessErr
     *script.prompt.lock().unwrap() = "What do the files say?".to_owned();
     let (_, turn) = s.turn(&other, "What do the files say?").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
-    let outputs: Vec<Value> = script.requests.lock().unwrap().last().unwrap()["input"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|item| item["type"] == "function_call_output")
-        .map(|item| {
-            let output: Value = serde_json::from_str(item["output"].as_str().unwrap()).unwrap();
-            output.get("output").cloned().unwrap_or(output)
-        })
-        .collect();
+    let outputs = stub::tool_outputs(&script);
     assert_eq!(outputs.len(), 3);
     assert_eq!(outputs[0]["text"], "Alpha PDF\n\n---\n\nBeta PDF");
     assert_eq!(outputs[1]["text"], "Launch plan\nShip on\tFriday");

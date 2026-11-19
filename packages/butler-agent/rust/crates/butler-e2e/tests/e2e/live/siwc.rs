@@ -32,7 +32,7 @@ pub(super) async fn check() -> Result<(), HarnessError> {
         setup = setup.record_into(scratch);
     }
     std::fs::write(
-        setup.sandbox.data.join("notes.txt"),
+        setup.sandbox.chat_folder("general")?.join("notes.txt"),
         format!("the secret word is {secret}\n"),
     )?;
     let s = setup.start().await?;

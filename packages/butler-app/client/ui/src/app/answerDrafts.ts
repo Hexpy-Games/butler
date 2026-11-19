@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AnswerBlockView } from "../../../shared/answer-blocks-view";
+import type { AnswerBlockView } from "../../../../../butler-protocol/src/answer-blocks-view";
 
 import type { TimelineEvent, MessageRecord } from "./types";
 

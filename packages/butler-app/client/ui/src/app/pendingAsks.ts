@@ -1,7 +1,7 @@
 import { api } from "./api.ts";
 import type { TimelineEvent } from "./types.ts";
-import type { SessionPendingAsks } from "../../../shared/pending-asks-contracts.ts";
-export type { PendingAsk, SessionPendingAsks } from "../../../shared/pending-asks-contracts.ts";
+import type { SessionPendingAsks } from "../../../../../butler-protocol/src/pending-asks-contracts.ts";
+export type { PendingAsk, SessionPendingAsks } from "../../../../../butler-protocol/src/pending-asks-contracts.ts";
 
 type Reader = { page: SessionPendingAsks | null; listeners: Set<() => void>; controller?: AbortController; revision: number; queued: boolean; seen: Map<string, string> };
 const readers = new Map<string, Reader>();

@@ -230,7 +230,29 @@ async fn ask_first_reads_the_project_and_asks_for_the_rest() -> Result<(), Harne
             &json!({"command":"ls","summary":"List files","state_effect":"read_only"}),
         )],
     );
-    let id = paused(&s, "general", "List general directory.").await?;
+    let id = s.gw.say_turn("general", "List general directory.").await?;
+    delivered(&s, "general", &id).await?;
+    assert_counts(&s, &id, 0, 0)?;
+    let session = s.gw.get("/session-summary?session_id=general").await?;
+    assert_ne!(
+        session.data()["branch_info"]["workspace_binding"],
+        "session_folder"
+    );
+    s.agent.terminate().await?;
+    rusqlite::Connection::open(s.sandbox.data.join("runtime/session-store.sqlite"))?.execute(
+        "UPDATE session_bindings SET workspace_path=?1, metadata_json=json_remove(metadata_json,'$.sessionFolder') WHERE session_id='butler/app-general'",
+        [s.sandbox.data.to_string_lossy()],
+    )?;
+    s.gw = s.agent.start_again().await?;
+    script.rounds.lock().unwrap().insert(
+        "List the data folder.".into(),
+        vec![call(
+            "ls-data",
+            "run_command",
+            &json!({"command":"ls","summary":"List files","state_effect":"read_only"}),
+        )],
+    );
+    let id = paused(&s, "general", "List the data folder.").await?;
     assert_counts(&s, &id, 1, 1)?;
     approve(&s, "general", "allow").await?;
     delivered(&s, "general", &id).await?;

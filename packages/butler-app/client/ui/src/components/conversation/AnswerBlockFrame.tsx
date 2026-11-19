@@ -1,7 +1,7 @@
 import { openDocument, type EditableDocument } from "../documents/documentApi";
 import { createContext, useContext, useRef, type ReactNode } from "react";
-import type { AnswerBlockView } from "../../../../shared/answer-blocks-view";
-import { toMarkdown } from "../../../../shared/answer-blocks-markdown";
+import type { AnswerBlockView } from "../../../../../../butler-protocol/src/answer-blocks-view";
+import { toMarkdown } from "../../../../../../butler-protocol/src/answer-blocks-markdown";
 import { BlockActionFrame, flySaveToTarget, type OverflowActionMenuItem } from "@/butler-ds";
 import { api } from "@/app/api";
 import { appCopy } from "@/app/copy";

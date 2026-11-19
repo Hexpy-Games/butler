@@ -64,7 +64,10 @@ async fn perf_02_round_overhead_at_large_context() -> Result<(), HarnessError> {
     });
     for round in 0..ROUNDS {
         fs::write(
-            setup.sandbox.data.join(format!("perf-{round}.txt")),
+            setup
+                .sandbox
+                .chat_folder("general")?
+                .join(format!("perf-{round}.txt")),
             prose(round),
         )?;
     }

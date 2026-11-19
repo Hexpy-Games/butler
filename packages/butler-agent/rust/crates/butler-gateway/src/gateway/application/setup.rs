@@ -163,6 +163,11 @@ pub struct ButlerVaultView {
     /// The vault opens unattended on this host (keychain or sealed); when false
     /// only the master password can open it.
     pub available: bool,
+    /// Why only the master password can open a vault here: `unsigned_build`
+    /// when the keychain is withheld only because this build is not
+    /// Developer ID signed (macOS development builds).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_reason: Option<&'static str>,
     /// How the vault in use opens: `keychain`, `sealed` or `password`.
     pub unlock: Option<&'static str>,
     /// A master password is set.

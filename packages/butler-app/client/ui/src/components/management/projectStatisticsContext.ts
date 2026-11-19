@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { DashboardStatisticsView } from "../../../../shared/app-contracts.ts";
+import type { DashboardStatisticsView } from "../../../../../../butler-protocol/src/app-contracts.ts";
 
 export const ProjectStatisticsContext = createContext<{
   data: DashboardStatisticsView; openSource: (key: string) => void;

@@ -62,6 +62,9 @@ test("each action kind reads as one question in English and Korean", () => {
 
 // test-category: pure-logic
 test("the sentence quotes the workspace label, spaces and all, and drops what is missing", () => {
+  const own = summary("run_command", { targets: [folder("@chat-folder/sub")], examples: ["npm test"] });
+  expect(approvalRequestView(card(own), en).title).toBe("Run a command in 'Chat folder/sub'?");
+  expect(approvalRequestView(card(own), ko).title).toBe("'대화 폴더/sub'에서 명령을 실행할까요?");
   const notes = summary("edit_files", { targets: [folder("My Notes")], count: 3 });
   expect(approvalRequestView(card(notes), en).title).toBe("Edit 3 files in 'My Notes'?");
   expect(approvalRequestView(card(notes), ko).title).toBe("'My Notes'의 파일 3개를 수정할까요?");
