@@ -110,6 +110,7 @@ const butlerAccount: AppCopy["butlerAccount"] = {
 
 const butlerVault: AppCopy["butlerVault"] = {
   passwordIntro: "This computer has no keychain, so a master password locks the vault.",
+  unsignedBuild: "Unsigned development builds don't use the Keychain, so a master password locks the vault.",
   masterPassword: "Master password",
   confirmPassword: "Confirm password",
   currentPassword: "Current password",
