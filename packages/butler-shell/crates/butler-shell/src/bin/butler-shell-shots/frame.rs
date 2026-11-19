@@ -24,6 +24,8 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         }
         "click" | "drag" => pointer(h, command, arg),
         "drag-from" => drag_from(h, arg),
+        "drag-hold" => super::hold::drag_hold(h, arg),
+        "drag-release" => super::hold::drag_release(h, arg),
         "click-at" => click_at(h, arg),
         "page-click" => page_click(h, arg),
         "hover" => hover(h, arg),

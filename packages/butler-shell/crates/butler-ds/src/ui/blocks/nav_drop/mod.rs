@@ -1,16 +1,20 @@
 //! DS NavDropTarget (NavDropTarget.tsx, NavDropOverlay.tsx, navDropAutoScroll.ts, with
 //! `lib/dropZones.ts`): the drag feedback of a sidebar tree. [`NavDropScope`] wraps the
-//! droppable rows, opens a one-row slot where a dragged row would land (the target of a
-//! `before` drop and every later row travel down; a 2px accent line sits in the slot), rings the
-//! header of an `inside`, `group` or `outside` target, and shows the auto-scroll band at the
-//! list's edge. The product owns the drag data and its rules; the block hit-tests the rows on
-//! their layout boxes, with the hysteresis and combine dwell of [`zones`].
+//! droppable tree, opens a one-row slot where a dragged row would land (the target of a
+//! `before` drop and every later row and neighbour travel down, in nested lists too; a 2px
+//! accent line sits in the slot), rings the header of an `inside`, `group` or `outside` target,
+//! and shows the auto-scroll band at the list's edge. A [`NavDropTarget`] is a row of the
+//! scope around it wherever it lays out (a scope's `row`, or an element in a nested list), and
+//! [`neighbour`] is something that is no row but slides with the rows. The product owns the
+//! drag data and its rules; the block hit-tests the rows on their layout boxes, with the
+//! hysteresis and combine dwell of [`zones`].
 //!
 //! The drag is gpui's own (`on_drag` / `on_drag_move` / `on_drop`); React uses native HTML5
 //! drag and `dnd-kit` is not involved. A scope drives a drag of payload type `T` once
 //! [`NavDropScope::drag`] gives it the per-row rules (which zones a row takes) and the
 //! `canDrop` check; without it the scope only draws what its rows are told (`drop`).
 pub mod auto_scroll;
+mod member;
 mod overlay;
 mod row;
 mod scope;
@@ -20,10 +24,11 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{
-    AnyElement, App, AppContext as _, Div, IntoElement, ParentElement as _, SharedString, Stateful,
-    StatefulInteractiveElement as _, Styled as _, Window,
+    AnyElement, App, AppContext as _, Div, ElementId, IntoElement, ParentElement as _,
+    SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, Window,
 };
 
+pub use member::Placed;
 pub use scope::{DragRules, NavDropScope};
 pub use zones::{DropZone, DropZoneHit, DropZoneRules};
 
@@ -54,6 +59,7 @@ type Dwelled = Rc<dyn Fn(&mut Window, &mut App)>;
 pub struct NavDropTarget {
     pub(crate) key: SharedString,
     pub(crate) drop: Option<NavDropPosition>,
+    pub(crate) combine_as: Option<NavDropPosition>,
     pub(crate) dragging: bool,
     pub(crate) indicator: Option<(f32, f32)>,
     pub(crate) row_header: bool,
@@ -74,6 +80,7 @@ impl NavDropTarget {
         Self {
             key: key.into(),
             drop: None,
+            combine_as: None,
             dragging: false,
             indicator: None,
             row_header: false,
@@ -90,6 +97,14 @@ impl NavDropTarget {
     /// drives the drag sets it from its own hit.
     pub fn drop(mut self, drop: Option<NavDropPosition>) -> Self {
         self.drop = drop;
+        self
+    }
+
+    /// What a `Combine` zone on this row is drawn as, over the scope's
+    /// [`NavDropScope::combine_as`]: a tree holds rows that group and folders that take a drop
+    /// inside.
+    pub fn combine_as(mut self, position: NavDropPosition) -> Self {
+        self.combine_as = Some(position);
         self
     }
 
@@ -157,6 +172,21 @@ impl NavDropTarget {
         }));
         self
     }
+}
+
+impl IntoElement for NavDropTarget {
+    type Element = Placed;
+
+    /// The row joins the scope around it where it lays out.
+    fn into_element(self) -> Placed {
+        Placed::row(self)
+    }
+}
+
+/// Something in a scope's tree that is no row (a row's subtask lines, a folder's "load more"):
+/// it slides with the rows after the slot. `id` keys its slide.
+pub fn neighbour(id: impl Into<ElementId>, element: impl IntoElement) -> AnyElement {
+    Placed::other(id.into(), element.into_any_element()).into_any_element()
 }
 
 /// `NavRootDropZone`: the dashed "move to the top level" zone shown while a row is dragged.

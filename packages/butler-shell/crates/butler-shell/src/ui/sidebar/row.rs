@@ -6,6 +6,7 @@ use crate::ui::{Icon, source::wire::SpaceNodeKind, store::navigation::SpaceRowDa
 use butler_ds::ui::{
     blocks::{
         collapsible_nav_group::CollapsibleNavGroup,
+        nav_drop,
         nav_row::{NavRow, NavRowSwap},
     },
     collapsible::{CollapsibleList, Row as CollapsibleRow},
@@ -183,7 +184,10 @@ impl Shell {
             && !shortcut
             && let Some(session) = &row.session
         {
-            block = block.child(self.subtask_lines(session, cx));
+            block = block.child(nav_drop::neighbour(
+                SharedString::from(format!("subtasks-{instance}")),
+                self.subtask_lines(session, cx),
+            ));
         }
         block.into_any_element()
     }
@@ -312,12 +316,10 @@ impl Shell {
             cx,
         ));
         if children.len() > limit {
-            group = group.child(self.sidebar_session_load_more(
-                Some(row.node.key.clone()),
-                children.len() - limit,
-                limit,
-                cx,
-            ));
+            let (rest, key) = (children.len() - limit, row.node.key.clone());
+            let more = self.sidebar_session_load_more(Some(key.clone()), rest, limit, cx);
+            let id = SharedString::from(format!("more-{key}"));
+            group = group.child(nav_drop::neighbour(id, more));
         }
         group.into_any_element()
     }

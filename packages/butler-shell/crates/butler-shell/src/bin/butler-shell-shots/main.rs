@@ -25,6 +25,7 @@ mod fixture;
 mod focus;
 mod frame;
 mod glide;
+mod hold;
 mod live;
 
 use std::path::{Path, PathBuf};
