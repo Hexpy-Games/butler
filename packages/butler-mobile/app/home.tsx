@@ -38,7 +38,7 @@ export default function Home() {
       <ScrollView keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ gap: t.length("--space-4") }}>
         <View style={{ gap: t.length("--space-4") }}>
           <Text variant="h3">{copy.appName}</Text>
-          <Text tone="secondary" literal selectable>{status.origin}</Text>
+          {status.origin ? <Text tone="secondary" literal selectable>{status.origin}</Text> : null}
           {status.kind === "checking" ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
               <Spinner label={copy.home.checking} />
