@@ -133,6 +133,26 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
             "compose",
             "wait-anchor send-button",
             &format!("layout docked700 {anchors}"),
+            "browser-link https://example.com/",
+            "wait-anchor browser-area",
+            "wait 600",
+            "layout split chat-card browser-area",
+            "size 1200 800",
+            "wait 600",
+            "compose",
+            "focus-next 7",
+            "key end",
+            "wait 600",
+            "layout end chat-card browser-area",
+            "key home",
+            "wait 600",
+            "layout home chat-card browser-area",
+            "drag split-handle 500 0",
+            "wait 600",
+            "layout dragged chat-card browser-area",
+            "size 1300 800",
+            "wait 600",
+            "layout grown chat-card browser-area",
             "app-quit",
         ])
         .await?;
@@ -199,7 +219,6 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
     // which makes the panel taller.
     let (closed, open) = (get("info", "inspector"), get("infoopen", "inspector"));
     assert!(open[3] > closed[3] + 0.5, "{closed:?} {open:?}");
-
     // (g) At 700 px with no pane open the sidebar stays docked, like Electron: it sits at the same
     // left inset as at 1200 px and the conversation starts to its right. The peek overlay has no
     // anchor, so a closed sidebar (which turns the peek on) shows as no `sidebar` anchor.
@@ -211,6 +230,53 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
     assert!(
         docked.is_some_and(|d| near(d[0], wide_sidebar[0]) && card[0] >= d[0] + d[2] - 0.5),
         "docked700 sidebar {docked:?}, wide sidebar {wide_sidebar:?}, chat card {card:?}"
+    );
+    // (h) With the browser pane beside the chat at 700 px, the chat keeps the width the web gives it,
+    // max(340, min(room - 375, 400)), so the pane keeps its 375 px minimum. `room` is what the chat
+    // column and the pane share: the chat column's width plus the pane's. The chat-card anchor is
+    // inset by the card's 1 px border on each side.
+    let (chat, pane) = (get("split", "chat-card"), get("split", "browser-area"));
+    let chat_width = chat[2] + 2.;
+    let room = chat_width + pane[2];
+    let expected = (room - 375.).clamp(340., 400.);
+    assert!(
+        (chat_width - expected).abs() <= 1. && pane[2] >= room - chat_width - 0.5,
+        "chat {chat:?}, pane {pane:?}, room {room}, expected chat {expected}"
+    );
+    // (i) At 1200 px both minimums can hold. The split handle is the 7th tab stop after the
+    // composer. End puts the chat at room - 375 (the pane keeps its minimum) and Home at 340; a
+    // drag far past the limit stops at room - 375 too. The chat then keeps that width when the
+    // window grows to 1300 px (the pane takes the extra 100): the clamped width went back to the
+    // owner through `on_chat_width_change`, the only place a width survives a resize.
+    let widths = |name: &str| {
+        let (chat, pane) = (get(name, "chat-card"), get(name, "browser-area"));
+        (chat[2] + 2., pane[2])
+    };
+    let (end, home, dragged, grown) = (
+        widths("end"),
+        widths("home"),
+        widths("dragged"),
+        widths("grown"),
+    );
+    let room = end.0 + end.1;
+    assert!(
+        (end.0 - (room - 375.)).abs() <= 1. && (end.1 - 375.).abs() <= 1.,
+        "End: chat {}, pane {}, room {room}",
+        end.0,
+        end.1
+    );
+    assert!((home.0 - 340.).abs() <= 1., "Home: chat {}", home.0);
+    assert!(
+        (dragged.0 - (room - 375.)).abs() <= 1. && dragged.1 >= 375. - 1.,
+        "drag: chat {}, pane {}, room {room}",
+        dragged.0,
+        dragged.1
+    );
+    assert!(
+        (grown.0 - dragged.0).abs() <= 1. && grown.1 > dragged.1 + 50.,
+        "resize: chat {}, pane {}, before {dragged:?}",
+        grown.0,
+        grown.1
     );
     shell.finish().await?;
     sandbox.mark_success();

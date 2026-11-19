@@ -410,7 +410,8 @@ impl RenderOnce for TitlebarShell {
                 Some(width) => {
                     // The chat group ends where the chat card does (TitlebarShell.module.css:117).
                     let card = vars.map_or((0., 0.), |v| (v.card_start, v.card_end));
-                    let basis = clamp_chat_width(width) + card.0 - m.start - m.end + card.1;
+                    let basis =
+                        clamp_chat_width(width, f32::INFINITY) + card.0 - m.start - m.end + card.1;
                     group.flex_grow(0.).flex_shrink(1.).flex_basis(px(basis))
                 }
                 None => group.flex_auto(),

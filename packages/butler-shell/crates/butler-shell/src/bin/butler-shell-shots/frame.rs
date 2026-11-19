@@ -26,6 +26,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "drag-from" => drag_from(h, arg),
         "drag-hold" => super::hold::drag_hold(h, arg),
         "drag-release" => super::hold::drag_release(h, arg),
+        "focus-next" => focus_next(h, arg),
         "click-at" => click_at(h, arg),
         "page-click" => page_click(h, arg),
         "hover" => hover(h, arg),
@@ -247,6 +248,21 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
     let end = point(center.x + px(dx), center.y + px(dy));
     let start = if command == "drag" { center } else { end };
     pointer_sequence(h, handle, start, end, button, command == "drag")
+}
+
+/// `focus-next <n>`: moves focus `n` tab stops on, as the Tab binding an app gives its window
+/// does. The shell window binds none (gpui has none by default) and a press on the split handle
+/// does not focus it, so this is how a script reaches a control that answers to keys.
+fn focus_next(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let steps: usize = arg.parse().context("focus-next <n>")?;
+    h.cx.update_window(h.handle, |_, window, cx| {
+        for _ in 0..steps {
+            window.focus_next(cx);
+        }
+    })?;
+    settle(&mut h.cx, h.handle);
+    Ok(())
 }
 
 fn pointer_button(button: Option<&str>) -> anyhow::Result<MouseButton> {
