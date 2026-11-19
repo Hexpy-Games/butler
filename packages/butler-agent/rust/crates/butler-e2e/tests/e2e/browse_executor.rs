@@ -97,7 +97,8 @@ async fn browse_batches_stateless_tasks_and_hands_exact_steps_to_browser_act()
         .iter()
         .map(|tab| tab["id"].as_str().unwrap())
         .collect();
-    assert_eq!(ids, ["product-b"]);
+    // Each browse run keeps only the tab it returns (the approval handoff's and the finished run's).
+    assert_eq!(ids, ["cart", "product-b"]);
     assert_requests(&requests);
     assert_usage(&s.sandbox.data, &id)?;
     let usage = s.gw.get("/session-view?session_id=general").await?;
