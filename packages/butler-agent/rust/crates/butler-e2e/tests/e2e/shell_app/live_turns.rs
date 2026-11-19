@@ -62,7 +62,10 @@ async fn shell_app_03_sidebar_row_follows_a_live_turn() -> Result<(), HarnessErr
         .expect("session id")
         .to_owned();
     // Eight lines: more than the user bubble shows collapsed, so it carries a "Show more" toggle.
-    let long = (1..=8).map(|n| format!("Line {n}")).collect::<Vec<_>>().join("\n");
+    let long = (1..=8)
+        .map(|n| format!("Line {n}"))
+        .collect::<Vec<_>>()
+        .join("\n");
     let sent = gw
         .post(
             "/messages",
