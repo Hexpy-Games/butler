@@ -477,6 +477,7 @@ export const enUsCopy: AppCopy = {
       notPairingQr: "This isn't a Butler pairing code.",
       cameraOff: "The camera isn't available. Enter the details instead.",
       openSettings: "Open Settings",
+      allowCamera: "Allow camera",
       rescan: "Scan again",
       connecting: "Connecting…",
       address: "Address",

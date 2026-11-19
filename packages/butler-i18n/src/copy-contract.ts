@@ -457,7 +457,7 @@ export interface LogTraceCopy {
 export interface MobileCopy {
   appName: string;
   pair: { title: string; lede: string; choiceLede: string; address: string; code: string; connect: string;
-    scan: string; manual: string; scanHint: string; notPairingQr: string; cameraOff: string; openSettings: string;
+    scan: string; manual: string; scanHint: string; notPairingQr: string; cameraOff: string; openSettings: string; allowCamera: string;
     rescan: string; connecting: string;
     addressInvalid: string; codeInvalid: string; updateApp: string; linkInvalid: string };
   problems: { invalidCode: string; hostNotAllowed: string; needsPairing: string; versionMismatch: string;
