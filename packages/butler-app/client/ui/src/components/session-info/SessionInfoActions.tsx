@@ -10,6 +10,8 @@ export function SessionInfoActions() {
   useAppLocale();
   const sessionId = useButlerStore(state => state.activeChatId);
   const open = useButlerStore(state => state.sessionInfoOpen);
+  const held = useButlerStore(state => state.sessionInfoHeldChat === state.activeChatId);
+  const pressed = open && !held;
   const graphEnabled = useButlerStore(state => state.taskGraphEnabled);
   const [graphOpen, setGraphOpen] = useState(false);
   const { ids, asks, subtasks } = useSessionSectionsModel();
@@ -23,9 +25,9 @@ export function SessionInfoActions() {
         <ScrollArea fill>{graphOpen && <TasksPanel key={sessionId} hideHeading />}</ScrollArea>
       </DialogContent>
     </Dialog>}
-    <Presence present={ids.length > 0} motion="fade"><IconButton label={c.title} aria-label={indicator ? c.waitingLabel : c.title} pane="aside" pressed={open}
-      tone={open ? "butler" : "default"} indicator={indicator} data-test-class="session-info-toggle" onClick={async () => {
-        if (await leaveCanonEditor()) useButlerStore.setState(state => ({ sessionInfoOpen: !state.sessionInfoOpen }));
+    <Presence present={ids.length > 0} motion="fade"><IconButton label={c.title} aria-label={indicator ? c.waitingLabel : c.title} pane="aside" pressed={pressed}
+      tone={pressed ? "butler" : "default"} indicator={indicator} data-test-class="session-info-toggle" onClick={async () => {
+        if (await leaveCanonEditor()) useButlerStore.setState(state => ({ sessionInfoOpen: !(state.sessionInfoOpen && state.sessionInfoHeldChat !== state.activeChatId), sessionInfoHeldChat: null }));
       }}>
       <AppleReminder size="md" />
     </IconButton></Presence>

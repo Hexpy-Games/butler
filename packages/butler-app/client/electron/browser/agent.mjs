@@ -1,6 +1,6 @@
 import { browserEvent, drainEvents } from "./events.mjs";
 import { randomUUID } from "node:crypto";
-import { startUse, endUse, finishUse, tabInUse, bindUse, releaseHold, pauseHold } from "./usage.mjs";
+import { startUse, endUse, finishUse, tabInUse, bindUse, releaseHold, pauseHold, idleReadTab } from "./usage.mjs";
 import { noteNativeContext } from "./native-worlds.mjs";
 import { wireDialogs, pendingDialog, answerDialog, requestClose, resolveDialog } from "./dialogs.mjs";
 import { BrowserWindow } from "electron";
@@ -174,6 +174,7 @@ async function executeFrame(browser, frame) {
   const tab = browser.tabs.get(frame.tab);
   if (!tab || tab.closeDrain || tab.owner !== owner) return { status: "refused", reason: "not_your_tab" };
   if (INTERACTIONS.has(op)) tab.acted = true;
+  if (op === "tab.read") tab.wasRead = true;
   if (op === "tab.selection") return browser.selection.result(tab, session);
   // A loopback page is read where it is: never driven, whoever holds the tab.
   if (op === "tab.devtools" && onLocalPage(tab)) return tab.dialog && args.read === "dom" ? pendingDialog(tab) : devtoolsRead(tab, args);
@@ -241,6 +242,9 @@ const INTERACTIONS = new Set(["tab.act", "tab.dialog", "tab.wait", "signin.fill"
 async function openAgent(browser, { session, args, id: callId, turn_id: turn }, source) {
   const signedIn = args.profile === "signed_in" || args.signed_in === true;
   if (signedIn && (args.policy?.mode !== "signed_in" || signedInPlace(args.url, args.policy) !== "granted")) return { status: "refused", reason: "signed_in_unavailable" };
+  // The turn's next page replaces a tab it already read and is not using, so its read tabs do not pile up.
+  const spent = !signedIn && !source && !args.preview_id && typeof turn === "string" ? [...browser.tabs.values()].find(tab => tab.wasRead && idleReadTab(browser, tab, session, turn)) : undefined;
+  if (spent) browser.close(spent.id);
   if (!makeAgentRoom(browser)) return { status: "refused", reason: "tab_budget_exhausted" };
   return openTab(browser, { session, args, callId, signedIn, source, turn });
 }
