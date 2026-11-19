@@ -13,7 +13,7 @@ import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { assertAssigneeLayout, mcpFocusAudit, runMcpMatrix } from "../support/canon-mcp-matrix.ts";
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
 import type { CanonGrant } from "../../packages/butler-app/client/ui/src/app/canonTrust.ts";
-import type { EpicDetail, PlanDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { EpicDetail, PlanDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
 const cases = [1440, 390].flatMap(w => ["light", "dark"].flatMap(t => ["plain", "wallpaper"].flatMap(s => (process.env.BUTLER_SMOKE_CROPS === "1" ? ["completed"] : ["pending", "completed"]).map(o => `${w}-${t}-${s}-${o}`))));
 if (await runMcpMatrix(cases, "BUTLER_CANON_MCP_CASE", import.meta.path)) process.exit(0);
 const [widthText, theme, surface, onboarding] = process.env.BUTLER_CANON_MCP_CASE!.split("-");

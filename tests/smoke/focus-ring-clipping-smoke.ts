@@ -28,7 +28,7 @@ import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, sep } from "node:path";
 import type { Page } from "playwright";
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
-import type { AnswerBlocks } from "../../packages/butler-app/client/shared/app-contracts";
+import type { AnswerBlocks } from "../../packages/butler-protocol/src/app-contracts";
 import type { MessageRecord, UsageMonitorView } from "../../packages/butler-app/client/ui/src/app/types";
 import { delegatedUsageView } from "../../packages/butler-app/client/ui/src/components/conversation/contextUsage.fixtures";
 import { launchSmokeBrowser } from "../support/smoke-browser";

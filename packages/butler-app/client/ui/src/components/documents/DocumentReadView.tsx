@@ -4,7 +4,7 @@ import { fromMarkdown } from "mdast-util-from-markdown";
 import { MediaFrame, MarkdownContent, MarkdownLink, MarkdownTable, Typo, Stack } from "@/butler-ds";
 import { AnswerBlocks } from "../conversation/AnswerBlocks";
 import { gatewayImageSource } from "@/app/messageFileUrls";
-import type { AnswerBlocksView, AnswerBlockView } from "../../../../shared/answer-blocks-view";
+import type { AnswerBlocksView, AnswerBlockView } from "../../../../../../butler-protocol/src/answer-blocks-view";
 import type { DocumentAsset, EditableDocument } from "./documentApi";
 /** Markdown shown as written: the reader's parts and the editor's units that are not editable text. */
 export function DocumentMarkdown({ raw, assets }: { raw: string; assets?: DocumentAsset[] }) {

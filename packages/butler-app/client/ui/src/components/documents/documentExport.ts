@@ -1,7 +1,7 @@
 import { fromMarkdown } from "mdast-util-from-markdown";
 import type { Root, RootContent } from "mdast";
-import { toMarkdown } from "../../../../shared/answer-blocks-markdown";
-import type { AnswerBlocks } from "../../../../shared/app-contracts";
+import { toMarkdown } from "../../../../../../butler-protocol/src/answer-blocks-markdown";
+import type { AnswerBlocks } from "../../../../../../butler-protocol/src/app-contracts";
 export const documentFileName = (title: string) => title.replace(/[<>:"/\\|?*]/gu, "_").split("").map(char => char.charCodeAt(0) < 32 ? "_" : char).join("").replace(/[. ]+$/u, "").slice(0, 180) || "document";
 function images(node: Root | RootContent, result: { start: number; end: number; id: string; alt: string; title?: string | null }[]) {
   if (node.type === "image" && node.url.startsWith("img_")) result.push({ start: node.position!.start.offset!, end: node.position!.end.offset!, id: node.url, alt: node.alt ?? "", title: node.title });

@@ -3,7 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import { api } from "../../packages/butler-app/client/ui/src/app/api.ts";
 import { canonBridgeInput } from "../../packages/butler-app/client/ui/src/app/canonBridge.ts";
 import { beginCanonQueueEdit, canonQueueSnapshot, observeCanonQueue, publishCanonQueueEvent } from "../../packages/butler-app/client/ui/src/app/canonQueue.ts";
-import type { CanonQueueView } from "../../packages/butler-app/client/shared/canon-queue-contracts.ts";
+import type { CanonQueueView } from "../../packages/butler-protocol/src/canon-queue-contracts.ts";
 import type { TimelineEvent } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
 const previous = globalThis.window;

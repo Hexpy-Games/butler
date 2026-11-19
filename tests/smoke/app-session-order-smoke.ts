@@ -11,7 +11,7 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { apiOrderEdit, installOrderPage, orderChat, orderItems, orderShape, readOrder, requestOrder, seedOrderPlan, stopOrderTurn, waitOrder } from "../support/session-order-fixtures.ts";
 import { getAppCopy } from "../../packages/butler-i18n/src/index.ts";
-import type { CanonQueueEdit, CanonQueueView } from "../../packages/butler-app/client/shared/canon-queue-contracts.ts";
+import type { CanonQueueEdit, CanonQueueView } from "../../packages/butler-protocol/src/canon-queue-contracts.ts";
 import { formatClips, probeFocusRing } from "../support/focus-ring-clipping.ts";
 
 const cells = ["light-desktop", "dark-desktop", "light-phone", "dark-phone"];

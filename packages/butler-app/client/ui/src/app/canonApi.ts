@@ -1,8 +1,8 @@
 import { api, callBridge } from "./api.ts";
 import { appCopy } from "./copy.ts";
 import type { MessageFileRef } from "./types.ts";
-import type { CanonTag, CanonTagCreateInput, CanonTagEditInput, CanonSidebar, CanonSidebarOrderInput, CanonConversation, CanonOverview, CanonOrderInput, EpicDetail, EpicInput, PlanDetail, PlanInput, EpicProgressSnapshot, CanonConversationInput } from "../../../shared/canon-contracts.ts";
-export type * from "../../../shared/canon-contracts.ts";
+import type { CanonTag, CanonTagCreateInput, CanonTagEditInput, CanonSidebar, CanonSidebarOrderInput, CanonConversation, CanonOverview, CanonOrderInput, EpicDetail, EpicInput, PlanDetail, PlanInput, EpicProgressSnapshot, CanonConversationInput } from "../../../../../butler-protocol/src/canon-contracts.ts";
+export type * from "../../../../../butler-protocol/src/canon-contracts.ts";
 const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}/canon`;
 const planPath = (id: string) => `/canon/plans/${encodeURIComponent(id)}`;
 const epicPath = (id: string) => `/canon/epics/${encodeURIComponent(id)}`;

@@ -1,7 +1,7 @@
 // test-category: format-pin
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
-import type { CanonActivityPage, EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { CanonActivityPage, EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
 import { auditCanonCardFocus } from "./canon-registration-cards.ts";
 import { assertActivityTimes } from "./canon-mcp-layout.ts";

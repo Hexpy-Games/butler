@@ -3,7 +3,7 @@ import { decideCanonHold, takeCanonHere } from "@/app/canonQueue.ts";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { Button, ButtonContainer, CircleAlert, ComposerDecisionPanel, Typo } from "@/butler-ds";
-import type { CanonHoldPanel, CanonTakeHerePanel } from "../../../../shared/canon-queue-contracts.ts";
+import type { CanonHoldPanel, CanonTakeHerePanel } from "../../../../../../butler-protocol/src/canon-queue-contracts.ts";
 import { useDecision } from "./useInitiatedDecision.ts";
 
 type Complete = (action: () => void) => void;

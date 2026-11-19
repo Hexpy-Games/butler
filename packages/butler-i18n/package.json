@@ -1,0 +1,8 @@
+{
+  "name": "@butler/i18n",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

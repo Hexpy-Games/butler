@@ -17,7 +17,7 @@ import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser, runSmokeCases } from "../support/smoke-browser.ts";
 import { auditSessionInfoFocus, failPendingAsksRead, installSessionBrowser, installPendingAskEvents, pendingAsksChanged, populatedSession, replaySession, runningSession, sessionQuestion } from "../support/session-info-fixtures.ts";
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
-import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
 
 const cases = ["light", "dark"];
 if (await runSmokeCases(cases, "BUTLER_SESSION_INFO_CASE", import.meta.path, { isolate: true })) process.exit(0);

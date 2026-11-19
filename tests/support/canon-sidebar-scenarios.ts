@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { CanonOverview, CanonSidebar, CanonConversation, EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { CanonOverview, CanonSidebar, CanonConversation, EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
 import { seedCanonBoard, waitToast } from "./canon-board-scenarios.ts";
 export async function seedCanonSidebar(server: NativeAppServerHandle) {
   const seed = await seedCanonBoard(server);

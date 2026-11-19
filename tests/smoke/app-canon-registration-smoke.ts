@@ -6,7 +6,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
-import type { CanonProposal } from "../../packages/butler-app/client/shared/canon-proposal-contracts.ts";
+import type { CanonProposal } from "../../packages/butler-protocol/src/canon-proposal-contracts.ts";
 import { captureReviewCrops } from "../support/canon-registration-review.ts";
 
 if (process.env.BUTLER_SMOKE_REVIEW_CROPS === "1") {

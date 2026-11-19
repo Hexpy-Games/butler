@@ -1,6 +1,6 @@
 import type { Page } from "playwright";
 import type { SessionView } from "../../packages/butler-app/client/ui/src/app/types.ts";
-import type { TaskGraphSnapshot } from "../../packages/butler-app/client/shared/task-graph-contracts.ts";
+import type { TaskGraphSnapshot } from "../../packages/butler-protocol/src/task-graph-contracts.ts";
 import { HARNESS_SS03_OBSERVER_VIEW } from "../../packages/butler-app/client/ui/src/app/fixtures.ts";
 
 /** The service builder admits turns into a controlled queue without running models.

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
 import { canonAsideClose } from "./canon-board-aside.ts";
 
 /** Every aside dismissal enters the same existing inline-edit guard. */

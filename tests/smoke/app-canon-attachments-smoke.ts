@@ -7,7 +7,7 @@ import { openCanonBoard, seedCanonBoard, waitToast } from "../support/canon-boar
 import { selectBoardPlan } from "../support/canon-board-selector.ts";
 import { closeCanonAside } from "../support/canon-board-aside.ts";
 import { probeFocusRing } from "../support/focus-ring-clipping.ts";
-import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
 
 const cells = [1440, 390].flatMap(width => ["light", "dark"].map(theme => `${width}-${theme}`));
 if (await runSmokeCases(cells, "BUTLER_ATTACHMENTS_CASE", import.meta.path, { isolate: true })) process.exit(0);

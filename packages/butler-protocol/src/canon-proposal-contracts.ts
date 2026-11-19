@@ -1,4 +1,4 @@
-import type { MessageFileRef } from "../ui/src/app/types.ts";
+import type { MessageFileRef } from "./message-session-contracts.ts";
 import type { CanonTagColor } from "./canon-contracts.ts";
 export interface CanonProposalAnchor { proposal_id: string; turn_id: string; source_call_id: string; epic_ids: string[] }
 export interface CanonProposal {

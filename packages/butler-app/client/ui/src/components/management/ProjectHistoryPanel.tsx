@@ -4,7 +4,7 @@ import { rememberDashboardLoadedCount, useProjectDashboardState } from "@/app/pr
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Box, Button, ChevronRight, CheckCircle2, EventTimeline, EventTimelineItem, FileText, MessageSquare, NavRow, Notice, Section, Stack, Typo } from "@/butler-ds";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
-import type { DashboardHistoryPage } from "../../../../shared/app-contracts.ts";
+import type { DashboardHistoryPage } from "../../../../../../butler-protocol/src/app-contracts.ts";
 
 export function ProjectHistoryPanel({ projectId, onSelect, onOpenSession }: { projectId: string; onSelect: (document: ProjectDashboardDocument) => void; onOpenSession: (id: string) => void }) {
   const locale = useAppLocale();
