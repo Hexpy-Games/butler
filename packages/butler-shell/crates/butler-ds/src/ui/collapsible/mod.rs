@@ -142,6 +142,9 @@ impl State {
             self.started = false;
             self.generation += 1;
         }
+        if reduced && open {
+            self.phase = Phase::Settled;
+        }
         let start = !self.started
             && self.phase != Phase::Settled
             && (self.phase == Phase::Closing || self.natural.get().is_some());
@@ -188,7 +191,11 @@ fn measure(state: &gpui::Entity<State>, natural: Rc<Cell<Option<f32>>>) -> impl 
             let height = Some(f32::from(bounds.size.height));
             let first = natural.replace(height).is_none();
             if first {
-                probe.update(cx, |_, cx| cx.notify());
+                probe.update(cx, |s, cx| {
+                    if s.phase == Phase::Opening && !s.started {
+                        cx.notify();
+                    }
+                });
             }
         },
     )
