@@ -1,5 +1,6 @@
-import { Text as RNText, type TextStyle } from "react-native";
+import type { TextStyle } from "react-native";
 import { useTokens } from "../design/useTokens";
+import { BaseText } from "./internal/BaseText";
 import { textStyle, toneColors, variantMaxScale, type TextTone, type TextVariant, type WeightName } from "./internal/typography";
 
 export type { TextTone, TextVariant };
@@ -36,17 +37,16 @@ export function Text({
     ...(fontVariant.length ? { fontVariant } : null),
   };
   return (
-    <RNText
+    <BaseText
       style={style}
       numberOfLines={lines}
       ellipsizeMode="tail"
       selectable={selectable}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={heading ? "header" : undefined}
-      lineBreakStrategyIOS={heading ? "hangul-word" : undefined}
       maxFontSizeMultiplier={variantMaxScale(variant)}
     >
       {children}
-    </RNText>
+    </BaseText>
   );
 }

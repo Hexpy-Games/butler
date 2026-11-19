@@ -1,6 +1,7 @@
 export { useTokens } from "../design/useTokens";
 export { Badge, UnreadDot, type BadgeProps, type UnreadDotProps } from "./Badge";
 export { Button, IconButton, type ButtonProps, type ButtonVariant, type IconButtonProps } from "./Button";
+export { ButtonGroup, type ButtonGroupLayout, type ButtonGroupProps } from "./ButtonGroup";
 export { Composer, ComposerDock, type ComposerDockProps, type ComposerProps } from "./Composer";
 export { GlassBackdrop, type GlassBackdropProps } from "./GlassBackdrop";
 export { Icon, type IconProps } from "./Icon";

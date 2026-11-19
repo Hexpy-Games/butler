@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -36,6 +37,10 @@ def fingerprints(names, package):
 class CargoUnits(unittest.TestCase):
     def fixture(self, root):
         (root / 'Cargo.toml').write_text('[workspace]\nmembers=["core", "gateway", "app"]\nresolver="2"\n')
+        # Build with the toolchain the product pins, not whatever Rust the runner image ships.
+        pinned = tomllib.loads((ROOT.parents[1] / 'packages/butler-agent/rust/rust-toolchain.toml').read_text())
+        (root / 'rust-toolchain.toml').write_text(
+            f'[toolchain]\nchannel = "{pinned["toolchain"]["channel"]}"\nprofile = "minimal"\n')
         for name, dependencies, source in [
                 ('core', '', 'pub fn value() -> u32 { 1 }'),
                 ('gateway', 'core={path="../core"}', 'pub fn value() -> u32 { core::value() + 1 }'),

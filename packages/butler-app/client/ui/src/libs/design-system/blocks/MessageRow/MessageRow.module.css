@@ -74,10 +74,11 @@
   --message-bubble-max-width: min(440px, 90%);
 }
 
-/* Bubble row (대화): the answer bubble mirrors the user bubble on the left;
-   attachments align to its left edge and never grow past its max width. */
+/* The footer sits under the bubble (or its attachments) with the user footer's
+   gap; the answer's own parts keep their lg rhythm inside MessageLiveGroup. */
 .bubbleRow .body {
   align-items: flex-start;
+  gap: var(--space-1);
 }
 
 .bubbleRow .body > * {
@@ -96,6 +97,11 @@
   gap: var(--space-lg);
   width: var(--message-bubble-max-width);
   min-width: 0;
+}
+
+/* An empty attachment slot takes no space (no extra gap under the bubble). */
+.bubbleAttachments:empty {
+  display: none;
 }
 
 .assistant .body > .footer,
@@ -120,14 +126,13 @@
 }
 
 .footer {
-  /* Footer icon actions keep the 26px footer row and control radius. */
+  /* Footer icon actions keep the 26px footer row; they are circles (IconButton's pill) 4px apart. */
   --icon-button-size: 26px;
-  --icon-button-radius: var(--radius-control);
 
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   margin-top: var(--space-3);
   color: var(--text-tertiary);
   font-size: var(--font-size-2);
@@ -155,7 +160,6 @@
   gap: var(--space-1);
   min-height: 26px;
   border: 0;
-  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
   font: inherit;

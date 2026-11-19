@@ -102,6 +102,21 @@ try {
         await activity.getByText("예정 → 진행 중", { exact: true }).waitFor();
         assert.doesNotMatch(await activity.innerText(), /in_progress|planned/u);
       }
+      if (!before) {
+        await server.api(`/canon/epics/${epic.id}/specs`, { ...post({ body: "# 접근 기준\n\n연결 권한을 먼저 확인합니다.", summary: "접근 기준 등록" }), headers });
+        const created = detail.locator('[data-test-class="canon-mcp-proposal"]').filter({ hasText: "명세 등록" });
+        await created.waitFor();
+        assert.equal(await created.getByText("명세 변경 제안").count(), 0);
+        await created.getByRole("button", { name: "반영", exact: true }).click();
+        await created.waitFor({ state: "detached" });
+        const specBody = detail.locator('[data-test-class="canon-spec-body"]');
+        await specBody.getByText("1판", { exact: true }).waitFor();
+        await specBody.getByRole("button").first().click();
+        assert.equal(await specBody.getByRole("button").first().getAttribute("aria-expanded"), "true");
+        await specBody.getByText("연결 권한을 먼저 확인합니다.", { exact: true }).waitFor();
+        if (crops) await captureRegion(page, shots, `after-spec-body-${width}-${theme}-${wallpaper ? "wallpaper" : "plain"}`,
+          [detail.locator('[data-test-class="canon-spec-tree"]')]);
+      }
       focus.finish();
       console.log(JSON.stringify({ result: "PASS",before,width,theme,wallpaper,embedded: true,clipped: 0 }));
     } finally { await context.close(); }

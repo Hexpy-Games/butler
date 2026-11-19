@@ -1,7 +1,8 @@
 import { useContext, useState } from "react";
-import { Text as RNText, TextInput, View } from "react-native";
+import { TextInput, View } from "react-native";
 import { alpha, mix, RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
+import { BaseText } from "./internal/BaseText";
 import { Text } from "./Text";
 import { ForcedState } from "./internal/press";
 import { fontFace, maxFontScale, textStyle } from "./internal/typography";
@@ -80,12 +81,12 @@ export function TextField({
       />
       {error || description ? (
         <View accessibilityRole={error ? "alert" : undefined} accessibilityLiveRegion={error ? "polite" : undefined}>
-          <RNText
+          <BaseText
             maxFontSizeMultiplier={maxFontScale.reading}
             style={{ ...textStyle(t, "body"), color: error ? t.color("--danger") : t.color("--text-secondary") }}
           >
             {error ?? description}
-          </RNText>
+          </BaseText>
         </View>
       ) : null}
     </View>

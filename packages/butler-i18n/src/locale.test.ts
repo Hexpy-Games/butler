@@ -127,7 +127,8 @@ test("API key copy claims Keychain storage only where the agent reports it (#217
   for (const locale of ["en-US", "ko-KR"] as const) {
     const copy = getAppCopy(locale);
     const reported = new Set(Object.values(copy.settings.savedKeys.storage));
-    const claims = strings(copy).filter((text) => !reported.has(text) && /keychain|키체인|secure storage|encrypt|암호화/iu.test(text));
+    // API keys are entered and listed only in first run and Settings; Butler Vault copy describes the vault itself.
+    const claims = strings([copy.firstRun, copy.settings]).filter((text) => !reported.has(text) && /keychain|키체인|secure storage|encrypt|암호화/iu.test(text));
     expect(claims, locale).toEqual([]);
   }
 });

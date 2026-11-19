@@ -27,6 +27,7 @@ function McpProposal({ proposal, reload }: { proposal: CanonMcpProposal; reload:
   const person = useCanonPersonName();
   const [busy, setBusy] = useState(false);
   const copy = appCopy.canon.mcp;
+  const label = proposal.spec_id ? copy.proposal : appCopy.canon.proposalCard.ops.specCreate;
   const lines = useMemo(() => proposalLines(proposal.current_body ?? "", proposal.proposed_body), [proposal.current_body, proposal.proposed_body]);
   const resolve = async (outcome: "accepted" | "declined") => {
     if (busy) return;
@@ -44,9 +45,9 @@ function McpProposal({ proposal, reload }: { proposal: CanonMcpProposal; reload:
     }
   };
   return <Stack gap="sm" data-test-class="canon-mcp-proposal">
-    <Typo.PanelSectionTitle wrap="anywhere">{copy.proposal} · {canonActorLabel(proposal.actor, person)}</Typo.PanelSectionTitle>
+    <Typo.PanelSectionTitle wrap="anywhere">{label} · {canonActorLabel(proposal.actor, person)}</Typo.PanelSectionTitle>
     <Typo.Body wrap="pre">{proposal.summary}</Typo.Body>
-    <ChangedLineDiff id={`proposal-${proposal.id}`} ariaLabel={copy.proposal} lines={lines} />
+    <ChangedLineDiff id={`proposal-${proposal.id}`} ariaLabel={label} lines={lines} />
     <ButtonContainer size="sm" justify="end">
       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void resolve("declined")}>{copy.deny}</Button>
       <Button size="sm" disabled={busy} onClick={() => void resolve("accepted")}>{copy.apply}</Button>

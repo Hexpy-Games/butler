@@ -23,7 +23,12 @@
         "./node_modules/pretendard/dist/public/static/Pretendard-Regular.otf",
         "./node_modules/pretendard/dist/public/static/Pretendard-Medium.otf",
         "./node_modules/pretendard/dist/public/static/Pretendard-SemiBold.otf"
-      ] }]
+      ] }],
+      ["expo-camera", {
+        "cameraPermission": "Butler uses the camera to scan the pairing QR code shown on your computer.",
+        "microphonePermission": false,
+        "recordAudioAndroid": false
+      }]
     ]
   }
 }
