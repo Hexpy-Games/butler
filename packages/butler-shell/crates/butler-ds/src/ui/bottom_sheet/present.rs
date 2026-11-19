@@ -124,8 +124,7 @@ impl Presented {
             }
             None => animated,
         };
-        // Over the surface, wheel and pointer stop here, as a DOM overlay on top (web: Popover.module.css overscroll-behavior: contain).
-        let mut content = div().track_focus(&self.focus).occlude().child(guarded);
+        let mut content = div().track_focus(&self.focus).child(guarded);
         if let Some(scope) = self.scope {
             content = content.capture_key_down(move |event, window, cx| {
                 if event.keystroke.key == "tab"

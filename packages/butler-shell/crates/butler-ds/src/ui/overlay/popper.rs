@@ -145,7 +145,7 @@ impl RenderOnce for Popper {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let priority = self.z.value(Ds::get(cx));
         // Over the surface, wheel and pointer stop here, as a DOM overlay on top (web: Popover.module.css overscroll-behavior: contain).
-        // A pinned child is window-sized; its own surface occludes instead.
+        // A pinned child brings its own window-sized occluding backdrop (bottom_sheet/anim.rs).
         let child = if self.pinned {
             self.child
         } else {
