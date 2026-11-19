@@ -39,7 +39,6 @@ pub struct LiquidGlass {
     profile: Profile,
     reduce_transparency: bool,
     increase_contrast: bool,
-    reduce_motion: bool,
 }
 
 impl LiquidGlass {
@@ -52,7 +51,6 @@ impl LiquidGlass {
             profile: Profile::Native,
             reduce_transparency: false,
             increase_contrast: false,
-            reduce_motion: false,
         }
     }
 
@@ -65,7 +63,6 @@ impl LiquidGlass {
             profile: Profile::Native,
             reduce_transparency: false,
             increase_contrast: false,
-            reduce_motion: false,
         }
     }
 
@@ -77,12 +74,10 @@ impl LiquidGlass {
         }
     }
 
-    /// Follow the OS Reduce Transparency, Increase Contrast and Reduce Motion settings
-    /// (LG research §6, §8.1.8). Under Reduce Motion the glass is present at once.
+    /// Follow the OS Reduce Transparency and Increase Contrast settings (LG research §6, §8.1.8).
     pub fn adapt(mut self, ds: &Ds) -> Self {
         self.reduce_transparency = ds.reduced_transparency();
         self.increase_contrast = ds.increased_contrast();
-        self.reduce_motion = ds.reduced_motion();
         self
     }
 }
@@ -106,11 +101,7 @@ pub fn paint(
     }
     let r = radii.max().as_f32();
     let circle = (w - h).abs() < 0.5 && r >= w / 2. - 0.5;
-    let presence = if glass.reduce_motion {
-        Presence::Static(1.)
-    } else {
-        glass.materialize
-    };
+    let presence = glass.materialize;
     if matches!(presence, Presence::Static(t) if t <= 0.) {
         return;
     }
@@ -129,14 +120,19 @@ pub fn paint(
         } => {
             // The glass appears and leaves by opacity only, at full material, so the lens
             // fades with its content exactly as a backdrop-filter under CSS opacity.
-            Some((
-                m.clone(),
-                gpui::LayerMotion {
-                    opacity: (from, to),
-                    ..timing.motion(start_ms)
-                },
-            ))
+            Some(gpui::LayerMotion {
+                opacity: (from, to),
+                ..timing.motion(start_ms)
+            })
         }
     };
-    material::paint(bounds, radii, &m, glass.lift, glass.grow, appear, window);
+    material::paint(
+        bounds,
+        radii,
+        &m,
+        glass.lift,
+        glass.grow,
+        appear.as_ref(),
+        window,
+    );
 }
