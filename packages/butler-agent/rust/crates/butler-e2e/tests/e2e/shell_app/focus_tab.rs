@@ -4,7 +4,10 @@ use super::*;
 
 /// SHELL-APP-18 — Tab moves keyboard focus like the browser: a click on a message's copy button
 /// shows no ring; Tab then walks the tab stops in order, each showing its keyboard ring, through
-/// the composer field and its toolbar buttons; Shift-Tab goes back one.
+/// the composer field and its toolbar buttons; Shift-Tab goes back one. Tab into the multi-line
+/// composer keeps its selection, as a textarea does (a regression guard: the composer is not a
+/// registered field, so it is never selected). Tab back into a single-line field (History's
+/// search) selects its text, as an input does.
 #[tokio::test]
 async fn shell_app_18_tab_moves_keyboard_focus_like_the_browser() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -86,6 +89,20 @@ async fn shell_app_18_tab_moves_keyboard_focus_like_the_browser() -> Result<(), 
             "expect-focus-ring access-menu",
             "key shift-tab",
             "expect-focus-ring attachment-menu",
+            "click composer-field",
+            "type Draft",
+            "key shift-tab",
+            "key tab",
+            "key secondary-c",
+            "expect-clipboard \"Hello\"",
+            "history",
+            "wait-anchor history-search",
+            "click history-search",
+            "type Find",
+            "key tab",
+            "key shift-tab",
+            "key secondary-c",
+            "expect-clipboard \"Find\"",
         ])
         .await?;
     shell.finish().await?;

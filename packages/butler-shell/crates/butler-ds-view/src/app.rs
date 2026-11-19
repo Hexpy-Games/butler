@@ -240,15 +240,13 @@ impl Render for DsView {
 }
 
 /// The DS View's window keys: Escape closes a peeked sidebar, and Tab moves focus as in a browser
-/// (`butler_ds::ui::focus::move_on_tab`) and selects the text of the field it lands on.
+/// (`butler_ds::ui::focus::move_on_tab`).
 fn move_focus(event: &gpui::KeyDownEvent, window: &mut Window, cx: &mut App) {
     if event.keystroke.key == "escape" {
         // A peeked sidebar closes on Escape wherever focus is.
         butler_ds::ui::blocks::adaptive_shell::peek::escape(window, cx);
     }
-    if focus::move_on_tab(event, window, cx) {
-        butler_ds::ui::text::select_focused(window, cx);
-    }
+    focus::move_on_tab(event, window, cx);
 }
 
 /// The story frame's background, `--conversation-bg`.
