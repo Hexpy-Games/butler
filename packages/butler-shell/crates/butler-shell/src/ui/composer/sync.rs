@@ -96,6 +96,11 @@ impl Composer {
         }
     }
 
+    /// Tab is a deliberate focus, like a pointer down: focus that lands in the field stays.
+    pub(crate) fn keep_next_focus(&mut self) {
+        self.release_focus = false;
+    }
+
     /// `focusComposer`: the request of `ComposerState::request_focus` is taken once; a request
     /// wins over a pending release.
     pub(super) fn take_focus_request(&mut self, window: &mut Window, cx: &mut Context<Self>) {

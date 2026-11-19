@@ -15,6 +15,7 @@ use gpui::{
 
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
+use crate::ui::liquid_glass::{Presence, with_presence};
 use crate::ui::motion::{Props, Timing, Transition, transition};
 use crate::ui::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
 use crate::ui::typo::{Role, Tone, Typo, Weight};
@@ -319,14 +320,11 @@ impl RenderOnce for ResizeHandle {
             .clone()
             .filter(|_| shown.hint.0.target() > 0. || shown.hint.0.moving(&shown.hint.1))
             .map(|hint| {
-                shown.hint.0.apply(
-                    cover().child(hint_view(self.label.clone(), hint, self.hint_side, ds)),
-                    &shown.hint.1,
-                    &Props {
-                        opacity: Some((0., 1.)),
-                        ..Default::default()
-                    },
-                )
+                // The hint is a glass: it fades by its own presence, not a parent's opacity.
+                cover().child(with_presence(
+                    Presence::of(&shown.hint.0, &shown.hint.1),
+                    hint_view(self.label.clone(), hint, self.hint_side, ds),
+                ))
             });
         let (hover, bounds_state) = (pointer.clone(), pointer);
         let (on_drag, on_key) = (self.on_drag.clone(), self.on_key.clone());
