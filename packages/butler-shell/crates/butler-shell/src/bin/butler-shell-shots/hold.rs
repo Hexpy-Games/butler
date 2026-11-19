@@ -27,36 +27,42 @@ fn at<'a>(
 /// down while real time passes for the drop feedback's motion to land.
 pub(super) fn drag_hold(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     h.cx.update(|cx| cx.set_reduce_motion(false));
-    settle(&mut h.cx, h.handle);
-    let mut parts = arg.split_whitespace();
-    let start = at(h, &mut parts)?;
-    let end = at(h, &mut parts)?;
-    move_pointer(h, h.handle, start, None)?;
-    settle(&mut h.cx, h.handle);
-    h.cx.update_window(h.handle, |_, w, cx| {
-        w.activate();
-        w.dispatch_event(
-            PlatformInput::MouseDown(MouseDownEvent {
-                button: MouseButton::Left,
-                position: start,
-                modifiers: Default::default(),
-                click_count: 1,
-                first_mouse: false,
-            }),
-            cx,
-        );
-    })?;
-    h.cx.run_until_parked();
-    for step in 1..=8_u8 {
-        let fraction = f32::from(step) / 8.;
-        let position = start + (end - start) * fraction;
-        move_pointer(h, h.handle, position, Some(MouseButton::Left))?;
-        h.cx.advance_clock(std::time::Duration::from_millis(16));
+    let result = (|| {
+        settle(&mut h.cx, h.handle);
+        let mut parts = arg.split_whitespace();
+        let start = at(h, &mut parts)?;
+        let end = at(h, &mut parts)?;
+        move_pointer(h, h.handle, start, None)?;
+        settle(&mut h.cx, h.handle);
+        h.cx.update_window(h.handle, |_, w, cx| {
+            w.activate();
+            w.dispatch_event(
+                PlatformInput::MouseDown(MouseDownEvent {
+                    button: MouseButton::Left,
+                    position: start,
+                    modifiers: Default::default(),
+                    click_count: 1,
+                    first_mouse: false,
+                }),
+                cx,
+            );
+        })?;
         h.cx.run_until_parked();
+        for step in 1..=8_u8 {
+            let fraction = f32::from(step) / 8.;
+            let position = start + (end - start) * fraction;
+            move_pointer(h, h.handle, position, Some(MouseButton::Left))?;
+            h.cx.advance_clock(std::time::Duration::from_millis(16));
+            h.cx.run_until_parked();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        settle(&mut h.cx, h.handle);
+        Ok(())
+    })();
+    if result.is_err() {
+        h.cx.update(|cx| cx.set_reduce_motion(true));
     }
-    std::thread::sleep(std::time::Duration::from_millis(600));
-    settle(&mut h.cx, h.handle);
-    Ok(())
+    result
 }
 
 /// `drag-release <target> <fx> <fy>`: releases the held drag at fractions of `target`'s bounds,

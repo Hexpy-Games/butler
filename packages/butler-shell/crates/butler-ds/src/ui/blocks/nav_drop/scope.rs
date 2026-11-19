@@ -5,8 +5,9 @@
 //! gpui drag: every move of a drag of payload `T` over the scope resolves a row and zone, and a
 //! drop commits it if the product's `can_drop` allows. The product turns the committed hit into
 //! its own move. A move draws again only when what it shows changes (the hit, a combine dwell,
-//! the auto-scroll band), as React renders only when the hit's `data-drop` changes, and then only
-//! the view the scope renders in: the other views keep their cached frames.
+//! the auto-scroll band), as React renders only when the hit's `data-drop` changes, and then it
+//! notifies only the view the scope renders in. (gpui itself still refreshes the whole window on
+//! every move of an active drag, in `Window::dispatch_event`.)
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;

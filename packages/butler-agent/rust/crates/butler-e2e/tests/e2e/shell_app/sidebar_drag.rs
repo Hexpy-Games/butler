@@ -226,7 +226,6 @@ async fn shell_app_23_sidebar_drag_opens_a_gap_and_reorders() -> Result<(), Harn
         if shown {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
     }
     assert!(shown, "the sidebar did not show the dropped order");
     shell.run(&["app-quit"]).await?;
