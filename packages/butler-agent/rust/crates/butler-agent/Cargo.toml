@@ -63,7 +63,6 @@ thiserror.workspace = true
 unicode-normalization.workspace = true
 unicode-segmentation.workspace = true
 url.workspace = true
-qrcode.workspace = true
 rmcp.workspace = true
 
 [dev-dependencies]
