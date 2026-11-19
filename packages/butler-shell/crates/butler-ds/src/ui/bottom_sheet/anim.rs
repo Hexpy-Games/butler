@@ -8,6 +8,7 @@ use gpui::{
 use super::state::SheetState;
 use crate::tokens::{Color, Duration as DsDuration, Easing};
 use crate::ui::context::Ds;
+use crate::ui::liquid_glass::{Presence, with_presence};
 use crate::ui::motion::{Props, Timing, keyed};
 use crate::ui::overlay::lifecycle::Phase;
 
@@ -74,15 +75,9 @@ pub(crate) fn animate(
                 ..Default::default()
             },
         ),
-        (
-            "fade",
-            enter_fade,
-            Props {
-                opacity: Some((0., 1.)),
-                ..Default::default()
-            },
-        ),
+        ("fade", enter_fade, Props::default()),
     ];
+    let mut presence = Presence::Static(1.);
     for (name, incoming, props) in layers {
         let enter_id = format!("{id}-{name}-in-{key}");
         let exit_id = format!("{id}-{name}-out-{key}");
@@ -93,9 +88,14 @@ pub(crate) fn animate(
         } else {
             keyed(exit_id, enter.value(&incoming), 0., &timing, window, cx)
         };
-        moving = value.apply(div().relative().child(moving), &timing, &props);
+        if name == "fade" {
+            // The sheet is a glass: it fades by its own presence, not a wrapping opacity.
+            presence = Presence::of(&value, &timing);
+        } else {
+            moving = value.apply(div().relative().child(moving), &timing, &props);
+        }
     }
-    Some(moving.into_any_element())
+    Some(with_presence(presence, moving).into_any_element())
 }
 
 /// The backdrop (`--dialog-overlay-bg`) over the whole window: it fades in over `--motion-base`

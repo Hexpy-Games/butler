@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, Entity, FocusHandle, IntoElement as _, ParentElement as _, SharedString,
-    Styled as _, Window, div, point, px,
+    Window, div, point, px,
 };
 
 pub use entry::{Entry, Position, SelectContent, SelectGroup, SelectItem};
@@ -30,6 +30,7 @@ use crate::ui::bottom_sheet::SheetState;
 use crate::ui::bottom_sheet::present::{self, Presented};
 use crate::ui::context::Ds;
 use crate::ui::layer::{Layer, Z};
+use crate::ui::liquid_glass;
 use crate::ui::menu::footprint;
 use crate::ui::overlay::dismiss::{Dismissable, Handle, Reason};
 use crate::ui::overlay::lifecycle::{Lifecycle, Phase, Spec};
@@ -412,7 +413,11 @@ impl Select {
         };
         let surface = theme.scoped(cx, |cx| surface::build(self, &view, &focus, cx));
         let animated = if hidden {
-            Some(div().opacity(0.).child(surface).into_any_element())
+            // Measuring frame: laid out but not painted (presence 0 paints no glass).
+            Some(
+                liquid_glass::with_presence(liquid_glass::Presence::Static(0.), surface)
+                    .into_any_element(),
+            )
         } else {
             motion::animate_glass(
                 &format!("{}-select", self.id),

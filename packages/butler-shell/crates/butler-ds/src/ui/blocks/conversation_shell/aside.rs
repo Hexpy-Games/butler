@@ -186,7 +186,7 @@ fn panel(
 }
 
 /// The glass is the floating aside's only surface: as tall as its content up to `max_height`, its scroller inside.
-/// `alpha` is its presence: the glass materializes with it and only the content fades.
+/// `alpha` is its presence: the glass and its content fade by that opacity alone, at full material.
 fn floating_glass(scroller: AnyElement, (max_height, alpha): (f32, Presence)) -> AnyElement {
     div()
         .w_full()
@@ -235,6 +235,13 @@ fn layer(
         .read(cx)
         .clone()
         .filter(|_| alpha.target() > 0. || alpha.moving(&timing))?;
+    // The exit ends on compositor ticks, which re-render nothing: wake this view at its end so
+    // the leaving aside is removed then, not at some later unrelated render.
+    if !on && alpha.moving(&timing) {
+        let elapsed = gpui::animation_time_ms().wrapping_sub(alpha.start_ms);
+        let left = timing.ms().saturating_sub(elapsed) + 1;
+        crate::ui::motion::wake_after(window, cx, std::time::Duration::from_millis(left.into()));
+    }
     let scroller = scroll(slot, layout, content(layout), window, cx);
     let panel = panel(
         slot,
@@ -253,8 +260,8 @@ fn layer(
         ),
     );
     let layer = cover();
-    // The floating glass takes `alpha` as its presence (LG research §5 Appear/disappear): the
-    // docked aside has no glass and fades whole.
+    // The floating glass takes `alpha` as its presence (opacity only, at full material, never a
+    // parent's opacity): the docked aside has no glass and fades whole.
     let layer = match layout {
         AsideLayout::Docked => alpha.apply(
             layer,
