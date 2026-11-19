@@ -736,6 +736,7 @@ export interface AppCopy {
   };
   butlerVault: {
     passwordIntro: string;
+    unsignedBuild: string;
     masterPassword: string;
     confirmPassword: string;
     currentPassword: string;

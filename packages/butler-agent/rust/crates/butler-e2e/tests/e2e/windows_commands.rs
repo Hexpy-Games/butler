@@ -65,6 +65,16 @@ fn contained_shell_file_transport() -> Result<(), HarnessError> {
     Ok(())
 }
 
+/// The agent's per-phase command timings, kept in the test output because the
+/// scenario's logs are removed with its sandbox.
+fn print_command_timings(scenario: &Scenario) {
+    for line in scenario.agent.logs().lines().filter(|line| {
+        line.contains("command_phase_timing") || line.contains("command_process_timing")
+    }) {
+        eprintln!("{line}");
+    }
+}
+
 async fn log_approval_timeout_diagnostics(
     scenario: &Scenario,
     chat_id: &str,
@@ -81,11 +91,7 @@ async fn log_approval_timeout_diagnostics(
         turn.as_ref().map(turn_state).unwrap_or("missing"),
         approvals.len()
     );
-    for line in scenario.agent.logs().lines().filter(|line| {
-        line.contains("command_phase_timing") || line.contains("command_process_timing")
-    }) {
-        eprintln!("{line}");
-    }
+    print_command_timings(scenario);
     Ok(())
 }
 
@@ -156,6 +162,9 @@ async fn run(case: &str, command: &str) -> Result<Value, HarnessError> {
         .cloned()
         .unwrap_or(result);
     eprintln!("{case}: {output}");
+    if output["timed_out"] == true {
+        print_command_timings(&s);
+    }
     assert_eq!(
         std::fs::read_to_string(downloads.join("보고서.txt"))?,
         "document"

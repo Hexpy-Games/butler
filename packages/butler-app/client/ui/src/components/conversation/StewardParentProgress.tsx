@@ -26,12 +26,8 @@ import { useWorkBlockExpanded } from "./workBlockExpansion.ts";
 import { workBlockLatestStatus } from "./workBlockLatestStatus.ts";
 import { workBlockTail } from "./workBlockTail.ts";
 
-export function StewardParentProgress({
-  progress,
-}: {
-  progress: AnchoredStewardProgress;
-}) {
-  useAppLocale();
+/** The card's child (summary overlaid with its live session view) and its one-line latest status. */
+export function useStewardCardState(progress: AnchoredStewardProgress) {
   const view = useButlerStore(state => state.sessionViews[progress.child.session_id]);
   const refresh = useButlerStore(state => state.refreshSessionObserver);
   useSessionViewSubscription(progress.child.session_id, refresh);
@@ -39,8 +35,6 @@ export function StewardParentProgress({
     status: view.status, plan: view.plan ?? progress.child.plan, approved_plan_total: view.approved_plan_total ?? progress.child.approved_plan_total,
     approved_plan_completed: view.approved_plan_completed ?? progress.child.approved_plan_completed, waiting_for_children: view.waiting_for_children } : progress.child;
   const rows = (child.active_turn ?? child.latest_turn)?.progress?.safe_progress_rows ?? progress.rows;
-  const [detailsOpen, toggleDetails] = useWorkBlockExpanded(child.session_id);
-  const detailsId = useId();
   const turn = child.active_turn ?? child.latest_turn;
   const live = Boolean(child.active_turn || child.waiting_for_children);
   const activityLabel = workerActivityTitle(
@@ -48,6 +42,18 @@ export function StewardParentProgress({
     child.title,
   );
   const latestStatus = workBlockLatestStatus(rows, turn?.id, live, effectiveStewardStatus(child)) ?? activityLabel;
+  return { view, child, rows, turn, live, latestStatus };
+}
+
+export function StewardParentProgress({
+  progress,
+}: {
+  progress: AnchoredStewardProgress;
+}) {
+  useAppLocale();
+  const { view, child, rows, turn, live, latestStatus } = useStewardCardState(progress);
+  const [detailsOpen, toggleDetails] = useWorkBlockExpanded(child.session_id);
+  const detailsId = useId();
   const tail = useMemo(() => workBlockTail(view, rows, turn?.id), [view, rows, turn?.id]);
   const [card, setCard] = useState<HTMLDivElement | null>(null);
   const cardRef = { ref: setCard };
