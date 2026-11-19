@@ -35,6 +35,7 @@ mod focus_fallback;
 mod focus_selection;
 mod narrow_window;
 mod observer_dialog;
+mod quit_agent;
 mod text_selection;
 mod text_size;
 mod titlebar_drag;
