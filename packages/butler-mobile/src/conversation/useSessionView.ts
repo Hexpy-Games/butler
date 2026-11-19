@@ -6,6 +6,9 @@ import type { GatewayClient } from "../../../butler-protocol/src/client/index.ts
 import { useConversation } from "./live";
 import { applyLiveEvent, mergeMessages } from "./sessionView";
 
+/** Messages per /session-view page; the conversation renders one page in its first pass. */
+export const SESSION_PAGE = 50;
+
 export function useSessionView(id: string) {
   const { client, reconcile, subscribe } = useConversation();
   const [view, setView] = useState<SessionView | null>(null);
@@ -34,7 +37,7 @@ export function useSessionView(id: string) {
       if (!older) { pending = false; last = Date.now(); }
       setLoadingEarlier(older);
       const before = token ? `&before_cursor_token=${encodeURIComponent(token)}` : "";
-      void client.request<SessionView>(`/session-view?session_id=${encodeURIComponent(id)}${before}&limit=50`).then(next => {
+      void client.request<SessionView>(`/session-view?session_id=${encodeURIComponent(id)}${before}&limit=${SESSION_PAGE}`).then(next => {
         if (closed) return;
         publish(mergeSessionView(current, next, older));
         setError(false);

@@ -7,7 +7,7 @@ import { toMarkdown } from "../../../butler-protocol/src/answer-blocks-markdown.
 import { Button, ButtonGroup, Composer, ComposerDock, EdgeFade, Markdown, showToast, Spinner, Surface, Text, useHeaderInset, useHeaderOptions, useTokens } from "@/ds";
 import { RADIUS } from "@/design/tokens";
 import { useConversation } from "@/conversation/live";
-import { useSessionView } from "@/conversation/useSessionView";
+import { SESSION_PAGE, useSessionView } from "@/conversation/useSessionView";
 import { useMobileCopy } from "@/i18n";
 
 export default function Chat() {
@@ -46,6 +46,7 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
       contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerInset }} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
       keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" scrollEventThrottle={16}
       contentContainerStyle={{ paddingHorizontal: t.length("--space-4"), paddingTop: headerInset + t.length("--space-4"), gap: t.length("--space-4") }}
+      initialNumToRender={SESSION_PAGE}
       onStartReached={() => { if (!first.current) loadEarlier(); }} onStartReachedThreshold={0.5}
       onScroll={({ nativeEvent }) => {
         setBottom(nearEnd(nativeEvent));
