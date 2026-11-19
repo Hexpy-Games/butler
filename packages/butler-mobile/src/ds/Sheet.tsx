@@ -94,16 +94,18 @@ export function Sheet({ open, onClose, dismissible = true, testID, ...panel }: S
   const fade = useRef(new Animated.Value(reduced ? 0 : 1)).current;
   const close = useRef(onClose);
   close.current = onClose;
+  const live = useRef({ height, t });
+  live.current = { height, t };
   const drag = useRef(PanResponder.create({
     // RN's Modal root claims every touch start that nothing inside claims (Modal._shouldSetResponder), and once an
     // ancestor is responder, move negotiation never asks its descendants. The strip holds nothing tappable: claim on start.
     onStartShouldSetPanResponder: () => true,
     onPanResponderMove: (_, g) => travel.setValue(Math.max(0, g.dy)),
     onPanResponderRelease: (_, g) => {
-      if (g.dy > height / 6 || g.vy > 0.5) close.current();
-      else run(t, travel, 0, "--motion-fast", "--motion-ease-standard").start();
+      if (g.dy > live.current.height / 6 || g.vy > 0.5) close.current();
+      else run(live.current.t, travel, 0, "--motion-fast", "--motion-ease-standard").start();
     },
-    onPanResponderTerminate: () => run(t, travel, 0, "--motion-fast", "--motion-ease-standard").start(),
+    onPanResponderTerminate: () => run(live.current.t, travel, 0, "--motion-fast", "--motion-ease-standard").start(),
   })).current;
   useEffect(() => {
     if (open) setMounted(true);

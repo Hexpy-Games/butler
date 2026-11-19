@@ -68,7 +68,7 @@ export default function PairScan() {
         <ButtonGroup>
           {blocked ? <>
             <Button label={copy.pair.manual} onPress={manual} />
-            {permission && !permission.granted && !permission.canAskAgain ? <Button variant="secondary" label={copy.pair.openSettings} onPress={() => void Linking.openSettings()} /> : null}
+            {permission && !permission.granted ? <Button variant="secondary" label={permission.canAskAgain ? copy.pair.allowCamera : copy.pair.openSettings} onPress={() => void (permission.canAskAgain ? requestPermission() : Linking.openSettings())} /> : null}
           </> : scan.kind === "failed" ? <>
             <Button label={copy.pair.rescan} onPress={rescan} />
             <Button variant="secondary" label={copy.pair.manual} onPress={manual} />

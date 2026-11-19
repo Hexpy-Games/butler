@@ -475,6 +475,7 @@ export const koKrCopy: AppCopy = {
       notPairingQr: "버틀러 연결용 QR코드가 아닙니다.",
       cameraOff: "카메라를 사용할 수 없습니다. 직접 입력하십시오.",
       openSettings: "설정 열기",
+      allowCamera: "카메라 허용",
       rescan: "다시 스캔",
       connecting: "연결하는 중…",
       address: "주소",
