@@ -1,28 +1,22 @@
 import { appCopy } from "@/app/copy.ts";
-import { Button, QrCode, SettingsField, SettingsSection, Stack, Tooltip, Typo } from "@/butler-ds";
-import { pairingLink } from "./pairingLink";
+import { Button, SettingsField, SettingsSection, Stack, Tooltip, Typo } from "@/butler-ds";
 import { usePairingSession } from "./usePairingSession";
 
-export function SecurityPairingSection({ disabled, addresses }: { disabled: boolean; addresses: readonly string[] }) {
+export function SecurityPairingSection({ disabled }: { disabled: boolean }) {
   const copy = appCopy.settings.security;
   const pairing = usePairingSession();
   const unavailable = disabled || pairing.busy || Boolean(pairing.code);
   const digits = pairing.busy ? undefined : pairing.code?.code;
-  const link = digits ? pairingLink(addresses, digits) : null;
   return (
     <SettingsSection id="device-pairing" kind="form" title={copy.pairDevice}>
       <SettingsField settingId="pairing-code" label={copy.code} controlWidth="full" control={(
         <Stack gap="sm" cross="start">
           {digits && (
-            <Stack align="row" gap="lg" cross="center" wrap>
-              {link && <QrCode value={link} label={copy.pairingQr} data-test-class="pairing-qr" data-pairing-link={link} />}
-              <Stack gap="xs">
-                <Typo.MetricValue numeric="tabular" wrap="nowrap" data-test-class="pairing-code">
-                  {digits.slice(0, 4)} {digits.slice(4)}
-                </Typo.MetricValue>
-                <Typo.Caption tone="secondary">{copy.expiresIn(pairing.remaining)}</Typo.Caption>
-                {link && <Typo.Caption tone="secondary">{copy.scanWithPhone}</Typo.Caption>}
-              </Stack>
+            <Stack gap="xs">
+              <Typo.MetricValue numeric="tabular" wrap="nowrap" data-test-class="pairing-code">
+                {digits.slice(0, 4)} {digits.slice(4)}
+              </Typo.MetricValue>
+              <Typo.Caption tone="secondary">{copy.expiresIn(pairing.remaining)}</Typo.Caption>
             </Stack>
           )}
           {pairing.invalidated && <Typo.Caption tone="secondary">{copy.invalidated}</Typo.Caption>}

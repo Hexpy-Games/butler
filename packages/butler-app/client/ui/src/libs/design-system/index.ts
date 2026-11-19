@@ -37,7 +37,6 @@ export * from "./components/Label";
 export * from "./components/NativeSelect";
 export * from "./components/Popover";
 export * from "./components/Presence";
-export * from "./components/QrCode";
 export * from "./components/RollingStatusLine";
 export * from "./components/RollingSwap";
 export * from "./components/PillButton";

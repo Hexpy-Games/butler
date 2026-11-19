@@ -3,8 +3,7 @@ use super::ApplicationFuture;
 use serde::Serialize;
 
 /// How a device presents its credential: a browser cookie, or a phone's token.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeviceKind {
     Browser,
     Ios,
@@ -40,6 +39,7 @@ pub struct PairedDevice {
     pub created_at: u64,
     pub last_seen_at: u64,
     pub revoked_at: Option<u64>,
+    #[serde(skip_serializing)]
     pub kind: DeviceKind,
 }
 

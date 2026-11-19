@@ -62,7 +62,6 @@ try {
     const headers = path.startsWith("/security") || path === "/settings" ? adminHeaders : server.authHeaders;
     await route.continue({ headers: { ...route.request().headers(), ...headers } });
   });
-  await admin("/settings", { method: "PATCH", body: JSON.stringify({ security: { allowed_hosts: ["phone-test.local"] } }) });
   await page.goto(server.url);
   await page.getByRole("button", { name: appCopy.sidebar.settings, exact: true }).click();
   await page.getByRole("button", { name: appCopy.settings.sections.security, exact: true }).click();
@@ -99,25 +98,8 @@ try {
   await page.getByRole("alertdialog").getByRole("button", { name: copy.revokeAll, exact: true }).click();
   await page.getByText(copy.noDevices, { exact: true }).waitFor();
   assert.equal((await admin<unknown[]>("/security/devices")).length, 0);
-  await page.getByRole("button", { name: copy.pairDevice, exact: true }).click();
-  const qr = page.getByRole("img", { name: copy.pairingQr, exact: true });
-  await qr.waitFor();
-  const link = new URL((await page.locator('[data-test-class="pairing-qr"]').getAttribute("data-pairing-link"))!);
-  assert.equal(link.protocol, "butler:");
-  assert.equal(link.searchParams.get("v"), "1");
-  assert.equal(link.searchParams.get("c"), await codeFromUi(page));
-  assert.deepEqual(link.searchParams.getAll("a"), (await admin<{ lan_urls: string[] }>("/security")).lan_urls.slice(0, 4));
-  const phone = await fetch(new URL("devices/pair", server.url), {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ code: link.searchParams.get("c"), device_name: "Smoke phone", platform: "ios" }),
-  });
-  assert.equal(phone.status, 201);
-  assert.ok((await phone.json()).data.device_token);
-  await page.getByText(copy.paired, { exact: true }).waitFor();
-  await page.getByText("Smoke phone", { exact: true }).waitFor();
-  assert.deepEqual((await admin<{ name: string; kind: string }[]>("/security/devices")).map(({ name, kind }) => ({ name, kind })), [{ name: "Smoke phone", kind: "ios" }]);
   assert.equal(server.stubModelCalls.length, 0, "pairing needs no model calls");
-  console.log(JSON.stringify({ ok: true, checks: ["expiry", "invalidation", "pair", "stop", "event-refresh", "revoke", "confirm-all", "responsive", "qr"], widths: [320, 375, 390, 430, 768, 1440] }));
+  console.log(JSON.stringify({ ok: true, checks: ["expiry", "invalidation", "pair", "stop", "event-refresh", "revoke", "confirm-all", "responsive"], widths: [320, 375, 390, 430, 768, 1440] }));
 } catch (error) {
   const message = String(error).replaceAll(secret, "[redacted]").replaceAll(server.token, "[redacted]");
   console.error(message);

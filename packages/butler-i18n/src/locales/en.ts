@@ -2293,8 +2293,6 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       copied: "Copied",
       code: "Code",
       pairDevice: "Pair device",
-      pairingQr: "Pairing QR code",
-      scanWithPhone: "Scan with the Butler app on your phone.",
       expiresIn: (seconds) => `${seconds}s remaining`,
       invalidated: "Repeated failures issued a new code",
       paired: "Device paired",

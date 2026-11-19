@@ -1941,8 +1941,6 @@ export interface AppCopy {
       copied: string;
       code: string;
       pairDevice: string;
-      pairingQr: string;
-      scanWithPhone: string;
       expiresIn: (seconds: number) => string;
       invalidated: string;
       paired: string;

@@ -61,7 +61,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
       </SettingsSection>
       {view?.remote_access_enabled && (
         <>
-          <SecurityPairingSection disabled={busy !== null} addresses={view.lan_urls} />
+          <SecurityPairingSection disabled={busy !== null} />
           <SecurityDevicesSection disabled={busy !== null} />
         </>
       )}

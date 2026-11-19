@@ -4,6 +4,7 @@ import type { DsBaseProps } from "../../lib/dsProps";
  * Maps Butler UI icon names to Hugeicons alternatives.
  * Preserves simple <Icon size={...} /> usage pattern
  */
+
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { HugeiconsIconProps, IconSvgElement } from "@hugeicons/react";
 import { createIcon } from "./iconBase";
@@ -20,7 +21,7 @@ import {
   Note01Icon, PaintBrush02Icon, PaintBrush04Icon, PanelLeftIcon, PanelLeftOpenIcon, PanelRightCloseIcon,
   PanelRightIcon, PencilEdit01Icon, PencilEdit02Icon, PinIcon, PlayIcon, ReloadIcon,
   Rocket01Icon, Search01Icon, SecurityCheckIcon, SecurityIcon, SentIcon, ServerStack01Icon,
-  Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SmartPhone01Icon, SquareIcon, StarIcon, Sun03Icon, Tag01Icon, Task01Icon, Ticket01Icon,
+  Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SquareIcon, StarIcon, Sun03Icon, Tag01Icon, Task01Icon, Ticket01Icon,
   TerminalIcon, Tick02Icon, Time03Icon, Undo02Icon, UserCircleIcon, ViewIcon, Wrench01Icon,
   ZoomInAreaIcon, ZoomOutAreaIcon,
 } from "@hugeicons/core-free-icons";
@@ -104,7 +105,6 @@ export const GeneralChat = createIcon(BubbleChatIcon);
 export const Notebook = createIcon(Note01Icon);
 export const Minus = createIcon(MinusSignIcon);
 export const Monitor = createIcon(ComputerIcon);
-export const Smartphone = createIcon(SmartPhone01Icon);
 export const Moon = createIcon(Moon02Icon);
 export const MoreHorizontal = createIcon(MoreHorizontalGlyph);
 export const MoreHorizontalIcon = MoreHorizontal;
