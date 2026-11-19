@@ -19,11 +19,11 @@ pub(super) struct Pin {
 
 /// The group with its `header` (filled with `surface`) sticky in `nav`'s scroller, `row` px per
 /// depth: it stops with the group's last row, and `content` clips at its bottom edge with the
-/// focus-ring room (`room`) left open on the other edges.
+/// focus-ring room (`room`) left open on the sides and the fold's clip margin (`fold`) below.
 pub(super) fn group(
     (header, content): (AnyElement, AnyElement),
     (pin, nav): (&Pin, NavSticky),
-    (row, surface, room): (f32, Hsla, Pixels),
+    (row, surface, room, fold): (f32, Hsla, Pixels, Pixels),
 ) -> AnyElement {
     let (block, placed) = (Placement::default(), Placement::default());
     let top = nav.offset + px(pin.depth as f32 * row);
@@ -33,6 +33,6 @@ pub(super) fn group(
     block
         .track(div().w_full().min_w_0())
         .child(header)
-        .child(ClipUnder::new(&placed, room, content))
+        .child(ClipUnder::new(&placed, room, content).bottom(fold))
         .into_any_element()
 }

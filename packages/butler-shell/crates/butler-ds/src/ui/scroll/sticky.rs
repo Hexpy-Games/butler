@@ -155,12 +155,14 @@ impl Element for Sticky {
 }
 
 /// `child` clipped at the bottom edge of the box `placed` publishes, so what scrolls under a
-/// stuck box hides behind it; the other edges stay open by `outset` (the focus-ring room):
-/// `clip-path: inset(var(--sticky-clip-top) -outset -outset)`.
+/// stuck box hides behind it; the other edges stay open by `outset` (the focus-ring room), the
+/// bottom by [`ClipUnder::bottom`] when set: `clip-path: inset(var(--sticky-clip-top) -outset
+/// -bottom)`.
 pub struct ClipUnder {
     child: AnyElement,
     placed: Placement,
     outset: Pixels,
+    bottom: Pixels,
 }
 
 impl ClipUnder {
@@ -169,7 +171,14 @@ impl ClipUnder {
             child: child.into_any_element(),
             placed: placed.clone(),
             outset,
+            bottom: outset,
         }
+    }
+
+    /// How far the bottom edge stays open (the fold's clip margin while a drag moves rows).
+    pub fn bottom(mut self, outset: Pixels) -> Self {
+        self.bottom = outset;
+        self
     }
 
     fn mask(&self, bounds: Bounds<Pixels>) -> ContentMask<Pixels> {
@@ -179,7 +188,7 @@ impl ClipUnder {
         ContentMask {
             bounds: Bounds::from_corners(
                 point(bounds.left() - self.outset, top),
-                point(bounds.right() + self.outset, bounds.bottom() + self.outset),
+                point(bounds.right() + self.outset, bounds.bottom() + self.bottom),
             ),
             fade_out: Edges::default(),
         }

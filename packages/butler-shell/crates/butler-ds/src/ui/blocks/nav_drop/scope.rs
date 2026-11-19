@@ -1,22 +1,27 @@
 //! NavDropScope (`NavDropScope` in NavDropTarget.tsx): wraps a droppable tree, a column with the
 //! sidebar row spacing. It sizes the insert slot (one row; none for an outside payload or under
-//! reduced motion), moves the rows after the insertion point, and, once [`NavDropScope::drag`]
-//! gives it the rules, runs the hit-testing of a gpui drag: every move of a drag of payload `T`
-//! over the scope resolves a row and zone, and a drop commits it if the product's `can_drop`
-//! allows. The product turns the committed hit into its own move.
+//! reduced motion), moves the rows after the insertion point (anywhere in its tree, see
+//! `member.rs`), and, once [`NavDropScope::drag`] gives it the rules, runs the hit-testing of a
+//! gpui drag: every move of a drag of payload `T` over the scope resolves a row and zone, and a
+//! drop commits it if the product's `can_drop` allows. The product turns the committed hit into
+//! its own move. A move draws again only when what it shows changes (the hit, a combine dwell,
+//! the auto-scroll band), as React renders only when the hit's `data-drop` changes, and then only
+//! the view the scope renders in: the other views keep their cached frames.
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Instant;
 
 use gpui::{
-    AnyElement, App, DragMoveEvent, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, ScrollHandle, SharedString, Stateful, Styled as _, Window, div,
+    AnyElement, App, AppContext as _, DragMoveEvent, ElementId, EntityId, InteractiveElement as _,
+    IntoElement, ParentElement as _, RenderOnce, ScrollHandle, SharedString, Stateful, Styled as _,
+    Window, div,
 };
 
 use super::auto_scroll::{self, Edge};
+use super::member::{Frame, Framed, Placed};
 use super::overlay::scroll_band;
-use super::row::{self, Boxes, Ctx, Slot};
+use super::row::{Boxes, Slot};
 use super::zones::{
     DropZone, DropZoneBox, DropZoneCandidate, DropZoneHit, DropZoneRules, DropZoneTracker,
 };
@@ -25,8 +30,10 @@ use crate::tokens::{Density, Length};
 use crate::ui::blocks::nav_row::metrics::{density_of, metrics};
 use crate::ui::context::Ds;
 
-type Hit = DropZoneHit<SharedString>;
-type Drive = Box<dyn FnOnce(Stateful<gpui::Div>, Rc<Shared>) -> Stateful<gpui::Div>>;
+pub(super) type Hit = DropZoneHit<SharedString>;
+type Drive = Box<
+    dyn FnOnce(Stateful<gpui::Div>, Rc<Shared>, Option<ScrollHandle>) -> Stateful<gpui::Div>,
+>;
 type Zones<T> = Rc<dyn Fn(&T, &str) -> Option<DropZoneRules>>;
 type CanDrop<T> = Rc<dyn Fn(&T, &Hit) -> bool>;
 type OnDrop<T> = Rc<dyn Fn(&T, Hit, &mut Window, &mut App)>;
@@ -45,18 +52,42 @@ pub struct DragRules<T> {
 
 /// The drag state a scope keeps between frames.
 #[derive(Default)]
-struct Shared {
-    boxes: Boxes,
-    /// Each row's header inside its item, in px from the item's top and its height
-    /// (`NavDropTarget::indicator`): the box the drop zones are tested on, as React measures
-    /// the `tree-row` header and not the whole item, which an open folder stretches over its
-    /// children.
-    headers: RefCell<HashMap<SharedString, (f32, f32)>>,
+pub(super) struct Shared {
+    pub(super) boxes: Boxes,
+    /// The rows the last layout placed, each with its header inside its item, in px from the
+    /// item's top and its height (`NavDropTarget::indicator`): the box the drop zones are tested
+    /// on, as React measures the `tree-row` header and not the whole item, which an open folder
+    /// stretches over its children. A row a fold took away is no longer here.
+    pub(super) headers: RefCell<HashMap<SharedString, Option<(f32, f32)>>>,
     tracker: RefCell<DropZoneTracker<SharedString>>,
     /// A drag of the scope's payload type has moved over it.
     engaged: Cell<bool>,
     pointer_y: Cell<Option<f32>>,
     edge: Cell<Option<Edge>>,
+    /// The view the scope renders in: the one a changed hit draws again.
+    view: Cell<Option<EntityId>>,
+}
+
+impl Shared {
+    /// What a pointer move can change on screen: the hit, a combine zone waiting out its dwell
+    /// (polled each frame), and the pointer being in an auto-scroll edge band (which scrolls
+    /// each frame).
+    fn seen(&self, scroll: Option<&ScrollHandle>) -> (Option<Hit>, bool, bool) {
+        let band = scroll.zip(self.pointer_y.get()).is_some_and(|(handle, y)| {
+            let bounds = handle.bounds();
+            let (top, bottom) = (bounds.top().as_f32(), bounds.bottom().as_f32());
+            auto_scroll::step(y, top, bottom, auto_scroll::EDGE) != 0.
+        });
+        let tracker = self.tracker.borrow();
+        (tracker.current().cloned(), tracker.waiting(), band)
+    }
+
+    /// Draws the scope's view again, and only it.
+    fn repaint(&self, cx: &mut App) {
+        if let Some(view) = self.view.get() {
+            cx.notify(view);
+        }
+    }
 }
 
 enum Entry {
@@ -136,7 +167,9 @@ impl NavDropScope {
 
     /// Drives a drag of payload `T` with `rules`.
     pub fn drag<T: 'static>(mut self, rules: DragRules<T>) -> Self {
-        self.drive = Some(Box::new(move |el, shared| drive::<T>(el, shared, rules)));
+        self.drive = Some(Box::new(move |el, shared, scroll| {
+            drive::<T>(el, (shared, scroll), rules)
+        }));
         self
     }
 }
@@ -144,39 +177,44 @@ impl NavDropScope {
 /// Wires the gpui drag handlers of payload `T` onto the scope's element.
 fn drive<T: 'static>(
     el: Stateful<gpui::Div>,
-    shared: Rc<Shared>,
+    (shared, scroll): (Rc<Shared>, Option<ScrollHandle>),
     rules: DragRules<T>,
 ) -> Stateful<gpui::Div> {
     let (moving, dropping) = (shared.clone(), shared);
     let (zones, check, commit) = (rules.rules, rules.can_drop, rules.on_drop);
     let check_drop = check.clone();
-    el.on_drag_move::<T>(move |event: &DragMoveEvent<T>, window, cx| {
-        if !event.bounds.contains(&event.event.position) {
+    el.on_drag_move::<T>(move |event: &DragMoveEvent<T>, _, cx| {
+        let seen = moving.seen(scroll.as_ref());
+        if event.bounds.contains(&event.event.position) {
+            let payload = event.drag(cx);
+            let y = event.event.position.y.as_f32();
+            let headers = moving.headers.borrow();
+            let rows = moving
+                .boxes
+                .borrow()
+                .iter()
+                .filter_map(|(key, bounds)| {
+                    let header = *headers.get(key)?;
+                    let rules = zones(payload, key)?;
+                    Some(DropZoneCandidate {
+                        key: key.clone(),
+                        bounds: header_box(*bounds, header),
+                        rules,
+                    })
+                })
+                .collect();
+            drop(headers);
+            moving.engaged.set(true);
+            moving.pointer_y.set(Some(y));
+            moving.tracker.borrow_mut().update(y, rows, Instant::now());
+        } else {
             moving.tracker.borrow_mut().reset();
             moving.pointer_y.set(None);
-            window.refresh();
-            return;
         }
-        let payload = event.drag(cx);
-        let y = event.event.position.y.as_f32();
-        let rows = moving
-            .boxes
-            .borrow()
-            .iter()
-            .filter_map(|(key, bounds)| {
-                let rules = zones(payload, key)?;
-                let header = moving.headers.borrow().get(key).copied();
-                Some(DropZoneCandidate {
-                    key: key.clone(),
-                    bounds: header_box(*bounds, header),
-                    rules,
-                })
-            })
-            .collect();
-        moving.engaged.set(true);
-        moving.pointer_y.set(Some(y));
-        moving.tracker.borrow_mut().update(y, rows, Instant::now());
-        window.refresh();
+        // Only the auto-scroll reads the pointer between hits: it runs on its own frames.
+        if moving.seen(scroll.as_ref()) != seen {
+            moving.repaint(cx);
+        }
     })
     .on_drop::<T>(move |payload, window, cx| {
         let hit = dropping.tracker.borrow().current().cloned();
@@ -187,7 +225,7 @@ fn drive<T: 'static>(
         if let Some(hit) = hit.filter(|hit| check_drop(payload, hit)) {
             commit(payload, hit, window, cx);
         }
-        window.refresh();
+        dropping.repaint(cx);
     })
 }
 
@@ -207,7 +245,7 @@ fn header_box(item: gpui::Bounds<gpui::Pixels>, header: Option<(f32, f32)>) -> D
 }
 
 /// One nav row's height at the scope's density.
-fn row_height(cx: &App) -> f32 {
+pub(super) fn row_height(cx: &App) -> f32 {
     let ds = Ds::get(cx);
     metrics(ds, density_of(ds, None::<Density>, cx)).height
 }
@@ -226,7 +264,7 @@ fn slot(payload: Payload, cx: &App) -> Slot {
 }
 
 /// The position a zone is drawn as.
-fn position(zone: DropZone, combine: NavDropPosition) -> NavDropPosition {
+pub(super) fn position(zone: DropZone, combine: NavDropPosition) -> NavDropPosition {
     match zone {
         DropZone::Before => NavDropPosition::Before,
         DropZone::After => NavDropPosition::After,
@@ -275,64 +313,44 @@ impl RenderOnce for NavDropScope {
             })
             .read(cx)
             .clone();
-        let dragging = cx.has_active_drag();
+        shared.view.set(Some(window.current_view()));
+        let active = self.active.unwrap_or_else(|| cx.has_active_drag());
         let edge = advance(&shared, self.scroll.as_ref(), window, cx);
-        let band = edge
-            .or(self.edge)
-            .filter(|_| self.active.unwrap_or(dragging));
+        let band = edge.or(self.edge).filter(|_| active);
         let hit = shared.tracker.borrow().current().cloned();
-        let slot = slot(self.payload, cx);
-        let ctx = Ctx {
-            scope: &self.id,
-            slot,
-            shift: false,
-            boxes: &shared.boxes,
+        let list = {
+            let headers = shared.headers.borrow();
+            shared
+                .boxes
+                .borrow()
+                .iter()
+                .filter(|(key, _)| headers.contains_key(*key))
+                .map(|(_, bounds)| *bounds)
+                .reduce(|a, b| a.union(&b))
         };
-        let mut moved = false;
-        let mut children = Vec::new();
-        let mut headers = HashMap::new();
-        for entry in std::mem::take(&mut self.entries) {
-            match entry {
-                Entry::Row(mut target) => {
-                    if target.row_header && target.indicator.is_none() {
-                        target.indicator = Some((0., row_height(cx)));
-                    }
-                    if let Some(header) = target.indicator {
-                        headers.insert(target.key.clone(), header);
-                    }
-                    if target.drop.is_none() {
-                        target.drop = hit
-                            .as_ref()
-                            .filter(|hit| hit.key == target.key)
-                            .map(|hit| position(hit.zone, self.combine_as));
-                    }
-                    let slot_after = matches!(
-                        target.drop,
-                        Some(NavDropPosition::Before | NavDropPosition::After)
-                    );
-                    let row_ctx = Ctx {
-                        shift: moved,
-                        ..ctx
-                    };
-                    children.push(row::render(target, &row_ctx, window, cx));
-                    moved |= slot_after;
-                }
+        // The rows register again as the tree lays out.
+        shared.headers.borrow_mut().clear();
+        let frame = Frame::new(
+            self.id.clone(),
+            shared.clone(),
+            (slot(self.payload, cx), self.combine_as),
+            hit,
+        );
+        let children: Vec<Placed> = std::mem::take(&mut self.entries)
+            .into_iter()
+            .enumerate()
+            .map(|(index, entry)| match entry {
+                Entry::Row(target) => Placed::row(target),
                 Entry::Other(element) => {
-                    children.push(shifted_other(element, moved, ctx.slot, window, cx));
+                    Placed::other((self.id.clone(), format!("other-{index}")).into(), element)
                 }
-            }
-        }
-        *shared.headers.borrow_mut() = headers;
+            })
+            .collect();
         let ds = Ds::get(cx);
-        let list = shared
-            .boxes
-            .borrow()
-            .values()
-            .copied()
-            .reduce(|a, b| a.union(&b));
         let band = band
             .zip(self.scroll.as_ref().map(ScrollHandle::bounds).or(list))
             .map(|(edge, bounds)| scroll_band(edge, bounds, ds));
+        let clip = active.then(|| ds.len(Length::DropClipMargin)); // DS: NavDropTarget.module.css:15
         let mut root = div()
             .id((self.id, "scope"))
             .flex()
@@ -341,27 +359,8 @@ impl RenderOnce for NavDropScope {
             .children(children)
             .children(band);
         if let Some(drive) = self.drive {
-            root = drive(root, shared);
+            root = drive(root, shared, self.scroll);
         }
-        root
-    }
-}
-
-/// A neighbour that is not a row slides with the rows after the slot.
-fn shifted_other(
-    element: AnyElement,
-    moved: bool,
-    slot: Slot,
-    _: &mut Window,
-    _: &mut App,
-) -> AnyElement {
-    if moved && slot.gap > 0. {
-        div()
-            .relative()
-            .top(gpui::px(slot.gap))
-            .child(element)
-            .into_any_element()
-    } else {
-        element
+        Framed::new(frame, clip, root)
     }
 }

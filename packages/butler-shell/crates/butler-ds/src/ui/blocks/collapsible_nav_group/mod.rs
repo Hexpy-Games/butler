@@ -19,7 +19,7 @@ use super::nav_row::{ActionsVisibility, NavRow};
 use super::scope;
 use crate::tokens::{Color, Length};
 use crate::ui::Icon;
-use crate::ui::collapsible::Collapsible;
+use crate::ui::collapsible::{self, Collapsible};
 use crate::ui::context::Ds;
 
 type Toggle = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -170,7 +170,12 @@ impl RenderOnce for CollapsibleNavGroup {
         sticky::group(
             (header.into_any_element(), content.into_any_element()),
             (&pin, nav),
-            (row, surface, ds.len(Length::FocusRingRoom)),
+            (
+                row,
+                surface,
+                ds.len(Length::FocusRingRoom),
+                collapsible::clip_margin(cx),
+            ),
         )
     }
 }
