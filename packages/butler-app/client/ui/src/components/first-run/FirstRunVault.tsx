@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { SetupWizardStepAction } from "@/butler-ds";
+import { passwordIntro } from "../vault/useButlerVault";
 import { VaultPasswordFields } from "../vault/VaultPasswordFields";
 import { FirstRunStepCard } from "./FirstRunStepCard";
 import type { FirstRunFlow } from "./useFirstRunFlow";
@@ -30,7 +31,7 @@ export function FirstRunVault({ flow }: { flow: FirstRunFlow }) {
   return (
     <FirstRunStepCard flow={flow} title={copy.name}
       onBack={result === "done" ? undefined : () => flow.setScreen("memory")}
-      description={passwordOnly && result !== "done" ? copy.passwordIntro : copy[result]}
+      description={passwordOnly && result !== "done" ? passwordIntro(vault.view) : copy[result]}
       actions={result === "done"
         ? <SetupWizardStepAction forward onClick={() => flow.setScreen("connect")}>{copy.continue}</SetupWizardStepAction>
         : <>

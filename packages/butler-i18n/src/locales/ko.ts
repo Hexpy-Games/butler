@@ -116,6 +116,7 @@ const butlerAccount: AppCopy["butlerAccount"] = {
 
 const butlerVault: AppCopy["butlerVault"] = {
   passwordIntro: "이 컴퓨터는 키체인이 없어 마스터 비밀번호로 금고를 잠급니다.",
+  unsignedBuild: "서명되지 않은 개발 빌드는 키체인을 쓰지 않아 마스터 비밀번호로 금고를 잠급니다.",
   masterPassword: "마스터 비밀번호",
   confirmPassword: "비밀번호 확인",
   currentPassword: "지금 비밀번호",

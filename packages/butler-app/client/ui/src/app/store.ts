@@ -141,6 +141,8 @@ export interface NavigationSetOptions {
 interface ButlerStore {
   leftOpen: boolean;
   sessionInfoOpen: boolean;
+  /** A new conversation whose pane stays closed until the user opens it (carried to the session its first send creates). Cleared by openSession. */
+  sessionInfoHeldChat: string | null;
   taskGraphEnabled: boolean;
   leftPanelWidth: number;
   sidebarChatsCollapsed: boolean;
@@ -952,6 +954,7 @@ setAppCopyLanguage(initialSettings.language);
 export const useButlerStore = create<ButlerStore>()((set, get) => ({
   leftOpen: false,
   sessionInfoOpen: false,
+  sessionInfoHeldChat: null,
   taskGraphEnabled: false,
   leftPanelWidth: DEFAULT_LEFT_PANEL_WIDTH,
   sidebarChatsCollapsed: false,
@@ -1269,6 +1272,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         : sessionMessageViews;
       return {
         activeChatId: chatId,
+        sessionInfoHeldChat: null,
         activeChatTitle: sessionTitle,
         leftOpen: currentAdaptiveMode(chromeEnvironment()) === "expanded"
           ? state.leftOpen : false,
@@ -1779,6 +1783,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
         tone: "muted",
       },
       activeChatId: optimisticStart?.id ?? state.activeChatId,
+      sessionInfoHeldChat: optimisticStart && state.sessionInfoHeldChat === state.activeChatId ? optimisticStart.id : state.sessionInfoHeldChat,
       view: optimisticStart && !dashboardTarget ? { kind: "session" } : state.view,
       navigation: optimisticStart
         ? navigationWithOptimisticSession(state.navigation, optimisticStart)
@@ -1872,6 +1877,7 @@ export const useButlerStore = create<ButlerStore>()((set, get) => ({
             state.activeChatId === previousChatId
               ? targetChatId
               : state.activeChatId,
+          sessionInfoHeldChat: state.sessionInfoHeldChat === previousChatId ? targetChatId : state.sessionInfoHeldChat,
           sendingChatId:
             state.sendingChatId === previousChatId
               ? targetChatId
