@@ -472,6 +472,7 @@ export interface MobileCopy {
     unread: string;
     reconnecting: string;
     untitled: string;
+    loadFailed: string;
   };
   chat: {
     placeholder: string;

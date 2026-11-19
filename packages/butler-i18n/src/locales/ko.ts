@@ -510,6 +510,7 @@ export const koKrCopy: AppCopy = {
       unread: "읽지 않음",
       reconnecting: "다시 연결하는 중…",
       untitled: "새 대화",
+      loadFailed: "대화 목록을 불러오지 못했습니다.",
     },
     chat: {
       placeholder: "버틀러에게 보내기",

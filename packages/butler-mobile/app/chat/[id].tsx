@@ -46,12 +46,13 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
       contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerInset }} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
       keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" scrollEventThrottle={16}
       contentContainerStyle={{ paddingHorizontal: t.length("--space-4"), paddingTop: headerInset + t.length("--space-4"), gap: t.length("--space-4") }}
-      onStartReached={loadEarlier} onStartReachedThreshold={0.5}
+      onStartReached={() => { if (!first.current) loadEarlier(); }} onStartReachedThreshold={0.5}
       onScroll={({ nativeEvent }) => {
         setBottom(nearEnd(nativeEvent));
         setScrolled(nativeEvent.contentOffset.y > 0);
       }}
       onScrollBeginDrag={() => { atBottom.current = false; }}
+      onScrollToTop={() => { atBottom.current = false; }}
       onScrollEndDrag={({ nativeEvent }) => { atBottom.current = nearEnd(nativeEvent); }}
       onMomentumScrollEnd={({ nativeEvent }) => { atBottom.current = nearEnd(nativeEvent); }}
       onContentSizeChange={() => {

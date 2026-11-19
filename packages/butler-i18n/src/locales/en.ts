@@ -512,6 +512,7 @@ export const enUsCopy: AppCopy = {
       unread: "Unread",
       reconnecting: "Reconnecting…",
       untitled: "New conversation",
+      loadFailed: "Could not load conversations.",
     },
     chat: {
       placeholder: "Message Butler",

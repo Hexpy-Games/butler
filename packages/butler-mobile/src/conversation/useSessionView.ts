@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { useFocusEffect } from "expo-router";
-import type { SessionView } from "../../../butler-protocol/src/index.ts";
+import type { ConversationMessage, SessionView } from "../../../butler-protocol/src/index.ts";
 import type { GatewayClient } from "../../../butler-protocol/src/client/index.ts";
 import { useConversation } from "./live";
 import { applyLiveEvent, mergeMessages } from "./sessionView";
@@ -38,7 +38,7 @@ export function useSessionView(id: string) {
         if (closed) return;
         publish(mergeSessionView(current, next, older));
         setError(false);
-      }).catch(() => { if (!closed) setError(true); }).finally(() => {
+      }).catch(() => { if (!closed && !current) setError(true); }).finally(() => {
         busy = false;
         if (!closed) setLoadingEarlier(false);
         if (pending) request();
@@ -57,8 +57,13 @@ export function useSessionView(id: string) {
       requestRef.current = () => {};
     };
   }, [client, id, subscribe]);
-  useEffect(() => { requestRef.current(); }, [reconcile]);
-  useSessionRead(client, id, view?.latest_turn?.state);
+  const seen = useRef(reconcile);
+  useEffect(() => {
+    if (seen.current === reconcile) return;
+    seen.current = reconcile;
+    requestRef.current();
+  }, [reconcile]);
+  useSessionRead(client, id, view?.latest_turn ? `${view.latest_turn.id}:${view.latest_turn.state}` : undefined);
   const reload = useCallback(() => requestRef.current(), []);
   const loadEarlier = useCallback(() => requestRef.current(true), []);
   return { view, error, loadingEarlier, reload, loadEarlier };
@@ -70,11 +75,10 @@ function mergeSessionView(previous: SessionView | null, next: SessionView, older
     ...previous, messages: mergeMessages(previous.messages, next.messages),
     message_window: { ...previous.message_window, previous_cursor_token: next.message_window.previous_cursor_token, has_more: next.message_window.has_more },
   };
-  const first = next.messages[0];
-  const retained = previous.messages.filter(message => first && (
-    message.cursor !== undefined && first.cursor !== undefined ? message.cursor < first.cursor
-      : !!message.created_at && !!first.created_at && message.created_at < first.created_at
-  ));
+  const first = next.messages[0], last = next.messages.at(-1);
+  const ids = new Set(next.messages.map(message => message.id));
+  const retained = previous.messages.filter(message => ids.has(message.id)
+    || !first || !last || before(message, first) || before(last, message));
   return {
     ...next, messages: mergeMessages(retained, next.messages),
     message_window: retained.length ? {
@@ -83,10 +87,16 @@ function mergeSessionView(previous: SessionView | null, next: SessionView, older
   };
 }
 
-function useSessionRead(client: GatewayClient | null, id: string, state: string | undefined) {
+/** True when `a` sorts before `b` (cursor when both have one, else creation time). */
+function before(a: ConversationMessage, b: ConversationMessage): boolean {
+  return a.cursor !== undefined && b.cursor !== undefined ? a.cursor < b.cursor
+    : !!a.created_at && !!b.created_at && a.created_at < b.created_at;
+}
+
+function useSessionRead(client: GatewayClient | null, id: string, turn: string | undefined) {
   const focused = useRef(false);
-  const read = useCallback(() => {
-    if (focused.current && AppState.currentState === "active") {
+  const read = useCallback((leaving = false) => {
+    if ((focused.current || leaving) && AppState.currentState === "active") {
       void client?.request(`/sessions/${encodeURIComponent(id)}/read`, { body: {} }).catch(() => {});
     }
   }, [client, id]);
@@ -94,7 +104,9 @@ function useSessionRead(client: GatewayClient | null, id: string, state: string 
     focused.current = true;
     read();
     const subscription = AppState.addEventListener("change", value => { if (value === "active") read(); });
-    return () => { focused.current = false; subscription.remove(); };
+    return () => { focused.current = false; subscription.remove(); read(true); };
   }, [read]));
-  useEffect(() => { if (state === "delivered") read(); }, [read, state]);
+  useEffect(() => {
+    if (turn && ["delivered", "failed", "cancelled", "runtime_fault"].includes(turn.split(":").at(-1) ?? "")) read();
+  }, [read, turn]);
 }

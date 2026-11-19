@@ -6,6 +6,7 @@ import { useConversation } from "./live";
 export function useNavigationView() {
   const { client, reconcile, subscribe } = useConversation();
   const [view, setView] = useState<NavigationView | null>(null);
+  const [error, setError] = useState(false);
   const reload = useRef(() => {});
   useEffect(() => {
     setView(null);
@@ -25,8 +26,8 @@ export function useNavigationView() {
       pending = false;
       last = Date.now();
       void client.request<NavigationView>("/navigation").then(next => {
-        if (!closed) setView(next);
-      }).catch(() => {}).finally(() => {
+        if (!closed) { setView(next); setError(false); }
+      }).catch(() => { if (!closed) setError(true); }).finally(() => {
         busy = false;
         if (pending) request();
       });
@@ -45,6 +46,12 @@ export function useNavigationView() {
     };
   }, [client, subscribe]);
   useFocusEffect(useCallback(() => { reload.current(); }, []));
-  useEffect(() => { reload.current(); }, [reconcile]);
-  return view;
+  const seen = useRef(reconcile);
+  useEffect(() => {
+    if (seen.current === reconcile) return;
+    seen.current = reconcile;
+    reload.current();
+  }, [reconcile]);
+  const retry = useCallback(() => reload.current(), []);
+  return { view, error, retry };
 }

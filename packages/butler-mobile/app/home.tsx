@@ -78,7 +78,7 @@ function Conversations() {
   const copy = useMobileCopy();
   const t = useTokens();
   const options = useHeaderOptions();
-  const view = useNavigationView();
+  const { view, error, retry } = useNavigationView();
   const { lost } = useConversation();
   const [scrolled, setScrolled] = useState(false);
   const sections = view ? conversationSections(view, copy.conversations.general) : [];
@@ -100,8 +100,12 @@ function Conversations() {
             : mark === "unread" ? <UnreadDot label={copy.conversations.unread} /> : null}
           onPress={() => router.push({ pathname: "/chat/[id]", params: { id: item.id, title } })} />;
       }}
-      ListEmptyComponent={<View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <Text tone="secondary">{copy.conversations.empty}</Text>
+      ListEmptyComponent={<View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: t.length("--space-4") }}>
+        {view ? <Text tone="secondary">{copy.conversations.empty}</Text>
+          : error ? <>
+            <Text tone="danger">{copy.conversations.loadFailed}</Text>
+            <ButtonGroup><Button label={copy.home.retry} onPress={retry} /></ButtonGroup>
+          </> : <Spinner label={copy.home.checking} />}
       </View>}
       ListHeaderComponent={lost ? <Text variant="caption" tone="tertiary">{copy.conversations.reconnecting}</Text> : undefined}
       ListFooterComponent={<ButtonGroup><Button variant="secondary" label={copy.home.pairAgain} onPress={() => router.push("/pair")} /></ButtonGroup>}
