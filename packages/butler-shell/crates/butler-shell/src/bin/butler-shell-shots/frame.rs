@@ -207,20 +207,7 @@ fn reveal(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             .context("missing scroll port")?;
     let position = port.center();
     let delta = target.center().y - position.y;
-    move_pointer(h, h.handle, position, None)?;
-    h.cx.update_window(h.handle, |_, w, cx| {
-        w.dispatch_event(
-            PlatformInput::ScrollWheel(ScrollWheelEvent {
-                position,
-                delta: ScrollDelta::Pixels(point(px(0.), -delta)),
-                modifiers: Default::default(),
-                touch_phase: TouchPhase::Moved,
-            }),
-            cx,
-        );
-    })?;
-    settle(&mut h.cx, h.handle);
-    Ok(())
+    wheel_at(h, h.handle, position, -delta)
 }
 
 /// `wheel <anchor> <dy>`: one wheel step of `dy` px (positive scrolls toward the start) with the
@@ -231,12 +218,22 @@ fn wheel(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     let (handle, bounds) = find_anchor(h, anchor)?.context("missing wheel target")?;
     let position = bounds.center();
     let dy: f32 = dy.parse()?;
+    wheel_at(h, handle, position, px(dy))
+}
+
+/// One wheel step of `dy` with the pointer at `position` in the window `handle`, then settles.
+fn wheel_at(
+    h: &mut Harness,
+    handle: gpui::AnyWindowHandle,
+    position: gpui::Point<gpui::Pixels>,
+    dy: gpui::Pixels,
+) -> anyhow::Result<()> {
     move_pointer(h, handle, position, None)?;
     h.cx.update_window(handle, |_, w, cx| {
         w.dispatch_event(
             PlatformInput::ScrollWheel(ScrollWheelEvent {
                 position,
-                delta: ScrollDelta::Pixels(point(px(0.), px(dy))),
+                delta: ScrollDelta::Pixels(point(px(0.), dy)),
                 modifiers: Default::default(),
                 touch_phase: TouchPhase::Moved,
             }),

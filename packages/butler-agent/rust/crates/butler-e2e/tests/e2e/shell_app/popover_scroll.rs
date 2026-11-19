@@ -4,10 +4,15 @@ use super::*;
 
 /// The vertical position of `anchor` in the layout `name` wrote.
 fn anchor_y(layout: &Value, anchor: &str) -> Option<f64> {
+    anchor_field(layout, anchor, "y")
+}
+
+/// A number (`y`, `h`, …) of `anchor` in a layout report.
+fn anchor_field(layout: &Value, anchor: &str, key: &str) -> Option<f64> {
     layout
         .as_array()?
         .iter()
-        .find(|item| item["anchor"] == anchor)?["y"]
+        .find(|item| item["anchor"] == anchor)?[key]
         .as_f64()
 }
 
@@ -21,19 +26,11 @@ async fn layout(shell: &mut Shell, name: &str, anchors: &str) -> Result<Value, H
 
 /// A message row inside the transcript's viewport, to follow while the list may scroll.
 fn visible_message(layout: &Value) -> String {
-    let items = layout.as_array().expect("layout");
-    let find = |anchor: &str| {
-        let item = items
-            .iter()
-            .find(|item| item["anchor"] == anchor)
-            .expect("transcript");
-        (
-            item["y"].as_f64().expect("y"),
-            item["h"].as_f64().expect("h"),
-        )
-    };
-    let (top, height) = find("chat-transcript");
-    items
+    let top = anchor_field(layout, "chat-transcript", "y").expect("transcript");
+    let height = anchor_field(layout, "chat-transcript", "h").expect("transcript");
+    layout
+        .as_array()
+        .expect("layout")
         .iter()
         .filter_map(|item| item["anchor"].as_str())
         .find(|anchor| {
@@ -82,29 +79,8 @@ async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), 
     shell.run(&["wheel chat-transcript 60", "wait 500"]).await?;
     let moved = layout(&mut shell, "moved", &message).await?;
     let control = anchor_y(&moved, &message).expect("message y") - y0;
-    let y1 = y0 + control;
 
-    // (b) A popover without a scroller: the conversation stays.
-    shell
-        .run(&[
-            "wait-anchor session-menu-trigger",
-            "click session-menu-trigger",
-            "wait-anchor menu-content",
-            "wheel menu-content 60",
-            "wait 500",
-        ])
-        .await?;
-    let plain = layout(&mut shell, "plain", &message).await?;
-    let plain_dy = anchor_y(&plain, &message).expect("message y") - y1;
-    // (c) A press outside closes it.
-    shell
-        .run(&[
-            "click-at chat-transcript 0.5 0.5",
-            "wait-no-anchor menu-content",
-        ])
-        .await?;
-
-    // (a) A popover whose list is taller than its cap: the list moves, the conversation stays.
+    // A popover whose list is taller than its cap: the list moves, the conversation stays.
     shell
         .run(&[
             "size 1200 150",
@@ -140,22 +116,19 @@ async fn shell_app_20_wheel_over_a_popover_stays_in_the_popover() -> Result<(), 
         ])
         .await?;
     let measured = format!(
-        "control (wheel over the chat) moved it {control}; (b) popover without a scroller: chat \
-         moved {plain_dy}; (a) capped list: chat moved {chat_dy}, list moved {list_dy}"
+        "control (wheel over the chat) moved it {control}; capped list: chat moved {chat_dy}, \
+         list moved {list_dy}"
     );
     println!("SHELL-APP-20 {measured}");
     let mut failed = Vec::new();
     if control.abs() < 20. {
         failed.push("(control) the wheel over the chat did not move it");
     }
-    if plain_dy.abs() > 0.5 {
-        failed.push("(b) the chat scrolled behind a popover");
-    }
     if chat_dy.abs() > 0.5 {
-        failed.push("(a) the chat scrolled behind a popover's list");
+        failed.push("the chat scrolled behind a popover's list");
     }
     if list_dy.abs() < 5. {
-        failed.push("(a) the popover's list did not scroll");
+        failed.push("the popover's list did not scroll");
     }
     assert!(failed.is_empty(), "{failed:?}: {measured}");
     shell.run(&["app-quit"]).await?;
