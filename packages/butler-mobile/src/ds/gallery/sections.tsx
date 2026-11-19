@@ -178,6 +178,8 @@ function ListRowSection() {
   return (
     <>
       <Cell name="title only" list><ListRow title={en.sentence} /></Cell>
+      <Cell name="disclosure collapsed" list><ListRow icon={icons.Folder} title="Folder" disclosure={{ expanded: false }} onPress={noop} /></Cell>
+      <Cell name="disclosure expanded" list><ListRow icon={icons.Folder} title="Folder" disclosure={{ expanded: true }} onPress={noop} /></Cell>
       <Cell name="icon, title, meta" list><ListRow icon={icons.MessageSquare} title={en.sentence} meta={en.meta} /></Cell>
       <Cell name="description, 1 line" list><ListRow title={en.sentence} description={long.note} descriptionLines={1} /></Cell>
       <Cell name="description, 2 lines" list><ListRow title={en.sentence} description={long.note} /></Cell>

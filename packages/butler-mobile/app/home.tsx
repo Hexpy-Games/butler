@@ -119,11 +119,12 @@ function Conversations() {
       renderItem={({ item }) => <View style={{ paddingLeft: item.depth * t.length("--space-4") }}>
         {item.session ? <SessionRow session={item.session} locale={locale} />
           : <ListRow icon={item.kind === "project" ? icons.Briefcase : icons.Folder} title={item.title}
-            accessibilityLabel={(collapsed.has(item.key) ? copy.conversations.expand : copy.conversations.collapse)(item.title)}
-            trailing={<View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
-              {collapsed.has(item.key) && unread.has(item.key) ? <UnreadDot label={copy.conversations.unread} /> : null}
-              <Icon glyph={collapsed.has(item.key) ? icons.ChevronRight : icons.ChevronDown} tone="tertiary" />
-            </View>} onPress={() => toggle(item.key)} />}
+            {...((tree.children.get(item.key)?.length ?? 0) > 0 ? {
+              disclosure: { expanded: !collapsed.has(item.key) },
+              onPress: () => toggle(item.key),
+              accessibilityLabel: (collapsed.has(item.key) ? copy.conversations.expand : copy.conversations.collapse)(item.title),
+            } : {})}
+            trailing={collapsed.has(item.key) && unread.has(item.key) ? <UnreadDot label={copy.conversations.unread} /> : undefined} />}
       </View>}
       ListEmptyComponent={<View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: t.length("--space-4") }}>
         {view ? <Text tone="secondary">{copy.conversations.empty}</Text>
