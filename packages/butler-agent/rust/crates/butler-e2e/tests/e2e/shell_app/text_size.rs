@@ -118,14 +118,18 @@ async fn control_pointer_states(shell: &mut Shell, sandbox: &Sandbox) -> Result<
 }
 
 fn region_differs(a: &std::path::Path, b: &std::path::Path, bounds: [f64; 4]) -> bool {
-    let (a, b) = (
+    let (before, after) = (
         image::open(a).expect("shot").to_rgba8(),
         image::open(b).expect("shot").to_rgba8(),
     );
-    assert_eq!(a.dimensions(), b.dimensions());
-    let [x, y, w, h] = bounds;
-    (y.ceil() as u32..(y + h).floor() as u32).any(|row| {
-        (x.ceil() as u32..(x + w).floor() as u32)
-            .any(|col| a.get_pixel(col, row) != b.get_pixel(col, row))
+    assert_eq!(before.dimensions(), after.dimensions());
+    let [left, top, width, height] = bounds;
+    before.enumerate_pixels().any(|(col, row, pixel)| {
+        let (x, y) = (f64::from(col), f64::from(row));
+        x >= left
+            && x < left + width
+            && y >= top
+            && y < top + height
+            && after.get_pixel(col, row) != pixel
     })
 }
