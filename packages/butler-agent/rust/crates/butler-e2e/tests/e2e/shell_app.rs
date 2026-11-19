@@ -36,6 +36,7 @@ mod focus_selection;
 mod focus_tab;
 mod narrow_window;
 mod observer_dialog;
+mod sidebar_sticky;
 mod space_header;
 mod text_selection;
 mod text_size;
