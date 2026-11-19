@@ -1,0 +1,15 @@
+.tile {
+  display: block;
+  inline-size: var(--qr-size);
+  max-inline-size: 100%;
+  aspect-ratio: 1;
+  background: var(--qr-background);
+  border-radius: var(--radius-control);
+}
+
+.tile > svg {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  fill: var(--qr-module);
+}
