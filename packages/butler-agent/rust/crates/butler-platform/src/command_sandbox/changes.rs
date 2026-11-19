@@ -16,7 +16,7 @@ pub struct CommandChanges {
 pub struct Changes {
     /// Paths relative to the watched workspace; directories are omitted.
     pub paths: Vec<PathBuf>,
-    /// False on native gaps, errors, or a root that did not become quiet.
+    /// False on native gaps, errors or a closed event channel. A root other actors keep busy is not a gap.
     pub complete: bool,
 }
 
@@ -44,8 +44,8 @@ impl CommandChanges {
         })
     }
 
-    /// Drain a short quiet interval, then close the producer and retain every queued event.
-    /// A continuously changing root or native overflow is explicitly incomplete.
+    /// Drain until the root is quiet for 50 ms or 250 ms have passed, then close the producer and retain every
+    /// queued event. Only native errors, overflow or a closed channel make the observation incomplete.
     pub fn finish(self) -> Changes {
         let Self {
             watcher,
@@ -58,7 +58,6 @@ impl CommandChanges {
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
-                complete = false;
                 break;
             }
             match events.recv_timeout(remaining.min(Duration::from_millis(50))) {
@@ -101,5 +100,36 @@ fn collect(
         if let Ok(relative) = path.strip_prefix(root) {
             paths.insert(relative.to_path_buf());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    // test-category: race
+    #[test]
+    fn a_root_another_writer_keeps_busy_is_still_complete() {
+        let root = std::env::temp_dir().join(format!("butler-changes-busy-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let changes = CommandChanges::watch(&root).unwrap();
+        std::fs::write(root.join("own.txt"), "x").unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let writer = {
+            let (stop, other) = (stop.clone(), root.join("other.txt"));
+            std::thread::spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    let _ = std::fs::write(&other, "y");
+                }
+            })
+        };
+        let observed = changes.finish();
+        stop.store(true, Ordering::Relaxed);
+        writer.join().unwrap();
+        let _ = std::fs::remove_dir_all(&root);
+        assert!(observed.complete);
+        assert!(observed.paths.contains(&PathBuf::from("own.txt")));
     }
 }
