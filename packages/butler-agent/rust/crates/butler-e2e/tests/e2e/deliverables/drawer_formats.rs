@@ -99,16 +99,7 @@ async fn drawer_pdf_and_office_files_are_read_as_text() -> Result<(), HarnessErr
     *script.prompt.lock().unwrap() = "What do the files say?".to_owned();
     let (_, turn) = s.turn(&other, "What do the files say?").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
-    let outputs: Vec<Value> = script.requests.lock().unwrap().last().unwrap()["input"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|item| item["type"] == "function_call_output")
-        .map(|item| {
-            let output: Value = serde_json::from_str(item["output"].as_str().unwrap()).unwrap();
-            output.get("output").cloned().unwrap_or(output)
-        })
-        .collect();
+    let outputs = stub::tool_outputs(&script);
     assert_eq!(outputs.len(), 3);
     assert_eq!(outputs[0]["text"], "Alpha PDF\n\n---\n\nBeta PDF");
     assert_eq!(outputs[1]["text"], "Launch plan\nShip on\tFriday");

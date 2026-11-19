@@ -50,7 +50,7 @@ export async function captureReviewCrops() {
       await server.api("/settings", patch({ language: "ko" })); await page.reload();
       const card = page.locator(`[data-proposal-id="${id}"]`);
       await card.getByRole("button", { name: "등록", exact: true }).click();
-      await card.getByText("등록함", { exact: true }).waitFor();
+      await card.getByText("과제 1개 등록", { exact: true }).waitFor();
       await cardMatrix(page, server, id, "applied");
       const other = await server.api<{ project: { id: string } }>("/projects", post({ source: "scratch", display_name: "다른 제품" }));
       const draft = async (changes: unknown[], destination = project.id) => {

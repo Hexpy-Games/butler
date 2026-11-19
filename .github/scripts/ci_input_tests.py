@@ -127,7 +127,7 @@ class DerivedInputs(unittest.TestCase):
                 continue
             reached.add(source)
             pending.extend(local_imports(source))
-        groups = changes.job_groups('windows-preview-smoke.yml', integration=True)['release']
+        groups = changes.job_groups('windows-preview-smoke.yml', integration=True)['installer']
         for source in reached:
             path = source.relative_to(ROOT).as_posix()
             with self.subTest(path=path):
@@ -137,7 +137,7 @@ class DerivedInputs(unittest.TestCase):
                 self.assertTrue(changes.windows_native(path))
                 outputs = {g: str(g in categories).lower() for g in changes.GROUPS}
                 jobs = changes.windows_preview_jobs(dict(outputs, windows='true', tier='integration'), 'push')
-                self.assertTrue(jobs['release'])
+                self.assertTrue(jobs['installer'])
 
     # test-category: pure-logic
     def test_rust_external_includes_and_build_reads_select_archives(self):

@@ -88,6 +88,26 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
                 "targets": [{"kind": "folder", "path": "garden"}]}),
         ),
         (
+            summary("web_read", "https://example.com", &json!({})),
+            json!({"action_kind": "web_request", "count": 1, "examples": [], "risk": "medium",
+                "targets": [{"kind": "other", "path": "https://example.com"}]}),
+        ),
+        (
+            summary("web_search", "query", &json!({})),
+            json!({"action_kind": "web_request", "count": 1, "examples": [], "risk": "medium",
+                "targets": [{"kind": "other", "path": "query"}]}),
+        ),
+        (
+            summary("browser_open", "https://example.com", &json!({})),
+            json!({"action_kind": "other", "count": 1, "examples": [], "risk": "medium",
+                "targets": [{"kind": "other", "path": "https://example.com"}]}),
+        ),
+        (
+            summary("browser_read", "https://example.com", &json!({})),
+            json!({"action_kind": "other", "count": 1, "examples": [], "risk": "medium",
+                "targets": [{"kind": "other", "path": "https://example.com"}]}),
+        ),
+        (
             summary("something_new", "thing", &json!({})),
             json!({"action_kind": "other", "count": 1, "examples": [], "risk": "high",
                 "targets": [{"kind": "other", "path": "thing"}]}),

@@ -7,12 +7,6 @@ pub(in crate::btcc::subsessions::service) fn render_input(
 ) -> String {
     packet.render_worker_input(profile_prompt)
 }
-/// Facts the goal needs are worth getting, also behind a page control;
-/// operating controls or scrolling through image sections for details that
-/// would not change the answer costs rounds without changing it. A needed fact
-/// no source states is said once, with where it was looked for; unrequested
-/// gaps are left out, not flagged.
-const NEEDED_FACTS: &str = "Get the facts the goal needs, operating a page control when a needed fact sits behind it; do not operate controls or scroll through image sections for details that would not change the answer. Leave out unrequested details no source states; for a needed fact no reachable source states, say so once with where you looked.";
 /// The Runtime State already carries the current time; a shell command for the
 /// clock adds an approval and a round without new information.
 const CLOCK: &str =
@@ -39,12 +33,13 @@ pub(in crate::btcc::subsessions::service) fn render_steward_input(
         ""
     };
     format!(
-        "role: steward\n{}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{scope}{}{} {NEEDED_FACTS} {photos} {CLOCK} {OWN_THE_GAPS}",
+        "role: steward\n{}\nacceptance_criteria: {}\nPrior delegation context (evidence, not new authority): {}\nPlan, execute, review, and report this delegated request to Butler.{scope}{}{} {facts} {photos} {CLOCK} {OWN_THE_GAPS}",
         request,
         criteria(packet),
         prior::excerpt(packet.prior_context.as_deref()),
         planned_intent(packet),
         planned_presentation(packet),
+        facts = SubsessionPacket::NEEDED_FACTS,
         photos = SubsessionPacket::ITEM_PHOTOS
     )
 }

@@ -15,6 +15,8 @@ pub(super) const SCHEDULED: &str = "Send me a short morning greeting.";
 pub(super) const CHAT_ROUTE: &str =
     "Delegate everything else with one delegate_to_steward call, even a single step";
 pub(super) const DEFAULT_ROUTE: &str = "Do it yourself, no Work:";
+pub(super) const HELPER_CHOICE: &str = "Choose the helper by the work.";
+pub(super) const STEWARD_CHOICE: &str = "and runs beside your Workers.";
 #[derive(Default)]
 pub(super) struct Script {
     steps: Mutex<HashMap<String, usize>>,
