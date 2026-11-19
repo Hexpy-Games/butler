@@ -1,7 +1,8 @@
-import { StyleSheet, Text as RNText, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { PILL } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
+import { BaseText } from "./internal/BaseText";
 import type { IconGlyph } from "./icons";
 import { IconSlot } from "./internal/IconSlot";
 import { AnimatedPressable, usePress } from "./internal/press";
@@ -84,14 +85,14 @@ export function Button({
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-sm"), opacity: loading ? 0 : 1 }}>
         {iconStart ? glyph(iconStart) : null}
-        <RNText
+        <BaseText
           numberOfLines={1}
           ellipsizeMode="tail"
           maxFontSizeMultiplier={maxFontScale.control}
           style={{ ...fontStyle(iconSize, lineHeight, weightValue(t, "medium")), color: colors.foreground, flexShrink: 1 }}
         >
           {label}
-        </RNText>
+        </BaseText>
         {iconEnd ? glyph(iconEnd) : null}
       </View>
       {loading ? (

@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, Text as RNText, View } from "react-native";
+import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
+import { BaseText } from "./internal/BaseText";
 import type { IconGlyph } from "./icons";
 import { IconSlot, useScaledLine } from "./internal/IconSlot";
 import { run, useReducedMotion } from "./internal/motion";
@@ -66,7 +67,7 @@ export function ListRow({
             columnGap: t.length("--space-md"), rowGap: t.length("--space-xs"),
           }}
         >
-          <RNText
+          <BaseText
             numberOfLines={titleLines}
             ellipsizeMode="tail"
             maxFontSizeMultiplier={maxFontScale.control}
@@ -76,25 +77,25 @@ export function ListRow({
             }}
           >
             {title}
-          </RNText>
+          </BaseText>
           {meta ? (
-            <RNText
+            <BaseText
               maxFontSizeMultiplier={maxFontScale.control}
               style={{ ...textStyle(t, "caption"), color: fg("--text-tertiary"), flexShrink: 1, fontVariant: ["tabular-nums"] }}
             >
               {meta}
-            </RNText>
+            </BaseText>
           ) : null}
         </View>
         {description ? (
-          <RNText
+          <BaseText
             numberOfLines={descriptionLines}
             ellipsizeMode="tail"
             maxFontSizeMultiplier={maxFontScale.control}
             style={{ ...textStyle(t, "caption"), color: fg("--text-secondary"), marginTop: t.length("--space-xs") }}
           >
             {description}
-          </RNText>
+          </BaseText>
         ) : null}
       </View>
       {trailing ? <View style={{ height: trailingHeight, justifyContent: "center" }}>{trailing}</View> : null}

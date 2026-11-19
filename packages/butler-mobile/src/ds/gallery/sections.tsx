@@ -3,6 +3,7 @@ import { Platform, useWindowDimensions, View } from "react-native";
 import { useTokens } from "../../design/useTokens";
 import { Badge, UnreadDot } from "../Badge";
 import { Button, IconButton, type ButtonVariant } from "../Button";
+import { ButtonGroup } from "../ButtonGroup";
 import { Composer } from "../Composer";
 import { GlassBackdrop } from "../GlassBackdrop";
 import { Icon } from "../Icon";
@@ -62,11 +63,6 @@ function Floating({ height, children }: { height: number; children: React.ReactN
       </GlassBackdrop>
     </View>
   );
-}
-
-function Row({ children }: { children: React.ReactNode }) {
-  const t = useTokens();
-  return <View style={{ flexDirection: "row", justifyContent: "flex-end", flexWrap: "wrap", gap: t.length("--space-2") }}>{children}</View>;
 }
 
 const variants: TextVariant[] = ["h1", "h2", "h3", "h4", "h5", "h6", "body", "caption", "label", "appTitle", "panelTitle", "sectionTitle"];
@@ -137,9 +133,19 @@ function ButtonSection() {
       ))}
       <Cell name="icon button · disabled"><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} disabled /></View></Cell>
       <Cell name="icon button · loading"><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} loading /></View></Cell>
+    </>
+  );
+}
+
+function ButtonGroupSection() {
+  return (
+    <>
+      <Cell name="stack · 1"><ButtonGroup><Button label={en.action} onPress={noop} /></ButtonGroup></Cell>
+      <Cell name="stack · primary, secondary"><ButtonGroup><Button label={en.action} onPress={noop} /><Button label={en.sentence} variant="secondary" onPress={noop} /></ButtonGroup></Cell>
+      <Cell name="stack · loading / disabled"><ButtonGroup><Button label={en.action} onPress={noop} loading /><Button label={en.sentence} variant="secondary" onPress={noop} disabled /></ButtonGroup></Cell>
       {sets.map(([name, s]) => (
-        <Cell key={name} name={`action row · ${name}`}>
-          <Row><Button label={s.cancel} onPress={noop} variant="ghost" /><Button label={s.action} onPress={noop} /></Row>
+        <Cell key={name} name={`pair · ${name}`}>
+          <ButtonGroup layout="pair"><Button label={s.cancel} variant="secondary" onPress={noop} /><Button label={s.action} onPress={noop} /></ButtonGroup>
         </Cell>
       ))}
     </>
@@ -282,9 +288,9 @@ function LiveSheet({ initial }: { initial: boolean }) {
   const [open, setOpen] = useState(initial);
   return (
     <>
-      <View style={{ flexDirection: "row" }}><Button label={en.sentence} onPress={() => setOpen(true)} /></View>
-      <Sheet open={open} onClose={() => setOpen(false)} title={en.sentence} description={en.note} closeLabel={en.close}
-        actions={<><Button label={en.cancel} variant="ghost" onPress={() => setOpen(false)} /><Button label={en.action} onPress={() => setOpen(false)} /></>}>
+      <ButtonGroup><Button label={en.sentence} onPress={() => setOpen(true)} /></ButtonGroup>
+      <Sheet open={open} onClose={() => setOpen(false)} title={en.sentence} description={en.note} cancelLabel={en.cancel}
+        action={<Button label={en.action} onPress={() => setOpen(false)} />}>
         {Array.from({ length: 30 }, (_, i) => <Text key={i}>{`${i + 1}. ${en.note}`}</Text>)}
       </Sheet>
     </>
@@ -295,10 +301,9 @@ function LiveSheet({ initial }: { initial: boolean }) {
 const Backdrop = Platform.OS === "ios" ? GlassBackdrop : ({ children, overlay }: React.ComponentProps<typeof GlassBackdrop>) => <View>{children}{overlay}</View>;
 
 function SheetSection({ state }: { state?: string }) {
-  const actions = (s: Strings) => <><Button label={s.cancel} variant="ghost" onPress={noop} /><Button label={s.action} onPress={noop} /></>;
   const panel = (name: string, props: Partial<React.ComponentProps<typeof SheetPanel>>, s: Strings = en) => (
     <Cell key={name} name={name}>
-      <Backdrop overlay={<View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}><SheetPanel title={s.sentence} closeLabel={s.close} onClose={noop} actions={actions(s)} {...props} /></View>}>
+      <Backdrop overlay={<View style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}><SheetPanel title={s.sentence} cancelLabel={s.cancel} onClose={noop} action={<Button label={s.action} onPress={noop} />} {...props} /></View>}>
         {Array.from({ length: 12 }, (_, i) => <Text key={i}>{`${en.note}. ${long.note}. ${en.sentence}. ${long.sentence}.`}</Text>)}
       </Backdrop>
     </Cell>
@@ -309,7 +314,8 @@ function SheetSection({ state }: { state?: string }) {
       {panel("title only, actions", {})}
       {panel("title, description, body, actions", { description: en.note, children: <Text>{en.note}</Text> })}
       {panel("long scrolling body", { description: en.note, children: lines })}
-      {panel("long actions wrap", {}, long)}
+      {panel("long labels", {}, long)}
+      {panel("description, no action", { description: en.note, action: undefined })}
       {panel("ko", { description: ko.note }, ko)}
       <Cell name="Live"><LiveSheet initial={state === "open"} /></Cell>
     </>
@@ -325,7 +331,7 @@ function ToastSection({ state }: { state?: string }) {
       {toastTones.map((tone) => <Cell key={tone} name={tone}><ToastView message={en.sentence} tone={tone} /></Cell>)}
       <Cell name="3 lines"><ToastView tone="warning" message={`${en.note}. ${en.note}. ${en.note}. ${en.note}.`} /></Cell>
       {sets.slice(1).map(([name, s]) => <Cell key={name} name={name}><ToastView tone="error" message={s === long ? long.title : s.note} /></Cell>)}
-      <Cell name="Live"><View style={{ flexDirection: "row" }}><Button label={en.sentence} onPress={() => showToast({ message: en.sentence })} /></View></Cell>
+      <Cell name="Live"><ButtonGroup><Button label={en.sentence} onPress={() => showToast({ message: en.sentence })} /></ButtonGroup></Cell>
     </>
   );
 }
@@ -335,6 +341,7 @@ export const sections: { id: string; title: string; render: (state?: string) => 
   { id: "icon", title: "Icon", render: () => <IconSection /> },
   { id: "spinner", title: "Spinner", render: () => <SpinnerSection /> },
   { id: "button", title: "Button", render: () => <ButtonSection /> },
+  { id: "button-group", title: "ButtonGroup", render: () => <ButtonGroupSection /> },
   { id: "surface", title: "Surface", render: () => <SurfaceSection /> },
   { id: "list-row", title: "ListRow", render: () => <ListRowSection /> },
   { id: "text-field", title: "TextField", render: () => <TextFieldSection /> },

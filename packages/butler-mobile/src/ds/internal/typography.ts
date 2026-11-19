@@ -67,3 +67,9 @@ export function textStyle(t: Tokens, variant: TextVariant, weight?: WeightName):
     letterSpacing: t.number(`--typo-${s}-letter-spacing`),
   };
 }
+
+/** Android has no keep-all: a WORD JOINER between a Hangul syllable and an adjacent letter/digit forbids the break (ICU LB11). */
+const KEEP_ALL = /([0-9A-Za-z가-힣])(?=[가-힣])|([가-힣])(?=[0-9A-Za-z])/g;
+export function keepHangulWords(text: string): string {
+  return text.replace(KEEP_ALL, "$1$2\u2060");
+}

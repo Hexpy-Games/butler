@@ -456,6 +456,14 @@ export interface LogTraceCopy {
 /** Copy for the mobile app (packages/butler-mobile). Screens add their keys here, in both locales. */
 export interface MobileCopy {
   appName: string;
+  pair: { title: string; lede: string; choiceLede: string; address: string; code: string; connect: string;
+    scan: string; manual: string; scanHint: string; notPairingQr: string; cameraOff: string; openSettings: string;
+    rescan: string; connecting: string;
+    addressInvalid: string; codeInvalid: string; updateApp: string; linkInvalid: string };
+  problems: { invalidCode: string; hostNotAllowed: string; needsPairing: string; versionMismatch: string;
+    notButler: string; unreachable: string; failed: string };
+  localNetwork: { title: string; body: string; retry: string; cancel: string };
+  home: { checking: string; connected: string; retry: string; pairAgain: string };
 }
 
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
