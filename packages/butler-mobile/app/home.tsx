@@ -1,17 +1,17 @@
-import { useCallback, useRef, useState } from "react";
-import { Platform, ScrollView, SectionList, View } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Platform, FlatList, RefreshControl, ScrollView, View } from "react-native";
 import { router, Stack, useFocusEffect } from "expo-router";
-import { Badge, Button, ButtonGroup, EdgeFade, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useHeaderOptions, useTokens } from "@/ds";
+import { Badge, Button, ButtonGroup, EdgeFade, Icon, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useHeaderOptions, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
 import { probe } from "@/connection/probe";
 import type { Problem } from "@/connection/problems";
 import { pairingStore } from "@/connection/store";
-import { useMobileCopy } from "@/i18n";
+import { useAppLocale, useMobileCopy } from "@/i18n";
 
-import { getLocales } from "expo-localization";
 import { useConversation } from "@/conversation/live";
 import { useNavigationView } from "@/conversation/useNavigationView";
-import { conversationSections, sessionMark, timeLabel } from "@/conversation/sessions";
+import { spaceTree, visibleRows, type SpaceRow } from "@/conversation/space";
+import { sessionMark, timeLabel } from "@/conversation/sessions";
 
 type Status = { kind: "checking"; origin?: string } | { kind: "ready"; origin: string } | { kind: "problem"; origin: string; problem: Problem };
 
@@ -78,28 +78,53 @@ function Conversations() {
   const copy = useMobileCopy();
   const t = useTokens();
   const options = useHeaderOptions();
-  const { view, error, retry } = useNavigationView();
+  const { view, error, retry, refresh } = useNavigationView();
   const { lost } = useConversation();
   const [scrolled, setScrolled] = useState(false);
-  const sections = view ? conversationSections(view, copy.conversations.general) : [];
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [refreshing, setRefreshing] = useState(false);
+  const tree = useMemo<ReturnType<typeof spaceTree>>(() => view ? spaceTree(view) : { children: new Map() }, [view]);
+  const rows: SpaceRow[] = visibleRows(tree, collapsed);
+  if (tree.general) rows.unshift({ key: "s:general", kind: "session", title: tree.general.title, session: tree.general, depth: 0 });
+  const toggle = (key: string) => setCollapsed(previous => {
+    const next = new Set(previous);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+  const unread = useMemo(() => {
+    const keys = new Set<string>();
+    const visit = (parent: string | null): boolean => {
+      let found = false;
+      for (const row of tree.children.get(parent) ?? []) {
+        const descendant = visit(row.key);
+        if (descendant) keys.add(row.key);
+        found = found || !!row.session?.unread || descendant;
+      }
+      return found;
+    };
+    visit(null);
+    return keys;
+  }, [tree]);
   const paddingHorizontal = t.length("--space-4");
-  const locale = getLocales()[0].languageTag;
+  const locale = useAppLocale();
   return <Surface variant="base" grow edges={["left", "right"]}>
     <Stack.Screen options={{ ...options, title: copy.conversations.title, headerLargeTitle: Platform.OS === "ios" }} />
-    <SectionList sections={sections} keyExtractor={item => item.id} contentInsetAdjustmentBehavior="automatic"
+    <FlatList data={rows} keyExtractor={item => item.key} contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ flexGrow: 1, paddingHorizontal }}
       onScroll={event => setScrolled(event.nativeEvent.contentOffset.y > 0)} scrollEventThrottle={16}
-      renderSectionHeader={({ section }) => <Text variant="sectionTitle" tone="secondary">{section.title}</Text>}
-      renderItem={({ item }) => {
-        const mark = sessionMark(item);
-        const title = item.title.trim() ? item.title : copy.conversations.untitled;
-        return <ListRow title={title} description={item.last_message_preview ? markdownPlainText(item.last_message_preview) : undefined} descriptionLines={1}
-          meta={timeLabel(item.last_activity_at, locale, new Date())}
-          trailing={mark === "attention" ? <Badge tone="warning" label={copy.conversations.needsAttention} />
-            : mark === "working" ? <Spinner label={copy.conversations.working} />
-            : mark === "unread" ? <UnreadDot label={copy.conversations.unread} /> : null}
-          onPress={() => router.push({ pathname: "/chat/[id]", params: { id: item.id, title } })} />;
-      }}
+      refreshControl={<RefreshControl refreshing={refreshing} tintColor={t.color("--text-secondary")} onRefresh={() => {
+        setRefreshing(true);
+        void refresh().finally(() => setRefreshing(false));
+      }} />}
+      renderItem={({ item }) => <View style={{ paddingLeft: item.depth * t.length("--space-4") }}>
+        {item.session ? <SessionRow session={item.session} locale={locale} />
+          : <ListRow icon={item.kind === "project" ? icons.Briefcase : icons.Folder} title={item.title}
+            accessibilityLabel={(collapsed.has(item.key) ? copy.conversations.expand : copy.conversations.collapse)(item.title)}
+            trailing={<View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
+              {collapsed.has(item.key) && unread.has(item.key) ? <UnreadDot label={copy.conversations.unread} /> : null}
+              <Icon glyph={collapsed.has(item.key) ? icons.ChevronRight : icons.ChevronDown} tone="tertiary" />
+            </View>} onPress={() => toggle(item.key)} />}
+      </View>}
       ListEmptyComponent={<View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: t.length("--space-4") }}>
         {view ? <Text tone="secondary">{copy.conversations.empty}</Text>
           : error ? <>
@@ -108,8 +133,23 @@ function Conversations() {
           </> : <Spinner label={copy.home.checking} />}
       </View>}
       ListHeaderComponent={lost ? <Text variant="caption" tone="tertiary">{copy.conversations.reconnecting}</Text> : undefined}
-      ListFooterComponent={<ButtonGroup><Button variant="secondary" label={copy.home.pairAgain} onPress={() => router.push("/pair")} /></ButtonGroup>}
     />
     <EdgeFade edge="top" visible={scrolled} />
   </Surface>;
+}
+
+function SessionRow({ session, locale }: { session: NonNullable<SpaceRow["session"]>; locale: string }) {
+  const copy = useMobileCopy();
+  const t = useTokens();
+  const title = session.title.trim() ? session.title : copy.conversations.untitled;
+  const mark = sessionMark(session);
+  return <ListRow icon={session.project_id && session.id !== "general" ? icons.Notebook : icons.MessageSquare}
+    title={title} description={session.last_message_preview ? markdownPlainText(session.last_message_preview) : undefined}
+    descriptionLines={1} meta={timeLabel(session.last_activity_at, locale, new Date())}
+    trailing={<View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
+      {mark === "attention" ? <Badge tone="warning" label={copy.conversations.needsAttention} />
+        : mark === "working" ? <Spinner label={copy.conversations.working} />
+        : mark === "unread" ? <UnreadDot label={copy.conversations.unread} /> : null}
+      <Icon glyph={icons.ChevronRight} tone="tertiary" />
+    </View>} onPress={() => router.push({ pathname: "/chat/[id]", params: { id: session.id, title } })} />;
 }

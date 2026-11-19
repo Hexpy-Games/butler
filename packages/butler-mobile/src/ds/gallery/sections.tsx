@@ -4,6 +4,7 @@ import { useTokens } from "../../design/useTokens";
 import { Badge, UnreadDot } from "../Badge";
 import { Button, IconButton, type ButtonVariant } from "../Button";
 import { ButtonGroup } from "../ButtonGroup";
+import { ContextRing } from "../ContextRing";
 import { Composer } from "../Composer";
 import { GlassBackdrop } from "../GlassBackdrop";
 import { Icon } from "../Icon";
@@ -278,6 +279,9 @@ function ComposerSection() {
       {cell("busy", { value: en.sentence, busy: true })}
       {cell("disabled", { value: en.sentence, disabled: true, canSend: true })}
       {cell("with attach", { attach: { label: en.attach, onPress: noop } })}
+      {cell("with controls", { leading: <Button variant="ghost" label="GPT-6 Sol · Low" onPress={noop} />,
+        trailing: <ContextRing ratio={0.5} label="50% used" onPress={noop} />,
+        attachments: [{ key: "file", label: "Photo.png", onRemove: noop, removeLabel: "Remove Photo.png" }] })}
       {cell("with adjunct", { adjunct: <Text tone="secondary">{en.note}</Text> })}
       {cell("send pressed", { value: en.sentence, canSend: true }, "pressed")}
       <Cell name="Live"><Floating height={height}><LiveComposer /></Floating></Cell>
@@ -349,6 +353,8 @@ export const sections: { id: string; title: string; render: (state?: string) => 
   { id: "text-field", title: "TextField", render: () => <TextFieldSection /> },
   { id: "switch", title: "Switch", render: () => <SwitchSection /> },
   { id: "badge", title: "Badge", render: () => <BadgeSection /> },
+  { id: "context-ring", title: "ContextRing", render: () => <>{[0.05, 0.5, 0.95].map(ratio =>
+    <Cell key={ratio} name={String(ratio)}><ContextRing ratio={ratio} label={`${ratio * 100}% used`} onPress={noop} /></Cell>)}</> },
   { id: "composer", title: "Composer", render: () => <ComposerSection /> },
   { id: "sheet", title: "Sheet", render: (state) => <SheetSection state={state} /> },
   { id: "toast", title: "Toast", render: (state) => <ToastSection state={state} /> },

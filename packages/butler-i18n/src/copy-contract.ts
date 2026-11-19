@@ -466,6 +466,8 @@ export interface MobileCopy {
   conversations: {
     title: string;
     general: string;
+    expand: (title: string) => string;
+    collapse: (title: string) => string;
     empty: string;
     needsAttention: string;
     working: string;
@@ -475,6 +477,30 @@ export interface MobileCopy {
     loadFailed: string;
   };
   chat: {
+    copy: string;
+    copied: string;
+    retryFailed: string;
+    attach: string;
+    attachPhoto: string;
+    attachFile: string;
+    uploading: string;
+    uploadFailed: string;
+    model: string;
+    reasoning: string;
+    modelFailed: string;
+    modelUnavailable: string;
+    context: string;
+    close: string;
+    info: string;
+    infoAsks: string;
+    infoWorkspace: string;
+    infoNoWorkspace: string;
+    infoAttachments: string;
+    removeAttachment: (name: string) => string;
+    contextUsed: (percent: number) => string;
+    contextTokens: (used: string, budget: string) => string;
+    contextCompact: (at: string) => string;
+
     placeholder: string;
     send: string;
     stop: string;

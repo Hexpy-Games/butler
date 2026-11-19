@@ -71,6 +71,8 @@ export interface SessionView {
   kind: ChatKind;
   project_id?: string;
   status: SessionViewStatus;
+  context?: ContextDetails | null;
+  branch?: SessionBranch | null;
   active_turn: SessionViewTurn | null;
   latest_turn: SessionViewTurn | null;
   messages: ConversationMessage[];
@@ -85,4 +87,58 @@ export interface MessageSendRequest {
   client_message_id: string;
   attachments: { file_id: string }[];
   queue_policy: "send_now" | "enqueue_if_busy";
+}
+
+export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
+
+export interface ModelSummary {
+  provider_id: string;
+  provider_label: string;
+  model_id: string;
+  model_ref: string;
+  display_name: string;
+  default_reasoning_effort: ReasoningEffort;
+  reasoning_efforts: ReasoningEffort[];
+  reasoning_budget_tokens?: Partial<Record<ReasoningEffort, number>>;
+  availability?: "ready" | "sign_in_required" | "plan_off" | "not_in_plan";
+  /** Catalog image capability; absent means unknown. */
+  image_input_support?: "supported" | "unsupported" | "unknown";
+}
+
+export interface ModelCatalog {
+  generation: string;
+  default_model_ref: string;
+  default_reasoning_effort: ReasoningEffort;
+  models: ModelSummary[];
+  registered_models?: ModelSummary[];
+}
+
+export interface SessionControls {
+  model: string;
+  reasoning_effort: ReasoningEffort;
+  access_mode: string;
+  plan_mode: boolean;
+}
+
+export interface SessionControlsView {
+  session_id: string;
+  controls: SessionControls;
+  revision: number;
+  catalog_generation: string;
+}
+
+export interface ContextDetails {
+  used_tokens: number;
+  budget_tokens: number;
+  ratio: number;
+  auto_compact_at_tokens?: number;
+  model_ref?: string;
+}
+
+export interface SessionBranch {
+  available: boolean;
+  label?: string;
+  workspace_path?: string;
+  branch?: string;
+  safe_status?: string;
 }

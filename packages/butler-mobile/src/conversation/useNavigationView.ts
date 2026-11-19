@@ -7,30 +7,36 @@ export function useNavigationView() {
   const { client, reconcile, subscribe } = useConversation();
   const [view, setView] = useState<NavigationView | null>(null);
   const [error, setError] = useState(false);
-  const reload = useRef(() => {});
+  const reload = useRef<(immediate?: boolean) => Promise<void>>(async () => {});
   useEffect(() => {
     setView(null);
     if (!client) return;
-    let closed = false, busy = false, pending = false, last = 0;
+    let closed = false, pending = false, last = 0;
+    let active: Promise<void> | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const request = () => {
+    const request = async (immediate = false): Promise<void> => {
       if (closed) return;
       pending = true;
-      if (busy || timer) return;
-      const delay = last + 1000 - Date.now();
-      if (delay > 0) {
-        timer = setTimeout(() => { timer = undefined; request(); }, delay);
+      if (active) {
+        if (immediate) { await active; return request(true); }
         return;
       }
-      busy = true;
+      if (immediate) { clearTimeout(timer); timer = undefined; }
+      else if (timer) return;
+      const delay = last + 1000 - Date.now();
+      if (!immediate && delay > 0) {
+        timer = setTimeout(() => { timer = undefined; void request(); }, delay);
+        return;
+      }
       pending = false;
       last = Date.now();
-      void client.request<NavigationView>("/navigation").then(next => {
+      active = client.request<NavigationView>("/navigation").then(next => {
         if (!closed) { setView(next); setError(false); }
       }).catch(() => { if (!closed) setError(true); }).finally(() => {
-        busy = false;
-        if (pending) request();
+        active = null;
+        if (pending) void request();
       });
+      await active;
     };
     reload.current = request;
     const unsubscribe = subscribe(event => {
@@ -42,7 +48,7 @@ export function useNavigationView() {
       closed = true;
       clearTimeout(timer);
       unsubscribe();
-      reload.current = () => {};
+      reload.current = async () => {};
     };
   }, [client, subscribe]);
   useFocusEffect(useCallback(() => { reload.current(); }, []));
@@ -53,5 +59,6 @@ export function useNavigationView() {
     reload.current();
   }, [reconcile]);
   const retry = useCallback(() => reload.current(), []);
-  return { view, error, retry };
+  const refresh = useCallback(() => reload.current(true), []);
+  return { view, error, retry, refresh };
 }

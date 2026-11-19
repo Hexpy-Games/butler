@@ -1,14 +1,21 @@
 import { useCallback, useRef, useState } from "react";
-import { FlatList, Platform, View } from "react-native";
+import { FlatList, Image, Platform, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { ScrollEdgeEffectProvider, useScrollEdgeEffectRef } from "@bsky.app/expo-scroll-edge-effect";
-import type { ConversationMessage, MessageSendRequest, SessionView } from "../../../butler-protocol/src/index.ts";
+import type { ConversationMessage, MessageFileRef, MessageSendRequest, SessionView } from "../../../butler-protocol/src/index.ts";
 import { toMarkdown } from "../../../butler-protocol/src/answer-blocks-markdown.ts";
-import { Button, ButtonGroup, Composer, ComposerDock, EdgeFade, Markdown, showToast, Spinner, Surface, Text, useHeaderInset, useHeaderOptions, useTokens } from "@/ds";
 import { RADIUS } from "@/design/tokens";
+import { reasoningEffortLabel } from "../../../butler-i18n/src/reasoning-effort.ts";
+import { Badge, Button, ButtonGroup, Composer, ComposerDock, ContextRing, EdgeFade, IconButton, icons, ListRow, Markdown, Sheet, showToast, Spinner, Surface, Text, useHeaderInset, useHeaderOptions, useTokens } from "@/ds";
 import { useConversation } from "@/conversation/live";
 import { SESSION_PAGE, useSessionView } from "@/conversation/useSessionView";
-import { useMobileCopy } from "@/i18n";
+import { useAppLocale, useMobileCopy } from "@/i18n";
+
+import { ContextBody, SessionInfoSheet } from "@/conversation/SessionInfoSheet";
+import { ModelSheet } from "@/conversation/ModelSheet";
+import { useAttachments } from "@/conversation/useAttachments";
+import { useControls } from "@/conversation/useControls";
 
 export default function Chat() {
   const { id, title } = useLocalSearchParams<{ id: string; title?: string }>();
@@ -20,6 +27,7 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
   const t = useTokens();
   const options = useHeaderOptions();
   const headerInset = useHeaderInset();
+  const [infoOpen, setInfoOpen] = useState(false);
   const { view, error, loadingEarlier, reload, loadEarlier } = useSessionView(id);
   const list = useRef<FlatList<ConversationMessage> | null>(null);
   const edgeRef = useScrollEdgeEffectRef();
@@ -36,12 +44,14 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
   const messages = view?.messages.filter(message => message.role === "user"
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length))) ?? [];
   return <Surface variant="base" grow edges={["left", "right"]}>
-    <Stack.Screen options={{ ...options, title, headerLargeTitle: false }} />
+    <Stack.Screen options={{ ...options, title, headerLargeTitle: false,
+      headerRight: () => <IconButton icon={icons.Info} variant="ghost" label={copy.chat.info} onPress={() => setInfoOpen(true)} /> }} />
+    <SessionInfoSheet open={infoOpen} onClose={() => setInfoOpen(false)} id={id} title={title} view={view} />
     {error ? <View style={{ flex: 1, justifyContent: "center", padding: t.length("--space-4"), gap: t.length("--space-4") }}>
       <Text tone="danger">{copy.chat.loadFailed}</Text>
       <ButtonGroup><Button label={copy.chat.retry} onPress={reload} /></ButtonGroup>
     </View> : <FlatList ref={ref} data={messages} keyExtractor={message => message.id}
-      renderItem={({ item }) => <Message message={item} />}
+      renderItem={({ item }) => <Message message={item} latestTurn={view?.latest_turn} />}
       maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
       contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerInset }} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
       keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" scrollEventThrottle={16}
@@ -69,7 +79,7 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
     />}
     <EdgeFade edge="top" offset={headerInset} visible={scrolled} />
     <EdgeFade edge="bottom" offset={dockHeight} visible={!bottom} />
-    <ChatComposer id={id} turn={view?.active_turn ?? null} onHeightChange={setDockHeight}
+    <ChatComposer id={id} view={view} onHeightChange={setDockHeight}
       onSend={() => { atBottom.current = true; setBottom(true); }} />
   </Surface>;
 }
@@ -77,24 +87,6 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
 type ScrollMetrics = { contentSize: { height: number }; layoutMeasurement: { height: number }; contentOffset: { y: number } };
 const nearEnd = ({ contentSize, layoutMeasurement, contentOffset }: ScrollMetrics) =>
   contentSize.height - layoutMeasurement.height - contentOffset.y < 48;
-
-function Message({ message }: { message: ConversationMessage }) {
-  const copy = useMobileCopy();
-  const t = useTokens();
-  if (message.role === "user") return <View style={{ alignSelf: "flex-end", maxWidth: "85%",
-    backgroundColor: t.color("--user-message-bg"), borderRadius: t.length(RADIUS),
-    paddingVertical: t.length("--space-3"), paddingHorizontal: t.length("--space-4") }}>
-    <Text selectable>{message.text}</Text>
-  </View>;
-  const failed = message.status === "failed" || message.delivery_state === "system_error" || message.delivery_state === "failed_system";
-  const cancelled = message.status === "cancelled" || message.delivery_state === "cancelled";
-  return <View style={{ width: "100%", gap: t.length("--space-3") }}>
-    <Markdown text={message.text} />
-    {message.answer_blocks?.map((set, index) => <Markdown key={index} text={toMarkdown(set.spec, url => url)} />)}
-    {failed ? <Text tone="danger">{copy.chat.failed}</Text> : null}
-    {cancelled ? <Text tone="tertiary">{copy.chat.cancelled}</Text> : null}
-  </View>;
-}
 
 function TurnStatus({ view }: { view: SessionView }) {
   const copy = useMobileCopy();
@@ -110,23 +102,32 @@ function TurnStatus({ view }: { view: SessionView }) {
   </View>;
 }
 
-function ChatComposer({ id, turn, onHeightChange, onSend }: {
-  id: string; turn: SessionView["active_turn"]; onHeightChange(height: number): void; onSend(): void;
+function ChatComposer({ id, view, onHeightChange, onSend }: {
+  id: string; view: SessionView | null; onHeightChange(height: number): void; onSend(): void;
 }) {
   const copy = useMobileCopy();
   const { client } = useConversation();
+  const locale = useAppLocale();
+  const attachments = useAttachments(id);
+  const model = useControls(id);
+  const [sheet, setSheet] = useState<"attach" | "model" | "context" | null>(null);
+  const turn = view?.active_turn;
+  const ready = attachments.items.flatMap(item => item.status === "ready" && item.file ? [item.file] : []);
+  const uploading = attachments.items.some(item => item.status === "uploading");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const canSend = (!!text.trim() || ready.length > 0) && !uploading;
   const send = async () => {
-    if (!client || busy || !text.trim()) return;
+    if (!client || busy || !canSend) return;
     onSend();
     setBusy(true);
     const body: MessageSendRequest = { chat_id: id, text: text.trim(),
       client_message_id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
-      attachments: [], queue_policy: "send_now" };
+      attachments: ready.map(file => ({ file_id: file.file_id })), queue_policy: "send_now" };
     try {
       await client.request("/messages", { body });
       setText("");
+      attachments.clear();
     } catch {
       showToast({ message: copy.chat.sendFailed, tone: "error" });
     } finally { setBusy(false); }
@@ -139,8 +140,85 @@ function ChatComposer({ id, turn, onHeightChange, onSend }: {
     finally { setBusy(false); }
   };
   return <ComposerDock onHeightChange={onHeightChange}>
-    <Composer value={text} onChangeText={setText} placeholder={copy.chat.placeholder} canSend={!!text.trim()}
+    <Composer value={text} onChangeText={setText} placeholder={copy.chat.placeholder} canSend={canSend}
       mode={turn?.cancellable ? "stop" : "send"} busy={busy} onSend={send} onStop={stop}
-      sendLabel={copy.chat.send} stopLabel={copy.chat.stop} />
+      sendLabel={copy.chat.send} stopLabel={copy.chat.stop} attach={{ label: copy.chat.attach, onPress: () => setSheet("attach") }}
+      attachments={attachments.items.map(item => ({ key: item.key, label: item.name, busy: item.status === "uploading",
+        onRemove: () => attachments.remove(item.key), removeLabel: copy.chat.removeAttachment(item.name) }))}
+      leading={model.controls ? <Button variant="ghost" iconEnd={icons.ChevronDown} onPress={() => setSheet("model")}
+        label={`${model.current?.display_name ?? model.controls.model} · ${reasoningEffortLabel(model.controls.reasoning_effort, locale)}`} /> : null}
+      trailing={view?.context ? <ContextRing ratio={view.context.ratio} label={copy.chat.contextUsed(Math.round(view.context.ratio * 100))}
+        onPress={() => setSheet("context")} /> : null} />
+    <ModelSheet {...model} open={sheet === "model"} onClose={() => setSheet(null)} />
+    <Sheet open={sheet === "context"} onClose={() => setSheet(null)} title={copy.chat.context} cancelLabel={copy.chat.close}>
+      {view?.context ? <ContextBody context={view.context} /> : null}
+    </Sheet>
+    <Sheet open={sheet === "attach"} onClose={() => setSheet(null)} title={copy.chat.attach} cancelLabel={copy.chat.close}>
+      {model.current?.image_input_support !== "unsupported" ? <ListRow icon={icons.Image} title={copy.chat.attachPhoto}
+        onPress={() => { setSheet(null); void attachments.pick("photo"); }} /> : null}
+      <ListRow icon={icons.File} title={copy.chat.attachFile} onPress={() => { setSheet(null); void attachments.pick("file"); }} />
+    </Sheet>
   </ComposerDock>;
+}
+
+function Message({ message, latestTurn }: { message: ConversationMessage; latestTurn?: SessionView["latest_turn"] }) {
+  const copy = useMobileCopy();
+  const t = useTokens();
+  const { pairing } = useConversation();
+  if (message.role === "user") return <View style={{ alignSelf: "flex-end", maxWidth: "85%", gap: t.length("--space-1") }}>
+    <View style={{ backgroundColor: t.color("--user-message-bg"), borderRadius: t.length(RADIUS),
+      paddingVertical: t.length("--space-3"), paddingHorizontal: t.length("--space-4"), gap: t.length("--space-2") }}>
+      {message.attachments?.map(file => <MessageAttachment key={file.file_id} file={file} origin={pairing?.origin} />)}
+      {message.text ? <Text selectable>{message.text}</Text> : null}
+    </View>
+    <MessageInfo message={message} />
+  </View>;
+  const failed = message.status === "failed" || message.delivery_state === "system_error" || message.delivery_state === "failed_system";
+  const cancelled = message.status === "cancelled" || message.delivery_state === "cancelled";
+  return <View style={{ width: "100%", gap: t.length("--space-1") }}>
+    <View style={{ gap: t.length("--space-3") }}>
+      <Markdown text={message.text} />
+      {message.answer_blocks?.map((set, index) => <Markdown key={index} text={toMarkdown(set.spec, url => url)} />)}
+      {failed ? <Text tone="danger">{copy.chat.failed}</Text> : null}
+      {cancelled ? <Text tone="tertiary">{copy.chat.cancelled}</Text> : null}
+    </View>
+    {message.status !== "streaming" ? <MessageInfo message={message}
+      retryable={failed && message.turn_id === latestTurn?.id && latestTurn?.retryable} /> : null}
+  </View>;
+}
+
+function MessageInfo({ message, retryable }: { message: ConversationMessage; retryable?: boolean }) {
+  const copy = useMobileCopy();
+  const locale = useAppLocale();
+  const t = useTokens();
+  const { client } = useConversation();
+  const user = message.role === "user";
+  const timestamp = user ? message.created_at : message.updated_at ?? message.created_at;
+  const time = timestamp ? <Text variant="caption" tone="tertiary">
+    {new Date(timestamp).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })}
+  </Text> : null;
+  const copyText = async () => {
+    const text = user ? message.text : [message.text, ...(message.answer_blocks ?? []).map(set => toMarkdown(set.spec, url => url))].join("\n\n");
+    await Clipboard.setStringAsync(text);
+    showToast({ message: copy.chat.copied, tone: "success" });
+  };
+  const retry = async () => {
+    try { await client?.request(`/turns/${encodeURIComponent(message.turn_id!)}/retry`, { body: {} }); }
+    catch { showToast({ message: copy.chat.retryFailed, tone: "error" }); }
+  };
+  return <View style={{ flexDirection: "row", alignItems: "center", justifyContent: user ? "flex-end" : "flex-start", gap: t.length("--space-1") }}>
+    {retryable ? <Button variant="secondary" iconStart={icons.Retry} label={copy.chat.retry} onPress={retry} /> : null}
+    {user ? time : null}
+    <IconButton icon={icons.Copy} variant="ghost" label={copy.chat.copy} onPress={copyText} />
+    {user ? null : time}
+  </View>;
+}
+
+function MessageAttachment({ file, origin }: { file: MessageFileRef; origin?: string }) {
+  const t = useTokens();
+  if (file.kind !== "image" && !file.mime_type.startsWith("image/")) return <Badge icon={icons.File} label={file.safe_name} />;
+  const url = file.signed_url ?? file.url;
+  const width = Math.min(file.width ?? 220, 220);
+  return <Image source={{ uri: origin ? new URL(url, origin).href : url }} accessibilityLabel={file.safe_name}
+    style={{ width, maxWidth: 220, height: file.width && file.height ? width * file.height / file.width : 160, borderRadius: t.length(RADIUS) }} />;
 }

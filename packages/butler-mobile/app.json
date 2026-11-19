@@ -18,6 +18,11 @@
     "locales": { "ko": "./locales/ko.json" },
     "plugins": [
       "expo-router",
+      ["expo-image-picker", {
+        "photosPermission": "Butler attaches the photos you choose to your message.",
+        "cameraPermission": false,
+        "microphonePermission": false
+      }],
       ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }],
       ["expo-font", { "fonts": [
         "./node_modules/pretendard/dist/public/static/Pretendard-Regular.otf",

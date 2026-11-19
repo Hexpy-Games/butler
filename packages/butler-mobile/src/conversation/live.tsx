@@ -11,6 +11,7 @@ import { useMobileCopy } from "@/i18n";
 interface ConversationContext {
   connect(pairing: Pairing): void;
   client: GatewayClient | null;
+  pairing: Pairing | null;
   lost: boolean;
   reconcile: number;
   subscribe(listener: (event: LiveEvent) => void): () => void;
@@ -23,6 +24,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
   const live = useRef<LiveConnection | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const listeners = useRef(new Set<(event: LiveEvent) => void>());
+  const [activePairing, setPairing] = useState<Pairing | null>(null);
   const [client, setClient] = useState<GatewayClient | null>(null);
   const [lost, setLost] = useState(false);
   const [reconcile, setReconcile] = useState(0);
@@ -36,6 +38,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     clearTimeout(timer.current);
     setLost(false);
     pairing.current = next;
+    setPairing(next);
     const gateway = createGatewayClient({ origin: next.origin, fetch: nativeFetch, token: () => next.deviceToken });
     setClient(gateway);
     live.current = connectLive({
@@ -54,6 +57,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
         clearTimeout(timer.current);
         setLost(false);
         pairing.current = null;
+        setPairing(null);
         setClient(null);
         void pairingStore.clear(next.butlerId).then(() => {
           showToast({ message: copy.problems.needsPairing, tone: "warning" });
@@ -74,7 +78,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
       clearTimeout(timer.current);
     };
   }, []);
-  return <Context.Provider value={{ connect, client, lost, reconcile, subscribe }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ connect, client, pairing: activePairing, lost, reconcile, subscribe }}>{children}</Context.Provider>;
 }
 
 export function useConversation(): ConversationContext {
