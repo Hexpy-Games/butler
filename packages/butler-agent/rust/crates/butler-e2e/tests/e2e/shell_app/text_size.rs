@@ -2,7 +2,7 @@
 use super::live_turns::ready_workspace;
 use super::*;
 
-/// SHELL-APP-06 — Text size: the shortcut zooms the whole window and saves the setting, reset returns to 1, and a size saved through the Agent reaches the open window.
+/// SHELL-APP-06 — Text size: the shortcut zooms the whole window and saves the setting, reset returns to 1, a press on an Appearance size option sets and saves it, and a size saved through the Agent reaches the open window.
 #[tokio::test]
 async fn shell_app_06_text_size_zooms_the_window() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -33,6 +33,22 @@ async fn shell_app_06_text_size_zooms_the_window() -> Result<(), HarnessError> {
     };
     saved_as("large").await?;
     shell.run(&["key secondary-0", "expect-scale 1"]).await?;
+    saved_as("default").await?;
+    // In Settings > Appearance, at the large size, a pointer press on the first option of the
+    // text-size group (기본) sets the default again. The group starts at the anchor's left edge
+    // whether its column stretches the anchor or not, so 4% of its width lands in that option.
+    shell
+        .run(&[
+            "click sidebar-settings",
+            "wait-anchor settings-nav-appearance",
+            "click settings-nav-appearance",
+            "wait-anchor text-size",
+            "key secondary-=",
+            "expect-scale 1.15",
+            "click-at text-size 0.04 0.5",
+            "expect-scale 1",
+        ])
+        .await?;
     saved_as("default").await?;
     let patched = gw
         .patch("/settings", json!({"text_size": "larger"}))

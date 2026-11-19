@@ -171,7 +171,6 @@ impl RenderOnce for Control {
             window,
             cx,
         );
-        let shrink = super::strut::shrink_wrap(cx);
         if self.debug.is_none() {
             self.debug = Some(next_anchor(cx, handle.as_ref()));
         }
@@ -188,7 +187,7 @@ impl RenderOnce for Control {
             .map(|h| (h.clone(), self.ring_reach(ds)));
         // A scroller that cannot show the ring whole draws it itself.
         let focused = focused && !handed_off;
-        let mut el = self.frame(ds, hover, foreground, shrink);
+        let mut el = self.frame(ds, hover, foreground);
         if self.scale {
             el = press.apply(
                 el,
@@ -199,16 +198,15 @@ impl RenderOnce for Control {
                 },
             );
         }
-        if let Some(outer) = self.outer.take() {
-            el = outer(el);
-        }
+        let outer = self.outer.take();
         let el = self.interact(el, &state, handle.as_ref(), live);
         let el = self.finish(el, (hover_motion, fade), pressed, focused, ds);
         let el = match publish {
             Some((handle, reach)) => el.child(focus::publish(handle, reach)),
             None => el,
         };
-        el.children(self.children)
+        let fit = (self.width, self.inline);
+        parts::place(el.children(self.children), fit, outer, &self.id)
     }
 }
 
@@ -225,7 +223,7 @@ impl Control {
     }
 
     /// The outer box: size, padding, text style and the pointer cursor.
-    fn frame(&self, ds: &Ds, hover: f32, foreground: Hsla, shrink: bool) -> gpui::Stateful<Div> {
+    fn frame(&self, ds: &Ds, hover: f32, foreground: Hsla) -> gpui::Stateful<Div> {
         let mut el = div()
             .id(self.id.clone())
             .relative()
@@ -253,10 +251,9 @@ impl Control {
             el = el.justify_center();
         }
         el = match self.width {
-            // `width: max-content` is not stretched by a column's `align-items: stretch` nor,
-            // as a grid item, by the default `justify-self`.
-            Width::Auto if shrink => el.self_start().justify_self_start(),
-            Width::Auto => el.justify_self_start(),
+            // `width: max-content; max-width: 100%` (Button.module.css); [`parts::place`] keeps
+            // the container from stretching it.
+            Width::Auto => el.max_w_full(),
             Width::Stretch => el,
             Width::Fixed(width) => el.w(px(width)),
             Width::Full => el.w_full(),
