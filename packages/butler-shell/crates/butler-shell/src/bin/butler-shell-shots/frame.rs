@@ -459,9 +459,27 @@ pub(super) fn find_anchor(
 fn page_click(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     settle(&mut h.cx, h.handle);
     let (x, y) = arg.split_once(' ').context("page-click <x> <y>")?;
+    let (x, y): (f32, f32) = (x.parse()?, y.parse()?);
     let bounds =
         h.cx.debug_bounds(h.handle, "browser-page")?
             .context("missing page surface")?;
-    let at = bounds.origin + point(px(x.parse()?), px(y.parse()?));
+    let mut page = None;
+    h.update(|_, _, cx| {
+        let model = cx.global::<ui::browser::model::BrowserState>();
+        page = model
+            .active()
+            .and_then(|id| model.tab(id))
+            .map(|tab| tab.pick.viewport());
+    })?;
+    #[expect(clippy::cast_possible_truncation, reason = "page pixels fit f32")]
+    let (w, ht) = match page {
+        Some((w, ht)) if w > 0. && ht > 0. => (w as f32, ht as f32),
+        _ => (f32::from(bounds.size.width), f32::from(bounds.size.height)),
+    };
+    let (sx, sy) = (
+        f32::from(bounds.size.width) / w,
+        f32::from(bounds.size.height) / ht,
+    );
+    let at = bounds.origin + point(px(x * sx), px(y * sy));
     pointer_sequence(h, h.handle, at, at, MouseButton::Left, false)
 }

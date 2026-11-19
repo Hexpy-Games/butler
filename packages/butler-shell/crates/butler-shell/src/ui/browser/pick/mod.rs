@@ -29,6 +29,11 @@ pub(crate) struct Session {
     down: Rc<RefCell<Option<input::Press>>>,
     watches: Rc<RefCell<HashMap<Vec<usize>, gpui::Task<()>>>>,
 }
+impl Session {
+    pub(crate) fn viewport(&self) -> (f64, f64) {
+        self.viewport.get()
+    }
+}
 #[derive(Clone)]
 pub(crate) struct Item {
     pub(crate) data: Value,

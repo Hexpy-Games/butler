@@ -146,7 +146,7 @@ async fn the_user_takes_an_idle_agent_page_by_input() -> Result<(), HarnessError
         rect["x"].as_f64().unwrap() + rect["width"].as_f64().unwrap() / 2.0,
         rect["y"].as_f64().unwrap() + rect["height"].as_f64().unwrap() / 2.0,
     );
-    // `page-click` maps window pixels x window zoom, but the observed rect is in page coordinates: this runs at zoom 1.
+    // `page-click` takes page pixels, as `tab.observe` reports them.
     // The Agent's tab is the shown one; a press in its input makes the user the holder.
     complete_onboarding(&s.gw).await?;
     s.shell(&[
