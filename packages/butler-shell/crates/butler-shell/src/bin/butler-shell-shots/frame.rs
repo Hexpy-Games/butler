@@ -27,6 +27,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "click-at" => click_at(h, arg),
         "page-click" => page_click(h, arg),
         "hover" => hover(h, arg),
+        "wheel" => wheel(h, arg),
         "reveal" => reveal(h, arg),
         "wait-anchor" | "wait-no-anchor" => wait_anchor(h, arg, command == "wait-anchor"),
         "wait-theme" => wait_theme(h, arg),
@@ -212,6 +213,30 @@ fn reveal(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             PlatformInput::ScrollWheel(ScrollWheelEvent {
                 position,
                 delta: ScrollDelta::Pixels(point(px(0.), -delta)),
+                modifiers: Default::default(),
+                touch_phase: TouchPhase::Moved,
+            }),
+            cx,
+        );
+    })?;
+    settle(&mut h.cx, h.handle);
+    Ok(())
+}
+
+/// `wheel <anchor> <dy>`: one wheel step of `dy` px (positive scrolls toward the start) with the
+/// pointer on the anchor's centre, wherever the anchor is (a popover's surface is its own layer).
+fn wheel(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let (anchor, dy) = arg.split_once(' ').context("wheel <anchor> <dy>")?;
+    let (handle, bounds) = find_anchor(h, anchor)?.context("missing wheel target")?;
+    let position = bounds.center();
+    let dy: f32 = dy.parse()?;
+    move_pointer(h, handle, position, None)?;
+    h.cx.update_window(handle, |_, w, cx| {
+        w.dispatch_event(
+            PlatformInput::ScrollWheel(ScrollWheelEvent {
+                position,
+                delta: ScrollDelta::Pixels(point(px(0.), px(dy))),
                 modifiers: Default::default(),
                 touch_phase: TouchPhase::Moved,
             }),
