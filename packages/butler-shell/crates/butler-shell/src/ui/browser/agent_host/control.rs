@@ -194,8 +194,8 @@ impl BrowserState {
         }
     }
 
-    /// Real input on `id`'s page: blocked while the Agent uses the page it holds; otherwise
-    /// forwarded, and a press on a page the Agent holds takes it over first.
+    /// Real input on `id`'s page: a mouse press takes over even while the Agent uses it.
+    /// Other input is blocked while in use; otherwise a key press also takes over.
     #[cfg(feature = "cef")]
     pub(in crate::ui::browser) fn user_input(&mut self, id: &TabId, input: Input) -> Gate {
         let Some(hosted) = self.tab(id).and_then(|tab| tab.hosted.as_ref()) else {

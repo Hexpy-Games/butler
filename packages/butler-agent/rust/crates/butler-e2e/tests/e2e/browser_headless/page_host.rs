@@ -187,6 +187,30 @@ async fn the_user_takes_an_idle_agent_page_by_input() -> Result<(), HarnessError
         assert!(std::time::Instant::now() < deadline, "{listed}");
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
+    let rect = &node(&page, "link", "next")["rect"];
+    let (x, y) = (
+        rect["x"].as_f64().unwrap() + rect["width"].as_f64().unwrap() / 2.0,
+        rect["y"].as_f64().unwrap() + rect["height"].as_f64().unwrap() / 2.0,
+    );
+    s.shell(&[&format!("page-click {x} {y}")]).await?;
+    let target = reqwest::Url::parse(&url)
+        .unwrap()
+        .join("./popup.html")
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let listed = call(&admin, "general", "tabs.list", &Value::Null, json!({})).await?;
+        if listed["tabs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["id"] == *tab && t["url"] == target.as_str())
+        {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{listed}");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
     s.finish().await
 }
 
