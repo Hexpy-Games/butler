@@ -1,7 +1,7 @@
 import { maskActionSecrets } from "./maskActionSecrets.ts";
 import { appCopy } from "./copy.ts";
 import type { AppCopy } from "./copy.ts";
-import { approvalTargetsFromTransport, isAbsolutePath } from "./approvalTargets.ts";
+import { approvalTargetsFromTransport, chatFolderShown, isAbsolutePath } from "./approvalTargets.ts";
 import { scheduleTiming } from "./scheduleLabels.ts";
 import type { AccessMode, ApprovalRisk, ApprovalSummary, AuthorityApprovalCard } from "./types.ts";
 
@@ -149,7 +149,7 @@ export function approvalRequestView(
     };
   }
   const actionKind = knownActionKind(approval);
-  const workspace = workspaceLabel(approval);
+  const workspace = workspaceLabel(approval, copy);
   const operation = approval.operation;
   // A tool without a readable label reads as its action kind's sentence, never its internal name.
   const label = operation ? toolLabels[operation.tool] : undefined;
@@ -160,7 +160,7 @@ export function approvalRequestView(
       ...(card.reason === "authority.unsandboxedReason" ? [copy.unsandboxedReason] : []),
       ...(actionKind === "web_request" ? [copy.webRequestDesc] : []),
       ...actionDetails(approval, actionKind, card, copy)],
-    pathDetails: operation?.targets ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
+    pathDetails: operation?.targets.map(target => chatFolderShown(target, copy.chatFolder)) ?? [...(!COMMAND_KINDS.has(actionKind) ? approval.examples.filter(isAbsolutePath) : []),
       ...approval.targets.filter(target => target.kind === "outside").map(target => target.path)],
     risk: approval.risk ?? "high",
     conversationScope: approval.targets.some(target => target.kind === "outside") ? copy.covers.other : actionKind === "edit_files" ? copy.covers.editFiles(workspace)
@@ -215,7 +215,7 @@ function operationDetails(operation: NonNullable<ApprovalSummary["operation"]>, 
       `${c.qualityLabel}: ${image.quality === "auto" ? c.default : quality}`, `${c.prompt}: ${image.prompt}`];
   }
   return [...(operation.command ? [{ code: operation.command }] : []),
-    ...operation.targets.map((target, index) => index === 0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
+    ...operation.targets.map(target => chatFolderShown(target, copy.chatFolder)).map((target, index) => index === 0 && operation.browser_mode ? `${target} · ${copy.browserMode[operation.browser_mode]}` : target),
     ...(operation.tool === "browser_sign_in_wait" ? [copy.signInStep(operation.sign_in_step ?? "unknown_form")] : []),
     ...(operation.tool === "browser_pay_wait" ? [copy.payStep(operation.wait_reason ?? "unknown_form")] : []),
     ...(operation.browser_steps ?? []).map(step => [copy.browserStep(step.action, step.role, step.name, step.frame), step.value_preview, ...step.addons].filter(Boolean).join(" · "))];
@@ -247,10 +247,10 @@ function sentence(kind: ApprovalActionKind, approval: ApprovalSummary, workspace
 }
 
 /** The workspace's label: the folder's first, else another target's; `null` reads as "this workspace". */
-function workspaceLabel(approval: ApprovalSummary): string | null {
+function workspaceLabel(approval: ApprovalSummary, copy: ApprovalRequestCopy): string | null {
   const label = (approval.targets.find((target) => target.kind === "folder" && target.label?.trim())
     ?? approval.targets.find((target) => target.label?.trim()))?.label?.trim();
-  return label || null;
+  return label ? chatFolderShown(label, copy.chatFolder) : null;
 }
 
 /** `automation:create:<id>`, `automation:delete_automation:<id>` or `automation:due:<now>` (the agent's schedule target). */

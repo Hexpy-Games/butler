@@ -179,17 +179,23 @@ async fn settle_jobs(data: &Path, membership: &str, sessions: &[&str]) {
     );
     tokio::time::timeout(Duration::from_secs(180), async {
         loop {
-            let graph_path = graph_path(data).unwrap();
-            let ready = mirror_current(data)
-                && super::super::memory_idle::catchup_checkpoint_current(data, &graph_path)
-                && state(&graph(data), "canonical_catchup_change_seq").as_deref()
-                    == Some(canonical_position(data).1.to_string().as_str())
-                && graph(data)
-                    .query_row(&incomplete, rusqlite::params_from_iter(sessions), |row| {
-                        row.get::<_, i64>(0)
-                    })
-                    .unwrap()
-                    == 0;
+            // The memory generation is created after start; until then nothing has settled.
+            let ready = data
+                .join("cognition/memory/active-generation.json")
+                .exists()
+                && {
+                    let graph_path = graph_path(data).unwrap();
+                    mirror_current(data)
+                        && super::super::memory_idle::catchup_checkpoint_current(data, &graph_path)
+                        && state(&graph(data), "canonical_catchup_change_seq").as_deref()
+                            == Some(canonical_position(data).1.to_string().as_str())
+                        && graph(data)
+                            .query_row(&incomplete, rusqlite::params_from_iter(sessions), |row| {
+                                row.get::<_, i64>(0)
+                            })
+                            .unwrap()
+                            == 0
+                };
             if ready {
                 return;
             }

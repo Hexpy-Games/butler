@@ -175,7 +175,8 @@ pub trait ProviderStreamObserver: Send + Sync {
     /// round called tools, or its answer candidate was sent back or replaced.
     fn round_text_discarded(&self) {}
 
-    /// Retains a joined cut answer while another round is requested.
+    /// Retains answer text the next round continues (a cut answer, or text
+    /// written beside answer blocks).
     fn round_text_continued(&self, _text: &str) {}
 
     /// The answer candidate failed review and must not become a delivered segment.

@@ -155,6 +155,8 @@ export interface ButlerVaultView {
   has_password: boolean;
   state: "protected" | "off" | "locked";
   available: boolean;
+  /** Why only the master password can open a vault here (macOS development builds are unsigned). */
+  password_reason?: "unsigned_build";
   declined: boolean;
   counts?: { api_key: number; signin: number; card: number; profile: number; plugin: number };
 }

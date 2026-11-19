@@ -178,6 +178,7 @@ async fn readonly_change_keeps_the_allowed_exact_action_and_denies_the_next()
                 write("next-write", "denied.txt", bridge),
             ],
         );
+        controls(&s, "ask_except_reads").await?;
         let turn = paused(&s, "general", PROMPT).await?;
         let cards = s.gw.approval_requests("general").await?;
         controls(&s, "read_only").await?;

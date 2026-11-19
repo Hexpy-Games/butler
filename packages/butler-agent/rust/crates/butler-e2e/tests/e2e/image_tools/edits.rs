@@ -270,8 +270,8 @@ async fn work_folder_image_is_edited_by_path() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let f = Fixture::start(Access::Auto, "openai").await?;
     let bytes = png(false);
-    // The general chat works in the data folder.
-    let folder = f.s.sandbox.data.join("art");
+    // The general chat works in its own folder.
+    let folder = f.s.sandbox.chat_folder("general")?.join("art");
     std::fs::create_dir_all(&folder)?;
     std::fs::write(folder.join("reina.png"), &bytes)?;
     // A picture outside the work folder stays out of reach.

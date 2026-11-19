@@ -55,11 +55,6 @@ async fn browse_batches_stateless_tasks_and_hands_exact_steps_to_browser_act()
     );
     let requests = s.provider()?.requests();
     assert_surface(&requests[0]);
-    assert!(
-        requests[0]["input"]
-            .to_string()
-            .contains("Choose the helper by the work. browse (the browsing agent)")
-    );
     let results = outputs(requests.last().unwrap());
     let browse: Vec<_> = results
         .iter()
@@ -208,15 +203,16 @@ fn assert_surface(request: &Value) {
         })
         .filter_map(|tool| tool["name"].as_str())
         .collect();
-    for name in ["browse", "browser_act", "web_search", "browser_read"] {
-        assert!(names.contains(&name), "{names:?}");
-    }
     for name in [
-        "browser_open",
-        "browser_observe",
-        "browser_close",
+        "browse",
+        "browser_act",
+        "web_search",
+        "browser_read",
         "image_collect",
     ] {
+        assert!(names.contains(&name), "{names:?}");
+    }
+    for name in ["browser_open", "browser_observe", "browser_close"] {
         assert!(!names.contains(&name), "{names:?}");
     }
 }

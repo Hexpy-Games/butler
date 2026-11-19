@@ -478,4 +478,7 @@ impl crate::gateway::GatewayDevices for TestApplication {
     fn touch_device(&self, _: String, _: u64) -> ApplicationFuture<()> {
         Box::pin(async { Ok(()) })
     }
+    fn butler_id(&self) -> ApplicationFuture<String> {
+        Box::pin(async { Ok("test-butler".to_owned()) })
+    }
 }

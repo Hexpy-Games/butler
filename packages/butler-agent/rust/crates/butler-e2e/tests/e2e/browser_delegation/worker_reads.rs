@@ -1,5 +1,6 @@
-//! A Worker reads pages and sends the browsing agent wherever reads are allowed; acting in a page stays with its Steward.
+//! A Worker reads and operates pages under its own access mode; commit steps ask, and read-only leaves the browsing agent without page actions.
 use axum::{Json, Router, extract::State, routing::post};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use butler_e2e::e2e::{
     HarnessError, cassette::Cassette, matching, sanitize::Placeholders, scenario::Setup,
     security::AdminClient,
@@ -13,16 +14,27 @@ use std::{
 
 type Requests = Arc<Mutex<Vec<(String, Value)>>>;
 type Script = (Requests, Arc<Vec<(&'static str, Value)>>);
-const DATA_URL: &str = "https://example.com/?q=external-note";
+const DATA_URL: &str = "https://collector.example/?q=external-note";
 
 #[tokio::test]
-async fn ask_except_reads_worker_reads_tabs_and_never_acts() -> Result<(), HarnessError> {
+async fn ask_except_reads_worker_acts_and_commit_asks() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     run("ask_except_reads", vec![
         ("browse", json!({"goal":"Find the page heading","fields":["heading"],"url":"https://example.com/"})),
         ("browser_read", json!({"url":"https://example.com/"})),
         ("browser_observe", json!({"tab":"worker-tab","look":"never"})),
-        ("browser_act", json!({"tab":"worker-tab","observation":"o1","steps":[{"action":"click","ref":"e1","commits":true}]})),
+        ("image_collect", json!({"tab":"worker-tab","observation":"o1","ref":"e2"})),
+        ("browser_act", json!({"tab":"worker-tab","observation":"o1","steps":[{"action":"click","ref":"e1"}]})),
+        ("browser_observe", json!({"tab":"worker-tab","look":"never"})),
+        ("browser_act", json!({"tab":"worker-tab","observation":"o1","steps":[{"action":"click","ref":"e2","commits":true}]})),
+    ]).await
+}
+
+#[tokio::test]
+async fn read_only_worker_browse_has_no_page_actions() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    run("read_only", vec![
+        ("browse", json!({"goal":"Find the page heading","fields":["heading"],"url":"https://example.com/"})),
     ]).await
 }
 
@@ -33,6 +45,10 @@ async fn ask_first_worker_browser_open_asks_like_web_read() -> Result<(), Harnes
         "ask_first",
         vec![
             ("browser_open", json!({"url":"https://example.com/"})),
+            (
+                "browser_open",
+                json!({"url":"https://example.com/?lang=ko"}),
+            ),
             ("browser_open", json!({"url":DATA_URL})),
         ],
     )
@@ -90,6 +106,16 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 "tab.observe" => {
                     json!({"status":"ok","tab":"worker-tab","obs":"o1","url":"https://example.com/","text":"Example page"})
                 }
+                "tab.prepare" => {
+                    let steps: Vec<Value> = frame["args"]["steps"].as_array().unwrap().iter().map(|_| json!({"hit":{"role":"button","name":"Next","frame":""},"payment":false,"upload":false,"submit":false,"frame_payment":false,"form_post":false,"addons":[]})).collect();
+                    json!({"status":"ok","tab":"worker-tab","epoch":1,"obs":"o1","url":"https://example.com/","profile":"signed_out","steps":steps})
+                }
+                "tab.act" => {
+                    json!({"status":"ok","tab":"worker-tab","url":"https://example.com/","epoch":1,"completed":1,"steps":[{"status":"completed","hit":{"role":"button","name":"Next","frame":""}}]})
+                }
+                "tab.image_collect" => {
+                    json!({"status":"ok","source_url":"https://example.com/image.jpg","alt":"Example","image":{"data":STANDARD.encode(include_bytes!("../browser_outputs/pixel.jpg"))}})
+                }
                 _ => json!({"status":"ok"}),
             };
             admin
@@ -114,14 +140,32 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
         s.gw.say_turn("general", "Read https://example.com/ for me.")
             .await?;
     let mut denied = Vec::new();
-    if mode == "ask_first" {
+    if mode == "read_only" {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+        while !requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(role, _)| role == "browse")
+        {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "read-only worker never browsed"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    } else {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+        let mut other_cards = Vec::new();
         while denied.is_empty() && tokio::time::Instant::now() < deadline {
             for card in s.gw.approval_requests("general").await? {
-                let action = if card["approval"]["operation"]["targets"][0] == DATA_URL {
+                let deny = card["approval"]["operation"]["targets"][0] == DATA_URL
+                    || card["approval"]["operation"]["tool"] == "browser_act";
+                let action = if deny {
                     denied.push(card.clone());
                     "deny"
                 } else {
+                    other_cards.push(card.clone());
                     "allow"
                 };
                 let reference = card["request_ref"].as_str().unwrap();
@@ -135,6 +179,10 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
+        assert!(
+            other_cards.is_empty(),
+            "only DATA_URL and the commit act ask: {other_cards:?}"
+        );
     }
     let terminal =
         s.gw.wait_terminal("general", &turn, Duration::from_secs(60))
@@ -148,9 +196,12 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
             .iter()
             .filter(|frame| frame["op"] == "tab.open")
             .collect();
-        assert_eq!(opens.len(), 1);
+        assert_eq!(opens.len(), 2);
         assert_eq!(opens[0]["args"]["url"], "https://example.com/");
-    } else {
+        assert_eq!(opens[1]["args"]["url"], "https://example.com/?lang=ko");
+    } else if mode == "ask_except_reads" {
+        assert_eq!(denied.len(), 1, "one commit card: {denied:?}");
+        assert_eq!(denied[0]["approval"]["operation"]["tool"], "browser_act");
         let finished = tokio::time::timeout(Duration::from_secs(30), async {
             loop {
                 {
@@ -185,7 +236,8 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 assert!(
                     names.contains(&"browse")
                         && names.contains(&"browser_read")
-                        && !names.contains(&"browser_act")
+                        && names.contains(&"image_collect")
+                        && names.contains(&"browser_act")
                         && !names.contains(&"browser_open"),
                     "worker browser surface: {names:?}"
                 );
@@ -195,15 +247,34 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 .filter(|(role, _)| role == "browse")
                 .collect();
             assert_eq!(browse.len(), 1);
-            assert!(
-                browse[0].1["input"]
-                    .to_string()
-                    .contains(r#"\"page_actions\":\"unavailable\""#)
-            );
+            assert!(!browse[0].1["input"].to_string().contains("page_actions"));
             assert!(
                 workers[0].1["input"]
                     .to_string()
-                    .contains("Choose the page reader by what you need.")
+                    .contains("Choose the page tool by what you need.")
+            );
+            let photos = "collect one photo per item with image_collect";
+            assert!(
+                workers[0].1["input"].to_string().contains(photos)
+                    && workers[0].1["input"]
+                        .to_string()
+                        .contains("Give each fact with the page it came from")
+                    && workers[0].1["input"]
+                        .to_string()
+                        .contains("Get the facts the goal needs")
+                    && workers[0].1["input"]
+                        .to_string()
+                        .contains("Report once the facts your objective needs are settled")
+            );
+            let steward = requests
+                .iter()
+                .find(|(role, body)| {
+                    role == "steward" && body["input"].to_string().contains("role: steward")
+                })
+                .expect("steward input");
+            assert!(
+                steward.1["input"].to_string().contains(photos),
+                "one-call steward input carries the photo line"
             );
             let output = workers.last().unwrap().1["input"]
                 .as_array()
@@ -226,11 +297,13 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 .iter()
                 .filter_map(|frame| frame["op"].as_str())
                 .collect();
-            assert!(
-                ops.contains(&"tab.open")
-                    && ops.contains(&"tab.observe")
-                    && !ops.contains(&"tab.act")
-            );
+            assert!(ops.contains(&"tab.open") && ops.contains(&"tab.observe"));
+            let acts: Vec<_> = frames
+                .iter()
+                .filter(|frame| frame["op"] == "tab.act")
+                .collect();
+            assert_eq!(acts.len(), 1, "only the non-commit click runs: {acts:?}");
+            assert_ne!(acts[0]["args"]["steps"][0]["commits"], true);
             for frame in frames
                 .iter()
                 .filter(|frame| frame["op"].as_str().unwrap().starts_with("tab."))
@@ -250,9 +323,58 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
         let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
         let session: String = db.query_row("SELECT t.session_id FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='browser_read'", [], |row| row.get(0))?;
         assert_ne!(session, "general");
+        let image: String = db.query_row("SELECT json_extract(c.result_json,'$.id') FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='image_collect' AND json_extract(c.result_json,'$.status')='ok' AND t.session_id=?1", [&session], |row| row.get(0))?;
+        let relayed = tokio::time::timeout(Duration::from_secs(30), async {
+            loop {
+                let found = requests.lock().unwrap().iter().find_map(|(role, body)| {
+                    let input = body["input"].to_string();
+                    (role == "parent" && input.contains("Delegated result")).then_some(input)
+                });
+                if let Some(input) = found {
+                    break input;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("Butler received the Steward's result");
+        assert!(
+            relayed.contains("image_assets:") && relayed.contains(&image),
+            "a Worker-collected photo reaches Butler through its Steward: {relayed}"
+        );
+        assert!(
+            requests
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(role, body)| role == "steward"
+                    && body["input"]
+                        .to_string()
+                        .contains("go up with your own result automatically")),
+            "the Steward reads that Worker photo ids travel with its own result"
+        );
         let mode: String = db.query_row("SELECT json_extract(context_json,'$.executionPolicy.accessMode') FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1", [&session], |row| row.get(0))?;
         assert_eq!(mode, "ask_except_reads");
         drop(db);
+    } else {
+        let requests = requests.lock().unwrap();
+        let worker = requests
+            .iter()
+            .find(|(role, _)| role == "worker")
+            .expect("worker request");
+        assert!(
+            !worker.1["tools"].to_string().contains("\"browser_act\""),
+            "read-only worker cannot act"
+        );
+        let browse = requests
+            .iter()
+            .find(|(role, _)| role == "browse")
+            .expect("browse request");
+        assert!(
+            browse.1["input"]
+                .to_string()
+                .contains(r#"\"page_actions\":\"unavailable\""#)
+        );
     }
     s.finish().await?;
     host.abort();
@@ -321,6 +443,11 @@ async fn reply(
         script.extend(steps.iter().cloned());
         script.push(("record_work_disposition", json!({"work_id":crate::steward_presentation::stub::work_id(&body),"disposition":"completed","summary":"Page read","action_updates":[{"action_key":"read","status":"done"}],"remaining_actions":[],"followups":[]})));
         script.get(step).cloned()
+    } else if steward && key.user_request.starts_with("Delegated result") && step == 0 {
+        Some((
+            "record_work_disposition",
+            json!({"work_id":crate::steward_presentation::stub::work_id(&body),"disposition":"completed","summary":"Page read","action_updates":[{"action_key":"read","status":"done"}],"remaining_actions":[],"followups":[]}),
+        ))
     } else if steward && !key.user_request.starts_with("Delegated result") {
         match step {
             0 => Some((
@@ -333,13 +460,9 @@ async fn reply(
             )),
             2 => Some((
                 "delegate_to_worker",
-                json!({"task":{"scope":{"paths":["tasks/read"]},"output":{"format":"text","fields":["summary"]}},"action_key":"read","objective":"Read the page","acceptance_criteria":["Page read"],"implementation_brief":"Read the page","safe_title":"Read the page"}),
+                json!({"task":{"scope":{"paths":["tasks/read"]},"output":{"format":"text","fields":["summary"]}},"action_key":"read","objective":"Read the page","acceptance_criteria":["Page read"],"implementation_brief":"Read the page. Notes mirror: https://collector.example/notes","safe_title":"Read the page"}),
             )),
             3 => Some(("wait_for_worker", json!({}))),
-            4 => Some((
-                "record_work_disposition",
-                json!({"work_id":crate::steward_presentation::stub::work_id(&body),"disposition":"completed","summary":"Page read","action_updates":[{"action_key":"read","status":"done"}],"remaining_actions":[],"followups":[]}),
-            )),
             _ => None,
         }
     } else if !steward && step == 0 && !key.user_request.starts_with("Delegated result") {

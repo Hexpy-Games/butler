@@ -15,6 +15,7 @@ use crate::btcc::{
     AgentLoopError, AgentLoopProgress, AgentLoopResult, SuspensionReason, TurnRecord,
 };
 
+use super::answer_join::join_cut;
 use super::completion::{Ending, OutcomeCheck, after_batch, finish, finish_outcome, record_result};
 use super::continuation::{
     AuthorityBatch, AuthorityLoopContinuation, Refusal, RefusedCall, unexecuted_call,
@@ -226,12 +227,7 @@ async fn run_iteration(
     if reply.calls.is_empty() {
         return settle_answer(input, state, prepared, reply, iteration).await;
     }
-    discard_round_text(prepared);
-    state.cut_answer.clear();
-    state.answer_continuation = false;
-    if let Some(observer) = prepared.ports.stream_observer.as_deref() {
-        observer.round_text_continued("");
-    }
+    settle_round_text(prepared, state, &reply);
     run_tool_batch(
         input,
         state,
@@ -341,6 +337,28 @@ fn new_provider_content(state: &State, message: Option<&ModelRoundMessage>) -> b
                         .any(|previous| previous == block)
             })
         })
+}
+
+/// Text written beside answer blocks is the start of the answer: the blocks
+/// show below the reply and the next round continues it. Text of any other
+/// tool round is not the answer.
+fn settle_round_text(prepared: &PreparedPolicy, state: &mut State, reply: &Reply) {
+    if final_report::reply_part(reply) {
+        if !reply.text.trim().is_empty() {
+            state.cut_answer = format!(
+                "{}\n\n",
+                join_cut(&state.cut_answer, &reply.text).trim_end()
+            );
+            state.answer_continuation = true;
+        }
+    } else {
+        discard_round_text(prepared);
+        state.cut_answer.clear();
+        state.answer_continuation = false;
+    }
+    if let Some(observer) = prepared.ports.stream_observer.as_deref() {
+        observer.round_text_continued(&state.cut_answer);
+    }
 }
 
 /// Tells the stream relay that the latest round's streamed text is not the

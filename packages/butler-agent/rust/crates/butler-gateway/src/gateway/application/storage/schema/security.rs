@@ -9,5 +9,11 @@ pub(super) fn create(db: &Connection) -> Result<(), AppStorageError> {
         revoked_at INTEGER
     );",
     )
-    .map_err(AppStorageError::sqlite)
+    .map_err(AppStorageError::sqlite)?;
+    super::migration::ensure_column(
+        db,
+        "paired_devices",
+        "kind",
+        "TEXT NOT NULL DEFAULT 'browser'",
+    )
 }

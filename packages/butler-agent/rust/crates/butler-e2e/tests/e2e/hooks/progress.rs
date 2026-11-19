@@ -13,7 +13,10 @@ async fn hooks_unpublished_tool_row_interrupts_turn_and_retry_delivers() -> Resu
         final_text: "Done.".into(),
     });
     fs::write(
-        setup.sandbox.data.join("progress-input.txt"),
+        setup
+            .sandbox
+            .chat_folder("general")?
+            .join("progress-input.txt"),
         "Exact tool content",
     )?;
     let held = setup.sandbox.home.join("hook-held");

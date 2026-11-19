@@ -7,7 +7,7 @@ pub(super) fn command(body: &Value) -> Option<ResponseRecord> {
     flow(
         body,
         "native:run_command",
-        &json!({"command":"echo plugin-skill","summary":"Plugin skill command","state_effect":"read_only","timeout_ms":30000}),
+        &json!({"command":"echo plugin-skill","summary":"Plugin skill command","state_effect":"mutation","timeout_ms":30000}),
     )
 }
 fn flow(body: &Value, tool: &str, arguments: &Value) -> Option<ResponseRecord> {

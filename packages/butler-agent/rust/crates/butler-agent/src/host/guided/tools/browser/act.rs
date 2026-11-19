@@ -1,4 +1,5 @@
 use super::*;
+use butler_turn::btcc::AccessDecision;
 
 pub(super) async fn execute(
     owner: &GuidedTools,
@@ -68,11 +69,7 @@ async fn run(
     if let Some(refused) = schedule_payment_refusal(owner, call, &prepared, &input).await {
         return finish_batch(&args, refused);
     }
-    if client.approval_handoff
-        && (input["commit"] == true
-            || input["always_confirm"] == true
-            || authority::reviews(&owner.access_mode(), &input))
-    {
+    if client.approval_handoff && needs_approval(owner, &input) {
         return encoded(&handoff(&args, "approval_required"));
     }
     let (approval, allow_scope) =
@@ -105,6 +102,16 @@ async fn run(
         },
     )
     .await
+}
+
+fn needs_approval(owner: &GuidedTools, input: &Value) -> bool {
+    input["commit"] == true
+        || !matches!(
+            authority::typing_decision(owner, input),
+            AccessDecision::Allow
+        )
+        || input["always_confirm"] == true
+        || authority::reviews(&owner.access_mode(), input)
 }
 
 struct PreparedAction {

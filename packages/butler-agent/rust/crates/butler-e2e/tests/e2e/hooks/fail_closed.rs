@@ -11,7 +11,10 @@ fn reading(name: &str) -> Result<Setup, HarnessError> {
         path_for: Box::new(|_| "hook-input.txt".into()),
         final_text: "Done.".into(),
     });
-    fs::write(setup.sandbox.data.join("hook-input.txt"), CONTENT)?;
+    fs::write(
+        setup.sandbox.chat_folder("general")?.join("hook-input.txt"),
+        CONTENT,
+    )?;
     Ok(setup)
 }
 
@@ -147,6 +150,10 @@ async fn hooks_failing_observers_continue() -> Result<(), HarnessError> {
             .await?;
     assert_eq!(created.status, 201, "{created:?}");
     let chat = created.data()["session"]["id"].as_str().unwrap().to_owned();
+    fs::write(
+        s.sandbox.chat_folder(&chat)?.join("hook-input.txt"),
+        CONTENT,
+    )?;
     let (_, turn) = s.turn(&chat, ASK).await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     assert!(heard(&s)?.contains(CONTENT), "the tool did not run");

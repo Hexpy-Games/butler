@@ -119,10 +119,10 @@ async fn sched_01_schedule_runs_with_its_own_access_mode() -> Result<(), Harness
         .iter()
         .find(|request| request["source_turn_id"] == turn_id.as_str())
         .unwrap_or_else(|| panic!("no approval request for the ask-first schedule: {requests:?}"));
-    let label = s.sandbox.data.file_name().unwrap().to_str().unwrap();
+    let label = butler_turn::workspace::CHAT_FOLDER_LABEL;
     assert_file_edit_approval(request, label, &asked);
     assert!(
-        !s.sandbox.data.join(&asked).exists(),
+        !s.sandbox.chat_folder("general")?.join(&asked).exists(),
         "the ask-first schedule wrote before approval"
     );
 
@@ -138,7 +138,7 @@ async fn sched_01_schedule_runs_with_its_own_access_mode() -> Result<(), Harness
         requests.is_empty(),
         "the full-access schedule asked: {requests:?}"
     );
-    let content = std::fs::read_to_string(s.sandbox.data.join(&written))?;
+    let content = std::fs::read_to_string(s.sandbox.chat_folder(&strict)?.join(&written))?;
     assert_eq!(content.trim(), "scheduled");
     let controls = s.gw.get(&format!("/sessions/{strict}/controls")).await?;
     assert!(

@@ -66,7 +66,10 @@ async fn office_file_opens_only_as_marked_allowlisted_copy() -> Result<(), Harne
         .stub_cassette(Cassette::load("TOOL-01")?)
         .env("BUTLER_CHATGPT_API_BASE_URL", format!("{url}/v1"));
     let docx = package(DOCX_MAIN, "word/document.xml", &[]);
-    std::fs::write(setup.sandbox.data.join("plan.docx"), &docx)?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("plan.docx"),
+        &docx,
+    )?;
     let mut s = setup.start().await?;
     *script.steps.lock().unwrap() = [deliver("plan.docx", "Plan"), done()].into();
     let (_, turn) = run_turn(&s, &script, "Deliver the plan.").await?;
@@ -80,7 +83,7 @@ async fn office_file_opens_only_as_marked_allowlisted_copy() -> Result<(), Harne
     let saved = s.gw.get(file["url"].as_str().unwrap()).await?;
     assert_eq!(saved.status, 200);
     // Without its original, the delivered file opens as its stored copy.
-    std::fs::remove_file(s.sandbox.data.join("plan.docx"))?;
+    std::fs::remove_file(s.sandbox.chat_folder("general")?.join("plan.docx"))?;
 
     assert_copy(
         &s,

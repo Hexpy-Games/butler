@@ -1,4 +1,4 @@
-use super::super::{web_read_carries_data, web_search_carries_data};
+use super::super::{same_origin, types_text, web_read_carries_data, web_search_carries_data};
 
 pub(super) fn boundaries() {
     for (url, carries) in [
@@ -49,6 +49,46 @@ pub(super) fn boundaries() {
     assert!(web_search_carries_data(&"x ".repeat(60)));
     assert!(!web_search_carries_data(&"가".repeat(23)));
     assert!(web_search_carries_data(&"가".repeat(24)));
+    // Same origin (scheme, exact host, port) as a trusted URL; opaque origins never match.
+    let found = "https://www.example.com/contents/baggage?hl=en";
+    for (url, same) in [
+        ("https://www.example.com/contents/baggage?hl=ko", true),
+        ("https://www.example.com/other#section", true),
+        ("https://www.example.com:443/?q=note", true),
+        ("http://www.example.com/?q=note", false),
+        ("https://example.com/?q=note", false),
+        ("https://shop.example.com/?q=note", false),
+        ("https://www.example.com:8443/?q=note", false),
+        ("https://collector.example/?q=note", false),
+    ] {
+        assert_eq!(same_origin(url, found), same, "{url}");
+    }
+    assert!(!same_origin("about:blank", "about:blank"));
+    assert!(!same_origin("file:///tmp/a?x=1", "file:///tmp/b"));
+    for (steps, types) in [
+        (
+            serde_json::json!([{"action":"fill","ref":"e1","value":"x"}]),
+            true,
+        ),
+        (
+            serde_json::json!([{"action":"press","value":"Shift+a"}]),
+            true,
+        ),
+        (
+            serde_json::json!([{"action":"press","value":"Shift+Insert"}]),
+            true,
+        ),
+        (
+            serde_json::json!([{"action":"press","value":"Enter"}, {"action":"click","ref":"e1"}]),
+            false,
+        ),
+        (
+            serde_json::json!([{"action":"select","ref":"e1","value":"m"}]),
+            false,
+        ),
+    ] {
+        assert_eq!(types_text(&steps), types, "{steps}");
+    }
     search_syntax_boundaries();
 }
 

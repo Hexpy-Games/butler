@@ -67,3 +67,32 @@ async fn defaults_roundtrip_restart_and_validation() -> Result<(), HarnessError>
     );
     s.finish().await
 }
+
+#[tokio::test]
+async fn proposal_message_follows_the_active_persona() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = setup("PATTERN-PERSONA").await?;
+    std::fs::create_dir_all(s.sandbox.data.join("personas"))?;
+    std::fs::write(
+        s.sandbox.data.join("personas/active.md"),
+        "Speak like a calm ship captain.",
+    )?;
+    seed(&s, 0, 8)?;
+    enable(&s).await?;
+    run(&s).await?;
+    let tasks: Vec<Value> = s.provider()?.requests().iter().map(task).collect();
+    let proposal = tasks
+        .iter()
+        .find(|t| t["task"] == "pattern_proposal")
+        .expect("proposal request");
+    assert_eq!(proposal["persona"], "Speak like a calm ship captain.");
+    let review = tasks
+        .iter()
+        .find(|t| t["task"] == "pattern_proposal_review")
+        .expect("review request");
+    assert!(
+        !review.to_string().contains("calm ship captain"),
+        "{review}"
+    );
+    s.finish().await
+}

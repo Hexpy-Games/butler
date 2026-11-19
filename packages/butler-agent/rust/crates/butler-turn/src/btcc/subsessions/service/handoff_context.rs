@@ -3,6 +3,16 @@ use super::*;
 use crate::btcc::SubsessionPacket;
 
 impl SubsessionService {
+    /// The user's own words in `child_session`'s packet, if it has one.
+    pub async fn user_request(&self, child_session: &str) -> Result<Option<String>, BtccError> {
+        Ok(self
+            .repository
+            .by_child(child_session.into())
+            .await
+            .map_err(BtccError::from)?
+            .and_then(|relation| relation.packet.user_request))
+    }
+
     pub(super) async fn worker_user_request(
         &self,
         packet: &mut SubsessionPacket,

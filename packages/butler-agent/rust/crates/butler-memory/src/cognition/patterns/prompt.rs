@@ -60,6 +60,16 @@ pub(super) fn proposal_prompt(
     let mut value = json!({"locale":input.locale,"now":now,"timezone":input.timezone});
     crate::lenient::set_field(&mut value, "task", json!("pattern_proposal"));
     crate::lenient::set_field(&mut value, "level", json!(input.level));
+    crate::lenient::set_field(
+        &mut value,
+        "persona",
+        json!(
+            input
+                .persona
+                .as_deref()
+                .map(|text| text.chars().take(2400).collect::<String>())
+        ),
+    );
     crate::lenient::set_field(&mut value, "context", context.clone());
     crate::lenient::set_field(
         &mut value,
@@ -96,11 +106,20 @@ pub(super) fn proposal_prompt(
                 .collect::<Vec<_>>()
         ),
     );
-    crate::lenient::set_field(&mut value, "rules", json!(PROPOSAL_RULES));
+    crate::lenient::set_field(&mut value, "rules", json!(rules(input.persona.is_some())));
     crate::lenient::set_field(
         &mut value,
         "output_shape",
         json!({"candidates":[{"lens":"remind|productivity|creativity","kind":"once|schedule","pattern_id":"id from patterns, schedule only","message":"string","title":"string","action":{"title":"string","prompt":"string","schedule":{"type":"daily|weekdays","time":"HH:MM"}},"evidence":["conversation id or item title from context"],"related_existing":["existing item you checked"],"what_is_new":"string"}]}),
     );
     value.to_string()
+}
+fn rules(has_persona: bool) -> Vec<&'static str> {
+    let mut rules = PROPOSAL_RULES.to_vec();
+    rules.push(if has_persona {
+        "Write `message` and `title` in the voice of `persona`, applied subtly in phrasing without turning the suggestion into a performance. Keep action.title and action.prompt plain: action.prompt is sent as the user's own request or run by the 예약 작업."
+    } else {
+        "Write `message` and `title` in neutral Butler wording because no persona text was supplied."
+    });
+    rules
 }

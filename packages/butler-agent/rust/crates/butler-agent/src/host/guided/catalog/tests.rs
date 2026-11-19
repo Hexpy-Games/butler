@@ -416,23 +416,27 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
                     browsing_agent
                 );
                 assert_eq!(has("browse"), browsing_agent);
-                assert!(!(browsing_agent && (has("browser_open") || has("browser_act"))));
-                for name in [
-                    "browser_open",
-                    "browser_observe",
-                    "browser_close",
-                    "image_collect",
-                ] {
+                assert!(!(browsing_agent && has("browser_open")));
+                for name in ["browser_open", "browser_observe", "browser_close"] {
                     assert!(selection.authorized_names.iter().any(|tool| tool == name));
                     if browsing_agent {
                         assert!(!has_provider_tool(&selection.provider_tools, name));
                     }
                 }
-                if browsing_agent {
-                    assert_eq!(
-                        has_provider_tool(&selection.provider_tools, "browser_act"),
-                        access != "read_only"
-                    );
+                if browsing_agent && flag == "on" {
+                    assert!(has_provider_tool(
+                        &selection.provider_tools,
+                        "image_collect"
+                    ));
+                }
+                for tools in [&selection.provider_tools, &worker_selection.provider_tools] {
+                    if browsing_agent {
+                        assert_eq!(
+                            has_provider_tool(tools, "browser_act"),
+                            access != "read_only",
+                            "{access} browser_act"
+                        );
+                    }
                 }
                 for name in [
                     "create_automation",

@@ -293,6 +293,7 @@ async function checkLeniencyAndExpand(page: Page) {
   await open(page, { v: 1, blocks: [{ type: "cards", items: dsItems }] }, 390, "light");
   await page.locator('[data-slot="item-card"]').first().waitFor();
   assert.equal(await page.locator('[data-slot="item-card"]').count(), 5);
+  assert.equal(await page.locator('[data-slot="item-card"] [data-slot="media-frame"]').count(), 0, "cards without a picture have no picture area");
   const firstCardText = await page.locator('[data-slot="item-card"]').first().innerText();
   assert(firstCardText.includes(dateLabel), `expected locale short date ${dateLabel} in ${firstCardText}`);
   const oldSource = page.locator('[data-slot="item-card"]').first().locator('[data-slot="item-card-footer"] [role="button"]');

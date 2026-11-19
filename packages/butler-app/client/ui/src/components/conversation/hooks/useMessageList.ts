@@ -17,7 +17,7 @@ import type {
   WorkerActivitySummary,
 } from "@/app/types.ts";
 import { buildAssistantFooterMetaById } from "../messageFooterMeta";
-import { anchoredStewardProgressByMessageId } from "../stewardParentProgressProjection";
+import { anchoredStewardProgressByMessageId, type AnchoredStewardProgress } from "../stewardParentProgressProjection";
 
 export function useMessageList(
   messages: MessageRecord[],
@@ -77,7 +77,10 @@ export function useMessageList(
   const turnId = activeSnapshot?.turn_id ?? summary?.latest_progress?.turn_id;
   const liveMessageId = useLiveMessageId(visibleMessages, turnId, showTurnActivity, progressRows, turnState);
   const separateTurnActivity = showTurnActivity && !liveMessageId;
-  const itemCount = visibleMessages.length + (separateTurnActivity ? 1 : 0);
+  // Delegated work runs after Butler's own turn ended: its live Steward keeps the status row.
+  const delegatedProgress = !separateTurnActivity && !activeTurn && !isSending
+    ? liveDelegation(anchoredStewardProgress) : undefined;
+  const itemCount = visibleMessages.length + (separateTurnActivity || delegatedProgress ? 1 : 0);
 
   return {
     visibleMessages,
@@ -89,9 +92,21 @@ export function useMessageList(
     turnStartedAt: activeSnapshot?.started_at,
     turnId,
     anchoredStewardProgress,
-    showTurnActivity: separateTurnActivity,
+    showTurnActivity: separateTurnActivity || Boolean(delegatedProgress),
+    delegatedProgress,
     liveMessageId,
     itemCount,
     ...copy,
   };
+}
+
+/** The newest anchored Steward child still working. */
+function liveDelegation(progress: Map<string, AnchoredStewardProgress>): AnchoredStewardProgress | undefined {
+  let newest: AnchoredStewardProgress | undefined;
+  for (const entry of progress.values()) {
+    const { child } = entry;
+    if (child.terminal || !(child.active_turn || child.waiting_for_children)) continue;
+    if (!newest || child.relation.ordinal > newest.child.relation.ordinal) newest = entry;
+  }
+  return newest;
 }

@@ -96,6 +96,14 @@ impl Sandbox {
         self.directory.success = true;
     }
 
+    /// A chat's own working folder (created), where its relative paths resolve.
+    pub fn chat_folder(&self, chat: &str) -> std::io::Result<PathBuf> {
+        let folder = butler_turn::workspace::chat_folder(&self.data, chat)
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "chat id"))?;
+        fs::create_dir_all(&folder)?;
+        Ok(folder)
+    }
+
     /// Byte-level snapshot of the installation dir (relative path, size, hash)
     /// used to prove the product never writes into it.
     pub fn installation_fingerprint(&self) -> Result<Vec<(String, u64, String)>, HarnessError> {

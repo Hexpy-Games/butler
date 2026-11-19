@@ -10,7 +10,7 @@ import { useAnswerCardGrid } from "./useAnswerCardGrid";
 import { AnswerItem } from "./AnswerItem";
 import { formatAnswerValue } from "./answerValueFormat";
 
-/** The card opens its source page in the conversation's browser; its picture opens the viewer on the block's pictures. */
+/** The card opens its source page in the conversation's browser; a card that names a picture shows it (a placeholder until it loads), and the picture opens the viewer on the block's pictures. */
 const AnswerCard = memo(function AnswerCard({ item, media, images, picture, index }: { item: AnswerCardView; media: AnswerCardsView["media"]; images: { current: ViewerImage[] }; picture?: string; index: number }) {
   const locale = useAppLocale();
   const sessionId = useAnswerSession();
@@ -19,8 +19,8 @@ const AnswerCard = memo(function AnswerCard({ item, media, images, picture, inde
   const reducedMotion = useButlerStore(state => state.settings.reduce_motion);
 
   return <ItemCard title={item.title} eyebrow={item.label} subtitle={item.sub}
-    media={<MediaFrame aspect={media ?? "1:1"} fit="cover" placeholder placeholderIcon={source?.icon}
-      src={picture || undefined} alt={item.title} reducedMotion={reducedMotion || undefined} />}
+    media={item.img || item.image_url ? <MediaFrame aspect={media ?? "1:1"} fit="cover" placeholder placeholderIcon={source?.icon}
+      src={picture || undefined} alt={item.title} reducedMotion={reducedMotion || undefined} /> : undefined}
     onMediaOpen={picture ? () => openImageViewer(images.current, index) : undefined}
     mediaLabel={appCopy.conversation.imageViewer.viewImage(item.title)}
     value={item.value ? { amount: formatAnswerValue(item.value, locale), was: item.value.was === undefined ? undefined : formatAnswerValue(item.value, locale, item.value.was), wasLabel: copy.previousValue, note: item.value.note } : undefined}

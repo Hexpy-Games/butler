@@ -371,6 +371,8 @@ impl Agent {
         let task = tokio::task::spawn_blocking(work);
         loop {
             observe();
+            // Read completion first: an exit that happened before the work finished is reaped below.
+            let finished = task.is_finished();
             if let Some(child) = self.child.as_mut()
                 && let Ok(Some(status)) = child.try_wait()
             {
@@ -381,7 +383,7 @@ impl Agent {
                     self.spawn().await?;
                 }
             }
-            if task.is_finished() {
+            if finished {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(25)).await;
