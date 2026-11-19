@@ -24,7 +24,6 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         }
         "click" | "drag" => pointer(h, command, arg),
         "drag-from" => drag_from(h, arg),
-        "focus-next" => focus_next(h, arg),
         "click-at" => click_at(h, arg),
         "page-click" => page_click(h, arg),
         "hover" => hover(h, arg),
@@ -316,21 +315,6 @@ pub(super) fn titlebar_grid(
     );
     let report = serde_json::json!({ "drag": drag, "control": control, "controls": bounds });
     std::fs::write(dir.join("titlebar-grid.json"), serde_json::to_vec(&report)?)?;
-    Ok(())
-}
-
-/// `focus-next <n>`: moves focus `n` tab stops on, as the Tab binding an app gives its window
-/// does. The shell window binds none (gpui has none by default) and a press on the split handle
-/// does not focus it, so this is how a script reaches a control that answers to keys.
-fn focus_next(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
-    settle(&mut h.cx, h.handle);
-    let steps: usize = arg.parse().context("focus-next <n>")?;
-    h.cx.update_window(h.handle, |_, window, cx| {
-        for _ in 0..steps {
-            window.focus_next(cx);
-        }
-    })?;
-    settle(&mut h.cx, h.handle);
     Ok(())
 }
 
