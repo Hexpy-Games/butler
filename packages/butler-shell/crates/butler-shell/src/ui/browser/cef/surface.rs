@@ -139,12 +139,13 @@ pub(super) fn thumbnail(
     #[cfg(not(target_os = "macos"))] frame: butler_cef_host::osr::OsrFrame,
     window: &mut Window,
 ) -> Option<AnyElement> {
-    #[cfg(target_os = "linux")]
+    // Linux consumes damage/consumer slot; Windows DirectX signals release per draw.
+    #[cfg(not(target_os = "macos"))]
     {
         let _ = (frame, window);
         None
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     {
         let src = source(frame, window)?;
         Some(
