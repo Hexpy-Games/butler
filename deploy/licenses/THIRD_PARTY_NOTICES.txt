@@ -6116,6 +6116,13 @@ Copyright 2024 Radzivon Bartoshyk
 Copyright (c) Radzivon Bartoshyk. All rights reserved.
 
 =====
+qrcode 0.14.1
+MIT OR Apache-2.0
+License: https://github.com/kennytm/qrcode-rust/blob/0695f037c5b43999a6cdf08984974b8d0388ad78/LICENSE-APACHE.txt
+License: https://github.com/kennytm/qrcode-rust/blob/0695f037c5b43999a6cdf08984974b8d0388ad78/LICENSE-MIT.txt
+Copyright (c) 2016 kennytm
+
+=====
 quick-error 2.0.1
 MIT OR Apache-2.0
 License: https://crates.io/crates/quick-error/2.0.1
