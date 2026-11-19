@@ -12,10 +12,12 @@
         "expo-blur": "~58.0.6",
         "expo-build-properties": "~58.0.12",
         "expo-constants": "~58.0.16",
+        "expo-device": "~58.0.5",
         "expo-font": "~58.0.12",
         "expo-glass-effect": "~58.0.5",
         "expo-linear-gradient": "~58.0.4",
         "expo-linking": "~58.0.17",
+        "expo-localization": "~58.0.5",
         "expo-router": "~58.0.31",
         "expo-secure-store": "~58.0.3",
         "expo-status-bar": "~58.0.5",
@@ -548,6 +550,8 @@
 
     "expo-constants": ["expo-constants@58.0.16", "", { "dependencies": { "@expo/env": "~2.6.0", "@expo/require-utils": "^58.0.6" }, "peerDependencies": { "expo": "*", "react-native": "*" } }, "sha512-sVETnE1ktBMclc2Ve3qNrHhOCCio75a9JdghnJYGbqblmKfrrfE+lO9K4g9kNtmslIBLTK9Dyty6PbubkXs3Yw=="],
 
+    "expo-device": ["expo-device@58.0.5", "", { "dependencies": { "ua-parser-js": "^0.7.33" }, "peerDependencies": { "expo": "*" } }, "sha512-GNyaHPwoiI/z2SGR14R6d9J7hFSW2JabZieJtC3l6/LO2mJYVCbhEsQ7/1ljGBeTUnFFWHcFLccdaWEhOWtaQQ=="],
+
     "expo-file-system": ["expo-file-system@58.0.13", "", { "peerDependencies": { "expo": "*", "react-native": "*" } }, "sha512-+/1aFErkawyky5UdWI06zYeO2DeHUnfaWnYHeiI8M8Z/sB6L66gI3WUxqtvUvKJoaM0Ti1CximD3x3JwteLYIg=="],
 
     "expo-font": ["expo-font@58.0.12", "", { "peerDependencies": { "expo": "*", "react": "*", "react-native": "*" } }, "sha512-5m8TJrQ27DT1815P066HBtcHINgD8yuIqH4ca2ZyYwCsPa4QZ8UzOBDtrHnAMWMAlAgol+PGVj9aKeoYov70JA=="],
@@ -559,6 +563,8 @@
     "expo-linear-gradient": ["expo-linear-gradient@58.0.4", "", { "peerDependencies": { "expo": "*", "react": "*", "react-native": "*" } }, "sha512-Zn6SilYGJPZ7jPZTksTS5i6Se7/rGjSurCEVFXLBAY+smdcLmbeiy8YV+svZDpAW0N2pFBi8LlgFzHTVshuRfg=="],
 
     "expo-linking": ["expo-linking@58.0.17", "", { "dependencies": { "expo-constants": "~58.0.16", "invariant": "^2.2.4" }, "peerDependencies": { "expo": "*", "react": "*", "react-native": "*" } }, "sha512-NFOt1L+FdW1uwjnwvvW+1oZ8j0W1IpYydKKuqny7tCiDVmHLxDYiYgXbyuHNAMLdQYjCBknq4910DmTM1x/XGw=="],
+
+    "expo-localization": ["expo-localization@58.0.5", "", { "dependencies": { "rtl-detect": "^1.0.2" }, "peerDependencies": { "expo": "*", "react": "*" } }, "sha512-2wyZl/5wn95l38AAtdaUAq2VMJWbGbgQQDEuIEkkemmsA/BZ8gS21Nq+7I2X9hDfL5Z+4hlyLVdPtDIH0vvt1A=="],
 
     "expo-modules-autolinking": ["expo-modules-autolinking@58.1.0", "", { "dependencies": { "@expo/platforms": "^58.0.1", "@expo/require-utils": "^58.0.6", "@expo/spawn-async": "^1.8.0", "chalk": "^4.1.0", "commander": "^7.2.0" }, "bin": { "expo-modules-autolinking": "bin/expo-modules-autolinking.js" } }, "sha512-JAegkS+nC4LVEgKMHAnpWhUxs1BYHHaTJnncVW2EQION1bVz0y8/wEglAeGV+oq4BNS1V7s8zCMTZU0hMi28bA=="],
 
@@ -870,6 +876,8 @@
 
     "restore-cursor": ["restore-cursor@2.0.0", "", { "dependencies": { "onetime": "^2.0.0", "signal-exit": "^3.0.2" } }, "sha512-6IzJLuGi4+R14vwagDHX+JrXmPVtPpn4mffDJ1UdR7/Edm87fl6yi8mMBIVvFtJaNTUvjughmW4hwLhRG7gC1Q=="],
 
+    "rtl-detect": ["rtl-detect@1.1.2", "", {}, "sha512-PGMBq03+TTG/p/cRB7HCLKJ1MgDIi07+QU1faSjiYRfmY5UsAttV9Hs08jDAHVwcOwmVLcSJkpwyfXszVjWfIQ=="],
+
     "safe-buffer": ["safe-buffer@5.2.1", "", {}, "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ=="],
 
     "sandbox-cli-detector": ["sandbox-cli-detector@0.2.0", "", { "bin": { "sandbox-cli-detector": "dist/cli.js" } }, "sha512-4lyHX0ZU0AZKwjgZ1InxZAa3PNpyEb8rOQ+Zss1ReYmhNzW0Q+h1zE5nvniXN0HaAWZaZE1zgVNEirb0R7LmNg=="],
@@ -953,6 +961,8 @@
     "type-fest": ["type-fest@0.7.1", "", {}, "sha512-Ne2YiiGN8bmrmJJEuTWTLJR32nh/JdL1+PSicowtNb0WFpn59GK8/lfD61bVtzguz7b3PBt74nxpv/Pw5po5Rg=="],
 
     "typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
+
+    "ua-parser-js": ["ua-parser-js@0.7.41", "", { "bin": { "ua-parser-js": "script/cli.js" } }, "sha512-O3oYyCMPYgNNHuO7Jjk3uacJWZF8loBgwrfd/5LE/HyZ3lUIOdniQ7DNXJcIgZbwioZxk0fLfI4EVnetdiX5jg=="],
 
     "undici-types": ["undici-types@8.9.0", "", {}, "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="],
 
