@@ -47,7 +47,7 @@ fn copy(lang: Lang) -> Copy {
         },
         Copy {
             title: "새 프로젝트",
-            description: "프로젝트 이름을 정하고 폴더를 고르세요.",
+            description: "프로젝트 이름을 정하고 폴더를 고르십시오.",
             name: "프로젝트 이름",
             folder: "폴더",
             value: "butler-site",

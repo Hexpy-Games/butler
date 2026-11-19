@@ -30,7 +30,7 @@ fn copy(lang: Lang) -> Copy {
             unavailable: "Delete (not allowed for system messages)",
         },
         Copy {
-            hint: "메시지를 오른쪽 클릭하거나 길게 누르세요.",
+            hint: "메시지를 오른쪽 클릭하거나 길게 누르십시오.",
             message: "컨텍스트를 확보하려고 이전 42개 턴을 요약했습니다.",
             clipboard: "복사",
             branch: "여기서 분기",

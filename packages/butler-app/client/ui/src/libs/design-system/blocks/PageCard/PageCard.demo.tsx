@@ -14,7 +14,7 @@ type Locale = "en-US" | "ko-KR";
 const PAGE_STYLE = { display: "block", width: "100%", height: "100%", objectFit: "cover", objectPosition: "top left" } as const;
 const COPY = {
   "en-US": { empty: "Open a new tab", newTab: "New tab", crashed: "Tab stopped", reload: "Reload", waiting: "waiting for the first frame" },
-  "ko-KR": { empty: "새 탭을 열어보세요", newTab: "새 탭", crashed: "탭이 중단됨", reload: "새로고침", waiting: "첫 프레임 대기 중" },
+  "ko-KR": { empty: "새 탭을 열어 보십시오", newTab: "새 탭", crashed: "탭이 중단됨", reload: "새로고침", waiting: "첫 프레임 대기 중" },
 } as const;
 
 export interface PageCardDemoProps {

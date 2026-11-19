@@ -23,8 +23,8 @@ const labels = {
   },
   "ko-KR": {
     saved: "설정을 저장했습니다", slow: "모델 제공자의 응답이 느립니다.", created: "프로젝트를 만들었습니다",
-    failed: "대시보드를 불러오지 못했습니다", retryHint: "연결을 확인하고 다시 시도하세요.", retry: "다시 시도",
-    missing: "이 프로젝트가 더 이상 없습니다", missingHelp: "다른 기기에서 삭제되었을 수 있습니다. 새 채팅을 시작하세요.",
+    failed: "대시보드를 불러오지 못했습니다", retryHint: "연결을 확인하고 다시 시도하십시오.", retry: "다시 시도",
+    missing: "이 프로젝트가 더 이상 없습니다", missingHelp: "다른 기기에서 삭제되었을 수 있습니다. 새 채팅을 시작하십시오.",
     newChat: "새 채팅", loading: "대시보드를 불러오는 중…", history: "지금은 프로젝트 기록을 볼 수 없습니다.",
     waiting: "브라우저에서 기다리는 중", reopen: "브라우저 다시 열기", account: "ada@example.com 계정으로 로그인함",
   },

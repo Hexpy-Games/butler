@@ -45,9 +45,9 @@ fn words(lang: Lang) -> Words {
             scrap: "스크랩",
             copy_text: "텍스트 복사",
             clear: "선택 해제",
-            pick_empty: "요소를 눌러 선택하세요",
-            pick_first: "먼저 요소를 선택하세요",
-            no_text: "고른 요소에 텍스트가 없어요",
+            pick_empty: "요소를 눌러 선택하십시오",
+            pick_first: "먼저 요소를 선택하십시오",
+            no_text: "고른 요소에 텍스트가 없습니다",
         },
     )
 }

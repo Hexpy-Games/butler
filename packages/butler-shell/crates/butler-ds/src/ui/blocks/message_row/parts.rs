@@ -14,6 +14,7 @@ use crate::ui::blocks::scope::{self, ActionScale, Spec};
 use crate::ui::context::Ds;
 use crate::ui::layout::{Space, Stack};
 use crate::ui::motion::{Loop, Timing, mounted_at};
+use crate::ui::strut;
 use crate::ui::typo::Role;
 
 /// The footer's icon actions keep a 26px row (`--icon-button-size`, DS: MessageRow.module.css:93).
@@ -313,7 +314,10 @@ impl RenderOnce for MessageStatusLabel {
                     // DS: MessageRow.module.css:205 `.statusMark > * { width:100%; height:100% }`
                     .child(div().size_full().child(self.mark)),
             )
-            .child(div().flex_1().min_w_0().overflow_hidden().child(content))
+            .child(strut::scope(
+                true,
+                div().flex_1().min_w_0().overflow_hidden().child(content),
+            ))
     }
 }
 

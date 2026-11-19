@@ -36,9 +36,9 @@ export const SLOT_COPY = {
     newTab: "New tab", crashed: "This page stopped", reload: "Reload", waiting: "waiting for the first frame",
   },
   "ko-KR": {
-    menu: "메뉴", items: ["링크 복사", "새 탭에서 열기"], toast: "토스트", toastText: "링크를 복사했어요", slide: "패널 밀기",
-    hide: "뷰 숨기기", show: "뷰 보이기", visible: "표시", hidden: "숨김", covered: "가려짐", clear: "보임", empty: "열린 탭이 없어요",
-    newTab: "새 탭", crashed: "페이지가 종료됐어요", reload: "새로고침", waiting: "첫 프레임 대기 중",
+    menu: "메뉴", items: ["링크 복사", "새 탭에서 열기"], toast: "토스트", toastText: "링크를 복사했습니다", slide: "패널 밀기",
+    hide: "뷰 숨기기", show: "뷰 보이기", visible: "표시", hidden: "숨김", covered: "가려짐", clear: "보임", empty: "열린 탭이 없습니다",
+    newTab: "새 탭", crashed: "페이지가 종료됐습니다", reload: "새로고침", waiting: "첫 프레임 대기 중",
   },
 } as const;
 

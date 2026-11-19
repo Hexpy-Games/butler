@@ -14,7 +14,7 @@ const COPY = {
   },
   "ko-KR": {
     page: "shop.example.com · 결제", title: "페이지 메시지", host: "shop.example.com",
-    message: "주문을 취소할까요? 취소하면 쿠폰은 돌려받을 수 없어요.", cancel: "취소", ok: "확인", show: "다시 보기",
+    message: "주문을 취소하시겠습니까? 취소하면 쿠폰은 돌려받을 수 없습니다.", cancel: "취소", ok: "확인", show: "다시 보기",
   },
 } as const;
 

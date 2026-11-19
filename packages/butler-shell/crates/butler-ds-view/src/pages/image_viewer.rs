@@ -76,7 +76,7 @@ fn copy(lang: Lang) -> Copy {
             zoom_out: "축소",
             open: "원본 페이지 열기",
             save: "서랍에 저장",
-            saved: "서랍에 저장했어요",
+            saved: "서랍에 저장했습니다",
             duplicate: "이미지 복사",
             view: "보기",
         },

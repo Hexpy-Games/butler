@@ -18,7 +18,7 @@ const labels = {
     copy: "Copy", branch: "Branch from here", remove: "Delete", unavailable: "Delete (not allowed for system messages)",
   },
   "ko-KR": {
-    hint: "메시지를 오른쪽 클릭하거나 길게 누르세요.", message: "컨텍스트를 확보하려고 이전 42개 턴을 요약했습니다.",
+    hint: "메시지를 오른쪽 클릭하거나 길게 누르십시오.", message: "컨텍스트를 확보하려고 이전 42개 턴을 요약했습니다.",
     copy: "복사", branch: "여기서 분기", remove: "삭제", unavailable: "삭제 (시스템 메시지는 삭제할 수 없음)",
   },
 } as const;

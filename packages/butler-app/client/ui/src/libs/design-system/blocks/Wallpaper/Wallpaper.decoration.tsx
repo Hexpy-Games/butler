@@ -17,7 +17,7 @@ const copy = {
     opaque: "Opaque: butler.silk covers the glass",
   },
   "ko-KR": {
-    placeholder: "버틀러에게 무엇이든 물어보세요",
+    placeholder: "버틀러에게 무엇이든 물어보십시오",
     transparent: "투명: butler.cherry-blossom은 가지만 그리고 유리는 그대로 보입니다",
     opaque: "불투명: butler.silk가 유리를 덮습니다",
   },

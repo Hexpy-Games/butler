@@ -34,10 +34,10 @@ fn copy(lang: Lang) -> Copy {
         },
         Copy {
             title: "예비 모델",
-            description: "포인터나 키보드로 끌어 버틀러가 시도할 순서를 바꾸세요.",
+            description: "포인터나 키보드로 끌어 버틀러가 시도할 순서를 바꾸십시오.",
             show_empty: "빈 상태 보기",
             show_cards: "카드 보기",
-            empty: "모델을 추가해 예비 순서를 만드세요.",
+            empty: "모델을 추가해 예비 순서를 만드십시오.",
             models: [
                 ("claude", "Claude Sonnet", "Anthropic", "균형 잡힌 추론"),
                 ("gemini", "Gemini Flash", "Google", "빠른 멀티모달 모델"),

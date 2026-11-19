@@ -40,7 +40,7 @@ const labels = {
     rename: "이름 바꾸기", renameTitle: "대화 이름 바꾸기", field: "이름", value: "토큰 페이지 검토",
     cancel: "취소", save: "저장", close: "닫기", description: "프로젝트 설명",
     descriptionValue: "버틀러 데스크톱 앱: Electron 셸, React UI, Rust 에이전트 게이트웨이.",
-    edit: "설명 편집", confirm: "대화를 보관할까요?", confirmBody: "보관된 대화에서 다시 복원할 수 있습니다.",
+    edit: "설명 편집", confirm: "대화를 보관하시겠습니까?", confirmBody: "보관된 대화에서 다시 복원할 수 있습니다.",
     archive: "보관",
   },
 } as const;
