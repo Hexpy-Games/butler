@@ -137,13 +137,16 @@ impl State {
 
         if self.open != open {
             self.open = open;
-            self.phase = if open { Phase::Opening } else { Phase::Closing };
+            self.phase = if !open {
+                Phase::Closing
+            } else if reduced {
+                Phase::Settled
+            } else {
+                Phase::Opening
+            };
             self.mounted |= open;
             self.started = false;
             self.generation += 1;
-        }
-        if reduced && open {
-            self.phase = Phase::Settled;
         }
         let start = !self.started
             && self.phase != Phase::Settled

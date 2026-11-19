@@ -288,7 +288,6 @@ pub fn looping<E: Styled>(
 }
 
 /// Requests one layout frame after a measured size or position changes. Stop once it settles.
-#[track_caller]
 pub fn remeasure(window: &mut Window) {
     window.request_animation_frame();
 }
@@ -296,7 +295,6 @@ pub fn remeasure(window: &mut Window) {
 /// Requests the next layout frame, only while a Collapsible's height transition is moving:
 /// a CSS height transition is layout, so the browser lays out every frame of it. Nothing at
 /// rest or under reduced motion calls it; every other motion stays a retained `LayerMotion`.
-#[track_caller]
 pub fn layout_transition_frame(window: &mut Window) {
     window.request_animation_frame();
 }
