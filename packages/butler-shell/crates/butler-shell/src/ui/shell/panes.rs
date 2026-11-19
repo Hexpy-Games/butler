@@ -72,7 +72,7 @@ impl Shell {
             info_open: false,
             task_graph_enabled: false,
             graph_open: false,
-            chat_width: None,
+            chat_width: crate::ui::browser::split_width::saved(cx),
             split: None,
         };
         (panes, subscription)
@@ -313,6 +313,7 @@ impl Shell {
             .on_chat_width_change(move |next, _, cx| {
                 let _ = width.update(cx, |s, cx| {
                     s.panes.chat_width = Some(next);
+                    crate::ui::browser::split_width::changed(next, cx);
                     cx.notify();
                 });
             });
