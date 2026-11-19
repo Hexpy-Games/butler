@@ -105,6 +105,27 @@ pub(super) async fn open(
     Ok(result)
 }
 
+/// A finished run keeps only the tab it returns; the other pages it opened close.
+pub(super) async fn close_spent(
+    owner: &GuidedTools,
+    invocation: &GuidedInvocation<'_>,
+    occurrence: &str,
+    run: &Run,
+) {
+    for (i, tab) in run.opened.iter().enumerate() {
+        if tab != &run.tab {
+            let _ = browser_call(
+                owner,
+                invocation,
+                &format!("{occurrence}:close:{i}"),
+                "browser_close",
+                json!({"tab": tab}),
+            )
+            .await;
+        }
+    }
+}
+
 pub(super) async fn execute(
     owner: &GuidedTools,
     invocation: &GuidedInvocation<'_>,

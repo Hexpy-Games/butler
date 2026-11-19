@@ -61,7 +61,9 @@ pub(super) async fn execute(
         );
     };
     let mut run = Run::new(goal, &args);
-    start(owner, invocation, occurrence, &args, &model, &mut run).await
+    let result = start(owner, invocation, occurrence, &args, &model, &mut run).await;
+    step::close_spent(owner, invocation, occurrence, &run).await;
+    result
 }
 
 async fn start(

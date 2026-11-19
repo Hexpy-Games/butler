@@ -98,9 +98,6 @@ async fn execute_client(
     if matches!(call.name.as_str(), "preview_start" | "preview_stop") {
         return preview::execute(owner, invocation, call, occurrence, client).await;
     }
-    if call.name == "browser_close" && owner.access_mode() == AccessMode::ReadOnly {
-        return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
-    }
     if call.name == "browser_act" {
         return act::execute(owner, invocation, call, occurrence, client, args).await;
     }

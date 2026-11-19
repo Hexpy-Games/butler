@@ -222,7 +222,7 @@ pub(super) fn full_recovery(state: &HttpState, session: &str, result: &mut Value
     }
     result["your_tabs"] = json!(tabs);
     result["recovery"] = json!(
-        "The browser holds as many tabs as this machine allows. Close tabs in your_tabs you have finished with (browser_close), then open again."
+        "Every tab this machine allows is in use right now. Close tabs in your_tabs you have finished with (browser_close), or wait for a running step to finish, then open again."
     );
 }
 

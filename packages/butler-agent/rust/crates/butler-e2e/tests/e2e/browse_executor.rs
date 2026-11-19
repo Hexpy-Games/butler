@@ -82,10 +82,22 @@ async fn browse_batches_stateless_tasks_and_hands_exact_steps_to_browser_act()
         .unwrap();
     assert_eq!(pending["handoff"]["steps"], stub::commit());
     assert_eq!(done["tab"], "product-b");
-    assert_eq!(
-        done["opened_tabs"],
-        json!(["listing", "product-a", "product-b"])
-    );
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let tabs = admin
+        .send(
+            reqwest::Method::POST,
+            "/internal/browser/calls",
+            Some(json!({"op":"tabs.list","session":"general"})),
+            &[],
+        )
+        .await?;
+    let ids: Vec<_> = tabs.body["tabs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tab| tab["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["product-b"]);
     assert_requests(&requests);
     assert_usage(&s.sandbox.data, &id)?;
     let usage = s.gw.get("/session-view?session_id=general").await?;
@@ -206,13 +218,14 @@ fn assert_surface(request: &Value) {
     for name in [
         "browse",
         "browser_act",
+        "browser_close",
         "web_search",
         "browser_read",
         "image_collect",
     ] {
         assert!(names.contains(&name), "{names:?}");
     }
-    for name in ["browser_open", "browser_observe", "browser_close"] {
+    for name in ["browser_open", "browser_observe"] {
         assert!(!names.contains(&name), "{names:?}");
     }
 }
