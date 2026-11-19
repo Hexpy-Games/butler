@@ -88,8 +88,8 @@ pub(super) fn theme(ctx: &SectionCtx, slice: &Slice, words: &Words) -> SettingsS
                     cx,
                 );
             });
-        // In a row the group keeps its own width, so the harness can press an option by place.
-        let control = Stack::row().child(crate::ui::widgets::anchored(control, "text-size"));
+        // Shots-only anchor: it passes the layout through and is absent from the product build.
+        let control = crate::ui::widgets::anchored(control, "text-size");
         section = section.child(SettingsField::new(words.text_size).control(control));
     }
     section.child(

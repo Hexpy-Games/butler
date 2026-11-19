@@ -34,18 +34,22 @@ async fn shell_app_06_text_size_zooms_the_window() -> Result<(), HarnessError> {
     saved_as("large").await?;
     shell.run(&["key secondary-0", "expect-scale 1"]).await?;
     saved_as("default").await?;
-    // The middle option of the Appearance text-size group (크게), pressed with the pointer.
+    // In Settings > Appearance, at the large size, a pointer press on the first option of the
+    // text-size group (기본) sets the default again. The group starts at the anchor's left edge
+    // whether its column stretches the anchor or not, so 4% of its width lands in that option.
     shell
         .run(&[
             "click sidebar-settings",
             "wait-anchor settings-nav-appearance",
             "click settings-nav-appearance",
             "wait-anchor text-size",
-            "click-at text-size 0.45 0.5",
+            "key secondary-=",
             "expect-scale 1.15",
+            "click-at text-size 0.04 0.5",
+            "expect-scale 1",
         ])
         .await?;
-    saved_as("large").await?;
+    saved_as("default").await?;
     let patched = gw
         .patch("/settings", json!({"text_size": "larger"}))
         .await?;
