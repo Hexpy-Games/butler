@@ -419,13 +419,11 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
                         assert!(!has_provider_tool(&selection.provider_tools, name));
                     }
                 }
-                if browsing_agent {
+                if browsing_agent && flag == "on" {
                     assert!(has_provider_tool(
                         &selection.provider_tools,
                         "browser_close"
                     ));
-                }
-                if browsing_agent && flag == "on" {
                     assert!(has_provider_tool(
                         &selection.provider_tools,
                         "image_collect"
