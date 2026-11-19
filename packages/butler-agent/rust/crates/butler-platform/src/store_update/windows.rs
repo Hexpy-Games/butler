@@ -34,10 +34,14 @@ pub(super) fn check() -> Result<Option<String>, StoreUpdateError> {
         let id = update.Package()?.Id()?;
         if id.FamilyName()? == family {
             let version = id.Version()?;
-            return Ok(Some(format!(
-                "{}.{}.{}",
-                version.Major, version.Minor, version.Build
-            )));
+            let app_version = super::app_version(version.Major, version.Minor, version.Build)
+                .ok_or_else(|| {
+                    StoreUpdateError::Failed(format!(
+                        "Store package version {}.{}.{}.{} does not follow the App version rule",
+                        version.Major, version.Minor, version.Build, version.Revision
+                    ))
+                })?;
+            return Ok(Some(app_version));
         }
     }
     Ok(None)
