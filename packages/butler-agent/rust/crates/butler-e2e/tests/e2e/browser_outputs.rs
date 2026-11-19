@@ -43,7 +43,8 @@ async fn published_outputs_are_isolated_deduplicated_and_revoked() -> Result<(),
     std::fs::create_dir_all(&outputs)?;
     let index = butler_platform::sqlite::open(outputs.join("index.sqlite")).unwrap();
     drop(index);
-    let site = setup.sandbox.data.join("site");
+    let folder = setup.sandbox.chat_folder("general")?;
+    let site = folder.join("site");
     let mut s = setup.start().await?;
     let finished = std::sync::atomic::AtomicBool::new(false);
     let reader = s.gw.clone();
@@ -65,7 +66,7 @@ async fn published_outputs_are_isolated_deduplicated_and_revoked() -> Result<(),
         }
     );
     let (turn, _) = publication?;
-    butler_platform::secure_fs::symlink(&site, &s.sandbox.data.join("linked"))?;
+    butler_platform::secure_fs::symlink(&site, &folder.join("linked"))?;
     let published = result(&s, &turn);
     assert_eq!(
         published["check"],
@@ -152,7 +153,7 @@ async fn published_outputs_are_isolated_deduplicated_and_revoked() -> Result<(),
         403,
         "discarded revision"
     );
-    let many = s.sandbox.data.join("many");
+    let many = folder.join("many");
     std::fs::create_dir_all(&many)?;
     std::fs::write(many.join("index.html"), "Many")?;
     for n in 0..2000 {
@@ -160,7 +161,7 @@ async fn published_outputs_are_isolated_deduplicated_and_revoked() -> Result<(),
     }
     let (turn, _) = s.turn("general", "Many").await?;
     assert_eq!(result(&s, &turn)["error"], "output_limit_exceeded");
-    let large = s.sandbox.data.join("large");
+    let large = folder.join("large");
     std::fs::create_dir_all(&large)?;
     std::fs::File::create(large.join("index.html"))?.set_len(100_000_001)?;
     let (turn, _) = s.turn("general", "Large").await?;
@@ -179,10 +180,7 @@ async fn published_outputs_are_isolated_deduplicated_and_revoked() -> Result<(),
             .unwrap()
             .contains("symlink")
     );
-    std::fs::write(
-        s.sandbox.data.join("site/space +%.html"),
-        "Encoded filename",
-    )?;
+    std::fs::write(site.join("space +%.html"), "Encoded filename")?;
     let (turn, _) = s.turn("general", "Spaced").await?;
     let spaced = result(&s, &turn);
     let link = s.gw.get(spaced["view"].as_str().unwrap()).await?;

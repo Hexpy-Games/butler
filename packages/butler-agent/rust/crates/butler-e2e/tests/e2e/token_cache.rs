@@ -137,7 +137,12 @@ async fn final_guard(mode: Mode, blocked_count: usize) -> Result<(), HarnessErro
             .iter()
             .all(|row| row["prefixDiagnostics"]["providerReportedCachedTokens"].is_null())
     );
-    assert!(!s.sandbox.data.join("final-mutation.txt").exists());
+    assert!(
+        !s.sandbox
+            .chat_folder("general")?
+            .join("final-mutation.txt")
+            .exists()
+    );
     assert_eq!(
         s.gw.approval_requests("general").await?,
         [] as [serde_json::Value; 0]

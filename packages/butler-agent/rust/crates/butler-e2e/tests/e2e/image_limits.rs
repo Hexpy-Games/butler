@@ -174,7 +174,10 @@ async fn chat_tool_images_follow_parallel_tool_results() -> Result<(), HarnessEr
         "direct browser tools",
     )
     .await?;
-    std::fs::write(s.sandbox.data.join("sample.txt"), "File contents")?;
+    std::fs::write(
+        s.sandbox.chat_folder("general")?.join("sample.txt"),
+        "File contents",
+    )?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let mut stream = reqwest::Client::new()
         .get(format!("{}/internal/browser-host", s.gw.base))

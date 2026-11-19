@@ -139,6 +139,14 @@ pub(in crate::btcc::authority) fn assert_approval_summaries() {
     }
     assert_eq!(workspace_label("/home/mina/.butler"), "/home/mina/.butler");
     assert_eq!(workspace_label("/home/mina/projects/garden"), "garden");
+    assert_eq!(
+        workspace_label("/home/mina/.butler/chats/chat-1"),
+        crate::workspace::CHAT_FOLDER_LABEL
+    );
+    assert_eq!(
+        workspace_label("/home/mina/projects/chat-notes"),
+        "chat-notes"
+    );
     assert_path_and_example_bounds();
     super::command_risk::pinned::assert_command_risks();
 }

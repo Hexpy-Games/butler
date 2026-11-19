@@ -26,7 +26,7 @@ async fn tool_01_read_tool_is_executed_and_shown() -> Result<(), HarnessError> {
         .cassette("TOOL-01")
         .placeholder("NONCE", &secret);
     fs::write(
-        setup.sandbox.data.join("notes.txt"),
+        setup.sandbox.chat_folder("general")?.join("notes.txt"),
         format!("the secret word is {secret}\n"),
     )?;
     let mut s = setup.start().await?;
@@ -87,7 +87,7 @@ async fn malformed_call(case: &str, mutation: ArgsMutation) -> Result<(), Harnes
             mutation: Box::new(mutation),
         }),
     ))?;
-    let before: Vec<_> = fs::read_dir(&s.sandbox.data)?
+    let before: Vec<_> = fs::read_dir(s.sandbox.chat_folder("general")?)?
         .flatten()
         .map(|entry| entry.file_name())
         .collect();
@@ -97,7 +97,7 @@ async fn malformed_call(case: &str, mutation: ArgsMutation) -> Result<(), Harnes
     assert!(matches!(state, "delivered" | "failed"), "{case}: {turn}");
     // The malformed call wrote nothing; the model's own valid retry may have
     // created exactly the requested file.
-    for entry in fs::read_dir(&s.sandbox.data)?.flatten() {
+    for entry in fs::read_dir(s.sandbox.chat_folder("general")?)?.flatten() {
         let name = entry.file_name();
         if entry.file_type()?.is_file() && !before.contains(&name) {
             assert_eq!(
