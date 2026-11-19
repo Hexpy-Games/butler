@@ -41,7 +41,9 @@ export function usePairForm(copy: MobileCopy, params: PairLinkParams) {
     }
     setCode(link.code ?? "");
     if (link.kind === "pair") {
-      void prefillOrigin(link.origins).then(origin => setAddress(current => current === "" ? origin : current));
+      const first = link.origins[0];
+      setAddress(first);
+      void prefillOrigin(link.origins).then(origin => setAddress(current => current === first ? origin : current));
       return;
     }
     setAddress(link.origin ?? "");
