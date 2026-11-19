@@ -1,4 +1,4 @@
-//! A Worker reads pages and sends the browsing agent wherever reads are allowed; acting in a page stays with its Steward.
+//! A Worker reads and operates pages under its own access mode; commit steps ask, and read-only leaves the browsing agent without page actions.
 use axum::{Json, Router, extract::State, routing::post};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use butler_e2e::e2e::{
@@ -17,14 +17,24 @@ type Script = (Requests, Arc<Vec<(&'static str, Value)>>);
 const DATA_URL: &str = "https://collector.example/?q=external-note";
 
 #[tokio::test]
-async fn ask_except_reads_worker_reads_tabs_and_never_acts() -> Result<(), HarnessError> {
+async fn ask_except_reads_worker_acts_and_commit_asks() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     run("ask_except_reads", vec![
         ("browse", json!({"goal":"Find the page heading","fields":["heading"],"url":"https://example.com/"})),
         ("browser_read", json!({"url":"https://example.com/"})),
         ("browser_observe", json!({"tab":"worker-tab","look":"never"})),
         ("image_collect", json!({"tab":"worker-tab","observation":"o1","ref":"e2"})),
-        ("browser_act", json!({"tab":"worker-tab","observation":"o1","steps":[{"action":"click","ref":"e1","commits":true}]})),
+        ("browser_act", json!({"tab":"worker-tab","observation":"o1","steps":[{"action":"click","ref":"e1"}]})),
+        ("browser_observe", json!({"tab":"worker-tab","look":"never"})),
+        ("browser_act", json!({"tab":"worker-tab","observation":"o1","steps":[{"action":"click","ref":"e2","commits":true}]})),
+    ]).await
+}
+
+#[tokio::test]
+async fn read_only_worker_browse_has_no_page_actions() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    run("read_only", vec![
+        ("browse", json!({"goal":"Find the page heading","fields":["heading"],"url":"https://example.com/"})),
     ]).await
 }
 
@@ -96,6 +106,13 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 "tab.observe" => {
                     json!({"status":"ok","tab":"worker-tab","obs":"o1","url":"https://example.com/","text":"Example page"})
                 }
+                "tab.prepare" => {
+                    let steps: Vec<Value> = frame["args"]["steps"].as_array().unwrap().iter().map(|_| json!({"hit":{"role":"button","name":"Next","frame":""},"payment":false,"upload":false,"submit":false,"frame_payment":false,"form_post":false,"addons":[]})).collect();
+                    json!({"status":"ok","tab":"worker-tab","epoch":1,"obs":"o1","url":"https://example.com/","profile":"signed_out","steps":steps})
+                }
+                "tab.act" => {
+                    json!({"status":"ok","tab":"worker-tab","url":"https://example.com/","epoch":1,"completed":1,"steps":[{"status":"completed","hit":{"role":"button","name":"Next","frame":""}}]})
+                }
                 "tab.image_collect" => {
                     json!({"status":"ok","source_url":"https://example.com/image.jpg","alt":"Example","image":{"data":STANDARD.encode(include_bytes!("../browser_outputs/pixel.jpg"))}})
                 }
@@ -123,12 +140,28 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
         s.gw.say_turn("general", "Read https://example.com/ for me.")
             .await?;
     let mut denied = Vec::new();
-    if mode == "ask_first" {
+    if mode == "read_only" {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+        while !requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(role, _)| role == "browse")
+        {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "read-only worker never browsed"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    } else {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
         let mut other_cards = Vec::new();
         while denied.is_empty() && tokio::time::Instant::now() < deadline {
             for card in s.gw.approval_requests("general").await? {
-                let action = if card["approval"]["operation"]["targets"][0] == DATA_URL {
+                let deny = card["approval"]["operation"]["targets"][0] == DATA_URL
+                    || card["approval"]["operation"]["tool"] == "browser_act";
+                let action = if deny {
                     denied.push(card.clone());
                     "deny"
                 } else {
@@ -148,7 +181,7 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
         }
         assert!(
             other_cards.is_empty(),
-            "only DATA_URL asks: {other_cards:?}"
+            "only DATA_URL and the commit act ask: {other_cards:?}"
         );
     }
     let terminal =
@@ -166,7 +199,9 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
         assert_eq!(opens.len(), 2);
         assert_eq!(opens[0]["args"]["url"], "https://example.com/");
         assert_eq!(opens[1]["args"]["url"], "https://example.com/?lang=ko");
-    } else {
+    } else if mode == "ask_except_reads" {
+        assert_eq!(denied.len(), 1, "one commit card: {denied:?}");
+        assert_eq!(denied[0]["approval"]["operation"]["tool"], "browser_act");
         let finished = tokio::time::timeout(Duration::from_secs(30), async {
             loop {
                 {
@@ -202,7 +237,7 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                     names.contains(&"browse")
                         && names.contains(&"browser_read")
                         && names.contains(&"image_collect")
-                        && !names.contains(&"browser_act")
+                        && names.contains(&"browser_act")
                         && !names.contains(&"browser_open"),
                     "worker browser surface: {names:?}"
                 );
@@ -212,15 +247,11 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 .filter(|(role, _)| role == "browse")
                 .collect();
             assert_eq!(browse.len(), 1);
-            assert!(
-                browse[0].1["input"]
-                    .to_string()
-                    .contains(r#"\"page_actions\":\"unavailable\""#)
-            );
+            assert!(!browse[0].1["input"].to_string().contains("page_actions"));
             assert!(
                 workers[0].1["input"]
                     .to_string()
-                    .contains("Choose the page reader by what you need.")
+                    .contains("Choose the page tool by what you need.")
             );
             let photos = "collect one photo per item with image_collect";
             assert!(
@@ -266,11 +297,13 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
                 .iter()
                 .filter_map(|frame| frame["op"].as_str())
                 .collect();
-            assert!(
-                ops.contains(&"tab.open")
-                    && ops.contains(&"tab.observe")
-                    && !ops.contains(&"tab.act")
-            );
+            assert!(ops.contains(&"tab.open") && ops.contains(&"tab.observe"));
+            let acts: Vec<_> = frames
+                .iter()
+                .filter(|frame| frame["op"] == "tab.act")
+                .collect();
+            assert_eq!(acts.len(), 1, "only the non-commit click runs: {acts:?}");
+            assert_ne!(acts[0]["args"]["steps"][0]["commits"], true);
             for frame in frames
                 .iter()
                 .filter(|frame| frame["op"].as_str().unwrap().starts_with("tab."))
@@ -323,6 +356,25 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
         let mode: String = db.query_row("SELECT json_extract(context_json,'$.executionPolicy.accessMode') FROM btcc_turns WHERE session_id=?1 ORDER BY rowid DESC LIMIT 1", [&session], |row| row.get(0))?;
         assert_eq!(mode, "ask_except_reads");
         drop(db);
+    } else {
+        let requests = requests.lock().unwrap();
+        let worker = requests
+            .iter()
+            .find(|(role, _)| role == "worker")
+            .expect("worker request");
+        assert!(
+            !worker.1["tools"].to_string().contains("\"browser_act\""),
+            "read-only worker cannot act"
+        );
+        let browse = requests
+            .iter()
+            .find(|(role, _)| role == "browse")
+            .expect("browse request");
+        assert!(
+            browse.1["input"]
+                .to_string()
+                .contains(r#"\"page_actions\":\"unavailable\""#)
+        );
     }
     s.finish().await?;
     host.abort();
