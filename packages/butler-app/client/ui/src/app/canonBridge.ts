@@ -5,6 +5,8 @@ export function canonBridgeInput(url: URL, verb: string, body: () => Record<stri
   if (grant && verb === "POST") return { method: "decideCanonGrant", input: { id: decodeURIComponent(grant[1]!), action: grant[2] } };
   const criterion = url.pathname.match(/^\/canon\/specs\/([^/]+)\/criteria\/([^/]+)$/u);
   if (criterion && verb === "POST") return { method: "checkCanonCriterion", input: { id: decodeURIComponent(criterion[1]!), criterionId: decodeURIComponent(criterion[2]!), body: body() } };
+  const spec = url.pathname.match(/^\/canon\/specs\/([^/]+)$/u);
+  if (spec && verb === "GET") return { method: "getCanonSpec", input: { id: decodeURIComponent(spec[1]!) } };
   const activity = url.pathname.match(/^\/canon\/epics\/([^/]+)\/activity$/u);
   if (activity && verb === "GET") return { method: "getCanonActivity", input: { id: decodeURIComponent(activity[1]!), before: url.searchParams.get("before") } };
   const proposal = url.pathname.match(/^\/canon\/proposals\/([^/]+)$/u);
