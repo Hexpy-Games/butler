@@ -95,7 +95,9 @@ export function Sheet({ open, onClose, dismissible = true, testID, ...panel }: S
   const close = useRef(onClose);
   close.current = onClose;
   const drag = useRef(PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) => g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx),
+    // RN's Modal root claims every touch start that nothing inside claims (Modal._shouldSetResponder), and once an
+    // ancestor is responder, move negotiation never asks its descendants. The strip holds nothing tappable: claim on start.
+    onStartShouldSetPanResponder: () => true,
     onPanResponderMove: (_, g) => travel.setValue(Math.max(0, g.dy)),
     onPanResponderRelease: (_, g) => {
       if (g.dy > height / 6 || g.vy > 0.5) close.current();
