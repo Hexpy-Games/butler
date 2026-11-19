@@ -241,6 +241,8 @@ fn counts(db: &Connection, refs: &[String]) -> StorageResult<(String, Vec<String
             }
         }
     }
+    // Concurrent reads start in no fixed order; URL order keeps the line stable.
+    pages.sort();
     let counts = counts
         .into_iter()
         .map(|(tool, count)| {
