@@ -7,7 +7,7 @@ import { CurrentModelRoundWaiting } from "./CurrentModelRoundWaiting";
 import { CurrentPhaseActivity } from "./CurrentPhaseActivity";
 import { AssistantStatusLabel } from "./AssistantStatusLabel";
 import { useButlerMarkTheme } from "./hooks/useButlerMarkTheme";
-import { Typo } from "@/butler-ds";
+import { Stack, Typo } from "@/butler-ds";
 import { selectActiveAuthorityApprovals, useButlerStore } from "@/app/store.ts";
 import { useElapsedTime } from "./hooks/useElapsedTime";
 
@@ -93,9 +93,10 @@ export function CurrentTurnStatus({
 
 function ChatActivityText({ label, elapsed }: { label: string; elapsed?: string }) {
   return (
-    <Typo.Body as="p" tone="secondary" minWidth="0" data-test-class="turn-chat-activity">
-      {label}{elapsed ? ` · ${elapsed}` : ""}
-    </Typo.Body>
+    <Stack as="span" align="row" cross="center" gap="xs" minWidth="0" data-test-class="turn-chat-activity">
+      <Typo.Body as="span" tone="secondary" minWidth="0" truncate>{label}</Typo.Body>
+      {elapsed ? <Typo.Body as="span" tone="secondary" wrap="nowrap">{` · ${elapsed}`}</Typo.Body> : null}
+    </Stack>
   );
 }
 
