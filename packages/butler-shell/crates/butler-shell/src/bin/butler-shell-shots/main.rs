@@ -24,6 +24,7 @@ mod clipboard;
 mod fixture;
 mod frame;
 mod glide;
+mod hold;
 mod live;
 
 use std::path::{Path, PathBuf};

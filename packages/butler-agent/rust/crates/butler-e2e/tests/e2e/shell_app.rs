@@ -35,6 +35,7 @@ mod focus_fallback;
 mod focus_selection;
 mod narrow_window;
 mod observer_dialog;
+mod sidebar_drag;
 mod sidebar_sticky;
 mod text_selection;
 mod text_size;
