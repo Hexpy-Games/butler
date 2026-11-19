@@ -1,15 +1,16 @@
 //! The presence of the overlay a glass surface is in: an enter or exit animation's progress
 //! (0..=1), passed down the subtree like [`crate::ui::blocks::scope`]'s values. An overlay wraps
 //! its surface in [`with_presence`] instead of fading it; the glass inside reads [`presence`] and
-//! materializes by it, while its content fades (LG research §5 Appear/disappear, §8.1.6).
+//! appears and leaves by that opacity alone, at the full material, on the same motion as its
+//! content (a glass is never faded by a parent's opacity: the lens ignores it).
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
     LayoutId, Pixels, Window,
 };
 
-use crate::ui::motion::Timing;
+use crate::ui::motion::{Timing, Transition};
 
-/// Static presence or a retained materialization on the animation clock.
+/// Static presence or a retained one on the animation clock.
 #[derive(Clone, Copy)]
 pub enum Presence {
     Static(f32),
@@ -19,6 +20,22 @@ pub enum Presence {
         start_ms: u32,
         timing: Timing,
     },
+}
+
+impl Presence {
+    /// The presence that follows `value` on `timing`: moving while it runs, else its target.
+    pub(crate) fn of(value: &Transition, timing: &Timing) -> Self {
+        if value.moving(timing) {
+            Self::Moving {
+                from: value.from,
+                to: value.to,
+                start_ms: value.start_ms,
+                timing: *timing,
+            }
+        } else {
+            Self::Static(value.target())
+        }
+    }
 }
 
 /// The enclosing presences, innermost last; `None` ends the scope for a glass's own children.

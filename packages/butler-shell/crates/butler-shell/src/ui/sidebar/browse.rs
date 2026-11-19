@@ -62,7 +62,10 @@ impl Shell {
             })
             .compact_gap(Space::Lg)
             .child(top)
-            .child(NavSectionHeading::new(title).actions(actions))
+            .child(crate::ui::widgets::anchored(
+                NavSectionHeading::new(title).actions(actions),
+                "sidebar-space-header",
+            ))
             .into_any_element()
     }
     pub(super) fn browse_actions(
@@ -113,6 +116,7 @@ impl Shell {
         let content = menu.content(content, window, cx);
         div()
             .flex()
+            .gap(Ds::get(cx).len(Length::SpaceXs) / 2.)
             .child(
                 IconButton::new("browse-new-chat", self.theme.strings.new_chat)
                     .glyph(Icon::PencilLine)

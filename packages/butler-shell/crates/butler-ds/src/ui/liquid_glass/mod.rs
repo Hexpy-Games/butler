@@ -32,14 +32,13 @@ pub struct LiquidGlass {
     pub lift: f32,
     /// Growth per side while pressed (pt), about the centre.
     pub grow: f32,
-    /// 0..=1: how far the glass has materialized (LG research §5 Appear/disappear): the lens
-    /// ramps from identity instead of the glass fading. 1 is the full material.
+    /// The glass appears and leaves by this presence's opacity only, at the full material, on
+    /// the same motion as its content (a glass is never faded by a parent's opacity).
     pub materialize: Presence,
     /// Which tuning paints the glass.
     profile: Profile,
     reduce_transparency: bool,
     increase_contrast: bool,
-    reduce_motion: bool,
 }
 
 impl LiquidGlass {
@@ -52,7 +51,6 @@ impl LiquidGlass {
             profile: Profile::Native,
             reduce_transparency: false,
             increase_contrast: false,
-            reduce_motion: false,
         }
     }
 
@@ -65,7 +63,6 @@ impl LiquidGlass {
             profile: Profile::Native,
             reduce_transparency: false,
             increase_contrast: false,
-            reduce_motion: false,
         }
     }
 
@@ -77,18 +74,10 @@ impl LiquidGlass {
         }
     }
 
-    /// How far the glass has materialized (an overlay's presence progress).
-    pub fn materialize(mut self, progress: f32) -> Self {
-        self.materialize = Presence::Static(progress);
-        self
-    }
-
-    /// Follow the OS Reduce Transparency, Increase Contrast and Reduce Motion settings
-    /// (LG research §6, §8.1.8). Under Reduce Motion the glass materializes instantly.
+    /// Follow the OS Reduce Transparency and Increase Contrast settings (LG research §6, §8.1.8).
     pub fn adapt(mut self, ds: &Ds) -> Self {
         self.reduce_transparency = ds.reduced_transparency();
         self.increase_contrast = ds.increased_contrast();
-        self.reduce_motion = ds.reduced_motion();
         self
     }
 }
@@ -112,20 +101,15 @@ pub fn paint(
     }
     let r = radii.max().as_f32();
     let circle = (w - h).abs() < 0.5 && r >= w / 2. - 0.5;
-    let presence = if glass.reduce_motion {
-        Presence::Static(1.)
-    } else {
-        glass.materialize
-    };
+    let presence = glass.materialize;
+    if matches!(presence, Presence::Static(t) if t <= 0.) {
+        return;
+    }
     let settings = Settings {
-        materialize: match presence {
-            Presence::Static(t) => t,
-            Presence::Moving { to, .. } => to,
-        },
         reduce_transparency: glass.reduce_transparency,
         increase_contrast: glass.increase_contrast,
     };
-    let mut m = material::material(dark, (w, h), circle, glass.place, settings);
+    let m = material::material(dark, (w, h), circle, glass.place, settings);
     let appear = match presence {
         Presence::Static(_) => None,
         Presence::Moving {
@@ -134,36 +118,21 @@ pub fn paint(
             start_ms,
             timing,
         } => {
-            let m_from = material::material(
-                dark,
-                (w, h),
-                circle,
-                glass.place,
-                Settings {
-                    materialize: from,
-                    ..settings
-                },
-            );
-            let maximum = from.max(to);
-            m.shadow = material::material(
-                dark,
-                (w, h),
-                circle,
-                glass.place,
-                Settings {
-                    materialize: maximum,
-                    ..settings
-                },
-            )
-            .shadow;
-            Some((
-                m_from,
-                gpui::LayerMotion {
-                    opacity: (from, to),
-                    ..timing.motion(start_ms)
-                },
-            ))
+            // The glass appears and leaves by opacity only, at full material, so the lens
+            // fades with its content exactly as a backdrop-filter under CSS opacity.
+            Some(gpui::LayerMotion {
+                opacity: (from, to),
+                ..timing.motion(start_ms)
+            })
         }
     };
-    material::paint(bounds, radii, &m, glass.lift, glass.grow, appear, window);
+    material::paint(
+        bounds,
+        radii,
+        &m,
+        glass.lift,
+        glass.grow,
+        appear.as_ref(),
+        window,
+    );
 }

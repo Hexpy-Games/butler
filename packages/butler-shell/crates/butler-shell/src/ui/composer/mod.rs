@@ -235,6 +235,9 @@ impl Composer {
             },
             cx,
         );
+        // The field is a tab stop as the DS field is (`text/layout.rs`): an element tracks the
+        // flagged handle, before the editor so the editor's key context is the one it resolves to.
+        let tab_stop = butler_ds::ui::focus::tab_stop(&self.input.read(cx).focus_handle(cx), true);
         let input = field::field(
             "composer-input",
             &self.input,
@@ -256,6 +259,11 @@ impl Composer {
             // The editor's own text is no chrome (`focusDraftFromComposerChrome` skips
             // `[contenteditable]`), whatever the button: a right press leaves focus and selection.
             .on_any_mouse_down(|_, window, _| window.prevent_default())
+            .children(
+                self.disabled
+                    .is_none()
+                    .then(|| div().absolute().size_0().track_focus(&tab_stop)),
+            )
             .child(input)
             .child(probe)
             .children(chips)

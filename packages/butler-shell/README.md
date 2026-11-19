@@ -37,7 +37,7 @@ The live harness accepts `browser` (standalone view), `browser-link <url>` (the 
 `cancel`, `disconnected`, `shot <name>` and `quit`. Frame commands are `url <url>`,
 `size <width> <height>`, `page-click <x> <y>` (a real click in window content pixels relative to the page surface; the page point is that times the window zoom), `click <anchor>`, `drag <anchor> <dx>`, `wait <ms>`,
 `expect-anchor <name>`, `expect-no-anchor <name>`, `expect-scale <factor>`,
-`expect-session <id|new>` and `expect-composer-focus`. Each completed command prints
+`expect-session <id|new>`, `expect-composer-focus`, `expect-focus-ring <anchor>` (the focused control shows its keyboard ring inside the anchor) and `expect-no-focus-ring` (it shows none). Each completed command prints
 `LIVE OK`. The main Rust workspace's `butler-e2e` example `gpui_shell` drives these
 with a local stub provider, stops/restarts its own agent, and saves both themes.
 

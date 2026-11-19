@@ -54,13 +54,16 @@ pub(crate) fn timeline(
     } else {
         Icon::ChevronRight
     };
-    let header = Stack::new().cross(Cross::Start).child(
-        Button::new(format!("{key}-toggle"))
-            .variant(Variant::Inline)
-            .text(header_label)
-            .icon_end(icon_px(chevron, px(14.)))
-            .on_click(set(None)),
-    );
+    let header = Stack::new().cross(Cross::Start).child(anchor(
+        div().flex().child(
+            Button::new(format!("{key}-toggle"))
+                .variant(Variant::Inline)
+                .text(header_label)
+                .icon_end(icon_px(chevron, px(14.)))
+                .on_click(set(None)),
+        ),
+        &format!("turn-activity-{}-header", turn_id.unwrap_or_default()),
+    ));
     let mut body = Stack::new().gap(Space::Sm);
     if expanded {
         let last = activities.len() - 1;
