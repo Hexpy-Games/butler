@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Badge, Button, ButtonGroup, showToast, Spinner, Surface, Text, useTokens } from "@/ds";
@@ -14,25 +14,35 @@ export default function Home() {
   const copy = useMobileCopy();
   const t = useTokens();
   const [status, setStatus] = useState<Status>({ kind: "checking" });
+  const latest = useRef(0);
   const check = useCallback(async () => {
+    const id = ++latest.current;
     setStatus(previous => ({ kind: "checking", origin: previous.origin }));
     const pairing = await pairingStore.loadActive().catch(() => null);
     if (!pairing) {
+      if (id !== latest.current) return;
       router.replace("/pair");
       return;
     }
     const result = await probe(pairing.origin, pairing.deviceToken, nativeFetch);
     if (result.kind === "problem" && result.problem === "needsPairing") {
+      if (id !== latest.current) return;
       await pairingStore.clear(pairing.butlerId);
+      if (id !== latest.current) return;
       showToast({ message: copy.problems.needsPairing, tone: "warning" });
+      if (id !== latest.current) return;
       router.replace("/pair");
       return;
     }
+    if (id !== latest.current) return;
     setStatus(result.kind === "ready"
       ? { kind: "ready", origin: pairing.origin }
       : { kind: "problem", origin: pairing.origin, problem: result.problem });
   }, [copy]);
-  useFocusEffect(useCallback(() => { void check(); }, [check]));
+  useFocusEffect(useCallback(() => {
+    void check();
+    return () => { latest.current++; };
+  }, [check]));
   return (
     <Surface variant="base" grow edges={["top", "bottom", "left", "right"]} padding="lg">
       <View style={{ flex: 1, gap: t.length("--space-4") }}>
