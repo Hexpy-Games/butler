@@ -166,6 +166,10 @@ export interface SessionSummary {
   last_activity_at: string;
   last_message_preview?: string;
   active_turn_state?: TurnState;
+  running_delegated_work?: boolean;
+  attention_required?: boolean;
+  /** Where the attention comes from; `subtask` when only open subtasks wait. */
+  attention_source?: "self" | "subtask" | "both";
   safe_status_label?: string;
   safe_status_label_key?: string;
   safe_status_label_parameters?: { attempt: number; maxAttempts: number };

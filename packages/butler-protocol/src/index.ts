@@ -10,3 +10,4 @@ export * from "./dashboard-space-contracts.ts";
 export * from "./message-session-contracts.ts";
 export * from "./pending-asks-contracts.ts";
 export * from "./task-graph-contracts.ts";
+export type * from "./conversation-contracts.ts";

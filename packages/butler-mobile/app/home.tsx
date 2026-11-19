@@ -1,12 +1,17 @@
 import { useCallback, useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
-import { Badge, Button, ButtonGroup, showToast, Spinner, Surface, Text, useTokens } from "@/ds";
+import { Platform, ScrollView, SectionList, View } from "react-native";
+import { router, Stack, useFocusEffect } from "expo-router";
+import { Badge, Button, ButtonGroup, EdgeFade, ListRow, showToast, Spinner, Surface, Text, UnreadDot, useHeaderOptions, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
 import { probe } from "@/connection/probe";
 import type { Problem } from "@/connection/problems";
 import { pairingStore } from "@/connection/store";
 import { useMobileCopy } from "@/i18n";
+
+import { getLocales } from "expo-localization";
+import { useConversation } from "@/conversation/live";
+import { useNavigationView } from "@/conversation/useNavigationView";
+import { conversationSections, sessionMark, timeLabel } from "@/conversation/sessions";
 
 type Status = { kind: "checking"; origin?: string } | { kind: "ready"; origin: string } | { kind: "problem"; origin: string; problem: Problem };
 
@@ -15,9 +20,10 @@ export default function Home() {
   const t = useTokens();
   const [status, setStatus] = useState<Status>({ kind: "checking" });
   const latest = useRef(0);
+  const { connect } = useConversation();
   const check = useCallback(async () => {
     const id = ++latest.current;
-    setStatus(previous => ({ kind: "checking", origin: previous.origin }));
+    setStatus(previous => previous.kind === "ready" ? previous : { kind: "checking", origin: previous.origin });
     const pairing = await pairingStore.loadActive().catch(() => null);
     if (!pairing) {
       if (id !== latest.current) return;
@@ -35,14 +41,16 @@ export default function Home() {
       return;
     }
     if (id !== latest.current) return;
+    if (result.kind === "ready") connect(pairing);
     setStatus(result.kind === "ready"
       ? { kind: "ready", origin: pairing.origin }
       : { kind: "problem", origin: pairing.origin, problem: result.problem });
-  }, [copy]);
+  }, [copy, connect]);
   useFocusEffect(useCallback(() => {
     void check();
     return () => { latest.current++; };
   }, [check]));
+  if (status.kind === "ready") return <Conversations />;
   return (
     <Surface variant="base" grow edges={["top", "bottom", "left", "right"]} padding="lg">
       <View style={{ flex: 1, gap: t.length("--space-4") }}>
@@ -55,9 +63,6 @@ export default function Home() {
               <Text tone="secondary">{copy.home.checking}</Text>
             </View>
           ) : null}
-          {status.kind === "ready" ? (
-            <View style={{ flexDirection: "row" }}><Badge tone="success" label={copy.home.connected} /></View>
-          ) : null}
           {status.kind === "problem" ? <Text tone="danger">{copy.problems[status.problem]}</Text> : null}
         </ScrollView>
         <ButtonGroup>
@@ -67,4 +72,40 @@ export default function Home() {
       </View>
     </Surface>
   );
+}
+
+function Conversations() {
+  const copy = useMobileCopy();
+  const t = useTokens();
+  const options = useHeaderOptions();
+  const view = useNavigationView();
+  const { lost } = useConversation();
+  const [scrolled, setScrolled] = useState(false);
+  const sections = view ? conversationSections(view, copy.conversations.general) : [];
+  const paddingHorizontal = t.length("--space-4");
+  const locale = getLocales()[0].languageTag;
+  return <Surface variant="base" grow edges={["left", "right"]}>
+    <Stack.Screen options={{ ...options, title: copy.conversations.title, headerLargeTitle: Platform.OS === "ios" }} />
+    <SectionList sections={sections} keyExtractor={item => item.id} contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{ flexGrow: 1, paddingHorizontal }}
+      onScroll={event => setScrolled(event.nativeEvent.contentOffset.y > 0)} scrollEventThrottle={16}
+      renderSectionHeader={({ section }) => <Text variant="sectionTitle" tone="secondary">{section.title}</Text>}
+      renderItem={({ item }) => {
+        const mark = sessionMark(item);
+        const title = item.title.trim() ? item.title : copy.conversations.untitled;
+        return <ListRow title={title} description={item.last_message_preview} descriptionLines={1}
+          meta={timeLabel(item.last_activity_at, locale, new Date())}
+          trailing={mark === "attention" ? <Badge tone="warning" label={copy.conversations.needsAttention} />
+            : mark === "working" ? <Spinner label={copy.conversations.working} />
+            : mark === "unread" ? <UnreadDot label={copy.conversations.unread} /> : null}
+          onPress={() => router.push({ pathname: "/chat/[id]", params: { id: item.id, title } })} />;
+      }}
+      ListEmptyComponent={<View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <Text tone="secondary">{copy.conversations.empty}</Text>
+      </View>}
+      ListHeaderComponent={lost ? <Text variant="caption" tone="tertiary">{copy.conversations.reconnecting}</Text> : undefined}
+      ListFooterComponent={<ButtonGroup><Button variant="secondary" label={copy.home.pairAgain} onPress={() => router.push("/pair")} /></ButtonGroup>}
+    />
+    <EdgeFade edge="top" visible={scrolled} />
+  </Surface>;
 }

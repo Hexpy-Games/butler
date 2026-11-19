@@ -463,6 +463,30 @@ export interface MobileCopy {
   problems: { invalidCode: string; hostNotAllowed: string; needsPairing: string; versionMismatch: string;
     notButler: string; unreachable: string; failed: string };
   localNetwork: { title: string; body: string; retry: string; cancel: string };
+  conversations: {
+    title: string;
+    general: string;
+    empty: string;
+    needsAttention: string;
+    working: string;
+    unread: string;
+    reconnecting: string;
+    untitled: string;
+  };
+  chat: {
+    placeholder: string;
+    send: string;
+    stop: string;
+    thinking: string;
+    waitingForYou: string;
+    failed: string;
+    cancelled: string;
+    sendFailed: string;
+    stopFailed: string;
+    loadFailed: string;
+    retry: string;
+    earlier: string;
+  };
   home: { checking: string; connected: string; retry: string; pairAgain: string };
 }
 

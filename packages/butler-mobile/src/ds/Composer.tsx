@@ -1,3 +1,4 @@
+import { ScrollEdgeEffect } from "@bsky.app/expo-scroll-edge-effect";
 import { useEffect, useState } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -119,12 +120,14 @@ export function ComposerDock({ children, onHeightChange }: ComposerDockProps) {
   const gap = t.length("--space-sm");
   return (
     <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" style={[StyleSheet.absoluteFill, { justifyContent: "flex-end" }]}>
+      <ScrollEdgeEffect edge="bottom" effect="soft">
       <View
         onLayout={(event) => onHeightChange?.(event.nativeEvent.layout.height)}
         style={{ paddingHorizontal: t.length("--adaptive-composer-inset"), paddingBottom: keyboard ? gap : insets.bottom + gap }}
       >
         {children}
       </View>
+      </ScrollEdgeEffect>
     </KeyboardAvoidingView>
   );
 }

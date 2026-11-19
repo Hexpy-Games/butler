@@ -9,6 +9,7 @@ import { GlassBackdrop } from "../GlassBackdrop";
 import { Icon } from "../Icon";
 import { icons } from "../icons";
 import { ForcedState } from "../internal/press";
+import { Markdown } from "../Markdown";
 import { ListRow } from "../ListRow";
 import { Sheet, SheetPanel } from "../Sheet";
 import { Spinner } from "../Spinner";
@@ -17,7 +18,7 @@ import { Switch } from "../Switch";
 import { Text, type TextTone, type TextVariant } from "../Text";
 import { TextField } from "../TextField";
 import { showToast, ToastView, type ToastTone } from "../Toast";
-import { en, ko, long, type Strings } from "./fixtures";
+import { en, ko, long, markdown, type Strings } from "./fixtures";
 
 const noop = () => {};
 type Forced = "pressed" | "focused" | null;
@@ -337,6 +338,7 @@ function ToastSection({ state }: { state?: string }) {
 }
 
 export const sections: { id: string; title: string; render: (state?: string) => React.ReactNode }[] = [
+  { id: "markdown", title: "Markdown", render: () => <Cell name="Markdown"><Markdown text={markdown} /></Cell> },
   { id: "text", title: "Text", render: () => <TextSection /> },
   { id: "icon", title: "Icon", render: () => <IconSection /> },
   { id: "spinner", title: "Spinner", render: () => <SpinnerSection /> },

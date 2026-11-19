@@ -54,3 +54,13 @@ export const long: Strings & { title: string } = {
   close: "Schließen",
   title: "Datenschutzgrundverordnungskonforme Rechnungsübersicht für das dritte Quartal exportieren",
 };
+
+export const markdown = [
+  "# Heading one", "## Heading two", "### Heading three",
+  "A paragraph with **strong**, *emphasis*, `code`, ~~deleted~~, [a link](https://example.com), and ![image alt](https://example.com/image.png).",
+  "A hard break  \ncontinues with an escaped \\*asterisk.",
+  "- An item\n  - A nested item\n\n1. First\n2. Second",
+  "```ts\nconst message = 'A code line long enough to scroll horizontally across a narrow conversation screen.';\n```",
+  "> A quoted paragraph", "---",
+  "| Header | Value |\n| --- | --- |\n| Cell | **Bold cell** |",
+].join("\n\n");
