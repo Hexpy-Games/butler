@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, Text as RNText, View } from "react-native";
+import { Animated, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { alpha, PILL } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
+import { BaseText } from "./internal/BaseText";
 import type { IconGlyph } from "./icons";
 import { run, useReducedMotion } from "./internal/motion";
 import { fontStyle, maxFontScale, weightValue } from "./internal/typography";
@@ -43,7 +44,7 @@ export function Badge({ label, tone = "neutral", icon }: BadgeProps) {
       }}
     >
       {icon ? <HugeiconsIcon icon={icon} size={t.length("--icon-size-xs")} color={colors.text} /> : null}
-      <RNText
+      <BaseText
         numberOfLines={1}
         ellipsizeMode="tail"
         maxFontSizeMultiplier={maxFontScale.badge}
@@ -54,7 +55,7 @@ export function Badge({ label, tone = "neutral", icon }: BadgeProps) {
         }}
       >
         {label}
-      </RNText>
+      </BaseText>
     </View>
   );
 }

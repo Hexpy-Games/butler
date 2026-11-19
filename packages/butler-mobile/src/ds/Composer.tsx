@@ -56,6 +56,7 @@ export function Composer({
       ) : null}
       <TextInput
         multiline
+        lineBreakStrategyIOS="hangul-word"
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text as RNText, View } from "react-native";
+import { AccessibilityInfo, Animated, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RADIUS, type Tokens } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
+import { BaseText } from "./internal/BaseText";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { icons, type IconGlyph } from "./icons";
 import { IconSlot } from "./internal/IconSlot";
@@ -77,14 +78,14 @@ export function ToastView({ message, tone = "neutral", onPress }: { message: str
           <HugeiconsIcon icon={palette.icon} size={t.length("--icon-size-md")} color={text} />
         </IconSlot>
       ) : null}
-      <RNText
+      <BaseText
         numberOfLines={3}
         ellipsizeMode="tail"
         maxFontSizeMultiplier={maxFontScale.control}
         style={{ ...textStyle(t, "label"), color: text, flex: 1 }}
       >
         {message}
-      </RNText>
+      </BaseText>
     </Pressable>
   );
 }

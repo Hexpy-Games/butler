@@ -56,16 +56,25 @@ export function SheetPanel({ onClose, title, description, children, action, canc
       }}
     >
       <GlassFill radii={{ topLeft: radius, topRight: radius, bottomRight: 0, bottomLeft: 0 }} />
-      <View {...drag} style={{ alignItems: "center", marginTop: -t.length("--space-2"), paddingBottom: t.length("--space-1") }}>
-        <View accessibilityElementsHidden importantForAccessibility="no"
-          style={{ width: t.length("--space-2xl") + t.length("--space-3"), height: t.length("--space-1"),
-            borderRadius: t.length(PILL), backgroundColor: t.color("--color-border-strong") }} />
-      </View>
-      <View {...drag} style={{ gap: t.length("--space-2") }}>
-        <View ref={titleRef} accessible>
-          <Text variant="panelTitle">{title}</Text>
+      <View
+        {...drag}
+        style={{
+          marginTop: -space, marginHorizontal: -space,
+          paddingTop: space - t.length("--space-2"), paddingHorizontal: space,
+          gap: space,
+        }}
+      >
+        <View style={{ alignItems: "center", paddingBottom: t.length("--space-1") }}>
+          <View accessibilityElementsHidden importantForAccessibility="no"
+            style={{ width: t.length("--space-2xl") + t.length("--space-3"), height: t.length("--space-1"),
+              borderRadius: t.length(PILL), backgroundColor: t.color("--color-border-strong") }} />
         </View>
-        {description ? <Text tone="secondary">{description}</Text> : null}
+        <View style={{ gap: t.length("--space-2") }}>
+          <View ref={titleRef} accessible>
+            <Text variant="panelTitle">{title}</Text>
+          </View>
+          {description ? <Text tone="secondary">{description}</Text> : null}
+        </View>
       </View>
       {children ? <FadedScroll>{children}</FadedScroll> : null}
       {action
