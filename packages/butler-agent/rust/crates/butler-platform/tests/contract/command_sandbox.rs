@@ -49,6 +49,7 @@ fn read_only_commands_run_sandboxed_or_are_refused() {
     timeout_markers_require_both_code_and_trailing_marker();
     super::project_secrets::verify();
     super::secret_reads::verify();
+    super::command_changes::busy_root_stays_complete();
     cmd_arguments_remain_verbatim();
     expected_host_sandbox_is_enforced();
     assert_eq!(

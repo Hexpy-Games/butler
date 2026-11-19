@@ -102,34 +102,3 @@ fn collect(
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    // test-category: race
-    #[test]
-    fn a_root_another_writer_keeps_busy_is_still_complete() {
-        let root = std::env::temp_dir().join(format!("butler-changes-busy-{}", std::process::id()));
-        std::fs::create_dir_all(&root).unwrap();
-        let changes = CommandChanges::watch(&root).unwrap();
-        std::fs::write(root.join("own.txt"), "x").unwrap();
-        let stop = Arc::new(AtomicBool::new(false));
-        let writer = {
-            let (stop, other) = (stop.clone(), root.join("other.txt"));
-            std::thread::spawn(move || {
-                while !stop.load(Ordering::Relaxed) {
-                    let _ = std::fs::write(&other, "y");
-                }
-            })
-        };
-        let observed = changes.finish();
-        stop.store(true, Ordering::Relaxed);
-        writer.join().unwrap();
-        let _ = std::fs::remove_dir_all(&root);
-        assert!(observed.complete);
-        assert!(observed.paths.contains(&PathBuf::from("own.txt")));
-    }
-}
