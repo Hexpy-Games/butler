@@ -191,6 +191,7 @@ impl ClipUnder {
                 point(bounds.right() + self.outset, bounds.bottom() + self.bottom),
             ),
             fade_out: Edges::default(),
+            ..ContentMask::default()
         }
     }
 }
