@@ -34,6 +34,7 @@ export interface PairingStatus extends Omit<PairingCode, "code"> {
   device_id: string | null;
 }
 export interface PairedDevice {
+  kind: "browser" | "ios" | "android";
   id: string;
   name: string;
   ip: string;

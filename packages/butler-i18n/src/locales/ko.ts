@@ -2253,6 +2253,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       copied: "복사됨",
       code: "코드",
       pairDevice: "기기 연결",
+      pairingQr: "연결용 QR코드",
+      scanWithPhone: "휴대폰의 버틀러 앱으로 스캔하십시오.",
       expiresIn: (seconds) => `${seconds}초 남음`,
       invalidated: "실패가 반복돼 새 코드를 발급했어요",
       paired: "기기를 연결했어요",

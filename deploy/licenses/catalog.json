@@ -1,6 +1,6 @@
 {
   "inputs": {
-    "bun.lock": "396b254520eceeb05f77c652cb4c66e65747e54bad74dcc9d2c02ea69d7aee97",
+    "bun.lock": "dcd6815299f9c809a359d631013b9cec8914b511138a9f6d871f35750a6e6032",
     "deploy/licenses/disclosure.py": "992c3d7f47a0944dc1c0ab0628e11a818b88f9ae7d5f62a5c5692715a175d859",
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
@@ -32,7 +32,7 @@
     "packages/butler-agent/rust/scripts/static-ort.lock.json": "a1aee730fc0773ca02d23bad8da95c0efe56a07ded67dc36d251f475a90369b2",
     "packages/butler-agent/rust/tools/source-check/Cargo.toml": "e50cffe7e1c5a79f1fe76bf689eb65fb682a29cd8425ae3609c35cfa1f56603c",
     "packages/butler-app/client/electron/package.json": "75bf192017270ab76ef12a560dd7643789a965331e1958edb5f5a930fd1587a8",
-    "packages/butler-app/client/ui/package.json": "2280d74dca88e60d49390de9095aa2b1185faaf27d8fac10829a3b9c2a6d8506",
+    "packages/butler-app/client/ui/package.json": "216bd469a23c9436e210ecbcd5735b1ab6baad8469cb4809a6e8c3b0297b7911",
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "f77a06e6ca123d65971fff38e3616fe9344efab396b6a3ebea7250a771064a90",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-sans-kr/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
@@ -5536,6 +5536,30 @@
       ],
       "copyright": [
         "Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com>"
+      ]
+    },
+    {
+      "id": "npm:uqr@0.1.3",
+      "name": "uqr",
+      "version": "0.1.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/uqr/-/uqr-0.1.3.tgz",
+      "artifacts": [
+        "App/Agent browser renderer"
+      ],
+      "evidenceSha256": [
+        "b39d50e24727f341a0ebdb2ab040c57efaf4076a8ad5b1d0c8c45beb975b4571"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "integrity": "sha512-0rjE8iEJe4YmT9TOhwsZtqCMRLc5DXZUI2UEYUUg63ikBkqqE5EYWaI0etFe/5KUcmcYwLih2RND1kq+hrUJXA==",
+      "links": [
+        "https://www.npmjs.com/package/uqr/v/0.1.3"
+      ],
+      "copyright": [
+        "Copyright (c) Project Nayuki",
+        "Copyright (c) 2023 Anthony Fu <https://github.com/antfu>"
       ]
     },
     {
