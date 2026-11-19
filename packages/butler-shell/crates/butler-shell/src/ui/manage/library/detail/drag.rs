@@ -9,12 +9,13 @@
 //! synthesises) has no counterpart: a gpui drop sends no click.
 // ANIM-MIGRATE(CardDragPreview): React fades the lifted stack out when it is invalid; gpui hands
 // the ghost no target, so the ghost always shows as valid.
+use butler_ds::tokens::Length;
 use butler_ds::ui::blocks::drag_preview::{DragPreview, DragPreviewImage};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::toast::{self, Toast};
 use gpui::{
-    App, AppContext as _, Context, Empty, Entity, ImageSource, IntoElement, ObjectFit, Render,
-    SharedString, Styled as _, StyledImage as _, Window, img, px,
+    App, AppContext as _, Context, Empty, Entity, ImageSource, IntoElement, ObjectFit,
+    ParentElement as _, Render, SharedString, Styled as _, StyledImage as _, Window, div, img, px,
 };
 use std::rc::Rc;
 
@@ -78,7 +79,8 @@ pub(crate) fn card_ghost(drag: &CardDrag, cx: &mut App) -> Entity<CardGhost> {
 }
 
 impl Render for CardGhost {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let ds = Ds::get(cx);
         let images = self.pictures.iter().cloned().map(|(src, (width, height))| {
             DragPreviewImage::new(width, height, move |scale| {
                 img(src)
@@ -88,7 +90,11 @@ impl Render for CardGhost {
                     .into_any_element()
             })
         });
-        DragPreview::elements("library-card-drag", images.collect()).count(self.count)
+        div()
+            .font_family(ds.body_font().clone())
+            .text_size(ds.len(Length::TypoBodySize))
+            .line_height(ds.len(Length::TypoBodyLineHeight))
+            .child(DragPreview::elements("library-card-drag", images.collect()).count(self.count))
     }
 }
 

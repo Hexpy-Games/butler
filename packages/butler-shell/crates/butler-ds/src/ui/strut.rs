@@ -13,6 +13,16 @@ use gpui::{
     LayoutId, ParentElement as _, Pixels, Styled as _, Window, div,
 };
 
+use crate::tokens::Length;
+use crate::ui::context::Ds;
+
+/// A root (window or drag view) starts the text-style stack at the body font, as the CSS `body` rule does.
+pub(crate) fn body_root<E: gpui::Styled>(el: E, ds: &Ds) -> E {
+    el.font_family(ds.body_font().clone())
+        .text_size(ds.len(Length::TypoBodySize))
+        .line_height(ds.len(Length::TypoBodyLineHeight))
+}
+
 /// One container being laid out: whether it is a block (inline children get a strut) and whether
 /// it is a column that stretches its items (an item with `width: max-content` must not stretch).
 #[derive(Clone, Copy)]
