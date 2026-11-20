@@ -174,6 +174,7 @@ fn row_content(
         .flex()
         .items_start()
         .w_full()
+        .gap(ds.len(Length::SpaceSm))
         .child(
             IconSlot::new()
                 .size(SlotSize::Lg)
@@ -270,7 +271,7 @@ pub(super) fn options(
         if rows.ctx.busy {
             row = row.disabled();
         }
-        stack = stack.child(row.child(div().py(pad).child(content)));
+        stack = stack.child(row.child(div().flex_1().min_w_0().py(pad).child(content)));
     }
     stack.into_any_element()
 }
@@ -307,6 +308,7 @@ pub(super) fn review(rows: &Rows, cx: &mut App) -> AnyElement {
                     .flex()
                     .items_start()
                     .w_full()
+                    .gap(ds.len(Length::SpaceSm))
                     .py(ds.len(Length::MenuItemPaddingBlock))
                     .child(
                         div()
