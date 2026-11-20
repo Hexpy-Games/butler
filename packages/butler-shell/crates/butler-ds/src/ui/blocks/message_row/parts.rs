@@ -298,7 +298,7 @@ impl RenderOnce for MessageStatusLabel {
         };
         let ds = Ds::get(cx);
         div()
-            .flex()
+            .inline_flex()
             .min_w_0()
             .max_w(relative(1.))
             .items_center()
