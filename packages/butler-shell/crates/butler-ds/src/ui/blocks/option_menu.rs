@@ -14,6 +14,7 @@ use crate::ui::blocks::composer_control::PermissionTone;
 use crate::ui::button::{Button, Variant};
 use crate::ui::context::Ds;
 use crate::ui::control::{Blend, Disabled};
+use crate::ui::strut;
 use crate::ui::tooltip::{Align, Side, Tooltip};
 
 type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -78,14 +79,18 @@ impl RenderOnce for OptionMenu {
         let menu = div().flex().flex_col().gap(px(2.));
         match self.fit {
             // `min-width: min(320px, calc(100vw - 32px))`
-            MenuFit::Default => menu.min_w(px(
-                320_f32.min(f32::from(window.viewport_size().width) - 32.)
-            )),
-            MenuFit::Fit => menu
-                .max_w(window.viewport_size().width - px(32.))
-                .justify_self_start(),
+            MenuFit::Default => menu
+                .min_w(px(
+                    320_f32.min(f32::from(window.viewport_size().width) - 32.)
+                ))
+                .children(self.children)
+                .into_any_element(),
+            // `width: max-content; max-width: calc(100vw - 32px)`
+            MenuFit::Fit => strut::max_content(
+                menu.max_w(window.viewport_size().width - px(32.))
+                    .children(self.children),
+            ),
         }
-        .children(self.children)
     }
 }
 

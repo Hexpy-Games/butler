@@ -23,7 +23,7 @@ use crate::ui::typo::{Tone, Typo};
 use crate::ui::{convert, focus};
 
 /// The pointer over a card.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq)]
 struct Pointer {
     over: bool,
     down: bool,
@@ -184,8 +184,11 @@ pub(super) fn render(
         let pointer = pointer.clone();
         move |cx: &mut App| {
             pointer.update(cx, |pointer, cx| {
+                let before = *pointer;
                 change(pointer);
-                cx.notify();
+                if *pointer != before {
+                    cx.notify();
+                }
             });
         }
     };

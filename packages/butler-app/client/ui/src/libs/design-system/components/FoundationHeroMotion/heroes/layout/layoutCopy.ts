@@ -35,7 +35,7 @@ export const LAYOUT_COPY = {
       ["모드", "창의 너비가 모드를 정합니다: expanded, medium, compact."],
       ["플랫폼", "중단점은 responsive.ts의 상수이고, 그보다 좁으면 사이드바는 서랍이 됩니다."],
     ] as IntroLead,
-    newChat: "새 대화", search: "검색", favorites: "즐겨찾기", favoritesHint: "자주 찾는 대화를 고정해 보세요.",
+    newChat: "새 대화", search: "검색", favorites: "즐겨찾기", favoritesHint: "자주 찾는 대화를 고정해 보십시오.",
     all: "전체보기", recent: "최신", running: "진행중", general: "대화", space: "스페이스", settings: "설정",
     project: "디자인 시스템",
     sessions: ["간격 토큰을 rem으로 이전", "사이드바 아이콘 크기 점검", "iOS에서 컴포저가 튀는 문제", "포커스 링 대비 비교", "오래된 기능 플래그 정리", "주간 릴리스 노트", "출시 주간 계획 초안"],
@@ -46,7 +46,7 @@ export const LAYOUT_COPY = {
     answer2: "완료했습니다. 서랍은 그대로이고, 컴포저가 키보드를 따라갑니다:",
     steps: [["키보드 오프셋을 ", "visualViewport", "에서 읽기"], ["리사이즈 리스너 하나 추가, 화면이 사라지면 제거", "", ""]] as Array<[string, string, string]>,
     code: "const vv = visualViewport;\nconst gap = innerHeight - vv.height;\ncomposer.style.bottom = `${gap}px`;",
-    worked: "9초 동안 작업", time: "오전 9:41", done: "답변 완료", placeholder: "버틀러에게 무엇이든 물어보세요",
+    worked: "9초 동안 작업", time: "오전 9:41", done: "답변 완료", placeholder: "버틀러에게 무엇이든 물어보십시오",
     copy: "메시지 복사", more: "추가 기능", sidebar: "사이드바 보기", hide: "사이드바 숨기기", panel: "오른쪽 패널 보기",
   },
 } satisfies Record<FoundationHeroLang, unknown>;

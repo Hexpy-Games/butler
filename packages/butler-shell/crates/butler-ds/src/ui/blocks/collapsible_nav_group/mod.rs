@@ -9,18 +9,17 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ClickEvent, ElementId, Hsla, IntoElement, ParentElement, RenderOnce,
-    SharedString, Styled as _, Window, div, px,
+    SharedString, Styled as _, Window, div,
 };
 
-pub use sticky::StickyScroll;
-use sticky::{Pin, clipped, span_recorder};
+use sticky::Pin;
 
 use super::nav_row::metrics::{density_of, metrics};
 use super::nav_row::{ActionsVisibility, NavRow};
 use super::scope;
 use crate::tokens::{Color, Length};
 use crate::ui::Icon;
-use crate::ui::collapsible::Collapsible;
+use crate::ui::collapsible::{self, Collapsible};
 use crate::ui::context::Ds;
 
 type Toggle = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -87,11 +86,11 @@ impl CollapsibleNavGroup {
         self
     }
 
-    /// `stickyDepth`: the header holds at the scroller's top edge below the sticky headers of
-    /// the `depth` groups around it, and the rows under it clip at its bottom edge.
-    pub fn sticky(mut self, scroll: &StickyScroll, depth: usize) -> Self {
+    /// `stickyDepth`: inside a SidebarShell, the header holds at the scroller's top edge below
+    /// the sticky headers of the `depth` groups around it, and the rows under it clip at its
+    /// bottom edge.
+    pub fn sticky(mut self, depth: usize) -> Self {
         self.pin = Some(Pin {
-            scroll: scroll.clone(),
             depth,
             surface: None,
         });
@@ -115,11 +114,7 @@ impl ParentElement for CollapsibleNavGroup {
 }
 
 impl RenderOnce for CollapsibleNavGroup {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let span = self
-            .pin
-            .as_ref()
-            .map(|_| Pin::span(self.id.clone(), window, cx));
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
         let gap = ds.len(Length::Space1);
         // `--nav-tree-indent`: `--space-sm` in a SidebarShell, else `--space-lg`.
@@ -154,7 +149,7 @@ impl RenderOnce for CollapsibleNavGroup {
         }
         let content = Collapsible::new((self.id.clone(), "content"), self.expanded)
             .child(items.children(self.children));
-        let (Some(pin), Some(span)) = (self.pin, span) else {
+        let Some((pin, nav)) = self.pin.zip(scope::nav_sticky(cx)) else {
             return div()
                 .w_full()
                 .min_w_0()
@@ -163,7 +158,6 @@ impl RenderOnce for CollapsibleNavGroup {
                 .into_any_element();
         };
         let row = metrics(ds, density_of(ds, None, cx)).height;
-        let offset = pin.offset(*span.read(cx), row, cx);
         // `--nav-sticky-surface`: a SidebarShell makes it `transparent` (SidebarShell.module.css:18),
         // else `--color-surface-base`.
         let surface = pin.surface.unwrap_or_else(|| {
@@ -173,24 +167,15 @@ impl RenderOnce for CollapsibleNavGroup {
                 ds.color(Color::ColorSurfaceBase)
             }
         });
-        // The header paints over the rows it passes, so they clip at its bottom edge.
-        let pinned = div()
-            .w_full()
-            .relative()
-            .top(px(offset))
-            .bg(surface)
-            .child(header);
-        div()
-            .relative()
-            .w_full()
-            .min_w_0()
-            .child(pinned)
-            .child(clipped(
-                content.into_any_element(),
-                offset,
+        sticky::group(
+            (header.into_any_element(), content.into_any_element()),
+            (&pin, nav),
+            (
+                row,
+                surface,
                 ds.len(Length::FocusRingRoom),
-            ))
-            .child(span_recorder(span))
-            .into_any_element()
+                collapsible::clip_margin(cx),
+            ),
+        )
     }
 }

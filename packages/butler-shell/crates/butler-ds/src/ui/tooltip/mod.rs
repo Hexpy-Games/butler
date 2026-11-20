@@ -216,7 +216,6 @@ impl RenderOnce for Tooltip {
             }
             s.focus_open = focused;
         });
-        let shrink = strut::shrink_wrap(cx);
         let layer = self.layer(&state, window, cx);
         let child = self.child.take();
         let hover_state = state.clone();
@@ -237,13 +236,15 @@ impl RenderOnce for Tooltip {
         if self.fill {
             wrapper = wrapper.flex_1().min_w_0();
         }
-        if shrink {
-            wrapper = wrapper.self_start();
-        }
-        wrapper
+        let wrapper = wrapper
             .children(child)
             .child(bounds_probe(&state))
-            .children(layer)
+            .children(layer);
+        if self.fill {
+            wrapper.into_any_element()
+        } else {
+            strut::fit(true, wrapper)
+        }
     }
 }
 

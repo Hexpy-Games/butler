@@ -16,7 +16,7 @@ use super::SortableCardItem;
 use super::row;
 use crate::tokens::{Color, Length, Shadow};
 use crate::ui::context::Ds;
-use crate::ui::convert;
+use crate::ui::{convert, strut};
 
 pub(super) type OnReorder = Rc<dyn Fn(Vec<SharedString>, &mut Window, &mut App)>;
 
@@ -154,7 +154,8 @@ impl Render for Lifted {
         if let Some(width) = self.width {
             surface = surface.w(width);
         }
-        div()
+        let ds = Ds::get(cx);
+        strut::body_root(div(), ds)
             .relative()
             .left(-self.shift.x)
             .top(-self.shift.y)

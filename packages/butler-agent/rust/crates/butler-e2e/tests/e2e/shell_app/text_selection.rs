@@ -250,7 +250,7 @@ async fn shell_app_11_selection_fills_wrapped_lines_and_clears_outside() -> Resu
     shell.run(&[&format!("click sidebar-row-{id}")]).await?;
     shell
         .run(&[
-            &drag("0.005 0.765 0.93 0.804"),
+            &drag("0.005 0.742 0.93 0.795"),
             "key secondary-c",
             "expect-clipboard-contains \"CDN 배포 파일 변조\"",
         ])

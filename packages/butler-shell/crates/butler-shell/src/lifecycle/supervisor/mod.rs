@@ -14,6 +14,8 @@ mod stop;
 
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use futures::StreamExt as _;
 use futures::channel::{mpsc, oneshot};
@@ -109,6 +111,7 @@ enum Command {
 pub(crate) struct Supervisor {
     commands: mpsc::UnboundedSender<Command>,
     lease: LeaseSlot,
+    quitting: Arc<AtomicBool>,
 }
 
 impl Supervisor {
@@ -122,10 +125,24 @@ impl Supervisor {
         let (commands, incoming) = mpsc::unbounded();
         let lease = LeaseSlot::default();
         let slot = lease.clone();
+        let quitting = Arc::new(AtomicBool::new(false));
+        let thread_quitting = quitting.clone();
         let _ = std::thread::Builder::new()
             .name("agent-supervisor".into())
-            .spawn(move || run(Inner::new(data, read_only, status, slot), incoming));
-        (Self { commands, lease }, statuses)
+            .spawn(move || {
+                run(
+                    Inner::new(data, read_only, status, slot, thread_quitting),
+                    incoming,
+                );
+            });
+        (
+            Self {
+                commands,
+                lease,
+                quitting,
+            },
+            statuses,
+        )
     }
 
     fn ask(&self, command: impl FnOnce(Reply) -> Command) -> Answer {
@@ -160,8 +177,9 @@ impl Supervisor {
         self.ask(|reply| Command::Stop(reason, reply))
     }
 
-    /// Drops the child's stdin now (the App is quitting without waiting).
+    /// The App is quitting without waiting: marks the supervisor quitting, then drops the child's stdin now.
     pub(crate) fn release_lease_now(&self) {
+        self.quitting.store(true, Ordering::SeqCst);
         let Ok(slot) = self.lease.lock() else {
             return;
         };

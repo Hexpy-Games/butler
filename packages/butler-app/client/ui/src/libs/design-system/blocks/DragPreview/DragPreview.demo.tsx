@@ -9,7 +9,7 @@ type Locale = "en-US" | "ko-KR";
 
 const COPY = {
   "en-US": { hint: "Move the pointer over the area", blocked: "Can't drop here", tab: "Search results — Shop" },
-  "ko-KR": { hint: "영역 위로 포인터를 움직여 보세요", blocked: "여기에는 놓을 수 없어요", tab: "검색 결과 — 쇼핑" },
+  "ko-KR": { hint: "영역 위로 포인터를 움직여 보십시오", blocked: "여기에는 놓을 수 없습니다", tab: "검색 결과 — 쇼핑" },
 } as const;
 
 export interface FloatingStageProps {

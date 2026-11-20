@@ -12,8 +12,8 @@ use gpui::{
 use crate::tokens::{Color, Length, Shadow};
 use crate::ui::card::{Card, CardPadding};
 use crate::ui::context::Ds;
-use crate::ui::convert;
 use crate::ui::typo::Typo;
+use crate::ui::{convert, strut};
 
 /// What the lifted copy shows in place of the card's own children, which gpui cannot draw twice.
 pub(super) type Preview = Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>;
@@ -50,7 +50,7 @@ impl Render for Lifted {
         if let Some(width) = self.width {
             surface = surface.w(width);
         }
-        div()
+        strut::body_root(div(), ds)
             .relative()
             .left(-self.offset.x)
             .top(-self.offset.y)

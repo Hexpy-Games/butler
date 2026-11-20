@@ -8,8 +8,8 @@ use crate::ui::{
 use butler_ds::ui::blocks::{
     drag_preview::DragPreview,
     nav_drop::{
-        DragRules, DropZone, DropZoneHit, DropZoneRules, NavDropScope, NavDropTarget,
-        NavRootDropZone,
+        DragRules, DropZone, DropZoneHit, DropZoneRules, NavDropPosition, NavDropScope,
+        NavDropTarget, NavRootDropZone,
     },
 };
 use gpui::{AnyElement, Context, SharedString, Window, div, prelude::*};
@@ -219,21 +219,20 @@ impl Shell {
                 },
             );
         let target = if row.session.is_some() {
-            target.hint(self.copy("Group together", "그룹으로 묶기"))
-        } else {
             target
-        };
-        let scope = NavDropScope::new(SharedString::from(format!("drop-{instance}")))
-            .combine_as(if row.session.is_some() {
-                butler_ds::ui::blocks::nav_drop::NavDropPosition::Group
-            } else {
-                butler_ds::ui::blocks::nav_drop::NavDropPosition::Inside
-            })
-            .row(target);
-        if enabled {
-            scope.drag(self.space_drag_rules(cx)).into_any_element()
+                .hint(self.copy("Group together", "그룹으로 묶기"))
+                .combine_as(NavDropPosition::Group)
         } else {
-            scope.into_any_element()
+            target.combine_as(NavDropPosition::Inside)
+        };
+        if enabled {
+            // A row of the tree's one scope (`space_drop_scope`), which it joins where it lays
+            // out: the slot opens across the nested lists, and the scope drives the drag.
+            target.into_any_element()
+        } else {
+            NavDropScope::new(SharedString::from(format!("drop-{instance}")))
+                .row(target)
+                .into_any_element()
         }
     }
     /// `conversationAt`: a library card dropped on a conversation row attaches to it

@@ -48,7 +48,7 @@ pub(super) fn copy(lang: Lang) -> Copy {
             latest: "최신으로 이동",
             unread: "새 메시지",
             label: "세션 정보",
-            prompt: "이 과제에 대해 말해 보세요",
+            prompt: "이 과제에 대해 말해 보십시오",
             chat: [
                 (true, "릴리스 노트 초안도 만들어줘."),
                 (false, "프리뷰 14 릴리스 노트 초안을 docs/release/preview-14.md에 만들었습니다. 읽어 보시고 커밋해 주세요."),

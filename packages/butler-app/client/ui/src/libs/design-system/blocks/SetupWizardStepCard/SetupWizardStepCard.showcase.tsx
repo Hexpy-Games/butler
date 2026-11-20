@@ -36,9 +36,9 @@ const labels = {
     consentTitle: "시작하기 전에 확인해 주세요", consentBody: "버틀러는 이 컴퓨터에서 파일을 만들고, 수정하고, 삭제하고, 명령어를 실행할 수 있습니다.",
     ready: "준비됨", decline: "동의하지 않음", agree: "동의하고 계속",
     pickTitle: "어떤 AI와 일할까요?", pickBody: "하나만 고르면 바로 시작합니다. 나중에 설정에서 바꿀 수 있습니다.",
-    signInTitle: "ChatGPT에 로그인하세요", signInBody: "로그인을 마치면 버틀러가 자동으로 이어갑니다.",
+    signInTitle: "ChatGPT에 로그인하십시오", signInBody: "로그인을 마치면 버틀러가 자동으로 이어갑니다.",
     waiting: "브라우저에서 기다리는 중", reopen: "브라우저 다시 열기", copy: "링크 복사", cancel: "취소",
-    timedOut: "로그인 시간이 지났습니다", timedOutBody: "브라우저에서 응답이 없었습니다. 다시 시도하세요.", retry: "다시 시도",
+    timedOut: "로그인 시간이 지났습니다", timedOutBody: "브라우저에서 응답이 없었습니다. 다시 시도하십시오.", retry: "다시 시도",
     welcome: "반갑습니다", welcomeBody: "버틀러는 이 컴퓨터에서 일을 대신합니다.", start: "시작하기", next: "다음 단계",
   },
 } as const;

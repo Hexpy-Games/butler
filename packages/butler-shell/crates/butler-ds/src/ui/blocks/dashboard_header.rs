@@ -77,7 +77,9 @@ impl RenderOnce for DashboardHeader {
             false,
             header
                 .child(copy)
-                .children(self.action.map(|action| div().flex_none().child(action))),
+                .children(self.action.map(|action| {
+                    strut::flex_scope(false, div().flex().flex_none().child(action))
+                })),
         )
     }
 }

@@ -44,7 +44,7 @@ fn words(lang: Lang) -> Words {
         Words {
             secure: "안전한 연결",
             insecure: "주의 요함",
-            sign_in: "계속하려면 로그인하세요",
+            sign_in: "계속하려면 로그인하십시오",
             email: "이메일",
             next: "다음",
             minimize: "창 최소화",

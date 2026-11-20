@@ -167,7 +167,7 @@ impl Inner {
 
     /// `recoverUnexpectedForegroundExit`: 3 recoveries per 60 s, then `Failed`.
     async fn recover(self: &Rc<Self>) {
-        if self.read(|state| state.quitting) {
+        if self.quitting() {
             return;
         }
         if !self.mutate(super::state::State::spend_budget) {

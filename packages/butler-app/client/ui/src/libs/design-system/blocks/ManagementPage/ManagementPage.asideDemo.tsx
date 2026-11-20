@@ -27,7 +27,7 @@ const copy = {
     shots: [["margin.png", "1.2 MB"], ["floating.png", "Uploading 40%"]],
   },
   "ko-KR": {
-    project: "버틀러", description: "데스크톱 클라이언트와 게이트웨이.", action: "새 과제", label: "과제 정보", prompt: "이 프로젝트에 대해 말해 보세요",
+    project: "버틀러", description: "데스크톱 클라이언트와 게이트웨이.", action: "새 과제", label: "과제 정보", prompt: "이 프로젝트에 대해 말해 보십시오",
     columns: [["계획", ["단축키 입력창 충돌", "릴리스 노트"]], ["진행 중", ["세션 정보 영역"]], ["완료", ["카드 모서리"]]],
     title: "세션 정보 영역", tags: ["프리뷰 14", "UI"], state: "진행 중 · 실행",
     intro: "대화 옆에 세션의 열린 요청, 과제, 결과물을 보여 줍니다.", heading: "완료 기준",

@@ -30,6 +30,7 @@ mod popup_window;
 mod popups;
 pub(crate) mod restore;
 pub(crate) mod shell_state;
+pub(crate) mod split_width;
 mod suggestions;
 mod tabs;
 mod toolbar;
@@ -44,6 +45,7 @@ pub(crate) fn init(cx: &mut gpui::App) {
     }
     visits::init(cx);
     restore::init(cx);
+    split_width::init(cx);
     model::BrowserState::init(cx);
     cx.set_global(shell_state::BrowserShell::default());
 }

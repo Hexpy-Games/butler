@@ -44,7 +44,8 @@ pub fn tab_stop(handle: &FocusHandle, on: bool) -> FocusHandle {
 /// Tab and Shift-Tab move focus along the tab stops, as a browser does; Tab with Ctrl, Alt or
 /// Cmd is not focus navigation and passes on. gpui binds no Tab, so a window gives its root this
 /// as an `on_key_down` listener (bubble phase: an overlay that traps or handles Tab sees it
-/// first). Returns whether it took the key.
+/// first). A single-line field focus lands on selects its text, as a browser's input does
+/// ([`crate::ui::text::select_focused`]). Returns whether it took the key.
 pub fn move_on_tab(event: &KeyDownEvent, window: &mut Window, cx: &mut App) -> bool {
     let m = event.keystroke.modifiers;
     if event.keystroke.key != "tab" || m.control || m.alt || m.platform || m.function {
@@ -55,6 +56,7 @@ pub fn move_on_tab(event: &KeyDownEvent, window: &mut Window, cx: &mut App) -> b
     } else {
         window.focus_next(cx);
     }
+    crate::ui::text::select_focused(window, cx);
     cx.stop_propagation();
     true
 }

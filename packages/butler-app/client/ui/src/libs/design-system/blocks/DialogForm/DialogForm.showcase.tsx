@@ -22,7 +22,7 @@ const labels = {
     deleteDetail: "Deletes it on this device. Linked conversations stay.", deleteAction: "Delete task", openDelete: "Delete task",
   },
   "ko-KR": {
-    title: "새 프로젝트", description: "프로젝트 이름을 정하고 폴더를 고르세요.", name: "프로젝트 이름", folder: "폴더",
+    title: "새 프로젝트", description: "프로젝트 이름을 정하고 폴더를 고르십시오.", name: "프로젝트 이름", folder: "폴더",
     value: "butler-site", path: "~/code/butler-site", cancel: "취소", create: "만들기", open: "새 프로젝트", close: "닫기",
     deleteTitle: "\u2018삭제 확인 · 긴 과제 제목이 여러 줄로 이어져도 작업 메뉴와 겹치지 않고 올바르게 표시됩니다\u2019 과제 삭제",
     deleteDetail: "이 기기에서 삭제합니다. 연결된 대화는 남습니다.", deleteAction: "과제 삭제", openDelete: "과제 삭제",

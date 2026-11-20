@@ -59,7 +59,7 @@ fn copy(lang: Lang) -> Copy {
             field_hint: "A disabled reason opens to the right, clear of the label and description above the control.",
         },
         Copy {
-            hint: "650ms 동안 올려 두거나 키보드로 포커스하세요. 툴팁은 컨트롤 이름만 보여 주며 동작을 담지 않습니다.",
+            hint: "650ms 동안 올려 두거나 키보드로 포커스하십시오. 툴팁은 컨트롤 이름만 보여 주며 동작을 담지 않습니다.",
             panel: "오른쪽 패널 보기",
             shortcut: "링크 복사",
             long: "대화를 그대로 둔 채 오른쪽 패널에서 프로젝트 대시보드를 엽니다",

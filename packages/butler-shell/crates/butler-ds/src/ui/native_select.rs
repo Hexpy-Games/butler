@@ -293,7 +293,6 @@ impl RenderOnce for NativeSelect {
             .or_else(|| self.choices().next())
             .map(|choice| choice.label.clone())
             .unwrap_or_default();
-        let shrink = strut::shrink_wrap(cx);
         let focused = handle.as_ref().is_some_and(|h| h.is_focused(window));
         let ring =
             focused && focus::visible(Ds::get(cx), true, false) && !focus::ring_handed_off(cx);
@@ -315,14 +314,7 @@ impl RenderOnce for NativeSelect {
             on_change: self.on_change.clone(),
             anchor,
         });
-        assemble(
-            &self,
-            label,
-            menu,
-            handle,
-            (focused, ring, shrink),
-            (layer, cx),
-        )
+        assemble(&self, label, menu, handle, (focused, ring), (layer, cx))
     }
 }
 
@@ -332,7 +324,7 @@ fn assemble(
     label: SharedString,
     menu: Rc<Menu>,
     handle: Option<gpui::FocusHandle>,
-    (focused, ring, shrink): (bool, bool, bool),
+    (focused, ring): (bool, bool),
     (layer, cx): (gpui::AnyElement, &App),
 ) -> gpui::AnyElement {
     let ds = Ds::get(cx);
@@ -396,7 +388,7 @@ fn assemble(
         None => root.cursor_default().into_any_element(),
     };
     // `width: max-content` (the default): the content's width, whatever the container does.
-    if select.stretch || !shrink {
+    if select.stretch {
         root
     } else {
         strut::max_content(root)
