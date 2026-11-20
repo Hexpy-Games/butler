@@ -56,7 +56,8 @@ fn arguments(profile: &Path, proxy: &str) -> Vec<OsString> {
         "--disable-breakpad".into(),
         "--disable-crash-reporter".into(),
         "--disable-domain-reliability".into(),
-        "--disable-features=Translate,MediaRouter,OptimizationHints,DialMediaRouteProvider".into(),
+        // SegmentationPlatform(UkmEngine): unused on-device segmentation that writes the profile on timers (#2249).
+        "--disable-features=Translate,MediaRouter,OptimizationHints,DialMediaRouteProvider,SegmentationPlatform,SegmentationPlatformUkmEngine".into(),
         "--password-store=basic".into(),
         "--use-mock-keychain".into(),
         "--mute-audio".into(),
