@@ -21,10 +21,13 @@ export function QueuedMessageItem({ item, onEdit, refresh }: {
     catch { showToast({ message: appCopy.interfaceFeedback.queueDeleteFailed, tone: "error" }); }
     finally { await refresh(); }
   };
-  const edit = () => {
-    // Queued attachments are not restored into the composer in this stage.
-    onEdit(item.record.text);
-    void remove();
+  const edit = async () => {
+    if (!client) return;
+    try {
+      await client.request(path, { method: "DELETE" });
+      onEdit(item.record.text);
+    } catch { showToast({ message: appCopy.interfaceFeedback.queueUpdateFailed, tone: "error" }); }
+    finally { await refresh(); }
   };
   const sendNow = async () => {
     try { await client?.request(`${path}/send-now`, { body: {} }); }
@@ -40,7 +43,8 @@ export function QueuedMessageItem({ item, onEdit, refresh }: {
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: t.length("--space-1") }}>
       <Text variant="caption" tone={failed ? "danger" : "tertiary"}>{status}</Text>
       {item.canSendNow ? <IconButton size="sm" variant="ghost" icon={icons.SendNow} label={copy.sendNow} onPress={sendNow} /> : null}
-      <IconButton size="sm" variant="ghost" icon={icons.Edit} label={failed ? copy.retryFailedMessage : copy.editQueuedMessage} onPress={edit} />
+      {!item.record.attachments?.length && !item.record.content_parts?.parts.length
+        ? <IconButton size="sm" variant="ghost" icon={icons.Edit} label={failed ? copy.retryFailedMessage : copy.editQueuedMessage} onPress={edit} /> : null}
       <IconButton size="sm" variant="ghost" icon={icons.Delete} label={failed ? copy.deleteFailedMessage : copy.deleteQueuedMessage} onPress={remove} />
     </View>
   </UserMessage>;

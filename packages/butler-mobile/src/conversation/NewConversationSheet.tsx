@@ -21,7 +21,7 @@ export function NewConversationSheet({ view }: { view: NavigationView | null }) 
   };
   const newChat = () => {
     if (!view) return;
-    if (!view.projects.length && !groups.length) start();
+    if (!projects.length && !groups.length) start();
     else setOpen(true);
   };
   return <>

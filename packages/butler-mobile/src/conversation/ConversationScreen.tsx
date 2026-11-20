@@ -103,6 +103,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
       onScrollEndDrag={({ nativeEvent }) => { atBottom.current = nearEnd(nativeEvent); }}
       onMomentumScrollEnd={({ nativeEvent }) => { atBottom.current = nearEnd(nativeEvent); }}
       onContentSizeChange={() => {
+        if (!rows.length) return;
         if (first.current || atBottom.current) {
           list.current?.getNativeScrollRef()?.scrollToEnd({ animated: !first.current && rows.length !== count.current });
         }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { router } from "expo-router";
 import type { CreateSessionRequest, CreateSessionResult, MessageFileRef, MessageSendRequest, MessageSendResult, SessionView } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy, reasoningEffortLabel } from "../../../butler-i18n/src/index.ts";
@@ -70,23 +70,22 @@ function useMessageSend({ id, project, group, text, setText, ready, attachments,
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
   const send = async () => {
-    if (!client || busy || !canSend) return;
+    if (inFlight.current || !client || busy || !canSend) return;
+    inFlight.current = true;
     onSend();
     setBusy(true);
     if (!id) onPending(text);
     const keys = attachments.items.filter(item => item.status === "ready" && item.file).map(item => item.key);
-    let replaced = false;
+    let sessionId = id;
+    const title = titleFromPrompt(text, appCopy.space.newChat);
     try {
-      let sessionId = id;
       if (!sessionId) {
-        const title = titleFromPrompt(text, appCopy.space.newChat);
         const body: CreateSessionRequest = { kind: project ? "project" : "chat", workspace_mode: "local", title,
           ...(project ? { project_id: project } : {}), ...(group ? { group_id: group } : {}) };
         const { session } = await client.request<CreateSessionResult>("/sessions", { body });
         sessionId = session.id;
-        router.replace({ pathname: "/chat/[id]", params: { id: sessionId, title } });
-        replaced = true;
       }
       const body: MessageSendRequest = { chat_id: sessionId, text: text.trim(),
         client_message_id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
@@ -95,11 +94,11 @@ function useMessageSend({ id, project, group, text, setText, ready, attachments,
       setText("");
       attachments.removeMany(keys);
       if (result.queued) await refreshQueue();
+      if (!id) router.replace({ pathname: "/chat/[id]", params: { id: sessionId, title } });
     } catch {
       showToast({ message: copy.chat.sendFailed, tone: "error" });
-      if (replaced) router.replace({ pathname: "/chat/new", params: { text,
-        ...(project ? { project } : {}), ...(group ? { group } : {}) } });
-    } finally { setBusy(false); onPending(null); }
+      if (!id && sessionId) router.replace({ pathname: "/chat/[id]", params: { id: sessionId, title, text } });
+    } finally { inFlight.current = false; setBusy(false); onPending(null); }
   };
   return { busy, setBusy, send };
 }
