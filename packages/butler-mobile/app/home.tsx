@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { FlatList, RefreshControl, ScrollView, View } from "react-native";
+import { FlatList, Platform, RefreshControl, ScrollView, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Badge, Button, ButtonGroup, EdgeFade, Icon, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
@@ -107,10 +107,11 @@ function Conversations() {
   }, [tree]);
   const paddingHorizontal = t.length("--space-4");
   const locale = useAppLocale();
-  return <Surface variant="base" grow edges={["left", "right"]}>
-    <NewConversationSheet view={view} />
+  return <>
+    {/* The list is the screen's root view: iOS ties the header to a scroll view only when nothing wraps it. */}
     <FlatList data={rows} keyExtractor={item => item.key} contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ flexGrow: 1, paddingHorizontal }}
+      style={{ backgroundColor: t.color("--color-surface-base") }}
+      contentContainerStyle={{ flexGrow: 1, paddingHorizontal, paddingBottom: Platform.OS === "android" ? t.length("--control-hit-target") + 2 * t.length("--space-4") : undefined }}
       onScroll={event => setScrolled(event.nativeEvent.contentOffset.y > 0)} scrollEventThrottle={16}
       refreshControl={<RefreshControl refreshing={refreshing} tintColor={t.color("--text-secondary")} onRefresh={() => {
         setRefreshing(true);
@@ -136,7 +137,8 @@ function Conversations() {
       ListHeaderComponent={lost ? <Text variant="caption" tone="tertiary">{copy.conversations.reconnecting}</Text> : undefined}
     />
     <EdgeFade edge="top" visible={scrolled} />
-  </Surface>;
+    <NewConversationSheet view={view} />
+  </>;
 }
 
 function SessionRow({ session, locale }: { session: NonNullable<SpaceRow["session"]>; locale: string }) {
