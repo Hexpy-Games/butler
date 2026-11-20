@@ -131,6 +131,10 @@ function ButtonSection() {
       <Cell name="icon start"><View style={{ flexDirection: "row" }}><Button label={en.action} onPress={noop} iconStart={icons.Plus} /></View></Cell>
       <Cell name="icon end"><View style={{ flexDirection: "row" }}><Button label={en.action} onPress={noop} iconEnd={icons.ChevronRight} /></View></Cell>
       <Cell name="stretch"><Button label={en.action} onPress={noop} stretch /></Cell>
+      <Cell name="sm"><View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Button size="sm" variant="ghost" label={en.action} onPress={noop} />
+        <Button size="sm" variant="secondary" label={en.action} onPress={noop} />
+      </View></Cell>
       {states.map(([name, forced]) => (
         <Cell key={name} name={`icon button · ${name}`}>
           <Forcing state={forced}><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} /></View></Forcing>

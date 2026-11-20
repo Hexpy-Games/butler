@@ -41,7 +41,7 @@ export function QueuedMessage({
     </View> : null}
     {attachments}
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: t.length("--space-1") }}>
-      {sendNowLabel && onSendNow ? <Button variant="ghost" label={sendNowLabel} onPress={onSendNow} disabled={disabled} /> : null}
+      {sendNowLabel && onSendNow ? <Button size="sm" variant="ghost" label={sendNowLabel} onPress={onSendNow} disabled={disabled} /> : null}
       {onEdit ? <IconButton size="sm" variant="ghost" icon={icons.Edit} label={editLabel ?? ""} onPress={onEdit} disabled={disabled} /> : null}
       <IconButton size="sm" variant="ghost" icon={icons.Delete} label={deleteLabel} onPress={onDelete} disabled={disabled} />
     </View>
