@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -43,6 +43,11 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
   const [dockHeight, setDockHeight] = useState(0);
   const messages = view?.messages.filter(message => message.role === "user"
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length))) ?? [];
+  useEffect(() => {
+    if (atBottom.current && messages.length) {
+      requestAnimationFrame(() => list.current?.getNativeScrollRef()?.scrollToEnd({ animated: true }));
+    }
+  }, [dockHeight]);
   return <Surface variant="base" grow edges={["left", "right"]}>
     <Stack.Screen options={{ ...options, title, headerLargeTitle: false,
       ...(Platform.OS === "ios" ? {
