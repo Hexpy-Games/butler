@@ -9,7 +9,8 @@ export function ContextRing({ ratio, label, onPress }: { ratio: number; label: s
   const stroke = t.length("--border-hairline") * 3.5;
   const radius = (diameter - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  return <Pressable onPress={onPress} hitSlop={(target - diameter) / 2}
+  return <Pressable onPress={onPress}
+    style={{ width: target, height: target, alignItems: "center", justifyContent: "center" }}
     accessibilityRole="button" accessibilityLabel={label}>
     <Svg width={diameter} height={diameter}>
       <Circle cx={diameter / 2} cy={diameter / 2} r={radius} fill="none"
