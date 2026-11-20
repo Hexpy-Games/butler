@@ -23,7 +23,7 @@ jobs:
   shell:
     needs: changes
     if: (github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/gpui-port') && needs.changes.outputs.shell == 'true'
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
