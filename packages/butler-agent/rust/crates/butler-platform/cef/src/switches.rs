@@ -10,9 +10,10 @@ pub const OSR_JOB: &str = "butler-osr-job";
 /// See [`OSR_JOB`].
 pub const OSR_APP: &str = "butler-osr-app";
 
-/// The value of `--disable-features` in [`QUIET`].
-pub const DISABLED_FEATURES: &str =
-    "Translate,MediaRouter,OptimizationHints,DialMediaRouteProvider";
+/// The value of `--disable-features` in [`QUIET`]. SegmentationPlatform(UkmEngine): Chrome's
+/// on-device usage segmentation, unused here, writes `segmentation_platform/ukm_db` and
+/// `shared_proto_db` on timers after start (#2249).
+pub const DISABLED_FEATURES: &str = "Translate,MediaRouter,OptimizationHints,DialMediaRouteProvider,SegmentationPlatform,SegmentationPlatformUkmEngine";
 
 /// Switch names without leading dashes, with their value where they take one.
 pub const QUIET: &[(&str, Option<&str>)] = &[

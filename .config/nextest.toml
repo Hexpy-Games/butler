@@ -35,3 +35,8 @@ slow-timeout = { period = "12m", terminate-after = 1 }
 [[profile.default.overrides]]
 filter = 'test(/^idle_resources::perf_idle_history_reads_and_footprint$/)'
 slow-timeout = { period = "15m", terminate-after = 1 }
+
+# Shell backend waits for the CEF startup tail to settle before its idle check (#2249).
+[[profile.default.overrides]]
+filter = 'test(/^browser_headless::assets::image_assets_collect_dedupe_crop_guard_serve_and_sweep$/)'
+slow-timeout = { period = "8m", terminate-after = 1 }
