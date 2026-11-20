@@ -1,18 +1,22 @@
 import { useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import type { ConversationMessage, SessionView } from "../../../butler-protocol/src/index.ts";
 import { toMarkdown } from "../../../butler-protocol/src/answer-blocks-markdown.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
-import { RADIUS } from "@/design/tokens";
-import { AttachmentTiles, Button, IconButton, icons, Markdown, showToast, Text, useTokens } from "@/ds";
+import { AttachmentTiles, Button, IconButton, icons, inlineSelectable, Markdown, MessageBubble, showToast, Text, TextSelectSheet, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useConversation } from "./live";
 import { documentKindLabel } from "./documents";
 import { BranchSheet } from "./BranchSheet";
 
-export function UserMessage({ message, children }: {
+export function messageCopyText(message: ConversationMessage): string {
+  return message.role === "user" ? message.text : [message.text, ...(message.answer_blocks ?? []).map(set => toMarkdown(set.spec, url => url))].join("\n\n");
+}
+
+export function UserMessage({ message, children, onLongPress }: {
   message: Pick<ConversationMessage, "text" | "attachments" | "content_parts">; children: React.ReactNode;
+  onLongPress?: () => void;
 }) {
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
@@ -20,22 +24,21 @@ export function UserMessage({ message, children }: {
   const { pairing } = useConversation();
   const references = message.content_parts?.parts.filter(part => part.type === "project_source_ref") ?? [];
   const text = message.content_parts ? message.content_parts.parts.filter(part => part.type === "text").map(part => part.text).join("") : message.text;
-  return <View style={{ alignSelf: "flex-end", maxWidth: "85%", gap: t.length("--space-1") }}>
-    {text.trim() ? <View style={{ backgroundColor: t.color("--user-message-bg"), borderRadius: t.length(RADIUS),
-      paddingVertical: t.length("--space-3"), paddingHorizontal: t.length("--space-4") }}>
-      <Text selectable>{text}</Text>
-    </View> : null}
-    {message.attachments?.length ? <AttachmentTiles layout="wrap" items={message.attachments.map(file => ({
-      key: file.file_id, name: file.safe_name, kind: file.kind === "image" || file.mime_type.startsWith("image/") ? "image" : "file",
-      image: pairing && (file.kind === "image" || file.mime_type.startsWith("image/"))
-        ? { uri: new URL(file.url, pairing.origin).href, headers: { Authorization: `Bearer ${pairing.deviceToken}` } } : undefined,
-      extension: file.safe_name.trim().match(/\.([^.]+)$/)?.[1]?.toUpperCase() || copy.chat.fileLabel,
-      meta: file.size_bytes < 1024 * 1024 ? `${Math.round(file.size_bytes / 1024)} KB` : `${(file.size_bytes / (1024 * 1024)).toFixed(1)} MB`,
-    }))} uploadingLabel={copy.chat.uploading} failedLabel={copy.chat.uploadFailed} /> : null}
-    {references.length ? <AttachmentTiles layout="wrap" items={references.map((part, index) => ({
-      key: `${part.source.kind}:${part.source.id}:${index}`, name: part.titleSnapshot, kind: "file",
-      extension: documentKindLabel(part.source.kind, appCopy),
-    }))} uploadingLabel={copy.chat.uploading} failedLabel={copy.chat.uploadFailed} /> : null}
+  return <View style={{ alignSelf: "flex-end", maxWidth: "80%", gap: t.length("--space-1") }}>
+    <Pressable onLongPress={onLongPress} style={{ gap: t.length("--space-1") }}>
+      {text.trim() ? <MessageBubble><Text selectable={inlineSelectable}>{text}</Text></MessageBubble> : null}
+      {message.attachments?.length ? <AttachmentTiles layout="wrap" items={message.attachments.map(file => ({
+        key: file.file_id, name: file.safe_name, kind: file.kind === "image" || file.mime_type.startsWith("image/") ? "image" : "file",
+        image: pairing && (file.kind === "image" || file.mime_type.startsWith("image/"))
+          ? { uri: new URL(file.url, pairing.origin).href, headers: { Authorization: `Bearer ${pairing.deviceToken}` } } : undefined,
+        extension: file.safe_name.trim().match(/\.([^.]+)$/)?.[1]?.toUpperCase() || copy.chat.fileLabel,
+        meta: file.size_bytes < 1024 * 1024 ? `${Math.round(file.size_bytes / 1024)} KB` : `${(file.size_bytes / (1024 * 1024)).toFixed(1)} MB`,
+      }))} uploadingLabel={copy.chat.uploading} failedLabel={copy.chat.uploadFailed} /> : null}
+      {references.length ? <AttachmentTiles layout="wrap" items={references.map((part, index) => ({
+        key: `${part.source.kind}:${part.source.id}:${index}`, name: part.titleSnapshot, kind: "file",
+        extension: documentKindLabel(part.source.kind, appCopy),
+      }))} uploadingLabel={copy.chat.uploading} failedLabel={copy.chat.uploadFailed} /> : null}
+    </Pressable>
     {children}
   </View>;
 }
@@ -45,24 +48,38 @@ export function Message({ message, latestTurn, sessionId, projectId }: {
 }) {
   const copy = useMobileCopy();
   const t = useTokens();
-  if (message.role === "user") return <UserMessage message={message}><MessageInfo message={message} /></UserMessage>;
+  const [selecting, setSelecting] = useState(false);
+  const onLongPress = inlineSelectable ? undefined : () => setSelecting(true);
+  const selectSheet = <TextSelectSheet open={selecting} onClose={() => setSelecting(false)}
+    title={copy.chat.selectText} closeLabel={copy.chat.close} text={messageCopyText(message)} />;
+  if (message.role === "user") return <>
+    <UserMessage message={message} onLongPress={onLongPress}>
+      <MessageInfo message={message} onSelectText={() => setSelecting(true)} />
+    </UserMessage>
+    {selectSheet}
+  </>;
+  const bubble = sessionId === "general";
   const failed = message.status === "failed" || message.delivery_state === "system_error" || message.delivery_state === "failed_system";
   const cancelled = message.status === "cancelled" || message.delivery_state === "cancelled";
-  return <View style={{ width: "100%", gap: t.length("--space-1") }}>
-    <View style={{ gap: t.length("--space-3") }}>
-      <Markdown text={message.text} />
+  return <View style={{ ...(bubble ? { alignSelf: "flex-start", maxWidth: "90%" } : { width: "100%" }), gap: t.length("--space-1") }}>
+    <Pressable onLongPress={onLongPress} style={{ gap: t.length(bubble ? "--space-1" : "--space-3") }}>
+      {bubble ? (message.text.trim() ? <MessageBubble><Markdown text={message.text} /></MessageBubble> : null)
+        : <Markdown text={message.text} />}
       {message.answer_blocks?.map((set, index) => <Markdown key={index} text={toMarkdown(set.spec, url => url)} />)}
       {failed ? <Text tone="danger">{copy.chat.failed}</Text> : null}
       {cancelled ? <Text tone="tertiary">{copy.chat.cancelled}</Text> : null}
-    </View>
+    </Pressable>
     {message.status !== "streaming" ? <MessageInfo message={message}
+      onSelectText={() => setSelecting(true)}
       sessionId={sessionId} projectId={projectId}
       retryable={failed && message.turn_id === latestTurn?.id && latestTurn?.retryable} /> : null}
+    {selectSheet}
   </View>;
 }
 
-function MessageInfo({ message, retryable, sessionId, projectId }: {
+function MessageInfo({ message, retryable, sessionId, projectId, onSelectText }: {
   message: ConversationMessage; retryable?: boolean; sessionId?: string; projectId?: string;
+  onSelectText(): void;
 }) {
   const [retrying, setRetrying] = useState(false);
   const [branch, setBranch] = useState<"chat" | "project" | null>(null);
@@ -79,8 +96,7 @@ function MessageInfo({ message, retryable, sessionId, projectId }: {
     {new Date(timestamp).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })}
   </Text> : null;
   const copyText = async () => {
-    const text = user ? message.text : [message.text, ...(message.answer_blocks ?? []).map(set => toMarkdown(set.spec, url => url))].join("\n\n");
-    await Clipboard.setStringAsync(text);
+    await Clipboard.setStringAsync(messageCopyText(message));
     showToast({ message: copy.chat.copied, tone: "success" });
   };
   const retry = async () => {
@@ -93,6 +109,7 @@ function MessageInfo({ message, retryable, sessionId, projectId }: {
     {retryable ? <Button variant="secondary" iconStart={icons.Retry} label={copy.chat.retry} onPress={retry} disabled={retrying} /> : null}
     {user ? time : null}
     <IconButton icon={icons.Copy} variant="ghost" size="sm" label={copy.chat.copy} onPress={copyText} />
+    <IconButton icon={icons.TextSelect} variant="ghost" size="sm" label={copy.chat.selectText} onPress={onSelectText} />
     {branchable ? <>
       <IconButton icon={icons.BranchChat} size="sm" label={appCopy.interfaceStatus.branchChat} onPress={() => setBranch("chat")} />
       <IconButton icon={icons.BranchProject} size="sm" label={appCopy.interfaceStatus.branchProject} onPress={() => setBranch("project")} />

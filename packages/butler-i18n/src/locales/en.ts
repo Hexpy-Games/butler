@@ -519,6 +519,7 @@ export const enUsCopy: AppCopy = {
     },
     chat: {
       copy: "Copy",
+      selectText: "Select text",
       copied: "Copied",
       retryFailed: "Could not retry.",
       attach: "Attach",
