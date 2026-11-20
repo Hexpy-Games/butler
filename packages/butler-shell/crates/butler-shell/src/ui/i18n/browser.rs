@@ -125,7 +125,7 @@ const KO: BrowserStrings = BrowserStrings {
     signed_in: "로그인 사용",
     move_to_conversation: "대화로 가져가기",
     new_conversation: "새 대화",
-    bring_tab: "탭 가져오기",
+    bring_tab: "내 탭 가져오기",
     history: "방문 기록",
     popup_blocked: "팝업 차단됨",
     popup_opened: "팝업 열림",
