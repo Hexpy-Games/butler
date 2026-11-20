@@ -155,7 +155,7 @@ impl Typo {
     }
 
     /// `as="span"`: the element is inline whatever the role (a Body in a block line).
-    pub(crate) fn as_span(mut self) -> Self {
+    pub(crate) fn span(mut self) -> Self {
         self.span = true;
         self
     }
@@ -425,7 +425,7 @@ impl Typo {
     }
 
     /// Whether the web draws this Typo as an inline box, the only kind a container's strut
-    /// reaches: an inline role or `as_span`, not truncated (`display: block`) or clamped
+    /// reaches: an inline role or `span`, not truncated (`display: block`) or clamped
     /// (`-webkit-box`).
     fn inline_box(&self) -> bool {
         (self.role.is_inline() || self.span) && !self.truncate && self.line_clamp.is_none()

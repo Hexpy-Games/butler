@@ -18,9 +18,9 @@ pub use tools::{BuildDetails, ToolDetails, ToolItem};
 
 use crate::tokens::{Color, Length};
 use crate::ui::context::Ds;
-use crate::ui::{convert, strut};
 use crate::ui::layout::{Space, Stack};
 use crate::ui::typo::{Tone, Typo, Weight, Wrap};
+use crate::ui::{convert, strut};
 
 /// The metrics a density sets.
 #[derive(Clone, Copy)]
@@ -161,7 +161,7 @@ impl RenderOnce for WorkActivityBlock {
         } else {
             Typo::body(self.title)
         }
-        .as_span()
+        .span()
         .selectable(Break::Line)
         .tone(Tone::Secondary)
         .weight(Weight::Regular)
