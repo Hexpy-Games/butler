@@ -21,13 +21,13 @@ struct Run {
     steward: Vec<(usize, usize, usize)>,
     /// Steward requests that carried more than one call.
     batched_rounds: usize,
-    /// Every page window the steward read: (tab, start chunk, text).
+    /// Every page window the steward read: (url, start chunk, text).
     reads: Vec<(String, u64, String)>,
     /// The steward's report as Butler received it.
     report: String,
     instructions: String,
-    /// The next step `web_search` and `browser_open` gave the steward.
-    guidance: [String; 2],
+    /// The next step `web_search` gave the steward.
+    guidance: String,
 }
 
 #[tokio::test]
@@ -41,8 +41,8 @@ async fn deleg_batch_01_batched_reads_take_fewer_rounds_with_the_same_content()
         json!({"serial":cost(&serial),"batched":cost(&batched)})
     );
 
-    // The steward is told to batch independent reads, and the search and
-    // open results name the reads that can share the next round.
+    // The steward is told to batch independent reads, and the search
+    // results name the reads that can share the next round.
     assert!(
         batched
             .instructions
@@ -50,9 +50,11 @@ async fn deleg_batch_01_batched_reads_take_fewer_rounds_with_the_same_content()
         "{}",
         batched.instructions
     );
-    for next in &batched.guidance {
-        assert!(next.contains("browser_read {tab}"), "{next}");
-    }
+    assert!(
+        batched.guidance.contains("web_read {url}"),
+        "{}",
+        batched.guidance
+    );
     // The same facts: every page window, and the report Butler got.
     assert_eq!(serial.reads.len(), 6, "{:?}", serial.reads);
     assert_eq!(batched.reads, serial.reads);
@@ -186,7 +188,7 @@ fn measure(exchanges: &[(bool, Value, Vec<Value>)]) -> Result<Run, HarnessError>
     let outputs = model::outputs(last);
     let mut reads = outputs
         .iter()
-        .filter(|output| output["reader"] == "butler-browser-tab")
+        .filter(|output| output["markdown"].is_string())
         .map(|output| {
             (
                 output["final_url"].as_str().unwrap().to_owned(),
@@ -219,7 +221,7 @@ fn measure(exchanges: &[(bool, Value, Vec<Value>)]) -> Result<Run, HarnessError>
         reads,
         report,
         instructions: last["instructions"].as_str().unwrap_or_default().to_owned(),
-        guidance: [next("results"), next("tabs")],
+        guidance: next("results"),
     })
 }
 

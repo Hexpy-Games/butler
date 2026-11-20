@@ -113,9 +113,6 @@ async fn execute_client(
     if call.name == "browser_open" && navigation::reviewed(owner, &args) {
         return navigation::execute(owner, invocation, call, occurrence, client, args).await;
     }
-    if call.name == "browser_open" && args.get("results").is_some() {
-        return open::execute(owner, invocation, call, occurrence, client).await;
-    }
     // A region makes the observation a close-up of the newest observation.
     let zoom = call.name == "browser_observe" && args.get("region").is_some();
     let model = invocation.model_execution.active_model_ref();

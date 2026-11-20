@@ -215,7 +215,7 @@ async fn representations_and_schema_errors() -> Result<(), HarnessError> {
     let cases = [
         (
             "browser_open",
-            json!({"url":"https://example.com/","signed_in":"false","results":null}),
+            json!({"url":"https://example.com/","signed_in":"false"}),
         ),
         (
             "browser_observe",
@@ -271,7 +271,6 @@ async fn representations_and_schema_errors() -> Result<(), HarnessError> {
         ]
     );
     assert_eq!(ops[0]["args"]["signed_in"], false);
-    assert!(ops[0]["args"].get("results").is_none());
     assert_eq!(ops[1]["args"]["scale"], 2.5);
     let step = &ops[3]["args"]["steps"][0];
     assert_eq!(step["click_count"], 2);

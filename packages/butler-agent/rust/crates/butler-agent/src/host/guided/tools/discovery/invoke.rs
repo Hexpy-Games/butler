@@ -338,11 +338,7 @@ fn native_admission(
             .unwrap_or("Tool is disabled.");
         let alternatives = if description.get("category").and_then(Value::as_str) == Some("search")
         {
-            if owner.browser_available() {
-                vec!["tool_search", "browser_open"]
-            } else {
-                vec!["tool_search", "web_read"]
-            }
+            vec!["tool_search", "web_read"]
         } else {
             vec!["tool_search"]
         };

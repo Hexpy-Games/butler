@@ -38,12 +38,6 @@ impl Research {
         outputs: &[Value],
     ) -> Vec<Value> {
         let browsing = tools.iter().any(|t| t["name"] == "browser_open");
-        let reader = if tools.iter().any(|t| t["name"] == "browser_read") {
-            "browser_read"
-        } else {
-            "web_read"
-        };
-        let contract = schema(tools, outputs, reader);
         let mut calls = Vec::new();
         for step in group {
             let url = step["read"].as_str().unwrap();
@@ -52,8 +46,14 @@ impl Research {
                 continue;
             }
             let tab = opened_tab(outputs, url);
+            let reader = if tab.is_some() && tools.iter().any(|t| t["name"] == "browser_read") {
+                "browser_read"
+            } else {
+                "web_read"
+            };
+            let contract = schema(tools, outputs, reader);
             if contract.is_null()
-                || (tab.is_none() && (browsing || contract.pointer("/properties/url").is_none()))
+                || (tab.is_none() && contract.pointer("/properties/url").is_none())
             {
                 read.status = Status::Done;
                 let reason = if contract.is_null() {
@@ -69,7 +69,7 @@ impl Research {
                 );
                 continue;
             }
-            let mut args = if browsing || tab.is_some() {
+            let mut args = if reader == "browser_read" {
                 json!({"tab":tab.expect("opened tab")})
             } else {
                 json!({"url":url})

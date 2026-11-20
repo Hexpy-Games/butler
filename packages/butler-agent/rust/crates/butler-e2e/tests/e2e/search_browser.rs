@@ -1,7 +1,5 @@
-//! Web research through Butler's browser: a general request that never says
-//! "browser" searches, opens the results as background tabs in parallel,
-//! reads them from those tabs and answers. A scripted model, an offline
-//! search fixture and this test as the App browser host; no network.
+//! Web research reads search results without opening tabs, with an attached
+//! App browser host and an offline search provider.
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -21,7 +19,7 @@ const PROMPT: &str =
     "What do the published tide tables say about spring tides? Compare the sources.";
 
 #[tokio::test]
-async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), HarnessError> {
+async fn research_reads_results_without_tabs() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let fixture = model::Fixture::start().await?;
     let setup = Setup::new("SEARCH-BROWSER")?
@@ -45,7 +43,6 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let host = host::Host::attach(admin).await?;
     let log = host.log.clone();
-    let parallel_opens = host.parallel_opens.clone();
     let served = tokio::spawn(host.serve());
     let turn = s.gw.say_turn("general", PROMPT).await?;
     let done =
@@ -60,129 +57,39 @@ async fn research_searches_opens_results_as_tabs_and_reads_them() -> Result<(), 
     let log = log.lock().unwrap().clone();
     let outputs = fixture.outputs.lock().unwrap().clone();
 
-    // The model saw one coherent toolset without asking for a browser.
     let tools = fixture.tools.lock().unwrap().clone();
-    for name in [
-        "web_search",
-        "browser_read",
-        "browser_open",
-        "browser_observe",
-        "browser_act",
-    ] {
+    for name in ["web_read", "browser_read"] {
+        assert!(tools.iter().any(|tool| tool["name"] == name), "{tools:?}");
+    }
+    let open = tools
+        .iter()
+        .find(|tool| tool["name"] == "browser_open")
+        .unwrap();
+    assert!(open["parameters"]["properties"].get("results").is_none());
+    assert!(outputs[0]["next"].as_str().unwrap().contains("web_read"));
+    assert_eq!(
+        log.iter().filter(|frame| frame["op"] == "tab.open").count(),
+        0
+    );
+    for (read, name) in outputs[1..].iter().zip(["alpha", "beta", "gamma"]) {
         assert!(
-            tools.iter().any(|t| t["name"] == name),
-            "{name} offered: {tools:?}"
+            read["markdown"]
+                .as_str()
+                .unwrap()
+                .contains(&host::page_text(&format!(
+                    "https://example.com/tides/{name}"
+                )))
         );
     }
-    assert!(!tools.iter().any(|t| t["name"] == "web_read"), "{tools:?}");
-    for index in [0, 2, 4] {
-        for key in [
-            "evidence_receipts",
-            "evidence_capability_receipts",
-            "public_web_evidence_items",
-        ] {
-            assert!(
-                outputs[index].get(key).is_none(),
-                "{key}: {}",
-                outputs[index]
-            );
-        }
-    }
-    let search = &outputs[0];
-    let ids = search["results"]
-        .as_array()
-        .unwrap()
+    let messages = s.gw.messages("general").await?;
+    let reply = messages
         .iter()
-        .map(|r| r["id"].as_str().unwrap().to_owned())
-        .collect::<Vec<_>>();
-    assert_eq!(ids, ["r1", "r2", "r3"], "{search}");
-
-    // All three opens reached the browser before any was answered.
-    let opened = &outputs[1];
-    assert_eq!(opened["status"], "ok", "{opened}");
-    assert_eq!(opened["tabs"].as_array().unwrap().len(), 3, "{opened}");
-    assert_eq!(
-        parallel_opens.load(std::sync::atomic::Ordering::SeqCst),
-        3,
-        "{log:?}"
-    );
-    for (tab, id) in opened["tabs"].as_array().unwrap().iter().zip(&ids) {
-        assert_eq!(tab["result"], id.as_str(), "{opened}");
-        assert_eq!(tab["status"], "ok", "{opened}");
-    }
-    assert!(
-        log.iter()
-            .filter(|f| f["op"] == "tab.open")
-            .all(|f| f["args"]["background"] == true),
-        "{log:?}"
-    );
-
-    let read = &outputs[2];
-    assert_eq!(read["schema"], "butler.browser-observation.v1", "{read}");
-    assert!(
-        read["untrusted_content"]["text"]
-            .as_str()
-            .unwrap()
-            .contains("Spring tides alpha")
-    );
-    assert_eq!(log.iter().filter(|f| f["op"] == "tab.observe").count(), 1);
-    assert!(!read.to_string().contains("End of the tide table."));
-    assert_eq!(outputs[3]["ok"], false, "{}", outputs[3]);
-    assert_eq!(
-        outputs[3]["error"]["code"], "tool_unavailable",
-        "{}",
-        outputs[3]
-    );
-    let full = &outputs[4];
-    assert_eq!(full["ok"], true, "{full}");
-    assert_eq!(full["content_has_more"], false, "{full}");
-    assert_eq!(full["returned_chunks"], full["total_chunks"]);
-    let markdown = full["markdown"].as_str().unwrap();
-    assert!(markdown.contains("Spring tides alpha"));
-    assert!(markdown.contains("End of the tide table."));
-    // Evidence chunks intentionally overlap. Identify source entries rather
-    // than treating repeated context at a chunk boundary as another entry.
-    let mut previous = 0;
-    let entries = host::entries();
-    assert_eq!(entries.len(), 60);
-    for entry in &entries {
-        let offset = markdown.find(entry).expect("every source entry arrives");
-        assert!(offset >= previous, "source order is preserved");
-        previous = offset + entry.len();
-    }
-    assert_eq!(log.iter().filter(|f| f["op"] == "tab.read").count(), 2);
-    assert_eq!(
-        outputs[6]["error"]["code"], "disabled_tool",
-        "{}",
-        outputs[6]
-    );
-    assert_eq!(outputs[7]["ok"], true, "{}", outputs[7]);
-    assert!(
-        outputs[7]["markdown"]
-            .as_str()
-            .unwrap()
-            .contains("End of the tide table.")
-    );
-    assert!(!log.iter().any(|f| f["op"] == "reader.render"));
-    eprintln!(
-        "long-page evidence: observe_chars={}, reader_chars={}, complete_entries={}, end_present=true",
-        read["untrusted_content"]["text"].as_str().unwrap().len(),
-        markdown.len(),
-        entries.len()
-    );
-    assert!(read.get("image").is_none());
-    if let Some(dir) = std::env::var_os("BUTLER_SEARCH_BROWSER_EVIDENCE") {
-        std::fs::write(
-            std::path::Path::new(&dir).join("model-tools.json"),
-            serde_json::to_vec_pretty(&tools)?,
-        )?;
-    }
-    let requests =
-        super::outbound_http::http_calls(&s, &format!("{}/search", fixture.base)).await?;
-    assert_eq!(
-        requests.len(),
-        1,
-        "one record for the single search request"
-    );
+        .find(|message| {
+            message["role"] == "assistant"
+                && message["turn_id"] == turn
+                && message["status"] == "delivered"
+        })
+        .unwrap();
+    assert!(reply["text"].as_str().unwrap().contains("6.1 m"), "{reply}");
     s.finish().await
 }
