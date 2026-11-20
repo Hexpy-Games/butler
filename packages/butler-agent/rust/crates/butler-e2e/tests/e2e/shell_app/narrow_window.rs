@@ -139,8 +139,7 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
             "layout split chat-card browser-area",
             "size 1200 800",
             "wait 600",
-            "compose",
-            "focus-next 7",
+            "click split-handle",
             "key end",
             "wait 600",
             "layout end chat-card browser-area",
@@ -243,8 +242,8 @@ async fn shell_app_10_narrow_window_keeps_the_desktop_layout() -> Result<(), Har
         (chat_width - expected).abs() <= 1. && pane[2] >= room - chat_width - 0.5,
         "chat {chat:?}, pane {pane:?}, room {room}, expected chat {expected}"
     );
-    // (i) At 1200 px both minimums can hold. The split handle is the 7th tab stop after the
-    // composer. End puts the chat at room - 375 (the pane keeps its minimum) and Home at 340; a
+    // (i) At 1200 px both minimums can hold. A press on the split handle focuses it.
+    // End puts the chat at room - 375 (the pane keeps its minimum) and Home at 340; a
     // drag far past the limit stops at room - 375 too. The chat then keeps that width when the
     // window grows to 1300 px (the pane takes the extra 100): the clamped width went back to the
     // owner through `on_chat_width_change`, the only place a width survives a resize.

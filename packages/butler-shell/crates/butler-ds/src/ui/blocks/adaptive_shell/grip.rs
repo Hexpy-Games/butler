@@ -354,7 +354,11 @@ impl RenderOnce for ResizeHandle {
             .child(pill(self.id.clone(), &shown, ds))
             .children(hint);
         if live && on_key.is_some() {
-            el = el.track_focus(&tracked);
+            // A press focuses the handle, as a pointerdown focuses the web's tabIndex=0 separator, so the keys work right after it.
+            let press = tracked.clone();
+            el = el
+                .track_focus(&tracked)
+                .capture_any_mouse_down(move |_, window, cx| window.focus(&press, cx));
         }
         if let Some(on_key) = on_key.filter(|_| live) {
             el = el.on_key_down(move |event, window, cx| on_key(event, window, cx));
