@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Image, Platform, useWindowDimensions, View } from "react-native";
+import { Platform, useWindowDimensions, View } from "react-native";
 import { useTokens } from "../../design/useTokens";
 import { AttachmentTiles, type AttachmentTile } from "../AttachmentTiles";
 import { Badge, UnreadDot } from "../Badge";
@@ -20,7 +20,7 @@ import { Switch } from "../Switch";
 import { Text, type TextTone, type TextVariant } from "../Text";
 import { TextField } from "../TextField";
 import { showToast, ToastView, type ToastTone } from "../Toast";
-import { en, ko, long, markdown, type Strings } from "./fixtures";
+import { en, ko, long, markdown, sampleImage, type Strings } from "./fixtures";
 
 const noop = () => {};
 type Forced = "pressed" | "focused" | null;
@@ -294,9 +294,8 @@ function ComposerSection() {
 }
 
 function AttachmentTilesSection() {
-  const image = Image.resolveAssetSource(require("../../../../../assets/readme/mark-light.png"))!;
   const items: AttachmentTile[] = [
-    { key: "image", name: "Photo.png", kind: "image", image: { uri: image.uri }, extension: "PNG" },
+    { key: "image", name: "Photo.png", kind: "image", image: { uri: sampleImage }, extension: "PNG" },
     { key: "file", name: "Document.pdf", kind: "file", extension: "PDF", meta: "128 KB" },
   ];
   return <>

@@ -1,3 +1,6 @@
+/** A 32×32 gradient PNG for image-tile examples (inline, so the gallery needs no asset file). */
+export const sampleImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAPElEQVR4nO3QsQ0AIBDDwCCFXZiJiRmLEVx951P6SF7nvp3MrWlG1QNiImQiZCJkImQiZCJkImQiZKKQD9AtAt9VDH+CAAAAAElFTkSuQmCC";
+
 export interface Strings {
   action: string;
   cancel: string;
