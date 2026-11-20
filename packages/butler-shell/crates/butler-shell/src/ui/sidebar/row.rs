@@ -15,7 +15,7 @@ use butler_ds::ui::{
     icon::{IconSize, icon},
     icon_button::IconButton,
     icon_slot::{IconSlot, SlotSize},
-    layout::Space,
+    layout::{Basis, Cross, Justify, MaxWidth, MinWidth, Space, Stack, WithItem},
     typo::{Tone, Typo, Wrap},
     unread_dot::UnreadDot,
 };
@@ -360,7 +360,7 @@ impl Shell {
         }))
         .into_any_element()
     }
-    pub(super) fn space_row_meta(&self, row: &SpaceRowData, cx: &Context<Self>) -> AnyElement {
+    pub(super) fn space_row_meta(&self, row: &SpaceRowData, _cx: &Context<Self>) -> AnyElement {
         let trailing = if self.sidebar.tab == super::Tab::Recent {
             Typo::caption(self.recent_age(&row.updated_at))
                 .tabular()
@@ -369,33 +369,32 @@ impl Shell {
                 .into_any_element()
         } else {
             let (status, progress) = self.space_row_status(row);
-            let mut label = div()
-                .flex()
-                .min_w_0()
-                .max_w(gpui::relative(0.6))
+            let mut label = Stack::row()
+                .gap(Space::None)
+                .min_width(MinWidth::Zero)
+                .max_width(MaxWidth::ThreeFifths)
                 .child(Typo::caption(status).tone(Tone::Secondary).truncate());
             if !progress.is_empty() {
                 label = label.child(
-                    div().flex_none().child(
-                        Typo::caption(progress)
-                            .tone(Tone::Secondary)
-                            .wrap(Wrap::Pre),
-                    ),
+                    Typo::caption(progress)
+                        .tone(Tone::Secondary)
+                        .wrap(Wrap::Pre)
+                        .shrink(false),
                 );
             }
             label.into_any_element()
         };
-        div()
-            .flex()
-            .items_baseline()
-            .justify_between()
-            .gap(Ds::get(cx).len(butler_ds::tokens::Length::SpaceSm))
+        Stack::row()
+            .cross(Cross::Baseline)
+            .justify(Justify::Between)
+            .gap(Space::Sm)
             .child(
-                div().flex_1().min_w_0().child(
-                    Typo::caption(row.location.clone())
-                        .tone(Tone::Secondary)
-                        .truncate(),
-                ),
+                Typo::caption(row.location.clone())
+                    .tone(Tone::Secondary)
+                    .grow()
+                    .basis(Basis::Zero)
+                    .min_width(MinWidth::Zero)
+                    .truncate(),
             )
             .child(trailing)
             .into_any_element()
