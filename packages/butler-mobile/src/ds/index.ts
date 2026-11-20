@@ -28,3 +28,6 @@ export { ProviderLogo, type ProviderLogoProps } from "./ProviderLogo";
 export type { ProviderLogoName } from "./internal/providerLogoXml";
 export { Meter } from "./Meter";
 export { UsageBars, type UsageBarsProps, type UsageBarsBucket, type UsageBarsSegment } from "./UsageBars";
+export { WorkCard, type WorkCardProps } from "./WorkCard";
+export { StatusLine, type StatusLineProps } from "./StatusLine";
+export { ThinkingMark } from "./ThinkingMark";

@@ -1,5 +1,6 @@
+import type { InterfaceTextReference } from "../../butler-i18n/src/index.ts";
 import type { AnswerBlockSet } from "./app-contracts.ts";
-import type { ChatKind, MessageContent, MessageFileRef, SessionSummary, TurnState } from "./message-session-contracts.ts";
+import type { ChatKind, MessageContent, MessageFileRef, ProgressSummaryRow, SessionSummary, TurnState, WorkerActivityWorkBlock } from "./message-session-contracts.ts";
 
 export type RuntimeDeliveryState =
   | "running"
@@ -18,7 +19,39 @@ export type SessionViewStatus =
   | "failed"
   | "cancelled";
 
+export interface SessionTurnProgress {
+  summary?: string;
+  summary_reference?: InterfaceTextReference;
+  started_at?: string;
+  safe_progress_rows: ProgressSummaryRow[];
+}
+
+export interface SessionRelation {
+  relation_id: string;
+  parent_session_id: string;
+  parent_turn_id: string;
+  child_session_id: string;
+  anchor_message_id: string;
+  created_at: string;
+}
+
+export interface StewardChild {
+  relation: SessionRelation;
+  session_id: string;
+  title: string;
+  status: string;
+  active_turn: SessionViewTurn | null;
+  latest_turn: SessionViewTurn | null;
+  waiting_for_children?: boolean;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
+  result: { status: "success" | "blocked" | "failed" | "cancelled" } | null;
+  terminal: boolean;
+  updated_at: string;
+}
+
 export interface SessionViewTurn {
+  progress?: SessionTurnProgress;
   id: string;
   state: TurnState;
   safe_status_label?: string;
@@ -57,6 +90,9 @@ export interface ConversationMessage {
   role: MessageRole;
   text: string;
   answer_blocks?: AnswerBlockSet[];
+  work_blocks?: WorkerActivityWorkBlock[];
+  /** Set when Butler started the turn (schedule, canon step, delegated result); its request is not in the chat. */
+  initiated?: { kind: string };
   attachments?: MessageFileRef[];
   status?: string;
   delivery_state?: RuntimeDeliveryState;
@@ -68,6 +104,7 @@ export interface ConversationMessage {
 }
 
 export interface SessionView {
+  steward_children?: StewardChild[];
   session_id: string;
   kind: ChatKind;
   project_id?: string;

@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Platform, View } from "react-native";
 import { Stack } from "expo-router";
 import { useScrollEdgeEffectRef } from "@bsky.app/expo-scroll-edge-effect";
-import type { SessionView } from "../../../butler-protocol/src/index.ts";
+import type { SessionView, StewardChild } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
-import { Button, ButtonGroup, EdgeFade, IconButton, icons, Spinner, Surface, Text, useHeaderInset, useHeaderOptions, useTokens } from "@/ds";
+import { Button, ButtonGroup, EdgeFade, IconButton, icons, Spinner, StatusLine, Surface, Text, useHeaderInset, useHeaderOptions, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { pendingDecision, withQuestionAnswers, type ConversationRow, type PendingDecision } from "./approval";
 import { ApprovalCard, BrowserHandoffCard } from "./ApprovalCard";
@@ -16,6 +16,9 @@ import { Message, UserMessage } from "./Message";
 import { useSessionQueue } from "./useSessionQueue";
 import { queuedConversationItems } from "./queue";
 import { QueuedMessageItem } from "./QueuedMessageItem";
+import { anchoredStewardChildren } from "./stewardAnchors";
+import { turnLatest } from "./workStatus";
+import { useElapsed } from "./useElapsed";
 
 export function ConversationScreen({ id, title, project, group, initialText = "" }: {
   id?: string; title: string; project?: string; group?: string; initialText?: string;
@@ -45,14 +48,14 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
     {error ? <View style={{ flex: 1, justifyContent: "center", padding: t.length("--space-4"), gap: t.length("--space-4") }}>
       <Text tone="danger">{copy.chat.loadFailed}</Text>
       <ButtonGroup><Button label={copy.chat.retry} onPress={reload} /></ButtonGroup>
-    </View> : <ConversationMessages {...session} dockHeight={dockHeight} sends={sends}>
+    </View> : <ConversationMessages {...session} dockHeight={dockHeight} sends={sends}>{anchors => <>
       {pending !== null ? <UserMessage message={{ text: pending }}>
         <Text variant="caption" tone="tertiary">{appCopy.sidebar.newSessionStarting}</Text>
       </UserMessage> : null}
       {items.map(item => <QueuedMessageItem key={item.key} item={item} onEdit={setText} refresh={queue.refresh} />)}
-      {view ? <TurnStatus view={view} hasDecision={hasDecision} /> : null}
+      {view ? <TurnStatus view={view} hasDecision={hasDecision} anchors={anchors} /> : null}
       {view && decision ? <PendingRequest decision={decision} view={view} reload={reload} /> : null}
-    </ConversationMessages>}
+    </>}</ConversationMessages>}
     <ChatComposer id={id} project={project} group={group} view={view} hasDecision={hasDecision}
       text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh} onHeightChange={setDockHeight}
       onSend={() => setSends(value => value + 1)} />
@@ -61,7 +64,7 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
 
 function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, sends, children }: {
   view: SessionView | null; loadingEarlier: boolean; loadEarlier(): void;
-  dockHeight: number; sends: number; children: React.ReactNode;
+  dockHeight: number; sends: number; children: (anchors: ReturnType<typeof anchoredStewardChildren>) => React.ReactNode;
 }) {
   const copy = useMobileCopy();
   const t = useTokens();
@@ -78,8 +81,10 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
   const dragging = useRef(false);
   const [bottom, setBottom] = useState(true);
   const [scrolled, setScrolled] = useState(false);
+  const anchors = anchoredStewardChildren(view?.messages ?? [], view);
   const rows = withQuestionAnswers(view?.messages ?? [], view?.question_answers ?? [], message => message.role === "user"
-    || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length)));
+    || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length || anchors.has(message.id)
+      || (view?.session_id !== "general" && message.status !== "streaming" && !!message.work_blocks?.length))));
   useEffect(() => { atBottom.current = true; setBottom(true); }, [sends]);
   useEffect(() => {
     if (atBottom.current && rows.length) {
@@ -89,7 +94,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
   return <>
     <FlatList ref={ref} data={rows} keyExtractor={message => message.id}
       renderItem={({ item }) => "questionAnswer" in item ? <QuestionAnswerCard answer={item.questionAnswer} /> : <Message message={item}
-        latestTurn={view?.latest_turn} sessionId={view?.session_id} projectId={view?.project_id} />}
+        stewardChild={anchors.get(item.id)} latestTurn={view?.latest_turn} sessionId={view?.session_id} projectId={view?.project_id} />}
       maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
       contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerInset }} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
       keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" scrollEventThrottle={16}
@@ -118,7 +123,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
         count.current = rows.length;
       }}
       ListHeaderComponent={loadingEarlier ? <Spinner label={copy.chat.earlier} /> : undefined}
-      ListFooterComponent={<View style={{ paddingBottom: dockHeight, gap: t.length("--space-4") }}>{children}</View>}
+      ListFooterComponent={<View style={{ paddingBottom: dockHeight + t.length("--space-4"), gap: t.length("--space-4") }}>{children(anchors)}</View>}
     />
     <EdgeFade edge="top" offset={headerInset} visible={scrolled} />
     <EdgeFade edge="bottom" offset={dockHeight} visible={!bottom} />
@@ -135,16 +140,27 @@ type ScrollMetrics = { contentSize: { height: number }; layoutMeasurement: { hei
 const nearEnd = ({ contentSize, layoutMeasurement, contentOffset }: ScrollMetrics) =>
   contentSize.height - layoutMeasurement.height - contentOffset.y < 48;
 
-function TurnStatus({ view, hasDecision }: { view: SessionView; hasDecision: boolean }) {
+function TurnStatus({ view, hasDecision, anchors }: {
+  view: SessionView; hasDecision: boolean; anchors: ReturnType<typeof anchoredStewardChildren>;
+}) {
   const copy = useMobileCopy();
-  const t = useTokens();
+  const locale = useAppLocale();
+  const appCopy = getAppCopy(locale);
   const turn = view.active_turn;
-  if (turn?.state === "waiting_for_form") return hasDecision ? null : <Text tone="secondary">{copy.chat.waitingForYou}</Text>;
+  const elapsed = useElapsed(turn?.progress?.started_at ?? turn?.created_at);
+  if (!turn) {
+    const child = [...anchors.values()].at(-1)?.child;
+    return child && (child.active_turn || child.waiting_for_children) ? <DelegatedTurnStatus child={child} /> : null;
+  }
+  if (turn.state === "waiting_for_form") return hasDecision ? null : <StatusLine label={copy.chat.waitingForYou} active={false} />;
   const newest = view.messages.at(-1);
-  if (!turn || !["queued", "accepted", "thinking", "streaming", "waiting_for_tool", "cancelling", "retrying"].includes(turn.state)
+  if (!["queued", "accepted", "thinking", "streaming", "waiting_for_tool", "cancelling", "retrying"].includes(turn.state)
     || (newest?.role === "assistant" && newest.status === "streaming")) return null;
-  return <View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
-    <Spinner label={copy.chat.thinking} />
-    <Text tone="secondary">{turn.safe_status_label ?? copy.chat.thinking}</Text>
-  </View>;
+  return <StatusLine label={turnLatest(turn, locale) ?? appCopy.interfaceStatus.generating} elapsed={elapsed} active />;
+}
+
+function DelegatedTurnStatus({ child }: { child: StewardChild }) {
+  const locale = useAppLocale();
+  const elapsed = useElapsed(child.relation.created_at);
+  return <StatusLine label={turnLatest(child.active_turn, locale) ?? child.title} elapsed={elapsed} active />;
 }

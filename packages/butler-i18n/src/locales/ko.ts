@@ -545,6 +545,7 @@ export const koKrCopy: AppCopy = {
       stop: "중지",
       thinking: "작업하는 중…",
       waitingForYou: "컴퓨터에서 답을 기다리고 있습니다.",
+      openWork: (title) => `${title} 열기`,
       failed: "답변을 끝내지 못했습니다.",
       cancelled: "중지했습니다.",
       sendFailed: "보내지 못했습니다. 다시 시도하세요.",

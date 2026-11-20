@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import type { ConversationMessage, SessionView } from "../../../butler-protocol/src/index.ts";
+import type { ConversationMessage, SessionView, SessionViewTurn, StewardChild } from "../../../butler-protocol/src/index.ts";
 import { toMarkdown } from "../../../butler-protocol/src/answer-blocks-markdown.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { AttachmentTiles, Button, IconButton, icons, inlineSelectable, Markdown, MessageBubble, showToast, Text, TextSelectSheet, useTokens } from "@/ds";
@@ -9,6 +9,7 @@ import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useConversation } from "./live";
 import { documentKindLabel } from "./documents";
 import { BranchSheet } from "./BranchSheet";
+import { CompletedWorkCards, StewardWorkCard } from "./WorkCards";
 
 export function messageCopyText(message: ConversationMessage): string {
   return message.role === "user" ? message.text : [message.text, ...(message.answer_blocks ?? []).map(set => toMarkdown(set.spec, url => url))].join("\n\n");
@@ -43,7 +44,8 @@ export function UserMessage({ message, children, onLongPress }: {
   </View>;
 }
 
-export function Message({ message, latestTurn, sessionId, projectId }: {
+export function Message({ message, latestTurn, sessionId, projectId, stewardChild }: {
+  stewardChild?: { child: StewardChild; turn: SessionViewTurn };
   message: ConversationMessage; latestTurn?: SessionView["latest_turn"]; sessionId?: string; projectId?: string;
 }) {
   const copy = useMobileCopy();
@@ -62,6 +64,7 @@ export function Message({ message, latestTurn, sessionId, projectId }: {
   const failed = message.status === "failed" || message.delivery_state === "system_error" || message.delivery_state === "failed_system";
   const cancelled = message.status === "cancelled" || message.delivery_state === "cancelled";
   return <View style={{ ...(bubble ? { alignSelf: "flex-start", maxWidth: "90%" } : { width: "100%" }), gap: t.length("--space-1") }}>
+    {!bubble && message.status !== "streaming" ? <CompletedWorkCards blocks={message.work_blocks ?? []} /> : null}
     <Pressable onLongPress={onLongPress} style={{ gap: t.length(bubble ? "--space-1" : "--space-3") }}>
       {bubble ? (message.text.trim() ? <MessageBubble><Markdown text={message.text} /></MessageBubble> : null)
         : <Markdown text={message.text} />}
@@ -69,7 +72,8 @@ export function Message({ message, latestTurn, sessionId, projectId }: {
       {failed ? <Text tone="danger">{copy.chat.failed}</Text> : null}
       {cancelled ? <Text tone="tertiary">{copy.chat.cancelled}</Text> : null}
     </Pressable>
-    {message.status !== "streaming" ? <MessageInfo message={message}
+    {stewardChild ? <StewardWorkCard {...stewardChild} /> : null}
+    {message.status !== "streaming" && message.text.trim() ? <MessageInfo message={message}
       onSelectText={() => setSelecting(true)}
       sessionId={sessionId} projectId={projectId}
       retryable={failed && message.turn_id === latestTurn?.id && latestTurn?.retryable} /> : null}
