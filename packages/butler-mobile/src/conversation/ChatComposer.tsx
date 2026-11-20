@@ -2,10 +2,11 @@ import { useRef, useState } from "react";
 import { router } from "expo-router";
 import type { CreateSessionRequest, CreateSessionResult, MessageFileRef, MessageSendRequest, MessageSendResult, ProjectDashboardDocument, SessionView } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy, reasoningEffortLabel } from "../../../butler-i18n/src/index.ts";
-import { AttachmentTiles, Button, Composer, ComposerDock, ContextRing, icons, ListRow, Sheet, showToast } from "@/ds";
+import { AttachmentTiles, IconButton, Composer, ComposerDock, ContextRing, icons, ListRow, Sheet, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useConversation } from "./live";
-import { ContextBody } from "./SessionInfoSheet";
+import { ContextUsage } from "./usage/ContextUsage";
+import { ModelMark } from "./ModelMark";
 import { ModelSheet } from "./ModelSheet";
 import { useAttachments } from "./useAttachments";
 import { useControls } from "./useControls";
@@ -52,13 +53,16 @@ export function ChatComposer({ id, project, group, view, hasDecision, text, setT
         upload: item.status === "ready" ? undefined : item.status,
       }))} onRemove={attachments.remove} removeLabel={copy.chat.removeAttachment}
         uploadingLabel={copy.chat.uploading} failedLabel={copy.chat.uploadFailed} /> : null}
-      leading={model.controls ? <Button variant="ghost" iconEnd={icons.ChevronDown} onPress={() => setSheet("model")}
-        label={`${model.current?.display_name ?? model.controls.model} · ${reasoningEffortLabel(model.controls.reasoning_effort, locale)}`} /> : null}
-      trailing={view?.context ? <ContextRing ratio={view.context.ratio} label={copy.chat.contextUsed(Math.round(view.context.ratio * 100))}
-        onPress={() => setSheet("context")} /> : null} />
+      trailing={<>
+        {view?.context ? <ContextRing ratio={view.context.ratio} label={copy.chat.contextUsed(Math.round(view.context.ratio * 100))}
+          onPress={() => setSheet("context")} /> : null}
+        {model.controls ? <IconButton size="control" variant="ghost" icon={<ModelMark model={model.current} />}
+          label={`${model.current?.display_name ?? model.controls.model} · ${reasoningEffortLabel(model.controls.reasoning_effort, locale)}`}
+          onPress={() => setSheet("model")} /> : null}
+      </>} />
     <ModelSheet {...model} open={sheet === "model"} onClose={() => setSheet(null)} />
     <Sheet open={sheet === "context"} onClose={() => setSheet(null)} title={copy.chat.context} cancelLabel={copy.chat.close}>
-      {view?.context ? <ContextBody context={view.context} /> : null}
+      {view?.context ? <ContextUsage open={sheet === "context"} context={view.context} sessionId={id} models={model.models} model={model.current} /> : null}
     </Sheet>
     <Sheet open={sheet === "attach"} onClose={() => setSheet(null)} title={copy.chat.attach} cancelLabel={copy.chat.close}
       onClosed={() => {

@@ -538,8 +538,6 @@ export const koKrCopy: AppCopy = {
       fileLabel: "파일",
       removeAttachment: (name) => `${name} 빼기`,
       contextUsed: (percent) => `${percent}% 사용`,
-      contextTokens: (used, budget) => `${budget} 토큰 중 ${used}`,
-      contextCompact: (at) => `${at}에서 자동 압축`,
 
       placeholder: "버틀러에게 보내기",
       send: "보내기",

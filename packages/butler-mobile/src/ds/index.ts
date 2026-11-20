@@ -21,3 +21,7 @@ export { useHeaderInset, useHeaderOptions } from "./header";
 export { ContextRing } from "./ContextRing";
 export { DecisionCard, type DecisionCardProps } from "./DecisionCard";
 export { QueuedMessage, type QueuedMessageProps } from "./QueuedMessage";
+export { ProviderLogo, type ProviderLogoProps } from "./ProviderLogo";
+export type { ProviderLogoName } from "./internal/providerLogoXml";
+export { Meter } from "./Meter";
+export { UsageBars, type UsageBarsProps, type UsageBarsBucket, type UsageBarsSegment } from "./UsageBars";

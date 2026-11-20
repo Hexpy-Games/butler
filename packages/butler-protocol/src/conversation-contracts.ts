@@ -138,6 +138,10 @@ export type MessageSendResult = { accepted?: boolean; queued?: QueuedMessageReco
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface ModelSummary {
+  /** Local server kind; only models on a local server have it. */
+  platform?: "llama_cpp" | "ollama" | "lm_studio" | "custom";
+  /** How the model's provider is signed in. */
+  auth_type?: "api_key" | "chatgpt_oauth";
   provider_id: string;
   provider_label: string;
   model_id: string;
@@ -174,6 +178,8 @@ export interface SessionControlsView {
 }
 
 export interface ContextDetails {
+  provider_id?: string;
+  updated_at?: string;
   used_tokens: number;
   budget_tokens: number;
   ratio: number;

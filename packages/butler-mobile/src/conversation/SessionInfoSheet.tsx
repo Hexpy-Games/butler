@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
-import type { ContextDetails, SessionPendingAsks, SessionView } from "../../../butler-protocol/src/index.ts";
+import type { SessionPendingAsks, SessionView } from "../../../butler-protocol/src/index.ts";
 import { ListRow, Sheet, Text, useTokens } from "@/ds";
 import { useMobileCopy } from "@/i18n";
+import { ContextUsage } from "./usage/ContextUsage";
+import { useControls } from "./useControls";
 import { useConversation } from "./live";
 
 export function SessionInfoSheet({ open, onClose, id, title, view }: {
   open: boolean; onClose(): void; id: string; title: string; view: SessionView | null;
 }) {
   const copy = useMobileCopy();
+  const model = useControls(id);
   const t = useTokens();
   const { client } = useConversation();
   const [pending, setPending] = useState<SessionPendingAsks | null>(null);
@@ -37,7 +40,7 @@ export function SessionInfoSheet({ open, onClose, id, title, view }: {
       </View>
       {view?.context ? <View style={section}>
         <Text variant="sectionTitle" tone="secondary">{copy.chat.context}</Text>
-        <ContextBody context={view.context} />
+        <ContextUsage open={open} context={view.context} sessionId={id} models={model.models} model={model.current} />
       </View> : null}
       {attachments.length ? <View style={section}>
         <Text variant="sectionTitle" tone="secondary">{copy.chat.infoAttachments}</Text>
@@ -45,15 +48,4 @@ export function SessionInfoSheet({ open, onClose, id, title, view }: {
       </View> : null}
     </View>
   </Sheet>;
-}
-
-export function ContextBody({ context }: { context: ContextDetails }) {
-  const copy = useMobileCopy();
-  const t = useTokens();
-  const fmt = (n: number) => n >= 1_000_000 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n);
-  return <View style={{ gap: t.length("--space-4") }}>
-    <Text variant="h4">{copy.chat.contextUsed(Math.round(context.ratio * 100))}</Text>
-    <Text tone="secondary">{copy.chat.contextTokens(fmt(context.used_tokens), fmt(context.budget_tokens))}</Text>
-    {context.auto_compact_at_tokens ? <Text tone="secondary">{copy.chat.contextCompact(fmt(context.auto_compact_at_tokens))}</Text> : null}
-  </View>;
 }

@@ -1,3 +1,4 @@
+import React from "react";
 import { StyleSheet, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { PILL } from "../design/tokens";
@@ -28,11 +29,11 @@ export interface ButtonProps {
 }
 
 export interface IconButtonProps {
-  icon: IconGlyph;
+  icon: IconGlyph | React.ReactElement;
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
-  size?: "md" | "sm";
+  size?: "md" | "sm" | "control";
   loading?: boolean;
   disabled?: boolean;
   testID?: string;
@@ -118,14 +119,14 @@ export function IconButton({
   const press = usePress({ scale: true, disabled: disabled || loading });
   const colors = variantColors(t, variant);
   const target = t.length("--control-hit-target");
-  const box = size === "sm" ? t.length("--control-height-sm") : target;
+  const box = size === "control" ? t.length("--control-height-lg") : size === "sm" ? t.length("--control-height-sm") : target;
   const iconSize = t.length(size === "sm" ? "--icon-size-md" : "--icon-size-lg");
   return (
     <AnimatedPressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled, busy: !!loading }}
-      hitSlop={size === "sm" ? (target - box) / 2 : undefined}
+      hitSlop={size === "md" ? undefined : (target - box) / 2}
       testID={testID}
       disabled={disabled || loading}
       onPress={onPress}
@@ -149,7 +150,7 @@ export function IconButton({
       {loading ? (
         <SpinnerArc size={iconSize} color={colors.foreground} />
       ) : (
-        <HugeiconsIcon icon={icon} size={iconSize} color={colors.foreground} />
+        React.isValidElement(icon) ? icon : <HugeiconsIcon icon={icon} size={iconSize} color={colors.foreground} />
       )}
     </AnimatedPressable>
   );

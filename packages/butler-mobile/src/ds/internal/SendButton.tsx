@@ -28,6 +28,7 @@ export function SendButton({ mode, enabled, busy, label, onPress }: SendButtonPr
     else run(t, dim, dimmed ? 0.56 : 1, "--motion-fast", "--motion-ease-standard").start();
   }, [dimmed, reduced, t, dim]);
   const target = t.length("--control-hit-target");
+  const box = t.length("--control-height-lg");
   const background = mode === "stop" && !busy ? t.color("--send-stop-bg") : active && !busy ? t.color("--send-bg") : t.color("--send-disabled-bg");
   return (
     <Animated.View style={{ opacity: dim }}>
@@ -37,10 +38,11 @@ export function SendButton({ mode, enabled, busy, label, onPress }: SendButtonPr
         accessibilityState={{ disabled: !active || busy, busy }}
         disabled={!active || busy}
         onPress={onPress}
+        hitSlop={(target - box) / 2}
         {...press.handlers}
         style={[
           {
-            width: target, height: target, alignItems: "center", justifyContent: "center",
+            width: box, height: box, alignItems: "center", justifyContent: "center",
             borderRadius: t.length(PILL), backgroundColor: background, opacity: press.opacity,
           },
           press.scaleStyle,
@@ -52,7 +54,7 @@ export function SendButton({ mode, enabled, busy, label, onPress }: SendButtonPr
         ) : mode === "stop" ? (
           <HugeiconsIcon icon={icons.Square} size={t.length("--icon-size-sm")} color={t.color("--send-fg")} />
         ) : (
-          <HugeiconsIcon icon={icons.SendHorizontal} size={t.length("--icon-size-md")} color={t.color("--send-fg")} />
+          <HugeiconsIcon icon={icons.SendHorizontal} size={t.length("--icon-size-lg")} color={t.color("--send-fg")} />
         )}
       </AnimatedPressable>
     </Animated.View>
