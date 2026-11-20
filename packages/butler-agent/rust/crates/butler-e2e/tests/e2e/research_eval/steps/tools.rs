@@ -14,20 +14,13 @@ impl Research {
             .filter_map(|o| o["results"].as_array())
             .flatten()
             .collect::<Vec<_>>();
-        let mut ids = Vec::new();
         let mut calls = Vec::new();
         for url in urls {
-            if let Some(result) = results.iter().rev().find(|r| r["url"] == *url) {
-                ids.push(result["id"].clone());
+            if results.iter().any(|result| result["url"] == *url) {
+                calls.push(self.invoke(tools, outputs, "web_read", &json!({"url":url})));
             } else {
                 calls.push(self.invoke(tools, outputs, "browser_open", &json!({"url":url})));
             }
-        }
-        if !ids.is_empty() {
-            calls.insert(
-                0,
-                self.invoke(tools, outputs, "browser_open", &json!({"results":ids})),
-            );
         }
         calls
     }

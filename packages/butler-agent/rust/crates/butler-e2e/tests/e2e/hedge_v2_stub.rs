@@ -106,7 +106,7 @@ async fn unavailable_reader_recovers_through_the_offered_browser() -> Result<(),
         .max_by_key(Vec::len)
         .unwrap();
     assert_eq!(
-        outputs[1]["error"]["code"], "tool_unavailable",
+        outputs[1]["error"], "page reader backend is disabled",
         "{outputs:?}"
     );
     assert_eq!(

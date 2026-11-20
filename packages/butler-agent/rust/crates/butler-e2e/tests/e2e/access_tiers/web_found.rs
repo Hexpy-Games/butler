@@ -107,7 +107,7 @@ async fn browser_host_loss_restores_reader_with_reached_url_provenance() -> Resu
     };
     let attached = tool_names(requests.first().unwrap());
     assert!(
-        attached.contains(&"browser_read".to_owned()) && !attached.contains(&"web_read".to_owned()),
+        attached.contains(&"browser_read".to_owned()) && attached.contains(&"web_read".to_owned()),
         "{attached:?}"
     );
     let detached = tool_names(requests.last().unwrap());

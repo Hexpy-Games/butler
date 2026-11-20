@@ -178,7 +178,7 @@ impl WebSession {
         };
         let mut observation = read_result(&page, max_chars, max_chunks, start_chunk, query);
         if browsing && needs_tab(&page) {
-            to_tab(&page, &mut observation);
+            to_tab(&mut observation);
         }
         let mut result = observed(&page, &parsed, observation);
         result["cache_hit"] = Value::Bool(cache_hit);
@@ -201,14 +201,9 @@ fn needs_tab(page: &PageRead) -> bool {
 
 /// Marks the read failed, keeping what the reader got, with the tab as the
 /// next step: the model must not answer from a partial page.
-fn to_tab(page: &PageRead, observation: &mut Value) {
-    let reason = page.error.as_deref().unwrap_or(
-        "Only part of this page reached the reader: it is built by scripts, blocked or nearly empty here.",
-    );
+fn to_tab(observation: &mut Value) {
     observation["ok"] = Value::Bool(false);
-    observation["error"] = Value::String(format!(
-        "{reason} Open it with browser_open, then read the tab with browser_read."
-    ));
+    observation["error"] = Value::String("This page needs the real browser (a sign-in or a check): open it with browser_open (signed_in:true if it needs the user's account) and read the tab with browser_read.".into());
     observation["next_action"] = Value::String("open_in_tab".into());
 }
 

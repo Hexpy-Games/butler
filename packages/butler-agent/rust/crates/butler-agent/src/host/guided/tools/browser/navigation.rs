@@ -16,7 +16,7 @@ fn decision(owner: &GuidedTools, args: &Value) -> AccessDecision {
         );
     }
     let mut decision = AccessDecision::Allow;
-    for url in destinations(owner, args) {
+    for url in destinations(args) {
         let next = super::super::access::for_kind(
             owner,
             CapabilityKind::WebRequest {
@@ -46,7 +46,7 @@ pub(super) async fn execute(
     if matches!(decision(owner, &args), AccessDecision::Deny(_)) {
         return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
     }
-    let urls = destinations(owner, &args);
+    let urls = destinations(&args);
     let target = urls.join("\n");
     let steps: Vec<_> = urls
         .iter()
@@ -70,11 +70,7 @@ pub(super) async fn execute(
         authority::Gate::Pending(value) => return encoded(&value),
         authority::Gate::Allowed(reference, _) => reference,
     };
-    let result = if args.get("results").is_some() {
-        open::execute(owner, invocation, call, occurrence, client).await
-    } else {
-        open_one(owner, invocation, call, occurrence, client, &args).await
-    };
+    let result = open_one(owner, invocation, call, occurrence, client, &args).await;
     let status = match &result {
         Ok(value) if value.field("status").ok().flatten() == Some("ok") => "ok",
         Ok(_) => "failed",
@@ -82,40 +78,6 @@ pub(super) async fn execute(
     };
     settle(owner, reference, status).await?;
     result
-}
-
-pub(in crate::host::guided::tools) async fn open_for_read(
-    owner: &GuidedTools,
-    invocation: &GuidedInvocation<'_>,
-    call: &ModelRoundToolCall,
-    occurrence: &str,
-    url: &str,
-) -> Result<Result<String, Value>, ToolExecutionError> {
-    let args = json!({"url":url});
-    if !owner.authorized("browser_open") || !admitted(owner, "browser_open") {
-        return Ok(Err(
-            json!({"status":"not_dispatched","reason":"tool_not_admitted"}),
-        ));
-    }
-    let Some(client) = client::Client::new(owner).await else {
-        return Ok(Err(json!({"status":"unavailable","reason":"no_browser"})));
-    };
-    owner.refresh_instruction_context().await?;
-    let result = if reviewed(owner, &args) {
-        execute(owner, invocation, call, occurrence, client, args).await?
-    } else {
-        open_one(owner, invocation, call, occurrence, client, &args).await?
-    };
-    let result: Value = serde_json::from_str(result.as_str()).map_err(|error| {
-        ToolExecutionError::Integrity(butler_turn::btcc::BtccError::relayed(
-            "guided_tool_result_json",
-            error.to_string(),
-        ))
-    })?;
-    match result["tab"].as_str().filter(|_| result["status"] == "ok") {
-        Some(tab) => Ok(Ok(tab.to_owned())),
-        None => Ok(Err(result)),
-    }
 }
 
 async fn open_one(
@@ -144,16 +106,6 @@ async fn open_one(
     }
 }
 
-fn destinations(owner: &GuidedTools, args: &Value) -> Vec<String> {
-    if let Some(url) = args["url"].as_str() {
-        return vec![url.into()];
-    }
-    args["results"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .filter_map(|id| owner.web_session.search_result(id))
-        .map(|found| found.url)
-        .collect()
+fn destinations(args: &Value) -> Vec<String> {
+    args["url"].as_str().map(String::from).into_iter().collect()
 }
