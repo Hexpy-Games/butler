@@ -428,6 +428,9 @@ impl PageEngine for CefEngine {
         if self.pending.contains_key(&id) {
             return None;
         }
-        surface::thumbnail(self.runtime.frame(id)?, window)
+        Some(surface::thumbnail(surface::source(
+            self.runtime.frame(id)?,
+            window,
+        )?))
     }
 }

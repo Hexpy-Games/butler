@@ -139,30 +139,15 @@ impl Render for Page {
         )
     }
 }
-pub(super) fn thumbnail(
-    #[cfg(target_os = "macos")] frame: impl Into<SurfaceSource>,
-    #[cfg(not(target_os = "macos"))] frame: butler_cef_host::osr::OsrFrame,
-    window: &mut Window,
-) -> Option<AnyElement> {
-    // Linux consumes damage/consumer slot; Windows DirectX signals release per draw.
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (frame, window);
-        None
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let src = source(frame, window)?;
-        Some(
-            surface(src)
-                .object_fit(ObjectFit::Cover)
-                .size_full()
-                .absolute()
-                .top_0()
-                .left_0()
-                .into_any_element(),
-        )
-    }
+/// The hand-off card's live tab picture: the page's current frame, cropped to fill.
+pub(super) fn thumbnail(src: SurfaceSource) -> AnyElement {
+    surface(src)
+        .object_fit(ObjectFit::Cover)
+        .size_full()
+        .absolute()
+        .top_0()
+        .left_0()
+        .into_any_element()
 }
 
 /// The macOS frame: an IOSurface-backed CoreVideo buffer.
@@ -171,7 +156,7 @@ pub(super) fn thumbnail(
     clippy::unnecessary_wraps,
     reason = "one signature with the fallible Windows frame conversion"
 )]
-fn source(frame: impl Into<SurfaceSource>, _: &Window) -> Option<SurfaceSource> {
+pub(super) fn source(frame: impl Into<SurfaceSource>, _: &Window) -> Option<SurfaceSource> {
     Some(frame.into())
 }
 /// The Windows frame: a pooled D3D11 shared texture with its acquire and release fences. The
@@ -181,7 +166,7 @@ fn source(frame: impl Into<SurfaceSource>, _: &Window) -> Option<SurfaceSource> 
     clippy::needless_pass_by_value,
     reason = "the frame is the runtime's clone; one signature with the macOS conversion"
 )]
-fn source(frame: butler_cef_host::osr::OsrFrame, _: &Window) -> Option<SurfaceSource> {
+pub(super) fn source(frame: butler_cef_host::osr::OsrFrame, _: &Window) -> Option<SurfaceSource> {
     let (width, height) = frame.size();
     let size = gpui::size(
         gpui::DevicePixels(i32::try_from(width).ok()?),
@@ -204,7 +189,10 @@ fn source(frame: butler_cef_host::osr::OsrFrame, _: &Window) -> Option<SurfaceSo
     clippy::needless_pass_by_value,
     reason = "the frame is the runtime's clone; one signature with the other platforms' conversions"
 )]
-fn source(frame: butler_cef_host::osr::OsrFrame, window: &Window) -> Option<SurfaceSource> {
+pub(super) fn source(
+    frame: butler_cef_host::osr::OsrFrame,
+    window: &Window,
+) -> Option<SurfaceSource> {
     use gpui_wgpu::wgpu;
     use std::{any::Any, sync::Arc};
     struct Upload {
