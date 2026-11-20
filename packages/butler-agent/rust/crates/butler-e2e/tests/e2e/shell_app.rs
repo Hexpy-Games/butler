@@ -36,6 +36,7 @@ mod focus_selection;
 mod focus_tab;
 mod narrow_window;
 mod observer_dialog;
+mod popover_scroll;
 mod sidebar_drag;
 mod sidebar_sticky;
 mod space_header;

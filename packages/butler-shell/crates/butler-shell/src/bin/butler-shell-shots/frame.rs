@@ -29,6 +29,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "click-at" => click_at(h, arg),
         "page-click" => page_click(h, arg),
         "hover" => hover(h, arg),
+        "wheel" => wheel(h, arg),
         "reveal" => reveal(h, arg),
         "wait-anchor" | "wait-no-anchor" => wait_anchor(h, arg, command == "wait-anchor"),
         "wait-theme" => wait_theme(h, arg),
@@ -208,12 +209,33 @@ fn reveal(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             .context("missing scroll port")?;
     let position = port.center();
     let delta = target.center().y - position.y;
-    move_pointer(h, h.handle, position, None)?;
-    h.cx.update_window(h.handle, |_, w, cx| {
+    wheel_at(h, h.handle, position, -delta)
+}
+
+/// `wheel <anchor> <dy>`: one wheel step of `dy` px (positive scrolls toward the start) with the
+/// pointer on the anchor's centre, wherever the anchor is (a popover's surface is its own layer).
+fn wheel(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let (anchor, dy) = arg.split_once(' ').context("wheel <anchor> <dy>")?;
+    let (handle, bounds) = find_anchor(h, anchor)?.context("missing wheel target")?;
+    let position = bounds.center();
+    let dy: f32 = dy.parse()?;
+    wheel_at(h, handle, position, px(dy))
+}
+
+/// One wheel step of `dy` with the pointer at `position` in the window `handle`, then settles.
+fn wheel_at(
+    h: &mut Harness,
+    handle: gpui::AnyWindowHandle,
+    position: gpui::Point<gpui::Pixels>,
+    dy: gpui::Pixels,
+) -> anyhow::Result<()> {
+    move_pointer(h, handle, position, None)?;
+    h.cx.update_window(handle, |_, w, cx| {
         w.dispatch_event(
             PlatformInput::ScrollWheel(ScrollWheelEvent {
                 position,
-                delta: ScrollDelta::Pixels(point(px(0.), -delta)),
+                delta: ScrollDelta::Pixels(point(px(0.), dy)),
                 modifiers: Default::default(),
                 touch_phase: TouchPhase::Moved,
             }),
