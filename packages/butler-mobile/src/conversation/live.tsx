@@ -10,6 +10,7 @@ import { useMobileCopy } from "@/i18n";
 
 interface ConversationContext {
   connect(pairing: Pairing): void;
+  disconnect(): Promise<void>;
   client: GatewayClient | null;
   pairing: Pairing | null;
   lost: boolean;
@@ -32,6 +33,17 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     listeners.current.add(listener);
     return () => { listeners.current.delete(listener); };
   }, []);
+  const disconnect = useCallback(async () => {
+    const current = pairing.current;
+    live.current?.close();
+    clearTimeout(timer.current);
+    setLost(false);
+    pairing.current = null;
+    setPairing(null);
+    setClient(null);
+    if (current) await pairingStore.clear(current.butlerId);
+    router.replace("/pair");
+  }, []);
   const connect = useCallback((next: Pairing) => {
     if (pairing.current?.origin === next.origin && pairing.current.deviceToken === next.deviceToken) return;
     live.current?.close();
@@ -53,20 +65,13 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
       },
       onError(error) {
         if (error.status !== 401 && error.code !== "local_auth_required") return;
-        live.current?.close();
-        clearTimeout(timer.current);
-        setLost(false);
-        pairing.current = null;
-        setPairing(null);
-        setClient(null);
-        void pairingStore.clear(next.butlerId).then(() => {
+        void disconnect().then(() => {
           showToast({ message: copy.problems.needsPairing, tone: "warning" });
-          router.replace("/pair");
         });
       },
     });
     if (AppState.currentState === "background") live.current.pause();
-  }, [copy]);
+  }, [copy, disconnect]);
   useEffect(() => {
     const subscription = AppState.addEventListener("change", state => {
       if (state === "background") live.current?.pause();
@@ -78,7 +83,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
       clearTimeout(timer.current);
     };
   }, []);
-  return <Context.Provider value={{ connect, client, pairing: activePairing, lost, reconcile, subscribe }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ connect, disconnect, client, pairing: activePairing, lost, reconcile, subscribe }}>{children}</Context.Provider>;
 }
 
 export function useConversation(): ConversationContext {
