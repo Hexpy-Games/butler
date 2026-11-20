@@ -75,6 +75,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
   const first = useRef(true);
   const count = useRef(0);
   const atBottom = useRef(true);
+  const dragging = useRef(false);
   const [bottom, setBottom] = useState(true);
   const [scrolled, setScrolled] = useState(false);
   const rows = withQuestionAnswers(view?.messages ?? [], view?.question_answers ?? [], message => message.role === "user"
@@ -98,10 +99,15 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
         setBottom(nearEnd(nativeEvent));
         setScrolled(nativeEvent.contentOffset.y > 0);
       }}
-      onScrollBeginDrag={() => { atBottom.current = false; }}
+      onScrollBeginDrag={() => { dragging.current = true; atBottom.current = false; }}
       onScrollToTop={() => { atBottom.current = false; }}
       onScrollEndDrag={({ nativeEvent }) => { atBottom.current = nearEnd(nativeEvent); }}
-      onMomentumScrollEnd={({ nativeEvent }) => { atBottom.current = nearEnd(nativeEvent); }}
+      onMomentumScrollEnd={({ nativeEvent }) => {
+        if (dragging.current) {
+          atBottom.current = nearEnd(nativeEvent);
+          dragging.current = false;
+        }
+      }}
       onContentSizeChange={() => {
         if (!rows.length) return;
         if (first.current || atBottom.current) {
