@@ -90,9 +90,6 @@ async fn research_reads_results_without_tabs() -> Result<(), HarnessError> {
                 && message["status"] == "delivered"
         })
         .unwrap();
-    assert!(
-        reply["text"].as_str().unwrap().contains("6.1 m"),
-        "{reply}"
-    );
+    assert!(reply["text"].as_str().unwrap().contains("6.1 m"), "{reply}");
     s.finish().await
 }
