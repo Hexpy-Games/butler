@@ -1,0 +1,62 @@
+name: Model replay eval
+# Owner-run. Replays captured model requests in prompt variants against the
+# real provider. Inputs and results may hold private conversations, so both
+# travel only as AES-256 ciphertext attached to a draft release (visible to
+# repository writers only); logs carry content-free metrics.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Draft release whose bundle.tar.gz.enc holds cases/ and variants.json
+        required: true
+        type: string
+      repeats:
+        description: Runs per case and variant
+        required: false
+        default: '3'
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: model-replay-eval
+  cancel-in-progress: false
+jobs:
+  replay:
+    name: replay
+    runs-on: ubuntu-latest
+    environment: live-e2e
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.release_tag }}
+      REPEATS: ${{ inputs.repeats }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Fetch and decrypt the bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE_KEY: ${{ secrets.BUTLER_EVAL_BUNDLE_KEY }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern bundle.tar.gz.enc --dir "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/bundle"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BUNDLE_KEY \
+            -in "$RUNNER_TEMP/bundle.tar.gz.enc" | tar -xz -C "$RUNNER_TEMP/bundle"
+      - name: Replay
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.BUTLER_EVAL_ANTHROPIC_API_KEY }}
+        run: python3 .github/scripts/model-replay-eval.py "$RUNNER_TEMP/bundle" "$RUNNER_TEMP/results" --repeats "$REPEATS"
+      - name: Encrypt and attach the results
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLE_KEY: ${{ secrets.BUTLER_EVAL_BUNDLE_KEY }}
+        run: |
+          set -euo pipefail
+          [ -d "$RUNNER_TEMP/results" ] || exit 0
+          tar -cz -C "$RUNNER_TEMP" results | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt \
+            -pass env:BUNDLE_KEY -out "$RUNNER_TEMP/results-$GITHUB_RUN_ID.tar.gz.enc"
+          gh release upload "$TAG" "$RUNNER_TEMP/results-$GITHUB_RUN_ID.tar.gz.enc" --repo "$GITHUB_REPOSITORY" --clobber

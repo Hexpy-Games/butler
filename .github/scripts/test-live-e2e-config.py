@@ -9,13 +9,15 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / '.github/workflows'
 CATALOG = ROOT / 'packages/butler-agent/rust/crates/butler-models/src/models/catalog/static-catalog.json'
 JOB = re.compile(r'^  ([\w-]+):\s*$', re.M)
+# Replays owner-chosen request bodies; its model is in the encrypted input, not an E2E selection.
+NOT_E2E = {'model-replay-eval.yml'}
 LITERAL = re.compile(r'BUTLER_E2E_(PROVIDER|MODEL|MODEL_MATRIX)\s*[:=]\s*[\'"]?(?!\$\{\{)[\w.@/-]')
 
 
 def live_jobs():
     for path in sorted(WORKFLOWS.glob('*.yml')):
         text = path.read_text(encoding='utf-8')
-        if 'jobs:' not in text:
+        if path.name in NOT_E2E or 'jobs:' not in text:
             continue
         body = text.split('\njobs:\n', 1)[1]
         starts = [match.start() for match in JOB.finditer(body)] + [len(body)]
