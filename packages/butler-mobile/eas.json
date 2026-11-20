@@ -10,5 +10,5 @@
     },
     "production": { "extends": "base", "autoIncrement": true }
   },
-  "submit": { "production": {} }
+  "submit": { "production": { "ios": { "ascAppId": "6837217542" } } }
 }
