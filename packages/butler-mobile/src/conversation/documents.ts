@@ -2,6 +2,9 @@ import type { MessageContent, ProjectDashboardDocument, ProjectDashboardDocument
 import type { GatewayClient } from "../../../butler-protocol/src/client/index.ts";
 import type { getAppCopy } from "../../../butler-i18n/src/index.ts";
 
+// Matches packages/butler-app/client/ui/src/components/conversation/conversationUtils.tsx.
+export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+
 export function documentContent(text: string, references: ProjectSourceContentPart[]): MessageContent {
   return { version: 1, parts: [{ type: "text", text }, ...references] };
 }

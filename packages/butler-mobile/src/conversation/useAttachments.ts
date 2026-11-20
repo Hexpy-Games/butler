@@ -8,7 +8,7 @@ import { showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useConversation } from "./live";
 import { uploadMessageFile } from "./upload";
-import { completeProjectDocument, projectDocumentFileName, readProjectDocumentPage } from "./documents";
+import { ATTACHMENT_MAX_BYTES, completeProjectDocument, projectDocumentFileName, readProjectDocumentPage } from "./documents";
 
 type Attachment = {
   key: string; name: string; kind: "image" | "file"; uri?: string; mimeType?: string; size?: number;
@@ -53,6 +53,11 @@ export function useAttachments(sessionId: string | undefined) {
   };
   const addProjectDocument = async (document: ProjectDashboardDocument) => {
     if (!client || !pairing || !sessionId) return;
+    const sources = new Set(items.flatMap(item => item.reference ? [`${item.reference.source.kind}:${item.reference.source.id}`] : []));
+    if (document.project_id && document.revision && sources.size >= 8 && !sources.has(`${document.document_type ?? document.kind}:${document.id}`)) {
+      showToast({ message: appCopy.feedback.attachmentFailed, tone: "error" });
+      return;
+    }
     const key = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     setItems(previous => [...previous, { key, name: document.title, kind: "file", status: "uploading" }]);
     try {
@@ -65,11 +70,14 @@ export function useAttachments(sessionId: string | undefined) {
       } else {
         const complete = await completeProjectDocument(client, document);
         const name = projectDocumentFileName(document);
-        const cached = new File(Paths.cache, name);
-        cached.write(complete.markdown);
-        const file = await uploadMessageFile({ origin: pairing.origin, token: pairing.deviceToken, sessionId,
-          file: { uri: cached.uri, name, mimeType: "text/markdown" } });
-        setItems(previous => previous.map(item => item.key === key ? { ...item, name, status: "ready", file } : item));
+        const cached = new File(Paths.cache, `${key}-${name}`);
+        try {
+          cached.write(complete.markdown);
+          if (cached.size > ATTACHMENT_MAX_BYTES) throw new Error("Project source exceeds the attachment limit.");
+          const file = await uploadMessageFile({ origin: pairing.origin, token: pairing.deviceToken, sessionId,
+            file: { uri: cached.uri, name, mimeType: "text/markdown" } });
+          setItems(previous => previous.map(item => item.key === key ? { ...item, name, status: "ready", file } : item));
+        } finally { if (cached.exists) cached.delete(); }
       }
     } catch {
       setItems(previous => previous.map(item => item.key === key ? { ...item, status: "failed" } : item));

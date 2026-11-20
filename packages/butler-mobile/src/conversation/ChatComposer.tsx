@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { router } from "expo-router";
-import type { CreateSessionRequest, CreateSessionResult, MessageFileRef, MessageSendRequest, MessageSendResult, SessionView } from "../../../butler-protocol/src/index.ts";
+import type { CreateSessionRequest, CreateSessionResult, MessageFileRef, MessageSendRequest, MessageSendResult, ProjectDashboardDocument, SessionView } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy, reasoningEffortLabel } from "../../../butler-i18n/src/index.ts";
 import { AttachmentTiles, Button, Composer, ComposerDock, ContextRing, icons, ListRow, Sheet, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
@@ -25,6 +25,8 @@ export function ChatComposer({ id, project, group, view, hasDecision, text, setT
   const attachments = useAttachments(id);
   const model = useControls(id);
   const [sheet, setSheet] = useState<"attach" | "documents" | "model" | "context" | null>(null);
+  const pendingAction = useRef<"documents" | "photo" | "file" | null>(null);
+  const pendingDocument = useRef<ProjectDashboardDocument | null>(null);
   const turn = view?.active_turn;
   const ready = attachments.items.flatMap(item => item.status === "ready" && item.file ? [item.file] : []);
   const hasReferences = attachments.items.some(item => item.status === "ready" && item.reference);
@@ -58,15 +60,26 @@ export function ChatComposer({ id, project, group, view, hasDecision, text, setT
     <Sheet open={sheet === "context"} onClose={() => setSheet(null)} title={copy.chat.context} cancelLabel={copy.chat.close}>
       {view?.context ? <ContextBody context={view.context} /> : null}
     </Sheet>
-    <Sheet open={sheet === "attach"} onClose={() => setSheet(null)} title={copy.chat.attach} cancelLabel={copy.chat.close}>
+    <Sheet open={sheet === "attach"} onClose={() => setSheet(null)} title={copy.chat.attach} cancelLabel={copy.chat.close}
+      onClosed={() => {
+        const action = pendingAction.current;
+        pendingAction.current = null;
+        if (action === "documents") setSheet("documents");
+        else if (action) void attachments.pick(action);
+      }}>
       {view?.project_id ? <ListRow icon={icons.Document} title={appCopy.interfaceDetails.projectDocuments}
-        onPress={() => setSheet("documents")} /> : null}
+        onPress={() => { pendingAction.current = "documents"; setSheet(null); }} /> : null}
       {model.current?.image_input_support !== "unsupported" ? <ListRow icon={icons.Image} title={copy.chat.attachPhoto}
-        onPress={() => { setSheet(null); void attachments.pick("photo"); }} /> : null}
-      <ListRow icon={icons.File} title={copy.chat.attachFile} onPress={() => { setSheet(null); void attachments.pick("file"); }} />
+        onPress={() => { pendingAction.current = "photo"; setSheet(null); }} /> : null}
+      <ListRow icon={icons.File} title={copy.chat.attachFile} onPress={() => { pendingAction.current = "file"; setSheet(null); }} />
     </Sheet>
     {view?.project_id ? <ProjectDocumentsSheet key={view.project_id} projectId={view.project_id} open={sheet === "documents"}
-      onClose={() => setSheet(null)} onPick={attachments.addProjectDocument} /> : null}
+      onClose={() => setSheet(null)} onPick={document => { pendingDocument.current = document; setSheet(null); }}
+      onClosed={() => {
+        const document = pendingDocument.current;
+        pendingDocument.current = null;
+        if (document) void attachments.addProjectDocument(document);
+      }} /> : null}
   </ComposerDock>;
 }
 

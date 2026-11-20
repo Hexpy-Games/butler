@@ -7,8 +7,8 @@ import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useConversation } from "./live";
 import { documentKindLabel } from "./documents";
 
-export function ProjectDocumentsSheet({ open, onClose, projectId, onPick }: {
-  open: boolean; onClose(): void; projectId: string; onPick(document: ProjectDashboardDocument): Promise<void>;
+export function ProjectDocumentsSheet({ open, onClose, onClosed, projectId, onPick }: {
+  open: boolean; onClose(): void; onClosed?(): void; projectId: string; onPick(document: ProjectDashboardDocument): void;
 }) {
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
@@ -18,8 +18,9 @@ export function ProjectDocumentsSheet({ open, onClose, projectId, onPick }: {
   const [filter, setFilter] = useState("");
   const [error, setError] = useState(false);
   useEffect(() => {
-    if (!open || !client || documents !== null) return;
+    if (!open || !client) return;
     let cancelled = false;
+    setDocuments(null);
     setError(false);
     const load = async () => {
       let cursor: string | null = null;
@@ -28,7 +29,7 @@ export function ProjectDocumentsSheet({ open, onClose, projectId, onPick }: {
         const query: URLSearchParams = new URLSearchParams({ all: "true", limit: "100", ...(cursor ? { cursor } : {}) });
         const page: DashboardMaterialsPage = await client.request(`/projects/${encodeURIComponent(projectId)}/dashboard/materials?${query}`);
         if (cancelled) return;
-        if (page.status !== "ready") break;
+        if (page.status !== "ready") { setError(true); return; }
         loaded.push(...page.documents);
         cursor = page.nextCursor;
       } while (cursor);
@@ -36,9 +37,9 @@ export function ProjectDocumentsSheet({ open, onClose, projectId, onPick }: {
     };
     void load().catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
-  }, [open, client, projectId, documents]);
+  }, [open, client, projectId]);
   const visible = documents?.filter(document => document.title.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase())) ?? [];
-  return <Sheet open={open} onClose={onClose} title={appCopy.interfaceDetails.projectDocuments} cancelLabel={copy.chat.close}>
+  return <Sheet open={open} onClose={onClose} onClosed={onClosed} title={appCopy.interfaceDetails.projectDocuments} cancelLabel={copy.chat.close}>
     <View style={{ gap: t.length("--space-3") }}>
       <TextField label={appCopy.interfaceDetails.searchDocuments}
         value={filter} onChangeText={setFilter} />
@@ -46,7 +47,7 @@ export function ProjectDocumentsSheet({ open, onClose, projectId, onPick }: {
         : documents !== null && !visible.length ? <Text>{appCopy.interfaceDetails.noDocuments}</Text> : null}
       {visible.map(document => <ListRow key={`${document.document_type ?? document.kind}:${document.id}`} title={document.title}
         meta={documentKindLabel(document.document_type ?? document.kind, appCopy)} description={document.safe_path_label}
-        onPress={() => { onClose(); void onPick(document); }} />)}
+        onPress={() => onPick(document)} />)}
     </View>
   </Sheet>;
 }

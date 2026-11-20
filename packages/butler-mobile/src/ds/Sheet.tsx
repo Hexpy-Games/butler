@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, KeyboardAvoidingView, Modal, PanResponder, Pressable, StyleSheet, useWindowDimensions, View, type GestureResponderHandlers } from "react-native";
+import { AccessibilityInfo, Animated, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, StyleSheet, useWindowDimensions, View, type GestureResponderHandlers } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PILL, RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
@@ -13,6 +13,7 @@ import { run, useReducedMotion } from "./internal/motion";
 export interface SheetProps {
   open: boolean;
   onClose: () => void;
+  onClosed?: () => void;
   title: string;
   description?: string;
   children?: React.ReactNode;
@@ -84,7 +85,7 @@ export function SheetPanel({ onClose, title, description, children, action, canc
   );
 }
 
-export function Sheet({ open, onClose, dismissible = true, testID, ...panel }: SheetProps) {
+export function Sheet({ open, onClose, onClosed, dismissible = true, testID, ...panel }: SheetProps) {
   const t = useTokens();
   const reduced = useReducedMotion();
   const { height } = useWindowDimensions();
@@ -94,6 +95,13 @@ export function Sheet({ open, onClose, dismissible = true, testID, ...panel }: S
   const fade = useRef(new Animated.Value(reduced ? 0 : 1)).current;
   const close = useRef(onClose);
   close.current = onClose;
+  const closed = useRef(onClosed);
+  closed.current = onClosed;
+  const wasMounted = useRef(mounted);
+  useEffect(() => {
+    if (wasMounted.current && !mounted && Platform.OS !== "ios") closed.current?.();
+    wasMounted.current = mounted;
+  }, [mounted]);
   const live = useRef({ height, t });
   live.current = { height, t };
   const drag = useRef(PanResponder.create({
@@ -131,7 +139,8 @@ export function Sheet({ open, onClose, dismissible = true, testID, ...panel }: S
     return () => animation.stop();
   }, [open, mounted, reduced, t, height, scrim, travel, fade]);
   return (
-    <Modal transparent animationType="none" statusBarTranslucent visible={mounted} onRequestClose={dismissible ? onClose : undefined} testID={testID}>
+    <Modal transparent animationType="none" statusBarTranslucent visible={mounted} onDismiss={() => closed.current?.()}
+      onRequestClose={dismissible ? onClose : undefined} testID={testID}>
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: t.color("--dialog-overlay-bg"), opacity: scrim }]} />
       <Pressable
         style={StyleSheet.absoluteFill}

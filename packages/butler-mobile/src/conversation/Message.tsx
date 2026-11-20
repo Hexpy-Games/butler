@@ -19,10 +19,11 @@ export function UserMessage({ message, children }: {
   const t = useTokens();
   const { pairing } = useConversation();
   const references = message.content_parts?.parts.filter(part => part.type === "project_source_ref") ?? [];
+  const text = message.content_parts ? message.content_parts.parts.filter(part => part.type === "text").map(part => part.text).join("") : message.text;
   return <View style={{ alignSelf: "flex-end", maxWidth: "85%", gap: t.length("--space-1") }}>
-    {message.text ? <View style={{ backgroundColor: t.color("--user-message-bg"), borderRadius: t.length(RADIUS),
+    {text.trim() ? <View style={{ backgroundColor: t.color("--user-message-bg"), borderRadius: t.length(RADIUS),
       paddingVertical: t.length("--space-3"), paddingHorizontal: t.length("--space-4") }}>
-      <Text selectable>{message.text}</Text>
+      <Text selectable>{text}</Text>
     </View> : null}
     {message.attachments?.length ? <AttachmentTiles layout="wrap" items={message.attachments.map(file => ({
       key: file.file_id, name: file.safe_name, kind: file.kind === "image" || file.mime_type.startsWith("image/") ? "image" : "file",
