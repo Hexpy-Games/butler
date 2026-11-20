@@ -111,6 +111,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             s.set_view(ui::manage::View::History { from }, w, cx);
         }),
         "browser-link" => h.update(|_, _, cx| ui::chat::open_link(arg, cx)),
+        "image-viewer" => open_image_viewer(h, arg),
         "browser-state" | "browser-frame" => browser_report(h, command),
         "new" => h.update(|s, w, cx| s.open_chat(None, w, cx)),
         // The main window closes; the tray's Open brings one back.
@@ -156,6 +157,13 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         _ => super::frame::command(h, command, arg),
     }
 }
+/// `image-viewer <file id>`: opens the window's image viewer on one picture (it need not load).
+fn open_image_viewer(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    use ui::shell::image_viewer::{ViewerEntry, loader::PictureId};
+    let entry = ViewerEntry::new(PictureId::File(arg.to_owned()), arg.to_owned());
+    h.update(|_, _, cx| ui::shell::image_viewer::open(vec![entry], 0, cx))
+}
+
 /// `tick <ms>`: advances the clock and runs what is due, without `wait`'s settle.
 fn tick(h: &mut Harness, ms: &str) -> anyhow::Result<()> {
     h.cx.advance_clock(Duration::from_millis(ms.parse()?));
