@@ -31,7 +31,6 @@
       "expo-router",
       ["expo-image-picker", {
         "photosPermission": "Butler attaches the photos you choose to your message.",
-        "cameraPermission": false,
         "microphonePermission": false
       }],
       ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }],
