@@ -14,6 +14,7 @@ import { icons } from "../icons";
 import { ForcedState } from "../internal/press";
 import { Markdown } from "../Markdown";
 import { ListRow } from "../ListRow";
+import { QueuedMessage } from "../QueuedMessage";
 import { Sheet, SheetPanel } from "../Sheet";
 import { Spinner } from "../Spinner";
 import { Surface } from "../Surface";
@@ -383,7 +384,18 @@ function DecisionCardSection() {
   </>;
 }
 
+function QueuedMessageSection() {
+  const base = { text: en.sentence, editLabel: "Edit", onEdit: noop, deleteLabel: "Delete", onDelete: noop };
+  return <>
+    <Cell name="queued with send now"><QueuedMessage {...base} status="Queued · 1 of 3" sendNowLabel="Send now" onSendNow={noop} /></Cell>
+    <Cell name="queued without send now"><QueuedMessage {...base} status="Queued · 2 of 3" /></Cell>
+    <Cell name="sending"><QueuedMessage {...base} status="Sending…" tone="sending" sendNowLabel="Send now" onSendNow={noop} /></Cell>
+    <Cell name="failed"><QueuedMessage {...base} status="Failed" tone="failed" /></Cell>
+  </>;
+}
+
 export const sections: { id: string; title: string; render: (state?: string) => React.ReactNode }[] = [
+  { id: "queued-message", title: "QueuedMessage", render: () => <QueuedMessageSection /> },
   { id: "decision-card", title: "DecisionCard", render: () => <DecisionCardSection /> },
   { id: "markdown", title: "Markdown", render: () => <Cell name="Markdown"><Markdown text={markdown} /></Cell> },
   { id: "text", title: "Text", render: () => <TextSection /> },
