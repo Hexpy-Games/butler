@@ -50,7 +50,8 @@ def variant_body(body, edits, case, variant):
 
 
 def send(body, key):
-    data = json.dumps(body).encode()
+    # Captured bodies may ask for SSE; this runner reads one JSON response.
+    data = json.dumps({**body, "stream": False}).encode()
     for attempt in range(6):
         request = urllib.request.Request(API, data=data, method="POST", headers={
             "x-api-key": key,
@@ -64,8 +65,17 @@ def send(body, key):
             if error.code in (429, 500, 502, 503, 529) and attempt < 5:
                 time.sleep(2 ** attempt * 5)
                 continue
-            # The error body never contains request content; keep it short.
-            sys.exit(f"HTTP {error.code}: {error.read()[:300]!r}")
+            # Print only the error type: an error body may quote request values.
+            try:
+                kind = json.loads(error.read()).get("error", {}).get("type")
+            except ValueError:
+                kind = None
+            sys.exit(f"HTTP {error.code}: {kind}")
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt < 5:
+                time.sleep(2 ** attempt * 5)
+                continue
+            raise
     sys.exit("retries exhausted")
 
 
