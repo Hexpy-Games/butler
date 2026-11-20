@@ -25,6 +25,7 @@ mod drift;
 mod hedge;
 pub(crate) mod hedge_v2;
 pub(super) mod profile;
+mod recall;
 mod siwc;
 
 const IGNORE: &str = "";
