@@ -31,7 +31,7 @@ export function StatusLine({ label, elapsed, active }: StatusLineProps) {
     loop.start();
     return () => loop.stop();
   }, [active, reduced, labelWidth, t, shimmer]);
-  const text = <Text tone="secondary" lines={1}>{elapsed ? `${label} · ${elapsed}` : label}</Text>;
+  const text = <Text tone="secondary" lines={1} numeric="tabular">{elapsed ? `${label} · ${elapsed}` : label}</Text>;
   const shimmering = active && !reduced;
   return <View accessible accessibilityLabel={label} style={{ flexDirection: "row", alignItems: "center",
     gap: t.length("--space-2"), height: t.length("--typo-body-line-height"), overflow: "hidden" }}>

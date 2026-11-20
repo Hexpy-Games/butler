@@ -73,7 +73,7 @@ export function Message({ message, latestTurn, sessionId, projectId, stewardChil
       {cancelled ? <Text tone="tertiary">{copy.chat.cancelled}</Text> : null}
     </Pressable>
     {stewardChild ? <StewardWorkCard {...stewardChild} /> : null}
-    {message.status !== "streaming" && message.text.trim() ? <MessageInfo message={message}
+    {message.status !== "streaming" && (message.text.trim() || message.answer_blocks?.length) ? <MessageInfo message={message}
       onSelectText={() => setSelecting(true)}
       sessionId={sessionId} projectId={projectId}
       retryable={failed && message.turn_id === latestTurn?.id && latestTurn?.retryable} /> : null}
