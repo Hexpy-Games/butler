@@ -129,9 +129,9 @@ pub(super) fn legacy_shell(
         .unwrap_or("powershell.exe")
         .to_owned();
     let command = explicit_script(command).unwrap_or(command);
-    // EncodedCommand preserves nested quotes and multi-line scripts without
-    // cmd/CRT/PowerShell argument reparsing. Set both console and pipeline
-    // encodings; native reg/cmd output follows the console code page.
+    // The direct fallback uses -EncodedCommand; the wrapper passes the script
+    // in the environment with a constant -Command bootstrap. Set both console
+    // and pipeline encodings; native reg/cmd output follows the console code page.
     // Keep the inner imports: NUL, quote, CR or LF in the program path makes
     // code_page_shell retain the direct -EncodedCommand invocation. Wrapped
     // transports repeat Import-Module, which does not reload an already loaded module.
@@ -191,15 +191,13 @@ fn code_page_shell(
         "{}$butlerCommandText=$env:BUTLER_COMMAND_SCRIPT; Remove-Item Env:BUTLER_COMMAND_SCRIPT; Invoke-Expression $butlerCommandText",
         bootstrap_modules()
     );
-    let encoded = STANDARD.encode(
-        bootstrap
-            .encode_utf16()
-            .flat_map(u16::to_le_bytes)
-            .collect::<Vec<_>>(),
-    );
-    if let Some(argument) = invocation.arguments.last_mut() {
-        *argument = encoded;
-    }
+    // Defender holds process creation ~1 s for each -EncodedCommand command
+    // line. The bootstrap is constant and has no double quote: -Command is enough.
+    invocation
+        .arguments
+        .truncate(invocation.arguments.len() - 2);
+    invocation.arguments.push("-Command".into());
+    invocation.arguments.push(format!("\"{bootstrap}\""));
     let text = format!(
         "\"%BUTLER_COMMAND_SHELL%\" {}",
         invocation.arguments.join(" ")
