@@ -41,7 +41,7 @@ export function WorkCard({ title, status, tone, latest, live, details, onOpen, o
       <View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
         <Badge label={status} tone={tone} />
         {live ? <SpinnerArc size={t.length("--icon-size-sm")} color={t.color("--text-secondary")} /> : null}
-        <View style={{ flex: 1 }}><Text variant="caption" tone="secondary" lines={1}>{latest}</Text></View>
+        <View style={{ flex: 1 }}>{expanded ? null : <Text variant="caption" tone="secondary" lines={1}>{latest}</Text>}</View>
         {details.length > 0 ? <Animated.View style={{ transform: [{ rotate: rotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] }) }] }}>
           <IconButton size="sm" variant="ghost" icon={icons.ChevronDown} label={disclosureLabel} onPress={() => setExpanded(value => !value)} />
         </Animated.View> : null}
