@@ -112,12 +112,10 @@ async fn stage(
         let path = generation(&read).join("manifest.json");
         crate::coordination::ensure_data_authority(&read.0, &[&path])?;
         match fs::read(path) {
-            Ok(bytes) => Ok(
-                serde_json::from_slice::<Value>(&bytes)
-                    .map_err(io::Error::other)?
-                    .get("state")
-                    .is_some_and(|state| state == "building"),
-            ),
+            Ok(bytes) => Ok(serde_json::from_slice::<Value>(&bytes)
+                .map_err(io::Error::other)?
+                .get("state")
+                .is_some_and(|state| state == "building")),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
             Err(error) => Err(error),
         }
