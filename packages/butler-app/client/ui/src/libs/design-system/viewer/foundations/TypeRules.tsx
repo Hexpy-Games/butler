@@ -27,8 +27,8 @@ export function KoreanRules() {
       <DoDont lang="ko"
         doCaption="Latin, numbers and units share the stack; particles attach"
         dontCaption="Spaces before particles and units, forced Latin font"
-        doRender={<Typo.Body>버틀러가 PR 3개를 12분 만에 검토했어요.</Typo.Body>}
-        dontRender={<Typo.Body><span className={f.foreignLatin}>버틀러</span> 가 PR 3 개를 12 분 만에 검토 했어요.</Typo.Body>} />
+        doRender={<Typo.Body>버틀러가 PR 3개를 12분 만에 검토했습니다.</Typo.Body>}
+        dontRender={<Typo.Body><span className={f.foreignLatin}>버틀러</span> 가 PR 3 개를 12 분 만에 검토 했습니다.</Typo.Body>} />
     </Stack>
   );
 }

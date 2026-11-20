@@ -238,8 +238,7 @@ impl RenderOnce for StackItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         strut::scope(
             true,
-            strut::container(self.item.apply(div(), Ds::get(cx)), Ds::get(cx))
-                .children(self.children),
+            self.item.apply(div(), Ds::get(cx)).children(self.children),
         )
     }
 }

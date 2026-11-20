@@ -2,17 +2,23 @@
 //! browser pane, which side panel is open, and when the docked sidebar steps aside so the page
 //! keeps its minimum width.
 
-/// The chat column's width beside the browser pane (`--browser-chat-width-min/default/max`).
+/// The chat column's width beside the browser pane (`--browser-chat-width-min/default`).
 pub const CHAT_WIDTH_MIN: f32 = 340.; // DS: conversationFrame.ts:2
 pub const CHAT_WIDTH_DEFAULT: f32 = 400.; // DS: conversationFrame.ts:2
-pub const CHAT_WIDTH_MAX: f32 = 560.; // DS: conversationFrame.ts:2
+/// The pane beside the chat never gets narrower than a phone screen (`--browser-pane-width-min`).
+pub const BROWSER_PANE_MIN_WIDTH: f32 = 375.; // DS: conversationFrame.ts:4
 /// The page (browser pane) never gets narrower than this while the sidebar is docked.
 pub const MIN_PAGE_WIDTH: f32 = 720.; // DS: conversationFrame.ts:4
 /// Width the page must gain back before a collapsed sidebar returns, so it never flaps.
 const RESTORE_MARGIN: f32 = 32.; // DS: conversationFrame.ts:6
 
-pub fn clamp_chat_width(width: f32) -> f32 {
-    width.clamp(CHAT_WIDTH_MIN, CHAT_WIDTH_MAX).round()
+/// `clampBrowserChatWidth` (conversationFrame.ts): at least the chat minimum; leaves the pane its
+/// minimum out of `room`, the width the chat column and the pane share (the chat minimum wins
+/// when both cannot fit). Pass `f32::INFINITY` for `room` while it is unknown.
+pub fn clamp_chat_width(width: f32, room: f32) -> f32 {
+    CHAT_WIDTH_MIN
+        .max((room - BROWSER_PANE_MIN_WIDTH).min(width))
+        .round()
 }
 
 /// The conversation's side panel: the browser pane (split) and the inspector never show together.

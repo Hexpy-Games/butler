@@ -201,7 +201,7 @@ fn panel(
     .default_step(step)
     .error(lang.pick(
         "Could not send. Try again.",
-        "보내지 못했습니다. 다시 시도하세요.",
+        "보내지 못했습니다. 다시 시도하십시오.",
     ))
     .on_skip(move |_, cx| {
         let answers = skip_questions

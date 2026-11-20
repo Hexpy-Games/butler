@@ -20,7 +20,6 @@ pub use self::skeleton::ItemCardSkeleton;
 use super::measure;
 use crate::tokens::{Color, Length};
 use crate::ui::context::Ds;
-use crate::ui::strut;
 
 type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -247,7 +246,7 @@ impl RenderOnce for ItemCard {
         };
         let anchor = format!("{id}-card");
         // `Card` inherits the body font and line height (the Show more button's line box).
-        let mut card = strut::container(div(), ds)
+        let mut card = div()
             .id((id.clone(), "card"))
             .debug_selector(move || anchor.clone())
             .flex()

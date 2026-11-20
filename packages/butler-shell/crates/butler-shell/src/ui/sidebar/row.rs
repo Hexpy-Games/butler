@@ -5,7 +5,8 @@ use super::{Shell, canon_state::nested_chat_ids};
 use crate::ui::{Icon, source::wire::SpaceNodeKind, store::navigation::SpaceRowData};
 use butler_ds::ui::{
     blocks::{
-        collapsible_nav_group::{CollapsibleNavGroup, StickyScroll},
+        collapsible_nav_group::CollapsibleNavGroup,
+        nav_drop,
         nav_row::{NavRow, NavRowSwap},
     },
     collapsible::{CollapsibleList, Row as CollapsibleRow},
@@ -18,26 +19,16 @@ use butler_ds::ui::{
     typo::{Tone, Typo, Wrap},
     unread_dot::UnreadDot,
 };
-use gpui::{AnyElement, App, Context, SharedString, Window, div, prelude::*};
+use gpui::{AnyElement, Context, SharedString, div, prelude::*};
 
-/// Where the sidebar's sticky headers hold: the scroller's recorder is the first row of the
-/// SidebarShell (`Shell::sidebar_sticky(..).recorder()`), every branch header reads it.
-const STICKY_ID: &str = "sidebar-sticky";
-
-/// A sticky group: the scroller it holds in and `stickyDepth`, the number of sticky groups
+/// A sticky group in the SidebarShell's scroller: `stickyDepth`, the number of sticky groups
 /// around it.
 #[derive(Clone, Copy)]
-pub(super) struct Pin<'a> {
-    pub(super) scroll: &'a StickyScroll,
+pub(super) struct Pin {
     pub(super) depth: usize,
 }
 
 impl Shell {
-    /// The sticky scroller of the sidebar tree; state is keyed, so every call is the same one.
-    pub(super) fn sidebar_sticky(window: &mut Window, cx: &mut App) -> StickyScroll {
-        StickyScroll::new(STICKY_ID, window, cx)
-    }
-
     pub(super) fn space_row_actions(
         &mut self,
         row: &SpaceRowData,
@@ -127,11 +118,9 @@ impl Shell {
         let instance_scope = self.sidebar.tab.value();
         let rows = rows.into_iter().map(move |row| {
             let weak = weak.clone();
-            CollapsibleRow::new(row.node.key.clone(), move |window, cx| {
-                let scroll = Self::sidebar_sticky(window, cx);
+            CollapsibleRow::new(row.node.key.clone(), move |_, cx| {
                 weak.update(cx, |s, cx| {
                     let pin = Pin {
-                        scroll: &scroll,
                         depth: row.ancestors.len(),
                     };
                     s.space_row_in(&row, (flat, false), instance_scope, Some(pin), cx)
@@ -161,7 +150,7 @@ impl Shell {
         row: &SpaceRowData,
         (flat, shortcut): (bool, bool),
         scope: &str,
-        pin: Option<Pin<'_>>,
+        pin: Option<Pin>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let key = row.node.key.clone();
@@ -195,7 +184,10 @@ impl Shell {
             && !shortcut
             && let Some(session) = &row.session
         {
-            block = block.child(self.subtask_lines(session, cx));
+            block = block.child(nav_drop::neighbour(
+                SharedString::from(format!("subtasks-{instance}")),
+                self.subtask_lines(session, cx),
+            ));
         }
         block.into_any_element()
     }
@@ -204,7 +196,7 @@ impl Shell {
         row: &SpaceRowData,
         (flat, shortcut): (bool, bool),
         instance: &str,
-        pin: Option<Pin<'_>>,
+        pin: Option<Pin>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let key = row.node.key.clone();
@@ -258,7 +250,7 @@ impl Shell {
         row: &SpaceRowData,
         actions: AnyElement,
         instance: &str,
-        pin: Option<Pin<'_>>,
+        pin: Option<Pin>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let key = row.node.key.clone();
@@ -271,7 +263,10 @@ impl Shell {
         )
         .glyph(space_glyph(row))
         .indented()
-        .actions(actions)
+        .actions(crate::ui::widgets::anchored(
+            actions,
+            &format!("sidebar-group-actions-{}", row.node.entityId),
+        ))
         .on_toggle(cx.listener(move |s, _, _, cx| {
             if s.sidebar.take_long_press(&click_instance) {
                 return;
@@ -281,7 +276,7 @@ impl Shell {
             cx.notify();
         }));
         if let Some(pin) = pin {
-            group = group.sticky(pin.scroll, pin.depth);
+            group = group.sticky(pin.depth);
         }
         let mut children = self.store.navigation.children(Some(&row.node.key));
         if let Some(project) = &row.project {
@@ -295,7 +290,6 @@ impl Shell {
             }
             let canon_pin = pin.map(|pin| Pin {
                 depth: pin.depth + 1,
-                ..pin
             });
             group = group.child(self.canon_sidebar_groups(&project.id, canon_pin, cx));
         }
@@ -322,12 +316,10 @@ impl Shell {
             cx,
         ));
         if children.len() > limit {
-            group = group.child(self.sidebar_session_load_more(
-                Some(row.node.key.clone()),
-                children.len() - limit,
-                limit,
-                cx,
-            ));
+            let (rest, key) = (children.len() - limit, row.node.key.clone());
+            let more = self.sidebar_session_load_more(Some(key.clone()), rest, limit, cx);
+            let id = SharedString::from(format!("more-{key}"));
+            group = group.child(nav_drop::neighbour(id, more));
         }
         group.into_any_element()
     }

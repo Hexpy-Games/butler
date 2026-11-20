@@ -120,7 +120,6 @@ impl SegmentedControl {
 
 impl RenderOnce for SegmentedControl {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let shrink = strut::shrink_wrap(cx);
         let selected = self.options.iter().position(|o| o.value == self.value);
         let first_enabled = self.options.iter().position(|o| !o.disabled);
         let stop = selected.or(first_enabled).unwrap_or(0);
@@ -156,11 +155,9 @@ impl RenderOnce for SegmentedControl {
             .overflow_x_scroll()
             .rounded(radius)
             .bg(ds.color(Color::Surface));
-        track = match (self.stretch, shrink) {
-            (true, _) => track.w_full(),
-            (false, true) => track.self_start(),
-            (false, false) => track,
-        };
+        if self.stretch {
+            track = track.w_full();
+        }
         if sm {
             // `box-shadow: inset 0 0 0 1px var(--line)`.
             track = track.child(
@@ -195,7 +192,12 @@ impl RenderOnce for SegmentedControl {
         if let Some(keys) = keys {
             track = track.on_key_down(keys);
         }
-        track.children(items)
+        let track = track.children(items);
+        if self.stretch {
+            track.into_any_element()
+        } else {
+            strut::fit_content(true, track)
+        }
     }
 }
 

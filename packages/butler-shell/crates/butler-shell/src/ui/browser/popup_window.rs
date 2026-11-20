@@ -2,6 +2,7 @@
 use super::{engine::TabId, model::BrowserState};
 use crate::lifecycle::window::{WindowMetrics, apply_text_scale, min_size, scaled_traffic_lights};
 use crate::ui::{i18n::browser::BrowserStrings, widgets::anchor};
+use butler_ds::tokens::Length;
 use butler_ds::ui::blocks::{page_card::PageCard, popup_window_chrome::PopupWindowChrome};
 use butler_ds::ui::context::Ds;
 use gpui::{
@@ -160,7 +161,11 @@ impl Render for PopupWindow {
             page = page.overlay(super::dialog::show(&tab.id, dialog, window, cx));
         }
         let close = tab.id.clone();
+        let ds = Ds::get(cx);
         anchor(div().id("popup-window-root"), "browser-popup-window")
+            .font_family(ds.body_font().clone())
+            .text_size(ds.len(Length::TypoBodySize))
+            .line_height(ds.len(Length::TypoBodyLineHeight))
             .track_focus(&self.focus)
             .key_context("BrowserArea")
             .on_action(move |_: &super::area::CloseTab, window, cx| {

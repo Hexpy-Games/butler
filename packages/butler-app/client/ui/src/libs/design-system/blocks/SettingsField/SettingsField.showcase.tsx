@@ -35,7 +35,7 @@ const labels = {
     section: "일반",
     port: "포트",
     portDescription: "웹 앱이 쓰는 로컬 포트입니다.",
-    portError: "1024부터 65535까지의 숫자를 입력하세요.",
+    portError: "1024부터 65535까지의 숫자를 입력하십시오.",
   },
 } as const;
 

@@ -20,7 +20,7 @@ export const meta: ShowcaseMeta = {
 
 const COPY = {
   "en-US": { secure: "Secure connection", insecure: "Not secure", signIn: "Sign in to continue", email: "Email", next: "Next", minimize: "Minimize window", maximize: "Maximize window", close: "Close window" },
-  "ko-KR": { secure: "안전한 연결", insecure: "주의 요함", signIn: "계속하려면 로그인하세요", email: "이메일", next: "다음", minimize: "창 최소화", maximize: "창 최대화", close: "창 닫기" },
+  "ko-KR": { secure: "안전한 연결", insecure: "주의 요함", signIn: "계속하려면 로그인하십시오", email: "이메일", next: "다음", minimize: "창 최소화", maximize: "창 최대화", close: "창 닫기" },
 } as const;
 
 /** The pop-up's page (a sign-in form), standing in for the native view. */

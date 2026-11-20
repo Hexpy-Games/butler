@@ -54,7 +54,7 @@ fn copy(lang: Lang) -> Copy {
             toggle: "Fold or unfold",
         },
         Copy {
-            placeholder: "버틀러에게 무엇이든 물어보세요",
+            placeholder: "버틀러에게 무엇이든 물어보십시오",
             follow_up: "후속 변경사항 요청",
             more: "추가 기능",
             plan: "계획",
@@ -62,7 +62,7 @@ fn copy(lang: Lang) -> Copy {
             model: "Model 5.1",
             draft: "모션 토큰을 요약하고 아직 자체 전환을 선언하는 컴포넌트를 나열해 주세요.",
             preview: "모션 토큰을 요약하고…",
-            optional: "웹 검색이 꺼져 있습니다. 출처를 인용하려면 설정에서 켜세요.",
+            optional: "웹 검색이 꺼져 있습니다. 출처를 인용하려면 설정에서 켜십시오.",
             no_images: "이미지 미지원 모델",
             toggle: "접기 또는 펼치기",
         },

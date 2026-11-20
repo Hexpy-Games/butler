@@ -34,7 +34,7 @@ export const guidance: ShowcaseGuidance = {
         render: () => <IconButton label="Save to library"><Library size="sm" /></IconButton> },
     },
   ],
-  content: ["label names the action (Save to library / 서랍에 저장); doneLabel states the result (Saved to library / 서랍에 저장했어요)."],
+  content: ["label names the action (Save to library / 서랍에 저장); doneLabel states the result (Saved to library / 서랍에 저장했습니다)."],
   accessibility: [
     "The tooltip and accessible name switch to doneLabel while the check shows; the icon swap is decorative.",
     "doneLabel is announced in a polite live region; pass announce={false} when the action already announces its result (a toast), so it is said once.",

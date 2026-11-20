@@ -29,6 +29,12 @@ pub fn area(el: Div) -> Div {
         .on_mouse_up(MouseButton::Left, |_, _, _| ARMED.set(false))
 }
 
+/// Whether the last press armed a window move; clears it. For the test harness only.
+#[doc(hidden)]
+pub fn take_armed() -> bool {
+    ARMED.replace(false)
+}
+
 /// A control inside a drag band: it takes the press, so the band never moves the window from it.
 pub fn no_drag(el: Div) -> Div {
     el.on_mouse_down(MouseButton::Left, |_, _, cx| {

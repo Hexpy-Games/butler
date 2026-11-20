@@ -6,26 +6,21 @@
 //!
 //! The block containers of the DS (Box, Card, TintedGlass, item wrappers) wrap their subtree in
 //! [`scope`] with `true` and Stack with `false`; an inline `Typo` reads [`active`] while it
-//! renders. The strut is the root's body line (`--typo-body-*`), which every DS container
-//! inherits unless an ancestor sets another.
-use super::context::Ds;
-use super::typo::Role;
+//! renders. The strut is the inherited font at the inherited line height, so each window root
+//! sets the body text style (`--typo-body-*`) as the CSS `body` rule does.
 use gpui::{
-    AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
-    LayoutId, ParentElement as _, Pixels, Styled as _, Window, div,
+    AnyElement, App, Bounds, Div, Element, ElementId, GlobalElementId, InspectorElementId,
+    IntoElement, LayoutId, ParentElement as _, Pixels, Styled as _, Window, div,
 };
 
-/// The strut of a block container: the root's body font at its line height. An inline `Typo`
-/// flowing in the container takes line boxes at least this tall.
-pub fn container<E: gpui::Styled>(el: E, ds: &Ds) -> E {
-    let body = Role::Body.tokens();
-    let mut el = el.font_family(ds.body_font().clone());
-    if let Some(body) = body {
-        el = el
-            .text_size(ds.len(body.size))
-            .line_height(ds.len(body.line_height));
-    }
-    el
+use crate::tokens::Length;
+use crate::ui::context::Ds;
+
+/// A root (window or drag view) starts the text-style stack at the body font, as the CSS `body` rule does.
+pub(crate) fn body_root<E: gpui::Styled>(el: E, ds: &Ds) -> E {
+    el.font_family(ds.body_font().clone())
+        .text_size(ds.len(Length::TypoBodySize))
+        .line_height(ds.len(Length::TypoBodyLineHeight))
 }
 
 /// One container being laid out: whether it is a block (inline children get a strut) and whether
@@ -80,16 +75,39 @@ pub fn auto_track(cx: &App) -> bool {
         .is_some_and(|frame| frame.auto_track)
 }
 
-/// An item with `width: max-content` in a container that stretches its items: a full-width row
-/// that holds `child` at its content width. gpui has no `justify-self`, which is what a grid
-/// item needs to opt out of the stretch (`align-self` is the other axis there).
+/// An item with `width: max-content`: `child` at its content width, whatever the container. The
+/// value constrains only the width, so it cannot be `align-self` (that is the parent's cross
+/// axis: a row's vertical one). A column, block or grid cell stretches this box and `child`
+/// keeps its width at the start; a row sizes the box to `child` and aligns it as any item.
 pub fn max_content(child: impl IntoElement) -> AnyElement {
-    div()
-        .flex()
-        .w_full()
-        .min_w_0()
+    fit(false, child)
+}
+
+/// [`max_content`] for a `child` that is block-level (`false`) or an atomic inline box (`true`).
+pub(crate) fn fit(inline: bool, child: impl IntoElement) -> AnyElement {
+    fit_box(inline)
         .child(div().flex().flex_none().max_w_full().child(child))
         .into_any_element()
+}
+
+/// The box of [`max_content`]: a horizontal flex box that does not grow or shrink. It takes the
+/// outer display of what it holds: an inline box stays on its line in a block (where nothing
+/// stretches it), and a flex or grid container blockifies it as any item.
+pub(crate) fn fit_box(inline: bool) -> Div {
+    let el = div();
+    let el = if inline { el.inline_flex() } else { el.flex() };
+    el.flex_none().max_w_full().min_w_0()
+}
+
+/// An item with `width: fit-content` and the default `flex: 0 1 auto`: as [`max_content`], but a
+/// row too narrow for it shrinks the box and `child` with it. `min_zero` is the item's
+/// `min-width: 0`; without it the box keeps its automatic minimum, `child`'s min-content width.
+/// Always block-level: gpui measures an atomic inline box at its max-content width, so an inline
+/// box could not fit a narrow block.
+pub(crate) fn fit_content(min_zero: bool, child: impl IntoElement) -> AnyElement {
+    let el = div().flex().flex_grow_0().flex_shrink_1().max_w_full();
+    let el = if min_zero { el.min_w_0() } else { el };
+    el.child(child).into_any_element()
 }
 
 /// The Dialog being laid out, when the container is inside one.

@@ -267,22 +267,19 @@ impl Typo {
     }
 
     /// An inline span in a block: its line box is the taller of its own and the strut's (the
-    /// body role), baselines aligned. Returns the line height to use and how far the glyphs move
-    /// down from where a line of that height would put them.
-    fn strut_line(ds: &Ds, own: (&SharedString, f32, f32, f32), cx: &App) -> (f32, f32) {
-        let body = Role::Body.tokens().map(|body| {
-            (
-                f32::from(ds.len(body.size)),
-                f32::from(ds.len(body.line_height)),
-                ds.number(body.weight),
-            )
-        });
-        let Some((body_size, body_line, body_weight)) = body else {
-            return (own.2, 0.);
-        };
+    /// inherited font at the inherited line height, as in CSS), baselines aligned. Returns the
+    /// line height to use and how far the glyphs move down from where a line of that height would
+    /// put them.
+    fn strut_line(own: (&SharedString, f32, f32, f32), window: &Window, cx: &App) -> (f32, f32) {
+        let inherited = window.text_style();
+        let rem = window.rem_size();
+        let body_size = f32::from(inherited.font_size.to_pixels(rem));
+        let body_line = f32::from(inherited.line_height_in_pixels(rem));
+        let body_family = inherited.font_family.clone();
         let (family, size, line, weight) = own;
         let (own_asc, own_desc) = Self::extent(family, size, weight, cx);
-        let (body_asc, body_desc) = Self::extent(ds.body_font(), body_size, body_weight, cx);
+        let (body_asc, body_desc) =
+            Self::extent(&body_family, body_size, inherited.font_weight.0, cx);
         let above = |asc: f32, desc: f32, line: f32| (line - (asc + desc)) / 2. + asc;
         let (above_own, above_body) = (
             above(own_asc, own_desc, line),
@@ -327,7 +324,7 @@ impl Typo {
 }
 
 impl RenderOnce for Typo {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
         let keep = ds.lang() == Lang::Ko || self.role.keeps_words();
         let (text, highlights) = self.content(ds);
@@ -358,7 +355,8 @@ impl RenderOnce for Typo {
             }
             trim = Some(Self::trim_offset(&family, size, cx, weight));
             if self.inline_box() && strut::active(cx) && !flow {
-                let (line, shift) = Self::strut_line(ds, (&family, size, line_height, weight), cx);
+                let (line, shift) =
+                    Self::strut_line((&family, size, line_height, weight), window, cx);
                 el = el.line_height(px(line));
                 trim = Some(shift);
             }

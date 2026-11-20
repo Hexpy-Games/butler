@@ -19,8 +19,9 @@ use butler_ds::ui::copy_button::CopyButton;
 use butler_ds::ui::icon::{IconSize, icon, icon_px};
 use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Space, Stack};
+use butler_ds::ui::selectable::Break;
 use butler_ds::ui::spinner::Spinner;
-use butler_ds::ui::typo::{Role as TypoRole, Tone, Typo};
+use butler_ds::ui::typo::{Role as TypoRole, Typo};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, Window, div, px};
 
 use super::Story;
@@ -85,7 +86,7 @@ fn assistant_footer(id: &str, text: &str, time: &'static str, l: Footer) -> [Any
             // The mark fills its 18px box (`.statusMark svg`).
             icon_px(Icon::CheckCircle2, px(18.)),
         )
-        .child(Typo::caption(l.completed)),
+        .child(Typo::caption(l.completed).selectable(Break::Line)),
     );
     [footer.into_any_element(), status.into_any_element()]
 }
@@ -265,9 +266,7 @@ fn default_turn(lang: Lang, cx: &App) -> AnyElement {
             MessageRow::new("mr-default-assistant", Role::Assistant)
                 .child(
                     // A bare `<p>`: the user agent's one-em block margins.
-                    div()
-                        .my(ds.len(Length::FontSize3))
-                        .child(Typo::body(c.summary).tone(Tone::Inherit)),
+                    div().my(ds.len(Length::FontSize3)).child(c.summary),
                 )
                 .child(footer)
                 .child(status),

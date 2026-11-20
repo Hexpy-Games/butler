@@ -5,7 +5,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogT
 
 const COPY = {
   "en-US": { title: "Save your changes?", keep: "Keep editing", discard: "Don't save", save: "Save" },
-  "ko-KR": { title: "변경 내용을 저장할까요?", keep: "계속 편집", discard: "저장 안 함", save: "저장" },
+  "ko-KR": { title: "변경 내용을 저장하시겠습니까?", keep: "계속 편집", discard: "저장 안 함", save: "저장" },
 } as const;
 
 /**

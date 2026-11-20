@@ -19,7 +19,7 @@ use super::{Env, RenderItem, StepSortableOutcome, StepSortableRowContext, sub};
 use crate::tokens::{Color, Length, Shadow};
 use crate::ui::card::Card;
 use crate::ui::context::Ds;
-use crate::ui::convert;
+use crate::ui::{convert, strut};
 
 pub(super) struct Lifted {
     pub hub: Rc<Hub>,
@@ -70,7 +70,7 @@ impl Render for Lifted {
             .first()
             .and_then(|first| locate_item(&chains, first));
         let (Some(at), true) = (at, carried) else {
-            return div().into_any_element();
+            return strut::body_root(div(), Ds::get(cx)).into_any_element();
         };
         let chain = &chains[at.chain];
         let step = &chain.steps[at.step];
@@ -128,6 +128,9 @@ impl Render for Lifted {
             .boxes
             .get(&step_key(&chain.id, at.step))
             .map(|b| b.size.width);
-        lifted_surface(inner, width, self.offset.y, cx)
+        let ds = Ds::get(cx);
+        strut::body_root(div(), ds)
+            .child(lifted_surface(inner, width, self.offset.y, cx))
+            .into_any_element()
     }
 }

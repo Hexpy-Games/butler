@@ -285,7 +285,6 @@ impl Tag {
 
 impl RenderOnce for Tag {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let shrink = strut::shrink_wrap(cx);
         let (border, fill, ink) = palette(self.tone, Ds::get(cx));
         let edit = self.edit_button(ink, window, cx);
         let ds = Ds::get(cx);
@@ -336,7 +335,6 @@ impl RenderOnce for Tag {
             .flex()
             .flex_none()
             .items_center()
-            .self_start()
             .gap(gap)
             .min_h(ds.len(height))
             .py(ds.len(Length::TagPaddingBlock))
@@ -353,10 +351,6 @@ impl RenderOnce for Tag {
             .children(edit)
             .children(remove);
         // `width: fit-content`: a column or grid that stretches its items does not stretch it.
-        if shrink {
-            strut::max_content(tag).into_any_element()
-        } else {
-            tag.into_any_element()
-        }
+        strut::max_content(tag)
     }
 }

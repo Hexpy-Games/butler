@@ -2,9 +2,10 @@
 use super::live_turns::ready_workspace;
 use super::*;
 
-/// SHELL-APP-12 — Electron's `app-region` rule: the title band drags except its controls, which take
-/// the press. Presses on a grid over the band (the harness's `titlebar-grid`) are checked against
-/// the controls' bounds: every press inside a control is stopped, and the band itself drags.
+/// SHELL-APP-12 — Electron's `app-region` rule: the title band drags except its controls, which
+/// take the press. Presses on a grid over the band (the harness's `titlebar-grid`) are checked
+/// against the controls' bounds: every press inside a control is stopped, and the band itself drags
+/// (the band above the open sidebar too; a press counts as drag only if it armed the move).
 #[tokio::test]
 async fn shell_app_12_the_title_band_drags_except_its_controls() -> Result<(), HarnessError> {
     butler_e2e::gate!();
@@ -29,13 +30,28 @@ async fn shell_app_12_the_title_band_drags_except_its_controls() -> Result<(), H
             &format!("wait-anchor sidebar-row-{id}"),
             &format!("open {id}"),
             "wait-anchor session-menu-trigger",
+            // Sidebar open: the band above it drags too.
+            "titlebar-grid 8 sidebar",
+        ])
+        .await?;
+    check(&shell.report("titlebar-grid-sidebar")?);
+    shell
+        .run(&[
             // Sidebar collapsed: the title band then spans the window, the sidebar toggle in it.
             "click sidebar-toggle",
             "wait 500",
             "titlebar-grid 8",
         ])
         .await?;
-    let grid = shell.report("titlebar-grid")?;
+    check(&shell.report("titlebar-grid")?);
+    shell.finish().await?;
+    sandbox.mark_success();
+    Ok(())
+}
+
+/// The grid's assertions: no press that armed the move lies inside a control, no press outside the
+/// controls is dead, and some press arms the move.
+fn check(grid: &serde_json::Value) {
     let points = |key: &str| -> Vec<(f64, f64)> {
         grid[key]
             .as_array()
@@ -61,21 +77,16 @@ async fn shell_app_12_the_title_band_drags_except_its_controls() -> Result<(), H
             .iter()
             .any(|b| x >= b[0] && x < b[2] && y >= b[1] && y < b[3])
     };
-    let (drag, stopped) = (points("drag"), points("control"));
+    let drag = points("drag");
+    let from_control: Vec<_> = drag.iter().filter(|p| inside(**p)).collect();
     assert!(
-        !drag.is_empty() && !stopped.is_empty() && !controls.is_empty(),
-        "{grid}"
+        from_control.is_empty(),
+        "presses on a control reach the window drag: {from_control:?}\n{grid}"
     );
-    let moves_from_control: Vec<_> = drag.iter().filter(|p| inside(**p)).collect();
+    let dead: Vec<_> = points("dead").into_iter().filter(|p| !inside(*p)).collect();
     assert!(
-        moves_from_control.is_empty(),
-        "presses on a control reach the window drag: {moves_from_control:?}\n{grid}"
+        dead.is_empty(),
+        "presses outside the controls move nothing: {dead:?}\n{grid}"
     );
-    assert!(
-        drag.iter().any(|p| !inside(*p)),
-        "no press outside the controls reaches the window drag\n{grid}"
-    );
-    shell.finish().await?;
-    sandbox.mark_success();
-    Ok(())
+    assert!(!drag.is_empty(), "no press arms the window drag\n{grid}");
 }

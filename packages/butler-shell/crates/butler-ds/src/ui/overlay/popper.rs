@@ -10,8 +10,8 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, Bounds, Display, Element, ElementId, GlobalElementId, InspectorElementId,
-    IntoElement, LayoutId, ParentElement as _, Pixels, Position, RenderOnce, Style, Styled as _,
-    Window, canvas, deferred, point, px,
+    InteractiveElement as _, IntoElement, LayoutId, ParentElement as _, Pixels, Position,
+    RenderOnce, Style, Styled as _, Window, canvas, deferred, div, point, px,
 };
 
 use super::place::{self, Options, Rect, Resolved};
@@ -144,6 +144,13 @@ impl Popper {
 impl RenderOnce for Popper {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let priority = self.z.value(Ds::get(cx));
+        // Over the surface, wheel and pointer stop here, as a DOM overlay on top (web: Popover.module.css overscroll-behavior: contain).
+        // A pinned child brings its own window-sized occluding backdrop (bottom_sheet/anim.rs).
+        let child = if self.pinned {
+            self.child
+        } else {
+            div().occlude().child(self.child).into_any_element()
+        };
         deferred(Placed {
             pinned: self.pinned,
             anchor: self.anchor,
@@ -151,7 +158,7 @@ impl RenderOnce for Popper {
             frozen: self.frozen,
             output: self.output,
             theme: self.theme,
-            child: self.child,
+            child,
         })
         .priority(priority)
     }

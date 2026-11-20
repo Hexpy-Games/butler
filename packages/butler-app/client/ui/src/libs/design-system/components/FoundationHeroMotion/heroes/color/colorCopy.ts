@@ -29,7 +29,7 @@ export const COLOR_COPY = {
       ["의도", "초록·주황·빨강은 상태만 말하며, 두 테마 모두에서 대비를 맞춥니다."],
     ] as Array<[string, string]>,
     topics: { contrast: "대비", action: "동작", status: "상태", states: "비활성·포커스" },
-    cardTitle: "릴리스 노트", cardBody: "이번 주 세 가지가 바뀌었어요.", cardMeta: "2분 전 업데이트",
+    cardTitle: "릴리스 노트", cardBody: "이번 주 세 가지가 바뀌었습니다.", cardMeta: "2분 전 업데이트",
     publish: "게시", later: "나중에", autoSave: "자동 저장",
     done: "동기화됨", attention: "디스크 부족", failed: "실패", info: "버틀러가 매일 업데이트를 확인합니다.",
     readOnly: "읽기 전용", focused: "you@example.com",

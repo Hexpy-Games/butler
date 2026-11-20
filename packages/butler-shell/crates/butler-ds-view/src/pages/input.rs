@@ -48,7 +48,7 @@ fn copy(lang: Lang) -> Copy {
             api_key_hint: "이 컴퓨터에만 저장되며 마지막 네 글자만 보입니다.",
             context: "컨텍스트 창",
             oauth: "로그인 링크",
-            invalid: "숫자를 입력하세요",
+            invalid: "숫자를 입력하십시오",
             max_workers: "최대 동시 Worker 수",
             search: "설정 검색",
             inline_padding: "안쪽 여백",

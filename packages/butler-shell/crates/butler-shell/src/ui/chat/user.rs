@@ -181,7 +181,7 @@ impl RenderOnce for UserMessageText {
         let strings = transcript(Ds::get(cx).lang());
         let toggle = overflowing.then(|| {
             let state = state.clone();
-            Button::new(SharedString::from(format!("{}-toggle", self.id)))
+            let button = Button::new(SharedString::from(format!("{}-toggle", self.id)))
                 .variant(Variant::Inline)
                 .text(if expanded {
                     strings.show_less
@@ -193,11 +193,12 @@ impl RenderOnce for UserMessageText {
                         s.expanded = !s.expanded;
                         cx.notify();
                     });
-                })
+                });
+            crate::ui::widgets::anchored(button, "user-toggle")
         });
         div()
             .child(
-                div()
+                crate::ui::widgets::anchor(div(), "user-text")
                     .relative()
                     .min_w_0()
                     .child(self.content(!expanded, true, line))
