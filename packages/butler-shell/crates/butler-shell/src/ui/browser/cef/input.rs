@@ -1,12 +1,24 @@
+use super::super::{
+    agent_host::{Gate, Input},
+    model::BrowserState,
+};
 use super::surface::Page;
 use butler_cef_host::osr::{OsrButton, OsrKey, OsrModifiers, OsrMouse, OsrMouseKind, OsrWheel};
 use gpui::{
-    Context, Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
-    MouseUpEvent, NativeKeyData, Pixels, Point, ScrollDelta, ScrollWheelEvent, Window,
-    WindowsKeyData, px,
+    App, BorrowAppContext as _, Context, Keystroke, Modifiers, MouseButton, MouseDownEvent,
+    MouseExitEvent, MouseMoveEvent, MouseUpEvent, NativeKeyData, Pixels, Point, ScrollDelta,
+    ScrollWheelEvent, Window, WindowsKeyData, px,
 };
 
 impl Page {
+    /// Whether real input reaches the page; the Agent's own input arrives over DevTools.
+    pub(super) fn admit(&self, input: Input, cx: &mut App) -> bool {
+        let Some(tab) = self.state.borrow().tab.clone() else {
+            return true;
+        };
+        cx.update_global::<BrowserState, _>(|model, _| model.user_input(&tab, input))
+            == Gate::Forward
+    }
     fn mouse(
         &self,
         position: Point<Pixels>,
@@ -39,6 +51,9 @@ impl Page {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.admit(Input::Press, cx) {
+            return;
+        }
         self.state
             .borrow()
             .last_input
@@ -57,8 +72,11 @@ impl Page {
         &mut self,
         e: &MouseUpEvent,
         window: &mut Window,
-        _: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
+        if !self.admit(Input::Other, cx) {
+            return;
+        }
         self.mouse(
             e.position,
             e.modifiers,
@@ -72,8 +90,11 @@ impl Page {
         &mut self,
         e: &MouseMoveEvent,
         window: &mut Window,
-        _: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
+        if !self.admit(Input::Other, cx) {
+            return;
+        }
         self.mouse(
             e.position,
             e.modifiers,
@@ -87,8 +108,11 @@ impl Page {
         &mut self,
         e: &MouseExitEvent,
         window: &mut Window,
-        _: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
+        if !self.admit(Input::Other, cx) {
+            return;
+        }
         self.mouse(
             e.position,
             e.modifiers,
@@ -102,8 +126,11 @@ impl Page {
         &mut self,
         e: &ScrollWheelEvent,
         window: &mut Window,
-        _: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
+        if !self.admit(Input::Other, cx) {
+            return;
+        }
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };
@@ -125,7 +152,16 @@ impl Page {
             },
         );
     }
-    pub(super) fn key(&self, key: &Keystroke, native: Option<NativeKeyData>, up: bool) {
+    pub(super) fn key(
+        &self,
+        key: &Keystroke,
+        native: Option<NativeKeyData>,
+        up: bool,
+        cx: &mut App,
+    ) {
+        if !self.admit(if up { Input::Other } else { Input::Press }, cx) {
+            return;
+        }
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };

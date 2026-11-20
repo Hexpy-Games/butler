@@ -5,7 +5,8 @@
     clippy::panic,
     reason = "test assertions"
 )]
-use super::support::{admin, call, open, publish, selected, setup, shell};
+use super::support::{admin, call, node, open, publish, selected, setup, shell};
+use crate::shell_app::live_turns::complete_onboarding;
 use butler_e2e::e2e::HarnessError;
 use serde_json::{Value, json};
 
@@ -82,5 +83,66 @@ async fn the_page_host_starts_cef_on_first_use_without_a_window() -> Result<(), 
         "{opened}"
     );
     assert!(profile.is_dir(), "CEF started on the first page");
+    s.finish().await
+}
+
+#[tokio::test]
+async fn the_user_takes_an_idle_agent_page_by_input() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        shell() && selected(),
+        "BUTLER_E2E_BROWSER_BACKEND=shell not set"
+    );
+    let mut s = setup("BROWSER-PAGE-HOST-USER-INPUT")?.start().await?;
+    let url = publish(&s).await?;
+    let admin = admin(&s);
+    let opened = open(&admin, "general", &url).await?;
+    assert_eq!(opened["status"], "ok", "{opened}");
+    let tab = &opened["tab"];
+    let page = call(&admin, "general", "tab.observe", tab, json!({})).await?;
+    let rect = &node(&page, "textbox", "Search")["rect"];
+    let (x, y) = (
+        rect["x"].as_f64().unwrap() + rect["width"].as_f64().unwrap() / 2.0,
+        rect["y"].as_f64().unwrap() + rect["height"].as_f64().unwrap() / 2.0,
+    );
+    // `page-click` maps window pixels x window zoom, but the observed rect is in page coordinates: this runs at zoom 1.
+    // The Agent's tab is the shown one; a press in its input makes the user the holder.
+    complete_onboarding(&s.gw).await?;
+    s.shell(&[
+        "close-window",
+        "tray-open",
+        "wait-anchor composer",
+        "browser",
+        "wait-anchor browser-area",
+        "click browser-tab-0",
+    ])
+    .await?;
+    s.shell(&[&format!("page-click {x} {y}")]).await?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let refused = call(&admin, "general", "tab.observe", tab, json!({})).await?;
+        if refused["status"] == "not_dispatched" {
+            assert_eq!(refused["reason"], "user_control", "{refused}");
+            let listed = call(&admin, "general", "tabs.list", &Value::Null, json!({})).await?;
+            let held = listed["tabs"]
+                .as_array()
+                .and_then(|t| t.iter().find(|t| t["id"] == *tab));
+            assert_eq!(held.map(|t| &t["holder"]), Some(&json!("user")), "{listed}");
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{refused}");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    // The user's text still reaches the page.
+    s.shell(&["type typed"]).await?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let listed = call(&admin, "general", "tabs.list", &Value::Null, json!({})).await?;
+        if listed["tabs"][0]["title"] == "typed" {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{listed}");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
     s.finish().await
 }

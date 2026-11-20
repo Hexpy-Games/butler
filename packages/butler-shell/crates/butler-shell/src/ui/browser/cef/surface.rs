@@ -78,13 +78,13 @@ impl Render for Page {
             // The page moves its own focus on Tab: the shell's Tab navigation must not take focus
             // off it. Other keys go on to the text input that types into the page.
             .on_key_down(cx.listener(|s, e: &KeyDownEvent, _, cx| {
-                s.key(&e.keystroke, e.native, false);
+                s.key(&e.keystroke, e.native, false, cx);
                 if e.keystroke.key == "tab" {
                     cx.stop_propagation();
                 }
             }))
-            .on_key_up(cx.listener(|s, e: &KeyUpEvent, _, _| {
-                s.key(&e.keystroke, e.native, true);
+            .on_key_up(cx.listener(|s, e: &KeyUpEvent, _, cx| {
+                s.key(&e.keystroke, e.native, true, cx);
             }));
         let page = [MouseButton::Left, MouseButton::Middle, MouseButton::Right]
             .into_iter()
