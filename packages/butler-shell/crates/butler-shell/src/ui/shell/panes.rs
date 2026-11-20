@@ -5,6 +5,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use butler_ds::ui::blocks::adaptive_shell::parts::ShellCard;
 use butler_ds::ui::blocks::adaptive_shell::split::AdaptiveShellSplit;
 use butler_ds::ui::blocks::conversation_shell::AsideLayout;
 use butler_ds::ui::context::Ds;
@@ -285,7 +286,7 @@ impl Shell {
     ) -> AnyElement {
         let Some(session) = self.store.selected().map(|c| c.session.0.to_string()) else {
             self.panes.split = None;
-            return conversation;
+            return ShellCard::new().child(conversation).into_any_element();
         };
         let editing = match images::editor_target(cx) {
             Some(target) if target.session.as_ref() == session => true,

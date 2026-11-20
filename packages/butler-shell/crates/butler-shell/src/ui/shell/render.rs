@@ -68,11 +68,9 @@ impl Shell {
             .flex_col()
             .children(notice)
             .child(
-                ShellCard::new().child(
-                    self.with_aside(conversation)
-                        .child(content)
-                        .child(self.composer.clone()),
-                ),
+                self.with_aside(conversation)
+                    .child(content)
+                    .child(self.composer.clone()),
             )
             .into_any_element()
     }
