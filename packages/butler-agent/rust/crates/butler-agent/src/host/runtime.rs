@@ -420,8 +420,12 @@ impl AgentRuntime {
     }
 }
 
-async fn open_daily_cognition(owners: DailyCognitionOwners) -> Result<Arc<DailyCognitionJobs>, BtccError> {
-    Ok(Arc::new(DailyCognitionJobs::open(owners).await.map_err(setup)?))
+async fn open_daily_cognition(
+    owners: DailyCognitionOwners,
+) -> Result<Arc<DailyCognitionJobs>, BtccError> {
+    Ok(Arc::new(
+        DailyCognitionJobs::open(owners).await.map_err(setup)?,
+    ))
 }
 
 /// Capture both process time sources before opening any persistent store.
@@ -433,7 +437,10 @@ fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), 
 }
 
 impl AgentRuntime {
-    fn finish_startup(runtime: Self, memory_consumer: Arc<butler_memory::cognition::MemorySyncConsumer>) -> Result<Self, BtccError> {
+    fn finish_startup(
+        runtime: Self,
+        memory_consumer: Arc<butler_memory::cognition::MemorySyncConsumer>,
+    ) -> Result<Self, BtccError> {
         crate::host::memory_jobs::recover_resets(
             runtime.memory_management.clone(),
             runtime.profile.clone(),

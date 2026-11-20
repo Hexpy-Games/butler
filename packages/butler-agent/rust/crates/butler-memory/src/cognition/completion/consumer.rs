@@ -140,8 +140,11 @@ impl MemorySyncConsumer {
     /// Builds through the same registration owner and serial admission permit.
     pub fn rebuild_consumer(&self, generation_id: String) -> MemorySyncConsumer {
         let mut consumer = Self::new(
-            self.data_root.clone(), self.environment.clone(), self.registration.clone(),
-            self.coordinator.clone(), self.clock.clone(),
+            self.data_root.clone(),
+            self.environment.clone(),
+            self.registration.clone(),
+            self.coordinator.clone(),
+            self.clock.clone(),
         )
         .with_instruction_owner(self.instruction_owner.clone())
         .with_rebuild_target(generation_id)
@@ -158,7 +161,10 @@ impl MemorySyncConsumer {
         let root = self.data_root.clone();
         let environment = self.environment.clone();
         let target = self.target.clone().ok_or_else(|| {
-            CognitionError::new(CognitionCode::MemoryGenerationChanged, "memory_generation_changed")
+            CognitionError::new(
+                CognitionCode::MemoryGenerationChanged,
+                "memory_generation_changed",
+            )
         })?;
         blocking::run(move || catchup::caught_up(&root, &environment, &target)).await
     }

@@ -91,8 +91,7 @@ fn is_eligible_empty_target(
         MemoryGenerationTarget::Rebuild {
             generation_id: target_generation,
         } => {
-            target_generation == generation_id
-                && manifest.state == Some(GenerationState::Building)
+            target_generation == generation_id && manifest.state == Some(GenerationState::Building)
         }
     }
 }

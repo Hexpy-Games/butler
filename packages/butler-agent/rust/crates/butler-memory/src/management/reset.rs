@@ -54,14 +54,18 @@ impl MemoryManagement {
         tokio::task::spawn_blocking(move || {
             let mut receipt = cognition::reset_receipt(&root, &paths, &operation_id)?;
             if let Some(result) = &mut receipt
-                && result.kind == "reextract" && result.phase == "preparing"
-                && let Ok((total, done)) = cognition::reextract_progress(&root, &paths, &operation_id)
+                && result.kind == "reextract"
+                && result.phase == "preparing"
+                && let Ok((total, done)) =
+                    cognition::reextract_progress(&root, &paths, &operation_id)
             {
                 result.total = Some(total);
                 result.done = Some(done);
             }
             Ok(receipt)
-        }).await.map_err(io::Error::other)?
+        })
+        .await
+        .map_err(io::Error::other)?
     }
 }
 
@@ -194,13 +198,18 @@ impl MemoryManagement {
         let paths = self.paths.clone();
         let coordinator = self.coordinator.clone();
         tokio::task::spawn_blocking(move || {
-            if !cognition::active_memory_descriptor_exists(&root, &paths).map_err(io::Error::other)? {
+            if !cognition::active_memory_descriptor_exists(&root, &paths)
+                .map_err(io::Error::other)?
+            {
                 return Ok(None);
             }
-            let active = cognition::resolve_active_generation(&root, &paths).map_err(io::Error::other)?;
+            let active =
+                cognition::resolve_active_generation(&root, &paths).map_err(io::Error::other)?;
             let manifest = cognition::GenerationManifest::read(
-                &active.root.join("manifest.json"), cognition::CognitionCode::MemoryGenerationUnavailable,
-            ).map_err(io::Error::other)?;
+                &active.root.join("manifest.json"),
+                cognition::CognitionCode::MemoryGenerationUnavailable,
+            )
+            .map_err(io::Error::other)?;
             if manifest.extraction_rules_version() >= cognition::MEMORY_EXTRACTION_RULES_VERSION {
                 return Ok(None);
             }
@@ -214,7 +223,9 @@ impl MemoryManagement {
                             continue;
                         }
                         if cognition::reset_receipt(&root, &paths, &id)?.is_some_and(|receipt| {
-                            receipt.kind == "reextract" && receipt.phase == "failed" && receipt.old_generation == active.generation_id
+                            receipt.kind == "reextract"
+                                && receipt.phase == "failed"
+                                && receipt.old_generation == active.generation_id
                         }) {
                             return Ok(None);
                         }
@@ -224,10 +235,18 @@ impl MemoryManagement {
                 Err(error) => return Err(error),
             }
             cognition::begin_conversation_reset(
-                &root, &paths, &coordinator, &uuid::Uuid::new_v4().to_string(),
-                coordinator.inventory_revision(), None, "reextract",
-            ).map(Some)
-        }).await.map_err(io::Error::other)?
+                &root,
+                &paths,
+                &coordinator,
+                &uuid::Uuid::new_v4().to_string(),
+                coordinator.inventory_revision(),
+                None,
+                "reextract",
+            )
+            .map(Some)
+        })
+        .await
+        .map_err(io::Error::other)?
     }
 
     /// Drives or resumes the staged generation through the supplied shadow consumer.
@@ -239,8 +258,14 @@ impl MemoryManagement {
         token: CancellationToken,
     ) -> io::Result<cognition::ReextractOutcome> {
         cognition::reextract_conversations(
-            (self.root.clone(), self.paths.clone()), self.coordinator.clone(), id,
-            shadow, now, token, self.stop.clone(),
-        ).await
+            (self.root.clone(), self.paths.clone()),
+            self.coordinator.clone(),
+            id,
+            shadow,
+            now,
+            token,
+            self.stop.clone(),
+        )
+        .await
     }
 }

@@ -1,6 +1,10 @@
 //! A rules upgrade resumes the same shadow and retires its predecessor after seven days.
 use super::{memory_response, memory_stubs};
-use butler_e2e::e2e::{HarnessError, cassette::{Cassette, Chunk, ResponseRecord}, scenario::Setup};
+use butler_e2e::e2e::{
+    HarnessError,
+    cassette::{Cassette, Chunk, ResponseRecord},
+    scenario::Setup,
+};
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -12,11 +16,17 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
     const CHAT2_WORD: &str = "garnet";
     const CHAT2: &str = "My garden word is garnet.";
     const CHAT3: &str = "My travel word is cobalt.";
-    let asks = [("Recall my lock word.", "lock word", "amber"), ("Recall my travel word.", "travel word", "cobalt")];
+    let asks = [
+        ("Recall my lock word.", "lock word", "amber"),
+        ("Recall my travel word.", "travel word", "cobalt"),
+    ];
     let mut cassette = Cassette::load("MEM-01")?;
     let mut answer = cassette.exchanges[1].clone();
     for chunk in &mut answer.response.chunks {
-        chunk.text = chunk.text.replace("Saved your bike lock code to explicit memory for future conversations.", "Noted.");
+        chunk.text = chunk.text.replace(
+            "Saved your bike lock code to explicit memory for future conversations.",
+            "Noted.",
+        );
     }
     for message in [CHAT1, CHAT2, CHAT3] {
         let mut exchange = cassette.exchanges[0].clone();
@@ -27,12 +37,18 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
     for (ask, cue, _) in asks {
         let mut call = cassette.exchanges[0].clone();
         call.request.key.user_request = ask.into();
-        call.response = memory_response(&json!({"type":"function_call","id":"fc_recall","call_id":"call_recall","name":"recall_memory","status":"completed","arguments":json!({"cue":cue}).to_string()}));
+        call.response = memory_response(
+            &json!({"type":"function_call","id":"fc_recall","call_id":"call_recall","name":"recall_memory","status":"completed","arguments":json!({"cue":cue}).to_string()}),
+        );
         let mut reply = answer.clone();
         reply.request.key.user_request = ask.into();
         cassette.exchanges.extend([call, reply]);
     }
-    let mut s = Setup::new("MEM-REEXTRACT")?.stub_cassette(cassette).env("BUTLER_E2E_APP_NOW", T).start().await?;
+    let mut s = Setup::new("MEM-REEXTRACT")?
+        .stub_cassette(cassette)
+        .env("BUTLER_E2E_APP_NOW", T)
+        .start()
+        .await?;
     s.provider()?.set_memory_responder(|_| {
         let text = json!({"status":"processed","entities":[],"items":[],"attributes":[]}).to_string();
         let item = json!({"type":"message","id":"msg_meaning","role":"assistant","status":"completed","content":[{"type":"output_text","text":text,"annotations":[]}]});
@@ -51,7 +67,9 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
             }).collect(),
         }
     });
-    let chat = s.gw.post("/sessions", json!({"kind":"chat","title":"Second chat"})).await?;
+    let chat =
+        s.gw.post("/sessions", json!({"kind":"chat","title":"Second chat"}))
+            .await?;
     assert_eq!(chat.status, 201, "{}", chat.text);
     let chat2 = chat.data()["session"]["id"].as_str().unwrap();
     assert_eq!(s.turn("general", CHAT1).await?.1["state"], "delivered");
@@ -63,10 +81,15 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
         Ok(serde_json::from_slice(&std::fs::read(path)?)?)
     };
     let active = read_json(&memory.join("active-generation.json"))?;
-    let old = memory.join("generations").join(active["generation_id"].as_str().unwrap());
+    let old = memory
+        .join("generations")
+        .join(active["generation_id"].as_str().unwrap());
     s.agent.terminate().await?;
     let mut manifest = read_json(&old.join("manifest.json"))?;
-    manifest.as_object_mut().unwrap().remove("extraction_rules_version");
+    manifest
+        .as_object_mut()
+        .unwrap()
+        .remove("extraction_rules_version");
     std::fs::write(old.join("manifest.json"), serde_json::to_vec(&manifest)?)?;
     let g1 = s.provider()?.hold_next_reply(CHAT2_WORD);
     let before = s.provider()?.memory_requests().len();
@@ -75,15 +98,25 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
         loop {
             let inventory = s.gw.get("/memory/inventory").await?;
             let operation = &inventory.data()["operation"];
-            if operation["kind"] == "reextract" && operation["phase"] == "preparing"
-                && operation["done"].as_u64().is_some_and(|done| done >= 1 && operation["total"].as_u64().is_some_and(|total| done < total))
-                && s.provider()?.memory_requests()[before..].iter().any(|request| request.to_string().contains(CHAT2_WORD))
+            if operation["kind"] == "reextract"
+                && operation["phase"] == "preparing"
+                && operation["done"].as_u64().is_some_and(|done| {
+                    done >= 1
+                        && operation["total"]
+                            .as_u64()
+                            .is_some_and(|total| done < total)
+                })
+                && s.provider()?.memory_requests()[before..]
+                    .iter()
+                    .any(|request| request.to_string().contains(CHAT2_WORD))
             {
                 return Ok::<_, HarnessError>(operation.clone());
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-    }).await.expect("re-extraction reaches its held second chat")?;
+    })
+    .await
+    .expect("re-extraction reaches its held second chat")?;
     let id = receipt["operation_id"].as_str().unwrap();
     s.agent.terminate().await?;
     drop(g1);
@@ -92,12 +125,17 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
     s.gw = s.agent.start_again().await?;
     tokio::time::timeout(Duration::from_secs(90), async {
         loop {
-            if s.provider()?.memory_requests()[before..].iter().any(|request| request.to_string().contains(CHAT2_WORD)) {
+            if s.provider()?.memory_requests()[before..]
+                .iter()
+                .any(|request| request.to_string().contains(CHAT2_WORD))
+            {
                 return Ok::<_, HarnessError>(());
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-    }).await.expect("interrupted window retries after restart")?;
+    })
+    .await
+    .expect("interrupted window retries after restart")?;
     let resumed = s.gw.get(&format!("/memory/reset/{id}")).await?;
     assert_eq!(resumed.data()["operation_id"], id);
     assert_eq!(resumed.data()["phase"], "preparing");
@@ -112,22 +150,44 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-    }).await.expect("re-extraction completes")?;
+    })
+    .await
+    .expect("re-extraction completes")?;
     let active = read_json(&memory.join("active-generation.json"))?;
     assert_eq!(active["generation_id"], id);
     assert!(active["previous_generation_id"].is_null());
     let graph = memory.join("generations").join(id).join("graph.sqlite");
-    let count: u64 = butler_platform::sqlite::open_with_flags(graph, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?
-        .query_row("SELECT COUNT(*) FROM memory_chunks WHERE source_key LIKE 'conversation_turn:%'", [], |row| row.get(0))?;
+    let count: u64 = butler_platform::sqlite::open_with_flags(
+        graph,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?
+    .query_row(
+        "SELECT COUNT(*) FROM memory_chunks WHERE source_key LIKE 'conversation_turn:%'",
+        [],
+        |row| row.get(0),
+    )?;
     assert_eq!(count, 3);
     for (ask, _, word) in asks {
-        let chat = s.gw.post("/sessions", json!({"kind":"chat","title":"Recall"})).await?;
+        let chat =
+            s.gw.post("/sessions", json!({"kind":"chat","title":"Recall"}))
+                .await?;
         assert_eq!(chat.status, 201, "{}", chat.text);
         let first = s.provider()?.requests().len();
-        assert_eq!(s.turn(chat.data()["session"]["id"].as_str().unwrap(), ask).await?.1["state"], "delivered");
+        assert_eq!(
+            s.turn(chat.data()["session"]["id"].as_str().unwrap(), ask)
+                .await?
+                .1["state"],
+            "delivered"
+        );
         let requests = s.provider()?.requests();
-        let output = requests[first..].iter().filter_map(|r| r["input"].as_array()).flatten()
-            .find(|item| item["type"] == "function_call_output").unwrap()["output"].as_str().unwrap();
+        let output = requests[first..]
+            .iter()
+            .filter_map(|r| r["input"].as_array())
+            .flatten()
+            .find(|item| item["type"] == "function_call_output")
+            .unwrap()["output"]
+            .as_str()
+            .unwrap();
         let result: Value = serde_json::from_str(output)?;
         assert_eq!(result["ok"], true, "{output}");
         assert!(output.contains(word), "{output}");
@@ -137,7 +197,9 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
     assert_eq!(complete["removal_pending"], true);
     assert_eq!(complete["retire_after"], "2026-11-27T12:00:00.000Z");
     s.agent.terminate().await?;
-    s.agent.launch.set_env("BUTLER_E2E_APP_NOW", "2026-11-28T12:00:00.000Z");
+    s.agent
+        .launch
+        .set_env("BUTLER_E2E_APP_NOW", "2026-11-28T12:00:00.000Z");
     s.gw = s.agent.start_again().await?;
     tokio::time::timeout(Duration::from_secs(90), async {
         loop {
@@ -147,6 +209,8 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-    }).await.expect("retired generation is reclaimed on the later startup")?;
+    })
+    .await
+    .expect("retired generation is reclaimed on the later startup")?;
     s.finish().await
 }

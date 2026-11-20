@@ -1,6 +1,6 @@
 //! Reapply the current extraction rules through the normal shadow consumer.
 use super::*;
-use crate::cognition::{MemorySyncConsumer, MemorySyncPoll, MEMORY_EXTRACTION_RULES_VERSION};
+use crate::cognition::{MEMORY_EXTRACTION_RULES_VERSION, MemorySyncConsumer, MemorySyncPoll};
 use std::time::Duration;
 
 type Clock = Arc<dyn Fn() -> String + Send + Sync>;
@@ -15,7 +15,9 @@ pub enum ReextractOutcome {
 }
 
 pub(crate) fn preparing(root: &Path, paths: &CognitionPathEnvironment) -> io::Result<bool> {
-    let pending = paths.memory_root(root).join("management/reset-pending.json");
+    let pending = paths
+        .memory_root(root)
+        .join("management/reset-pending.json");
     crate::coordination::ensure_data_authority(root, &[&pending])?;
     let bytes = match fs::read(pending) {
         Ok(bytes) => bytes,
@@ -26,7 +28,11 @@ pub(crate) fn preparing(root: &Path, paths: &CognitionPathEnvironment) -> io::Re
     Ok(receipt(root, paths, &id)?.is_some_and(|r| r.kind == "reextract" && r.phase == "preparing"))
 }
 
-pub(crate) fn progress(root: &Path, paths: &CognitionPathEnvironment, id: &str) -> io::Result<(u64, u64)> {
+pub(crate) fn progress(
+    root: &Path,
+    paths: &CognitionPathEnvironment,
+    id: &str,
+) -> io::Result<(u64, u64)> {
     let graph = graph(root, paths, id)?;
     graph.query_row("SELECT COUNT(*), COALESCE(SUM(NOT EXISTS(SELECT 1 FROM memory_projection_windows w WHERE w.job_id=j.job_id AND w.state IN ('pending','planned','running'))),0) FROM memory_projection_jobs j JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision", [], |row| Ok((row.get(0)?, row.get(1)?))).map_err(io::Error::other)
 }
@@ -59,7 +65,8 @@ pub(crate) async fn run(
         match outcome {
             Ok(Some(ReextractOutcome::Restage)) => return Ok(ReextractOutcome::Restage),
             Ok(Some(ReextractOutcome::Done)) => {
-                return match settle(binding.clone(), coordinator.clone(), &now, token.clone()).await {
+                return match settle(binding.clone(), coordinator.clone(), &now, token.clone()).await
+                {
                     Ok(()) => Ok(ReextractOutcome::Done),
                     Err(error) => fail(binding, coordinator, &token, stop, error).await,
                 };
@@ -74,30 +81,47 @@ pub(crate) async fn run(
     }
 }
 
-async fn load_receipt(root: PathBuf, paths: CognitionPathEnvironment, id: String) -> io::Result<ResetResult> {
+async fn load_receipt(
+    root: PathBuf,
+    paths: CognitionPathEnvironment,
+    id: String,
+) -> io::Result<ResetResult> {
     tokio::task::spawn_blocking(move || {
         receipt(&root, &paths, &id)?.ok_or_else(|| io::Error::other("Reset receipt is missing"))
-    }).await.map_err(io::Error::other)?
+    })
+    .await
+    .map_err(io::Error::other)?
 }
 
 fn retirement_due(at: Option<&str>, now: &Clock) -> io::Result<bool> {
-    let Some(at) = at else { return Ok(false); };
+    let Some(at) = at else {
+        return Ok(false);
+    };
     let at = chrono::DateTime::parse_from_rfc3339(at).map_err(io::Error::other)?;
     let now = chrono::DateTime::parse_from_rfc3339(&now()).map_err(io::Error::other)?;
     Ok(now >= at)
 }
 
-async fn stage(binding: &Binding, coordinator: &Arc<CognitionWriteCoordinator>, token: &CancellationToken) -> io::Result<()> {
+async fn stage(
+    binding: &Binding,
+    coordinator: &Arc<CognitionWriteCoordinator>,
+    token: &CancellationToken,
+) -> io::Result<()> {
     let read = binding.clone();
     let building = tokio::task::spawn_blocking(move || {
         let path = generation(&read).join("manifest.json");
         crate::coordination::ensure_data_authority(&read.0, &[&path])?;
         match fs::read(path) {
-            Ok(bytes) => Ok(serde_json::from_slice::<Value>(&bytes).map_err(io::Error::other)?["state"] == "building"),
+            Ok(bytes) => Ok(
+                serde_json::from_slice::<Value>(&bytes).map_err(io::Error::other)?["state"]
+                    == "building",
+            ),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
             Err(error) => Err(error),
         }
-    }).await.map_err(io::Error::other)??;
+    })
+    .await
+    .map_err(io::Error::other)??;
     if building {
         return Ok(());
     }
@@ -106,8 +130,16 @@ async fn stage(binding: &Binding, coordinator: &Arc<CognitionWriteCoordinator>, 
     tokio::task::spawn_blocking(move || {
         crate::cognition::registration::retire_idle_graphs(&new.join("graph.sqlite"));
         crate::cognition::lance_store::forget(&new.join("butler.lance"), "butler_memory");
-    }).await.map_err(io::Error::other)?;
-    let prepared = prepare(binding.0.clone(), binding.1.clone(), binding.2.clone(), token.clone()).await;
+    })
+    .await
+    .map_err(io::Error::other)?;
+    let prepared = prepare(
+        binding.0.clone(),
+        binding.1.clone(),
+        binding.2.clone(),
+        token.clone(),
+    )
+    .await;
     let owned = binding.clone();
     tokio::task::spawn_blocking(move || {
         let result = prepared.and_then(|staged| {
@@ -118,7 +150,9 @@ async fn stage(binding: &Binding, coordinator: &Arc<CognitionWriteCoordinator>, 
         });
         lease.release(false).map_err(io::Error::other)?;
         result
-    }).await.map_err(io::Error::other)?
+    })
+    .await
+    .map_err(io::Error::other)?
 }
 
 async fn drive(
@@ -129,7 +163,10 @@ async fn drive(
 ) -> io::Result<Option<ReextractOutcome>> {
     check(token)?;
     let read = binding.clone();
-    if tokio::task::spawn_blocking(move || active(&read)).await.map_err(io::Error::other)?? {
+    if tokio::task::spawn_blocking(move || active(&read))
+        .await
+        .map_err(io::Error::other)??
+    {
         return Ok(Some(ReextractOutcome::Done));
     }
     stage(binding, coordinator, token).await?;
@@ -149,16 +186,18 @@ async fn drive(
         Ok(MemorySyncPoll::Idle) => {}
     }
     let read = binding.clone();
-    let (total, done) = match tokio::task::spawn_blocking(move || progress(&read.0, &read.1, &read.2.operation_id))
-        .await.map_err(io::Error::other)?
-    {
-        Ok(progress) => progress,
-        Err(error) => {
-            tracing::warn!(%error, "Memory re-extraction progress check will retry");
-            sleep(token, 5).await?;
-            return Ok(None);
-        }
-    };
+    let (total, done) =
+        match tokio::task::spawn_blocking(move || progress(&read.0, &read.1, &read.2.operation_id))
+            .await
+            .map_err(io::Error::other)?
+        {
+            Ok(progress) => progress,
+            Err(error) => {
+                tracing::warn!(%error, "Memory re-extraction progress check will retry");
+                sleep(token, 5).await?;
+                return Ok(None);
+            }
+        };
     if done < total {
         sleep(token, 30).await?;
         return Ok(None);
@@ -217,18 +256,31 @@ async fn cutover(
     Ok(outcome)
 }
 
-async fn settle(mut binding: Binding, coordinator: Arc<CognitionWriteCoordinator>, now: &Clock, token: CancellationToken) -> io::Result<()> {
+async fn settle(
+    mut binding: Binding,
+    coordinator: Arc<CognitionWriteCoordinator>,
+    now: &Clock,
+    token: CancellationToken,
+) -> io::Result<()> {
     let read = binding.clone();
     tokio::task::spawn_blocking(move || {
-        let old = read.1.memory_root(&read.0).join("generations").join(&read.2.old_generation);
+        let old = read
+            .1
+            .memory_root(&read.0)
+            .join("generations")
+            .join(&read.2.old_generation);
         if old.join("manifest.json").try_exists()? {
             rewrite_manifest(&old, "retired", false)?;
         }
         Ok::<_, io::Error>(())
-    }).await.map_err(io::Error::other)??;
+    })
+    .await
+    .map_err(io::Error::other)??;
     if binding.2.retire_after.is_none() {
         let time = chrono::DateTime::parse_from_rfc3339(&now()).map_err(io::Error::other)?;
-        binding.2.retire_after = Some((time + chrono::Duration::days(7)).to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+        binding.2.retire_after = Some(
+            (time + chrono::Duration::days(7)).to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        );
     }
     binding.2.phase = "complete".into();
     binding.2.sequence += 1;
@@ -244,7 +296,13 @@ async fn settle(mut binding: Binding, coordinator: Arc<CognitionWriteCoordinator
     }
 }
 
-async fn fail(binding: Binding, coordinator: Arc<CognitionWriteCoordinator>, token: &CancellationToken, stop: CancellationToken, error: io::Error) -> io::Result<ReextractOutcome> {
+async fn fail(
+    binding: Binding,
+    coordinator: Arc<CognitionWriteCoordinator>,
+    token: &CancellationToken,
+    stop: CancellationToken,
+    error: io::Error,
+) -> io::Result<ReextractOutcome> {
     // A stop or a committed pointer leaves settlement resumable; never delete live memory.
     if token.is_cancelled() || stop.is_cancelled() {
         return Err(error);
@@ -262,7 +320,9 @@ async fn fail(binding: Binding, coordinator: Arc<CognitionWriteCoordinator>, tok
             retirement::remove_tree(&owned.0, &new, &token)?;
         }
         Ok::<_, io::Error>(false)
-    }).await.map_err(io::Error::other)??;
+    })
+    .await
+    .map_err(io::Error::other)??;
     if !committed {
         let (root, paths, mut result) = binding;
         result.phase = "failed".into();
@@ -273,37 +333,60 @@ async fn fail(binding: Binding, coordinator: Arc<CognitionWriteCoordinator>, tok
 }
 
 fn generation(binding: &Binding) -> PathBuf {
-    binding.1.memory_root(&binding.0).join("generations").join(&binding.2.operation_id)
+    binding
+        .1
+        .memory_root(&binding.0)
+        .join("generations")
+        .join(&binding.2.operation_id)
 }
 
 fn active(binding: &Binding) -> io::Result<bool> {
     resolve_active_generation(&binding.0, &binding.1)
-        .map(|handle| handle.generation_id == binding.2.operation_id).map_err(io::Error::other)
+        .map(|handle| handle.generation_id == binding.2.operation_id)
+        .map_err(io::Error::other)
 }
 
-fn graph(root: &Path, paths: &CognitionPathEnvironment, id: &str) -> io::Result<butler_platform::sqlite::Connection> {
+fn graph(
+    root: &Path,
+    paths: &CognitionPathEnvironment,
+    id: &str,
+) -> io::Result<butler_platform::sqlite::Connection> {
     validate(root, paths, id)?;
-    let path = paths.memory_root(root).join("generations").join(id).join("graph.sqlite");
+    let path = paths
+        .memory_root(root)
+        .join("generations")
+        .join(id)
+        .join("graph.sqlite");
     crate::coordination::ensure_data_authority(root, &[&path])?;
-    butler_platform::sqlite::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(io::Error::other)
+    butler_platform::sqlite::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(io::Error::other)
 }
 
 fn typed_rows(db: &rusqlite::Connection) -> io::Result<Vec<(String, String)>> {
     let mut query = db.prepare("SELECT s.source_id, c.status FROM memory_chunk_sources s JOIN memory_chunks c ON c.memory_chunk_id = s.episode_id WHERE s.source_kind <> 'conversation' ORDER BY 1").map_err(io::Error::other)?;
-    query.query_map([], |row| Ok((row.get(0)?, row.get(1)?))).map_err(io::Error::other)?
-        .collect::<Result<Vec<_>, _>>().map_err(io::Error::other)
+    query
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(io::Error::other)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(io::Error::other)
 }
 
 fn rewrite_manifest(root: &Path, state: &str, version: bool) -> io::Result<()> {
     let path = root.join("manifest.json");
-    let mut manifest: Value = serde_json::from_slice(&fs::read(&path)?).map_err(io::Error::other)?;
+    let mut manifest: Value =
+        serde_json::from_slice(&fs::read(&path)?).map_err(io::Error::other)?;
     if manifest["state"] == state && !version {
         return Ok(());
     }
-    let object = manifest.as_object_mut().ok_or_else(|| io::Error::other("Generation manifest is unavailable"))?;
+    let object = manifest
+        .as_object_mut()
+        .ok_or_else(|| io::Error::other("Generation manifest is unavailable"))?;
     object.insert("state".into(), json!(state));
     if version {
-        object.insert("extraction_rules_version".into(), json!(MEMORY_EXTRACTION_RULES_VERSION));
+        object.insert(
+            "extraction_rules_version".into(),
+            json!(MEMORY_EXTRACTION_RULES_VERSION),
+        );
     }
     write_json(&path, &manifest)
 }

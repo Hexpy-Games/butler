@@ -1,7 +1,11 @@
 //! One startup recovery pass, detached from admission and cancelled by service stop.
-use butler_memory::{cognition::{MemorySyncConsumer, ReextractOutcome}, management::{MemoryManagement, ResetResult}, profile::ProfileService};
 use super::consolidation::ConsolidationRunGate;
 use crate::host::app::schedule_clock;
+use butler_memory::{
+    cognition::{MemorySyncConsumer, ReextractOutcome},
+    management::{MemoryManagement, ResetResult},
+    profile::ProfileService,
+};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 pub(crate) fn recover_resets(
@@ -20,7 +24,11 @@ pub(crate) fn recover_resets(
                 return;
             }
         };
-        for receipt in pending.iter().filter(|receipt| receipt.kind != "reextract").cloned() {
+        for receipt in pending
+            .iter()
+            .filter(|receipt| receipt.kind != "reextract")
+            .cloned()
+        {
             if stop.is_cancelled() {
                 break;
             }
@@ -43,7 +51,9 @@ pub(crate) fn recover_resets(
                 butler_core::diagnostic!("[memory-reset-recovery] {}", error);
             }
         }
-        let resumed = pending.iter().any(|r| r.kind == "reextract" && r.phase == "preparing");
+        let resumed = pending
+            .iter()
+            .any(|r| r.kind == "reextract" && r.phase == "preparing");
         for receipt in pending.into_iter().filter(|r| r.kind == "reextract") {
             drive_reextract(&owner, &consumer, &gate, receipt, &stop).await;
         }
@@ -53,7 +63,12 @@ pub(crate) fn recover_resets(
     });
 }
 
-async fn begin_reextract(owner: &MemoryManagement, consumer: &MemorySyncConsumer, gate: &ConsolidationRunGate, stop: &CancellationToken) {
+async fn begin_reextract(
+    owner: &MemoryManagement,
+    consumer: &MemorySyncConsumer,
+    gate: &ConsolidationRunGate,
+    stop: &CancellationToken,
+) {
     while !stop.is_cancelled() {
         match owner.begin_reextract_if_due().await {
             Ok(Some(receipt)) => {
@@ -61,7 +76,12 @@ async fn begin_reextract(owner: &MemoryManagement, consumer: &MemorySyncConsumer
                 return;
             }
             Ok(None) => return,
-            Err(error) if matches!(error.to_string().as_str(), "Memory is in use" | "Inventory changed") => {
+            Err(error)
+                if matches!(
+                    error.to_string().as_str(),
+                    "Memory is in use" | "Inventory changed"
+                ) =>
+            {
                 tokio::select! {
                     () = stop.cancelled() => return,
                     () = tokio::time::sleep(std::time::Duration::from_secs(5)) => {}
@@ -75,7 +95,13 @@ async fn begin_reextract(owner: &MemoryManagement, consumer: &MemorySyncConsumer
     }
 }
 
-async fn drive_reextract(owner: &MemoryManagement, consumer: &MemorySyncConsumer, gate: &ConsolidationRunGate, receipt: ResetResult, stop: &CancellationToken) {
+async fn drive_reextract(
+    owner: &MemoryManagement,
+    consumer: &MemorySyncConsumer,
+    gate: &ConsolidationRunGate,
+    receipt: ResetResult,
+    stop: &CancellationToken,
+) {
     if stop.is_cancelled() {
         return;
     }
@@ -94,7 +120,14 @@ async fn drive_reextract(owner: &MemoryManagement, consumer: &MemorySyncConsumer
     }
     loop {
         let shadow = consumer.rebuild_consumer(id.clone());
-        let outcome = owner.reextract(id.clone(), &shadow, Arc::new(|| schedule_clock::clock().now_iso()), token.clone()).await;
+        let outcome = owner
+            .reextract(
+                id.clone(),
+                &shadow,
+                Arc::new(|| schedule_clock::clock().now_iso()),
+                token.clone(),
+            )
+            .await;
         // close() closes the shared admission semaphore; this shadow owns no worker.
         drop(shadow);
         match outcome {

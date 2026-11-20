@@ -142,10 +142,16 @@ pub(super) fn caught_up(
     };
     let revision = canonical.public_revision()?;
     let identity = canonical.source_identity()?;
-    let cursors_valid = canonical.catchup_cursors_exist(state.outcome.as_deref(), state.message.as_deref())?;
+    let cursors_valid =
+        canonical.catchup_cursors_exist(state.outcome.as_deref(), state.message.as_deref())?;
     let (changed, reset) = changes::prepare(&canonical, &mut state, identity.as_deref())?;
     let caught_up = !changed
-        && inventory_unchanged(&state, revision, identity.as_deref(), !cursors_valid || reset)
+        && inventory_unchanged(
+            &state,
+            revision,
+            identity.as_deref(),
+            !cursors_valid || reset,
+        )
         && !changes::pending(&state);
     canonical.close()?;
     Ok(caught_up)

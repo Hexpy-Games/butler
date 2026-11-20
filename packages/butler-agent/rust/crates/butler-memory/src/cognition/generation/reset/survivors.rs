@@ -17,7 +17,8 @@ pub(super) fn prune(
     db.progress_handler(1000, Some(move || cancellation.is_cancelled()));
     let tx = db.transaction().map_err(io::Error::other)?;
     if reextract {
-        tx.execute_batch("DELETE FROM memory_state WHERE key LIKE 'canonical_catchup_%'").map_err(io::Error::other)?;
+        tx.execute_batch("DELETE FROM memory_state WHERE key LIKE 'canonical_catchup_%'")
+            .map_err(io::Error::other)?;
     } else {
         crate::coordination::capture_project_admission_floor(root, &tx, token, project)?;
     }

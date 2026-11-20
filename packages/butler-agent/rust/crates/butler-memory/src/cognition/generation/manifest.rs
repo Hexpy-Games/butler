@@ -303,7 +303,10 @@ pub(crate) struct RuntimeVersions<'a> {
 
 impl GenerationManifest {
     pub(crate) fn extraction_rules_version(&self) -> u64 {
-        self.other.get("extraction_rules_version").and_then(Value::as_u64).unwrap_or(1)
+        self.other
+            .get("extraction_rules_version")
+            .and_then(Value::as_u64)
+            .unwrap_or(1)
     }
 
     /// A new manifest with no embedding, readiness, or qualification. Native

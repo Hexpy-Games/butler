@@ -2,8 +2,8 @@
 mod cache;
 #[cfg(feature = "e2e-fixtures")]
 mod receipt_hold;
-mod retirement;
 pub(crate) mod reextract;
+mod retirement;
 #[cfg(feature = "e2e-fixtures")]
 mod settlement;
 mod survivors;
