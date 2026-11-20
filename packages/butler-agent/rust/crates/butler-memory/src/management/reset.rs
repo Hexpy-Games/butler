@@ -55,8 +55,8 @@ impl MemoryManagement {
             let mut receipt = cognition::reset_receipt(&root, &paths, &operation_id)?;
             if let Some(result) = &mut receipt
                 && result.kind == "reextract" && result.phase == "preparing"
+                && let Ok((total, done)) = cognition::reextract_progress(&root, &paths, &operation_id)
             {
-                let (total, done) = cognition::reextract_progress(&root, &paths, &operation_id)?;
                 result.total = Some(total);
                 result.done = Some(done);
             }

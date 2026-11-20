@@ -102,6 +102,11 @@ async fn stage(binding: &Binding, coordinator: &Arc<CognitionWriteCoordinator>, 
         return Ok(());
     }
     let lease = acquire(&binding.0, &binding.1, coordinator, "cutover", token).await?;
+    let new = generation(binding);
+    tokio::task::spawn_blocking(move || {
+        crate::cognition::registration::retire_idle_graphs(&new.join("graph.sqlite"));
+        crate::cognition::lance_store::forget(&new.join("butler.lance"), "butler_memory");
+    }).await.map_err(io::Error::other)?;
     let prepared = prepare(binding.0.clone(), binding.1.clone(), binding.2.clone(), token.clone()).await;
     let owned = binding.clone();
     tokio::task::spawn_blocking(move || {
@@ -144,8 +149,16 @@ async fn drive(
         Ok(MemorySyncPoll::Idle) => {}
     }
     let read = binding.clone();
-    let (total, done) = tokio::task::spawn_blocking(move || progress(&read.0, &read.1, &read.2.operation_id))
-        .await.map_err(io::Error::other)??;
+    let (total, done) = match tokio::task::spawn_blocking(move || progress(&read.0, &read.1, &read.2.operation_id))
+        .await.map_err(io::Error::other)?
+    {
+        Ok(progress) => progress,
+        Err(error) => {
+            tracing::warn!(%error, "Memory re-extraction progress check will retry");
+            sleep(token, 5).await?;
+            return Ok(None);
+        }
+    };
     if done < total {
         sleep(token, 30).await?;
         return Ok(None);
@@ -166,15 +179,15 @@ async fn cutover(
             lease.release(false).map_err(io::Error::other)?;
             if let Err(error) = result {
                 tracing::warn!(%error, "Memory re-extraction catch-up check will retry");
-                sleep(token, 5).await?;
             }
+            sleep(token, 5).await?;
             return Ok(None);
         }
     }
     let owned = binding.clone();
-    let token = token.clone();
-    tokio::task::spawn_blocking(move || {
-        check(&token)?;
+    let cancellation = token.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        check(&cancellation)?;
         let (root, paths, result) = &owned;
         let db = graph(root, paths, &result.operation_id)?;
         let terminal: bool = db.query_row("SELECT NOT EXISTS(SELECT 1 FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id AND c.current_revision=j.revision WHERE w.state IN ('pending','planned','running'))", [], |row| row.get(0)).map_err(io::Error::other)?;
@@ -190,14 +203,18 @@ async fn cutover(
         let new = generation(&owned);
         if !matches {
             lease.release(false).map_err(io::Error::other)?;
-            retirement::remove_tree(root, &new, &token)?;
+            fs::remove_file(new.join("manifest.json"))?;
             return Ok(Some(ReextractOutcome::Restage));
         }
         rewrite_manifest(&new, "active", false)?;
-        commit(root, paths, lease, result, &old, &new, &token)?;
+        commit(root, paths, lease, result, &old, &new, &cancellation)?;
         rewrite_manifest(&old.root, "retired", false)?;
-        Ok(Some(ReextractOutcome::Done))
-    }).await.map_err(io::Error::other)?
+        Ok::<_, io::Error>(Some(ReextractOutcome::Done))
+    }).await.map_err(io::Error::other)??;
+    if outcome.is_none() {
+        sleep(token, 5).await?;
+    }
+    Ok(outcome)
 }
 
 async fn settle(mut binding: Binding, coordinator: Arc<CognitionWriteCoordinator>, now: &Clock, token: CancellationToken) -> io::Result<()> {
@@ -240,6 +257,8 @@ async fn fail(binding: Binding, coordinator: Arc<CognitionWriteCoordinator>, tok
         }
         let new = generation(&owned);
         if new.try_exists()? {
+            crate::cognition::registration::retire_idle_graphs(&new.join("graph.sqlite"));
+            crate::cognition::lance_store::forget(&new.join("butler.lance"), "butler_memory");
             retirement::remove_tree(&owned.0, &new, &token)?;
         }
         Ok::<_, io::Error>(false)

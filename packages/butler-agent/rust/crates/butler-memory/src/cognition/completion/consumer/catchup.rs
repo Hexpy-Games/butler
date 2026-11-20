@@ -133,7 +133,13 @@ pub(super) fn caught_up(
     let graph = GraphRepository::open_readonly(&handle.graph_path)?;
     let mut state = graph.catchup_state()?;
     graph.close()?;
-    let canonical = ConversationSourceReader::open(&canonical_path(&handle, data_root))?;
+    let canonical = match ConversationSourceReader::open(&canonical_path(&handle, data_root)) {
+        Ok(reader) => reader,
+        Err(error) if error.code() == "conversation_source_unavailable" => {
+            return Ok(true);
+        }
+        Err(error) => return Err(CognitionError::from(error)),
+    };
     let revision = canonical.public_revision()?;
     let identity = canonical.source_identity()?;
     let cursors_valid = canonical.catchup_cursors_exist(state.outcome.as_deref(), state.message.as_deref())?;

@@ -80,25 +80,34 @@ async fn drive_reextract(owner: &MemoryManagement, consumer: &MemorySyncConsumer
         return;
     }
     let id = receipt.operation_id.clone();
-    if let Ok(mut jobs) = gate.jobs.lock() {
-        jobs.insert(id.clone(), stop.child_token());
-    }
-    if let Ok(value) = serde_json::to_value(&receipt) {
-        gate.publish(value).await;
+    let token = stop.child_token();
+    let preparing = receipt.phase == "preparing";
+    if preparing {
+        if let Ok(mut jobs) = gate.jobs.lock() {
+            jobs.insert(id.clone(), token.clone());
+        }
+        if let Ok(Some(receipt)) = owner.reset_status(id.clone()).await
+            && let Ok(value) = serde_json::to_value(receipt)
+        {
+            gate.publish(value).await;
+        }
     }
     loop {
         let shadow = consumer.rebuild_consumer(id.clone());
-        let outcome = owner.reextract(id.clone(), &shadow, Arc::new(|| schedule_clock::clock().now_iso()), stop.child_token()).await;
+        let outcome = owner.reextract(id.clone(), &shadow, Arc::new(|| schedule_clock::clock().now_iso()), token.clone()).await;
         // close() closes the shared admission semaphore; this shadow owns no worker.
         drop(shadow);
         match outcome {
-            Ok(ReextractOutcome::Restage) if !stop.is_cancelled() => {}
+            Ok(ReextractOutcome::Restage) if preparing && !stop.is_cancelled() => {}
             Ok(_) => break,
             Err(error) => {
                 butler_core::diagnostic!("[memory-reextract-recovery] {error}");
                 break;
             }
         }
+    }
+    if !preparing {
+        return;
     }
     if let Ok(mut jobs) = gate.jobs.lock() {
         jobs.remove(&id);
