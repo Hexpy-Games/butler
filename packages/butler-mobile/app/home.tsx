@@ -5,7 +5,7 @@ import { ScrollEdgeEffectProvider, useScrollEdgeEffectRef } from "@bsky.app/expo
 import { router, useFocusEffect } from "expo-router";
 import { getAppCopy } from "../../butler-i18n/src/index.ts";
 import type { EpicCard } from "../../butler-protocol/src/index.ts";
-import { Badge, Button, ButtonGroup, Icon, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
+import { Badge, Button, ButtonGroup, GlassBackdrop, Icon, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
 import { probe } from "@/connection/probe";
 import type { Problem } from "@/connection/problems";
@@ -132,6 +132,7 @@ function Conversations() {
   }, [tree]);
   const paddingHorizontal = t.length("--space-4");
   return <>
+    <GlassBackdrop overlay={<HomeHeader scrollY={scrollY} title={copy.conversations.title} settingsLabel={appCopy.sidebar.settings} onSettings={() => router.push("/settings")} />}>
     <Animated.FlatList data={rows} keyExtractor={item => item.key} contentInsetAdjustmentBehavior="never"
       ref={(node: FlatList<SpaceRow> | null) => { if (typeof edgeRef === "function") edgeRef(node); }}
       style={{ backgroundColor: t.color("--color-surface-base") }}
@@ -162,7 +163,7 @@ function Conversations() {
       </View>}
       ListHeaderComponent={lost ? <Text variant="caption" tone="tertiary">{copy.conversations.reconnecting}</Text> : undefined}
     />
-    <HomeHeader scrollY={scrollY} title={copy.conversations.title} settingsLabel={appCopy.sidebar.settings} onSettings={() => router.push("/settings")} />
+    </GlassBackdrop>
     <RowActions row={actionRow} view={view} tree={tree} onClose={() => setActionRow(null)} onChanged={refresh} />
     <NewConversationSheet view={view} />
   </>;
