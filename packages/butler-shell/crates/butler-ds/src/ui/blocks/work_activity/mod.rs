@@ -18,7 +18,7 @@ pub use tools::{BuildDetails, ToolDetails, ToolItem};
 
 use crate::tokens::{Color, Length};
 use crate::ui::context::Ds;
-use crate::ui::convert;
+use crate::ui::{convert, strut};
 use crate::ui::layout::{Space, Stack};
 use crate::ui::typo::{Tone, Typo, Weight, Wrap};
 
@@ -170,7 +170,7 @@ impl RenderOnce for WorkActivityBlock {
             .min_w_0()
             .min_h(line)
             .child(lead)
-            .child(heading);
+            .child(strut::scope(true, heading));
         // One line per `\n`, a `--space-xs` apart (`<Stack gap="xs">` of lines).
         let description = self.description.map(|text| {
             let lines = text.split('\n').map(|line| {
