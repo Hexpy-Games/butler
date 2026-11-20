@@ -17,7 +17,7 @@ pub enum ApprovalExemptAction {
     /// Saving the answers of the first-conversation onboarding (and reading
     /// back the profile they build).
     FirstConversationOnboarding,
-    /// Saving a memory.
+    /// Saving a memory, or a skill (a saved instruction loaded only when needed).
     MemorySave,
     /// Analyzing an image the user attached to the current message.
     AttachedImageAnalysis,
@@ -34,7 +34,9 @@ impl ApprovalExemptAction {
             ToolName::UpdateOnboardingProfile | ToolName::SummarizeUserProfile => {
                 Some(Self::FirstConversationOnboarding)
             }
-            ToolName::UpdateExplicitMemory | ToolName::IngestTaskMemory => Some(Self::MemorySave),
+            ToolName::UpdateExplicitMemory | ToolName::IngestTaskMemory | ToolName::SaveSkill => {
+                Some(Self::MemorySave)
+            }
             ToolName::AnalyzeAttachedImage => Some(Self::AttachedImageAnalysis),
             ToolName::DocumentCreate | ToolName::DocumentEdit => Some(Self::DocumentWrite),
             ToolName::LibraryOrganize => Some(Self::LibraryOrganize),

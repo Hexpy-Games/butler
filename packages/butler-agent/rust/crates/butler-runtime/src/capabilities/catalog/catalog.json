@@ -5763,6 +5763,54 @@
       "durable": false
     },
     {
+      "name": "save_skill",
+      "definition": {
+        "type": "function",
+        "name": "save_skill",
+        "description": "Save a skill to the user's skill store. A skill is instructions loaded only when needed (load_skill), unlike a saved rule, which is always in context. The skill is listed and loadable from the next call, with no restart. Saving with an existing user skill's name replaces it. To turn a rule into a skill: save it, check it with list_skills, then remove the rule with forget_explicit_memory. Never write skill files by hand.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Lowercase letters, digits and hyphens, e.g. product-search."
+            },
+            "description": {
+              "type": "string",
+              "description": "One line: what the skill does."
+            },
+            "applicability": {
+              "type": "string",
+              "description": "One line: when to load it."
+            },
+            "instructions": {
+              "type": "string",
+              "description": "The skill body in Markdown."
+            }
+          },
+          "required": [
+            "name",
+            "description",
+            "applicability",
+            "instructions"
+          ]
+        },
+        "effectBoundary": "turn_local",
+        "concurrencySafe": false,
+        "interruptBehavior": "continue",
+        "transcriptVisibility": "visible"
+      },
+      "effectBoundary": "turn_local",
+      "category": "memory",
+      "tags": [
+        "memory",
+        "rules",
+        "preference"
+      ],
+      "durable": false
+    },
+    {
       "name": "update_automation",
       "definition": {
         "type": "function",
@@ -14589,6 +14637,43 @@
       "concurrencySafe": false,
       "interruptBehavior": "continue",
       "transcriptVisibility": "visible"
+    },
+    "save_skill": {
+      "type": "function",
+      "name": "save_skill",
+      "description": "Save a skill to the user's skill store. A skill is instructions loaded only when needed (load_skill), unlike a saved rule, which is always in context. The skill is listed and loadable from the next call, with no restart. Saving with an existing user skill's name replaces it. To turn a rule into a skill: save it, check it with list_skills, then remove the rule with forget_explicit_memory. Never write skill files by hand.",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Lowercase letters, digits and hyphens, e.g. product-search."
+          },
+          "description": {
+            "type": "string",
+            "description": "One line: what the skill does."
+          },
+          "applicability": {
+            "type": "string",
+            "description": "One line: when to load it."
+          },
+          "instructions": {
+            "type": "string",
+            "description": "The skill body in Markdown."
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "applicability",
+          "instructions"
+        ]
+      },
+      "effectBoundary": "turn_local",
+      "concurrencySafe": false,
+      "interruptBehavior": "continue",
+      "transcriptVisibility": "visible"
     }
   },
   "allLedgerEffects": [
@@ -14623,6 +14708,7 @@
       "list_skills",
       "load_skill",
       "read_skill_file",
+      "save_skill",
       "ask_user",
       "resolve_ask",
       "project_artifacts",

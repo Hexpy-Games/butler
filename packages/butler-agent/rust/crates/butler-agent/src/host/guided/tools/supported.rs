@@ -37,6 +37,7 @@ fn builtin(name: &str) -> bool {
                 | ToolName::ListSkills
                 | ToolName::LoadSkill
                 | ToolName::ReadSkillFile
+                | ToolName::SaveSkill
                 | ToolName::ListOperationResults
                 | ToolName::ReadOperationResults
                 | ToolName::QueryMemory

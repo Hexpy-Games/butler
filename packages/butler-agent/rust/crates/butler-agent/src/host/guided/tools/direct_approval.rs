@@ -1,6 +1,6 @@
 //! Exact-action approval for direct adapters, including normally exempt writes.
 use super::GuidedTools;
-use butler_core::json::JsonDocument;
+use butler_core::{json::JsonDocument, tool_protocol::ToolName};
 use butler_turn::btcc::{
     AccessDecision, AuthorityAdmissionInput, AuthorityAdmissionResult, AuthorityExecutionInput,
     AuthorityOutcomeInput, CapabilityKind, FullOnlyAction, GuidedInvocation, ModelRoundToolCall,
@@ -172,6 +172,8 @@ async fn run(
         Box::pin(super::image::execute(owner, invocation, call)).await
     } else if super::profile::supports(&call.name) {
         super::profile::execute(owner, call).await
+    } else if call.name == ToolName::SaveSkill {
+        super::dispatch::save_skill(owner, call).await
     } else {
         super::dispatch::domain_tool(owner, &invocation, call, occurrence)
             .await

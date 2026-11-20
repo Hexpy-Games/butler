@@ -72,6 +72,7 @@ export const additionalToolLabels = {
   request_service_restart: "서비스 재시작 요청",
   load_skill: "스킬 읽기",
   read_skill_file: "스킬 파일 읽기",
+  save_skill: "스킬 저장",
   update_automation: "예약 작업 변경",
   ask_user: "질문",
   read_operation_result: "작업 결과 읽기",

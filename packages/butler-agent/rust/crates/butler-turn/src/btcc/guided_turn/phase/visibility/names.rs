@@ -70,6 +70,7 @@ pub(super) const NON_FULL: &[&str] = &[
     "list_skills",
     "load_skill",
     "read_skill_file",
+    "save_skill",
     "transform_public_data_table",
 ];
 /// Non-full tools that change something: offered when asking first, where

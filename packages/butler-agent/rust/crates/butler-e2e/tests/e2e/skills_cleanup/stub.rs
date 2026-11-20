@@ -1,6 +1,6 @@
 use butler_e2e::e2e::cassette::{Chunk, ResponseRecord};
 use serde_json::{Value, json};
-pub(super) fn response(item: &Value) -> ResponseRecord {
+pub(crate) fn response(item: &Value) -> ResponseRecord {
     let mut events = vec![
         json!({"type":"response.created","response":{"id":"resp_artifact","status":"in_progress","output":[]}}),
         json!({"type":"response.output_item.added","output_index":0,"item":item}),

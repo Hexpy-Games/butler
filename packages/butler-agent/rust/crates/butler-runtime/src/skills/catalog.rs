@@ -7,7 +7,7 @@ use std::{
 use serde::Serialize;
 
 use super::{
-    SkillError, SkillProjectView, SkillSettingsView, SkillSummary, SkillValidationCounts,
+    NewSkill, SkillError, SkillProjectView, SkillSettingsView, SkillSummary, SkillValidationCounts,
     SkillValidationIssueView, SkillValidationView,
 };
 
@@ -277,12 +277,6 @@ pub(crate) fn validate(skills: &[SkillDefinition]) -> Vec<SkillValidationIssue> 
         if skill.applicability.trim().is_empty() {
             add("applicability is required");
         }
-        if skill.allowed_tools.is_empty() {
-            add("allowed-tools are required");
-        }
-        if skill.reporting.trim().is_empty() {
-            add("reporting is required");
-        }
         if skill.instructions.trim().is_empty() {
             add("instructions body is required");
         }
@@ -397,6 +391,34 @@ pub(super) fn safe_name(value: &str) -> String {
         .trim_matches('-')
         .to_owned()
 }
+/// Writes a user skill through the atomic installer; returns the installed SKILL.md path.
+pub(super) fn save_user(data: &Path, skill: &NewSkill) -> Result<PathBuf, SkillError> {
+    let staging = data
+        .join(butler_platform::data_paths::SKILLS)
+        .join(".imports")
+        .join(uuid::Uuid::new_v4().to_string());
+    let staging_skill_dir = staging.join(&skill.name);
+    fs::create_dir_all(&staging_skill_dir).map_err(SkillError::Io)?;
+    let result = (|| {
+        let content = format!(
+            "---\nname: {}\ndescription: {}\napplicability: {}\n---\n{}\n",
+            skill.name,
+            skill.description,
+            skill.applicability,
+            skill
+                .instructions
+                .trim()
+                .replace("\r\n", "\n")
+                .replace('\r', "\n"),
+        );
+        fs::write(staging_skill_dir.join("SKILL.md"), content).map_err(SkillError::Io)?;
+        super::install::replace(&staging_skill_dir, &user_dir(data), &skill.name)?;
+        Ok(user_dir(data).join(&skill.name).join("SKILL.md"))
+    })();
+    let _ = fs::remove_dir_all(&staging);
+    result
+}
+
 pub(super) fn user_dir(data: &Path) -> PathBuf {
     data.join(butler_platform::data_paths::SKILLS)
         .join("default")
