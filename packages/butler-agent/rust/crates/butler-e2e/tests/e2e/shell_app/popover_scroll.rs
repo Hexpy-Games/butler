@@ -194,7 +194,9 @@ async fn shell_app_26_wheel_over_the_image_viewer_never_scrolls_the_chat()
         .await?;
     let open = layout(&mut shell, "v-drawer-open", &message).await?;
     let y0 = anchor_y(&open, &message).expect("message y");
-    shell.run(&["wheel adaptive-scrim 60", "wait 500"]).await?;
+    shell
+        .run(&["wheel adaptive-scrim 60 0.95 0.5", "wait 500"])
+        .await?;
     let after = layout(&mut shell, "v-drawer-after", &message).await?;
     let drawer_dy = anchor_y(&after, &message).expect("message y") - y0;
     shell

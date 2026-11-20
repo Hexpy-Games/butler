@@ -210,14 +210,19 @@ fn reveal(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     wheel_at(h, h.handle, position, -delta)
 }
 
-/// `wheel <anchor> <dy>`: one wheel step of `dy` px (positive scrolls toward the start) with the
-/// pointer on the anchor's centre, wherever the anchor is (a popover's surface is its own layer).
+/// `wheel <anchor> <dy> [fx fy]`: one wheel step of `dy` px (positive scrolls toward the start) with the pointer at the anchor's fractions (default its centre), wherever the anchor is (a popover's surface is its own layer).
 fn wheel(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     settle(&mut h.cx, h.handle);
-    let (anchor, dy) = arg.split_once(' ').context("wheel <anchor> <dy>")?;
+    let mut parts = arg.split_whitespace();
+    let anchor = parts.next().context("wheel anchor")?;
+    let dy: f32 = parts.next().context("wheel dy")?.parse()?;
+    let fx: f32 = parts.next().unwrap_or("0.5").parse()?;
+    let fy: f32 = parts.next().unwrap_or("0.5").parse()?;
     let (handle, bounds) = find_anchor(h, anchor)?.context("missing wheel target")?;
-    let position = bounds.center();
-    let dy: f32 = dy.parse()?;
+    let position = point(
+        bounds.left() + bounds.size.width * fx,
+        bounds.top() + bounds.size.height * fy,
+    );
     wheel_at(h, handle, position, px(dy))
 }
 
