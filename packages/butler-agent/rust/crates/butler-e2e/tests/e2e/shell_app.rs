@@ -39,6 +39,7 @@ mod observer_dialog;
 mod sidebar_drag;
 mod sidebar_sticky;
 mod space_header;
+mod split_width;
 mod text_selection;
 mod text_size;
 mod titlebar_drag;
