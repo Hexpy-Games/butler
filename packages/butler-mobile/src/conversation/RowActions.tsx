@@ -43,7 +43,7 @@ export function RowActions({ row, view, tree, onClose, onChanged }: {
   }
   const destinations = stage === "move" ? [
     { key: null, title: appCopy.space.root, depth: 0, scope: null, icon: icons.Folder },
-    ...visibleRows(tree, new Set()).filter(item => item.kind !== "session" && !excluded.has(item.key)).map(item => ({
+    ...visibleRows(tree, new Set()).filter(item => (item.kind === "group" || item.kind === "project") && !excluded.has(item.key)).map(item => ({
       key: item.key, title: item.title, depth: item.depth, icon: item.kind === "project" ? icons.Briefcase : icons.Folder,
       scope: item.kind === "project" ? item.project!.id : view?.space.groups.find(g => "g:" + g.id === item.key)?.scopeProjectId ?? null,
     })),
