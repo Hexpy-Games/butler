@@ -137,7 +137,8 @@ pub fn scrim(
     ds: &Ds,
 ) -> AnyElement {
     let color = convert::with_alpha(ds.color(Color::AdaptiveScrimBg), alpha);
-    let el = cover().id(id).bg(color);
+    // The backdrop covers the page: a wheel over it never scrolls what is under it, as on the web.
+    let el = cover().id(id).bg(color).occlude();
     match on_dismiss {
         Some(dismiss) => el
             .debug_selector(|| "adaptive-scrim".to_owned())
