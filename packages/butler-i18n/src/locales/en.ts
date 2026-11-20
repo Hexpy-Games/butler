@@ -1824,6 +1824,8 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       keptProfile: "Your chats, instructions, chat memory and project memory, plus your name, tone and profile-building settings",
       keptProject: "Your chats and project files, other projects, the rest of chat memory, instructions for all chats and your profile",
       resetNote: "A reply already in progress may still use the old memory.",
+      reextracting: (d, t) => `Reorganizing memory with the new rules · ${d} / ${t}`,
+      reextractDone: "Memory reorganized with the new rules", reextractFailed: "Couldn't reorganize memory",
       resetChatDone: "Chat memory reset", resetProfileDone: "Profile reset", resetProjectDone: "Project memory reset",
       resetFailed: "Couldn't reset", nothingToReset: "Nothing to reset",
       thisChat: "This chat", thisChatOnly: "This chat only", expiresInHours: hours => `Expires in ${hours} ${hours === 1 ? "hour" : "hours"}`, expiresInDays: days => `Expires in ${days} days`,

@@ -73,6 +73,9 @@ pub(crate) fn begin(
         phase: "preparing".into(),
         sequence: 1,
         removal_pending: false,
+        retire_after: None,
+        done: None,
+        total: None,
         instructions,
     };
     save(root, paths, &result)?;

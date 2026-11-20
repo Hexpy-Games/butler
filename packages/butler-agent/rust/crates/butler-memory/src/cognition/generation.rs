@@ -21,6 +21,7 @@ pub(in crate::cognition) use cache::{
 pub use initialize::{
     FreshMemoryGeneration, initialize_empty_memory_generation, prepare_fresh_memory_generation,
 };
+pub(crate) use manifest::MEMORY_EXTRACTION_RULES_VERSION;
 pub use manifest::{
     AcceptanceBinding, ActiveDescriptor, CanonicalSnapshot, EmbeddingSlot, GenerationFormat,
     GenerationManifest, GenerationReadiness, GenerationState, InitializationOrigin, ProjectionMode,

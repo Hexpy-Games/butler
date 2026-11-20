@@ -5,7 +5,7 @@ import { confirmAction } from "@/app/confirmation.ts";
 import { onMemoryEvent } from "@/app/memoryEvents.ts";
 import { notifyStatus } from "@/app/notifications.ts";
 import type { MemoryCard, MemoryReceipt, ProjectMemory } from "../memoryTypes";
-export type ResetKind = "automatic" | "profile" | "project_memory";
+export type ResetKind = "automatic" | "profile" | "project_memory" | "reextract";
 const running = (receipt?: MemoryReceipt) => receipt?.phase === "preparing" || receipt?.phase === "removing";
 export function useMemoryReset(initial: MemoryReceipt | undefined, refresh: () => Promise<void>) {
   const [receipt, setReceipt] = useState<MemoryReceipt>();
@@ -14,15 +14,16 @@ export function useMemoryReset(initial: MemoryReceipt | undefined, refresh: () =
   const seen = useRef(new Map<string, number>());
   const pending = useRef(false);
   const accept = useCallback((next: MemoryReceipt, announce = true) => {
-    if (!next.kind || !["automatic", "profile", "project_memory"].includes(next.kind)) return;
+    if (!next.kind || !["automatic", "profile", "project_memory", "reextract"].includes(next.kind)) return;
     if ((seen.current.get(next.operation_id) ?? -1) >= next.sequence) return;
     seen.current.set(next.operation_id, next.sequence);
     current.current = next;
     setReceipt(next);
     if (!running(next) && announce) {
       const copy = appCopy.settings.memory;
-      const done = next.kind === "profile" ? copy.resetProfileDone : next.kind === "project_memory" ? copy.resetProjectDone : copy.resetChatDone;
-      notifyStatus(next.phase === "complete" ? done : copy.resetFailed, { id: "memory-reset", tone: next.phase === "complete" ? "ok" : "error" });
+      const done = next.kind === "reextract" ? copy.reextractDone : next.kind === "profile" ? copy.resetProfileDone : next.kind === "project_memory" ? copy.resetProjectDone : copy.resetChatDone;
+      const failed = next.kind === "reextract" ? copy.reextractFailed : copy.resetFailed;
+      notifyStatus(next.phase === "complete" ? done : failed, { id: "memory-reset", tone: next.phase === "complete" ? "ok" : "error" });
       void refresh();
     }
   }, [refresh]);
@@ -33,6 +34,20 @@ export function useMemoryReset(initial: MemoryReceipt | undefined, refresh: () =
       void api<MemoryReceipt>(`/memory/reset/${current.current!.operation_id}`).then((next) => accept(next)).catch(() => {});
     }
   }), [accept]);
+  const reextract = running(receipt) && receipt?.kind === "reextract" ? receipt : undefined;
+  const reextractId = reextract?.operation_id;
+  useEffect(() => {
+    if (!reextractId) return;
+    let cancelled = false;
+    const timer = setInterval(() => {
+      void api<MemoryReceipt>(`/memory/reset/${reextractId}`).then((next) => {
+        if (cancelled) return;
+        if (running(next)) setReceipt(next);
+        else accept(next);
+      }).catch(() => {});
+    }, 15_000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [reextractId, accept]);
   const start = async (kind: ResetKind, revision: number, card?: MemoryCard, project?: ProjectMemory, name?: string, projectId?: string) => {
     if (pending.current || running(current.current)) return;
     pending.current = true;
@@ -53,5 +68,5 @@ export function useMemoryReset(initial: MemoryReceipt | undefined, refresh: () =
     } catch { notifyStatus(copy.resetFailed, { id: "memory-reset", tone: "error" }); void refresh(); }
     finally { setStarting(undefined); pending.current = false; }
   };
-  return { kind: starting ?? (running(receipt) ? receipt?.kind as ResetKind : undefined), start };
+  return { kind: starting ?? (running(receipt) ? receipt?.kind as ResetKind : undefined), start, reextract };
 }

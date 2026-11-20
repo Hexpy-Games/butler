@@ -173,25 +173,22 @@ impl AgentRuntime {
             metric_files.clone(),
         )
         .await;
-        let daily_cognition = Arc::new(
-            DailyCognitionJobs::open(DailyCognitionOwners {
-                data_root: paths.data_root.clone(),
-                paths: environment.cognition_paths.clone(),
-                coordinator: coordinator.clone(),
-                metrics: metric_files.clone(),
-                consumer: memory_sync.consumer(),
-                capsules: capsule_service,
-                provider: models.provider.clone(),
-                configuration: models.configuration.clone(),
-                profile: profile.clone(),
-                ledger: project_ledger.clone(),
-                date_parser: date_parser.clone(),
-                bindings: stores.bindings.clone(),
-                embedding: embedding.clone(),
-            })
-            .await
-            .map_err(setup)?,
-        );
+        let daily_cognition = open_daily_cognition(DailyCognitionOwners {
+            data_root: paths.data_root.clone(),
+            paths: environment.cognition_paths.clone(),
+            coordinator: coordinator.clone(),
+            metrics: metric_files.clone(),
+            consumer: memory_sync.consumer(),
+            capsules: capsule_service,
+            provider: models.provider.clone(),
+            configuration: models.configuration.clone(),
+            profile: profile.clone(),
+            ledger: project_ledger.clone(),
+            date_parser: date_parser.clone(),
+            bindings: stores.bindings.clone(),
+            embedding: embedding.clone(),
+        })
+        .await?;
         let context_maintenance =
             daily_cognition.context_maintenance(&tool_output, &metric_files, &date_parser);
         let command = Arc::new(crate::host::guided::command::GuidedCommand::new(
@@ -351,6 +348,7 @@ impl AgentRuntime {
         let bindings = stores.bindings.clone();
         let conversations = Arc::new(stores.conversations.clone());
         let progress = StorageProgressPublication::new(stores.btcc.clone());
+        let memory_consumer = memory_sync.consumer();
         let owner = Arc::new(RuntimeOwners {
             stores,
             project_work,
@@ -379,7 +377,7 @@ impl AgentRuntime {
         });
         let assembly = assemble_runtime_turn(&repositories, preparation, agent, owner);
         startup.phase("runtime_ports");
-        Self::finish_startup(Self {
+        let runtime = Self {
             data_reset: process.data_reset,
             hooks,
             plugins,
@@ -417,8 +415,13 @@ impl AgentRuntime {
             context_maintenance,
             daily_cognition,
             profile,
-        })
+        };
+        Self::finish_startup(runtime, memory_consumer)
     }
+}
+
+async fn open_daily_cognition(owners: DailyCognitionOwners) -> Result<Arc<DailyCognitionJobs>, BtccError> {
+    Ok(Arc::new(DailyCognitionJobs::open(owners).await.map_err(setup)?))
 }
 
 /// Capture both process time sources before opening any persistent store.
@@ -430,12 +433,14 @@ fn process_clocks() -> Result<(Arc<SystemPromptClock>, Arc<super::DateParser>), 
 }
 
 impl AgentRuntime {
-    fn finish_startup(runtime: Self) -> Result<Self, BtccError> {
+    fn finish_startup(runtime: Self, memory_consumer: Arc<butler_memory::cognition::MemorySyncConsumer>) -> Result<Self, BtccError> {
         crate::host::memory_jobs::recover_resets(
             runtime.memory_management.clone(),
             runtime.profile.clone(),
             runtime.memory_writes.clone(),
             runtime.service_shutdown.child_token(),
+            memory_consumer,
+            runtime.daily_cognition.gate.clone(),
         );
         Ok(runtime)
     }

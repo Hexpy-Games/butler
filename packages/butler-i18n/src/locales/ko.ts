@@ -1828,6 +1828,8 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       keptProfile: "채팅, 지침, 대화 기억, 프로젝트 기억, 이름·말투·알아가기 설정",
       keptProject: "채팅, 프로젝트 파일, 다른 프로젝트, 그 밖의 대화 기억, 모든 채팅의 지침, 프로필",
       resetNote: "진행 중인 응답에는 이전 기억이 남을 수 있습니다.",
+      reextracting: (d, t) => `기억을 새 규칙으로 다시 정리하는 중입니다 · ${d} / ${t}`,
+      reextractDone: "기억을 새 규칙으로 다시 정리했습니다", reextractFailed: "기억을 다시 정리하지 못했습니다",
       resetChatDone: "대화 기억을 초기화했습니다", resetProfileDone: "프로필을 초기화했습니다", resetProjectDone: "프로젝트 기억을 초기화했습니다",
       resetFailed: "초기화하지 못했습니다", nothingToReset: "초기화할 내용 없음",
       thisChat: "이 채팅", thisChatOnly: "이 채팅에서만", expiresInHours: hours => `${hours}시간 후 만료`, expiresInDays: days => `${days}일 후 만료`,

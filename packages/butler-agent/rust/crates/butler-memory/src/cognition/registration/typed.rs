@@ -203,16 +203,7 @@ impl LockedRegistration {
     ) -> CognitionResult<crate::cognition::GraphProgress> {
         let prepared = &self.prepared;
         let now = (self.clock)();
-        let (cursor_key, snapshot_id) = match &self.input.target {
-            MemoryGenerationTarget::Rebuild {
-                canonical_snapshot_id,
-                ..
-            } => (
-                Some(prepared.plan.source_key.as_str()),
-                Some(canonical_snapshot_id.as_str()),
-            ),
-            MemoryGenerationTarget::Active { .. } => (None, None),
-        };
+        let (cursor_key, snapshot_id) = (None, None);
         let registered = (|| {
             graph.ensure_schema(&now)?;
             let result = graph.register_typed(TypedRegistrationInput {

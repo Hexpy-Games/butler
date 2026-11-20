@@ -11,7 +11,7 @@ export interface MemoryCard {
 }
 export interface MemoryReceipt {
   kind?: string; project_id?: string; operation_id: string; phase: "preparing" | "removing" | "complete" | "failed" | "cancelled";
-  sequence: number; bytes_reclaimed: number;
+  sequence: number; bytes_reclaimed: number; done?: number; total?: number; retire_after?: string;
 }
 export interface MemoryInventory { revision: number; kinds: MemoryCard[]; operation?: MemoryReceipt }
 export interface ProjectMemory {

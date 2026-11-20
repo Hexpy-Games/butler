@@ -99,7 +99,7 @@ fn write_empty_generation(
     durable::create_dir(&root)?;
     GraphRepository::create_fresh(&root.join("graph.sqlite"), now)?;
     let inventory_hash = format!("{:x}", Sha256::digest(b"[\"memory-source-inventory\"]"));
-    let manifest = GenerationManifest::new(
+    let mut manifest = GenerationManifest::new(
         NewManifest {
             generation_id,
             format: GenerationFormat::V2,
@@ -114,6 +114,7 @@ fn write_empty_generation(
             icu: icu_version,
         }),
     );
+    manifest.other.insert("extraction_rules_version".into(), super::manifest::MEMORY_EXTRACTION_RULES_VERSION.into());
     durable::write_json(&root.join("manifest.json"), &manifest)?;
     let active = ActiveDescriptor::new(generation_id, None, now, ProjectionMode::Running);
     durable::write_json(&memory_root.join("active-generation.json"), &active)

@@ -1,7 +1,7 @@
 //! Resolves which generation a caller may read: the serving generation named
-//! by the descriptor, or a building rebuild candidate bound to its snapshot.
+//! by the descriptor, or a building rebuild candidate over the live source store.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use super::manifest::{
     ACTIVE_DESCRIPTOR_SCHEMA, DescriptorView, EmbeddingSlot, GenerationFormat, GenerationManifest,
@@ -11,7 +11,6 @@ use super::types::{
     GenerationEmbedding, MemoryGenerationHandle, MemoryGenerationTarget,
     validate_generation_embedding,
 };
-use crate::cognition::paths::node_join;
 use crate::cognition::{CognitionCode, CognitionError, CognitionPathEnvironment};
 
 /// The serving generation as named by the descriptor.
@@ -59,30 +58,16 @@ pub fn resolve_generation(
     let Some(format) = manifest.format else {
         return Err(error(CognitionCode::MemoryGenerationVersionUnsupported));
     };
-    let snapshot = manifest
-        .canonical_snapshot_path
-        .as_deref()
-        .map(|path| node_join(&manifest_root, path));
-    if let MemoryGenerationTarget::Rebuild {
-        canonical_snapshot_id,
-        ..
-    } = target
-        && (manifest.state != Some(GenerationState::Building)
-            || format != GenerationFormat::V2
-            || manifest.canonical_snapshot_id.as_deref() != Some(canonical_snapshot_id)
-            || snapshot.is_none())
+    if matches!(target, MemoryGenerationTarget::Rebuild { .. })
+        && (manifest.state != Some(GenerationState::Building) || format != GenerationFormat::V2)
     {
-        return Err(error(CognitionCode::MemorySnapshotChanged));
+        return Err(error(CognitionCode::MemoryGenerationChanged));
     }
     let root = match format {
         GenerationFormat::Legacy => memory_root.join("db"),
         GenerationFormat::V2 => manifest_root,
     };
-    let source_root = if active {
-        data_root.to_owned()
-    } else {
-        snapshot_source_root(snapshot.as_deref())?
-    };
+    let source_root = data_root.to_owned();
     let reader_pin = super::pins::pin(&root);
     if active && read_descriptor(&memory_root)?.generation_id != generation_id {
         return Err(error(CognitionCode::MemoryGenerationChanged));
@@ -94,18 +79,8 @@ pub fn resolve_generation(
         root,
         embedding,
         source_root,
-        canonical_snapshot_path: if active { None } else { snapshot },
+        canonical_snapshot_path: None,
     })
-}
-
-/// A rebuild reads sources from the snapshot root two levels above the
-/// canonical store (`source-snapshot/runtime/conversation-store.sqlite`).
-fn snapshot_source_root(snapshot: Option<&Path>) -> Result<PathBuf, CognitionError> {
-    snapshot
-        .and_then(Path::parent)
-        .and_then(Path::parent)
-        .map(Path::to_owned)
-        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))
 }
 
 /// The active memory generation.
@@ -145,15 +120,11 @@ pub(crate) fn resolve_projection_generation(
     if manifest.state != Some(GenerationState::Building) {
         return Err(error(CognitionCode::MemoryGenerationChanged));
     }
-    let snapshot_id = manifest
-        .canonical_snapshot_id
-        .ok_or_else(|| error(CognitionCode::MemorySnapshotChanged))?;
     resolve_generation(
         data_root,
         environment,
         &MemoryGenerationTarget::Rebuild {
             generation_id: generation_id.to_owned(),
-            canonical_snapshot_id: snapshot_id,
         },
     )
 }

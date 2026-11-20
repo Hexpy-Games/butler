@@ -132,16 +132,35 @@ impl MemorySyncConsumer {
     }
 
     /// Consumes into a rebuild candidate instead of the active generation.
-    pub fn with_rebuild_target(
-        mut self,
-        generation_id: String,
-        canonical_snapshot_id: String,
-    ) -> Self {
-        self.target = Some(MemoryGenerationTarget::Rebuild {
-            generation_id,
-            canonical_snapshot_id,
-        });
+    pub fn with_rebuild_target(mut self, generation_id: String) -> Self {
+        self.target = Some(MemoryGenerationTarget::Rebuild { generation_id });
         self
+    }
+
+    /// Builds through the same registration owner and serial admission permit.
+    pub fn rebuild_consumer(&self, generation_id: String) -> MemorySyncConsumer {
+        let mut consumer = Self::new(
+            self.data_root.clone(), self.environment.clone(), self.registration.clone(),
+            self.coordinator.clone(), self.clock.clone(),
+        )
+        .with_instruction_owner(self.instruction_owner.clone())
+        .with_rebuild_target(generation_id)
+        .with_cancellation(&self.shutdown);
+        if let Some(embedding) = &self.embedding {
+            consumer = consumer.with_embedding(embedding.clone());
+        }
+        consumer.admission = self.admission.clone();
+        consumer
+    }
+
+    /// Checks the persisted shadow checkpoint against the live canonical store.
+    pub async fn rebuild_caught_up(&self) -> CognitionResult<bool> {
+        let root = self.data_root.clone();
+        let environment = self.environment.clone();
+        let target = self.target.clone().ok_or_else(|| {
+            CognitionError::new(CognitionCode::MemoryGenerationChanged, "memory_generation_changed")
+        })?;
+        blocking::run(move || catchup::caught_up(&root, &environment, &target)).await
     }
 
     /// Stop background execution with its owner, retaining durable queued work.

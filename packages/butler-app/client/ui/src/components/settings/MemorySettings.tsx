@@ -43,7 +43,7 @@ export function MemorySettings() {
     <SettingsSection id="chat-memory" kind="form" title={copy.pageSections.chatMemory} description={copy.pageSectionDescriptions.chatMemory}
       state={cardState(summary.state, chat)} emptyMessage={copy.memory.unavailable} onRetry={() => { void summary.reload(true); }}>
       <RecallSettings />
-      <ChatMemoryBody card={chat} receipt={operation.receipt} cancel={() => { void operation.cancel(); }}
+      <ChatMemoryBody status={reset.reextract && copy.memory.reextracting(reset.reextract.done ?? 0, reset.reextract.total ?? 0)} card={chat} receipt={operation.receipt} cancel={() => { void operation.cancel(); }}
         free={<ChatMemoryActions busy={operation.busy} locked={Boolean(reset.kind) || consolidation.running} ready={summary.state === "ready" && chat?.item_count != null}
           reclaimable={chat?.health.reclaimable_bytes} start={() => { void operation.start(revision); }} />}
         reset={<MemoryResetButton running={reset.kind === "automatic"} locked={sharedBusy && reset.kind !== "automatic"}
