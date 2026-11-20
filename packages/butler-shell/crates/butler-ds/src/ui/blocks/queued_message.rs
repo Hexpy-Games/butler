@@ -126,7 +126,14 @@ impl QueuedMessage {
 
 /// How many lines `text` takes wrapped to `width` in the body face.
 fn lines(text: &str, width: f32, window: &mut Window, cx: &App) -> usize {
-    measure::wrapped_lines(text, Length::FontSize3, width, window, cx)
+    // The paint's breaking (`body_text`): keep-all in Korean, overflow-wrap anywhere.
+    let word_break = if Ds::get(cx).lang() == Lang::Ko {
+        gpui::WordBreak::KeepAll
+    } else {
+        gpui::WordBreak::Normal
+    };
+    let breaks = (word_break, gpui::OverflowWrap::Anywhere);
+    measure::wrapped_lines_with(text, Length::FontSize3, width, breaks, window, cx)
 }
 
 impl QueuedMessage {
