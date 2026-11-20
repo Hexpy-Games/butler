@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { FlatList, LayoutAnimation, Platform, RefreshControl, ScrollView, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
+import { getAppCopy } from "../../butler-i18n/src/index.ts";
+import type { EpicCard } from "../../butler-protocol/src/index.ts";
 import { Badge, Button, ButtonGroup, EdgeFade, Icon, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
 import { probe } from "@/connection/probe";
@@ -13,7 +15,8 @@ import { NewConversationSheet } from "@/conversation/NewConversationSheet";
 import { RowActions } from "@/conversation/RowActions";
 import { useConversation } from "@/conversation/live";
 import { useNavigationView } from "@/conversation/useNavigationView";
-import { spaceTree, visibleRows, type SpaceRow } from "@/conversation/space";
+import { useCanonSidebars } from "@/conversation/useCanonSidebars";
+import { spaceTree, visibleRows, withCanon, type SpaceRow } from "@/conversation/space";
 import { sessionMark, timeLabel } from "@/conversation/sessions";
 
 type Status = { kind: "checking"; origin?: string } | { kind: "ready"; origin: string } | { kind: "problem"; origin: string; problem: Problem };
@@ -79,6 +82,8 @@ export default function Home() {
 
 function Conversations() {
   const copy = useMobileCopy();
+  const locale = useAppLocale();
+  const appCopy = getAppCopy(locale);
   const t = useTokens();
   const { view, error, retry, refresh } = useNavigationView();
   const { lost } = useConversation();
@@ -86,7 +91,8 @@ function Conversations() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [actionRow, setActionRow] = useState<SpaceRow | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const tree = useMemo<ReturnType<typeof spaceTree>>(() => view ? spaceTree(view) : { children: new Map() }, [view]);
+  const sidebars = useCanonSidebars(useMemo(() => view?.projects.filter(project => !project.archived && !collapsed.has(`p:${project.id}`)).map(project => project.id) ?? [], [view, collapsed]));
+  const tree = useMemo<ReturnType<typeof spaceTree>>(() => view ? withCanon(spaceTree(view), sidebars, appCopy.canon.backlog) : { children: new Map() }, [view, sidebars, appCopy]);
   const rows: SpaceRow[] = visibleRows(tree, collapsed);
   if (tree.general) rows.unshift({ key: "s:general", kind: "session", title: tree.general.title, session: tree.general, depth: 0 });
   const reduced = useReducedMotion();
@@ -120,7 +126,6 @@ function Conversations() {
     return keys;
   }, [tree]);
   const paddingHorizontal = t.length("--space-4");
-  const locale = useAppLocale();
   return <>
     {/* The list is the screen's root view: iOS ties the header to a scroll view only when nothing wraps it. */}
     <FlatList data={rows} keyExtractor={item => item.key} contentInsetAdjustmentBehavior="automatic"
@@ -133,8 +138,9 @@ function Conversations() {
       }} />}
       renderItem={({ item }) => <View style={{ paddingLeft: item.depth * t.length("--space-4") }}>
         {item.session ? <SessionRow session={item.session} locale={locale} onLongPress={item.key === "s:general" ? undefined : () => setActionRow(item)} />
-          : <ListRow icon={item.kind === "project" ? icons.Briefcase : icons.Folder} title={item.title}
-            onLongPress={() => setActionRow(item)}
+          : item.kind === "epic" ? <EpicRow epic={item.epic!} />
+          : <ListRow icon={item.kind === "project" ? icons.Briefcase : item.kind === "plan" ? icons.Flag : icons.Folder} title={item.title}
+            onLongPress={item.kind === "plan" || item.kind === "backlog" ? undefined : () => setActionRow(item)}
             {...((tree.children.get(item.key)?.length ?? 0) > 0 ? {
               disclosure: { expanded: !collapsed.has(item.key) },
               onPress: () => toggle(item.key),
@@ -155,6 +161,25 @@ function Conversations() {
     <RowActions row={actionRow} view={view} tree={tree} onClose={() => setActionRow(null)} onChanged={refresh} />
     <NewConversationSheet view={view} />
   </>;
+}
+
+function EpicRow({ epic }: { epic: EpicCard }) {
+  const copy = useMobileCopy();
+  const appCopy = getAppCopy(useAppLocale());
+  const { client } = useConversation();
+  const t = useTokens();
+  const running = epic.running || epic.queue?.state === "running";
+  const open = async () => {
+    try {
+      const id = epic.home_session_id ?? (await client!.request<{ session_id: string }>(`/canon/epics/${encodeURIComponent(epic.id)}/conversation`, { body: {} })).session_id;
+      router.push({ pathname: "/chat/[id]", params: { id, title: epic.title } });
+    } catch { showToast({ message: appCopy.canon.conversationFailed, tone: "warning" }); }
+  };
+  return <ListRow icon={icons.Ticket} title={epic.title} onPress={() => void open()}
+    trailing={<View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
+      {running ? <Spinner label={copy.conversations.working} /> : null}
+      <Icon glyph={icons.ChevronRight} tone="tertiary" />
+    </View>} />;
 }
 
 function SessionRow({ session, locale, onLongPress }: { session: NonNullable<SpaceRow["session"]>; locale: string; onLongPress?: () => void }) {
