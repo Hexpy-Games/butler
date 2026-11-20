@@ -231,7 +231,7 @@ function MessageInfo({ message, retryable }: { message: ConversationMessage; ret
   return <View style={{ flexDirection: "row", alignItems: "center", justifyContent: user ? "flex-end" : "flex-start", gap: t.length("--space-1") }}>
     {retryable ? <Button variant="secondary" iconStart={icons.Retry} label={copy.chat.retry} onPress={retry} disabled={retrying} /> : null}
     {user ? time : null}
-    <IconButton icon={icons.Copy} variant="ghost" label={copy.chat.copy} onPress={copyText} />
+    <IconButton icon={icons.Copy} variant="ghost" size="sm" label={copy.chat.copy} onPress={copyText} />
     {user ? null : time}
   </View>;
 }

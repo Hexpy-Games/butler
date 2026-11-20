@@ -136,6 +136,10 @@ function ButtonSection() {
       ))}
       <Cell name="icon button · disabled"><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} disabled /></View></Cell>
       <Cell name="icon button · loading"><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} loading /></View></Cell>
+      <Cell name="sm"><View style={{ flexDirection: "row", alignItems: "center" }}>
+        <IconButton icon={icons.Plus} variant="ghost" size="sm" label={en.attach} onPress={noop} />
+        <IconButton icon={icons.Plus} label={en.attach} onPress={noop} />
+      </View></Cell>
     </>
   );
 }
