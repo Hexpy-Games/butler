@@ -35,10 +35,10 @@ export function HomeHeader({ scrollY, title, settingsLabel, onSettings }: {
     <Animated.View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, height: reach, opacity: shade }}>
       {Platform.OS === "ios"
         ? <Mask style={StyleSheet.absoluteFill} maskElement={<LinearGradient style={StyleSheet.absoluteFill}
-            colors={["#000", "#000", "transparent"]} locations={[0, insets.top / reach, 1]} />}>
+            colors={["#000", "#000", "transparent"]} locations={[0, height / reach, 1]} />}>
             <BlurView style={StyleSheet.absoluteFill} intensity={GLASS_BLUR_IOS} tint={t.scheme === "dark" ? "dark" : "light"} />
           </Mask>
-        : <LinearGradient style={StyleSheet.absoluteFill} colors={[surface, surface, alpha(surface, 0)]} locations={[0, insets.top / reach, 1]} />}
+        : <LinearGradient style={StyleSheet.absoluteFill} colors={[surface, surface, alpha(surface, 0)]} locations={[0, height / reach, 1]} />}
     </Animated.View>
     <Animated.View pointerEvents="box-none" style={{ position: "absolute", top: insets.top, left: 0, right: 0, height: HOME_HEADER_ROW,
       flexDirection: "row", alignItems: "center", paddingHorizontal: edge, transform: [{ translateY: follow }] }}>
