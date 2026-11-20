@@ -172,8 +172,7 @@ impl QueuedMessage {
         )
     }
 
-    /// The bubble's text; clamped, it clips at five lines (gpui's `line_clamp` counts hard breaks
-    /// apart and draws no ellipsis).
+    /// The bubble's text; clamped, its fifth line ends in an ellipsis (`-webkit-line-clamp: 5`).
     fn body_text(&self, clamped: bool, ds: &Ds) -> gpui::Div {
         let mut text = div().min_w_0();
         if ds.lang() == Lang::Ko {
@@ -183,8 +182,7 @@ impl QueuedMessage {
             .overflow_wrap(OverflowWrap::Anywhere)
             .child(gpui::StyledText::new(self.text.clone()));
         if clamped {
-            text.max_h(ds.len(Length::TypoBodyLineHeightDocument) * CLAMP_LINES as f32)
-                .overflow_hidden()
+            text.line_clamp(CLAMP_LINES).text_ellipsis()
         } else {
             text
         }
