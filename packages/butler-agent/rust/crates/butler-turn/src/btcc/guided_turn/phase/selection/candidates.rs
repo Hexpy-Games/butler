@@ -147,8 +147,8 @@ pub(super) fn profile_candidates(
 }
 
 /// The butler delegates to stewards (and may bind a worktree with full
-/// project access) and never sees non-durable project tools; a steward
-/// delegates to workers.
+/// project access) and never sees non-durable project tools unless the request
+/// requires one; a steward delegates to workers.
 pub(super) fn add_role_tools(
     names: &mut HashSet<String>,
     catalog: &GuidedCatalogSnapshot,
@@ -173,9 +173,10 @@ pub(super) fn add_role_tools(
     }
     if policy.role == PolicyRole::Butler {
         names.retain(|name| {
-            catalog
-                .tool(name)
-                .is_none_or(|tool| tool.category.as_deref() != Some("project") || tool.durable)
+            policy.required_tools.contains(name)
+                || catalog
+                    .tool(name)
+                    .is_none_or(|tool| tool.category.as_deref() != Some("project") || tool.durable)
         });
     }
 }
