@@ -11,6 +11,7 @@ import Folder01Icon from "@hugeicons/core-free-icons/Folder01Icon";
 import Message01Icon from "@hugeicons/core-free-icons/Message01Icon";
 import SecurityCheckIcon from "@hugeicons/core-free-icons/SecurityCheckIcon";
 import SentIcon from "@hugeicons/core-free-icons/SentIcon";
+import Settings01Icon from "@hugeicons/core-free-icons/Settings01Icon";
 import SquareIcon from "@hugeicons/core-free-icons/SquareIcon";
 import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
 
@@ -58,6 +59,7 @@ export const icons = {
   ChevronRight: ArrowRight01Icon,
   ArrowLeft: ArrowLeft01Icon,
   SendHorizontal: SentIcon,
+  Settings: Settings01Icon,
   Square: SquareIcon,
   AlertCircle: AlertCircleIcon,
   CheckCircle2: CheckmarkCircle02Icon,
