@@ -51,7 +51,6 @@ pub struct TintedGlass {
     square_bottom: bool,
     column: Option<Pixels>,
     height: Option<Pixels>,
-    presence: Option<Presence>,
     composer: bool,
     children: Vec<AnyElement>,
 }
@@ -65,7 +64,6 @@ impl TintedGlass {
             square_bottom: false,
             column: None,
             height: None,
-            presence: None,
             composer: false,
             children: Vec::new(),
         }
@@ -98,15 +96,6 @@ impl TintedGlass {
     /// shrink and scroll (a sheet's body).
     pub fn column(mut self, max_height: Pixels) -> Self {
         self.column = Some(max_height);
-        self
-    }
-
-    /// How present the surface is, 0..=1 (an enter or exit animation's progress): the glass
-    /// materializes with it instead of fading (LG research §5 Appear/disappear, §8.1.6) while the
-    /// content fades. Without it the glass takes the presence of the enclosing overlay
-    /// ([`liquid_glass::presence`]), if any. The caller must not fade the glass's ancestors.
-    pub fn presence(mut self, progress: f32) -> Self {
-        self.presence = Some(Presence::Static(progress.clamp(0., 1.)));
         self
     }
 
@@ -204,10 +193,7 @@ impl Paint {
 
 impl RenderOnce for TintedGlass {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let presence = self
-            .presence
-            .or_else(|| liquid_glass::presence(cx))
-            .unwrap_or(Presence::Static(1.));
+        let presence = liquid_glass::presence(cx).unwrap_or(Presence::Static(1.));
         let ds = Ds::get(cx);
         let radius = ds.len(match self.radius {
             GlassRadius::Control => Length::RadiusControl,
@@ -267,7 +253,7 @@ impl RenderOnce for TintedGlass {
                 // The 1px border of the surface stays in layout, so the content keeps the DS geometry.
                 .child(
                     shrink(fill(round(content))).child(
-                        shrink(fill(strut::container(div(), ds)))
+                        shrink(fill(div()))
                             .px(padding + px(1.)) // DS: TintedGlass.module.css:5
                             .pt(padding + px(1.))
                             .pb(padding + bottom_border)

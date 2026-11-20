@@ -131,7 +131,7 @@ fn table(
             .child(
                 Button::new(SharedString::from(format!("{key}-toggle")))
                     .variant(Variant::Inline)
-                    .text(label)
+                    .child(label)
                     .on_click(move |_, _, cx| {
                         expanded.update(cx, |open, cx| {
                             *open = !*open;

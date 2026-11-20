@@ -4,6 +4,7 @@
 //! [`InlineFlow`]: a wrapping, baseline-aligned run whose text is cut into words and whose
 //! references are cut the way the CSS breaks them (the icon and the first character of an
 //! external label never part; the rest of the label wraps anywhere).
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -185,6 +186,9 @@ impl InlineReference {
 }
 
 /// The favicon slot: the globe at once, the favicon fading in over it once decoded.
+///
+/// Like the web's `vertical-align: -0.2em`: the favicon (a box without text, baseline = its
+/// bottom) sits 0.2em below the text baseline, now that the label row aligns real baselines.
 fn favicon_slot(
     id: &ElementId,
     source: Option<&ImageSource>,
@@ -215,9 +219,7 @@ fn favicon_slot(
     let ds = Ds::get(cx);
     let side = em * 1.125; // DS: InlineReference.module.css:75
     let radius = ds.len(Length::RadiusControl) / 2.;
-    let globe = div()
-        .absolute()
-        .size_full()
+    let globe = cover()
         .flex()
         .items_center()
         .justify_center()
@@ -231,9 +233,7 @@ fn favicon_slot(
         },
     );
     let plate = data.map(|data| {
-        div()
-            .absolute()
-            .size_full()
+        cover()
             .rounded(radius)
             .bg(ds.color(Color::FaviconPlate))
             .border(ds.len(Length::BorderHairline))
@@ -260,7 +260,7 @@ fn favicon_slot(
         .flex_none()
         .size(side)
         .mr(ds.len(Length::Space1))
-        .top(-em * 0.2) // `vertical-align: -0.2em` (gpui puts a box without text on its top edge)
+        .top(em * 0.2)
         .child(globe)
         .children(plate)
         .into_any_element()

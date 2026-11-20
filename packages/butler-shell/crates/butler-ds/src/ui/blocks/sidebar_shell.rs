@@ -11,11 +11,13 @@ use gpui::{
 };
 
 use super::measure;
-use super::scope::{self, Spec};
+use super::scope::{self, NavSticky, Spec};
 use crate::tokens::{Color, Density, Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
 use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::scroll::engine::{self, Axis, Config};
+use crate::ui::scroll::frame as scroll_frame;
+use crate::ui::scroll::{ClipUnder, Placement, Sticky};
 use crate::ui::{convert, strut};
 
 /// The scrollbar's lane past the rows (`--sidebar-scrollbar-offset`).
@@ -119,62 +121,46 @@ impl gpui::ParentElement for SidebarShell {
     }
 }
 
-/// The sticky header's offset and the clip of the rows under it, from how far the scroller has
-/// scrolled (`scrolled`) and where the header sits in the content (`natural_top`): the header
-/// holds at `stick_top` from the scrollport's top, and the rows hide behind its bottom edge.
-fn sticky_offset(scrolled: f32, natural_top: f32, stick_top: f32) -> f32 {
-    (scrolled + stick_top - natural_top).max(0.)
-}
-
-/// `.clippedContent`: the rows clipped by `clip` px at the top, with the focus-ring room left
-/// open on the other edges (`clip-path: inset(clip -room -room)`). The wrapper pads the room
-/// back with a negative margin so the rows keep their place.
-fn clipped(rows: Vec<AnyElement>, clip: f32, room: Pixels) -> AnyElement {
-    let inner = div()
-        .flex()
-        .flex_col()
-        .min_w_0()
-        .pt(room)
-        .mt(px(-clip))
-        .children(rows);
-    div()
-        .flex_auto()
-        .min_w_0()
-        .mx(-room)
-        .mb(-room)
-        .px(room)
-        .pb(room)
-        .mt(px(clip))
-        .overflow_hidden()
-        .child(inner)
-        .into_any_element()
-}
-
 struct Parts {
     sticky: Option<AnyElement>,
     rows: Vec<AnyElement>,
     scroll_header: Option<AnyElement>,
 }
 
-/// What the scroller holds: the scroll header, the sticky header, then the rows.
-fn scroll_content(shell: &mut SidebarShell, scrolled: f32, header_height: f32, ds: &Ds) -> Parts {
+/// What the scroller (`scroll`) holds: the scroll header, the sticky header, then the rows.
+/// `.stickyHeader` sticks under the top fade and `.clippedContent` clips the rows at its bottom
+/// edge, with the focus-ring room left open on the other edges; `recorder` measures it.
+fn scroll_content(
+    shell: &mut SidebarShell,
+    scroll: &ScrollHandle,
+    recorder: AnyElement,
+    ds: &Ds,
+) -> Parts {
     let room = ds.len(Length::FocusRingRoom);
-    let sticky = shell.sticky_header.take();
-    let stick_top = f32::from(ds.len(Length::ScrollFadeSize) + room);
-    let natural_top = f32::from(room) + header_height;
-    let offset = sticky_offset(scrolled, natural_top, stick_top);
     let rows = std::mem::take(&mut shell.children);
-    let (sticky, rows) = match sticky {
+    let (sticky, rows) = match shell.sticky_header.take() {
         Some(header) => {
+            let placed = Placement::default();
             // `padding-bottom: calc(var(--space-sm) - var(--focus-ring-room))`
             let pinned = div()
                 .relative()
-                .top(px(offset))
                 .flex_none()
                 .pb((ds.len(Length::SpaceSm) - room).max(px(0.)))
                 .child(header)
-                .into_any_element();
-            (Some(pinned), vec![clipped(rows, offset, room)])
+                .child(recorder);
+            let top = ds.len(Length::ScrollFadeSize) + room;
+            let pinned = Sticky::new(scroll, top, pinned).placed(&placed);
+            let rows = div()
+                .flex()
+                .flex_col()
+                .flex_auto()
+                .min_w_0()
+                .pt(room)
+                .children(rows);
+            (
+                Some(pinned.into_any_element()),
+                vec![ClipUnder::new(&placed, room, rows).into_any_element()],
+            )
         }
         None => (None, rows),
     };
@@ -185,9 +171,22 @@ fn scroll_content(shell: &mut SidebarShell, scrolled: f32, header_height: f32, d
     }
 }
 
+/// `--nav-sticky-offset` for the sticky groups in the rows: the sticky header's line plus its
+/// `height`, so they hold under it, or the scroller's top edge without a sticky header.
+fn nav_sticky(scroll: ScrollHandle, height: Option<Pixels>, ds: &Ds) -> Spec {
+    let offset = height.map_or(px(0.), |height| {
+        ds.len(Length::ScrollFadeSize) + ds.len(Length::FocusRingRoom) + height
+    });
+    Spec {
+        nav_sticky: Some(NavSticky { scroll, offset }),
+        ..Spec::default()
+    }
+}
+
 impl SidebarShell {
     fn scroller(&mut self, window: &mut Window, cx: &mut App) -> AnyElement {
-        let (header, recorder) = measure::track((self.id.clone(), "scroll-header"), window, cx);
+        let (sticky_size, recorder) =
+            measure::track((self.id.clone(), "sticky-header"), window, cx);
         let ds = Ds::get(cx);
         let sticky = self.sticky_header.is_some();
         let (room, fade) = (
@@ -201,11 +200,12 @@ impl SidebarShell {
             size: if self.scroll_fade { fade } else { px(0.) },
             guard: px(0.),
         };
-        let scrolled = scroll_position(&config, window, cx);
+        // The fade engine's handle, which the scroller below tracks.
+        let scroll = engine::fade(&config, None, false, window, cx).handle;
         let ds = Ds::get(cx);
-        let parts = scroll_content(self, scrolled, f32::from(header.height), ds);
+        let parts = scroll_content(self, &scroll, recorder, ds);
         let padded_header = parts.scroll_header.map(|header| {
-            let el = div().relative().child(header).child(recorder);
+            let el = div().child(header);
             // The header keeps its room below it while a sticky header follows.
             if sticky {
                 el.pb(ds.len(Length::Space2xl))
@@ -225,7 +225,16 @@ impl SidebarShell {
             .children(padded_header)
             .children(parts.sticky)
             .children(parts.rows);
-        let built = engine::scroller(&config, content.flex_none(), window, cx);
+        let content = scope::scoped(
+            nav_sticky(scroll, sticky.then_some(sticky_size.height), ds),
+            content,
+        );
+        let built = engine::scroller(
+            &config,
+            scroll_frame::body(div().child(content), "sidebar-scroll"),
+            window,
+            cx,
+        );
         if let Some(slot) = &self.scroll_slot {
             *slot.borrow_mut() = Some(built.handle.clone());
         }
@@ -238,11 +247,10 @@ impl SidebarShell {
             window,
             cx,
         );
-        div()
+        scroll_frame::frame("sidebar-scroll")
             .id((self.id.clone(), "scroll-frame"))
             .relative()
             .min_w_0()
-            .min_h_0()
             .flex_auto()
             .overflow_hidden()
             .ml(-room)
@@ -254,20 +262,19 @@ impl SidebarShell {
     }
 }
 
-/// How far the scroller has scrolled, from the handle its fade engine keeps.
-fn scroll_position(config: &Config, window: &mut Window, cx: &mut App) -> f32 {
-    let fade = engine::fade(config, None, false, window, cx);
-    f32::from(-fade.handle.offset().y).max(0.)
-}
-
+/// The title row is a window drag band, as Electron's `.titlebar` (`app-region: drag`); it spans
+/// the shell's inline padding too.
 fn title_row(titlebar: AnyElement, ds: &Ds, leading: f32) -> AnyElement {
-    div()
+    let pad = ds.len(Length::SidebarPaddingInline);
+    crate::ui::window_drag::area(div())
         .flex()
         .flex_none()
         .items_center()
         .h(ds.len(Length::TitlebarHeight))
         .gap(ds.len(Length::Space2))
-        .pl(px(leading))
+        .mx(-pad)
+        .pl(px(leading) + pad)
+        .pr(pad)
         .child(titlebar)
         .into_any_element()
 }

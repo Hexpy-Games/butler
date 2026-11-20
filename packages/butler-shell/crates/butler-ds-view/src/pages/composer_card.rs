@@ -12,6 +12,7 @@ use butler_ds::ui::blocks::composer_control::{Compact, ComposerControl};
 use butler_ds::ui::blocks::context_donut_button::ContextDonutButton;
 use butler_ds::ui::blocks::notice::{Notice, NoticeTone};
 use butler_ds::ui::blocks::scope::{Spec, scoped};
+use butler_ds::ui::button::{Button, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::icon::{IconSize, icon};
 use butler_ds::ui::icon_button::IconButton;
@@ -34,6 +35,7 @@ struct Copy {
     preview: &'static str,
     optional: &'static str,
     no_images: &'static str,
+    toggle: &'static str,
 }
 
 fn copy(lang: Lang) -> Copy {
@@ -49,9 +51,10 @@ fn copy(lang: Lang) -> Copy {
             preview: "Summarize the motion tokens…",
             optional: "Web search is off. Turn it on in Settings to cite sources.",
             no_images: "Model doesn't accept images",
+            toggle: "Fold or unfold",
         },
         Copy {
-            placeholder: "버틀러에게 무엇이든 물어보세요",
+            placeholder: "버틀러에게 무엇이든 물어보십시오",
             follow_up: "후속 변경사항 요청",
             more: "추가 기능",
             plan: "계획",
@@ -59,8 +62,9 @@ fn copy(lang: Lang) -> Copy {
             model: "Model 5.1",
             draft: "모션 토큰을 요약하고 아직 자체 전환을 선언하는 컴포넌트를 나열해 주세요.",
             preview: "모션 토큰을 요약하고…",
-            optional: "웹 검색이 꺼져 있습니다. 출처를 인용하려면 설정에서 켜세요.",
+            optional: "웹 검색이 꺼져 있습니다. 출처를 인용하려면 설정에서 켜십시오.",
             no_images: "이미지 미지원 모델",
+            toggle: "접기 또는 펼치기",
         },
     )
 }
@@ -102,6 +106,10 @@ pub(super) fn stories() -> Vec<Story> {
         Story {
             name: "Folded preview, drop target and notice",
             render: folded,
+        },
+        Story {
+            name: "Folding and unfolding (live)",
+            render: folding,
         },
     ]
 }
@@ -309,5 +317,54 @@ fn folded(lang: Lang, _: &mut Window, cx: &mut App) -> AnyElement {
                 .child(CompactPreview::new("cc-folded-preview", c.preview))
                 .child(SendButton::new("cc-folded-send")),
         )
+        .into_any_element()
+}
+
+/// A card that folds and unfolds on the button (or unfolds from its preview), with the motion.
+fn folding(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
+    let c = copy(lang);
+    let expanded = window.use_keyed_state("cc-folding", cx, |_, _| true);
+    let open = *expanded.read(cx);
+    let ds = Ds::get(cx);
+    let set = move |value: Option<bool>, cx: &mut App| {
+        expanded.update(cx, |open, cx| {
+            *open = value.unwrap_or(!*open);
+            cx.notify();
+        });
+    };
+    let (toggle, unfold) = (set.clone(), set);
+    let card = ComposerCard::new("cc-folding-card")
+        .expanded(open)
+        .large()
+        .child(
+            ExpandedBody::new("cc-folding-body")
+                .child(textarea("cc-folding-editor").default_value(c.draft).rows(1)),
+        )
+        .child(
+            Toolbar::new()
+                .child(IconButton::new("cc-folding-more", c.more).icon(icon(
+                    Icon::Plus,
+                    IconSize::Md,
+                    ds,
+                )))
+                .child(
+                    CompactPreview::new("cc-folding-preview", c.preview)
+                        .on_click(move |_, _, cx| unfold(Some(true), cx)),
+                )
+                .child(SendButton::new("cc-folding-send")),
+        );
+    div()
+        .flex()
+        .flex_col()
+        .gap(ds.len(Length::Space3))
+        .child(
+            div().flex().child(
+                Button::new("cc-folding-toggle")
+                    .variant(Variant::Outline)
+                    .text(c.toggle)
+                    .on_click(move |_, _, cx| toggle(None, cx)),
+            ),
+        )
+        .child(card)
         .into_any_element()
 }

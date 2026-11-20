@@ -83,7 +83,9 @@ fn decide(h: &mut Harness, allow: bool) -> anyhow::Result<()> {
 fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
     let (command, arg) = line.split_once(' ').unwrap_or((line, ""));
     match command {
-        "agent" | "diagnostics" | "app-quit" => super::app::command(h, dir, command, arg),
+        "agent" | "restart" | "restart-answers" | "diagnostics" | "app-quit" => {
+            super::app::command(h, dir, command, arg)
+        }
         "connected" => wait(h, |s, _| {
             s.disconnected().is_none() && s.store.cursor.is_some() && !s.store.chats.is_empty()
         }),
@@ -109,6 +111,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             s.set_view(ui::manage::View::History { from }, w, cx);
         }),
         "browser-link" => h.update(|_, _, cx| ui::chat::open_link(arg, cx)),
+        "image-viewer" => open_image_viewer(h, arg),
         "browser-state" | "browser-frame" => browser_report(h, command),
         "new" => h.update(|s, w, cx| s.open_chat(None, w, cx)),
         // The main window closes; the tray's Open brings one back.
@@ -145,12 +148,27 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             h.update(|s, _, cx| s.stop(cx))?;
             wait(h, |s, _| s.store.running().is_none())
         }
-        "titlebar-grid" => super::frame::titlebar_grid(h, dir, arg),
+        "titlebar-grid" => super::titlebar_grid::run(h, dir, arg),
+        "expect-focus-ring" | "expect-no-focus-ring" => super::focus::expect_ring(h, command, arg),
         "shot" => h.shot(dir, arg),
         "expect-fresh" => super::frame::expect_fresh(h, dir),
         "layout" => h.layout(dir, arg),
+        "tick" => tick(h, arg),
         _ => super::frame::command(h, command, arg),
     }
+}
+/// `image-viewer <file id>`: opens the window's image viewer on one picture (it need not load).
+fn open_image_viewer(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    use ui::shell::image_viewer::{ViewerEntry, loader::PictureId};
+    let entry = ViewerEntry::new(PictureId::File(arg.to_owned()), arg.to_owned());
+    h.update(|_, _, cx| ui::shell::image_viewer::open(vec![entry], 0, cx))
+}
+
+/// `tick <ms>`: advances the clock and runs what is due, without `wait`'s settle.
+fn tick(h: &mut Harness, ms: &str) -> anyhow::Result<()> {
+    h.cx.advance_clock(Duration::from_millis(ms.parse()?));
+    h.cx.run_until_parked();
+    Ok(())
 }
 /// The tray's Open, then follows the main window (root `Shell`) it left open.
 fn tray_open(h: &mut Harness) -> anyhow::Result<()> {
@@ -235,14 +253,31 @@ pub(super) fn run(
         let first = serde_json::json!({ "dark": dark });
         std::fs::write(dir.join("first-frame.json"), serde_json::to_vec(&first)?)?;
     }
+    if !app {
+        // Without `--app` nothing runs `lifecycle::start`, the only writer of `Jobs`.
+        h.cx.update(|cx| ui::source::agent::Jobs::keep_current(data.clone(), cx));
+    }
     let attachment = Attachment::start(Some(data));
     h.update(|s, _, cx| s.attach(attachment, cx))?;
     println!("LIVE READY");
     io::stdout().flush()?;
-    for line in io::stdin().lock().lines() {
-        let line = line?;
+    // Commands arrive on a thread, so the App keeps running between them: a stop request (SIGTERM)
+    // ends it through the App's own Quit. Only real time passes; the fake clock stays put.
+    let input = stdin_lines();
+    loop {
+        let line = match input.recv_timeout(Duration::from_millis(30)) {
+            Ok(line) => line?,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                h.cx.run_until_parked();
+                if quit_requested(&mut h) {
+                    return end(&mut h);
+                }
+                continue;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return end(&mut h),
+        };
         if line == "quit" {
-            return Ok(());
+            return end(&mut h);
         }
         if let Err(error) = command(&mut h, dir, &line) {
             let _ = h.shot(dir, "failure");
@@ -259,9 +294,52 @@ pub(super) fn run(
         }
         println!("LIVE OK");
         io::stdout().flush()?;
+        if quit_requested(&mut h) {
+            return end(&mut h);
+        }
     }
+}
+
+/// Standard input's lines, read on a thread.
+fn stdin_lines() -> std::sync::mpsc::Receiver<io::Result<String>> {
+    let (lines, input) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in io::stdin().lock().lines() {
+            if lines.send(line).is_err() {
+                return;
+            }
+        }
+    });
+    input
+}
+
+/// The App finished its Quit and asked gpui to quit (headless gpui's `quit` does nothing).
+fn quit_requested(h: &mut Harness) -> bool {
+    h.cx.update(|cx| {
+        super::lifecycle::runtime(cx).is_some_and(|runtime| {
+            runtime.read(cx).quit == super::lifecycle::QuitProgress::Requested
+        })
+    })
+}
+
+/// The App's Quit after `lifecycle::quit`: the CEF runtime is kept from dropping as AppKit's
+/// `terminate:` would, and the harness returns normally. `Harness::drop` settles the window
+/// first, then `HeadlessAppContext::drop` calls `App::shutdown` once, which runs the quit
+/// observers (the shell closes its pages and shuts CEF down through its own handle).
+fn end(h: &mut Harness) -> anyhow::Result<()> {
+    keep_cef_alive(h);
+    io::stdout().flush()?;
     Ok(())
 }
+
+/// AppKit terminate never drops the CEF runtime, so the harness keeps it from dropping too.
+#[cfg(feature = "cef")]
+fn keep_cef_alive(h: &mut Harness) {
+    h.cx.update(|cx| ui::browser::keep_runtime_alive(cx));
+}
+
+#[cfg(not(feature = "cef"))]
+fn keep_cef_alive(_: &mut Harness) {}
 
 /// Both rows must be present, in the requested sidebar order.
 fn before(h: &mut Harness, arg: &str) -> anyhow::Result<()> {

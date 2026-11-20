@@ -5,6 +5,7 @@
 //!
 //! The press `scale` is gpui's element scale about the centre: the whole control, content
 //! included, shrinks over `--motion-instant` and is released over `--motion-fast`.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -170,7 +171,6 @@ impl RenderOnce for Control {
             window,
             cx,
         );
-        let shrink = super::strut::shrink_wrap(cx);
         if self.debug.is_none() {
             self.debug = Some(next_anchor(cx, handle.as_ref()));
         }
@@ -187,7 +187,7 @@ impl RenderOnce for Control {
             .map(|h| (h.clone(), self.ring_reach(ds)));
         // A scroller that cannot show the ring whole draws it itself.
         let focused = focused && !handed_off;
-        let mut el = self.frame(ds, hover, foreground, shrink);
+        let mut el = self.frame(ds, hover, foreground);
         if self.scale {
             el = press.apply(
                 el,
@@ -198,16 +198,15 @@ impl RenderOnce for Control {
                 },
             );
         }
-        if let Some(outer) = self.outer.take() {
-            el = outer(el);
-        }
-        let el = self.interact(el, &state, handle.as_ref(), live);
+        let outer = self.outer.take();
+        let el = self.interact(el, &state, handle.as_ref(), (live, pressed));
         let el = self.finish(el, (hover_motion, fade), pressed, focused, ds);
         let el = match publish {
             Some((handle, reach)) => el.child(focus::publish(handle, reach)),
             None => el,
         };
-        el.children(self.children)
+        let fit = (self.width, self.inline);
+        parts::place(el.children(self.children), fit, outer, &self.id)
     }
 }
 
@@ -224,7 +223,7 @@ impl Control {
     }
 
     /// The outer box: size, padding, text style and the pointer cursor.
-    fn frame(&self, ds: &Ds, hover: f32, foreground: Hsla, shrink: bool) -> gpui::Stateful<Div> {
+    fn frame(&self, ds: &Ds, hover: f32, foreground: Hsla) -> gpui::Stateful<Div> {
         let mut el = div()
             .id(self.id.clone())
             .relative()
@@ -252,9 +251,10 @@ impl Control {
             el = el.justify_center();
         }
         el = match self.width {
-            // `width: max-content` is not stretched by a column's `align-items: stretch`.
-            Width::Auto if shrink => el.self_start(),
-            Width::Auto | Width::Stretch => el,
+            // `width: max-content; max-width: 100%` (Button.module.css); [`parts::place`] keeps
+            // the container from stretching it.
+            Width::Auto => el.max_w_full(),
+            Width::Stretch => el,
             Width::Fixed(width) => el.w(px(width)),
             Width::Full => el.w_full(),
             Width::Grow => el.flex_1(),
@@ -319,7 +319,7 @@ impl Control {
         el: gpui::Stateful<Div>,
         state: &gpui::Entity<State>,
         handle: Option<&gpui::FocusHandle>,
-        live: bool,
+        (live, pressed): (bool, bool),
     ) -> gpui::Stateful<Div> {
         let mut el = if live {
             el.cursor_pointer()
@@ -335,40 +335,28 @@ impl Control {
             let hover = state.clone();
             let press = state.clone();
             let release = state.clone();
-            let release_out = state.clone();
             el = el
                 .on_hover(move |on, _, cx| {
                     let now = cx.background_executor().now();
                     hover.update(cx, |s, cx| {
                         let at = s.mix;
-                        s.retarget(*on, now, at);
-                        if !*on {
-                            s.set_pressed(false, now);
+                        if s.retarget(*on, now, at) | (!*on && s.set_pressed(false)) {
+                            cx.notify();
                         }
-                        cx.notify();
                     });
                 })
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                    let now = cx.background_executor().now();
-                    press.update(cx, |s, cx| {
-                        s.set_pressed(true, now);
-                        cx.notify();
-                    });
+                    State::press(&press, true, cx);
                 })
-                .on_mouse_up(MouseButton::Left, move |_, _, cx| {
-                    let now = cx.background_executor().now();
-                    release.update(cx, |s, cx| {
-                        s.set_pressed(false, now);
-                        cx.notify();
-                    });
-                })
-                .on_mouse_up_out(MouseButton::Left, move |_, _, cx| {
-                    let now = cx.background_executor().now();
-                    release_out.update(cx, |s, cx| {
-                        s.set_pressed(false, now);
-                        cx.notify();
-                    });
+                .on_mouse_up(MouseButton::Left, {
+                    let release = release.clone();
+                    move |_, _, cx| State::press(&release, false, cx)
                 });
+            if pressed {
+                el = el.on_mouse_up_out(MouseButton::Left, move |_, _, cx| {
+                    State::press(&release, false, cx);
+                });
+            }
             if let Some(handler) = self.on_click.clone() {
                 el = el.on_click(move |event, window, cx| handler(event, window, cx));
             }
@@ -404,15 +392,9 @@ impl Control {
             ..Default::default()
         };
         for (selection, fill, border) in std::iter::once(base).chain(tone) {
-            let mut group = div().absolute().top_0().left_0().size_full();
+            let mut group = cover();
             for (value, fade) in [(0., None), (1., Some(hover))] {
-                let mut layer = div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .rounded(self.radius)
-                    .bg(fill.at(value, pressed));
+                let mut layer = cover().rounded(self.radius).bg(fill.at(value, pressed));
                 if self.square[0] {
                     layer = layer.rounded_tl(px(0.)).rounded_bl(px(0.));
                 }
@@ -460,7 +442,7 @@ impl Control {
 
 /// The ring's spread shadows over the box, painted outside it.
 pub(crate) fn ring_layer(ring: Vec<BoxShadow>, radius: Pixels) -> Div {
-    div().absolute().top_0().left_0().size_full().child(
+    cover().child(
         gpui::canvas(
             |_, _, _| (),
             move |bounds, (), window, _| {
@@ -471,7 +453,9 @@ pub(crate) fn ring_layer(ring: Vec<BoxShadow>, radius: Pixels) -> Div {
             },
         )
         .absolute()
-        .size_full(),
+        .size_full()
+        .top_0()
+        .left_0(),
     )
 }
 

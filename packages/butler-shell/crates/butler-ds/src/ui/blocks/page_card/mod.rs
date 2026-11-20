@@ -15,6 +15,7 @@ mod edge;
 mod model;
 mod parts;
 
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -264,11 +265,7 @@ impl PageCard {
         let area = area
             .child(body)
             .child(report)
-            .children(
-                self.overlay
-                    .take()
-                    .map(|layer| div().absolute().top_0().left_0().size_full().child(layer)),
-            )
+            .children(self.overlay.take().map(|layer| cover().child(layer)))
             .child(recorder);
         (area.into_any_element(), note)
     }
@@ -299,6 +296,8 @@ impl PageCard {
         )
         .absolute()
         .size_full()
+        .top_0()
+        .left_0()
         .into_any_element()
     }
 }

@@ -187,10 +187,7 @@ impl RenderOnce for Box {
                 ds.tokens(),
             ));
         }
-        strut::scope(
-            true,
-            strut::container(self.item.apply(el, ds), ds).children(self.children),
-        )
+        strut::scope(true, self.item.apply(el, ds).children(self.children))
     }
 }
 

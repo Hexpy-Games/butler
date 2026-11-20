@@ -2,6 +2,7 @@
 //! the Select trigger, for custom popovers such as a searchable list. The value stays left-aligned
 //! before the chevron; chosen values show a count badge and the accent. Keyboard focus draws the
 //! ring; any focus takes the accent border.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -210,11 +211,7 @@ fn geometry(
 
 /// The box: the raised fill and the border.
 fn surface(border: gpui::Hsla, ds: &Ds) -> gpui::Div {
-    div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
+    cover()
         .rounded(ds.len(if ds.compact() {
             Length::RadiusControlTouch
         } else {

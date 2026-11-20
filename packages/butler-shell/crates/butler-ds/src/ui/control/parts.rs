@@ -1,9 +1,12 @@
 //! The value types a control is described with, its hover state and the harness anchors.
 use std::time::Instant;
 
-use gpui::{App, Hsla, SharedString};
+use gpui::{
+    AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement as _,
+    ParentElement as _, SharedString, Stateful,
+};
 
-use crate::ui::convert;
+use crate::ui::{convert, strut};
 
 /// How a control is disabled.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -76,6 +79,8 @@ pub enum Ring {
 
 /// Numbers the controls in render order (`control-<n>` geometry anchors), so a harness can
 /// address the nth control of a page like the React viewer's DOM order. Reset once per frame.
+/// Exists only once a page host has called [`reset_anchors`]; without it (the product) controls
+/// are not numbered and nothing is kept.
 #[derive(Default)]
 struct Anchors {
     next: std::cell::Cell<usize>,
@@ -93,7 +98,6 @@ pub fn reset_anchors(cx: &mut App) {
     anchors.handles.borrow_mut().clear();
     anchors.slots.borrow_mut().clear();
     crate::ui::focus::reset_hand_off(cx);
-    crate::ui::text::reset(cx);
 }
 
 /// The focus handle of control `n` of the last frame (`None` when it cannot take focus).
@@ -106,8 +110,10 @@ pub fn focus_handle(cx: &App, n: usize) -> Option<gpui::FocusHandle> {
         .map(|(_, handle)| handle.clone())
 }
 
-pub(crate) fn next_anchor(cx: &mut App, handle: Option<&gpui::FocusHandle>) -> SharedString {
-    let anchors = cx.default_global::<Anchors>();
+pub(crate) fn next_anchor(cx: &App, handle: Option<&gpui::FocusHandle>) -> SharedString {
+    let Some(anchors) = cx.try_global::<Anchors>() else {
+        return SharedString::new_static("control");
+    };
     let n = anchors.next.get();
     anchors.next.set(n + 1);
     if let Some(handle) = handle {
@@ -166,6 +172,27 @@ pub enum Width {
     Grow,
 }
 
+/// The control in its container, with the last restyle (`outer`) on the outermost box. A
+/// `max-content` control sits in [`strut::fit_box`]: the CSS width belongs to the control and
+/// constrains only its width, whichever axis the container lays out.
+pub(super) fn place(
+    el: Stateful<Div>,
+    (width, inline): (Width, bool),
+    outer: Option<super::Outer>,
+    id: &ElementId,
+) -> AnyElement {
+    let restyle = |el: Stateful<Div>| match outer {
+        Some(outer) => outer(el),
+        None => el,
+    };
+    if width == Width::Auto {
+        let fit = strut::fit_box(inline).id((id.clone(), "fit"));
+        restyle(fit.child(el)).into_any_element()
+    } else {
+        restyle(el).into_any_element()
+    }
+}
+
 /// Hover and press state of one control.
 #[derive(Default)]
 pub(crate) struct State {
@@ -178,14 +205,27 @@ pub(crate) struct State {
 }
 
 impl State {
-    pub(super) fn set_pressed(&mut self, on: bool, _now: Instant) {
-        self.pressed = on;
+    /// Sets the press; whether it changed.
+    pub(super) fn set_pressed(&mut self, on: bool) -> bool {
+        std::mem::replace(&mut self.pressed, on) != on
     }
 
-    pub(crate) fn retarget(&mut self, hovered: bool, now: Instant, at: f32) {
+    /// Sets the press and notifies the view only when it changed.
+    pub(super) fn press(state: &gpui::Entity<Self>, on: bool, cx: &mut App) {
+        state.update(cx, |s, cx| {
+            if s.set_pressed(on) {
+                cx.notify();
+            }
+        });
+    }
+
+    /// Retargets the hover blend; whether the hover changed.
+    pub(crate) fn retarget(&mut self, hovered: bool, now: Instant, at: f32) -> bool {
+        let changed = self.hovered != hovered;
         self.from = at;
         self.hovered = hovered;
         self.since = Some(now);
+        changed
     }
 
     /// The hover blend now, and whether it is still moving.

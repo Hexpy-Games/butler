@@ -1,5 +1,6 @@
 //! One toast drawn (Toast.module.css over sonner's `[data-sonner-toast][data-styled]`): the
 //! surface, the status icon, the title, the cancel and action buttons and the close button.
+use crate::ui::cover::cover;
 use std::time::Instant;
 
 use gpui::{
@@ -68,10 +69,10 @@ fn tone(kind: Kind, ds: &Ds) -> Tone {
     }
 }
 
-/// The glass behind a toast: Liquid Glass over the content, materialized by `progress` (the
-/// toast's presence; the lens draws its own shadow, rim and hairline), then the kind's
-/// translucent fill and 1px border (Toast.module.css:45-80) over it. The glass is not faded
-/// with the content: it ramps its lensing instead (LG research §5, §8.1.6).
+/// The glass behind a toast: Liquid Glass over the content at full material (the lens draws its
+/// own shadow, rim and hairline), then the kind's translucent fill and 1px border
+/// (Toast.module.css:45-80) over it. The glass fades by the toast's presence (opacity only), on
+/// the same motion as the content.
 fn surface(tone: &Tone, resolved: &Resolved, ds: &Ds) -> gpui::Div {
     let radius = ds.len(Length::RadiusPanel);
     let dark = ds.dark();
@@ -92,12 +93,12 @@ fn surface(tone: &Tone, resolved: &Resolved, ds: &Ds) -> gpui::Div {
         },
     )
     .absolute()
-    .size_full();
+    .size_full()
+    .top_0()
+    .left_0();
     let tint = tone.tint.map(|(fill, border)| {
         resolved.opacity.apply(
-            div()
-                .absolute()
-                .size_full()
+            cover()
                 .rounded(radius)
                 .bg(fill)
                 .border(px(1.))
@@ -109,13 +110,7 @@ fn surface(tone: &Tone, resolved: &Resolved, ds: &Ds) -> gpui::Div {
             },
         )
     });
-    div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
-        .child(lens)
-        .children(tint)
+    cover().child(lens).children(tint)
 }
 
 /// sonner's loader: twelve bars on a ring that fade in turn over 1.2s. Under reduced motion they
@@ -381,14 +376,7 @@ pub(super) fn render(
         outer = outer.h(px(resolved.height));
     }
     // The front toast's box, for a harness that reports geometry.
-    let marker = front.then(|| {
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .debug_selector(|| "toast-front".to_owned())
-    });
+    let marker = front.then(|| cover().debug_selector(|| "toast-front".to_owned()));
     let mut face = div()
         .relative()
         .w_full()

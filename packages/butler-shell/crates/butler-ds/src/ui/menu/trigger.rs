@@ -35,15 +35,17 @@ impl TriggerBox {
 }
 
 impl RenderOnce for TriggerBox {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let wrapper = div().relative();
-        let wrapper = if self.fill {
-            wrapper.flex().w_full()
-        } else if strut::shrink_wrap(cx) {
-            wrapper.inline_flex().flex_none().self_start()
+        if self.fill {
+            (self.wire)(wrapper.flex().w_full())
+                .child(self.child)
+                .into_any_element()
         } else {
-            wrapper.inline_flex().flex_none()
-        };
-        (self.wire)(wrapper).child(self.child)
+            strut::fit(
+                true,
+                (self.wire)(wrapper.inline_flex().flex_none()).child(self.child),
+            )
+        }
     }
 }

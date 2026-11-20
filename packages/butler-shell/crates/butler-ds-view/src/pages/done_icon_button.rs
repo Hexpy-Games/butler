@@ -30,9 +30,9 @@ fn copy(lang: Lang) -> Copy {
         },
         Copy {
             save: "서랍에 저장",
-            saved: "서랍에 저장했어요",
+            saved: "서랍에 저장했습니다",
             duplicate: "복사",
-            copied: "복사했어요",
+            copied: "복사했습니다",
         },
     )
 }

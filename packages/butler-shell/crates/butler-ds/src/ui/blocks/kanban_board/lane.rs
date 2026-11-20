@@ -229,6 +229,6 @@ impl RenderOnce for KanbanLane {
                     .child(body),
             )
             .children(record);
-        strut::scope(true, strut::container(lane, ds))
+        strut::scope(true, lane)
     }
 }

@@ -155,7 +155,9 @@ impl UserMessageText {
                     |_, (), _, _| {},
                 )
                 .absolute()
-                .size_full(),
+                .size_full()
+                .top_0()
+                .left_0(),
             )
     }
 }
@@ -179,7 +181,7 @@ impl RenderOnce for UserMessageText {
         let strings = transcript(Ds::get(cx).lang());
         let toggle = overflowing.then(|| {
             let state = state.clone();
-            Button::new(SharedString::from(format!("{}-toggle", self.id)))
+            let button = Button::new(SharedString::from(format!("{}-toggle", self.id)))
                 .variant(Variant::Inline)
                 .text(if expanded {
                     strings.show_less
@@ -191,11 +193,12 @@ impl RenderOnce for UserMessageText {
                         s.expanded = !s.expanded;
                         cx.notify();
                     });
-                })
+                });
+            crate::ui::widgets::anchored(button, "user-toggle")
         });
         div()
             .child(
-                div()
+                crate::ui::widgets::anchor(div(), "user-text")
                     .relative()
                     .min_w_0()
                     .child(self.content(!expanded, true, line))
@@ -246,12 +249,15 @@ pub(crate) fn user_footer(msg: &MessageRecord, cx: &App) -> MessageFooter {
                 .tabular()
                 .into_any_element()
         }))
-        .child(
-            CopyButton::new(
-                SharedString::from(format!("copy-{}", msg.id)),
-                strings.copy_message,
-                strings.copied,
-            )
-            .text(msg.text.clone()),
-        )
+        .child(crate::ui::widgets::anchor(
+            gpui::div().flex().child(
+                CopyButton::new(
+                    SharedString::from(format!("copy-{}", msg.id)),
+                    strings.copy_message,
+                    strings.copied,
+                )
+                .text(msg.text.clone()),
+            ),
+            &format!("user-copy-{}", msg.id),
+        ))
 }

@@ -8,7 +8,6 @@ use gpui::{AnyElement, App, Global, SharedString, Window};
 
 use super::address::{AddressError, address_url, web_url};
 use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
-use super::placeholder::PlaceholderEngine;
 
 // Mirrors butler-runtime/src/browser/capacity.rs.
 const USER_TABS: usize = 30;
@@ -71,6 +70,37 @@ pub(crate) struct Tab {
     pub(crate) pick_hover: Option<super::pick::Hover>,
     pub(crate) pick: super::pick::Session,
     pub(super) last_nav: Option<super::visits::Transition>,
+    pub(crate) hosted: Option<super::agent_host::Hosted>,
+}
+
+impl Tab {
+    pub(super) fn new(id: TabId, owner: Owner, profile: Profile, url: String) -> Self {
+        Self {
+            id,
+            owner,
+            epoch: 1,
+            url,
+            title: String::new(),
+            favicon: String::new(),
+            title_url: String::new(),
+            favicon_url: String::new(),
+            status: TabStatus::Idle,
+            can_back: false,
+            can_forward: false,
+            placeholder: false,
+            profile,
+            opener: None,
+            popup: false,
+            blocked_popup: None,
+            dialog: None,
+            picking: false,
+            selections: Vec::new(),
+            pick_hover: None,
+            pick: Default::default(),
+            last_nav: None,
+            hosted: None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,51 +141,56 @@ impl From<AddressError> for BrowserError {
 
 pub(crate) struct BrowserState {
     pub(super) engine: Box<dyn PageEngine>,
+    /// What the engine starts with, until its first use starts it (`lazy.rs`).
+    pub(super) starter: Option<(mpsc::UnboundedSender<PageEvent>, Option<u64>)>,
     pub(super) tabs: Vec<Tab>,
     pub(super) active: Option<TabId>,
     pub(super) next_id: u64,
     pub(super) publisher: super::host::Publisher,
+    /// The Agent's calls in flight; hosted pages stay awake while it is above zero and they open.
+    pub(super) calls: u32,
 }
 
 impl Global for BrowserState {}
 
 impl BrowserState {
-    /// `adapter`: the LUID of the GPU adapter that draws the page frames (`browser::init`).
-    pub(crate) fn init(adapter: Option<u64>, cx: &mut App) {
+    pub(crate) fn shutdown(&mut self) {
+        self.engine.shutdown();
+    }
+
+    pub(crate) fn init(cx: &mut App) {
         let (sender, mut receiver) = mpsc::unbounded();
-        let engine = Self::engine(sender, adapter, cx);
         let publisher = super::host::Publisher::start(cx);
         cx.set_global(Self {
             publisher,
-            engine,
+            engine: Box::new(super::lazy::Unstarted),
+            starter: Some((sender, None)),
             tabs: Vec::new(),
             active: None,
             next_id: 0,
+            calls: 0,
         });
+        super::agent_host::start(cx);
         cx.spawn(async move |cx| {
             while let Some(event) = receiver.next().await {
                 cx.update(|cx| {
+                    let quiet = event.change.is_quiet();
                     cx.update_global::<Self, _>(|model, cx| model.apply(event, cx));
-                    super::popup_window::sync(cx);
-                    cx.refresh_windows();
+                    if !quiet {
+                        super::popup_window::sync(cx);
+                        cx.refresh_windows();
+                    }
                 });
             }
         })
         .detach();
     }
 
-    fn engine(
-        sender: mpsc::UnboundedSender<PageEvent>,
-        adapter: Option<u64>,
-        cx: &mut App,
-    ) -> Box<dyn PageEngine> {
-        #[cfg(feature = "cef")]
-        match super::cef::CefEngine::start(sender.clone(), adapter, cx) {
-            Ok(engine) => return Box::new(engine),
-            Err(error) => eprintln!("CEF unavailable: {error}"),
+    /// The GPU adapter a window draws with; the engine follows it if it has not started yet.
+    pub(crate) fn note_adapter(&mut self, luid: Option<u64>) {
+        if let Some((_, adapter)) = &mut self.starter {
+            *adapter = luid;
         }
-        let _ = (adapter, cx);
-        Box::new(PlaceholderEngine::new(sender))
     }
 
     pub(crate) fn show(&mut self, id: Option<&TabId>) {
@@ -173,6 +208,7 @@ impl BrowserState {
         activate: bool,
         cx: &mut App,
     ) -> Result<Option<TabId>, BrowserError> {
+        self.start_engine(cx);
         if !self.enabled() {
             return Err(BrowserError::BrowsingDisabled);
         }
@@ -192,28 +228,8 @@ impl BrowserState {
         let tab_owner = owner.clone();
         let profile = Profile::for_url(&url);
         self.tabs.push(Tab {
-            id: id.clone(),
-            owner,
-            epoch: 1,
-            profile,
             placeholder: placeholder && url.is_empty(),
-            url: url.clone(),
-            title: String::new(),
-            favicon: String::new(),
-            title_url: String::new(),
-            favicon_url: String::new(),
-            status: TabStatus::Idle,
-            can_back: false,
-            can_forward: false,
-            opener: None,
-            popup: false,
-            blocked_popup: None,
-            dialog: None,
-            picking: false,
-            selections: Vec::new(),
-            pick_hover: None,
-            pick: Default::default(),
-            last_nav: None,
+            ..Tab::new(id.clone(), owner, profile, url.clone())
         });
         if activate {
             self.activate(&id);
@@ -221,8 +237,8 @@ impl BrowserState {
         if !url.is_empty() {
             self.drop_placeholders(&tab_owner, cx);
         }
-        self.engine
-            .open(&id, &url, profile, &super::area::owner_key(&tab_owner));
+        let key = super::area::owner_key(&tab_owner);
+        self.engine.open(&id, &url, profile, &key, &key);
         self.publisher.changed(&self.tabs);
         if tab_owner == Owner::Mine {
             super::restore::changed(cx);
@@ -248,6 +264,7 @@ impl BrowserState {
             super::restore::changed(cx);
         }
         self.publisher.changed(&self.tabs);
+        super::agent_host::closed(cx, &removed);
         if self.active.as_ref() == Some(id) {
             self.active = self.tabs.last().map(|tab| tab.id.clone());
         }
@@ -289,6 +306,7 @@ impl BrowserState {
             return Err(BrowserError::TabBudgetExhausted);
         }
         if changed_owner {
+            self.end_hosting(id, cx);
             self.close_popups(id, cx);
             self.cancel_dialog(id, "owner_changed");
             self.engine.change_owner(id, &super::area::owner_key(&to));
@@ -379,6 +397,9 @@ impl BrowserState {
     }
 
     pub(crate) fn resize(&mut self, id: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32) {
+        if self.note_pane(id, size, scale) {
+            return;
+        }
         if let Some(tab) = self.tab(id) {
             tab.pick.viewport.set((
                 f64::from(f32::from(size.width)),
@@ -403,8 +424,14 @@ impl BrowserState {
         let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == event.page) else {
             return;
         };
+        super::agent_host::page_changed(cx, tab, &mut *self.engine, &event.change);
+        if event.change.is_quiet() {
+            return;
+        }
         match event.change {
             PageChange::DevToolsEvent { .. } => {}
+            #[cfg(feature = "cef")]
+            PageChange::DevToolsRaw(_) => {}
             PageChange::Url(url) => {
                 let changed = tab.url != url;
                 tab.url = url;

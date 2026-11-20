@@ -433,6 +433,7 @@ impl Masked {
         ContentMask {
             bounds: Bounds::new(origin, size),
             fade_out: self.lengths.fade,
+            ..ContentMask::default()
         }
     }
 }

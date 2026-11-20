@@ -2,6 +2,7 @@
 //! footer, the status row and its label (with the thinking shimmer), the bubble and the files
 //! under it, and the group of rows of one turn.
 
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, IntoElement, ParentElement, RenderOnce, SharedString, Styled as _, Window,
     div, px, relative,
@@ -13,6 +14,7 @@ use crate::ui::blocks::scope::{self, ActionScale, Spec};
 use crate::ui::context::Ds;
 use crate::ui::layout::{Space, Stack};
 use crate::ui::motion::{Loop, Timing, mounted_at};
+use crate::ui::strut;
 use crate::ui::typo::Role;
 
 /// The footer's icon actions keep a 26px row (`--icon-button-size`, DS: MessageRow.module.css:93).
@@ -255,7 +257,7 @@ fn shimmer_text(
         .text_color(secondary)
         .child(div().child(text.clone()));
     if Loop::Decorative.runs(ds) {
-        let mut overlay = div().absolute().top_0().left_0().size_full();
+        let mut overlay = cover();
         let timing = Timing::linear(ds.duration(crate::tokens::Duration::ShimmerDuration));
         for (at, character) in text.char_indices() {
             for bounds in line
@@ -312,7 +314,10 @@ impl RenderOnce for MessageStatusLabel {
                     // DS: MessageRow.module.css:205 `.statusMark > * { width:100%; height:100% }`
                     .child(div().size_full().child(self.mark)),
             )
-            .child(div().flex_1().min_w_0().overflow_hidden().child(content))
+            .child(strut::scope(
+                true,
+                div().flex_1().min_w_0().overflow_hidden().child(content),
+            ))
     }
 }
 

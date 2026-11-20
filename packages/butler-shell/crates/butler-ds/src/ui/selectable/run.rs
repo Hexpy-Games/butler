@@ -161,57 +161,29 @@ fn paint_range(
     window: &mut Window,
     cx: &App,
 ) {
-    if s == e {
-        return;
-    }
-    let (Some(start), Some(end)) = (
-        run.layout.position_for_index(s),
-        run.layout.position_for_index(e),
-    ) else {
+    let line = run.layout.line_height();
+    let Some(layout) = run
+        .layout
+        .line_layout_for_index(s)
+        .filter(|_| s < e && line > px(0.))
+    else {
         return;
     };
-    let line = run.layout.line_height();
-    if line <= px(0.) {
-        return;
-    }
-    let bounds = run.layout.bounds();
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "ordered text positions give a nonnegative, rounded visual line count"
-    )]
-    let lines = ((end.y - start.y) / line).round() as usize;
-    for i in 0..=lines {
-        let y = start.y + line * i;
-        let mut left = if i == 0 { start.x } else { bounds.left() };
-        if i == 0 && s == 0 {
-            if (bounds.left() - left).abs() * window.scale_factor() <= px(1.) {
-                left = left.min(bounds.left());
-            }
-            if continues.0 {
-                left -= run.space_before;
-            }
+    let origin = run.layout.bounds().origin;
+    let rects = layout.selection_bounds(s..e, line);
+    let scale = window.scale_factor();
+    let snap = |v: Pixels| (v * scale).round() / scale;
+    for (i, rect) in rects.iter().enumerate() {
+        let mut left = origin.x + rect.left();
+        let mut right = origin.x + rect.right();
+        if i == 0 && s == 0 && continues.0 {
+            left -= run.space_before;
         }
-        let mut right = if i == lines {
-            end.x
-        } else {
-            let index = run
-                .layout
-                .index_for_position(point(bounds.right(), y + line / 2.))
-                .unwrap_or_else(|i| i);
-            run.layout.position_for_index(index).map_or(left, |p| p.x)
-        };
-        if i == lines && e == run.text.len() {
-            if (bounds.right() - right).abs() * window.scale_factor() <= px(1.) {
-                right = right.max(bounds.right());
-            }
-            if continues.1 {
-                right += run.space_after;
-            }
+        if i + 1 == rects.len() && e == run.text.len() && continues.1 {
+            right += run.space_after;
         }
-        let scale = window.scale_factor();
-        let snap = |v: Pixels| (v * scale).round() / scale;
-        let (left, right, top, bottom) = (snap(left), snap(right), snap(y), snap(y + line));
+        let (left, right) = (snap(left), snap(right));
+        let (top, bottom) = (snap(origin.y + rect.top()), snap(origin.y + rect.bottom()));
         if right > left {
             window.paint_quad(
                 gpui::PaintQuad::new(Bounds::new(

@@ -24,11 +24,11 @@ required-features = ["shots"]
 # The shell's `cef` cargo feature builds on macOS (CVPixelBuffer frames), Windows (D3D11 shared
 # textures, `SurfaceSource::WindowsSharedTexture`) and Linux (CPU frames uploaded to a wgpu texture,
 # `SurfaceSource::Texture`).
-cef = ["dep:butler-cef"]
+cef = ["butler-cef/cef"]
 shots = ["gpui/test-support", "dep:gpui_wgpu"]
 
 [dependencies]
-butler-cef = { path = "../../../butler-agent/rust/crates/butler-platform/cef", features = ["cef"], optional = true }
+butler-cef = { path = "../../../butler-agent/rust/crates/butler-platform/cef" }
 butler-ds = { path = "../butler-ds" }
 butler-shell-client = { path = "../../../butler-agent/rust/crates/butler-shell-client" }
 butler-platform = { path = "../../../butler-agent/rust/crates/butler-platform" }

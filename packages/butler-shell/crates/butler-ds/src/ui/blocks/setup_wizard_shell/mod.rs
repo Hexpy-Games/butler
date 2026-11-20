@@ -16,6 +16,7 @@ mod progress;
 mod stage;
 mod wizard;
 
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, Bounds, ElementId, Global, IntoElement, ParentElement, Pixels, RenderOnce,
     SharedString, Styled as _, Window, div,
@@ -273,13 +274,7 @@ impl SetupWizardShell {
             };
             wallpaper.into_any_element()
         });
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .overflow_hidden()
-            .child(backdrop)
+        cover().overflow_hidden().child(backdrop)
     }
 }
 

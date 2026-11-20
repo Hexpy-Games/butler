@@ -54,7 +54,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: [
     "Count label: 2 selected / 2개 선택됨. Verbs: Add to chat / 대화에 첨부, Scrap / 스크랩, Copy text / 텍스트 복사.",
-    "At 0: hint Click an element to pick it / 요소를 눌러 선택하세요; reason Pick an element first / 먼저 요소를 선택하세요.",
+    "At 0: hint Click an element to pick it / 요소를 눌러 선택하십시오; reason Pick an element first / 먼저 요소를 선택하십시오.",
   ],
   accessibility: [
     "role toolbar named by the count label (the hint at 0); every action keeps its words as a label or tooltip.",

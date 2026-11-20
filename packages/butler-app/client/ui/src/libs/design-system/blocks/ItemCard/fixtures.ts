@@ -36,26 +36,26 @@ const ITEMS: Record<Locale, FixtureItem[]> = {
   "ko-KR": [
     { picture: "paper", eyebrow: "1 · 질문에 가장 가까움", subtitle: "김, 오르테가, 류 · ACL 2026", title: "긴 다국어 문서를 위한 희소 검색",
       value: { amount: "인용 1,284회", note: "무료 PDF 공개" }, facts: ["32쪽", "코드 공개", "동료 심사"],
-      text: "물어보신 조건과 같은 설정을 다룹니다. 8개 언어, 1만 토큰이 넘는 문서에서 청크 크기별 비교까지 있어요.", site: "papers.example.org" },
+      text: "물어보신 조건과 같은 설정을 다룹니다. 8개 언어, 1만 토큰이 넘는 문서에서 청크 크기별 비교까지 있습니다.", site: "papers.example.org" },
     { picture: "place", eyebrow: "2 · 반나절 가볍게", subtitle: "산책로 · 호수 지구", title: "호숫가 순환 산책로",
       value: { amount: "4.6km", note: "순환 · 약 1시간 40분" }, facts: ["평지", "반려견 동반", "주차 가능"],
-      text: "대부분 그늘이고 유모차도 다닐 만큼 평평해요. 동쪽 호숫가에는 몇백 미터마다 벤치가 있어요.", site: "trails.example.org" },
+      text: "대부분 그늘이고 유모차도 다닐 만큼 평평합니다. 동쪽 호숫가에는 몇백 미터마다 벤치가 있습니다.", site: "trails.example.org" },
     { picture: "recipe", eyebrow: "3 · 평일 저녁 최단", subtitle: "밥 요리 · 2인분", title: "반숙 달걀 김치볶음밥",
       value: { amount: "25분", note: "손질 10분" }, facts: ["집에 있는 재료", "팬 하나"],
-      text: "하루 지난 밥이 가장 바삭해요. 김치를 먼저 가장자리가 눌을 때까지 볶고, 밥과 김치 국물 한 숟가락을 넣으세요.", site: "recipes.example.com" },
+      text: "하루 지난 밥이 가장 바삭합니다. 김치를 먼저 가장자리가 눌을 때까지 볶고, 밥과 김치 국물 한 숟가락을 넣으십시오.", site: "recipes.example.com" },
     { picture: "product", eyebrow: "4 · 가성비", subtitle: "주방 · 1.0L", title: "드립용 구스넥 전기 주전자",
       value: { amount: "49,000원", was: "69,000원", note: "회원가" }, facts: ["2일 내 출고", "무광 블랙", "1년 보증"],
-      text: "온도를 1도 안으로 유지하고 드립에 맞게 천천히 따라져요. 플라스틱은 뚜껑뿐이에요.", site: "shop.example.com" },
+      text: "온도를 1도 안으로 유지하고 드립에 맞게 천천히 따라집니다. 플라스틱은 뚜껑뿐입니다.", site: "shop.example.com" },
     { picture: "library", eyebrow: "5 · 가장 많이 씀", subtitle: "TypeScript · MIT", title: "tiny-schema: 정적 타입과 런타임 검증",
       value: { amount: "별 3.8만", note: "주간 다운로드 410만" }, facts: ["v4.1.12", "의존성 없음", "ESM + CJS"],
-      text: "스키마에서 타입을 추론해서 기준이 하나뿐이에요. 오류에는 실패한 필드까지의 경로가 들어 있어요.", site: "code.example.dev" },
+      text: "스키마에서 타입을 추론해서 기준이 하나뿐입니다. 오류에는 실패한 필드까지의 경로가 들어 있습니다.", site: "code.example.dev" },
   ],
 };
 
 export const LABELS = {
   "en-US": { checked: "Checked 5:41 PM", open: "checked at 5:41 PM, open the page", save: "Save to library", saved: "Saved to library", copy: "Copy", copied: "Copied",
     before: "Before", more: "Show more", less: "Show less" },
-  "ko-KR": { checked: "오후 5:41 확인", open: "오후 5:41에 확인한 페이지 열기", save: "서랍에 저장", saved: "서랍에 저장했어요", copy: "복사", copied: "복사했어요",
+  "ko-KR": { checked: "오후 5:41 확인", open: "오후 5:41에 확인한 페이지 열기", save: "서랍에 저장", saved: "서랍에 저장했습니다", copy: "복사", copied: "복사했습니다",
     before: "이전", more: "더 보기", less: "접기" },
 } as const;
 

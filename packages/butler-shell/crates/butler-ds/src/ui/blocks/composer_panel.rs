@@ -2,6 +2,7 @@
 //! composerPanel.module.css): a frame, a subject header with an icon, an eyebrow, the title and
 //! an aside, a scrolling body and an actions row. `composer` placement sits in place of the
 //! composer input; `conversation` sits in the transcript inside a flat bordered Card.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -146,22 +147,21 @@ pub fn frame(
     );
     if focused {
         surface = surface.child(
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
+            cover()
                 .rounded(radius)
                 .border(ds.len(Length::FocusRingWidth))
                 .border_color(ds.color(Color::ColorActionPrimary)),
         );
     }
+    // `.surface` is a grid: the panel's parts are its items (blockified), so their text takes no
+    // strut from the composer glass or the card around the panel.
+    let surface = strut::grid_scope(surface);
     match placement {
         Placement::Composer => surface.into_any_element(),
         Placement::Conversation => Card::new((keys.id, "card"))
             .padding(CardPadding::None)
             .radius(CardRadius::Lg)
-            .child(strut::grid_scope(surface))
+            .child(surface)
             .into_any_element(),
     }
 }

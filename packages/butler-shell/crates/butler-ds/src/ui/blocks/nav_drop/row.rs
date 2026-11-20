@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use gpui::{
     AnyElement, App, Bounds, Div, ElementId, InteractiveElement as _, IntoElement as _,
-    ParentElement as _, Pixels, SharedString, Styled as _, Window, canvas, div, px,
+    ParentElement as _, Pixels, SharedString, Styled, Window, canvas, div, px,
 };
 
 use super::overlay::{label_height, outside_label};
@@ -161,8 +161,17 @@ pub(super) struct Ctx<'a> {
     pub(super) boxes: &'a Boxes,
 }
 
-/// How far the row has travelled down to open the slot, eased over `--motion-base`.
-fn travelled(id: &ElementId, goal: f32, window: &mut Window, cx: &mut App) -> (Transition, Timing) {
+/// `el` travelled `goal` px down to open the slot, eased over `--motion-base` from where it is
+/// (`transition: translate var(--motion-base) var(--motion-ease-standard)`): a retained layer
+/// motion, so the slide runs at the display rate without laying the tree out again, and the
+/// layout box (the box the drop zones test) never moves.
+pub(super) fn slide<E: Styled>(
+    id: &ElementId,
+    goal: f32,
+    el: E,
+    window: &mut Window,
+    cx: &mut App,
+) -> E {
     let (timing, jump) = {
         let ds = Ds::get(cx);
         (
@@ -170,9 +179,14 @@ fn travelled(id: &ElementId, goal: f32, window: &mut Window, cx: &mut App) -> (T
             ds.reduced_motion(),
         )
     };
-    (
-        transition((id.clone(), "shift"), (goal, jump), &timing, window, cx),
-        timing,
+    let shift = transition((id.clone(), "shift"), (goal, jump), &timing, window, cx);
+    shift.apply(
+        el,
+        &timing,
+        &Props {
+            offset: Some((gpui::point(px(0.), px(0.)), gpui::point(px(0.), px(1.)))),
+            ..Default::default()
+        },
     )
 }
 
@@ -230,7 +244,6 @@ pub(super) fn render(
     } else {
         0.
     };
-    let shift = travelled(&id, goal, window, cx);
     let drop = target.drop;
     let opacity = fade(
         (id.clone(), "indicator").into(),
@@ -239,21 +252,20 @@ pub(super) fn render(
         window,
         cx,
     );
-    let ds = Ds::get(cx);
-    let layers = indicators(&target, (ctx, opacity), ds);
     let anchor = format!("nav-drop:{}", target.key);
-    let mut inner = shift.0.apply(
+    let mut inner = slide(
+        &id,
+        goal,
         div()
             .id(id.clone())
             .debug_selector(move || anchor.clone())
             .relative()
             .opacity(if target.dragging { 0.5 } else { 1. }),
-        &shift.1,
-        &Props {
-            offset: Some((gpui::point(px(0.), px(0.)), gpui::point(px(0.), px(1.)))),
-            ..Default::default()
-        },
+        window,
+        cx,
     ); // DS: NavDropTarget.module.css:25
+    let ds = Ds::get(cx);
+    let layers = indicators(&target, (ctx, opacity), ds);
     for attach in std::mem::take(&mut target.attach) {
         inner = attach(inner);
     }
@@ -265,7 +277,9 @@ pub(super) fn render(
         .children(layers);
     let record = recorder(target.key.clone(), ctx.boxes.clone())
         .absolute()
-        .size_full();
+        .size_full()
+        .top_0()
+        .left_0();
     let mut outer = div().relative().w_full().child(record).child(inner);
     if let (Some(NavDropPosition::Outside), Some(text)) = (drop, target.hint.take()) {
         let measured = ctx.boxes.borrow().get(&target.key).copied();

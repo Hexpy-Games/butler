@@ -101,6 +101,8 @@ pub(crate) fn open_window(cx: &mut App, args: &[OsString]) -> anyhow::Result<()>
         app_id: Some("butler-shell".into()),
         // AppKit neither drags a strip nor delays title-bar clicks; the bands move the window.
         app_owns_titlebar_drag: true,
+        // A visible window animates at the display rate whether or not it has focus.
+        inactive_frame_interval: None,
         ..Default::default()
     };
     let code_font = crate::ui::theme::code_font(&cx.text_system().all_font_names());
@@ -150,7 +152,7 @@ pub(crate) fn reopen(cx: &mut App) {
 /// conversations: `args` navigate in the open window, else open a new one, and the App comes
 /// forward. Nothing while quitting.
 pub(crate) fn launched(cx: &mut App, args: &[String]) {
-    if super::runtime(cx).is_some_and(|runtime| runtime.read(cx).quitting) {
+    if super::runtime(cx).is_some_and(|runtime| runtime.read(cx).quitting()) {
         return;
     }
     let shell = cx

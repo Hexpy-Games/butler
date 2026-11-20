@@ -2,6 +2,7 @@
 //! the pointer or the keyboard (Space, arrows, Space); outside one it is a plain card that opens.
 //! The card is a button: click or Enter opens it (`on_open`), Space picks it up. The wrapper owns
 //! the focus, the hover fill and the focus ring; the DS Card draws the surface.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -313,11 +314,7 @@ impl KanbanCard {
         let radius = ds.len(Length::RadiusControl);
         let layout = lane.as_ref().map_or(LaneLayout::List, |lane| lane.layout);
         let tint = (self.on_open.is_some() || hub.is_some()).then(|| {
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
+            cover()
                 .rounded(radius)
                 .group_hover_style(group.clone(), move |style| style.bg(hover))
         });

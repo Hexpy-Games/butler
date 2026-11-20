@@ -11,6 +11,7 @@
 mod content;
 mod parts;
 
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -170,7 +171,10 @@ impl Dialog {
             wrapper
                 .track_focus(&dialog.trigger_focus)
                 .tab_stop(false)
-                .child(dialog.trigger.probe())
+                .child(dialog.trigger.probe_while({
+                    let dialog = dialog.clone();
+                    move |cx| dialog.is_open(cx)
+                }))
         })
         .into_any_element()
     }
@@ -299,11 +303,7 @@ impl Dialog {
         };
         let child = self.guarded(animated, handle, focus, area.card.is_some());
         if area.card.is_some() {
-            return div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
+            return cover()
                 .children(scrim)
                 .child(
                     div()

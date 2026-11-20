@@ -4,6 +4,7 @@
 //! and fades out keeping its last label and position.
 pub mod place;
 
+use crate::ui::cover::cover;
 use std::time::{Duration, Instant};
 
 use gpui::{
@@ -215,7 +216,6 @@ impl RenderOnce for Tooltip {
             }
             s.focus_open = focused;
         });
-        let shrink = strut::shrink_wrap(cx);
         let layer = self.layer(&state, window, cx);
         let child = self.child.take();
         let hover_state = state.clone();
@@ -236,13 +236,15 @@ impl RenderOnce for Tooltip {
         if self.fill {
             wrapper = wrapper.flex_1().min_w_0();
         }
-        if shrink {
-            wrapper = wrapper.self_start();
-        }
-        wrapper
+        let wrapper = wrapper
             .children(child)
             .child(bounds_probe(&state))
-            .children(layer)
+            .children(layer);
+        if self.fill {
+            wrapper.into_any_element()
+        } else {
+            strut::fit(true, wrapper)
+        }
     }
 }
 
@@ -270,7 +272,7 @@ fn on_hover(state: &Entity<State>, on: bool, label: bool, window: &mut Window, c
 /// Records the trigger's window bounds and whether its ancestors clip it out of sight entirely.
 fn bounds_probe(state: &Entity<State>) -> gpui::Div {
     let state = state.clone();
-    div().absolute().top_0().left_0().size_full().child(
+    cover().child(
         canvas(
             move |bounds, window, cx| {
                 let visible = bounds.intersect(&window.content_mask().bounds);

@@ -3,6 +3,7 @@
 //! Runs rebuild their layouts and hitboxes during each prepaint.
 //! Pointer positions clamp to the scope; highlights paint behind glyphs.
 //! One active scope per window copies plain text with block separators.
+//! A left press outside a scope clears its selection.
 mod hit;
 mod run;
 mod scroll;
@@ -15,7 +16,7 @@ use gpui::{
     AnyElement, App, Bounds, ClipboardItem, Element, ElementId, Entity, FocusHandle,
     GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, KeyDownEvent,
     LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-    SharedString, TextLayout, WeakEntity, Window,
+    SharedString, TextLayout, Window,
 };
 
 /// The break before a run of text when copied (Chromium's plain-text serialization, measured).
@@ -65,9 +66,6 @@ pub struct State {
 #[derive(Default)]
 struct Stack(Vec<Option<Entity<State>>>);
 impl gpui::Global for Stack {}
-#[derive(Default)]
-struct Active(Option<WeakEntity<State>>);
-impl gpui::Global for Active {}
 
 fn current(cx: &App) -> Option<Entity<State>> {
     cx.try_global::<Stack>()
@@ -363,23 +361,30 @@ impl Element for ScopeElement {
 fn listeners(selection: &Selection, hitbox: Hitbox, window: &mut Window, cx: &App) {
     let state = selection.0.clone();
     window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
-        if !phase.bubble()
-            || event.button != MouseButton::Left
-            || !hitbox.is_hovered(window)
-            || window.default_prevented()
-        {
+        if event.button != MouseButton::Left {
             return;
         }
+        // A press anywhere else clears in capture: a control painted later stops the bubble.
+        if phase.capture() {
+            if !hitbox.is_hovered(window) {
+                state.update(cx, |s, cx| {
+                    if s.clear() {
+                        cx.notify();
+                    }
+                });
+            }
+            return;
+        }
+        if !hitbox.is_hovered(window) {
+            return;
+        }
+        // A focusable descendant (table scroller, answer block) already took focus and the press.
+        let taken = window.default_prevented();
         if !state.update(cx, |s, _| s.press(event)) {
             return;
         }
-        window.focus(&state.read(cx).focus.clone(), cx);
-        let previous = cx.default_global::<Active>().0.replace(state.downgrade());
-        if let Some(previous) = previous.and_then(|s| s.upgrade()).filter(|s| s != &state) {
-            previous.update(cx, |s, cx| {
-                s.clear();
-                cx.notify();
-            });
+        if !taken {
+            window.focus(&state.read(cx).focus.clone(), cx);
         }
         window.prevent_default();
         state.update(cx, |_, cx| cx.notify());
@@ -389,7 +394,9 @@ fn listeners(selection: &Selection, hitbox: Hitbox, window: &mut Window, cx: &Ap
         window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
             if phase.bubble() {
                 state.update(cx, |s, cx| {
-                    if s.drag(event.position) {
+                    if event.pressed_button != Some(MouseButton::Left) {
+                        s.dragging = false;
+                    } else if s.drag(event.position) {
                         cx.notify();
                     }
                 });

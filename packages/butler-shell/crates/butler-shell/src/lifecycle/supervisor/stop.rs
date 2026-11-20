@@ -2,6 +2,7 @@
 //! Every App stop is the end of the lease (EOF on the child's stdin); a child that has not
 //! exited after 8 s is killed. An attached Agent is only detached.
 use std::rc::Rc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use futures::channel::oneshot;
@@ -48,14 +49,17 @@ impl Inner {
 
     /// `stop({ wait: true })`: answers once our child has exited (kill included).
     pub(super) async fn stop(self: &Rc<Self>, reason: StopReason) -> Result<(), SupervisorError> {
+        if reason == StopReason::Quit {
+            self.quitting.store(true, Ordering::SeqCst);
+        }
         self.mutate(|state| {
-            state.quitting |= reason == StopReason::Quit;
             // cancelRestartWait, cancelPollTick; an attached Agent is only detached.
             state.exit_generation += 1;
             state.restart_wait = None;
             state.poll_epoch += 1;
             state.poll_active = false;
             state.respawning = false;
+            state.last_stop = Some(reason);
             state.attached = None;
         });
         let running = self.read(|state| {

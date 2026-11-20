@@ -12,8 +12,8 @@ mod zoom;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ElementId, ImageSource, IntoElement, ParentElement, RenderOnce, SharedString,
-    Styled as _, Window, div, point,
+    AnyElement, App, ElementId, ImageSource, InteractiveElement as _, IntoElement, ParentElement,
+    RenderOnce, SharedString, Styled as _, Window, div, point,
 };
 
 pub use self::surface::ImageViewerSurface;
@@ -129,7 +129,12 @@ impl RenderOnce for ImageViewer {
         Layer::new(
             Z::Dialog,
             point(gpui::px(0.), gpui::px(0.)),
-            div().w(gpui::px(width)).h(gpui::px(height)).child(surface),
+            // Over the page, wheel and pointer stop here, as the web's fixed viewer on top takes them.
+            div()
+                .w(gpui::px(width))
+                .h(gpui::px(height))
+                .occlude()
+                .child(surface),
         )
         .into_any_element()
     }

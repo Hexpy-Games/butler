@@ -5,6 +5,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -14,7 +15,7 @@ use serde_json::{Value, json};
 use tokio::process::ChildStdin;
 
 use super::launch::{AgentCommand, AgentSource};
-use super::{AgentState, AgentStatus, Requester, SupervisorError};
+use super::{AgentState, AgentStatus, Requester, StopReason, SupervisorError};
 
 /// `AGENT_RECOVERY_BUDGET`: unexpected exits recovered per window.
 const RECOVERY_MAX: usize = 3;
@@ -94,8 +95,11 @@ pub(super) struct ExitInfo {
 #[derive(Clone, Copy)]
 pub(super) enum Startup {
     Failed(SupervisorError),
-    /// An intentional restart replaced the candidate; `ensure_ready` joins the replacement.
+    /// The candidate was replaced outside the App's own stops (a respawn, an awaited
+    /// replacement); `ensure_ready` joins the replacement when its restart generation moved.
     Restarting,
+    /// The App's own `stop(Restart)` took the candidate away: every caller joins the next startup.
+    Replaced,
 }
 
 pub(super) type StartupFuture = Shared<LocalBoxFuture<'static, Result<(), Startup>>>;
@@ -115,7 +119,9 @@ pub(super) struct State {
     pub(super) exit_generation: u64,
     pub(super) restart_generation: u64,
     pub(super) respawning: bool,
-    pub(super) quitting: bool,
+    /// Why the App last stopped its child, until the next startup is created: after a Restart
+    /// the startup still waiting on that child is replaced.
+    pub(super) last_stop: Option<StopReason>,
     pub(super) last_exited: Option<Exited>,
     pub(super) poll_epoch: u64,
     pub(super) poll_active: bool,
@@ -140,7 +146,7 @@ impl State {
             exit_generation: 0,
             restart_generation: 0,
             respawning: false,
-            quitting: false,
+            last_stop: None,
             last_exited: None,
             poll_epoch: 0,
             poll_active: false,
@@ -225,6 +231,7 @@ pub(super) struct Inner {
     pub(super) data: PathBuf,
     pub(super) read_only: bool,
     pub(super) lease_slot: LeaseSlot,
+    pub(super) quitting: Arc<AtomicBool>,
     status: mpsc::UnboundedSender<AgentStatus>,
     state: RefCell<State>,
 }
@@ -235,14 +242,21 @@ impl Inner {
         read_only: bool,
         status: mpsc::UnboundedSender<AgentStatus>,
         lease_slot: LeaseSlot,
+        quitting: Arc<AtomicBool>,
     ) -> Self {
         Self {
             data,
             read_only,
             lease_slot,
+            quitting,
             status,
             state: RefCell::new(State::new()),
         }
+    }
+
+    /// The App is quitting (either quit path): no recovery and no new child.
+    pub(super) fn quitting(&self) -> bool {
+        self.quitting.load(Ordering::SeqCst)
     }
 
     pub(super) fn read<R>(&self, f: impl FnOnce(&State) -> R) -> R {

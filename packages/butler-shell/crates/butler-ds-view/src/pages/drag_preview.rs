@@ -261,6 +261,8 @@ fn record_area(
     )
     .absolute()
     .size_full()
+    .top_0()
+    .left_0()
 }
 
 /// A drag area whose right third refuses the drop: the floating preview follows the pointer in
@@ -282,8 +284,8 @@ fn stage(
     let (blocked, hint) = lang.pick(
         ("Can't drop here", "Move the pointer over the area"),
         (
-            "여기에는 놓을 수 없어요",
-            "영역 위로 포인터를 움직여 보세요",
+            "여기에는 놓을 수 없습니다",
+            "영역 위로 포인터를 움직여 보십시오",
         ),
     );
     let tab_title = lang.pick("Search results \u{2014} Shop", "검색 결과 \u{2014} 쇼핑");

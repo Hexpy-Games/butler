@@ -2,6 +2,7 @@
 //! over a divider. A 4x64 pill grabber shows on hover, focus and drag, and with a hint a
 //! two-line tooltip beside it after about the Tooltip delay (2 x `--motion-deliberate`), on the
 //! workspace side of the divider.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -14,6 +15,7 @@ use gpui::{
 
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::context::Ds;
+use crate::ui::liquid_glass::{Presence, with_presence};
 use crate::ui::motion::{Props, Timing, Transition, transition};
 use crate::ui::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
 use crate::ui::typo::{Role, Tone, Typo, Weight};
@@ -318,19 +320,11 @@ impl RenderOnce for ResizeHandle {
             .clone()
             .filter(|_| shown.hint.0.target() > 0. || shown.hint.0.moving(&shown.hint.1))
             .map(|hint| {
-                shown.hint.0.apply(
-                    div().absolute().size_full().child(hint_view(
-                        self.label.clone(),
-                        hint,
-                        self.hint_side,
-                        ds,
-                    )),
-                    &shown.hint.1,
-                    &Props {
-                        opacity: Some((0., 1.)),
-                        ..Default::default()
-                    },
-                )
+                // The hint is a glass: it fades by its own presence, not a parent's opacity.
+                cover().child(with_presence(
+                    Presence::of(&shown.hint.0, &shown.hint.1),
+                    hint_view(self.label.clone(), hint, self.hint_side, ds),
+                ))
             });
         let (hover, bounds_state) = (pointer.clone(), pointer);
         let (on_drag, on_key) = (self.on_drag.clone(), self.on_key.clone());
@@ -360,7 +354,11 @@ impl RenderOnce for ResizeHandle {
             .child(pill(self.id.clone(), &shown, ds))
             .children(hint);
         if live && on_key.is_some() {
-            el = el.track_focus(&tracked);
+            // A press focuses the handle, as a pointerdown focuses the web's tabIndex=0 separator, so the keys work right after it.
+            let press = tracked.clone();
+            el = el
+                .track_focus(&tracked)
+                .capture_any_mouse_down(move |_, window, cx| window.focus(&press, cx));
         }
         if let Some(on_key) = on_key.filter(|_| live) {
             el = el.on_key_down(move |event, window, cx| on_key(event, window, cx));
@@ -374,7 +372,9 @@ impl RenderOnce for ResizeHandle {
             },
         )
         .absolute()
-        .size_full();
+        .size_full()
+        .top_0()
+        .left_0();
         strut::scope(false, el.child(recorder))
     }
 }

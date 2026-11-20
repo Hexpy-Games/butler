@@ -101,7 +101,7 @@ impl Shell {
     pub(super) fn canon_sidebar_groups(
         &mut self,
         project: &str,
-        pin: Option<super::row::Pin<'_>>,
+        pin: Option<super::row::Pin>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         crate::ui::manage::canon::common::warm_person_name(cx);
@@ -121,7 +121,7 @@ impl Shell {
         &mut self,
         project: &str,
         group: &CanonSidebarGroup,
-        pin: Option<super::row::Pin<'_>>,
+        pin: Option<super::row::Pin>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let key = format!("canon:{project}:{}", group.key);
@@ -152,7 +152,7 @@ impl Shell {
             cx.notify();
         }));
         if let Some(pin) = pin {
-            branch = branch.sticky(pin.scroll, pin.depth);
+            branch = branch.sticky(pin.depth);
         }
         for epic in &group.rows {
             branch = branch.child(self.canon_epic_row(project, &group.key, epic, cx));

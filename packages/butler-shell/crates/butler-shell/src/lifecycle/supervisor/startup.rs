@@ -40,6 +40,7 @@ impl Inner {
             let generation = self.read(|state| state.restart_generation);
             let failure = match self.shared_startup().await {
                 Ok(()) => return Ok(()),
+                Err(Startup::Replaced) => continue,
                 Err(failure) => failure,
             };
             let replaced =
@@ -47,7 +48,7 @@ impl Inner {
             if !replaced {
                 return Err(match failure {
                     Startup::Failed(error) => error,
-                    Startup::Restarting => SupervisorError::EarlyExit,
+                    _ => SupervisorError::EarlyExit,
                 });
             }
         }
@@ -72,7 +73,7 @@ impl Inner {
 
     async fn ensure_ready_once(self: &Rc<Self>) -> Result<(), Startup> {
         self.reconcile_attached_exit();
-        if self.read(|state| state.quitting) {
+        if self.quitting() {
             return Err(Startup::Failed(SupervisorError::ShuttingDown));
         }
         if let Some(error) = self.read(State::halt_error) {
@@ -108,6 +109,8 @@ impl Inner {
             state.port = Some(port);
             state.last_error = None;
             state.last_exit = None;
+            // Only a stop of the child spawned next can replace this startup.
+            state.last_stop = None;
             state.attached = None;
         });
         let Ok(child) = OwnedChild::spawn(&command, port) else {
@@ -208,15 +211,15 @@ impl Inner {
 
     /// `throwIfCandidateFailed`: our child must still be the one we are waiting for.
     fn check_candidate(&self, pid: u32) -> Result<(), Startup> {
-        let (alive, stopped, restarting, quitting) = self.read(|state| {
+        let (alive, stopped, replaced, restarting) = self.read(|state| {
             (
                 state.child_pid() == Some(pid),
                 state
                     .halt
                     .as_ref()
                     .is_some_and(|h| h.reason == super::state::HaltReason::Stop),
+                state.last_stop == Some(StopReason::Restart),
                 state.restarting(),
-                state.quitting,
             )
         });
         if alive {
@@ -225,10 +228,13 @@ impl Inner {
         if stopped {
             return Err(Startup::Failed(SupervisorError::Stopped));
         }
+        if replaced {
+            return Err(Startup::Replaced);
+        }
         if restarting {
             return Err(Startup::Restarting);
         }
-        if quitting {
+        if self.quitting() {
             return Err(Startup::Failed(SupervisorError::ShuttingDown));
         }
         self.record_error(SupervisorError::EarlyExit);

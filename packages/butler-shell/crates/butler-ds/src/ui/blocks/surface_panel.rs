@@ -99,9 +99,6 @@ impl RenderOnce for SurfacePanel {
             Elevation::Medium => el.bg(raised).shadow(shadow(Shadow::ShadowCard)),
             Elevation::High => el.bg(raised).shadow(shadow(Shadow::ShadowWindow)),
         };
-        strut::scope(
-            true,
-            strut::container(self.item.apply(el, ds), ds).children(self.children),
-        )
+        strut::scope(true, self.item.apply(el, ds).children(self.children))
     }
 }

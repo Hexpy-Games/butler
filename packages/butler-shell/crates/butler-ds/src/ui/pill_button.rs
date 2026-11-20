@@ -1,5 +1,6 @@
 //! DS PillButton (PillButton.tsx / PillButton.module.css): a borderless pill Button, plain or
 //! glass, that can be a pressed chip, carry a count or show the drop ring.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -247,11 +248,7 @@ fn glass_layer(radius: gpui::Pixels) -> AnyElement {
 
 /// `inset 0 0 0 var(--border-width-strong) var(--accent)`.
 fn drop_ring(ds: &Ds, radius: gpui::Pixels) -> AnyElement {
-    div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
+    cover()
         .rounded(radius)
         .border(ds.len(Length::BorderWidthStrong))
         .border_color(ds.color(Color::Accent))

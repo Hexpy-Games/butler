@@ -267,22 +267,19 @@ impl Typo {
     }
 
     /// An inline span in a block: its line box is the taller of its own and the strut's (the
-    /// body role), baselines aligned. Returns the line height to use and how far the glyphs move
-    /// down from where a line of that height would put them.
-    fn strut_line(ds: &Ds, own: (&SharedString, f32, f32, f32), cx: &App) -> (f32, f32) {
-        let body = Role::Body.tokens().map(|body| {
-            (
-                f32::from(ds.len(body.size)),
-                f32::from(ds.len(body.line_height)),
-                ds.number(body.weight),
-            )
-        });
-        let Some((body_size, body_line, body_weight)) = body else {
-            return (own.2, 0.);
-        };
+    /// inherited font at the inherited line height, as in CSS), baselines aligned. Returns the
+    /// line height to use and how far the glyphs move down from where a line of that height would
+    /// put them.
+    fn strut_line(own: (&SharedString, f32, f32, f32), window: &Window, cx: &App) -> (f32, f32) {
+        let inherited = window.text_style();
+        let rem = window.rem_size();
+        let body_size = f32::from(inherited.font_size.to_pixels(rem));
+        let body_line = f32::from(inherited.line_height_in_pixels(rem));
+        let body_family = inherited.font_family.clone();
         let (family, size, line, weight) = own;
         let (own_asc, own_desc) = Self::extent(family, size, weight, cx);
-        let (body_asc, body_desc) = Self::extent(ds.body_font(), body_size, body_weight, cx);
+        let (body_asc, body_desc) =
+            Self::extent(&body_family, body_size, inherited.font_weight.0, cx);
         let above = |asc: f32, desc: f32, line: f32| (line - (asc + desc)) / 2. + asc;
         let (above_own, above_body) = (
             above(own_asc, own_desc, line),
@@ -327,7 +324,7 @@ impl Typo {
 }
 
 impl RenderOnce for Typo {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
         let keep = ds.lang() == Lang::Ko || self.role.keeps_words();
         let (text, highlights) = self.content(ds);
@@ -357,8 +354,9 @@ impl RenderOnce for Typo {
                 el.text_style().letter_spacing = Some(px(spacing));
             }
             trim = Some(Self::trim_offset(&family, size, cx, weight));
-            if self.role.is_inline() && strut::active(cx) && !flow {
-                let (line, shift) = Self::strut_line(ds, (&family, size, line_height, weight), cx);
+            if self.inline_box() && strut::active(cx) && !flow {
+                let (line, shift) =
+                    Self::strut_line((&family, size, line_height, weight), window, cx);
                 el = el.line_height(px(line));
                 trim = Some(shift);
             }
@@ -388,12 +386,18 @@ impl RenderOnce for Typo {
         } else {
             styled.into_any_element()
         };
+        // The glyphs move down by a top margin that the bottom margin gives back, so the box keeps
+        // its size and layout reports the baseline where the glyphs are drawn. A flex column keeps
+        // the margins from collapsing through the Typo.
         let body: AnyElement = match trim.filter(|_| !flow && self.line_clamp.is_none()) {
-            Some(offset) => div()
-                .relative()
-                .top(px(offset))
-                .child(styled)
-                .into_any_element(),
+            Some(offset) => {
+                el = el.flex().flex_col();
+                div()
+                    .mt(px(offset))
+                    .mb(px(-offset))
+                    .child(styled)
+                    .into_any_element()
+            }
             None => styled.into_any_element(),
         };
         self.item.apply(el, ds).child(body)
@@ -406,12 +410,16 @@ impl Typo {
     /// container's strut setting the minimum line height. Block props make it a block.
     fn flows(&self, cx: &App) -> bool {
         self.selectable.is_none()
-            && self.role.is_inline()
+            && self.inline_box()
             && strut::active(cx)
-            && !self.truncate
-            && self.line_clamp.is_none()
             && !self.align_with_control
             && self.align == TextAlign::Start
+    }
+
+    /// Whether the web draws this Typo as an inline box, the only kind a container's strut
+    /// reaches: an inline role, not truncated (`display: block`) or clamped (`-webkit-box`).
+    fn inline_box(&self) -> bool {
+        self.role.is_inline() && !self.truncate && self.line_clamp.is_none()
     }
 
     /// Truncation, clamping, wrapping and the control-row padding.

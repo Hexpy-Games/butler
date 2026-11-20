@@ -1,6 +1,7 @@
 //! The slots of an AdaptiveShell that are elements in their own right (AdaptiveShellParts.tsx):
 //! the content card, the chrome layer with its floating toggle, the scrim, the peek edge and the
 //! drawer's panel titlebar.
+use crate::ui::cover::cover;
 use std::rc::Rc;
 
 use gpui::{
@@ -110,15 +111,9 @@ impl RenderOnce for ChromeFloatingToggle {
             },
             self.toggle,
         );
-        div()
-            .id(self.id)
-            .absolute()
-            .top_0()
-            .left_0()
-            .size_full()
-            .child(crate::ui::window_drag::no_drag(
-                div().absolute().top(px(top)).left(px(left)).child(toggle),
-            ))
+        cover().id(self.id).child(crate::ui::window_drag::no_drag(
+            div().absolute().top(px(top)).left(px(left)).child(toggle),
+        ))
     }
 }
 
@@ -142,15 +137,11 @@ pub fn scrim(
     ds: &Ds,
 ) -> AnyElement {
     let color = convert::with_alpha(ds.color(Color::AdaptiveScrimBg), alpha);
-    let el = div()
-        .id(id)
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
-        .bg(color);
+    let el = cover().id(id).bg(color);
     match on_dismiss {
+        // While open the backdrop covers the page: a wheel over it never scrolls what is under it, as on the web; closing, it lets everything through (web: pointer-events none until data-open).
         Some(dismiss) => el
+            .occlude()
             .debug_selector(|| "adaptive-scrim".to_owned())
             .on_click(move |_, window, cx| dismiss(window, cx))
             .into_any_element(),

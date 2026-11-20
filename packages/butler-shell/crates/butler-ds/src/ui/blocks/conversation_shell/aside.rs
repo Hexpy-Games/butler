@@ -1,7 +1,8 @@
 //! The aside of ConversationShell (lib/AsideSlot.tsx, lib/asideLayout.ts, conversationAside.ts):
 //! session details in the right margin. From a 960px shell it docks flat in the margin and the
-//! column moves left; narrower it floats on TintedGlass over the conversation while open. Each
+//! column moves left; narrower it floats on TintedGlass over the conversation while open, as tall as its content. Each
 //! layout enters and leaves with a fade; its content has a scroller of its own.
+use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
     SharedString, Styled as _, Window, div, px,
@@ -13,6 +14,7 @@ use crate::ui::context::Ds;
 use crate::ui::liquid_glass::{Presence, with_presence};
 use crate::ui::motion::{Props, Timing, transition};
 use crate::ui::scroll::engine::{self, Axis, Config};
+use crate::ui::scroll::frame as scroll_frame;
 use crate::ui::tinted_glass::{GlassPadding, GlassRadius, TintedGlass};
 
 /// The shell width from which the aside docks in the right margin (a floating one docks again
@@ -119,17 +121,20 @@ fn scroll(
         .flex()
         .flex_col()
         .w_full()
-        .flex_none()
         .py(fade)
         .pl(side)
         .pr(side)
         .child(content);
-    let built = engine::scroller(&config, body.min_w_0().flex_auto().min_h_0(), window, cx);
-    let frame = div()
+    let built = engine::scroller(
+        &config,
+        scroll_frame::body(body.min_w_0(), "conversation-aside-scroll"),
+        window,
+        cx,
+    );
+    let frame = scroll_frame::frame("conversation-aside-scroll")
         .relative()
         .flex_auto()
         .min_w_0()
-        .min_h_0()
         .overflow_hidden();
     match layout {
         AsideLayout::Docked => frame.mx(-room).child(built.element),
@@ -168,34 +173,32 @@ fn panel(
                 wanted
             };
             let bottom = (slot.composer_reserve - space(Length::SpaceSm)).max(0.);
-            // `.asideGlass { height: 100% }`: the glass fills the panel between its insets.
-            let height = (shell_h - slot.top - bottom).max(0.);
+            // Desktop only: the glass sizes to its content, no taller than the room above the composer.
+            let max_height = (shell_h - slot.top - bottom).max(0.);
             aside
                 .top(px(slot.top))
                 .right(ds.len(Length::SpaceSm))
-                .bottom(px(bottom))
                 .w(px(width))
-                .child(floating_glass(scroller, (height, alpha)))
+                .child(floating_glass(scroller, (max_height, alpha)))
                 .into_any_element()
         }
     }
 }
 
-/// The glass is the floating aside's only surface: it fills the panel, its scroller inside.
-/// `alpha` is its presence: the glass materializes with it and only the content fades.
-fn floating_glass(scroller: AnyElement, (height, alpha): (f32, Presence)) -> AnyElement {
+/// The glass is the floating aside's only surface: as tall as its content up to `max_height`, its scroller inside.
+/// `alpha` is its presence: the glass and its content fade by that opacity alone, at full material.
+fn floating_glass(scroller: AnyElement, (max_height, alpha): (f32, Presence)) -> AnyElement {
     div()
-        .size_full()
+        .w_full()
         .flex()
         .flex_col()
-        .min_h_0()
         .child(with_presence(
             alpha,
             TintedGlass::new()
                 .radius(GlassRadius::Popover)
                 .padding(GlassPadding::None)
-                .height(px(height))
-                .child(div().flex().flex_col().h_full().min_h_0().child(scroller)),
+                .column(px(max_height))
+                .child(scroller),
         ))
         .into_any_element()
 }
@@ -232,6 +235,13 @@ fn layer(
         .read(cx)
         .clone()
         .filter(|_| alpha.target() > 0. || alpha.moving(&timing))?;
+    // The exit ends on compositor ticks, which re-render nothing: wake this view at its end so
+    // the leaving aside is removed then, not at some later unrelated render.
+    if !on && alpha.moving(&timing) {
+        let elapsed = gpui::animation_time_ms().wrapping_sub(alpha.start_ms);
+        let left = timing.ms().saturating_sub(elapsed) + 1;
+        crate::ui::motion::wake_after(window, cx, std::time::Duration::from_millis(left.into()));
+    }
     let scroller = scroll(slot, layout, content(layout), window, cx);
     let panel = panel(
         slot,
@@ -249,9 +259,9 @@ fn layer(
             },
         ),
     );
-    let layer = div().absolute().top_0().left_0().size_full();
-    // The floating glass takes `alpha` as its presence (LG research §5 Appear/disappear): the
-    // docked aside has no glass and fades whole.
+    let layer = cover();
+    // The floating glass takes `alpha` as its presence (opacity only, at full material, never a
+    // parent's opacity): the docked aside has no glass and fades whole.
     let layer = match layout {
         AsideLayout::Docked => alpha.apply(
             layer,

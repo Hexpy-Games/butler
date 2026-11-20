@@ -126,8 +126,8 @@ pub fn animate(
 }
 
 /// [`animate`] for a surface whose root is a TintedGlass: the progress is not an opacity but the
-/// surface's presence, so the glass materializes and only its content fades (LG research §5
-/// Appear/disappear, §8.1.6). Scale and travel are the same.
+/// surface's presence: the glass and its content fade by that opacity alone, at full material
+/// (the lens ignores a parent's opacity). Scale and travel are the same.
 pub fn animate_glass(
     id: &str,
     phase: Phase,
@@ -191,17 +191,7 @@ fn build(
         ..Default::default()
     };
     let content = if glass {
-        let presence = if value.moving(&timing) {
-            Presence::Moving {
-                from: value.from,
-                to: value.to,
-                start_ms: value.start_ms,
-                timing,
-            }
-        } else {
-            Presence::Static(value.target())
-        };
-        with_presence(presence, content).into_any_element()
+        with_presence(Presence::of(&value, &timing), content).into_any_element()
     } else {
         content
     };

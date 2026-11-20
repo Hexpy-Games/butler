@@ -62,7 +62,10 @@ impl Shell {
             })
             .compact_gap(Space::Lg)
             .child(top)
-            .child(NavSectionHeading::new(title).actions(actions))
+            .child(crate::ui::widgets::anchored(
+                NavSectionHeading::new(title).actions(actions),
+                "sidebar-space-header",
+            ))
             .into_any_element()
     }
     pub(super) fn browse_actions(
@@ -72,16 +75,15 @@ impl Shell {
     ) -> AnyElement {
         let menu = DropdownMenu::new("sidebar-create", window, cx);
         let trigger = menu.trigger(|toggle| {
-            crate::ui::widgets::anchor(div(), "sidebar-create-trigger")
-                .child(
-                    IconButton::new(
-                        "sidebar-create-trigger",
-                        self.copy("Space menu", "공간 메뉴"),
-                    )
-                    .glyph(Icon::FolderPlus)
-                    .on_click(toggle.on_click()),
+            crate::ui::widgets::anchored(
+                IconButton::new(
+                    "sidebar-create-trigger",
+                    self.copy("Space menu", "공간 메뉴"),
                 )
-                .into_any_element()
+                .glyph(Icon::FolderPlus)
+                .on_click(toggle.on_click()),
+                "sidebar-create-trigger",
+            )
         });
         let mut content = DropdownMenuContent::new();
         for (label, dialog) in [
@@ -114,6 +116,7 @@ impl Shell {
         let content = menu.content(content, window, cx);
         div()
             .flex()
+            .gap(Ds::get(cx).len(Length::SpaceXs) / 2.)
             .child(
                 IconButton::new("browse-new-chat", self.theme.strings.new_chat)
                     .glyph(Icon::PencilLine)
