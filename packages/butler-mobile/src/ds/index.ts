@@ -20,3 +20,4 @@ export { EdgeFade } from "./EdgeFade";
 export { useHeaderInset, useHeaderOptions } from "./header";
 export { ContextRing } from "./ContextRing";
 export { DecisionCard, type DecisionCardProps } from "./DecisionCard";
+export { QueuedMessage, type QueuedMessageProps } from "./QueuedMessage";

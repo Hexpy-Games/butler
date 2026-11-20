@@ -24,7 +24,12 @@ import ArrowUp01Icon from "@hugeicons/core-free-icons/ArrowUp01Icon";
 import Notebook01Icon from "@hugeicons/core-free-icons/Notebook01Icon";
 import RotateLeft01Icon from "@hugeicons/core-free-icons/RotateLeft01Icon";
 
+import PencilEdit01Icon from "@hugeicons/core-free-icons/PencilEdit01Icon";
+import Delete02Icon from "@hugeicons/core-free-icons/Delete02Icon";
+
 export const icons = {
+  Edit: PencilEdit01Icon,
+  Delete: Delete02Icon,
   Briefcase: Briefcase01Icon,
   Copy: Copy01Icon,
   Info: InformationCircleIcon,

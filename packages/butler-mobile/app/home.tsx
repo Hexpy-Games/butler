@@ -1,13 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Platform, FlatList, RefreshControl, ScrollView, View } from "react-native";
-import { router, Stack, useFocusEffect } from "expo-router";
-import { Badge, Button, ButtonGroup, EdgeFade, Icon, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useHeaderOptions, useTokens } from "@/ds";
+import { FlatList, RefreshControl, ScrollView, View } from "react-native";
+import { router, useFocusEffect } from "expo-router";
+import { Badge, Button, ButtonGroup, EdgeFade, Icon, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
 import { probe } from "@/connection/probe";
 import type { Problem } from "@/connection/problems";
 import { pairingStore } from "@/connection/store";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 
+import { NewConversationSheet } from "@/conversation/NewConversationSheet";
 import { useConversation } from "@/conversation/live";
 import { useNavigationView } from "@/conversation/useNavigationView";
 import { spaceTree, visibleRows, type SpaceRow } from "@/conversation/space";
@@ -77,7 +78,6 @@ export default function Home() {
 function Conversations() {
   const copy = useMobileCopy();
   const t = useTokens();
-  const options = useHeaderOptions();
   const { view, error, retry, refresh } = useNavigationView();
   const { lost } = useConversation();
   const [scrolled, setScrolled] = useState(false);
@@ -108,7 +108,7 @@ function Conversations() {
   const paddingHorizontal = t.length("--space-4");
   const locale = useAppLocale();
   return <Surface variant="base" grow edges={["left", "right"]}>
-    <Stack.Screen options={{ ...options, title: copy.conversations.title, headerLargeTitle: Platform.OS === "ios" }} />
+    <NewConversationSheet view={view} />
     <FlatList data={rows} keyExtractor={item => item.key} contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ flexGrow: 1, paddingHorizontal }}
       onScroll={event => setScrolled(event.nativeEvent.contentOffset.y > 0)} scrollEventThrottle={16}

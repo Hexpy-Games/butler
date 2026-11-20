@@ -12,14 +12,14 @@ type Attachment = {
   status: "uploading" | "ready" | "failed"; file?: MessageFileRef;
 };
 
-export function useAttachments(sessionId: string) {
+export function useAttachments(sessionId: string | undefined) {
   const { pairing } = useConversation();
   const copy = useMobileCopy();
   const [items, setItems] = useState<Attachment[]>([]);
   const remove = (key: string) => setItems(previous => previous.filter(item => item.key !== key));
   const removeMany = (keys: string[]) => setItems(previous => previous.filter(item => !keys.includes(item.key)));
   const upload = async (file: { uri: string; name: string; mimeType: string; kind: "image" | "file"; size?: number }) => {
-    if (!pairing) return;
+    if (!pairing || !sessionId) return;
     const key = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     setItems(previous => [...previous, { key, ...file, status: "uploading" }]);
     try {

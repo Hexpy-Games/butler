@@ -6,7 +6,7 @@ import { BaseText } from "./internal/BaseText";
 import type { IconGlyph } from "./icons";
 import { IconSlot } from "./internal/IconSlot";
 import { AnimatedPressable, usePress } from "./internal/press";
-import { fontStyle, maxFontScale, weightValue } from "./internal/typography";
+import { fontStyle, maxFontScale, textStyle, weightValue } from "./internal/typography";
 import { variantColors, type ButtonVariant } from "./internal/variants";
 import { SpinnerArc } from "./Spinner";
 
@@ -16,6 +16,7 @@ export interface ButtonProps {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
+  size?: "md" | "sm";
   iconStart?: IconGlyph;
   iconEnd?: IconGlyph;
   loading?: boolean;
@@ -38,16 +39,20 @@ export interface IconButtonProps {
 }
 
 export function Button({
-  label, onPress, variant = "default", iconStart, iconEnd, loading, disabled, stretch,
+  label, onPress, variant = "default", size = "md", iconStart, iconEnd, loading, disabled, stretch,
   accessibilityLabel, accessibilityHint, testID,
 }: ButtonProps) {
   const t = useTokens();
   const press = usePress({ scale: true, disabled: disabled || loading });
   const colors = variantColors(t, variant);
-  const iconSize = t.length("--font-size-4");
-  const lineHeight = t.length("--typo-app-title-line-height");
-  const inline = t.length("--space-lg");
-  const inlineIcon = t.length("--space-md");
+  const target = t.length("--control-hit-target");
+  const height = size === "sm" ? t.length("--control-height-sm") : target;
+  const hitSlop = Math.max(0, (target - height) / 2);
+  const iconSize = t.length(size === "sm" ? "--icon-size-md" : "--font-size-4");
+  const lineHeight = t.length(size === "sm" ? "--typo-caption-line-height" : "--typo-app-title-line-height");
+  const labelStyle = size === "sm" ? textStyle(t, "caption", "medium") : fontStyle(iconSize, lineHeight, weightValue(t, "medium"));
+  const inline = t.length(size === "sm" ? "--space-3" : "--space-lg");
+  const inlineIcon = t.length(size === "sm" ? "--space-2" : "--space-md");
   const glyph = (icon: IconGlyph) => (
     <IconSlot size={iconSize} lineHeight={lineHeight}>
       <HugeiconsIcon icon={icon} size={iconSize} color={colors.foreground} />
@@ -59,14 +64,15 @@ export function Button({
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: !!disabled, busy: !!loading }}
+      hitSlop={size === "sm" ? { top: hitSlop, bottom: hitSlop, left: t.length("--space-1"), right: t.length("--space-1") } : undefined}
       testID={testID}
       disabled={disabled || loading}
       onPress={onPress}
       {...press.handlers}
       style={[
         {
-          minHeight: t.length("--control-hit-target"),
-          paddingVertical: (t.length("--control-hit-target") - lineHeight) / 2,
+          minHeight: height,
+          paddingVertical: (height - lineHeight) / 2 - (size === "sm" ? t.length("--border-hairline") : 0),
           paddingStart: iconStart ? inlineIcon : inline,
           paddingEnd: iconEnd ? inlineIcon : inline,
           borderRadius: t.length(PILL),
@@ -90,7 +96,7 @@ export function Button({
           numberOfLines={1}
           ellipsizeMode="tail"
           maxFontSizeMultiplier={maxFontScale.control}
-          style={{ ...fontStyle(iconSize, lineHeight, weightValue(t, "medium")), color: colors.foreground, flexShrink: 1 }}
+          style={{ ...labelStyle, color: colors.foreground, flexShrink: 1 }}
         >
           {label}
         </BaseText>
@@ -98,7 +104,7 @@ export function Button({
       </View>
       {loading ? (
         <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]}>
-          <SpinnerArc size={t.length("--icon-size-lg")} color={colors.foreground} />
+          <SpinnerArc size={size === "sm" ? iconSize : t.length("--icon-size-lg")} color={colors.foreground} />
         </View>
       ) : null}
     </AnimatedPressable>

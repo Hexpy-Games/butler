@@ -7,14 +7,14 @@ import { useConversation } from "./live";
 
 const catalogs = new WeakMap<GatewayClient, Promise<ModelCatalog>>();
 
-export function useControls(sessionId: string) {
+export function useControls(sessionId: string | undefined) {
   const { client } = useConversation();
   const copy = useMobileCopy();
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [view, setView] = useState<SessionControlsView | null>(null);
   useEffect(() => {
     setView(null); setCatalog(null);
-    if (!client) return;
+    if (!client || !sessionId) return;
     let closed = false;
     let request = catalogs.get(client);
     if (!request) {
@@ -43,7 +43,7 @@ export function useControls(sessionId: string) {
   const models = catalog?.registered_models?.length ? catalog.registered_models : catalog?.models ?? [];
   const current = models.find(model => model.model_ref === controls?.model);
   const apply = async (patch: { model?: string; reasoning_effort?: ReasoningEffort }) => {
-    if (!client || !controls) return;
+    if (!client || !sessionId || !controls) return;
     const model = models.find(item => item.model_ref === patch.model);
     if (model && model.model_ref !== controls.model && !model.reasoning_efforts.includes(controls.reasoning_effort)) {
       patch = { ...patch, reasoning_effort: model.default_reasoning_effort };

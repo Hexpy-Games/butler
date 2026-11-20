@@ -1,5 +1,5 @@
 import type { AnswerBlockSet } from "./app-contracts.ts";
-import type { ChatKind, MessageFileRef, TurnState } from "./message-session-contracts.ts";
+import type { ChatKind, MessageContent, MessageFileRef, SessionSummary, TurnState } from "./message-session-contracts.ts";
 
 export type RuntimeDeliveryState =
   | "running"
@@ -91,6 +91,47 @@ export interface MessageSendRequest {
   attachments: { file_id: string }[];
   queue_policy: "send_now" | "enqueue_if_busy";
 }
+
+export interface QueuedMessageRecord {
+  content_parts?: MessageContent;
+  id: string;
+  chat_id: string;
+  text: string;
+  /** Transport id of the send; the delivered user message reuses it. */
+  client_message_id?: string;
+  plan_id?: string;
+  attachments?: MessageFileRef[];
+  controls: {
+    model: string;
+    reasoning_effort: ReasoningEffort;
+    access_mode: "read_only" | "ask_first" | "ask_except_reads" | "auto" | "full_access";
+    plan_mode: boolean;
+  };
+  state: "queued" | "dispatching" | "dispatched" | "deleted" | "failed";
+  safe_error_code?: string;
+  dispatched_message_id?: string;
+  turn_id?: string;
+  cursor: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SessionQueueView {
+  session_id: string;
+  queued_messages: QueuedMessageRecord[];
+  /** Stopped turn: queued messages wait for the next user input. */
+  paused?: boolean;
+}
+
+export type CreateSessionRequest = {
+  kind: "chat" | "project";
+  project_id?: string;
+  group_id?: string;
+  workspace_mode: "local";
+  title: string;
+};
+export type CreateSessionResult = { session: SessionSummary };
+export type MessageSendResult = { accepted?: boolean; queued?: QueuedMessageRecord };
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
