@@ -12,7 +12,7 @@ export function QuestionCard({ request, sessionId, reload }: { request: PendingU
   const t = useTokens();
   const { client } = useConversation();
   const questions = request.questions.questions;
-  const [draft, setDraft] = useState<QuestionDraft[]>(() => questions.map(q => ({ id: q.id, selected: [], text: "", other: "", skipped: true })));
+  const [draft, setDraft] = useState<QuestionDraft[]>(() => questions.map(q => ({ id: q.id, selected: [], text: "", other: "", skipped: false })));
   const [pending, setPending] = useState<string>();
   const [failed, setFailed] = useState(false);
   const inFlight = useRef(false);
@@ -32,7 +32,7 @@ export function QuestionCard({ request, sessionId, reload }: { request: PendingU
     setDraft(next);
     if (send) void submit({ status: "answered", answers: answerWire(questions, next) }, "send");
   };
-  const ready = draft.every(a => a.skipped || a.selected.length > 0 || a.text.trim() || a.other.trim());
+  const ready = draft.every(a => a.selected.length > 0 || a.text.trim() || a.other.trim());
   return <DecisionCard eyebrow={questions[0].eyebrow} title={questions[0].title}
     footnote={failed ? copy.interfaceDetails.decisionFailed : undefined}
     actions={<ButtonGroup>
