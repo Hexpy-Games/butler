@@ -1,4 +1,5 @@
-import { Platform, TextInput, useWindowDimensions } from "react-native";
+import { useRef } from "react";
+import { Platform, TextInput, useWindowDimensions, type TextInputInstance } from "react-native";
 import { useTokens } from "../design/useTokens";
 import { fontFace, maxFontScale } from "./internal/typography";
 import { Sheet } from "./Sheet";
@@ -8,10 +9,11 @@ export interface TextSelectSheetProps {
 }
 
 export function TextSelectSheet({ open, onClose, title, closeLabel, text }: TextSelectSheetProps) {
+  const input = useRef<TextInputInstance>(null);
   const t = useTokens();
   const { height } = useWindowDimensions();
   return <Sheet open={open} onClose={onClose} title={title} cancelLabel={closeLabel}>
-    <TextInput multiline value={text} scrollEnabled
+    <TextInput ref={input} onLayout={() => input.current?.setSelection(0, 0)} multiline value={text} scrollEnabled
       // iOS keeps read-only selection; Android must stay enabled to select, with value restoring paste or cut.
       editable={Platform.OS === "ios" ? false : undefined}
       showSoftInputOnFocus={false}

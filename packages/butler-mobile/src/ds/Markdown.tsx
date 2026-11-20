@@ -18,7 +18,7 @@ export function Markdown({ text }: { text: string }) {
 export function CodeBlock({ code, inset, tone = "primary" }: { code: string; inset?: boolean; tone?: TextTone }) {
   const t = useTokens();
   return <View style={{ backgroundColor: t.color(inset ? "--color-surface-base" : "--color-surface-raised-opaque"), borderRadius: t.length(RADIUS), padding: t.length("--space-3") }}>
-    <ScrollView horizontal><BaseText selectable={inlineSelectable} style={{ ...textStyle(t, "body"),
+    <ScrollView horizontal style={{ flexGrow: 0 }}><BaseText selectable={inlineSelectable} style={{ ...textStyle(t, "body"),
       fontFamily: CODE_FONT, fontSize: t.length("--typo-code-size"), lineHeight: t.length("--typo-code-line-height"),
       color: t.color(toneColors[tone === "inherit" ? "primary" : tone]),
     }}>{code}</BaseText></ScrollView>
@@ -89,7 +89,7 @@ function Block({ token, tone }: { token: Token; tone: TextTone }) {
 function Table({ token, tone }: { token: Tokens.Table; tone: TextTone }) {
   const t = useTokens();
   const line = { width: t.length("--border-hairline"), color: t.color("--color-border-strong") };
-  return <ScrollView horizontal><View style={{ flexDirection: "row", borderTopWidth: line.width, borderLeftWidth: line.width, borderColor: line.color }}>
+  return <ScrollView horizontal style={{ flexGrow: 0 }}><View style={{ flexDirection: "row", borderTopWidth: line.width, borderLeftWidth: line.width, borderColor: line.color }}>
     {token.header.map((header, column) => <View key={column}>
       {[header, ...token.rows.map(row => row[column])].map((cell, row) => <View key={row}
         style={{ padding: t.length("--space-2"), borderRightWidth: line.width, borderBottomWidth: line.width, borderColor: line.color }}>

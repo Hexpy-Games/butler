@@ -17,7 +17,7 @@ import { useSessionQueue } from "./useSessionQueue";
 import { queuedConversationItems } from "./queue";
 import { QueuedMessageItem } from "./QueuedMessageItem";
 import { anchoredStewardChildren } from "./stewardAnchors";
-import { turnLatest } from "./workStatus";
+import { latestStatus, turnStatusLabel } from "./workStatus";
 import { useElapsed } from "./useElapsed";
 
 export function ConversationScreen({ id, title, project, group, initialText = "" }: {
@@ -145,7 +145,6 @@ function TurnStatus({ view, hasDecision, anchors }: {
 }) {
   const copy = useMobileCopy();
   const locale = useAppLocale();
-  const appCopy = getAppCopy(locale);
   const turn = view.active_turn;
   const elapsed = useElapsed(turn?.progress?.started_at ?? turn?.created_at);
   if (!turn) {
@@ -156,11 +155,11 @@ function TurnStatus({ view, hasDecision, anchors }: {
   const newest = view.messages.at(-1);
   if (!["queued", "accepted", "thinking", "streaming", "waiting_for_tool", "cancelling", "retrying"].includes(turn.state)
     || (newest?.role === "assistant" && newest.status === "streaming")) return null;
-  return <StatusLine label={turnLatest(turn, locale) ?? appCopy.interfaceStatus.generating} elapsed={elapsed} active />;
+  return <StatusLine label={turnStatusLabel(turn, locale)} elapsed={elapsed} active />;
 }
 
 function DelegatedTurnStatus({ child }: { child: StewardChild }) {
   const locale = useAppLocale();
   const elapsed = useElapsed(child.relation.created_at);
-  return <StatusLine label={turnLatest(child.active_turn, locale) ?? child.title} elapsed={elapsed} active />;
+  return <StatusLine label={latestStatus(child.active_turn?.progress?.safe_progress_rows ?? [], true, child.status, locale) ?? child.title} elapsed={elapsed} active />;
 }

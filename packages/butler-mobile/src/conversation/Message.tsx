@@ -12,7 +12,7 @@ import { BranchSheet } from "./BranchSheet";
 import { CompletedWorkCards, StewardWorkCard } from "./WorkCards";
 
 export function messageCopyText(message: ConversationMessage): string {
-  return message.role === "user" ? message.text : [message.text, ...(message.answer_blocks ?? []).map(set => toMarkdown(set.spec, url => url))].join("\n\n");
+  return message.role === "user" ? message.text : [message.text, ...(message.answer_blocks ?? []).map(set => toMarkdown(set.spec, url => url))].filter(Boolean).join("\n\n");
 }
 
 export function UserMessage({ message, children, onLongPress }: {
@@ -26,7 +26,7 @@ export function UserMessage({ message, children, onLongPress }: {
   const references = message.content_parts?.parts.filter(part => part.type === "project_source_ref") ?? [];
   const text = message.content_parts ? message.content_parts.parts.filter(part => part.type === "text").map(part => part.text).join("") : message.text;
   return <View style={{ alignSelf: "flex-end", maxWidth: "80%", gap: t.length("--space-1") }}>
-    <Pressable onLongPress={onLongPress} style={{ gap: t.length("--space-1") }}>
+    <MessageBody onLongPress={onLongPress} style={{ gap: t.length("--space-1") }}>
       {text.trim() ? <MessageBubble><Text selectable={inlineSelectable}>{text}</Text></MessageBubble> : null}
       {message.attachments?.length ? <AttachmentTiles layout="wrap" items={message.attachments.map(file => ({
         key: file.file_id, name: file.safe_name, kind: file.kind === "image" || file.mime_type.startsWith("image/") ? "image" : "file",
@@ -39,7 +39,7 @@ export function UserMessage({ message, children, onLongPress }: {
         key: `${part.source.kind}:${part.source.id}:${index}`, name: part.titleSnapshot, kind: "file",
         extension: documentKindLabel(part.source.kind, appCopy),
       }))} uploadingLabel={copy.chat.uploading} failedLabel={copy.chat.uploadFailed} /> : null}
-    </Pressable>
+    </MessageBody>
     {children}
   </View>;
 }
@@ -65,13 +65,13 @@ export function Message({ message, latestTurn, sessionId, projectId, stewardChil
   const cancelled = message.status === "cancelled" || message.delivery_state === "cancelled";
   return <View style={{ ...(bubble ? { alignSelf: "flex-start", maxWidth: "90%" } : { width: "100%" }), gap: t.length("--space-1") }}>
     {!bubble && message.status !== "streaming" ? <CompletedWorkCards blocks={message.work_blocks ?? []} /> : null}
-    <Pressable onLongPress={onLongPress} style={{ gap: t.length(bubble ? "--space-1" : "--space-3") }}>
+    <MessageBody onLongPress={onLongPress} style={{ gap: t.length(bubble ? "--space-1" : "--space-3") }}>
       {bubble ? (message.text.trim() ? <MessageBubble><Markdown text={message.text} /></MessageBubble> : null)
         : <Markdown text={message.text} />}
       {message.answer_blocks?.map((set, index) => <Markdown key={index} text={toMarkdown(set.spec, url => url)} />)}
       {failed ? <Text tone="danger">{copy.chat.failed}</Text> : null}
       {cancelled ? <Text tone="tertiary">{copy.chat.cancelled}</Text> : null}
-    </Pressable>
+    </MessageBody>
     {stewardChild ? <StewardWorkCard {...stewardChild} /> : null}
     {message.status !== "streaming" && (message.text.trim() || message.answer_blocks?.length) ? <MessageInfo message={message}
       onSelectText={() => setSelecting(true)}
@@ -122,4 +122,8 @@ function MessageInfo({ message, retryable, sessionId, projectId, onSelectText }:
     {branch && sessionId ? <BranchSheet key={branch} sourceSessionId={sessionId} sourceMessageId={message.id}
       project={branch === "project"} projectId={projectId} onClose={() => setBranch(null)} /> : null}
   </View>;
+}
+
+function MessageBody({ onLongPress, style, children }: { onLongPress?: () => void; style: object; children: React.ReactNode }) {
+  return onLongPress ? <Pressable onLongPress={onLongPress} style={style}>{children}</Pressable> : <View style={style}>{children}</View>;
 }
