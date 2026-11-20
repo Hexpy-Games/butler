@@ -12,6 +12,7 @@ pub(super) fn boundaries() {
             [
                 "analyze_attached_image",
                 "ingest_task_memory",
+                "save_skill",
                 "summarize_user_profile",
                 "update_explicit_memory",
                 "update_onboarding_profile",

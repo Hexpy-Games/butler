@@ -72,6 +72,7 @@ export const additionalToolLabels = {
   request_service_restart: "Request service restart",
   load_skill: "Load skill",
   read_skill_file: "Read skill file",
+  save_skill: "Save skill",
   update_automation: "Update schedule",
   ask_user: "Question",
   read_operation_result: "Read operation result",

@@ -6,7 +6,7 @@ use std::{
 use serde_json::{Value, json};
 
 use super::{CapabilityError, CapabilityInvocation, failure};
-use crate::skills::{SkillDefinition, Skills};
+use crate::skills::{NewSkill, SkillDefinition, Skills};
 use butler_turn::workspace::{PathForm, ReadFileInput, WorkspaceFiles};
 
 pub(super) fn load_definition() -> Value {
@@ -27,6 +27,61 @@ pub(super) fn read_definition() -> Value {
             "max_bytes":{"type":"integer","minimum":1,"maximum":262_144}},
             "required":["name","relative_path"]},
         "effectBoundary":"none","concurrencySafe":true,"interruptBehavior":"continue","transcriptVisibility":"visible"})
+}
+
+pub(super) fn save_definition() -> Value {
+    json!({"type":"function","name":"save_skill",
+        "description":"Save a skill to the user's skill store. A skill is instructions loaded only when needed (load_skill), unlike a saved rule, which is always in context. The skill is listed and loadable from the next call, with no restart. Saving with an existing user skill's name replaces it. To turn a rule into a skill: save it, check it with list_skills, then remove the rule with forget_explicit_memory. Never write skill files by hand.",
+        "parameters":{"type":"object","additionalProperties":false,"properties":{
+            "name":{"type":"string","description":"Lowercase letters, digits and hyphens, e.g. product-search."},
+            "description":{"type":"string","description":"One line: what the skill does."},
+            "applicability":{"type":"string","description":"One line: when to load it."},
+            "instructions":{"type":"string","description":"The skill body in Markdown."}},
+            "required":["name","description","applicability","instructions"]},
+        "effectBoundary":"turn_local","concurrencySafe":false,"interruptBehavior":"continue","transcriptVisibility":"visible"})
+}
+
+pub(super) async fn save(
+    skills: &Skills,
+    input: CapabilityInvocation<'_>,
+) -> Result<Value, CapabilityError> {
+    let args = &input.call["arguments"];
+    let name = args["name"].as_str().unwrap_or("").trim();
+    let instructions = args["instructions"].as_str().unwrap_or("");
+    let valid_name = !name.is_empty()
+        && name.len() <= 64
+        && name.chars().enumerate().all(|(index, c)| {
+            c.is_ascii_lowercase() || c.is_ascii_digit() || (index > 0 && c == '-')
+        });
+    if !valid_name || instructions.trim().is_empty() {
+        return Ok(failure(
+            "skill_input_invalid",
+            "Skill name must be lowercase letters, digits and hyphens, and instructions must not be empty.",
+            "Fix the name or instructions and save again.",
+        ));
+    }
+    let description = args["description"]
+        .as_str()
+        .unwrap_or("")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let applicability = args["applicability"]
+        .as_str()
+        .unwrap_or("")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let path = skills
+        .save_user(NewSkill {
+            name: name.to_owned(),
+            description,
+            applicability,
+            instructions: instructions.to_owned(),
+        })
+        .await
+        .map_err(|error| CapabilityError::caused(error.code(), error))?;
+    Ok(json!({"ok":true,"name":name,"file_path":path}))
 }
 
 async fn named(

@@ -1,6 +1,6 @@
 //! Retired core skills disappear across updates without deleting custom skills.
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "E2E assertions")]
-mod stub;
+pub(super) mod stub;
 use butler_e2e::e2e::{HarnessError, cassette::Cassette, scenario::Setup};
 use serde_json::{Value, json};
 use std::{fs, path::Path};

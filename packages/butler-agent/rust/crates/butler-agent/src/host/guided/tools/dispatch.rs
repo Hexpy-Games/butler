@@ -237,6 +237,24 @@ async fn read_native(
     encoded(&result.unwrap_or_else(|error| super::message::tool_failure(&call.name, error.code())))
 }
 
+/// Saves a user skill; refused, like rule saves, when the turn cannot save without approval.
+pub(super) async fn save_skill(
+    owner: &GuidedTools,
+    call: &ModelRoundToolCall,
+) -> Result<JsonDocument, ToolExecutionError> {
+    if !owner
+        .access_mode()
+        .allows_without_approval(butler_turn::btcc::ApprovalExemptAction::MemorySave)
+    {
+        return encoded(
+            &json!({"ok":false,"error":{"code":"skill_save_read_only","message":"This Turn is read-only; no skill was saved."}}),
+        );
+    }
+    let args = Value::Object(call.arguments.clone());
+    let result = file_capability(owner, call, &args, false).await;
+    encoded(&result.unwrap_or_else(|error| super::message::tool_failure(&call.name, error.code())))
+}
+
 async fn read_tool_artifact(
     owner: &GuidedTools,
     name: &str,
