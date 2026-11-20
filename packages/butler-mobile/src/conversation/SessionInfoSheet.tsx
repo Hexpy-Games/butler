@@ -11,7 +11,7 @@ export function SessionInfoSheet({ open, onClose, id, title, view }: {
   open: boolean; onClose(): void; id: string; title: string; view: SessionView | null;
 }) {
   const copy = useMobileCopy();
-  const model = useControls(id);
+  const model = useControls(open ? id : undefined);
   const t = useTokens();
   const { client } = useConversation();
   const [pending, setPending] = useState<SessionPendingAsks | null>(null);

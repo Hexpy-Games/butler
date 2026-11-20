@@ -20,7 +20,7 @@ export function PlanUsage({ summary }: { summary: QuotaSummary }) {
     {state === "ready" ? windows.map(window => <View key={window.id} style={{ gap: t.length("--space-1") }}>
       <View style={row}>
         <Text variant="caption">{window.label}</Text>
-        <Text variant="caption" numeric="tabular">{copy.composer.usage.left(`${window.remainingPercent}%`)}</Text>
+        <Text variant="caption" numeric="tabular">{window.remainingPercent === null ? "—" : copy.composer.usage.left(`${Math.round(Math.max(0, Math.min(100, window.remainingPercent)))}%`)}</Text>
       </View>
       {window.caption ? <Text variant="caption" tone="tertiary">{window.caption}</Text> : null}
     </View>) : <Text variant="caption">{state === "loading" ? copy.composer.usage.loading : copy.composer.usage.unavailable}</Text>}

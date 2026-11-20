@@ -56,10 +56,10 @@ export function usageTimeline(view: UsageMonitorView | null, maxBars: number, co
     const [requests = 0, prompt = 0, cached = 0, output = 0, delegated = 0, dRequests = 0, dCached = 0, dOutput = 0] = bucket.values;
     const split = scoped && delegated > 0 && bucket.values.length >= SPLIT_SLOT_VALUES;
     const segment = (id: string, value: number, subtask: number): UsageBarsSegment => split ? { id, value, subtask } : { id, value };
+    const label = usageBucketLabel(bucket.startMs, bucket.endMs, now, grouped.stepHours, copy, locale);
     return {
       ...bucket, requests, prompt, cached, output, delegated, dRequests, total: prompt + output,
-      key: usageBucketLabel(bucket.startMs, bucket.endMs, now, grouped.stepHours, copy, locale),
-      label: usageBucketLabel(bucket.startMs, bucket.endMs, now, grouped.stepHours, copy, locale),
+      key: label, label,
       valueText: `${compactTokens(prompt + output, locale)} ${copy.composer.usage.tokens}`,
       segments: [
         segment("new", Math.max(0, prompt - cached), Math.max(0, delegated - dOutput - dCached)),
