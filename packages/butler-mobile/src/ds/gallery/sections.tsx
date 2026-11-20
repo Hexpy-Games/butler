@@ -303,6 +303,7 @@ function AttachmentTilesSection() {
     { key: "file", name: "Document.pdf", kind: "file", extension: "PDF", meta: "128 KB" },
   ];
   return <>
+    <Text variant="caption" tone="secondary">Tile radius 16: concentric with the composer (28 − 12); approved exception to the 28 container radius.</Text>
     <Cell name="row"><AttachmentTiles layout="row" items={[...items,
       { ...items[0], key: "uploading", upload: "uploading" }, { ...items[1], key: "failed", upload: "failed" },
     ]} onRemove={noop} removeLabel={name => `Remove ${name}`} uploadingLabel="Uploading" failedLabel="Upload failed" /></Cell>

@@ -32,7 +32,11 @@ export interface AttachmentTilesProps {
   failedLabel: string;
 }
 
-// concentric with the composer: RADIUS (28) minus the composer's inner padding (12)
+/**
+ * Tile radius 16 is concentric with the composer (28 − 12 inner padding).
+ * Owner-approved exception to the single 28 container radius: tiles are content
+ * thumbnails, not wrappers (owner, 2026-11-20). This is the only place to change it.
+ */
 const TILE_RADIUS = 16;
 
 function Tile({ item, layout, onRemove, removeLabel, uploadingLabel, failedLabel }: Omit<AttachmentTilesProps, "items"> & { item: AttachmentTile }) {
