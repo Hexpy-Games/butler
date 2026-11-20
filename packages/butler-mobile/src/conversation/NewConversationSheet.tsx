@@ -28,7 +28,7 @@ export function NewConversationSheet({ view }: { view: NavigationView | null }) 
     else setOpen(true);
   };
   return <>
-    <Stack.Screen options={{ ...options, title: copy.conversations.title }} />
+    <Stack.Screen options={{ ...options, title: copy.conversations.title, headerLargeTitle: Platform.OS === "ios" }} />
     {Platform.OS === "ios" ? <Stack.Toolbar placement="bottom">
       <Stack.Toolbar.Spacer />
       <Stack.Toolbar.Button icon="square.and.pencil" accessibilityLabel={appCopy.space.newChat} disabled={!view} onPress={newChat} />
