@@ -14,4 +14,8 @@ with tempfile.TemporaryDirectory(prefix='ci-home-', dir=base) as home, tempfile.
     env.update(HOME=home, BUTLER_DATA=data, TMPDIR=base)
     env.setdefault('CARGO_HOME', str(Path.home() / '.cargo'))
     env.setdefault('RUSTUP_HOME', str(Path.home() / '.rustup'))
+    # rustup proxies in CARGO_HOME/bin keep the named toolchain usable in non-login hooks.
+    cargo_bin = Path(env['CARGO_HOME']) / 'bin'
+    if cargo_bin.is_dir() and str(cargo_bin) not in env.get('PATH', '').split(os.pathsep):
+        env['PATH'] = os.pathsep.join([str(cargo_bin), env.get('PATH', '')])
     sys.exit(subprocess.call(sys.argv[1:], env=env))

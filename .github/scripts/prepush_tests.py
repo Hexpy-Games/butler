@@ -132,6 +132,7 @@ class PrepushChecks(unittest.TestCase):
         calls = []
         host = 'aarch64-apple-darwin'
         with patch.object(prepush, 'output', side_effect=['host: ' + host, host]), \
+                patch.object(prepush, 'tool_available', return_value=True), \
                 patch.object(prepush, 'prerequisites', return_value=['C compiler missing']), \
                 patch.object(prepush, 'run', side_effect=lambda *a: calls.append(a) or True), \
                 contextlib.redirect_stderr(io.StringIO()) as errors, \
@@ -149,6 +150,7 @@ class PrepushChecks(unittest.TestCase):
         host = 'aarch64-apple-darwin'
         for passed in (True, False):
             with self.subTest(passed=passed), \
+                    patch.object(prepush, 'tool_available', return_value=True), \
                     patch.object(prepush, 'output', side_effect=['host: ' + host, host]), \
                     patch.object(prepush, 'prerequisites', return_value=[]), \
                     patch.object(prepush, 'run', side_effect=lambda label, *a:
@@ -202,6 +204,7 @@ class PrepushChecks(unittest.TestCase):
     def test_clippy_lint_and_non_lint_exit_codes_both_fail(self):
         for code in (1, 101):
             with self.subTest(code=code), \
+                    patch.object(prepush, 'tool_available', return_value=True), \
                     patch.object(prepush.subprocess, 'call', return_value=code), \
                     contextlib.redirect_stderr(io.StringIO()) as errors, \
                     contextlib.redirect_stdout(io.StringIO()):
