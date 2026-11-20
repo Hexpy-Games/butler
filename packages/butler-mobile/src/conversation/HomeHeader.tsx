@@ -1,10 +1,8 @@
-import { Animated, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BlurView } from "expo-blur";
 import { ScrollEdgeEffect } from "@bsky.app/expo-scroll-edge-effect";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { EdgeFade, icons, Text, useTokens } from "@/ds";
-import { liquidGlass } from "@/ds/internal/GlassFill";
 
 /** Title row height under the status bar; the list starts below it. */
 export const HOME_HEADER_ROW = 56;
@@ -27,12 +25,11 @@ export function HomeHeader({ scrollY, title, settingsLabel, onSettings }: {
   const shade = scrollY.interpolate({ inputRange: [0, collapse], outputRange: [0, 1], extrapolate: "clamp" });
   const height = insets.top + HOME_HEADER_ROW;
   return <ScrollEdgeEffect edge="top" effect="soft" pointerEvents="box-none" style={{ position: "absolute", top: 0, left: 0, right: 0, height }}>
-    {Platform.OS === "android" ? <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: shade }]}>
+    {/* The base surface fades in as the title collapses, so no row shows through it; the system edge effect (iOS 26+) or the DS edge fade (Android) softens its lower edge. */}
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: shade }]}>
       <View style={{ flex: 1, backgroundColor: t.color("--color-surface-base") }} />
       <EdgeFade edge="top" offset={height} visible />
-    </Animated.View> : !liquidGlass ? <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: shade }]}>
-      <BlurView style={StyleSheet.absoluteFill} tint="systemChromeMaterial" intensity={100} />
-    </Animated.View> : null}
+    </Animated.View>
     <Animated.View pointerEvents="box-none" style={{ position: "absolute", top: insets.top, left: 0, right: 0, height: HOME_HEADER_ROW,
       flexDirection: "row", alignItems: "center", paddingHorizontal: edge, transform: [{ translateY: follow }] }}>
       <Animated.View style={{ flex: 1, transformOrigin: "left center", transform: [{ scale }] }}>
