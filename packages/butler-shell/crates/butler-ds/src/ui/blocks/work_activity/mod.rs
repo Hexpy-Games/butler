@@ -161,6 +161,7 @@ impl RenderOnce for WorkActivityBlock {
         } else {
             Typo::body(self.title)
         }
+        .as_span()
         .selectable(Break::Line)
         .tone(Tone::Secondary)
         .weight(Weight::Regular)
