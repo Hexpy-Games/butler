@@ -537,6 +537,7 @@ export const enUsCopy: AppCopy = {
       infoWorkspace: "Workspace",
       infoNoWorkspace: "No project folder",
       infoAttachments: "Attachments",
+      fileLabel: "File",
       removeAttachment: (name) => `Remove ${name}`,
       contextUsed: (percent) => `${percent}% used`,
       contextTokens: (used, budget) => `${used} of ${budget} tokens`,

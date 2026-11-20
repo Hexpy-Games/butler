@@ -1,15 +1,14 @@
 import { useCallback, useRef, useState } from "react";
-import { FlatList, Image, Platform, View } from "react-native";
+import { FlatList, Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { ScrollEdgeEffectProvider, useScrollEdgeEffectRef } from "@bsky.app/expo-scroll-edge-effect";
-import type { ConversationMessage, MessageFileRef, MessageSendRequest, SessionView } from "../../../butler-protocol/src/index.ts";
+import type { ConversationMessage, MessageSendRequest, SessionView } from "../../../butler-protocol/src/index.ts";
 import { toMarkdown } from "../../../butler-protocol/src/answer-blocks-markdown.ts";
 import { RADIUS } from "@/design/tokens";
 import { reasoningEffortLabel } from "../../../butler-i18n/src/reasoning-effort.ts";
-import { Badge, Button, ButtonGroup, Composer, ComposerDock, ContextRing, EdgeFade, IconButton, icons, ListRow, Markdown, Sheet, showToast, Spinner, Surface, Text, useHeaderInset, useHeaderOptions, useTokens } from "@/ds";
+import { AttachmentTiles, Button, ButtonGroup, Composer, ComposerDock, ContextRing, EdgeFade, IconButton, icons, ListRow, Markdown, Sheet, showToast, Spinner, Surface, Text, useHeaderInset, useHeaderOptions, useTokens } from "@/ds";
 import { useConversation } from "@/conversation/live";
-import type { Pairing } from "@/connection/pairings";
 import { SESSION_PAGE, useSessionView } from "@/conversation/useSessionView";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 
@@ -46,7 +45,10 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length))) ?? [];
   return <Surface variant="base" grow edges={["left", "right"]}>
     <Stack.Screen options={{ ...options, title, headerLargeTitle: false,
-      headerRight: () => <IconButton icon={icons.Info} variant="ghost" label={copy.chat.info} onPress={() => setInfoOpen(true)} /> }} />
+      ...(Platform.OS === "ios" ? {
+        unstable_headerRightItems: () => [{ type: "button", label: copy.chat.info,
+          icon: { type: "sfSymbol", name: "info.circle" }, onPress: () => setInfoOpen(true) }],
+      } : { headerRight: () => <IconButton icon={icons.Info} variant="ghost" label={copy.chat.info} onPress={() => setInfoOpen(true)} /> }) }} />
     <SessionInfoSheet open={infoOpen} onClose={() => setInfoOpen(false)} id={id} title={title} view={view} />
     {error ? <View style={{ flex: 1, justifyContent: "center", padding: t.length("--space-4"), gap: t.length("--space-4") }}>
       <Text tone="danger">{copy.chat.loadFailed}</Text>
@@ -145,8 +147,12 @@ function ChatComposer({ id, view, onHeightChange, onSend }: {
     <Composer value={text} onChangeText={setText} placeholder={copy.chat.placeholder} canSend={canSend}
       mode={turn?.cancellable ? "stop" : "send"} busy={busy} onSend={send} onStop={stop}
       sendLabel={copy.chat.send} stopLabel={copy.chat.stop} attach={{ label: copy.chat.attach, onPress: () => setSheet("attach") }}
-      attachments={attachments.items.map(item => ({ key: item.key, label: item.name, busy: item.status === "uploading",
-        onRemove: () => attachments.remove(item.key), removeLabel: copy.chat.removeAttachment(item.name) }))}
+      attachments={attachments.items.length ? <AttachmentTiles layout="row" items={attachments.items.map(item => ({
+        key: item.key, name: item.name, kind: item.kind, image: item.kind === "image" ? { uri: item.uri } : undefined,
+        extension: item.name.trim().match(/\.([^.]+)$/)?.[1]?.toUpperCase() || copy.chat.fileLabel,
+        upload: item.status === "ready" ? undefined : item.status,
+      }))} onRemove={attachments.remove} removeLabel={copy.chat.removeAttachment}
+        uploadingLabel={copy.chat.uploading} failedLabel={copy.chat.uploadFailed} /> : null}
       leading={model.controls ? <Button variant="ghost" iconEnd={icons.ChevronDown} onPress={() => setSheet("model")}
         label={`${model.current?.display_name ?? model.controls.model} · ${reasoningEffortLabel(model.controls.reasoning_effort, locale)}`} /> : null}
       trailing={view?.context ? <ContextRing ratio={view.context.ratio} label={copy.chat.contextUsed(Math.round(view.context.ratio * 100))}
@@ -168,11 +174,17 @@ function Message({ message, latestTurn }: { message: ConversationMessage; latest
   const t = useTokens();
   const { pairing } = useConversation();
   if (message.role === "user") return <View style={{ alignSelf: "flex-end", maxWidth: "85%", gap: t.length("--space-1") }}>
-    <View style={{ backgroundColor: t.color("--user-message-bg"), borderRadius: t.length(RADIUS),
-      paddingVertical: t.length("--space-3"), paddingHorizontal: t.length("--space-4"), gap: t.length("--space-2") }}>
-      {message.attachments?.map(file => <MessageAttachment key={file.file_id} file={file} pairing={pairing} />)}
-      {message.text ? <Text selectable>{message.text}</Text> : null}
-    </View>
+    {message.text ? <View style={{ backgroundColor: t.color("--user-message-bg"), borderRadius: t.length(RADIUS),
+      paddingVertical: t.length("--space-3"), paddingHorizontal: t.length("--space-4") }}>
+      <Text selectable>{message.text}</Text>
+    </View> : null}
+    {message.attachments?.length ? <AttachmentTiles layout="wrap" items={message.attachments.map(file => ({
+      key: file.file_id, name: file.safe_name, kind: file.kind === "image" || file.mime_type.startsWith("image/") ? "image" : "file",
+      image: pairing && (file.kind === "image" || file.mime_type.startsWith("image/"))
+        ? { uri: new URL(file.url, pairing.origin).href, headers: { Authorization: `Bearer ${pairing.deviceToken}` } } : undefined,
+      extension: file.safe_name.trim().match(/\.([^.]+)$/)?.[1]?.toUpperCase() || copy.chat.fileLabel,
+      meta: file.size_bytes < 1024 * 1024 ? `${Math.round(file.size_bytes / 1024)} KB` : `${(file.size_bytes / (1024 * 1024)).toFixed(1)} MB`,
+    }))} uploadingLabel={copy.chat.uploading} failedLabel={copy.chat.uploadFailed} /> : null}
     <MessageInfo message={message} />
   </View>;
   const failed = message.status === "failed" || message.delivery_state === "system_error" || message.delivery_state === "failed_system";
@@ -217,13 +229,4 @@ function MessageInfo({ message, retryable }: { message: ConversationMessage; ret
     <IconButton icon={icons.Copy} variant="ghost" label={copy.chat.copy} onPress={copyText} />
     {user ? null : time}
   </View>;
-}
-
-function MessageAttachment({ file, pairing }: { file: MessageFileRef; pairing: Pairing | null }) {
-  const t = useTokens();
-  if (file.kind !== "image" && !file.mime_type.startsWith("image/")) return <Badge icon={icons.File} label={file.safe_name} />;
-  if (!pairing) return null;
-  const width = Math.min(file.width ?? 220, 220);
-  return <Image source={{ uri: new URL(file.url, pairing.origin).href, headers: { Authorization: `Bearer ${pairing.deviceToken}` } }} accessibilityLabel={file.safe_name}
-    style={{ width, maxWidth: 220, height: file.width && file.height ? width * file.height / file.width : 160, borderRadius: t.length(RADIUS) }} />;
 }

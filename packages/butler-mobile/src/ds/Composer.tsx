@@ -1,11 +1,9 @@
 import { ScrollEdgeEffect } from "@bsky.app/expo-scroll-edge-effect";
 import { useEffect, useState } from "react";
-import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Keyboard, KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { PILL, RADIUS } from "../design/tokens";
+import { RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
-import { Spinner } from "./Spinner";
-import { Text } from "./Text";
 import { IconButton } from "./Button";
 import { icons } from "./icons";
 import { GlassFill, glassShadow, liquidGlass } from "./internal/GlassFill";
@@ -29,14 +27,13 @@ export interface ComposerProps {
   adjunct?: React.ReactNode;
   leading?: React.ReactNode;
   trailing?: React.ReactNode;
-  attachments?: { key: string; label: string; busy?: boolean; onRemove: () => void; removeLabel: string }[];
+  attachments?: React.ReactNode;
   testID?: string;
 }
 export interface ComposerDockProps { children: React.ReactNode; onHeightChange?: (height: number) => void }
 
-// Eight input lines before the input scrolls (web `8lh`), and the toolbar's 2px button gap.
+// Eight input lines before the input scrolls (web `8lh`).
 const MAX_LINES = 8;
-const TOOLBAR_GAP = 2;
 
 export function Composer({
   value, onChangeText, placeholder, canSend, onSend, mode = "send", onStop, busy, disabled, attach,
@@ -54,16 +51,6 @@ export function Composer({
       {adjunct ? (
         <View style={{ borderColor: divider, borderBottomWidth: t.length("--border-hairline") }}>{adjunct}</View>
       ) : null}
-      {attachments?.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        style={{ borderColor: divider, borderBottomWidth: t.length("--border-hairline") }}
-        contentContainerStyle={{ padding, gap: t.length("--space-2") }}>
-        {attachments.map(item => <View key={item.key} style={{ flexDirection: "row", alignItems: "center",
-          backgroundColor: t.color("--selection-strong"), borderRadius: t.length(PILL),
-          paddingVertical: t.length("--space-1"), paddingHorizontal: t.length("--space-3") }}>
-          <View style={{ maxWidth: 160 }}><Text lines={1}>{item.label}</Text></View>
-          {item.busy ? <Spinner /> : <IconButton icon={icons.X} label={item.removeLabel} onPress={item.onRemove} />}
-        </View>)}
-      </ScrollView> : null}
       <TextInput
         multiline lineBreakStrategyIOS="hangul-word" value={value} onChangeText={onChangeText} placeholder={placeholder}
         placeholderTextColor={t.color("--placeholder")}
@@ -81,12 +68,13 @@ export function Composer({
           lineHeight: t.length("--typo-body-line-height"),
         }}
       />
+      {attachments}
       <View style={{ borderColor: divider, borderTopWidth: t.length("--border-hairline"),
         flexDirection: "row", alignItems: "center", minHeight: t.length("--control-hit-target"),
-        padding: t.length("--space-xs"), gap: TOOLBAR_GAP }}>
+        padding: t.length("--space-xs"), gap: t.length("--space-1") }}>
         {attach ? <IconButton icon={icons.Plus} label={attach.label} onPress={attach.onPress} disabled={disabled} /> : null}
         {leading}
-        <View style={{ flex: 1 }} />
+        <View style={{ flex: 1, minWidth: t.length("--space-2") }} />
         {trailing}
         <SendButton
           mode={mode}

@@ -496,6 +496,7 @@ export interface MobileCopy {
     infoWorkspace: string;
     infoNoWorkspace: string;
     infoAttachments: string;
+    fileLabel: string;
     removeAttachment: (name: string) => string;
     contextUsed: (percent: number) => string;
     contextTokens: (used: string, budget: string) => string;

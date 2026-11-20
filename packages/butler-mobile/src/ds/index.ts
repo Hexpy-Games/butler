@@ -1,3 +1,4 @@
+export { AttachmentTiles, type AttachmentTile, type AttachmentTilesProps } from "./AttachmentTiles";
 export { useTokens } from "../design/useTokens";
 export { Badge, UnreadDot, type BadgeProps, type UnreadDotProps } from "./Badge";
 export { Button, IconButton, type ButtonProps, type ButtonVariant, type IconButtonProps } from "./Button";

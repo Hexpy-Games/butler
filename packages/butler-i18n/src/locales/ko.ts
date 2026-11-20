@@ -535,6 +535,7 @@ export const koKrCopy: AppCopy = {
       infoWorkspace: "작업 위치",
       infoNoWorkspace: "프로젝트 폴더 없음",
       infoAttachments: "첨부 파일",
+      fileLabel: "파일",
       removeAttachment: (name) => `${name} 빼기`,
       contextUsed: (percent) => `${percent}% 사용`,
       contextTokens: (used, budget) => `${budget} 토큰 중 ${used}`,

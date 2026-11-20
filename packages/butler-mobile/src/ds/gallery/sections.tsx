@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Platform, useWindowDimensions, View } from "react-native";
+import { Image, Platform, useWindowDimensions, View } from "react-native";
 import { useTokens } from "../../design/useTokens";
+import { AttachmentTiles, type AttachmentTile } from "../AttachmentTiles";
 import { Badge, UnreadDot } from "../Badge";
 import { Button, IconButton, type ButtonVariant } from "../Button";
 import { ButtonGroup } from "../ButtonGroup";
@@ -283,12 +284,27 @@ function ComposerSection() {
       {cell("with attach", { attach: { label: en.attach, onPress: noop } })}
       {cell("with controls", { leading: <Button variant="ghost" label="GPT-6 Sol · Low" onPress={noop} />,
         trailing: <ContextRing ratio={0.5} label="50% used" onPress={noop} />,
-        attachments: [{ key: "file", label: "Photo.png", onRemove: noop, removeLabel: "Remove Photo.png" }] })}
+        attachments: <AttachmentTiles layout="row" items={[{ key: "file", name: "Photo.png", kind: "file", extension: "PNG" }]}
+          onRemove={noop} removeLabel={name => `Remove ${name}`} uploadingLabel="Uploading" failedLabel="Upload failed" /> })}
       {cell("with adjunct", { adjunct: <Text tone="secondary">{en.note}</Text> })}
       {cell("send pressed", { value: en.sentence, canSend: true }, "pressed")}
       <Cell name="Live"><Floating height={height}><LiveComposer /></Floating></Cell>
     </>
   );
+}
+
+function AttachmentTilesSection() {
+  const image = Image.resolveAssetSource(require("../../../../../assets/readme/mark-light.png"))!;
+  const items: AttachmentTile[] = [
+    { key: "image", name: "Photo.png", kind: "image", image: { uri: image.uri }, extension: "PNG" },
+    { key: "file", name: "Document.pdf", kind: "file", extension: "PDF", meta: "128 KB" },
+  ];
+  return <>
+    <Cell name="row"><AttachmentTiles layout="row" items={[...items,
+      { ...items[0], key: "uploading", upload: "uploading" }, { ...items[1], key: "failed", upload: "failed" },
+    ]} onRemove={noop} removeLabel={name => `Remove ${name}`} uploadingLabel="Uploading" failedLabel="Upload failed" /></Cell>
+    <Cell name="wrap"><AttachmentTiles layout="wrap" items={items} uploadingLabel="Uploading" failedLabel="Upload failed" /></Cell>
+  </>;
 }
 
 function LiveSheet({ initial }: { initial: boolean }) {
@@ -357,6 +373,7 @@ export const sections: { id: string; title: string; render: (state?: string) => 
   { id: "badge", title: "Badge", render: () => <BadgeSection /> },
   { id: "context-ring", title: "ContextRing", render: () => <>{[0.05, 0.5, 0.95].map(ratio =>
     <Cell key={ratio} name={String(ratio)}><ContextRing ratio={ratio} label={`${ratio * 100}% used`} onPress={noop} /></Cell>)}</> },
+  { id: "attachment-tiles", title: "AttachmentTiles", render: () => <AttachmentTilesSection /> },
   { id: "composer", title: "Composer", render: () => <ComposerSection /> },
   { id: "sheet", title: "Sheet", render: (state) => <SheetSection state={state} /> },
   { id: "toast", title: "Toast", render: (state) => <ToastSection state={state} /> },
