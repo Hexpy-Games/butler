@@ -7,11 +7,8 @@ use gpui::{
     LayoutId, Pixels, Window,
 };
 
-use crate::tokens::{Color, Density, Duration as DsDuration, Easing};
-use crate::ui::blocks::adaptive_shell::frame::clamp_chat_width;
-use crate::ui::blocks::adaptive_shell::split::shared_room;
+use crate::tokens::{Color, Density};
 use crate::ui::context::Ds;
-use crate::ui::motion::Timing;
 
 /// How the app shell frames its content (shellFrame.ts).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -60,24 +57,17 @@ pub struct SplitMotion {
     pub fade: f32,
     pub open: bool,
     pub chat_width: f32,
+    /// The chat column's width on screen while the pane moves (`None` at rest): one retained
+    /// transition from the width on screen, so a room that changes as the motion starts never jumps it.
+    pub chat_now: Option<f32>,
     /// The split's width, which the chat and the pane share (0 before the shell lays it out).
     pub room: f32,
 }
 
 impl SplitMotion {
-    /// The chat column's width this frame while the pane moves (`None` at rest or without a room):
-    /// the split's room with the pane closed, the clamped chat width with it open, on the panel motion's eased value.
-    pub fn moving_chat_width(&self, ds: &Ds, cards: bool) -> Option<f32> {
-        let timing = Timing::token(
-            ds,
-            DsDuration::AdaptivePanelDuration,
-            Easing::AdaptivePanelEasing,
-        );
-        let m = self
-            .motion
-            .filter(|m| m.moving(&timing) && self.room > 0.)?;
-        let open = clamp_chat_width(self.chat_width, shared_room(self.room, cards, ds));
-        Some(open + (self.room - open) * (1. - m.value(&timing)))
+    /// The chat column's width this frame while the pane moves (`None` at rest).
+    pub fn moving_chat_width(&self) -> Option<f32> {
+        self.chat_now
     }
 }
 

@@ -390,7 +390,7 @@ impl RenderOnce for TitlebarShell {
         // While the pane moves the group follows the chat card's per-frame width.
         let moving = vars
             .and_then(|v| v.split)
-            .and_then(|s| s.moving_chat_width(ds, vars.is_some_and(|v| v.cards_docked)));
+            .and_then(|s| s.moving_chat_width());
         let chat = moving.or(self
             .split_chat_width
             .map(|width| clamp_chat_width(width, f32::INFINITY)));

@@ -309,6 +309,7 @@ impl RenderOnce for AdaptiveShellSplit {
             fade: f32::from(u8::from(self.pane_open)),
             open: self.pane_open,
             chat_width: self.chat_width,
+            chat_now: None,
             room: 0.,
         });
         let ds = Ds::get(cx);
@@ -340,7 +341,7 @@ impl RenderOnce for AdaptiveShellSplit {
         let width = clamp_chat_width(self.chat_width, room);
         // The flow stays at the open layout: the chat column's width moves per frame while the
         // pane travels, and its margin keeps the handle and the pane in place.
-        let moving = motion.moving_chat_width(ds, cards);
+        let moving = motion.moving_chat_width();
         if moving.is_some() {
             let view = self.frame_view.unwrap_or_else(|| window.current_view());
             layout_frame_for(window, view);

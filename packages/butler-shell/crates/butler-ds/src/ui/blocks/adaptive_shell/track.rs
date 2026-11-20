@@ -140,6 +140,7 @@ fn split_motion(
         fade_motion: Some(faded),
         open: split.open,
         chat_width: split.chat_width,
+        chat_now: None,
         room: 0.,
     })
 }
