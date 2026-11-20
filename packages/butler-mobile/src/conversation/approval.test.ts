@@ -34,3 +34,13 @@ test("withQuestionAnswers places the answer after the asking message and before 
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length))))
     .toEqual([user, { id: answer.request_ref, questionAnswer: answer }, continuation]);
 });
+
+test("withQuestionAnswers replaces the deferred follow-up message with the answer", () => {
+  const user: ConversationMessage = { id: "user", turn_id: "t1", role: "user", text: "Question" };
+  const assistant: ConversationMessage = { id: "assistant", turn_id: "t1", role: "assistant", text: "Continuing" };
+  const followup: ConversationMessage = { id: "followup", role: "user", text: "Answers to your deferred questions: Details" };
+  const answer: AnsweredUserQuestions = { request_ref: "answer", source_turn_id: "t1", followup_message_id: followup.id,
+    updated_at: "2026-11-20T00:00:00Z", questions: { questions: [] }, response: { status: "answered", answers: [] } };
+  expect(withQuestionAnswers([user, assistant, followup], [answer], () => true))
+    .toEqual([user, assistant, { id: answer.request_ref, questionAnswer: answer }]);
+});

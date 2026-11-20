@@ -74,8 +74,10 @@ export function useSessionView(id: string) {
 
 function mergeSessionView(previous: SessionView | null, next: SessionView, older: boolean): SessionView {
   if (!previous) return next;
+  const answers = new Map([...(previous.question_answers ?? []), ...(next.question_answers ?? [])].map(answer => [answer.request_ref, answer]));
   if (older) return {
     ...previous, messages: mergeMessages(previous.messages, next.messages),
+    question_answers: [...answers.values()],
     message_window: { ...previous.message_window, previous_cursor_token: next.message_window.previous_cursor_token, has_more: next.message_window.has_more },
   };
   const first = next.messages[0], last = next.messages.at(-1);
@@ -84,6 +86,7 @@ function mergeSessionView(previous: SessionView | null, next: SessionView, older
     || !first || !last || before(message, first) || before(last, message));
   return {
     ...next, messages: mergeMessages(retained, next.messages),
+    question_answers: [...answers.values()],
     message_window: retained.length ? {
       ...next.message_window, previous_cursor_token: previous.message_window.previous_cursor_token, has_more: previous.message_window.has_more,
     } : next.message_window,

@@ -432,14 +432,16 @@ export function withQuestionAnswers(
     previousMessage.set(message.id, messages[index - 1]?.id);
   }
   const after = new Map<string | undefined, ConversationRow[]>();
+  const replaced = new Set<string>();
   for (const answer of answers) {
     if (answer.response.status !== "answered") continue;
-    const id = firstAssistant.get(answer.source_turn_id) ?? lastMessage.get(answer.source_turn_id) ?? (previousMessage.has(answer.followup_message_id)
-      ? previousMessage.get(answer.followup_message_id) : messages.at(-1)?.id);
+    const id = previousMessage.has(answer.followup_message_id) ? previousMessage.get(answer.followup_message_id)
+      : firstAssistant.get(answer.source_turn_id) ?? lastMessage.get(answer.source_turn_id) ?? messages.at(-1)?.id;
+    replaced.add(answer.followup_message_id);
     const rows = after.get(id) ?? [];
     rows.push({ id: answer.request_ref, questionAnswer: answer });
     after.set(id, rows);
   }
   return [...(after.get(undefined) ?? []), ...messages.flatMap(message => [message, ...(after.get(message.id) ?? [])])]
-    .filter(row => "questionAnswer" in row || visible(row));
+    .filter(row => "questionAnswer" in row || (!replaced.has(row.id) && visible(row)));
 }

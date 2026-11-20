@@ -47,6 +47,7 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
   const rows = withQuestionAnswers(view?.messages ?? [], view?.question_answers ?? [], message => message.role === "user"
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length)));
   const decision = view ? pendingDecision(view) : null;
+  const hasDecision = !!decision && (decision.kind !== "question" || decision.request.question_state === "pending");
   useEffect(() => {
     if (atBottom.current && rows.length) {
       requestAnimationFrame(() => list.current?.getNativeScrollRef()?.scrollToEnd({ animated: true }));
@@ -88,20 +89,20 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
       }}
       ListHeaderComponent={loadingEarlier ? <Spinner label={copy.chat.earlier} /> : undefined}
       ListFooterComponent={<View style={{ paddingBottom: dockHeight, gap: t.length("--space-4") }}>
-        {view ? <TurnStatus view={view} hasDecision={!!decision} /> : null}
+        {view ? <TurnStatus view={view} hasDecision={hasDecision} /> : null}
         {view && decision ? <PendingRequest decision={decision} view={view} reload={reload} /> : null}
       </View>}
     />}
     <EdgeFade edge="top" offset={headerInset} visible={scrolled} />
     <EdgeFade edge="bottom" offset={dockHeight} visible={!bottom} />
-    <ChatComposer id={id} view={view} hasDecision={!!decision} onHeightChange={setDockHeight}
+    <ChatComposer id={id} view={view} hasDecision={hasDecision} onHeightChange={setDockHeight}
       onSend={() => { atBottom.current = true; setBottom(true); }} />
   </Surface>;
 }
 
 function PendingRequest({ decision, view, reload }: { decision: PendingDecision; view: SessionView; reload(): void }) {
   if (decision.kind === "question") return <QuestionCard key={decision.request.request_ref} request={decision.request} sessionId={view.session_id} reload={reload} />;
-  if (decision.kind === "handoff") return <BrowserHandoffCard key={decision.card.requestRef} card={decision.card} turn={view.active_turn} reload={reload} />;
+  if (decision.kind === "handoff") return <BrowserHandoffCard key={decision.card.requestRef} card={decision.card} sessionId={view.session_id} turn={view.active_turn} reload={reload} />;
   return <ApprovalCard key={decision.card.requestRef} card={decision.card} count={decision.count} sessionId={view.session_id} reload={reload} />;
 }
 

@@ -23,14 +23,16 @@ export function QuestionCard({ request, sessionId, reload }: { request: PendingU
       const result = await client.request<AuthorityDecisionResult>(
         `/authority-requests/${encodeURIComponent(request.request_ref)}/answer?session_id=${encodeURIComponent(sessionId)}`, { body: response });
       if (result.request_ref !== request.request_ref || result.decision !== "modified" || result.scheduled !== true) throw new Error("Answer not accepted");
+      setPending("done");
       reload();
-    } catch { setFailed(true); }
-    finally { inFlight.current = false; setPending(undefined); }
+    } catch { setFailed(true); inFlight.current = false; setPending(undefined); }
   };
   const update = (id: string, patch: Partial<QuestionDraft>, send = false) => {
-    const next = draft.map(a => a.id === id ? { ...a, ...patch } : a);
-    setDraft(next);
-    if (send) void submit({ status: "answered", answers: answerWire(questions, next) }, "send");
+    setDraft(previous => {
+      const next = previous.map(a => a.id === id ? { ...a, ...patch } : a);
+      if (send) void submit({ status: "answered", answers: answerWire(questions, next) }, "send");
+      return next;
+    });
   };
   const ready = draft.every(a => a.selected.length > 0 || a.text.trim() || a.other.trim());
   return <DecisionCard eyebrow={questions[0].eyebrow} title={questions[0].title}
