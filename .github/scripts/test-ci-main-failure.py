@@ -335,6 +335,17 @@ class Followup(unittest.TestCase):
                 failure.resolve(REPO, dict(dict(RUN, id=12, conclusion='success'), **update))
             self.assertEqual(github.writes, [], update)
 
+    # test-category: pure-logic
+    def test_jobs_without_a_runner_are_rerun_once_before_reporting(self):
+        unacquired = dict(name='macos-archive', html_url='job-url', conclusion='cancelled', runner_name=None)
+        second = dict(RUN, run_attempt=2, status='completed', conclusion='success')
+        github = FakeGitHub(jobs=[unacquired, FAILED_JOB])
+        with github.patches(), patch.object(failure, 'api', return_value=second) as api, \
+                patch.object(failure.subprocess, 'check_call') as rerun, patch.object(failure.time, 'sleep'):
+            failure.report(REPO, RUN)
+        rerun.assert_called_once_with(['gh', 'api', '--method', 'POST', f'repos/{REPO}/actions/runs/10/rerun-failed-jobs'])
+        api.assert_called_once_with(f'repos/{REPO}/actions/runs/10')
+
 
 if __name__ == '__main__':
     unittest.main()
