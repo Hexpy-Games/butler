@@ -24,10 +24,13 @@ test("answerWire maps a single-choice pick and a text answer", () => {
   ]);
 });
 
-test("withQuestionAnswers places the answer after its user turn and before the follow-up", () => {
+test("withQuestionAnswers places the answer after the asking message and before the continuation", () => {
   const user: ConversationMessage = { id: "user", turn_id: "t1", role: "user", text: "Question" };
-  const followup: ConversationMessage = { id: "follow-up", turn_id: "t2", role: "assistant", text: "Follow-up" };
-  const answer: AnsweredUserQuestions = { request_ref: "answer", source_turn_id: "t1", followup_message_id: followup.id,
+  const asking: ConversationMessage = { id: "asking", turn_id: "t1", role: "assistant", text: "" };
+  const continuation: ConversationMessage = { id: "continuation", turn_id: "t1", role: "assistant", text: "Got it" };
+  const answer: AnsweredUserQuestions = { request_ref: "answer", source_turn_id: "t1", followup_message_id: "client-id",
     updated_at: "2026-11-20T00:00:00Z", questions: { questions: [] }, response: { status: "answered", answers: [] } };
-  expect(withQuestionAnswers([user, followup], [answer])).toEqual([user, { id: answer.request_ref, questionAnswer: answer }, followup]);
+  expect(withQuestionAnswers([user, asking, continuation], [answer], message => message.role === "user"
+    || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length))))
+    .toEqual([user, { id: answer.request_ref, questionAnswer: answer }, continuation]);
 });

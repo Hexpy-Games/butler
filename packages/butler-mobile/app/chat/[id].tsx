@@ -44,12 +44,11 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
   const [bottom, setBottom] = useState(true);
   const [scrolled, setScrolled] = useState(false);
   const [dockHeight, setDockHeight] = useState(0);
-  const messages = view?.messages.filter(message => message.role === "user"
-    || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length))) ?? [];
-  const rows = withQuestionAnswers(messages, view?.question_answers ?? []);
+  const rows = withQuestionAnswers(view?.messages ?? [], view?.question_answers ?? [], message => message.role === "user"
+    || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length)));
   const decision = view ? pendingDecision(view) : null;
   useEffect(() => {
-    if (atBottom.current && messages.length) {
+    if (atBottom.current && rows.length) {
       requestAnimationFrame(() => list.current?.getNativeScrollRef()?.scrollToEnd({ animated: true }));
     }
   }, [dockHeight]);
@@ -80,12 +79,12 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
       onScrollEndDrag={({ nativeEvent }) => { atBottom.current = nearEnd(nativeEvent); }}
       onMomentumScrollEnd={({ nativeEvent }) => { atBottom.current = nearEnd(nativeEvent); }}
       onContentSizeChange={() => {
-        if (!messages.length) return;
+        if (!rows.length) return;
         if (first.current || atBottom.current) {
-          list.current?.getNativeScrollRef()?.scrollToEnd({ animated: !first.current && messages.length !== count.current });
+          list.current?.getNativeScrollRef()?.scrollToEnd({ animated: !first.current && rows.length !== count.current });
         }
         first.current = false;
-        count.current = messages.length;
+        count.current = rows.length;
       }}
       ListHeaderComponent={loadingEarlier ? <Spinner label={copy.chat.earlier} /> : undefined}
       ListFooterComponent={<View style={{ paddingBottom: dockHeight, gap: t.length("--space-4") }}>

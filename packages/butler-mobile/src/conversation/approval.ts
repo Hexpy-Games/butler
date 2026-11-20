@@ -418,21 +418,28 @@ export function pendingDecision(view: SessionView): PendingDecision | null {
 
 export type ConversationRow = ConversationMessage | { id: string; questionAnswer: AnsweredUserQuestions };
 
-export function withQuestionAnswers(messages: ConversationMessage[], answers: readonly AnsweredUserQuestions[]): ConversationRow[] {
+export function withQuestionAnswers(
+  messages: ConversationMessage[], answers: readonly AnsweredUserQuestions[], visible: (message: ConversationMessage) => boolean,
+): ConversationRow[] {
+  const firstAssistant = new Map<string, string>();
   const lastMessage = new Map<string, string>();
   const previousMessage = new Map<string, string | undefined>();
   for (const [index, message] of messages.entries()) {
     if (message.turn_id) lastMessage.set(message.turn_id, message.id);
+    if (message.turn_id && message.role === "assistant" && !firstAssistant.has(message.turn_id)) {
+      firstAssistant.set(message.turn_id, message.id);
+    }
     previousMessage.set(message.id, messages[index - 1]?.id);
   }
   const after = new Map<string | undefined, ConversationRow[]>();
   for (const answer of answers) {
     if (answer.response.status !== "answered") continue;
-    const id = lastMessage.get(answer.source_turn_id) ?? (previousMessage.has(answer.followup_message_id)
+    const id = firstAssistant.get(answer.source_turn_id) ?? lastMessage.get(answer.source_turn_id) ?? (previousMessage.has(answer.followup_message_id)
       ? previousMessage.get(answer.followup_message_id) : messages.at(-1)?.id);
     const rows = after.get(id) ?? [];
     rows.push({ id: answer.request_ref, questionAnswer: answer });
     after.set(id, rows);
   }
-  return [...(after.get(undefined) ?? []), ...messages.flatMap(message => [message, ...(after.get(message.id) ?? [])])];
+  return [...(after.get(undefined) ?? []), ...messages.flatMap(message => [message, ...(after.get(message.id) ?? [])])]
+    .filter(row => "questionAnswer" in row || visible(row));
 }
