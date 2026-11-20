@@ -1,5 +1,6 @@
 //! AddressRow and BrowserOptions.
 use super::{
+    agent_host::Hosted,
     area::{AreaState, result},
     model::{BrowserState, Tab, TabStatus},
 };
@@ -29,9 +30,15 @@ enum Nav {
     Reload,
 }
 
+/// Electron `AddressRow`: the Agent acting in the page it holds locks the row.
+fn locked(tab: Option<&Tab>) -> bool {
+    tab.and_then(|t| t.hosted.as_ref())
+        .is_some_and(Hosted::in_use)
+}
+
 fn navigation(tab: Option<&Tab>, cx: &App) -> BrowserToolbar {
     let c = BrowserStrings::get(cx);
-    let enabled = cx.global::<BrowserState>().enabled();
+    let enabled = cx.global::<BrowserState>().enabled() && !locked(tab);
     let mut toolbar = BrowserToolbar::new("browser-toolbar");
     for (action, name, label, glyph, disabled) in [
         (
@@ -104,7 +111,7 @@ fn nav_button(
 
 fn address(tab: Option<&Tab>, state: &Entity<AreaState>, cx: &mut App) -> AddressField {
     let c = BrowserStrings::get(cx);
-    let enabled = cx.global::<BrowserState>().enabled();
+    let enabled = cx.global::<BrowserState>().enabled() && !locked(tab);
     let url = tab.map_or("", |t| t.url.as_str());
     super::bookmarks::lookup(state, url, cx);
     let editing = state.clone();
@@ -183,7 +190,7 @@ pub(super) fn toolbar(
                 }),
             );
         });
-    if url.is_empty() {
+    if url.is_empty() || locked(tab) {
         pick = pick.disabled();
     }
     let mut toolbar = toolbar

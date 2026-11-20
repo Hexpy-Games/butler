@@ -112,6 +112,7 @@ pub(crate) enum BrowserError {
     InvalidAddress,
     UnknownTab,
     InvalidMove,
+    AgentControl,
 }
 
 impl fmt::Display for BrowserError {
@@ -124,6 +125,7 @@ impl fmt::Display for BrowserError {
             Self::InvalidAddress => "invalid_address",
             Self::UnknownTab => "unknown_tab",
             Self::InvalidMove => "invalid_move",
+            Self::AgentControl => "agent_control",
         })
     }
 }
@@ -147,6 +149,8 @@ pub(crate) struct BrowserState {
     pub(super) active: Option<TabId>,
     pub(super) next_id: u64,
     pub(super) publisher: super::host::Publisher,
+    /// The browser area rendered since it was last hidden.
+    pub(super) area_shown: bool,
     /// The Agent's calls in flight; hosted pages stay awake while it is above zero and they open.
     pub(super) calls: u32,
 }
@@ -168,6 +172,7 @@ impl BrowserState {
             tabs: Vec::new(),
             active: None,
             next_id: 0,
+            area_shown: false,
             calls: 0,
         });
         super::agent_host::start(cx);
@@ -194,6 +199,7 @@ impl BrowserState {
     }
 
     pub(crate) fn show(&mut self, id: Option<&TabId>) {
+        self.area_shown = true;
         self.engine.show(id);
     }
     pub(crate) fn frame_size(&self, id: &TabId) -> Option<(usize, usize)> {
@@ -248,6 +254,7 @@ impl BrowserState {
 
     pub(crate) fn activate(&mut self, id: &TabId) {
         if self.tab(id).is_some() {
+            self.hand_over(id);
             self.active = Some(id.clone());
         }
     }
@@ -265,9 +272,7 @@ impl BrowserState {
         }
         self.publisher.changed(&self.tabs);
         super::agent_host::closed(cx, &removed);
-        if self.active.as_ref() == Some(id) {
-            self.active = self.tabs.last().map(|tab| tab.id.clone());
-        }
+        self.reselect(id);
     }
 
     fn drop_placeholders(&mut self, owner: &Owner, cx: &mut App) {
@@ -362,7 +367,7 @@ impl BrowserState {
         if !self.enabled() {
             return Err(BrowserError::BrowsingDisabled);
         }
-        Ok(())
+        self.agent_gate(id)
     }
 
     pub(crate) fn back(&mut self, id: &TabId) -> Result<(), BrowserError> {

@@ -13,8 +13,10 @@ use gpui::{AnyElement, App, IntoElement as _, SharedString, Window};
 use serde_json::{Value, json};
 
 use super::DecisionCtx;
+use crate::ui::browser::open_handoff;
 use crate::ui::i18n::browser_handoff::BrowserHandoff;
 use crate::ui::source::agent::Jobs;
+use butler_shell_client::ShellClient;
 
 pub(crate) use stills::browser_step_still;
 
@@ -25,8 +27,7 @@ struct HandoffView {
     sign_in: bool,
 }
 
-/// `browserHandoffView`. The shell has no browser tab to open, so the place is always the
-/// desktop line (`canOpenTab` is false).
+/// `browserHandoffView`: the desktop app always has a browser, so the place is the tab.
 fn handoff_view(request: &Value, lang: Lang, copy: &BrowserHandoff) -> Option<HandoffView> {
     let operation = request.pointer("/approval/operation")?;
     let field = |name: &str| operation.get(name).and_then(Value::as_str);
@@ -41,7 +42,7 @@ fn handoff_view(request: &Value, lang: Lang, copy: &BrowserHandoff) -> Option<Ha
         Some(site) => format!("{site} · {step}"),
         None => step.to_owned(),
     };
-    let place = copy.on_desktop.to_owned();
+    let place = copy.in_tab.to_owned();
     match field("tool")? {
         "browser_sign_in_wait" => {
             let step =
@@ -79,8 +80,13 @@ fn handoff_view(request: &Value, lang: Lang, copy: &BrowserHandoff) -> Option<Ha
 
 #[derive(Clone)]
 enum Stop {
-    Child { relation: String, parent: String },
+    Child {
+        relation: String,
+        parent: String,
+    },
     Turn(Option<String>),
+    /// A conversation that need not be open: the active turn its session view names.
+    Session(String),
 }
 
 /// Stop ends the work that raised the request: a delegated task's waiting turn, or this conversation's own.
@@ -89,7 +95,7 @@ fn stop(target: Stop, cx: &mut App) {
     let failed = match &target {
         Stop::Child { .. } => copy.steward_stop_failed,
         Stop::Turn(None) => return,
-        Stop::Turn(Some(_)) => copy.stop_failed,
+        Stop::Turn(Some(_)) | Stop::Session(_) => copy.stop_failed,
     };
     let done = Jobs::run(cx, move |client| async move {
         match target {
@@ -99,6 +105,7 @@ fn stop(target: Stop, cx: &mut App) {
                 .is_ok(),
             Stop::Turn(Some(turn)) => client.cancel_turn(&turn).await.is_ok(),
             Stop::Turn(None) => false,
+            Stop::Session(session) => cancel_active(&client, &session).await,
         }
     });
     cx.spawn(async move |cx| {
@@ -109,16 +116,35 @@ fn stop(target: Stop, cx: &mut App) {
     .detach();
 }
 
+/// Electron `stopBrowserTurn`: cancels `session`'s active turn when it can be cancelled; with
+/// none there is nothing to stop.
+async fn cancel_active(client: &ShellClient, session: &str) -> bool {
+    let Ok(view) = client.message_window(session, None, 1).await else {
+        return false;
+    };
+    let turn = &view["active_turn"];
+    match (turn["id"].as_str(), turn["cancellable"].as_bool()) {
+        (Some(id), Some(true)) => client.cancel_turn(id).await.is_ok(),
+        _ => true,
+    }
+}
+
+/// Stop task on a conversation's browser tab.
+pub(crate) fn stop_conversation(session: &str, cx: &mut App) {
+    stop(Stop::Session(session.to_owned()), cx);
+}
+
 /// ComposerBrowserHandoffSurface; `None` when this session has nothing for it.
 pub(crate) fn browser_surface(
     ctx: DecisionCtx<'_>,
     placement: Placement,
-    _window: &mut Window,
+    window: &mut Window,
     cx: &mut App,
 ) -> Option<AnyElement> {
     let requests = super::authority::valid_requests(ctx.view.authority_requests.as_deref()?);
     let request = *requests.first()?;
     let copy = BrowserHandoff::get(cx);
+    let session = ctx.view.session_id.clone();
     let handoff = handoff_view(request, Ds::get(cx).lang(), copy)?;
     let turn = ctx.view.active_turn.as_ref().map(|turn| turn.id.clone());
     let target = request
@@ -147,6 +173,7 @@ pub(crate) fn browser_surface(
             Icon::Globe2
         },
         handoff.title,
+        // Electron `onOpenSource` scrolls to the turn; the shell has no such action.
         |_, _, _| {},
     )
     .placement(placement)
@@ -158,6 +185,22 @@ pub(crate) fn browser_surface(
         })
         .icon(Icon::Square),
     );
+    if request
+        .pointer("/approval/operation/tool")
+        .and_then(Value::as_str)
+        .is_some_and(|tool| tool.starts_with("browser_"))
+        && let Some(tab) = request
+            .pointer("/approval/operation/browser_tab")
+            .and_then(Value::as_str)
+        && let Some(media) = crate::ui::browser::handoff_media(&session, tab, window, cx)
+    {
+        panel = panel.media(media);
+    }
+    panel = panel.action(Action::new(
+        copy.open_tab,
+        Variant::Default,
+        move |_, cx| open_handoff(&session, cx),
+    ));
     if requests.len() > 1 {
         panel = panel.aside(Typo::caption(format!("+{}", requests.len() - 1)));
     }

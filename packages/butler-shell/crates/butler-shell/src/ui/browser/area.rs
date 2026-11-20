@@ -1,25 +1,21 @@
 //! The browser sheet (`BrowserArea.tsx`), shared by the hub and conversation slot.
 use super::{
+    agent_host::{ShownHolder, shown_holder},
     engine::TabId,
     model::{BrowserError, BrowserState, Owner, Tab, TabStatus},
     shell_state::BrowserShell,
 };
-use crate::ui::{
-    i18n::browser::BrowserStrings,
-    manage,
-    widgets::{anchor, anchored},
-};
+use crate::ui::{i18n::browser::BrowserStrings, manage, widgets::anchor};
 use butler_ds::ui::blocks::{
     browser_pane::{BrowserPane, PanePlacement},
     empty_line::EmptyLine,
-    page_band::{PageBand, PageBandTone},
-    page_card::PageCard,
+    page_card::{PageCard, PageCardHolder},
 };
 use butler_ds::ui::{
     button::{Button, Variant},
     toast::{self, Toast},
 };
-use gpui::{AnyElement, App, Entity, Window, div, prelude::*};
+use gpui::{AnyElement, App, Entity, SharedString, Window, div, prelude::*};
 use std::collections::HashSet;
 
 gpui::actions!(browser, [FocusAddress, NewTab, CloseTab, Back, Forward]);
@@ -124,17 +120,37 @@ fn shown(session: Option<&str>, state: &Entity<AreaState>, cx: &mut App) -> Vec<
     }
     tabs
 }
+/// Who the card shows holding `tab` (Electron `browserHolder`).
+fn card_holder(tab: &Tab) -> PageCardHolder {
+    match shown_holder(tab) {
+        ShownHolder::None => PageCardHolder::None,
+        ShownHolder::Butler => PageCardHolder::Butler,
+        ShownHolder::User => PageCardHolder::User,
+        ShownHolder::Waiting => PageCardHolder::Waiting,
+    }
+}
 fn page(tab: Option<&Tab>, key: &str, window: &mut Window, cx: &mut App) -> PageCard {
     let c = BrowserStrings::get(cx);
     let enabled = cx.global::<BrowserState>().enabled();
     let empty = tab.is_none_or(|t| t.url.is_empty());
     let crashed = tab.is_some_and(|t| t.status == TabStatus::Crashed);
-    let mut page = PageCard::new("browser-page")
+    // Each tab its own card: a card keeps the bounds it last reported, so a shared one never
+    // reports them to another tab of the same size.
+    let card = tab.map_or_else(
+        || SharedString::from("browser-page"),
+        |t| SharedString::from(format!("browser-page-{}", t.id.0)),
+    );
+    let mut page = PageCard::new(card)
         .panel_id("browser-page")
         .reserve_band()
         .hidden(empty || crashed || !enabled);
     if let Some(tab) = tab {
-        if let Some(band) = popup_band(tab, cx) {
+        page = page.holder(card_holder(tab));
+        // A hosted page keeps the size the Agent's tools measure against (`fix_hosted_size`).
+        if tab.hosted.as_ref().is_some_and(|hosted| !hosted.internal) {
+            page = page.viewport(gpui::size(1280., 800.));
+        }
+        if let Some(band) = super::holder_band::band(tab, cx) {
             page = page.band(band);
         }
         if let Some(dialog) = &tab.dialog {
@@ -231,7 +247,8 @@ pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut 
         PanePlacement::Conversation
     } else {
         PanePlacement::Standalone
-    });
+    })
+    .holder(tab.map_or(PageCardHolder::None, card_holder));
     let focus = state.read(cx).focus.clone();
     anchor(div().id("browser-area"), "browser-area")
         .track_focus(&focus)
@@ -268,60 +285,4 @@ fn area_state(session: Option<&str>, window: &mut Window, cx: &mut App) -> Entit
 pub(crate) fn focus_address(owner: Owner, cx: &mut App) {
     cx.global_mut::<BrowserShell>().address_focus = Some(owner);
     cx.refresh_windows();
-}
-
-fn popup_band(tab: &Tab, cx: &App) -> Option<PageBand> {
-    let c = BrowserStrings::get(cx);
-    let id = tab.id.clone();
-    if let Some(blocked) = &tab.blocked_popup {
-        let mut band =
-            PageBand::new("browser-band", PageBandTone::Info, c.popup_blocked).icon(popup_icon(cx));
-        if blocked.reason == "no_gesture" {
-            band = band.actions(anchored(
-                Button::new("browser-popup-allow")
-                    .size(butler_ds::ui::button::Size::Xs)
-                    .variant(Variant::Ghost)
-                    .text(c.allow)
-                    .on_click(move |_, _, cx| {
-                        cx.global_mut::<BrowserState>().allow_popup(&id);
-                        cx.refresh_windows();
-                    }),
-                "browser-popup-allow",
-            ));
-        }
-        return Some(band);
-    }
-    let popup = cx
-        .global::<BrowserState>()
-        .tabs()
-        .iter()
-        .find(|t| t.opener.as_ref() == Some(&tab.id))?;
-    let host = url::Url::parse(&popup.url)
-        .ok()
-        .map(|u| u[url::Position::BeforeHost..url::Position::AfterPort].to_owned())
-        .unwrap_or_default();
-    let child = popup.id.clone();
-    Some(
-        PageBand::new("browser-band", PageBandTone::Info, c.popup_opened)
-            .icon(popup_icon(cx))
-            .detail(host)
-            .actions(anchored(
-                Button::new("browser-popup-show")
-                    .size(butler_ds::ui::button::Size::Xs)
-                    .variant(Variant::Ghost)
-                    .text(c.show_popup)
-                    .on_click(move |_, _, cx| super::popup_window::focus(&child, cx)),
-                "browser-popup-show",
-            )),
-    )
-}
-
-fn popup_icon(cx: &App) -> AnyElement {
-    anchor(div(), "browser-band")
-        .child(butler_ds::ui::icon::icon(
-            butler_ds::ui::Icon::Popup,
-            butler_ds::ui::icon::IconSize::Sm,
-            butler_ds::ui::context::Ds::get(cx),
-        ))
-        .into_any_element()
 }

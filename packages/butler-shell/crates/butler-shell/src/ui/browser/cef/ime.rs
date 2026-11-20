@@ -1,4 +1,5 @@
 //! Native text queries use document UTF-16 offsets, including composition overlaps.
+use super::super::agent_host::Input;
 use super::surface::{Page, range};
 use gpui::{
     Bounds, Context, EntityInputHandler, Pixels, Point, UTF16Selection, Window, point, px, size,
@@ -33,10 +34,11 @@ impl EntityInputHandler for Page {
     fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
         self.runtime.upgrade()?.ime(self.id)?.marked.map(range)
     }
-    fn unmark_text(&mut self, _: &mut Window, _: &mut Context<Self>) {
+    fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(runtime) = self.runtime.upgrade()
             && let Some(ime) = runtime.ime(self.id)
             && ime.marked.is_some()
+            && self.admit(Input::KeyPress, cx)
         {
             runtime.ime_commit(self.id, &ime.composition);
         }
@@ -46,9 +48,11 @@ impl EntityInputHandler for Page {
         _: Option<Range<usize>>,
         text: &str,
         _: &mut Window,
-        _: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
-        if let Some(runtime) = self.runtime.upgrade() {
+        if self.admit(Input::KeyPress, cx)
+            && let Some(runtime) = self.runtime.upgrade()
+        {
             runtime.ime_commit(self.id, text);
         }
     }
@@ -58,10 +62,11 @@ impl EntityInputHandler for Page {
         text: &str,
         selected: Option<Range<usize>>,
         _: &mut Window,
-        _: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
         let length = text.encode_utf16().count();
-        if let Some(runtime) = self.runtime.upgrade()
+        if self.admit(Input::KeyPress, cx)
+            && let Some(runtime) = self.runtime.upgrade()
             && let Some(selected) = cef_range(selected.unwrap_or(length..length))
         {
             runtime.ime_set_composition(self.id, text, selected);
@@ -82,12 +87,12 @@ impl EntityInputHandler for Page {
             .get(requested.start.saturating_sub(start))
             .or_else(|| state.ime_bounds.last())?;
         // CEF reports page pixels; the window works in content pixels.
-        let zoom = window.zoom();
+        let (x, y) = state.page_scale(window.zoom());
         Some(Bounds::new(
-            bounds.origin + point(px(rect.x as f32 / zoom), px(rect.y as f32 / zoom)),
+            bounds.origin + point(px(rect.x as f32 / x), px(rect.y as f32 / y)),
             size(
-                px(rect.width.max(1) as f32 / zoom),
-                px(rect.height.max(1) as f32 / zoom),
+                px(rect.width.max(1) as f32 / x),
+                px(rect.height.max(1) as f32 / y),
             ),
         ))
     }

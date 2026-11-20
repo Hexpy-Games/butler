@@ -27,6 +27,7 @@ use crate::ui::clickable::Clickable;
 use crate::ui::context::Ds;
 use crate::ui::control::State;
 use crate::ui::motion::{Timing, Transition, transition};
+use crate::ui::strut;
 
 type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -315,7 +316,11 @@ impl NavRow {
             .children(controls);
         let meta = self.meta.take().map(|meta| {
             let inset = if has_icon { m.icon + m.gap } else { 0. };
-            div().w_full().min_w_0().pl(px(inset)).child(meta)
+            div()
+                .w_full()
+                .min_w_0()
+                .pl(px(inset))
+                .child(strut::scope(true, meta))
         });
         let row_gap = if self.multiline {
             ds.len(Length::SpaceXs)
