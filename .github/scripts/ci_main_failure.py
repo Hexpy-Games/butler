@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 
 BOT = 'github-actions[bot]'
 PASSED = '<!-- passed -->'
@@ -109,12 +110,30 @@ def draft_revert(repository, run, merges, prs, marker, body):
         head=branch, base='main', draft=True, body=body))
 
 
+def rerun_unacquired(repository, run, jobs):
+    """GitHub cancels a hosted job no runner picked up within ~15 minutes; that job never ran.
+
+    Rerun the failed jobs once and return the finished second attempt, or None when every job got a runner.
+    """
+    if run['run_attempt'] != 1 or not any(job['conclusion'] == 'cancelled' and not job.get('runner_name') for job in jobs):
+        return None
+    subprocess.check_call(['gh', 'api', '--method', 'POST', f'repos/{repository}/actions/runs/{run["id"]}/rerun-failed-jobs'])
+    while True:
+        time.sleep(60)
+        latest = api(f'repos/{repository}/actions/runs/{run["id"]}')
+        if latest['run_attempt'] > 1 and latest['status'] == 'completed':
+            return latest
+
+
 def report(repository, run):
     if not trusted(run, repository) or run.get('conclusion') in ('success', 'skipped'):
         return
     jobs = list(pages(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs'))
     if not any(job['conclusion'] == 'failure' for job in jobs):
         return
+    retried = rerun_unacquired(repository, run, jobs)
+    if retried:
+        return report(repository, retried)
     try:
         base, commits = failure_range(repository, run)
     except ValueError:

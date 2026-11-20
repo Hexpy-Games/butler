@@ -8,7 +8,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  actions: read
+  actions: write
 concurrency:
   group: main-ci-failure-follow-up-${{ github.event.workflow_run.id }}
   cancel-in-progress: false
