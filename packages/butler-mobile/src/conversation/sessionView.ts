@@ -4,6 +4,8 @@ import type { LiveEvent } from "../../../butler-protocol/src/client/index.ts";
 export function applyLiveEvent(view: SessionView, event: LiveEvent): SessionView | "refetch" | null {
   const payload = event.payload;
   if (!payload) return null;
+  if (payload.session_id === view.session_id && (event.type.startsWith("question.")
+    || event.type.startsWith("authority.") || event.type === "pending_asks.changed")) return "refetch";
   const message = payload.message as ConversationMessage | undefined;
   if ((event.type === "message.created" || event.type === "message.updated") && message?.chat_id === view.session_id) {
     return { ...view, messages: mergeMessages(view.messages, [message]) };

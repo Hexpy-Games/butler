@@ -73,6 +73,9 @@ export interface SessionView {
   status: SessionViewStatus;
   context?: ContextDetails | null;
   branch?: SessionBranch | null;
+  authority_requests?: AuthorityRequestRecord[];
+  pending_questions?: PendingUserQuestions[];
+  question_answers?: AnsweredUserQuestions[];
   active_turn: SessionViewTurn | null;
   latest_turn: SessionViewTurn | null;
   messages: ConversationMessage[];
@@ -141,4 +144,50 @@ export interface SessionBranch {
   workspace_path?: string;
   branch?: string;
   safe_status?: string;
+}
+
+export interface AuthorityRequestRecord {
+  request_ref: string; category: string; reason: string; executable: string; command_count: number;
+  scope?: { title: string; description: string };
+  source_turn_id?: string; source_session_id?: string; source_call_id?: string;
+  approval?: ApprovalSummaryWire;
+}
+
+export interface ApprovalSummaryWire {
+  operation?: {
+    image?: unknown; tool: string; access: "read_only" | "change"; targets: string[]; command?: string;
+    allow_conversation?: boolean; allow_site?: "signed_in" | "payment";
+    browser_tab?: string; browser_mode?: "signed_out" | "signed_in"; sign_in_step?: string; wait_reason?: string;
+    browser_steps?: { action: string; role: string; name: string; frame: string; value_preview?: string | null; addons: string[] }[];
+  };
+  command_access?: "read_only_unisolated";
+  schedule?: {
+    title: string; schedule_type: "once" | "interval" | "daily" | "weekdays" | "update";
+    browser_signin?: boolean; browser_payment?: boolean; time?: string; run_at?: string; start_at?: string;
+    interval_seconds?: number; access_mode?: "auto" | "read_only" | "ask_first" | "ask_except_reads" | "full_access";
+  };
+  action_kind: string; targets: { kind: string; path: string; label?: string }[];
+  count: number; examples: string[]; examples_truncated?: boolean[]; risk?: "low" | "medium" | "high";
+}
+
+export interface AuthorityDecisionResult {
+  request_ref: string; decision: "allowed" | "denied" | "modified"; scheduled: boolean;
+}
+
+export interface UserQuestion {
+  /** `text`: a free-text answer with no options. */
+  id: string; eyebrow: string; title: string; kind: "single" | "multi" | "text"; allow_custom: boolean;
+  /** `skip` and `input` duplicate the card's own Skip and free input; the runtime drops them. */
+  options: { id: string; label: string; description?: string; recommended?: boolean; kind?: "answer" | "skip" | "input" }[];
+}
+export interface PendingUserQuestions {
+  request_ref: string; source_turn_id: string; source_session_id: string;
+  question_state: "pending" | "deferred";
+  category: "ask_user"; questions: { questions: UserQuestion[] };
+}
+export interface UserQuestionAnswer { id: string; selected: string[]; custom: string | null; skipped: boolean }
+export type UserQuestionResponse = { status: "answered"; answers: UserQuestionAnswer[] } | { status: "deferred" };
+export interface AnsweredUserQuestions {
+  request_ref: string; followup_message_id: string; source_turn_id: string; updated_at: string;
+  questions: { questions: UserQuestion[] }; response: UserQuestionResponse;
 }

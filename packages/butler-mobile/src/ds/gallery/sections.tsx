@@ -6,6 +6,7 @@ import { Badge, UnreadDot } from "../Badge";
 import { Button, IconButton, type ButtonVariant } from "../Button";
 import { ButtonGroup } from "../ButtonGroup";
 import { ContextRing } from "../ContextRing";
+import { DecisionCard } from "../DecisionCard";
 import { Composer } from "../Composer";
 import { GlassBackdrop } from "../GlassBackdrop";
 import { Icon } from "../Icon";
@@ -363,7 +364,27 @@ function ToastSection({ state }: { state?: string }) {
   );
 }
 
+function DecisionCardSection() {
+  return <>
+    <Cell name="approval"><DecisionCard eyebrow="Permission" title="Run a command?" tag={{ label: "High risk", tone: "danger" }}
+      actions={<ButtonGroup layout="pair"><Button label="Deny" variant="secondary" onPress={noop} /><Button label="Allow once" onPress={noop} /></ButtonGroup>}>
+      <Markdown text={"```\npwd\n```"} />
+    </DecisionCard></Cell>
+    <Cell name="handoff"><DecisionCard eyebrow="Browser" title="Sign-in needs you"
+      actions={<ButtonGroup><Button label="Stop task" variant="secondary" onPress={noop} /></ButtonGroup>}>
+      <Text>Finish this on your computer</Text>
+    </DecisionCard></Cell>
+    <Cell name="question"><DecisionCard eyebrow="Destination" title="Where should it go?"
+      actions={<ButtonGroup><Button label="Send" onPress={noop} /><Button label="Skip" variant="secondary" onPress={noop} />
+        <Button label="Answer later" variant="secondary" onPress={noop} /></ButtonGroup>}>
+      <ListRow title="This folder" meta="Recommended" selected onPress={noop} />
+      <TextField label="Other…" value="" onChangeText={noop} />
+    </DecisionCard></Cell>
+  </>;
+}
+
 export const sections: { id: string; title: string; render: (state?: string) => React.ReactNode }[] = [
+  { id: "decision-card", title: "DecisionCard", render: () => <DecisionCardSection /> },
   { id: "markdown", title: "Markdown", render: () => <Cell name="Markdown"><Markdown text={markdown} /></Cell> },
   { id: "text", title: "Text", render: () => <TextSection /> },
   { id: "icon", title: "Icon", render: () => <IconSection /> },

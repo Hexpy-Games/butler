@@ -12,6 +12,9 @@ import { useConversation } from "@/conversation/live";
 import { SESSION_PAGE, useSessionView } from "@/conversation/useSessionView";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 
+import { pendingDecision, withQuestionAnswers, type ConversationRow, type PendingDecision } from "@/conversation/approval";
+import { ApprovalCard, BrowserHandoffCard } from "@/conversation/ApprovalCard";
+import { QuestionAnswerCard, QuestionCard } from "@/conversation/QuestionCard";
 import { ContextBody, SessionInfoSheet } from "@/conversation/SessionInfoSheet";
 import { ModelSheet } from "@/conversation/ModelSheet";
 import { useAttachments } from "@/conversation/useAttachments";
@@ -29,9 +32,9 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
   const headerInset = useHeaderInset();
   const [infoOpen, setInfoOpen] = useState(false);
   const { view, error, loadingEarlier, reload, loadEarlier } = useSessionView(id);
-  const list = useRef<FlatList<ConversationMessage> | null>(null);
+  const list = useRef<FlatList<ConversationRow> | null>(null);
   const edgeRef = useScrollEdgeEffectRef();
-  const ref = useCallback((node: FlatList<ConversationMessage> | null) => {
+  const ref = useCallback((node: FlatList<ConversationRow> | null) => {
     list.current = node;
     if (typeof edgeRef === "function") edgeRef(node);
   }, [edgeRef]);
@@ -43,6 +46,8 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
   const [dockHeight, setDockHeight] = useState(0);
   const messages = view?.messages.filter(message => message.role === "user"
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length))) ?? [];
+  const rows = withQuestionAnswers(messages, view?.question_answers ?? []);
+  const decision = view ? pendingDecision(view) : null;
   useEffect(() => {
     if (atBottom.current && messages.length) {
       requestAnimationFrame(() => list.current?.getNativeScrollRef()?.scrollToEnd({ animated: true }));
@@ -58,8 +63,8 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
     {error ? <View style={{ flex: 1, justifyContent: "center", padding: t.length("--space-4"), gap: t.length("--space-4") }}>
       <Text tone="danger">{copy.chat.loadFailed}</Text>
       <ButtonGroup><Button label={copy.chat.retry} onPress={reload} /></ButtonGroup>
-    </View> : <FlatList ref={ref} data={messages} keyExtractor={message => message.id}
-      renderItem={({ item }) => <Message message={item} latestTurn={view?.latest_turn} />}
+    </View> : <FlatList ref={ref} data={rows} keyExtractor={message => message.id}
+      renderItem={({ item }) => "questionAnswer" in item ? <QuestionAnswerCard answer={item.questionAnswer} /> : <Message message={item} latestTurn={view?.latest_turn} />}
       maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
       contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerInset }} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
       keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" scrollEventThrottle={16}
@@ -83,24 +88,33 @@ function ConversationScreen({ id, title }: { id: string; title: string }) {
         count.current = messages.length;
       }}
       ListHeaderComponent={loadingEarlier ? <Spinner label={copy.chat.earlier} /> : undefined}
-      ListFooterComponent={<View style={{ paddingBottom: dockHeight }}>{view ? <TurnStatus view={view} /> : null}</View>}
+      ListFooterComponent={<View style={{ paddingBottom: dockHeight, gap: t.length("--space-4") }}>
+        {view ? <TurnStatus view={view} hasDecision={!!decision} /> : null}
+        {view && decision ? <PendingRequest decision={decision} view={view} reload={reload} /> : null}
+      </View>}
     />}
     <EdgeFade edge="top" offset={headerInset} visible={scrolled} />
     <EdgeFade edge="bottom" offset={dockHeight} visible={!bottom} />
-    <ChatComposer id={id} view={view} onHeightChange={setDockHeight}
+    <ChatComposer id={id} view={view} hasDecision={!!decision} onHeightChange={setDockHeight}
       onSend={() => { atBottom.current = true; setBottom(true); }} />
   </Surface>;
+}
+
+function PendingRequest({ decision, view, reload }: { decision: PendingDecision; view: SessionView; reload(): void }) {
+  if (decision.kind === "question") return <QuestionCard key={decision.request.request_ref} request={decision.request} sessionId={view.session_id} reload={reload} />;
+  if (decision.kind === "handoff") return <BrowserHandoffCard key={decision.card.requestRef} card={decision.card} turn={view.active_turn} reload={reload} />;
+  return <ApprovalCard key={decision.card.requestRef} card={decision.card} count={decision.count} sessionId={view.session_id} reload={reload} />;
 }
 
 type ScrollMetrics = { contentSize: { height: number }; layoutMeasurement: { height: number }; contentOffset: { y: number } };
 const nearEnd = ({ contentSize, layoutMeasurement, contentOffset }: ScrollMetrics) =>
   contentSize.height - layoutMeasurement.height - contentOffset.y < 48;
 
-function TurnStatus({ view }: { view: SessionView }) {
+function TurnStatus({ view, hasDecision }: { view: SessionView; hasDecision: boolean }) {
   const copy = useMobileCopy();
   const t = useTokens();
   const turn = view.active_turn;
-  if (turn?.state === "waiting_for_form") return <Text tone="secondary">{copy.chat.waitingForYou}</Text>;
+  if (turn?.state === "waiting_for_form") return hasDecision ? null : <Text tone="secondary">{copy.chat.waitingForYou}</Text>;
   const newest = view.messages.at(-1);
   if (!turn || !["queued", "accepted", "thinking", "streaming", "waiting_for_tool", "cancelling", "retrying"].includes(turn.state)
     || (newest?.role === "assistant" && newest.status === "streaming")) return null;
@@ -110,8 +124,8 @@ function TurnStatus({ view }: { view: SessionView }) {
   </View>;
 }
 
-function ChatComposer({ id, view, onHeightChange, onSend }: {
-  id: string; view: SessionView | null; onHeightChange(height: number): void; onSend(): void;
+function ChatComposer({ id, view, hasDecision, onHeightChange, onSend }: {
+  id: string; view: SessionView | null; hasDecision: boolean; onHeightChange(height: number): void; onSend(): void;
 }) {
   const copy = useMobileCopy();
   const { client } = useConversation();
@@ -124,7 +138,7 @@ function ChatComposer({ id, view, onHeightChange, onSend }: {
   const uploading = attachments.items.some(item => item.status === "uploading");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const canSend = (!!text.trim() || ready.length > 0) && !uploading;
+  const canSend = (!!text.trim() || ready.length > 0) && !uploading && !hasDecision;
   const send = async () => {
     if (!client || busy || !canSend) return;
     onSend();
