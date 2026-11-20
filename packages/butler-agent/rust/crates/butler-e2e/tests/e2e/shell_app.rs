@@ -28,6 +28,7 @@ use serde_json::{Value, json};
 pub(super) mod driver;
 pub(super) mod live_turns;
 use driver::{SERIAL, SHOTS, Shell};
+mod activity_tools;
 mod chat_end_room;
 mod composer_fold;
 mod composer_toolbar;

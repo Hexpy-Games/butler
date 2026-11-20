@@ -4,21 +4,21 @@ use butler_ds::ui::button::{Button, Shape, Variant};
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _, div};
 
 use super::labels::nonempty;
-use crate::ui::chat::{AssistantHooks, TranscriptCtx};
-use crate::ui::source::wire::ProgressRow;
+use crate::ui::chat::AssistantHooks;
+use crate::ui::source::wire::{ProgressRow, SessionView};
 
 /// WorkerCallCapsule: the button that names the worker a `delegate_to_worker` call started.
 pub(super) fn capsule(
     row: &ProgressRow,
     turn: Option<&str>,
-    t: &TranscriptCtx,
+    view: &SessionView,
 ) -> Option<AnyElement> {
     if row.safe_tool_name.as_deref() != Some("delegate_to_worker") {
         return None;
     }
     let turn = turn.or(nonempty(row.turn_id.as_deref()))?;
     let call = nonempty(row.tool_call_id.as_deref())?;
-    let worker = t.view.workers.iter().find(|worker| {
+    let worker = view.workers.iter().find(|worker| {
         worker.parent_turn_id.as_deref() == Some(turn)
             && worker.source_tool_call_id.as_deref() == Some(call)
     })?;

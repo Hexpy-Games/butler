@@ -330,7 +330,7 @@ pub(super) fn tail(
 
 /// `workPlanPresentation.ts`: local clock, using the same chrono locale rules as the timeline.
 pub(super) fn plan_time(value: &str) -> String {
-    crate::ui::chat::activity::timeline::clock_time(value, false)
+    crate::ui::chat::activity::clock::clock_time(value, false)
 }
 
 /// `workPlanPresentation.ts` drops the end's shared day period from a completed range.

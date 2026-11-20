@@ -1,6 +1,6 @@
 //! `WorkBlocks`, `WorkBlockDetails`, `workBlock*`.
 use butler_ds::ui::Icon;
-use butler_ds::ui::blocks::work_activity::WorkActivityBlock;
+use butler_ds::ui::blocks::work_activity::{ToolItem, WorkActivityBlock};
 use butler_ds::ui::button::{Button, Size, Variant};
 use butler_ds::ui::context::{Ds, Lang};
 use butler_ds::ui::icon::icon_px;
@@ -8,10 +8,10 @@ use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::rolling_swap::RollingSwap;
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window, px};
 
-use super::tools::tool_column;
+use super::tools::tool_items;
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::i18n::Locale;
-use crate::ui::source::wire::WorkBlockView;
+use crate::ui::source::wire::{SessionView, WorkBlockView};
 
 pub(super) fn locale_of(lang: Lang) -> Locale {
     match lang {
@@ -22,12 +22,6 @@ pub(super) fn locale_of(lang: Lang) -> Locale {
 
 pub(super) fn locale(cx: &App) -> Locale {
     locale_of(Ds::get(cx).lang())
-}
-
-/// Where the content column of a block starts, which its tool rows line up with.
-// DS: WorkActivityBlock geometry (`content_x`)
-pub(super) fn content_x(compact: bool) -> f32 {
-    if compact { 28. } else { 44. }
 }
 
 /// `WorkDecisionBody`: the block's rationale and next step, one per line.
@@ -57,19 +51,11 @@ fn block_header(block: &WorkBlockView) -> WorkActivityBlock {
 fn block_tools(
     block: &WorkBlockView,
     turn: Option<&str>,
-    t: &TranscriptCtx,
+    view: &SessionView,
     window: &mut Window,
     cx: &mut App,
-) -> Option<AnyElement> {
-    tool_column(
-        &block.rows,
-        Some(&block.label),
-        turn,
-        content_x(false),
-        t,
-        window,
-        cx,
-    )
+) -> Vec<ToolItem> {
+    tool_items(&block.rows, Some(&block.label), turn, view, window, cx)
 }
 
 fn block_view(
@@ -79,12 +65,8 @@ fn block_view(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let tools = block_tools(block, turn, t, window, cx);
-    Stack::new()
-        .gap(Space::Sm)
-        .child(block_header(block))
-        .children(tools)
-        .into_any_element()
+    let tools = block_tools(block, turn, t.view, window, cx);
+    block_header(block).tools(tools).into_any_element()
 }
 
 fn toggle_state(id: &str, window: &mut Window, cx: &mut App) -> gpui::Entity<bool> {
@@ -156,15 +138,16 @@ pub(crate) fn work_blocks(
         body = body.child(collapse_button(&key, &state, strings.activity_collapse()));
     } else if live {
         let item_key: SharedString = latest.id.clone().into();
-        let tools = block_tools(&latest, turn, t, window, cx);
         let swapped = latest;
-        body = body
-            .child(RollingSwap::new(
-                format!("{key}-swap"),
-                item_key,
-                move |_, _| block_header(&swapped).into_any_element(),
-            ))
-            .children(tools);
+        let (view, turn) = (t.shared.clone(), turn.map(str::to_owned));
+        body = body.child(RollingSwap::new(
+            format!("{key}-swap"),
+            item_key,
+            move |window, cx| {
+                let tools = block_tools(&swapped, turn.as_deref(), &view, window, cx);
+                block_header(&swapped).tools(tools).into_any_element()
+            },
+        ));
     }
     Some(
         Stack::new()

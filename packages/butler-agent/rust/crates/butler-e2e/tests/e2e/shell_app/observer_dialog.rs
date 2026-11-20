@@ -6,15 +6,15 @@ use crate::steward_presentation::{setup, stub};
 
 /// What the App needs of the finished child: its session, the turn its steps belong to and its
 /// reply message.
-struct Child {
-    session: String,
-    turn: String,
-    reply: String,
+pub(super) struct Child {
+    pub(super) session: String,
+    pub(super) turn: String,
+    pub(super) reply: String,
 }
 
 /// A chat whose steward child has finished with a reply and step rows, through the stub model of
 /// `steward_presentation`; the Agent is stopped, so the App starts it on the same data.
-async fn finished_child(id: &str) -> Result<(Sandbox, String, Child), HarnessError> {
+pub(super) async fn finished_child(id: &str) -> Result<(Sandbox, String, Child), HarnessError> {
     let (url, script, server) = stub::start().await?;
     script.release.notify_one();
     let setup = setup(id, &url)?.data_folder_token();

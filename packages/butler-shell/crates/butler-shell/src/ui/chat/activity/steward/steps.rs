@@ -198,15 +198,13 @@ impl Steps<'_, '_> {
                 // Electron `SessionObserverStepTimeline.tsx`: source turn scopes tools and row identity.
                 anchor(
                     div().child(
-                        Stack::new()
-                            .gap(Space::Xs)
-                            .child(activity::activity_block(
-                                &item.phase,
-                                (index < last, pulse),
-                                None,
-                                Ds::get(cx).lang(),
-                            ))
-                            .children(tools),
+                        activity::activity_block(
+                            &item.phase,
+                            (index < last, pulse),
+                            None,
+                            Ds::get(cx).lang(),
+                        )
+                        .tools(tools),
                     ),
                     &format!("plan-activity:{}:{}", item.turn, item.phase.id),
                 )
