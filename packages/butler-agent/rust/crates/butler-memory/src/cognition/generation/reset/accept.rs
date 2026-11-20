@@ -20,20 +20,7 @@ pub(crate) fn begin(
     if coordinator.inventory_revision() != revision {
         return Err(io::Error::other("Inventory changed"));
     }
-    let old_generation = if kind == "profile" {
-        uuid::Uuid::nil().to_string()
-    } else {
-        let active = resolve_active_generation(root, paths).map_err(io::Error::other)?;
-        if active.root
-            != paths
-                .memory_root(root)
-                .join("generations")
-                .join(&active.generation_id)
-        {
-            return Err(io::Error::other("Active v2 generation is required"));
-        }
-        active.generation_id
-    };
+    let old_generation = old_generation(root, paths, kind)?;
     let lease = coordinator
         .try_acquire(&CognitionWriteAcquire::immediate(
             paths.consolidation_lock(root),
@@ -81,4 +68,21 @@ pub(crate) fn begin(
     save(root, paths, &result)?;
     lease.release(false).map_err(io::Error::other)?;
     Ok(result)
+}
+
+fn old_generation(root: &Path, paths: &CognitionPathEnvironment, kind: &str) -> io::Result<String> {
+    Ok(if kind == "profile" {
+        uuid::Uuid::nil().to_string()
+    } else {
+        let active = resolve_active_generation(root, paths).map_err(io::Error::other)?;
+        if active.root
+            != paths
+                .memory_root(root)
+                .join("generations")
+                .join(&active.generation_id)
+        {
+            return Err(io::Error::other("Active v2 generation is required"));
+        }
+        active.generation_id
+    })
 }

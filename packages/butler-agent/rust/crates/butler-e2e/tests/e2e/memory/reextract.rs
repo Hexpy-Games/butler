@@ -101,10 +101,9 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
             if operation["kind"] == "reextract"
                 && operation["phase"] == "preparing"
                 && operation["done"].as_u64().is_some_and(|done| {
-                    done >= 1
-                        && operation["total"]
-                            .as_u64()
-                            .is_some_and(|total| done < total)
+                    operation["total"]
+                        .as_u64()
+                        .is_some_and(|total| total == 2 && done < total)
                 })
                 && s.provider()?.memory_requests()[before..]
                     .iter()
