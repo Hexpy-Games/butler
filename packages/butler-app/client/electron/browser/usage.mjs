@@ -21,7 +21,7 @@ export function bindUse(browser, use, tab) {
   holdUse(browser, use);
   browser.publish();
 }
-function activeCalls(browser, tab) {
+export function activeCalls(browser, tab) {
   return [...browser.uses.values()].some(use => use.tab === tab.id && tab.owner === `conversation:${use.session}`);
 }
 function settlePointer(browser, tab) {

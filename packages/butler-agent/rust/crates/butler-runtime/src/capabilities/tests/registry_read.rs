@@ -15,6 +15,7 @@ async fn registered_read_preserves_bom_line_endings_errors_and_continuation() {
             "list_skills",
             "load_skill",
             "read_skill_file",
+            "save_skill",
         ]
     );
     assert_eq!(

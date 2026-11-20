@@ -4,13 +4,20 @@ use serde_json::Value;
 use std::{process::Stdio, time::Duration};
 use tokio::io::{AsyncBufReadExt, BufReader, Lines};
 
-async fn next_code(
+/// The next issued code with the pairing link printed above it; asserts its QR was drawn.
+async fn next_pairing(
     lines: &mut Lines<BufReader<tokio::process::ChildStdout>>,
-) -> Result<String, HarnessError> {
+) -> Result<(String, String), HarnessError> {
     Ok(tokio::time::timeout(Duration::from_secs(10), async {
+        let (mut qr, mut link) = (false, String::new());
         while let Some(line) = lines.next_line().await.unwrap() {
+            qr |= line.contains('▀') || line.contains('▄');
+            if let Some(value) = line.strip_prefix("Link: ") {
+                link = value.to_owned();
+            }
             if let Some(code) = line.strip_prefix("Pairing code: ") {
-                return code.to_owned();
+                assert!(qr, "QR missing before code");
+                return (link, code.to_owned());
             }
         }
         panic!("CLI stopped before issuing a code");
@@ -55,10 +62,10 @@ async fn sec_15_headless_cli_refreshes_and_exits_on_pair() -> Result<(), Harness
             .unwrap()
             .contains(&serde_json::json!("https://butler.example.com"))
     );
-    let first = next_code(&mut lines).await?;
+    let (_, first) = next_pairing(&mut lines).await?;
     assert_eq!(first.len(), 8);
     advance(&app, 60).await?;
-    let second = next_code(&mut lines).await?;
+    let (_, second) = next_pairing(&mut lines).await?;
     assert_ne!(second, first);
     assert_eq!(
         connect(&s.gw, &browser, &first).await?.status().as_u16(),
@@ -70,9 +77,26 @@ async fn sec_15_headless_cli_refreshes_and_exits_on_pair() -> Result<(), Harness
             401
         );
     }
-    let third = next_code(&mut lines).await?;
+    let (link, third) = next_pairing(&mut lines).await?;
     assert_ne!(third, second);
-    let response = connect(&s.gw, &browser, &third).await?;
+    let parsed = url::Url::parse(&link).unwrap();
+    assert_eq!(
+        (parsed.scheme(), parsed.host_str()),
+        ("butler", Some("pair"))
+    );
+    let pairs: Vec<(String, String)> = parsed.query_pairs().into_owned().collect();
+    let origins: Vec<&str> = view["lan_urls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .take(4)
+        .map(|u| u.as_str().unwrap())
+        .collect();
+    let mut expected = vec![("v".to_owned(), "1".to_owned())];
+    expected.extend(origins.iter().map(|o| ("a".to_owned(), (*o).to_owned())));
+    expected.push(("c".to_owned(), third.clone()));
+    assert_eq!(pairs, expected);
+    let response = connect(&s.gw, &browser, &pairs.last().unwrap().1).await?;
     assert_eq!(response.status().as_u16(), 303);
     let mut output = String::new();
     tokio::time::timeout(Duration::from_secs(10), async {
@@ -113,7 +137,7 @@ async fn sec_15_headless_cli_refreshes_and_exits_on_pair() -> Result<(), Harness
         .kill_on_drop(true)
         .spawn()?;
     let mut alias_lines = BufReader::new(alias.stdout.take().unwrap()).lines();
-    let code = next_code(&mut alias_lines).await?;
+    let (_, code) = next_pairing(&mut alias_lines).await?;
     assert_eq!(
         connect(&s.gw, &browser, &code).await?.status().as_u16(),
         303

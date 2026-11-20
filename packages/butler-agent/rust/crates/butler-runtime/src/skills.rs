@@ -250,6 +250,12 @@ impl Skills {
         .await
     }
 
+    pub async fn save_user(&self, skill: NewSkill) -> Result<PathBuf, SkillError> {
+        let permit = self.permit().await?;
+        let data = self.inner.data_root.clone();
+        blocking(permit, move || catalog::save_user(&data, &skill)).await
+    }
+
     pub async fn loaded_names(
         &self,
         sessions: Vec<(String, Option<String>, Option<String>)>,

@@ -293,6 +293,7 @@ mod transcript_history;
 mod memory_reset_support;
 
 mod skills_cleanup;
+mod skills_save;
 mod storage_concurrency_support;
 
 mod task_graphs;

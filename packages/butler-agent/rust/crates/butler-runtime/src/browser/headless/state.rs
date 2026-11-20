@@ -290,15 +290,14 @@ impl State {
         self.tabs.values().filter(|t| t.hidden.is_none()).count()
     }
 
-    /// The least recently used conversation tab no call or wait holds, outside
-    /// `keep` and the tabs `turn` drives: the one to close when every tab
-    /// memory allows is open, as its idle expiry would.
-    pub(crate) fn reclaimable(&self, keep: &[&str], turn: Option<&str>) -> Option<String> {
+    /// The least recently used conversation tab with no call, wait or dialog
+    /// right now, outside `keep`: the one to close when every tab memory allows
+    /// is open.
+    pub(crate) fn reclaimable(&self, keep: &[&str]) -> Option<String> {
         self.tabs
             .values()
             .filter(|t| t.hidden.is_none() && t.admitted && !t.busy && !t.waiting && !t.closing)
             .filter(|t| t.dialog.is_none() && !keep.contains(&t.id.as_str()))
-            .filter(|t| turn.is_none() || t.turn.as_deref() != turn)
             .min_by_key(|t| t.last_call)
             .map(|t| t.id.clone())
     }

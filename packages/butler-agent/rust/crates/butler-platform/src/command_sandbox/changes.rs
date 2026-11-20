@@ -16,7 +16,7 @@ pub struct CommandChanges {
 pub struct Changes {
     /// Paths relative to the watched workspace; directories are omitted.
     pub paths: Vec<PathBuf>,
-    /// False on native gaps, errors, or a root that did not become quiet.
+    /// False on native gaps, errors or a closed event channel. A root other actors keep busy is not a gap.
     pub complete: bool,
 }
 
@@ -44,8 +44,8 @@ impl CommandChanges {
         })
     }
 
-    /// Drain a short quiet interval, then close the producer and retain every queued event.
-    /// A continuously changing root or native overflow is explicitly incomplete.
+    /// Drain until the root is quiet for 50 ms or 250 ms have passed, then close the producer and retain every
+    /// queued event. Only native errors, overflow or a closed channel make the observation incomplete.
     pub fn finish(self) -> Changes {
         let Self {
             watcher,
@@ -58,7 +58,6 @@ impl CommandChanges {
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
-                complete = false;
                 break;
             }
             match events.recv_timeout(remaining.min(Duration::from_millis(50))) {
