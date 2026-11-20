@@ -32,6 +32,26 @@ impl Default for PageState {
         }
     }
 }
+impl PageState {
+    /// Page pixels per element pixel on each axis. The frame fills the element, so it is the
+    /// page's size over the element's: the window zoom for a page sized to its element (page
+    /// pixels are native logical pixels), only the fit scale for a fixed-size page fitted into it.
+    pub(super) fn page_scale(&self, zoom: f32) -> (f32, f32) {
+        let ratio = |page: Pixels, element: Pixels| {
+            if element > Pixels::ZERO {
+                page / element
+            } else {
+                zoom
+            }
+        };
+        self.geometry.map_or((zoom, zoom), |(page, _)| {
+            (
+                ratio(page.width, self.bounds.size.width),
+                ratio(page.height, self.bounds.size.height),
+            )
+        })
+    }
+}
 pub(super) struct Page {
     pub(super) runtime: Weak<OsrRuntime>,
     pub(super) id: u64,
@@ -119,6 +139,20 @@ impl Render for Page {
         )
     }
 }
+/// The hand-off card's live tab picture: the page's current frame, cropped to fill.
+pub(super) fn thumbnail(runtime: &OsrRuntime, page: u64, window: &Window) -> Option<AnyElement> {
+    let src = source(runtime.frame(page)?, window)?;
+    Some(
+        surface(src)
+            .object_fit(ObjectFit::Cover)
+            .size_full()
+            .absolute()
+            .top_0()
+            .left_0()
+            .into_any_element(),
+    )
+}
+
 /// The macOS frame: an IOSurface-backed CoreVideo buffer.
 #[cfg(target_os = "macos")]
 #[expect(

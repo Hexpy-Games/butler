@@ -31,8 +31,11 @@ impl Page {
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };
-        // Page pixels are native logical pixels: content pixels times the window zoom.
-        let point = (position - self.state.borrow().bounds.origin) * zoom;
+        let state = self.state.borrow();
+        let (x, y) = state.page_scale(zoom);
+        let point = position - state.bounds.origin;
+        let point = gpui::point(point.x * x, point.y * y);
+        drop(state);
         runtime.mouse(
             self.id,
             OsrMouse {
@@ -51,7 +54,7 @@ impl Page {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.admit(Input::Press, cx) {
+        if !self.admit(Input::MouseDown, cx) {
             return;
         }
         self.state
@@ -134,18 +137,20 @@ impl Page {
         let Some(runtime) = self.runtime.upgrade() else {
             return;
         };
-        let zoom = window.zoom();
-        let point = (e.position - self.state.borrow().bounds.origin) * zoom;
-        // Pixel deltas arrive in content pixels; line deltas become native pixels through `line()`.
+        let state = self.state.borrow();
+        let (x, y) = state.page_scale(window.zoom());
+        let point = e.position - state.bounds.origin;
+        drop(state);
+        // Pixel deltas arrive in content pixels; line deltas become page pixels through `line()`.
         let delta = match e.delta {
-            ScrollDelta::Pixels(delta) => delta * zoom,
+            ScrollDelta::Pixels(delta) => gpui::point(delta.x * x, delta.y * y),
             ScrollDelta::Lines(_) => e.delta.pixel_delta(px(line())),
         };
         runtime.wheel(
             self.id,
             OsrWheel {
-                x: coordinate(point.x),
-                y: coordinate(point.y),
+                x: coordinate(point.x * x),
+                y: coordinate(point.y * y),
                 modifiers: flags(e.modifiers),
                 delta_x: coordinate(delta.x),
                 delta_y: coordinate(delta.y),
@@ -159,7 +164,7 @@ impl Page {
         up: bool,
         cx: &mut App,
     ) {
-        if !self.admit(if up { Input::Other } else { Input::Press }, cx) {
+        if !self.admit(if up { Input::Other } else { Input::KeyPress }, cx) {
             return;
         }
         let Some(runtime) = self.runtime.upgrade() else {

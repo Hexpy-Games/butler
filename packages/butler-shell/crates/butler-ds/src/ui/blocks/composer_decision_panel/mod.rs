@@ -439,6 +439,7 @@ fn media_layout(
         144.
     }; // DS: ComposerDecisionPanel.module.css:111
     let target = div()
+        .w_full()
         .overflow_hidden()
         .rounded(ds.len(Length::RadiusControl))
         .shadow(vec![gpui::BoxShadow {

@@ -26,7 +26,6 @@ impl Step {
 }
 
 /// The holder the page shows (Electron `browserHolder`).
-#[allow(dead_code, reason = "the browser band reads it in the next change")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ShownHolder {
     None,
@@ -36,7 +35,6 @@ pub(crate) enum ShownHolder {
 }
 
 /// You hold the page: shown only while a Butler turn is paused on it, not for your own browsing.
-#[allow(dead_code, reason = "the browser band reads it in the next change")]
 pub(crate) fn shown_holder(tab: &Tab) -> ShownHolder {
     let Some(hosted) = tab.hosted.as_ref().filter(|hosted| !hosted.internal) else {
         return ShownHolder::None;
@@ -62,7 +60,8 @@ pub(crate) fn shown_holder(tab: &Tab) -> ShownHolder {
 #[cfg(feature = "cef")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(in crate::ui::browser) enum Input {
-    Press,
+    MouseDown,
+    KeyPress,
     Other,
 }
 
@@ -195,8 +194,8 @@ impl BrowserState {
         }
     }
 
-    /// Real input on `id`'s page: blocked while the Agent uses the page it holds; otherwise
-    /// forwarded, and a press on a page the Agent holds takes it over first.
+    /// Real input on `id`'s page: a mouse press takes over even while the Agent uses it.
+    /// Other input is blocked while in use; otherwise a key press also takes over.
     #[cfg(feature = "cef")]
     pub(in crate::ui::browser) fn user_input(&mut self, id: &TabId, input: Input) -> Gate {
         let Some(hosted) = self.tab(id).and_then(|tab| tab.hosted.as_ref()) else {
@@ -205,10 +204,10 @@ impl BrowserState {
         if hosted.holder == Holder::User {
             return Gate::Forward;
         }
-        if hosted.in_use() {
+        if hosted.in_use() && input != Input::MouseDown {
             return Gate::Block;
         }
-        if input == Input::Press {
+        if matches!(input, Input::MouseDown | Input::KeyPress) {
             self.control(id, Holder::User, false);
         }
         Gate::Forward

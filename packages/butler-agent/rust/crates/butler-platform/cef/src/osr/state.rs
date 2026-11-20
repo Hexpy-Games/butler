@@ -72,6 +72,9 @@ impl Page {
     }
     pub(super) fn release_frames(&mut self) {
         self.frame = None;
+        self.release_pool();
+    }
+    pub(super) fn release_pool(&mut self) {
         #[cfg(not(target_os = "linux"))]
         {
             self.pool = FramePool::default();

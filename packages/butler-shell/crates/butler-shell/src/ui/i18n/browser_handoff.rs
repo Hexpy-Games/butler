@@ -4,10 +4,12 @@ use butler_ds::ui::context::{Ds, Lang};
 use gpui::App;
 
 pub(crate) struct BrowserHandoff {
-    /// interfaceTemplates.approvalRequest.signInHandoff: eyebrow, title, onDesktop, stop
+    /// interfaceTemplates.approvalRequest.signInHandoff: eyebrow, title, inTab, openTab,
+    /// stop
     pub(crate) eyebrow: &'static str,
     pub(crate) sign_in_title: &'static str,
-    pub(crate) on_desktop: &'static str,
+    pub(crate) in_tab: &'static str,
+    pub(crate) open_tab: &'static str,
     pub(crate) stop: &'static str,
     /// interfaceTemplates.approvalRequest.payHandoff
     pub(crate) pay_title: &'static str,
@@ -24,7 +26,8 @@ pub(crate) struct BrowserHandoff {
 const KO: BrowserHandoff = BrowserHandoff {
     eyebrow: "브라우저",
     sign_in_title: "로그인 확인 필요",
-    on_desktop: "PC의 버틀러에서 확인해 주세요",
+    in_tab: "탭에서 마친 뒤 버틀러에게 돌려주세요",
+    open_tab: "열어서 확인",
     stop: "작업 중지",
     pay_title: "결제 확인 필요",
     still: "브라우저 단계",
@@ -37,7 +40,8 @@ const KO: BrowserHandoff = BrowserHandoff {
 const EN: BrowserHandoff = BrowserHandoff {
     eyebrow: "Browser",
     sign_in_title: "Sign-in needs you",
-    on_desktop: "Finish this on your computer",
+    in_tab: "Finish in the tab, then give it back to Butler",
+    open_tab: "Open to check",
     stop: "Stop task",
     pay_title: "Payment needs you",
     still: "Browser step",

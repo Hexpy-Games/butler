@@ -87,6 +87,52 @@ async fn the_page_host_starts_cef_on_first_use_without_a_window() -> Result<(), 
 }
 
 #[tokio::test]
+async fn a_waiting_hand_off_shows_the_band_and_gives_back() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        shell() && selected(),
+        "BUTLER_E2E_BROWSER_BACKEND=shell not set"
+    );
+    let mut s = setup("BROWSER-PAGE-HOST-HAND-OFF")?.start().await?;
+    let url = publish(&s).await?;
+    let admin = admin(&s);
+    let opened = open(&admin, "general", &url).await?;
+    assert_eq!(opened["status"], "ok", "{opened}");
+    let tab = &opened["tab"];
+    // A new window opens the workspace once the onboarding is done.
+    complete_onboarding(&s.gw).await?;
+    s.shell(&[
+        "close-window",
+        "tray-open",
+        "wait-anchor composer",
+        "browser",
+        "wait-anchor browser-area",
+    ])
+    .await?;
+    // The Agent hands the tab to the user: the band shows, and the Agent is locked out.
+    let waited = call(
+        &admin,
+        "general",
+        "tab.wait",
+        tab,
+        json!({"reason":"other"}),
+    )
+    .await?;
+    assert_eq!(waited["status"], "user_control", "{waited}");
+    s.shell(&["wait-anchor browser-band", "wait-anchor browser-control"])
+        .await?;
+    let locked = call(&admin, "general", "tab.observe", tab, json!({})).await?;
+    assert_eq!(locked["reason"], "user_control", "{locked}");
+    // Give back from the band: the band goes and the Agent has the page again.
+    s.shell(&["click browser-control", "wait-no-anchor browser-band"])
+        .await?;
+    let observed = call(&admin, "general", "tab.observe", tab, json!({})).await?;
+    assert_eq!(observed["status"], "ok", "{observed}");
+    call(&admin, "general", "tab.close", tab, json!({})).await?;
+    s.finish().await
+}
+
+#[tokio::test]
 async fn the_user_takes_an_idle_agent_page_by_input() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     butler_e2e::skip_unless!(
@@ -105,7 +151,7 @@ async fn the_user_takes_an_idle_agent_page_by_input() -> Result<(), HarnessError
         rect["x"].as_f64().unwrap() + rect["width"].as_f64().unwrap() / 2.0,
         rect["y"].as_f64().unwrap() + rect["height"].as_f64().unwrap() / 2.0,
     );
-    // `page-click` maps window pixels x window zoom, but the observed rect is in page coordinates: this runs at zoom 1.
+    // `page-click` takes page pixels, as `tab.observe` reports them.
     // The Agent's tab is the shown one; a press in its input makes the user the holder.
     complete_onboarding(&s.gw).await?;
     s.shell(&[
@@ -139,6 +185,86 @@ async fn the_user_takes_an_idle_agent_page_by_input() -> Result<(), HarnessError
     loop {
         let listed = call(&admin, "general", "tabs.list", &Value::Null, json!({})).await?;
         if listed["tabs"][0]["title"] == "typed" {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{listed}");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let rect = &node(&page, "link", "next")["rect"];
+    let (x, y) = (
+        rect["x"].as_f64().unwrap() + rect["width"].as_f64().unwrap() / 2.0,
+        rect["y"].as_f64().unwrap() + rect["height"].as_f64().unwrap() / 2.0,
+    );
+    s.shell(&[&format!("page-click {x} {y}")]).await?;
+    let target = reqwest::Url::parse(&url)
+        .unwrap()
+        .join("./popup.html")
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let listed = call(&admin, "general", "tabs.list", &Value::Null, json!({})).await?;
+        if listed["tabs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["id"] == *tab && t["url"] == target.as_str())
+        {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{listed}");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    s.finish().await
+}
+
+#[tokio::test]
+async fn the_user_takes_a_turn_held_page_by_press() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        shell() && selected(),
+        "BUTLER_E2E_BROWSER_BACKEND=shell not set"
+    );
+    let mut s = setup("BROWSER-PAGE-HOST-TURN-HELD-PRESS")?.start().await?;
+    let url = publish(&s).await?;
+    let admin = admin(&s);
+    let opened = open(&admin, "general", &url).await?;
+    assert_eq!(opened["status"], "ok", "{opened}");
+    let tab = &opened["tab"];
+    let reply = admin
+        .send(
+            reqwest::Method::POST,
+            "/internal/browser/calls",
+            Some(json!({"op":"tab.observe","session":"general","tab":tab,
+                "args":{"include_image":false},"turn_id":"turn-held-press"})),
+            &[],
+        )
+        .await?;
+    assert_eq!(reply.status, 200, "{}", reply.text);
+    let page = reply.body;
+    assert_eq!(page["status"], "ok", "{page}");
+    let rect = &node(&page, "textbox", "Search")["rect"];
+    let (x, y) = (
+        rect["x"].as_f64().unwrap() + rect["width"].as_f64().unwrap() / 2.0,
+        rect["y"].as_f64().unwrap() + rect["height"].as_f64().unwrap() / 2.0,
+    );
+    complete_onboarding(&s.gw).await?;
+    s.shell(&[
+        "close-window",
+        "tray-open",
+        "wait-anchor composer",
+        "browser",
+        "wait-anchor browser-area",
+        "click browser-tab-0",
+    ])
+    .await?;
+    s.shell(&[&format!("page-click {x} {y}")]).await?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let listed = call(&admin, "general", "tabs.list", &Value::Null, json!({})).await?;
+        let held = listed["tabs"]
+            .as_array()
+            .and_then(|t| t.iter().find(|t| t["id"] == *tab));
+        if held.map(|t| &t["holder"]) == Some(&json!("user")) {
             break;
         }
         assert!(std::time::Instant::now() < deadline, "{listed}");
