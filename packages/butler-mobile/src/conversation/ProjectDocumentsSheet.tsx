@@ -40,7 +40,7 @@ export function ProjectDocumentsSheet({ open, onClose, projectId, onPick }: {
   const visible = documents?.filter(document => document.title.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase())) ?? [];
   return <Sheet open={open} onClose={onClose} title={appCopy.interfaceDetails.projectDocuments} cancelLabel={copy.chat.close}>
     <View style={{ gap: t.length("--space-3") }}>
-      <TextField label={appCopy.interfaceDetails.projectDocuments} placeholder={appCopy.interfaceDetails.searchDocuments}
+      <TextField label={appCopy.interfaceDetails.searchDocuments}
         value={filter} onChangeText={setFilter} />
       {error ? <Text tone="danger">{appCopy.interfacePanels.projectDocumentsFailed}</Text>
         : documents !== null && !visible.length ? <Text>{appCopy.interfaceDetails.noDocuments}</Text> : null}
