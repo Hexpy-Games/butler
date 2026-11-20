@@ -113,8 +113,10 @@ async fn stage(
         crate::coordination::ensure_data_authority(&read.0, &[&path])?;
         match fs::read(path) {
             Ok(bytes) => Ok(
-                serde_json::from_slice::<Value>(&bytes).map_err(io::Error::other)?["state"]
-                    == "building",
+                serde_json::from_slice::<Value>(&bytes)
+                    .map_err(io::Error::other)?
+                    .get("state")
+                    .is_some_and(|state| state == "building"),
             ),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
             Err(error) => Err(error),
@@ -375,7 +377,7 @@ fn rewrite_manifest(root: &Path, state: &str, version: bool) -> io::Result<()> {
     let path = root.join("manifest.json");
     let mut manifest: Value =
         serde_json::from_slice(&fs::read(&path)?).map_err(io::Error::other)?;
-    if manifest["state"] == state && !version {
+    if manifest.get("state") == Some(&json!(state)) && !version {
         return Ok(());
     }
     let object = manifest
