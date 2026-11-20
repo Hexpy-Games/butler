@@ -4,7 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { BaseText } from "./internal/BaseText";
-import type { IconGlyph } from "./icons";
+import { icons, type IconGlyph } from "./icons";
 import { IconSlot, useScaledLine } from "./internal/IconSlot";
 import { run, useReducedMotion } from "./internal/motion";
 import { usePress } from "./internal/press";
@@ -16,6 +16,7 @@ export interface ListRowProps {
   meta?: string;
   icon?: IconGlyph;
   trailing?: React.ReactNode;
+  disclosure?: { expanded: boolean };
   onPress?: () => void;
   selected?: boolean;
   disabled?: boolean;
@@ -28,7 +29,7 @@ export interface ListRowProps {
 
 export function ListRow({
   title, description, meta, icon, trailing, onPress, selected, disabled, titleLines = 1, descriptionLines = 2,
-  accessibilityLabel, accessibilityHint, testID,
+  accessibilityLabel, accessibilityHint, testID, disclosure,
 }: ListRowProps) {
   const t = useTokens();
   const reduced = useReducedMotion();
@@ -39,6 +40,12 @@ export function ListRow({
     if (reduced) underlay.setValue(filled ? 1 : 0);
     else run(t, underlay, filled ? 1 : 0, filled ? "--motion-instant" : "--motion-fast", "--motion-ease-standard").start();
   }, [filled, reduced, t, underlay]);
+  const expanded = disclosure?.expanded ?? false;
+  const rotation = useRef(new Animated.Value(expanded ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduced) rotation.setValue(expanded ? 1 : 0);
+    else run(t, rotation, expanded ? 1 : 0, "--motion-fast", "--motion-ease-standard").start();
+  }, [expanded, reduced, rotation, t]);
 
   const titleLine = t.length("--typo-app-title-line-height");
   const trailingHeight = useScaledLine(titleLine);
@@ -46,6 +53,19 @@ export function ListRow({
   const fg = (key: "--text-primary" | "--text-secondary" | "--text-tertiary") =>
     t.color(disabled ? "--interactive-disabled-fg" : key);
   const titleColor = fg("--text-primary");
+  const titleText = (
+    <BaseText
+      numberOfLines={titleLines}
+      ellipsizeMode="tail"
+      maxFontSizeMultiplier={maxFontScale.control}
+      style={{
+        ...fontStyle(t.length("--font-size-4"), titleLine, weightValue(t, selected ? "medium" : "regular")),
+        color: titleColor, flexShrink: 1, ...(disclosure ? {} : { flexGrow: 1, flexBasis: "50%" }),
+      }}
+    >
+      {title}
+    </BaseText>
+  );
 
   const body = (
     <>
@@ -67,17 +87,14 @@ export function ListRow({
             columnGap: t.length("--space-md"), rowGap: t.length("--space-xs"),
           }}
         >
-          <BaseText
-            numberOfLines={titleLines}
-            ellipsizeMode="tail"
-            maxFontSizeMultiplier={maxFontScale.control}
-            style={{
-              ...fontStyle(t.length("--font-size-4"), titleLine, weightValue(t, selected ? "medium" : "regular")),
-              color: titleColor, flexGrow: 1, flexShrink: 1, flexBasis: "50%",
-            }}
-          >
-            {title}
-          </BaseText>
+          {disclosure ? (
+            <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: "50%", flexDirection: "row", alignItems: "center", gap: t.length("--space-1") }}>
+              {titleText}
+              <Animated.View style={{ transform: [{ rotate: rotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "90deg"] }) }] }}>
+                <HugeiconsIcon icon={icons.ChevronRight} size={t.length("--sidebar-icon-size")} color={fg("--text-tertiary")} />
+              </Animated.View>
+            </View>
+          ) : titleText}
           {meta ? (
             <BaseText
               maxFontSizeMultiplier={maxFontScale.control}
@@ -120,7 +137,7 @@ export function ListRow({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? [title, description, meta].filter(Boolean).join(", ")}
       accessibilityHint={accessibilityHint}
-      accessibilityState={{ selected: !!selected, disabled: !!disabled }}
+      accessibilityState={{ selected: !!selected, disabled: !!disabled, ...(disclosure ? { expanded } : {}) }}
       testID={testID}
       disabled={disabled}
       onPress={onPress}

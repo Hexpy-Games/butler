@@ -14,7 +14,27 @@ import SentIcon from "@hugeicons/core-free-icons/SentIcon";
 import SquareIcon from "@hugeicons/core-free-icons/SquareIcon";
 import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
 
+import Briefcase01Icon from "@hugeicons/core-free-icons/Briefcase01Icon";
+import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
+import InformationCircleIcon from "@hugeicons/core-free-icons/InformationCircleIcon";
+import Image01Icon from "@hugeicons/core-free-icons/Image01Icon";
+import File01Icon from "@hugeicons/core-free-icons/File01Icon";
+import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
+import ArrowUp01Icon from "@hugeicons/core-free-icons/ArrowUp01Icon";
+import Notebook01Icon from "@hugeicons/core-free-icons/Notebook01Icon";
+import RotateLeft01Icon from "@hugeicons/core-free-icons/RotateLeft01Icon";
+
 export const icons = {
+  Briefcase: Briefcase01Icon,
+  Copy: Copy01Icon,
+  Info: InformationCircleIcon,
+  Image: Image01Icon,
+  File: File01Icon,
+  ChevronDown: ArrowDown01Icon,
+  ChevronUp: ArrowUp01Icon,
+  Notebook: Notebook01Icon,
+  Retry: RotateLeft01Icon,
+
   Plus: Add01Icon,
   X: Cancel01Icon,
   CheckIcon: Tick02Icon,

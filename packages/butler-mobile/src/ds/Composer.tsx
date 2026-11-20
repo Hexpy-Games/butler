@@ -1,3 +1,4 @@
+import { ScrollEdgeEffect } from "@bsky.app/expo-scroll-edge-effect";
 import { useEffect, useState } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,17 +25,19 @@ export interface ComposerProps {
   sendLabel: string;
   stopLabel: string;
   adjunct?: React.ReactNode;
+  leading?: React.ReactNode;
+  trailing?: React.ReactNode;
+  attachments?: React.ReactNode;
   testID?: string;
 }
 export interface ComposerDockProps { children: React.ReactNode; onHeightChange?: (height: number) => void }
 
-// Eight input lines before the input scrolls (web `8lh`), and the toolbar's 2px button gap.
+// Eight input lines before the input scrolls (web `8lh`).
 const MAX_LINES = 8;
-const TOOLBAR_GAP = 2;
 
 export function Composer({
   value, onChangeText, placeholder, canSend, onSend, mode = "send", onStop, busy, disabled, attach,
-  sendLabel, stopLabel, adjunct, testID,
+  sendLabel, stopLabel, adjunct, leading, trailing, attachments, testID,
 }: ComposerProps) {
   const t = useTokens();
   const radius = t.length(RADIUS);
@@ -42,28 +45,16 @@ export function Composer({
   const lineHeight = useScaledLine(t.length("--typo-body-line-height"));
   const padding = t.length("--space-3");
   return (
-    <View
-      style={{
-        borderRadius: radius,
-        borderWidth: liquidGlass ? 0 : t.length("--border-hairline"),
-        borderColor: t.color("--tinted-glass-border"),
-        boxShadow: glassShadow(t),
-      }}
-    >
+    <View style={{ borderRadius: radius, borderWidth: liquidGlass ? 0 : t.length("--border-hairline"),
+      borderColor: t.color("--tinted-glass-border"), boxShadow: glassShadow(t) }}>
       <GlassFill radii={{ topLeft: radius, topRight: radius, bottomRight: radius, bottomLeft: radius }} />
       {adjunct ? (
         <View style={{ borderColor: divider, borderBottomWidth: t.length("--border-hairline") }}>{adjunct}</View>
       ) : null}
       <TextInput
-        multiline
-        lineBreakStrategyIOS="hangul-word"
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
+        multiline lineBreakStrategyIOS="hangul-word" value={value} onChangeText={onChangeText} placeholder={placeholder}
         placeholderTextColor={t.color("--placeholder")}
-        editable={!disabled}
-        testID={testID}
-        accessibilityLabel={placeholder}
+        editable={!disabled} testID={testID} accessibilityLabel={placeholder}
         maxFontSizeMultiplier={maxFontScale.control}
         textAlignVertical="top"
         style={{
@@ -77,19 +68,14 @@ export function Composer({
           lineHeight: t.length("--typo-body-line-height"),
         }}
       />
-      <View
-        style={{
-          borderColor: divider,
-          borderTopWidth: t.length("--border-hairline"),
-          flexDirection: "row",
-          alignItems: "center",
-          minHeight: t.length("--control-hit-target"),
-          padding: t.length("--space-xs"),
-          gap: TOOLBAR_GAP,
-        }}
-      >
+      {attachments}
+      <View style={{ borderColor: divider, borderTopWidth: t.length("--border-hairline"),
+        flexDirection: "row", alignItems: "center", minHeight: t.length("--control-hit-target"),
+        padding: t.length("--space-xs"), gap: t.length("--space-1") }}>
         {attach ? <IconButton icon={icons.Plus} label={attach.label} onPress={attach.onPress} disabled={disabled} /> : null}
-        <View style={{ flex: 1 }} />
+        {leading}
+        <View style={{ flex: 1, minWidth: t.length("--space-2") }} />
+        {trailing}
         <SendButton
           mode={mode}
           enabled={canSend && !disabled}
@@ -119,12 +105,14 @@ export function ComposerDock({ children, onHeightChange }: ComposerDockProps) {
   const gap = t.length("--space-sm");
   return (
     <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" style={[StyleSheet.absoluteFill, { justifyContent: "flex-end" }]}>
+      <ScrollEdgeEffect edge="bottom" effect="soft">
       <View
         onLayout={(event) => onHeightChange?.(event.nativeEvent.layout.height)}
         style={{ paddingHorizontal: t.length("--adaptive-composer-inset"), paddingBottom: keyboard ? gap : insets.bottom + gap }}
       >
         {children}
       </View>
+      </ScrollEdgeEffect>
     </KeyboardAvoidingView>
   );
 }

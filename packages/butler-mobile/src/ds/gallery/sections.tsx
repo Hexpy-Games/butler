@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { Platform, useWindowDimensions, View } from "react-native";
 import { useTokens } from "../../design/useTokens";
+import { AttachmentTiles, type AttachmentTile } from "../AttachmentTiles";
 import { Badge, UnreadDot } from "../Badge";
 import { Button, IconButton, type ButtonVariant } from "../Button";
 import { ButtonGroup } from "../ButtonGroup";
+import { ContextRing } from "../ContextRing";
 import { Composer } from "../Composer";
 import { GlassBackdrop } from "../GlassBackdrop";
 import { Icon } from "../Icon";
 import { icons } from "../icons";
 import { ForcedState } from "../internal/press";
+import { Markdown } from "../Markdown";
 import { ListRow } from "../ListRow";
 import { Sheet, SheetPanel } from "../Sheet";
 import { Spinner } from "../Spinner";
@@ -17,7 +20,7 @@ import { Switch } from "../Switch";
 import { Text, type TextTone, type TextVariant } from "../Text";
 import { TextField } from "../TextField";
 import { showToast, ToastView, type ToastTone } from "../Toast";
-import { en, ko, long, type Strings } from "./fixtures";
+import { en, ko, long, markdown, sampleImage, type Strings } from "./fixtures";
 
 const noop = () => {};
 type Forced = "pressed" | "focused" | null;
@@ -133,6 +136,10 @@ function ButtonSection() {
       ))}
       <Cell name="icon button · disabled"><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} disabled /></View></Cell>
       <Cell name="icon button · loading"><View style={{ flexDirection: "row" }}><IconButton icon={icons.Plus} label={en.attach} onPress={noop} loading /></View></Cell>
+      <Cell name="sm"><View style={{ flexDirection: "row", alignItems: "center" }}>
+        <IconButton icon={icons.Plus} variant="ghost" size="sm" label={en.attach} onPress={noop} />
+        <IconButton icon={icons.Plus} label={en.attach} onPress={noop} />
+      </View></Cell>
     </>
   );
 }
@@ -176,6 +183,8 @@ function ListRowSection() {
   return (
     <>
       <Cell name="title only" list><ListRow title={en.sentence} /></Cell>
+      <Cell name="disclosure collapsed" list><ListRow icon={icons.Folder} title="Folder" disclosure={{ expanded: false }} onPress={noop} /></Cell>
+      <Cell name="disclosure expanded" list><ListRow icon={icons.Folder} title="Folder" disclosure={{ expanded: true }} onPress={noop} /></Cell>
       <Cell name="icon, title, meta" list><ListRow icon={icons.MessageSquare} title={en.sentence} meta={en.meta} /></Cell>
       <Cell name="description, 1 line" list><ListRow title={en.sentence} description={long.note} descriptionLines={1} /></Cell>
       <Cell name="description, 2 lines" list><ListRow title={en.sentence} description={long.note} /></Cell>
@@ -277,11 +286,29 @@ function ComposerSection() {
       {cell("busy", { value: en.sentence, busy: true })}
       {cell("disabled", { value: en.sentence, disabled: true, canSend: true })}
       {cell("with attach", { attach: { label: en.attach, onPress: noop } })}
+      {cell("with controls", { leading: <Button variant="ghost" label="GPT-6 Sol · Low" onPress={noop} />,
+        trailing: <ContextRing ratio={0.5} label="50% used" onPress={noop} />,
+        attachments: <AttachmentTiles layout="row" items={[{ key: "file", name: "Photo.png", kind: "file", extension: "PNG" }]}
+          onRemove={noop} removeLabel={name => `Remove ${name}`} uploadingLabel="Uploading" failedLabel="Upload failed" /> })}
       {cell("with adjunct", { adjunct: <Text tone="secondary">{en.note}</Text> })}
       {cell("send pressed", { value: en.sentence, canSend: true }, "pressed")}
       <Cell name="Live"><Floating height={height}><LiveComposer /></Floating></Cell>
     </>
   );
+}
+
+function AttachmentTilesSection() {
+  const items: AttachmentTile[] = [
+    { key: "image", name: "Photo.png", kind: "image", image: { uri: sampleImage }, extension: "PNG" },
+    { key: "file", name: "Document.pdf", kind: "file", extension: "PDF", meta: "128 KB" },
+  ];
+  return <>
+    <Text variant="caption" tone="secondary">Tile radius 16: concentric with the composer (28 − 12); approved exception to the 28 container radius.</Text>
+    <Cell name="row"><AttachmentTiles layout="row" items={[...items,
+      { ...items[0], key: "uploading", upload: "uploading" }, { ...items[1], key: "failed", upload: "failed" },
+    ]} onRemove={noop} removeLabel={name => `Remove ${name}`} uploadingLabel="Uploading" failedLabel="Upload failed" /></Cell>
+    <Cell name="wrap"><AttachmentTiles layout="wrap" items={items} uploadingLabel="Uploading" failedLabel="Upload failed" /></Cell>
+  </>;
 }
 
 function LiveSheet({ initial }: { initial: boolean }) {
@@ -337,6 +364,7 @@ function ToastSection({ state }: { state?: string }) {
 }
 
 export const sections: { id: string; title: string; render: (state?: string) => React.ReactNode }[] = [
+  { id: "markdown", title: "Markdown", render: () => <Cell name="Markdown"><Markdown text={markdown} /></Cell> },
   { id: "text", title: "Text", render: () => <TextSection /> },
   { id: "icon", title: "Icon", render: () => <IconSection /> },
   { id: "spinner", title: "Spinner", render: () => <SpinnerSection /> },
@@ -347,6 +375,9 @@ export const sections: { id: string; title: string; render: (state?: string) => 
   { id: "text-field", title: "TextField", render: () => <TextFieldSection /> },
   { id: "switch", title: "Switch", render: () => <SwitchSection /> },
   { id: "badge", title: "Badge", render: () => <BadgeSection /> },
+  { id: "context-ring", title: "ContextRing", render: () => <>{[0.05, 0.5, 0.95].map(ratio =>
+    <Cell key={ratio} name={String(ratio)}><ContextRing ratio={ratio} label={`${ratio * 100}% used`} onPress={noop} /></Cell>)}</> },
+  { id: "attachment-tiles", title: "AttachmentTiles", render: () => <AttachmentTilesSection /> },
   { id: "composer", title: "Composer", render: () => <ComposerSection /> },
   { id: "sheet", title: "Sheet", render: (state) => <SheetSection state={state} /> },
   { id: "toast", title: "Toast", render: (state) => <ToastSection state={state} /> },

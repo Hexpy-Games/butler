@@ -31,6 +31,7 @@ export interface IconButtonProps {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
+  size?: "md" | "sm";
   loading?: boolean;
   disabled?: boolean;
   testID?: string;
@@ -105,26 +106,28 @@ export function Button({
 }
 
 export function IconButton({
-  icon, label, onPress, variant = "ghost", loading, disabled, testID,
+  icon, label, onPress, variant = "ghost", size = "md", loading, disabled, testID,
 }: IconButtonProps) {
   const t = useTokens();
   const press = usePress({ scale: true, disabled: disabled || loading });
   const colors = variantColors(t, variant);
   const target = t.length("--control-hit-target");
-  const size = t.length("--icon-size-lg");
+  const box = size === "sm" ? t.length("--control-height-sm") : target;
+  const iconSize = t.length(size === "sm" ? "--icon-size-md" : "--icon-size-lg");
   return (
     <AnimatedPressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled, busy: !!loading }}
+      hitSlop={size === "sm" ? (target - box) / 2 : undefined}
       testID={testID}
       disabled={disabled || loading}
       onPress={onPress}
       {...press.handlers}
       style={[
         {
-          width: target,
-          height: target,
+          width: box,
+          height: box,
           borderRadius: t.length(PILL),
           borderWidth: t.length("--border-hairline"),
           borderColor: colors.border,
@@ -138,9 +141,9 @@ export function IconButton({
       ]}
     >
       {loading ? (
-        <SpinnerArc size={size} color={colors.foreground} />
+        <SpinnerArc size={iconSize} color={colors.foreground} />
       ) : (
-        <HugeiconsIcon icon={icon} size={size} color={colors.foreground} />
+        <HugeiconsIcon icon={icon} size={iconSize} color={colors.foreground} />
       )}
     </AnimatedPressable>
   );

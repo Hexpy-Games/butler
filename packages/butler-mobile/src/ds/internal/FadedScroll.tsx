@@ -1,15 +1,13 @@
 import { useRef, useState, type ComponentType, type ReactElement } from "react";
 import { Platform, ScrollView, View, type ViewProps } from "react-native";
-import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import MaskedView from "@react-native-masked-view/masked-view";
 import { alpha, opaque } from "../../design/tokens";
 import { useTokens } from "../../design/useTokens";
-import { GLASS_BLUR_IOS } from "./GlassFill";
 
 const Mask = MaskedView as unknown as ComponentType<ViewProps & { maskElement: ReactElement }>; // 0.3.2 class typings predate @types/react 19
 
-/** A scrolling body whose clipped edges fade into the surface (with a blur on iOS), so a cut-off edge signals more content. */
+/** A scrolling body whose clipped edges fade into the surface (alpha mask on iOS, fill gradient on Android), so a cut-off edge signals more content. */
 export function FadedScroll({ children }: { children: React.ReactNode }) {
   const t = useTokens();
   const viewport = useRef(0);
@@ -27,22 +25,7 @@ export function FadedScroll({ children }: { children: React.ReactNode }) {
   };
   const edge = (side: "top" | "bottom") => {
     const place = { position: "absolute", left: 0, right: 0, [side]: 0, height: size } as const;
-    if (!blur) {
-      return <LinearGradient pointerEvents="none" colors={side === "top" ? [fill, clear] : [clear, fill]} style={place} />;
-    }
-    return (
-      <Mask
-        pointerEvents="none"
-        style={place}
-        maskElement={<LinearGradient colors={["transparent", "black", "transparent"]} style={{ flex: 1 }} />}
-      >
-        <BlurView
-          style={{ flex: 1 }}
-          tint={t.scheme === "dark" ? "systemUltraThinMaterialDark" : "systemUltraThinMaterialLight"}
-          intensity={GLASS_BLUR_IOS}
-        />
-      </Mask>
-    );
+    return <LinearGradient pointerEvents="none" colors={side === "top" ? [fill, clear] : [clear, fill]} style={place} />;
   };
   const scroll = (
     <ScrollView
@@ -75,8 +58,8 @@ export function FadedScroll({ children }: { children: React.ReactNode }) {
   return (
     <View style={{ flexShrink: 1 }}>
       {blur ? <Mask style={{ flexShrink: 1 }} maskElement={mask}>{scroll}</Mask> : scroll}
-      {scrolled ? edge("top") : null}
-      {more ? edge("bottom") : null}
+      {!blur && scrolled ? edge("top") : null}
+      {!blur && more ? edge("bottom") : null}
     </View>
   );
 }

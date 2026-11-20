@@ -1,3 +1,6 @@
+/** A 32×32 gradient PNG for image-tile examples (inline, so the gallery needs no asset file). */
+export const sampleImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAPElEQVR4nO3QsQ0AIBDDwCCFXZiJiRmLEVx951P6SF7nvp3MrWlG1QNiImQiZCJkImQiZCJkImQiZKKQD9AtAt9VDH+CAAAAAElFTkSuQmCC";
+
 export interface Strings {
   action: string;
   cancel: string;
@@ -54,3 +57,13 @@ export const long: Strings & { title: string } = {
   close: "Schließen",
   title: "Datenschutzgrundverordnungskonforme Rechnungsübersicht für das dritte Quartal exportieren",
 };
+
+export const markdown = [
+  "# Heading one", "## Heading two", "### Heading three",
+  "A paragraph with **strong**, *emphasis*, `code`, ~~deleted~~, [a link](https://example.com), and ![image alt](https://example.com/image.png).",
+  "A hard break  \ncontinues with an escaped \\*asterisk.",
+  "- An item\n  - A nested item\n\n1. First\n2. Second",
+  "```ts\nconst message = 'A code line long enough to scroll horizontally across a narrow conversation screen.';\n```",
+  "> A quoted paragraph", "---",
+  "| Header | Value |\n| --- | --- |\n| Cell | **Bold cell** |",
+].join("\n\n");

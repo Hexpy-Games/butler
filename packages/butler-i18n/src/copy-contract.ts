@@ -463,6 +463,58 @@ export interface MobileCopy {
   problems: { invalidCode: string; hostNotAllowed: string; needsPairing: string; versionMismatch: string;
     notButler: string; unreachable: string; failed: string };
   localNetwork: { title: string; body: string; retry: string; cancel: string };
+  conversations: {
+    title: string;
+    general: string;
+    expand: (title: string) => string;
+    collapse: (title: string) => string;
+    empty: string;
+    needsAttention: string;
+    working: string;
+    unread: string;
+    reconnecting: string;
+    untitled: string;
+    loadFailed: string;
+  };
+  chat: {
+    copy: string;
+    copied: string;
+    retryFailed: string;
+    attach: string;
+    attachPhoto: string;
+    attachFile: string;
+    uploading: string;
+    uploadFailed: string;
+    model: string;
+    reasoning: string;
+    modelFailed: string;
+    modelUnavailable: string;
+    context: string;
+    close: string;
+    info: string;
+    infoAsks: string;
+    infoWorkspace: string;
+    infoNoWorkspace: string;
+    infoAttachments: string;
+    fileLabel: string;
+    removeAttachment: (name: string) => string;
+    contextUsed: (percent: number) => string;
+    contextTokens: (used: string, budget: string) => string;
+    contextCompact: (at: string) => string;
+
+    placeholder: string;
+    send: string;
+    stop: string;
+    thinking: string;
+    waitingForYou: string;
+    failed: string;
+    cancelled: string;
+    sendFailed: string;
+    stopFailed: string;
+    loadFailed: string;
+    retry: string;
+    earlier: string;
+  };
   home: { checking: string; connected: string; retry: string; pairAgain: string };
 }
 
