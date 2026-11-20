@@ -186,14 +186,14 @@ pub(crate) async fn utility(cdp: &Arc<Cdp>, shared: &Shared) -> Result<String, S
 /// Room for one more conversation tab: when every tab memory allows is open,
 /// the least recently used idle one closes first. False only while every tab
 /// is in use.
-pub(crate) async fn make_room(browser: &Browser, keep: &[&str], turn: Option<&str>) -> bool {
+pub(crate) async fn make_room(browser: &Browser, keep: &[&str]) -> bool {
     let limit = crate::browser::capacity::agent_tabs();
     let victim = {
         let state = browser.shared.lock();
         if state.agent_tabs() < limit {
             return true;
         }
-        state.reclaimable(keep, turn)
+        state.reclaimable(keep)
     };
     let Some(victim) = victim else {
         return false;
@@ -365,7 +365,7 @@ async fn page_attached(browser: Arc<Browser>, session: String, target: String, i
         .shared
         .with_tab(&opener, |t| t.turn.clone())
         .flatten();
-    let room = make_room(&browser, &[&opener], turn.as_deref()).await;
+    let room = make_room(&browser, &[&opener]).await;
     let admitted = {
         let mut state = browser.shared.lock();
         if room {

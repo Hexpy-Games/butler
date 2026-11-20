@@ -1,5 +1,5 @@
 import { totalmem } from "node:os";
-import { tabInUse } from "./usage.mjs";
+import { activeCalls } from "./usage.mjs";
 
 // How many tabs the browser holds, as the Agent's `browser::capacity` sizes
 // them: the user's own tabs, and agent tabs by installed memory (one per GiB,
@@ -17,15 +17,15 @@ export function agentTabFits(browser) {
   return count < AGENT_TABS;
 }
 
-/** Room for one more agent tab: when every slot is taken, the least recently
- * used agent tab that no call, turn, wait or dialog holds and the user is not
- * viewing closes first, as its idle expiry would. False only while every agent
- * tab is in use. */
+/** Room for one more agent tab: when every slot is taken, the agent tab nobody is using
+ * right now (no call running, no wait or dialog, not on screen, not in the user's hands)
+ * closes first, preferring tabs the user never looked at, then the least recently used.
+ * False only while every agent tab is in use. */
 export function makeAgentRoom(browser, keep) {
   if (agentTabFits(browser)) return true;
   const idle = [...browser.tabs.values()].filter(tab => tab.agent && tab.holder === "agent" && tab !== keep && !tab.closing && !tab.busy
-    && !tab.dialog && !tab.waiting && !tab.viewed && !tab.userViewed && !tabInUse(browser, tab));
-  const oldest = idle.sort((a, b) => (a.lastAgentCall ?? 0) - (b.lastAgentCall ?? 0))[0];
+    && !tab.dialog && !tab.waiting && !tab.viewed && !activeCalls(browser, tab));
+  const oldest = idle.sort((a, b) => (Number(Boolean(a.userViewed)) - Number(Boolean(b.userViewed))) || ((a.lastAgentCall ?? 0) - (b.lastAgentCall ?? 0)))[0];
   if (oldest) browser.close(oldest.id);
   return agentTabFits(browser);
 }

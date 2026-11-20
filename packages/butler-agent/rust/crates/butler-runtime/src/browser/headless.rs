@@ -287,20 +287,13 @@ impl Headless {
             }
             "tab.open" => {
                 let deadline = frame["deadline_ms"].as_u64().unwrap_or(20_000);
-                self.open(session, args, deadline, frame["turn_id"].as_str())
-                    .await
+                self.open(session, args, deadline).await
             }
             _ => self.tab_call(op, session, frame).await,
         }
     }
 
-    async fn open(
-        self: &Arc<Self>,
-        session: &str,
-        args: &Value,
-        deadline_ms: u64,
-        turn: Option<&str>,
-    ) -> Value {
+    async fn open(self: &Arc<Self>, session: &str, args: &Value, deadline_ms: u64) -> Value {
         if args["profile"] == "signed_in" || args["signed_in"] == true {
             return refused("signed_in_unavailable");
         }
@@ -324,7 +317,7 @@ impl Headless {
         let owner = format!("conversation:{session}");
         // Memory bounds the open tabs; conversations share them (several
         // browse at once), and an idle tab closes to make room for a new one.
-        if !targets::make_room(&browser, &[], turn).await {
+        if !targets::make_room(&browser, &[]).await {
             return refused("tab_budget_exhausted");
         }
         let remaining = Duration::from_millis(deadline_ms.saturating_sub(500))

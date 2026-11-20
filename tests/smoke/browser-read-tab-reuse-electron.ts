@@ -46,6 +46,11 @@ try {
   // The turn's end closes the tab it read; the tab it only opened stays for the user.
   await app.main(`globalThis.browserAgentSubject.execute(${JSON.stringify({ op: "use.finished", session: "general", turn_id: "t1", args: { close_read_tabs: false } })})`);
   assert.deepEqual((await agentTabs()).sort(), [unread.tab, other.tab].sort());
+  for (let i = 0; i < 25; i++) {
+    const opened = await execute<{ status: string }>("tab.open", "t3", undefined, { url: `${page}/a` });
+    assert.equal(opened.status, "ok", JSON.stringify(opened));
+  }
+  assert.ok((await agentTabs()).length <= 24);
   writeFileSync(join(evidence, "result.json"), JSON.stringify({ ok: true, ...results }, null, 2));
 } catch (error) {
   writeFileSync(join(evidence, "failure.json"), JSON.stringify({ error: String(error), results, state: await app.call("state").catch(() => null) }, null, 2));

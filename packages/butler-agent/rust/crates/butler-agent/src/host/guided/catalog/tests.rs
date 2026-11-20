@@ -1,13 +1,10 @@
 mod fixtures;
-use fixtures::image_context;
-use std::sync::Arc;
-
-use serde_json::{Value, json};
-
 use super::*;
 use butler_turn::btcc::{GuidedPhaseInput, TurnRecord, select_phase};
 use butler_turn::workspace::{WorkspaceFiles, WorkspaceMutations};
-
+use fixtures::image_context;
+use serde_json::{Value, json};
+use std::sync::Arc;
 fn catalog() -> GuidedCatalog {
     let capabilities = Capabilities::new(
         Arc::new(WorkspaceFiles::new(1)),
@@ -15,7 +12,6 @@ fn catalog() -> GuidedCatalog {
     );
     GuidedCatalog::load(&capabilities).unwrap()
 }
-
 /// (admitted access, turn context, phase surface enabled, replay flag,
 /// Ok((mode, phase, write_file authorized, work tools authorized)) | Err(policy error))
 type PhaseCase = (
@@ -417,13 +413,17 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
                 );
                 assert_eq!(has("browse"), browsing_agent);
                 assert!(!(browsing_agent && has("browser_open")));
-                for name in ["browser_open", "browser_observe", "browser_close"] {
+                for name in ["browser_open", "browser_observe"] {
                     assert!(selection.authorized_names.iter().any(|tool| tool == name));
                     if browsing_agent {
                         assert!(!has_provider_tool(&selection.provider_tools, name));
                     }
                 }
                 if browsing_agent && flag == "on" {
+                    assert!(has_provider_tool(
+                        &selection.provider_tools,
+                        "browser_close"
+                    ));
                     assert!(has_provider_tool(
                         &selection.provider_tools,
                         "image_collect"
@@ -458,13 +458,11 @@ fn ask_first_authorizes_approval_free_actions_and_approval_gated_mcp() {
         }
     }
 }
-
 fn has_provider_tool(tools: &[Value], expected: &str) -> bool {
     tools
         .iter()
         .any(|tool| tool.get("name").and_then(Value::as_str) == Some(expected))
 }
-
 fn phase_turn(access_mode: &str, context_bits: &Value) -> TurnRecord {
     let mut context = json!({
         "userRef":"user",

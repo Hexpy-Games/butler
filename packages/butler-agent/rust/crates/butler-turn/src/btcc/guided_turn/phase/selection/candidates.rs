@@ -85,7 +85,8 @@ pub(super) fn provider_candidates(
 }
 
 pub(super) fn deferred_browser(name: &str) -> bool {
-    BROWSER_CORE.contains(&name) && !matches!(name, "browser_act" | "image_collect")
+    BROWSER_CORE.contains(&name)
+        && !matches!(name, "browser_act" | "image_collect" | "browser_close")
 }
 
 /// Initial tools of the public-web, workspace (outside the direct phase),
