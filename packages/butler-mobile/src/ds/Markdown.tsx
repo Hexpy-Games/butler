@@ -14,6 +14,16 @@ export function Markdown({ text }: { text: string }) {
   return <Blocks tokens={tokens} />;
 }
 
+export function CodeBlock({ code, inset, tone = "primary" }: { code: string; inset?: boolean; tone?: TextTone }) {
+  const t = useTokens();
+  return <View style={{ backgroundColor: t.color(inset ? "--color-surface-base" : "--color-surface-raised-opaque"), borderRadius: t.length(RADIUS), padding: t.length("--space-3") }}>
+    <ScrollView horizontal><BaseText selectable style={{ ...textStyle(t, "body"),
+      fontFamily: CODE_FONT, fontSize: t.length("--typo-code-size"), lineHeight: t.length("--typo-code-line-height"),
+      color: t.color(toneColors[tone === "inherit" ? "primary" : tone]),
+    }}>{code}</BaseText></ScrollView>
+  </View>;
+}
+
 function Inline({ tokens }: { tokens: Token[] }) {
   const t = useTokens();
   return tokens.map((generic, index) => {
@@ -64,12 +74,7 @@ function Block({ token, tone }: { token: Token; tone: TextTone }) {
         <View style={{ flex: 1 }}><Blocks tokens={item.tokens} tone={tone} /></View>
       </View>)}
     </View>;
-    case "code": return <View style={{ backgroundColor: t.color("--color-surface-raised-opaque"), borderRadius: t.length(RADIUS), padding: t.length("--space-3") }}>
-      <ScrollView horizontal><BaseText selectable style={{ ...textStyle(t, "body"),
-        fontFamily: CODE_FONT, fontSize: t.length("--typo-code-size"), lineHeight: t.length("--typo-code-line-height"),
-        color: t.color(toneColors[tone === "inherit" ? "primary" : tone]),
-      }}>{token.text}</BaseText></ScrollView>
-    </View>;
+    case "code": return <CodeBlock code={token.text} tone={tone} />;
     case "blockquote": return <View style={{ borderLeftWidth: t.length("--border-hairline") * 3,
       borderColor: t.color("--color-border-strong"), paddingLeft: t.length("--space-3") }}>
       <Blocks tokens={token.tokens ?? []} tone="secondary" />
