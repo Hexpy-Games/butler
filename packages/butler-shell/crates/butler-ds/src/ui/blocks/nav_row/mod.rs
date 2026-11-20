@@ -316,7 +316,11 @@ impl NavRow {
             .children(controls);
         let meta = self.meta.take().map(|meta| {
             let inset = if has_icon { m.icon + m.gap } else { 0. };
-            div().w_full().min_w_0().pl(px(inset)).child(strut::scope(true, meta))
+            div()
+                .w_full()
+                .min_w_0()
+                .pl(px(inset))
+                .child(strut::scope(true, meta))
         });
         let row_gap = if self.multiline {
             ds.len(Length::SpaceXs)
