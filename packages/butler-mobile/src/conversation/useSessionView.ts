@@ -9,7 +9,7 @@ import { applyLiveEvent, mergeMessages } from "./sessionView";
 /** Messages per /session-view page; the conversation renders one page in its first pass. */
 export const SESSION_PAGE = 50;
 
-export function useSessionView(id: string) {
+export function useSessionView(id: string | undefined) {
   const { client, reconcile, subscribe } = useConversation();
   const [view, setView] = useState<SessionView | null>(null);
   const [error, setError] = useState(false);
@@ -17,7 +17,7 @@ export function useSessionView(id: string) {
   const requestRef = useRef<(older?: boolean) => void>(() => {});
   useEffect(() => {
     setView(null); setError(false); setLoadingEarlier(false);
-    if (!client) return;
+    if (!client || !id) return;
     let current: SessionView | null = null;
     let closed = false, busy = false, pending = false, last = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -99,10 +99,10 @@ function before(a: ConversationMessage, b: ConversationMessage): boolean {
     : !!a.created_at && !!b.created_at && a.created_at < b.created_at;
 }
 
-function useSessionRead(client: GatewayClient | null, id: string, turn: string | undefined) {
+function useSessionRead(client: GatewayClient | null, id: string | undefined, turn: string | undefined) {
   const focused = useRef(false);
   const read = useCallback((leaving = false) => {
-    if ((focused.current || leaving) && AppState.currentState === "active") {
+    if (id && (focused.current || leaving) && AppState.currentState === "active") {
       void client?.request(`/sessions/${encodeURIComponent(id)}/read`, { body: {} }).catch(() => {});
     }
   }, [client, id]);
