@@ -226,12 +226,18 @@ async fn canonical_writer_turn_prepares_ordered_windows_hydration_and_prior_cont
         "memory_source_changed"
     );
     let context = read_prior_public_context(&reader, "cs_source", &plan.rows).unwrap();
-    assert_eq!(context.len(), 1);
+    assert_eq!(context.len(), 2);
     assert_eq!(context[0].text, "prior one   prior two");
+    assert_eq!(context[1].text, "z".repeat(4 * 1024));
     assert!(
         butler_core::json::stringify(&serde_json::to_value(&context).unwrap())
             .unwrap()
             .contains("\"ref\":\"conversation-message:cm_prior\"")
+    );
+    assert!(
+        !butler_core::json::stringify(&serde_json::to_value(&context).unwrap())
+            .unwrap()
+            .contains("must not enter public context")
     );
     let recall_input: crate::cognition::recall::RecallRequest = serde_json::from_value(json!({
         "cue":"answer","seedPhrases":[],"vectorQueries":[],"includeVector":false,
