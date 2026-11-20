@@ -419,17 +419,20 @@ export function pendingDecision(view: SessionView): PendingDecision | null {
 export type ConversationRow = ConversationMessage | { id: string; questionAnswer: AnsweredUserQuestions };
 
 export function withQuestionAnswers(messages: ConversationMessage[], answers: readonly AnsweredUserQuestions[]): ConversationRow[] {
-  const lastAssistant = new Map<string, string>();
-  for (const message of messages) {
-    if (message.role === "assistant" && message.turn_id) lastAssistant.set(message.turn_id, message.id);
+  const lastMessage = new Map<string, string>();
+  const previousMessage = new Map<string, string | undefined>();
+  for (const [index, message] of messages.entries()) {
+    if (message.turn_id) lastMessage.set(message.turn_id, message.id);
+    previousMessage.set(message.id, messages[index - 1]?.id);
   }
   const after = new Map<string | undefined, ConversationRow[]>();
   for (const answer of answers) {
     if (answer.response.status !== "answered") continue;
-    const id = lastAssistant.get(answer.source_turn_id) ?? messages.at(-1)?.id;
+    const id = lastMessage.get(answer.source_turn_id) ?? (previousMessage.has(answer.followup_message_id)
+      ? previousMessage.get(answer.followup_message_id) : messages.at(-1)?.id);
     const rows = after.get(id) ?? [];
     rows.push({ id: answer.request_ref, questionAnswer: answer });
     after.set(id, rows);
   }
-  return messages.length ? messages.flatMap(message => [message, ...(after.get(message.id) ?? [])]) : after.get(undefined) ?? [];
+  return [...(after.get(undefined) ?? []), ...messages.flatMap(message => [message, ...(after.get(message.id) ?? [])])];
 }

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import type { AuthorityDecisionResult, SessionView } from "../../../butler-protocol/src/index.ts";
-import { Button, ButtonGroup, DecisionCard, Markdown, Text } from "@/ds";
+import { Button, ButtonGroup, CodeBlock, DecisionCard, Text } from "@/ds";
 import { useAppLocale } from "@/i18n";
 import { useConversation } from "./live";
 import { approvalRequestView, browserHandoffView, type AuthorityApprovalCard } from "./approval";
@@ -45,7 +45,7 @@ export function ApprovalCard({ card, count, sessionId, reload }: {
     {view.details.map((line, index) => typeof line === "string"
       ? <Text key={index} variant={view.pathDetails?.includes(line) ? "caption" : "body"}
         tone={view.pathDetails?.includes(line) ? "secondary" : "primary"} literal>{line}</Text>
-      : <Markdown key={index} text={"```\n" + line.code + "\n```"} />)}
+      : <CodeBlock key={index} code={line.code} inset />)}
   </DecisionCard>;
 }
 
