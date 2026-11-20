@@ -145,6 +145,13 @@ impl Host {
         let url = tab.and_then(|tab| tab["url"].as_str()).unwrap_or("");
         let text = page_text(url);
         match (op, tab) {
+            ("reader.render", _) => {
+                use base64::Engine;
+                let url = frame["args"]["url"].as_str().unwrap();
+                let text = page_text(url);
+                json!({"status":"ok","final_url":url,"http_status":200,
+                    "html_base64":base64::engine::general_purpose::STANDARD.encode(format!("<!doctype html><html><head><title>Tide table</title></head><body><main><article><h1>Tide table</h1><p>{text}</p><p>{}</p><p>End of the tide table.</p></article></main></body></html>", entries().join("</p><p>")))})
+            }
             ("tabs.list", _) => json!({"tabs":self.tabs}),
             ("tab.read", Some(tab)) => json!({"status":"ok","tab":tab["id"],"url":url,"epoch":1,
                 "html":format!("<!doctype html><html><head><title>Tide table</title></head><body><main><article><h1>Tide table</h1><p>{text}</p><p>{}</p><p>End of the tide table.</p></article></main></body></html>", entries().join("</p><p>"))}),

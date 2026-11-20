@@ -388,14 +388,9 @@ impl ToolPort for GuidedTools {
             }
             self.resume_pool().await?;
             let mut tools = permission_surface::surface(self, invocation.turn).await?;
-            // One page reader per round, chosen from the live host: open tabs while
-            // the Butler browser is attached, urls otherwise.
-            let withheld = if self.browser_available() {
-                "web_read"
-            } else {
-                "browser_read"
-            };
-            tools.retain(|tool| tool.name != withheld);
+            if !self.browser_available() {
+                tools.retain(|tool| tool.name != "browser_read");
+            }
             let encoded = serde_json::to_string(&tools).map_err(|error| {
                 BtccError::relayed("guided_tool_surface_invalid", error.to_string())
                     .with_source(error)

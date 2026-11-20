@@ -21,7 +21,7 @@ async fn ask_except_reads_worker_acts_and_commit_asks() -> Result<(), HarnessErr
     butler_e2e::gate!();
     run("ask_except_reads", vec![
         ("browse", json!({"goal":"Find the page heading","fields":["heading"],"url":"https://example.com/"})),
-        ("browser_read", json!({"url":"https://example.com/"})),
+        ("web_read", json!({"url":"https://example.com/"})),
         ("browser_observe", json!({"tab":"worker-tab","look":"never"})),
         ("image_collect", json!({"tab":"worker-tab","observation":"o1","ref":"e2"})),
         ("browser_act", json!({"tab":"worker-tab","observation":"o1","steps":[{"action":"click","ref":"e1"}]})),
@@ -321,7 +321,7 @@ async fn run(mode: &str, steps: Vec<(&'static str, Value)>) -> Result<(), Harnes
             assert_eq!(finished["args"]["close_read_tabs"], true);
         }
         let db = rusqlite::Connection::open(s.sandbox.data.join("agent-runtime/btcc.sqlite"))?;
-        let session: String = db.query_row("SELECT t.session_id FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='browser_read'", [], |row| row.get(0))?;
+        let session: String = db.query_row("SELECT t.session_id FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='web_read'", [], |row| row.get(0))?;
         assert_ne!(session, "general");
         let image: String = db.query_row("SELECT json_extract(c.result_json,'$.id') FROM btcc_guided_tool_calls c JOIN btcc_turns t ON t.turn_id=c.turn_id WHERE c.tool_name='image_collect' AND json_extract(c.result_json,'$.status')='ok' AND t.session_id=?1", [&session], |row| row.get(0))?;
         let relayed = tokio::time::timeout(Duration::from_secs(30), async {

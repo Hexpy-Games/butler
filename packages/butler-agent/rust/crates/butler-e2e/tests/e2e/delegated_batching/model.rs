@@ -106,38 +106,31 @@ fn parent(round: usize) -> Value {
 }
 
 /// The steward's research. Serially every read is its own round; batched,
-/// the first reads of all three tabs share one round and their
+/// the first reads of all three pages share one round and their
 /// continuations the next. The calls and their arguments are the same.
 fn steward(round: usize, body: &Value, batched: bool) -> Vec<Value> {
     let outputs = outputs(body);
-    let tabs = || {
+    let pages = || {
         outputs
             .iter()
-            .find(|output| output["tabs"].is_array())
-            .map(|opened| opened["tabs"].as_array().unwrap().clone())
+            .find(|output| output["results"].is_array())
+            .map(|search| search["results"].as_array().unwrap().clone())
             .unwrap_or_default()
     };
     let read = |index: usize| {
-        let tab = tabs()[index]["tab"].clone();
-        call(
-            &format!("read-{index}"),
-            "browser_read",
-            &json!({"tab":tab}),
-        )
+        let url = pages()[index]["url"].clone();
+        call(&format!("read-{index}"), "web_read", &json!({"url":url}))
     };
     let rest = |index: usize| {
-        let (tab, url) = (
-            tabs()[index]["tab"].clone(),
-            &tabs()[index]["untrusted_content"]["url"],
-        );
+        let url = &pages()[index]["url"];
         let first = outputs
             .iter()
             .find(|output| output["final_url"] == *url && output["start_chunk"] == 0)
             .unwrap_or_else(|| panic!("first read of {url}: {outputs:?}"));
         call(
             &format!("rest-{index}"),
-            "browser_read",
-            &json!({"tab":tab,"start_chunk":first["next_start_chunk"],"max_chunks":8,"max_chars":8000}),
+            "web_read",
+            &json!({"url":url,"start_chunk":first["next_start_chunk"],"max_chunks":8,"max_chars":8000}),
         )
     };
     let research = 2;
@@ -150,17 +143,8 @@ fn steward(round: usize, body: &Value, batched: bool) -> Vec<Value> {
             "web_search",
             &json!({"query":"spring tide tables"}),
         )],
-        3 => {
-            let ids = outputs[outputs.len() - 1]["results"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|result| result["id"].clone())
-                .collect::<Vec<_>>();
-            vec![call("open", "browser_open", &json!({"results":ids}))]
-        }
-        n if n < research + 2 + reads => {
-            let step = n - research - 2;
+        n if n < research + 1 + reads => {
+            let step = n - research - 1;
             if batched {
                 (0..3)
                     .map(|index| if step == 0 { read(index) } else { rest(index) })
@@ -171,7 +155,7 @@ fn steward(round: usize, body: &Value, batched: bool) -> Vec<Value> {
                 vec![rest(step / 2)]
             }
         }
-        n if n == research + 2 + reads => vec![call(
+        n if n == research + 1 + reads => vec![call(
             "close",
             "record_work_disposition",
             &json!({"work_id":work_id(body),"disposition":"completed","summary":REPORT,
