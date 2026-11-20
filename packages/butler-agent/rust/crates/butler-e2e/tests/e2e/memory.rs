@@ -358,6 +358,8 @@ mod cold_recall;
 
 #[path = "memory/compact.rs"]
 mod compact;
+#[path = "memory/context_reference.rs"]
+mod context_reference;
 #[path = "memory/hook_context.rs"]
 mod hook_context;
 #[path = "memory/reset_vectors.rs"]

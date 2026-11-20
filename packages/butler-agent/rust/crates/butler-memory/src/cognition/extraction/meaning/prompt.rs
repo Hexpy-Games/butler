@@ -1,5 +1,5 @@
 //! The meaning stage prompt: numbered passages plus as much earlier context
-//! (newest first) as fits the 4 KiB prompt budget.
+//! (newest first) as fits the 20 KiB prompt budget, with parts limited to 4 KiB.
 
 use serde::Serialize;
 
@@ -7,8 +7,9 @@ use super::{Passage, error, json_error};
 use crate::cognition::extraction::ExtractInput;
 use crate::cognition::{CognitionCode, CognitionResult};
 
-/// Prompt and context budget of one meaning call, in `JSON.stringify` bytes.
+/// Parts-only budget of one meaning call, in `JSON.stringify` bytes.
 const PROMPT_BUDGET_BYTES: usize = 4096;
+const CONTEXT_PROMPT_BUDGET_BYTES: usize = 20 * 1024;
 
 /// The meaning stage input shown to the model.
 #[derive(Serialize)]
@@ -107,7 +108,7 @@ fn fitting_context<'a>(
             parts,
             context: &candidate,
         };
-        if bytes(&candidate)? <= PROMPT_BUDGET_BYTES {
+        if bytes(&candidate)? <= CONTEXT_PROMPT_BUDGET_BYTES {
             context.insert(0, item);
         }
     }
