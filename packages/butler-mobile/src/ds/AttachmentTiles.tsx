@@ -38,6 +38,8 @@ export interface AttachmentTilesProps {
  * thumbnails, not wrappers (owner, 2026-11-20). This is the only place to change it.
  */
 const TILE_RADIUS = 16;
+// Visible remove button; hitSlop grows it to --control-hit-target.
+const REMOVE_SIZE = 28;
 
 function Tile({ item, layout, onRemove, removeLabel, uploadingLabel, failedLabel }: Omit<AttachmentTilesProps, "items"> & { item: AttachmentTile }) {
   const t = useTokens();
@@ -49,7 +51,7 @@ function Tile({ item, layout, onRemove, removeLabel, uploadingLabel, failedLabel
     animation.start();
     return () => animation.stop();
   }, [t, enter, reduced]);
-  const size = layout === "row" ? 64 : 96;
+  const size = layout === "row" ? 128 : 96;
   const uploading = item.upload === "uploading";
   const failed = item.upload === "failed";
   const pill = t.length(PILL);
@@ -69,22 +71,22 @@ function Tile({ item, layout, onRemove, removeLabel, uploadingLabel, failedLabel
             <GlassFill radii={radii} /><Spinner size={14} />
           </View>
         </View> : null}
-      </> : <View style={{ flex: 1, padding: layout === "row" ? 6 : t.length("--space-2"), gap: t.length("--space-1") }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-1") }}>
+      </> : <View style={{ flex: 1, padding: t.length("--space-2"), gap: t.length("--space-1") }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-1"), paddingEnd: layout === "row" && onRemove ? REMOVE_SIZE : undefined }}>
           {uploading ? <Spinner size={14} /> : <Icon glyph={failed ? icons.AlertCircle : icons.File} size="xs" tone={failed ? "danger" : "tertiary"} />}
           <View style={{ flex: 1 }}><Text variant="caption" weight="semibold" tone={failed ? "danger" : "secondary"} lines={1}>{item.extension}</Text></View>
         </View>
-        <Text variant="caption" lines={layout === "row" ? 1 : 2}>{item.name}</Text>
+        <Text variant="caption" lines={layout === "row" ? 3 : 2}>{item.name}</Text>
         {layout === "wrap" && item.meta ? <View style={{ marginTop: "auto" }}>
           <Text variant="caption" tone="tertiary" numeric="tabular">{item.meta}</Text>
         </View> : null}
       </View>}
     </View>
     {layout === "row" && onRemove ? <Pressable onPress={() => onRemove(item.key)}
-      hitSlop={(t.length("--control-hit-target") - 24) / 2} accessibilityRole="button" accessibilityLabel={removeLabel?.(item.name)}
-      style={{ position: "absolute", top: t.length("--space-1"), end: t.length("--space-1"),
-        width: 24, height: 24, borderRadius: pill, alignItems: "center", justifyContent: "center" }}>
-      <GlassFill radii={radii} /><HugeiconsIcon icon={icons.X} size={12} color={t.color("--text-primary")} />
+      hitSlop={(t.length("--control-hit-target") - REMOVE_SIZE) / 2} accessibilityRole="button" accessibilityLabel={removeLabel?.(item.name)}
+      style={{ position: "absolute", top: t.length("--space-2"), end: t.length("--space-2"),
+        width: REMOVE_SIZE, height: REMOVE_SIZE, borderRadius: pill, alignItems: "center", justifyContent: "center" }}>
+      <GlassFill radii={radii} /><HugeiconsIcon icon={icons.X} size={16} color={t.color("--text-primary")} />
     </Pressable> : null}
   </Animated.View>;
 }
