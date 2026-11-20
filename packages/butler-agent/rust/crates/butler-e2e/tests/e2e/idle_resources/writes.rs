@@ -234,6 +234,46 @@ impl Watch {
     }
 }
 
+/// Waits until nothing under `data` has been created, modified or removed for `quiet`; fails if
+/// that has not happened within `bound`.
+pub(crate) async fn wait_until_settled(
+    data: &Path,
+    quiet: Duration,
+    bound: Duration,
+) -> Result<(), HarnessError> {
+    let start = std::time::Instant::now();
+    let last = Arc::new(Mutex::new((start, String::new())));
+    let sink = last.clone();
+    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+        if let Ok(event) = event
+            && (event.kind.is_modify() || event.kind.is_create() || event.kind.is_remove())
+        {
+            let path = event
+                .paths
+                .first()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default();
+            *sink.lock().unwrap() = (std::time::Instant::now(), path);
+        }
+    })
+    .map_err(std::io::Error::other)?;
+    watcher
+        .watch(data, RecursiveMode::Recursive)
+        .map_err(std::io::Error::other)?;
+    loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let (at, path) = last.lock().unwrap().clone();
+        if at.elapsed() >= quiet {
+            return Ok(());
+        }
+        if start.elapsed() >= bound {
+            return Err(HarnessError(format!(
+                "data dir did not settle for {quiet:?} within {bound:?}; last write: {path}"
+            )));
+        }
+    }
+}
+
 fn snapshot(root: &Path) -> std::io::Result<BTreeMap<PathBuf, (u64, SystemTime)>> {
     let mut files = BTreeMap::new();
     let mut directories = vec![root.to_path_buf()];
