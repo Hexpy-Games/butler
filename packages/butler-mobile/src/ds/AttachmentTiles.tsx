@@ -89,8 +89,9 @@ export function AttachmentTiles({ items, layout, ...props }: AttachmentTilesProp
   const t = useTokens();
   const tiles = items.map(item => <Tile key={item.key} item={item} layout={layout} {...props} />);
   const gap = t.length("--space-2");
+  // Mirrors the desktop track: the input's own bottom padding sits above, --space-3 below.
   return layout === "row" ? <ScrollView horizontal showsHorizontalScrollIndicator={false}
-    contentContainerStyle={{ gap, paddingTop: t.length("--space-3"), paddingHorizontal: t.length("--space-4"), paddingBottom: 0 }}>
+    contentContainerStyle={{ gap, paddingTop: 0, paddingHorizontal: t.length("--space-4"), paddingBottom: t.length("--space-3") }}>
     {tiles}
   </ScrollView> : <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap }}>{tiles}</View>;
 }
