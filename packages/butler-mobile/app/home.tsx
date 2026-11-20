@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { FlatList, LayoutAnimation, Platform, RefreshControl, ScrollView, View } from "react-native";
+import { Animated, FlatList, LayoutAnimation, RefreshControl, ScrollView, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ScrollEdgeEffectProvider, useScrollEdgeEffectRef } from "@bsky.app/expo-scroll-edge-effect";
 import { router, useFocusEffect } from "expo-router";
 import { getAppCopy } from "../../butler-i18n/src/index.ts";
 import type { EpicCard } from "../../butler-protocol/src/index.ts";
-import { Badge, Button, ButtonGroup, EdgeFade, Icon, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
+import { Badge, Button, ButtonGroup, Icon, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
 import { probe } from "@/connection/probe";
 import type { Problem } from "@/connection/problems";
@@ -11,6 +13,7 @@ import { pairingStore } from "@/connection/store";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useReducedMotion } from "@/ds/internal/motion";
 
+import { HomeHeader, HOME_HEADER_ROW } from "@/conversation/HomeHeader";
 import { NewConversationSheet } from "@/conversation/NewConversationSheet";
 import { RowActions } from "@/conversation/RowActions";
 import { useConversation } from "@/conversation/live";
@@ -56,7 +59,7 @@ export default function Home() {
     void check();
     return () => { latest.current++; };
   }, [check]));
-  if (status.kind === "ready") return <Conversations />;
+  if (status.kind === "ready") return <ScrollEdgeEffectProvider><Conversations /></ScrollEdgeEffectProvider>;
   return (
     <Surface variant="base" grow edges={["top", "bottom", "left", "right"]} padding="lg">
       <View style={{ flex: 1, gap: t.length("--space-4") }}>
@@ -85,9 +88,11 @@ function Conversations() {
   const locale = useAppLocale();
   const appCopy = getAppCopy(locale);
   const t = useTokens();
+  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const edgeRef = useScrollEdgeEffectRef();
   const { view, error, retry, refresh } = useNavigationView();
   const { lost } = useConversation();
-  const [scrolled, setScrolled] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [actionRow, setActionRow] = useState<SpaceRow | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -127,12 +132,12 @@ function Conversations() {
   }, [tree]);
   const paddingHorizontal = t.length("--space-4");
   return <>
-    {/* The list is the screen's root view: iOS ties the header to a scroll view only when nothing wraps it. */}
-    <FlatList data={rows} keyExtractor={item => item.key} contentInsetAdjustmentBehavior="automatic"
+    <Animated.FlatList data={rows} keyExtractor={item => item.key} contentInsetAdjustmentBehavior="never"
+      ref={(node: FlatList<SpaceRow> | null) => { if (typeof edgeRef === "function") edgeRef(node); }}
       style={{ backgroundColor: t.color("--color-surface-base") }}
-      contentContainerStyle={{ flexGrow: 1, paddingHorizontal, paddingBottom: Platform.OS === "android" ? t.length("--control-hit-target") + 2 * t.length("--space-4") : undefined }}
-      onScroll={event => setScrolled(event.nativeEvent.contentOffset.y > 0)} scrollEventThrottle={16}
-      refreshControl={<RefreshControl refreshing={refreshing} tintColor={t.color("--text-secondary")} onRefresh={() => {
+      contentContainerStyle={{ flexGrow: 1, paddingHorizontal, paddingTop: insets.top + HOME_HEADER_ROW, paddingBottom: insets.bottom + t.length("--control-hit-target") + 2 * t.length("--space-4") }}
+      onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })} scrollEventThrottle={16}
+      refreshControl={<RefreshControl refreshing={refreshing} progressViewOffset={insets.top + HOME_HEADER_ROW} tintColor={t.color("--text-secondary")} onRefresh={() => {
         setRefreshing(true);
         void refresh().finally(() => setRefreshing(false));
       }} />}
@@ -157,7 +162,7 @@ function Conversations() {
       </View>}
       ListHeaderComponent={lost ? <Text variant="caption" tone="tertiary">{copy.conversations.reconnecting}</Text> : undefined}
     />
-    <EdgeFade edge="top" visible={scrolled} />
+    <HomeHeader scrollY={scrollY} title={copy.conversations.title} settingsLabel={appCopy.sidebar.settings} onSettings={() => router.push("/settings")} />
     <RowActions row={actionRow} view={view} tree={tree} onClose={() => setActionRow(null)} onChanged={refresh} />
     <NewConversationSheet view={view} />
   </>;

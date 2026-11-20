@@ -28,11 +28,7 @@ export function NewConversationSheet({ view }: { view: NavigationView | null }) 
     else setOpen(true);
   };
   return <>
-    <Stack.Screen options={{ ...options, title: copy.conversations.title, headerLargeTitle: Platform.OS === "ios",
-      ...(Platform.OS === "ios" ? {
-        unstable_headerRightItems: () => [{ type: "button", label: appCopy.sidebar.settings,
-          icon: { type: "sfSymbol", name: "gearshape" }, onPress: () => router.push("/settings") }],
-      } : { headerRight: () => <IconButton icon={icons.Settings} variant="ghost" label={appCopy.sidebar.settings} onPress={() => router.push("/settings")} /> }) }} />
+    <Stack.Screen options={{ ...options, headerShown: false, title: copy.conversations.title }} />
     {Platform.OS === "ios" ? <Stack.Toolbar placement="bottom">
       <Stack.Toolbar.Spacer />
       <Stack.Toolbar.Button icon="square.and.pencil" accessibilityLabel={appCopy.space.newChat} disabled={!view} onPress={newChat} />
