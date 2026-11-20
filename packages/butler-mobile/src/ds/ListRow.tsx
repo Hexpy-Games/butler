@@ -18,6 +18,8 @@ export interface ListRowProps {
   trailing?: React.ReactNode;
   disclosure?: { expanded: boolean };
   onPress?: () => void;
+  /** Opens the row's actions; also offered to screen readers as the "longpress" action. */
+  onLongPress?: () => void;
   selected?: boolean;
   disabled?: boolean;
   titleLines?: 1 | 2;
@@ -28,12 +30,12 @@ export interface ListRowProps {
 }
 
 export function ListRow({
-  title, description, meta, icon, trailing, onPress, selected, disabled, titleLines = 1, descriptionLines = 2,
+  title, description, meta, icon, trailing, onPress, onLongPress, selected, disabled, titleLines = 1, descriptionLines = 2,
   accessibilityLabel, accessibilityHint, testID, disclosure,
 }: ListRowProps) {
   const t = useTokens();
   const reduced = useReducedMotion();
-  const press = usePress({ scale: false, disabled: disabled || !onPress });
+  const press = usePress({ scale: false, disabled: disabled || (!onPress && !onLongPress) });
   const filled = press.pressed || !!selected;
   const underlay = useRef(new Animated.Value(filled ? 1 : 0)).current;
   useEffect(() => {
@@ -130,7 +132,7 @@ export function ListRow({
     boxShadow: press.focused ? t.shadow("--focus-ring") : undefined,
   } as const;
 
-  if (!onPress) return <View style={container} testID={testID}>{body}</View>;
+  if (!onPress && !onLongPress) return <View style={container} testID={testID}>{body}</View>;
   return (
     <Pressable
       accessible
@@ -141,6 +143,9 @@ export function ListRow({
       testID={testID}
       disabled={disabled}
       onPress={onPress}
+      onLongPress={onLongPress}
+      accessibilityActions={onLongPress ? [{ name: "longpress" }] : undefined}
+      onAccessibilityAction={event => { if (event.nativeEvent.actionName === "longpress") onLongPress?.(); }}
       {...press.handlers}
       style={container}
     >

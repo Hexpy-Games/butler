@@ -29,8 +29,14 @@ import Delete02Icon from "@hugeicons/core-free-icons/Delete02Icon";
 import BookOpen01Icon from "@hugeicons/core-free-icons/BookOpen01Icon";
 import BubbleChatAddIcon from "@hugeicons/core-free-icons/BubbleChatAddIcon";
 import FolderAddIcon from "@hugeicons/core-free-icons/FolderAddIcon";
+import Archive02Icon from "@hugeicons/core-free-icons/Archive02Icon";
+import Flag01Icon from "@hugeicons/core-free-icons/Flag01Icon";
+import Ticket01Icon from "@hugeicons/core-free-icons/Ticket01Icon";
 
 export const icons = {
+  Archive: Archive02Icon,
+  Flag: Flag01Icon,
+  Ticket: Ticket01Icon,
   Document: BookOpen01Icon,
   BranchChat: BubbleChatAddIcon,
   BranchProject: FolderAddIcon,

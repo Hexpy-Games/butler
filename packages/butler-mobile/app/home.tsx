@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { FlatList, Platform, RefreshControl, ScrollView, View } from "react-native";
+import { FlatList, LayoutAnimation, Platform, RefreshControl, ScrollView, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Badge, Button, ButtonGroup, EdgeFade, Icon, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
@@ -7,8 +7,10 @@ import { probe } from "@/connection/probe";
 import type { Problem } from "@/connection/problems";
 import { pairingStore } from "@/connection/store";
 import { useAppLocale, useMobileCopy } from "@/i18n";
+import { useReducedMotion } from "@/ds/internal/motion";
 
 import { NewConversationSheet } from "@/conversation/NewConversationSheet";
+import { RowActions } from "@/conversation/RowActions";
 import { useConversation } from "@/conversation/live";
 import { useNavigationView } from "@/conversation/useNavigationView";
 import { spaceTree, visibleRows, type SpaceRow } from "@/conversation/space";
@@ -82,15 +84,27 @@ function Conversations() {
   const { lost } = useConversation();
   const [scrolled, setScrolled] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [actionRow, setActionRow] = useState<SpaceRow | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const tree = useMemo<ReturnType<typeof spaceTree>>(() => view ? spaceTree(view) : { children: new Map() }, [view]);
   const rows: SpaceRow[] = visibleRows(tree, collapsed);
   if (tree.general) rows.unshift({ key: "s:general", kind: "session", title: tree.general.title, session: tree.general, depth: 0 });
-  const toggle = (key: string) => setCollapsed(previous => {
-    const next = new Set(previous);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
+  const reduced = useReducedMotion();
+  const toggle = (key: string) => {
+    const expanding = collapsed.has(key);
+    // Rows slide and fade with the desktop collapse timing (--motion-base in, --motion-exit-base out).
+    if (!reduced) LayoutAnimation.configureNext({
+      duration: t.duration(expanding ? "--motion-base" : "--motion-exit-base"),
+      create: { type: "easeOut", property: "opacity" },
+      update: { type: expanding ? "easeOut" : "easeIn" },
+      delete: { type: "easeIn", property: "opacity" },
+    });
+    setCollapsed(previous => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
   const unread = useMemo(() => {
     const keys = new Set<string>();
     const visit = (parent: string | null): boolean => {
@@ -118,8 +132,9 @@ function Conversations() {
         void refresh().finally(() => setRefreshing(false));
       }} />}
       renderItem={({ item }) => <View style={{ paddingLeft: item.depth * t.length("--space-4") }}>
-        {item.session ? <SessionRow session={item.session} locale={locale} />
+        {item.session ? <SessionRow session={item.session} locale={locale} onLongPress={item.key === "s:general" ? undefined : () => setActionRow(item)} />
           : <ListRow icon={item.kind === "project" ? icons.Briefcase : icons.Folder} title={item.title}
+            onLongPress={() => setActionRow(item)}
             {...((tree.children.get(item.key)?.length ?? 0) > 0 ? {
               disclosure: { expanded: !collapsed.has(item.key) },
               onPress: () => toggle(item.key),
@@ -137,18 +152,19 @@ function Conversations() {
       ListHeaderComponent={lost ? <Text variant="caption" tone="tertiary">{copy.conversations.reconnecting}</Text> : undefined}
     />
     <EdgeFade edge="top" visible={scrolled} />
+    <RowActions row={actionRow} view={view} tree={tree} onClose={() => setActionRow(null)} onChanged={refresh} />
     <NewConversationSheet view={view} />
   </>;
 }
 
-function SessionRow({ session, locale }: { session: NonNullable<SpaceRow["session"]>; locale: string }) {
+function SessionRow({ session, locale, onLongPress }: { session: NonNullable<SpaceRow["session"]>; locale: string; onLongPress?: () => void }) {
   const copy = useMobileCopy();
   const t = useTokens();
   const title = session.title.trim() ? session.title : copy.conversations.untitled;
   const mark = sessionMark(session);
   return <ListRow icon={session.project_id && session.id !== "general" ? icons.Notebook : icons.MessageSquare}
     title={title} description={session.last_message_preview ? markdownPlainText(session.last_message_preview) : undefined}
-    descriptionLines={1} meta={timeLabel(session.last_activity_at, locale, new Date())}
+    descriptionLines={1} meta={timeLabel(session.last_activity_at, locale, new Date())} onLongPress={onLongPress}
     trailing={<View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
       {mark === "attention" ? <Badge tone="warning" label={copy.conversations.needsAttention} />
         : mark === "working" ? <Spinner label={copy.conversations.working} />
