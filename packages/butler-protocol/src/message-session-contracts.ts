@@ -46,6 +46,11 @@ export interface SessionBranchSeed {
   excerptTruncated: boolean;
 }
 
+export interface SessionBranchResult {
+  session: SessionSummary;
+  seed: SessionBranchSeed;
+}
+
 export interface ProjectSourceReference {
   kind: "work" | "task" | "plan" | "spec" | "report" | "message" | "reference";
   id: string;

@@ -26,8 +26,14 @@ import RotateLeft01Icon from "@hugeicons/core-free-icons/RotateLeft01Icon";
 
 import PencilEdit01Icon from "@hugeicons/core-free-icons/PencilEdit01Icon";
 import Delete02Icon from "@hugeicons/core-free-icons/Delete02Icon";
+import BookOpen01Icon from "@hugeicons/core-free-icons/BookOpen01Icon";
+import BubbleChatAddIcon from "@hugeicons/core-free-icons/BubbleChatAddIcon";
+import FolderAddIcon from "@hugeicons/core-free-icons/FolderAddIcon";
 
 export const icons = {
+  Document: BookOpen01Icon,
+  BranchChat: BubbleChatAddIcon,
+  BranchProject: FolderAddIcon,
   Edit: PencilEdit01Icon,
   Delete: Delete02Icon,
   Briefcase: Briefcase01Icon,

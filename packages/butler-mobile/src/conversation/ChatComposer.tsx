@@ -10,6 +10,8 @@ import { ModelSheet } from "./ModelSheet";
 import { useAttachments } from "./useAttachments";
 import { useControls } from "./useControls";
 import { titleFromPrompt } from "./sessions";
+import { ProjectDocumentsSheet } from "./ProjectDocumentsSheet";
+import { documentContent, documentKindLabel } from "./documents";
 
 export function ChatComposer({ id, project, group, view, hasDecision, text, setText, onPending, refreshQueue, onHeightChange, onSend }: {
   id?: string; project?: string; group?: string; view: SessionView | null; hasDecision: boolean;
@@ -19,13 +21,15 @@ export function ChatComposer({ id, project, group, view, hasDecision, text, setT
   const copy = useMobileCopy();
   const { client } = useConversation();
   const locale = useAppLocale();
+  const appCopy = getAppCopy(locale);
   const attachments = useAttachments(id);
   const model = useControls(id);
-  const [sheet, setSheet] = useState<"attach" | "model" | "context" | null>(null);
+  const [sheet, setSheet] = useState<"attach" | "documents" | "model" | "context" | null>(null);
   const turn = view?.active_turn;
   const ready = attachments.items.flatMap(item => item.status === "ready" && item.file ? [item.file] : []);
+  const hasReferences = attachments.items.some(item => item.status === "ready" && item.reference);
   const uploading = attachments.items.some(item => item.status === "uploading");
-  const canSend = (!!text.trim() || ready.length > 0) && !uploading && !hasDecision;
+  const canSend = (!!text.trim() || ready.length > 0 || hasReferences) && !uploading && !hasDecision;
   const { busy, setBusy, send } = useMessageSend({ id, project, group, text, setText, ready, attachments,
     activeTurn: !!turn, canSend, onPending, onSend, refreshQueue });
   const stop = async () => {
@@ -37,11 +41,12 @@ export function ChatComposer({ id, project, group, view, hasDecision, text, setT
   };
   return <ComposerDock onHeightChange={onHeightChange}>
     <Composer value={text} onChangeText={setText} placeholder={copy.chat.placeholder} canSend={canSend}
-      mode={turn?.cancellable && !text.trim() && !ready.length ? "stop" : "send"} busy={busy} disabled={!id && busy} onSend={send} onStop={stop}
+      mode={turn?.cancellable && !text.trim() && !ready.length && !hasReferences ? "stop" : "send"} busy={busy} disabled={!id && busy} onSend={send} onStop={stop}
       sendLabel={copy.chat.send} stopLabel={copy.chat.stop} attach={id ? { label: copy.chat.attach, onPress: () => setSheet("attach") } : undefined}
       attachments={attachments.items.length ? <AttachmentTiles layout="row" items={attachments.items.map(item => ({
-        key: item.key, name: item.name, kind: item.kind, image: item.kind === "image" ? { uri: item.uri } : undefined,
-        extension: item.name.trim().match(/\.([^.]+)$/)?.[1]?.toUpperCase() || copy.chat.fileLabel,
+        key: item.key, name: item.name, kind: item.kind, image: item.kind === "image" && item.uri ? { uri: item.uri } : undefined,
+        extension: item.reference ? documentKindLabel(item.reference.source.kind, appCopy)
+          : item.name.trim().match(/\.([^.]+)$/)?.[1]?.toUpperCase() || copy.chat.fileLabel,
         upload: item.status === "ready" ? undefined : item.status,
       }))} onRemove={attachments.remove} removeLabel={copy.chat.removeAttachment}
         uploadingLabel={copy.chat.uploading} failedLabel={copy.chat.uploadFailed} /> : null}
@@ -54,10 +59,14 @@ export function ChatComposer({ id, project, group, view, hasDecision, text, setT
       {view?.context ? <ContextBody context={view.context} /> : null}
     </Sheet>
     <Sheet open={sheet === "attach"} onClose={() => setSheet(null)} title={copy.chat.attach} cancelLabel={copy.chat.close}>
+      {view?.project_id ? <ListRow icon={icons.Document} title={appCopy.interfaceDetails.projectDocuments}
+        onPress={() => setSheet("documents")} /> : null}
       {model.current?.image_input_support !== "unsupported" ? <ListRow icon={icons.Image} title={copy.chat.attachPhoto}
         onPress={() => { setSheet(null); void attachments.pick("photo"); }} /> : null}
       <ListRow icon={icons.File} title={copy.chat.attachFile} onPress={() => { setSheet(null); void attachments.pick("file"); }} />
     </Sheet>
+    {view?.project_id ? <ProjectDocumentsSheet key={view.project_id} projectId={view.project_id} open={sheet === "documents"}
+      onClose={() => setSheet(null)} onPick={attachments.addProjectDocument} /> : null}
   </ComposerDock>;
 }
 
@@ -77,7 +86,8 @@ function useMessageSend({ id, project, group, text, setText, ready, attachments,
     onSend();
     setBusy(true);
     if (!id) onPending(text);
-    const keys = attachments.items.filter(item => item.status === "ready" && item.file).map(item => item.key);
+    const keys = attachments.items.filter(item => item.status === "ready" && (item.file || item.reference)).map(item => item.key);
+    const references = attachments.items.flatMap(item => item.status === "ready" && item.reference ? [item.reference] : []);
     let sessionId = id;
     const title = titleFromPrompt(text, appCopy.space.newChat);
     try {
@@ -88,6 +98,7 @@ function useMessageSend({ id, project, group, text, setText, ready, attachments,
         sessionId = session.id;
       }
       const body: MessageSendRequest = { chat_id: sessionId, text: text.trim(),
+        ...(references.length ? { content_parts: documentContent(text.trim(), references) } : {}),
         client_message_id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
         attachments: ready.map(file => ({ file_id: file.file_id })), queue_policy: activeTurn ? "enqueue_if_busy" : "send_now" };
       const result = await client.request<MessageSendResult>("/messages", { body });

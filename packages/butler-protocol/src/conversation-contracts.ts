@@ -50,6 +50,7 @@ export interface SessionViewCursors {
 export type MessageRole = "user" | "assistant" | "system" | "system_event" | "tool_summary" | "automation";
 
 export interface ConversationMessage {
+  content_parts?: MessageContent;
   id: string;
   chat_id?: string;
   turn_id?: string;
@@ -85,6 +86,7 @@ export interface SessionView {
 }
 
 export interface MessageSendRequest {
+  content_parts?: MessageContent;
   chat_id: string;
   text: string;
   client_message_id: string;

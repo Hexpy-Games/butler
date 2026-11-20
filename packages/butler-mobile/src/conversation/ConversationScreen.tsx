@@ -88,7 +88,8 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
   }, [dockHeight]);
   return <>
     <FlatList ref={ref} data={rows} keyExtractor={message => message.id}
-      renderItem={({ item }) => "questionAnswer" in item ? <QuestionAnswerCard answer={item.questionAnswer} /> : <Message message={item} latestTurn={view?.latest_turn} />}
+      renderItem={({ item }) => "questionAnswer" in item ? <QuestionAnswerCard answer={item.questionAnswer} /> : <Message message={item}
+        latestTurn={view?.latest_turn} sessionId={view?.session_id} projectId={view?.project_id} />}
       maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
       contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerInset }} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
       keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" scrollEventThrottle={16}
