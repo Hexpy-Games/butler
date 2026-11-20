@@ -8,7 +8,7 @@ import { ScrollEdgeEffect } from "@bsky.app/expo-scroll-edge-effect";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { icons, Text, useTokens } from "@/ds";
 import { alpha } from "@/design/tokens";
-import { GlassFill, GLASS_BLUR_IOS } from "@/ds/internal/GlassFill";
+import { GlassFill, GLASS_BLUR_IOS, liquidGlass, glassShadow } from "@/ds/internal/GlassFill";
 
 const Mask = MaskedView as unknown as ComponentType<ViewProps & { maskElement: ReactElement }>; // 0.3.2 class typings predate @types/react 19
 
@@ -44,7 +44,8 @@ export function HomeHeader({ scrollY, title, settingsLabel, onSettings }: {
       flexDirection: "row", alignItems: "center", paddingHorizontal: edge, transform: [{ translateY: follow }] }}>
       <View style={{ flex: 1 }}><Text variant="h1" lines={1}>{title}</Text></View>
       <Pressable accessibilityRole="button" accessibilityLabel={settingsLabel} onPress={onSettings}
-        style={({ pressed }) => ({ width: button, height: button, borderRadius: pill, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.6 : 1 })}>
+        style={({ pressed }) => ({ width: button, height: button, borderRadius: pill, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.6 : 1,
+          borderWidth: liquidGlass ? 0 : t.length("--border-hairline"), borderColor: t.color("--tinted-glass-border"), boxShadow: glassShadow(t) })}>
         <GlassFill radii={{ topLeft: pill, topRight: pill, bottomRight: pill, bottomLeft: pill }} />
         <HugeiconsIcon icon={icons.Settings} size={t.length("--titlebar-action-icon-size")} color={t.color("--text-primary")} />
       </Pressable>
