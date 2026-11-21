@@ -33,3 +33,16 @@ test("message.deleted removes the message and session events are routed", () => 
   expect(applyLiveEvent(view, { id: 2, type: "message.deleted", payload: { chat_id: "s2", message_id: "m1" } })).toBeNull();
   expect(applyLiveEvent(view, { id: 3, type: "turn.state_changed", payload: { chat_id: "s1" } })).toBe("refetch");
 });
+
+test("a steward child turn state change refetches the parent view", () => {
+  const view: SessionView = {
+    session_id: "s1", kind: "chat", status: "active", active_turn: null, latest_turn: null, messages: [],
+    steward_children: [{
+      relation: { relation_id: "r1", parent_session_id: "s1", parent_turn_id: "t1", child_session_id: "c1", anchor_message_id: "u1", created_at: "2026-11-20T00:00:00Z" },
+      session_id: "c1", title: "Work", status: "active", active_turn: null, latest_turn: null,
+      terminal: false, result: null, updated_at: "2026-11-20T00:00:00Z",
+    }],
+    message_window: { next_cursor: 0, complete: true }, cursors: { messages: 0, events: 0 }, updated_at: "2026-11-20T00:00:00Z",
+  };
+  expect(applyLiveEvent(view, { id: 1, type: "turn.state_changed", payload: { session_id: "c1" } })).toBe("refetch");
+});

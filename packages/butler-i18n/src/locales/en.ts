@@ -519,6 +519,7 @@ export const enUsCopy: AppCopy = {
     },
     chat: {
       copy: "Copy",
+      selectText: "Select text",
       copied: "Copied",
       retryFailed: "Could not retry.",
       attach: "Attach",
@@ -540,8 +541,6 @@ export const enUsCopy: AppCopy = {
       fileLabel: "File",
       removeAttachment: (name) => `Remove ${name}`,
       contextUsed: (percent) => `${percent}% used`,
-      contextTokens: (used, budget) => `${used} of ${budget} tokens`,
-      contextCompact: (at) => `Compacts automatically at ${at}`,
 
       placeholder: "Message Butler",
       send: "Send",

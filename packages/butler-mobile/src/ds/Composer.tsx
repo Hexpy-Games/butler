@@ -70,9 +70,9 @@ export function Composer({
       />
       {attachments}
       <View style={{ borderColor: divider, borderTopWidth: t.length("--border-hairline"),
-        flexDirection: "row", alignItems: "center", minHeight: t.length("--control-hit-target"),
-        padding: t.length("--space-xs"), gap: t.length("--space-1") }}>
-        {attach ? <IconButton icon={icons.Plus} label={attach.label} onPress={attach.onPress} disabled={disabled} /> : null}
+        flexDirection: "row", alignItems: "center",
+        padding: t.length("--space-2"), gap: t.length("--space-2") }}>
+        {attach ? <IconButton size="control" icon={icons.Plus} label={attach.label} onPress={attach.onPress} disabled={disabled} /> : null}
         {leading}
         <View style={{ flex: 1, minWidth: t.length("--space-2") }} />
         {trailing}

@@ -1,5 +1,6 @@
+import type { InterfaceTextReference } from "../../butler-i18n/src/index.ts";
 import type { AnswerBlockSet } from "./app-contracts.ts";
-import type { ChatKind, MessageContent, MessageFileRef, SessionSummary, TurnState } from "./message-session-contracts.ts";
+import type { ChatKind, MessageContent, MessageFileRef, ProgressSummaryRow, SessionSummary, TurnState, WorkerActivityWorkBlock } from "./message-session-contracts.ts";
 
 export type RuntimeDeliveryState =
   | "running"
@@ -18,7 +19,50 @@ export type SessionViewStatus =
   | "failed"
   | "cancelled";
 
+export interface SessionTurnProgress {
+  summary?: string;
+  summary_reference?: InterfaceTextReference;
+  started_at?: string;
+  safe_progress_rows: ProgressSummaryRow[];
+}
+
+export interface SessionRelation {
+  relation_id: string;
+  parent_session_id: string;
+  parent_turn_id: string;
+  child_session_id: string;
+  anchor_message_id: string;
+  created_at: string;
+}
+
+export interface WorkPlanAction {
+  action_key: string; order: number; title: string; purpose: string;
+  status: "pending" | "active" | "done" | "blocked" | "skipped";
+  started_at?: string; finished_at?: string; added_in_revision: number;
+}
+export interface WorkPlanRevision { revision: number; at: string; added: string[]; removed: string[]; reason?: string }
+export interface WorkPlan { revision: number; actions: WorkPlanAction[]; revisions: WorkPlanRevision[] }
+export interface ActivityHistoryEntry { turn_id: string; created_at: string; rows: ProgressSummaryRow[] }
+
+export interface StewardChild {
+  plan?: WorkPlan;
+  approved_plan_revision?: number;
+  relation: SessionRelation;
+  session_id: string;
+  title: string;
+  status: string;
+  active_turn: SessionViewTurn | null;
+  latest_turn: SessionViewTurn | null;
+  waiting_for_children?: boolean;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
+  result: { status: "success" | "blocked" | "failed" | "cancelled" } | null;
+  terminal: boolean;
+  updated_at: string;
+}
+
 export interface SessionViewTurn {
+  progress?: SessionTurnProgress;
   id: string;
   state: TurnState;
   safe_status_label?: string;
@@ -50,6 +94,7 @@ export interface SessionViewCursors {
 export type MessageRole = "user" | "assistant" | "system" | "system_event" | "tool_summary" | "automation";
 
 export interface ConversationMessage {
+  turn_activity_rows?: ProgressSummaryRow[];
   content_parts?: MessageContent;
   id: string;
   chat_id?: string;
@@ -57,6 +102,9 @@ export interface ConversationMessage {
   role: MessageRole;
   text: string;
   answer_blocks?: AnswerBlockSet[];
+  work_blocks?: WorkerActivityWorkBlock[];
+  /** Set when Butler started the turn (schedule, canon step, delegated result); its request is not in the chat. */
+  initiated?: { kind: string };
   attachments?: MessageFileRef[];
   status?: string;
   delivery_state?: RuntimeDeliveryState;
@@ -68,6 +116,14 @@ export interface ConversationMessage {
 }
 
 export interface SessionView {
+  plan?: WorkPlan;
+  activity_history?: ActivityHistoryEntry[];
+  relation?: { safe_title?: string };
+  workers?: Array<StewardChild & { action_key?: string }>;
+  waiting_for_children?: boolean;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
+  steward_children?: StewardChild[];
   session_id: string;
   kind: ChatKind;
   project_id?: string;
@@ -138,6 +194,10 @@ export type MessageSendResult = { accepted?: boolean; queued?: QueuedMessageReco
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface ModelSummary {
+  /** Local server kind; only models on a local server have it. */
+  platform?: "llama_cpp" | "ollama" | "lm_studio" | "custom";
+  /** How the model's provider is signed in. */
+  auth_type?: "api_key" | "chatgpt_oauth";
   provider_id: string;
   provider_label: string;
   model_id: string;
@@ -174,6 +234,8 @@ export interface SessionControlsView {
 }
 
 export interface ContextDetails {
+  provider_id?: string;
+  updated_at?: string;
   used_tokens: number;
   budget_tokens: number;
   ratio: number;
@@ -233,4 +295,15 @@ export type UserQuestionResponse = { status: "answered"; answers: UserQuestionAn
 export interface AnsweredUserQuestions {
   request_ref: string; followup_message_id: string; source_turn_id: string; updated_at: string;
   questions: { questions: UserQuestion[] }; response: UserQuestionResponse;
+}
+
+export interface OperationOutputView {
+  turn_id: string;
+  request_id: string;
+  result_id: string;
+  content: string;
+  byte_start: number;
+  byte_end: number;
+  byte_length: number;
+  complete: boolean;
 }

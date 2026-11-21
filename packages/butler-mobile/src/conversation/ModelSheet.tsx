@@ -2,6 +2,7 @@ import { View } from "react-native";
 import { reasoningEffortLabel } from "../../../butler-i18n/src/reasoning-effort.ts";
 import { ListRow, Sheet, Text, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
+import { ModelMark } from "./ModelMark";
 import type { useControls } from "./useControls";
 
 export function ModelSheet({ open, onClose, controls, models, current, apply }: ReturnType<typeof useControls> & {
@@ -20,7 +21,7 @@ export function ModelSheet({ open, onClose, controls, models, current, apply }: 
       <Text variant="sectionTitle" tone="secondary">{copy.chat.model}</Text>
       {models.map(model => {
         const disabled = !!model.availability && model.availability !== "ready";
-        return <ListRow key={model.model_ref} title={model.display_name} description={model.provider_label}
+        return <ListRow icon={<ModelMark model={model} />} key={model.model_ref} title={model.display_name} description={model.provider_label}
           selected={model.model_ref === controls?.model} disabled={disabled} meta={disabled ? copy.chat.modelUnavailable : undefined}
           onPress={() => { void apply({ model: model.model_ref }); onClose(); }} />;
       })}

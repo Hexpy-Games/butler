@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { Platform, useWindowDimensions, View } from "react-native";
+import { Image, Platform, useWindowDimensions, View } from "react-native";
+import { getAppCopy } from "../../../../butler-i18n/src/index.ts";
+import { useAppLocale } from "../../i18n";
+import { ImageFrame } from "../ImageFrame";
+import { ImageViewer } from "../ImageViewer";
 import { useTokens } from "../../design/useTokens";
 import { AttachmentTiles, type AttachmentTile } from "../AttachmentTiles";
 import { Badge, UnreadDot } from "../Badge";
@@ -22,7 +26,9 @@ import { Switch } from "../Switch";
 import { Text, type TextTone, type TextVariant } from "../Text";
 import { TextField } from "../TextField";
 import { showToast, ToastView, type ToastTone } from "../Toast";
-import { en, ko, long, markdown, sampleImage, type Strings } from "./fixtures";
+import { WorkActivityBlock } from "../WorkActivityBlock";
+import { WorkActivityDisclosure } from "../WorkActivityDisclosure";
+import { en, ko, long, markdown, sampleImage, workActivityCollapsed, workActivityExpanded, workActivityNormal, type Strings } from "./fixtures";
 
 const noop = () => {};
 type Forced = "pressed" | "focused" | null;
@@ -398,7 +404,46 @@ function QueuedMessageSection() {
   </>;
 }
 
+function WorkActivitySection() {
+  const t = useTokens();
+  const [collapsedOpen, setCollapsedOpen] = useState(workActivityCollapsed.expanded);
+  const [expandedOpen, setExpandedOpen] = useState(workActivityExpanded.expanded);
+  const details = <View style={{ gap: t.length("--space-sm") }}>{workActivityExpanded.blocks.map((block, index) =>
+    <WorkActivityBlock key={block.title} {...block} density="compact" last={index === workActivityExpanded.blocks.length - 1} />)}</View>;
+  return <>
+    <Cell name="collapsed live disclosure"><WorkActivityDisclosure {...workActivityCollapsed} expanded={collapsedOpen} onToggle={() => setCollapsedOpen(value => !value)}>{details}</WorkActivityDisclosure></Cell>
+    <Cell name="expanded disclosure"><WorkActivityDisclosure {...workActivityExpanded} expanded={expandedOpen} onToggle={() => setExpandedOpen(value => !value)}>{details}</WorkActivityDisclosure></Cell>
+    <Cell name="normal block"><WorkActivityBlock {...workActivityNormal} /></Cell>
+  </>;
+}
+
+function ImageFrameSection() {
+  const t = useTokens();
+  const source = { uri: Image.resolveAssetSource(require("../../../assets/icon.png"))!.uri, headers: {} };
+  return <Cell name="fill · matte · placeholder"><View style={{ width: t.length("--layout-basis-xs"), maxWidth: "100%", gap: t.length("--space-md") }}>
+    <ImageFrame source={source} aspect="1:1" fit="fill" />
+    <ImageFrame source={source} aspect="16:9" fit="matte" />
+    <ImageFrame aspect="1:1" fit="fill" />
+  </View></Cell>;
+}
+
+function ImageViewerSection() {
+  const copy = getAppCopy(useAppLocale());
+  const [index, setIndex] = useState<number | null>(null);
+  const images = [require("../../../assets/icon.png"), require("../../../assets/splash-mark.png")].map(asset => {
+    const { uri, width, height } = Image.resolveAssetSource(asset)!;
+    return { source: { uri, headers: {} }, width: width!, height: height!, alt: copy.conversation.answerBlocks.image };
+  });
+  return <Cell name="ImageViewer">
+    <Button label={copy.conversation.imageViewer.viewImage(copy.conversation.answerBlocks.image)} onPress={() => setIndex(0)} />
+    <ImageViewer images={images} index={index} onIndexChange={setIndex} onClose={() => setIndex(null)} labels={copy.conversation.imageViewer} />
+  </Cell>;
+}
+
 export const sections: { id: string; title: string; render: (state?: string) => React.ReactNode }[] = [
+  { id: "image-frame", title: "ImageFrame", render: () => <ImageFrameSection /> },
+  { id: "image-viewer", title: "ImageViewer", render: () => <ImageViewerSection /> },
+  { id: "work-activity", title: "WorkActivity", render: () => <WorkActivitySection /> },
   { id: "queued-message", title: "QueuedMessage", render: () => <QueuedMessageSection /> },
   { id: "decision-card", title: "DecisionCard", render: () => <DecisionCardSection /> },
   { id: "markdown", title: "Markdown", render: () => <Cell name="Markdown"><Markdown text={markdown} /></Cell> },

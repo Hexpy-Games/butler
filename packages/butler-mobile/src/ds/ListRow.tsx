@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { RADIUS } from "../design/tokens";
@@ -14,7 +14,7 @@ export interface ListRowProps {
   title: string;
   description?: string;
   meta?: string;
-  icon?: IconGlyph;
+  icon?: IconGlyph | React.ReactElement;
   trailing?: React.ReactNode;
   disclosure?: { expanded: boolean };
   onPress?: () => void;
@@ -78,7 +78,7 @@ export function ListRow({
       {icon ? (
         <View style={{ opacity: 0.82 }}>
           <IconSlot size={t.length("--sidebar-icon-size")} lineHeight={titleLine}>
-            <HugeiconsIcon icon={icon} size={t.length("--sidebar-icon-size")} color={titleColor} />
+            {React.isValidElement(icon) ? icon : <HugeiconsIcon icon={icon} size={t.length("--sidebar-icon-size")} color={titleColor} />}
           </IconSlot>
         </View>
       ) : null}

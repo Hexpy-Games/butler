@@ -478,6 +478,7 @@ export interface MobileCopy {
   };
   chat: {
     copy: string;
+    selectText: string;
     copied: string;
     retryFailed: string;
     attach: string;
@@ -499,8 +500,6 @@ export interface MobileCopy {
     fileLabel: string;
     removeAttachment: (name: string) => string;
     contextUsed: (percent: number) => string;
-    contextTokens: (used: string, budget: string) => string;
-    contextCompact: (at: string) => string;
 
     placeholder: string;
     send: string;

@@ -517,6 +517,7 @@ export const koKrCopy: AppCopy = {
     },
     chat: {
       copy: "복사",
+      selectText: "텍스트 선택",
       copied: "복사했습니다",
       retryFailed: "다시 시도하지 못했습니다.",
       attach: "첨부",
@@ -538,8 +539,6 @@ export const koKrCopy: AppCopy = {
       fileLabel: "파일",
       removeAttachment: (name) => `${name} 빼기`,
       contextUsed: (percent) => `${percent}% 사용`,
-      contextTokens: (used, budget) => `${budget} 토큰 중 ${used}`,
-      contextCompact: (at) => `${at}에서 자동 압축`,
 
       placeholder: "버틀러에게 보내기",
       send: "보내기",
@@ -1201,7 +1200,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       previous: "이전 이미지",
       next: "다음 이미지",
       position: (current, total) => `${current} / ${total}`,
-      failed: "이미지를 불러오지 못했어요",
+      failed: "이미지를 불러오지 못했습니다.",
       openSource: "원본 페이지 열기",
       copyImage: "이미지 복사",
       imageCopied: "이미지를 복사했어요",

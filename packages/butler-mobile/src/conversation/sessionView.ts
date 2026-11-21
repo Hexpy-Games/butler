@@ -15,7 +15,7 @@ export function applyLiveEvent(view: SessionView, event: LiveEvent): SessionView
   }
   const turn = payload.turn as { chat_id?: string } | undefined;
   const id = payload.chat_id ?? payload.session_id ?? turn?.chat_id ?? message?.chat_id;
-  if (id === view.session_id && (["turn.", "session_queue.", "session.", "progress."]
+  if ((id === view.session_id || view.steward_children?.some(child => child.session_id === id)) && (["turn.", "session_queue.", "session.", "progress."]
     .some(prefix => event.type.startsWith(prefix)) || event.type === "agent.turn_event" || event.type === "agent.turn_event.progress")) {
     return "refetch";
   }
