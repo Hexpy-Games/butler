@@ -49,7 +49,7 @@ export function ChatComposer({ ref, id, project, group, view, hasDecision, text,
   };
   return <ComposerDock onHeightChange={onHeightChange}>
     <Composer value={text} onChangeText={setText} placeholder={copy.chat.placeholder} canSend={canSend}
-      mode={turn?.cancellable && !text.trim() && !ready.length && !hasReferences ? "stop" : "send"} busy={busy} disabled={!id && busy} onSend={send} onStop={stop}
+      mode={turn?.cancellable && !text.trim() && !ready.length && !hasReferences ? "stop" : "send"} busy={busy} disabled={!id && busy} onSend={() => { void send(); }} onStop={stop}
       sendLabel={copy.chat.send} stopLabel={copy.chat.stop} attach={{ label: copy.chat.attach, onPress: () => setSheet("attach") }}
       attachments={attachments.items.length ? <AttachmentTiles layout="row" items={attachments.items.map(item => ({
         key: item.key, name: item.name, kind: item.kind, image: item.kind === "image" && item.uri ? { uri: item.uri } : undefined,
