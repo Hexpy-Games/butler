@@ -47,6 +47,10 @@ impl Pending {
         Self(self.0.env(key, value))
     }
 
+    pub(crate) fn unset_env(self, key: &str) -> Self {
+        Self(self.0.unset_env(key))
+    }
+
     pub(crate) fn data_folder_token(self) -> Self {
         Self(self.0.data_folder_token())
     }
