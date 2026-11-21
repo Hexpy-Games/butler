@@ -41,8 +41,12 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     pairing.current = null;
     setPairing(null);
     setClient(null);
-    if (current) await pairingStore.clear(current.butlerId);
-    router.replace("/pair");
+    try {
+      if (current) await pairingStore.clear(current.butlerId);
+    } finally {
+      if (router.canDismiss()) router.dismissAll();
+      router.replace("/pair");
+    }
   }, []);
   const disconnect = useCallback(async () => {
     const current = pairing.current;

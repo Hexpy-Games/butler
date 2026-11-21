@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
@@ -14,6 +14,7 @@ export default function Settings() {
   const { pairing, disconnect } = useConversation();
   const address = pairing ? pairing.origin.replace(/^[^:]+:\/\//, "") : "";
   const [open, setOpen] = useState(false);
+  const leaving = useRef(false);
   const version = Application.nativeApplicationVersion === null || Application.nativeBuildVersion === null
     ? copy.settings.version(Constants.expoConfig?.version ?? "")
     : copy.settings.version(Application.nativeApplicationVersion, Application.nativeBuildVersion);
@@ -29,7 +30,8 @@ export default function Settings() {
       <View style={{ paddingHorizontal: gutter }}><Text variant="caption">{version}</Text></View>
     </ScrollView>
     <Sheet open={open} onClose={() => setOpen(false)} title={copy.settings.disconnectTitle}
+      onClosed={() => { if (leaving.current) void disconnect(); }}
       description={copy.settings.disconnectBody} cancelLabel={copy.settings.cancel}
-      action={<Button variant="destructive" label={copy.settings.disconnect} onPress={() => { void disconnect(); }} />} />
+      action={<Button variant="destructive" label={copy.settings.disconnect} onPress={() => { leaving.current = true; setOpen(false); }} />} />
   </Surface>;
 }
