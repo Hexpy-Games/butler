@@ -18,6 +18,7 @@ import { icons } from "../icons";
 import { ForcedState } from "../internal/press";
 import { Markdown } from "../Markdown";
 import { ListRow } from "../ListRow";
+import { ListGroupSection } from "./ListGroupSection";
 import { QueuedMessage } from "../QueuedMessage";
 import { Sheet, SheetPanel } from "../Sheet";
 import { Spinner } from "../Spinner";
@@ -454,6 +455,7 @@ export const sections: { id: string; title: string; render: (state?: string) => 
   { id: "button-group", title: "ButtonGroup", render: () => <ButtonGroupSection /> },
   { id: "surface", title: "Surface", render: () => <SurfaceSection /> },
   { id: "list-row", title: "ListRow", render: () => <ListRowSection /> },
+  { id: "list-group", title: "ListGroup", render: () => <ListGroupSection /> },
   { id: "text-field", title: "TextField", render: () => <TextFieldSection /> },
   { id: "switch", title: "Switch", render: () => <SwitchSection /> },
   { id: "badge", title: "Badge", render: () => <BadgeSection /> },

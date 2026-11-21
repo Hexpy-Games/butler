@@ -49,7 +49,30 @@ import AiChipIcon from "@hugeicons/core-free-icons/AiChipIcon";
 import ZoomInAreaIcon from "@hugeicons/core-free-icons/ZoomInAreaIcon";
 import ZoomOutAreaIcon from "@hugeicons/core-free-icons/ZoomOutAreaIcon";
 
+import SlidersHorizontalIcon from "@hugeicons/core-free-icons/SlidersHorizontalIcon";
+import PaintBoardIcon from "@hugeicons/core-free-icons/PaintBoardIcon";
+import UserIcon from "@hugeicons/core-free-icons/UserIcon";
+import RefreshIcon from "@hugeicons/core-free-icons/RefreshIcon";
+import DatabaseIcon from "@hugeicons/core-free-icons/DatabaseIcon";
+import Globe02Icon from "@hugeicons/core-free-icons/Globe02Icon";
+import LockIcon from "@hugeicons/core-free-icons/LockIcon";
+import Activity01Icon from "@hugeicons/core-free-icons/Activity01Icon";
+import MagicWand01Icon from "@hugeicons/core-free-icons/MagicWand01Icon";
+import ComputerIcon from "@hugeicons/core-free-icons/ComputerIcon";
+import Unlink01Icon from "@hugeicons/core-free-icons/Unlink01Icon";
+
 export const icons = {
+  SlidersHorizontal: SlidersHorizontalIcon,
+  Palette: PaintBoardIcon,
+  UserRound: UserIcon,
+  RefreshCcw: RefreshIcon,
+  Database: DatabaseIcon,
+  Globe2: Globe02Icon,
+  Lock: LockIcon,
+  Activity: Activity01Icon,
+  MagicWand: MagicWand01Icon,
+  Computer: ComputerIcon,
+  Unlink: Unlink01Icon,
   ZoomIn: ZoomInAreaIcon,
   ZoomOut: ZoomOutAreaIcon,
   FileText: File02Icon,

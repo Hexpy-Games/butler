@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useContext, useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { RADIUS } from "../design/tokens";
@@ -6,6 +6,7 @@ import { useTokens } from "../design/useTokens";
 import { BaseText } from "./internal/BaseText";
 import { icons, type IconGlyph } from "./icons";
 import { IconSlot, useScaledLine } from "./internal/IconSlot";
+import { GroupDivider, InListGroup } from "./internal/listGroup";
 import { run, useReducedMotion } from "./internal/motion";
 import { usePress } from "./internal/press";
 import { fontStyle, maxFontScale, textStyle, weightValue } from "./internal/typography";
@@ -22,6 +23,8 @@ export interface ListRowProps {
   onLongPress?: () => void;
   selected?: boolean;
   disabled?: boolean;
+  /** Danger-toned title and icon, for a destructive action row. */
+  destructive?: boolean;
   titleLines?: 1 | 2;
   descriptionLines?: 1 | 2 | 3;
   accessibilityLabel?: string;
@@ -30,11 +33,12 @@ export interface ListRowProps {
 }
 
 export function ListRow({
-  title, description, meta, icon, trailing, onPress, onLongPress, selected, disabled, titleLines = 1, descriptionLines = 2,
+  title, description, meta, icon, trailing, onPress, onLongPress, selected, disabled, destructive, titleLines = 1, descriptionLines = 2,
   accessibilityLabel, accessibilityHint, testID, disclosure,
 }: ListRowProps) {
   const t = useTokens();
   const reduced = useReducedMotion();
+  const grouped = useContext(InListGroup);
   const press = usePress({ scale: false, disabled: disabled || (!onPress && !onLongPress) });
   const filled = press.pressed || !!selected;
   const underlay = useRef(new Animated.Value(filled ? 1 : 0)).current;
@@ -51,10 +55,11 @@ export function ListRow({
 
   const titleLine = t.length("--typo-app-title-line-height");
   const trailingHeight = useScaledLine(titleLine);
-  const radius = t.length(RADIUS);
+  const radius = grouped ? 0 : t.length(RADIUS);
+  const padX = t.length(grouped ? "--space-4" : "--space-sm");
   const fg = (key: "--text-primary" | "--text-secondary" | "--text-tertiary") =>
     t.color(disabled ? "--interactive-disabled-fg" : key);
-  const titleColor = fg("--text-primary");
+  const titleColor = disabled ? t.color("--interactive-disabled-fg") : t.color(destructive ? "--color-danger-text" : "--text-primary");
   const titleText = (
     <BaseText
       numberOfLines={titleLines}
@@ -71,6 +76,7 @@ export function ListRow({
 
   const body = (
     <>
+      {grouped ? <GroupDivider inset={padX + (icon ? t.length("--sidebar-icon-size") + t.length("--sidebar-row-gap") : 0)} /> : null}
       <Animated.View
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, { borderRadius: radius, backgroundColor: t.color("--selection-strong"), opacity: underlay }]}
@@ -126,10 +132,10 @@ export function ListRow({
     alignItems: "flex-start",
     minHeight: t.length("--sidebar-row-height"),
     paddingVertical: t.length("--space-md"),
-    paddingHorizontal: t.length("--space-sm"),
+    paddingHorizontal: padX,
     columnGap: t.length("--sidebar-row-gap"),
     borderRadius: radius,
-    boxShadow: press.focused ? t.shadow("--focus-ring") : undefined,
+    boxShadow: press.focused ? t.shadow("--focus-ring").map(s => (grouped ? { ...s, inset: true } : s)) : undefined,
   } as const;
 
   if (!onPress && !onLongPress) return <View style={container} testID={testID}>{body}</View>;

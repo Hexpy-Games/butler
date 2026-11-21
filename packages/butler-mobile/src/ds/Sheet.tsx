@@ -8,6 +8,7 @@ import { ButtonGroup } from "./ButtonGroup";
 import { Text } from "./Text";
 import { FadedScroll } from "./internal/FadedScroll";
 import { GlassFill, liquidGlass } from "./internal/GlassFill";
+import { InListGroup } from "./internal/listGroup";
 import { run, useReducedMotion } from "./internal/motion";
 
 export interface SheetProps {
@@ -77,7 +78,7 @@ export function SheetPanel({ onClose, title, description, children, action, canc
           {description ? <Text tone="secondary">{description}</Text> : null}
         </View>
       </View>
-      {children ? <FadedScroll>{children}</FadedScroll> : null}
+      {children ? <InListGroup.Provider value={false}><FadedScroll>{children}</FadedScroll></InListGroup.Provider> : null}
       {action
         ? <ButtonGroup layout="pair"><Button variant="secondary" label={cancelLabel} onPress={onClose} />{action}</ButtonGroup>
         : <ButtonGroup><Button variant="secondary" label={cancelLabel} onPress={onClose} /></ButtonGroup>}
