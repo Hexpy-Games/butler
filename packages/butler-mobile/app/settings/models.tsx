@@ -3,7 +3,7 @@ import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { Button, Icon, icons, ListRow, Sheet, Text, TextField, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { SettingsScreen, SettingsGroup, LoadState } from "@/settings/layout";
+import { GroupInset, SettingsScreen, SettingsGroup, LoadState } from "@/settings/layout";
 import { ReasoningRow, SelectRow, SwitchRow } from "@/settings/rows";
 import { useSettings } from "@/settings/useSettings";
 import { modelDisplayName, modelLabel, runtimeModels, tokenWindowLabel, useModelCatalog } from "@/settings/useModelCatalog";
@@ -86,10 +86,10 @@ function BackupModels({ settings, update, catalog }: SettingsProps & { catalog: 
     <SwitchRow title={S.backupModels.enabled} description={S.backupModels.enabledDescription} value={fallback.enabled}
       onChange={enabled => { void update({ model_fallback: { enabled, models: fallback.models } }); }} />
     {fallback.enabled ? <>
-      <Text variant="caption">{S.backupModels.description}</Text>
+      <GroupInset><Text variant="caption">{S.backupModels.description}</Text></GroupInset>
       {cards.map(m => <ListRow key={m.model_ref} title={modelDisplayName(m, locale)} description={`${m.provider_label} · ${m.model_ref}`}
         meta={tokenWindowLabel(m.context_window_tokens, locale)} onPress={() => setSelected(m)} />)}
-      {cards.length === 0 ? <Text variant="caption">{S.backupModels.empty}</Text> : null}
+      {cards.length === 0 ? <GroupInset><Text variant="caption">{S.backupModels.empty}</Text></GroupInset> : null}
       <ListRow icon={icons.Plus} title={S.backupModels.add} disabled={fallback.models.length >= MAX_BACKUP_MODELS}
         meta={fallback.models.length >= MAX_BACKUP_MODELS ? S.backupModels.limitReached : undefined} onPress={() => setAdding(true)} />
     </> : null}
@@ -134,7 +134,7 @@ function ImageModels() {
   const selected = settings?.selected;
   const model = settings?.models.find(m => m.model_ref === selected?.model_ref);
   return <SettingsGroup title={app.settings.pageSections.imageModels}>
-    {!settings ? <LoadState error={error} onRetry={reload} /> : <>
+    {!settings ? <GroupInset><LoadState error={error} onRetry={reload} /></GroupInset> : <>
       <SelectRow title={copy.model} value={selected?.model_ref ?? "off"} disabled={busy}
         options={[{ value: "off", label: copy.off }, ...settings.models.filter(m => settings.registered.includes(m.model_ref)).map(m => ({
           value: m.model_ref, label: m.display_name, description: m.provider_id === "custom-image" ? copy.custom : m.provider_label,

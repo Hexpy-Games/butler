@@ -6,7 +6,7 @@ import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { Button, ListRow, Text, TextField, showToast, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { SettingsScreen, SettingsGroup, LoadState } from "@/settings/layout";
+import { GroupInset, SettingsScreen, SettingsGroup, LoadState } from "@/settings/layout";
 import { ReasoningRow, SelectRow } from "@/settings/rows";
 import { useSettings } from "@/settings/useSettings";
 import { modelLabel, runtimeModels, useModelCatalog } from "@/settings/useModelCatalog";
@@ -69,8 +69,8 @@ function ProfileFields({ draft, setDraft, saving }: DraftProps) {
   return <SettingsGroup title={S.pageSections.profile}>
     {([
       ["butler_nickname", "butlerNickname"], ["principal_name", "principalName"], ["preferred_address", "preferredAddress"],
-    ] as const).map(([key, copy]) => <TextField key={key} label={S.fields[copy]} placeholder={S.placeholders[copy]} value={draft.profile[key]} disabled={saving}
-      onChangeText={text => setDraft(current => current && ({ ...current, profile: { ...current.profile, [key]: text } }))} />)}
+    ] as const).map(([key, copy]) => <GroupInset key={key}><TextField label={S.fields[copy]} placeholder={S.placeholders[copy]} value={draft.profile[key]} disabled={saving}
+      onChangeText={text => setDraft(current => current && ({ ...current, profile: { ...current.profile, [key]: text } }))} /></GroupInset>)}
   </SettingsGroup>;
 }
 
@@ -87,7 +87,7 @@ function ResponseStyle({ draft, setDraft, saving, personalization }: DraftProps 
     <ListRow title={S.fields.persona} description={draft.persona || S.placeholders.persona} descriptionLines={3} />
     <ListRow title={S.fields.eol} description={draft.eol || S.placeholders.eol} descriptionLines={3}
       meta={S.descriptions.eolLastLoaded(new Date(personalization.updated_at).toLocaleString())} />
-    <Text variant="caption" tone="secondary">{M.settings.editOnComputer}</Text>
+    <GroupInset><Text variant="caption" tone="secondary">{M.settings.editOnComputer}</Text></GroupInset>
   </SettingsGroup>;
 }
 
@@ -141,8 +141,8 @@ function ProfileImport({ language, replace }: { language: string; replace(view: 
   };
   return <SettingsGroup title={S.pageSections.agentImport}>
     <ListRow title={S.fields.profileMigrationImport} description={S.descriptions.profileMigration} />
-    <Button variant="secondary" label={S.actions.copyMigrationPrompt} onPress={() => { void copyPrompt(); }} />
-    <Button label={running ? S.actions.importProfileMigrationRunning : S.actions.importProfileMigration} disabled={running} loading={running} onPress={() => { void importProfile(); }} />
-    <Text variant="caption" tone="secondary">{M.settings.importFromClipboardHint}</Text>
+    <GroupInset><Button variant="secondary" label={S.actions.copyMigrationPrompt} onPress={() => { void copyPrompt(); }} /></GroupInset>
+    <GroupInset><Button label={running ? S.actions.importProfileMigrationRunning : S.actions.importProfileMigration} disabled={running} loading={running} onPress={() => { void importProfile(); }} /></GroupInset>
+    <GroupInset><Text variant="caption" tone="secondary">{M.settings.importFromClipboardHint}</Text></GroupInset>
   </SettingsGroup>;
 }

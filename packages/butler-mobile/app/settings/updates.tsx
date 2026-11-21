@@ -3,7 +3,7 @@ import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { Button, ListRow, Sheet, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
+import { GroupInset, LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
 import type { ComponentUpdateStatus, UpdateCancelResult, UpdateProgressView, UpdateStatusView } from "@/settings/types";
 
 function useUpdates() {
@@ -81,8 +81,8 @@ export default function UpdatesSettings() {
       : status?.check_state === "unavailable" ? S.actions.updateUnavailable : status?.check_state === "unchecked" ? S.actions.updateChecking : S.actions.upToDate;
   return <SettingsScreen title={S.sections.updates} description={S.sectionDescriptions.updates}>
     <SettingsGroup title={S.pageSections.updateVersions}>
-      <Button variant="secondary" label={updates.loading ? S.actions.updateChecking : S.actions.checkUpdates} disabled={updates.loading || applying} onPress={() => void updates.check()} />
-      {!updates.view ? <LoadState error={updates.error} message={S.errors.loadUpdates} onRetry={updates.load} /> : <ListRow title={S.updateComponents.app}
+      <GroupInset><Button variant="secondary" label={updates.loading ? S.actions.updateChecking : S.actions.checkUpdates} disabled={updates.loading || applying} onPress={() => void updates.check()} /></GroupInset>
+      {!updates.view ? <GroupInset><LoadState error={updates.error} message={S.errors.loadUpdates} onRetry={updates.load} /></GroupInset> : <ListRow title={S.updateComponents.app}
         description={[version, status?.bundled_agent_version ? `Butler Agent ${status.bundled_agent_version}` : ""].filter(Boolean).join("\n")}
         meta={busy || stage === "ready" ? S.updateProgress[stage] : undefined}
         trailing={!busy && (stage !== "downloading" || cancelling) ? <Button size="sm" variant={cancelling || !status?.update_available ? "outline" : "default"} label={label}

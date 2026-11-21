@@ -3,7 +3,7 @@ import { getAppCopy, type AppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { Button, ListRow, Text, showToast } from "@/ds";
 import { useAppLocale } from "@/i18n";
-import { LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
+import { GroupInset, LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
 import { SelectRow } from "@/settings/rows";
 import { compactTokens } from "@/settings/format";
 import { useModelCatalog } from "@/settings/useModelCatalog";
@@ -37,11 +37,11 @@ export default function UsageSettings() {
   return <SettingsScreen title={S.sections.usage} description={S.sectionDescriptions.usage}>
     <SettingsGroup title={usage.overviewTitle}>
       <SelectRow title={usage.period} value={hours} options={[{ value: "24", label: usage.day }, { value: "168", label: usage.week }, { value: "720", label: usage.month }]} onSelect={setHours} />
-      <Button label={app.common.refresh} disabled={loading} onPress={reload} />
-      {!view ? <LoadState error={error} message={app.interfacePanels.usageFailed} onRetry={reload} /> : <UsageOverview view={view} hours={Number(hours)} />}
+      <GroupInset><Button label={app.common.refresh} disabled={loading} onPress={reload} /></GroupInset>
+      {!view ? <GroupInset><LoadState error={error} message={app.interfacePanels.usageFailed} onRetry={reload} /></GroupInset> : <UsageOverview view={view} hours={Number(hours)} />}
     </SettingsGroup>
     <SettingsGroup title={usage.historyTitle}>
-      {!history ? <LoadState error={historyError} message={app.interfacePanels.usageFailed} onRetry={reload} /> : <UsageHistory history={history} />}
+      {!history ? <GroupInset><LoadState error={historyError} message={app.interfacePanels.usageFailed} onRetry={reload} /></GroupInset> : <UsageHistory history={history} />}
     </SettingsGroup>
     <UsageImages revision={revision} />
     {view?.providerUsage.providers.length ? <SettingsGroup title={usage.remaining}>
@@ -65,10 +65,10 @@ function UsageOverview({ view, hours }: { view: UsageMonitorView; hours: number 
   const ratio = model.promptTokens ? Math.round(model.cachedTokens / model.promptTokens * 100) : 0;
   const clock = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(view.generated_at));
   return <>
-    <Text variant="caption">{usage.updated(clock)}</Text>
-    <Text variant="h2">{compactTokens(model.totalTokens, locale)}</Text><Text variant="caption">{usage.tokens}</Text>
-    <Text variant="caption">{periodDelta(view, hours, usage)}</Text>
-    <Text variant="caption">{usage.requests(new Intl.NumberFormat(locale).format(model.requestCount))}</Text>
+    <GroupInset><Text variant="caption">{usage.updated(clock)}</Text></GroupInset>
+    <GroupInset><Text variant="h2">{compactTokens(model.totalTokens, locale)}</Text></GroupInset><GroupInset><Text variant="caption">{usage.tokens}</Text></GroupInset>
+    <GroupInset><Text variant="caption">{periodDelta(view, hours, usage)}</Text></GroupInset>
+    <GroupInset><Text variant="caption">{usage.requests(new Intl.NumberFormat(locale).format(model.requestCount))}</Text></GroupInset>
     <ListRow title={usage.newInput} meta={compactTokens(Math.max(0, model.promptTokens - model.cachedTokens), locale)} />
     <ListRow title={usage.cached} meta={`${compactTokens(model.cachedTokens, locale)} · ${ratio}%`} />
     <ListRow title={usage.output} meta={compactTokens(model.outputTokens, locale)} />
@@ -117,7 +117,7 @@ function UsageImages({ revision }: { revision: number }) {
   if (!snapshot || (snapshot.selected === null && !snapshot.views.find(v => v.days === 30)?.models.length)) return null;
   return <SettingsGroup title={copy.imagesTitle}>
     <SelectRow title={copy.period} value={days} options={[{ value: "7", label: copy.week }, { value: "30", label: copy.month }]} onSelect={setDays} />
-    {!view ? <LoadState error={error} message={app.interfacePanels.usageFailed} onRetry={() => setRetry(n => n + 1)} /> : <>
+    {!view ? <GroupInset><LoadState error={error} message={app.interfacePanels.usageFailed} onRetry={() => setRetry(n => n + 1)} /></GroupInset> : <>
       {view.models.map(model => <ImageUsageRow key={model.model_ref} title={model.display_name} values={model} />)}
       <ImageUsageRow title={copy.imagesTotal} values={view.total} />
     </>}

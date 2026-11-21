@@ -2149,7 +2149,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
         "버틀러가 현재 시간과 일정 맥락을 해석할 때 사용할 시간대입니다.",
       consolidationModel:
         "대화 기억 정리와 알아가기에서 사용할 모델입니다.",
-      recallMode: "정확하게 회상하면 몇 초 더 걸릴 수 있어요.",
+      recallMode: "정확하게 회상하면 몇 초 더 걸릴 수 있습니다.",
       consolidationTime: "버틀러가 켜져 있을 때만 실행합니다.",
       consolidationModelDefault:
         "현재 버틀러 기본 모델 설정을 그대로 따릅니다.",

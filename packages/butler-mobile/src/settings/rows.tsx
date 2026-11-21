@@ -16,7 +16,7 @@ export function SelectRow<T extends string>({ title, description, value, options
   const [query, setQuery] = useState("");
   const visible = search ? options.filter(o => o.label.toLowerCase().includes(query.toLowerCase())) : options;
   return <>
-    <ListRow title={title} description={disabled && disabledReason ? disabledReason : description}
+    <ListRow title={title} description={disabled && disabledReason ? disabledReason : description} descriptionLines={3}
       meta={options.find(o => o.value === value)?.label} disabled={disabled}
       trailing={<Icon glyph={icons.ChevronRight} tone="tertiary" />} onPress={() => { setQuery(""); setOpen(true); }} />
     <Sheet open={open} onClose={() => setOpen(false)} title={title} cancelLabel={M.settings.cancel}>
@@ -31,7 +31,7 @@ export function SelectRow<T extends string>({ title, description, value, options
 export function SwitchRow({ title, description, value, onChange, disabled }: {
   title: string; description?: string; value: boolean; onChange(value: boolean): void; disabled?: boolean;
 }) {
-  return <ListRow title={title} description={description} trailing={<Switch value={value} label={title} onValueChange={onChange} disabled={disabled} />} />;
+  return <ListRow title={title} description={description} descriptionLines={3} trailing={<Switch value={value} label={title} onValueChange={onChange} disabled={disabled} />} />;
 }
 
 export function TimeRow({ title, description, value, onChange, disabled }: {
@@ -46,7 +46,7 @@ export function TimeRow({ title, description, value, onChange, disabled }: {
   const time = new Date(2000, 0, 1, h, m);
   const minutes = [...new Set([...Array.from({ length: 12 }, (_, i) => i * 5), m])].sort((a, b) => a - b);
   return <>
-    <ListRow title={title} description={description} disabled={disabled}
+    <ListRow title={title} description={description} descriptionLines={3} disabled={disabled}
       meta={new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }).format(time)}
       onPress={() => { setHour(h); setStep("hour"); setOpen(true); }} />
     <Sheet open={open} onClose={() => setOpen(false)} title={title} cancelLabel={M.settings.cancel}

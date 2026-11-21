@@ -4,7 +4,7 @@ import { GatewayError } from "../../../../butler-protocol/src/client/index.ts";
 import { useConversation } from "@/conversation/live";
 import { Button, IconButton, icons, ListRow, Sheet, Text, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { SettingsGroup, LoadState } from "../layout";
+import { GroupInset, SettingsGroup, LoadState } from "../layout";
 import { SelectRow, TimeRow } from "../rows";
 import { useSettings } from "../useSettings";
 import { uuid } from "../format";
@@ -29,13 +29,13 @@ export function InstructionsGroup({ data, locked }: { data: Data; locked: boolea
     finally { setDeleting(undefined); }
   };
   return <SettingsGroup title={S.pageSections.instructions} description={S.pageSectionDescriptions.instructions}>
-    <Text variant="caption">{facts(data.inventory?.kinds.find(c => c.kind === "pinned"), undefined, app, locale)}</Text>
-    {!data.instructions || data.errors.instructions ? <LoadState error={Boolean(data.errors.instructions)} onRetry={data.reload} />
+    <GroupInset><Text variant="caption">{facts(data.inventory?.kinds.find(c => c.kind === "pinned"), undefined, app, locale)}</Text></GroupInset>
+    {!data.instructions || data.errors.instructions ? <GroupInset><LoadState error={Boolean(data.errors.instructions)} onRetry={data.reload} /></GroupInset>
       : data.instructions.instructions.length ? data.instructions.instructions.map(item => <ListRow key={item.handle} title={item.text} titleLines={2}
         description={instructionMeta(item, S.memory)} meta={locked ? S.memory.inUse : undefined}
         trailing={<IconButton icon={icons.Delete} variant="ghost" label={app.common.delete} loading={deleting === item.handle}
           disabled={locked || Boolean(deleting)} onPress={() => select(item)} />} />)
-        : <Text variant="caption">{data.unavailable ? S.memory.unavailable : S.memory.instructionsEmpty}</Text>}
+        : <GroupInset><Text variant="caption">{data.unavailable ? S.memory.unavailable : S.memory.instructionsEmpty}</Text></GroupInset>}
     <Sheet open={Boolean(selected)} onClose={() => select(undefined)} title={S.memory.deleteInstructionTitle}
       description={S.memory.chatsKept} cancelLabel={M.settings.cancel}
       action={<Button variant="destructive" label={app.common.delete} loading={Boolean(deleting)} disabled={locked} onPress={() => void remove()} />}>
@@ -61,11 +61,11 @@ export function PatternsGroup({ data }: { data: Data }) {
     } finally { setDeleting(undefined); }
   };
   return <SettingsGroup title={S.pageSections.noticedPatterns} description={S.pageSectionDescriptions.noticedPatterns}>
-    {data.inventory?.kinds.find(c => c.kind === "profile")?.health.consent_on === false ? <Text variant="caption">{S.memory.profileBuildingOff}</Text> : null}
-    {!data.patterns || data.errors.patterns ? <LoadState error={Boolean(data.errors.patterns)} onRetry={data.reload} />
+    {data.inventory?.kinds.find(c => c.kind === "profile")?.health.consent_on === false ? <GroupInset><Text variant="caption">{S.memory.profileBuildingOff}</Text></GroupInset> : null}
+    {!data.patterns || data.errors.patterns ? <GroupInset><LoadState error={Boolean(data.errors.patterns)} onRetry={data.reload} /></GroupInset>
       : data.patterns.patterns.length ? data.patterns.patterns.map(item => <ListRow key={item.id} title={item.title} description={patternMeta(item, S.memory)}
         trailing={<IconButton icon={icons.Delete} label={app.common.delete} loading={deleting === item.id} disabled={Boolean(deleting)} onPress={() => select(item)} />} />)
-        : <Text variant="caption">{S.memory.patternsEmpty}</Text>}
+        : <GroupInset><Text variant="caption">{S.memory.patternsEmpty}</Text></GroupInset>}
     <SelectRow title={S.memory.proactiveLevel} description={S.memory.proactiveDescription} value={settings?.proactive_level ?? "sometimes"}
       options={[{ value: "off", label: S.memory.proactiveOff }, { value: "sometimes", label: S.memory.proactiveSometimes }, { value: "often", label: S.memory.proactiveOften }]}
       onSelect={proactive_level => void update({ proactive_level })} />

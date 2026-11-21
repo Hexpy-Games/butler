@@ -4,7 +4,7 @@ import { getAppCopy, type AppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { Button, ListRow, Sheet, Text, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
+import { GroupInset, LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
 import { relativeAge } from "@/settings/format";
 import type { ArchiveListView, SessionSummary } from "@/settings/types";
 
@@ -57,12 +57,12 @@ export default function ArchivesSettings() {
   const change = (remove: boolean) => { if (selected) { void archives.change(selected, remove); select(undefined); } };
   return <SettingsScreen title={S.sections.archives} description={S.sectionDescriptions.archives}>
     <SettingsGroup title={S.pageSections.archived}>
-      {!archives.view || archives.error ? <LoadState error={archives.error} onRetry={() => void archives.load()} /> : <>
+      {!archives.view || archives.error ? <GroupInset><LoadState error={archives.error} onRetry={() => void archives.load()} /></GroupInset> : <>
         {items.map(item => <ListRow key={`${item.kind}:${item.id}`} title={item.title} description={`${archiveSubtitle(item, app)} · ${relativeAge(item.updatedAt, app)}`}
           disabled={archives.busy} onPress={() => { setMode("actions"); select(item); }} />)}
-        {!items.length ? <Text variant="caption">{app.interfaceDetails.archivesEmpty}</Text> : null}
+        {!items.length ? <GroupInset><Text variant="caption">{app.interfaceDetails.archivesEmpty}</Text></GroupInset> : null}
       </>}
-      {archives.view?.pagination.has_more ? <Button label={app.common.more} disabled={archives.busy} onPress={() => void archives.load(items.length)} /> : null}
+      {archives.view?.pagination.has_more ? <GroupInset><Button label={app.common.more} disabled={archives.busy} onPress={() => void archives.load(items.length)} /></GroupInset> : null}
     </SettingsGroup>
     <Sheet open={Boolean(selected)} onClose={() => select(undefined)} title={mode === "confirm" ? app.common.delete : selected?.title ?? S.sections.archives}
       description={mode === "confirm" && selected ? app.interfaceTemplates.deleteItem(selected.title) : undefined} cancelLabel={M.settings.cancel}

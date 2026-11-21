@@ -4,7 +4,7 @@ import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { ListRow } from "@/ds";
 import { useAppLocale } from "@/i18n";
-import { LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
+import { GroupInset, LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
 import type { AppInfoView } from "@/settings/types";
 
 function repositoryLabel(href: string) {
@@ -24,7 +24,7 @@ export default function AboutSettings() {
   useEffect(reload, [reload, reconcile]);
   return <SettingsScreen title={S.sections.about} description={S.sectionDescriptions.about}>
     <SettingsGroup title={S.pageSections.appInfo}>
-      {!info ? <LoadState error={error} message={S.errors.loadAppInfo} onRetry={reload} /> : <>
+      {!info ? <GroupInset><LoadState error={error} message={S.errors.loadAppInfo} onRetry={reload} /></GroupInset> : <>
         <ListRow title={S.fields.appName} meta={info.name ?? app.firstRun.product} />
         <ListRow title={S.fields.appVersion} meta={info.version} />
         <ListRow title={S.fields.appRepository} description={info.repository_url ? repositoryLabel(info.repository_url) : "-"} onPress={info.repository_url ? () => void Linking.openURL(info.repository_url) : undefined} />

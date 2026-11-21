@@ -3,7 +3,7 @@ import { getAppCopy, type AppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { Button, ListRow, Text } from "@/ds";
 import { useAppLocale } from "@/i18n";
-import { LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
+import { GroupInset, LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
 import type { SystemEventListView, SystemEventSummary } from "@/settings/types";
 
 export default function SystemSettings() {
@@ -22,12 +22,12 @@ export default function SystemSettings() {
   useEffect(() => { void load(); }, [load, reconcile]);
   return <SettingsScreen title={S.sections.system} description={S.sectionDescriptions.system}>
     <SettingsGroup title={S.pageSections.systemEvents} description={S.descriptions.systemEvents}>
-      <Button label={app.common.refresh} disabled={loading} onPress={() => void load()} />
-      {!view || error ? <LoadState error={error} onRetry={() => void load()} /> : <>
+      <GroupInset><Button label={app.common.refresh} disabled={loading} onPress={() => void load()} /></GroupInset>
+      {!view || error ? <GroupInset><LoadState error={error} onRetry={() => void load()} /></GroupInset> : <>
         {view.events.map(event => <SystemEventRow key={event.id} event={event} />)}
-        {!view.events.length ? <Text variant="caption">{S.descriptions.systemEventsEmpty}</Text> : null}
+        {!view.events.length ? <GroupInset><Text variant="caption">{S.descriptions.systemEventsEmpty}</Text></GroupInset> : null}
       </>}
-      {view?.pagination.has_more ? <Button label={app.common.more} disabled={loading} onPress={() => void load(view.events.length)} /> : null}
+      {view?.pagination.has_more ? <GroupInset><Button label={app.common.more} disabled={loading} onPress={() => void load(view.events.length)} /></GroupInset> : null}
     </SettingsGroup>
   </SettingsScreen>;
 }

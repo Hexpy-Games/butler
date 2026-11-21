@@ -3,7 +3,7 @@ import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { ListRow, Text } from "@/ds";
 import { useAppLocale } from "@/i18n";
-import { LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
+import { GroupInset, LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
 import { SelectRow } from "@/settings/rows";
 import type { SkillSettingsView, SkillSummaryView } from "@/settings/types";
 
@@ -24,7 +24,7 @@ export default function SkillsSettings() {
       <SettingsGroup title={S.pageSections.userSkills}><SkillRows skills={view.user} /></SettingsGroup>
       <SettingsGroup title={S.pageSections.projectSkills}>
         {project ? <><SelectRow title={app.interfaceDetails.project} value={project.id} options={view.projects.map(p => ({ value: p.id, label: p.display_name }))} onSelect={select} />
-          <SkillRows skills={project.skills} /></> : <Text variant="caption">{S.memory.noProjects}</Text>}
+          <SkillRows skills={project.skills} /></> : <GroupInset><Text variant="caption">{S.memory.noProjects}</Text></GroupInset>}
       </SettingsGroup>
     </>}
   </SettingsScreen>;
@@ -33,5 +33,5 @@ export default function SkillsSettings() {
 function SkillRows({ skills }: { skills: SkillSummaryView[] }) {
   const app = getAppCopy(useAppLocale());
   return skills.length ? <>{skills.map(skill => <ListRow key={skill.file_path} title={skill.name} description={skill.description || skill.file_path} />)}</>
-    : <Text variant="caption">{app.interfaceDetails.noSkills}</Text>;
+    : <GroupInset><Text variant="caption">{app.interfaceDetails.noSkills}</Text></GroupInset>;
 }

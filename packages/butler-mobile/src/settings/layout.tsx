@@ -27,6 +27,11 @@ export function SettingsGroup({ title, description, children }: { title: string;
   </View>;
 }
 
+export function GroupInset({ children }: { children: React.ReactNode }) {
+  const t = useTokens();
+  return <View style={{ paddingHorizontal: t.length("--space-sm"), gap: t.length("--space-2") }}>{children}</View>;
+}
+
 export function LoadState({ error, message, onRetry }: { error: boolean; message?: string; onRetry(): void }) {
   const S = getAppCopy(useAppLocale()).settings;
   return error ? <><Text tone="danger">{message ?? S.sectionState.error}</Text><Button variant="secondary" label={S.sectionState.retry} onPress={onRetry} /></>
