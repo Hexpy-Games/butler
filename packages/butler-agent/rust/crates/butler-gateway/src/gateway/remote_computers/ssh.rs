@@ -291,6 +291,7 @@ pub(super) async fn probe(
         r#"echo "os=$(uname -s)"
 echo "arch=$(uname -m)"
 echo "glibc=$(getconf GNU_LIBC_VERSION 2>/dev/null)"
+echo "ptrace=$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null)"
 echo "kill=$(busctl get-property org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager KillUserProcesses 2>/dev/null)"
 if cd -- {folder} 2>/dev/null; then echo folder=ok; else echo folder=missing; fi
 "#
@@ -315,8 +316,8 @@ if cd -- {folder} 2>/dev/null; then echo folder=ok; else echo folder=missing; fi
         remote_error(
             "unsupported_computer",
             &format!(
-                "Unsupported computer: os={}, arch={}, glibc={}.",
-                raw.os, raw.arch, raw.glibc
+                "Unsupported computer: os={}, arch={}, glibc={}, ptrace={}.",
+                raw.os, raw.arch, raw.glibc, raw.ptrace
             ),
         )
     })?;
@@ -343,6 +344,7 @@ struct Unsupported {
     os: String,
     arch: String,
     glibc: String,
+    ptrace: String,
 }
 
 fn platform(probe: &str) -> Result<Platform, Unsupported> {
@@ -358,10 +360,12 @@ fn platform(probe: &str) -> Result<Platform, Unsupported> {
         .and_then(|v| v.split_once('.'))
         .and_then(|(major, minor)| Some((major.parse::<u32>().ok()?, minor.parse::<u32>().ok()?)))
         .is_some_and(|version| version >= (2, 39));
+    let ptrace = values.get("ptrace").copied().unwrap_or_default();
+    let supported_linux = supported_glibc && ptrace.parse::<u32>().is_ok_and(|scope| scope >= 1);
     let (os, arch, glibc) = match (os, arch) {
         ("Darwin", "arm64") => ("macos", "arm64", None),
-        ("Linux", "x86_64") if supported_glibc => ("linux", "x64", version.map(str::to_owned)),
-        ("Linux", "aarch64" | "arm64") if supported_glibc => {
+        ("Linux", "x86_64") if supported_linux => ("linux", "x64", version.map(str::to_owned)),
+        ("Linux", "aarch64" | "arm64") if supported_linux => {
             ("linux", "arm64", version.map(str::to_owned))
         }
         _ => {
@@ -369,6 +373,7 @@ fn platform(probe: &str) -> Result<Platform, Unsupported> {
                 os: os.into(),
                 arch: arch.into(),
                 glibc: glibc.into(),
+                ptrace: ptrace.into(),
             });
         }
     };

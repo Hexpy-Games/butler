@@ -32,6 +32,7 @@ mod probes;
 mod provider;
 mod quota;
 mod read;
+pub mod sealed;
 mod secret_store;
 mod settings;
 pub use proactive::QuietHours;

@@ -42,7 +42,7 @@ pub(super) async fn save(
         .await
         .map_err(|error| match error {
             ProviderKeySaveError::Invalid(invalid) => key_check_error(&invalid),
-            ProviderKeySaveError::Storage(_) => GatewayApplicationError::internal_from(error),
+            ProviderKeySaveError::Storage(_) => save_storage_error(error),
             ProviderKeySaveError::Rejected(_) => GatewayApplicationError::Public {
                 status: 400,
                 code: "provider_credential_save_failed".into(),
@@ -54,6 +54,22 @@ pub(super) async fn save(
         credential: saved.credential,
         created: saved.created,
     })
+}
+
+fn save_storage_error(error: ProviderKeySaveError) -> GatewayApplicationError {
+    use butler_models::models::CredentialStoreError;
+    if let ProviderKeySaveError::Storage(ModelCatalogError::Storage { source, .. }) = &error
+        && let Some(CredentialStoreError::Sealed(sealed)) =
+            source.downcast_ref::<CredentialStoreError>()
+    {
+        return GatewayApplicationError::Public {
+            status: 409,
+            code: sealed.code().into(),
+            message: sealed.to_string(),
+            source: None,
+        };
+    }
+    GatewayApplicationError::internal_from(error)
 }
 
 /// The saved keys, masked, and where new keys go.

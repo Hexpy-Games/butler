@@ -1299,6 +1299,7 @@ dependencies = [
 name = "butler-models"
 version = "0.0.0"
 dependencies = [
+ "age",
  "base64 0.22.1",
  "butler-core",
  "butler-log",

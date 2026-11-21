@@ -166,7 +166,6 @@ impl ModelConfiguration {
     ) -> Result<CredentialMigrationReport, ModelCatalogError> {
         let _write = self.configuration_writes.acquire().await;
         let root = self.data_root.as_path();
-        let (_lock, mut file) = self.open_credentials(root).await.map_err(catalog_error)?;
         let choice = self.secrets.choice(root);
         let mut report = CredentialMigrationReport {
             reason: choice.reason,
@@ -179,6 +178,10 @@ impl ModelConfiguration {
             override_ignored: self.secrets.facts().file_override
                 == FileOverride::IgnoredForDefaultDataRoot,
         };
+        if super::sealed::is_enabled() {
+            return Ok(report);
+        }
+        let (_lock, mut file) = self.open_credentials(root).await.map_err(catalog_error)?;
         let plan = self.plan(&file, choice.mode == SecretStoreMode::System);
         if !plan.movable.is_empty() {
             self.move_entries(root, &mut file, &plan.movable, &mut report)

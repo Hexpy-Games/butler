@@ -18,7 +18,7 @@ use std::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// Stop the recorded service before removing its short data directory on every path.
-struct RemoteData(Launch);
+pub(super) struct RemoteData(pub(super) Launch);
 
 impl Drop for RemoteData {
     fn drop(&mut self) {
@@ -27,7 +27,7 @@ impl Drop for RemoteData {
     }
 }
 
-fn shell_quote(value: &str) -> String {
+pub(super) fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 

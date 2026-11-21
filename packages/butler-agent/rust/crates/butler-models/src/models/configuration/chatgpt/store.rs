@@ -1,4 +1,5 @@
 //! Protected host identity and account registration; reads never create files.
+use super::super::sealed;
 use super::{ChatGptAccountState, ChatGptAccountStatus as Status, Error};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -27,14 +28,32 @@ pub async fn read(path: &Path) -> Result<Value, Error> {
 }
 
 pub fn read_sync(path: &Path) -> Result<Value, Error> {
+    if !sealed::is_enabled() {
+        return read_plain_sync(path);
+    }
+    if sealed::is_locked() {
+        return Err("remote_key_pending");
+    }
     match std::fs::read(path) {
-        Ok(bytes) => serde_json::from_slice::<Value>(&bytes)
-            .ok()
-            .filter(Value::is_object)
-            .ok_or("chatgpt_store_unreadable"),
+        Ok(bytes) => parse(&sealed::open(&bytes).map_err(|error| error.code())?),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
         Err(_) => Err("chatgpt_store_unreadable"),
     }
+}
+
+fn read_plain_sync(path: &Path) -> Result<Value, Error> {
+    match std::fs::read(path) {
+        Ok(bytes) => parse(&bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
+        Err(_) => Err("chatgpt_store_unreadable"),
+    }
+}
+
+fn parse(bytes: &[u8]) -> Result<Value, Error> {
+    serde_json::from_slice::<Value>(bytes)
+        .ok()
+        .filter(Value::is_object)
+        .ok_or("chatgpt_store_unreadable")
 }
 
 pub async fn update<F>(paths: &Paths, path: PathBuf, change: F) -> Result<Value, Error>
@@ -42,6 +61,8 @@ where
     F: FnOnce(&mut Value) -> Result<(), Error> + Send + 'static,
 {
     let registration = paths.registration.clone();
+    let sealed = sealed::is_enabled();
+    let seal_registration = sealed && path == registration;
     // A cancelled caller cannot release the lock before an atomic write finishes.
     tokio::spawn(async move {
         let _lock = tokio::task::spawn_blocking(move || {
@@ -50,9 +71,24 @@ where
         .await
         .map_err(|_| "oauth_profile_write_failed")?
         .map_err(|_| "oauth_profile_write_failed")?;
-        let mut raw = read(&path).await?;
+        let mut raw = if sealed && !seal_registration {
+            let path = path.clone();
+            tokio::task::spawn_blocking(move || read_plain_sync(&path))
+                .await
+                .map_err(|_| "oauth_profile_write_failed")??
+        } else {
+            read(&path).await?
+        };
         change(&mut raw)?;
         let bytes = serde_json::to_vec_pretty(&raw).map_err(|_| "oauth_profile_write_failed")?;
+        let bytes = if seal_registration {
+            tokio::task::spawn_blocking(move || sealed::seal(&bytes))
+                .await
+                .map_err(|_| "oauth_profile_write_failed")?
+                .map_err(|error| error.code())?
+        } else {
+            bytes
+        };
         super::super::auth::io::write_mode_600(&path, &bytes)
             .await
             .map_err(|_| "oauth_profile_write_failed")?;
@@ -98,7 +134,10 @@ fn validate_host(raw: &Value) -> Result<(), Error> {
 }
 
 pub async fn account(paths: &Paths) -> Result<ChatGptAccountState, Error> {
-    let registration = read(&paths.registration).await?;
+    let registration = match read(&paths.registration).await {
+        Err("remote_key_pending") => return Ok(account_view(&json!({}), &json!({}), false)),
+        result => result?,
+    };
     let host = match tokio::fs::read(&paths.host).await {
         Ok(bytes) => {
             let host = serde_json::from_slice(&bytes).map_err(|_| "chatgpt_host_unreadable")?;

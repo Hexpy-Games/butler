@@ -67,9 +67,7 @@ pub(in crate::models::configuration) async fn resolve(
         }
         updated["updated_at"] = clock.now_iso().into();
         let changed = terminal.is_some() || current["scopes"] != updated["scopes"];
-        let bytes = serde_json::to_vec_pretty(&updated)
-            .map_err(|_| chatgpt_error("provider_auth_write_failed"))?;
-        super::super::auth::io::write_mode_600(&paths.registration, &bytes).await?;
+        write_registration(&paths.registration, &updated).await?;
         if changed {
             revision.send_modify(|v| *v = v.wrapping_add(1));
         }
@@ -81,6 +79,21 @@ pub(in crate::models::configuration) async fn resolve(
     .await
     .map_err(|_| chatgpt_error("provider_auth_refresh_unavailable"))?
 }
+
+async fn write_registration(path: &std::path::Path, updated: &Value) -> Result<(), AuthError> {
+    let bytes = serde_json::to_vec_pretty(updated)
+        .map_err(|_| chatgpt_error("provider_auth_write_failed"))?;
+    let bytes = if super::super::sealed::is_enabled() {
+        tokio::task::spawn_blocking(move || super::super::sealed::seal(&bytes))
+            .await
+            .map_err(|_| chatgpt_error("provider_auth_write_failed"))?
+            .map_err(|error| chatgpt_error(error.code()))?
+    } else {
+        bytes
+    };
+    super::super::auth::io::write_mode_600(path, &bytes).await
+}
+
 async fn exchange(client: &butler_log::http::Client, raw: &Value) -> Option<Value> {
     let issuer = raw["issuer"].as_str()?.trim_end_matches('/');
     let mut response = client

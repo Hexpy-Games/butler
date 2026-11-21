@@ -14,6 +14,7 @@ const SCRIPT: &str = r#"set -eu
 umask 077
 R="$HOME/.butler-remote"
 mkdir -p "$R/versions"
+if [ "$(uname -s)" = Linux ]; then P=$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo 0); if [ "$P" -lt 1 ] 2>/dev/null || [ -z "$P" ]; then echo state=unprotected; exit 0; fi; fi
 rm -rf "$R"/versions/.download-* "$R"/versions/.staging-*; [ -n "${UPLOADED:-}" ] || rm -f "$R"/versions/.upload-*
 V=$1
 SHA=$2
@@ -214,6 +215,12 @@ fn response(output: &HookOutput) -> Result<String, HttpError> {
 }
 
 fn ready(line: &str) -> Result<RemoteState, HttpError> {
+    if line == "state=unprotected" {
+        return Err(remote_error(
+            "unsupported_computer",
+            "Memory protection is off on this computer.",
+        ));
+    }
     if let Some((state, version)) = line.split_once(" version=")
         && matches!(state, "state=ready" | "state=busy")
     {

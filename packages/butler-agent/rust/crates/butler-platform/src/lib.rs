@@ -83,6 +83,7 @@ pub mod memory;
 pub mod network;
 pub mod powershell_text;
 pub mod process_control;
+pub mod process_hardening;
 pub mod process_names;
 pub mod process_priority;
 pub mod secrets;

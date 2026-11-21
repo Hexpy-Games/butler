@@ -53,6 +53,8 @@ const STORE_TIMEOUT: Duration = Duration::from_secs(30);
 /// Why a key could not be read from or written to its store.
 #[derive(Debug, thiserror::Error)]
 pub enum CredentialStoreError {
+    #[error(transparent)]
+    Sealed(#[from] super::sealed::SealedError),
     #[error("the Butler vault could not be used")]
     Vault(#[from] VaultError),
     /// The key is in a system store this host does not have (a data folder
@@ -77,6 +79,7 @@ impl CredentialStoreError {
     /// A stable code for reports and logs.
     pub fn code(&self) -> &'static str {
         match self {
+            Self::Sealed(error) => error.code(),
             Self::Vault(_) => "credential_vault_unavailable",
             Self::Store(SecretError::Unavailable(_)) => "credential_store_unavailable",
             Self::ForeignStore => "credential_store_foreign",
