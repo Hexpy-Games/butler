@@ -1825,6 +1825,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
       keptProject: "Your chats and project files, other projects, the rest of chat memory, instructions for all chats and your profile",
       resetNote: "A reply already in progress may still use the old memory.",
       reextracting: (d, t) => `Organizing memory · ${d} / ${t}`,
+      reextractingPending: "Organizing memory",
       reextractLabel: "Reorganize memory",
       reextractDescription: "Rebuilds memory from past chats with the improved method.",
       reextract: "Reorganize",

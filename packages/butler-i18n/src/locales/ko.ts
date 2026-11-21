@@ -1829,6 +1829,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       keptProject: "채팅, 프로젝트 파일, 다른 프로젝트, 그 밖의 대화 기억, 모든 채팅의 지침, 프로필",
       resetNote: "진행 중인 응답에는 이전 기억이 남을 수 있습니다.",
       reextracting: (d, t) => `기억을 정리하는 중입니다 · ${d} / ${t}`,
+      reextractingPending: "기억을 정리하는 중입니다",
       reextractLabel: "기억 다시 정리",
       reextractDescription: "개선된 방식으로 지난 대화를 다시 정리합니다.",
       reextract: "다시 정리",
