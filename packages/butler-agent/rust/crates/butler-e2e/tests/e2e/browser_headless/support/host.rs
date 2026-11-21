@@ -47,6 +47,8 @@ impl Pending {
         Self(self.0.env(key, value))
     }
 
+    // Only the Windows installed-App tests unset variables.
+    #[cfg(windows)]
     pub(crate) fn unset_env(self, key: &str) -> Self {
         Self(self.0.unset_env(key))
     }
