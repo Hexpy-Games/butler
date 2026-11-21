@@ -54,6 +54,7 @@ async fn inventory_and_explicit_cleanup_preserve_memory_and_replay_receipts()
 -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = setup("MEM-MANAGE").await?;
+    super::memory_fixture::wait_parked(&s).await;
     assert_fresh_inventory(&s).await?;
     let CleanupFixture {
         memory,
@@ -110,6 +111,7 @@ async fn inventory_and_explicit_cleanup_preserve_memory_and_replay_receipts()
     );
     s.agent.terminate().await?;
     s.gw = s.agent.start_again().await?;
+    super::memory_fixture::wait_parked(&s).await;
     assert_eq!(
         s.gw.get(&format!("/memory/cleanup/{id}")).await?.data(),
         &result
@@ -128,6 +130,7 @@ async fn wiring_profile_clear_relearns_from_old_chats() -> Result<(), HarnessErr
     butler_e2e::gate!();
     let (base, server) = profile_server().await?;
     let mut s = setup("MEM-PROFILE-CLEAR").await?;
+    super::memory_fixture::wait_parked(&s).await;
     local_model(&s, &base).await?;
     let mode =
         s.gw.patch("/personalization", json!({"profiling":{"mode":"basic"}}))
@@ -144,6 +147,7 @@ async fn wiring_profile_clear_relearns_from_old_chats() -> Result<(), HarnessErr
         .await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     cycle(&mut s).await?;
+    super::memory_fixture::wait_parked(&s).await;
     let db = s.sandbox.data.join("cognition/profile/profile.sqlite");
     assert!(
         sql_count(
@@ -217,6 +221,7 @@ async fn interrupted_trash_waits_for_an_explicit_cleanup_after_restart() -> Resu
 {
     butler_e2e::gate!();
     let mut s = setup("MEM-MANAGE-RESTART").await?;
+    super::memory_fixture::wait_parked(&s).await;
     s.agent.terminate().await?;
     let memory = s.sandbox.data.join("cognition/memory");
     let id = uuid::Uuid::new_v4().to_string();
@@ -237,6 +242,7 @@ async fn interrupted_trash_waits_for_an_explicit_cleanup_after_restart() -> Resu
     )?;
     std::fs::rename(source, operation.join("trash/0"))?;
     s.gw = s.agent.start_again().await?;
+    super::memory_fixture::wait_parked(&s).await;
     assert!(
         operation.join("trash/0").exists(),
         "startup performed automatic cleanup"

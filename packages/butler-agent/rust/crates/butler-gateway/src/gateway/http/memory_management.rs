@@ -51,12 +51,9 @@ pub(super) async fn route(
         }
         (&Method::GET, "/memory/inventory") => (AppMemoryCommand::Inventory, StatusCode::OK),
         (&Method::POST, "/memory/inventory/check") => (AppMemoryCommand::Check, StatusCode::OK),
-        (
-            &Method::POST,
-            path @ ("/memory/reset/profile"
-            | "/memory/reset/chat-memory"
-            | "/memory/reset/reextract"),
-        ) => (reset_request(request, path).await?, StatusCode::ACCEPTED),
+        (&Method::POST, path) if is_reset_path(path) => {
+            (reset_request(request, path).await?, StatusCode::ACCEPTED)
+        }
         (&Method::POST, path) if path.starts_with("/memory/reset/projects/") => {
             (project_reset(request, path).await?, StatusCode::ACCEPTED)
         }
@@ -91,6 +88,13 @@ pub(super) async fn route(
         _ => return Err(HttpError::public(404, "not_found", "Route not found.")),
     };
     execute(state, command, status).await
+}
+
+fn is_reset_path(path: &str) -> bool {
+    matches!(
+        path,
+        "/memory/reset/profile" | "/memory/reset/chat-memory" | "/memory/reset/reextract"
+    )
 }
 
 async fn execute(

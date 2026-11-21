@@ -22,6 +22,7 @@ pub(super) async fn setup(id: &str) -> Result<Scenario, HarnessError> {
     let setup = Setup::new(id)?
         .fixture(Fixture::Empty)
         .env("BUTLER_E2E_APP_NOW", NOW)
+        .env("BUTLER_MEMORY_SYNC_TRACE", "1")
         .env(
             "BUTLER_E2E_EMBED_MANIFEST",
             "http://127.0.0.1:1/unavailable",
