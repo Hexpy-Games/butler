@@ -6,7 +6,8 @@ import { keepHangulWords } from "./typography";
 
 /** Every DS text: Hangul breaks by word (web DS keep-all), on both platforms. */
 export function BaseText({ children, ...props }: TextProps) {
-  const selectable = !!props.selectable && useTextSelectionEnabled();
+  const scopeEnabled = useTextSelectionEnabled();
+  const selectable = !!props.selectable && scopeEnabled;
   const items = Children.toArray(children);
   const body = Platform.OS === "android" && !selectable
     ? items.every(c => typeof c === "string" || typeof c === "number")
