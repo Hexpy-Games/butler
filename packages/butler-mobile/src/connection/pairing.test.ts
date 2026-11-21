@@ -74,13 +74,13 @@ test("pairDevice", async () => {
   const code = "12345678";
   const calls: { url: string; init: Parameters<FetchLike>[1] }[] = [];
   let status = 201;
-  let data: unknown = { butler_id: "b-1", device_id: "d1", device_token: "bdt_x.y" };
+  let data: unknown = { butler_id: "b-1", device_id: "d1", device_token: "bdt_x.y", computer_name: "Mac mini" };
   const fetch: FetchLike = async (url, init) => {
     calls.push({ url, init });
     return { status, ok: status < 300, body: null, json: async () => ({ protocol_version: "butler.app.v1", data, error: { code: "invalid_connection_code" } }) };
   };
   const input = { origin, code, device: { name: "Test phone", platform: "ios" as const }, fetch };
-  expect(await pairDevice(input)).toEqual({ ok: true, pairing: { origin, butlerId: "b-1", deviceId: "d1", deviceToken: "bdt_x.y" } });
+  expect(await pairDevice(input)).toEqual({ ok: true, pairing: { origin, butlerId: "b-1", deviceId: "d1", deviceToken: "bdt_x.y", computerName: "Mac mini" } });
   expect(calls[0].url).toBe("http://192.0.2.5:18765/devices/pair");
   expect(calls[0].init.method).toBe("POST");
   expect(JSON.parse(String(calls[0].init.body))).toEqual({ code, device_name: "Test phone", platform: "ios" });
@@ -100,7 +100,7 @@ test("Pairing store", async () => {
     set: async (key, value) => { values.set(key, value); },
     remove: async key => { values.delete(key); },
   });
-  const a = { origin: "http://192.0.2.5:18765", butlerId: "b-1", deviceId: "d1", deviceToken: "bdt_x.y" };
+  const a = { origin: "http://192.0.2.5:18765", butlerId: "b-1", deviceId: "d1", deviceToken: "bdt_x.y", computerName: "Mac mini" };
   const b = { ...a, butlerId: "b-2" };
   expect(await store.loadActive()).toBeNull();
   await store.save(a);

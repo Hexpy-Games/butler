@@ -560,6 +560,15 @@ export const koKrCopy: AppCopy = {
       retry: "다시 시도",
       pairAgain: "다시 연결",
     },
+    settings: {
+      title: "설정",
+      computer: "컴퓨터",
+      disconnect: "연결 해제",
+      disconnectTitle: "이 컴퓨터와 연결을 해제하시겠습니까?",
+      disconnectBody: "버틀러를 쓰려면 다시 연결해야 합니다.",
+      cancel: "취소",
+      version: (version: string, build?: string) => `버전 ${version}${build === undefined ? "" : ` (${build})`}`,
+    },
   },
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",
