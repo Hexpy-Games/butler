@@ -191,59 +191,43 @@ impl MemoryManagement {
     }
 }
 
+pub(super) fn reextract_due(
+    root: &std::path::Path,
+    paths: &CognitionPathEnvironment,
+) -> io::Result<bool> {
+    if !cognition::active_memory_descriptor_exists(root, paths).map_err(io::Error::other)? {
+        return Ok(false);
+    }
+    let active = cognition::resolve_active_generation(root, paths).map_err(io::Error::other)?;
+    let manifest = cognition::GenerationManifest::read(
+        &active.root.join("manifest.json"),
+        cognition::CognitionCode::MemoryGenerationUnavailable,
+    )
+    .map_err(io::Error::other)?;
+    Ok(manifest.extraction_rules_version() < cognition::MEMORY_EXTRACTION_RULES_VERSION)
+}
+
 impl MemoryManagement {
-    /// Accepts one rules upgrade unless this active generation already failed it.
-    pub async fn begin_reextract_if_due(&self) -> io::Result<Option<ResetResult>> {
+    /// Accepts a user-started rules upgrade with an idempotent durable receipt.
+    pub async fn begin_reextract(&self, id: String, revision: u64) -> io::Result<ResetResult> {
         let root = self.root.clone();
         let paths = self.paths.clone();
         let coordinator = self.coordinator.clone();
         tokio::task::spawn_blocking(move || {
-            if !cognition::active_memory_descriptor_exists(&root, &paths)
-                .map_err(io::Error::other)?
+            if cognition::reset_receipt(&root, &paths, &id)?.is_none()
+                && !reextract_due(&root, &paths)?
             {
-                return Ok(None);
-            }
-            let active =
-                cognition::resolve_active_generation(&root, &paths).map_err(io::Error::other)?;
-            let manifest = cognition::GenerationManifest::read(
-                &active.root.join("manifest.json"),
-                cognition::CognitionCode::MemoryGenerationUnavailable,
-            )
-            .map_err(io::Error::other)?;
-            if manifest.extraction_rules_version() >= cognition::MEMORY_EXTRACTION_RULES_VERSION {
-                return Ok(None);
-            }
-            let directory = paths.memory_root(&root).join("management/resets");
-            crate::coordination::ensure_data_authority(&root, &[&directory])?;
-            match std::fs::read_dir(directory) {
-                Ok(entries) => {
-                    for entry in entries {
-                        let id = entry?.file_name().to_string_lossy().into_owned();
-                        if !uuid::Uuid::parse_str(&id).is_ok_and(|value| value.to_string() == id) {
-                            continue;
-                        }
-                        if cognition::reset_receipt(&root, &paths, &id)?.is_some_and(|receipt| {
-                            receipt.kind == "reextract"
-                                && receipt.phase == "failed"
-                                && receipt.old_generation == active.generation_id
-                        }) {
-                            return Ok(None);
-                        }
-                    }
-                }
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                Err(error) => return Err(error),
+                return Err(io::Error::other("Re-extraction is not due"));
             }
             cognition::begin_conversation_reset(
                 &root,
                 &paths,
                 &coordinator,
-                &uuid::Uuid::new_v4().to_string(),
-                coordinator.inventory_revision(),
+                &id,
+                revision,
                 None,
                 "reextract",
             )
-            .map(Some)
         })
         .await
         .map_err(io::Error::other)?

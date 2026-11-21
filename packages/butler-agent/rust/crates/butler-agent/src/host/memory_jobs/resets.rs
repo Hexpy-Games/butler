@@ -51,51 +51,13 @@ pub(crate) fn recover_resets(
                 butler_core::diagnostic!("[memory-reset-recovery] {}", error);
             }
         }
-        let resumed = pending
-            .iter()
-            .any(|r| r.kind == "reextract" && r.phase == "preparing");
         for receipt in pending.into_iter().filter(|r| r.kind == "reextract") {
             drive_reextract(&owner, &consumer, &gate, receipt, &stop).await;
-        }
-        if !resumed {
-            begin_reextract(&owner, &consumer, &gate, &stop).await;
         }
     });
 }
 
-async fn begin_reextract(
-    owner: &MemoryManagement,
-    consumer: &MemorySyncConsumer,
-    gate: &ConsolidationRunGate,
-    stop: &CancellationToken,
-) {
-    while !stop.is_cancelled() {
-        match owner.begin_reextract_if_due().await {
-            Ok(Some(receipt)) => {
-                drive_reextract(owner, consumer, gate, receipt, stop).await;
-                return;
-            }
-            Ok(None) => return,
-            Err(error)
-                if matches!(
-                    error.to_string().as_str(),
-                    "Memory is in use" | "Inventory changed"
-                ) =>
-            {
-                tokio::select! {
-                    () = stop.cancelled() => return,
-                    () = tokio::time::sleep(std::time::Duration::from_secs(5)) => {}
-                }
-            }
-            Err(error) => {
-                butler_core::diagnostic!("[memory-reextract-recovery] {error}");
-                return;
-            }
-        }
-    }
-}
-
-async fn drive_reextract(
+pub(crate) async fn drive_reextract(
     owner: &MemoryManagement,
     consumer: &MemorySyncConsumer,
     gate: &ConsolidationRunGate,

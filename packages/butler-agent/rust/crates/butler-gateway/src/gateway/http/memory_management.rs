@@ -51,9 +51,10 @@ pub(super) async fn route(
         }
         (&Method::GET, "/memory/inventory") => (AppMemoryCommand::Inventory, StatusCode::OK),
         (&Method::POST, "/memory/inventory/check") => (AppMemoryCommand::Check, StatusCode::OK),
-        (&Method::POST, path @ ("/memory/reset/profile" | "/memory/reset/chat-memory")) => {
-            (reset_request(request, path).await?, StatusCode::ACCEPTED)
-        }
+        (
+            &Method::POST,
+            path @ ("/memory/reset/profile" | "/memory/reset/chat-memory" | "/memory/reset/reextract"),
+        ) => (reset_request(request, path).await?, StatusCode::ACCEPTED),
         (&Method::POST, path) if path.starts_with("/memory/reset/projects/") => {
             (project_reset(request, path).await?, StatusCode::ACCEPTED)
         }
@@ -191,6 +192,11 @@ async fn reset_request(
     let input: ResetInput = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
     if path == "/memory/reset/profile" {
         Ok(AppMemoryCommand::ResetProfile {
+            operation_id: input.operation_id,
+            inventory_revision: input.inventory_revision,
+        })
+    } else if path == "/memory/reset/reextract" {
+        Ok(AppMemoryCommand::Reextract {
             operation_id: input.operation_id,
             inventory_revision: input.inventory_revision,
         })

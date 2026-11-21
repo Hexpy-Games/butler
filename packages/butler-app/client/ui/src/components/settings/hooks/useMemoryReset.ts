@@ -20,10 +20,11 @@ export function useMemoryReset(initial: MemoryReceipt | undefined, refresh: () =
     current.current = next;
     setReceipt(next);
     if (!running(next) && announce) {
-      const copy = appCopy.settings.memory;
-      const done = next.kind === "reextract" ? copy.reextractDone : next.kind === "profile" ? copy.resetProfileDone : next.kind === "project_memory" ? copy.resetProjectDone : copy.resetChatDone;
-      const failed = next.kind === "reextract" ? copy.reextractFailed : copy.resetFailed;
-      notifyStatus(next.phase === "complete" ? done : failed, { id: "memory-reset", tone: next.phase === "complete" ? "ok" : "error" });
+      if (next.kind !== "reextract") {
+        const copy = appCopy.settings.memory;
+        const done = next.kind === "profile" ? copy.resetProfileDone : next.kind === "project_memory" ? copy.resetProjectDone : copy.resetChatDone;
+        notifyStatus(next.phase === "complete" ? done : copy.resetFailed, { id: "memory-reset", tone: next.phase === "complete" ? "ok" : "error" });
+      }
       void refresh();
     }
   }, [refresh]);
@@ -59,13 +60,18 @@ export function useMemoryReset(initial: MemoryReceipt | undefined, refresh: () =
       : kind === "profile" ? copy.removedProfile(card?.item_count ?? 0, card?.pending_count ?? 0) : copy.removedChat(card?.item_count ?? 0);
     const kept = isProject ? copy.keptProject : kind === "profile" ? copy.keptProfile : copy.keptChat;
     try {
-      const accepted = await confirmAction(body, { title, confirmLabel: copy.reset, destructive: true, note: copy.resetNote,
+      const accepted = kind === "reextract"
+        ? await confirmAction(copy.reextractBody, { title: copy.reextractTitle, confirmLabel: copy.reextractConfirm })
+        : await confirmAction(body, { title, confirmLabel: copy.reset, destructive: true, note: copy.resetNote,
         details: [...(isProject ? [{ label: copy.project, text: name ?? copy.project }] : []), { label: copy.removed, text: removed }, { label: copy.kept, text: kept }] });
       if (!accepted) return;
       setStarting(kind);
-      const route = isProject ? `projects/${encodeURIComponent(projectId ?? project!.project_id)}` : kind === "profile" ? "profile" : "chat-memory";
+      const route = kind === "reextract" ? "reextract" : isProject ? `projects/${encodeURIComponent(projectId ?? project!.project_id)}` : kind === "profile" ? "profile" : "chat-memory";
       accept(await api<MemoryReceipt>(`/memory/reset/${route}`, { method: "POST", body: JSON.stringify({ operation_id: crypto.randomUUID(), inventory_revision: revision }) }));
-    } catch { notifyStatus(copy.resetFailed, { id: "memory-reset", tone: "error" }); void refresh(); }
+    } catch {
+      if (kind !== "reextract") notifyStatus(copy.resetFailed, { id: "memory-reset", tone: "error" });
+      void refresh();
+    }
     finally { setStarting(undefined); pending.current = false; }
   };
   return { kind: starting ?? (running(receipt) ? receipt?.kind as ResetKind : undefined), start, reextract };

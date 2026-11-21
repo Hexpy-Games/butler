@@ -1,4 +1,4 @@
-//! A rules upgrade resumes the same shadow and retires its predecessor after seven days.
+//! A user-started rules upgrade resumes the same shadow and retires its predecessor after seven days.
 use super::{memory_response, memory_stubs};
 use butler_e2e::e2e::{
     HarnessError,
@@ -75,6 +75,16 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
     assert_eq!(s.turn("general", CHAT1).await?.1["state"], "delivered");
     assert_eq!(s.turn(chat2, CHAT2).await?.1["state"], "delivered");
     memory_stubs::text_complete(&s.sandbox.data, 2).await?;
+    let checked = s.gw.post("/memory/inventory/check", json!({})).await?;
+    assert_eq!(checked.data()["reextract_available"], false);
+    let rejected = s
+        .gw
+        .post(
+            "/memory/reset/reextract",
+            json!({"operation_id":uuid::Uuid::new_v4().to_string(),"inventory_revision":checked.data()["revision"]}),
+        )
+        .await?;
+    assert_eq!(rejected.status, 409, "{}", rejected.text);
     let memory = s.sandbox.data.join("cognition/memory");
     assert!(!memory.join("management/resets").exists());
     let read_json = |path: &std::path::Path| -> Result<Value, HarnessError> {
@@ -94,7 +104,21 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
     let g1 = s.provider()?.hold_next_reply(CHAT2_WORD);
     let before = s.provider()?.memory_requests().len();
     s.gw = s.agent.start_again().await?;
-    let receipt = tokio::time::timeout(Duration::from_secs(90), async {
+    let checked = s.gw.post("/memory/inventory/check", json!({})).await?;
+    assert_eq!(checked.data()["reextract_available"], true);
+    assert!(!memory.join("management/resets").exists());
+    let accepted = s
+        .gw
+        .post(
+            "/memory/reset/reextract",
+            json!({"operation_id":uuid::Uuid::new_v4().to_string(),"inventory_revision":checked.data()["revision"]}),
+        )
+        .await?;
+    assert_eq!(accepted.status, 202, "{}", accepted.text);
+    assert_eq!(accepted.data()["kind"], "reextract");
+    assert_eq!(accepted.data()["phase"], "preparing");
+    let id = accepted.data()["operation_id"].as_str().unwrap();
+    tokio::time::timeout(Duration::from_secs(90), async {
         loop {
             let inventory = s.gw.get("/memory/inventory").await?;
             let operation = &inventory.data()["operation"];
@@ -116,7 +140,6 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
     })
     .await
     .expect("re-extraction reaches its held second chat")?;
-    let id = receipt["operation_id"].as_str().unwrap();
     s.agent.terminate().await?;
     drop(g1);
     let g2 = s.provider()?.hold_next_reply(CHAT2_WORD);
@@ -166,6 +189,8 @@ async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), Har
         |row| row.get(0),
     )?;
     assert_eq!(count, 3);
+    let checked = s.gw.post("/memory/inventory/check", json!({})).await?;
+    assert_eq!(checked.data()["reextract_available"], false);
     for (ask, _, word) in asks {
         let chat =
             s.gw.post("/sessions", json!({"kind":"chat","title":"Recall"}))

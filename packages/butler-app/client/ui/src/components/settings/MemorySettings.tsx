@@ -48,7 +48,15 @@ export function MemorySettings() {
           reclaimable={chat?.health.reclaimable_bytes} start={() => { void operation.start(revision); }} />}
         reset={<MemoryResetButton running={reset.kind === "automatic"} locked={sharedBusy && reset.kind !== "automatic"}
           ready={summary.state === "ready" && chat?.item_count != null} empty={chat?.item_count === 0}
-          onClick={() => { void reset.start("automatic", revision, chat); }} />} />
+          onClick={() => { void reset.start("automatic", revision, chat); }} />}
+        reextract={summary.inventory?.reextract_available || reset.reextract ? <MemoryResetButton
+          label={copy.memory.reextract}
+          running={reset.kind === "reextract"}
+          locked={sharedBusy && reset.kind !== "reextract"}
+          ready={summary.state === "ready"}
+          empty={false}
+          onClick={() => { void reset.start("reextract", revision); }}
+        /> : undefined} />
     </SettingsSection>
     <SettingsSection id="memory-cleanup" kind="form" title={copy.pageSections.memoryCleanup} description={copy.pageSectionDescriptions.memoryCleanup}>
       <ConsolidationFields operation={consolidation} locked={operation.busy || Boolean(reset.kind)} />
