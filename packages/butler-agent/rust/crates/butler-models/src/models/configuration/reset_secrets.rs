@@ -29,6 +29,12 @@ pub fn reset_secret_keys(root: &Path) -> io::Result<Vec<(String, String)>> {
             .filter(|p| p.backend.is_system())
             .map(|p| (p.provider_id, p.id, p.backend)),
     );
+    for (id, home) in super::computer_keys::homes(root)? {
+        if let Some(backend) = SecretBackend::from_name(&home).filter(|backend| backend.is_system())
+        {
+            ids.push(("computer_key".into(), id, backend));
+        }
+    }
     ids.into_iter()
         .map(|(provider, id, backend)| {
             let key = secret_store::key(root, backend, &provider, &id).map_err(io::Error::other)?;

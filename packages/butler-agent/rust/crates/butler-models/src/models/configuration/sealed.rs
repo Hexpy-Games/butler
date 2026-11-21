@@ -19,7 +19,10 @@ use std::{
 };
 
 use age::x25519::{Identity, Recipient};
-use butler_platform::{secrets::SecretBackend, secure_fs};
+use butler_platform::{
+    secrets::{SecretBackend, SecretText},
+    secure_fs,
+};
 use chrono::{DateTime, TimeDelta, Utc};
 use parking_lot::RwLock;
 
@@ -56,6 +59,12 @@ impl SealedError {
             Self::Storage(_) => "credential_store_failed",
         }
     }
+}
+
+/// A new account identity for one remote computer (kept by the main).
+pub fn new_identity() -> SecretText {
+    use age::secrecy::ExposeSecret;
+    SecretText::new(Identity::generate().to_string().expose_secret().to_owned())
 }
 
 pub fn enable(data_root: &Path) {

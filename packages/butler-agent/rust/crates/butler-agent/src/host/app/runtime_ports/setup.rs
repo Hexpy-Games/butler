@@ -18,7 +18,8 @@ use tokio::sync::watch;
 use butler_gateway::gateway::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
     ApplicationFuture, GatewayApplicationError, LocalModelServersView, OauthFlowView,
-    ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView, SetupReadinessView,
+    ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView, SavedProviderKey,
+    SetupReadinessView,
 };
 use butler_models::models::{
     CredentialList, DeletedCredential, LocalServerKind, LocalServerProbe, ModelConfiguration,
@@ -167,6 +168,30 @@ impl AppSetupPort for AppSetup {
         })
     }
 
+    fn saved_provider_key(&self, name: String) -> ApplicationFuture<SavedProviderKey> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            credentials::saved_key(&this.configuration, &name, &root).await
+        })
+    }
+
+    fn computer_key(&self, id: String) -> ApplicationFuture<SecretText> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            credentials::computer_key(&this.configuration, &id, &root).await
+        })
+    }
+
+    fn delete_computer_key(&self, id: String) -> ApplicationFuture<()> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            credentials::delete_computer_key(&this.configuration, &id, &root).await
+        })
+    }
+
     fn list_credentials(&self) -> ApplicationFuture<CredentialList> {
         let this = self.0.clone();
         Box::pin(async move {
@@ -283,6 +308,7 @@ impl SetupInner {
             "auth",
             "auth/model-provider-credentials.json",
             "auth/credential-store.json",
+            "auth/computer-key-homes.json",
         ] {
             let target = self
                 .installation

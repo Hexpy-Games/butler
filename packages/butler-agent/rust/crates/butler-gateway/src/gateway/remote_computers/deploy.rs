@@ -185,7 +185,7 @@ async fn upload(
     ready(&response(&output)?)
 }
 
-fn check_exit(output: &HookOutput) -> Result<(), HttpError> {
+pub(super) fn check_exit(output: &HookOutput) -> Result<(), HttpError> {
     if output.exit_code == Some(255) {
         return Err(if output.stderr.contains("Permission denied") {
             remote_error("ssh_auth_failed", "SSH key login failed.")

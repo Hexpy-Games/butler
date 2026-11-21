@@ -122,8 +122,8 @@ pub use application::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
     ChatGptNoticeInput, ChatGptNoticeKind, ChatGptSignOutView, LocalModelServersView,
     MemoryModelProgress, OauthFlowStatus, OauthFlowView, ProviderKeyVerificationView,
-    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SetupReadinessStatus,
-    SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
+    ReplacedCredentialView, SETUP_READINESS_EVENT, SavedCredentialView, SavedProviderKey,
+    SetupReadinessStatus, SetupReadinessStep, SetupReadinessView, SetupStepError, SetupStepStatus,
 };
 pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,

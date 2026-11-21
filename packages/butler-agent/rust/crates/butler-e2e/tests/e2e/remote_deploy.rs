@@ -23,7 +23,7 @@ use std::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-struct RemoteHome(Launch);
+pub(super) struct RemoteHome(pub(super) Launch);
 
 impl Drop for RemoteHome {
     fn drop(&mut self) {
@@ -33,14 +33,14 @@ impl Drop for RemoteHome {
 }
 
 /// One file server for the manifest and archive; the counter measures archive downloads.
-struct Files {
-    base: String,
-    downloads: Arc<AtomicUsize>,
-    task: tokio::task::JoinHandle<()>,
+pub(super) struct Files {
+    pub(super) base: String,
+    pub(super) downloads: Arc<AtomicUsize>,
+    pub(super) task: tokio::task::JoinHandle<()>,
 }
 
 impl Files {
-    async fn start(root: PathBuf) -> Result<Self, HarnessError> {
+    pub(super) async fn start(root: PathBuf) -> Result<Self, HarnessError> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let base = format!("http://{}", listener.local_addr()?);
         let downloads = Arc::new(AtomicUsize::new(0));

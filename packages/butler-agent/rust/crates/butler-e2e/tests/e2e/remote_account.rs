@@ -38,7 +38,12 @@ async fn remote_credentials_stay_sealed_and_need_the_main_key() -> Result<(), Ha
     ));
     fs::create_dir(&launch.data)?;
     let data = RemoteData(launch);
-    let command = data.0.command_without_local_auth();
+    fs::write(
+        data.0.data.join("butler.config.json"),
+        serde_json::to_vec(&json!({"webSearch":{"provider":"openai-web-search"}}))?,
+    )?;
+    let mut command = data.0.command_without_local_auth();
+    command.env("OPENAI_API_KEY", uuid::Uuid::new_v4().to_string());
     let mut words = vec!["env -i".to_owned()];
     words.extend(command.get_envs().filter_map(|(key, value)| {
         value.map(|value| {
@@ -109,23 +114,42 @@ async fn remote_credentials_stay_sealed_and_need_the_main_key() -> Result<(), Ha
             .ok_or_else(|| harness_error("no admin credential"))?;
         let requests = if index == 0 {
             vec![
-                ("/credentials", &first, 409, "remote_key_pending"),
-                ("/remote/unlock", &unlock, 204, ""),
-                ("/credentials", &first, 201, ""),
+                (
+                    "POST",
+                    "/credentials",
+                    Some(&first),
+                    409,
+                    "remote_key_pending",
+                ),
+                ("POST", "/remote/unlock", Some(&unlock), 204, ""),
+                ("GET", "/settings", None, 200, ""),
+                ("POST", "/credentials", Some(&first), 201, ""),
             ]
         } else {
             vec![
-                ("/credentials", &second, 409, "remote_key_pending"),
-                ("/remote/unlock", &wrong, 403, "remote_key_mismatch"),
-                ("/remote/unlock", &unlock, 204, ""),
-                ("/credentials", &second, 201, ""),
+                (
+                    "POST",
+                    "/credentials",
+                    Some(&second),
+                    409,
+                    "remote_key_pending",
+                ),
+                (
+                    "POST",
+                    "/remote/unlock",
+                    Some(&wrong),
+                    403,
+                    "remote_key_mismatch",
+                ),
+                ("POST", "/remote/unlock", Some(&unlock), 204, ""),
+                ("POST", "/credentials", Some(&second), 201, ""),
             ]
         };
-        for (route, body, status, code) in requests {
+        for (method, route, body, status, code) in requests {
             let mut stream = local_socket::connect(&data.0.data.join("remote/agent.sock")).await?;
-            let body = body.to_string();
+            let body = body.map(ToString::to_string).unwrap_or_default();
             let request = format!(
-                "POST http://agent{route} HTTP/1.1\r\nHost: agent\r\nAuthorization: Bearer {token}\r\nX-Butler-Admin: {admin}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                "{method} http://agent{route} HTTP/1.1\r\nHost: agent\r\nAuthorization: Bearer {token}\r\nX-Butler-Admin: {admin}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                 body.len()
             );
             stream.write_all(request.as_bytes()).await?;
@@ -141,6 +165,14 @@ async fn remote_credentials_stay_sealed_and_need_the_main_key() -> Result<(), Ha
                     .and_then(|value| value.parse::<u16>().ok()),
                 Some(status)
             );
+            if route == "/settings" {
+                let settings: Value = serde_json::from_str(payload)?;
+                assert_eq!(
+                    settings["data"]["web_search"]["provider"],
+                    "openai-web-search"
+                );
+                assert_eq!(settings["data"]["web_search"]["api_key_configured"], false);
+            }
             if !code.is_empty() {
                 assert_eq!(
                     serde_json::from_str::<Value>(payload)?["error"]["code"],

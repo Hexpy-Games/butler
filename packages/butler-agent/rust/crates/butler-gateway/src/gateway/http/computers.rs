@@ -1,6 +1,6 @@
 //! Local-admin HTTP boundary for the SSH computer registry.
 use super::*;
-use crate::gateway::remote_computers::{self, AddInput, Computer, HostInput};
+use crate::gateway::remote_computers::{self, AddInput, Computer, HostInput, SendCredential};
 
 pub(super) async fn route(
     state: Arc<HttpState>,
@@ -40,6 +40,7 @@ pub(super) async fn route(
         (Method::POST, path) if path.starts_with("/computers/") && path.ends_with("/start") => (
             StatusCode::OK,
             remote_computers::change(
+                &state.application.setup()?,
                 root,
                 path,
                 true,
@@ -48,9 +49,13 @@ pub(super) async fn route(
             )
             .await?,
         ),
+        (Method::POST, p) if p.starts_with("/computers/") && p.ends_with("/credentials") => {
+            send_credential(&state, request, root, p).await?
+        }
         (Method::DELETE, path) if path.starts_with("/computers/") => (
             StatusCode::OK,
             remote_computers::change(
+                &state.application.setup()?,
                 root,
                 path,
                 false,
@@ -68,4 +73,31 @@ pub(super) async fn route(
             data,
         },
     )
+}
+
+async fn send_credential(
+    state: &HttpState,
+    request: Request<Body>,
+    root: &std::path::Path,
+    path: &str,
+) -> Result<(StatusCode, serde_json::Value), HttpError> {
+    let bytes = read_body_with_limit(request.into_body(), 64 * 1024)
+        .await
+        .map_err(|_| HttpError::invalid_json())?;
+    let input: SendCredential =
+        serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+    let setup = state.application.setup()?;
+    let key = setup.saved_provider_key(input.credential_id).await?;
+    Ok((
+        StatusCode::OK,
+        remote_computers::send_credential(
+            &setup,
+            root,
+            path,
+            &state.agent_version,
+            key,
+            state.shutdown.clone(),
+        )
+        .await?,
+    ))
 }

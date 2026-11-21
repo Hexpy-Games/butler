@@ -12,6 +12,7 @@ pub(super) mod observability;
 pub(super) mod open;
 pub(super) mod public;
 pub(super) mod remote;
+mod remote_relay;
 pub(super) mod schedule;
 pub(super) mod service;
 pub(super) mod settings;

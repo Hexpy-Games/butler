@@ -3,11 +3,12 @@
 //! replacing and deleting saved keys (#217). Keys are kept in the OS
 //! credential store; the credentials file holds only their metadata.
 
+use butler_platform::secrets::SecretText;
 use std::path::Path;
 
 use butler_gateway::gateway::{
     AppCredentialReplaceInput, AppProviderKeyInput, GatewayApplicationError,
-    ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView,
+    ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView, SavedProviderKey,
 };
 use butler_models::models::{
     CredentialError, CredentialList, DeletedCredential, ModelCatalogError, ModelConfiguration,
@@ -79,6 +80,43 @@ pub(super) async fn list(
 ) -> Result<CredentialList, GatewayApplicationError> {
     configuration
         .list_provider_credentials(root)
+        .await
+        .map_err(credential_error)
+}
+
+pub(super) async fn saved_key(
+    configuration: &ModelConfiguration,
+    name: &str,
+    root: &Path,
+) -> Result<SavedProviderKey, GatewayApplicationError> {
+    let (provider_id, api_key) = configuration
+        .saved_provider_key(name, root)
+        .await
+        .map_err(credential_error)?;
+    Ok(SavedProviderKey {
+        provider_id,
+        api_key,
+    })
+}
+
+pub(super) async fn computer_key(
+    configuration: &ModelConfiguration,
+    id: &str,
+    root: &Path,
+) -> Result<SecretText, GatewayApplicationError> {
+    configuration
+        .computer_identity(id, root)
+        .await
+        .map_err(credential_error)
+}
+
+pub(super) async fn delete_computer_key(
+    configuration: &ModelConfiguration,
+    id: &str,
+    root: &Path,
+) -> Result<(), GatewayApplicationError> {
+    configuration
+        .delete_computer_identity(id, root)
         .await
         .map_err(credential_error)
 }

@@ -89,6 +89,12 @@ pub struct AppProviderKeyInput {
     pub api_key: String,
 }
 
+/// A saved key read for an explicit owner action; never serialized.
+pub struct SavedProviderKey {
+    pub provider_id: String,
+    pub api_key: SecretText,
+}
+
 /// A key the provider did not reject; failures are error envelopes.
 #[derive(Clone, Debug, Serialize)]
 pub struct ProviderKeyVerificationView {
@@ -246,6 +252,9 @@ pub trait AppSetupPort: Send + Sync + 'static {
     /// The saved keys (masked, with their store and the models using them)
     /// and where new keys go.
     fn list_credentials(&self) -> ApplicationFuture<CredentialList>;
+    fn saved_provider_key(&self, name: String) -> ApplicationFuture<SavedProviderKey>;
+    fn computer_key(&self, id: String) -> ApplicationFuture<SecretText>;
+    fn delete_computer_key(&self, id: String) -> ApplicationFuture<()>;
     /// Replaces the key of the saved credential `name` (its id, or its
     /// label when exactly one key has it).
     fn replace_credential(
@@ -390,6 +399,15 @@ pub(crate) fn test_setup_port() -> Arc<dyn AppSetupPort> {
             &self,
             _: AppProviderKeyInput,
         ) -> ApplicationFuture<SavedCredentialView> {
+            unsupported()
+        }
+        fn saved_provider_key(&self, _: String) -> ApplicationFuture<SavedProviderKey> {
+            unsupported()
+        }
+        fn computer_key(&self, _: String) -> ApplicationFuture<SecretText> {
+            unsupported()
+        }
+        fn delete_computer_key(&self, _: String) -> ApplicationFuture<()> {
             unsupported()
         }
         fn list_credentials(&self) -> ApplicationFuture<CredentialList> {
