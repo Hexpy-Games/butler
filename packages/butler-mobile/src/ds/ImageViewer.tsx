@@ -131,9 +131,11 @@ function IOSPicture({ width, height, stage, children, ref, onScale, onClose }: Z
   const reduced = useReducedMotion();
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const lastPress = useRef(0);
-  const position = useRef({ scale: MIN_ZOOM, x: 0, y: 0 });
   const [scale, setZoomScale] = useState(MIN_ZOOM);
   const insets = centringInsets(stage, width, height, scale);
+  const fit = useMemo(() => centringInsets(stage, width, height, MIN_ZOOM), [stage.width, stage.height, width, height]);
+  const restOffset = useMemo(() => ({ x: -fit.left, y: -fit.top }), [fit]);
+  const position = useRef({ scale: MIN_ZOOM, x: -fit.left, y: -fit.top });
   const frame = useRef({ x: 0, y: 0 });
   const tap = useRef({ x: 0, y: 0, at: 0, multi: false, dragged: false });
   const zoomTo = (next: number, centreX: number, centreY: number) => {
@@ -157,7 +159,7 @@ function IOSPicture({ width, height, stage, children, ref, onScale, onClose }: Z
     } else lastPress.current = now;
   };
   return <ScrollView ref={scroll} style={{ flex: 1, alignSelf: "stretch" }} contentContainerStyle={{ width, height }}
-    contentInset={insets} contentOffset={{ x: -insets.left, y: -insets.top }}
+    contentInset={insets} contentOffset={restOffset}
     automaticallyAdjustContentInsets={false} contentInsetAdjustmentBehavior="never"
     minimumZoomScale={MIN_ZOOM} maximumZoomScale={MAX_ZOOM}
     bouncesZoom alwaysBounceVertical showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
