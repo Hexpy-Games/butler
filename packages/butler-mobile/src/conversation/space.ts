@@ -1,11 +1,12 @@
-import type { NavigationView, ProjectSummary, SessionSummary } from "../../../butler-protocol/src/index.ts";
+import type { CanonSidebar, EpicCard, NavigationView, ProjectSummary, SessionSummary } from "../../../butler-protocol/src/index.ts";
 
 export type SpaceRow = {
   key: string;
-  kind: "session" | "project" | "group";
+  kind: "session" | "project" | "group" | "plan" | "backlog" | "epic";
   title: string;
   session?: SessionSummary;
   project?: ProjectSummary;
+  epic?: EpicCard;
   depth: number;
 };
 
@@ -47,6 +48,37 @@ export function spaceTree(view: NavigationView): { general?: SessionSummary; chi
     children.set(parentKey, siblings);
   }
   return { general: view.chats.find(session => session.id === "general" && !session.archived), children };
+}
+
+/** Desktop's project contents: Canon groups first (backlog, then plans), each holding its 과제; a chat that worked only on one 과제 (and is not its home) nests under it and leaves the project's list. */
+export function withCanon(tree: ReturnType<typeof spaceTree>, sidebars: ReadonlyMap<string, CanonSidebar>, backlogTitle: string): ReturnType<typeof spaceTree> {
+  const children = new Map(tree.children);
+  const rows = new Map([...tree.children.values()].flatMap(siblings => siblings.map(row => [row.key, row] as const)));
+  for (const [projectId, sidebar] of sidebars) {
+    const projectKey = `p:${projectId}`;
+    if (!rows.has(projectKey)) continue;
+    const nested = new Set<string>();
+    const groupRows: SpaceRow[] = [];
+    for (const group of sidebar.groups) {
+      if (!group.rows.length) continue;
+      const epicRows = group.rows.map((epic): SpaceRow => {
+        const sessions = epic.sessions.flatMap(session => {
+          const row = rows.get(`s:${session.session_id}`);
+          if (session.worked !== 1 || session.session_id === epic.home_session_id || !row) return [];
+          nested.add(row.key);
+          return [row];
+        });
+        const row: SpaceRow = { key: `e:${epic.id}`, kind: "epic", title: epic.title, epic, depth: 0 };
+        children.set(row.key, sessions);
+        return row;
+      });
+      const row: SpaceRow = { key: `c:${projectId}:${group.key}`, kind: group.kind, title: group.kind === "backlog" ? backlogTitle : group.title ?? "", depth: 0 };
+      children.set(row.key, epicRows);
+      groupRows.push(row);
+    }
+    children.set(projectKey, [...groupRows, ...(children.get(projectKey) ?? []).filter(row => !nested.has(row.key))]);
+  }
+  return { general: tree.general, children };
 }
 
 export function visibleRows(tree: ReturnType<typeof spaceTree>, collapsed: ReadonlySet<string>): SpaceRow[] {
