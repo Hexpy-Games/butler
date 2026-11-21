@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, Stack } from "expo-router";
 import type { NavigationView } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
-import { IconButton, icons, ListRow, Sheet, useHeaderOptions, useTokens } from "@/ds";
+import { IconButton, icons, ListGroup, ListRow, Sheet, useHeaderOptions, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 
 export function NewConversationSheet({ view }: { view: NavigationView | null }) {
@@ -37,13 +37,19 @@ export function NewConversationSheet({ view }: { view: NavigationView | null }) 
       <IconButton icon={icons.Edit} variant="default" label={appCopy.space.newChat} disabled={!view} onPress={newChat} />
     </View>}
     <Sheet open={open} onClose={() => setOpen(false)} title={appCopy.space.newChat} cancelLabel={copy.chat.close}>
-      <ListRow icon={icons.MessageSquare} title={appCopy.interfacePanels.generalChat}
-        onPress={() => { setOpen(false); router.push({ pathname: "/chat/[id]", params: { id: "general", title: general?.title ?? appCopy.interfacePanels.generalChat } }); }} />
-      <ListRow icon={icons.Edit} title={appCopy.space.newChat} onPress={() => start()} />
-      {projects.map(project => <ListRow key={project.id} icon={icons.Briefcase} title={project.display_name}
-        onPress={() => start(project.id)} />)}
-      {groups.map(group => <ListRow key={group.id} icon={icons.Folder} title={group.title}
-        onPress={() => start(group.scopeProjectId ?? undefined, group.id)} />)}
+      <View style={{ gap: t.length("--space-4") }}>
+        <ListGroup>
+          <ListRow icon={icons.MessageSquare} title={appCopy.interfacePanels.generalChat}
+            onPress={() => { setOpen(false); router.push({ pathname: "/chat/[id]", params: { id: "general", title: general?.title ?? appCopy.interfacePanels.generalChat } }); }} />
+          <ListRow icon={icons.Edit} title={appCopy.space.newChat} onPress={() => start()} />
+        </ListGroup>
+        {projects.length || groups.length ? <ListGroup>
+          {projects.map(project => <ListRow key={project.id} icon={icons.Briefcase} title={project.display_name}
+            onPress={() => start(project.id)} />)}
+          {groups.map(group => <ListRow key={group.id} icon={icons.Folder} title={group.title}
+            onPress={() => start(group.scopeProjectId ?? undefined, group.id)} />)}
+        </ListGroup> : null}
+      </View>
     </Sheet>
   </>;
 }

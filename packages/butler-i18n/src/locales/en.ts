@@ -531,6 +531,7 @@ export const enUsCopy: AppCopy = {
       reasoning: "Reasoning",
       modelFailed: "Could not change the model.",
       modelUnavailable: "Not available",
+      selected: "Selected",
       context: "Context",
       close: "Close",
       info: "Conversation info",

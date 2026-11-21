@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { View } from "react-native";
 import type { DashboardMaterialsPage, ProjectDashboardDocument } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
-import { ListRow, Sheet, Text, TextField, useTokens } from "@/ds";
+import { icons, ListGroup, ListRow, Sheet, Text, TextField, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useConversation } from "./live";
 import { documentKindLabel } from "./documents";
@@ -40,14 +40,14 @@ export function ProjectDocumentsSheet({ open, onClose, onClosed, projectId, onPi
   }, [open, client, projectId]);
   const visible = documents?.filter(document => document.title.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase())) ?? [];
   return <Sheet open={open} onClose={onClose} onClosed={onClosed} title={appCopy.interfaceDetails.projectDocuments} cancelLabel={copy.chat.close}>
-    <View style={{ gap: t.length("--space-3") }}>
+    <View style={{ gap: t.length("--space-4") }}>
       <TextField label={appCopy.interfaceDetails.searchDocuments}
         value={filter} onChangeText={setFilter} />
       {error ? <Text tone="danger">{appCopy.interfacePanels.projectDocumentsFailed}</Text>
         : documents !== null && !visible.length ? <Text>{appCopy.interfaceDetails.noDocuments}</Text> : null}
-      {visible.map(document => <ListRow key={`${document.document_type ?? document.kind}:${document.id}`} title={document.title}
-        meta={documentKindLabel(document.document_type ?? document.kind, appCopy)} description={document.safe_path_label}
-        onPress={() => onPick(document)} />)}
+      {visible.length ? <ListGroup>{visible.map(document => <ListRow icon={icons.Document} key={`${document.document_type ?? document.kind}:${document.id}`} title={document.title}
+        meta={documentKindLabel(document.document_type ?? document.kind, appCopy)}
+        onPress={() => onPick(document)} />)}</ListGroup> : null}
     </View>
   </Sheet>;
 }

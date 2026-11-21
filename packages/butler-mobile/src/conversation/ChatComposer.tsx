@@ -2,7 +2,7 @@ import { useImperativeHandle, useRef, useState } from "react";
 import { router } from "expo-router";
 import type { CreateSessionRequest, CreateSessionResult, MessageFileRef, MessageSendRequest, MessageSendResult, ProjectDashboardDocument, SessionView } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy, reasoningEffortLabel } from "../../../butler-i18n/src/index.ts";
-import { AttachmentTiles, IconButton, Composer, ComposerDock, ContextRing, icons, ListRow, Sheet, showToast } from "@/ds";
+import { AttachmentTiles, IconButton, Composer, ComposerDock, ContextRing, icons, ListGroup, ListRow, Sheet, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useConversation } from "./live";
 import { ContextUsage } from "./usage/ContextUsage";
@@ -76,11 +76,13 @@ export function ChatComposer({ ref, id, project, group, view, hasDecision, text,
         if (action === "documents") setSheet("documents");
         else if (action) void attachments.pick(action);
       }}>
-      {projectId ? <ListRow icon={icons.Document} title={appCopy.interfaceDetails.projectDocuments}
-        onPress={() => { pendingAction.current = "documents"; setSheet(null); }} /> : null}
-      {model.current?.image_input_support !== "unsupported" ? <ListRow icon={icons.Image} title={copy.chat.attachPhoto}
-        onPress={() => { pendingAction.current = "photo"; setSheet(null); }} /> : null}
-      <ListRow icon={icons.File} title={copy.chat.attachFile} onPress={() => { pendingAction.current = "file"; setSheet(null); }} />
+      <ListGroup>
+        {projectId ? <ListRow icon={icons.Document} title={appCopy.interfaceDetails.projectDocuments} navigates
+          onPress={() => { pendingAction.current = "documents"; setSheet(null); }} /> : null}
+        {model.current?.image_input_support !== "unsupported" ? <ListRow icon={icons.Image} title={copy.chat.attachPhoto}
+          onPress={() => { pendingAction.current = "photo"; setSheet(null); }} /> : null}
+        <ListRow icon={icons.File} title={copy.chat.attachFile} onPress={() => { pendingAction.current = "file"; setSheet(null); }} />
+      </ListGroup>
     </Sheet>
     {projectId ? <ProjectDocumentsSheet key={projectId} projectId={projectId} open={sheet === "documents"}
       onClose={() => setSheet(null)} onPick={document => { pendingDocument.current = document; setSheet(null); }}

@@ -490,6 +490,7 @@ export interface MobileCopy {
     reasoning: string;
     modelFailed: string;
     modelUnavailable: string;
+    selected: string;
     context: string;
     close: string;
     info: string;

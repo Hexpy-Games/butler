@@ -529,6 +529,7 @@ export const koKrCopy: AppCopy = {
       reasoning: "추론 강도",
       modelFailed: "모델을 바꾸지 못했습니다.",
       modelUnavailable: "사용할 수 없음",
+      selected: "선택됨",
       context: "컨텍스트",
       close: "닫기",
       info: "대화 정보",

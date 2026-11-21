@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Platform, ScrollView, View } from "react-native";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
-import { ListRow, Text, ThinkingMark, useHeaderInset, useTokens } from "@/ds";
+import { ListGroup, ListRow, Text, ThinkingMark, useHeaderInset, useTokens } from "@/ds";
 import { useAppLocale } from "@/i18n";
 import type { NewChatBriefingView } from "@/settings/types";
 import { useConversation } from "./live";
@@ -38,9 +38,9 @@ export function NewChatIntro({ project, title, dockHeight, setText, onSend }: {
       <Text variant="h1">{briefing?.title ?? title}</Text>
       {briefing?.description ? <Text tone="secondary">{briefing.description}</Text> : null}
     </View>
-    <View>
-      {suggestions.map(suggestion => <ListRow key={suggestion.id} title={suggestion.title} description={suggestion.description}
+    <ListGroup>
+      {suggestions.map(suggestion => <ListRow key={suggestion.id} title={suggestion.title}
         onPress={() => suggestion.template ? setText(suggestion.text) : onSend(suggestion.text)} />)}
-    </View>
+    </ListGroup>
   </ScrollView>;
 }
