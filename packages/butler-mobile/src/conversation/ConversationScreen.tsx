@@ -161,5 +161,5 @@ function TurnStatus({ view, hasDecision, anchors }: {
 function DelegatedTurnStatus({ child }: { child: StewardChild }) {
   const locale = useAppLocale();
   const elapsed = useElapsed(child.relation.created_at);
-  return <StatusLine label={latestStatus(child.active_turn?.progress?.safe_progress_rows ?? [], true, child.status, locale) ?? child.title} elapsed={elapsed} active />;
+  return <StatusLine label={latestStatus(child.active_turn?.progress?.safe_progress_rows ?? [], child.active_turn?.id, true, child.status, locale) ?? child.title} elapsed={elapsed} active />;
 }

@@ -1,7 +1,8 @@
 import { commandProgram, uniqueFileTargets, formatInterfaceText, getAppCopy, getInterfaceProgressLabel, type AppCopy, type AppLocale } from "../../../butler-i18n/src/index.ts";
 import type { ProgressSummaryRow, SessionViewTurn, StewardChild, WorkerActivityWorkBlock } from "../../../butler-protocol/src/index.ts";
+import type { WorkActivityToolIcon, WorkActivityToolItem } from "@/ds";
 
-import { projectActivities } from "./activityProjection";
+import { activityDisplayTitle, projectActivities } from "./activityProjection";
 
 export function progressRowLabel(row: ProgressSummaryRow, locale: AppLocale): string {
   const reference = row.interface_content?.summary ?? (!row.work_decision_summary ? row.interface_content?.title : undefined);
@@ -116,16 +117,6 @@ export function visibleRows(rows: ProgressSummaryRow[]): ProgressSummaryRow[] {
   return rows.filter(row => !isInternalProgressRow(row));
 }
 
-function isPhaseActivityRow(row: ProgressSummaryRow): row is ProgressSummaryRow & {
-  semantic_block_id: string;
-  work_decision_summary: string;
-} {
-  return row.kind === "message" && !row.work_block_id &&
-    Boolean(row.semantic_block_id) &&
-    row.work_decision_source === "model-authored" &&
-    Boolean(row.work_decision_summary);
-}
-
 function publicOperationTitle(capabilityRef: string | undefined, copy: AppCopy): string {
   const name = capabilityRef?.trim() ?? "";
   return copy.progress.operations[name] ?? copy.guided.tools[name] ?? copy.progress.fallback;
@@ -205,22 +196,19 @@ export function toolGroupLabel(row: ProgressSummaryRow, copy: AppCopy): string {
   return copy.interfaceStatus.review;
 }
 
-export function latestStatus(rows: ProgressSummaryRow[], live: boolean, settledState: string, locale: AppLocale): string | null {
-  const latest = projectActivities(rows, undefined, locale).activities.at(-1);
-  if (!latest) return null;
+export function latestStatus(rows: ProgressSummaryRow[], turnId: string | undefined, live: boolean, settledState: string, locale: AppLocale): string | null {
   const copy = getAppCopy(locale);
-  const visible = visibleRows(rows);
-  const step = visible.slice(visible.findLastIndex(isPhaseActivityRow) + 1).findLast(row => row.bridge_phase === "btcc_operation");
-  const kind = live
-    ? step ? toolGroupLabel(step, copy) : phaseLabel(latest.phase, copy)
-    : phaseLabel(settledState, copy);
-  return [latest.title, kind].filter(Boolean).join(" · ");
+  const latest = projectActivities(rows, turnId, locale).activities.at(-1);
+  if (!latest) return null;
+  const step = latest.operations.at(-1);
+  const kind = live ? step ? toolGroupLabel(step, copy) : phaseLabel(latest.phase, copy) : phaseLabel(settledState, copy);
+  return [activityDisplayTitle(latest, copy), kind].filter(Boolean).join(" · ");
 }
 
 export function turnStatusLabel(turn: SessionViewTurn, locale: AppLocale): string {
   const copy = getAppCopy(locale);
   const rows = visibleRows(turn.progress?.safe_progress_rows ?? []);
-  const activities = projectActivities(rows, undefined, locale).activities;
+  const activities = projectActivities(rows, turn.id, locale).activities;
   const operation = rows.findLast(row => row.bridge_phase === "btcc_operation" && row.state === "running");
   if (operation) return toolRowLabel(operation, locale);
   if (currentModelRoundWait(rows)) return copy.interfaceStatus.generating;
@@ -350,13 +338,7 @@ function isUsefulWorkerActivityTitle(value: string, appCopy: AppCopy): boolean {
     !/^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/u.test(normalized);
 }
 
-export type ToolIcon = "Rocket" | "FileText" | "Pencil" | "Terminal" | "Wrench" | "Search" | "ListChecks" | "AiChip";
-export type ToolItem = {
-  id: string; icon: ToolIcon; title: string; summaryLabel: string; details?: string;
-  output?: { turnId: string; callId: string; resultId: string; toolName?: string; command?: string };
-};
-
-export function toolItems(rows: ProgressSummaryRow[], locale: AppLocale): ToolItem[] {
+export function toolItems(rows: ProgressSummaryRow[], locale: AppLocale): WorkActivityToolItem[] {
   const copy = getAppCopy(locale);
   return rows.filter(isWorkActivityToolRow).map((row, index) => ({
     id: row.thinking_title ? `thinking:${row.tool_call_id}` : `${row.id}:${index}`,
@@ -372,11 +354,11 @@ export function toolItems(rows: ProgressSummaryRow[], locale: AppLocale): ToolIt
   }));
 }
 
-export function workBlockToolItems(block: WorkerActivityWorkBlock, turnId: string | undefined, locale: AppLocale): ToolItem[] {
+export function workBlockToolItems(block: WorkerActivityWorkBlock, turnId: string | undefined, locale: AppLocale): WorkActivityToolItem[] {
   return toolItems(block.rows.filter(row => isVisibleToolActivity(row, block.label)).map(row => ({ ...row, turn_id: turnId })), locale);
 }
 
-export function toolIcon(row: ProgressSummaryRow): ToolIcon {
+export function toolIcon(row: ProgressSummaryRow): WorkActivityToolIcon {
   if (row.safe_tool_name === "delegate_to_worker") return "Rocket";
   if (row.safe_tool_name === "read_file") return "FileText";
   if (row.safe_tool_name === "edit_file" || row.safe_tool_name === "write_file") {

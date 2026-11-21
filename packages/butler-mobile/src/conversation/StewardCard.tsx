@@ -28,9 +28,9 @@ export function StewardCard({ child }: { child: StewardChild }) {
   const rows = turn?.progress?.safe_progress_rows ?? [];
   const live = !!(child.active_turn || child.waiting_for_children);
   const status = stewardCardStatus(child, narrow, appCopy);
-  const latest = latestStatus(rows, live, effectiveStewardStatus(child), locale)
+  const latest = latestStatus(rows, turn?.id, live, effectiveStewardStatus(child), locale)
     ?? workerActivityTitle(stewardCurrentActivityTitle(child, locale), child.title, appCopy);
-  const tail = activityTail(expanded && childView ? observerActivities(childView, locale) : projectActivities(rows, undefined, locale).activities, appCopy);
+  const tail = activityTail(expanded && childView ? observerActivities(childView, locale) : projectActivities(rows, turn?.id, locale).activities, appCopy);
   const resume = async () => {
     if (!client) return;
     setResuming(true);
@@ -64,7 +64,7 @@ function StewardDetails({ view }: { view: SessionView | null }) {
   const t = useTokens();
   return <View style={{ gap: t.length("--space-md") }}>
     {view?.plan ? <StepTimeline view={view} plan={view.plan} /> : view ? <ActivityTimeline activities={observerActivities(view, locale)}
-      expandAll live={!!view.active_turn} goal={view.relation?.safe_title} /> : null}
+      expandAll live={!!view.active_turn} pulseLatest={!!view.active_turn} goal={view.relation?.safe_title} /> : null}
     {view?.waiting_for_children && !view.active_turn ? <StatusLine label={copy.conversation.work.pendingStateLabels.waiting_for_children} active /> : null}
     {view?.active_turn ? <StatusLine label={turnStatusLabel(view.active_turn, locale)} active /> : null}
     {!view?.messages.length && !view?.active_turn && !view?.waiting_for_children ? <Text variant="caption">{emptyObserverLabel(view?.status, copy)}</Text> : null}
@@ -88,14 +88,16 @@ function StepTimeline({ view, plan }: { view: SessionView; plan: WorkPlan }) {
   const newest = activities.at(-1);
   const live = !!view.active_turn;
   return <View style={{ paddingHorizontal: t.length("--space-md"), gap: t.length("--space-md") }}>
-    <ActivityTimeline activities={groups.before} expandAll live={live && newest !== undefined && groups.before.includes(newest)} />
+    <ActivityTimeline activities={groups.before} expandAll live={live && newest !== undefined && groups.before.includes(newest)}
+      pulseLatest={live && newest !== undefined && groups.before.includes(newest)} />
     {groups.steps.map(step => <Fragment key={step.action.action_key}>
       {step.revision ? <RevisionRow revision={step.revision} /> : null}
       <StepGroup action={step.action} activities={step.activities} workers={step.workers} newest={newest} live={live} />
     </Fragment>)}
     {groups.trailingRevisions.map(revision => <RevisionRow key={revision.revision} revision={revision} />)}
     {groups.after.length ? <View style={{ height: 1, backgroundColor: t.color("--line") }} /> : null}
-    <ActivityTimeline activities={groups.after} expandAll live={live && newest !== undefined && groups.after.includes(newest)} />
+    <ActivityTimeline activities={groups.after} expandAll live={live && newest !== undefined && groups.after.includes(newest)}
+      pulseLatest={live && newest !== undefined && groups.after.includes(newest)} />
   </View>;
 }
 
@@ -116,7 +118,8 @@ function StepGroup({ action, activities, workers, newest, live }: {
     <ListRow title={copy.conversation.work.planSteps.title(action.order, action.title)} meta={workPlanStatusTime(action, copy, locale)}
       description={action.purpose} descriptionLines={1} disclosure={{ expanded: open }} onPress={toggle} />
     {open ? <>
-      <ActivityTimeline activities={activities} expandAll live={live && newest !== undefined && activities.includes(newest)} />
+      <ActivityTimeline activities={activities} expandAll live={live && newest !== undefined && activities.includes(newest)}
+        pulseLatest={live && newest !== undefined && activities.includes(newest)} />
       {workers.length ? <View style={{ gap: t.length("--space-xs") }}>{workers.map(worker => <StepWorkerCapsule key={worker.session_id} worker={worker} />)}</View> : null}
     </> : null}
   </View>;

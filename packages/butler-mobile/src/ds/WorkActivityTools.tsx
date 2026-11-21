@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { LayoutAnimation, Pressable, View } from "react-native";
 import { OperationOutput, ThinkingDetails } from "../conversation/OperationOutput.tsx";
-import type { ToolItem } from "../conversation/workStatus";
 import { alpha, PILL } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { Icon } from "./Icon";
@@ -11,11 +10,17 @@ import { useReducedMotion } from "./internal/motion";
 import { usePress } from "./internal/press";
 import { textStyle } from "./internal/typography";
 
-export function WorkActivityTools({ tools, compact }: { tools: ToolItem[]; compact: boolean }) {
+export type WorkActivityToolIcon = "Rocket" | "FileText" | "Pencil" | "Terminal" | "Wrench" | "Search" | "ListChecks" | "AiChip";
+export type WorkActivityToolItem = {
+  id: string; icon: WorkActivityToolIcon; title: string; summaryLabel: string; details?: string;
+  output?: { turnId: string; callId: string; resultId: string; toolName?: string; command?: string };
+};
+
+export function WorkActivityTools({ tools, compact }: { tools: WorkActivityToolItem[]; compact: boolean }) {
   return tools.length === 1 ? <ToolChip tool={tools[0]} compact={compact} /> : <ToolGroup tools={tools} compact={compact} />;
 }
 
-function ToolChip({ tool, compact, nested = false }: { tool: ToolItem; compact: boolean; nested?: boolean }) {
+function ToolChip({ tool, compact, nested = false }: { tool: WorkActivityToolItem; compact: boolean; nested?: boolean }) {
   const t = useTokens();
   const reduced = useReducedMotion();
   const hasDetails = Boolean(tool.details || tool.output);
@@ -51,7 +56,7 @@ function ToolChip({ tool, compact, nested = false }: { tool: ToolItem; compact: 
   </View>;
 }
 
-function ToolGroup({ tools, compact }: { tools: ToolItem[]; compact: boolean }) {
+function ToolGroup({ tools, compact }: { tools: WorkActivityToolItem[]; compact: boolean }) {
   const t = useTokens();
   const reduced = useReducedMotion();
   const press = usePress({ scale: false });
@@ -80,7 +85,7 @@ function ToolGroup({ tools, compact }: { tools: ToolItem[]; compact: boolean }) 
   </View>;
 }
 
-function toolSummary(tools: ToolItem[]): string {
+function toolSummary(tools: WorkActivityToolItem[]): string {
   const counts = new Map<string, number>();
   for (const tool of tools) {
     const label = tool.summaryLabel.trim();

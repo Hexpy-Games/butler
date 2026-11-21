@@ -29,7 +29,7 @@ export type { ProviderLogoName } from "./internal/providerLogoXml";
 export { Meter } from "./Meter";
 export { UsageBars, type UsageBarsProps, type UsageBarsBucket, type UsageBarsSegment } from "./UsageBars";
 export { WorkActivityBlock, WorkActivityMarker, WORK_GEOMETRY, type WorkActivityBlockProps } from "./WorkActivityBlock";
-export { WorkActivityTools } from "./WorkActivityTools";
+export { WorkActivityTools, type WorkActivityToolIcon, type WorkActivityToolItem } from "./WorkActivityTools";
 export { WorkActivityDisclosure, type WorkActivityDisclosureProps } from "./WorkActivityDisclosure";
 export { StatusLine, type StatusLineProps } from "./StatusLine";
 export { ThinkingMark } from "./ThinkingMark";

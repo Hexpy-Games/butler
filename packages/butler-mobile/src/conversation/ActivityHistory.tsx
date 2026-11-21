@@ -10,8 +10,8 @@ import { activityDisplayTitle, delegatedRequestGoal, projectActivities, type Act
 import { phaseLabel, toolItems, workBlockToolItems } from "./workStatus";
 import { useWorkExpanded } from "./workExpansion";
 
-export function ActivityTimeline({ activities, currentState, live = false, expandAll = false, goal, storeKey }: {
-  activities: Activity[]; currentState?: string; live?: boolean; expandAll?: boolean; goal?: string; storeKey?: string;
+export function ActivityTimeline({ activities, currentState, live = false, pulseLatest = false, expandAll = false, goal, storeKey }: {
+  activities: Activity[]; currentState?: string; live?: boolean; pulseLatest?: boolean; expandAll?: boolean; goal?: string; storeKey?: string;
 }) {
   const t = useTokens();
   const locale = useAppLocale();
@@ -44,8 +44,8 @@ export function ActivityTimeline({ activities, currentState, live = false, expan
     <View style={{ gap: t.length("--space-sm") }}>
       {expanded || expandAll ? activities.map((activity, index) => <ActivityRow key={activity.id} activity={activity}
         connected={index < activities.length - 1} last={index === activities.length - 1}
-        live={live && index === activities.length - 1} goal={index === 0 ? goal : undefined} />)
-        : live ? <LiveActivity key={latest.id} activity={latest} goal={activities.length === 1 ? goal : undefined} /> : null}
+        live={pulseLatest && index === activities.length - 1} goal={index === 0 ? goal : undefined} />)
+        : live ? <LiveActivity key={latest.id} activity={latest} pulseLatest={pulseLatest} goal={activities.length === 1 ? goal : undefined} /> : null}
       {expanded && !expandAll ? <View style={{ alignItems: "flex-start" }}>
         <Button variant="ghost" size="sm" iconStart={icons.ListChecks} label={copy.conversation.work.collapseLabel} onPress={toggle} />
       </View> : null}
@@ -65,7 +65,7 @@ function HistoryHeader({ label, expanded, onToggle }: { label: string; expanded:
   </AnimatedPressable>;
 }
 
-function LiveActivity({ activity, goal }: { activity: Activity; goal?: string }) {
+function LiveActivity({ activity, pulseLatest, goal }: { activity: Activity; pulseLatest: boolean; goal?: string }) {
   const t = useTokens();
   const reduced = useReducedMotion();
   const enter = useRef(new Animated.Value(reduced ? 1 : 0)).current;
@@ -77,7 +77,7 @@ function LiveActivity({ activity, goal }: { activity: Activity; goal?: string })
     return () => animation.stop();
   }, [activity.id, reduced, t, enter]);
   return <Animated.View style={{ opacity: enter, transform: reduced ? undefined : [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [t.length("--motion-distance-md"), 0] }) }] }}>
-    <ActivityRow activity={activity} live goal={goal} last />
+    <ActivityRow activity={activity} live={pulseLatest} goal={goal} last />
   </Animated.View>;
 }
 

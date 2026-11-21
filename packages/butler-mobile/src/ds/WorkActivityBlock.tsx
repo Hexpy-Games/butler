@@ -1,13 +1,12 @@
 import { Fragment, useEffect, useRef } from "react";
 import { Animated, View } from "react-native";
-import type { ToolItem } from "../conversation/workStatus";
 import { alpha, PILL } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { Text } from "./Text";
 import { BaseText } from "./internal/BaseText";
 import { textStyle } from "./internal/typography";
 import { toEasing, useReducedMotion } from "./internal/motion";
-import { WorkActivityTools } from "./WorkActivityTools";
+import { WorkActivityTools, type WorkActivityToolItem } from "./WorkActivityTools";
 
 // Desktop WorkActivityBlock.module.css:1-31; marker 7, border 1, line 1.
 export const WORK_GEOMETRY = {
@@ -35,7 +34,7 @@ export function WorkActivityMarker({ live = false, top }: { live?: boolean; top:
 
 export interface WorkActivityBlockProps {
   title: string; description?: (string | React.ReactElement)[]; live?: boolean; connected?: boolean; last?: boolean;
-  density?: "normal" | "compact"; tools?: ToolItem[];
+  density?: "normal" | "compact"; tools?: WorkActivityToolItem[];
 }
 
 export function WorkActivityBlock({ title, description, live, connected, last = true, density = "normal", tools = [] }: WorkActivityBlockProps) {
