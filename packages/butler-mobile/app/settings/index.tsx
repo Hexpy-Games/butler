@@ -2,13 +2,17 @@ import { useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
-import { Stack } from "expo-router";
+import { Stack, router } from "expo-router";
 import { useConversation } from "@/conversation/live";
-import { Button, ListRow, Sheet, Surface, Text, useHeaderOptions, useTokens } from "@/ds";
-import { useMobileCopy } from "@/i18n";
+import { Button, Icon, icons, ListRow, Sheet, Surface, Text, useHeaderOptions, useTokens } from "@/ds";
+import { getAppCopy } from "../../../butler-i18n/src/index.ts";
+import { SettingsGroup } from "@/settings/layout";
+import { SETTINGS_GROUPS } from "@/settings/sections";
+import { useAppLocale, useMobileCopy } from "@/i18n";
 
 export default function Settings() {
   const copy = useMobileCopy();
+  const S = getAppCopy(useAppLocale()).settings;
   const t = useTokens();
   const gutter = t.length("--adaptive-page-gutter");
   const { pairing, disconnect } = useConversation();
@@ -27,6 +31,10 @@ export default function Settings() {
         <View style={{ paddingHorizontal: t.length("--space-sm") }}><ListRow title={pairing.computerName ?? address} description={pairing.computerName ? address : undefined} /></View>
       </View> : null}
       <View style={{ paddingHorizontal: gutter }}><Button variant="destructive" label={copy.settings.disconnect} onPress={() => setOpen(true)} /></View>
+      {SETTINGS_GROUPS.map(group => <SettingsGroup key={group.label} title={S.groups[group.label]}>
+        {group.ids.map(id => <ListRow key={id} title={S.sections[id]}
+          trailing={<Icon glyph={icons.ChevronRight} tone="tertiary" />} onPress={() => router.push(`/settings/${id}`)} />)}
+      </SettingsGroup>)}
       <View style={{ paddingHorizontal: gutter }}><Text variant="caption">{version}</Text></View>
     </ScrollView>
     <Sheet open={open} onClose={() => setOpen(false)} title={copy.settings.disconnectTitle}

@@ -168,3 +168,57 @@ async fn sec_16_phone_pairs_with_device_token_until_revoked() -> Result<(), Harn
     assert_no_secrets(&s, &[code, &token, other_code, &other_token])?;
     s.finish().await
 }
+
+#[tokio::test]
+async fn phone_settings_parity_routes_preserve_security_boundary() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("phone-settings-parity")?
+        .data_folder_token()
+        .start()
+        .await?;
+    let client = browser();
+    let pin = issue(&admin(&s)).await?;
+    let paired: serde_json::Value = pair(&s.gw, &client, pin["code"].as_str().unwrap())
+        .await?
+        .json()
+        .await?;
+    let token = paired["data"]["device_token"].as_str().unwrap();
+    let response = client
+        .patch(format!("{}/settings", s.gw.base))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "show_thinking": false }))
+        .send()
+        .await?;
+    assert_eq!(response.status().as_u16(), 200);
+    let response = client
+        .get(format!("{}/settings", s.gw.base))
+        .bearer_auth(token)
+        .send()
+        .await?;
+    assert_eq!(response.status().as_u16(), 200);
+    let settings: serde_json::Value = response.json().await?;
+    assert_eq!(settings["data"]["show_thinking"], false);
+    let response = client
+        .patch(format!("{}/settings", s.gw.base))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "security": { "remote_access_enabled": true } }))
+        .send()
+        .await?;
+    assert_eq!(response.status().as_u16(), 403);
+    for path in [
+        "/personalization",
+        "/memory/inventory",
+        "/archives?limit=1",
+        "/system-events?limit=1",
+        "/usage-monitor?since_hours=24",
+        "/skills",
+        "/authority-permissions",
+    ] {
+        assert_eq!(
+            status(&s.gw, &client, token, Method::GET, path).await?,
+            200,
+            "{path}"
+        );
+    }
+    s.finish().await
+}
