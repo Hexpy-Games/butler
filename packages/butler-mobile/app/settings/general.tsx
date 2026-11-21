@@ -36,7 +36,7 @@ export default function GeneralSettings() {
         <SelectRow title={S.fields.scheduleAccess} value={settings.schedule_access_mode ?? "auto"}
           options={accessOptions("auto")} onSelect={schedule_access_mode => { void update({ schedule_access_mode }); }} />
       </ListGroup>
-      <ListGroup label={S.pageSections.searchProvider}>
+      <ListGroup>
         <SelectRow title={S.fields.searchProvider} value={settings.web_search.provider} options={[
           { value: "duckduckgo-html", label: S.options.searchProviderDuckDuckGo }, { value: "auto", label: S.options.searchProviderAuto },
           { value: "brave", label: S.options.searchProviderBrave }, { value: "tavily", label: S.options.searchProviderTavily },

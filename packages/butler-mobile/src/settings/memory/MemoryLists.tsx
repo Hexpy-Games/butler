@@ -59,21 +59,25 @@ export function PatternsGroup({ data }: { data: Data }) {
       showToast({ message: S.memory.deleteFailed, tone: "error" });
     } finally { setDeleting(undefined); }
   };
-  return <ListGroup label={S.pageSections.noticedPatterns}>
-    {!data.patterns || data.errors.patterns ? <LoadState error={Boolean(data.errors.patterns)} onRetry={data.reload} />
-      : data.patterns.patterns.length ? data.patterns.patterns.map(item => <ListRow key={item.id} title={item.title}
-        trailing={<IconButton icon={icons.Delete} label={app.common.delete} loading={deleting === item.id} disabled={Boolean(deleting)} onPress={() => select(item)} />} />)
-        : <ListRow title={S.memory.patternsEmpty} />}
-    <SelectRow title={S.memory.proactiveLevel} value={settings?.proactive_level ?? "sometimes"}
-      options={[{ value: "off", label: S.memory.proactiveOff }, { value: "sometimes", label: S.memory.proactiveSometimes }, { value: "often", label: S.memory.proactiveOften }]}
-      onSelect={proactive_level => void update({ proactive_level })} />
-    <TimeRow title={S.memory.quietHoursStart} value={settings?.quiet_hours_start ?? "22:00"}
-      onChange={quiet_hours_start => void update({ quiet_hours_start })} />
-    <TimeRow title={S.memory.quietHoursEnd} value={settings?.quiet_hours_end ?? "07:00"} onChange={quiet_hours_end => void update({ quiet_hours_end })} />
-    <Sheet open={Boolean(selected)} onClose={() => select(undefined)} title={S.memory.deletePatternTitle}
-      description={S.memory.deletePatternBody} cancelLabel={M.settings.cancel}
-      action={<Button variant="destructive" label={app.common.delete} loading={Boolean(deleting)} onPress={() => void remove()} />}>
-      {selected ? <ListRow title={selected.title} /> : null}
-    </Sheet>
-  </ListGroup>;
+  return <>
+    <ListGroup label={S.pageSections.noticedPatterns}>
+      {!data.patterns || data.errors.patterns ? <LoadState error={Boolean(data.errors.patterns)} onRetry={data.reload} />
+        : data.patterns.patterns.length ? data.patterns.patterns.map(item => <ListRow key={item.id} title={item.title}
+          trailing={<IconButton icon={icons.Delete} label={app.common.delete} loading={deleting === item.id} disabled={Boolean(deleting)} onPress={() => select(item)} />} />)
+          : <ListRow title={S.memory.patternsEmpty} />}
+      <Sheet open={Boolean(selected)} onClose={() => select(undefined)} title={S.memory.deletePatternTitle}
+        description={S.memory.deletePatternBody} cancelLabel={M.settings.cancel}
+        action={<Button variant="destructive" label={app.common.delete} loading={Boolean(deleting)} onPress={() => void remove()} />}>
+        {selected ? <ListRow title={selected.title} /> : null}
+      </Sheet>
+    </ListGroup>
+    <ListGroup>
+      <SelectRow title={S.memory.proactiveLevel} value={settings?.proactive_level ?? "sometimes"}
+        options={[{ value: "off", label: S.memory.proactiveOff }, { value: "sometimes", label: S.memory.proactiveSometimes }, { value: "often", label: S.memory.proactiveOften }]}
+        onSelect={proactive_level => void update({ proactive_level })} />
+      <TimeRow title={S.memory.quietHoursStart} value={settings?.quiet_hours_start ?? "22:00"}
+        onChange={quiet_hours_start => void update({ quiet_hours_start })} />
+      <TimeRow title={S.memory.quietHoursEnd} value={settings?.quiet_hours_end ?? "07:00"} onChange={quiet_hours_end => void update({ quiet_hours_end })} />
+    </ListGroup>
+  </>;
 }

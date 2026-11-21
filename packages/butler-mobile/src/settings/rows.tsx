@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Icon, icons, ListRow, Sheet, Switch, Text, TextField } from "@/ds";
+import { ListRow, Sheet, Switch, Text, TextField } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import type { AppModelSummary, ReasoningEffort } from "./types";
 import { effectiveReasoningEffort, reasoningOptionLabel } from "./useModelCatalog";
@@ -17,7 +17,7 @@ export function SelectRow<T extends string>({ title, value, options, onSelect, d
   return <>
     <ListRow title={title}
       meta={options.find(o => o.value === value)?.label} disabled={disabled}
-      trailing={<Icon glyph={icons.ChevronRight} size="lg" tone="tertiary" />} onPress={() => { setQuery(""); setOpen(true); }} />
+      onPress={() => { setQuery(""); setOpen(true); }} />
     <Sheet open={open} onClose={() => setOpen(false)} title={title} cancelLabel={M.settings.cancel}>
       {search ? <TextField label={search.label} value={query} onChangeText={setQuery} /> : null}
       {visible.map(o => <ListRow key={o.value} title={o.label} description={o.description} meta={o.meta}
