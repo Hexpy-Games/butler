@@ -327,7 +327,7 @@ fn parse(args: &[OsString]) -> Result<(Options, Action), crate::host::HostError>
             "--quiet" | "--silent" => options.quiet = true,
             // The service configuration reads harness port overrides from argv.
             value if value.starts_with("--port=") => {}
-            "--verbose" | "--yes" | "--non-interactive" | "--safe-mode" => {}
+            "--verbose" | "--yes" | "--non-interactive" | "--safe-mode" | "--remote" => {}
             "--dry-run" => options.dry_run = true,
             "--detached" => options.detached = true,
             "--if-absent" => options.if_absent = true,

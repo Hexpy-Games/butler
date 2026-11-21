@@ -53,7 +53,9 @@ impl AuthOwner<'_> {
         &self,
         rejected: Option<&str>,
     ) -> Result<ProviderAuth, AuthError> {
-        if let Some(key) = trimmed(self.environment.openai_api_key.as_deref()) {
+        if !super::sealed::is_enabled()
+            && let Some(key) = trimmed(self.environment.openai_api_key.as_deref())
+        {
             return Ok(ProviderAuth::ApiKey(zeroize::Zeroizing::new(
                 key.to_owned(),
             )));

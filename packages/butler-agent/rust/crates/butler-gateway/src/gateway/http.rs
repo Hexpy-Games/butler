@@ -17,7 +17,7 @@ mod image_models;
 mod library;
 mod pending_asks;
 mod start;
-pub(super) use start::serve;
+pub(super) use start::{Listeners, serve};
 mod access_log;
 mod agent_import;
 mod automations;
@@ -42,6 +42,7 @@ mod personalization;
 mod project_session_mutations;
 mod projects;
 mod read_routes;
+mod remote_account;
 mod retry;
 mod router;
 #[cfg(feature = "test-support")]
@@ -103,6 +104,7 @@ pub(super) use body::read_body_with_limit;
 use body::{MAX_REQUEST_BODY_SIZE, declared_body_too_large, payload_too_large_response};
 
 struct HttpState {
+    agent_version: String,
     browser: Arc<browser_host::Hub>,
     headless: Option<Arc<butler_runtime::browser::Headless>>,
     /// The installed App's Electron as a windowless browser host.
@@ -189,24 +191,41 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
 }
 
 async fn dispatch_inner(state: Arc<HttpState>, request: Request<Body>) -> Response {
+    if matches!(
+        request.extensions().get::<router::Handler>(),
+        Some(router::Handler::RemoteAccount)
+    ) && (request.method() != Method::POST
+        || request
+            .extensions()
+            .get::<listeners::LocalSocketPeer>()
+            .is_none()
+        || !state.security.is_admin(request.headers())
+        || !butler_models::models::sealed::is_enabled())
+    {
+        return error_response(&HttpError::public(404, "not_found", "Route not found."));
+    }
     let timing = latency_trace::start(&request);
     let connect_form =
         request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH;
     let html_connect_form = connect_form && static_ui::accepts_html(request.headers());
-    let origin =
-        match state
-            .security
-            .admit(request.method(), request.uri().path(), request.headers())
-        {
-            Ok(origin) => origin,
-            Err(error) => {
-                return if html_connect_form {
-                    security::GatewaySecurity::connect_error_response(&error)
-                } else {
-                    error_response(&error)
-                };
-            }
-        };
+    let origin = match state.security.admit(
+        request.method(),
+        request.uri().path(),
+        request.headers(),
+        request
+            .extensions()
+            .get::<listeners::LocalSocketPeer>()
+            .is_some(),
+    ) {
+        Ok(origin) => origin,
+        Err(error) => {
+            return if html_connect_form {
+                security::GatewaySecurity::connect_error_response(&error)
+            } else {
+                error_response(&error)
+            };
+        }
+    };
     if request.method() == Method::OPTIONS && origin.allowed().is_some() {
         return security::preflight(&origin);
     }
@@ -274,7 +293,12 @@ async fn authorized_route(
     let device_token = grant.access == security::Access::DeviceToken;
     let client = Client {
         access: grant.access,
-        local: !device_token && security::is_local_client(peer, request.headers(), origin),
+        local: !device_token
+            && (request
+                .extensions()
+                .get::<listeners::LocalSocketPeer>()
+                .is_some()
+                || security::is_local_client(peer, request.headers(), origin)),
         admin: !device_token && state.security.is_admin(request.headers()),
         keys: grant.keys,
     };

@@ -1,6 +1,6 @@
 //! Local-admin HTTP boundary for the SSH computer registry.
 use super::*;
-use crate::gateway::remote_computers::{self, AddInput, Computer, HostInput};
+use crate::gateway::remote_computers::{self, AddInput, Computer, HostInput, SendCredential};
 
 pub(super) async fn route(
     state: Arc<HttpState>,
@@ -37,17 +37,36 @@ pub(super) async fn route(
                 serde_json::json!({"computer": computer.wire()?}),
             )
         }
-        (Method::DELETE, path)
-            if path
-                .strip_prefix("/computers/")
-                .is_some_and(|id| !id.is_empty() && !id.contains('/')) =>
-        {
-            let id = path
-                .strip_prefix("/computers/")
-                .ok_or(HttpError::Internal)?;
-            remote_computers::delete(root, id.to_owned()).await?;
-            (StatusCode::OK, serde_json::json!({"deleted": true}))
+        (_, p) if p.starts_with("/computers/") && p.contains("/oauth/") => {
+            oauth(&state, request, root, p).await?
         }
+        (Method::POST, path) if path.starts_with("/computers/") && path.ends_with("/start") => (
+            StatusCode::OK,
+            remote_computers::change(
+                &state.application.setup()?,
+                root,
+                path,
+                true,
+                &state.agent_version,
+                state.shutdown.clone(),
+            )
+            .await?,
+        ),
+        (Method::POST, p) if p.starts_with("/computers/") && p.ends_with("/credentials") => {
+            send_credential(&state, request, root, p).await?
+        }
+        (Method::DELETE, path) if path.starts_with("/computers/") => (
+            StatusCode::OK,
+            remote_computers::change(
+                &state.application.setup()?,
+                root,
+                path,
+                false,
+                &state.agent_version,
+                state.shutdown.clone(),
+            )
+            .await?,
+        ),
         _ => return Err(HttpError::public(404, "not_found", "Route not found.")),
     };
     json(
@@ -57,4 +76,83 @@ pub(super) async fn route(
             data,
         },
     )
+}
+
+async fn send_credential(
+    state: &HttpState,
+    request: Request<Body>,
+    root: &std::path::Path,
+    path: &str,
+) -> Result<(StatusCode, serde_json::Value), HttpError> {
+    let bytes = read_body_with_limit(request.into_body(), 64 * 1024)
+        .await
+        .map_err(|_| HttpError::invalid_json())?;
+    let input: SendCredential =
+        serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
+    let setup = state.application.setup()?;
+    let key = setup.saved_provider_key(input.credential_id).await?;
+    Ok((
+        StatusCode::OK,
+        remote_computers::send_credential(
+            &setup,
+            root,
+            path,
+            &state.agent_version,
+            key,
+            state.shutdown.clone(),
+        )
+        .await?,
+    ))
+}
+
+async fn oauth(
+    state: &HttpState,
+    request: Request<Body>,
+    root: &std::path::Path,
+    path: &str,
+) -> Result<(StatusCode, serde_json::Value), HttpError> {
+    let not_found = || HttpError::public(404, "not_found", "Route not found.");
+    let (id, route) = path
+        .strip_prefix("/computers/")
+        .and_then(|p| p.split_once("/oauth/"))
+        .filter(|(id, _)| !id.is_empty() && !id.contains('/'))
+        .ok_or_else(not_found)?;
+    let cancel = state.shutdown.clone();
+    let data = match (request.method(), route) {
+        (&Method::POST, "start") => {
+            let bytes = read_body_with_limit(request.into_body(), 64 * 1024).await?;
+            let input = if bytes.is_empty() {
+                remote_computers::OauthStart::default()
+            } else {
+                serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?
+            };
+            remote_computers::oauth_start(
+                &state.application.setup()?,
+                root,
+                id,
+                &state.agent_version,
+                input,
+                cancel,
+            )
+            .await?
+        }
+        (method, route) => {
+            let (flow, suffix) = route
+                .split_once('/')
+                .map_or((route, None), |(flow, suffix)| (flow, Some(suffix)));
+            if flow.is_empty() || !flow.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+                return Err(not_found());
+            }
+            match (method, suffix) {
+                (&Method::GET, None) => {
+                    remote_computers::oauth_flow(root, id, flow, cancel).await?
+                }
+                (&Method::POST, Some("cancel")) => {
+                    remote_computers::oauth_cancel(root, id, flow, cancel).await?
+                }
+                _ => return Err(not_found()),
+            }
+        }
+    };
+    Ok((StatusCode::OK, data))
 }

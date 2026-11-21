@@ -257,3 +257,7 @@ fallback setting. For server/CLI installs, set `config.headlessBrowser` to `true
 `BUTLER_BROWSER_HEADLESS=on|off` overrides that
 key, for example `BUTLER_BROWSER_HEADLESS=off butler start`. Restart the agent to
 apply a change. These controls are also described by `butler help config`.
+
+`BUTLER_REMOTE_RELEASE_BASE` overrides the release download base used to deploy remote
+computers (default: `https://github.com/Hexpy-Games/butler/releases/download`).
+The manifest is read from `<base>/v<agent_version>/agent-update-manifest.json`.

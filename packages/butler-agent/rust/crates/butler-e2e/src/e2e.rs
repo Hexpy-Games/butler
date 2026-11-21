@@ -23,6 +23,7 @@ pub mod mcp;
 pub mod media;
 pub mod provider;
 pub mod readiness;
+pub mod remote_home;
 pub mod sandbox;
 pub mod sanitize;
 pub mod scenario;

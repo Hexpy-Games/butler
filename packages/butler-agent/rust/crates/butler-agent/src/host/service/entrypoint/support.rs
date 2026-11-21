@@ -181,6 +181,16 @@ pub(super) async fn capture_configuration(
 pub(super) async fn initialize_credentials(
     mut config: crate::host::ServiceConfiguration,
 ) -> Result<crate::host::ServiceConfiguration, BtccError> {
+    if config.app.remote_socket().is_some() {
+        let root = config.data_root.clone();
+        tokio::task::spawn_blocking(move || {
+            butler_models::models::sealed::enable(&root);
+            butler_models::models::sealed::expire(&root)
+        })
+        .await
+        .map_err(io)?
+        .map_err(io)?;
+    }
     if butler_platform::secure_fs::OWNER_ONLY {
         config.initialize_app_credentials();
         return Ok(config);

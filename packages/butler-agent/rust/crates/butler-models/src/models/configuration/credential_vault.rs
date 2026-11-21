@@ -13,7 +13,8 @@ use super::credential_admin::{CredentialDraft, CredentialError};
 use super::credentials::{
     self, CREDENTIALS_FILE, CredentialRecord, CredentialsFile, PendingRemoval, SecretHome,
 };
-use super::secret_store;
+use super::secret_store::CredentialStoreError;
+use super::{sealed, secret_store};
 use crate::models::{CredentialView, ModelCatalogError};
 
 impl ModelConfiguration {
@@ -29,6 +30,11 @@ impl ModelConfiguration {
         secret: &str,
         previous: Option<&SecretHome>,
     ) -> Result<CredentialView, CredentialError> {
+        if sealed::is_enabled() {
+            return self
+                .write_sealed_credential(root, file, draft, secret)
+                .await;
+        }
         butler_log::register_secret_for(
             &format!("credential:{}:{}", draft.provider_id, draft.id),
             secret,
@@ -92,12 +98,63 @@ impl ModelConfiguration {
         Ok(record.view())
     }
 
+    async fn write_sealed_credential(
+        &self,
+        root: &Path,
+        file: &mut CredentialsFile,
+        draft: CredentialDraft,
+        secret: &str,
+    ) -> Result<CredentialView, CredentialError> {
+        let root = root.to_owned();
+        let mut updated = file.clone();
+        let secret = SecretText::new(secret.to_owned());
+        let now = self.clock.now_iso();
+        let (updated, view) = tokio::task::spawn_blocking(move || {
+            let mut map = sealed::read_map().map_err(CredentialStoreError::Sealed)?;
+            let key = format!("{}/{}", draft.provider_id, draft.id);
+            butler_log::register_secret_for(
+                &format!("credential:{}:{}", draft.provider_id, draft.id),
+                secret.expose(),
+            );
+            let old = map.insert(key.clone(), secret.expose().to_owned());
+            sealed::write_map(&map).map_err(CredentialStoreError::Sealed)?;
+            let record = CredentialRecord {
+                fingerprint: secret_store::fingerprint(&root, &draft.provider_id, secret.expose()),
+                masked_value: credentials::mask(secret.expose()),
+                home: SecretHome::Store(SecretBackend::FallbackFile),
+                updated_at: now,
+                id: draft.id,
+                provider_id: draft.provider_id,
+                label: draft.label,
+                created_at: draft.created_at,
+            };
+            updated.put(&record);
+            if let Err(error) = updated.save(&root.join(CREDENTIALS_FILE)) {
+                if let Some(old) = old {
+                    map.insert(key, old);
+                } else {
+                    map.remove(&key);
+                }
+                sealed::write_map(&map).map_err(CredentialStoreError::Sealed)?;
+                return Err(CredentialError::from(error));
+            }
+            Ok((updated, record.view()))
+        })
+        .await
+        .map_err(CredentialStoreError::Interrupted)??;
+        *file = updated;
+        Ok(view)
+    }
+
     /// The key of `record`, read from its store now; it is not kept.
     pub(super) async fn credential_secret(
         &self,
         root: &Path,
         record: &CredentialRecord,
     ) -> Result<SecretText, CredentialError> {
+        if sealed::is_enabled() {
+            return sealed_secret(record).await;
+        }
         let backend = match &record.home {
             SecretHome::Plaintext(secret) => {
                 butler_log::register_secret_for(
@@ -165,6 +222,9 @@ impl ModelConfiguration {
         removal: &PendingRemoval,
         drop_vault_item: bool,
     ) -> bool {
+        if sealed::is_enabled() {
+            return remove_sealed_secret(removal, drop_vault_item).await;
+        }
         if drop_vault_item {
             match self.secrets.vault(root).await {
                 Ok(Some(vault)) => {
@@ -215,4 +275,34 @@ impl ModelConfiguration {
 /// Whether `record` keeps its key in `backend`.
 fn stored_in(record: &CredentialRecord, backend: SecretBackend) -> bool {
     matches!(record.home, SecretHome::Store(stored) if stored == backend)
+}
+
+async fn sealed_secret(record: &CredentialRecord) -> Result<SecretText, CredentialError> {
+    let key = format!("{}/{}", record.provider_id, record.id);
+    let secret = tokio::task::spawn_blocking(move || Ok(sealed::read_map()?.remove(&key)))
+        .await
+        .map_err(CredentialStoreError::Interrupted)?
+        .map_err(CredentialStoreError::Sealed)?
+        .ok_or(CredentialError::SecretMissing)?;
+    butler_log::register_secret_for(
+        &format!("credential:{}:{}", record.provider_id, record.id),
+        &secret,
+    );
+    Ok(SecretText::new(secret))
+}
+
+async fn remove_sealed_secret(removal: &PendingRemoval, unused: bool) -> bool {
+    if !unused {
+        return true;
+    }
+    let key = format!("{}/{}", removal.provider_id, removal.id);
+    tokio::task::spawn_blocking(move || {
+        let mut map = sealed::read_map()?;
+        if map.remove(&key).is_some() {
+            sealed::write_map(&map)?;
+        }
+        Ok::<_, sealed::SealedError>(())
+    })
+    .await
+    .is_ok_and(|result| result.is_ok())
 }

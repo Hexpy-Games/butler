@@ -17,7 +17,9 @@ use tokio_util::sync::CancellationToken;
 
 use super::security::lan;
 use super::{HttpState, MAX_REQUEST_BODY_SIZE};
-use crate::gateway::GatewayExposure;
+use crate::gateway::remote_socket::CountedListener;
+use crate::gateway::{GatewayExposure, RemoteSocket};
+use butler_platform::local_socket::LocalListener;
 
 /// Request extension: the listener a request came through. Live streams
 /// served through a LAN listener close when remote access is turned off.
@@ -50,6 +52,34 @@ pub(super) fn spawn(
         axum::serve(listener, service)
             .with_graceful_shutdown(closed.cancelled_owned())
             .await
+    })
+}
+
+/// The request came through the owner-only socket file.
+#[derive(Clone)]
+pub(super) struct LocalSocketPeer;
+
+pub(super) fn spawn_local(
+    listener: LocalListener,
+    socket: RemoteSocket,
+    state: Arc<HttpState>,
+    closed: CancellationToken,
+) -> JoinHandle<std::io::Result<()>> {
+    let service = super::router::routes()
+        .with_state(state)
+        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
+        .layer(Extension(ListenerScope {
+            closed: closed.clone(),
+        }))
+        .layer(Extension(LocalSocketPeer))
+        .into_make_service();
+    let listener = CountedListener::new(listener, socket.activity);
+    tokio::spawn(async move {
+        let result = axum::serve(listener, service)
+            .with_graceful_shutdown(closed.cancelled_owned())
+            .await;
+        tokio::fs::remove_file(socket.path).await?;
+        result
     })
 }
 

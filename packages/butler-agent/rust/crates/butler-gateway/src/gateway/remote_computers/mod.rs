@@ -1,13 +1,20 @@
-//! Owner-confirmed SSH computers. No remote process is installed or started.
+//! Owner-confirmed SSH computers and their main-managed remote service.
+mod deploy;
+mod forward;
+mod relay;
 mod ssh;
 mod store;
 
-use super::http::HttpError;
+use super::{AppSetupPort, SavedProviderKey, http::HttpError};
+use butler_platform::secrets::ChangeLock;
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use std::path::Path;
+use std::sync::Arc;
+use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub(super) struct Computer {
     id: String,
     name: String,
@@ -86,6 +93,12 @@ pub(super) struct AddInput {
     key_file: Option<String>,
     folder: String,
     host_fingerprint: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct SendCredential {
+    pub credential_id: String,
 }
 
 impl AddInput {
@@ -177,10 +190,191 @@ pub(super) async fn add(
     store::add(data.join("config/computers.json"), computer).await
 }
 
-pub(super) async fn delete(data: &Path, id: String) -> Result<(), HttpError> {
-    store::delete(data.join("config/computers.json"), id).await
+pub(super) async fn delete(
+    setup: &Arc<dyn AppSetupPort>,
+    data: &Path,
+    computer: &Computer,
+    cancel: CancellationToken,
+) -> Result<bool, HttpError> {
+    let cleaned = deploy::remove(computer, cancel).await.is_ok();
+    store::delete(data.join("config/computers.json"), computer.id.clone()).await?;
+    setup.delete_computer_key(computer.id.clone()).await?;
+    Ok(cleaned)
 }
 
 fn remote_error(code: &str, message: &str) -> HttpError {
     HttpError::public(422, code, message)
+}
+
+pub(super) async fn change(
+    setup: &Arc<dyn AppSetupPort>,
+    root: &std::path::Path,
+    path: &str,
+    start: bool,
+    version: &str,
+    cancel: CancellationToken,
+) -> Result<serde_json::Value, HttpError> {
+    let id = path
+        .strip_prefix("/computers/")
+        .ok_or(HttpError::Internal)?;
+    let id = if start {
+        id.strip_suffix("/start").ok_or(HttpError::Internal)?
+    } else {
+        id
+    };
+    if id.is_empty() || id.contains('/') {
+        return Err(HttpError::public(404, "not_found", "Route not found."));
+    }
+    let (_lock, computer) = locked(root, id).await?;
+    if start {
+        let remote = connect(setup, root, version, &computer, cancel).await?;
+        Ok(
+            serde_json::json!({"state": if remote.started { "ready" } else { "busy" }, "version": remote.version}),
+        )
+    } else {
+        let cleaned = delete(setup, root, &computer, cancel).await?;
+        Ok(serde_json::json!({"deleted": true, "remote_cleaned": cleaned}))
+    }
+}
+
+async fn locked(root: &Path, id: &str) -> Result<(ChangeLock, Computer), HttpError> {
+    let lock = butler_core::configuration::lock_file_async(
+        &root.join(format!("config/computers/{id}.lock")),
+    )
+    .await
+    .map_err(|_| HttpError::Internal)?;
+    let records = list(root).await?;
+    let computer = records
+        .into_iter()
+        .find(|computer| computer.id == id)
+        .ok_or_else(|| HttpError::public(404, "computer_not_found", "Computer not found."))?;
+    Ok((lock, computer))
+}
+
+async fn connect(
+    setup: &Arc<dyn AppSetupPort>,
+    root: &Path,
+    version: &str,
+    computer: &Computer,
+    cancel: CancellationToken,
+) -> Result<deploy::RemoteState, HttpError> {
+    let state = deploy::ensure_running((root, version), computer, cancel.clone()).await?;
+    let identity = setup.computer_key(computer.id.clone()).await?;
+    relay::unlock(computer, &identity, cancel).await?;
+    Ok(state)
+}
+
+pub(super) async fn send_credential(
+    setup: &Arc<dyn AppSetupPort>,
+    root: &Path,
+    path: &str,
+    version: &str,
+    key: SavedProviderKey,
+    cancel: CancellationToken,
+) -> Result<serde_json::Value, HttpError> {
+    let id = path
+        .strip_prefix("/computers/")
+        .and_then(|p| p.strip_suffix("/credentials"))
+        .filter(|id| !id.is_empty() && !id.contains('/'))
+        .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
+    let (_lock, computer) = locked(root, id).await?;
+    connect(setup, root, version, &computer, cancel.clone()).await?;
+    let body = serde_json::json!({"provider_id": key.provider_id, "api_key": key.api_key.expose()})
+        .to_string()
+        .into_bytes();
+    relay::data(relay::request(&computer, "POST", "/credentials", body, cancel).await?)
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(super) struct OauthStart {
+    #[serde(default)]
+    kind: Option<Value>,
+}
+
+pub(super) async fn oauth_start(
+    setup: &Arc<dyn AppSetupPort>,
+    root: &Path,
+    id: &str,
+    version: &str,
+    input: OauthStart,
+    shutdown: CancellationToken,
+) -> Result<Value, HttpError> {
+    let (_lock, computer) = locked(root, id).await?;
+    connect(setup, root, version, &computer, shutdown.clone()).await?;
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .map_err(|_| HttpError::Internal)?;
+    let port = listener
+        .local_addr()
+        .map_err(|_| HttpError::Internal)?
+        .port();
+    let mut body = json!({"force":true,"redirect_port":port});
+    if let Some(kind) = input.kind {
+        body["kind"] = kind;
+    }
+    let view = relay::data(
+        relay::request(
+            &computer,
+            "POST",
+            "/setup/oauth/start",
+            body.to_string().into_bytes(),
+            shutdown.clone(),
+        )
+        .await?,
+    )?;
+    if view["status"] != "pending" {
+        return Ok(view);
+    }
+    let invalid = || {
+        remote_error(
+            "remote_oauth_invalid",
+            "This computer returned an invalid sign-in.",
+        )
+    };
+    let port = view["callback_port"]
+        .as_u64()
+        .and_then(|p| u16::try_from(p).ok())
+        .ok_or_else(invalid)?;
+    let flow_id = view["flow_id"].as_str().ok_or_else(invalid)?;
+    let stop = forward::replace(id, flow_id, &shutdown);
+    tokio::spawn(forward::serve(listener, computer, port, stop));
+    Ok(view)
+}
+
+pub(super) async fn oauth_flow(
+    root: &Path,
+    id: &str,
+    flow_id: &str,
+    cancel: CancellationToken,
+) -> Result<Value, HttpError> {
+    let computer = list(root)
+        .await?
+        .into_iter()
+        .find(|computer| computer.id == id)
+        .ok_or_else(|| HttpError::public(404, "computer_not_found", "Computer not found."))?;
+    let path = format!("/setup/oauth/{flow_id}");
+    let view = relay::data(relay::request(&computer, "GET", &path, Vec::new(), cancel).await?)?;
+    if view["status"] != "pending" {
+        forward::stop(id, flow_id);
+    }
+    Ok(view)
+}
+
+pub(super) async fn oauth_cancel(
+    root: &Path,
+    id: &str,
+    flow_id: &str,
+    cancel: CancellationToken,
+) -> Result<Value, HttpError> {
+    let computer = list(root)
+        .await?
+        .into_iter()
+        .find(|computer| computer.id == id)
+        .ok_or_else(|| HttpError::public(404, "computer_not_found", "Computer not found."))?;
+    let path = format!("/setup/oauth/{flow_id}/cancel");
+    let view =
+        relay::data(relay::request(&computer, "POST", &path, b"{}".to_vec(), cancel).await?)?;
+    forward::stop(id, flow_id);
+    Ok(view)
 }

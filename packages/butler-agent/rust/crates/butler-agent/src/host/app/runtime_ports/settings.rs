@@ -258,12 +258,14 @@ fn web_search_credentials(
     ];
     let mut values = serde_json::Map::new();
     for (provider, primary, accepted) in keys {
-        let configured = accepted.iter().any(|name| {
-            std::env::var(name).is_ok_and(|value| !value.trim().is_empty())
-                || private_environment
-                    .get(*name)
-                    .is_some_and(|value| !value.trim().is_empty())
-        });
+        let configured = !(butler_models::models::sealed::is_enabled()
+            && primary == "OPENAI_API_KEY")
+            && accepted.iter().any(|name| {
+                std::env::var(name).is_ok_and(|value| !value.trim().is_empty())
+                    || private_environment
+                        .get(*name)
+                        .is_some_and(|value| !value.trim().is_empty())
+            });
         values.insert(
             provider.into(),
             serde_json::json!({"configured":configured,"env_var":primary}),

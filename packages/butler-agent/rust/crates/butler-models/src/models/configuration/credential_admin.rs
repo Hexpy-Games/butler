@@ -12,7 +12,7 @@
 
 use std::path::Path;
 
-use butler_platform::secrets::{SYSTEM_BACKEND, SecretStoreMode};
+use butler_platform::secrets::{SYSTEM_BACKEND, SecretStoreMode, SecretText};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -145,6 +145,19 @@ impl CredentialDraft {
 }
 
 impl ModelConfiguration {
+    /// The provider and key of the saved credential `name` (id, or a unique label),
+    /// read now for an explicit owner action; never kept.
+    pub async fn saved_provider_key(
+        &self,
+        name: &str,
+        root: &Path,
+    ) -> Result<(String, SecretText), CredentialError> {
+        let records = self.saved_credentials(root);
+        let record = find(&records, name)?;
+        let secret = self.credential_secret(root, record).await?;
+        Ok((record.provider_id.clone(), secret))
+    }
+
     /// The saved keys under `root` (masked, from the credentials file only:
     /// no key is read) and where new keys go.
     pub async fn list_provider_credentials(

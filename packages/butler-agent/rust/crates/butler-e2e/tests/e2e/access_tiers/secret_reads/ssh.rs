@@ -55,7 +55,7 @@ fn servers(home: &Path, key: &Path) -> Result<(Children, TestSshd, PathBuf), Har
     let short = std::env::temp_dir().join(format!("bsr-ssh-{}", std::process::id()));
     std::fs::create_dir_all(&short)?;
     let mut children = Children(Vec::new(), short.clone());
-    let sshd = TestSshd::start(&home.join("sshd"), &key.with_extension("pub"))?;
+    let sshd = TestSshd::start(&home.join("sshd"), &key.with_extension("pub"), None)?;
     let port = sshd.port;
     let host = std::fs::read_to_string(sshd.host_key.with_extension("pub"))?;
     let host: Vec<_> = host.split_whitespace().take(2).collect();

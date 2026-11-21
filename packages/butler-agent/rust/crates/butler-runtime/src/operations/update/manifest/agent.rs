@@ -100,6 +100,34 @@ pub(crate) async fn load_agent_artifact(
     })
 }
 
+/// Selects the exact release for the requested computer, without channel selection.
+pub async fn release_artifact(
+    client: &butler_log::http::Client,
+    shutdown: &CancellationToken,
+    manifest_url: &str,
+    platform: &str,
+    version: &str,
+) -> Result<(String, String), UpdateError> {
+    let bytes = read_manifest(client, shutdown, manifest_url).await?;
+    let manifest: Value = serde_json::from_slice(&bytes)
+        .map_err(|source| UpdateError::caused(UpdateCode::UpdateManifestInvalid, source))?;
+    let artifacts = manifest
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .ok_or(UpdateCode::UpdateManifestArtifactsMissing)?;
+    let selected = artifacts
+        .iter()
+        .find(|artifact| {
+            string(artifact, "platform") == Some(platform)
+                && string(artifact, "version") == Some(version)
+        })
+        .ok_or(UpdateCode::UpdateManifestAgentPlatformMissing)?;
+    let url = string(selected, "artifact_url").ok_or(UpdateCode::UpdateArtifactUrlMissing)?;
+    let sha256 = string(selected, "sha256").ok_or(UpdateCode::UpdateArtifactSha256Missing)?;
+    validate_integrity(selected, Some(sha256))?;
+    Ok((url.to_owned(), sha256.to_ascii_lowercase()))
+}
+
 fn component_as_artifact(component: &Value) -> Value {
     let mut artifact = component.clone();
     if let Some(object) = artifact.as_object_mut() {

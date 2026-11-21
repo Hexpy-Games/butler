@@ -62,6 +62,7 @@ pub(super) async fn configured(
             ),
             None => ddg(),
         },
+        "openai-web-search" if butler_models::models::sealed::is_enabled() => ddg(),
         "openai-web-search" => match access.environment_value("OPENAI_API_KEY")? {
             Some(key) => fallback(
                 Box::new(OpenAIWebSearchProvider::new(&key, model, api_base)),

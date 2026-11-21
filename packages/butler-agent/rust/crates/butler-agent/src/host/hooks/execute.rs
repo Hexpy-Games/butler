@@ -319,6 +319,7 @@ fn input(
         environment: environment(hooks, hook, payload),
         cwd: PathBuf::from(&payload.cwd),
         stdin,
+        stdin_file: None,
         timeout: Duration::from_millis(hook.timeout_ms),
         stdout_limit: if super::context::can_add(hook) {
             CONTEXT_OUTPUT_LIMIT

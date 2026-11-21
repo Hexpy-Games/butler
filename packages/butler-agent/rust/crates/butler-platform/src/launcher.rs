@@ -91,6 +91,16 @@ pub fn release_platform() -> String {
     format!("{}-{arch}", sys::RELEASE_OS)
 }
 
+/// The release artifact for a registered computer's OS and architecture.
+pub fn release_platform_for(os: &str, arch: &str) -> Option<&'static str> {
+    match (os, arch) {
+        ("macos", "arm64") => Some("darwin-arm64"),
+        ("linux", "x64") => Some("linux-x64"),
+        ("linux", "arm64") => Some("linux-arm64"),
+        _ => None,
+    }
+}
+
 /// Resolves the installed command alias to its verified original executable.
 pub(crate) fn canonical_command_executable(path: PathBuf) -> io::Result<PathBuf> {
     sys::canonical_command_executable(path)

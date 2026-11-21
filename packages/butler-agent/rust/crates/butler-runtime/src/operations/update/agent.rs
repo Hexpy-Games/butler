@@ -175,7 +175,7 @@ impl AgentArchiveUpdateService {
             &self.client,
             &self.shutdown,
             &self.data,
-            &self.installation,
+            Some(&self.installation),
             stage::DownloadSource {
                 url,
                 sha256,
@@ -202,24 +202,7 @@ impl AgentArchiveUpdateService {
         sha256: &str,
         directory: &std::path::Path,
     ) -> Result<PathBuf, UpdateError> {
-        if !secure_source(source) {
-            return Err(UpdateCode::UpdateArtifactSourceInvalid.into());
-        }
-        let label = "archive.tar.gz";
-        Box::pin(stage::download_to_label(
-            &self.client,
-            &self.shutdown,
-            directory,
-            &self.installation,
-            stage::DownloadSource {
-                url: source,
-                sha256: &sha256.to_ascii_lowercase(),
-                label,
-            },
-            None,
-        ))
-        .await?;
-        Ok(directory.join(label))
+        fetch_verified(&self.client, &self.shutdown, source, sha256, directory).await
     }
 
     /// Extracts the staged archive into the home and makes it the active
@@ -373,6 +356,31 @@ impl AgentArchiveUpdateService {
             false
         }
     }
+}
+
+/// Streams a verified archive into a caller-owned scratch directory.
+pub async fn fetch_verified(
+    client: &butler_log::http::Client,
+    shutdown: &CancellationToken,
+    url: &str,
+    sha256: &str,
+    dir: &std::path::Path,
+) -> Result<PathBuf, UpdateError> {
+    let label = "archive.tar.gz";
+    Box::pin(stage::download_to_label(
+        client,
+        shutdown,
+        dir,
+        None,
+        stage::DownloadSource {
+            url,
+            sha256: &sha256.to_ascii_lowercase(),
+            label,
+        },
+        None,
+    ))
+    .await?;
+    Ok(dir.join(label))
 }
 
 fn artifact_name(url: &str, version: &str) -> String {

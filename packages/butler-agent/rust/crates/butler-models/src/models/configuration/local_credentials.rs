@@ -6,6 +6,7 @@ use butler_platform::{secrets::SecretText, secure_fs};
 use butler_vault::vault::{ItemKind, ProductVault, shared};
 use serde_json::{Map, Value};
 
+use super::sealed;
 use crate::models::ModelCatalogError;
 
 pub(super) const FILE: &str = "auth/custom-model-credentials.json";
@@ -31,6 +32,20 @@ fn vault(root: &Path) -> Result<Option<Arc<ProductVault>>, ModelCatalogError> {
 }
 
 pub(super) fn read_sync(root: &Path) -> Result<HashMap<String, String>, ModelCatalogError> {
+    if sealed::is_enabled() {
+        return match sealed::read_map() {
+            Ok(map) => Ok(map
+                .into_iter()
+                .filter_map(|(key, secret)| {
+                    let model_ref = key.strip_prefix(VAULT_PREFIX)?;
+                    butler_log::register_secret_for(&format!("local:{model_ref}"), &secret);
+                    Some((model_ref.to_owned(), secret))
+                })
+                .collect()),
+            Err(sealed::SealedError::KeyPending) => Ok(HashMap::new()),
+            Err(error) => Err(read_failed(error)),
+        };
+    }
     let Some(vault) = vault(root)? else {
         return read_file(root);
     };
@@ -61,6 +76,17 @@ pub(super) fn write(
     root: &Path,
     credentials: &HashMap<String, String>,
 ) -> Result<(), ModelCatalogError> {
+    if sealed::is_enabled() {
+        let mut map = sealed::read_map().map_err(write_failed)?;
+        map.retain(|key, _| !key.starts_with(VAULT_PREFIX));
+        for (model_ref, secret) in credentials {
+            if !secret.is_empty() {
+                butler_log::register_secret_for(&format!("local:{model_ref}"), secret);
+                map.insert(format!("{VAULT_PREFIX}{model_ref}"), secret.clone());
+            }
+        }
+        return sealed::write_map(&map).map_err(write_failed);
+    }
     for (source, secret) in credentials {
         butler_log::register_secret_for(&format!("local:{source}"), secret);
     }
