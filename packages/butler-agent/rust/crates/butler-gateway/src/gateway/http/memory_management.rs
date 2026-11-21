@@ -53,7 +53,9 @@ pub(super) async fn route(
         (&Method::POST, "/memory/inventory/check") => (AppMemoryCommand::Check, StatusCode::OK),
         (
             &Method::POST,
-            path @ ("/memory/reset/profile" | "/memory/reset/chat-memory" | "/memory/reset/reextract"),
+            path @ ("/memory/reset/profile"
+            | "/memory/reset/chat-memory"
+            | "/memory/reset/reextract"),
         ) => (reset_request(request, path).await?, StatusCode::ACCEPTED),
         (&Method::POST, path) if path.starts_with("/memory/reset/projects/") => {
             (project_reset(request, path).await?, StatusCode::ACCEPTED)
