@@ -506,7 +506,6 @@ export interface MobileCopy {
     stop: string;
     thinking: string;
     waitingForYou: string;
-    openWork: (title: string) => string;
     failed: string;
     cancelled: string;
     sendFailed: string;

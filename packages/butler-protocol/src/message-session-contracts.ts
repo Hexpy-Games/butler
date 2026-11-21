@@ -236,6 +236,10 @@ export interface ProgressDetailRow {
 }
 
 export interface ProgressSummaryRow {
+  turn_id?: string;
+  action_key?: string | null;
+  thinking_title?: string;
+  thinking_body?: string;
   interface_label_key?: string;
   interface_content?: InterfaceContentReferences;
   interface_label_parameters?: { attempt: number; maxAttempts: number };

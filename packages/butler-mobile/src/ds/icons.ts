@@ -32,7 +32,27 @@ import BookOpen01Icon from "@hugeicons/core-free-icons/BookOpen01Icon";
 import BubbleChatAddIcon from "@hugeicons/core-free-icons/BubbleChatAddIcon";
 import FolderAddIcon from "@hugeicons/core-free-icons/FolderAddIcon";
 
+import File02Icon from "@hugeicons/core-free-icons/File02Icon";
+import Task01Icon from "@hugeicons/core-free-icons/Task01Icon";
+import Rocket01Icon from "@hugeicons/core-free-icons/Rocket01Icon";
+import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
+import TerminalIcon from "@hugeicons/core-free-icons/TerminalIcon";
+import Wrench01Icon from "@hugeicons/core-free-icons/Wrench01Icon";
+import ViewIcon from "@hugeicons/core-free-icons/ViewIcon";
+import PlayIcon from "@hugeicons/core-free-icons/PlayIcon";
+import AiChipIcon from "@hugeicons/core-free-icons/AiChipIcon";
+
 export const icons = {
+  FileText: File02Icon,
+  ListChecks: Task01Icon,
+  Rocket: Rocket01Icon,
+  Search: Search01Icon,
+  Terminal: TerminalIcon,
+  Wrench: Wrench01Icon,
+  Eye: ViewIcon,
+  Play: PlayIcon,
+  AiChip: AiChipIcon,
+  Pencil: PencilEdit01Icon,
   Server: ServerStack01Icon,
   Document: BookOpen01Icon,
   BranchChat: BubbleChatAddIcon,

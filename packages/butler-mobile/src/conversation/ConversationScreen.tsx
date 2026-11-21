@@ -84,7 +84,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
   const anchors = anchoredStewardChildren(view?.messages ?? [], view);
   const rows = withQuestionAnswers(view?.messages ?? [], view?.question_answers ?? [], message => message.role === "user"
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length || anchors.has(message.id)
-      || (view?.session_id !== "general" && message.status !== "streaming" && !!message.work_blocks?.length))));
+      || (view?.session_id !== "general" && (!!message.turn_activity_rows?.length || (message.status !== "streaming" && !!message.work_blocks?.length))))));
   useEffect(() => { atBottom.current = true; setBottom(true); }, [sends]);
   useEffect(() => {
     if (atBottom.current && rows.length) {

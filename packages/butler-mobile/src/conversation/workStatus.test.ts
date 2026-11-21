@@ -2,9 +2,10 @@
 import { expect, test } from "bun:test";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import type { ProgressSummaryRow, SessionViewTurn } from "../../../butler-protocol/src/index.ts";
-import { phaseActivities, turnStatusLabel } from "./workStatus";
+import { turnStatusLabel } from "./workStatus";
+import { projectActivities } from "./activityProjection";
 
-test("phaseActivities keeps only localized model-authored activities", () => {
+test("projectActivities keeps only localized model-authored activities", () => {
   const rows: ProgressSummaryRow[] = [
     { id: "model", kind: "turn", safe_label: "openai/gpt-6-sol", state: "running", created_at: "2026-11-20T00:00:00Z" },
     { id: "wait", kind: "turn", safe_label: "Generating", interface_label_key: "generating", bridge_phase: "model_round_waiting", state: "running", created_at: "2026-11-20T00:00:00Z" },
@@ -14,7 +15,7 @@ test("phaseActivities keeps only localized model-authored activities", () => {
       interface_content: { title: { key: "toolTitle", parameters: { toolName: "record_work_disposition" } } }, created_at: "2026-11-20T00:00:00Z" },
     { id: "completed", kind: "turn", safe_label: "Completed", state: "completed", created_at: "2026-11-20T00:00:00Z" },
   ];
-  expect(phaseActivities(rows, "ko-KR")).toEqual([
+  expect(projectActivities(rows, undefined, "ko-KR").activities.map(({ title, summary, phase }) => ({ title, summary, phase }))).toEqual([
     { title: getAppCopy("ko-KR").guided.tools.record_work_disposition, summary: "Finished the work", phase: "reporting" },
   ]);
 });

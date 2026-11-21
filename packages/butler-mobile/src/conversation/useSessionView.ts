@@ -9,7 +9,7 @@ import { applyLiveEvent, mergeMessages } from "./sessionView";
 /** Messages per /session-view page; the conversation renders one page in its first pass. */
 export const SESSION_PAGE = 50;
 
-export function useSessionView(id: string | undefined) {
+export function useSessionViewData(id: string | undefined) {
   const { client, reconcile, subscribe } = useConversation();
   const [view, setView] = useState<SessionView | null>(null);
   const [error, setError] = useState(false);
@@ -66,10 +66,17 @@ export function useSessionView(id: string | undefined) {
     seen.current = reconcile;
     requestRef.current();
   }, [reconcile]);
-  useSessionRead(client, id, view?.latest_turn ? `${view.latest_turn.id}:${view.latest_turn.state}` : undefined);
   const reload = useCallback(() => requestRef.current(), []);
   const loadEarlier = useCallback(() => requestRef.current(true), []);
   return { view, error, loadingEarlier, reload, loadEarlier };
+}
+
+export function useSessionView(id: string | undefined) {
+  const data = useSessionViewData(id);
+  const { client } = useConversation();
+  const turn = data.view?.latest_turn;
+  useSessionRead(client, id, turn ? `${turn.id}:${turn.state}` : undefined);
+  return data;
 }
 
 function mergeSessionView(previous: SessionView | null, next: SessionView, older: boolean): SessionView {

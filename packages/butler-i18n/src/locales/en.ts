@@ -547,7 +547,6 @@ export const enUsCopy: AppCopy = {
       stop: "Stop",
       thinking: "Working…",
       waitingForYou: "Waiting for your answer on your computer.",
-      openWork: (title) => `Open ${title}`,
       failed: "The answer could not be finished.",
       cancelled: "Stopped.",
       sendFailed: "Could not send. Try again.",

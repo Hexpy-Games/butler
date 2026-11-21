@@ -35,7 +35,18 @@ export interface SessionRelation {
   created_at: string;
 }
 
+export interface WorkPlanAction {
+  action_key: string; order: number; title: string; purpose: string;
+  status: "pending" | "active" | "done" | "blocked" | "skipped";
+  started_at?: string; finished_at?: string; added_in_revision: number;
+}
+export interface WorkPlanRevision { revision: number; at: string; added: string[]; removed: string[]; reason?: string }
+export interface WorkPlan { revision: number; actions: WorkPlanAction[]; revisions: WorkPlanRevision[] }
+export interface ActivityHistoryEntry { turn_id: string; created_at: string; rows: ProgressSummaryRow[] }
+
 export interface StewardChild {
+  plan?: WorkPlan;
+  approved_plan_revision?: number;
   relation: SessionRelation;
   session_id: string;
   title: string;
@@ -83,6 +94,7 @@ export interface SessionViewCursors {
 export type MessageRole = "user" | "assistant" | "system" | "system_event" | "tool_summary" | "automation";
 
 export interface ConversationMessage {
+  turn_activity_rows?: ProgressSummaryRow[];
   content_parts?: MessageContent;
   id: string;
   chat_id?: string;
@@ -104,6 +116,13 @@ export interface ConversationMessage {
 }
 
 export interface SessionView {
+  plan?: WorkPlan;
+  activity_history?: ActivityHistoryEntry[];
+  relation?: { safe_title?: string };
+  workers?: Array<StewardChild & { action_key?: string }>;
+  waiting_for_children?: boolean;
+  approved_plan_total?: number;
+  approved_plan_completed?: number;
   steward_children?: StewardChild[];
   session_id: string;
   kind: ChatKind;

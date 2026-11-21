@@ -22,7 +22,9 @@ import { Switch } from "../Switch";
 import { Text, type TextTone, type TextVariant } from "../Text";
 import { TextField } from "../TextField";
 import { showToast, ToastView, type ToastTone } from "../Toast";
-import { en, ko, long, markdown, sampleImage, type Strings } from "./fixtures";
+import { WorkActivityBlock } from "../WorkActivityBlock";
+import { WorkActivityDisclosure } from "../WorkActivityDisclosure";
+import { en, ko, long, markdown, sampleImage, workActivityCollapsed, workActivityExpanded, workActivityNormal, type Strings } from "./fixtures";
 
 const noop = () => {};
 type Forced = "pressed" | "focused" | null;
@@ -398,7 +400,21 @@ function QueuedMessageSection() {
   </>;
 }
 
+function WorkActivitySection() {
+  const t = useTokens();
+  const [collapsedOpen, setCollapsedOpen] = useState(workActivityCollapsed.expanded);
+  const [expandedOpen, setExpandedOpen] = useState(workActivityExpanded.expanded);
+  const details = <View style={{ gap: t.length("--space-sm") }}>{workActivityExpanded.blocks.map((block, index) =>
+    <WorkActivityBlock key={block.title} {...block} density="compact" last={index === workActivityExpanded.blocks.length - 1} />)}</View>;
+  return <>
+    <Cell name="collapsed live disclosure"><WorkActivityDisclosure {...workActivityCollapsed} expanded={collapsedOpen} onToggle={() => setCollapsedOpen(value => !value)}>{details}</WorkActivityDisclosure></Cell>
+    <Cell name="expanded disclosure"><WorkActivityDisclosure {...workActivityExpanded} expanded={expandedOpen} onToggle={() => setExpandedOpen(value => !value)}>{details}</WorkActivityDisclosure></Cell>
+    <Cell name="normal block"><WorkActivityBlock {...workActivityNormal} /></Cell>
+  </>;
+}
+
 export const sections: { id: string; title: string; render: (state?: string) => React.ReactNode }[] = [
+  { id: "work-activity", title: "WorkActivity", render: () => <WorkActivitySection /> },
   { id: "queued-message", title: "QueuedMessage", render: () => <QueuedMessageSection /> },
   { id: "decision-card", title: "DecisionCard", render: () => <DecisionCardSection /> },
   { id: "markdown", title: "Markdown", render: () => <Cell name="Markdown"><Markdown text={markdown} /></Cell> },

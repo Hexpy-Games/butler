@@ -67,3 +67,20 @@ export const markdown = [
   "> A quoted paragraph", "---",
   "| Header | Value |\n| --- | --- |\n| Cell | **Bold cell** |",
 ].join("\n\n");
+
+export const workActivityCollapsed = {
+  status: "Working · 1/2", latest: "Reading the sources", previous: "Checked the request", hiddenCount: 2,
+  live: true, expanded: false, label: "Show work details", detailsLabel: "Work details",
+};
+export const workActivityExpanded = {
+  status: "Completed · 2/2 steps", latest: "Finished the work", hiddenCount: 1, live: false, expanded: true,
+  label: "Hide work details", detailsLabel: "Work details",
+  blocks: [{ title: "Check the request", description: ["Conception · 09:29:42"] }, { title: "Read the sources", tools: [
+    { id: "read", icon: "FileText" as const, title: "Read: notes.txt", summaryLabel: "Lookup", details: "Notes from the source" },
+    { id: "search", icon: "Search" as const, title: "Search the sources", summaryLabel: "Lookup" },
+  ] }],
+};
+export const workActivityNormal = {
+  title: "Read the source", description: ["Check the information before drafting"],
+  tools: [{ id: "source", icon: "FileText" as const, title: "Read: notes.txt", summaryLabel: "Lookup", details: "Source notes" }],
+};

@@ -9,7 +9,8 @@ import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useConversation } from "./live";
 import { documentKindLabel } from "./documents";
 import { BranchSheet } from "./BranchSheet";
-import { CompletedWorkCards, StewardWorkCard } from "./WorkCards";
+import { MessageActivity } from "./ActivityHistory";
+import { StewardCard } from "./StewardCard";
 
 export function messageCopyText(message: ConversationMessage): string {
   return message.role === "user" ? message.text : [message.text, ...(message.answer_blocks ?? []).map(set => toMarkdown(set.spec, url => url))].filter(Boolean).join("\n\n");
@@ -64,7 +65,7 @@ export function Message({ message, latestTurn, sessionId, projectId, stewardChil
   const failed = message.status === "failed" || message.delivery_state === "system_error" || message.delivery_state === "failed_system";
   const cancelled = message.status === "cancelled" || message.delivery_state === "cancelled";
   return <View style={{ ...(bubble ? { alignSelf: "flex-start", maxWidth: "90%" } : { width: "100%" }), gap: t.length("--space-1") }}>
-    {!bubble && message.status !== "streaming" ? <CompletedWorkCards blocks={message.work_blocks ?? []} /> : null}
+    {!bubble ? <MessageActivity message={message} /> : null}
     <MessageBody onLongPress={onLongPress} style={{ gap: t.length(bubble ? "--space-1" : "--space-3") }}>
       {bubble ? (message.text.trim() ? <MessageBubble><Markdown text={message.text} /></MessageBubble> : null)
         : <Markdown text={message.text} />}
@@ -72,7 +73,7 @@ export function Message({ message, latestTurn, sessionId, projectId, stewardChil
       {failed ? <Text tone="danger">{copy.chat.failed}</Text> : null}
       {cancelled ? <Text tone="tertiary">{copy.chat.cancelled}</Text> : null}
     </MessageBody>
-    {stewardChild ? <StewardWorkCard {...stewardChild} /> : null}
+    {stewardChild ? <StewardCard child={stewardChild.child} /> : null}
     {message.status !== "streaming" && (message.text.trim() || message.answer_blocks?.length) ? <MessageInfo message={message}
       onSelectText={() => setSelecting(true)}
       sessionId={sessionId} projectId={projectId}
