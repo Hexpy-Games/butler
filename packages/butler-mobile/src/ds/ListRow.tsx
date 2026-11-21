@@ -27,6 +27,8 @@ export interface ListRowProps {
   disabled?: boolean;
   /** Danger-toned title and icon, for a destructive action row. */
   destructive?: boolean;
+  /** Accent-toned title for a neutral action row (e.g. "Check for updates"). */
+  accent?: boolean;
   titleLines?: 1 | 2;
   descriptionLines?: 1 | 2 | 3;
   accessibilityLabel?: string;
@@ -35,7 +37,7 @@ export interface ListRowProps {
 }
 
 export function ListRow({
-  title, description, meta, icon, trailing, onPress, onLongPress, selected, disabled, destructive, titleLines = 1, descriptionLines = 2,
+  title, description, meta, icon, trailing, onPress, onLongPress, selected, disabled, destructive, accent, titleLines = 1, descriptionLines = 2,
   accessibilityLabel, accessibilityHint, testID, disclosure, navigates,
 }: ListRowProps) {
   const t = useTokens();
@@ -65,7 +67,7 @@ export function ListRow({
   const iconGap = grouped ? GROUP_INNER_GAP : t.length("--sidebar-row-gap");
   const fg = (key: "--text-primary" | "--text-secondary" | "--text-tertiary") =>
     t.color(disabled ? "--interactive-disabled-fg" : key);
-  const titleColor = disabled ? t.color("--interactive-disabled-fg") : t.color(destructive ? "--color-danger-text" : "--text-primary");
+  const titleColor = disabled ? t.color("--interactive-disabled-fg") : t.color(destructive ? "--color-danger-text" : accent ? "--accent-text" : "--text-primary");
   const titleText = (
     <BaseText
       numberOfLines={titleLines}
