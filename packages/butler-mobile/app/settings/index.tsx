@@ -12,8 +12,8 @@ import { useAppLocale, useMobileCopy } from "@/i18n";
 
 const SECTION_ICONS = {
   general: icons.SlidersHorizontal, appearance: icons.Palette, personalization: icons.UserRound, memory: icons.Notebook, models: icons.AiChip,
-  updates: icons.RefreshCcw, usage: icons.Database, browser: icons.Globe2, security: icons.Lock, system: icons.Activity,
-  archives: icons.Archive, about: icons.Document, skills: icons.MagicWand,
+  updates: icons.RefreshCcw, usage: icons.Database, browser: icons.Globe2, security: icons.Lock,
+  archives: icons.Archive, about: icons.Document,
 } satisfies Record<(typeof SETTINGS_GROUPS)[number]["ids"][number], IconGlyph>;
 
 export default function Settings() {
@@ -35,7 +35,7 @@ export default function Settings() {
     <ScrollView contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: gutter, paddingBottom: gutter + (Platform.OS === "android" ? insets.bottom : 0), gap: t.length("--space-6") }}>
       {pairing ? <ListGroup label={copy.settings.computer}>
-        <ListRow icon={icons.Computer} title={pairing.computerName ?? address} description={pairing.computerName ? address : undefined} />
+        <ListRow icon={icons.Computer} title={pairing.computerName ?? address} />
       </ListGroup> : null}
       {SETTINGS_GROUPS.map(group => <ListGroup key={group.label} label={S.groups[group.label]}>
         {group.ids.map(id => <ListRow key={id} icon={SECTION_ICONS[id]} title={S.sections[id]}

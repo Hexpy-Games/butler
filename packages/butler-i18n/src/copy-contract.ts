@@ -522,15 +522,10 @@ export interface MobileCopy {
     disconnectTitle: string;
     disconnectBody: string;
     cancel: string;
-    moveUp: string;
-    moveDown: string;
     pickHour: string;
     pickMinute: string;
-    importFromClipboardHint: string;
-    clipboardEmpty: string;
     applyUpdateTitle: string;
     applyUpdateBody: string;
-    editOnComputer: string;
     version: (version: string, build?: string) => string;
   };
 }

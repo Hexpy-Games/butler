@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { router } from "expo-router";
-import { getAppCopy, type AppCopy } from "../../../butler-i18n/src/index.ts";
+import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { ListGroup, ListGroupItem, Button, ListRow, Sheet, Text, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { LoadState, SettingsScreen } from "@/settings/layout";
-import { relativeAge } from "@/settings/format";
 import type { ArchiveListView, SessionSummary } from "@/settings/types";
 
 type ArchiveItem = { kind: "project" | "session"; id: string; title: string; updatedAt: string; session?: SessionSummary };
@@ -15,12 +14,6 @@ function archiveItems(view: ArchiveListView | null, untitled: string): ArchiveIt
     ...view.sessions.map((s): ArchiveItem => ({ kind: "session", id: s.id, title: s.title || untitled, updatedAt: s.last_activity_at, session: s }))]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
-function archiveSubtitle(item: ArchiveItem, app: AppCopy) {
-  if (item.kind === "project") return app.interfaceDetails.project;
-  if (item.session?.kind !== "project") return app.interfaceDetails.generalConversation;
-  return app.interfaceTemplates.projectConversation(item.session.project?.display_name ?? item.session.project_id ?? app.interfaceDetails.unknownProject);
-}
-
 function useArchives() {
   const { client, reconcile } = useConversation();
   const S = getAppCopy(useAppLocale()).settings;
@@ -55,10 +48,10 @@ export default function ArchivesSettings() {
   const archives = useArchives(), items = archiveItems(archives.view, M.conversations.untitled);
   const [selected, select] = useState<ArchiveItem>(), [mode, setMode] = useState<"actions" | "confirm">("actions");
   const change = (remove: boolean) => { if (selected) { void archives.change(selected, remove); select(undefined); } };
-  return <SettingsScreen title={S.sections.archives} description={S.sectionDescriptions.archives}>
+  return <SettingsScreen title={S.sections.archives}>
     <ListGroup label={S.pageSections.archived}>
       {!archives.view || archives.error ? <LoadState error={archives.error} onRetry={() => void archives.load()} /> : <>
-        {items.map(item => <ListRow key={`${item.kind}:${item.id}`} title={item.title} description={`${archiveSubtitle(item, app)} · ${relativeAge(item.updatedAt, app)}`}
+        {items.map(item => <ListRow key={`${item.kind}:${item.id}`} title={item.title}
           disabled={archives.busy} onPress={() => { setMode("actions"); select(item); }} />)}
         {!items.length ? <ListGroupItem><Text variant="caption">{app.interfaceDetails.archivesEmpty}</Text></ListGroupItem> : null}
       </>}

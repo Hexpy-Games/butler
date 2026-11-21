@@ -52,8 +52,8 @@ export default function SecuritySettings() {
     [row.target, row.cwd ?? "", ...[...row.places.values()].map(title => title ?? copy.deletedChat), row.project ?? "", copy.kind[row.kind]]
       .some(text => text.toLocaleLowerCase(locale).includes(search))));
   const date = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" });
-  return <SettingsScreen title={S.sections.security} description={S.sectionDescriptions.security}>
-    <ListGroup label={S.pageSections.grants} footer={S.pageSectionDescriptions.grants}>
+  return <SettingsScreen title={S.sections.security}>
+    <ListGroup label={S.pageSections.grants}>
       {!grants.rows || grants.error ? <LoadState error={grants.error} message={copy.loadFailed} onRetry={grants.reload} /> : <>
         {hasFilters ? <><ListGroupItem><TextField label={copy.search} value={query} onChangeText={setQuery} /></ListGroupItem>
           <SelectRow<GrantKind | "all"> title={copy.filter} value={kind} options={[{ value: "all", label: copy.filterAll }, ...kinds.map(value => ({ value, label: copy.kind[value] }))]} onSelect={setKind} /></> : null}

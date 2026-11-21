@@ -8,7 +8,7 @@ import { useSettings } from "@/settings/useSettings";
 export default function AppearanceSettings() {
   const S = getAppCopy(useAppLocale()).settings;
   const { settings, error, reload, update } = useSettings();
-  return <SettingsScreen title={S.sections.appearance} description={S.sectionDescriptions.appearance}>
+  return <SettingsScreen title={S.sections.appearance}>
     {!settings ? <ListGroup><LoadState error={error} onRetry={reload} /></ListGroup> : <ListGroup label={S.pageSections.conversation}>
       <SwitchRow title={S.fields.showThinking} value={settings.show_thinking} onChange={show_thinking => { void update({ show_thinking }); }} />
     </ListGroup>}

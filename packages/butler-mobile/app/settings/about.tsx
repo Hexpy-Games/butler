@@ -22,12 +22,12 @@ export default function AboutSettings() {
     void client.request<AppInfoView>("/app-info").then(setInfo).catch(() => setError(true));
   }, [client]);
   useEffect(reload, [reload, reconcile]);
-  return <SettingsScreen title={S.sections.about} description={S.sectionDescriptions.about}>
+  return <SettingsScreen title={S.sections.about}>
     <ListGroup label={S.pageSections.appInfo}>
       {!info ? <LoadState error={error} message={S.errors.loadAppInfo} onRetry={reload} /> : <>
         <ListRow title={S.fields.appName} meta={info.name ?? app.firstRun.product} />
         <ListRow title={S.fields.appVersion} meta={info.version} />
-        <ListRow title={S.fields.appRepository} description={info.repository_url ? repositoryLabel(info.repository_url) : "-"} onPress={info.repository_url ? () => void Linking.openURL(info.repository_url) : undefined} />
+        <ListRow title={S.fields.appRepository} meta={info.repository_url ? repositoryLabel(info.repository_url) : "-"} onPress={info.repository_url ? () => void Linking.openURL(info.repository_url) : undefined} />
         <ListRow title={S.fields.appProtocol} meta={info.protocol_version} />
       </>}
     </ListGroup>

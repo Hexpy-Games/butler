@@ -3,26 +3,12 @@ import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
 import { ListGroup, Button, ListRow, Sheet, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { LoadState, SettingsScreen } from "@/settings/layout";
-import { SelectRow, SwitchRow } from "@/settings/rows";
-import { useSettings } from "@/settings/useSettings";
-import { useModelCatalog } from "@/settings/useModelCatalog";
+import { SettingsScreen } from "@/settings/layout";
+import { SwitchRow } from "@/settings/rows";
 
 export default function BrowserSettings() {
-  const app = getAppCopy(useAppLocale()), S = app.settings, M = useMobileCopy();
-  const { settings, update, error, reload } = useSettings(), catalog = useModelCatalog();
-  const models = (catalog.catalog?.registered_models ?? []).filter(m => m.runtime_supported && m.enabled !== false);
-  const auto = settings?.browser?.auto;
-  const autoModel = models.find(m => m.model_ref === auto?.model) ?? catalog.catalog?.models.find(m => m.model_ref === auto?.model);
-  const autoName = auto?.available ? autoModel?.display_name ?? S.browsingAgent.conversationModel : S.browsingAgent.conversationModel;
-  return <SettingsScreen title={S.sections.browser} description={S.sectionDescriptions.browser}>
-    {!settings || !catalog.catalog ? <ListGroup><LoadState error={error || catalog.error} onRetry={() => { reload(); catalog.reload(); }} /></ListGroup> : <>
-      <ListGroup label={S.pageSections.browsing}>
-        <SelectRow title={S.browsingAgent.label} value={settings.browser?.browsing_agent ?? "auto"}
-          options={[{ value: "auto", label: S.browsingAgent.auto(autoName) }, { value: "off", label: S.browsingAgent.off }, ...models.map(m => ({ value: m.model_ref, label: m.display_name }))]}
-          onSelect={browsing_agent => void update({ browser: { browsing_agent } })} />
-      </ListGroup>
-    </>}
+  const S = getAppCopy(useAppLocale()).settings, M = useMobileCopy();
+  return <SettingsScreen title={S.sections.browser}>
     <HistoryGroup cancelLabel={M.settings.cancel} />
   </SettingsScreen>;
 }
@@ -39,7 +25,7 @@ function HistoryGroup({ cancelLabel }: { cancelLabel: string }) {
     finally { setBusy(false); }
   };
   return <ListGroup label={history.title}>
-    <ListRow title={history.pageLabel} description={history.pageDescription} trailing={<Button label={history.erase} onPress={() => { setRange("hour"); setOnly(false); setOpen(true); }} />} />
+    <ListRow title={history.pageLabel} trailing={<Button label={history.erase} onPress={() => { setRange("hour"); setOnly(false); setOpen(true); }} />} />
     <Sheet open={open} onClose={() => { if (!busy) setOpen(false); }} title={history.clear} cancelLabel={cancelLabel}
       action={<Button variant="destructive" label={app.browser.remove} loading={busy} onPress={() => void clear()} />}>
       {(["hour", "today", "week", "all"] as const).map(value => <ListRow key={value} title={history[value]} selected={range === value} disabled={busy} onPress={() => setRange(value)} />)}

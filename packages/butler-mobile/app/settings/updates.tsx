@@ -79,7 +79,7 @@ export default function UpdatesSettings() {
   const label = cancelling ? S.updateProgress.cancel : stage === "failed" ? S.updateProgress.retry : stage === "ready" ? S.updateProgress.restart
     : applying ? S.actions.updateApplying : status?.update_available ? S.actions.updateComponent
       : status?.check_state === "unavailable" ? S.actions.updateUnavailable : status?.check_state === "unchecked" ? S.actions.updateChecking : S.actions.upToDate;
-  return <SettingsScreen title={S.sections.updates} description={S.sectionDescriptions.updates}>
+  return <SettingsScreen title={S.sections.updates}>
     <ListGroup label={S.pageSections.updateVersions}>
       <ListGroupItem><Button variant="secondary" label={updates.loading ? S.actions.updateChecking : S.actions.checkUpdates} disabled={updates.loading || applying} onPress={() => void updates.check()} /></ListGroupItem>
       {!updates.view ? <LoadState error={updates.error} message={S.errors.loadUpdates} onRetry={updates.load} /> : <ListRow title={S.updateComponents.app}
