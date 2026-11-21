@@ -14,6 +14,7 @@ export function NewConversationSheet({ view }: { view: NavigationView | null }) 
   const t = useTokens();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const general = view?.chats.find(session => session.id === "general" && !session.archived);
   const projects = view?.projects.filter(project => !project.archived) ?? [];
   const groups = view?.space.groups ?? [];
   const start = (project?: string, group?: string) => {
@@ -36,7 +37,9 @@ export function NewConversationSheet({ view }: { view: NavigationView | null }) 
       <IconButton icon={icons.Edit} variant="default" label={appCopy.space.newChat} disabled={!view} onPress={newChat} />
     </View>}
     <Sheet open={open} onClose={() => setOpen(false)} title={appCopy.space.newChat} cancelLabel={copy.chat.close}>
-      <ListRow icon={icons.MessageSquare} title={appCopy.interfacePanels.generalChat} onPress={() => start()} />
+      <ListRow icon={icons.MessageSquare} title={appCopy.interfacePanels.generalChat}
+        onPress={() => { setOpen(false); router.push({ pathname: "/chat/[id]", params: { id: "general", title: general?.title ?? appCopy.interfacePanels.generalChat } }); }} />
+      <ListRow icon={icons.Edit} title={appCopy.space.newChat} onPress={() => start()} />
       {projects.map(project => <ListRow key={project.id} icon={icons.Briefcase} title={project.display_name}
         onPress={() => start(project.id)} />)}
       {groups.map(group => <ListRow key={group.id} icon={icons.Folder} title={group.title}

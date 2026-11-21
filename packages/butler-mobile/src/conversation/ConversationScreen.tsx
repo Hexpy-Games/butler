@@ -11,7 +11,8 @@ import { ApprovalCard, BrowserHandoffCard } from "./ApprovalCard";
 import { QuestionAnswerCard, QuestionCard } from "./QuestionCard";
 import { SessionInfoSheet } from "./SessionInfoSheet";
 import { SESSION_PAGE, useSessionView } from "./useSessionView";
-import { ChatComposer } from "./ChatComposer";
+import { ChatComposer, type ChatComposerHandle } from "./ChatComposer";
+import { NewChatIntro } from "./NewChatIntro";
 import { Message, UserMessage } from "./Message";
 import { useSessionQueue } from "./useSessionQueue";
 import { queuedConversationItems } from "./queue";
@@ -27,6 +28,7 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
   const appCopy = getAppCopy(useAppLocale());
   const t = useTokens();
   const options = useHeaderOptions();
+  const composer = useRef<ChatComposerHandle>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const session = useSessionView(id);
   const { view, error, reload } = session;
@@ -48,7 +50,8 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
     {error ? <View style={{ flex: 1, justifyContent: "center", padding: t.length("--space-4"), gap: t.length("--space-4") }}>
       <Text tone="danger">{copy.chat.loadFailed}</Text>
       <ButtonGroup><Button label={copy.chat.retry} onPress={reload} /></ButtonGroup>
-    </View> : <ConversationMessages {...session} dockHeight={dockHeight} sends={sends}>{anchors => <>
+    </View> : !id && pending === null ? <NewChatIntro project={project} title={title} dockHeight={dockHeight}
+      setText={setText} onSend={value => { void composer.current?.send(value); }} /> : <ConversationMessages {...session} dockHeight={dockHeight} sends={sends}>{anchors => <>
       {pending !== null ? <UserMessage message={{ text: pending }}>
         <Text variant="caption" tone="tertiary">{appCopy.sidebar.newSessionStarting}</Text>
       </UserMessage> : null}
@@ -56,7 +59,7 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
       {view ? <TurnStatus view={view} hasDecision={hasDecision} anchors={anchors} /> : null}
       {view && decision ? <PendingRequest decision={decision} view={view} reload={reload} /> : null}
     </>}</ConversationMessages>}
-    <ChatComposer id={id} project={project} group={group} view={view} hasDecision={hasDecision}
+    <ChatComposer ref={composer} id={id} project={project} group={group} view={view} hasDecision={hasDecision}
       text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh} onHeightChange={setDockHeight}
       onSend={() => setSends(value => value + 1)} />
   </Surface>;
