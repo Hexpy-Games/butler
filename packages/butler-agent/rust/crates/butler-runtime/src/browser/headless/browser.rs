@@ -32,20 +32,19 @@ pub(crate) struct Browser {
 }
 
 /// Where the pages come from: a process this crate launched, or the App that owns them.
-#[expect(
-    clippy::large_enum_variant,
-    reason = "one per browser; the launched variant owns the process"
-)]
 enum Pages {
-    Own {
-        process: Mutex<Option<PipeBrowser>>,
-        _proxy: EgressProxy,
-        _preview_proxy: Option<EgressProxy>,
-        proxy_url: String,
-        /// The proxy of registered previews' tabs (their own contexts).
-        preview_proxy_url: Option<String>,
-    },
+    Own(Box<OwnPages>),
     Hosted(Arc<dyn PageHost>),
+}
+
+/// The pages of a process this crate launched.
+struct OwnPages {
+    process: Mutex<Option<PipeBrowser>>,
+    _proxy: EgressProxy,
+    _preview_proxy: Option<EgressProxy>,
+    proxy_url: String,
+    /// The proxy of registered previews' tabs (their own contexts).
+    preview_proxy_url: Option<String>,
 }
 
 const LOG_LIMIT: u64 = 1024 * 1024;
@@ -155,13 +154,13 @@ impl Browser {
             downloads: downloads.clone(),
             history,
             contexts_created: tokio::sync::Mutex::new(()),
-            pages: Pages::Own {
+            pages: Pages::Own(Box::new(OwnPages {
                 process: Mutex::new(Some(process)),
                 preview_proxy_url: preview_proxy.as_ref().map(EgressProxy::url),
                 _proxy: proxy,
                 _preview_proxy: preview_proxy,
                 proxy_url,
-            },
+            })),
         });
         let _ = std::fs::create_dir_all(&downloads.stage);
         downloads.attach(&browser);
@@ -203,22 +202,20 @@ impl Browser {
     pub(crate) fn host(&self) -> Option<&Arc<dyn PageHost>> {
         match &self.pages {
             Pages::Hosted(host) => Some(host),
-            Pages::Own { .. } => None,
+            Pages::Own(_) => None,
         }
     }
 
     pub(crate) fn proxy_url(&self) -> Option<&str> {
         match &self.pages {
-            Pages::Own { proxy_url, .. } => Some(proxy_url),
+            Pages::Own(own) => Some(&own.proxy_url),
             Pages::Hosted(_) => None,
         }
     }
 
     pub(crate) fn preview_proxy_url(&self) -> Option<&str> {
         match &self.pages {
-            Pages::Own {
-                preview_proxy_url, ..
-            } => preview_proxy_url.as_deref(),
+            Pages::Own(own) => own.preview_proxy_url.as_deref(),
             Pages::Hosted(_) => None,
         }
     }
@@ -266,13 +263,14 @@ impl Browser {
 
     /// Ends the browser's whole process tree; its reused profile stays.
     pub(crate) async fn stop(&self) {
-        let Pages::Own { process, .. } = &self.pages else {
+        let Pages::Own(own) = &self.pages else {
             self.alive.cancel();
             return;
         };
         // No `Browser.close` first: on Linux and Windows the CEF host keeps running after it, so it
         // only delayed the kill, and the profile holds nothing a clean exit would save.
-        let process = process
+        let process = own
+            .process
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
@@ -296,11 +294,12 @@ impl Browser {
 
 impl Drop for Browser {
     fn drop(&mut self) {
-        let Pages::Own { process, .. } = &self.pages else {
+        let Pages::Own(own) = &self.pages else {
             self.alive.cancel();
             return;
         };
-        if let Some(mut process) = process
+        if let Some(mut process) = own
+            .process
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take()
