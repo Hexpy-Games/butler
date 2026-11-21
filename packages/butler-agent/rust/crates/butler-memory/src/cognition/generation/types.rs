@@ -25,8 +25,6 @@ pub enum MemoryGenerationTarget {
     Rebuild {
         /// Candidate generation.
         generation_id: String,
-        /// Canonical conversation snapshot the rebuild reads.
-        canonical_snapshot_id: String,
     },
 }
 

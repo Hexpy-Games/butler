@@ -31,6 +31,31 @@ async fn process_current(
     source: &SyncSource,
     job_id: &str,
 ) -> crate::cognition::CognitionResult<bool> {
+    let owned = input.clone();
+    if super::super::blocking::run(move || {
+        crate::cognition::reextract_preparing(&owned.data_root, &owned.environment).map_err(
+            |error| {
+                crate::cognition::CognitionError::new(
+                    CognitionCode::MemoryGenerationUnavailable,
+                    error.to_string(),
+                )
+                .with_source(error)
+            },
+        )
+    })
+    .await?
+    {
+        return Ok(false);
+    }
+    process_source(input, root, source, job_id).await
+}
+
+async fn process_source(
+    input: &Input,
+    root: &std::path::Path,
+    source: &SyncSource,
+    job_id: &str,
+) -> crate::cognition::CognitionResult<bool> {
     let kind = match source.kind.valid().map(String::as_str) {
         Some("task_report") => "task_report",
         Some("explicit_record")

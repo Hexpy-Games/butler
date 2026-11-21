@@ -142,7 +142,7 @@ impl ModelConfiguration {
         let _change = super::lock_config(root).await?;
         let mut config = read_object_sync(&root.join("butler.config.json"));
         let current = self.local_models(&config);
-        let mut credentials = super::super::local_credentials::read_sync(root)?;
+        let mut credentials = super::super::local_credentials::read(root).await?;
         let previous = find_local(&current, lookup)
             .cloned()
             .ok_or_else(|| super::error("Local model is not registered."))?;
@@ -156,8 +156,7 @@ impl ModelConfiguration {
             "local",
             serde_json::to_value(next).map_err(super::json_error)?,
         );
-        super::super::local_credentials::write(root, &credentials)?;
-        super::write_json(&root.join("butler.config.json"), &config)?;
+        persist(root.to_owned(), config, credentials).await?;
         Ok(previous)
     }
 }

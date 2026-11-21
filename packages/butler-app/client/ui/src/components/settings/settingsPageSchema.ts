@@ -24,7 +24,7 @@ export const settingsPageSchema: Record<SettingsSectionId, readonly SettingsSect
   memory: [
     { id: "instructions", kind: "form", fields: [] },
     { id: "noticed-patterns", kind: "form", fields: ["proactive-level", "quiet-hours"] },
-    { id: "chat-memory", kind: "form", fields: ["recall-mode", "recall-judge-model", "free-space", "reset-chat-memory"] },
+    { id: "chat-memory", kind: "form", fields: ["recall-mode", "recall-judge-model", "free-space", "reset-chat-memory", "reextract-chat-memory"] },
     { id: "memory-cleanup", kind: "form", fields: ["consolidation-time", "consolidation-run", "consolidation-model", "consolidation-reasoning"] },
     { id: "memory-model", kind: "form", fields: ["memory-model"] },
     { id: "profile-memory", kind: "form", fields: ["reset-profile"] },

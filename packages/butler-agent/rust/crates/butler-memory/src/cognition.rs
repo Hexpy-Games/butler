@@ -158,9 +158,14 @@ pub(crate) use project_capsule::capsule_path;
 
 mod admission;
 
+pub(crate) use generation::MEMORY_EXTRACTION_RULES_VERSION;
 pub(crate) use generation::pins::pinned as generation_reader_pinned;
-pub use generation::reset::ResetResult;
+pub use generation::reset::{ResetResult, reextract::ReextractOutcome};
 pub(crate) use generation::reset::{
-    begin as begin_conversation_reset, receipt as reset_receipt, run as reset_conversations,
-    save_leased as save_reset_receipt,
+    begin as begin_conversation_reset, receipt as reset_receipt,
+    reextract::{
+        preparing as reextract_preparing, progress as reextract_progress,
+        run as reextract_conversations,
+    },
+    run as reset_conversations, save_leased as save_reset_receipt,
 };

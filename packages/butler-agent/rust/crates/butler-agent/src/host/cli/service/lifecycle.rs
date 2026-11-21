@@ -410,6 +410,9 @@ fn spawn_service(
     if std::env::args_os().any(|s| s == "--safe-mode") {
         command.arg("--safe-mode");
     }
+    if std::env::args_os().any(|s| s == "--remote") {
+        command.arg("--remote");
+    }
     process_control::prepare_detached_spawn().map_err(crate::host::HostError::from_error)?;
     process_control::detach(&mut command);
     command.spawn().map_err(|source| {

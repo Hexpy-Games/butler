@@ -20,4 +20,4 @@ pub(super) mod sync;
 pub(super) mod transcript_sync;
 
 mod resets;
-pub(crate) use resets::{recover_resets, reset_profile};
+pub(crate) use resets::{drive_reextract, recover_resets, reset_profile};

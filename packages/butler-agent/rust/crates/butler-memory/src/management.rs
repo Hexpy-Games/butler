@@ -54,6 +54,9 @@ pub struct MemoryInventory {
     pub kinds: Vec<MemoryCard>,
     /// Physical allocation of unresolved dead letters; cleanup never deletes them.
     pub dead_letter_allocated_bytes: Option<u64>,
+    /// Active generation predates the current extraction rules.
+    #[serde(default)]
+    pub reextract_available: bool,
 }
 
 /// Process-owned backend. Construction performs no I/O and creates no worker.

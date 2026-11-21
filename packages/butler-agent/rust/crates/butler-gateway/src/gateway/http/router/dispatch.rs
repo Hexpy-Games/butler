@@ -109,6 +109,7 @@ async fn commands(
         {
             session_queue::route(state, request, uri).await
         }
+        Handler::RemoteAccount => remote_account::unlock(request).await,
         Handler::Computers => computers::route(state, request).await,
         Handler::Mcp => mcp_servers::route(state, request, uri).await,
         Handler::Operation => required(operation_output::route(state, request, uri).await?),

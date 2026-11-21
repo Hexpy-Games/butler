@@ -20,7 +20,7 @@ async fn computer_add_confirms_the_host_key_then_lists_and_removes() -> Result<(
         .arg(&key)
         .output()?;
     assert!(generated.status.success());
-    let sshd = TestSshd::start(&home.join("sshd"), &key.with_extension("pub"))?;
+    let sshd = TestSshd::start(&home.join("sshd"), &key.with_extension("pub"), Some(home))?;
     let host_public = fs::read_to_string(sshd.host_key.with_extension("pub"))?;
     let host_base64 = host_public.split_whitespace().nth(1).unwrap();
     let fingerprint = Command::new("ssh-keygen")
@@ -78,7 +78,10 @@ async fn computer_add_confirms_the_host_key_then_lists_and_removes() -> Result<(
         )
         .await?;
     assert_eq!(removed.status, 200, "{removed:?}");
-    assert_eq!(removed.data(), &json!({"deleted":true}));
+    assert_eq!(
+        removed.data(),
+        &json!({"deleted":true,"remote_cleaned":true})
+    );
     let listed = api.send(Method::GET, "/computers", None, &[]).await?;
     assert_eq!(listed.status, 200, "{listed:?}");
     assert_eq!(listed.data()["computers"], json!([]));
@@ -106,7 +109,7 @@ async fn computer_add_reports_each_ssh_failure() -> Result<(), HarnessError> {
             .output()?;
         assert!(generated.status.success());
     }
-    let mut sshd = TestSshd::start(&home.join("sshd"), &key.with_extension("pub"))?;
+    let mut sshd = TestSshd::start(&home.join("sshd"), &key.with_extension("pub"), Some(home))?;
     let closed_port = std::net::TcpListener::bind("127.0.0.1:0")?
         .local_addr()?
         .port();

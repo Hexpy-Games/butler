@@ -95,6 +95,7 @@ use tokenizer::TokenizerOwner;
 /// Secret input for key commands: echo off at a terminal (#217).
 pub use butler_platform::secrets::read_secret_input;
 pub use configuration::chatgpt;
+pub use configuration::sealed;
 pub use configuration::{
     CredentialError, CredentialFileSummary, CredentialList, CredentialListItem,
     CredentialMigrationFailure, CredentialMigrationReport, CredentialStoreError,

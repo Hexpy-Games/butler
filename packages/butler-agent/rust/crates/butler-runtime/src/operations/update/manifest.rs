@@ -9,6 +9,7 @@ const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
 
 mod agent;
 pub(super) use agent::AgentArtifact;
+pub use agent::release_artifact;
 pub(super) use agent::{ACTIVATION_POLICY, ROLLBACK_POLICY, load_agent_artifact};
 
 pub(super) struct AppArtifact {

@@ -5,10 +5,13 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-use super::{GatewayApplication, GatewaySecurityStore, LocalAuthConfig, http};
+use super::{GatewayApplication, GatewaySecurityStore, LocalAuthConfig, RemoteSocket, http};
+use butler_platform::local_socket;
 
 /// Listener configuration for [`serve_gateway`].
 pub struct GatewayConfig {
+    /// Version embedded in the running agent build.
+    pub agent_version: String,
     /// The local bearer token; it also keys signed URLs and browser sessions.
     pub local_auth: LocalAuthConfig,
     /// `BUTLER_APP_DEV_ORIGIN`: extra renderer origins (comma-separated,
@@ -45,6 +48,8 @@ pub struct GatewayConfig {
     /// Butler's own headless browser, used while no App is attached. `None`
     /// turns it off (calls without an App answer `no_browser`).
     pub headless_browser: Option<HeadlessBrowserConfig>,
+    /// Remote mode: also serve the API on this socket file; `None` in normal mode.
+    pub remote_socket: Option<RemoteSocket>,
 }
 
 /// Where the headless browser keeps its throwaway profile and its pinned
@@ -66,6 +71,7 @@ pub struct HeadlessBrowserConfig {
 impl Default for GatewayConfig {
     fn default() -> Self {
         Self {
+            agent_version: String::new(),
             local_auth: LocalAuthConfig::default(),
             dev_cors_origin: None,
             allowed_hosts: Vec::new(),
@@ -82,6 +88,7 @@ impl Default for GatewayConfig {
             static_ui_root: None,
             favicon_cache_root: None,
             headless_browser: None,
+            remote_socket: None,
         }
     }
 }
@@ -138,6 +145,11 @@ pub async fn serve_gateway(
     validate_content_hosts(&mut config)?;
     let local_addr = listener.local_addr()?;
     let content_listener = bind_content(local_addr, config.content_port).await?;
+    let local_listener = config
+        .remote_socket
+        .as_ref()
+        .map(|socket| local_socket::bind(&socket.path).map(|listener| (listener, socket.clone())))
+        .transpose()?;
     let content_addr = content_listener.local_addr()?;
     http::RequestPolicy::validate_content_origin(
         local_addr,
@@ -147,8 +159,11 @@ pub async fn serve_gateway(
     )?;
     let shutdown = CancellationToken::new();
     let task = http::serve(
-        listener,
-        content_listener,
+        http::Listeners {
+            main: listener,
+            content: content_listener,
+            local: local_listener,
+        },
         application,
         config,
         shutdown.clone(),

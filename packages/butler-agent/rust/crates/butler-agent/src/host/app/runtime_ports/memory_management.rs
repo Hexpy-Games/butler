@@ -104,6 +104,7 @@ impl AppMemoryManagement {
                 self.project(project_id, cancellation).await
             }
             command @ (AppMemoryCommand::ResetChat { .. }
+            | AppMemoryCommand::Reextract { .. }
             | AppMemoryCommand::ResetProfile { .. }
             | AppMemoryCommand::ResetProject { .. }
             | AppMemoryCommand::ResetStatus { .. }) => self.reset_command(command, sink).await,
@@ -204,6 +205,7 @@ fn encode(value: impl serde::Serialize) -> Result<Value, GatewayApplicationError
 fn error(source: std::io::Error) -> GatewayApplicationError {
     let reason = match source.to_string().as_str() {
         "Inventory changed" => "inventory_changed",
+        "Re-extraction is not due" => "reextract_not_due",
         "Memory is in use" => "writer_busy",
         "Operation ID conflicts" => "operation_id_conflict",
         "Active v2 generation is required" => "generation_required",

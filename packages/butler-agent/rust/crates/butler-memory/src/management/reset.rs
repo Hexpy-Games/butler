@@ -51,9 +51,21 @@ impl MemoryManagement {
     pub async fn reset_status(&self, operation_id: String) -> io::Result<Option<ResetResult>> {
         let root = self.root.clone();
         let paths = self.paths.clone();
-        tokio::task::spawn_blocking(move || cognition::reset_receipt(&root, &paths, &operation_id))
-            .await
-            .map_err(io::Error::other)?
+        tokio::task::spawn_blocking(move || {
+            let mut receipt = cognition::reset_receipt(&root, &paths, &operation_id)?;
+            if let Some(result) = &mut receipt
+                && result.kind == "reextract"
+                && result.phase == "preparing"
+                && let Ok((total, done)) =
+                    cognition::reextract_progress(&root, &paths, &operation_id)
+            {
+                result.total = Some(total);
+                result.done = Some(done);
+            }
+            Ok(receipt)
+        })
+        .await
+        .map_err(io::Error::other)?
     }
 }
 
@@ -176,5 +188,68 @@ impl MemoryManagement {
             }
         }
         self.reset_conversations(id, token).await
+    }
+}
+
+pub(super) fn reextract_due(
+    root: &std::path::Path,
+    paths: &CognitionPathEnvironment,
+) -> io::Result<bool> {
+    if !cognition::active_memory_descriptor_exists(root, paths).map_err(io::Error::other)? {
+        return Ok(false);
+    }
+    let active = cognition::resolve_active_generation(root, paths).map_err(io::Error::other)?;
+    let manifest = cognition::GenerationManifest::read(
+        &active.root.join("manifest.json"),
+        cognition::CognitionCode::MemoryGenerationUnavailable,
+    )
+    .map_err(io::Error::other)?;
+    Ok(manifest.extraction_rules_version() < cognition::MEMORY_EXTRACTION_RULES_VERSION)
+}
+
+impl MemoryManagement {
+    /// Accepts a user-started rules upgrade with an idempotent durable receipt.
+    pub async fn begin_reextract(&self, id: String, revision: u64) -> io::Result<ResetResult> {
+        let root = self.root.clone();
+        let paths = self.paths.clone();
+        let coordinator = self.coordinator.clone();
+        tokio::task::spawn_blocking(move || {
+            if cognition::reset_receipt(&root, &paths, &id)?.is_none()
+                && !reextract_due(&root, &paths)?
+            {
+                return Err(io::Error::other("Re-extraction is not due"));
+            }
+            cognition::begin_conversation_reset(
+                &root,
+                &paths,
+                &coordinator,
+                &id,
+                revision,
+                None,
+                "reextract",
+            )
+        })
+        .await
+        .map_err(io::Error::other)?
+    }
+
+    /// Drives or resumes the staged generation through the supplied shadow consumer.
+    pub async fn reextract(
+        &self,
+        id: String,
+        shadow: &cognition::MemorySyncConsumer,
+        now: Arc<dyn Fn() -> String + Send + Sync>,
+        token: CancellationToken,
+    ) -> io::Result<cognition::ReextractOutcome> {
+        cognition::reextract_conversations(
+            (self.root.clone(), self.paths.clone()),
+            self.coordinator.clone(),
+            id,
+            shadow,
+            now,
+            token,
+            self.stop.clone(),
+        )
+        .await
     }
 }

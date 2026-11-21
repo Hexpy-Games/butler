@@ -398,3 +398,6 @@ mod typed_pending;
 
 #[path = "memory/typed_corrupt.rs"]
 mod typed_corrupt;
+
+#[path = "memory/reextract.rs"]
+mod reextract;

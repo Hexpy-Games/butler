@@ -1610,6 +1610,10 @@ export interface AppCopy {
       removedChat: (n: number) => string; removedProfile: (entries: number, candidates: number) => string;
       removedProject: (chats: number, instructions: number) => string; keptChat: string; keptProfile: string; keptProject: string;
       resetNote: string; resetChatDone: string; resetProfileDone: string; resetProjectDone: string; resetFailed: string; nothingToReset: string;
+      reextracting: (done: number, total: number) => string;
+      reextractingPending: string;
+      reextract: string; reextractLabel: string; reextractDescription: string;
+      reextractTitle: string; reextractBody: string; reextractConfirm: string;
       thisChat: string; thisChatOnly: string; expiresInHours: (hours: number) => string; expiresInDays: (days: number) => string;
       linkLabel: string; linkDescription: string; linkOpen: string; linkOpenLabel: string;
       freeSpace: string; project: string; none: string; profileBuildingOff: string;

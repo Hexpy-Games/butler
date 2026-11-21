@@ -56,7 +56,7 @@ pub(super) async fn download(
         client,
         shutdown,
         data,
-        installation,
+        Some(installation),
         DownloadSource {
             url,
             sha256,
@@ -121,7 +121,7 @@ pub(super) async fn download_to_label(
     client: &butler_log::http::Client,
     shutdown: &CancellationToken,
     data: &Path,
-    installation: &Path,
+    installation: Option<&Path>,
     source: DownloadSource<'_>,
     progress: Option<&super::UpdateProgress>,
 ) -> Result<String, UpdateError> {
@@ -129,7 +129,14 @@ pub(super) async fn download_to_label(
     if !super::source::secure_source(url) {
         return Err(UpdateCode::UpdateArtifactSourceInvalid.into());
     }
-    let target = target(data, installation, label).await?;
+    let target = if let Some(installation) = installation {
+        target(data, installation, label).await?
+    } else {
+        fs::create_dir_all(data)
+            .await
+            .map_err(|source| UpdateError::caused(UpdateCode::UpdateStageUnavailable, source))?;
+        data.join(label)
+    };
     let temp = TempFile(unique_temp(&target));
     let mut output = OpenOptions::new()
         .write(true)
@@ -167,7 +174,9 @@ pub(super) async fn download_to_label(
     if shutdown.is_cancelled() {
         return Err(UpdateCode::UpdateCancelled.into());
     }
-    guard(data, installation, &target).await?;
+    if let Some(installation) = installation {
+        guard(data, installation, &target).await?;
+    }
     if shutdown.is_cancelled() {
         return Err(UpdateCode::UpdateCancelled.into());
     }

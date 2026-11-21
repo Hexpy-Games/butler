@@ -1,15 +1,21 @@
 //! Load device credentials before opening HTTP admission.
 use super::{FixedWindowRateLimiter, HttpState, listeners, security};
-use crate::gateway::{GatewayApplication, GatewayConfig, GatewayExposure};
+use crate::gateway::{GatewayApplication, GatewayConfig, GatewayExposure, RemoteSocket};
+use butler_platform::local_socket::LocalListener;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-/// Serves `listener` (loopback) until `shutdown`, and binds the LAN
+pub(in crate::gateway) struct Listeners {
+    pub main: TcpListener,
+    pub content: TcpListener,
+    pub local: Option<(LocalListener, RemoteSocket)>,
+}
+
+/// Serves `listeners.main` (loopback) until `shutdown`, and binds the LAN
 /// listeners too when remote access is enabled.
 pub(in crate::gateway) fn serve(
-    listener: TcpListener,
-    content_listener: TcpListener,
+    listeners: Listeners,
     application: Arc<dyn GatewayApplication>,
     config: GatewayConfig,
     shutdown: CancellationToken,
@@ -29,6 +35,7 @@ pub(in crate::gateway) fn serve(
         clear_opened_files(config.output_data.clone()).await;
         let headless = headless(config.headless_browser, &remote, &shutdown);
         let state = Arc::new(HttpState {
+            agent_version: config.agent_version,
             browser: Arc::new(super::browser_host::Hub::default()),
             headless,
             app_host,
@@ -66,10 +73,17 @@ pub(in crate::gateway) fn serve(
         // health probe must not race initialization of Settings → Security.
         state.remote.apply(&state, exposure);
         browser_ports(&state);
-        super::content::spawn(content_listener, state.clone(), shutdown.clone());
-        let result = listeners::spawn(listener, state.clone(), shutdown)
+        super::content::spawn(listeners.content, state.clone(), shutdown.clone());
+        let local = listeners.local.map(|(listener, socket)| {
+            listeners::spawn_local(listener, socket, state.clone(), shutdown.clone())
+        });
+        let result = listeners::spawn(listeners.main, state.clone(), shutdown)
             .await
-            .map_err(std::io::Error::other)?;
+            .map_err(std::io::Error::other);
+        if let Some(local) = local {
+            local.await.map_err(std::io::Error::other)??;
+        }
+        let result = result?;
         if let Some(headless) = &state.headless {
             headless.shutdown().await;
         }

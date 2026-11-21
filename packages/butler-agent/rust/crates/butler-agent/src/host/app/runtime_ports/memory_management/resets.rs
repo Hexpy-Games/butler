@@ -14,6 +14,10 @@ impl AppMemoryManagement {
                 self.start_reset(operation_id, inventory_revision, false, None, sink)
                     .await
             }
+            AppMemoryCommand::Reextract {
+                operation_id,
+                inventory_revision,
+            } => self.start_reextract(operation_id, inventory_revision).await,
             AppMemoryCommand::ResetProfile {
                 operation_id,
                 inventory_revision,
@@ -108,6 +112,42 @@ impl AppMemoryManagement {
             receipt,
             sink,
         ));
+        Ok(response)
+    }
+
+    async fn start_reextract(
+        self,
+        id: String,
+        revision: u64,
+    ) -> Result<Value, GatewayApplicationError> {
+        let gate = self.daily.gate.clone();
+        let admission = gate.admission.lock().await;
+        if gate.active().is_some() {
+            return Err(error(std::io::Error::other("Memory is in use")));
+        }
+        let receipt = self
+            .owner
+            .begin_reextract(id.clone(), revision)
+            .await
+            .map_err(error)?;
+        if receipt.phase != "preparing"
+            || gate
+                .jobs
+                .lock()
+                .map_err(|_| GatewayApplicationError::internal())?
+                .contains_key(&id)
+        {
+            return encode(receipt);
+        }
+        let response = encode(receipt.clone())?;
+        drop(admission);
+        let owner = self.owner.clone();
+        let consumer = self.daily.consumer.clone();
+        let shutdown = self.shutdown.clone();
+        tokio::spawn(async move {
+            crate::host::memory_jobs::drive_reextract(&owner, &consumer, &gate, receipt, &shutdown)
+                .await;
+        });
         Ok(response)
     }
 

@@ -155,6 +155,11 @@ impl IngressDispatcher {
         }
     }
 
+    pub(crate) async fn is_idle(&self) -> bool {
+        let state = self.lifecycle.lock().await;
+        state.tasks.is_empty() && state.active_sessions.is_empty()
+    }
+
     pub(crate) fn shutdown_token(&self) -> tokio_util::sync::CancellationToken {
         self.shutdown.clone()
     }

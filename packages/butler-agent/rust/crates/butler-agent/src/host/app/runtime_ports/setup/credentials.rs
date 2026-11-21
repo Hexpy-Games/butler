@@ -3,11 +3,12 @@
 //! replacing and deleting saved keys (#217). Keys are kept in the OS
 //! credential store; the credentials file holds only their metadata.
 
+use butler_platform::secrets::SecretText;
 use std::path::Path;
 
 use butler_gateway::gateway::{
     AppCredentialReplaceInput, AppProviderKeyInput, GatewayApplicationError,
-    ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView,
+    ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView, SavedProviderKey,
 };
 use butler_models::models::{
     CredentialError, CredentialList, DeletedCredential, ModelCatalogError, ModelConfiguration,
@@ -42,7 +43,7 @@ pub(super) async fn save(
         .await
         .map_err(|error| match error {
             ProviderKeySaveError::Invalid(invalid) => key_check_error(&invalid),
-            ProviderKeySaveError::Storage(_) => GatewayApplicationError::internal_from(error),
+            ProviderKeySaveError::Storage(_) => save_storage_error(error),
             ProviderKeySaveError::Rejected(_) => GatewayApplicationError::Public {
                 status: 400,
                 code: "provider_credential_save_failed".into(),
@@ -56,6 +57,22 @@ pub(super) async fn save(
     })
 }
 
+fn save_storage_error(error: ProviderKeySaveError) -> GatewayApplicationError {
+    use butler_models::models::CredentialStoreError;
+    if let ProviderKeySaveError::Storage(ModelCatalogError::Storage { source, .. }) = &error
+        && let Some(CredentialStoreError::Sealed(sealed)) =
+            source.downcast_ref::<CredentialStoreError>()
+    {
+        return GatewayApplicationError::Public {
+            status: 409,
+            code: sealed.code().into(),
+            message: sealed.to_string(),
+            source: None,
+        };
+    }
+    GatewayApplicationError::internal_from(error)
+}
+
 /// The saved keys, masked, and where new keys go.
 pub(super) async fn list(
     configuration: &ModelConfiguration,
@@ -63,6 +80,43 @@ pub(super) async fn list(
 ) -> Result<CredentialList, GatewayApplicationError> {
     configuration
         .list_provider_credentials(root)
+        .await
+        .map_err(credential_error)
+}
+
+pub(super) async fn saved_key(
+    configuration: &ModelConfiguration,
+    name: &str,
+    root: &Path,
+) -> Result<SavedProviderKey, GatewayApplicationError> {
+    let (provider_id, api_key) = configuration
+        .saved_provider_key(name, root)
+        .await
+        .map_err(credential_error)?;
+    Ok(SavedProviderKey {
+        provider_id,
+        api_key,
+    })
+}
+
+pub(super) async fn computer_key(
+    configuration: &ModelConfiguration,
+    id: &str,
+    root: &Path,
+) -> Result<SecretText, GatewayApplicationError> {
+    configuration
+        .computer_identity(id, root)
+        .await
+        .map_err(credential_error)
+}
+
+pub(super) async fn delete_computer_key(
+    configuration: &ModelConfiguration,
+    id: &str,
+    root: &Path,
+) -> Result<(), GatewayApplicationError> {
+    configuration
+        .delete_computer_identity(id, root)
         .await
         .map_err(credential_error)
 }

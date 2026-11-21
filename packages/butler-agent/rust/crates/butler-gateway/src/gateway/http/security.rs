@@ -198,9 +198,12 @@ impl GatewaySecurity {
         method: &Method,
         path: &str,
         headers: &HeaderMap,
+        local_socket: bool,
     ) -> Result<RequestOrigin, HttpError> {
         let policy = self.policy.read().clone();
-        policy.check_host(headers)?;
+        if !local_socket {
+            policy.check_host(headers)?;
+        }
         if *method == Method::POST && path == CONNECT_PATH {
             fetch_metadata::connect_post_site(headers)?;
         }

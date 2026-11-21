@@ -191,6 +191,7 @@ async fn cleanup_prevents_run_now() -> Result<(), HarnessError> {
 async fn scheduled_busy_skip_keeps_the_last_real_result() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, address) = setup("MEM-CONSOLIDATION-SKIP").await?;
+    super::super::memory_fixture::wait_parked(&s).await;
     let previous = state(&s);
     let held = s.provider()?.hold_next_reply("general_new_chat_briefing");
     assert_eq!(

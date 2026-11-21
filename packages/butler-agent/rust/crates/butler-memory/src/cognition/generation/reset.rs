@@ -2,6 +2,7 @@
 mod cache;
 #[cfg(feature = "e2e-fixtures")]
 mod receipt_hold;
+pub(crate) mod reextract;
 mod retirement;
 #[cfg(feature = "e2e-fixtures")]
 mod settlement;
@@ -42,6 +43,15 @@ pub struct ResetResult {
     pub sequence: u64,
     /// Whether the old directory remains pending reader drain/removal.
     pub removal_pending: bool,
+    /// Earliest startup at which the retired generation may be reclaimed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retire_after: Option<String>,
+    /// Current-revision jobs whose windows are terminal, computed on read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub done: Option<u64>,
+    /// Current-revision jobs in the shadow, computed on read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total: Option<u64>,
     /// Instruction owner targets captured when a project reset is accepted.
     #[serde(default)]
     pub instructions: Vec<crate::cognition::RememberedRuleTarget>,
@@ -240,6 +250,7 @@ fn stage(
         &new.join("graph.sqlite"),
         result.project_id.as_deref(),
         &result.operation_id,
+        result.kind == "reextract",
         token,
     )?;
     cache::copy(&old.root, &new)?;

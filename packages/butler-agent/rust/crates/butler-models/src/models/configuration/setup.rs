@@ -56,7 +56,9 @@ impl ModelConfiguration {
         let existing = saved.iter().find(|record| {
             record.provider_id == provider
                 && match &record.home {
-                    SecretHome::Plaintext(secret) => secret.expose() == key,
+                    SecretHome::Plaintext(secret) => {
+                        !super::sealed::is_enabled() && secret.expose() == key
+                    }
                     SecretHome::Store(_) => {
                         fingerprint.is_some() && record.fingerprint == fingerprint
                     }

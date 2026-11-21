@@ -1,5 +1,5 @@
 //! Fresh mutation authority: a writer may change only the serving v2
-//! generation or the building candidate bound to its snapshot.
+//! generation or a building candidate.
 
 use std::path::Path;
 
@@ -24,14 +24,9 @@ pub fn assert_mutation_authority(
                 && descriptor.projection_mode == Some(ProjectionMode::Running)
                 && manifest.format == Some(GenerationFormat::V2)
         }
-        MemoryGenerationTarget::Rebuild {
-            canonical_snapshot_id,
-            ..
-        } => {
+        MemoryGenerationTarget::Rebuild { .. } => {
             descriptor.generation_id != handle.generation_id
                 && manifest.is_v2_in(GenerationState::Building)
-                && manifest.canonical_snapshot_id.as_deref() == Some(canonical_snapshot_id)
-                && manifest.canonical_snapshot_path.is_some()
         }
     };
     valid

@@ -21,7 +21,7 @@ use butler_gateway::gateway::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
     ApplicationFuture, ButlerAccountRequest, GatewayApplicationError, LocalModelServersView,
     OauthFlowView, ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView,
-    SetupReadinessView, butler_account_disabled,
+    SavedProviderKey, SetupReadinessView, butler_account_disabled,
 };
 use butler_models::models::{
     CredentialList, DeletedCredential, LocalServerKind, LocalServerProbe, ModelConfiguration,
@@ -186,6 +186,30 @@ impl AppSetupPort for AppSetup {
         })
     }
 
+    fn saved_provider_key(&self, name: String) -> ApplicationFuture<SavedProviderKey> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            credentials::saved_key(&this.configuration, &name, &root).await
+        })
+    }
+
+    fn computer_key(&self, id: String) -> ApplicationFuture<SecretText> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            credentials::computer_key(&this.configuration, &id, &root).await
+        })
+    }
+
+    fn delete_computer_key(&self, id: String) -> ApplicationFuture<()> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            let root = this.validated_root()?;
+            credentials::delete_computer_key(&this.configuration, &id, &root).await
+        })
+    }
+
     fn list_credentials(&self) -> ApplicationFuture<CredentialList> {
         let this = self.0.clone();
         Box::pin(async move {
@@ -275,7 +299,20 @@ impl AppSetupPort for AppSetup {
 
     fn start_oauth(&self, input: AppOauthStartInput) -> ApplicationFuture<OauthFlowView> {
         let this = self.0.clone();
-        Box::pin(async move { Ok(this.oauth.start(input.force, input.kind).await) })
+        Box::pin(async move {
+            if input.redirect_port.is_some() && !butler_models::models::sealed::is_enabled() {
+                return Err(GatewayApplicationError::Public {
+                    status: 400,
+                    code: "invalid_request".into(),
+                    message: "redirect_port is only for remote computers.".into(),
+                    source: None,
+                });
+            }
+            Ok(this
+                .oauth
+                .start(input.force, input.kind, input.redirect_port)
+                .await)
+        })
     }
 
     fn oauth_flow(&self, flow_id: String) -> ApplicationFuture<OauthFlowView> {
@@ -302,6 +339,7 @@ impl SetupInner {
             "auth",
             "auth/model-provider-credentials.json",
             "auth/credential-store.json",
+            "auth/computer-key-homes.json",
         ] {
             let target = self
                 .installation

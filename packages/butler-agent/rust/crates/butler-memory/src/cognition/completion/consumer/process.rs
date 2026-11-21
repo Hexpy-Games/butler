@@ -99,7 +99,10 @@ pub(super) async fn poll(input: Input) -> CognitionResult<MemorySyncPoll> {
         return Ok(MemorySyncPoll::Deferred);
     }
     if input.target.is_some() {
-        return Ok(if projection::process(&input).await? {
+        let report = catchup::run_once(&input).await?;
+        let caught_up = report.ingested > 0 || (report.scanned > 0 && report.sweeping);
+        let projected = projection::process(&input).await?;
+        return Ok(if caught_up || projected {
             MemorySyncPoll::Processed
         } else {
             MemorySyncPoll::Idle

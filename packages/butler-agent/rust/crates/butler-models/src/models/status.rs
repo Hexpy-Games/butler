@@ -219,7 +219,11 @@ fn status_environment(data_root: &Path) -> ModelConfigurationEnvironment {
         oauth_no_browser: env_value("BUTLER_OAUTH_NO_BROWSER"),
         openai_model: env_value("BUTLER_OPENAI_MODEL"),
         openai_reasoning_effort: env_value("BUTLER_OPENAI_REASONING_EFFORT"),
-        openai_api_key: env_value("OPENAI_API_KEY"),
+        openai_api_key: if super::sealed::is_enabled() {
+            None
+        } else {
+            env_value("OPENAI_API_KEY")
+        },
         openai_base_url: env_value("OPENAI_BASE_URL"),
         openai_prompt_cache_key_prefix: env_value("BUTLER_OPENAI_PROMPT_CACHE_KEY_PREFIX"),
         openai_prompt_cache_retention: env_value("BUTLER_OPENAI_PROMPT_CACHE_RETENTION"),

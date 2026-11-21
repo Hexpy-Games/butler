@@ -27,23 +27,32 @@ pub(crate) struct Attempt {
     secrets: SignInAttempt,
     pub redirect_uri: String,
     pub auth_url: String,
+    pub callback_port: Option<u16>,
 }
 impl Attempt {
     pub(crate) async fn start(
         configuration: &ModelConfiguration,
         kind: SignInKind,
+        redirect_port: Option<u16>,
     ) -> Result<Self, String> {
         let secrets = configuration
             .chatgpt_prepare(kind)
             .await
             .map_err(flow_error)?;
         let (port, host) = configuration.chatgpt_callback_environment();
-        let bound = if port.is_none() && host.is_none() {
+        let bound = if redirect_port.is_some() || butler_models::models::sealed::is_enabled() {
+            oauth_callback::bind_with_environment(
+                SPEC,
+                if redirect_port.is_some() { None } else { port },
+                Some("127.0.0.1"),
+            )
+            .await
+        } else if port.is_none() && host.is_none() {
             oauth_callback::bind(SPEC).await
         } else {
             oauth_callback::bind_with_environment(SPEC, port, host).await
         };
-        let (listener, redirect_uri) = bound.map_err(|error| match error {
+        let (listener, bound_uri) = bound.map_err(|error| match error {
             oauth_callback::CallbackBindError::PortInvalid => {
                 "oauth_callback_port_invalid".to_owned()
             }
@@ -51,6 +60,17 @@ impl Attempt {
                 "oauth_callback_port_unavailable".to_owned()
             }
         })?;
+        let callback_port = match redirect_port {
+            Some(_) => Some(
+                listener
+                    .local_addr()
+                    .map_err(|_| "oauth_callback_port_unavailable".to_owned())?
+                    .port(),
+            ),
+            None => None,
+        };
+        let redirect_uri =
+            redirect_port.map_or(bound_uri, |p| format!("http://127.0.0.1:{p}{}", SPEC.path));
         let auth_url = chatgpt::authorize::url(&secrets, &redirect_uri)
             .map_err(str::to_owned)?
             .to_string();
@@ -59,6 +79,7 @@ impl Attempt {
             secrets,
             redirect_uri,
             auth_url,
+            callback_port,
         })
     }
     pub(crate) async fn run(
