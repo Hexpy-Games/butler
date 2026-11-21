@@ -567,6 +567,15 @@ export const koKrCopy: AppCopy = {
       disconnectTitle: "이 컴퓨터와 연결을 해제하시겠습니까?",
       disconnectBody: "버틀러를 쓰려면 다시 연결해야 합니다.",
       cancel: "취소",
+      moveUp: "위로 이동",
+      moveDown: "아래로 이동",
+      pickHour: "시를 고릅니다.",
+      pickMinute: "분을 고릅니다.",
+      importFromClipboardHint: "다른 AI의 답변을 복사한 뒤 여기서 가져옵니다.",
+      clipboardEmpty: "클립보드가 비어 있습니다.",
+      applyUpdateTitle: "지금 업데이트할까요?",
+      applyUpdateBody: "컴퓨터의 버틀러가 다시 시작되며 업데이트를 마칩니다.",
+      editOnComputer: "컴퓨터의 버틀러에서 편집할 수 있습니다.",
       version: (version: string, build?: string) => `버전 ${version}${build === undefined ? "" : ` (${build})`}`,
     },
   },
@@ -2140,7 +2149,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
         "버틀러가 현재 시간과 일정 맥락을 해석할 때 사용할 시간대입니다.",
       consolidationModel:
         "대화 기억 정리와 알아가기에서 사용할 모델입니다.",
-      recallMode: "정확하게 회상하면 몇 초 더 걸릴 수 있어요.",
+      recallMode: "정확하게 회상하면 몇 초 더 걸릴 수 있습니다.",
       consolidationTime: "버틀러가 켜져 있을 때만 실행합니다.",
       consolidationModelDefault:
         "현재 버틀러 기본 모델 설정을 그대로 따릅니다.",
@@ -2156,7 +2165,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
       composerDecoration: "글자 뒤에 그림을 깝니다.",
       composerCharacter: "입력창 위에 작은 친구가 앉습니다.",
       themeFollowsWallpaper: "실시간 월페이퍼가 정해요",
-      reasoningFixed: "모델이 정해요",
+      reasoningFixed: "모델이 정합니다",
       contextLimit: (maxLabel) =>
         `실제 버틀러 컨텍스트 예산입니다. 모델 최대값: ${maxLabel}.`,
       contextLimitClamped: (value) =>
@@ -2177,7 +2186,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
         "개인화에 필요한 정보를 읽어낼 때 사용할 모델입니다.",
       profilingExtractorDefault:
         "현재 버틀러 기본 모델 설정을 그대로 따릅니다.",
-      profileMigration: "다른 AI 서비스의 기억을 옮겨요",
+      profileMigration: "다른 AI 서비스의 기억을 옮깁니다",
       profileMigrationImporting:
         "가져온 기억을 읽고 프로필에 반영하는 중입니다.",
       profileMigrationApplied: (count) =>
