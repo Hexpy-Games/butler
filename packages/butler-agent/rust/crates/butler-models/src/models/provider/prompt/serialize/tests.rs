@@ -133,6 +133,33 @@ fn hosted_prompt_wire_bodies_follow_each_carrier_contract() {
             r#"{"model":"grok-4.5","instructions":"System","input":"Hello","reasoning":{"effort":"high"},"text":{"format":{"type":"json_schema","name":"answer","schema":{"type":"object"},"strict":false}}}"#
         );
     }
+    // anthropic and gemini carry the schema in the system text
+    {
+        let usage = usage();
+        let schema = Map::from_iter([("type".into(), json!("object"))]);
+        let mut request = request(&ReasoningEffort::High, &usage);
+        request.response_format = Some(PromptJsonSchema {
+            name: "answer",
+            schema: &schema,
+            strict: Some(true),
+        });
+        assert_eq!(
+            wire(
+                &request,
+                &config("anthropic/claude-sonnet-5-5"),
+                Carrier::Anthropic,
+            ),
+            r#"{"model":"claude-sonnet-5-5","max_tokens":321,"system":"System\n\nReturn exactly one JSON object matching the following JSON Schema. Do not wrap it in Markdown or add explanatory text.\n{\"type\":\"object\"}","thinking":{"type":"adaptive"},"output_config":{"effort":"high"},"messages":[{"role":"user","content":"Hello"}]}"#
+        );
+        assert_eq!(
+            wire(
+                &request,
+                &config("google/gemini-3.8-flash"),
+                Carrier::Gemini
+            ),
+            r#"{"systemInstruction":{"parts":[{"text":"System\n\nReturn exactly one JSON object matching the following JSON Schema. Do not wrap it in Markdown or add explanatory text.\n{\"type\":\"object\"}"}]},"generationConfig":{"thinkingConfig":{"thinkingLevel":"HIGH"},"maxOutputTokens":321},"contents":[{"role":"user","parts":[{"text":"Hello"}]}]}"#
+        );
+    }
     // openai cache boundary matches the responses contract
     {
         let usage = usage();
