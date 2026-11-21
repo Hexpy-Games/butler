@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { router } from "expo-router";
 import type { NavigationView } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
-import { Button, icons, ListRow, Sheet, showToast, TextField, useTokens } from "@/ds";
+import { Button, icons, ListGroup, ListRow, Sheet, showToast, TextField, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useConversation } from "./live";
 import { spaceTree, visibleRows, type SpaceRow } from "./space";
@@ -55,26 +55,29 @@ export function RowActions({ row, view, tree, onClose, onChanged }: {
     action={stage === "rename" || stage === "subgroup" ? <Button label={appCopy.space.save} disabled={!name.trim() || busy} onPress={save} />
       : stage === "delete" ? <Button variant="destructive" label={appCopy.common.delete} disabled={busy}
         onPress={() => run(`/projects/${id}?permanent=true`, { method: "DELETE" })} /> : undefined}>
-    {stage === "menu" ? <>
-      {kind !== "session" ? <>
-        <ListRow icon={icons.MessageSquare} title={appCopy.space.newChat} onPress={() => {
-          onClose();
-          router.push({ pathname: "/chat/new", params: kind === "project" ? { project: id } : { group: id, ...(groupScope ? { project: groupScope } : {}) } });
-        }} />
-        <ListRow icon={icons.Folder} title={appCopy.space.subgroup} onPress={() => { setName(""); setStage("subgroup"); }} />
-      </> : null}
-      <ListRow icon={icons.Edit} title={appCopy.space.rename} onPress={() => { setName(row?.title ?? ""); setStage("rename"); }} />
-      <ListRow icon={icons.Folder} title={appCopy.space.moveMenu} onPress={() => setStage("move")} />
-      {kind === "group" ? <ListRow icon={icons.Delete} title={appCopy.space.dissolve}
-        onPress={() => run(`/space/groups/${id}`, { method: "DELETE", body: { action: "dissolve", groupId: id, expectedRevision: revision } })} />
-        : <ListRow icon={icons.Archive} title={appCopy.space.archive} onPress={() => run(`/${kind === "session" ? "sessions" : "projects"}/${id}/archive`, { body: {} })} />}
-      {kind === "project" ? <ListRow icon={icons.Delete} title={appCopy.space.deleteProject} onPress={() => setStage("delete")} /> : null}
-    </> : stage === "rename" || stage === "subgroup" ? <TextField autoFocus returnKeyType="done" onSubmitEditing={save} value={name} onChangeText={setName}
+    {stage === "menu" ? <View style={{ gap: t.length("--space-4") }}>
+      <ListGroup>
+        {kind !== "session" ? <>
+          <ListRow icon={icons.MessageSquare} title={appCopy.space.newChat} onPress={() => {
+            onClose();
+            router.push({ pathname: "/chat/new", params: kind === "project" ? { project: id } : { group: id, ...(groupScope ? { project: groupScope } : {}) } });
+          }} />
+          <ListRow icon={icons.Folder} title={appCopy.space.subgroup} onPress={() => { setName(""); setStage("subgroup"); }} />
+        </> : null}
+        <ListRow icon={icons.Edit} title={appCopy.space.rename} onPress={() => { setName(row?.title ?? ""); setStage("rename"); }} />
+        <ListRow icon={icons.Folder} title={appCopy.space.moveMenu} onPress={() => setStage("move")} />
+        {kind !== "group" ? <ListRow icon={icons.Archive} title={appCopy.space.archive}
+          onPress={() => run(`/${kind === "session" ? "sessions" : "projects"}/${id}/archive`, { body: {} })} /> : null}
+      </ListGroup>
+      {kind === "group" ? <ListGroup><ListRow icon={icons.Delete} title={appCopy.space.dissolve} destructive
+        onPress={() => run(`/space/groups/${id}`, { method: "DELETE", body: { action: "dissolve", groupId: id, expectedRevision: revision } })} /></ListGroup> : null}
+      {kind === "project" ? <ListGroup><ListRow icon={icons.Delete} title={appCopy.space.deleteProject} destructive onPress={() => setStage("delete")} /></ListGroup> : null}
+    </View> : stage === "rename" || stage === "subgroup" ? <TextField autoFocus returnKeyType="done" onSubmitEditing={save} value={name} onChangeText={setName}
       label={stage === "subgroup" || kind === "group" ? appCopy.space.groupName : kind === "session" ? appCopy.interfaceStatus.conversationTitle : appCopy.interfaceStatus.projectName} />
-      : stage === "move" ? destinations.map(destination => <View key={destination.key ?? "root"} style={{ paddingLeft: destination.depth * t.length("--space-4") }}>
+      : stage === "move" ? <ListGroup>{destinations.map(destination => <View key={destination.key ?? "root"} style={{ paddingLeft: destination.depth * t.length("--space-4") }}>
         <ListRow icon={destination.icon} title={destination.title} onPress={() => run("/space/moves", {
           body: { action: "move", sourceKey: row?.key, targetKey: destination.key, position: "inside", expectedRevision: revision },
         })} />
-      </View>) : null}
+      </View>)}</ListGroup> : null}
   </Sheet>;
 }
