@@ -4,7 +4,6 @@ import { useTokens } from "../design/useTokens";
 import { Button, IconButton } from "./Button";
 import { Icon } from "./Icon";
 import { icons } from "./icons";
-import { inlineSelectable } from "./internal/selection";
 import { MessageBubble } from "./MessageBubble";
 import { Text } from "./Text";
 
@@ -33,7 +32,7 @@ export function QueuedMessage({
       <Text variant="caption" tone={failed ? "danger" : "secondary"}>{status}</Text>
     </View>
     {text ? <MessageBubble variant={failed ? "failed" : "queued"}>
-      <Text tone="secondary" selectable={inlineSelectable}>{text}</Text>
+      <Text tone="secondary" selectable>{text}</Text>
     </MessageBubble> : null}
     {attachments}
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: t.length("--space-1") }}>

@@ -318,7 +318,7 @@
       "--trace-tool-alt": "rgba(132, 86, 232, 1)",
       "--trace-wait": "rgba(242, 178, 0, 1)",
       "--trace-wait-alt": "rgba(184, 130, 0, 1)",
-      "--user-message-bg": "rgba(244, 245, 247, 0.92)",
+      "--user-message-bg": "rgba(233, 234, 236, 1)",
       "--windows-sidebar-bg": "rgba(255, 255, 255, 0.85)",
       "--windows-sidebar-hover-bg": "rgba(255, 255, 255, 0.6)",
       "--windows-sidebar-selected-bg": "rgba(255, 255, 255, 0.94)",

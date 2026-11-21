@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useImperativeHandle, useRef, useState } from "react";
 import { router } from "expo-router";
 import type { CreateSessionRequest, CreateSessionResult, MessageFileRef, MessageSendRequest, MessageSendResult, ProjectDashboardDocument, SessionView } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy, reasoningEffortLabel } from "../../../butler-i18n/src/index.ts";
@@ -9,13 +9,16 @@ import { ContextUsage } from "./usage/ContextUsage";
 import { ModelMark } from "./ModelMark";
 import { ModelSheet } from "./ModelSheet";
 import { useAttachments } from "./useAttachments";
+import type { DraftControls } from "./draftControls";
 import { useControls } from "./useControls";
 import { titleFromPrompt } from "./sessions";
 import { ProjectDocumentsSheet } from "./ProjectDocumentsSheet";
 import { documentContent, documentKindLabel } from "./documents";
 
-export function ChatComposer({ id, project, group, view, hasDecision, text, setText, onPending, refreshQueue, onHeightChange, onSend }: {
-  id?: string; project?: string; group?: string; view: SessionView | null; hasDecision: boolean;
+export type ChatComposerHandle = { send(text?: string): Promise<void> };
+
+export function ChatComposer({ ref, id, project, group, view, hasDecision, text, setText, onPending, refreshQueue, onHeightChange, onSend }: {
+  ref?: React.Ref<ChatComposerHandle>; id?: string; project?: string; group?: string; view: SessionView | null; hasDecision: boolean;
   text: string; setText(text: string): void; onPending(text: string | null): void;
   refreshQueue(): Promise<void>; onHeightChange(height: number): void; onSend(): void;
 }) {
@@ -28,13 +31,15 @@ export function ChatComposer({ id, project, group, view, hasDecision, text, setT
   const [sheet, setSheet] = useState<"attach" | "documents" | "model" | "context" | null>(null);
   const pendingAction = useRef<"documents" | "photo" | "file" | null>(null);
   const pendingDocument = useRef<ProjectDashboardDocument | null>(null);
+  const projectId = view?.project_id ?? project;
   const turn = view?.active_turn;
   const ready = attachments.items.flatMap(item => item.status === "ready" && item.file ? [item.file] : []);
   const hasReferences = attachments.items.some(item => item.status === "ready" && item.reference);
   const uploading = attachments.items.some(item => item.status === "uploading");
   const canSend = (!!text.trim() || ready.length > 0 || hasReferences) && !uploading && !hasDecision;
   const { busy, setBusy, send } = useMessageSend({ id, project, group, text, setText, ready, attachments,
-    activeTurn: !!turn, canSend, onPending, onSend, refreshQueue });
+    activeTurn: !!turn, canSend, onPending, onSend, refreshQueue, controls: model.controls });
+  useImperativeHandle(ref, () => ({ send }));
   const stop = async () => {
     if (!client || busy || !turn) return;
     setBusy(true);
@@ -44,8 +49,8 @@ export function ChatComposer({ id, project, group, view, hasDecision, text, setT
   };
   return <ComposerDock onHeightChange={onHeightChange}>
     <Composer value={text} onChangeText={setText} placeholder={copy.chat.placeholder} canSend={canSend}
-      mode={turn?.cancellable && !text.trim() && !ready.length && !hasReferences ? "stop" : "send"} busy={busy} disabled={!id && busy} onSend={send} onStop={stop}
-      sendLabel={copy.chat.send} stopLabel={copy.chat.stop} attach={id ? { label: copy.chat.attach, onPress: () => setSheet("attach") } : undefined}
+      mode={turn?.cancellable && !text.trim() && !ready.length && !hasReferences ? "stop" : "send"} busy={busy} disabled={!id && busy} onSend={() => { void send(); }} onStop={stop}
+      sendLabel={copy.chat.send} stopLabel={copy.chat.stop} attach={{ label: copy.chat.attach, onPress: () => setSheet("attach") }}
       attachments={attachments.items.length ? <AttachmentTiles layout="row" items={attachments.items.map(item => ({
         key: item.key, name: item.name, kind: item.kind, image: item.kind === "image" && item.uri ? { uri: item.uri } : undefined,
         extension: item.reference ? documentKindLabel(item.reference.source.kind, appCopy)
@@ -55,7 +60,7 @@ export function ChatComposer({ id, project, group, view, hasDecision, text, setT
         uploadingLabel={copy.chat.uploading} failedLabel={copy.chat.uploadFailed} /> : null}
       trailing={<>
         {view?.context ? <ContextRing ratio={view.context.ratio} label={copy.chat.contextUsed(Math.round(view.context.ratio * 100))}
-          onPress={() => setSheet("context")} /> : null}
+          onPress={() => setSheet("context")} /> : <ContextRing ratio={0} label={copy.chat.contextUsed(0)} onPress={() => {}} />}
         {model.controls ? <IconButton size="control" variant="ghost" icon={<ModelMark model={model.current} />}
           label={`${model.current?.display_name ?? model.controls.model} · ${reasoningEffortLabel(model.controls.reasoning_effort, locale)}`}
           onPress={() => setSheet("model")} /> : null}
@@ -71,13 +76,13 @@ export function ChatComposer({ id, project, group, view, hasDecision, text, setT
         if (action === "documents") setSheet("documents");
         else if (action) void attachments.pick(action);
       }}>
-      {view?.project_id ? <ListRow icon={icons.Document} title={appCopy.interfaceDetails.projectDocuments}
+      {projectId ? <ListRow icon={icons.Document} title={appCopy.interfaceDetails.projectDocuments}
         onPress={() => { pendingAction.current = "documents"; setSheet(null); }} /> : null}
       {model.current?.image_input_support !== "unsupported" ? <ListRow icon={icons.Image} title={copy.chat.attachPhoto}
         onPress={() => { pendingAction.current = "photo"; setSheet(null); }} /> : null}
       <ListRow icon={icons.File} title={copy.chat.attachFile} onPress={() => { pendingAction.current = "file"; setSheet(null); }} />
     </Sheet>
-    {view?.project_id ? <ProjectDocumentsSheet key={view.project_id} projectId={view.project_id} open={sheet === "documents"}
+    {projectId ? <ProjectDocumentsSheet key={projectId} projectId={projectId} open={sheet === "documents"}
       onClose={() => setSheet(null)} onPick={document => { pendingDocument.current = document; setSheet(null); }}
       onClosed={() => {
         const document = pendingDocument.current;
@@ -87,35 +92,39 @@ export function ChatComposer({ id, project, group, view, hasDecision, text, setT
   </ComposerDock>;
 }
 
-function useMessageSend({ id, project, group, text, setText, ready, attachments, activeTurn, canSend, onPending, onSend, refreshQueue }: {
+function useMessageSend({ id, project, group, text, setText, ready, attachments, activeTurn, canSend, onPending, onSend, refreshQueue, controls }: {
   id?: string; project?: string; group?: string; text: string; setText(text: string): void;
   ready: MessageFileRef[]; attachments: ReturnType<typeof useAttachments>; activeTurn: boolean; canSend: boolean;
-  onPending(text: string | null): void; onSend(): void; refreshQueue(): Promise<void>;
+  onPending(text: string | null): void; onSend(): void; refreshQueue(): Promise<void>; controls: DraftControls | undefined;
 }) {
   const { client } = useConversation();
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
-  const send = async () => {
-    if (inFlight.current || !client || busy || !canSend) return;
+  const send = async (override?: string) => {
+    const value = override ?? text;
+    if (inFlight.current || !client || busy || (override === undefined && !canSend)) return;
     inFlight.current = true;
     onSend();
     setBusy(true);
-    if (!id) onPending(text);
+    if (!id) onPending(value);
     const keys = attachments.items.filter(item => item.status === "ready" && (item.file || item.reference)).map(item => item.key);
     const references = attachments.items.flatMap(item => item.status === "ready" && item.reference ? [item.reference] : []);
     let sessionId = id;
-    const title = titleFromPrompt(text, appCopy.space.newChat);
+    const title = titleFromPrompt(value, appCopy.space.newChat);
     try {
       if (!sessionId) {
         const body: CreateSessionRequest = { kind: project ? "project" : "chat", workspace_mode: "local", title,
           ...(project ? { project_id: project } : {}), ...(group ? { group_id: group } : {}) };
         const { session } = await client.request<CreateSessionResult>("/sessions", { body });
         sessionId = session.id;
+        if (controls) await client.request(`/sessions/${encodeURIComponent(sessionId)}/controls`, {
+          method: "PATCH", body: { model: controls.model, reasoning_effort: controls.reasoning_effort },
+        }).catch(() => undefined);
       }
-      const body: MessageSendRequest = { chat_id: sessionId, text: text.trim(),
-        ...(references.length ? { content_parts: documentContent(text.trim(), references) } : {}),
+      const body: MessageSendRequest = { chat_id: sessionId, text: value.trim(),
+        ...(references.length ? { content_parts: documentContent(value.trim(), references) } : {}),
         client_message_id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
         attachments: ready.map(file => ({ file_id: file.file_id })), queue_policy: activeTurn ? "enqueue_if_busy" : "send_now" };
       const result = await client.request<MessageSendResult>("/messages", { body });
@@ -125,7 +134,7 @@ function useMessageSend({ id, project, group, text, setText, ready, attachments,
       if (!id) router.replace({ pathname: "/chat/[id]", params: { id: sessionId, title } });
     } catch {
       showToast({ message: copy.chat.sendFailed, tone: "error" });
-      if (!id && sessionId) router.replace({ pathname: "/chat/[id]", params: { id: sessionId, title, text } });
+      if (!id && sessionId) router.replace({ pathname: "/chat/[id]", params: { id: sessionId, title, text: value } });
     } finally { inFlight.current = false; setBusy(false); onPending(null); }
   };
   return { busy, setBusy, send };

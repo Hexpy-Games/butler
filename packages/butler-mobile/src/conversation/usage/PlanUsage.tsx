@@ -11,22 +11,25 @@ export function PlanUsage({ summary }: { summary: QuotaSummary }) {
   const copy = getAppCopy(locale);
   const { plan, windows, state, updatedLabel, butlerUsage } = summary;
   const limit = plan?.planUsage?.state === "limit_reached";
+  const shown = limit ? [] : windows;
   const labels = { hours_5: copy.chatgptPlan.usageWindow5h, days_7: copy.chatgptPlan.usageWindow7d, days_30: copy.chatgptPlan.usageWindow30d };
   const row = { flexDirection: "row", justifyContent: "space-between", gap: t.length("--space-2") } as const;
   return <View style={{ gap: t.length("--space-2") }}>
     {limit ? <Text variant="caption" tone="danger">{copy.chatgptPlan.limitReached}
       {plan?.planUsage?.resetsAt ? ` · ${copy.chatgptPlan.resetsAt(usageTime(plan.planUsage.resetsAt, locale))}` : ""}</Text> : null}
-    <Text variant="caption">{copy.composer.usage.accountLimits}</Text>
-    {state === "ready" ? windows.map(window => <View key={window.id} style={{ gap: t.length("--space-1") }}>
-      <View style={row}>
-        <Text variant="caption">{window.label}</Text>
-        <Text variant="caption" numeric="tabular">{window.remainingPercent === null ? "—" : copy.composer.usage.left(`${Math.round(Math.max(0, Math.min(100, window.remainingPercent)))}%`)}</Text>
-      </View>
-      {window.caption ? <Text variant="caption" tone="tertiary">{window.caption}</Text> : null}
-    </View>) : <Text variant="caption">{state === "loading" ? copy.composer.usage.loading : copy.composer.usage.unavailable}</Text>}
+    {!plan || shown.length > 0 ? <>
+      <Text variant="caption">{copy.composer.usage.accountLimits}</Text>
+      {state === "ready" ? shown.map(window => <View key={window.id} style={{ gap: t.length("--space-1") }}>
+        <View style={row}>
+          <Text variant="caption">{window.label}</Text>
+          <Text variant="caption" numeric="tabular">{window.remainingPercent === null ? "—" : copy.composer.usage.left(`${Math.round(Math.max(0, Math.min(100, window.remainingPercent)))}%`)}</Text>
+        </View>
+        {window.caption ? <Text variant="caption" tone="tertiary">{window.caption}</Text> : null}
+      </View>) : <Text variant="caption">{state === "loading" ? copy.composer.usage.loading : copy.composer.usage.unavailable}</Text>}
+    </> : null}
     {!plan && updatedLabel ? <Text variant="caption" tone="tertiary">{updatedLabel}</Text> : null}
     {plan ? <>
-      <View style={{ height: t.length("--border-hairline"), backgroundColor: t.color("--line") }} />
+      {shown.length > 0 ? <View style={{ height: t.length("--border-hairline"), backgroundColor: t.color("--line") }} /> : null}
       <Text variant="caption">{copy.chatgptPlan.butlerUsage}</Text>
       {(["hours_5", "days_7", "days_30"] as const).map(id => {
         const total = butlerUsage?.windows.find(window => window.id === id)?.totalTokens;

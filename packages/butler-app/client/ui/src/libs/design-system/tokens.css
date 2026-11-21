@@ -833,7 +833,7 @@
   --tinted-glass-filter: saturate(1.35) blur(var(--tinted-glass-blur));
   /* ManagementPage calm background: a veil in the page tone over the wallpaper. */
   --management-page-veil: rgba(255, 255, 255, 0.4);
-  --user-message-bg: rgba(244, 245, 247, 0.92);
+  --user-message-bg: var(--grayscale-03);
   --danger-bg: rgba(255, 245, 244, 0.86);
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
@@ -1531,7 +1531,7 @@
   --tinted-glass-filter: saturate(1.35) blur(var(--tinted-glass-blur));
   /* ManagementPage calm background: a veil in the page tone over the wallpaper. */
   --management-page-veil: rgba(255, 255, 255, 0.4);
-  --user-message-bg: rgba(244, 245, 247, 0.92);
+  --user-message-bg: var(--grayscale-03);
   --danger-bg: rgba(255, 245, 244, 0.86);
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);

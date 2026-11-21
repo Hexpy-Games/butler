@@ -1,6 +1,7 @@
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { RADIUS } from "../design/tokens";
+import { LinearGradient } from "expo-linear-gradient";
+import { opaque, RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { GlassFill, glassShadow, liquidGlass } from "./internal/GlassFill";
 
@@ -8,7 +9,7 @@ type Edge = "top" | "bottom" | "left" | "right";
 
 export interface SurfaceProps {
   children?: React.ReactNode;
-  variant?: "base" | "raised" | "card" | "glass";
+  variant?: "base" | "raised" | "card" | "glass" | "conversation";
   padding?: "none" | "sm" | "md" | "lg";
   grow?: boolean;
   edges?: readonly Edge[];
@@ -20,7 +21,7 @@ export function Surface({ children, variant = "base", padding, grow, edges = [] 
   const t = useTokens();
   const insets = useSafeAreaInsets();
   const framed = variant === "card" || variant === "glass";
-  const corner = variant === "base" ? 0 : t.length(RADIUS);
+  const corner = variant === "base" || variant === "conversation" ? 0 : t.length(RADIUS);
   const round = (a: Edge, b: Edge) => (edges.includes(a) || edges.includes(b) ? 0 : corner);
   const radii = { topLeft: round("top", "left"), topRight: round("top", "right"), bottomRight: round("bottom", "right"), bottomLeft: round("bottom", "left") };
   const pad = padding ?? (framed ? "md" : "none");
@@ -30,6 +31,7 @@ export function Surface({ children, variant = "base", padding, grow, edges = [] 
     : variant === "raised" ? t.color("--color-surface-raised-opaque")
     : variant === "card" ? t.color("--surface-raised")
     : undefined;
+  const gradient = variant === "conversation" ? t.gradient("--conversation-bg") : null;
   return (
     <View
       style={{
@@ -51,6 +53,9 @@ export function Surface({ children, variant = "base", padding, grow, edges = [] 
       {variant === "glass" ? (
         <GlassFill radii={radii} />
       ) : null}
+      {gradient ? <LinearGradient style={StyleSheet.absoluteFill} pointerEvents="none"
+        colors={gradient.stops.map(([color]) => opaque(color)) as [string, string, ...string[]]}
+        locations={gradient.stops.map(([, offset]) => offset) as [number, number, ...number[]]} /> : null}
       {children}
     </View>
   );

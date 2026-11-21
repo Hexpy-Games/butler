@@ -265,3 +265,31 @@ export interface GrantRecord extends GrantRef {
   workspace_path: string; created_at: string;
 }
 export interface AuthorityPermissionsView { permissions: GrantRecord[] }
+
+export interface NewChatBriefingSuggestion {
+  id: string;
+  title: string;
+  description: string;
+  text: string;
+  /** A template the user finishes: it fills the composer instead of sending. */
+  template?: boolean;
+}
+
+export interface NewChatBriefingView {
+  moment: string;
+  title: string;
+  description?: string;
+  suggestions: NewChatBriefingSuggestion[];
+  source: {
+    scope: "general" | "project" | "onboarding";
+    content_origin: "generated" | "heuristic_fallback";
+    consolidation_run_id: string | null;
+    generated_at: string;
+    locale: "ko" | "en";
+    project_id?: string;
+    project_name?: string;
+    persona_applied: boolean;
+    profile_projection_applied: boolean;
+  };
+  raw_text_included: false;
+}

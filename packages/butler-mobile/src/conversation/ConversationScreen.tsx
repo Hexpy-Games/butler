@@ -5,13 +5,15 @@ import { useScrollEdgeEffectRef } from "@bsky.app/expo-scroll-edge-effect";
 import type { SessionView, StewardChild } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { Button, ButtonGroup, EdgeFade, IconButton, icons, Spinner, StatusLine, Surface, Text, useHeaderInset, useHeaderOptions, useTokens } from "@/ds";
+import { opaque } from "../design/tokens";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { pendingDecision, withQuestionAnswers, type ConversationRow, type PendingDecision } from "./approval";
 import { ApprovalCard, BrowserHandoffCard } from "./ApprovalCard";
 import { QuestionAnswerCard, QuestionCard } from "./QuestionCard";
 import { SessionInfoSheet } from "./SessionInfoSheet";
 import { SESSION_PAGE, useSessionView } from "./useSessionView";
-import { ChatComposer } from "./ChatComposer";
+import { ChatComposer, type ChatComposerHandle } from "./ChatComposer";
+import { NewChatIntro } from "./NewChatIntro";
 import { Message, UserMessage } from "./Message";
 import { useSessionQueue } from "./useSessionQueue";
 import { queuedConversationItems } from "./queue";
@@ -26,7 +28,8 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
   const t = useTokens();
-  const options = useHeaderOptions();
+  const options = useHeaderOptions(opaque(t.gradient("--conversation-bg").stops[0][0]));
+  const composer = useRef<ChatComposerHandle>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const session = useSessionView(id);
   const { view, error, reload } = session;
@@ -38,7 +41,7 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
   const decision = view ? pendingDecision(view) : null;
   const hasDecision = !!decision && (decision.kind !== "question" || decision.request.question_state === "pending");
   const items = queuedConversationItems(queue.view?.queued_messages ?? [], view?.messages ?? []);
-  return <Surface variant="base" grow edges={["left", "right"]}>
+  return <Surface variant="conversation" grow edges={["left", "right"]}>
     <Stack.Screen options={{ ...options, title, headerLargeTitle: false,
       ...(id ? Platform.OS === "ios" ? {
         unstable_headerRightItems: () => [{ type: "button", label: copy.chat.info,
@@ -48,7 +51,8 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
     {error ? <View style={{ flex: 1, justifyContent: "center", padding: t.length("--space-4"), gap: t.length("--space-4") }}>
       <Text tone="danger">{copy.chat.loadFailed}</Text>
       <ButtonGroup><Button label={copy.chat.retry} onPress={reload} /></ButtonGroup>
-    </View> : <ConversationMessages {...session} dockHeight={dockHeight} sends={sends}>{anchors => <>
+    </View> : !id && pending === null ? <NewChatIntro project={project} title={title} dockHeight={dockHeight}
+      setText={setText} onSend={value => { void composer.current?.send(value); }} /> : <ConversationMessages {...session} dockHeight={dockHeight} sends={sends}>{anchors => <>
       {pending !== null ? <UserMessage message={{ text: pending }}>
         <Text variant="caption" tone="tertiary">{appCopy.sidebar.newSessionStarting}</Text>
       </UserMessage> : null}
@@ -56,7 +60,7 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
       {view ? <TurnStatus view={view} hasDecision={hasDecision} anchors={anchors} /> : null}
       {view && decision ? <PendingRequest decision={decision} view={view} reload={reload} /> : null}
     </>}</ConversationMessages>}
-    <ChatComposer id={id} project={project} group={group} view={view} hasDecision={hasDecision}
+    <ChatComposer ref={composer} id={id} project={project} group={group} view={view} hasDecision={hasDecision}
       text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh} onHeightChange={setDockHeight}
       onSend={() => setSends(value => value + 1)} />
   </Surface>;
@@ -69,6 +73,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
   const copy = useMobileCopy();
   const t = useTokens();
   const headerInset = useHeaderInset();
+  const stops = t.gradient("--conversation-bg").stops;
   const list = useRef<FlatList<ConversationRow> | null>(null);
   const edgeRef = useScrollEdgeEffectRef();
   const ref = useCallback((node: FlatList<ConversationRow> | null) => {
@@ -125,8 +130,8 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
       ListHeaderComponent={loadingEarlier ? <Spinner label={copy.chat.earlier} /> : undefined}
       ListFooterComponent={<View style={{ paddingBottom: dockHeight + t.length("--space-4"), gap: t.length("--space-4") }}>{children(anchors)}</View>}
     />
-    <EdgeFade edge="top" offset={headerInset} visible={scrolled} />
-    <EdgeFade edge="bottom" offset={dockHeight} visible={!bottom} />
+    <EdgeFade color={opaque(stops[0][0])} edge="top" offset={headerInset} visible={scrolled} />
+    <EdgeFade color={opaque(stops[stops.length - 1][0])} edge="bottom" offset={dockHeight} visible={!bottom} />
   </>;
 }
 
