@@ -308,5 +308,5 @@ fn current_turn_status_line(status: &Status, id: &ElementId, lang: Lang) -> AnyE
         }
         None => label.shimmer(Role::Body, text),
     };
-    RollingStatusLine::new().child(label).into_any_element()
+    RollingStatusLine::new().label(label).into_any_element()
 }

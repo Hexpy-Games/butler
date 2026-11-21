@@ -168,6 +168,7 @@ pub struct MessageStatusLabel {
     id: gpui::ElementId,
     mark: AnyElement,
     content: Option<Content>,
+    clip: bool,
 }
 
 impl MessageStatusLabel {
@@ -176,7 +177,14 @@ impl MessageStatusLabel {
             id: id.into(),
             mark: mark.into_any_element(),
             content: None,
+            clip: false,
         }
+    }
+
+    /// RollingStatusLine's `.content > * { min-width: 0; overflow: hidden }` on the label itself.
+    pub(crate) fn clip(mut self) -> Self {
+        self.clip = true;
+        self
     }
 
     /// The label, any element (typically a caption).
@@ -297,27 +305,32 @@ impl RenderOnce for MessageStatusLabel {
             None => div().into_any_element(),
         };
         let ds = Ds::get(cx);
-        div()
-            .flex()
+        let root = div()
+            .inline_flex()
             .min_w_0()
             .max_w(relative(1.))
             .items_center()
             .gap(ds.len(Length::Space2))
-            .text_color(ds.color(Color::TextSecondary))
-            .child(
-                div()
-                    .flex()
-                    .flex_none()
-                    .items_center()
-                    .justify_center()
-                    .size(px(18.)) // DS: MessageRow.module.css:196
-                    // DS: MessageRow.module.css:205 `.statusMark > * { width:100%; height:100% }`
-                    .child(div().size_full().child(self.mark)),
-            )
-            .child(strut::scope(
-                true,
-                div().flex_1().min_w_0().overflow_hidden().child(content),
-            ))
+            .text_color(ds.color(Color::TextSecondary));
+        let root = if self.clip {
+            root.overflow_hidden()
+        } else {
+            root
+        };
+        root.child(
+            div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .justify_center()
+                .size(px(18.)) // DS: MessageRow.module.css:196
+                // DS: MessageRow.module.css:205 `.statusMark > * { width:100%; height:100% }`
+                .child(div().size_full().child(self.mark)),
+        )
+        .child(strut::scope(
+            true,
+            div().flex_1().min_w_0().overflow_hidden().child(content),
+        ))
     }
 }
 
