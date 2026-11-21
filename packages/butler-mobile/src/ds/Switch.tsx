@@ -1,4 +1,4 @@
-import { Platform, Switch as NativeSwitch } from "react-native";
+import { Switch as NativeSwitch } from "react-native";
 import { useTokens } from "../design/useTokens";
 
 export interface SwitchProps {
@@ -9,7 +9,7 @@ export interface SwitchProps {
   testID?: string;
 }
 
-/** The platform switch: UISwitch on iOS, the Material switch on Android. iOS keeps its system off track. */
+/** UISwitch; Android uses Switch.android.tsx (Material 3 via @expo/ui) */
 export function Switch({ value, onValueChange, label, disabled, testID }: SwitchProps) {
   const t = useTokens();
   return (
@@ -19,8 +19,7 @@ export function Switch({ value, onValueChange, label, disabled, testID }: Switch
       disabled={disabled}
       accessibilityLabel={label}
       testID={testID}
-      thumbColor={Platform.select({ android: t.color("--switch-thumb") })}
-      trackColor={{ true: t.color("--accent"), false: Platform.select({ android: t.color("--switch-track-bg") }) }}
+      trackColor={{ true: t.color("--accent") }}
     />
   );
 }

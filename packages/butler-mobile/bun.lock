@@ -6,6 +6,7 @@
       "name": "butler-mobile",
       "dependencies": {
         "@bsky.app/expo-scroll-edge-effect": "0.1.11",
+        "@expo/ui": "~58.0.29",
         "@hugeicons/core-free-icons": "4.1.4",
         "@hugeicons/react-native": "^1.0.17",
         "@react-native-masked-view/masked-view": "0.3.2",
@@ -263,7 +264,7 @@
 
     "@expo/sudo-prompt": ["@expo/sudo-prompt@9.3.2", "", {}, "sha512-HHQigo3rQWKMDzYDLkubN5WQOYXJJE2eNqIQC2axC2iO3mHdwnIR7FgZVvHWtBwAdzBgAP0ECp8KqS8TiMKvgw=="],
 
-    "@expo/ui": ["@expo/ui@58.0.28", "", { "dependencies": { "sf-symbols-typescript": "^2.1.0" }, "peerDependencies": { "@babel/core": "*", "expo": "*", "react": "*", "react-dom": "*", "react-native": "*", "react-native-worklets": "*" }, "optionalPeers": ["@babel/core", "react-dom", "react-native-worklets"] }, "sha512-WEe4lOdislcL16H4wAGJRQ3JtzTj4cIFwX+5ZBaTt7QbpxnVwi5acaic9PcEJHjU6pV4ySr6yzH7oywOo7HvrQ=="],
+    "@expo/ui": ["@expo/ui@58.0.29", "", { "dependencies": { "sf-symbols-typescript": "^2.1.0" }, "peerDependencies": { "@babel/core": "*", "expo": "*", "react": "*", "react-dom": "*", "react-native": "*", "react-native-worklets": "*" }, "optionalPeers": ["@babel/core", "react-dom", "react-native-worklets"] }, "sha512-+zeaoDU1zS1rKe1afVsH8sh7+b+HNZyq93ZL0BRJ03RtrxZyYxKljqOcl78Q9NkX1oOO8CdQxzhFa8Dl6o52ug=="],
 
     "@expo/ws-tunnel": ["@expo/ws-tunnel@2.0.1", "", { "peerDependencies": { "ws": "^8.0.0" } }, "sha512-mljsRffbOHzmSimYQbQu9h9NR3alwCCwEEouRGFL4QRTt8dNvsNtKEPa/5jHmtDLDtsh4xXsWKwzjN9BTpeXHQ=="],
 

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@bsky.app/expo-scroll-edge-effect": "0.1.11",
+    "@expo/ui": "~58.0.29",
     "@hugeicons/core-free-icons": "4.1.4",
     "@hugeicons/react-native": "^1.0.17",
     "@react-native-masked-view/masked-view": "0.3.2",
