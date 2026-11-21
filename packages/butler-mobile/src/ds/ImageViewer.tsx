@@ -223,7 +223,7 @@ function AndroidPicture({ width, height, children, ref, onScale, onClose, dragFa
     },
     onPanResponderRelease: (event, movement) => {
       const g = gesture.current, current = live.current;
-      if (!g.pinched && view.current.scale === MIN_ZOOM && (movement.dy > current.screenHeight / 6 || movement.vy > 0.5)) { current.onClose(); return; }
+      if (!g.pinched && view.current.scale === MIN_ZOOM && (movement.dy > current.height / 6 || movement.vy > 0.5)) { current.onClose(); return; }
       if (!g.pinched && Math.hypot(movement.dx, movement.dy) < 10) {
         const now = Date.now();
         if (now - g.lastPress < 300) {
@@ -237,7 +237,7 @@ function AndroidPicture({ width, height, children, ref, onScale, onClose, dragFa
     },
     onPanResponderTerminate: () => { if (view.current.scale === MIN_ZOOM) live.current.restore(); },
   }), [view, y, dragFade]);
-  return <View pointerEvents="box-none" {...responder.panHandlers} style={{ flex: 1, width: "100%", justifyContent: "center", alignItems: "center" }}>
+  return <View pointerEvents="box-none" {...responder.panHandlers} style={{ flex: 1, width: "100%", justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
     <View ref={box} pointerEvents="box-none" style={{ width, height }}>
       <Animated.View style={{ transform: [{ translateX: x }, { translateY: y }, { scale }] }}>{children}</Animated.View>
     </View>
