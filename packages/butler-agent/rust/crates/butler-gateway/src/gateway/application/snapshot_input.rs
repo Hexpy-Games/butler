@@ -18,47 +18,36 @@ impl AppApplication {
         let queued_id = claim.queued_message_id.clone();
         let claim_id = claim.claim_id.clone();
         let facts = self.dependencies.settings_facts.snapshot()?;
-        let (snapshot, conversation_access, default_project_folder, document_edits, language, hook) =
-            self.storage
-                .execute(move |db| {
-                    let (snapshot, access, folder, edits) =
-                        claimed_input(db, &queued_id, &claim_id)?;
-                    let hook = super::hook_context::claimed(db, &snapshot.chat_id, &queued_id)?;
-                    Ok((
-                        snapshot,
-                        access,
-                        folder,
-                        edits,
-                        settings::ui_language(db, &facts)?.as_str().to_owned(),
-                        hook,
-                    ))
-                })
-                .await
-                .map_err(app_error)?;
+        let since = super::initiated::notes_since(&self.dependencies.identity_clock.now_iso())
+            .ok_or_else(GatewayApplicationError::internal)?;
+        let (
+            snapshot,
+            conversation_access,
+            default_project_folder,
+            document_edits,
+            language,
+            hook,
+            notes,
+        ) = self
+            .storage
+            .execute(move |db| {
+                let (snapshot, access, folder, edits) = claimed_input(db, &queued_id, &claim_id)?;
+                let hook = super::hook_context::claimed(db, &snapshot.chat_id, &queued_id)?;
+                let notes = super::initiated::suggestion_notes(db, &snapshot.chat_id, &since)?;
+                Ok((
+                    snapshot,
+                    access,
+                    folder,
+                    edits,
+                    settings::ui_language(db, &facts)?.as_str().to_owned(),
+                    hook,
+                    notes,
+                ))
+            })
+            .await
+            .map_err(app_error)?;
         verify_claimed_controls(&snapshot)?;
-        let needs_project_sources = snapshot
-            .content_parts
-            .as_ref()
-            .and_then(|parts| serde_json::to_value(parts).ok())
-            .and_then(|value| value.get("parts").cloned())
-            .and_then(|value| value.as_array().cloned())
-            .is_some_and(|parts| {
-                parts.iter().any(|part| {
-                    part.get("type").and_then(Value::as_str) == Some("project_source_ref")
-                })
-            });
-        if needs_project_sources
-            && snapshot
-                .project_sources
-                .as_array()
-                .is_none_or(Vec::is_empty)
-        {
-            return Err(public(
-                500,
-                "project_source_snapshot_missing",
-                "Project source context is unavailable.",
-            ));
-        }
+        verify_project_sources(&snapshot)?;
         self.ensure_native_dispatch_ready()?;
         let assets = self
             .dependencies
@@ -73,8 +62,13 @@ impl AppApplication {
         );
         turn.app_turn_context["language"] = language.into();
         turn.app_turn_context["documentEdits"] = json!(document_edits);
-        if let Some(text) = hook.text {
-            turn.app_turn_context["hookContext"] = text.into();
+        let context = [hook.text, notes]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        if !context.is_empty() {
+            turn.app_turn_context["hookContext"] = context.into();
         }
         Ok((self.with_canon_epics(turn).await?, hook.waiting))
     }
@@ -90,6 +84,33 @@ impl AppApplication {
         }
         Ok(())
     }
+}
+
+fn verify_project_sources(snapshot: &ClaimedNativeSnapshot) -> Result<(), GatewayApplicationError> {
+    let needs_project_sources = snapshot
+        .content_parts
+        .as_ref()
+        .and_then(|parts| serde_json::to_value(parts).ok())
+        .and_then(|value| value.get("parts").cloned())
+        .and_then(|value| value.as_array().cloned())
+        .is_some_and(|parts| {
+            parts
+                .iter()
+                .any(|part| part.get("type").and_then(Value::as_str) == Some("project_source_ref"))
+        });
+    if needs_project_sources
+        && snapshot
+            .project_sources
+            .as_array()
+            .is_none_or(Vec::is_empty)
+    {
+        return Err(public(
+            500,
+            "project_source_snapshot_missing",
+            "Project source context is unavailable.",
+        ));
+    }
+    Ok(())
 }
 
 /// Dispatch verifies the immutable controls against the claimed turn identity.

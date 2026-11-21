@@ -1,0 +1,42 @@
+diff --git a/ios/RNUITextView.mm b/ios/RNUITextView.mm
+index d7cf2216206d1ca6ebde9be2f7e0bed93d4cbf18..9d3cbbfa6592002dc9bb26cf1817801fab7786be 100644
+--- a/ios/RNUITextView.mm
++++ b/ios/RNUITextView.mm
+@@ -175,6 +175,15 @@ - (instancetype)initWithFrame:(CGRect)frame
+     _textView.delegate = self;
+     // Must match RCTTextLayoutManager, which measures with usesFontLeading = NO.
+     _textView.layoutManager.usesFontLeading = NO;
++    _textView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
++    #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 260000
++    if (@available(iOS 26.0, *)) {
++      _textView.topEdgeEffect.hidden = YES;
++      _textView.bottomEdgeEffect.hidden = YES;
++      _textView.leftEdgeEffect.hidden = YES;
++      _textView.rightEdgeEffect.hidden = YES;
++    }
++    #endif
+     [self addSubview:_textView];
+ 
+     _pressGestureRecognizer = [[RNUITextViewPressGestureRecognizer alloc] initWithTarget:self
+@@ -252,7 +261,8 @@ - (void)drawRect:(CGRect)rect
+   const auto &props = *std::static_pointer_cast<RNUITextViewProps const>(_props);
+ 
+   const auto attrString = _state->getData().attributedString;
+-  const auto convertedAttrString = RCTNSAttributedStringFromAttributedString(attrString);
++  const auto convertedAttrString = [RCTNSAttributedStringFromAttributedString(attrString) mutableCopy];
++  RCTApplyBaselineOffset(convertedAttrString);
+ 
+   // Setting attributedText clears any active text selection. Bail out entirely
+   // when neither the text nor its layout changed so a JS-side state update made
+diff --git a/ios/RNUITextViewShadowNode.cpp b/ios/RNUITextViewShadowNode.cpp
+index 88843d86d592006a2bf562d952796a0fbcdbf777..8d1c3281e5a427686912c1e3670ecab153927145 100644
+--- a/ios/RNUITextViewShadowNode.cpp
++++ b/ios/RNUITextViewShadowNode.cpp
+@@ -131,6 +131,7 @@ AttributedString RNUITextViewShadowNode::getAttributedString(
+         textAttributes.backgroundColor = props.backgroundColor;
+         textAttributes.fontSize = props.fontSize;
+         textAttributes.lineHeight = props.lineHeight;
++        textAttributes.lineBreakStrategy = LineBreakStrategy::HangulWordPriority;
+         textAttributes.foregroundColor = props.color;
+         textAttributes.textShadowColor = props.shadowColor;
+         textAttributes.textShadowOffset = props.shadowOffset;

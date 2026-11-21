@@ -48,7 +48,7 @@ summary; the current step and the status line fold away with `Collapsible`, and
 the footer renders once at the end. Existing DS stream reveal, `Collapsible`
 and activity motion own animations and honor reduced motion.
 
-Assistant body sections use a column gap of `--space-lg` (16px), including the
+In work sessions, assistant body sections use a column gap of `--space-lg` (16px), including the
 activity, answer, status line and footer. The same gap separates the activity
 from the answer and the answer from the status line, live or completed;
 completion does not change the spacing token. Do not add section margins in
@@ -65,14 +65,14 @@ shape, padding and fill (`--user-message-bg`); its max width is
 One answer is one bubble. `MessageBubbleAttachments` holds files, answer
 blocks and panels under it: they align to the bubble's left edge and are no
 wider than its max width. A panel that keeps its own width (the background-work
-card) is a direct body child instead. The footer (copy, time) follows; the
+card) is a direct body child instead. The footer (copy, time) follows `--space-xs` (4px) below, the same gap as under the user bubble; the
 completed status row is not shown in 대화. Work sessions keep the full-width
 answer layout.
 
 User and Butler bubbles, and the document and in-chat cards around them, use
 `--radius-popover` (12px).
 
-The optional `footer` slot renders metadata outside the message bubble. User
+The optional `footer` slot renders metadata outside the message bubble. Footer icon actions are 26px circles, `--space-xs` apart. User
 messages use this slot for their sent date/time and full-text copy action.
 Long user text is folded by the conversation container at five rendered lines;
 attachments remain outside the folded text. Neither folding nor copying changes

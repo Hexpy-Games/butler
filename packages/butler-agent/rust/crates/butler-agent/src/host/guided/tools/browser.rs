@@ -98,9 +98,6 @@ async fn execute_client(
     if matches!(call.name.as_str(), "preview_start" | "preview_stop") {
         return preview::execute(owner, invocation, call, occurrence, client).await;
     }
-    if call.name == "browser_close" && owner.access_mode() == AccessMode::ReadOnly {
-        return encoded(&json!({"status":"not_dispatched","reason":"read_only"}));
-    }
     if call.name == "browser_act" {
         return act::execute(owner, invocation, call, occurrence, client, args).await;
     }
@@ -115,9 +112,6 @@ async fn execute_client(
     }
     if call.name == "browser_open" && navigation::reviewed(owner, &args) {
         return navigation::execute(owner, invocation, call, occurrence, client, args).await;
-    }
-    if call.name == "browser_open" && args.get("results").is_some() {
-        return open::execute(owner, invocation, call, occurrence, client).await;
     }
     // A region makes the observation a close-up of the newest observation.
     let zoom = call.name == "browser_observe" && args.get("region").is_some();
@@ -320,7 +314,7 @@ fn approval_input(
         "signed_out"
     };
     let commit = authority::commits(args, prepared);
-    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"url":prepared["url"],"site":scope,"mode":mode,"always_confirm":always,"merchant_site":if payment { prepared["merchant_site"].clone() } else { Value::Null },"commit":commit,"allow_site":if allow_site { Some("payment") } else { None }})
+    json!({"tab":args["tab"],"observation":args["observation"],"steps":args["steps"],"resolved_steps":prepared["steps"],"url":prepared["url"],"data_site":butler_runtime::browser::site_scope(prepared["url"].as_str().unwrap_or("")).ok(),"site":scope,"mode":mode,"always_confirm":always,"merchant_site":if payment { prepared["merchant_site"].clone() } else { Value::Null },"commit":commit,"allow_site":if allow_site { Some("payment") } else { None }})
 }
 /// The act's authority target: the page's site under its tab profile.
 fn act_scope(prepared: &Value) -> String {

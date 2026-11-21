@@ -5,7 +5,6 @@ use butler_core::json::JsonDocument;
 use butler_core::tool_protocol::ToolName;
 use butler_turn::btcc::{GuidedInvocation, ModelRoundToolCall, ToolExecutionError};
 
-const OPEN_IN_TABS: &str = "Open the useful results with browser_open {results:[ids]}, then read each tab with browser_read {tab}; read different tabs in one round.";
 const READ_URLS: &str =
     "Read the useful results with web_read {url}; read different pages in one round.";
 
@@ -75,12 +74,7 @@ async fn execute_mode(
             .as_array()
             .is_some_and(|items| !items.is_empty())
     {
-        let next = if owner.browser_available() {
-            OPEN_IN_TABS
-        } else {
-            READ_URLS
-        };
-        result["next"] = Value::String(next.into());
+        result["next"] = Value::String(READ_URLS.into());
     }
     settle(owner, approved, &result).await?;
     // Search results are the turn's provenance by their ids (the web session
@@ -109,35 +103,12 @@ async fn read_page(
     if call.name != ToolName::WebRead && call.name != ToolName::BrowserRead {
         return Ok(Ok(None));
     }
-    if call.name == ToolName::BrowserRead
-        && arguments["tab"].as_str().is_none()
-        && arguments["url"].as_str().is_none()
-    {
+    if call.name == ToolName::BrowserRead && arguments["tab"].as_str().is_none() {
         return Ok(Err(
-            json!({"ok":false,"error":{"code":"tab_or_url_required","message":"browser_read needs a tab or a url."}}),
+            json!({"status":"not_dispatched","reason":"tab_required","recovery":"Read a page by URL with web_read; browser_read reads a tab you opened to operate."}),
         ));
     }
-    let live =
-        super::super::browser::live_page(owner, invocation, arguments, call, occurrence, executor)
-            .await?;
-    if call.name == ToolName::BrowserRead
-        && matches!(live, Ok(None))
-        && let Some(url) = arguments["url"].as_str()
-    {
-        let tab = super::super::browser::navigation::open_for_read(
-            owner, invocation, call, occurrence, url,
-        )
-        .await?;
-        match tab {
-            Ok(tab) => arguments["tab"] = json!(tab),
-            Err(result) => return Ok(Err(result)),
-        }
-        return super::super::browser::live_page(
-            owner, invocation, arguments, call, occurrence, executor,
-        )
-        .await;
-    }
-    Ok(live)
+    super::super::browser::live_page(owner, invocation, arguments, call, occurrence, executor).await
 }
 
 /// URLs explicitly supplied by the user are trusted only for this turn.

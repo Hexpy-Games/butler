@@ -1,5 +1,5 @@
 import { pendingAsksBridgeInput } from "./pendingAsksBridge.ts";
-import type { PendingAsksBridge } from "../../../shared/pending-asks-contracts.ts";
+import type { PendingAsksBridge } from "../../../../../butler-protocol/src/pending-asks-contracts.ts";
 import { canonBridgeInput } from "./canonBridge.ts";
 import { taskGraphBridgeInput } from "./taskGraphBridge.ts";
 import { appCopy } from "./copy.ts";
@@ -382,6 +382,22 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   if (method === "POST" && url.pathname === "/setup/chatgpt-account/sign-out") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "signOutChatGpt"));
+  }
+  if (method === "GET" && url.pathname === "/setup/butler-account") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getButlerAccount"));
+  }
+  if (method === "POST" && url.pathname === "/setup/butler-account") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "postButlerAccount", parseBody(options.body)));
+  }
+  if (method === "DELETE" && url.pathname === "/setup/butler-account") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "signOutButlerAccount"));
+  }
+  if (method === "GET" && url.pathname === "/setup/butler-account/devices") {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "listButlerAccountDevices"));
+  }
+  const accountDevice = url.pathname.match(/^\/setup\/butler-account\/devices\/([^/]+)$/u);
+  if (method === "DELETE" && accountDevice) {
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "revokeButlerAccountDevice", { id: decodeURIComponent(accountDevice[1]!) }));
   }
   if (method === "GET" && url.pathname === "/setup/butler-vault") {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "getButlerVault"));
@@ -967,39 +983,15 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
     return await callBridge<T>(bridge, "listAutomations", { targetSessionId: url.searchParams.get("target_session_id") ?? undefined });
   }
   if (method === "POST" && url.pathname === "/automations") {
-    const body = parseBody(options.body);
-    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "createAutomation", {
-      title: body.title,
-      promptBody: body.prompt_body,
-      targetSessionId: body.target_session_id,
-      intervalSeconds: body.interval_seconds,
-      accessMode: body.access_mode,
-      model: body.model,
-      schedule: body.schedule,
-      scheduleType: body.schedule_type,
-      runAt: body.run_at,
-      startAt: body.start_at,
-    }));
+    return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "createAutomation", parseBody(options.body)));
   }
   const automationMatch = url.pathname.match(/^\/automations\/([^/]+)$/);
   if (automationMatch && method === "GET") {
     return await callBridge<T>(bridge, "getAutomation", { automationId: decodeURIComponent(automationMatch[1]) });
   }
   if (automationMatch && method === "PATCH") {
-    const body = parseBody(options.body);
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "updateAutomation", {
-      automationId: decodeURIComponent(automationMatch[1]),
-      title: body.title,
-      promptBody: body.prompt_body,
-      targetSessionId: body.target_session_id,
-      intervalSeconds: body.interval_seconds,
-      state: body.state,
-      accessMode: body.access_mode,
-      model: body.model,
-      schedule: body.schedule,
-      scheduleType: body.schedule_type,
-      runAt: body.run_at,
-      startAt: body.start_at,
+      ...parseBody(options.body), automationId: decodeURIComponent(automationMatch[1]),
     }));
   }
   if (automationMatch && method === "DELETE") {

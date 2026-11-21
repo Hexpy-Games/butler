@@ -131,6 +131,7 @@ impl Capabilities {
             "list_skills" => Some(list_skills::definition()),
             "load_skill" => Some(skill_tools::load_definition()),
             "read_skill_file" => Some(skill_tools::read_definition()),
+            "save_skill" => Some(skill_tools::save_definition()),
             _ => None,
         }
     }
@@ -148,6 +149,7 @@ impl Capabilities {
             "list_skills" => list_skills::execute(&self.skills, input).await,
             "load_skill" => skill_tools::load(&self.skills, input).await,
             "read_skill_file" => skill_tools::read(&self.skills, &self.files, input).await,
+            "save_skill" => skill_tools::save(&self.skills, input).await,
             _ => Err(CapabilityError::new("unknown_capability")),
         }
     }
@@ -161,6 +163,7 @@ impl Capabilities {
             "list_skills",
             "load_skill",
             "read_skill_file",
+            "save_skill",
         ]
     }
 }

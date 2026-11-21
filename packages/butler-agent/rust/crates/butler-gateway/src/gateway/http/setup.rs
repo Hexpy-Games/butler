@@ -1,5 +1,7 @@
 //! First-run setup routes (#230):
 //!
+//! - `GET`/`POST`/`DELETE /setup/butler-account`
+//! - `GET /setup/butler-account/devices`, `DELETE /setup/butler-account/devices/{id}`
 //! - `GET /setup/readiness`, `POST /setup/readiness/retry`
 //! - `POST /setup/memory-model` (`{enabled}`: the persisted memory-model choice)
 //! - `GET /setup/local-model-servers`
@@ -19,7 +21,9 @@ use axum::{
 };
 use serde::{Serialize, de::DeserializeOwned};
 
-use super::{HttpError, HttpState, json, read_body_with_limit, subsessions::decode_component};
+use super::{
+    HttpError, HttpState, butler_account, json, read_body_with_limit, subsessions::decode_component,
+};
 use crate::gateway::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
@@ -83,6 +87,11 @@ pub(super) async fn route(
         (&Method::POST, "/setup/chatgpt-account/notice") => {
             let input = body(request).await?;
             envelope(StatusCode::OK, setup.chatgpt_notice(input).await?)
+        }
+        (_, path)
+            if path == "/setup/butler-account" || path.starts_with("/setup/butler-account/") =>
+        {
+            butler_account::route(&setup, request, path).await
         }
         (_, path) if path == "/setup/butler-vault" || path.starts_with("/setup/butler-vault/") => {
             vault_route(&setup, request, uri.path()).await
@@ -227,7 +236,7 @@ async fn oauth_flow_route(
 }
 
 /// The JSON body as `T`.
-async fn body<T: DeserializeOwned>(request: Request<Body>) -> Result<T, HttpError> {
+pub(super) async fn body<T: DeserializeOwned>(request: Request<Body>) -> Result<T, HttpError> {
     let bytes = read_body_with_limit(request.into_body(), MAX_SETUP_BODY).await?;
     parse(&bytes)
 }
@@ -253,7 +262,7 @@ fn parse<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, HttpError> {
     })
 }
 
-fn envelope<T: Serialize>(status: StatusCode, data: T) -> Result<Response, HttpError> {
+pub(super) fn envelope<T: Serialize>(status: StatusCode, data: T) -> Result<Response, HttpError> {
     json(
         status,
         ApiEnvelope {
@@ -263,6 +272,6 @@ fn envelope<T: Serialize>(status: StatusCode, data: T) -> Result<Response, HttpE
     )
 }
 
-fn not_found() -> HttpError {
+pub(super) fn not_found() -> HttpError {
     HttpError::public(404, "not_found", "Route not found.")
 }

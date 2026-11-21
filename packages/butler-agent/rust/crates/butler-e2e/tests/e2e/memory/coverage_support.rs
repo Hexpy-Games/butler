@@ -7,8 +7,8 @@
     reason = "test fixture assertions"
 )]
 
-use super::memory_response;
 use super::memory_stubs::graph_path;
+use super::{memory_calls_response, memory_response};
 use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
@@ -20,6 +20,9 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+
+/// The stub turn that recalls every variant at once (see [`compare`]).
+const ALL_VARIANTS: &str = "Coverage recall over every variant.";
 
 /// A recall the stub model issues for one fixed prompt.
 pub(super) struct Variant {
@@ -41,6 +44,25 @@ pub(super) async fn start(id: &str, variants: &[Variant]) -> Result<Scenario, Ha
         answer.request.key.user_request = variant.prompt.into();
         added.extend([call, answer]);
     }
+    let calls: Vec<Value> = variants
+        .iter()
+        .enumerate()
+        .map(|(index, variant)| {
+            json!({"type":"function_call","id":format!("fc_coverage_{index}"),
+            "call_id":format!("call_coverage_{index}"),"name":"recall_memory","status":"completed",
+            "arguments":variant.arguments.to_string()})
+        })
+        .collect();
+    let mut call = cassette.exchanges[0].clone();
+    call.request.key.user_request = ALL_VARIANTS.into();
+    call.response = memory_calls_response(&calls);
+    let mut answer = cassette.exchanges[1].clone();
+    answer.request.key.user_request = ALL_VARIANTS.into();
+    answer.request.key.round = ["function_call", "function_call_output"]
+        .into_iter()
+        .flat_map(|kind| std::iter::repeat_n(kind.to_owned(), calls.len()))
+        .collect();
+    added.extend([call, answer]);
     cassette.exchanges.extend(added);
     let s = Setup::new(id)?
         .stub_cassette(cassette)
@@ -157,17 +179,23 @@ async fn settle_jobs(data: &Path, membership: &str, sessions: &[&str]) {
     );
     tokio::time::timeout(Duration::from_secs(180), async {
         loop {
-            let graph_path = graph_path(data).unwrap();
-            let ready = mirror_current(data)
-                && super::super::memory_idle::catchup_checkpoint_current(data, &graph_path)
-                && state(&graph(data), "canonical_catchup_change_seq").as_deref()
-                    == Some(canonical_position(data).1.to_string().as_str())
-                && graph(data)
-                    .query_row(&incomplete, rusqlite::params_from_iter(sessions), |row| {
-                        row.get::<_, i64>(0)
-                    })
-                    .unwrap()
-                    == 0;
+            // The memory generation is created after start; until then nothing has settled.
+            let ready = data
+                .join("cognition/memory/active-generation.json")
+                .exists()
+                && {
+                    let graph_path = graph_path(data).unwrap();
+                    mirror_current(data)
+                        && super::super::memory_idle::catchup_checkpoint_current(data, &graph_path)
+                        && state(&graph(data), "canonical_catchup_change_seq").as_deref()
+                            == Some(canonical_position(data).1.to_string().as_str())
+                        && graph(data)
+                            .query_row(&incomplete, rusqlite::params_from_iter(sessions), |row| {
+                                row.get::<_, i64>(0)
+                            })
+                            .unwrap()
+                            == 0
+                };
             if ready {
                 return;
             }
@@ -301,9 +329,38 @@ pub(super) fn pending(output: &Value) -> bool {
         .any(|code| code == "ingestion_pending")
 }
 
-/// Recalls every variant (each from its own chat) through the mirror and
-/// through a full scan of the same unchanged stores; returns whether each
-/// reported pending ingestion.
+/// One stub turn in `chat_id` that recalls every variant; the outputs in call
+/// order. The agent renames reused call ids within a chat, so order is the key.
+async fn recall_all(s: &Scenario, chat_id: &str, count: usize) -> Result<Vec<Value>, HarnessError> {
+    let start = s.provider()?.request_count();
+    let started = std::time::Instant::now();
+    let (_, turn) = s.turn(chat_id, ALL_VARIANTS).await?;
+    eprintln!(
+        "MEM-COVERAGE recall_turn_ms={}",
+        started.elapsed().as_millis()
+    );
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let outputs: Vec<Value> = s
+        .provider()?
+        .requests_since(start)
+        .iter()
+        .filter_map(|request| request["input"].as_array())
+        .flatten()
+        .filter(|item| item["type"] == "function_call_output")
+        .map(|item| serde_json::from_str(item["output"].as_str().unwrap()))
+        .collect::<Result<_, _>>()?;
+    assert_eq!(outputs.len(), count, "one output per recall call");
+    for payload in &outputs {
+        assert_eq!(payload["ok"], true, "{payload}");
+    }
+    Ok(outputs)
+}
+
+/// Recalls every variant through the mirror and through a full scan of the
+/// same stores, one turn per reading; returns whether each reported pending
+/// ingestion. Every reading turn adds a turn that "every chat" covers, so a
+/// first turn makes each reading see at least one unprojected recall turn;
+/// one more such turn then changes no coverage.
 pub(super) async fn compare(
     s: &Scenario,
     variants: &[Variant],
@@ -311,19 +368,20 @@ pub(super) async fn compare(
     step: &str,
 ) -> Result<Vec<bool>, HarnessError> {
     let data = &s.sandbox.data;
+    recall_all(s, &chats[0], variants.len()).await?;
+    let incremental = recall_all(s, &chats[0], variants.len()).await?;
+    let phase = hide_mirror(data);
+    let full = recall_all(s, &chats[1], variants.len()).await?;
+    show_mirror(data, &phase);
     let mut pending_by_variant = Vec::new();
-    for (variant, chat) in variants.iter().zip(chats) {
-        let (incremental, _) = recall_in(s, chat, variant).await?;
-        let phase = hide_mirror(data);
-        let (full, _) = recall_in(s, chat, variant).await?;
-        show_mirror(data, &phase);
+    for ((variant, incremental), full) in variants.iter().zip(&incremental).zip(&full) {
         assert_eq!(
-            coverage(&incremental),
-            coverage(&full),
+            coverage(incremental),
+            coverage(full),
             "{step}: {} mirror coverage differs from the full scan",
             variant.prompt
         );
-        pending_by_variant.push(pending(&incremental));
+        pending_by_variant.push(pending(incremental));
     }
     eprintln!("MEM-COVERAGE {step} pending={pending_by_variant:?}");
     Ok(pending_by_variant)

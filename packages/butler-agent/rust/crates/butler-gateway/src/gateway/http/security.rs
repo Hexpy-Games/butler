@@ -1,17 +1,21 @@
 //! Request admission for the App gateway, in order: Host check, Origin
 //! allowlist, CORS preflight (before auth), then one credential: the bearer
 //! token, the browser-session cookie from a connection code (used only by
-//! the Butler page itself, see [`fetch_metadata`]), or a signed URL for one
-//! message file.
+//! the Butler page itself, see [`fetch_metadata`]), a paired phone's device
+//! token, or a signed URL for one message file.
 //!
 //! The Host/Origin policy and the token can change while the gateway runs
 //! (Settings → Security): each request reads the current ones once, and
 //! keeps the key set it was authorized under ([`KeySet`]).
 
 mod browser_session;
+mod device_pair;
 mod devices;
 pub(super) use connect::connect_request;
-pub(super) use devices::DeviceRegistry;
+pub(super) use device_pair::{
+    DEVICE_PAIR_PATH, DEVICE_SELF_PATH, pair_device_request, revoke_self_request,
+};
+pub(super) use devices::{DeviceAuth, DeviceRegistry};
 mod client_place;
 mod connect;
 mod connect_page;
@@ -62,6 +66,8 @@ pub(super) enum Access {
     Bearer,
     /// The session cookie a redeemed connection code set.
     BrowserSession,
+    /// `Authorization: Bearer bdt_…`: a paired device's own token.
+    DeviceToken,
     /// A valid signature for this one message-file URL.
     SignedResource,
 }
@@ -71,7 +77,7 @@ impl Access {
     pub(super) fn receives_signed_urls(self) -> bool {
         matches!(
             self,
-            Self::AuthDisabled | Self::Bearer | Self::BrowserSession
+            Self::AuthDisabled | Self::Bearer | Self::BrowserSession | Self::DeviceToken
         )
     }
 }
@@ -304,7 +310,7 @@ impl GatewaySecurity {
         &self,
         request: &Request<Body>,
         origin: &RequestOrigin,
-        device: Option<&CancellationToken>,
+        device: Option<&DeviceAuth>,
     ) -> Result<Admission, HttpError> {
         let (method, uri, headers) = (request.method(), request.uri(), request.headers());
         let now = SystemTime::now();
@@ -314,8 +320,8 @@ impl GatewaySecurity {
                 access,
                 keys: KeySet(
                     keyed.clone(),
-                    if access == Access::BrowserSession {
-                        device.cloned()
+                    if matches!(access, Access::BrowserSession | Access::DeviceToken) {
+                        device.map(|device| device.closed.clone())
                     } else {
                         None
                     },
@@ -333,7 +339,7 @@ impl GatewaySecurity {
             now,
             ui_page: super::router::serves_ui(request),
         };
-        match self.credential(&keyed, &request, device.is_some()) {
+        match self.credential(&keyed, &request, device) {
             Ok(access) => Ok(grant(access)),
             // A navigation without a usable session (none, or one another
             // local page's link carried) gets the connection-code screen.
@@ -350,7 +356,7 @@ impl GatewaySecurity {
         &self,
         keyed: &Keyed,
         request: &CredentialRequest<'_>,
-        device: bool,
+        device: Option<&DeviceAuth>,
     ) -> Result<Access, Denial> {
         if !self.auth.required {
             return Ok(Access::AuthDisabled);
@@ -367,7 +373,10 @@ impl GatewaySecurity {
         if auth::bearer_matches(headers, token) {
             return Ok(Access::Bearer);
         }
-        let session_refusal = if device {
+        if device.is_some_and(|device| device.token) {
+            return Ok(Access::DeviceToken);
+        }
+        let session_refusal = if device.is_some_and(|device| !device.token) {
             match fetch_metadata::session_use(fetch_metadata::SessionRequest {
                 method,
                 headers,

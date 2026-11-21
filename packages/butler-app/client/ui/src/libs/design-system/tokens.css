@@ -782,6 +782,11 @@
   --icon-size-xl: 24px;
   --icon-size-2xl: 32px;
   --icon-size-3xl: 48px;
+
+  /* QR codes stay dark on white in every theme so cameras read them. */
+  --qr-size: 192px;
+  --qr-background: var(--neutral-white);
+  --qr-module: var(--neutral-light-text-primary);
   --z-content: 1;
   --sidebar-row-height: 30px;
   --sidebar-action-size: 24px;
@@ -828,7 +833,7 @@
   --tinted-glass-filter: saturate(1.35) blur(var(--tinted-glass-blur));
   /* ManagementPage calm background: a veil in the page tone over the wallpaper. */
   --management-page-veil: rgba(255, 255, 255, 0.4);
-  --user-message-bg: rgba(244, 245, 247, 0.92);
+  --user-message-bg: var(--grayscale-03);
   --danger-bg: rgba(255, 245, 244, 0.86);
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);
@@ -1127,7 +1132,7 @@
     --typo-h4-size: 20px;
     --typo-h5-size: 18px;
     --typo-h6-size: 16px;
-    --typo-body-size: 16px;
+    --typo-body-size: 17px;
     --typo-caption-size: 14px;
     --typo-label-size: 15px;
     --typo-code-size: 15px;
@@ -1144,7 +1149,7 @@
     --typo-h4-line-height: 28px;
     --typo-h5-line-height: 26px;
     --typo-h6-line-height: 24px;
-    --typo-body-line-height: 24px;
+    --typo-body-line-height: 26px;
     --typo-caption-line-height: 20px;
     --typo-label-line-height: 22px;
     --typo-code-line-height: 22px;
@@ -1526,7 +1531,7 @@
   --tinted-glass-filter: saturate(1.35) blur(var(--tinted-glass-blur));
   /* ManagementPage calm background: a veil in the page tone over the wallpaper. */
   --management-page-veil: rgba(255, 255, 255, 0.4);
-  --user-message-bg: rgba(244, 245, 247, 0.92);
+  --user-message-bg: var(--grayscale-03);
   --danger-bg: rgba(255, 245, 244, 0.86);
   --danger-banner-bg: rgba(255, 239, 238, 0.96);
   --worker-panel-bg: rgba(241, 242, 244, 0.96);

@@ -21,7 +21,7 @@ export function bindUse(browser, use, tab) {
   holdUse(browser, use);
   browser.publish();
 }
-function activeCalls(browser, tab) {
+export function activeCalls(browser, tab) {
   return [...browser.uses.values()].some(use => use.tab === tab.id && tab.owner === `conversation:${use.session}`);
 }
 function settlePointer(browser, tab) {
@@ -73,16 +73,22 @@ export function finishUse(browser, session, turn, closeReadTabs = false) {
     if (tab.pausedTurns?.delete(turn) && !tab.pausedTurns.size) tab.pausedTurns = null;
     if (affected.has(tab.id) && !tabInUse(browser, tab)) tab.pointer = null;
   }
-  if (closeReadTabs) for (const tab of [...browser.tabs.values()]) if (readOnlyTab(browser, tab, session, turn)) browser.close(tab.id);
+  // A turn's end closes the tabs it opened and read; a delegated turn also closes the ones it only opened.
+  for (const tab of [...browser.tabs.values()]) if ((closeReadTabs || tab.wasRead) && readOnlyTab(browser, tab, session, turn)) browser.close(tab.id);
   browser.publish();
   return released;
 }
 /** An agent tab the finished turn opened and only read: no step acted in it or
  * handed it over, nobody has viewed it, and nothing else holds it. */
 function readOnlyTab(browser, tab, session, turn) {
+  return idleReadTab(browser, tab, session, turn) && !tabInUse(browser, tab);
+}
+/** A tab this turn opened and only read, with no call on it now and no other turn holding it. */
+export function idleReadTab(browser, tab, session, turn) {
   return tab.owner === `conversation:${session}` && tab.openedTurn === turn && tab.agent && tab.holder === "agent" && !tab.acted
     && !tab.viewed && !tab.userViewed && !tab.sticky && !tab.preview && tab.profile !== "signed_in" && !tab.dialog && !tab.waiting
-    && !tab.pausedTurns && !tab.busy && !tab.closing && !tabInUse(browser, tab);
+    && !tab.pausedTurns && !tab.busy && !tab.closing && !activeCalls(browser, tab)
+    && [...(browser.holds.get(tab.id)?.keys() ?? [])].every(held => held === turn);
 }
 export function resetUse(browser) {
   browser.holds.clear();

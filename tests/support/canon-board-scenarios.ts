@@ -3,7 +3,7 @@ import { selectBoardPlan } from "./canon-board-selector.ts";
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { CanonOverview, EpicDetail, PlanDetail, CanonStatus } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { CanonOverview, EpicDetail, PlanDetail, CanonStatus } from "../../packages/butler-protocol/src/canon-contracts.ts";
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 export async function seedCanonBoard(server: NativeAppServerHandle): Promise<{ projectId: string; planId: string; emptyPlanId: string; singlePlanId: string }> {
   const { project } = await server.api<{ project: { id: string } }>("/projects", post({ source: "scratch", display_name: "캐논 보드" }));

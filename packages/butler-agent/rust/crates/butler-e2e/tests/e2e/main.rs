@@ -58,6 +58,7 @@ mod browser_tab_claims;
 mod browser_tool_args;
 mod browser_usage;
 mod browsing_settings;
+mod butler_account;
 mod cassette_lint;
 mod catalog_provider_truth;
 mod chatgpt_plan_usage;
@@ -281,6 +282,7 @@ mod project_artifacts;
 mod project_folder_browser;
 mod project_instructions;
 mod project_reference;
+mod project_source;
 mod project_workspace;
 mod schedule_handoff;
 mod session_folder;
@@ -296,6 +298,7 @@ mod transcript_history;
 mod memory_reset_support;
 
 mod skills_cleanup;
+mod skills_save;
 mod storage_concurrency_support;
 
 mod task_graphs;

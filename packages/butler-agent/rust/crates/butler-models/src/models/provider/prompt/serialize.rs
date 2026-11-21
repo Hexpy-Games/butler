@@ -38,12 +38,12 @@ pub(super) fn body(
             None,
         ),
         Carrier::Anthropic => (
-            compatible::anthropic(request, config, &prompt, reasoning),
+            compatible::anthropic(request, config, &prompt, reasoning)?,
             None,
             None,
         ),
         Carrier::Gemini => (
-            compatible::gemini(request, config, &prompt, reasoning),
+            compatible::gemini(request, config, &prompt, reasoning)?,
             None,
             None,
         ),

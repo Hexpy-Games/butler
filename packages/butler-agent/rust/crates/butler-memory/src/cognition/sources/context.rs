@@ -9,9 +9,10 @@ use butler_turn::conversation::{
 use super::types::{CognitionSourceError, CognitionSourceRow, PriorPublicContext};
 use crate::cognition::CognitionCode;
 
-const CONTEXT_BYTES: usize = 4 * 1_024;
+const MESSAGE_BYTES: usize = 4 * 1_024;
+const CONTEXT_BYTES: usize = 16 * 1_024;
 
-/// Public messages of the session before the source, bounded to the context budget.
+/// Earlier user messages of the session plus the message right before the source, newest first within the context budget.
 pub fn read_prior_public_context(
     reader: &ConversationSourceReader,
     session_id: &str,
@@ -48,10 +49,12 @@ pub fn read_prior_public_context(
             )
         })
         .collect::<Vec<_>>();
-    let keep_from = eligible.len().saturating_sub(2);
+    let last = eligible.pop();
+    eligible.retain(|message| message.message.role == ConversationRole::User);
+    eligible.extend(last);
     let mut units = Vec::new();
-    for message in eligible.drain(keep_from..) {
-        let text = tail_within_bytes(&message, CONTEXT_BYTES);
+    for message in eligible {
+        let text = tail_within_bytes(&message, MESSAGE_BYTES);
         if !text.is_empty() {
             units.push(PriorPublicContext {
                 ref_id: format!("conversation-message:{}", message.message.id),

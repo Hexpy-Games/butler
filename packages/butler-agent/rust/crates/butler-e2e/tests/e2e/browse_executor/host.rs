@@ -146,6 +146,18 @@ async fn serve(
                 json!({"status":"ok","tab":tab,"completed":1,"steps":[{"status":"completed"}]})
             }
             "tabs.list" => json!({"status":"ok","tabs":tabs.values().collect::<Vec<_>>()}),
+            "tab.close" => {
+                tabs.remove(tab);
+                admin
+                    .send(
+                        Method::POST,
+                        "/internal/browser-host/events",
+                        Some(json!({"tabs":tabs.values().collect::<Vec<_>>()})),
+                        &[],
+                    )
+                    .await?;
+                json!({"status":"ok"})
+            }
             "tab.read" => {
                 let mut passages = String::new();
                 for i in 0..20 {

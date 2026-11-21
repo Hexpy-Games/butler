@@ -203,6 +203,8 @@ export interface ApprovalRequestCopy {
   restartService: string;
   createWorktree: string;
   switchFolder: string;
+  /** A chat's own working folder, shown in place of its internal name. */
+  chatFolder: string;
   /** Any kind this App does not know yet. */
   generic: string;
   /** The line after the examples. */
@@ -261,6 +263,7 @@ interface ConversationCopy {
     workFailed: (state: "retrying" | "failed" | undefined, reasonCode: string | undefined) => string;
     noThanks: string; soundsGood: string;
     created: (action: string) => string; skipped: (action: string) => string;
+    onceAccepted: (title: string) => string; onceSkipped: (title: string) => string;
     continuing: (action: string) => string; paused: (action: string) => string;
     alreadyHandled: string; failed: string;
     dailyAt: (time: string) => string; weekdaysAt: (time: string) => string;
@@ -358,16 +361,12 @@ interface ConversationCopy {
 }
 
 export interface BrowserCopy {
-  contextMenu: {
-    openInNewTab: string; openInButler: string; openInBrowser: (name: string) => string; copyLink: string;
-    copy: string; selectAll: string; paste: string;
-  };
   siteData: { title: string; label: string; description: string; clear: string; confirmTitle: string; confirmMessage: string; items: string; itemList: string; kept: string; cleared: string; failed: string; desktopOnly: string };
   history: { erase: string; title: string; search: string; clear: string; butlerOnly: string; empty: string; hour: string; today: string; week: string; all: string; suggestions: string; pageLabel: string; pageDescription: string; };
   tabCount: string; newTabIn: string; moreTabs: string; tabMoved: string; agentControl: string; handBack: string; stills: string; still: string; stillPending: string; stillUnavailable: string; stillFailure: Record<string, string>;
   title: string; myTabs: string; newTab: string; closeTab: string; address: string; addressPlaceholder: string; back: string; forward: string;
   reload: string; stop: string; loading: string; crashed: string; empty: string; updateRequired: string; restartRequired: string; failed: string;
-  openOutput: string; output: string; show: string; hide: string; active: string; openConversation: string; moveToConversation: string;
+  openOutput: string; output: string; show: string; hide: string; openConversation: string; moveToConversation: string;
   newConversation: string; bringTab: string; resizeChat: string; pick: string; scrap: string; bookmarks: string; bookmarkAdd: string;
   bookmarked: string; manageBookmarks: string; downloads: string; downloading: string; showInFolder: string; more: string; findInPage: string;
   zoom: string; print: string; openExternal: string; settings: string; secure: string; notSecure: string; butlerOutput: string; preview: string;
@@ -383,8 +382,8 @@ export interface BrowserCopy {
   viewAll: string; scrapped: string; scrapsSaved: (count: number) => string; view: string; all: string; elements: string; views: string;
   element: string; viewKind: string; document: string; attach: string; openSource: string; openSourcePage: string; remove: string; archivedClosed: (count: number) => string;
   pageSays: string; authNeeded: string; username: string; password: string; signIn: string; ok: string; cancel: string; leaveTitle: string;
-  stay: string; leave: string; viewInBrowser: string; toolOpen: string; toolAct: string; toolSelection: string; sectionTitle: string; enabled: string;
-  enabledHelp: string; shareSignIn: string; shareSignInHelp: string; signIns: string; signInsHelp: string; addSignIn: string; fillPolicy: string;
+  stay: string; leave: string; viewInBrowser: string; toolOpen: string; toolAct: string; toolSelection: string;
+  shareSignIn: string; shareSignInHelp: string; signIns: string; signInsHelp: string; addSignIn: string; fillPolicy: string;
   ask: string; always: string; never: string; standing: string; lastUsed: string; deletePassword: string; signOutSite: string; revoke: string;
   usedTimes: (count: number) => string; filled: string; askedApproved: string;
   /** The live tab rail beside the conversation (TabRail, LiveTabCard). */
@@ -454,6 +453,84 @@ export interface LogTraceCopy {
   attrs: Record<string, string>;
 }
 
+/** Copy for the mobile app (packages/butler-mobile). Screens add their keys here, in both locales. */
+export interface MobileCopy {
+  appName: string;
+  pair: { title: string; lede: string; choiceLede: string; address: string; code: string; connect: string;
+    scan: string; manual: string; scanHint: string; notPairingQr: string; cameraOff: string; openSettings: string; allowCamera: string;
+    rescan: string; connecting: string;
+    addressInvalid: string; codeInvalid: string; updateApp: string; linkInvalid: string };
+  problems: { invalidCode: string; hostNotAllowed: string; needsPairing: string; versionMismatch: string;
+    notButler: string; unreachable: string; failed: string };
+  localNetwork: { title: string; body: string; retry: string; cancel: string };
+  conversations: {
+    title: string;
+    general: string;
+    expand: (title: string) => string;
+    collapse: (title: string) => string;
+    empty: string;
+    needsAttention: string;
+    working: string;
+    unread: string;
+    reconnecting: string;
+    untitled: string;
+    loadFailed: string;
+  };
+  chat: {
+    copy: string;
+    selectText: string;
+    copied: string;
+    retryFailed: string;
+    attach: string;
+    attachPhoto: string;
+    attachFile: string;
+    uploading: string;
+    uploadFailed: string;
+    model: string;
+    reasoning: string;
+    modelFailed: string;
+    modelUnavailable: string;
+    context: string;
+    close: string;
+    info: string;
+    infoAsks: string;
+    infoWorkspace: string;
+    infoNoWorkspace: string;
+    infoAttachments: string;
+    fileLabel: string;
+    removeAttachment: (name: string) => string;
+    contextUsed: (percent: number) => string;
+
+    placeholder: string;
+    send: string;
+    stop: string;
+    thinking: string;
+    waitingForYou: string;
+    failed: string;
+    cancelled: string;
+    sendFailed: string;
+    stopFailed: string;
+    loadFailed: string;
+    retry: string;
+    earlier: string;
+  };
+  home: { checking: string; connected: string; retry: string; pairAgain: string };
+  settings: {
+    title: string;
+    computer: string;
+    disconnect: string;
+    disconnectTitle: string;
+    disconnectBody: string;
+    cancel: string;
+    pickHour: string;
+    pickMinute: string;
+    checkForUpdates: string;
+    applyUpdateTitle: string;
+    applyUpdateBody: string;
+    version: (version: string, build?: string) => string;
+  };
+}
+
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */
 export interface AppCopy {
   canon: CanonCopy;
@@ -498,6 +575,7 @@ export interface AppCopy {
   taskGraph: TaskGraphCopy;
   lifecycle: LifecycleCopy;
   browser: BrowserCopy;
+  mobile: MobileCopy;
   library: LibraryCopy;
   documents: { title: string; saved: string; editing: string; edited: string; restore: string;
     versions: string; current: string; me: string; butler: string; export: string; markdown: string; pdf: string; moreActions: string; exportMarkdown: string; exportPdf: string;
@@ -693,8 +771,49 @@ export interface AppCopy {
     notificationUpdated: string;
 
   };
+  butlerAccount: {
+    name: string;
+    intro: string;
+    dialogTitle: string;
+    dialogIntro: string;
+    cancel: string;
+    signedIn: string;
+    notSignedIn: string;
+    email: string;
+    sendCode: string;
+    code: string;
+    codeSent: (email: string) => string;
+    changeEmail: string;
+    resend: string;
+    resent: string;
+    signIn: string;
+    account: string;
+    plan: string;
+    renews: (date: string) => string;
+    plans: { free: string; plus: string; pro: string; enterprise: string; [plan: string]: string };
+    signOut: string;
+    signOutConfirm: string;
+    signedOut: string;
+    devices: string;
+    thisDevice: string;
+    platforms: { macos: string; windows: string; linux: string; ios: string; android: string; [platform: string]: string };
+    revoke: string;
+    revokeDevice: (name: string) => string;
+    revokeConfirm: (name: string) => string;
+    revoked: string;
+    working: string;
+    codeInvalid: string;
+    codeExpired: string;
+    tooSoon: string;
+    unavailableNow: string;
+    offline: string;
+    emailInvalid: string;
+    failed: string;
+    loadFailed: string;
+  };
   butlerVault: {
     passwordIntro: string;
+    unsignedBuild: string;
     masterPassword: string;
     confirmPassword: string;
     currentPassword: string;
@@ -1278,6 +1397,9 @@ export interface AppCopy {
     paymentOffNotify: string;
     browser: { title: string; signin: string; signinDescription: string; payment: string; paymentDescription: string; unavailable: string };
     saveFailed: string;
+    /** Toast after 지금 실행 / 일시정지 / 재개, by action. */
+    actionDone: Record<"run" | "pause" | "resume", string>;
+    actionFailed: Record<"run" | "pause" | "resume", string>;
     /** Inline messages for a save the gateway refused (400). */
     errors: {
       title: string;
@@ -1401,6 +1523,7 @@ export interface AppCopy {
       usage: string;
       logs: string;
       personalization: string;
+      account: string;
       memory: string;
       privacy: string;
       connections: string;
@@ -1422,6 +1545,7 @@ export interface AppCopy {
       usage: string;
       logs: string;
       personalization: string;
+      account: string;
       memory: string;
       privacy: string;
       connections: string;
@@ -1443,6 +1567,7 @@ export interface AppCopy {
       usage: string[];
       logs: string[];
       personalization: string[];
+      account: string[];
       memory: string[];
       privacy: string[];
       connections: string[];
@@ -1881,6 +2006,8 @@ export interface AppCopy {
       copied: string;
       code: string;
       pairDevice: string;
+      pairingQr: string;
+      scanWithPhone: string;
       expiresIn: (seconds: number) => string;
       invalidated: string;
       paired: string;

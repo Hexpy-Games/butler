@@ -44,7 +44,7 @@ pub(super) fn setup_with_provider_delay(
     memory_stubs::extraction(&mut cassette, ASK)?;
     let setup = Setup::new(name)?;
     if name == "MEM-DAILY-BATCH" {
-        memory_stubs::daily_briefing(&mut cassette, &setup.sandbox.data)?;
+        memory_stubs::daily_persona(&setup.sandbox.data)?;
     }
     let setup = setup.stub_cassette(cassette).placeholder("NONCE", &code);
     assert!(
@@ -101,6 +101,30 @@ pub(super) async fn recall(s: &Scenario, chat: &str, ask: &str) -> Result<Value,
     let result: Value = serde_json::from_str(output)?;
     assert_eq!(result["ok"], true, "{output}");
     Ok(result)
+}
+
+/// Holds the model's first reply to `ask` until this Agent start has loaded
+/// its embedding worker. Admitting the turn starts that load (turn prefetch),
+/// which a real provider's reply latency covers; the stub replies at once, so
+/// without the hold the first recall after a start would depend on how fast
+/// this host loads the model.
+pub(super) fn reply_after_load<'a>(
+    s: &'a Scenario,
+    ask: &str,
+) -> Result<impl std::future::Future<Output = Result<(), HarnessError>> + 'a, HarnessError> {
+    let reply = s.provider()?.hold_next_reply(ask);
+    Ok(async move {
+        while !s
+            .agent
+            .current_logs()
+            .await?
+            .contains("[embedding-worker] initialized")
+        {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        reply.release();
+        Ok(())
+    })
 }
 
 fn loaded(s: &Scenario) -> Result<(), HarnessError> {
@@ -255,6 +279,8 @@ async fn mem_daily_window_defers_vectors_until_on_demand_load() -> Result<(), Ha
     butler_e2e::gate!();
     let (setup, remember, _) = setup("MEM-DAILY-BATCH")?;
     let mut s = setup.start().await?;
+    s.provider()?
+        .set_chat_responder(memory_stubs::daily_briefing);
     let pending = ordinary(&s, &remember).await?;
     s.agent
         .launch

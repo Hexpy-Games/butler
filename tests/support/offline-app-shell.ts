@@ -1,6 +1,7 @@
 // The reads the App shell issues on every surface (global dialogs, session
 // header, composer, sidebar), answered offline with the gateway's empty state
-// for a signed-in install. Each body is checked against the client's own
+// for a signed-in install (a feature that is off by default answers with its 404).
+// Each body is checked against the client's own
 // response type, so a shape change fails typecheck. Smokes that serve the
 // built App without a gateway route these here and refuse everything else
 // through `refuseUnrouted`, so a new read fails by name instead of drifting
@@ -9,9 +10,9 @@ import type { Route } from "playwright";
 import type { CanonGrant } from "../../packages/butler-app/client/ui/src/app/canonTrust.ts";
 import type { AuthorityRequestsTransportView, ChatGptAccountView, ConversationPermissionView, NewChatBriefingView, PersonalizationView,
   SessionQueueView } from "../../packages/butler-app/client/ui/src/app/types.ts";
-import type { CanonOverview, CanonSidebar } from "../../packages/butler-app/client/shared/canon-contracts.ts";
-import type { CanonQueueView } from "../../packages/butler-app/client/shared/canon-queue-contracts.ts";
-import type { SessionPendingAsks } from "../../packages/butler-app/client/shared/pending-asks-contracts.ts";
+import type { CanonOverview, CanonSidebar } from "../../packages/butler-protocol/src/canon-contracts.ts";
+import type { CanonQueueView } from "../../packages/butler-protocol/src/canon-queue-contracts.ts";
+import type { SessionPendingAsks } from "../../packages/butler-protocol/src/pending-asks-contracts.ts";
 
 const at = "2026-10-25T09:00:00Z";
 
@@ -44,9 +45,15 @@ export function appShellRead(url: URL, method: string): unknown {
   return undefined;
 }
 
-/** Records a request no route answers and refuses it the way the gateway refuses an unknown path. */
+/** App shell reads of features that are off by default: the gateway's own 404 code for each. */
+const OFF_BY_DEFAULT: Record<string, string> = { "/setup/butler-account": "butler_account_disabled" };
+
+/** Answers a read of a feature that is off by default with the gateway's own refusal; records any
+ * other request no route answers and refuses it the way the gateway refuses an unknown path. */
 export function refuseUnrouted(route: Route, unrouted: string[]) {
   const url = new URL(route.request().url());
+  const off = route.request().method() === "GET" ? OFF_BY_DEFAULT[url.pathname] : undefined;
+  if (off) return route.fulfill({ status: 404, json: { ok: false, error: { code: off } } });
   unrouted.push(`${route.request().method()} ${url.pathname}`);
   return route.fulfill({ status: 404, json: { ok: false, error: { code: "not_found" } } });
 }

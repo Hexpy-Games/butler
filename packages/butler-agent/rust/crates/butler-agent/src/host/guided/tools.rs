@@ -79,6 +79,8 @@ pub(crate) struct GuidedToolBinding {
     pub access_mode: butler_turn::btcc::AccessMode,
     pub ledger_tracking: bool,
     pub current_user_message: String,
+    /// The user's own words: the message itself, or a Steward or Worker packet's `user_request`.
+    pub trusted_user_message: String,
     pub memory: CanonicalMemoryReadBinding,
     pub project_id: Option<String>,
     pub project_folder: Option<PathBuf>,
@@ -279,7 +281,12 @@ impl GuidedTools {
         binding: GuidedToolBinding,
     ) -> Result<Self, BtccError> {
         binding.validate_surface()?;
-        turn_guard::restore_web(&web_session, &binding.current_user_message, restored);
+        turn_guard::restore_web(
+            &web_session,
+            &binding.current_user_message,
+            &binding.trusted_user_message,
+            restored,
+        );
         Ok(Self {
             capabilities,
             command,
@@ -381,14 +388,9 @@ impl ToolPort for GuidedTools {
             }
             self.resume_pool().await?;
             let mut tools = permission_surface::surface(self, invocation.turn).await?;
-            // One page reader per round, chosen from the live host: open tabs while
-            // the Butler browser is attached, urls otherwise.
-            let withheld = if self.browser_available() {
-                "web_read"
-            } else {
-                "browser_read"
-            };
-            tools.retain(|tool| tool.name != withheld);
+            if !self.browser_available() {
+                tools.retain(|tool| tool.name != "browser_read");
+            }
             let encoded = serde_json::to_string(&tools).map_err(|error| {
                 BtccError::relayed("guided_tool_surface_invalid", error.to_string())
                     .with_source(error)

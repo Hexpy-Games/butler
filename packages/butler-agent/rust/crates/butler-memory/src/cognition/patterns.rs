@@ -81,7 +81,14 @@ pub trait PatternInputSource: Send + Sync {
     fn learning_depth(&self) -> PatternFuture<'_, Option<String>>;
     /// Resolve consolidation model, locale, timezone and proactive level.
     fn settings(&self) -> PatternFuture<'_, PatternInput>;
-    /// At most 200 user events, chronologically, starting at the given offset.
+    /// The run's shared suggestion context, built once per run.
+    fn suggestion_context<'a>(
+        &'a self,
+        run_id: &'a str,
+        locale: &'a str,
+        now: DateTime<Utc>,
+    ) -> PatternFuture<'a, std::sync::Arc<serde_json::Value>>;
+    /// At most 200 user-written messages, chronologically, starting at the given offset.
     fn page(&self, since: DateTime<Utc>, offset: usize) -> PatternFuture<'_, Vec<PatternEvent>>;
 }
 /// Current settings for one extraction run.
@@ -98,6 +105,10 @@ pub struct PatternInput {
     pub model: String,
     /// Catalog-resolved reasoning effort.
     pub reasoning: ReasoningEffort,
+    /// The user's conversation model and effort for suggestion calls; None skips suggestions.
+    pub suggestion_model: Option<(String, ReasoningEffort)>,
+    /// The active persona text; proposals word `message` and `title` in it. None keeps neutral wording.
+    pub persona: Option<String>,
 }
 fn ensure_active(token: &CancellationToken) -> Result<(), PatternError> {
     if token.is_cancelled() {

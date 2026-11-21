@@ -25,6 +25,7 @@ mod drift;
 mod hedge;
 pub(crate) mod hedge_v2;
 pub(super) mod profile;
+mod recall;
 mod siwc;
 
 const IGNORE: &str = "";
@@ -207,7 +208,10 @@ async fn live_03_tool_read() -> Result<(), HarnessError> {
         return Ok(());
     };
     let n = nonce();
-    fs::write(s.sandbox.data.join("notes.txt"), format!("secret: {n}\n"))?;
+    fs::write(
+        s.sandbox.chat_folder("general")?.join("notes.txt"),
+        format!("secret: {n}\n"),
+    )?;
     let (_, turn) = live_turn(
         &s,
         "general",

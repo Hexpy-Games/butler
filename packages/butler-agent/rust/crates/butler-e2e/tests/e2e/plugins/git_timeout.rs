@@ -47,7 +47,17 @@ async fn hanging_git_times_out_without_blocking_configuration_writes() -> Result
         );
         let elapsed = start.elapsed();
         // Always release the transport, including on the unfixed host, before asserting.
-        let eof = tokio::time::timeout(Duration::from_secs(8), socket.read(&mut request)).await;
+        let eof = tokio::time::timeout(Duration::from_secs(8), async {
+            // The request may arrive in several writes; the transport ends at 0 bytes or a reset.
+            loop {
+                match socket.read(&mut request).await {
+                    Ok(0) => return Ok(0),
+                    Ok(_) => {}
+                    Err(error) => return Err(error),
+                }
+            }
+        })
+        .await;
         (disable, settings, elapsed, eof)
     };
     let (inspection, (disable, settings, elapsed, eof)) = tokio::join!(inspect, exercise);
@@ -69,15 +79,29 @@ async fn hanging_git_times_out_without_blocking_configuration_writes() -> Result
     assert!(empty(&s.sandbox.data.join("plugins/staging")));
     assert!(empty(&s.sandbox.data.join("plugins/work")));
     let events = fs::read_to_string(trace)?;
+    let events = events
+        .lines()
+        .map(serde_json::from_str::<Value>)
+        .collect::<Result<Vec<_>, _>>()?;
+    // A git that exited on its own wrote "atexit"; only the gits the agent killed must be gone,
+    // and an exited git's pid may already belong to another process.
+    let exited: Vec<&str> = events
+        .iter()
+        .filter(|event| event["event"] == "atexit")
+        .filter_map(|event| event["sid"].as_str())
+        .collect();
     let mut pids = Vec::new();
-    for line in events.lines() {
-        let event: Value = serde_json::from_str(line)?;
-        if event["event"] == "start" {
-            let sid = event["sid"].as_str().unwrap();
+    for event in &events {
+        let sid = event["sid"].as_str().unwrap();
+        if event["event"] == "start" && !exited.contains(&sid) {
             let pid = u32::from_str_radix(sid.rsplit_once("-P").unwrap().1, 16).unwrap();
             pids.push(pid);
         }
     }
+    assert!(
+        !pids.is_empty(),
+        "the hanging git left no trace2 start without atexit"
+    );
     // Windows ends a killed process asynchronously; it may stay listed briefly.
     let deadline = Instant::now() + Duration::from_secs(5);
     for pid in pids {

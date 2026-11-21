@@ -70,7 +70,6 @@ impl Run {
         }
         result["tab"] = self.tab.clone();
         result["url"] = self.url.clone();
-        result["opened_tabs"] = json!(self.opened);
         result["steps_used"] = json!(self.steps);
         result["executor_model"] = json!(model);
         if result.get("fields").is_none() {

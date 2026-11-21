@@ -9,7 +9,7 @@ export interface ComposerDraftSnapshot {
   session_id: string;
   text: string;
   content_parts?: MessageContent;
-  element_attachments?: import("../../../shared/browser-element").ElementAttachment[];
+  element_attachments?: import("../../../../../butler-protocol/src/browser-element").ElementAttachment[];
   updated_at: string;
 }
 

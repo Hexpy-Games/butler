@@ -6,7 +6,7 @@ order: 2
 status: published
 ---
 
-An MCP client runs Butler's stdio server. From another client that supports MCP, you can call tools for Butler's status, task history, memory graph and skill list.
+An MCP client runs Butler's stdio server. From another client that supports MCP, you can call tools for Butler's status, task history, memory graph and skill list, and read and change the tasks, plans and specifications on a project's **Board**.
 
 <Notice tone="info">
   You set the internal launch arguments in the client's configuration. First install the Agent by following [Butler Agent CLI](/en/help/advanced/agent-cli/#install).
@@ -17,7 +17,7 @@ An MCP client runs Butler's stdio server. From another client that supports MCP,
 <Steps>
   1. Find the absolute path of the installed `butler`. If you used the install script as is, it is `~/.local/bin/butler`.
   2. Add Butler to the server configuration of your MCP client. The command is the absolute path of `butler`, and the arguments are `mcp serve`.
-  3. Reload the server in the client, then check that the 8 Butler tools appear.
+  3. Reload the server in the client, then check that the 21 Butler tools appear.
 </Steps>
 
 ### Client configuration example
@@ -94,9 +94,29 @@ The Butler MCP server provides tools only. It does not provide resources or prom
 | `model_set` | Shows or changes the Worker model and the Butler model. All arguments are optional. With `target` (`worker` or `butler`) and `model`, it changes that model. With `model` empty, it shows the current settings. With `action` set to `list`, it shows the model aliases you can use. A Butler model change applies from the next restart. |
 | `restart_butler` | Restarts the Agent service that uses the same DATA folder. |
 
+### Board tools
+
+These work with the tasks, plans and specifications on a project's **Board**. They call the running Butler, so they fail with `butler_not_running` when Butler is not running. Changes are recorded in the activity under the MCP client's name. Specifications never change directly; the tools submit proposals for you to approve in Butler.
+
+| Tool | Description |
+| --- | --- |
+| `canon_list` | Lists plans and tasks, each task with its specifications. |
+| `canon_get_epic` | Shows one task with its specifications and recent activity. |
+| `canon_get_spec` | Shows one specification, or every specification of a task, with its body and criteria. |
+| `canon_list_tags` | Lists the project's tags. |
+| `canon_create_epic` | Creates a task in a plan or in the backlog. |
+| `canon_edit_epic` | Edits a task or moves it to another plan. |
+| `canon_update_epic_status` | Changes a task's status. |
+| `canon_comment_epic` | Adds a comment to a task. |
+| `canon_create_plan` | Creates a plan. |
+| `canon_edit_plan` | Edits a plan's title, description or due date. |
+| `canon_create_tag` | Creates a tag. Tag names are unique in a project, ignoring case. |
+| `canon_propose_spec` | Proposes a new specification for a task. |
+| `canon_propose_spec_change` | Proposes a change to a specification. |
+
 ## How it works
 
-- `butler mcp serve` does not start the Agent service. It answers from the records and settings stored in the data folder. If the service is not running, the uptime in `butler_status` is `unknown`.
+- `butler mcp serve` does not start the Agent service. Apart from the board tools, it answers from the records and settings stored in the data folder. If the service is not running, the uptime in `butler_status` is `unknown`.
 - On start, it deletes done (`DONE`) and failed (`FAILED`) task records older than 30 days from `tasks` in the data folder. If more than 100 records remain, it deletes the oldest done and failed records first.
 - Standard output carries MCP messages only. Startup messages and errors go to standard error.
 

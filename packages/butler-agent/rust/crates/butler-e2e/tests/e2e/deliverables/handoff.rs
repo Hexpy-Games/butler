@@ -29,7 +29,10 @@ async fn restart(crash: bool) -> Result<(), HarnessError> {
         .env("BUTLER_E2E_HOLD_RELEASE", release.to_str().unwrap());
     *script.prompt.lock().unwrap() = "Deliver the file.".into();
     *script.steps.lock().unwrap() = [deliver("report.md", "Report"), done()].into();
-    std::fs::write(setup.sandbox.data.join("report.md"), "Durable delivery")?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("report.md"),
+        "Durable delivery",
+    )?;
     let mut s = setup.start().await?;
     let accepted = s.gw.say("general", "Deliver the file.").await?;
     let turn = s.gw.accepted_turn(&accepted).await?;
@@ -40,7 +43,10 @@ async fn restart(crash: bool) -> Result<(), HarnessError> {
     assert_eq!(copies.len(), 1);
     assert_eq!(std::fs::read_to_string(&copies[0])?, "Durable delivery");
     // No fallback to the mutable project source can satisfy this check.
-    std::fs::write(data.join("report.md"), "Changed after delivery")?;
+    std::fs::write(
+        s.sandbox.chat_folder("general")?.join("report.md"),
+        "Changed after delivery",
+    )?;
     if crash {
         s.agent.kill9()?;
     } else {
@@ -83,8 +89,14 @@ async fn materialize_missing_handoff_preserves_other_attachments() -> Result<(),
         .env("BUTLER_E2E_HOLD_RELEASE", release.to_str().unwrap());
     *script.prompt.lock().unwrap() = "Deliver the file.".into();
     *script.steps.lock().unwrap() = [call("deliver_files", json!({"files":[{"path":"report.md","title":"Report"},{"path":"kept.md","title":"Kept"}]})), done()].into();
-    std::fs::write(setup.sandbox.data.join("kept.md"), "Still attached")?;
-    std::fs::write(setup.sandbox.data.join("report.md"), "Available original")?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("kept.md"),
+        "Still attached",
+    )?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("report.md"),
+        "Available original",
+    )?;
     let mut s = setup.start().await?;
     let accepted = s.gw.say("general", "Deliver the file.").await?;
     let turn = s.gw.accepted_turn(&accepted).await?;
@@ -165,7 +177,10 @@ async fn materialize_refused_handoff_reports_unavailable() -> Result<(), Harness
         done(),
     ]
     .into();
-    std::fs::write(setup.sandbox.data.join("report.pdf"), "%PDF-1.4 delivered")?;
+    std::fs::write(
+        setup.sandbox.chat_folder("general")?.join("report.pdf"),
+        "%PDF-1.4 delivered",
+    )?;
     let elsewhere = setup.sandbox.root.join("elsewhere.pdf");
     std::fs::write(&elsewhere, "%PDF-1.4 elsewhere")?;
     let s = setup.start().await?;

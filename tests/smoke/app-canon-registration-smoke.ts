@@ -6,7 +6,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createNativeAppServer } from "../support/native-app-server.ts";
 import { launchSmokeBrowser } from "../support/smoke-browser.ts";
-import type { CanonProposal } from "../../packages/butler-app/client/shared/canon-proposal-contracts.ts";
+import type { CanonProposal } from "../../packages/butler-protocol/src/canon-proposal-contracts.ts";
 import { captureReviewCrops } from "../support/canon-registration-review.ts";
 
 if (process.env.BUTLER_SMOKE_REVIEW_CROPS === "1") {
@@ -76,7 +76,7 @@ try {
     if (baseline) await server.api(`/canon/proposals/${id}`, { method: "POST", body: JSON.stringify({ outcome: "accepted" }) });
     else {
       await card.getByRole("button", { name: "등록", exact: true }).click();
-      await card.getByText("등록함", { exact: true }).waitFor();
+      await card.getByText("과제 1개 등록", { exact: true }).waitFor();
       const proposal = await server.api<CanonProposal>(`/canon/proposals/${id}`);
       assert.equal(proposal.state, "applied");
     }
@@ -84,7 +84,7 @@ try {
       await server.api("/settings", { method: "PATCH", body: JSON.stringify({ appearance_theme: theme, conversation_background: { source: { kind: "none" }, overlay: 0 } }) });
       await page.setViewportSize({ width, height: 1100 }); await page.reload();
       await page.getByText("입력 오류 과제 초안을 준비했습니다.", { exact: true }).first().waitFor();
-      if (!baseline) await card.getByText("등록함", { exact: true }).waitFor();
+      if (!baseline) await card.getByText("과제 1개 등록", { exact: true }).waitFor();
       await page.screenshot({ path: join(shots, `${baseline ? "before" : "after"}-${width}-${theme}-applied.png`) });
     }
     if (!baseline) {

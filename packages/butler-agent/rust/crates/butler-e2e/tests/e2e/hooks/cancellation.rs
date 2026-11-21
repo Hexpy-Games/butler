@@ -8,7 +8,10 @@ async fn hooks_shutdown_kills_pretool_tree_and_recovers_two_followups() -> Resul
         path_for: Box::new(|_| "input.txt".into()),
         final_text: "Recovered.".into(),
     });
-    fs::write(setup.sandbox.data.join("input.txt"), "input")?;
+    fs::write(
+        setup.sandbox.chat_folder("general")?.join("input.txt"),
+        "input",
+    )?;
     let pids = setup.sandbox.home.join("hook-pids");
     configure(
         &setup,

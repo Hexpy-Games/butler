@@ -2,7 +2,7 @@
 import { strict as assert } from "node:assert";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { CanonOverview, CanonTag, EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { CanonOverview, CanonTag, EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
 import { closeCanonAside } from "./canon-board-aside.ts";
 import { selectBoardPlan } from "./canon-board-selector.ts";
 const boardSelector = '[data-test-class="canon-board"]';

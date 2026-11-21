@@ -1,5 +1,7 @@
 //! Browser approval scope: on ask-first and Auto, browsing a public site (a
-//! consent banner, search, filters, tabs, links) never asks; a POST submit in
+//! consent banner, search, filters, tabs, links) never asks; after reading a page,
+//! typing into a site no user message or search result listed asks once per site;
+//! a POST submit in
 //! a signed-in tab or a step the model declares as committing asks once;
 //! payment steps keep their exact card. Ask-always still asks for every batch;
 //! full access asks only at payment.
@@ -21,7 +23,8 @@ use host::{Host, call};
 use serde_json::{Value, json};
 use std::time::Duration;
 
-const BROWSE: &str = "Browse the public catalog";
+const BROWSE: &str = "Browse the public catalog at https://shop.example.test/";
+const UNLISTED: &str = "Search the account site";
 const POST: &str = "Post my comment";
 const SEND: &str = "Send the message";
 const PAY: &str = "Pay for the order";
@@ -44,7 +47,13 @@ async fn browses_freely_and_asks_only_to_commit(
 ) -> Result<(), HarnessError> {
     let s = Setup::new(scenario)?
         .access(access)
-        .stub_cassette(host::cassette(&[browse(), post(), send(), pay()])?)
+        .stub_cassette(host::cassette(&[
+            browse(),
+            unlisted(),
+            post(),
+            send(),
+            pay(),
+        ])?)
         .start()
         .await?;
     let host = Host::attach(&s).await?;
@@ -60,6 +69,31 @@ async fn browses_freely_and_asks_only_to_commit(
         "{:?}",
         host.ops()
     );
+
+    // After reading a page, typing into a site no user message or search listed asks.
+    let (id, card) = ask(&s, UNLISTED).await?;
+    let card = card.expect("typing into an unlisted site asks");
+    assert_eq!(
+        card["approval"]["operation"]["tool"], "browser_act",
+        "{card}"
+    );
+    assert_eq!(
+        card["approval"]["operation"]["allow_conversation"], true,
+        "{card}"
+    );
+    assert_eq!(host.acts().len(), 3, "nothing typed before the answer");
+    let reference = card["request_ref"].as_str().unwrap();
+    let denied =
+        s.gw.post(
+            &format!("/authority-requests/{reference}/deny?session_id=general"),
+            json!({"scope":"once"}),
+        )
+        .await?;
+    assert_eq!(denied.status, 202, "{}", denied.text);
+    let done =
+        s.gw.wait_terminal("general", &id, Duration::from_secs(30))
+            .await?;
+    assert_eq!(turn_state(&done), "delivered", "{done}");
 
     let (id, card) = ask(&s, POST).await?;
     let card = card.expect("a signed-in POST submit asks");
@@ -246,6 +280,15 @@ fn post() -> Turn {
     let comment = vec![step("click", "e6", ""), step("type", "", "Warm and light.")];
     let submit = act("acct", vec![step("click", "e7", "")]);
     (POST.into(), vec![act("acct", comment), submit])
+}
+
+fn unlisted() -> Turn {
+    let observe = call("browser_observe", json!({"tab":"acct","look":"never"}));
+    let typed = act(
+        "acct",
+        vec![step("click", "e6", ""), step("type", "", "external note")],
+    );
+    (UNLISTED.into(), vec![observe, typed])
 }
 
 fn send() -> Turn {

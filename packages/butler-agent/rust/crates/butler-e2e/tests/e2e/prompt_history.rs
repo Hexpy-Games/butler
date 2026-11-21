@@ -114,7 +114,10 @@ async fn run(heavy: bool, verify: bool) -> Result<(), HarnessError> {
             if verify { "1" } else { "0" },
         );
     std::fs::write(
-        setup.sandbox.data.join("history-output.txt"),
+        setup
+            .sandbox
+            .chat_folder("general")?
+            .join("history-output.txt"),
         "tool output ".repeat(1490),
     )?;
     let placeholders = setup.placeholders.clone();

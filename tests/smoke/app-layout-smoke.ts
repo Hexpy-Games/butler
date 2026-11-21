@@ -3186,7 +3186,7 @@ try {
   assert(
     narrowNewChatState.titleTop >= narrowNewChatState.safeTitleTop &&
       narrowNewChatState.compactMetaAligned &&
-      narrowNewChatState.bodyTypeSize === 16 &&
+      narrowNewChatState.bodyTypeSize === 17 &&
       narrowNewChatState.captionTypeSize === 14 &&
       narrowNewChatState.fluidTopLeftRadius === 0 &&
       narrowNewChatState.fluidBottomLeftRadius === 0 &&

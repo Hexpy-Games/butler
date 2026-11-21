@@ -4,7 +4,7 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { Button, Card, Grid, Section, Stack, Typo } from "@/butler-ds";
 import { useComposerStore } from "@/components/conversation/composerStore.ts";
 import type { ProjectDashboardDocument } from "@/app/types.ts";
-import type { DashboardBriefingView, DashboardBriefingSource } from "../../../../shared/app-contracts.ts";
+import type { DashboardBriefingView, DashboardBriefingSource } from "../../../../../../butler-protocol/src/app-contracts.ts";
 import { ProjectSourceLinks } from "./ProjectSourceLinks.tsx";
 
 export function ProjectBriefingPanel({ projectId, briefing, onSelect, onUpdated, section = "position" }: {

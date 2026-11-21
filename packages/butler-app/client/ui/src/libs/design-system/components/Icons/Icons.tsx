@@ -4,7 +4,6 @@ import type { DsBaseProps } from "../../lib/dsProps";
  * Maps Butler UI icon names to Hugeicons alternatives.
  * Preserves simple <Icon size={...} /> usage pattern
  */
-
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { HugeiconsIconProps, IconSvgElement } from "@hugeicons/react";
 import { createIcon } from "./iconBase";
@@ -16,12 +15,12 @@ import {
   CheckListIcon, CheckmarkCircle02Icon, CircleIcon, Clock03Icon, CollapseIcon, CommandIcon, ComputerIcon,
   Copy01Icon, Heading01Icon, LeftToRightListBulletIcon, TextBoldIcon, CubeIcon, Eraser01Icon, DatabaseIcon, Delete02Icon, DragDropVerticalIcon, ExpandIcon, File02Icon,
   FilterIcon, Flag02Icon, FloppyDiskIcon, Folder01Icon, Folder02Icon, FolderAddIcon, GitBranchIcon,
-  Globe02Icon, Image01Icon, LayoutGridIcon, LockIcon, MagicWand01Icon, McpServerIcon, Message01Icon,
+  Globe02Icon, IdentityCardIcon, Image01Icon, LayoutGridIcon, LockIcon, MagicWand01Icon, McpServerIcon, Message01Icon,
   MessageAdd01Icon, MinusSignIcon, Moon02Icon, MoreHorizontalIcon as MoreHorizontalGlyph,
   Note01Icon, PaintBrush02Icon, PaintBrush04Icon, PanelLeftIcon, PanelLeftOpenIcon, PanelRightCloseIcon,
   PanelRightIcon, PencilEdit01Icon, PencilEdit02Icon, PinIcon, PlayIcon, ReloadIcon,
   Rocket01Icon, Search01Icon, SecurityCheckIcon, SecurityIcon, SentIcon, ServerStack01Icon,
-  Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SquareIcon, StarIcon, Sun03Icon, Tag01Icon, Task01Icon, Ticket01Icon,
+  Settings01Icon, ShieldEnergyIcon, SlidersHorizontalIcon, SmartPhone01Icon, SquareIcon, StarIcon, Sun03Icon, Tag01Icon, Task01Icon, Ticket01Icon,
   TerminalIcon, Tick02Icon, Time03Icon, Undo02Icon, UserCircleIcon, ViewIcon, Wrench01Icon,
   ZoomInAreaIcon, ZoomOutAreaIcon,
 } from "@hugeicons/core-free-icons";
@@ -105,6 +104,7 @@ export const GeneralChat = createIcon(BubbleChatIcon);
 export const Notebook = createIcon(Note01Icon);
 export const Minus = createIcon(MinusSignIcon);
 export const Monitor = createIcon(ComputerIcon);
+export const Smartphone = createIcon(SmartPhone01Icon);
 export const Moon = createIcon(Moon02Icon);
 export const MoreHorizontal = createIcon(MoreHorizontalGlyph);
 export const MoreHorizontalIcon = MoreHorizontal;
@@ -145,6 +145,8 @@ export const Sun = createIcon(Sun03Icon);
 export const Terminal = createIcon(TerminalIcon);
 export const Trash2 = createIcon(Delete02Icon);
 export const Undo = createIcon(Undo02Icon);
+/** An ID card: the Settings › Account page. */
+export const IdCard = createIcon(IdentityCardIcon);
 export const UserRound = createIcon(UserCircleIcon);
 export const Wrench = createIcon(Wrench01Icon);
 export const ZoomIn = createIcon(ZoomInAreaIcon);

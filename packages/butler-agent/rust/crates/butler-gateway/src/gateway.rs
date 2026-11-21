@@ -33,7 +33,7 @@ mod remote_computers;
 mod remote_socket;
 pub use remote_socket::{RemoteSocket, SocketActivity};
 mod security_settings;
-pub use devices::{GatewayDevices, PairedDevice};
+pub use devices::{DeviceKind, GatewayDevices, PairedDevice};
 mod server;
 mod session_references;
 mod shutdown_trace;
@@ -58,6 +58,7 @@ pub use application::settings::{
     browsing_agent_setting, command_sandbox_enabled, diagnostics_enabled_readonly,
     producer_log_config, startup_log_config, stored_ui_language_readonly,
 };
+pub use application::setup::butler_account::{ButlerAccountRequest, butler_account_disabled};
 pub use application::setup::{ButlerVaultCounts, ButlerVaultView};
 pub use application::{
     APP_PERSON_ID, AppAssetCommand, AppCanonOperation, AppCardInput, AppImageUsageCommand,

@@ -30,7 +30,7 @@ fn update(id: &Value, ids: &[Value]) -> Value {
         "window":{"days":["mon","tue","wed","thu","fri"],"start":"07:30","end":"08:30"},"evidence_ids":ids})
 }
 fn candidate(id: &Value) -> Value {
-    json!({"pattern_id":id,"title":"Prepare your morning report", "action":{"title":"Morning report",
+    json!({"pattern_id":id,"kind":"schedule","lens":"productivity","message":"I noticed you look for a morning report. Want me to prepare it?","title":"Prepare your morning report", "action":{"title":"Morning report",
         "prompt":"Research and summarize the latest information.","schedule":{"type":"weekdays","time":"07:25"}}})
 }
 pub(super) fn review(request: &Value) -> Option<ResponseRecord> {

@@ -175,9 +175,8 @@ class MainGate(unittest.TestCase):
         run = dict(id=12, run_attempt=2, display_title='CI #12', head_sha=PR['head']['sha'],
                    pull_requests=[dict(number=7)], status='completed')
         for conclusion in ['success', 'failure', 'skipped', 'cancelled']:
-            jobs = dict(total_count=1, jobs=[dict(name='gate', steps=[dict(
-                name='Require every selected check', conclusion=conclusion)])])
-            with patch.object(gate, 'api', side_effect=[dict(workflow_runs=[run]), jobs]) as api:
+            jobs = [dict(name='gate', steps=[dict(name='Require every selected check', conclusion=conclusion)])]
+            with patch.object(gate, 'api', side_effect=[dict(workflow_runs=[run])]) as api, patch.object(gate, 'run_jobs', return_value=jobs):
                 self.assertEqual(gate.quality_gate(dict(pull_request=PR), REPO), 0 if conclusion == 'success' else 1)
                 self.assertIn(f'&head_sha={PR["head"]["sha"]}&', api.call_args_list[0].args[0])
         for update in [dict(head_sha='old'), dict(pull_requests=[dict(number=8)]),
@@ -193,16 +192,16 @@ class MainGate(unittest.TestCase):
         older = dict(run, id=11, display_title='CI #11', status='completed')
         pending = [dict(workflow_runs=[dict(run, status=status), older]) for status in ['queued', 'in_progress']]
         for conclusion in ['success', 'failure']:
-            jobs = dict(total_count=1, jobs=[dict(name='gate', steps=[dict(
-                name='Require every selected check', conclusion=conclusion)])])
+            jobs = [dict(name='gate', steps=[dict(name='Require every selected check', conclusion=conclusion)])]
             done = dict(workflow_runs=[dict(run, status='completed'), older])
             sleep = Mock()
-            with patch.object(gate, 'api', side_effect=[*pending, done, jobs]) as api, \
+            with patch.object(gate, 'api', side_effect=[*pending, done]) as api, \
+                 patch.object(gate, 'run_jobs', return_value=jobs) as run_jobs, \
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(gate.quality_gate(dict(pull_request=PR), REPO, sleep=sleep),
                                  0 if conclusion == 'success' else 1)
             self.assertEqual(sleep.call_count, 2)
-            self.assertIn('/runs/12/attempts/1/jobs', api.call_args_list[-1].args[0])
+            self.assertEqual(run_jobs.call_args.args[0]['id'], 12)
 
     # test-category: race
     def test_metadata_retries_transient_api_errors_but_stays_fail_closed(self):
@@ -211,10 +210,10 @@ class MainGate(unittest.TestCase):
         listing = lambda status: dict(workflow_runs=[dict(run, status=status)])
         error = subprocess.CalledProcessError(1, 'gh')
         for conclusion, expected in [('success', 0), ('failure', 1)]:
-            jobs = dict(total_count=1, jobs=[dict(name='gate', steps=[dict(
-                name='Require every selected check', conclusion=conclusion)])])
+            jobs = [dict(name='gate', steps=[dict(name='Require every selected check', conclusion=conclusion)])]
             sleep = Mock()
-            with patch.object(gate, 'api', side_effect=[listing('in_progress'), error, listing('completed'), error, jobs]), \
+            with patch.object(gate, 'api', side_effect=[listing('in_progress'), error, listing('completed')]), \
+                 patch.object(gate, 'run_jobs', side_effect=[error, jobs]), \
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(gate.quality_gate(dict(pull_request=PR), REPO, sleep=sleep), expected)
             self.assertEqual(sleep.call_count, 3)
@@ -224,6 +223,14 @@ class MainGate(unittest.TestCase):
             self.assertEqual(gate.quality_gate(dict(pull_request=PR), REPO, sleep=Mock(),
                                                clock=lambda: next(ticks), wait_seconds=3000), 1)
         self.assertIn('stayed unavailable', out.getvalue())
+
+    # test-category: pure-logic
+    def test_full_run_reads_every_job_page(self):
+        gate_job = dict(name='gate', steps=[dict(name='Require every selected check', conclusion='success')])
+        pages = [dict(jobs=[dict(name=f'job {n}', steps=[]) for n in range(50)]), dict(jobs=[gate_job])]
+        with patch.object(gate, 'command', return_value=json.dumps(pages)) as command:
+            self.assertTrue(gate.full_run_passed(dict(id=12, run_attempt=1), REPO))
+        self.assertIn('--paginate', command.call_args.args)
 
     # test-category: race
     def test_metadata_times_out_when_full_run_never_completes(self):

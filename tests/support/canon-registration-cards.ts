@@ -55,7 +55,7 @@ export async function captureRegistrationVariants(page: Page, server: NativeAppS
     await page.setViewportSize({ width: 1440, height: 1100 }); await page.goto(server.url);
     await page.getByText("입력 오류 과제 초안을 준비했습니다.", { exact: true }).first().waitFor();
     if (!baseline) {
-      const record = page.locator('[data-test-class="canon-proposal-card"]').filter({ hasText: "과제 등록함 · 버틀러" });
+      const record = page.locator('[data-test-class="canon-proposal-card"]').filter({ hasText: "과제 2개 등록" });
       await record.waitFor(); assert.equal(await record.getByRole("button", { name: "열기", exact: true }).count(), 1);
       const changes = page.locator('[data-test-class="canon-proposal-card"][data-state="open"]');
       await changes.getByText("변경 제안 · 버틀러", { exact: true }).waitFor();
@@ -93,11 +93,11 @@ async function assertLatestCanonState(page: Page, server: NativeAppServerHandle,
     await page.reload(); await live;
     await Promise.race([captured.promise, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("initial proposal snapshot was not captured")), 30_000); })]);
     await server.api(path, { method: "POST", body: JSON.stringify({ outcome: "accepted" }) });
-    const card = page.locator(`[data-proposal-id="${id}"]`);
-    await card.getByText("등록함", { exact: true }).waitFor();
+    // An applied change joins the reply's receipt; its own card leaves.
+    await page.locator('[data-test-class="canon-proposal-card"][data-state="applied"]').filter({ hasText: "계획 등록" }).waitFor();
     release.resolve(); await completed.promise;
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-    assert.equal(await card.getAttribute("data-state"), "applied", "an earlier response must not reopen an applied card");
+    assert.equal(await page.locator(`[data-proposal-id="${id}"][data-state="open"]`).count(), 0, "an earlier response must not reopen an applied card");
   } catch (error) {
     console.error(JSON.stringify({ snapshots: states, cards: await page.locator('[data-test-class="canon-proposal-card"]').allTextContents(), current: (await server.api<{ state: string }>(path)).state }));
     throw error;

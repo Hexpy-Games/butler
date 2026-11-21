@@ -7,6 +7,7 @@ pub mod chatgpt_wire;
 pub mod config;
 pub mod events;
 pub mod executable;
+pub mod fake_butler_cloud;
 pub mod fake_chatgpt;
 pub mod fake_imap;
 pub mod fake_servers;

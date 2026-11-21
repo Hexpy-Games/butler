@@ -73,7 +73,7 @@ async fn result_ids_and_found_pages_survive_approval_resumes() -> Result<(), Har
     let path = s.sandbox.data.join("butler.config.json");
     let mut config: Value = serde_json::from_slice(&std::fs::read(&path)?)?;
     config["webSearch"] = json!({"provider":"brave","planning":{"enabled":false},
-        "readerBackend":"disabled","braveApiBase":format!("{base}/search")});
+        "braveApiBase":format!("{base}/search")});
     std::fs::write(path, serde_json::to_vec(&config)?)?;
     let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
     let served = tokio::spawn(host::Host::attach(admin).await?.serve());
@@ -86,6 +86,8 @@ async fn result_ids_and_found_pages_survive_approval_resumes() -> Result<(), Har
         assert_eq!(card["approval"]["operation"]["tool"], "read_file", "{card}");
         answer(&s, &card, "allow").await?;
     }
+    let card = next_card(&s, &mut seen).await?;
+    answer(&s, &card, "deny").await?;
     let done =
         s.gw.wait_terminal("general", &turn, Duration::from_secs(60))
             .await?;
@@ -111,16 +113,10 @@ async fn result_ids_and_found_pages_survive_approval_resumes() -> Result<(), Har
     assert_eq!(ids(&outputs[0]), alpha, "{}", outputs[0]);
     assert_eq!(ids(&outputs[1]), beta, "{}", outputs[1]);
     assert_eq!(ids(&outputs[3]), beta, "after resume: {}", outputs[3]);
-    for (index, id, url) in [(4, "r1", page("alpha", 1)), (8, "r4", page("beta", 2))] {
-        let tab = &outputs[index]["tabs"][0];
-        assert_eq!(tab["result"], id, "{}", outputs[index]);
-        assert_eq!(tab["status"], "ok", "{}", outputs[index]);
-        assert_eq!(
-            tab["untrusted_content"]["url"],
-            url.as_str(),
-            "{}",
-            outputs[index]
-        );
+    for (index, url) in [(4, page("alpha", 1)), (8, page("beta", 2))] {
+        let read = &outputs[index];
+        assert_eq!(read["ok"], true, "{read}");
+        assert_eq!(read["final_url"], url.as_str(), "{read}");
     }
 
     // Found pages and an observation remain usable across both resumes.
@@ -130,8 +126,8 @@ async fn result_ids_and_found_pages_survive_approval_resumes() -> Result<(), Har
         assert!(read.get("authority_pending").is_none(), "{read}");
         assert!(!read.to_string().contains("authority_request"), "{read}");
     }
-    assert!(outputs[10].to_string().contains("tool_unavailable"));
-    crate::access_tiers::assert_counts(&s, &turn, 2, 0)?;
+    assert!(outputs[10].to_string().contains("authority_request_denied"));
+    crate::access_tiers::assert_counts(&s, &turn, 3, 0)?;
     s.finish().await
 }
 
@@ -203,11 +199,11 @@ fn next(script: &Script, body: &Value) -> Value {
         0 => ("web_search", json!({"query":"alpha harbour tides"})),
         1 | 3 => ("web_search", json!({"query":"beta harbour tides"})),
         2 => ("read_file", read_file(&files[0])),
-        4 => ("browser_open", json!({"results":["r1"]})),
+        4 => ("web_read", json!({"url":page("alpha", 1)})),
         5 => ("browser_open", json!({"url":page("alpha", 2)})),
         6 => ("browser_observe", json!({"tab":outputs[5]["tab"]})),
         7 => ("read_file", read_file(&files[1])),
-        8 => ("browser_open", json!({"results":["r4"]})),
+        8 => ("web_read", json!({"url":page("beta", 2)})),
         9 => ("browser_open", json!({"url":page("beta", 1)})),
         10 => ("web_read", json!({"url":UNSEEN})),
         _ => return model::message("Both harbours list the same spring tide."),

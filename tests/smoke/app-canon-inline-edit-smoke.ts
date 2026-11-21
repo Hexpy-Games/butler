@@ -10,7 +10,7 @@ import { verifyInlineFields, verifyInlineExits, inlineShot } from "../support/ca
 import { verifyPaneExits, verifyInlineAttachment, verifyEmptyDescription } from "../support/canon-inline-pane-flows.ts";
 import { installPendingAskEvents } from "../support/session-info-fixtures.ts";
 import { showCanonSidebar } from "../support/canon-sidebar-scenarios.ts";
-import type { CanonOverview } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { CanonOverview } from "../../packages/butler-protocol/src/canon-contracts.ts";
 
 const cases = ["dark", "light"];
 if (await runSmokeCases(cases, "BUTLER_INLINE_EDIT_CASE", import.meta.path, { isolate: true })) process.exit(0);
@@ -63,7 +63,7 @@ try {
     await page.locator('[data-slot="management-page-aside"][data-state="closed"]').waitFor({ state: "detached" });
     assert.equal(await aside.getAttribute("data-layout"), width === 1440 ? "docked" : "floating");
     const dashboardShots = join(shots, "dashboard-" + width); mkdirSync(dashboardShots, { recursive: true });
-    const current = await server.api<import("../../packages/butler-app/client/shared/canon-contracts.ts").EpicDetail>("/canon/epics/" + epic.id);
+    const current = await server.api<import("../../packages/butler-protocol/src/canon-contracts.ts").EpicDetail>("/canon/epics/" + epic.id);
     const initialDescription = "문서 화면의 구성과 검색 흐름을 검토합니다.";
     await server.api("/canon/epics/" + epic.id, { method: "PATCH", body: JSON.stringify({
       expected_revision: current.revision, description: initialDescription,

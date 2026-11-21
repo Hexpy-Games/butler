@@ -1,7 +1,7 @@
 //! Loaded once, write-through credentials; one-shot expiry after authentication.
 use super::super::HttpError;
 use crate::gateway::{
-    GatewayApplication, PairedDevice,
+    DeviceKind, GatewayApplication, PairedDevice,
     crypto::{constant_time_eq, random_bytes},
 };
 use axum::http::{HeaderMap, HeaderValue, header};
@@ -21,6 +21,20 @@ use tokio_util::sync::CancellationToken;
 /// Fixed lifetime from issuance; activity never renews a captured credential.
 const SESSION_TTL: u64 = 30 * 24 * 60 * 60;
 
+const DEVICE_TOKEN_PREFIX: &str = "bdt_";
+
+/// A browser credential past its fixed lifetime can never authenticate again.
+fn expired(device: &PairedDevice, now: u64) -> bool {
+    device.kind == DeviceKind::Browser && now >= device.created_at.saturating_add(SESSION_TTL)
+}
+
+/// A paired device's credential on this request: its stream closer, and
+/// whether it came as a device token (else the cookie).
+pub(in crate::gateway::http) struct DeviceAuth {
+    pub(in crate::gateway::http) closed: CancellationToken,
+    pub(in crate::gateway::http) token: bool,
+}
+
 struct Entry {
     device: PairedDevice,
     seen: AtomicU64,
@@ -35,6 +49,7 @@ pub(in crate::gateway::http) struct DeviceRegistry {
     changes: tokio::sync::Mutex<()>,
     shutdown: CancellationToken,
     cookie_name: String,
+    butler_id: String,
     #[cfg(feature = "e2e-fixtures")]
     clock_offset: AtomicU64,
 }
@@ -45,9 +60,16 @@ impl DeviceRegistry {
         port: u16,
         shutdown: CancellationToken,
     ) -> Result<Self, HttpError> {
-        let entries = application
-            .load_devices()
-            .await?
+        let butler_id = application.butler_id().await?;
+        let now = super::unix_seconds(std::time::SystemTime::now());
+        let mut devices = application.load_devices().await?;
+        for device in devices.iter().filter(|device| expired(device, now)) {
+            application
+                .revoke_devices(Some(device.id.clone()), now)
+                .await?;
+        }
+        devices.retain(|device| !expired(device, now));
+        let entries = devices
             .into_iter()
             .map(|device| {
                 let entry = Arc::new(Entry {
@@ -66,9 +88,14 @@ impl DeviceRegistry {
             changes: tokio::sync::Mutex::new(()),
             shutdown,
             cookie_name: format!("butler_session_{port}"),
+            butler_id,
             #[cfg(feature = "e2e-fixtures")]
             clock_offset: AtomicU64::new(0),
         })
+    }
+
+    pub(in crate::gateway::http) fn butler_id(&self) -> &str {
+        &self.butler_id
     }
 
     fn now(&self) -> u64 {
@@ -83,12 +110,12 @@ impl DeviceRegistry {
         self.clock_offset.fetch_add(seconds, Ordering::Relaxed);
     }
 
-    pub(in crate::gateway::http) async fn pair(
+    async fn insert(
         &self,
         name: &str,
         ip: &str,
-        secure: bool,
-    ) -> Result<(HeaderValue, String), HttpError> {
+        kind: DeviceKind,
+    ) -> Result<(String, String), HttpError> {
         let _change = self.changes.lock().await;
         let now = self.now();
         let secret = URL_SAFE_NO_PAD.encode(random_bytes());
@@ -101,6 +128,7 @@ impl DeviceRegistry {
             created_at: now,
             last_seen_at: now,
             revoked_at: None,
+            kind,
         };
         self.application.save_device(device.clone()).await?;
         let entry = Arc::new(Entry {
@@ -112,6 +140,16 @@ impl DeviceRegistry {
         });
         let mut entries = self.entries.write();
         Arc::make_mut(&mut entries).insert(id.clone(), entry);
+        Ok((id, secret))
+    }
+
+    pub(in crate::gateway::http) async fn pair(
+        &self,
+        name: &str,
+        ip: &str,
+        secure: bool,
+    ) -> Result<(HeaderValue, String), HttpError> {
+        let (id, secret) = self.insert(name, ip, DeviceKind::Browser).await?;
         let transport = if secure { "; Secure" } else { "" };
         let cookie = HeaderValue::from_str(&format!(
             "{}=v2.{id}.{secret}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}{transport}",
@@ -121,20 +159,61 @@ impl DeviceRegistry {
         Ok((cookie, id))
     }
 
-    pub(in crate::gateway::http) fn authenticate(
+    pub(in crate::gateway::http) async fn pair_token(
         &self,
-        headers: &HeaderMap,
-    ) -> Option<CancellationToken> {
-        let entry = self.presented_entry(headers)?;
+        name: &str,
+        ip: &str,
+        kind: DeviceKind,
+    ) -> Result<(String, String), HttpError> {
+        let (id, secret) = self.insert(name, ip, kind).await?;
+        let token = format!("{DEVICE_TOKEN_PREFIX}{id}.{secret}");
+        Ok((id, token))
+    }
+
+    pub(in crate::gateway::http) fn authenticate(&self, headers: &HeaderMap) -> Option<DeviceAuth> {
         let now = self.now();
+        if let Some(entry) = self.token_entry(headers) {
+            entry.seen.fetch_max(now, Ordering::Relaxed);
+            self.touch(entry.clone(), now);
+            return Some(DeviceAuth {
+                closed: entry.closed.clone(),
+                token: true,
+            });
+        }
+        let entry = self.presented_entry(headers)?;
         entry.seen.fetch_max(now, Ordering::Relaxed);
         Self::schedule_expiry(entry.clone(), now);
         self.touch(entry.clone(), now);
-        Some(entry.closed.clone())
+        Some(DeviceAuth {
+            closed: entry.closed.clone(),
+            token: false,
+        })
+    }
+
+    fn token_entry(&self, headers: &HeaderMap) -> Option<Arc<Entry>> {
+        let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
+        let token = crate::gateway::auth::bearer_token(value)?.strip_prefix(DEVICE_TOKEN_PREFIX)?;
+        let (id, secret) = token.split_once('.')?;
+        let snapshot = self.entries.read().clone();
+        let hash = Sha256::digest(secret.as_bytes());
+        let entry = snapshot.get(id);
+        let target = entry.map_or(&[0; 32][..], |entry| entry.device.secret_hash.as_slice());
+        let matches = constant_time_eq(&hash, target);
+        entry
+            .filter(|entry| {
+                matches && entry.device.kind != DeviceKind::Browser && !entry.closed.is_cancelled()
+            })
+            .cloned()
     }
 
     pub(in crate::gateway::http) fn presented(&self, headers: &HeaderMap) -> Option<String> {
         self.presented_entry(headers).map(|e| e.device.id.clone())
+    }
+
+    /// The device id a valid device token on this request names.
+    pub(in crate::gateway::http) fn token_device_id(&self, headers: &HeaderMap) -> Option<String> {
+        self.token_entry(headers)
+            .map(|entry| entry.device.id.clone())
     }
 
     fn presented_entry(&self, headers: &HeaderMap) -> Option<Arc<Entry>> {
@@ -164,10 +243,10 @@ impl DeviceRegistry {
                 let matches = constant_time_eq(&hash, target);
                 if let Some(entry) = entry
                     && matches
+                    && entry.device.kind == DeviceKind::Browser
                     && !entry.closed.is_cancelled()
                 {
-                    let now = self.now();
-                    if now >= entry.device.created_at.saturating_add(SESSION_TTL) {
+                    if expired(&entry.device, self.now()) {
                         entry.closed.cancel();
                         continue;
                     }
@@ -231,10 +310,12 @@ impl DeviceRegistry {
     }
 
     pub(in crate::gateway::http) fn list(&self) -> Vec<PairedDevice> {
+        let now = self.now();
         let mut devices: Vec<_> = self
             .entries
             .read()
             .values()
+            .filter(|entry| !expired(&entry.device, now))
             .map(|entry| {
                 let mut device = entry.device.clone();
                 device.last_seen_at = entry.seen.load(Ordering::Relaxed);

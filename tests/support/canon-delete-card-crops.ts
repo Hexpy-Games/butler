@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import type { NativeAppServerHandle } from "./native-app-server.ts";
-import type { EpicDetail } from "../../packages/butler-app/client/shared/canon-contracts.ts";
+import type { EpicDetail } from "../../packages/butler-protocol/src/canon-contracts.ts";
 export type DeleteTool = { name: string; arguments: Record<string, unknown> };
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 

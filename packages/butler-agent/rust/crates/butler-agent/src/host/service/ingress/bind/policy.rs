@@ -40,21 +40,19 @@ pub(super) async fn upsert_app_binding(
     let project_workspace = project
         .and_then(|value| value.get("workspacePath"))
         .and_then(Value::as_str);
-    let marked = existing.as_ref().is_some_and(owns_folder);
-    let workspace = if marked {
-        existing
-            .as_ref()
-            .map(|binding| binding.workspace_path.as_str())
-    } else {
-        project_workspace.or_else(|| {
-            existing
-                .as_ref()
-                .map(|binding| binding.workspace_path.as_str())
-        })
-    }
-    .filter(|value| !value.is_empty())
-    .map(str::to_owned)
-    .unwrap_or_else(|| default_workspace.to_string_lossy().into_owned());
+    let session_kind = context
+        .pointer("/session/kind")
+        .and_then(Value::as_str)
+        .unwrap_or("chat");
+    let new_chat = session_kind == "chat" && project_id.is_none();
+    let (workspace, folder_marker) = working_folder(
+        existing.as_ref(),
+        project_workspace,
+        new_chat,
+        (data_root, default_workspace),
+        &envelope.peer.id,
+    )
+    .await?;
     let access = BindingAccess::read(envelope, context);
     let has_project = project_id.is_some();
     let profiles: &[&str] = if access.turn == AccessMode::FullAccess {
@@ -68,10 +66,6 @@ pub(super) async fn upsert_app_binding(
     } else {
         &[]
     };
-    let session_kind = context
-        .pointer("/session/kind")
-        .and_then(Value::as_str)
-        .unwrap_or("chat");
     let source = if has_project {
         "app_project_default"
     } else if session_kind == "project" {
@@ -102,6 +96,9 @@ pub(super) async fn upsert_app_binding(
         .as_ref()
         .and_then(|binding| binding.metadata.clone())
         .unwrap_or_default();
+    if let Some(marker) = folder_marker {
+        metadata.insert(butler_turn::workspace::SESSION_FOLDER_KEY.into(), marker);
+    }
     if selected_memory_write {
         let profiles = metadata
             .entry("requiredNativeToolProfiles")
@@ -234,6 +231,58 @@ fn owns_folder(binding: &StoredSessionBinding) -> bool {
         .as_ref()
         .is_some_and(|metadata| metadata.contains_key("sessionWorkspace"))
         || butler_turn::workspace::active_session_folder(binding).is_some()
+}
+
+/// The binding's working folder. A session's own folder stays; otherwise
+/// the project's folder, else the stored one. A new general chat works in
+/// its own folder under the data folder (decision-general-chat-folders),
+/// which Butler made for this chat alone, so it is consented like an
+/// approved folder; existing chats keep their stored folder. The chat's own
+/// folder is created here, before the turn resolves it.
+async fn working_folder(
+    existing: Option<&StoredSessionBinding>,
+    project_workspace: Option<&str>,
+    new_chat: bool,
+    (data_root, default_workspace): (&Path, &Path),
+    chat_id: &str,
+) -> Result<(String, Option<Value>), IngressError> {
+    let stored = existing.map(|binding| binding.workspace_path.as_str());
+    let chosen = if existing.is_some_and(owns_folder) {
+        stored
+    } else {
+        project_workspace.or(stored)
+    }
+    .filter(|value| !value.is_empty());
+    let own = butler_turn::workspace::chat_folder(data_root, chat_id)
+        .map(|path| path.to_string_lossy().into_owned());
+    let (workspace, marker) = match (chosen, own.as_deref().filter(|_| new_chat)) {
+        (Some(path), _) => (path.to_owned(), None),
+        (None, Some(path)) => {
+            let now = butler_models::models::ModelConfigurationClock::now_iso(
+                &crate::host::SystemIdentity,
+            );
+            (
+                path.to_owned(),
+                Some(butler_turn::workspace::session_folder_marker(
+                    path,
+                    path,
+                    true,
+                    butler_turn::workspace::FolderRelation::Current,
+                    &now,
+                )),
+            )
+        }
+        (None, None) => (default_workspace.to_string_lossy().into_owned(), None),
+    };
+    if own.as_deref() == Some(workspace.as_str()) {
+        tokio::fs::create_dir_all(&workspace)
+            .await
+            .map_err(|source| {
+                IngressError::new("chat_folder_unavailable", "Chat folder unavailable")
+                    .with_source(source)
+            })?;
+    }
+    Ok((workspace, marker))
 }
 
 /// The access modes an App turn binds with.

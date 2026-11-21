@@ -1,6 +1,6 @@
 import { appCopy, getAppLocale } from "@/app/copy.ts";
 import { useMinuteClock } from "@/app/space/minute-clock.ts";
-import { Button, ListRow, Monitor, SettingsSection, Stack, Tooltip } from "@/butler-ds";
+import { Button, ListRow, Monitor, SettingsSection, Smartphone, Stack, Tooltip } from "@/butler-ds";
 import { usePairedDevices } from "./usePairedDevices";
 
 function lastSeen(seconds: number, now: number) {
@@ -30,7 +30,7 @@ export function SecurityDevicesSection({ disabled }: { disabled: boolean }) {
       {devices.devices.map((device) => (
         <Stack key={device.id} align="row" cross="center" gap="sm" wrap>
           <Stack grow minWidth="0">
-            <ListRow icon={<Monitor size="md" />} title={device.name}
+            <ListRow icon={device.kind === "browser" ? <Monitor size="md" /> : <Smartphone size="md" />} title={device.name}
               description={device.ip} meta={lastSeen(device.last_seen_at, now)} />
           </Stack>
           <Tooltip label={unavailable ? copy.working : copy.revokeDevice(device.name)}>

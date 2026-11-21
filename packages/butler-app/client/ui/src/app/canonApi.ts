@@ -1,8 +1,8 @@
 import { api, callBridge } from "./api.ts";
 import { appCopy } from "./copy.ts";
 import type { MessageFileRef } from "./types.ts";
-import type { CanonTag, CanonTagCreateInput, CanonTagEditInput, CanonSidebar, CanonSidebarOrderInput, CanonConversation, CanonOverview, CanonOrderInput, EpicDetail, EpicInput, PlanDetail, PlanInput, EpicProgressSnapshot, CanonConversationInput } from "../../../shared/canon-contracts.ts";
-export type * from "../../../shared/canon-contracts.ts";
+import type { CanonTag, CanonTagCreateInput, CanonTagEditInput, CanonSidebar, CanonSidebarOrderInput, CanonConversation, CanonOverview, CanonOrderInput, EpicDetail, EpicInput, PlanDetail, PlanInput, EpicProgressSnapshot, CanonSpecDetail, CanonConversationInput } from "../../../../../butler-protocol/src/canon-contracts.ts";
+export type * from "../../../../../butler-protocol/src/canon-contracts.ts";
 const projectPath = (id: string) => `/projects/${encodeURIComponent(id)}/canon`;
 const planPath = (id: string) => `/canon/plans/${encodeURIComponent(id)}`;
 const epicPath = (id: string) => `/canon/epics/${encodeURIComponent(id)}`;
@@ -14,6 +14,7 @@ export const deleteCanonTag = (id: string): Promise<{ id: string }> => api(`/can
 export const getCanon = (projectId: string): Promise<CanonOverview> => api(projectPath(projectId));
 export const getCanonPlan = (id: string): Promise<PlanDetail> => api(planPath(id));
 export const checkCanonCriterion = (nodeId: string, criterionId: string, input: { confirmed: boolean; expected_revision: number }): Promise<unknown> => write(`/canon/specs/${encodeURIComponent(nodeId)}/criteria/${encodeURIComponent(criterionId)}`, "POST", input);
+export const getCanonSpec = (nodeId: string): Promise<CanonSpecDetail> => api(`/canon/specs/${encodeURIComponent(nodeId)}`);
 export const getCanonEpic = (id: string): Promise<EpicDetail> => api(epicPath(id));
 export const getEpicProgress = (epicId: string): Promise<EpicProgressSnapshot> => api(`${epicPath(epicId)}/progress`);
 export const createCanonPlan = (projectId: string, input: PlanInput): Promise<PlanDetail> => write(`${projectPath(projectId)}/plans`, "POST", input);

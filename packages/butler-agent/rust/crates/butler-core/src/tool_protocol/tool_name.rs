@@ -119,6 +119,7 @@ tool_names! {
     RequestServiceRestart = "request_service_restart",
     RunCommand = "run_command",
     RunDueAutomations = "run_due_automations",
+    SaveSkill = "save_skill",
     SaveWallpaperModule = "save_wallpaper_module",
     SetWallpaper = "set_wallpaper",
     StartTopicConversation = "start_topic_conversation",

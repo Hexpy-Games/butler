@@ -1,5 +1,5 @@
 //! A scripted model and an offline search provider. The model researches the
-//! way the tool contracts describe: search, open the results, read, look.
+//! way the tool contracts describe: search, read the results, answer.
 use axum::{
     Json, Router,
     extract::State,
@@ -86,14 +86,14 @@ async fn model(State(state): State<Arc<StateData>>, Json(body): Json<Value>) -> 
         .cloned()
         .collect::<Vec<_>>();
     let item = if tools.is_empty() {
-        message("Tide tables")
+        vec![message("Tide tables")]
     } else {
         next(&state, &body, &tools)
     };
-    let record = crate::browser_usage::stub::response(&item);
+    let wire = crate::steward_presentation::stub::wire_items(&item);
     let model = body["model"].as_str().unwrap_or("gpt-6-luna").to_owned();
-    let stream = futures_util::stream::iter(record.chunks).map(move |chunk| {
-        Ok::<_, std::io::Error>(bytes::Bytes::from(chunk.text.replace("gpt-6-sol", &model)))
+    let stream = futures_util::stream::iter([wire]).map(move |wire| {
+        Ok::<_, std::io::Error>(bytes::Bytes::from(wire.replace("gpt-6-luna", &model)))
     });
     axum::http::Response::builder()
         .header("content-type", "text/event-stream")
@@ -102,7 +102,7 @@ async fn model(State(state): State<Arc<StateData>>, Json(body): Json<Value>) -> 
 }
 
 /// The next research step, from the tool outputs so far.
-fn next(state: &StateData, body: &Value, tools: &[Value]) -> Value {
+fn next(state: &StateData, body: &Value, tools: &[Value]) -> Vec<Value> {
     {
         let mut seen = state.tools.lock().unwrap();
         if seen.is_empty() {
@@ -115,43 +115,27 @@ fn next(state: &StateData, body: &Value, tools: &[Value]) -> Value {
     let outputs = outputs(body);
     *state.outputs.lock().unwrap() = outputs.clone();
     match outputs.len() {
-        0 => call(0, "web_search", &json!({"query":"spring tide tables"})),
-        1 => {
-            let ids = outputs[0]["results"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .map(|r| r["id"].clone())
-                .collect::<Vec<_>>();
-            call(1, "browser_open", &json!({"results":ids}))
-        }
-        2 => call(
-            2,
-            "browser_observe",
-            &json!({"tab":outputs[1]["tabs"][0]["tab"],"look":"never","full":true}),
-        ),
-        3 => call(
-            3,
-            "web_read",
-            &json!({"url":"https://example.com/tides/alpha"}),
-        ),
-        4 => call(
-            4,
-            "browser_read",
-            &json!({"tab":outputs[1]["tabs"][0]["tab"],"max_chars":8000,"max_chunks":8}),
-        ),
-        5 => call(5, "tool_describe", &json!({"ids":["native:browser_read"]})),
-        6 => call(
-            6,
-            "tool_call",
-            &json!({"id":"native:web_read","arguments":{"url":"https://example.com/tides/alpha"}}),
-        ),
-        7 => call(
-            7,
-            "tool_call",
-            &json!({"id":"native:browser_read","arguments":{"tab":outputs[1]["tabs"][1]["tab"],"max_chars":8000,"max_chunks":8}}),
-        ),
-        _ => message("The three tables agree: the highest spring tide is 6.1 m."),
+        0 => vec![call(
+            0,
+            "web_search",
+            &json!({"query":"spring tide tables"}),
+        )],
+        1 => outputs[0]["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .map(|(index, result)| {
+                call(
+                    index + 1,
+                    "web_read",
+                    &json!({"url":result["url"],"max_chars":8000,"max_chunks":8}),
+                )
+            })
+            .collect(),
+        _ => vec![message(
+            "The three tables agree: the highest spring tide is 6.1 m.",
+        )],
     }
 }
 

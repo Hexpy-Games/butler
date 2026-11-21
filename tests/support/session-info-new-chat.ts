@@ -52,12 +52,13 @@ export async function verifyNewChatSessionInfo(browser: Browser, server: NativeA
     await page.locator('[contenteditable="true"]').fill("안녕하세요. 오늘의 작업을 정리해 주세요.");
     await page.getByRole("button", { name: "전송", exact: true }).click();
     await toggle.waitFor();
-    await page.locator(ASIDE).waitFor();
+    assert.equal(await toggle.getAttribute("aria-pressed"), "false", "The first message does not open the pane");
+    assert.equal(await page.locator(ASIDE).count(), 0);
     await capture(page, "first-message");
     await toggle.click();
-    await page.locator(ASIDE).waitFor({ state: "detached" });
-    await toggle.click();
     await page.locator(ASIDE).waitFor();
+    assert.equal(await toggle.getAttribute("aria-pressed"), "true");
+    await capture(page, "first-message-opened");
     await page.getByRole("button", { name: new RegExp(title) }).first().click();
     await page.locator(`${ASIDE} [data-session-section="task"]`).waitFor();
     assert.equal(await toggle.getAttribute("aria-pressed"), "true");

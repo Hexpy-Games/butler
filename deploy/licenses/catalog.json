@@ -1,14 +1,14 @@
 {
   "inputs": {
-    "bun.lock": "7b903cb3d269c8466fe8d78694c33839ba89432f12ad8bf0e306d5f869a92c47",
+    "bun.lock": "dcd6815299f9c809a359d631013b9cec8914b511138a9f6d871f35750a6e6032",
     "deploy/licenses/disclosure.py": "992c3d7f47a0944dc1c0ab0628e11a818b88f9ae7d5f62a5c5692715a175d859",
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
     "deploy/licenses/refresh.py": "70fde4af0a2ac557ec0fb297f4b0a850950e33146ddf96b82626f8b46f5d89fc",
-    "packages/butler-agent/rust/Cargo.lock": "12fc7fe071575df00817f627ad96d8803a45e0f8cf9fd90ca5cd3d73a3188144",
-    "packages/butler-agent/rust/Cargo.toml": "f285ad63272b66159ce655ff34c66177287cf157785d8bf84a569929a991060c",
+    "packages/butler-agent/rust/Cargo.lock": "7640e7249a74dd166ae8508b7500df2b1097dc6e28cc573be419a52243106312",
+    "packages/butler-agent/rust/Cargo.toml": "c81324fecce101ac59d380f1261ade6576245c035491a9020b90ae1816cbf1bd",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
-    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "b3589ba17a65604df6144e220b521377035f63b121fc792284805c5399431e9a",
+    "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "b1a2e90cdca2e5cb4e619607ad8e1659c58d0337e76b25d0f9a4936cbdb9e1a1",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
     "packages/butler-agent/rust/crates/butler-agent/src/host/embedding/worker/assets.rs": "f11dc3b1952a178092fbf7da589b8c39e28021c4975f884e236cd71c78c8d7a9",
     "packages/butler-agent/rust/crates/butler-canon/Cargo.toml": "6fbaad62c0bdd80654f846a11dffff9538849d496374a0486bb93f973056d92b",
@@ -32,7 +32,7 @@
     "packages/butler-agent/rust/scripts/static-ort.lock.json": "a1aee730fc0773ca02d23bad8da95c0efe56a07ded67dc36d251f475a90369b2",
     "packages/butler-agent/rust/tools/source-check/Cargo.toml": "e50cffe7e1c5a79f1fe76bf689eb65fb682a29cd8425ae3609c35cfa1f56603c",
     "packages/butler-app/client/electron/package.json": "75bf192017270ab76ef12a560dd7643789a965331e1958edb5f5a930fd1587a8",
-    "packages/butler-app/client/ui/package.json": "2280d74dca88e60d49390de9095aa2b1185faaf27d8fac10829a3b9c2a6d8506",
+    "packages/butler-app/client/ui/package.json": "216bd469a23c9436e210ecbcd5735b1ab6baad8469cb4809a6e8c3b0297b7911",
     "packages/butler-app/client/ui/src/libs/design-system/components/ProviderLogo/logos/NOTICE": "f77a06e6ca123d65971fff38e3616fe9344efab396b6a3ebea7250a771064a90",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-mono/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
     "packages/butler-app/client/ui/src/libs/design-system/fonts/ibm-plex-sans-kr/LICENSE.txt": "37784b44044a4ffd9256702b7c0982c37e5c8887ba90c6dca0479aea93dc898d",
@@ -5536,6 +5536,30 @@
       ],
       "copyright": [
         "Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com>"
+      ]
+    },
+    {
+      "id": "npm:uqr@0.1.3",
+      "name": "uqr",
+      "version": "0.1.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/uqr/-/uqr-0.1.3.tgz",
+      "artifacts": [
+        "App/Agent browser renderer"
+      ],
+      "evidenceSha256": [
+        "b39d50e24727f341a0ebdb2ab040c57efaf4076a8ad5b1d0c8c45beb975b4571"
+      ],
+      "files": [
+        "LICENSE"
+      ],
+      "integrity": "sha512-0rjE8iEJe4YmT9TOhwsZtqCMRLc5DXZUI2UEYUUg63ikBkqqE5EYWaI0etFe/5KUcmcYwLih2RND1kq+hrUJXA==",
+      "links": [
+        "https://www.npmjs.com/package/uqr/v/0.1.3"
+      ],
+      "copyright": [
+        "Copyright (c) Project Nayuki",
+        "Copyright (c) 2023 Anthony Fu <https://github.com/antfu>"
       ]
     },
     {
@@ -25153,6 +25177,34 @@
       "copyright": [
         "Copyright 2024 Radzivon Bartoshyk",
         "Copyright (c) Radzivon Bartoshyk. All rights reserved."
+      ]
+    },
+    {
+      "id": "rust:qrcode@0.14.1",
+      "name": "qrcode",
+      "version": "0.14.1",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/kennytm/qrcode-rust/tree/0695f037c5b43999a6cdf08984974b8d0388ad78",
+      "artifacts": [
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
+      ],
+      "evidenceSha256": [
+        "50e6751797c50dedd75ef1b8a0d9e42f5f8472e9fbce91f34718e9f97b0c780a",
+        "3c33ed359e50c860ed41ebd24af760ab5b7d2dc4e3f6aadb1e03fddb6dd04706"
+      ],
+      "files": [
+        "LICENSE-APACHE.txt",
+        "LICENSE-MIT.txt"
+      ],
+      "links": [
+        "https://github.com/kennytm/qrcode-rust/blob/0695f037c5b43999a6cdf08984974b8d0388ad78/LICENSE-APACHE.txt",
+        "https://github.com/kennytm/qrcode-rust/blob/0695f037c5b43999a6cdf08984974b8d0388ad78/LICENSE-MIT.txt"
+      ],
+      "copyright": [
+        "Copyright (c) 2016 kennytm"
       ]
     },
     {

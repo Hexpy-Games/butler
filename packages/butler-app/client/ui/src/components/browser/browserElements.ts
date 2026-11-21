@@ -3,8 +3,8 @@ import { api, uploadMessageFile } from "@/app/api";
 import { libraryChanged } from "@/app/libraryEvents";
 import { normalizeComposerDraft, readCachedComposerDraft, writeLocalComposerDraft } from "@/app/composerDraftCache";
 import { useComposerStore } from "../conversation/composerStore";
-import type { ElementAttachment } from "../../../../shared/browser-element";
-export type { ElementAttachment } from "../../../../shared/browser-element";
+import type { ElementAttachment } from "../../../../../../butler-protocol/src/browser-element";
+export type { ElementAttachment } from "../../../../../../butler-protocol/src/browser-element";
 
 export interface PickedElement {
   id: string; tab: string; title: string; text: string; tag: string; url: string; site: string;

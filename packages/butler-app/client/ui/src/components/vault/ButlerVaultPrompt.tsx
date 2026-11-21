@@ -3,7 +3,7 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { loadStartupSettings } from "@/app/startupSettings.ts";
 import { Button, ButtonContainer, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/butler-ds";
 import { VaultPasswordFields } from "./VaultPasswordFields";
-import { useButlerVault } from "./useButlerVault";
+import { passwordIntro, useButlerVault } from "./useButlerVault";
 
 /** Offers the vault once to an install that finished setup before this version; mounted with the workspace only. */
 export function ButlerVaultPrompt() {
@@ -53,7 +53,7 @@ export function ButlerVaultPrompt() {
       <DialogContent showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{copy.name}</DialogTitle>
-          <DialogDescription>{passwordOnly && result !== "done" ? copy.passwordIntro : copy[result]}</DialogDescription>
+          <DialogDescription>{passwordOnly && result !== "done" ? passwordIntro(vault.view) : copy[result]}</DialogDescription>
         </DialogHeader>
         {passwordOnly && result !== "done" && <VaultPasswordFields variant="card" password={password}
           onPasswordChange={setPassword} confirmation={confirmation} onConfirmationChange={setConfirmation}

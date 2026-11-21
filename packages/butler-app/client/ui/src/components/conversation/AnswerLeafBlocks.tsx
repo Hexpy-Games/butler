@@ -1,6 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { AnswerLeafView, AnswerImageView } from "../../../../shared/answer-blocks-view";
+import type { AnswerLeafView, AnswerImageView } from "../../../../../../butler-protocol/src/answer-blocks-view";
 import { EventTimeline, EventTimelineItem, Circle, MarkdownContent, MarkdownLink, MarkdownTable, MediaFrame, ProgressMeter, Stack, StatusChecklist, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy";
 import { AnswerSourceLine } from "./AnswerDataBlocks";

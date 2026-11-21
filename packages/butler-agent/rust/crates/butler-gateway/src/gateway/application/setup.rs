@@ -3,6 +3,9 @@
 //! host does the work behind [`AppSetupPort`]; the App API exposes it, and
 //! readiness changes become the live event `setup.readiness_changed`.
 
+pub(crate) mod butler_account;
+use butler_account::{ButlerAccountRequest, butler_account_disabled};
+
 use butler_platform::secrets::SecretText;
 use std::sync::Arc;
 
@@ -168,6 +171,11 @@ pub struct ButlerVaultView {
     /// The vault opens unattended on this host (keychain or sealed); when false
     /// only the master password can open it.
     pub available: bool,
+    /// Why only the master password can open a vault here: `unsigned_build`
+    /// when the keychain is withheld only because this build is not
+    /// Developer ID signed (macOS development builds).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_reason: Option<&'static str>,
     /// How the vault in use opens: `keychain`, `sealed` or `password`.
     pub unlock: Option<&'static str>,
     /// A master password is set.
@@ -302,6 +310,14 @@ pub trait AppSetupPort: Send + Sync + 'static {
     fn oauth_flow(&self, flow_id: String) -> ApplicationFuture<OauthFlowView>;
     /// Closes the flow's callback listener and drops its PKCE state.
     fn cancel_oauth(&self, flow_id: String) -> ApplicationFuture<OauthFlowView>;
+
+    /// The Butler account; off unless `butlerAccountEnabled`.
+    fn butler_account(
+        &self,
+        _request: ButlerAccountRequest,
+    ) -> ApplicationFuture<serde_json::Value> {
+        Box::pin(async { Err(butler_account_disabled()) })
+    }
 }
 
 /// Appends a `setup.readiness_changed` event for every readiness change
@@ -376,120 +392,7 @@ async fn append(
         .await;
 }
 
-/// A ready setup port for tests that do not exercise first-run setup.
 #[cfg(test)]
-pub(crate) fn test_setup_port() -> Arc<dyn AppSetupPort> {
-    struct Ready(watch::Sender<SetupReadinessView>);
-    fn unsupported<T: Send + 'static>() -> ApplicationFuture<T> {
-        Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })
-    }
-    impl AppSetupPort for Ready {
-        fn readiness(&self) -> watch::Receiver<SetupReadinessView> {
-            self.0.subscribe()
-        }
-        fn retry_readiness(&self) -> SetupReadinessView {
-            self.0.borrow().clone()
-        }
-        fn local_model_servers(&self) -> ApplicationFuture<LocalModelServersView> {
-            unsupported()
-        }
-        fn verify_provider_key(
-            &self,
-            _: AppProviderKeyInput,
-        ) -> ApplicationFuture<ProviderKeyVerificationView> {
-            unsupported()
-        }
-        fn save_provider_key(
-            &self,
-            _: AppProviderKeyInput,
-        ) -> ApplicationFuture<SavedCredentialView> {
-            unsupported()
-        }
-        fn saved_provider_key(&self, _: String) -> ApplicationFuture<SavedProviderKey> {
-            unsupported()
-        }
-        fn computer_key(&self, _: String) -> ApplicationFuture<SecretText> {
-            unsupported()
-        }
-        fn delete_computer_key(&self, _: String) -> ApplicationFuture<()> {
-            unsupported()
-        }
-        fn list_credentials(&self) -> ApplicationFuture<CredentialList> {
-            unsupported()
-        }
-        fn replace_credential(
-            &self,
-            _: String,
-            _: AppCredentialReplaceInput,
-        ) -> ApplicationFuture<ReplacedCredentialView> {
-            unsupported()
-        }
-        fn delete_credential(&self, _: String, _: bool) -> ApplicationFuture<DeletedCredential> {
-            unsupported()
-        }
-        fn chatgpt_revision(&self) -> watch::Receiver<u64> {
-            watch::channel(0).1
-        }
-        fn chatgpt_account(
-            &self,
-        ) -> ApplicationFuture<butler_models::models::chatgpt::ChatGptAccountState> {
-            unsupported()
-        }
-        fn chatgpt_notice(
-            &self,
-            _: ChatGptNoticeInput,
-        ) -> ApplicationFuture<butler_models::models::chatgpt::ChatGptAccountState> {
-            unsupported()
-        }
-        fn oauth_credentials(
-            &self,
-        ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::OauthCredentials>
-        {
-            unsupported()
-        }
-        fn remove_oauth_credential(
-            &self,
-            _: String,
-        ) -> ApplicationFuture<butler_models::models::chatgpt::credentials::RemovedOauthCredential>
-        {
-            unsupported()
-        }
-        fn butler_vault(&self) -> ApplicationFuture<ButlerVaultView> {
-            unsupported()
-        }
-        fn enable_butler_vault(&self, _: Option<SecretText>) -> ApplicationFuture<ButlerVaultView> {
-            unsupported()
-        }
-        fn unlock_butler_vault(&self, _: SecretText) -> ApplicationFuture<ButlerVaultView> {
-            unsupported()
-        }
-        fn change_butler_vault_password(
-            &self,
-            _: SecretText,
-            _: SecretText,
-        ) -> ApplicationFuture<ButlerVaultView> {
-            unsupported()
-        }
-        fn decline_butler_vault(&self) -> ApplicationFuture<ButlerVaultView> {
-            unsupported()
-        }
-        fn chatgpt_sign_out(&self) -> ApplicationFuture<ChatGptSignOutView> {
-            unsupported()
-        }
-        fn start_oauth(&self, _: AppOauthStartInput) -> ApplicationFuture<OauthFlowView> {
-            unsupported()
-        }
-        fn oauth_flow(&self, _: String) -> ApplicationFuture<OauthFlowView> {
-            unsupported()
-        }
-        fn cancel_oauth(&self, _: String) -> ApplicationFuture<OauthFlowView> {
-            unsupported()
-        }
-    }
-    let ready = SetupReadinessView {
-        memory_model: None,
-        status: SetupReadinessStatus::Ready,
-        steps: Vec::new(),
-    };
-    Arc::new(Ready(watch::channel(ready).0))
-}
+mod test_port;
+#[cfg(test)]
+pub(crate) use test_port::test_setup_port;

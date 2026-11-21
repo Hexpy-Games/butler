@@ -40,8 +40,9 @@ async fn first_recall_after_restart_history_is_complete() -> Result<(), HarnessE
     if let Some(workers) = usage::embedding_children(s.agent.pid().unwrap())? {
         assert!(workers.is_empty(), "startup spawned an embedding worker");
     }
+    let loaded = batch::reply_after_load(&s, ASK)?;
     let started = Instant::now();
-    let first = batch::recall(&s, "general", ASK).await?;
+    let (first, ()) = tokio::try_join!(batch::recall(&s, "general", ASK), loaded)?;
     let turn_ms = started.elapsed().as_millis();
     let tool_ms = recall_tool_ms(&s.sandbox.data);
     // Emit evidence before assertions so a baseline failure retains its timings.
@@ -224,9 +225,11 @@ async fn restart_keeps_worker_and_deferred_vectors_idle_until_demand() -> Result
             .contains("[embedding-worker] ready")
     );
     assert_eq!(memory_stubs::unit_states(&s.sandbox.data)?, before);
-    let first = batch::recall(&s, "general", ASK).await?;
-    assert_complete(&first, &code, 3);
+    // The first recall is the demand: it warms the worker, then the consumer embeds the deferred unit.
+    batch::recall(&s, "general", ASK).await?;
     memory_stubs::vectors_complete(&s.sandbox.data, 4).await?;
+    let warm = batch::recall(&s, "general", ASK).await?;
+    assert_complete(&warm, &code, 4);
     eprintln!(
         "RESTART-DEFERRED startup_workers=0 idle_pending=1 demand_pending=0 complete_results=4"
     );

@@ -10,7 +10,7 @@ import { launchSmokeBrowser } from "../support/smoke-browser.ts";
 import { verifyStewardHandoff, verifyAttemptHistory, verifyGraphFades, verifyGraphRevision, verifyPendingSelection, verifyStoppedGraphs } from "../support/task-graph-behavior.ts";
 import { assertTaskGraphClocks, installGraphActivityCounters } from "../support/task-graph-idle.ts";
 import { seedTaskGraphs, type SeedState } from "../support/task-graph-seed.ts";
-import type { TaskGraphSnapshot, TaskGraphsPage } from "../../packages/butler-app/client/shared/task-graph-contracts.ts";
+import type { TaskGraphSnapshot, TaskGraphsPage } from "../../packages/butler-protocol/src/task-graph-contracts.ts";
 
 const scenarios: { states: SeedState[]; tasks: number; matrix: boolean }[] = [
   { states: ["running"], tasks: 5, matrix: true },

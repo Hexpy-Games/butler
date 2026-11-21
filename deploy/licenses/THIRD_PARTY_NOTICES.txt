@@ -1544,6 +1544,13 @@ License: https://www.npmjs.com/package/unist-util-visit/v/5.1.0
 Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com>
 
 =====
+uqr 0.1.3
+MIT
+License: https://www.npmjs.com/package/uqr/v/0.1.3
+Copyright (c) Project Nayuki
+Copyright (c) 2023 Anthony Fu <https://github.com/antfu>
+
+=====
 use-callback-ref 1.3.3
 MIT
 License: https://www.npmjs.com/package/use-callback-ref/v/1.3.3
@@ -6107,6 +6114,13 @@ License: https://github.com/awxkee/pxfm/blob/acf7acd00cfc845307eda7b7b2de19e4230
 License: https://github.com/awxkee/pxfm/blob/acf7acd00cfc845307eda7b7b2de19e42303de82/LICENSE.md
 Copyright 2024 Radzivon Bartoshyk
 Copyright (c) Radzivon Bartoshyk. All rights reserved.
+
+=====
+qrcode 0.14.1
+MIT OR Apache-2.0
+License: https://github.com/kennytm/qrcode-rust/blob/0695f037c5b43999a6cdf08984974b8d0388ad78/LICENSE-APACHE.txt
+License: https://github.com/kennytm/qrcode-rust/blob/0695f037c5b43999a6cdf08984974b8d0388ad78/LICENSE-MIT.txt
+Copyright (c) 2016 kennytm
 
 =====
 quick-error 2.0.1

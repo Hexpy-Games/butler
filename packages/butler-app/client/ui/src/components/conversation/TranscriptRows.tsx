@@ -26,7 +26,7 @@ interface TranscriptRowsProps {
 
 /** Presentation rows share the transcript's virtual layout, without entering message history. */
 export function TranscriptRows({ list, layout, queue, request, anchored, enteringIds, liveActivity, activeChatId, intro, introIndex, requestIndex }: TranscriptRowsProps) {
-  const { visibleMessages, progressRows, turnState, turnStartedAt, turnId, liveMessageId, showTurnActivity,
+  const { visibleMessages, progressRows, turnState, turnStartedAt, turnId, liveMessageId, showTurnActivity, delegatedProgress,
     itemCount: messageItemCount, copiedMessageId, copyAssistantMessage, copyContextMenuText, assistantFooterMetaById, anchoredStewardProgress } = list;
   const { rowVirtualizer, topOffset } = layout;
   return rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -53,6 +53,7 @@ export function TranscriptRows({ list, layout, queue, request, anchored, enterin
           turnId={turnId}
           rowVirtualizer={rowVirtualizer}
           chat={isGeneralChat(activeChatId)}
+          delegated={delegatedProgress}
         />
       );
     }
@@ -72,7 +73,7 @@ export function TranscriptRows({ list, layout, queue, request, anchored, enterin
         rowVirtualizer={rowVirtualizer}
         stewardProgress={anchoredStewardProgress.get(message.id)}
         liveActivity={message.id === liveMessageId ? liveActivity : undefined}
-        turnLiveBelow={showTurnActivity && Boolean(turnId) && message.turn_id === turnId}
+        turnLiveBelow={showTurnActivity && !delegatedProgress && Boolean(turnId) && message.turn_id === turnId}
       />
     );
   });

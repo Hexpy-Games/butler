@@ -785,6 +785,15 @@ const butlerApp = Object.freeze({
   signOutChatGpt: () => requestBridgeResult("/setup/chatgpt-account/sign-out", {
     method: "POST", body: "{}",
   }),
+  getButlerAccount: () => requestBridgeResult("/setup/butler-account"),
+  postButlerAccount: (request) => requestBridgeResult("/setup/butler-account", {
+    method: "POST", body: JSON.stringify(request ?? {}),
+  }),
+  signOutButlerAccount: () => requestBridgeResult("/setup/butler-account", { method: "DELETE" }),
+  listButlerAccountDevices: () => requestBridgeResult("/setup/butler-account/devices"),
+  revokeButlerAccountDevice: ({ id } = {}) => requestBridgeResult(`/setup/butler-account/devices/${encodeURIComponent(id ?? "")}`, {
+    method: "DELETE",
+  }),
   getButlerVault: () => requestBridgeResult("/setup/butler-vault"),
   enableButlerVault: (request) => requestBridgeResult("/setup/butler-vault/enable", {
     method: "POST", body: JSON.stringify(request ?? {}),
@@ -1540,6 +1549,7 @@ const butlerApp = Object.freeze({
     return requestCanonWrite(`/canon/mcp-grants/${encodeURIComponent(id)}/${action}`, "POST", {});
   },
   checkCanonCriterion: ({ id, criterionId, body }) => requestCanonWrite(`/canon/specs/${encodeURIComponent(id)}/criteria/${encodeURIComponent(criterionId)}`, "POST", body),
+  getCanonSpec: ({ id }) => requestBridgeResult(`/canon/specs/${encodeURIComponent(id)}`),
   getCanonActivity: ({ id, before }) => requestBridgeResult(`/canon/epics/${encodeURIComponent(id)}/activity${before == null ? "" : `?before=${encodeURIComponent(before)}`}`),
   getCanonProposal: ({ id }) => requestBridgeResult(`/canon/proposals/${encodeURIComponent(id)}`),
   resolveCanonProposal: ({ id, body }) => requestCanonWrite(`/canon/proposals/${encodeURIComponent(id)}`, "POST", body),
@@ -1625,40 +1635,18 @@ const butlerApp = Object.freeze({
     return requestJson(query ? `/automations?${query}` : "/automations");
   },
   getAutomation: ({ automationId }) => requestJson(`/automations/${encodeURIComponent(automationId)}`),
-  // Schedule saves return the bridge envelope so a refused save keeps its
-  // code and status (the form shows 400s inline). An omitted accessMode lets
-  // the gateway use the target conversation's current mode.
-  createAutomation: ({ title, promptBody, targetSessionId, intervalSeconds, accessMode, model, schedule, scheduleType, runAt, startAt }) => requestBridgeResult("/automations", {
+  // Schedule saves carry the renderer's request body unchanged and return the
+  // bridge envelope so a refused save keeps its code and status (the form shows
+  // 400s inline). An omitted access_mode lets the gateway use the target
+  // conversation's current mode.
+  createAutomation: (body) => requestBridgeResult("/automations", {
     method: "POST",
-    body: JSON.stringify({
-      title,
-      prompt_body: promptBody,
-      target_session_id: targetSessionId,
-      interval_seconds: intervalSeconds,
-      access_mode: accessMode,
-      model,
-      schedule,
-      schedule_type: scheduleType,
-      run_at: runAt,
-      start_at: startAt,
-    }),
+    body: JSON.stringify(body),
   }),
-  updateAutomation: ({ automationId, title, promptBody, targetSessionId, intervalSeconds, state, accessMode, model, schedule, scheduleType, runAt, startAt }) =>
+  updateAutomation: ({ automationId, ...body }) =>
     requestBridgeResult(`/automations/${encodeURIComponent(automationId)}`, {
       method: "PATCH",
-      body: JSON.stringify({
-        title,
-        prompt_body: promptBody,
-        target_session_id: targetSessionId,
-        interval_seconds: intervalSeconds,
-        state,
-        access_mode: accessMode,
-        model,
-        schedule,
-        schedule_type: scheduleType,
-        run_at: runAt,
-        start_at: startAt,
-      }),
+      body: JSON.stringify(body),
     }),
   deleteAutomation: ({ automationId }) => requestJson(`/automations/${encodeURIComponent(automationId)}`, {
     method: "DELETE",

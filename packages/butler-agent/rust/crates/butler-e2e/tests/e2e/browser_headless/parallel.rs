@@ -336,21 +336,29 @@ async fn headless_full_browser_closes_idle_tab_for_new_one() -> Result<(), Harne
     let url = base.join("page-1.html").unwrap().to_string();
     let mut filled = Vec::new();
     for _ in 0..agent_tabs() {
-        let opened = open(&admin, "filler", &url).await?;
+        let opened = call_as(
+            &admin,
+            ME,
+            "filler-turn",
+            ("tab.open", &Value::Null),
+            json!({"url":url}),
+        )
+        .await?;
         assert_eq!(opened["status"], "ok", "{opened}");
         filled.push(opened["tab"].clone());
     }
     let args = json!({"url":url});
-    let fresh = call_as(&admin, ME, "fresh", ("tab.open", &Value::Null), args).await?;
+    let fresh = call_as(&admin, ME, "filler-turn", ("tab.open", &Value::Null), args).await?;
     assert_eq!(fresh["status"], "ok", "a full browser still opens: {fresh}");
-    let left = call(&admin, "filler", "tabs.list", &Value::Null, json!({})).await?;
+    let left = call(&admin, ME, "tabs.list", &Value::Null, json!({})).await?;
     let left: Vec<&Value> = left["tabs"]
         .as_array()
         .unwrap()
         .iter()
         .map(|t| &t["id"])
         .collect();
-    assert_eq!(left.len(), filled.len() - 1, "{left:?}");
+    assert_eq!(left.len(), filled.len(), "{left:?}");
+    assert!(left.contains(&&fresh["tab"]), "{left:?}");
     assert!(
         !left.contains(&&filled[0]),
         "the least recently used tab closed: {left:?}"

@@ -1,4 +1,4 @@
-import type { CanonHoldPanel, CanonTakeHerePanel } from "../../../shared/canon-queue-contracts.ts";
+import type { CanonHoldPanel, CanonTakeHerePanel } from "../../../../../butler-protocol/src/canon-queue-contracts.ts";
 
 /** Open origin kind allows future initiated work and connector messages. */
 export interface InitiatedOrigin {
@@ -29,8 +29,10 @@ export interface PatternCandidate {
   pattern_id: string;
   state: "pending" | "accepted" | "declined";
   title: string;
-  action: { title: string; schedule: InitiatedSchedule; deliver_to: "chats" };
-  evidence: { count: number; first_at: string; last_at: string };
+  action:
+    | { kind: "schedule"; title: string; schedule: InitiatedSchedule; deliver_to: "chats" }
+    | { kind: "once"; title: string; deliver_to: "chats" };
+  evidence?: { count: number; first_at: string; last_at: string };
   automation_id?: string;
 }
 export interface PatternProposalPanel {

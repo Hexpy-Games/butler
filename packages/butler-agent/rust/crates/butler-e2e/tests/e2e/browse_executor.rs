@@ -55,11 +55,6 @@ async fn browse_batches_stateless_tasks_and_hands_exact_steps_to_browser_act()
     );
     let requests = s.provider()?.requests();
     assert_surface(&requests[0]);
-    assert!(
-        requests[0]["input"]
-            .to_string()
-            .contains("Choose the helper by the work. browse (the browsing agent)")
-    );
     let results = outputs(requests.last().unwrap());
     let browse: Vec<_> = results
         .iter()
@@ -87,10 +82,23 @@ async fn browse_batches_stateless_tasks_and_hands_exact_steps_to_browser_act()
         .unwrap();
     assert_eq!(pending["handoff"]["steps"], stub::commit());
     assert_eq!(done["tab"], "product-b");
-    assert_eq!(
-        done["opened_tabs"],
-        json!(["listing", "product-a", "product-b"])
-    );
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let tabs = admin
+        .send(
+            reqwest::Method::POST,
+            "/internal/browser/calls",
+            Some(json!({"op":"tabs.list","session":"general"})),
+            &[],
+        )
+        .await?;
+    let ids: Vec<_> = tabs.body["tabs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tab| tab["id"].as_str().unwrap())
+        .collect();
+    // Each browse run keeps only the tab it returns (the approval handoff's and the finished run's).
+    assert_eq!(ids, ["cart", "product-b"]);
     assert_requests(&requests);
     assert_usage(&s.sandbox.data, &id)?;
     let usage = s.gw.get("/session-view?session_id=general").await?;
@@ -208,15 +216,17 @@ fn assert_surface(request: &Value) {
         })
         .filter_map(|tool| tool["name"].as_str())
         .collect();
-    for name in ["browse", "browser_act", "web_search", "browser_read"] {
-        assert!(names.contains(&name), "{names:?}");
-    }
     for name in [
-        "browser_open",
-        "browser_observe",
+        "browse",
+        "browser_act",
         "browser_close",
+        "web_search",
+        "browser_read",
         "image_collect",
     ] {
+        assert!(names.contains(&name), "{names:?}");
+    }
+    for name in ["browser_open", "browser_observe"] {
         assert!(!names.contains(&name), "{names:?}");
     }
 }

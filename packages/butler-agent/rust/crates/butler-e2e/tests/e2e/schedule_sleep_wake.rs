@@ -33,13 +33,15 @@ async fn setup(id: &str) -> Result<(Scenario, String), HarnessError> {
         .env("BUTLER_E2E_SCHEDULER_INSTRUMENTATION", "1");
     super::memory_fixture::initialize_empty(&setup.sandbox.data)?;
     if id == "SCHED-07" {
-        let mut cassette = butler_e2e::e2e::cassette::Cassette::load("TURN-01")?;
-        super::memory_stubs::daily_briefing(&mut cassette, &setup.sandbox.data)?;
-        let model = cassette.exchanges[0].request.key.model.clone();
-        cassette.exchanges.last_mut().unwrap().request.key.model = model;
+        let cassette = butler_e2e::e2e::cassette::Cassette::load("TURN-01")?;
+        super::memory_stubs::daily_persona(&setup.sandbox.data)?;
         setup = setup.stub_cassette(cassette);
     }
     let s = setup.start().await?;
+    if id == "SCHED-07" {
+        s.provider()?
+            .set_chat_responder(super::memory_stubs::daily_briefing);
+    }
     // These clock-jump scenarios exercise delivery at 22:04, outside quiet hours.
     let settings =
         s.gw.patch("/settings", json!({"quiet_hours_start":"23:00"}))

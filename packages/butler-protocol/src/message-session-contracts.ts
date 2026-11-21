@@ -2,7 +2,7 @@
 import type {
   InterfaceContentReferences,
   InterfaceTextReference,
-} from "../../../butler-i18n/src/index.ts";
+} from "../../butler-i18n/src/index.ts";
 
 /** App wire contracts shared by the UI, Electron declarations, and server. */
 
@@ -44,6 +44,11 @@ export interface SessionBranchSeed {
   canonicalMessageId: string | null;
   sourceThroughMessageId: string;
   excerptTruncated: boolean;
+}
+
+export interface SessionBranchResult {
+  session: SessionSummary;
+  seed: SessionBranchSeed;
 }
 
 export interface ProjectSourceReference {
@@ -166,6 +171,10 @@ export interface SessionSummary {
   last_activity_at: string;
   last_message_preview?: string;
   active_turn_state?: TurnState;
+  running_delegated_work?: boolean;
+  attention_required?: boolean;
+  /** Where the attention comes from; `subtask` when only open subtasks wait. */
+  attention_source?: "self" | "subtask" | "both";
   safe_status_label?: string;
   safe_status_label_key?: string;
   safe_status_label_parameters?: { attempt: number; maxAttempts: number };
@@ -227,6 +236,10 @@ export interface ProgressDetailRow {
 }
 
 export interface ProgressSummaryRow {
+  turn_id?: string;
+  action_key?: string | null;
+  thinking_title?: string;
+  thinking_body?: string;
   interface_label_key?: string;
   interface_content?: InterfaceContentReferences;
   interface_label_parameters?: { attempt: number; maxAttempts: number };
@@ -369,3 +382,24 @@ export interface AppEventEnvelope {
 }
 
 export const WORKER_PROFILE_ID_PATTERN = /^(?:default|w[1-9]\d*)$/u;
+
+export type MessageFileKind = "text" | "image" | "generic";
+
+export interface MessageFileRef {
+  /** Workspace label the file was produced under; null on legacy rows. */
+  source_label?: string | null;
+  /** Handed to the user as a finished file (it is in the Library). */
+  deliverable?: boolean;
+  file_id: string;
+  kind: MessageFileKind;
+  mime_type: string;
+  safe_name: string;
+  size_bytes: number;
+  sha256: string;
+  url: string;
+  /** Short-lived `url` with `?expires=..&signature=..` for token-less loads. */
+  signed_url?: string;
+  created_at: string;
+  width?: number | null;
+  height?: number | null;
+}

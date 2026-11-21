@@ -1,4 +1,4 @@
-//! Absolute paths outside a general chat's data-folder workspace, through model tool rounds.
+//! Absolute paths outside a general chat's own folder, through model tool rounds.
 use super::capability_stub::{self as provider, Case};
 use butler_e2e::e2e::{
     HarnessError,
@@ -48,7 +48,7 @@ fn cases(home: &Path, installation: &Path) -> Vec<Case> {
         ),
         case(
             "write_file",
-            json!({"path":"../Downloads/relative.txt","content":"relative parent"}),
+            json!({"path":"../../../Downloads/relative.txt","content":"relative parent"}),
         ),
         case(
             "write_file",
@@ -123,7 +123,10 @@ pub(super) async fn approve(
         "No file result before approval"
     );
     if case.tool == "write_file" {
-        let path = s.sandbox.data.join(case.args["path"].as_str().unwrap());
+        let path = s
+            .sandbox
+            .chat_folder("general")?
+            .join(case.args["path"].as_str().unwrap());
         assert!(!path.exists(), "No write before approval");
     }
     let cards = s.gw.approval_requests("general").await?;
@@ -136,12 +139,15 @@ pub(super) async fn approve(
     }
     // A path whose link or alias leads elsewhere shows where it leads.
     let observed = |path: &str| -> Result<PathBuf, HarnessError> {
-        Ok(match escaped(&s.sandbox.data, path) {
+        Ok(match escaped(&s.sandbox.chat_folder("general")?, path) {
             Some(real) => real,
             None => s
                 .sandbox
-                .data
-                .join(butler_platform::tool_paths::parse(&s.sandbox.data, path)?),
+                .chat_folder("general")?
+                .join(butler_platform::tool_paths::parse(
+                    &s.sandbox.chat_folder("general")?,
+                    path,
+                )?),
         })
     };
     let paths = if case.tool == "run_command" {
@@ -157,15 +163,18 @@ pub(super) async fn approve(
         )
     } else if matches!(case.tool, "list_files" | "grep_files") {
         json!([observed(case.args["root"].as_str().unwrap())?])
-    } else if let Some(real) = escaped(&s.sandbox.data, case.args["path"].as_str().unwrap()) {
+    } else if let Some(real) = escaped(
+        &s.sandbox.chat_folder("general")?,
+        case.args["path"].as_str().unwrap(),
+    ) {
         json!([real])
     } else {
         // Outside targets show the real path that is checked and written:
         // `..` resolved, native separators.
         let native = |path: &Path| path.components().collect::<PathBuf>();
         let path = case.args["path"].as_str().unwrap();
-        json!([match path.strip_prefix("../") {
-            Some(rest) => native(&s.sandbox.data.parent().unwrap().join(rest)),
+        json!([match path.strip_prefix("../../../") {
+            Some(rest) => native(&s.sandbox.home.join(rest)),
             None if Path::new(path).is_absolute() => native(Path::new(path)),
             None => PathBuf::from(path),
         }])
@@ -299,7 +308,7 @@ async fn run(access: Access) -> Result<(), HarnessError> {
     let installation = setup.sandbox.install.clone();
     butler_platform::secure_fs::fixture_links::directory_alias(
         &home.join("Desktop"),
-        &setup.sandbox.data.join("link"),
+        &setup.sandbox.chat_folder("general")?.join("link"),
     )?;
     let (url, script, server) = provider::start(cases(&home, &installation)[0].clone()).await?;
     let s = setup

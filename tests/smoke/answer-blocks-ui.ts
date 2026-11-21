@@ -7,10 +7,10 @@ import { join, resolve } from "node:path";
 import { createServer } from "../../packages/butler-app/client/ui/node_modules/vite/dist/node/index.js";
 import type { Page } from "playwright";
 import { launchSmokeBrowser } from "../support/smoke-browser";
-import type { AnswerBlocks } from "../../packages/butler-app/client/shared/app-contracts";
+import type { AnswerBlocks } from "../../packages/butler-protocol/src/app-contracts";
 import type { MessageRecord } from "../../packages/butler-app/client/ui/src/app/types";
 import { fixtureItems } from "../../packages/butler-app/client/ui/src/libs/design-system/blocks/ItemCard/fixtures";
-import { toMarkdown } from "../../packages/butler-app/client/shared/answer-blocks-markdown";
+import { toMarkdown } from "../../packages/butler-protocol/src/answer-blocks-markdown";
 
 const root = process.cwd();
 const only = process.env.BUTLER_ANSWER_ONLY;
@@ -293,6 +293,7 @@ async function checkLeniencyAndExpand(page: Page) {
   await open(page, { v: 1, blocks: [{ type: "cards", items: dsItems }] }, 390, "light");
   await page.locator('[data-slot="item-card"]').first().waitFor();
   assert.equal(await page.locator('[data-slot="item-card"]').count(), 5);
+  assert.equal(await page.locator('[data-slot="item-card"] [data-slot="media-frame"]').count(), 0, "cards without a picture have no picture area");
   const firstCardText = await page.locator('[data-slot="item-card"]').first().innerText();
   assert(firstCardText.includes(dateLabel), `expected locale short date ${dateLabel} in ${firstCardText}`);
   const oldSource = page.locator('[data-slot="item-card"]').first().locator('[data-slot="item-card-footer"] [role="button"]');
