@@ -2,7 +2,7 @@ import { useState } from "react";
 import { getAppCopy } from "../../../../butler-i18n/src/index.ts";
 import { GatewayError } from "../../../../butler-protocol/src/client/index.ts";
 import { useConversation } from "@/conversation/live";
-import { ListGroup, ListGroupItem, Button, IconButton, icons, ListRow, Sheet, Text, showToast } from "@/ds";
+import { ListGroup, Button, IconButton, icons, ListRow, Sheet, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { LoadState } from "../layout";
 import { SelectRow, TimeRow } from "../rows";
@@ -34,7 +34,7 @@ export function InstructionsGroup({ data, locked }: { data: Data; locked: boolea
         description={instructionMeta(item, S.memory)} meta={locked ? S.memory.inUse : undefined}
         trailing={<IconButton icon={icons.Delete} variant="ghost" label={app.common.delete} loading={deleting === item.handle}
           disabled={locked || Boolean(deleting)} onPress={() => select(item)} />} />)
-        : <ListGroupItem><Text variant="caption">{data.unavailable ? S.memory.unavailable : S.memory.instructionsEmpty}</Text></ListGroupItem>}
+        : <ListRow title={data.unavailable ? S.memory.unavailable : S.memory.instructionsEmpty} />}
     <Sheet open={Boolean(selected)} onClose={() => select(undefined)} title={S.memory.deleteInstructionTitle}
       description={S.memory.chatsKept} cancelLabel={M.settings.cancel}
       action={<Button variant="destructive" label={app.common.delete} loading={Boolean(deleting)} disabled={locked} onPress={() => void remove()} />}>
@@ -60,11 +60,10 @@ export function PatternsGroup({ data }: { data: Data }) {
     } finally { setDeleting(undefined); }
   };
   return <ListGroup label={S.pageSections.noticedPatterns}>
-    {data.inventory?.kinds.find(c => c.kind === "profile")?.health.consent_on === false ? <ListGroupItem><Text variant="caption">{S.memory.profileBuildingOff}</Text></ListGroupItem> : null}
     {!data.patterns || data.errors.patterns ? <LoadState error={Boolean(data.errors.patterns)} onRetry={data.reload} />
       : data.patterns.patterns.length ? data.patterns.patterns.map(item => <ListRow key={item.id} title={item.title}
         trailing={<IconButton icon={icons.Delete} label={app.common.delete} loading={deleting === item.id} disabled={Boolean(deleting)} onPress={() => select(item)} />} />)
-        : <ListGroupItem><Text variant="caption">{S.memory.patternsEmpty}</Text></ListGroupItem>}
+        : <ListRow title={S.memory.patternsEmpty} />}
     <SelectRow title={S.memory.proactiveLevel} value={settings?.proactive_level ?? "sometimes"}
       options={[{ value: "off", label: S.memory.proactiveOff }, { value: "sometimes", label: S.memory.proactiveSometimes }, { value: "often", label: S.memory.proactiveOften }]}
       onSelect={proactive_level => void update({ proactive_level })} />

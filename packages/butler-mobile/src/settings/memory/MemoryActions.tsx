@@ -42,7 +42,7 @@ function ResetAction({ ops, kind, card, ready, empty }: { ops: Props["ops"]; kin
   const profile = kind === "profile";
   const running = ops.resetKind === kind, locked = ops.sharedBusy && !running;
   return <>
-    <ListRow title={profile ? S.resetProfileLabel : S.resetChatLabel} meta={locked ? S.inUse : empty ? S.nothingToReset : undefined}
+    <ListRow title={profile ? S.resetProfileLabel : S.resetChatLabel}
       trailing={<Button size="sm" variant="outline" label={S.reset} loading={running} disabled={running || locked || !ready || empty} onPress={() => setOpen(true)} />} />
     <Sheet open={open} onClose={() => setOpen(false)} title={profile ? S.resetProfileTitle : S.resetChatTitle}
       description={profile ? S.resetProfileBody : S.resetBody} cancelLabel={M.settings.cancel}
