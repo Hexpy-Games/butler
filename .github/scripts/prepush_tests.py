@@ -227,6 +227,17 @@ class PrepushChecks(unittest.TestCase):
                 patch.object(prepush, 'run', return_value=False):
             self.assertEqual(prepush.main([]), 1)
 
+    # test-category: pure-logic
+    def test_ci_script_tests_skip_on_non_posix_host(self):
+        with patch.object(prepush, 'POSIX_HOST', False), \
+                patch.object(prepush, 'changed_paths', return_value=('HEAD', ['.github/scripts/prepush.py'])), \
+                patch.object(prepush, 'output', return_value='ci/checks'), \
+                patch.object(prepush, 'run', return_value=True) as run, \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            self.assertEqual(prepush.main([]), 0)
+        self.assertFalse([c for c in run.call_args_list if str(c.args[0]).startswith('CI-script')])
+        self.assertIn('SKIP CI-script tests', errors.getvalue())
+
     # test-category: format-pin
     def test_hook_is_executable_and_cannot_silently_skip_checks(self):
         hook = ROOT / '.githooks/pre-push'

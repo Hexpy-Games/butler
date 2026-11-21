@@ -259,13 +259,12 @@ const UNPAIRED_FONT_SIZE_RATCHET: Record<string, string[]> = {
 };
 
 function unpairedFontSizeFindings(path: string, rule: CssRule): DesignSystemRuleFinding[] {
-  const normalized = path.replaceAll("\\", "/");
-  if (RATIO_ALLOWED.test(normalized)) return [];
+  if (RATIO_ALLOWED.test(path)) return [];
   const match = FONT_SIZE_TOKEN.exec(rule.body);
   if (!match || LINE_HEIGHT_SET.test(rule.body)) return [];
   const selector = rule.selector.replace(/\s+/gu, " ");
   const ratchet = Object.entries(UNPAIRED_FONT_SIZE_RATCHET).some(([file, selectors]) =>
-    normalized.endsWith(`libs/design-system/${file}`) && selectors.includes(selector));
+    path.endsWith(`libs/design-system/${file}`) && selectors.includes(selector));
   if (ratchet) return [];
   return [{ path, line: rule.line, reason: `font-size var(${match[1]}) needs its --typo-*-line-height token in the same rule`, text: selector }];
 }
@@ -292,7 +291,7 @@ const TILE_AS_CARD_ICON = /<(ChoiceCard|ChoiceTile|CheckCard|ListRow)\b[^>]*?\bi
 export function lintCardIcons(path: string, source: string): DesignSystemRuleFinding[] {
   const findings: DesignSystemRuleFinding[] = [];
   const lineOf = (index: number) => source.slice(0, index).split("\n").length;
-  if (CARD_BLOCK.test(path.replaceAll("\\", "/")) && /\bIconTile\b/.test(source)) {
+  if (CARD_BLOCK.test(path) && /\bIconTile\b/.test(source)) {
     findings.push({ path, line: lineOf(source.search(/\bIconTile\b/)), reason: "card blocks show their glyph bare; no IconTile", text: "IconTile" });
   }
   for (const match of source.matchAll(TILE_AS_CARD_ICON)) {
@@ -315,13 +314,14 @@ const walkCss = (dir: string) => walk(dir, ".css");
 
 if (import.meta.main) {
   const root = process.cwd();
+  const repoPath = (path: string) => relative(root, path).replaceAll("\\", "/");
   const sourceRoot = join(root, "packages", "butler-app", "client", "ui", "src");
   const verbose = (process.env.BUTLER_VALIDATE_VERBOSE === "1" || process.argv.includes("--verbose")) &&
     !process.argv.includes("--silent");
   const files = walkCss(sourceRoot);
   const findings = [
-    ...files.flatMap((path) => lintDesignSystemRules(relative(root, path), readFileSync(path, "utf8"))),
-    ...walk(sourceRoot, ".tsx").flatMap((path) => lintCardIcons(relative(root, path), readFileSync(path, "utf8"))),
+    ...files.flatMap((path) => lintDesignSystemRules(repoPath(path), readFileSync(path, "utf8"))),
+    ...walk(sourceRoot, ".tsx").flatMap((path) => lintCardIcons(repoPath(path), readFileSync(path, "utf8"))),
   ];
   if (findings.length > 0) {
     console.error("Design-system rules lint failed:");

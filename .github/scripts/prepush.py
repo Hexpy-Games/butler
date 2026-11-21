@@ -20,6 +20,7 @@ RUST = ROOT / 'packages/butler-agent/rust'
 ISOLATE = ROOT / '.github/scripts/isolated.py'
 ARM = 'aarch64-unknown-linux-gnu'
 WINDOWS = 'x86_64-pc-windows-msvc'
+POSIX_HOST = os.name == 'posix'
 MISSING_TOOLS = set()
 
 
@@ -298,7 +299,10 @@ def check_range(base=None, tip=None, branch=None):
             success = run('actionlint', ['actionlint', *selected['workflows']]) and success
     success = powershell_check(selected['powershell']) and success
     tests = python_tests(paths)
-    if tests and sys.version_info < (3, 11):
+    if tests and not POSIX_HOST:
+        print('prepush: WARNING: SKIP CI-script tests: the lint job runs them on Linux and they '
+              'assume a POSIX host; CI still checks them', file=sys.stderr)
+    elif tests and sys.version_info < (3, 11):
         print('prepush: CI-script tests need Python 3.11+ (CI uses 3.12); '
               'put a newer python3 first on PATH', file=sys.stderr)
         success = False
