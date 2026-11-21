@@ -5,7 +5,7 @@ import { ScrollEdgeEffectProvider, useScrollEdgeEffectRef } from "@bsky.app/expo
 import { router, useFocusEffect } from "expo-router";
 import { getAppCopy } from "../../butler-i18n/src/index.ts";
 import type { EpicCard } from "../../butler-protocol/src/index.ts";
-import { Badge, Button, ButtonGroup, GlassBackdrop, Icon, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
+import { Badge, Button, ButtonGroup, GlassBackdrop, icons, ListRow, markdownPlainText, showToast, Spinner, Surface, Text, UnreadDot, useTokens } from "@/ds";
 import { nativeFetch } from "@/connection/nativeFetch";
 import { probe } from "@/connection/probe";
 import type { Problem } from "@/connection/problems";
@@ -173,7 +173,6 @@ function EpicRow({ epic }: { epic: EpicCard }) {
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
   const { client } = useConversation();
-  const t = useTokens();
   const running = epic.running || epic.queue?.state === "running";
   const open = async () => {
     try {
@@ -181,25 +180,19 @@ function EpicRow({ epic }: { epic: EpicCard }) {
       router.push({ pathname: "/chat/[id]", params: { id, title: epic.title } });
     } catch { showToast({ message: appCopy.canon.conversationFailed, tone: "warning" }); }
   };
-  return <ListRow icon={icons.Ticket} title={epic.title} onPress={() => void open()}
-    trailing={<View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
-      {running ? <Spinner label={copy.conversations.working} /> : null}
-      <Icon glyph={icons.ChevronRight} tone="tertiary" />
-    </View>} />;
+  return <ListRow icon={icons.Ticket} title={epic.title} navigates onPress={() => void open()}
+    trailing={running ? <Spinner label={copy.conversations.working} /> : undefined} />;
 }
 
 function SessionRow({ session, locale, onLongPress }: { session: NonNullable<SpaceRow["session"]>; locale: string; onLongPress?: () => void }) {
   const copy = useMobileCopy();
-  const t = useTokens();
   const title = session.title.trim() ? session.title : copy.conversations.untitled;
   const mark = sessionMark(session);
   return <ListRow icon={session.project_id && session.id !== "general" ? icons.Notebook : icons.MessageSquare}
     title={title} description={session.last_message_preview ? markdownPlainText(session.last_message_preview) : undefined}
     descriptionLines={1} meta={timeLabel(session.last_activity_at, locale, new Date())} onLongPress={onLongPress}
-    trailing={<View style={{ flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
-      {mark === "attention" ? <Badge tone="warning" label={copy.conversations.needsAttention} />
-        : mark === "working" ? <Spinner label={copy.conversations.working} />
-        : mark === "unread" ? <UnreadDot label={copy.conversations.unread} /> : null}
-      <Icon glyph={icons.ChevronRight} tone="tertiary" />
-    </View>} onPress={() => router.push({ pathname: "/chat/[id]", params: { id: session.id, title } })} />;
+    trailing={mark === "attention" ? <Badge tone="warning" label={copy.conversations.needsAttention} />
+      : mark === "working" ? <Spinner label={copy.conversations.working} />
+      : mark === "unread" ? <UnreadDot label={copy.conversations.unread} /> : undefined}
+    navigates onPress={() => router.push({ pathname: "/chat/[id]", params: { id: session.id, title } })} />;
 }

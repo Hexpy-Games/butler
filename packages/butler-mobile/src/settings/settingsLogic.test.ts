@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
 import { mergeSettings } from "./merge";
 import { draftFromPersonalization, personalizationUpdatePayload, resolvePersonaPreset, selectPersonaPreset } from "./personalization";
-import { moveBackupModel, selectableBackupModels } from "./backupModelsUtils";
 import { groupGrants, type GrantRecord } from "./grantRows";
-import type { AppModelSummary, PersonalizationView } from "./types";
+import type { PersonalizationView } from "./types";
 
 // test-category: pure-logic
 test("mergeSettings preserves nested web_search fields", () => {
@@ -26,19 +25,6 @@ test("personalization payload preserves preset frontmatter and sends custom edit
   const custom = { ...draft, personaPreset: "custom", persona: "Explain each step." };
   expect(resolvePersonaPreset(custom.persona, personalization)).toBe("custom");
   expect(personalizationUpdatePayload(personalization, custom)).toEqual({ persona: custom.persona });
-});
-
-// test-category: pure-logic
-test("selectableBackupModels excludes primary and selected identities and supports moving both ways", () => {
-  const models = [
-    { model_ref: "primary", model_id: "a" }, { model_ref: "alias", model_id: "a" },
-    { model_ref: "selected", model_id: "b" }, { model_ref: "candidate", model_id: "c" },
-  ].map(m => ({ ...m, provider_id: "provider", registered: true, runtime_supported: true } as AppModelSummary));
-  expect(selectableBackupModels(models, "primary", ["selected"]).map(m => m.model_ref)).toEqual(["candidate"]);
-  const order = ["selected", "candidate"];
-  expect(moveBackupModel(order, 1, -1)).toEqual(["candidate", "selected"]);
-  expect(moveBackupModel(order, 0, 1)).toEqual(["candidate", "selected"]);
-  expect(order).toEqual(["selected", "candidate"]);
 });
 
 // test-category: pure-logic

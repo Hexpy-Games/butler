@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useContext, useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { RADIUS } from "../design/tokens";
@@ -6,6 +6,7 @@ import { useTokens } from "../design/useTokens";
 import { BaseText } from "./internal/BaseText";
 import { icons, type IconGlyph } from "./icons";
 import { IconSlot, useScaledLine } from "./internal/IconSlot";
+import { GroupDivider, GROUP_INNER_GAP, InListGroup } from "./internal/listGroup";
 import { run, useReducedMotion } from "./internal/motion";
 import { usePress } from "./internal/press";
 import { fontStyle, maxFontScale, textStyle, weightValue } from "./internal/typography";
@@ -17,11 +18,17 @@ export interface ListRowProps {
   icon?: IconGlyph | React.ReactElement;
   trailing?: React.ReactNode;
   disclosure?: { expanded: boolean };
+  /** Pushes a deeper page; ListRow draws the trailing chevron. Leave unset for pickers, toggles and actions. */
+  navigates?: boolean;
   onPress?: () => void;
   /** Opens the row's actions; also offered to screen readers as the "longpress" action. */
   onLongPress?: () => void;
   selected?: boolean;
   disabled?: boolean;
+  /** Danger-toned title and icon, for a destructive action row. */
+  destructive?: boolean;
+  /** Accent-toned title for a neutral action row (e.g. "Check for updates"). */
+  accent?: boolean;
   titleLines?: 1 | 2;
   descriptionLines?: 1 | 2 | 3;
   accessibilityLabel?: string;
@@ -30,11 +37,12 @@ export interface ListRowProps {
 }
 
 export function ListRow({
-  title, description, meta, icon, trailing, onPress, onLongPress, selected, disabled, titleLines = 1, descriptionLines = 2,
-  accessibilityLabel, accessibilityHint, testID, disclosure,
+  title, description, meta, icon, trailing, onPress, onLongPress, selected, disabled, destructive, accent, titleLines = 1, descriptionLines = 2,
+  accessibilityLabel, accessibilityHint, testID, disclosure, navigates,
 }: ListRowProps) {
   const t = useTokens();
   const reduced = useReducedMotion();
+  const grouped = useContext(InListGroup);
   const press = usePress({ scale: false, disabled: disabled || (!onPress && !onLongPress) });
   const filled = press.pressed || !!selected;
   const underlay = useRef(new Animated.Value(filled ? 1 : 0)).current;
@@ -51,10 +59,15 @@ export function ListRow({
 
   const titleLine = t.length("--typo-app-title-line-height");
   const trailingHeight = useScaledLine(titleLine);
-  const radius = t.length(RADIUS);
+  const radius = grouped ? 0 : t.length(RADIUS);
+  // Grouped: 20 inset, 16 + 24 + 16 = 56 one-line height, 20 glyph, 14 gap. Loose: 8 inset, 12 + 24 + 12 = 48, 22 glyph, 12 gap.
+  const padX = t.length(grouped ? "--space-5" : "--space-sm");
+  const padY = t.length(grouped ? "--space-4" : "--space-md");
+  const iconSize = t.length(grouped ? "--icon-size-lg" : "--sidebar-icon-size");
+  const iconGap = grouped ? GROUP_INNER_GAP : t.length("--sidebar-row-gap");
   const fg = (key: "--text-primary" | "--text-secondary" | "--text-tertiary") =>
     t.color(disabled ? "--interactive-disabled-fg" : key);
-  const titleColor = fg("--text-primary");
+  const titleColor = disabled ? t.color("--interactive-disabled-fg") : t.color(destructive ? "--color-danger-text" : accent ? "--accent-text" : "--text-primary");
   const titleText = (
     <BaseText
       numberOfLines={titleLines}
@@ -71,14 +84,15 @@ export function ListRow({
 
   const body = (
     <>
+      {grouped ? <GroupDivider inset={padX + (icon ? iconSize + iconGap : 0)} /> : null}
       <Animated.View
         pointerEvents="none"
         style={[StyleSheet.absoluteFill, { borderRadius: radius, backgroundColor: t.color("--selection-strong"), opacity: underlay }]}
       />
       {icon ? (
         <View style={{ opacity: 0.82 }}>
-          <IconSlot size={t.length("--sidebar-icon-size")} lineHeight={titleLine}>
-            {React.isValidElement(icon) ? icon : <HugeiconsIcon icon={icon} size={t.length("--sidebar-icon-size")} color={titleColor} />}
+          <IconSlot size={iconSize} lineHeight={titleLine}>
+            {React.isValidElement(icon) ? icon : <HugeiconsIcon icon={icon} size={iconSize} color={titleColor} />}
           </IconSlot>
         </View>
       ) : null}
@@ -93,7 +107,7 @@ export function ListRow({
             <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: "50%", flexDirection: "row", alignItems: "center", gap: t.length("--space-1") }}>
               {titleText}
               <Animated.View style={{ transform: [{ rotate: rotation.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "90deg"] }) }] }}>
-                <HugeiconsIcon icon={icons.ChevronRight} size={t.length("--sidebar-icon-size")} color={fg("--text-tertiary")} />
+                <HugeiconsIcon icon={icons.ChevronRight} size={iconSize} color={fg("--text-tertiary")} />
               </Animated.View>
             </View>
           ) : titleText}
@@ -117,19 +131,24 @@ export function ListRow({
           </BaseText>
         ) : null}
       </View>
-      {trailing ? <View style={{ height: trailingHeight, justifyContent: "center" }}>{trailing}</View> : null}
+      {trailing || navigates ? (
+        <View style={{ height: trailingHeight, flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
+          {trailing}
+          {navigates ? <HugeiconsIcon icon={icons.ChevronRight} size={t.length(grouped ? "--icon-size-lg" : "--icon-size-md")} color={fg("--text-tertiary")} /> : null}
+        </View>
+      ) : null}
     </>
   );
 
   const container = {
     flexDirection: "row",
     alignItems: "flex-start",
-    minHeight: t.length("--sidebar-row-height"),
-    paddingVertical: t.length("--space-md"),
-    paddingHorizontal: t.length("--space-sm"),
-    columnGap: t.length("--sidebar-row-gap"),
+    minHeight: titleLine + 2 * padY,
+    paddingVertical: padY,
+    paddingHorizontal: padX,
+    columnGap: iconGap,
     borderRadius: radius,
-    boxShadow: press.focused ? t.shadow("--focus-ring") : undefined,
+    boxShadow: press.focused ? t.shadow("--focus-ring").map(s => (grouped ? { ...s, inset: true } : s)) : undefined,
   } as const;
 
   if (!onPress && !onLongPress) return <View style={container} testID={testID}>{body}</View>;

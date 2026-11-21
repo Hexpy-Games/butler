@@ -1,5 +1,3 @@
-import type { AppCopy } from "../../../butler-i18n/src/index.ts";
-
 // Desktop: components/usage/compactTokens.ts.
 /** Shared Usage-page token notation; Korean never falls back to Latin units. */
 export function compactTokens(value: number, locale: string): string {
@@ -20,21 +18,6 @@ export function compactTokens(value: number, locale: string): string {
     ? { maximumFractionDigits: scaled >= 100 ? 0 : 1 }
     : { maximumSignificantDigits: 3 };
   return `${new Intl.NumberFormat(locale, options).format(scaled)}${suffix}`;
-}
-
-// Desktop: components/conversation/conversationUtils.tsx:22-27.
-export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 ** 3) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-}
-
-// Desktop: app/utils.ts:1922-1927.
-export function relativeAge(iso: string | null | undefined, app: AppCopy): string {
-  const timestamp = Date.parse(iso ?? "");
-  if (!Number.isFinite(timestamp)) return "";
-  return app.interfaceTemplates.relativeAge(Math.max(0, Math.floor((Date.now() - timestamp) / 1000)));
 }
 
 // Desktop memory operations use crypto.randomUUID; Hermes needs the RFC 4122 v4 equivalent.

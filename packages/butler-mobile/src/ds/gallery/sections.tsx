@@ -18,6 +18,7 @@ import { icons } from "../icons";
 import { ForcedState } from "../internal/press";
 import { Markdown } from "../Markdown";
 import { ListRow } from "../ListRow";
+import { ListGroupSection } from "./ListGroupSection";
 import { QueuedMessage } from "../QueuedMessage";
 import { Sheet, SheetPanel } from "../Sheet";
 import { Spinner } from "../Spinner";
@@ -257,7 +258,6 @@ function SwitchSection() {
       <Cell name="on">{flex(<Switch value onValueChange={noop} label="on" />)}</Cell>
       <Cell name="disabled off">{flex(<Switch value={false} onValueChange={noop} label="off" disabled />)}</Cell>
       <Cell name="disabled on">{flex(<Switch value onValueChange={noop} label="on" disabled />)}</Cell>
-      <Cell name="focused"><Forcing state="focused">{flex(<Switch value onValueChange={noop} label="on" />)}</Forcing></Cell>
       <Cell name="in a list row" list><ListRow title={en.sentence} description={en.note} trailing={<Switch value onValueChange={noop} label={en.sentence} />} /></Cell>
       <Cell name="Live">{flex(<LiveSwitch />)}</Cell>
     </>
@@ -454,6 +454,7 @@ export const sections: { id: string; title: string; render: (state?: string) => 
   { id: "button-group", title: "ButtonGroup", render: () => <ButtonGroupSection /> },
   { id: "surface", title: "Surface", render: () => <SurfaceSection /> },
   { id: "list-row", title: "ListRow", render: () => <ListRowSection /> },
+  { id: "list-group", title: "ListGroup", render: () => <ListGroupSection /> },
   { id: "text-field", title: "TextField", render: () => <TextFieldSection /> },
   { id: "switch", title: "Switch", render: () => <SwitchSection /> },
   { id: "badge", title: "Badge", render: () => <BadgeSection /> },

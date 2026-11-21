@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { getAppCopy, type AppCopy } from "../../../butler-i18n/src/index.ts";
 import { GatewayError } from "../../../butler-protocol/src/client/index.ts";
 import { useConversation } from "@/conversation/live";
-import { Button, IconButton, icons, ListRow, Sheet, Text, TextField, showToast } from "@/ds";
+import { ListGroup, ListGroupItem, Button, IconButton, icons, ListRow, Sheet, Text, TextField, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { GroupInset, LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
+import { LoadState, SettingsScreen } from "@/settings/layout";
 import { SelectRow } from "@/settings/rows";
 import { groupGrants, type GrantedRow } from "@/settings/grantRows";
 import type { AuthorityPermissionsView, GrantKind } from "@/settings/types";
@@ -52,18 +52,18 @@ export default function SecuritySettings() {
     [row.target, row.cwd ?? "", ...[...row.places.values()].map(title => title ?? copy.deletedChat), row.project ?? "", copy.kind[row.kind]]
       .some(text => text.toLocaleLowerCase(locale).includes(search))));
   const date = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" });
-  return <SettingsScreen title={S.sections.security} description={S.sectionDescriptions.security}>
-    <SettingsGroup title={S.pageSections.grants} description={S.pageSectionDescriptions.grants}>
-      {!grants.rows || grants.error ? <GroupInset><LoadState error={grants.error} message={copy.loadFailed} onRetry={grants.reload} /></GroupInset> : <>
-        {hasFilters ? <><GroupInset><TextField label={copy.search} value={query} onChangeText={setQuery} /></GroupInset>
+  return <SettingsScreen title={S.sections.security}>
+    <ListGroup label={S.pageSections.grants}>
+      {!grants.rows || grants.error ? <LoadState error={grants.error} message={copy.loadFailed} onRetry={grants.reload} /> : <>
+        {hasFilters ? <><ListGroupItem><TextField label={copy.search} value={query} onChangeText={setQuery} /></ListGroupItem>
           <SelectRow<GrantKind | "all"> title={copy.filter} value={kind} options={[{ value: "all", label: copy.filterAll }, ...kinds.map(value => ({ value, label: copy.kind[value] }))]} onSelect={setKind} /></> : null}
         {visible.map(row => <ListRow key={row.key} title={copy.kind[row.kind]}
           description={`${(row.target || copy.targetUnknown).split("\n")[0]}\n${[copy.scope[row.scope], where(row, copy), row.cwd ? copy.cwd(row.cwd) : ""].filter(Boolean).join(" · ")}`}
           meta={date.format(new Date(row.createdAt))} trailing={<IconButton icon={icons.Delete} label={copy.revoke} disabled={Boolean(grants.busy)}
             loading={grants.busy === row.key} onPress={() => row.scope === "always" ? select(row) : void grants.revoke(row)} />} />)}
-        {!visible.length ? <GroupInset><Text variant="caption">{rows.length ? copy.noMatch : copy.empty}</Text></GroupInset> : null}
+        {!visible.length ? <ListGroupItem><Text variant="caption">{rows.length ? copy.noMatch : copy.empty}</Text></ListGroupItem> : null}
       </>}
-    </SettingsGroup>
+    </ListGroup>
     <Sheet open={Boolean(selected)} onClose={() => select(undefined)} title={copy.revokeAlwaysTitle} description={copy.revokeAlwaysMessage} cancelLabel={M.settings.cancel}
       action={<Button variant="destructive" label={copy.revoke} disabled={Boolean(grants.busy)} onPress={() => { if (selected) { void grants.revoke(selected); select(undefined); } }} />}>
       {selected ? <ListRow title={copy.kind[selected.kind]} description={selected.target || copy.targetUnknown} /> : null}
