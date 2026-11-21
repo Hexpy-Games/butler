@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import type { OperationOutputView } from "../../../butler-protocol/src/index.ts";
-import { RADIUS } from "@/design/tokens";
+import { alpha, RADIUS } from "@/design/tokens";
 import { useTokens } from "@/design/useTokens";
 import { Button } from "@/ds/Button";
 import { Text } from "@/ds/Text";
 import { BaseText } from "@/ds/internal/BaseText";
 import { CODE_FONT } from "@/ds/internal/codeFont";
+import { textStyle } from "@/ds/internal/typography";
 import { useAppLocale } from "@/i18n";
 import { useConversation } from "./live";
 import { readOutputPage, presentOperationOutput, type OperationOutputPresentation } from "./operationOutput.ts";
@@ -48,13 +49,13 @@ export function OperationOutput({ turnId, requestId, resultId, toolName, command
   }
 
   if (state === "failed" && pages.length === 0) {
-    return <Text variant="caption">{copy.interfaceDetails.outputLoadFailed}</Text>;
+    return <Muted>{copy.interfaceDetails.outputLoadFailed}</Muted>;
   }
   const output = presentOperationOutput(toolName, pages.map(page => page.content).join(""), latest?.complete === true, copy);
   const execution = output.kind === "command" ? output.command ?? command : command;
   return <View style={{ gap: t.length("--space-xs") }}>
-    {execution ? <Text variant="caption">{copy.interfaceStatus.execution}: {execution}</Text> : null}
-    {execution ? <Text variant="caption">{copy.interfaceStatus.result}:</Text> : null}
+    {execution ? <Muted>{copy.interfaceStatus.execution}: {execution}</Muted> : null}
+    {execution ? <Muted>{copy.interfaceStatus.result}:</Muted> : null}
     <OutputBody output={output} />
     {latest && !latest.complete ? <Button variant="ghost" size="sm" disabled={state === "loading"}
       label={state === "loading" ? copy.interfaceDetails.loading : copy.interfaceDetails.moreOutput}
@@ -62,19 +63,24 @@ export function OperationOutput({ turnId, requestId, resultId, toolName, command
   </View>;
 }
 
+function Muted({ children }: { children: React.ReactNode }) {
+  const t = useTokens();
+  return <BaseText style={{ ...textStyle(t, "caption"), color: alpha(t.color("--text-tertiary"), 0.78) }}>{children}</BaseText>;
+}
+
 function OutputBody({ output }: { output: OperationOutputPresentation }) {
   const t = useTokens();
-  if (output.kind === "summary") return <Text variant="caption">{output.content}</Text>;
+  if (output.kind === "summary") return <Muted>{output.content}</Muted>;
   if (output.kind === "sections") return <View style={{ gap: t.length("--space-xs") }}>
-    <Text variant="caption">{output.summary}</Text>
+    <Muted>{output.summary}</Muted>
     {output.sections.map((section, index) => <View key={index} style={{ gap: t.length("--space-xs") }}>
-      <Text variant="caption">{section.title}</Text>
-      {section.message ? <Text variant="caption">{section.message}</Text> : null}
+      <Muted>{section.title}</Muted>
+      {section.message ? <Muted>{section.message}</Muted> : null}
       {section.content ? <WorkActivityOutput>{section.content}</WorkActivityOutput> : null}
     </View>)}
   </View>;
   if (output.kind === "command") return <View style={{ gap: t.length("--space-xs") }}>
-    <Text variant="caption">{output.summary}</Text>
+    <Muted>{output.summary}</Muted>
     {output.content ? <WorkActivityOutput>{output.content}</WorkActivityOutput> : null}
   </View>;
   return <WorkActivityOutput>{output.content}</WorkActivityOutput>;
@@ -108,7 +114,7 @@ export function ThinkingDetails({ text, turnId, requestId, resultId }: {
       .then(output => { if (active) setStored(output.content); }, () => { if (active) setFailed(true); });
     return () => { active = false; };
   }, [client, text, turnId, requestId, resultId]);
-  if (failed) return <Text variant="caption">{copy.interfaceDetails.outputLoadFailed}</Text>;
+  if (failed) return <Muted>{copy.interfaceDetails.outputLoadFailed}</Muted>;
   return <View style={{ gap: t.length("--space-sm") }}>
     {(text ?? stored ?? retained.current ?? "").split(/\r?\n\s*\r?\n/u).filter(paragraph => paragraph.trim()).map((paragraph, index) => (
       <Text variant="caption" key={index} tone="tertiary">

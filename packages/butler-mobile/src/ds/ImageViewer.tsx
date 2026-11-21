@@ -3,7 +3,7 @@ import { Animated, Image, Modal, PanResponder, Platform, Pressable, ScrollView, 
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ViewerImage } from "../conversation/imageViewer";
-import { clampView, DOUBLE_TAP_ZOOM, MAX_ZOOM, MIN_ZOOM, zoomAt, ZOOM_STEP, type ZoomView } from "../conversation/imageOutputs";
+import { centringInsets, clampView, DOUBLE_TAP_ZOOM, MAX_ZOOM, MIN_ZOOM, onPicture, zoomAt, ZOOM_STEP, type ZoomView } from "../conversation/imageOutputs";
 import { PILL } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { IconButton } from "./Button";
@@ -112,7 +112,7 @@ function ImageViewerStage({ image, label, failedLabel, children, ref, onScale, o
   return <View pointerEvents="box-none" onLayout={({ nativeEvent }) => setStage(nativeEvent.layout)}
     style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
     {failed ? <ViewerFailure label={failedLabel} /> : Platform.OS === "ios"
-      ? <IOSPicture ref={ref} width={width} height={height} onScale={onScale} onClose={onClose}>{picture}</IOSPicture>
+      ? <IOSPicture ref={ref} width={width} height={height} stage={stage} onScale={onScale} onClose={onClose}>{picture}</IOSPicture>
       : <AndroidPicture ref={ref} width={width} height={height} onScale={onScale} onClose={onClose} dragFade={dragFade}>{picture}</AndroidPicture>}
     {children}
   </View>;
@@ -127,22 +127,26 @@ function ViewerFailure({ label }: { label: string }) {
   </View>;
 }
 
-function IOSPicture({ width, height, children, ref, onScale, onClose }: ZoomProps) {
+function IOSPicture({ width, height, stage, children, ref, onScale, onClose }: ZoomProps & { stage: { width: number; height: number } }) {
   const reduced = useReducedMotion();
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const lastPress = useRef(0);
   const position = useRef({ scale: MIN_ZOOM, x: 0, y: 0 });
-  const zoomTo = (scale: number, centreX: number, centreY: number) => {
-    const w = width / scale, h = height / scale;
+  const [scale, setZoomScale] = useState(MIN_ZOOM);
+  const insets = centringInsets(stage, width, height, scale);
+  const frame = useRef({ x: 0, y: 0 });
+  const tap = useRef({ x: 0, y: 0, at: 0, multi: false, dragged: false });
+  const zoomTo = (next: number, centreX: number, centreY: number) => {
+    const w = stage.width / next, h = stage.height / next;
     scroll.current?.getScrollResponder()?.scrollResponderZoomTo({
-      x: Math.max(0, Math.min(width - w, centreX - w / 2)),
-      y: Math.max(0, Math.min(height - h, centreY - h / 2)),
-      width: w, height: h, animated: !reduced,
+      x: centreX - w / 2, y: centreY - h / 2, width: w, height: h, animated: !reduced,
     });
   };
   useImperativeHandle(ref, () => ({ zoomBy(factor) {
     const { scale, x, y } = position.current;
-    zoomTo(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, scale * factor)), (x + width / 2) / scale, (y + height / 2) / scale);
+    const cx = Math.max(0, Math.min(width, (x + stage.width / 2) / scale));
+    const cy = Math.max(0, Math.min(height, (y + stage.height / 2) / scale));
+    zoomTo(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, scale * factor)), cx, cy);
   } }));
   const press = ({ nativeEvent }: GestureResponderEvent) => {
     const now = Date.now();
@@ -152,13 +156,29 @@ function IOSPicture({ width, height, children, ref, onScale, onClose }: ZoomProp
       lastPress.current = 0;
     } else lastPress.current = now;
   };
-  return <ScrollView ref={scroll} style={{ width, height, flexGrow: 0 }} minimumZoomScale={MIN_ZOOM} maximumZoomScale={MAX_ZOOM}
-    centerContent bouncesZoom alwaysBounceVertical showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
+  return <ScrollView ref={scroll} style={{ flex: 1, alignSelf: "stretch" }} contentContainerStyle={{ width, height }}
+    contentInset={insets} contentOffset={{ x: -insets.left, y: -insets.top }}
+    automaticallyAdjustContentInsets={false} contentInsetAdjustmentBehavior="never"
+    minimumZoomScale={MIN_ZOOM} maximumZoomScale={MAX_ZOOM}
+    bouncesZoom alwaysBounceVertical showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
+    onLayout={() => scroll.current?.measureInWindow((x, y) => { frame.current = { x, y }; })}
+    onTouchStart={({ nativeEvent }) => {
+      tap.current = { x: nativeEvent.pageX, y: nativeEvent.pageY, at: Date.now(), multi: nativeEvent.touches.length > 1, dragged: false };
+    }} onTouchMove={({ nativeEvent }) => {
+      if (nativeEvent.touches.length > 1) tap.current.multi = true;
+    }} onScrollBeginDrag={() => { tap.current.dragged = true; }}
+    onTouchEnd={({ nativeEvent }) => {
+      const { x, y, at, multi, dragged } = tap.current;
+      const { pageX, pageY } = nativeEvent;
+      const isTap = !multi && !dragged && Date.now() - at < 300 && Math.hypot(pageX - x, pageY - y) < 10;
+      if (isTap && !onPicture({ x: pageX - frame.current.x, y: pageY - frame.current.y }, position.current, width, height, scale)) onClose();
+    }}
     scrollEventThrottle={16} onScroll={({ nativeEvent }) => {
       position.current = { scale: nativeEvent.zoomScale!, x: nativeEvent.contentOffset.x, y: nativeEvent.contentOffset.y };
       onScale(nativeEvent.zoomScale!);
+      setZoomScale(Math.round(nativeEvent.zoomScale! * 100) / 100);
     }} onScrollEndDrag={({ nativeEvent }) => {
-      if (nativeEvent.zoomScale === MIN_ZOOM && nativeEvent.contentOffset.y <= -(height / 6)) onClose();
+      if (nativeEvent.zoomScale === MIN_ZOOM && nativeEvent.contentOffset.y + insets.top <= -(stage.height / 6)) onClose();
     }}>
     <Pressable accessible={false} onPress={press}>{children}</Pressable>
   </ScrollView>;
