@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Platform, ScrollView, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { Stack, router } from "expo-router";
@@ -19,6 +20,7 @@ export default function Settings() {
   const copy = useMobileCopy();
   const S = getAppCopy(useAppLocale()).settings;
   const t = useTokens();
+  const insets = useSafeAreaInsets();
   const gutter = t.length("--adaptive-page-gutter");
   const { pairing, disconnect } = useConversation();
   const address = pairing ? pairing.origin.replace(/^[^:]+:\/\//, "") : "";
@@ -27,10 +29,11 @@ export default function Settings() {
   const version = Application.nativeApplicationVersion === null || Application.nativeBuildVersion === null
     ? copy.settings.version(Constants.expoConfig?.version ?? "")
     : copy.settings.version(Application.nativeApplicationVersion, Application.nativeBuildVersion);
+  // iOS adds the bottom safe area through contentInsetAdjustmentBehavior; Android needs it in the content.
   return <Surface variant="base" grow edges={["left", "right"]}>
     <Stack.Screen options={{ ...useHeaderOptions(), title: copy.settings.title }} />
     <ScrollView contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ paddingHorizontal: gutter, paddingVertical: gutter, gap: t.length("--space-6") }}>
+      contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: gutter, paddingBottom: gutter + (Platform.OS === "android" ? insets.bottom : 0), gap: t.length("--space-6") }}>
       {pairing ? <ListGroup label={copy.settings.computer}>
         <ListRow icon={icons.Computer} title={pairing.computerName ?? address} description={pairing.computerName ? address : undefined} />
       </ListGroup> : null}
