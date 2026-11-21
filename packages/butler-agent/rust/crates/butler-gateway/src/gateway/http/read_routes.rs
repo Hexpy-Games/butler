@@ -166,6 +166,7 @@ pub(super) fn health(state: &HttpState) -> Result<Response, HttpError> {
         protocol_version: APP_PROTOCOL_VERSION.to_owned(),
     };
     let mut data = serde_json::to_value(data).map_err(|_| HttpError::Internal)?;
+    data["agent_version"] = serde_json::json!(state.agent_version);
     data["safe_mode"] =
         serde_json::json!(state.application.plugins().is_some_and(|p| p.safe_mode()));
     if let Some(opens) = crate::gateway::idle_probe::transcript_opens() {

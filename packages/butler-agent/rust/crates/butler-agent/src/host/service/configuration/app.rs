@@ -229,6 +229,7 @@ impl AppServiceConfiguration {
 
     pub(crate) fn gateway_config(&self) -> GatewayConfig {
         GatewayConfig {
+            agent_version: self.gateway.agent_version.clone(),
             local_auth: self.gateway.local_auth.clone(),
             dev_cors_origin: self.gateway.dev_cors_origin.clone(),
             allowed_hosts: self.gateway.allowed_hosts.clone(),
@@ -338,6 +339,7 @@ fn gateway_config(
         .map(|value| number_from_string(&value))
         .unwrap_or(60_000.0);
     GatewayConfig {
+        agent_version: crate::host::build_info::current().version.to_owned(),
         local_auth,
         dev_cors_origin: env::var("BUTLER_APP_DEV_ORIGIN").ok(),
         allowed_hosts: settings

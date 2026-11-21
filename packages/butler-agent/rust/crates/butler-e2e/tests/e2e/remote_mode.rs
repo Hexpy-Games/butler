@@ -70,7 +70,7 @@ async fn remote_mode_serves_only_through_its_socket_and_exits_when_idle() -> Res
         .arg(&key)
         .output()?;
     assert!(generated.status.success());
-    let sshd = TestSshd::start(&sandbox.home.join("sshd"), &key.with_extension("pub"))?;
+    let sshd = TestSshd::start(&sandbox.home.join("sshd"), &key.with_extension("pub"), None)?;
     let mut launch = Launch::new(&sandbox)?;
     launch.data = PathBuf::from(format!(
         "/tmp/bre-{}-{}",

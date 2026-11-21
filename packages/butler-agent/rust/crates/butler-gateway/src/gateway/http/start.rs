@@ -35,6 +35,7 @@ pub(in crate::gateway) fn serve(
         clear_opened_files(config.output_data.clone()).await;
         let headless = headless(config.headless_browser, &remote, &shutdown);
         let state = Arc::new(HttpState {
+            agent_version: config.agent_version,
             browser: Arc::new(super::browser_host::Hub::default()),
             headless,
             app_host,

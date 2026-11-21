@@ -26,7 +26,11 @@ pub struct TestSshd {
 }
 
 impl TestSshd {
-    pub fn start(dir: &Path, authorized_pubkey: &Path) -> Result<Self, HarnessError> {
+    pub fn start(
+        dir: &Path,
+        authorized_pubkey: &Path,
+        home: Option<&Path>,
+    ) -> Result<Self, HarnessError> {
         std::fs::create_dir_all(dir)?;
         let host_key = dir.join("host_key");
         let port = std::net::TcpListener::bind("127.0.0.1:0")?
@@ -51,6 +55,17 @@ impl TestSshd {
                 dir.join("sshd.pid").display(),
             ),
         )?;
+        if let Some(home) = home {
+            use std::io::Write;
+            let mut config = std::fs::OpenOptions::new()
+                .append(true)
+                .open(dir.join("sshd_config"))?;
+            writeln!(
+                config,
+                "SetEnv HOME={0} BUTLER_E2E_TIER=stub BUTLER_E2E_EMBED_LOCAL_ONLY=1 BUTLER_E2E_EMBED_SOURCES=http://127.0.0.1:9 BUTLER_PROVIDER_QUOTA_POLLING=0 BUTLER_SERVICE_MANAGER=off BUTLER_SECRET_STORE=file BUTLER_BROWSER_HEADLESS=off BUTLER_BROWSER_APP=off BUTLER_BROWSER_PROFILES_HOME={0} BUTLER_AGENT_IMPORT_HOME={0} BUTLER_TEST_SECRET_STORE={0}/test-secrets/store.json",
+                home.display()
+            )?;
+        }
         server.spawn()?;
         Ok(server)
     }

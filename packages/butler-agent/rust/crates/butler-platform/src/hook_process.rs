@@ -22,6 +22,8 @@ pub struct HookProcess {
     pub cwd: PathBuf,
     /// Full UTF-8 envelope, never truncated.
     pub stdin: Vec<u8>,
+    /// File copied to stdin after the envelope, without buffering it in memory.
+    pub stdin_file: Option<PathBuf>,
     /// Hard deadline.
     pub timeout: Duration,
     /// Stdout bound in bytes; stderr always uses `OUTPUT_LIMIT`.
@@ -96,10 +98,11 @@ pub async fn run(
 ) -> Result<HookOutput, HookProcessError> {
     let timeout = input.timeout;
     let stdout_limit = input.stdout_limit;
-    let (command, payload) =
-        tokio::task::spawn_blocking(move || prepare(&input).map(|command| (command, input.stdin)))
-            .await
-            .map_err(error)??;
+    let (command, payload, stdin_file) = tokio::task::spawn_blocking(move || {
+        prepare(&input).map(|command| (command, input.stdin, input.stdin_file))
+    })
+    .await
+    .map_err(error)??;
     if cancel.is_cancelled() {
         return Err(HookProcessError::Cancelled);
     }
@@ -113,24 +116,12 @@ pub async fn run(
         let _ = child.kill().await;
         return Err(error(e));
     }
-    let mut stdin = child.stdin.take().ok_or_else(|| error("Missing stdin"))?;
+    let stdin = child.stdin.take().ok_or_else(|| error("Missing stdin"))?;
     let stdout = child.stdout.take().ok_or_else(|| error("Missing stdout"))?;
     let stderr = child.stderr.take().ok_or_else(|| error("Missing stderr"))?;
     let result = {
         let io = async {
-            let write = async move {
-                // A handler may intentionally exit without reading stdin.
-                let result = match stdin.write_all(&payload).await {
-                    Ok(()) => {
-                        let _ = stdin.shutdown().await;
-                        Ok(())
-                    }
-                    Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
-                    Err(e) => Err(error(e)),
-                };
-                drop(stdin); // EOF must precede waiting for the handler.
-                result
-            };
+            let write = write_stdin(stdin, payload, stdin_file);
             let wait = async { child.wait().await.map_err(error) };
             let ((), out, err, status) = tokio::try_join!(
                 write,
@@ -157,6 +148,28 @@ pub async fn run(
     }
     drop(tree); // Successful handlers cannot leave background descendants either.
     result
+}
+async fn write_stdin(
+    mut stdin: tokio::process::ChildStdin,
+    payload: Vec<u8>,
+    file: Option<PathBuf>,
+) -> Result<(), HookProcessError> {
+    let result = async {
+        stdin.write_all(&payload).await?;
+        if let Some(file) = file {
+            let mut file = tokio::fs::File::open(file).await?;
+            tokio::io::copy(&mut file, &mut stdin).await?;
+        }
+        let _ = stdin.shutdown().await;
+        Ok::<(), std::io::Error>(())
+    }
+    .await;
+    // A handler may intentionally exit without reading stdin.
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(error(e)),
+    }
 }
 async fn read(
     mut stream: impl AsyncRead + Unpin,

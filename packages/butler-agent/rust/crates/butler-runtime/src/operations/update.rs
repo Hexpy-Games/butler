@@ -13,9 +13,10 @@ mod stage;
 mod status;
 mod version;
 
-pub use agent::{AgentArchiveUpdateService, AgentUpdateRequest, KEEP_VERSIONS};
+pub use agent::{AgentArchiveUpdateService, AgentUpdateRequest, KEEP_VERSIONS, fetch_verified};
 pub(crate) use error::UpdateCode;
 pub use error::UpdateError;
+pub use manifest::release_artifact;
 use std::{
     path::PathBuf,
     sync::{Arc, atomic::AtomicBool},

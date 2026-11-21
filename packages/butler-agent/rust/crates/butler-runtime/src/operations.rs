@@ -49,7 +49,8 @@ pub use status_summary::{
 };
 pub use update::{
     AgentArchiveUpdateService, AgentUpdateRequest, AppUpdateService, KEEP_VERSIONS, UpdateError,
-    UpdateProgress, UpdateProgressSink, UpdateRequest, effective_update_previews, version_newer,
+    UpdateProgress, UpdateProgressSink, UpdateRequest, effective_update_previews, fetch_verified,
+    release_artifact, version_newer,
 };
 pub use usage_cost::{
     CostReason, SessionRoleUsage, SessionUsage, SessionUsageIndex, SessionUsageView, UsageCostView,

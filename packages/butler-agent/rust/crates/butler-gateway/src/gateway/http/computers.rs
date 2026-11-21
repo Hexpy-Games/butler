@@ -37,17 +37,28 @@ pub(super) async fn route(
                 serde_json::json!({"computer": computer.wire()?}),
             )
         }
-        (Method::DELETE, path)
-            if path
-                .strip_prefix("/computers/")
-                .is_some_and(|id| !id.is_empty() && !id.contains('/')) =>
-        {
-            let id = path
-                .strip_prefix("/computers/")
-                .ok_or(HttpError::Internal)?;
-            remote_computers::delete(root, id.to_owned()).await?;
-            (StatusCode::OK, serde_json::json!({"deleted": true}))
-        }
+        (Method::POST, path) if path.starts_with("/computers/") && path.ends_with("/start") => (
+            StatusCode::OK,
+            remote_computers::change(
+                root,
+                path,
+                true,
+                &state.agent_version,
+                state.shutdown.clone(),
+            )
+            .await?,
+        ),
+        (Method::DELETE, path) if path.starts_with("/computers/") => (
+            StatusCode::OK,
+            remote_computers::change(
+                root,
+                path,
+                false,
+                &state.agent_version,
+                state.shutdown.clone(),
+            )
+            .await?,
+        ),
         _ => return Err(HttpError::public(404, "not_found", "Route not found.")),
     };
     json(

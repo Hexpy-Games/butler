@@ -6,8 +6,16 @@ use butler_platform::{
     hook_process::{self, HookOutput, HookProcess, HookProcessError},
     remote_ssh,
 };
-use std::{path::Path, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use tokio_util::sync::CancellationToken;
+
+pub(super) enum Stdin {
+    Bytes(Vec<u8>),
+    File(PathBuf),
+}
 
 pub(super) struct HostKey {
     pub fingerprint: Option<String>,
@@ -28,7 +36,7 @@ fn identity_args(target: &HostInput, home: Option<&Path>) -> Result<Vec<String>,
     Ok(args)
 }
 
-fn arguments(
+pub(super) fn arguments(
     target: &HostInput,
     known_hosts: &Path,
     mode: &str,
@@ -68,11 +76,16 @@ fn arguments(
     Ok(args)
 }
 
-async fn run(
+pub(super) async fn run(
     args: Vec<String>,
-    stdin: Vec<u8>,
+    stdin: Stdin,
+    timeout: Duration,
     cancel: CancellationToken,
 ) -> Result<HookOutput, HttpError> {
+    let (stdin, stdin_file) = match stdin {
+        Stdin::Bytes(bytes) => (bytes, None),
+        Stdin::File(path) => (Vec::new(), Some(path)),
+    };
     Box::pin(hook_process::run(
         HookProcess {
             command: None,
@@ -80,7 +93,8 @@ async fn run(
             environment: remote_ssh::environment(),
             cwd: std::env::temp_dir(),
             stdin,
-            timeout: Duration::from_secs(20),
+            stdin_file,
+            timeout,
             stdout_limit: hook_process::CONTEXT_OUTPUT_LIMIT,
         },
         cancel,
@@ -110,7 +124,13 @@ pub(super) async fn host_key(
         "true",
         home.as_deref(),
     )?;
-    let output = run(args, Vec::new(), cancel.clone()).await?;
+    let output = run(
+        args,
+        Stdin::Bytes(Vec::new()),
+        Duration::from_secs(20),
+        cancel.clone(),
+    )
+    .await?;
     if output
         .stderr
         .contains("REMOTE HOST IDENTIFICATION HAS CHANGED")
@@ -169,7 +189,8 @@ async fn fingerprint(
             "-f".into(),
             new_hosts.0.to_string_lossy().into_owned(),
         ],
-        Vec::new(),
+        Stdin::Bytes(Vec::new()),
+        Duration::from_secs(20),
         cancel.clone(),
     )
     .await?;
@@ -198,7 +219,13 @@ async fn lookup(
     let mut args = vec![remote_ssh::PROGRAM.into(), "-G".into()];
     args.extend(identity_args(target, home)?);
     args.extend(["--".into(), target.address.clone()]);
-    let config = run(args, Vec::new(), cancel.clone()).await?;
+    let config = run(
+        args,
+        Stdin::Bytes(Vec::new()),
+        Duration::from_secs(20),
+        cancel.clone(),
+    )
+    .await?;
     let mut hostname = "";
     let mut port = "22";
     let mut alias = "";
@@ -227,7 +254,8 @@ async fn lookup(
             "-f".into(),
             known_hosts.0.to_string_lossy().into_owned(),
         ],
-        Vec::new(),
+        Stdin::Bytes(Vec::new()),
+        Duration::from_secs(20),
         cancel,
     )
     .await?;
@@ -267,7 +295,13 @@ echo "kill=$(busctl get-property org.freedesktop.login1 /org/freedesktop/login1 
 if cd -- {folder} 2>/dev/null; then echo folder=ok; else echo folder=missing; fi
 "#
     );
-    let output = run(args, script.into_bytes(), cancel).await?;
+    let output = run(
+        args,
+        Stdin::Bytes(script.into_bytes()),
+        Duration::from_secs(20),
+        cancel,
+    )
+    .await?;
     if output.exit_code == Some(255) {
         return Err(if output.stderr.contains("Permission denied") {
             remote_error("ssh_auth_failed", "SSH key login failed.")

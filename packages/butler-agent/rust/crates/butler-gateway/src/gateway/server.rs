@@ -10,6 +10,8 @@ use butler_platform::local_socket;
 
 /// Listener configuration for [`serve_gateway`].
 pub struct GatewayConfig {
+    /// Version embedded in the running agent build.
+    pub agent_version: String,
     /// The local bearer token; it also keys signed URLs and browser sessions.
     pub local_auth: LocalAuthConfig,
     /// `BUTLER_APP_DEV_ORIGIN`: extra renderer origins (comma-separated,
@@ -69,6 +71,7 @@ pub struct HeadlessBrowserConfig {
 impl Default for GatewayConfig {
     fn default() -> Self {
         Self {
+            agent_version: String::new(),
             local_auth: LocalAuthConfig::default(),
             dev_cors_origin: None,
             allowed_hosts: Vec::new(),

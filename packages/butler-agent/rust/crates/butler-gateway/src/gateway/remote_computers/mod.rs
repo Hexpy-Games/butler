@@ -1,4 +1,5 @@
-//! Owner-confirmed SSH computers. No remote process is installed or started.
+//! Owner-confirmed SSH computers and their main-managed remote service.
+mod deploy;
 mod ssh;
 mod store;
 
@@ -177,10 +178,55 @@ pub(super) async fn add(
     store::add(data.join("config/computers.json"), computer).await
 }
 
-pub(super) async fn delete(data: &Path, id: String) -> Result<(), HttpError> {
-    store::delete(data.join("config/computers.json"), id).await
+pub(super) async fn delete(
+    data: &Path,
+    computer: &Computer,
+    cancel: CancellationToken,
+) -> Result<bool, HttpError> {
+    let cleaned = deploy::remove(computer, cancel).await.is_ok();
+    store::delete(data.join("config/computers.json"), computer.id.clone()).await?;
+    Ok(cleaned)
 }
 
 fn remote_error(code: &str, message: &str) -> HttpError {
     HttpError::public(422, code, message)
+}
+
+pub(super) async fn change(
+    root: &std::path::Path,
+    path: &str,
+    start: bool,
+    version: &str,
+    cancel: CancellationToken,
+) -> Result<serde_json::Value, HttpError> {
+    let id = path
+        .strip_prefix("/computers/")
+        .ok_or(HttpError::Internal)?;
+    let id = if start {
+        id.strip_suffix("/start").ok_or(HttpError::Internal)?
+    } else {
+        id
+    };
+    if id.is_empty() || id.contains('/') {
+        return Err(HttpError::public(404, "not_found", "Route not found."));
+    }
+    let _lock = butler_core::configuration::lock_file_async(
+        &root.join(format!("config/computers/{id}.lock")),
+    )
+    .await
+    .map_err(|_| HttpError::Internal)?;
+    let records = list(root).await?;
+    let computer = records
+        .iter()
+        .find(|computer| computer.id == id)
+        .ok_or_else(|| HttpError::public(404, "computer_not_found", "Computer not found."))?;
+    if start {
+        let remote = deploy::ensure_running((root, version), computer, cancel).await?;
+        Ok(
+            serde_json::json!({"state": if remote.started { "ready" } else { "busy" }, "version": remote.version}),
+        )
+    } else {
+        let cleaned = delete(root, computer, cancel).await?;
+        Ok(serde_json::json!({"deleted": true, "remote_cleaned": cleaned}))
+    }
 }

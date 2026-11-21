@@ -225,6 +225,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/computers", Handler::Computers),
     ("/computers/host-key", Handler::Computers),
     ("/computers/{id}", Handler::Computers),
+    ("/computers/{id}/start", Handler::Computers),
     ("/mcp-capabilities", Handler::Mcp),
     ("/mcp-servers", Handler::Mcp),
     ("/mcp-servers/{id}", Handler::Mcp),
