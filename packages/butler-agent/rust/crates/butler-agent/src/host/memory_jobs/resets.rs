@@ -1,5 +1,11 @@
 //! One startup recovery pass, detached from admission and cancelled by service stop.
-use butler_memory::{management::MemoryManagement, profile::ProfileService};
+use super::consolidation::ConsolidationRunGate;
+use crate::host::app::schedule_clock;
+use butler_memory::{
+    cognition::{MemorySyncConsumer, ReextractOutcome},
+    management::{MemoryManagement, ResetResult},
+    profile::ProfileService,
+};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 pub(crate) fn recover_resets(
@@ -7,6 +13,8 @@ pub(crate) fn recover_resets(
     profile: Arc<ProfileService>,
     instructions: Arc<butler_memory::cognition::RememberedRuleOwner>,
     stop: CancellationToken,
+    consumer: Arc<MemorySyncConsumer>,
+    gate: Arc<ConsolidationRunGate>,
 ) {
     tokio::spawn(async move {
         let pending = match owner.pending_resets().await {
@@ -16,7 +24,11 @@ pub(crate) fn recover_resets(
                 return;
             }
         };
-        for receipt in pending {
+        for receipt in pending
+            .iter()
+            .filter(|receipt| receipt.kind != "reextract")
+            .cloned()
+        {
             if stop.is_cancelled() {
                 break;
             }
@@ -39,7 +51,69 @@ pub(crate) fn recover_resets(
                 butler_core::diagnostic!("[memory-reset-recovery] {}", error);
             }
         }
+        for receipt in pending.into_iter().filter(|r| r.kind == "reextract") {
+            drive_reextract(&owner, &consumer, &gate, receipt, &stop).await;
+        }
     });
+}
+
+pub(crate) async fn drive_reextract(
+    owner: &MemoryManagement,
+    consumer: &MemorySyncConsumer,
+    gate: &ConsolidationRunGate,
+    receipt: ResetResult,
+    stop: &CancellationToken,
+) {
+    if stop.is_cancelled() {
+        return;
+    }
+    let id = receipt.operation_id.clone();
+    let token = stop.child_token();
+    let preparing = receipt.phase == "preparing";
+    if preparing {
+        if let Ok(mut jobs) = gate.jobs.lock() {
+            jobs.insert(id.clone(), token.clone());
+        }
+        if let Ok(Some(receipt)) = owner.reset_status(id.clone()).await
+            && let Ok(value) = serde_json::to_value(receipt)
+        {
+            gate.publish(value).await;
+        }
+    }
+    loop {
+        let shadow = consumer.rebuild_consumer(id.clone());
+        let outcome = owner
+            .reextract(
+                id.clone(),
+                &shadow,
+                Arc::new(|| schedule_clock::clock().now_iso()),
+                token.clone(),
+            )
+            .await;
+        // close() closes the shared admission semaphore; this shadow owns no worker.
+        drop(shadow);
+        match outcome {
+            Ok(ReextractOutcome::Restage) if preparing && !stop.is_cancelled() => {}
+            Ok(_) => break,
+            Err(error) => {
+                butler_core::diagnostic!("[memory-reextract-recovery] {error}");
+                break;
+            }
+        }
+    }
+    if !preparing {
+        return;
+    }
+    if let Ok(mut jobs) = gate.jobs.lock() {
+        jobs.remove(&id);
+    }
+    if !stop.is_cancelled()
+        && let Ok(Some(receipt)) = owner.reset_status(id).await
+        && matches!(receipt.phase.as_str(), "complete" | "failed")
+        && let Ok(value) = serde_json::to_value(receipt)
+    {
+        gate.publish(value).await;
+    }
 }
 
 pub(crate) async fn reset_profile(

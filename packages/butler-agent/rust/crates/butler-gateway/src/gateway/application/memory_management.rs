@@ -52,6 +52,11 @@ pub enum AppMemoryCommand {
         operation_id: String,
         inventory_revision: u64,
     },
+    /// Rebuild conversation memory with the current extraction rules.
+    Reextract {
+        operation_id: String,
+        inventory_revision: u64,
+    },
     /// Reset one project's summary, conversation projection and bound instructions.
     ResetProject {
         operation_id: String,

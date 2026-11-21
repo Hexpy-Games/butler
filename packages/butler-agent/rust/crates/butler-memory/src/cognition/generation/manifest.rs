@@ -17,6 +17,7 @@ use crate::cognition::{CognitionCode, CognitionError, CognitionResult};
 use crate::lenient;
 
 pub(crate) const GENERATION_MANIFEST_SCHEMA: &str = "butler.memory-generation.v2";
+pub(crate) const MEMORY_EXTRACTION_RULES_VERSION: u64 = 2;
 pub(crate) const ACTIVE_DESCRIPTOR_SCHEMA: &str = "butler.memory-active-generation.v2";
 
 /// How a generation stores its graph: native v2 files or the adopted legacy root.
@@ -301,6 +302,13 @@ pub(crate) struct RuntimeVersions<'a> {
 }
 
 impl GenerationManifest {
+    pub(crate) fn extraction_rules_version(&self) -> u64 {
+        self.other
+            .get("extraction_rules_version")
+            .and_then(Value::as_u64)
+            .unwrap_or(1)
+    }
+
     /// A new manifest with no embedding, readiness, or qualification. Native
     /// generations pass their runtime versions; the legacy baseline records none.
     pub(crate) fn new(facts: NewManifest<'_>, runtime: Option<&RuntimeVersions<'_>>) -> Self {

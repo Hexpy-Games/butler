@@ -251,6 +251,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/memory/inventory/check", Handler::Personalization),
     ("/memory/projects/{id}", Handler::Personalization),
     ("/memory/reset/chat-memory", Handler::Personalization),
+    ("/memory/reset/reextract", Handler::Personalization),
     ("/memory/reset/profile", Handler::Personalization),
     ("/memory/reset/projects/{id}", Handler::Personalization),
     ("/memory/reset/{id}", Handler::Personalization),

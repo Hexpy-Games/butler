@@ -28,6 +28,7 @@ pub(super) fn unknown(revision: u64) -> MemoryInventory {
         })
         .collect(),
         dead_letter_allocated_bytes: None,
+        reextract_available: false,
     }
 }
 
@@ -93,6 +94,7 @@ pub(super) fn measure(
     result.dead_letter_allocated_bytes =
         files(&memory.join("queue/dead-letter.jsonl"), token)?.bytes;
     super::safety::cancelled(token)?;
+    result.reextract_available = super::reset::reextract_due(root, paths).unwrap_or(false);
     result.state = "measured".into();
     result.measured_at = Some(now);
     Ok(result)

@@ -68,7 +68,7 @@ pub fn bind_native_embedding_identity(
 }
 
 /// Only a v2 generation that has never had an embedding may be bound: the
-/// empty-root active generation or a rebuild candidate on its snapshot.
+/// empty-root active generation or a building rebuild candidate.
 fn is_eligible_empty_target(
     manifest: &GenerationManifest,
     target: &MemoryGenerationTarget,
@@ -90,16 +90,8 @@ fn is_eligible_empty_target(
         }
         MemoryGenerationTarget::Rebuild {
             generation_id: target_generation,
-            canonical_snapshot_id,
         } => {
-            target_generation == generation_id
-                && manifest.state == Some(GenerationState::Building)
-                && manifest.initialization_origin == Some(InitializationOrigin::Rebuild)
-                && manifest.canonical_snapshot_id.as_deref() == Some(canonical_snapshot_id)
-                && manifest
-                    .canonical_snapshot_path
-                    .as_deref()
-                    .is_some_and(|path| !path.is_empty())
+            target_generation == generation_id && manifest.state == Some(GenerationState::Building)
         }
     }
 }

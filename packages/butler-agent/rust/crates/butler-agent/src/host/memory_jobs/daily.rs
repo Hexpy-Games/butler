@@ -29,7 +29,7 @@ pub(in crate::host) struct DailyCognitionJobs {
     data_root: PathBuf,
     paths: CognitionPathEnvironment,
     coordinator: Arc<CognitionWriteCoordinator>,
-    consumer: Arc<MemorySyncConsumer>,
+    pub(in crate::host) consumer: Arc<MemorySyncConsumer>,
     capsules: Arc<ProjectCapsuleService>,
     phases: CyclePhases,
     legacy: LegacySessionSync,

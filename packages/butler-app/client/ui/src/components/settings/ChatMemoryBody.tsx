@@ -5,8 +5,8 @@ import { formatFileSize } from "../conversation/conversationUtils";
 import { MemoryFacts } from "./MemoryFacts";
 import type { MemoryCard, MemoryReceipt } from "./memoryTypes";
 
-export function ChatMemoryBody({ card, receipt, cancel, free, reset }: {
-  card?: MemoryCard; receipt?: MemoryReceipt; cancel: () => void; free: ReactElement; reset: ReactElement;
+export function ChatMemoryBody({ card, receipt, cancel, free, reset, reextract, status }: {
+  card?: MemoryCard; receipt?: MemoryReceipt; cancel: () => void; free: ReactElement; reset: ReactElement; reextract?: ReactElement; status?: string;
 }) {
   const copy = appCopy.settings.memory;
   return <>
@@ -17,5 +17,14 @@ export function ChatMemoryBody({ card, receipt, cancel, free, reset }: {
         {receipt.phase === "preparing" ? copy.freeWaiting : copy.freeing(formatFileSize(receipt.bytes_reclaimed))}
       </Typo.Caption>} />
     <SettingsActionField settingId="reset-chat-memory" label={copy.resetChatLabel} description={copy.resetChatDescription} action={reset} />
+    {reextract && (
+      <SettingsActionField
+        settingId="reextract-chat-memory"
+        label={copy.reextractLabel}
+        description={copy.reextractDescription}
+        action={reextract}
+        meta={status && <Typo.Caption role="status" tone="secondary">{status}</Typo.Caption>}
+      />
+    )}
   </>;
 }

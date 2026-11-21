@@ -923,7 +923,7 @@ const butlerApp = Object.freeze({
   },
   memoryRequest: ({ path, method = "GET", body } = {}) => {
     const existing = /^\/memory\/(inventory(?:\/check)?|instructions(?:\/[A-Za-z0-9]+)?|projects\/[A-Za-z0-9_-]+|cleanup(?:\/[a-f0-9-]+)?)$/.test(path);
-    const reset = (method === "POST" && /^\/memory\/reset\/(chat-memory|profile|projects\/[A-Za-z0-9_-]+)$/.test(path)) ||
+    const reset = (method === "POST" && /^\/memory\/reset\/(chat-memory|profile|reextract|projects\/[A-Za-z0-9_-]+)$/.test(path)) ||
       (method === "GET" && /^\/memory\/reset\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path));
     const patterns = (method === "GET" && path === "/memory/patterns") ||
       (method === "DELETE" && /^\/memory\/patterns\/[A-Za-z0-9_-]+$/.test(path));

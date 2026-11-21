@@ -43,12 +43,22 @@ export function MemorySettings() {
     <SettingsSection id="chat-memory" kind="form" title={copy.pageSections.chatMemory} description={copy.pageSectionDescriptions.chatMemory}
       state={cardState(summary.state, chat)} emptyMessage={copy.memory.unavailable} onRetry={() => { void summary.reload(true); }}>
       <RecallSettings />
-      <ChatMemoryBody card={chat} receipt={operation.receipt} cancel={() => { void operation.cancel(); }}
+      <ChatMemoryBody status={reset.reextract && (typeof reset.reextract.total === "number" && reset.reextract.total > 0
+        ? copy.memory.reextracting(reset.reextract.done ?? 0, reset.reextract.total)
+        : copy.memory.reextractingPending)} card={chat} receipt={operation.receipt} cancel={() => { void operation.cancel(); }}
         free={<ChatMemoryActions busy={operation.busy} locked={Boolean(reset.kind) || consolidation.running} ready={summary.state === "ready" && chat?.item_count != null}
           reclaimable={chat?.health.reclaimable_bytes} start={() => { void operation.start(revision); }} />}
         reset={<MemoryResetButton running={reset.kind === "automatic"} locked={sharedBusy && reset.kind !== "automatic"}
           ready={summary.state === "ready" && chat?.item_count != null} empty={chat?.item_count === 0}
-          onClick={() => { void reset.start("automatic", revision, chat); }} />} />
+          onClick={() => { void reset.start("automatic", revision, chat); }} />}
+        reextract={summary.inventory?.reextract_available || reset.reextract ? <MemoryResetButton
+          label={copy.memory.reextract}
+          running={reset.kind === "reextract"}
+          locked={sharedBusy && reset.kind !== "reextract"}
+          ready={summary.state === "ready"}
+          empty={false}
+          onClick={() => { void reset.start("reextract", revision); }}
+        /> : undefined} />
     </SettingsSection>
     <SettingsSection id="memory-cleanup" kind="form" title={copy.pageSections.memoryCleanup} description={copy.pageSectionDescriptions.memoryCleanup}>
       <ConsolidationFields operation={consolidation} locked={operation.busy || Boolean(reset.kind)} />

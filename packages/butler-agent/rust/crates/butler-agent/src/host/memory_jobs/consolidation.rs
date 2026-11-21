@@ -175,7 +175,7 @@ impl ConsolidationRunGate {
         });
         Ok(json!({"active":self.active(),"last_run":last,"time_of_day":self.schedule().time}))
     }
-    async fn publish(&self, value: Value) {
+    pub(in crate::host) async fn publish(&self, value: Value) {
         let sink = self.sink.read().clone();
         if let Some(sink) = sink {
             let _ = sink(value).await;

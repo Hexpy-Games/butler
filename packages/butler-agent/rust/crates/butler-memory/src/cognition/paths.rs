@@ -11,24 +11,6 @@ pub struct CognitionPathEnvironment {
     pub memory_home: Option<String>,
 }
 
-pub(super) fn node_join(base: &Path, child: &str) -> PathBuf {
-    use std::path::Component;
-
-    let mut combined = base.to_path_buf();
-    for component in Path::new(child).components() {
-        match component {
-            Component::Prefix(_) | Component::RootDir | Component::CurDir => {}
-            Component::ParentDir => {
-                if !combined.pop() && !base.is_absolute() {
-                    combined.push("..");
-                }
-            }
-            Component::Normal(value) => combined.push(value),
-        }
-    }
-    combined
-}
-
 impl CognitionPathEnvironment {
     /// The cognition root.
     pub fn cognition_root(&self, data_root: &Path) -> PathBuf {

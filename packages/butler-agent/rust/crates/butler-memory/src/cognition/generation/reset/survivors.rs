@@ -9,13 +9,19 @@ pub(super) fn prune(
     graph: &Path,
     project: Option<&str>,
     generation: &str,
+    reextract: bool,
     token: &CancellationToken,
 ) -> io::Result<()> {
     let mut db = sqlite::open(graph).map_err(io::Error::other)?;
     let cancellation = token.clone();
     db.progress_handler(1000, Some(move || cancellation.is_cancelled()));
     let tx = db.transaction().map_err(io::Error::other)?;
-    crate::coordination::capture_project_admission_floor(root, &tx, token, project)?;
+    if reextract {
+        tx.execute_batch("DELETE FROM memory_state WHERE key LIKE 'canonical_catchup_%'")
+            .map_err(io::Error::other)?;
+    } else {
+        crate::coordination::capture_project_admission_floor(root, &tx, token, project)?;
+    }
     tx.execute_batch("CREATE TEMP TABLE reset_chunks(id TEXT PRIMARY KEY); CREATE TEMP TABLE reset_sources(id TEXT PRIMARY KEY); CREATE TEMP TABLE reset_jobs(id TEXT PRIMARY KEY);").map_err(io::Error::other)?;
     tx.execute("INSERT INTO reset_chunks SELECT memory_chunk_id FROM memory_chunks c WHERE (?1 IS NULL OR project_id=?1) AND EXISTS(SELECT 1 FROM memory_chunk_sources s WHERE s.episode_id=c.memory_chunk_id AND (s.source_kind='conversation' OR (?1 IS NOT NULL AND c.status='forgotten' AND s.source_kind='explicit_record')))", [project]).map_err(io::Error::other)?;
     if let Some(project) = project {
