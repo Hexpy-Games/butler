@@ -11,7 +11,7 @@ pub(super) fn anthropic(
     config: &ProviderRequestConfig,
     prompt: &str,
     reasoning: Option<ReasoningEffort>,
-) -> Value {
+) -> Result<Value, ModelRoundError> {
     let mut body = Map::new();
     body.insert("model".into(), config.wire_model.clone().into());
     body.insert(
@@ -30,11 +30,7 @@ pub(super) fn anthropic(
         .unwrap_or(4096)
         .into(),
     );
-    if let Some(instructions) = request
-        .instructions
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-    {
+    if let Some(instructions) = schema_instructions(request)? {
         body.insert("system".into(), instructions.into());
     }
     let claude5 = crate::models::ANTHROPIC_ADAPTIVE_MODELS.iter().any(|base| {
@@ -67,7 +63,7 @@ pub(super) fn anthropic(
         );
     }
     body.insert("messages".into(), json!([{"role":"user","content":prompt}]));
-    Value::Object(body)
+    Ok(Value::Object(body))
 }
 
 pub(super) fn gemini(
@@ -75,13 +71,9 @@ pub(super) fn gemini(
     _config: &ProviderRequestConfig,
     prompt: &str,
     reasoning: Option<ReasoningEffort>,
-) -> Value {
+) -> Result<Value, ModelRoundError> {
     let mut body = Map::new();
-    if let Some(instructions) = request
-        .instructions
-        .map(butler_core::public_text::trim_js_whitespace)
-        .filter(|value| !value.is_empty())
-    {
+    if let Some(instructions) = schema_instructions(request)? {
         body.insert(
             "systemInstruction".into(),
             json!({"parts":[{"text":instructions}]}),
@@ -108,7 +100,7 @@ pub(super) fn gemini(
         "contents".into(),
         json!([{"role":"user","parts":[{"text":prompt}]}]),
     );
-    Value::Object(body)
+    Ok(Value::Object(body))
 }
 
 pub(super) fn chat(
@@ -121,19 +113,9 @@ pub(super) fn chat(
     let mut instructions = request.instructions.map(str::to_owned);
     let mut response_format = request.response_format.as_ref().map(schema_value);
     if config.metadata.chat_wire_policy.structured_output == ChatStructuredOutput::JsonObject
-        && let Some(schema) = &request.response_format
+        && request.response_format.is_some()
     {
-        let schema_json = butler_core::json::stringify(&Value::Object(schema.schema.clone()))
-            .map_err(|error| {
-                super::invocation("prompt_schema_serialization_failed", error.to_string())
-            })?;
-        instructions = Some(format!(
-            "{}\n\nReturn exactly one JSON object matching the following JSON Schema. Do not wrap it in Markdown or add explanatory text.\n{schema_json}",
-            request
-                .instructions
-                .map(butler_core::public_text::trim_js_whitespace)
-                .unwrap_or_default()
-        ));
+        instructions = schema_instructions(request)?;
         response_format = Some(json!({"type":"json_object"}));
     }
     let mut messages = Vec::new();
@@ -262,6 +244,27 @@ fn local_reasoning(
         }
     }
     Ok(())
+}
+
+fn schema_instructions(
+    request: &ProviderPromptRequest<'_>,
+) -> Result<Option<String>, ModelRoundError> {
+    let instructions = request
+        .instructions
+        .map(butler_core::public_text::trim_js_whitespace)
+        .filter(|value| !value.is_empty());
+    if let Some(schema) = &request.response_format {
+        let schema_json = butler_core::json::stringify(&Value::Object(schema.schema.clone()))
+            .map_err(|error| {
+                super::invocation("prompt_schema_serialization_failed", error.to_string())
+            })?;
+        Ok(Some(format!(
+            "{}\n\nReturn exactly one JSON object matching the following JSON Schema. Do not wrap it in Markdown or add explanatory text.\n{schema_json}",
+            instructions.unwrap_or_default()
+        )))
+    } else {
+        Ok(instructions.map(str::to_owned))
+    }
 }
 
 fn schema_value(schema: &crate::models::PromptJsonSchema<'_>) -> Value {
