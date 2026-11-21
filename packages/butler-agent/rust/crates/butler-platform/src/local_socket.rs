@@ -73,10 +73,11 @@ pub fn bind(_path: &Path) -> io::Result<LocalListener> {
 /// Local sockets require Unix.
 #[cfg(windows)]
 pub async fn connect(_path: &Path) -> io::Result<LocalStream> {
-    Err(io::Error::new(
+    std::future::ready(Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "local sockets need Unix",
-    ))
+    )))
+    .await
 }
 
 /// Local sockets require Unix.
