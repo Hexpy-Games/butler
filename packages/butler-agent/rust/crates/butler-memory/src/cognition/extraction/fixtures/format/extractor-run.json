@@ -5,7 +5,7 @@
     "{\"input\":{\"targets\":[{\"target\":\"n0\",\"meaning\":{\"name\":\"Alice\"},\"evidence\":[\"n0u0\"],\"candidates\":[{\"ref\":\"n0c0\",\"type\":\"entity\",\"label\":\"Alice\",\"evidence\":[\"n0c0h\"]}]},{\"target\":\"f5\",\"meaning\":{\"kind\":\"change\",\"subject\":1,\"field\":\"deadline\",\"old\":\"2026\",\"new\":\"2027\",\"evidence\":[1]},\"evidence\":[\"f5u1\"],\"candidates\":[{\"ref\":\"f5c0\",\"type\":\"memory_atom\",\"label\":\"Atlas deadline 2026 is firm\",\"evidence\":[\"f5c0h\"],\"spans\":[{\"ref\":\"f5c0p0\",\"before\":\"Atlas deadline \",\"value\":\"2026\",\"after\":\" is firm\"}]}]}],\"evidence\":[{\"ref\":\"n0u0\",\"text\":\"Alice likes Atlas. \",\"role\":\"current\"},{\"ref\":\"n0c0h\",\"text\":\"Alice said hi. \",\"role\":\"user_statement\"},{\"ref\":\"f5u1\",\"text\":\"The Atlas deadline moved from 2026 to 2027.\",\"role\":\"current\"},{\"ref\":\"f5c0h\",\"text\":\"The deadline 2026 is firm.\",\"role\":\"user_statement\"}]},\"correction\":{\"error\":\"memory_extract_invalid_binding\",\"instruction\":\"Return a corrected complete response. For a selected candidate, put only current target evidence in current_support and exactly one selected-candidate historical evidence ID in selected_historical_support. For candidate=null, both arrays are empty. Do not invent IDs.\"}}"
   ],
   "stage_keys": [
-    "meaning:f443d79c556868cc5545bd5330680b5e534801f0fd0c5261a369105a22f25cd0",
+    "meaning:14a4174c1fb242b8c2ce9d27e022a7c82c4cc55bd45b5d515a6725b9a2ac52b9",
     "binding0:664ac919551d61ade6376929f3aef508c9c54dd28834ab559cab9b9700bbbaff",
     "binding0:cb80710d7d8ce4e69777efdf4907ffa8605592215e2b0c0dbf4113686bcc16b5:repair:1"
   ],
@@ -52,8 +52,8 @@
         }
       }
     },
-    "meaning:f443d79c556868cc5545bd5330680b5e534801f0fd0c5261a369105a22f25cd0": {
-      "request_hash": "f443d79c556868cc5545bd5330680b5e534801f0fd0c5261a369105a22f25cd0",
+    "meaning:14a4174c1fb242b8c2ce9d27e022a7c82c4cc55bd45b5d515a6725b9a2ac52b9": {
+      "request_hash": "14a4174c1fb242b8c2ce9d27e022a7c82c4cc55bd45b5d515a6725b9a2ac52b9",
       "raw": "{\"status\":\"processed\",\"entities\":[{\"name\":\"Alice\",\"evidence\":[0]},{\"name\":\"Atlas\",\"evidence\":[0,1]}],\"items\":[{\"kind\":\"preference\",\"subject\":0,\"text\":\"Alice prefers mornings\",\"evidence\":[0]},{\"kind\":\"relation\",\"from\":0,\"predicate\":\"likes\",\"to\":1,\"evidence\":[0]},{\"kind\":\"not_relation\",\"from\":1,\"predicate\":\"depends_on\",\"to\":0,\"evidence\":[1]},{\"kind\":\"requires\",\"subject\":0,\"action\":\"ship Atlas\",\"condition\":{\"all\":[{\"subject\":1,\"state\":\"ready\"},{\"not\":{\"subject\":null,\"state\":\"a holiday\"}},{\"any\":[{\"subject\":0,\"state\":\"awake\"}]}]},\"evidence\":[0,1]},{\"kind\":\"question\",\"subject\":null,\"text\":\"Is Atlas late?\",\"evidence\":[1]},{\"kind\":\"change\",\"subject\":1,\"field\":\"deadline\",\"old\":\"2026\",\"new\":\"2027\",\"evidence\":[1]}],\"attributes\":[{\"kind\":\"alias\",\"entity\":0,\"name\":\"Al\",\"evidence\":[0]},{\"kind\":\"importance\",\"item\":3,\"value\":\"high\"},{\"kind\":\"validity\",\"item\":0,\"from\":\"2026-01-01\",\"to\":null}]}",
       "evidence": {
         "reported_model": "provider/reported",
@@ -68,7 +68,7 @@
           "profile": "memory-meaning.v4",
           "input_json_sha256": "34655f3b10781218b748b9ef4b8d55dcb492078a5e8462046b5c51d2d79af485",
           "input_json_utf8_bytes": 243,
-          "instructions_sha256": "91144b2a0ecaf8839e6859fdb230d71c244ccead471067f6055082615e46e1f5",
+          "instructions_sha256": "810caf5e9abbdaee9a4ec70d0eccd4fb5a5dd1cf869d6bfd8e2ae18e4c686cec",
           "output_schema_sha256": "d965b047647a949f9461af93c97f9137c8adc36456f0339545496b966a229613"
         }
       }
@@ -87,7 +87,7 @@
       "profile": "memory-meaning.v4",
       "input_json_sha256": "34655f3b10781218b748b9ef4b8d55dcb492078a5e8462046b5c51d2d79af485",
       "input_json_utf8_bytes": 243,
-      "instructions_sha256": "91144b2a0ecaf8839e6859fdb230d71c244ccead471067f6055082615e46e1f5",
+      "instructions_sha256": "810caf5e9abbdaee9a4ec70d0eccd4fb5a5dd1cf869d6bfd8e2ae18e4c686cec",
       "output_schema_sha256": "d965b047647a949f9461af93c97f9137c8adc36456f0339545496b966a229613"
     },
     "stages": [
@@ -95,7 +95,7 @@
         "stage": "meaning",
         "repair": 0,
         "reused": false,
-        "request_hash": "f443d79c556868cc5545bd5330680b5e534801f0fd0c5261a369105a22f25cd0",
+        "request_hash": "14a4174c1fb242b8c2ce9d27e022a7c82c4cc55bd45b5d515a6725b9a2ac52b9",
         "provider": {
           "reported_model": "provider/reported",
           "usage": {
@@ -109,7 +109,7 @@
             "profile": "memory-meaning.v4",
             "input_json_sha256": "34655f3b10781218b748b9ef4b8d55dcb492078a5e8462046b5c51d2d79af485",
             "input_json_utf8_bytes": 243,
-            "instructions_sha256": "91144b2a0ecaf8839e6859fdb230d71c244ccead471067f6055082615e46e1f5",
+            "instructions_sha256": "810caf5e9abbdaee9a4ec70d0eccd4fb5a5dd1cf869d6bfd8e2ae18e4c686cec",
             "output_schema_sha256": "d965b047647a949f9461af93c97f9137c8adc36456f0339545496b966a229613"
           }
         }

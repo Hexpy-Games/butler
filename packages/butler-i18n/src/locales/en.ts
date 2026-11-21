@@ -561,6 +561,15 @@ export const enUsCopy: AppCopy = {
       retry: "Try again",
       pairAgain: "Pair again",
     },
+    settings: {
+      title: "Settings",
+      computer: "Computer",
+      disconnect: "Disconnect",
+      disconnectTitle: "Disconnect from this computer?",
+      disconnectBody: "You'll need to pair again to use Butler.",
+      cancel: "Cancel",
+      version: (version: string, build?: string) => `Version ${version}${build === undefined ? "" : ` (${build})`}`,
+    },
   },
   projectStatistics: {
     flow: "How work changed", flowHelp: "Registered work and recorded completions. These counts do not represent overall project progress.",

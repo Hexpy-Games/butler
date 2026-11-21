@@ -242,16 +242,18 @@ pub(super) fn source_row(
 }
 
 fn enforce_budget(input: &mut ExtractInput) -> CognitionResult<()> {
-    while json_bytes(&input.context_units)? > 4096 && input.context_units.len() > 1 {
+    const CONTEXT_UNITS_BYTES: usize = 16 * 1024;
+    const INPUT_BYTES: usize = 40 * 1024;
+    while json_bytes(&input.context_units)? > CONTEXT_UNITS_BYTES && input.context_units.len() > 1 {
         input.context_units.remove(0);
     }
-    if json_bytes(&input.context_units)? > 4096 {
+    if json_bytes(&input.context_units)? > CONTEXT_UNITS_BYTES {
         input.context_units.clear();
     }
-    while json_bytes(input)? > 24_576 && !input.context_units.is_empty() {
+    while json_bytes(input)? > INPUT_BYTES && !input.context_units.is_empty() {
         input.context_units.remove(0);
     }
-    if json_bytes(input)? > 24_576 {
+    if json_bytes(input)? > INPUT_BYTES {
         return Err(CognitionError::new(
             CognitionCode::MemoryExtractInputExceedsBudget,
             "memory_extract_input_exceeds_budget",

@@ -12,6 +12,7 @@ import Message01Icon from "@hugeicons/core-free-icons/Message01Icon";
 import SecurityCheckIcon from "@hugeicons/core-free-icons/SecurityCheckIcon";
 import SentIcon from "@hugeicons/core-free-icons/SentIcon";
 import ServerStack01Icon from "@hugeicons/core-free-icons/ServerStack01Icon";
+import Settings01Icon from "@hugeicons/core-free-icons/Settings01Icon";
 import SquareIcon from "@hugeicons/core-free-icons/SquareIcon";
 import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
 
@@ -31,6 +32,9 @@ import Delete02Icon from "@hugeicons/core-free-icons/Delete02Icon";
 import BookOpen01Icon from "@hugeicons/core-free-icons/BookOpen01Icon";
 import BubbleChatAddIcon from "@hugeicons/core-free-icons/BubbleChatAddIcon";
 import FolderAddIcon from "@hugeicons/core-free-icons/FolderAddIcon";
+import Archive02Icon from "@hugeicons/core-free-icons/Archive02Icon";
+import Flag01Icon from "@hugeicons/core-free-icons/Flag01Icon";
+import Ticket01Icon from "@hugeicons/core-free-icons/Ticket01Icon";
 
 import File02Icon from "@hugeicons/core-free-icons/File02Icon";
 import Task01Icon from "@hugeicons/core-free-icons/Task01Icon";
@@ -59,6 +63,9 @@ export const icons = {
   AiChip: AiChipIcon,
   Pencil: PencilEdit01Icon,
   Server: ServerStack01Icon,
+  Archive: Archive02Icon,
+  Flag: Flag01Icon,
+  Ticket: Ticket01Icon,
   Document: BookOpen01Icon,
   BranchChat: BubbleChatAddIcon,
   BranchProject: FolderAddIcon,
@@ -81,6 +88,7 @@ export const icons = {
   ChevronRight: ArrowRight01Icon,
   ArrowLeft: ArrowLeft01Icon,
   SendHorizontal: SentIcon,
+  Settings: Settings01Icon,
   Square: SquareIcon,
   AlertCircle: AlertCircleIcon,
   CheckCircle2: CheckmarkCircle02Icon,

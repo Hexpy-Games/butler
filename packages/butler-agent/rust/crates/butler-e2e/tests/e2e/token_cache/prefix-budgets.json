@@ -32,10 +32,10 @@
   "legacy|butler|auto|ledger": 2732,
   "legacy|butler|auto|local": 2669,
   "legacy|butler|auto|none": 2669,
-  "legacy|butler|chat|ask_except_reads|local": 2559,
-  "legacy|butler|chat|ask_first|local": 2558,
-  "legacy|butler|chat|auto|local": 2557,
-  "legacy|butler|chat|full_access|local": 2558,
-  "legacy|butler|chat|read_only|local": 2558,
+  "legacy|butler|chat|ask_except_reads|local": 2608,
+  "legacy|butler|chat|ask_first|local": 2607,
+  "legacy|butler|chat|auto|local": 2606,
+  "legacy|butler|chat|full_access|local": 2607,
+  "legacy|butler|chat|read_only|local": 2607,
   "phase_minimal|butler|chat|execution": 811
 }

@@ -515,6 +515,15 @@ export interface MobileCopy {
     earlier: string;
   };
   home: { checking: string; connected: string; retry: string; pairAgain: string };
+  settings: {
+    title: string;
+    computer: string;
+    disconnect: string;
+    disconnectTitle: string;
+    disconnectBody: string;
+    cancel: string;
+    version: (version: string, build?: string) => string;
+  };
 }
 
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */

@@ -17,7 +17,8 @@ function pairingFrom(origin: string, data: unknown): Pairing | null {
   const butlerId = stringField(data, "butler_id");
   const deviceId = stringField(data, "device_id");
   const deviceToken = stringField(data, "device_token");
-  return butlerId && isStorableId(butlerId) && deviceId && deviceToken ? { origin, butlerId, deviceId, deviceToken } : null;
+  const computerName = stringField(data, "computer_name");
+  return butlerId && isStorableId(butlerId) && deviceId && deviceToken ? { origin, butlerId, deviceId, deviceToken, ...(computerName ? { computerName } : {}) } : null;
 }
 
 export async function pairDevice(input: PairInput): Promise<PairOutcome> {
