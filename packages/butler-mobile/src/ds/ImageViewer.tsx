@@ -3,7 +3,7 @@ import { Animated, Image, Modal, PanResponder, Platform, Pressable, ScrollView, 
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ViewerImage } from "../conversation/imageViewer";
-import { centringInsets, clampView, DOUBLE_TAP_ZOOM, MAX_ZOOM, MIN_ZOOM, onPicture, zoomAt, ZOOM_STEP, type ZoomView } from "../conversation/imageOutputs";
+import { clampView, DOUBLE_TAP_ZOOM, MAX_ZOOM, MIN_ZOOM, onPicture, zoomAt, ZOOM_STEP, type ZoomView } from "../conversation/imageOutputs";
 import { PILL } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
 import { IconButton } from "./Button";
@@ -131,11 +131,8 @@ function IOSPicture({ width, height, stage, children, ref, onScale, onClose }: Z
   const reduced = useReducedMotion();
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const lastPress = useRef(0);
-  const [scale, setZoomScale] = useState(MIN_ZOOM);
-  const insets = centringInsets(stage, width, height, scale);
-  const fit = useMemo(() => centringInsets(stage, width, height, MIN_ZOOM), [stage.width, stage.height, width, height]);
-  const restOffset = useMemo(() => ({ x: -fit.left, y: -fit.top }), [fit]);
-  const position = useRef({ scale: MIN_ZOOM, x: -fit.left, y: -fit.top });
+  const margin = { x: (stage.width - width) / 2, y: (stage.height - height) / 2 };
+  const position = useRef({ scale: MIN_ZOOM, x: 0, y: 0 });
   const frame = useRef({ x: 0, y: 0 });
   const tap = useRef({ x: 0, y: 0, at: 0, multi: false, dragged: false });
   const zoomTo = (next: number, centreX: number, centreY: number) => {
@@ -146,21 +143,21 @@ function IOSPicture({ width, height, stage, children, ref, onScale, onClose }: Z
   };
   useImperativeHandle(ref, () => ({ zoomBy(factor) {
     const { scale, x, y } = position.current;
-    const cx = Math.max(0, Math.min(width, (x + stage.width / 2) / scale));
-    const cy = Math.max(0, Math.min(height, (y + stage.height / 2) / scale));
+    const cx = Math.max(0, Math.min(stage.width, (x + stage.width / 2) / scale));
+    const cy = Math.max(0, Math.min(stage.height, (y + stage.height / 2) / scale));
     zoomTo(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, scale * factor)), cx, cy);
   } }));
   const press = ({ nativeEvent }: GestureResponderEvent) => {
     const now = Date.now();
     if (now - lastPress.current < 300) {
-      if (position.current.scale === MIN_ZOOM) zoomTo(DOUBLE_TAP_ZOOM, nativeEvent.locationX, nativeEvent.locationY);
-      else zoomTo(MIN_ZOOM, width / 2, height / 2);
+      if (position.current.scale === MIN_ZOOM) zoomTo(DOUBLE_TAP_ZOOM, nativeEvent.locationX + margin.x, nativeEvent.locationY + margin.y);
+      else zoomTo(MIN_ZOOM, stage.width / 2, stage.height / 2);
       lastPress.current = 0;
     } else lastPress.current = now;
   };
-  return <ScrollView ref={scroll} style={{ flex: 1, alignSelf: "stretch" }} contentContainerStyle={{ width, height }}
-    contentInset={insets} contentOffset={restOffset}
-    automaticallyAdjustContentInsets={false} contentInsetAdjustmentBehavior="never"
+  return <ScrollView ref={scroll} style={{ flex: 1, alignSelf: "stretch" }}
+    contentContainerStyle={{ width: stage.width, height: stage.height, justifyContent: "center", alignItems: "center" }}
+    contentInsetAdjustmentBehavior="never"
     minimumZoomScale={MIN_ZOOM} maximumZoomScale={MAX_ZOOM}
     bouncesZoom alwaysBounceVertical showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false}
     onLayout={() => scroll.current?.measureInWindow((x, y) => { frame.current = { x, y }; })}
@@ -170,17 +167,18 @@ function IOSPicture({ width, height, stage, children, ref, onScale, onClose }: Z
       if (nativeEvent.touches.length > 1) tap.current.multi = true;
     }} onScrollBeginDrag={() => { tap.current.dragged = true; }}
     onTouchEnd={({ nativeEvent }) => {
-      const { x, y, at, multi, dragged } = tap.current;
+      const { x: startX, y: startY, at, multi, dragged } = tap.current;
       const { pageX, pageY } = nativeEvent;
-      const isTap = !multi && !dragged && Date.now() - at < 300 && Math.hypot(pageX - x, pageY - y) < 10;
-      if (isTap && !onPicture({ x: pageX - frame.current.x, y: pageY - frame.current.y }, position.current, width, height, scale)) onClose();
+      const isTap = !multi && !dragged && Date.now() - at < 300 && Math.hypot(pageX - startX, pageY - startY) < 10;
+      const { scale, x, y } = position.current;
+      if (isTap && !onPicture({ x: pageX - frame.current.x, y: pageY - frame.current.y },
+        { x: x - margin.x * scale, y: y - margin.y * scale }, width, height, scale)) onClose();
     }}
     scrollEventThrottle={16} onScroll={({ nativeEvent }) => {
       position.current = { scale: nativeEvent.zoomScale!, x: nativeEvent.contentOffset.x, y: nativeEvent.contentOffset.y };
       onScale(nativeEvent.zoomScale!);
-      setZoomScale(Math.round(nativeEvent.zoomScale! * 100) / 100);
     }} onScrollEndDrag={({ nativeEvent }) => {
-      if (nativeEvent.zoomScale === MIN_ZOOM && nativeEvent.contentOffset.y + insets.top <= -(stage.height / 6)) onClose();
+      if (nativeEvent.zoomScale === MIN_ZOOM && nativeEvent.contentOffset.y <= -(stage.height / 6)) onClose();
     }}>
     <Pressable accessible={false} onPress={press}>{children}</Pressable>
   </ScrollView>;

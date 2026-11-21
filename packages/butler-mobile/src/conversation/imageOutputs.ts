@@ -59,12 +59,6 @@ export const DOUBLE_TAP_ZOOM = 2;
 export type ZoomView = { scale: number; x: number; y: number };
 const FIT: ZoomView = { scale: 1, x: 0, y: 0 };
 
-/** UIScrollView insets that centre content of `size × scale` in `stage` (0 once it is larger). */
-export function centringInsets(stage: { width: number; height: number }, width: number, height: number, scale: number) {
-  const x = Math.max(0, (stage.width - width * scale) / 2), y = Math.max(0, (stage.height - height * scale) / 2);
-  return { top: y, bottom: y, left: x, right: x };
-}
-
 /** Whether a point in the scroll view's frame lies on the zoomed picture. */
 export function onPicture(point: { x: number; y: number }, offset: { x: number; y: number }, width: number, height: number, scale: number) {
   const x = point.x + offset.x, y = point.y + offset.y;
