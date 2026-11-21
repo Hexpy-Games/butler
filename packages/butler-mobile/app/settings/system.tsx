@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { getAppCopy, type AppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
-import { Button, ListRow, Text } from "@/ds";
+import { Button, ListGroup, ListGroupItem, ListRow, Text } from "@/ds";
 import { useAppLocale } from "@/i18n";
-import { GroupInset, LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
+import { LoadState, SettingsScreen } from "@/settings/layout";
 import type { SystemEventListView, SystemEventSummary } from "@/settings/types";
 
 export default function SystemSettings() {
@@ -21,14 +21,14 @@ export default function SystemSettings() {
   }, [client]);
   useEffect(() => { void load(); }, [load, reconcile]);
   return <SettingsScreen title={S.sections.system} description={S.sectionDescriptions.system}>
-    <SettingsGroup title={S.pageSections.systemEvents} description={S.descriptions.systemEvents}>
-      <GroupInset><Button label={app.common.refresh} disabled={loading} onPress={() => void load()} /></GroupInset>
-      {!view || error ? <GroupInset><LoadState error={error} onRetry={() => void load()} /></GroupInset> : <>
+    <ListGroup label={S.pageSections.systemEvents} footer={S.descriptions.systemEvents}>
+      <ListGroupItem><Button label={app.common.refresh} disabled={loading} onPress={() => void load()} /></ListGroupItem>
+      {!view || error ? <LoadState error={error} onRetry={() => void load()} /> : <>
         {view.events.map(event => <SystemEventRow key={event.id} event={event} />)}
-        {!view.events.length ? <GroupInset><Text variant="caption">{S.descriptions.systemEventsEmpty}</Text></GroupInset> : null}
+        {!view.events.length ? <ListGroupItem><Text variant="caption">{S.descriptions.systemEventsEmpty}</Text></ListGroupItem> : null}
       </>}
-      {view?.pagination.has_more ? <GroupInset><Button label={app.common.more} disabled={loading} onPress={() => void load(view.events.length)} /></GroupInset> : null}
-    </SettingsGroup>
+      {view?.pagination.has_more ? <ListGroupItem><Button label={app.common.more} disabled={loading} onPress={() => void load(view.events.length)} /></ListGroupItem> : null}
+    </ListGroup>
   </SettingsScreen>;
 }
 

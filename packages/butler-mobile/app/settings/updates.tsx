@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
-import { Button, ListRow, Sheet, showToast } from "@/ds";
+import { ListGroup, ListGroupItem, Button, ListRow, Sheet, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { GroupInset, LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
+import { LoadState, SettingsScreen } from "@/settings/layout";
 import type { ComponentUpdateStatus, UpdateCancelResult, UpdateProgressView, UpdateStatusView } from "@/settings/types";
 
 function useUpdates() {
@@ -80,15 +80,15 @@ export default function UpdatesSettings() {
     : applying ? S.actions.updateApplying : status?.update_available ? S.actions.updateComponent
       : status?.check_state === "unavailable" ? S.actions.updateUnavailable : status?.check_state === "unchecked" ? S.actions.updateChecking : S.actions.upToDate;
   return <SettingsScreen title={S.sections.updates} description={S.sectionDescriptions.updates}>
-    <SettingsGroup title={S.pageSections.updateVersions}>
-      <GroupInset><Button variant="secondary" label={updates.loading ? S.actions.updateChecking : S.actions.checkUpdates} disabled={updates.loading || applying} onPress={() => void updates.check()} /></GroupInset>
-      {!updates.view ? <GroupInset><LoadState error={updates.error} message={S.errors.loadUpdates} onRetry={updates.load} /></GroupInset> : <ListRow title={S.updateComponents.app}
+    <ListGroup label={S.pageSections.updateVersions}>
+      <ListGroupItem><Button variant="secondary" label={updates.loading ? S.actions.updateChecking : S.actions.checkUpdates} disabled={updates.loading || applying} onPress={() => void updates.check()} /></ListGroupItem>
+      {!updates.view ? <LoadState error={updates.error} message={S.errors.loadUpdates} onRetry={updates.load} /> : <ListRow title={S.updateComponents.app}
         description={[version, status?.bundled_agent_version ? `Butler Agent ${status.bundled_agent_version}` : ""].filter(Boolean).join("\n")}
         meta={busy || stage === "ready" ? S.updateProgress[stage] : undefined}
         trailing={!busy && (stage !== "downloading" || cancelling) ? <Button size="sm" variant={cancelling || !status?.update_available ? "outline" : "default"} label={label}
           disabled={(!status?.update_available && stage !== "failed" && stage !== "ready" && !cancelling) || (applying && stage !== "ready" && !cancelling)}
           onPress={() => cancelling ? void updates.cancel() : setConfirm(true)} /> : undefined} />}
-    </SettingsGroup>
+    </ListGroup>
     <Sheet open={confirm} onClose={() => setConfirm(false)} title={M.settings.applyUpdateTitle} description={M.settings.applyUpdateBody} cancelLabel={M.settings.cancel}
       action={<Button label={S.actions.updateComponent} onPress={() => { setConfirm(false); void updates.apply(); }} />} />
   </SettingsScreen>;

@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { router } from "expo-router";
 import { getAppCopy, type AppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
-import { Button, ListRow, Sheet, Text, showToast } from "@/ds";
+import { ListGroup, ListGroupItem, Button, ListRow, Sheet, Text, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { GroupInset, LoadState, SettingsGroup, SettingsScreen } from "@/settings/layout";
+import { LoadState, SettingsScreen } from "@/settings/layout";
 import { relativeAge } from "@/settings/format";
 import type { ArchiveListView, SessionSummary } from "@/settings/types";
 
@@ -56,14 +56,14 @@ export default function ArchivesSettings() {
   const [selected, select] = useState<ArchiveItem>(), [mode, setMode] = useState<"actions" | "confirm">("actions");
   const change = (remove: boolean) => { if (selected) { void archives.change(selected, remove); select(undefined); } };
   return <SettingsScreen title={S.sections.archives} description={S.sectionDescriptions.archives}>
-    <SettingsGroup title={S.pageSections.archived}>
-      {!archives.view || archives.error ? <GroupInset><LoadState error={archives.error} onRetry={() => void archives.load()} /></GroupInset> : <>
+    <ListGroup label={S.pageSections.archived}>
+      {!archives.view || archives.error ? <LoadState error={archives.error} onRetry={() => void archives.load()} /> : <>
         {items.map(item => <ListRow key={`${item.kind}:${item.id}`} title={item.title} description={`${archiveSubtitle(item, app)} · ${relativeAge(item.updatedAt, app)}`}
           disabled={archives.busy} onPress={() => { setMode("actions"); select(item); }} />)}
-        {!items.length ? <GroupInset><Text variant="caption">{app.interfaceDetails.archivesEmpty}</Text></GroupInset> : null}
+        {!items.length ? <ListGroupItem><Text variant="caption">{app.interfaceDetails.archivesEmpty}</Text></ListGroupItem> : null}
       </>}
-      {archives.view?.pagination.has_more ? <GroupInset><Button label={app.common.more} disabled={archives.busy} onPress={() => void archives.load(items.length)} /></GroupInset> : null}
-    </SettingsGroup>
+      {archives.view?.pagination.has_more ? <ListGroupItem><Button label={app.common.more} disabled={archives.busy} onPress={() => void archives.load(items.length)} /></ListGroupItem> : null}
+    </ListGroup>
     <Sheet open={Boolean(selected)} onClose={() => select(undefined)} title={mode === "confirm" ? app.common.delete : selected?.title ?? S.sections.archives}
       description={mode === "confirm" && selected ? app.interfaceTemplates.deleteItem(selected.title) : undefined} cancelLabel={M.settings.cancel}
       action={mode === "confirm" ? <Button variant="destructive" label={app.common.delete} disabled={archives.busy} onPress={() => change(true)} /> : undefined}>

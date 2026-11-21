@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { getAppCopy } from "../../../../butler-i18n/src/index.ts";
-import { Button, ListRow, Sheet, Text } from "@/ds";
+import { Button, ListGroup, ListGroupItem, ListRow, Sheet, Text } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { GroupInset, SettingsGroup, LoadState } from "../layout";
+import { LoadState } from "../layout";
 import { SelectRow } from "../rows";
 import { useSettings } from "../useSettings";
 import { modelDisplayName, runtimeModels, useModelCatalog } from "../useModelCatalog";
@@ -20,55 +20,57 @@ export function ChatMemoryGroup({ data, ops }: Props) {
   const ready = Boolean(data.inventory && !data.errors.inventory && card?.item_count != null);
   const locked = Boolean(ops.resetKind) || ops.consolidating;
   const reason = locked ? S.memory.inUse : card?.health.reclaimable_bytes === 0 ? S.memory.nothingToFree : undefined;
-  return <SettingsGroup title={S.pageSections.chatMemory} description={S.pageSectionDescriptions.chatMemory}>
-    {!data.inventory || data.errors.inventory ? <GroupInset><LoadState error={Boolean(data.errors.inventory)} onRetry={data.reload} /></GroupInset>
-      : card?.health.state === "unavailable" ? <GroupInset><Text variant="caption">{S.memory.unavailable}</Text></GroupInset> : <>
+  return <ListGroup label={S.pageSections.chatMemory} footer={S.pageSectionDescriptions.chatMemory}>
+    {!data.inventory || data.errors.inventory ? <LoadState error={Boolean(data.errors.inventory)} onRetry={data.reload} />
+      : card?.health.state === "unavailable" ? <ListGroupItem><Text variant="caption">{S.memory.unavailable}</Text></ListGroupItem> : <>
         <SelectRow title={S.fields.recallMode} description={S.descriptions.recallMode} value={settings?.recall_mode ?? "faster"}
           options={[{ value: "faster", label: S.recallOptions.faster }, { value: "accurate", label: S.recallOptions.accurate }]}
           onSelect={recall_mode => void update({ recall_mode })} />
         {settings?.recall_mode === "accurate" ? catalog ? <SelectRow title={S.fields.recallModel} value={settings.recall_judge_model}
           options={[{ value: "default", label: S.recallOptions.sameAsMemoryModel }, ...runtimeModels(catalog).filter(m => m.registered === true && m.enabled !== false)
             .map(m => ({ value: m.model_ref, label: `${m.provider_label} / ${modelDisplayName(m, locale)}` }))]}
-          onSelect={recall_judge_model => void update({ recall_judge_model })} /> : <GroupInset><LoadState error={error} onRetry={reload} /></GroupInset> : null}
+          onSelect={recall_judge_model => void update({ recall_judge_model })} /> : <LoadState error={error} onRetry={reload} /> : null}
         <ListRow title={S.memory.storageLabel} description={S.memory.freeSpaceDescription} meta={reason}
           trailing={<Button size="sm" variant="outline" label={S.memory.freeSpace} loading={ops.busy}
             disabled={ops.busy || locked || !ready || card?.health.reclaimable_bytes === 0} onPress={() => void ops.start("cleanup")} />} />
-        <GroupInset><Text variant="caption">{facts(card, undefined, app, locale)}</Text></GroupInset>
-        {ops.receipt ? <><GroupInset><Text variant="caption">{ops.receipt.phase === "preparing" ? S.memory.freeWaiting : S.memory.freeing(formatFileSize(ops.receipt.bytes_reclaimed))}</Text></GroupInset>
-          <GroupInset><Button label={app.common.cancel} onPress={() => void ops.cancel()} /></GroupInset></> : null}
+        <ListGroupItem><Text variant="caption">{facts(card, undefined, app, locale)}</Text></ListGroupItem>
+        {ops.receipt ? <ListGroupItem>
+          <Text variant="caption">{ops.receipt.phase === "preparing" ? S.memory.freeWaiting : S.memory.freeing(formatFileSize(ops.receipt.bytes_reclaimed))}</Text>
+          <Button label={app.common.cancel} onPress={() => void ops.cancel()} />
+        </ListGroupItem> : null}
         <ResetAction data={data} ops={ops} kind="automatic" card={card} ready={ready} empty={card?.item_count === 0} />
       </>}
-  </SettingsGroup>;
+  </ListGroup>;
 }
 
 export function ProfileMemoryGroup({ data, ops }: Props) {
   const locale = useAppLocale(), app = getAppCopy(locale), S = app.settings;
   const card = data.inventory?.kinds.find(c => c.kind === "profile");
-  return <SettingsGroup title={S.pageSections.profileMemory} description={S.pageSectionDescriptions.profileMemory}>
-    {!data.inventory || data.errors.inventory ? <GroupInset><LoadState error={Boolean(data.errors.inventory)} onRetry={data.reload} /></GroupInset>
-      : card?.health.state === "unavailable" ? <GroupInset><Text variant="caption">{S.memory.unavailable}</Text></GroupInset> : <>
+  return <ListGroup label={S.pageSections.profileMemory} footer={S.pageSectionDescriptions.profileMemory}>
+    {!data.inventory || data.errors.inventory ? <LoadState error={Boolean(data.errors.inventory)} onRetry={data.reload} />
+      : card?.health.state === "unavailable" ? <ListGroupItem><Text variant="caption">{S.memory.unavailable}</Text></ListGroupItem> : <>
         <ResetAction data={data} ops={ops} kind="profile" card={card} ready={card?.item_count != null && card?.pending_count != null}
           empty={card?.item_count === 0 && card?.pending_count === 0} />
-        <GroupInset><Text variant="caption">{facts(card, undefined, app, locale)}</Text></GroupInset>
-        {card?.health.consent_on === false ? <GroupInset><Text variant="caption">{S.memory.profileBuildingOff}</Text></GroupInset> : null}
+        <ListGroupItem><Text variant="caption">{facts(card, undefined, app, locale)}</Text></ListGroupItem>
+        {card?.health.consent_on === false ? <ListGroupItem><Text variant="caption">{S.memory.profileBuildingOff}</Text></ListGroupItem> : null}
       </>}
-  </SettingsGroup>;
+  </ListGroup>;
 }
 
 export function ProjectMemoryGroup({ data, ops }: Props) {
   const locale = useAppLocale(), app = getAppCopy(locale), S = app.settings;
-  return <SettingsGroup title={S.pageSections.projectMemory} description={S.pageSectionDescriptions.projectMemory}>
-    {!data.projects || data.errors.projects ? <GroupInset><LoadState error={Boolean(data.errors.projects)} onRetry={data.reload} /></GroupInset>
-      : !data.projects.length ? <GroupInset><Text variant="caption">{S.memory.noProjects}</Text></GroupInset> : <>
+  return <ListGroup label={S.pageSections.projectMemory} footer={S.pageSectionDescriptions.projectMemory}>
+    {!data.projects || data.errors.projects ? <LoadState error={Boolean(data.errors.projects)} onRetry={data.reload} />
+      : !data.projects.length ? <ListGroupItem><Text variant="caption">{S.memory.noProjects}</Text></ListGroupItem> : <>
         <SelectRow title={S.memory.project} value={data.selected} options={data.projects.map(p => ({ value: p.id, label: p.display_name }))}
           disabled={ops.resetKind === "project_memory"} onSelect={data.select} />
-        {!data.project || data.errors.project ? <GroupInset><LoadState error={Boolean(data.errors.project)} onRetry={data.reload} /></GroupInset> : <>
+        {!data.project || data.errors.project ? <LoadState error={Boolean(data.errors.project)} onRetry={data.reload} /> : <>
           <ResetAction data={data} ops={ops} kind="project_memory" ready={data.project.conversations != null && data.project.instructions != null}
             empty={!data.project.summary_bytes && data.project.conversations === 0 && data.project.instructions === 0} />
-          <GroupInset><Text variant="caption">{facts(undefined, data.project, app, locale)}</Text></GroupInset>
+          <ListGroupItem><Text variant="caption">{facts(undefined, data.project, app, locale)}</Text></ListGroupItem>
         </>}
       </>}
-  </SettingsGroup>;
+  </ListGroup>;
 }
 
 function ResetAction({ data, ops, kind, card, ready, empty }: Props & { kind: ResetKind; card?: MemoryCard; ready: boolean; empty: boolean }) {

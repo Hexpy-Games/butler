@@ -1,3 +1,4 @@
+import { ListGroup } from "@/ds";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useAppLocale } from "@/i18n";
 import { LoadState, SettingsScreen } from "@/settings/layout";
@@ -14,7 +15,7 @@ export default function MemorySettings() {
   const { settings, error, reload } = useSettings();
   const data = useMemoryData(), ops = useMemoryOps(data);
   return <SettingsScreen title={S.sections.memory} description={S.sectionDescriptions.memory}>
-    {!settings ? <LoadState error={error} onRetry={reload} /> : <>
+    {!settings ? <ListGroup><LoadState error={error} onRetry={reload} /></ListGroup> : <>
       <InstructionsGroup data={data} locked={ops.resetKind === "project_memory"} />
       <PatternsGroup data={data} />
       <ChatMemoryGroup data={data} ops={ops} />

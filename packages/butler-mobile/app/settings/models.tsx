@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
-import { Button, Icon, icons, ListRow, Sheet, Text, TextField, showToast } from "@/ds";
+import { ListGroup, ListGroupItem, Button, Icon, icons, ListRow, Sheet, Text, TextField, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
-import { GroupInset, SettingsScreen, SettingsGroup, LoadState } from "@/settings/layout";
+import { SettingsScreen, LoadState } from "@/settings/layout";
 import { ReasoningRow, SelectRow, SwitchRow } from "@/settings/rows";
 import { useSettings } from "@/settings/useSettings";
 import { modelDisplayName, modelLabel, runtimeModels, tokenWindowLabel, useModelCatalog } from "@/settings/useModelCatalog";
@@ -17,15 +17,15 @@ export default function ModelsSettings() {
   const { settings, update, error, reload } = useSettings();
   const catalogState = useModelCatalog();
   return <SettingsScreen title={S.sections.models} description={S.sectionDescriptions.models}>
-    {!settings || !catalogState.catalog ? <LoadState error={error || catalogState.error} onRetry={() => { reload(); catalogState.reload(); }} /> : <>
+    {!settings || !catalogState.catalog ? <ListGroup><LoadState error={error || catalogState.error} onRetry={() => { reload(); catalogState.reload(); }} /></ListGroup> : <>
       <ButlerModel settings={settings} update={update} models={runtimeModels(catalogState.catalog)} catalog={catalogState.catalog} />
       <BackupModels settings={settings} update={update} catalog={catalogState.catalog} />
       <ImageModels />
-      <SettingsGroup title={S.modelsAdvanced.title}>
+      <ListGroup label={S.modelsAdvanced.title}>
         <SelectRow title={S.workerProfilesPanel.maxSimultaneousWorkers} value={String(settings.max_simultaneous_workers)}
           options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))}
           onSelect={value => { void update({ max_simultaneous_workers: Number(value) }); }} />
-      </SettingsGroup>
+      </ListGroup>
     </>}
   </SettingsScreen>;
 }
@@ -54,7 +54,7 @@ function ButlerModel({ settings, update, models, catalog }: SettingsProps & { mo
       showToast({ message: S.descriptions.contextLimitClamped(value.toLocaleString("en-US")) });
     }
   };
-  return <SettingsGroup title={S.pageSections.butlerModel}>
+  return <ListGroup label={S.pageSections.butlerModel}>
     <SelectRow title={S.fields.butlerModel} description={S.descriptions.runtimeSupportedModelsOnly}
       value={activeModel?.model_ref ?? catalog.default_model_ref} options={models.map(m => ({ value: m.model_ref, label: modelLabel(m, locale) }))} onSelect={choose} />
     <ReasoningRow title={S.fields.butlerReasoning} model={activeModel} value={settings.reasoning_effort}
@@ -66,7 +66,7 @@ function ButlerModel({ settings, update, models, catalog }: SettingsProps & { mo
       action={<Button label={app.common.save} disabled={!/^\d+$/.test(text)} onPress={() => { void saveContext(); }} />}>
       <TextField label={S.fields.contextLimit} keyboardType="number-pad" value={text} onChangeText={setText} />
     </Sheet>
-  </SettingsGroup>;
+  </ListGroup>;
 }
 
 function BackupModels({ settings, update, catalog }: SettingsProps & { catalog: ModelCatalogView }) {
@@ -82,14 +82,13 @@ function BackupModels({ settings, update, catalog }: SettingsProps & { catalog: 
   const candidates = selectableBackupModels(registered, settings.model, fallback.models);
   const save = (models: string[]) => { setSelected(null); setAdding(false); void update({ model_fallback: { enabled: fallback.enabled, models } }); };
   const cards = fallback.models.flatMap(ref => { const model = registered.find(m => m.model_ref === ref); return model ? [model] : []; });
-  return <SettingsGroup title={S.pageSections.backupModels}>
+  return <ListGroup label={S.pageSections.backupModels} footer={fallback.enabled ? S.backupModels.description : undefined}>
     <SwitchRow title={S.backupModels.enabled} description={S.backupModels.enabledDescription} value={fallback.enabled}
       onChange={enabled => { void update({ model_fallback: { enabled, models: fallback.models } }); }} />
     {fallback.enabled ? <>
-      <GroupInset><Text variant="caption">{S.backupModels.description}</Text></GroupInset>
       {cards.map(m => <ListRow key={m.model_ref} title={modelDisplayName(m, locale)} description={`${m.provider_label} · ${m.model_ref}`}
         meta={tokenWindowLabel(m.context_window_tokens, locale)} onPress={() => setSelected(m)} />)}
-      {cards.length === 0 ? <GroupInset><Text variant="caption">{S.backupModels.empty}</Text></GroupInset> : null}
+      {cards.length === 0 ? <ListGroupItem><Text variant="caption">{S.backupModels.empty}</Text></ListGroupItem> : null}
       <ListRow icon={icons.Plus} title={S.backupModels.add} disabled={fallback.models.length >= MAX_BACKUP_MODELS}
         meta={fallback.models.length >= MAX_BACKUP_MODELS ? S.backupModels.limitReached : undefined} onPress={() => setAdding(true)} />
     </> : null}
@@ -103,7 +102,7 @@ function BackupModels({ settings, update, catalog }: SettingsProps & { catalog: 
         onPress={() => save([...fallback.models, m.model_ref])} />)}
       {candidates.length === 0 ? <Text variant="caption">{S.backupModels.noCandidates}</Text> : null}
     </Sheet>
-  </SettingsGroup>;
+  </ListGroup>;
 }
 
 type ImageSelection = { model_ref: string; credential_id: string | null; default_quality: string | null };
@@ -133,8 +132,8 @@ function ImageModels() {
   };
   const selected = settings?.selected;
   const model = settings?.models.find(m => m.model_ref === selected?.model_ref);
-  return <SettingsGroup title={app.settings.pageSections.imageModels}>
-    {!settings ? <GroupInset><LoadState error={error} onRetry={reload} /></GroupInset> : <>
+  return <ListGroup label={app.settings.pageSections.imageModels}>
+    {!settings ? <LoadState error={error} onRetry={reload} /> : <>
       <SelectRow title={copy.model} value={selected?.model_ref ?? "off"} disabled={busy}
         options={[{ value: "off", label: copy.off }, ...settings.models.filter(m => settings.registered.includes(m.model_ref)).map(m => ({
           value: m.model_ref, label: m.display_name, description: m.provider_id === "custom-image" ? copy.custom : m.provider_label,
@@ -147,5 +146,5 @@ function ImageModels() {
         options={model.qualities.map(value => ({ value, label: copy.quality[value as keyof typeof copy.quality] ?? value }))}
         onSelect={default_quality => { void save({ model_ref: model.model_ref, credential_id: selected!.credential_id, default_quality }); }} /> : null}
     </>}
-  </SettingsGroup>;
+  </ListGroup>;
 }
