@@ -218,6 +218,9 @@ pub async fn main(args: Vec<OsString>, build_info: crate::BuildInfo) -> ExitCode
     if args.first().is_some_and(|a| a == "--remote-request") {
         return super::remote_relay::request(&args[1..]).await;
     }
+    if args.first().is_some_and(|a| a == "--remote-loopback") {
+        return super::remote_relay::loopback(&args[1..]).await;
+    }
     let (installation, command_args) = match installation(&args) {
         Ok(value) => value,
         Err(error) => {

@@ -79,3 +79,66 @@ pub(super) async fn request(args: &[OsString]) -> ExitCode {
         }
     }
 }
+
+pub(super) async fn loopback(args: &[OsString]) -> ExitCode {
+    use std::io::Write;
+    use tokio::{net::TcpStream, time::timeout};
+
+    let reply = async {
+        let [port] = args else { return Err("connect") };
+        let port = port
+            .to_str()
+            .and_then(|p| p.parse::<u16>().ok())
+            .ok_or("connect")?;
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "raw loopback relay for a sign-in callback that must stay out of HTTP logs"
+        )]
+        let mut stream = timeout(
+            Duration::from_secs(10),
+            TcpStream::connect(("127.0.0.1", port)),
+        )
+        .await
+        .map_err(|_| "connect")?
+        .map_err(|_| "connect")?;
+        let head = tokio::task::spawn_blocking(|| {
+            let mut bytes = Vec::new();
+            std::io::stdin()
+                .lock()
+                .take(64 * 1024 + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|_| "io")?;
+            if bytes.len() > 64 * 1024 {
+                return Err("io");
+            }
+            Ok(bytes)
+        })
+        .await
+        .map_err(|_| "io")??;
+        stream.write_all(&head).await.map_err(|_| "io")?;
+        stream.shutdown().await.map_err(|_| "io")?;
+        let mut bytes = Vec::new();
+        timeout(
+            Duration::from_secs(60),
+            stream.take(1024 * 1024 + 1).read_to_end(&mut bytes),
+        )
+        .await
+        .map_err(|_| "io")?
+        .map_err(|_| "io")?;
+        if bytes.len() > 1024 * 1024 {
+            return Err("io");
+        }
+        tokio::task::spawn_blocking(move || std::io::stdout().lock().write_all(&bytes))
+            .await
+            .map_err(|_| "io")?
+            .map_err(|_| "io")
+    }
+    .await;
+    match reply {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(code) => {
+            eprintln!("remote_loopback_failed code={code}");
+            ExitCode::FAILURE
+        }
+    }
+}

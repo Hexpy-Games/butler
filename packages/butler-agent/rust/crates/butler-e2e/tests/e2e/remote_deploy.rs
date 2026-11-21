@@ -4,6 +4,7 @@ use butler_e2e::e2e::{
     HarnessError,
     agent::Launch,
     install_fixture::{build_archive, write_update_manifest},
+    remote_home::versions_on_disk,
     scenario::Setup,
     security::AdminClient,
     sshd::TestSshd,
@@ -23,12 +24,13 @@ use std::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-pub(super) struct RemoteHome(pub(super) Launch);
+pub(super) struct RemoteHome(pub(super) Launch, pub(super) PathBuf);
 
 impl Drop for RemoteHome {
     fn drop(&mut self) {
         drop(StopOnDrop(self.0.clone()));
         let _ = fs::remove_dir_all(&self.0.home);
+        let _ = fs::remove_dir_all(&self.1);
     }
 }
 
@@ -95,7 +97,8 @@ async fn remote_start_places_verifies_and_starts_the_main_version() -> Result<()
     ));
     launch.data = launch.home.join(".butler-remote/data");
     fs::create_dir(&launch.home)?;
-    let remote = RemoteHome(launch);
+    let versions = versions_on_disk(&launch.home, &setup.sandbox.root)?;
+    let remote = RemoteHome(launch, versions);
     let key = setup.sandbox.home.join("key");
     assert!(
         Command::new("ssh-keygen")
@@ -195,7 +198,8 @@ async fn remote_start_rejects_a_bad_checksum() -> Result<(), HarnessError> {
     ));
     launch.data = launch.home.join(".butler-remote/data");
     fs::create_dir(&launch.home)?;
-    let remote = RemoteHome(launch);
+    let versions = versions_on_disk(&launch.home, &setup.sandbox.root)?;
+    let remote = RemoteHome(launch, versions);
     let key = setup.sandbox.home.join("key");
     assert!(
         Command::new("ssh-keygen")
@@ -283,7 +287,8 @@ async fn remote_delete_stops_and_removes_the_remote() -> Result<(), HarnessError
     ));
     launch.data = launch.home.join(".butler-remote/data");
     fs::create_dir(&launch.home)?;
-    let remote = RemoteHome(launch);
+    let versions = versions_on_disk(&launch.home, &setup.sandbox.root)?;
+    let remote = RemoteHome(launch, versions);
     let key = setup.sandbox.home.join("key");
     assert!(
         Command::new("ssh-keygen")

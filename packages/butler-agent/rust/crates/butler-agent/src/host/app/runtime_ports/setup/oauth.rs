@@ -62,9 +62,14 @@ impl OauthFlows {
 
     /// A default sign-in without `force` reuses a saved account or pending flow.
     /// Explicit account/plan changes always start a new authorization.
-    pub(super) async fn start(&self, force: bool, kind: SignInKind) -> OauthFlowView {
+    pub(super) async fn start(
+        &self,
+        force: bool,
+        kind: SignInKind,
+        redirect_port: Option<u16>,
+    ) -> OauthFlowView {
         let _serial = self.starting.lock().await;
-        if force || kind != SignInKind::Default {
+        if force || kind != SignInKind::Default || redirect_port.is_some() {
             self.cancel_open().await;
         } else {
             if let Some(view) = self.open_view() {
@@ -84,7 +89,7 @@ impl OauthFlows {
                 ));
             }
         }
-        match Attempt::start(&self.configuration, kind).await {
+        match Attempt::start(&self.configuration, kind, redirect_port).await {
             Ok(attempt) => self.spawn(attempt),
             Err(code) => self.record(finished(OauthFlowStatus::Failed, None, Some(code))),
         }
@@ -151,6 +156,7 @@ impl OauthFlows {
         let mut view = finished(OauthFlowStatus::Pending, None, None);
         view.auth_url = Some(attempt.auth_url.clone());
         view.redirect_uri = Some(attempt.redirect_uri.clone());
+        view.callback_port = attempt.callback_port;
         let stop = CancellationToken::new();
         let context = FlowContext {
             flows: self.flows.clone(),
@@ -261,6 +267,7 @@ fn finished(
         status,
         auth_url: None,
         redirect_uri: None,
+        callback_port: None,
         label,
         error,
         plan_enabled: None,

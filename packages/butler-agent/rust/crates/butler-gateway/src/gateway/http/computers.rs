@@ -37,6 +37,9 @@ pub(super) async fn route(
                 serde_json::json!({"computer": computer.wire()?}),
             )
         }
+        (_, p) if p.starts_with("/computers/") && p.contains("/oauth/") => {
+            oauth(&state, request, root, p).await?
+        }
         (Method::POST, path) if path.starts_with("/computers/") && path.ends_with("/start") => (
             StatusCode::OK,
             remote_computers::change(
@@ -100,4 +103,56 @@ async fn send_credential(
         )
         .await?,
     ))
+}
+
+async fn oauth(
+    state: &HttpState,
+    request: Request<Body>,
+    root: &std::path::Path,
+    path: &str,
+) -> Result<(StatusCode, serde_json::Value), HttpError> {
+    let not_found = || HttpError::public(404, "not_found", "Route not found.");
+    let (id, route) = path
+        .strip_prefix("/computers/")
+        .and_then(|p| p.split_once("/oauth/"))
+        .filter(|(id, _)| !id.is_empty() && !id.contains('/'))
+        .ok_or_else(not_found)?;
+    let cancel = state.shutdown.clone();
+    let data = match (request.method(), route) {
+        (&Method::POST, "start") => {
+            let bytes = read_body_with_limit(request.into_body(), 64 * 1024).await?;
+            let input = if bytes.is_empty() {
+                remote_computers::OauthStart::default()
+            } else {
+                serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?
+            };
+            remote_computers::oauth_start(
+                &state.application.setup()?,
+                root,
+                id,
+                &state.agent_version,
+                input,
+                cancel,
+            )
+            .await?
+        }
+        (method, route) => {
+            let (flow, suffix) = route
+                .split_once('/')
+                .map_or((route, None), |(flow, suffix)| (flow, Some(suffix)));
+            if flow.is_empty() || !flow.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+                return Err(not_found());
+            }
+            match (method, suffix) {
+                (&Method::GET, None) => {
+                    remote_computers::oauth_flow(root, id, flow, cancel).await?
+                }
+                (&Method::POST, Some("cancel")) => {
+                    remote_computers::oauth_cancel(root, id, flow, cancel).await?
+                }
+                _ => return Err(not_found()),
+            }
+        }
+    };
+    Ok((StatusCode::OK, data))
 }

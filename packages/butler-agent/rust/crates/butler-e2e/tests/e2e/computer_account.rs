@@ -4,8 +4,10 @@ use age::x25519::Identity;
 use butler_e2e::e2e::{
     HarnessError,
     agent::Launch,
+    fake_chatgpt::FakeChatGptAuthority,
     harness_error,
     install_fixture::{build_archive, write_update_manifest},
+    remote_home::versions_on_disk,
     scenario::{Scenario, Setup},
     security::AdminClient,
     sshd::TestSshd,
@@ -17,8 +19,10 @@ use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
     fs,
+    net::TcpStream,
     path::{Path, PathBuf},
     process::Command,
+    time::{Duration, Instant},
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -32,7 +36,7 @@ struct Deployed {
     version: String,
 }
 
-async fn deployed(id: &str) -> Result<Deployed, HarnessError> {
+async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed, HarnessError> {
     let setup = Setup::new(id)?;
     let mut launch = Launch::new(&setup.sandbox)?;
     launch.home = PathBuf::from(format!(
@@ -42,7 +46,8 @@ async fn deployed(id: &str) -> Result<Deployed, HarnessError> {
     ));
     launch.data = launch.home.join(".butler-remote/data");
     fs::create_dir(&launch.home)?;
-    let remote = RemoteHome(launch);
+    let versions = versions_on_disk(&launch.home, &setup.sandbox.root)?;
+    let remote = RemoteHome(launch, versions);
     let key = setup.sandbox.home.join("key");
     assert!(
         Command::new("ssh-keygen")
@@ -52,10 +57,11 @@ async fn deployed(id: &str) -> Result<Deployed, HarnessError> {
             .status
             .success()
     );
-    let sshd = TestSshd::start(
+    let sshd = TestSshd::start_with_env(
         &setup.sandbox.home.join("sshd"),
         &key.with_extension("pub"),
         Some(&remote.0.home),
+        env,
     )?;
     let files_root = setup.sandbox.home.join("release");
     fs::create_dir(&files_root)?;
@@ -175,7 +181,7 @@ async fn computer_start_hands_its_key_to_the_remote_every_time() -> Result<(), H
         api,
         id,
         version,
-    } = deployed("COMPUTER-ACCOUNT-START").await?;
+    } = deployed("COMPUTER-ACCOUNT-START", &[]).await?;
     let start = format!("/computers/{id}/start");
     let homes_path = s.sandbox.data.join("auth/computer-key-homes.json");
     let store_path = s.sandbox.data.join("auth/credential-store.json");
@@ -270,7 +276,7 @@ async fn sending_a_saved_key_seals_it_on_the_computer() -> Result<(), HarnessErr
         api,
         id,
         ..
-    } = deployed("COMPUTER-ACCOUNT-SEND").await?;
+    } = deployed("COMPUTER-ACCOUNT-SEND", &[]).await?;
     let key = uuid::Uuid::new_v4().to_string();
     let saved = api
         .send(
@@ -345,6 +351,131 @@ async fn sending_a_saved_key_seals_it_on_the_computer() -> Result<(), HarnessErr
             .iter()
             .any(|c| c["id"] == cid)
     );
+    drop((remote, sshd, files));
+    s.finish().await
+}
+
+#[tokio::test]
+async fn computer_chatgpt_sign_in_runs_on_the_computer() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        Path::new("/usr/sbin/sshd").exists(),
+        "Requires a local sshd"
+    );
+    let authority = FakeChatGptAuthority::start().await?;
+    let api_base = format!("{}/v1", authority.issuer);
+    let Deployed {
+        s,
+        remote,
+        sshd,
+        files,
+        api,
+        id,
+        ..
+    } = deployed(
+        "COMPUTER-CHATGPT-SIGN-IN",
+        &[
+            ("BUTLER_CHATGPT_AUTH_ISSUER", &authority.issuer),
+            ("BUTLER_CHATGPT_API_BASE_URL", &api_base),
+        ],
+    )
+    .await?;
+    let refused =
+        s.gw.post("/setup/oauth/start", json!({"redirect_port":1}))
+            .await?;
+    assert_eq!(refused.status, 400);
+    assert_eq!(refused.error_code(), Some("invalid_request"));
+
+    let base = format!("/computers/{id}/oauth");
+    let start = format!("{base}/start");
+    let pending = api.send(Method::POST, &start, Some(json!({})), &[]).await?;
+    assert_eq!(pending.status, 200);
+    let flow = pending.data();
+    assert_eq!(flow["status"], "pending");
+    let main_port = url::Url::parse(flow["redirect_uri"].as_str().unwrap())
+        .unwrap()
+        .port()
+        .unwrap();
+    let remote_port = u16::try_from(flow["callback_port"].as_u64().unwrap()).unwrap();
+    assert_ne!(main_port, remote_port);
+    assert!(TcpStream::connect(("127.0.0.1", main_port)).is_ok());
+    assert!(TcpStream::connect(("127.0.0.1", remote_port)).is_ok());
+    let flow_id = flow["flow_id"].as_str().unwrap();
+    let cancel = api
+        .send(
+            Method::POST,
+            &format!("{base}/{flow_id}/cancel"),
+            Some(json!({})),
+            &[],
+        )
+        .await?;
+    assert_eq!(cancel.data()["status"], "cancelled");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while [main_port, remote_port]
+        .into_iter()
+        .any(|p| TcpStream::connect(("127.0.0.1", p)).is_ok())
+    {
+        assert!(
+            Instant::now() < deadline,
+            "a callback listener survived cancellation"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    let pending = api.send(Method::POST, &start, Some(json!({})), &[]).await?;
+    let flow = pending.data();
+    let main_port = url::Url::parse(flow["redirect_uri"].as_str().unwrap())
+        .unwrap()
+        .port()
+        .unwrap();
+    let (status, page) = authority.browser(flow).await?;
+    assert_eq!(status, 200);
+    assert!(page.contains("Signed in to ChatGPT"));
+    let path = format!("{base}/{}", flow["flow_id"].as_str().unwrap());
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let poll = api.send(Method::GET, &path, None, &[]).await?;
+        if poll.data()["status"] == "completed" {
+            break;
+        }
+        assert_eq!(poll.data()["status"], "pending");
+        assert!(Instant::now() < deadline, "sign-in did not complete");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while TcpStream::connect(("127.0.0.1", main_port)).is_ok() {
+        assert!(
+            Instant::now() < deadline,
+            "the completed callback listener stayed open"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(
+        super::chatgpt_sign_in::account(&s).await?["status"],
+        "signed_out"
+    );
+    let cipher = fs::read(remote.0.data.join("auth/chatgpt.json"))?;
+    for secret in authority.issued() {
+        assert!(!cipher.windows(secret.len()).any(|w| w == secret.as_bytes()));
+    }
+    let store: Value = serde_json::from_slice(&fs::read(
+        s.sandbox.data.join("auth/credential-store.json"),
+    )?)?;
+    let account = format!("computer_key/{id}");
+    let entry = store["secrets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["account"] == account)
+        .unwrap();
+    let identity: Identity = entry["secret"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .map_err(|_| harness_error("invalid computer identity"))?;
+    let plain = age::decrypt(&identity, &cipher).map_err(|e| harness_error(e.to_string()))?;
+    let registration: Value = serde_json::from_slice(&plain)?;
+    assert!(registration["client_id"].is_string());
     drop((remote, sshd, files));
     s.finish().await
 }

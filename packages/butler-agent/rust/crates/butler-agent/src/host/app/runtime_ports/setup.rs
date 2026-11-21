@@ -281,7 +281,20 @@ impl AppSetupPort for AppSetup {
 
     fn start_oauth(&self, input: AppOauthStartInput) -> ApplicationFuture<OauthFlowView> {
         let this = self.0.clone();
-        Box::pin(async move { Ok(this.oauth.start(input.force, input.kind).await) })
+        Box::pin(async move {
+            if input.redirect_port.is_some() && !butler_models::models::sealed::is_enabled() {
+                return Err(GatewayApplicationError::Public {
+                    status: 400,
+                    code: "invalid_request".into(),
+                    message: "redirect_port is only for remote computers.".into(),
+                    source: None,
+                });
+            }
+            Ok(this
+                .oauth
+                .start(input.force, input.kind, input.redirect_port)
+                .await)
+        })
     }
 
     fn oauth_flow(&self, flow_id: String) -> ApplicationFuture<OauthFlowView> {

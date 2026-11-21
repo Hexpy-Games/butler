@@ -103,3 +103,42 @@ pub(super) fn data(reply: Reply) -> Result<Value, HttpError> {
         reply.body["error"]["message"].as_str().unwrap_or(message),
     ))
 }
+
+pub(super) async fn loopback(
+    computer: &Computer,
+    port: u16,
+    head: Vec<u8>,
+    cancel: CancellationToken,
+) -> Result<String, HttpError> {
+    let known_hosts = KnownHosts::write(computer.host_keys.iter().cloned().collect()).await?;
+    let target = HostInput {
+        address: computer.address.clone(),
+        port: computer.port.map(i64::from),
+        key_file: computer.key_file.clone(),
+    };
+    let home = butler_platform::user_dirs::non_empty_home_dir();
+    let command =
+        format!(r#""$HOME/.butler-remote/current/butler-agent" --remote-loopback {port}"#);
+    let args = ssh::arguments(
+        &target,
+        &known_hosts.0,
+        "yes",
+        &[],
+        &command,
+        home.as_deref(),
+    )?;
+    let output = ssh::run(
+        args,
+        ssh::Stdin::Bytes(head),
+        Duration::from_secs(90),
+        cancel,
+    )
+    .await?;
+    if output.exit_code != Some(0) {
+        return Err(remote_error(
+            "remote_loopback_failed",
+            "Could not forward the sign-in callback.",
+        ));
+    }
+    Ok(output.stdout)
+}

@@ -139,6 +139,8 @@ pub struct AppOauthStartInput {
     pub force: bool,
     #[serde(default)]
     pub kind: butler_models::models::chatgpt::SignInKind,
+    #[serde(default)]
+    pub redirect_port: Option<u16>,
 }
 
 #[derive(Deserialize)]
@@ -193,6 +195,8 @@ pub struct OauthFlowView {
     pub auth_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub redirect_uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub callback_port: Option<u16>,
     /// The signed-in account (email or account id).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,

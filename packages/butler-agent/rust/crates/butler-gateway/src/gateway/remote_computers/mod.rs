@@ -1,5 +1,6 @@
 //! Owner-confirmed SSH computers and their main-managed remote service.
 mod deploy;
+mod forward;
 mod relay;
 mod ssh;
 mod store;
@@ -7,11 +8,13 @@ mod store;
 use super::{AppSetupPort, SavedProviderKey, http::HttpError};
 use butler_platform::secrets::ChangeLock;
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
+use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub(super) struct Computer {
     id: String,
     name: String,
@@ -280,4 +283,98 @@ pub(super) async fn send_credential(
         .to_string()
         .into_bytes();
     relay::data(relay::request(&computer, "POST", "/credentials", body, cancel).await?)
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(super) struct OauthStart {
+    #[serde(default)]
+    kind: Option<Value>,
+}
+
+pub(super) async fn oauth_start(
+    setup: &Arc<dyn AppSetupPort>,
+    root: &Path,
+    id: &str,
+    version: &str,
+    input: OauthStart,
+    shutdown: CancellationToken,
+) -> Result<Value, HttpError> {
+    let (_lock, computer) = locked(root, id).await?;
+    connect(setup, root, version, &computer, shutdown.clone()).await?;
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .map_err(|_| HttpError::Internal)?;
+    let port = listener
+        .local_addr()
+        .map_err(|_| HttpError::Internal)?
+        .port();
+    let mut body = json!({"force":true,"redirect_port":port});
+    if let Some(kind) = input.kind {
+        body["kind"] = kind;
+    }
+    let view = relay::data(
+        relay::request(
+            &computer,
+            "POST",
+            "/setup/oauth/start",
+            body.to_string().into_bytes(),
+            shutdown.clone(),
+        )
+        .await?,
+    )?;
+    if view["status"] != "pending" {
+        return Ok(view);
+    }
+    let invalid = || {
+        remote_error(
+            "remote_oauth_invalid",
+            "This computer returned an invalid sign-in.",
+        )
+    };
+    let port = view["callback_port"]
+        .as_u64()
+        .and_then(|p| u16::try_from(p).ok())
+        .ok_or_else(invalid)?;
+    let flow_id = view["flow_id"].as_str().ok_or_else(invalid)?;
+    let stop = forward::replace(id, flow_id, &shutdown);
+    tokio::spawn(forward::serve(listener, computer, port, stop));
+    Ok(view)
+}
+
+pub(super) async fn oauth_flow(
+    root: &Path,
+    id: &str,
+    flow_id: &str,
+    cancel: CancellationToken,
+) -> Result<Value, HttpError> {
+    let computer = list(root)
+        .await?
+        .into_iter()
+        .find(|computer| computer.id == id)
+        .ok_or_else(|| HttpError::public(404, "computer_not_found", "Computer not found."))?;
+    let path = format!("/setup/oauth/{flow_id}");
+    let view = relay::data(relay::request(&computer, "GET", &path, Vec::new(), cancel).await?)?;
+    if view["status"] != "pending" {
+        forward::stop(id, flow_id);
+    }
+    Ok(view)
+}
+
+pub(super) async fn oauth_cancel(
+    root: &Path,
+    id: &str,
+    flow_id: &str,
+    cancel: CancellationToken,
+) -> Result<Value, HttpError> {
+    let computer = list(root)
+        .await?
+        .into_iter()
+        .find(|computer| computer.id == id)
+        .ok_or_else(|| HttpError::public(404, "computer_not_found", "Computer not found."))?;
+    let path = format!("/setup/oauth/{flow_id}/cancel");
+    let view =
+        relay::data(relay::request(&computer, "POST", &path, b"{}".to_vec(), cancel).await?)?;
+    forward::stop(id, flow_id);
+    Ok(view)
 }
