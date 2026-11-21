@@ -82,7 +82,7 @@ function OutputBody({ output }: { output: OperationOutputPresentation }) {
 
 function WorkActivityOutput({ children }: { children: string }) {
   const t = useTokens();
-  return <ScrollView style={{ maxHeight: 320, borderWidth: t.length("--border-hairline"),
+  return <ScrollView nestedScrollEnabled style={{ maxHeight: 320, borderWidth: t.length("--border-hairline"),
     borderColor: t.color("--line"), borderRadius: t.length(RADIUS), backgroundColor: t.color("--surface-raised") }}
     contentContainerStyle={{ padding: t.length("--space-2") }}>
     <BaseText style={{ fontFamily: CODE_FONT, fontSize: t.length("--typo-code-size"),
