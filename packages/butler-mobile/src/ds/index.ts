@@ -36,3 +36,4 @@ export { ThinkingMark } from "./ThinkingMark";
 
 export { ImageViewer } from "./ImageViewer";
 export { ImageFrame } from "./ImageFrame";
+export { TextSelectionScope } from "./internal/textSelection";

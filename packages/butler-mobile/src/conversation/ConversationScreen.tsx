@@ -20,6 +20,8 @@ import { queuedConversationItems } from "./queue";
 import { QueuedMessageItem } from "./QueuedMessageItem";
 import { anchoredStewardChildren } from "./stewardAnchors";
 import { latestStatus, turnStatusLabel } from "./workStatus";
+import { createSelectableRows } from "./selectableRows";
+import { SelectableRowsContext } from "@/ds/internal/textSelection";
 import { useElapsed } from "./useElapsed";
 
 export function ConversationScreen({ id, title, project, group, initialText = "" }: {
@@ -73,6 +75,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
   const copy = useMobileCopy();
   const t = useTokens();
   const headerInset = useHeaderInset();
+  const [selection] = useState(() => Platform.OS === "ios" ? createSelectableRows() : null);
   const stops = t.gradient("--conversation-bg").stops;
   const list = useRef<FlatList<ConversationRow> | null>(null);
   const edgeRef = useScrollEdgeEffectRef();
@@ -97,39 +100,44 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
     }
   }, [dockHeight]);
   return <>
-    <FlatList ref={ref} data={rows} keyExtractor={message => message.id}
-      renderItem={({ item }) => "questionAnswer" in item ? <QuestionAnswerCard answer={item.questionAnswer} /> : <Message message={item}
-        stewardChild={anchors.get(item.id)} latestTurn={view?.latest_turn} sessionId={view?.session_id} projectId={view?.project_id} />}
-      maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-      contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerInset }} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
-      keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" scrollEventThrottle={16}
-      contentContainerStyle={{ paddingHorizontal: t.length("--space-4"), paddingTop: headerInset + t.length("--space-4"), gap: t.length("--space-4") }}
-      initialNumToRender={SESSION_PAGE}
-      onStartReached={() => { if (!first.current) loadEarlier(); }} onStartReachedThreshold={0.5}
-      onScroll={({ nativeEvent }) => {
-        setBottom(nearEnd(nativeEvent));
-        setScrolled(nativeEvent.contentOffset.y > 0);
-      }}
-      onScrollBeginDrag={() => { dragging.current = true; atBottom.current = false; }}
-      onScrollToTop={() => { atBottom.current = false; }}
-      onScrollEndDrag={({ nativeEvent }) => { atBottom.current = nearEnd(nativeEvent); }}
-      onMomentumScrollEnd={({ nativeEvent }) => {
-        if (dragging.current) {
-          atBottom.current = nearEnd(nativeEvent);
-          dragging.current = false;
-        }
-      }}
-      onContentSizeChange={() => {
-        if (!rows.length) return;
-        if (first.current || atBottom.current) {
-          list.current?.getNativeScrollRef()?.scrollToEnd({ animated: !first.current && rows.length !== count.current });
-        }
-        first.current = false;
-        count.current = rows.length;
-      }}
-      ListHeaderComponent={loadingEarlier ? <Spinner label={copy.chat.earlier} /> : undefined}
-      ListFooterComponent={<View style={{ paddingBottom: dockHeight + t.length("--space-4"), gap: t.length("--space-4") }}>{children(anchors)}</View>}
-    />
+    <SelectableRowsContext.Provider value={selection}>
+      <FlatList ref={ref} data={rows} keyExtractor={message => message.id}
+        renderItem={({ item }) => "questionAnswer" in item ? <QuestionAnswerCard answer={item.questionAnswer} /> : <Message message={item}
+          stewardChild={anchors.get(item.id)} latestTurn={view?.latest_turn} sessionId={view?.session_id} projectId={view?.project_id} />}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerInset }} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+        keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" scrollEventThrottle={16}
+        contentContainerStyle={{ paddingHorizontal: t.length("--space-4"), paddingTop: headerInset + t.length("--space-4"), gap: t.length("--space-4") }}
+        initialNumToRender={SESSION_PAGE}
+        onViewableItemsChanged={selection?.onViewableItemsChanged}
+        onStartReached={() => { if (!first.current) loadEarlier(); }} onStartReachedThreshold={0.5}
+        onScroll={({ nativeEvent }) => {
+          setBottom(nearEnd(nativeEvent));
+          setScrolled(nativeEvent.contentOffset.y > 0);
+        }}
+        onScrollBeginDrag={() => { dragging.current = true; atBottom.current = false; selection?.begin(); }}
+        onMomentumScrollBegin={() => selection?.begin()}
+        onScrollToTop={() => { atBottom.current = false; }}
+        onScrollEndDrag={({ nativeEvent }) => { atBottom.current = nearEnd(nativeEvent); if (!nativeEvent.velocity?.y) selection?.settle(); }}
+        onMomentumScrollEnd={({ nativeEvent }) => {
+          if (dragging.current) {
+            atBottom.current = nearEnd(nativeEvent);
+            dragging.current = false;
+          }
+          selection?.settle();
+        }}
+        onContentSizeChange={() => {
+          if (!rows.length) return;
+          if (first.current || atBottom.current) {
+            list.current?.getNativeScrollRef()?.scrollToEnd({ animated: !first.current && rows.length !== count.current });
+          }
+          first.current = false;
+          count.current = rows.length;
+        }}
+        ListHeaderComponent={loadingEarlier ? <Spinner label={copy.chat.earlier} /> : undefined}
+        ListFooterComponent={<View style={{ paddingBottom: dockHeight + t.length("--space-4"), gap: t.length("--space-4") }}>{children(anchors)}</View>}
+      />
+    </SelectableRowsContext.Provider>
     <EdgeFade color={opaque(stops[0][0])} edge="top" offset={headerInset} visible={scrolled} />
     <EdgeFade color={opaque(stops[stops.length - 1][0])} edge="bottom" offset={dockHeight} visible={!bottom} />
   </>;

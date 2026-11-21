@@ -1,23 +1,24 @@
 import { useState } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import type { ConversationMessage, SessionView, SessionViewTurn, StewardChild } from "../../../butler-protocol/src/index.ts";
 import { toMarkdown } from "../../../butler-protocol/src/answer-blocks-markdown.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
-import { AttachmentTiles, Button, IconButton, icons, Markdown, MessageBubble, showToast, Text, TextSelectSheet, useTokens } from "@/ds";
+import { AttachmentTiles, Button, IconButton, icons, Markdown, MessageBubble, showToast, Text, TextSelectionScope, TextSelectSheet, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useConversation } from "./live";
 import { documentKindLabel } from "./documents";
 import { BranchSheet } from "./BranchSheet";
 import { MessageActivity } from "./ActivityHistory";
+import { useSelectableRow } from "@/ds/internal/textSelection";
 import { StewardCard } from "./StewardCard";
 
 export function messageCopyText(message: ConversationMessage): string {
   return message.role === "user" ? message.text : [message.text, ...(message.answer_blocks ?? []).map(set => toMarkdown(set.spec, url => url))].filter(Boolean).join("\n\n");
 }
 
-export function UserMessage({ message, children }: {
-  message: Pick<ConversationMessage, "text" | "attachments" | "content_parts">; children: React.ReactNode;
+export function UserMessage({ message, children, selectable }: {
+  message: Pick<ConversationMessage, "text" | "attachments" | "content_parts">; children: React.ReactNode; selectable?: boolean;
 }) {
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
@@ -26,7 +27,7 @@ export function UserMessage({ message, children }: {
   const references = message.content_parts?.parts.filter(part => part.type === "project_source_ref") ?? [];
   const text = message.content_parts ? message.content_parts.parts.filter(part => part.type === "text").map(part => part.text).join("") : message.text;
   return <View style={{ alignSelf: "flex-end", maxWidth: "80%", gap: t.length("--space-1") }}>
-    <MessageBody style={{ gap: t.length("--space-1") }}>
+    <MessageBody selectable={selectable} style={{ gap: t.length("--space-1") }}>
       {text.trim() ? <MessageBubble><Text selectable>{text}</Text></MessageBubble> : null}
       {message.attachments?.length ? <AttachmentTiles layout="wrap" items={message.attachments.map(file => ({
         key: file.file_id, name: file.safe_name, kind: file.kind === "image" || file.mime_type.startsWith("image/") ? "image" : "file",
@@ -50,11 +51,13 @@ export function Message({ message, latestTurn, sessionId, projectId, stewardChil
 }) {
   const copy = useMobileCopy();
   const t = useTokens();
+  const settled = useSelectableRow(message.id);
+  const selectable = Platform.OS !== "ios" || (settled && message.status !== "streaming");
   const [selecting, setSelecting] = useState(false);
   const selectSheet = <TextSelectSheet open={selecting} onClose={() => setSelecting(false)}
     title={copy.chat.selectText} closeLabel={copy.chat.close} text={messageCopyText(message)} />;
   if (message.role === "user") return <>
-    <UserMessage message={message}>
+    <UserMessage message={message} selectable={selectable}>
       <MessageInfo message={message} onSelectText={() => setSelecting(true)} />
     </UserMessage>
     {selectSheet}
@@ -64,7 +67,7 @@ export function Message({ message, latestTurn, sessionId, projectId, stewardChil
   const cancelled = message.status === "cancelled" || message.delivery_state === "cancelled";
   return <View style={{ ...(bubble ? { alignSelf: "flex-start", width: "90%" } : { width: "100%" }), gap: t.length("--space-1") }}>
     {!bubble ? <MessageActivity message={message} /> : null}
-    <MessageBody style={{ gap: t.length(bubble ? "--space-1" : "--space-3"), ...(bubble ? { alignSelf: "flex-start" } : {}) }}>
+    <MessageBody selectable={selectable} style={{ gap: t.length(bubble ? "--space-1" : "--space-3"), ...(bubble ? { alignSelf: "flex-start" } : {}) }}>
       {bubble ? (message.text.trim() ? <MessageBubble><Markdown text={message.text} /></MessageBubble> : null)
         : <Markdown text={message.text} />}
       {message.answer_blocks?.map((set, index) => <Markdown key={index} text={toMarkdown(set.spec, url => url)} />)}
@@ -123,6 +126,6 @@ function MessageInfo({ message, retryable, sessionId, projectId, onSelectText }:
   </View>;
 }
 
-function MessageBody({ style, children }: { style: object; children: React.ReactNode }) {
-  return <View style={style}>{children}</View>;
+function MessageBody({ style, children, selectable = true }: { style: object; children: React.ReactNode; selectable?: boolean }) {
+  return <TextSelectionScope enabled={selectable}><View style={style}>{children}</View></TextSelectionScope>;
 }
