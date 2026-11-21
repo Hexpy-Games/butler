@@ -19,6 +19,7 @@ export function Switch({ value, onValueChange, label, disabled, testID }: Switch
       disabled={disabled}
       accessibilityLabel={label}
       testID={testID}
+      thumbColor={Platform.select({ android: t.color("--switch-thumb") })}
       trackColor={{ true: t.color("--accent"), false: Platform.select({ android: t.color("--switch-track-bg") }) }}
     />
   );
