@@ -4,7 +4,7 @@ import type { NativeStackNavigationOptions } from "expo-router";
 import { useTokens } from "../design/useTokens";
 import { fontFace, weightValue } from "./internal/typography";
 
-export function useHeaderOptions(): NativeStackNavigationOptions {
+export function useHeaderOptions(backgroundColor?: string): NativeStackNavigationOptions {
   const t = useTokens();
   const title = { fontFamily: fontFace(weightValue(t, "semibold")), color: t.color("--text-primary") };
   return {
@@ -19,7 +19,7 @@ export function useHeaderOptions(): NativeStackNavigationOptions {
       ...(parseInt(String(Platform.Version), 10) >= 26
         ? { scrollEdgeEffects: { top: "soft", bottom: "soft" } as const }
         : { headerBlurEffect: "systemChromeMaterial" as const }),
-    } : { headerTransparent: false, headerStyle: { backgroundColor: t.color("--color-surface-base") } }),
+    } : { headerTransparent: false, headerStyle: { backgroundColor: backgroundColor ?? t.color("--color-surface-base") } }),
   };
 }
 

@@ -23,7 +23,7 @@ export function useAttachments(sessionId: string | undefined) {
   const remove = (key: string) => setItems(previous => previous.filter(item => item.key !== key));
   const removeMany = (keys: string[]) => setItems(previous => previous.filter(item => !keys.includes(item.key)));
   const upload = async (file: { uri: string; name: string; mimeType: string; kind: "image" | "file"; size?: number }) => {
-    if (!pairing || !sessionId) return;
+    if (!pairing) return;
     const key = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     setItems(previous => [...previous, { key, ...file, status: "uploading" }]);
     try {
@@ -52,7 +52,7 @@ export function useAttachments(sessionId: string | undefined) {
     } catch { showToast({ message: copy.chat.uploadFailed, tone: "error" }); }
   };
   const addProjectDocument = async (document: ProjectDashboardDocument) => {
-    if (!client || !pairing || !sessionId) return;
+    if (!client || !pairing) return;
     const sources = new Set(items.flatMap(item => item.reference ? [`${item.reference.source.kind}:${item.reference.source.id}`] : []));
     if (document.project_id && document.revision && sources.size >= 8 && !sources.has(`${document.document_type ?? document.kind}:${document.id}`)) {
       showToast({ message: appCopy.feedback.attachmentFailed, tone: "error" });

@@ -5,6 +5,7 @@ type Light = (typeof generated)["light"];
 type Dark = (typeof generated)["dark"];
 type Key<K extends keyof Light & keyof Dark> = keyof Light[K] & keyof Dark[K] & string;
 
+export type GradientToken = { angleDeg: number; stops: [string, number][] };
 export type EasingToken = { bezier: number[] } | { linear: number[][] };
 export type ShadowToken = {
   offsetX: number;
@@ -22,6 +23,7 @@ export interface Tokens {
   number(name: Key<"Number">): number;
   duration(name: Key<"Duration">): number; // ms
   easing(name: Key<"Easing">): EasingToken;
+  gradient(name: Key<"GradientToken">): GradientToken;
   shadow(name: Key<"Shadow">): ShadowToken[]; // valid as RN `boxShadow`
 }
 
@@ -43,6 +45,7 @@ export function tokens(scheme: Scheme): Tokens {
     number: (name) => read<number>("Number", name),
     duration: (name) => read<number>("Duration", name),
     easing: (name) => read<EasingToken>("Easing", name),
+    gradient: (name) => read<GradientToken>("GradientToken", name),
     shadow: (name) => read<ShadowToken[]>("Shadow", name),
   };
   cache[scheme] = created;

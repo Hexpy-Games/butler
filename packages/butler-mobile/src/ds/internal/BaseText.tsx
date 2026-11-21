@@ -1,3 +1,4 @@
+import { UITextView } from "@bsky.app/react-native-uitextview";
 import { Children } from "react";
 import { Platform, Text as RNText, type TextProps } from "react-native";
 import { keepHangulWords } from "./typography";
@@ -10,5 +11,6 @@ export function BaseText({ children, ...props }: TextProps) {
       ? keepHangulWords(items.join(""))
       : Children.map(children, (child) => (typeof child === "string" ? keepHangulWords(child) : child))
     : children;
-  return <RNText lineBreakStrategyIOS="hangul-word" {...props}>{body}</RNText>;
+  const Component = Platform.OS === "ios" ? UITextView : RNText;
+  return <Component uiTextView lineBreakStrategyIOS="hangul-word" {...props}>{body}</Component>;
 }

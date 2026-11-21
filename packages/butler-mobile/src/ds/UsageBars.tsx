@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef } from "react";
 import { Animated, Pressable, View } from "react-native";
-import Svg, { Defs, Pattern, Rect } from "react-native-svg";
+import Svg, { Defs, G, Pattern, Rect } from "react-native-svg";
 import { useTokens } from "../design/useTokens";
 import { run, useReducedMotion } from "./internal/motion";
 import { Text } from "./Text";
@@ -65,10 +65,10 @@ function UsageColumn({ bucket, series, max, dimmed, onPress }: {
           const height = (segment?.value ?? 0) / max * PLOT_HEIGHT;
           const subtask = (segment?.subtask ?? 0) / max * PLOT_HEIGHT;
           bottom -= height;
-          return <Svg key={item.id} y={bottom} width="100%" height={height}>
-            <Rect y={subtask} width="100%" height={height - subtask} fill={t.color(item.color)} />
-            <Rect width="100%" height={subtask} fill={`url(#${instance}-${item.id})`} />
-          </Svg>;
+          return <G key={item.id}>
+            <Rect y={bottom + subtask} width="100%" height={height - subtask} fill={t.color(item.color)} />
+            <Rect y={bottom} width="100%" height={subtask} fill={`url(#${instance}-${item.id})`} />
+          </G>;
         })}
       </Svg>
     </Animated.View>
