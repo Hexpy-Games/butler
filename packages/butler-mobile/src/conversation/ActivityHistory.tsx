@@ -8,6 +8,7 @@ import { AnimatedPressable, usePress } from "@/ds/internal/press";
 import { useAppLocale } from "@/i18n";
 import { activityDisplayTitle, delegatedRequestGoal, projectActivities, type Activity } from "./activityProjection";
 import { phaseLabel, toolItems, workBlockToolItems } from "./workStatus";
+import { ImageToolStill } from "./ImageToolStill";
 import { useWorkExpanded } from "./workExpansion";
 
 export function ActivityTimeline({ activities, currentState, live = false, pulseLatest = false, expandAll = false, goal, storeKey }: {
@@ -98,7 +99,7 @@ export function ActivityRow({ activity, connected, last, live, goal }: { activit
     activity.rationale ? `${copy.interfaceDetails.intentLabel} ${activity.rationale}` : undefined,
     activity.nextStep ? `${copy.interfaceDetails.nextLabel} ${activity.nextStep}` : undefined,
   ].filter((line): line is string | React.ReactElement => Boolean(line));
-  return <WorkActivityBlock density="compact" title={activityDisplayTitle(activity, copy)} description={description}
+  return <WorkActivityBlock renderAfter={tool => tool.images ? <ImageToolStill tool={tool} /> : null} density="compact" title={activityDisplayTitle(activity, copy)} description={description}
     connected={connected} last={last} live={live} tools={toolItems(activity.operations.map(row => ({ ...row, turn_id: activity.turnId ?? row.turn_id })), locale)} />;
 }
 
@@ -125,7 +126,7 @@ function CompletedWork({ blocks, message }: { blocks: WorkerActivityWorkBlock[];
   return <View style={{ gap: t.length("--space-md") }}>
     <HistoryHeader label={copy.interfaceTemplates.activityHistory(false, copy.guided.tools[latest.label] ?? latest.label, blocks.length)} expanded={expanded} onToggle={toggle} />
     {expanded ? <>
-      {blocks.map((block, index) => <WorkActivityBlock key={block.id} density="normal" title={copy.guided.tools[block.label] ?? block.label}
+      {blocks.map((block, index) => <WorkActivityBlock renderAfter={tool => tool.images ? <ImageToolStill tool={tool} /> : null} key={block.id} density="normal" title={copy.guided.tools[block.label] ?? block.label}
         description={[block.decision_rationale, block.decision_next_step].filter((line): line is string => Boolean(line))}
         last={index === blocks.length - 1} live={false} tools={workBlockToolItems(block, message.turn_id, locale)} />)}
       <View style={{ alignItems: "flex-start" }}><Button variant="ghost" size="sm" iconStart={icons.ListChecks} label={copy.conversation.work.collapseLabel} onPress={toggle} /></View>

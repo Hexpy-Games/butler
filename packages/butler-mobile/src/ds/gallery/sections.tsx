@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { Platform, useWindowDimensions, View } from "react-native";
+import { Image, Platform, useWindowDimensions, View } from "react-native";
+import { getAppCopy } from "../../../../butler-i18n/src/index.ts";
+import { useAppLocale } from "../../i18n";
+import { ImageFrame } from "../ImageFrame";
+import { ImageViewer } from "../ImageViewer";
 import { useTokens } from "../../design/useTokens";
 import { AttachmentTiles, type AttachmentTile } from "../AttachmentTiles";
 import { Badge, UnreadDot } from "../Badge";
@@ -413,7 +417,32 @@ function WorkActivitySection() {
   </>;
 }
 
+function ImageFrameSection() {
+  const t = useTokens();
+  const source = { uri: Image.resolveAssetSource(require("../../../assets/icon.png"))!.uri, headers: {} };
+  return <Cell name="fill · matte · placeholder"><View style={{ width: t.length("--layout-basis-xs"), maxWidth: "100%", gap: t.length("--space-md") }}>
+    <ImageFrame source={source} aspect="1:1" fit="fill" />
+    <ImageFrame source={source} aspect="16:9" fit="matte" />
+    <ImageFrame aspect="1:1" fit="fill" />
+  </View></Cell>;
+}
+
+function ImageViewerSection() {
+  const copy = getAppCopy(useAppLocale());
+  const [index, setIndex] = useState<number | null>(null);
+  const images = [require("../../../assets/icon.png"), require("../../../assets/splash-mark.png")].map(asset => {
+    const { uri, width, height } = Image.resolveAssetSource(asset)!;
+    return { source: { uri, headers: {} }, width: width!, height: height!, alt: copy.conversation.answerBlocks.image };
+  });
+  return <Cell name="ImageViewer">
+    <Button label={copy.conversation.imageViewer.viewImage(copy.conversation.answerBlocks.image)} onPress={() => setIndex(0)} />
+    <ImageViewer images={images} index={index} onIndexChange={setIndex} onClose={() => setIndex(null)} labels={copy.conversation.imageViewer} />
+  </Cell>;
+}
+
 export const sections: { id: string; title: string; render: (state?: string) => React.ReactNode }[] = [
+  { id: "image-frame", title: "ImageFrame", render: () => <ImageFrameSection /> },
+  { id: "image-viewer", title: "ImageViewer", render: () => <ImageViewerSection /> },
   { id: "work-activity", title: "WorkActivity", render: () => <WorkActivitySection /> },
   { id: "queued-message", title: "QueuedMessage", render: () => <QueuedMessageSection /> },
   { id: "decision-card", title: "DecisionCard", render: () => <DecisionCardSection /> },

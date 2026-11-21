@@ -33,3 +33,6 @@ export { WorkActivityTools, type WorkActivityToolIcon, type WorkActivityToolItem
 export { WorkActivityDisclosure, type WorkActivityDisclosureProps } from "./WorkActivityDisclosure";
 export { StatusLine, type StatusLineProps } from "./StatusLine";
 export { ThinkingMark } from "./ThinkingMark";
+
+export { ImageViewer } from "./ImageViewer";
+export { ImageFrame } from "./ImageFrame";

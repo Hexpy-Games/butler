@@ -35,9 +35,10 @@ export function WorkActivityMarker({ live = false, top }: { live?: boolean; top:
 export interface WorkActivityBlockProps {
   title: string; description?: (string | React.ReactElement)[]; live?: boolean; connected?: boolean; last?: boolean;
   density?: "normal" | "compact"; tools?: WorkActivityToolItem[];
+  renderAfter?: (tool: WorkActivityToolItem) => React.ReactNode;
 }
 
-export function WorkActivityBlock({ title, description, live, connected, last = true, density = "normal", tools = [] }: WorkActivityBlockProps) {
+export function WorkActivityBlock({ title, description, live, connected, last = true, density = "normal", tools = [], renderAfter }: WorkActivityBlockProps) {
   const t = useTokens();
   const compact = density === "compact";
   const geometry = WORK_GEOMETRY[density];
@@ -56,6 +57,6 @@ export function WorkActivityBlock({ title, description, live, connected, last = 
       {description.map((line, index) => <Fragment key={index}>{typeof line === "string"
         ? <BaseText style={{ ...textStyle(t, variant), color: alpha(t.color("--text-tertiary"), 0.78) }}>{line}</BaseText> : line}</Fragment>)}
     </View> : null}
-    {tools.length ? <WorkActivityTools tools={tools} compact={compact} /> : null}
+    {tools.length ? <WorkActivityTools tools={tools} compact={compact} renderAfter={renderAfter} /> : null}
   </View>;
 }

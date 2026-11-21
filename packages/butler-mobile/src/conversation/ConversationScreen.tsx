@@ -18,6 +18,7 @@ import { queuedConversationItems } from "./queue";
 import { QueuedMessageItem } from "./QueuedMessageItem";
 import { anchoredStewardChildren } from "./stewardAnchors";
 import { latestStatus, turnStatusLabel } from "./workStatus";
+import { ImageViewerHost } from "./ImageViewerHost";
 import { useElapsed } from "./useElapsed";
 
 export function ConversationScreen({ id, title, project, group, initialText = "" }: {
@@ -59,6 +60,7 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
     <ChatComposer id={id} project={project} group={group} view={view} hasDecision={hasDecision}
       text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh} onHeightChange={setDockHeight}
       onSend={() => setSends(value => value + 1)} />
+    <ImageViewerHost />
   </Surface>;
 }
 

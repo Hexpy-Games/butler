@@ -348,6 +348,8 @@ export function toolItems(rows: ProgressSummaryRow[], locale: AppLocale): WorkAc
     details: row.thinking_title ? row.thinking_body : row.safe_tool_name === "run_command" && row.safe_input_label
       ? `${copy.interfaceStatus.execution}: ${row.safe_input_label}`
       : row.safe_detail_rows?.map(detail => toolchainDetailLabel(detail, row, copy)).join(" "),
+    images: (row.safe_tool_name === "generate_image" || row.safe_tool_name === "edit_image") && row.turn_id && row.tool_call_id && row.tool_result_id
+      ? { turnId: row.turn_id, callId: row.tool_call_id, resultId: row.tool_result_id } : undefined,
     output: row.turn_id && row.tool_call_id && row.tool_result_id
       ? { turnId: row.turn_id, callId: row.tool_call_id, resultId: row.tool_result_id, toolName: row.safe_tool_name,
         command: row.safe_tool_name === "run_command" ? row.safe_input_label : undefined } : undefined,

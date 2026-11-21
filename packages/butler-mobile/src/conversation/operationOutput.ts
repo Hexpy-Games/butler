@@ -1,3 +1,5 @@
+import type { GatewayClient } from "../../../butler-protocol/src/client/index.ts";
+import type { OperationOutputView } from "../../../butler-protocol/src/index.ts";
 import type { AppCopy } from "../../../butler-i18n/src/index.ts";
 
 export type OperationOutputSection = { title: string; content?: string; message?: string };
@@ -274,4 +276,13 @@ function publicSections(value: OutputRecord, copy: AppCopy): OperationOutputSect
   }
   if (!own.length && title !== copy.interfaceStatus.result) own.push({ title });
   return own;
+}
+
+export async function readOutputPage(
+  client: GatewayClient, turnId: string, callId: string, resultId: string, offset: number, signal?: AbortSignal,
+): Promise<OperationOutputView> {
+  return await client.request<OperationOutputView>(
+    `/turns/${encodeURIComponent(turnId)}/operations/${encodeURIComponent(callId)}` +
+      `/output?result_id=${encodeURIComponent(resultId)}&offset=${offset}`, { signal },
+  );
 }

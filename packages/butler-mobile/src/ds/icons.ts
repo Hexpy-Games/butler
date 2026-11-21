@@ -42,7 +42,12 @@ import ViewIcon from "@hugeicons/core-free-icons/ViewIcon";
 import PlayIcon from "@hugeicons/core-free-icons/PlayIcon";
 import AiChipIcon from "@hugeicons/core-free-icons/AiChipIcon";
 
+import ZoomInAreaIcon from "@hugeicons/core-free-icons/ZoomInAreaIcon";
+import ZoomOutAreaIcon from "@hugeicons/core-free-icons/ZoomOutAreaIcon";
+
 export const icons = {
+  ZoomIn: ZoomInAreaIcon,
+  ZoomOut: ZoomOutAreaIcon,
   FileText: File02Icon,
   ListChecks: Task01Icon,
   Rocket: Rocket01Icon,

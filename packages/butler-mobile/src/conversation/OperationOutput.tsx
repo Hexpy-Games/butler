@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import type { OperationOutputView } from "../../../butler-protocol/src/index.ts";
-import type { GatewayClient } from "../../../butler-protocol/src/client/index.ts";
 import { RADIUS } from "@/design/tokens";
 import { useTokens } from "@/design/useTokens";
 import { Button } from "@/ds/Button";
@@ -11,7 +10,7 @@ import { BaseText } from "@/ds/internal/BaseText";
 import { CODE_FONT } from "@/ds/internal/codeFont";
 import { useAppLocale } from "@/i18n";
 import { useConversation } from "./live";
-import { presentOperationOutput, type OperationOutputPresentation } from "./operationOutput.ts";
+import { readOutputPage, presentOperationOutput, type OperationOutputPresentation } from "./operationOutput.ts";
 
 export function OperationOutput({ turnId, requestId, resultId, toolName, command }: {
   turnId: string; requestId: string; resultId: string; toolName?: string; command?: string;
@@ -25,7 +24,7 @@ export function OperationOutput({ turnId, requestId, resultId, toolName, command
   useEffect(() => {
     if (!client) return;
     let active = true;
-    void readPage(0, client).then(
+    void readOutputPage(client, turnId, requestId, resultId, 0).then(
       page => {
         if (!active) return;
         setPages([page]);
@@ -36,18 +35,11 @@ export function OperationOutput({ turnId, requestId, resultId, toolName, command
     return () => { active = false; };
   }, [client, turnId, requestId, resultId]);
 
-  async function readPage(offset: number, gateway: GatewayClient): Promise<OperationOutputView> {
-    return await gateway.request<OperationOutputView>(
-      `/turns/${encodeURIComponent(turnId)}/operations/${encodeURIComponent(requestId)}` +
-        `/output?result_id=${encodeURIComponent(resultId)}&offset=${offset}`,
-    );
-  }
-
   async function loadMore(): Promise<void> {
     if (!client || !latest || latest.complete || state === "loading") return;
     setState("loading");
     try {
-      const page = await readPage(latest.byte_end, client);
+      const page = await readOutputPage(client, turnId, requestId, resultId, latest.byte_end);
       setPages(current => [...current, page]);
       setState("ready");
     } catch {

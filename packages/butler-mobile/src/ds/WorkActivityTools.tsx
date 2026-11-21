@@ -13,11 +13,20 @@ import { textStyle } from "./internal/typography";
 export type WorkActivityToolIcon = "Rocket" | "FileText" | "Pencil" | "Terminal" | "Wrench" | "Search" | "ListChecks" | "AiChip";
 export type WorkActivityToolItem = {
   id: string; icon: WorkActivityToolIcon; title: string; summaryLabel: string; details?: string;
+  images?: { turnId: string; callId: string; resultId: string };
   output?: { turnId: string; callId: string; resultId: string; toolName?: string; command?: string };
 };
 
-export function WorkActivityTools({ tools, compact }: { tools: WorkActivityToolItem[]; compact: boolean }) {
-  return tools.length === 1 ? <ToolChip tool={tools[0]} compact={compact} /> : <ToolGroup tools={tools} compact={compact} />;
+export function WorkActivityTools({ tools, compact, renderAfter }: {
+  tools: WorkActivityToolItem[]; compact: boolean; renderAfter?: (tool: WorkActivityToolItem) => React.ReactNode;
+}) {
+  const t = useTokens();
+  const after = tools.map(tool => renderAfter?.(tool));
+  if (tools.length === 1 && !after[0]) return <ToolChip tool={tools[0]} compact={compact} />;
+  return <View>
+    <ToolGroup tools={tools} compact={compact} />
+    {after.map((content, index) => content ? <View key={tools[index].id} style={{ marginTop: t.length("--space-2") }}>{content}</View> : null)}
+  </View>;
 }
 
 function ToolChip({ tool, compact, nested = false }: { tool: WorkActivityToolItem; compact: boolean; nested?: boolean }) {

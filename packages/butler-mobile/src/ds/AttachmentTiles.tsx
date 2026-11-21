@@ -37,7 +37,7 @@ export interface AttachmentTilesProps {
  * Owner-approved exception to the single 28 container radius: tiles are content
  * thumbnails, not wrappers (owner, 2026-11-20). This is the only place to change it.
  */
-const TILE_RADIUS = 16;
+export const TILE_RADIUS = 16;
 // Visible remove button; hitSlop grows it to --control-hit-target.
 const REMOVE_SIZE = 28;
 
