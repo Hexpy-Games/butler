@@ -4,8 +4,8 @@ import { useTokens } from "../design/useTokens";
 
 export interface MessageBubbleProps { children: React.ReactNode; variant?: "sent" | "queued" | "failed" }
 
-const BUBBLE_PAD_V = 10; // owner decision 2026-11-20
-const BUBBLE_PAD_H = 14;
+const BUBBLE_PAD_V = 12; // owner decision 2026-11-20
+const BUBBLE_PAD_H = 18;
 
 export function MessageBubble({ children, variant = "sent" }: MessageBubbleProps) {
   const t = useTokens();
