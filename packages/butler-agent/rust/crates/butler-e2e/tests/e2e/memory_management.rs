@@ -130,7 +130,6 @@ async fn wiring_profile_clear_relearns_from_old_chats() -> Result<(), HarnessErr
     butler_e2e::gate!();
     let (base, server) = profile_server().await?;
     let mut s = setup("MEM-PROFILE-CLEAR").await?;
-    super::memory_fixture::wait_parked(&s).await;
     local_model(&s, &base).await?;
     let mode =
         s.gw.patch("/personalization", json!({"profiling":{"mode":"basic"}}))
@@ -147,7 +146,6 @@ async fn wiring_profile_clear_relearns_from_old_chats() -> Result<(), HarnessErr
         .await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
     cycle(&mut s).await?;
-    super::memory_fixture::wait_parked(&s).await;
     let db = s.sandbox.data.join("cognition/profile/profile.sqlite");
     assert!(
         sql_count(
