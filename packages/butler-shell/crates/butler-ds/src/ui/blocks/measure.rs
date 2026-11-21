@@ -43,6 +43,25 @@ pub fn track(
 
 /// How many lines `text` takes wrapped to `width` at `size` in the regular body face.
 pub fn wrapped_lines(text: &str, size: Length, width: f32, window: &mut Window, cx: &App) -> usize {
+    wrapped_lines_with(
+        text,
+        size,
+        width,
+        (gpui::WordBreak::Normal, gpui::OverflowWrap::Normal),
+        window,
+        cx,
+    )
+}
+
+/// `wrapped_lines` with the paint's word-break and overflow-wrap.
+pub fn wrapped_lines_with(
+    text: &str,
+    size: Length,
+    width: f32,
+    breaks: (gpui::WordBreak, gpui::OverflowWrap),
+    window: &mut Window,
+    cx: &App,
+) -> usize {
     let ds = Ds::get(cx);
     let mut face = font(ds.body_font().clone());
     face.weight = FontWeight(ds.number(Number::FontWeightRegular));
@@ -57,12 +76,16 @@ pub fn wrapped_lines(text: &str, size: Length, width: f32, window: &mut Window, 
     };
     window
         .text_system()
-        .shape_text(
+        .shape_text_with_options(
             SharedString::from(text.to_owned()),
             ds.len(size),
             &[run],
-            Some(px(width)),
-            None,
+            gpui::TextLayoutOptions {
+                wrap_width: Some(px(width)),
+                word_break: breaks.0,
+                overflow_wrap: breaks.1,
+                ..Default::default()
+            },
         )
         .map_or(0, |shaped| shaped.line_count())
 }
