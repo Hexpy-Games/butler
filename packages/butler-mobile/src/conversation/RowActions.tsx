@@ -65,7 +65,7 @@ export function RowActions({ row, view, tree, onClose, onChanged }: {
           <ListRow icon={icons.Folder} title={appCopy.space.subgroup} onPress={() => { setName(""); setStage("subgroup"); }} />
         </> : null}
         <ListRow icon={icons.Edit} title={appCopy.space.rename} onPress={() => { setName(row?.title ?? ""); setStage("rename"); }} />
-        <ListRow icon={icons.Folder} title={appCopy.space.moveMenu} onPress={() => setStage("move")} />
+        <ListRow icon={icons.Folder} title={appCopy.space.moveMenu} navigates onPress={() => setStage("move")} />
         {kind !== "group" ? <ListRow icon={icons.Archive} title={appCopy.space.archive}
           onPress={() => run(`/${kind === "session" ? "sessions" : "projects"}/${id}/archive`, { body: {} })} /> : null}
       </ListGroup>

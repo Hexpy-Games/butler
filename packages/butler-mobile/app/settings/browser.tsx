@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { View } from "react-native";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
-import { ListGroup, Button, ListRow, Sheet, showToast } from "@/ds";
+import { ListGroup, Button, ListRow, Sheet, showToast, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { SettingsScreen } from "@/settings/layout";
-import { SwitchRow } from "@/settings/rows";
+import { SwitchRow, usePicked } from "@/settings/rows";
 
 export default function BrowserSettings() {
   const S = getAppCopy(useAppLocale()).settings, M = useMobileCopy();
@@ -15,6 +16,7 @@ export default function BrowserSettings() {
 
 function HistoryGroup({ cancelLabel }: { cancelLabel: string }) {
   const app = getAppCopy(useAppLocale()), history = app.browser.history;
+  const t = useTokens(), picked = usePicked();
   const { client } = useConversation();
   const [open, setOpen] = useState(false), [range, setRange] = useState("hour"), [butlerOnly, setOnly] = useState(false), [busy, setBusy] = useState(false);
   const clear = async () => {
@@ -28,8 +30,13 @@ function HistoryGroup({ cancelLabel }: { cancelLabel: string }) {
     <ListRow title={history.clear} destructive onPress={() => { setRange("hour"); setOnly(false); setOpen(true); }} />
     <Sheet open={open} onClose={() => { if (!busy) setOpen(false); }} title={history.clear} cancelLabel={cancelLabel}
       action={<Button variant="destructive" label={app.browser.remove} loading={busy} onPress={() => void clear()} />}>
-      {(["hour", "today", "week", "all"] as const).map(value => <ListRow key={value} title={history[value]} selected={range === value} disabled={busy} onPress={() => setRange(value)} />)}
-      <SwitchRow title={history.butlerOnly} value={butlerOnly} disabled={busy} onChange={setOnly} />
+      <View style={{ gap: t.length("--space-4") }}>
+        <ListGroup>
+          {(["hour", "today", "week", "all"] as const).map(value => <ListRow key={value} title={history[value]} disabled={busy}
+            {...picked(range === value, [history[value]])} onPress={() => setRange(value)} />)}
+        </ListGroup>
+        <ListGroup><SwitchRow title={history.butlerOnly} value={butlerOnly} disabled={busy} onChange={setOnly} /></ListGroup>
+      </View>
     </Sheet>
   </ListGroup>;
 }

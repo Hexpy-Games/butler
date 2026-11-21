@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { View } from "react-native";
 import { router } from "expo-router";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
-import { ListGroup, ListGroupItem, Button, ListRow, Sheet, Text, showToast } from "@/ds";
+import { ListGroup, ListGroupItem, Button, ListRow, Sheet, Text, showToast, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { LoadState, SettingsScreen } from "@/settings/layout";
 import type { ArchiveListView, SessionSummary } from "@/settings/types";
@@ -44,6 +45,7 @@ function useArchives() {
 }
 
 export default function ArchivesSettings() {
+  const t = useTokens();
   const app = getAppCopy(useAppLocale()), S = app.settings, M = useMobileCopy();
   const archives = useArchives(), items = archiveItems(archives.view, M.conversations.untitled);
   const [selected, select] = useState<ArchiveItem>(), [mode, setMode] = useState<"actions" | "confirm">("actions");
@@ -60,11 +62,13 @@ export default function ArchivesSettings() {
     <Sheet open={Boolean(selected)} onClose={() => select(undefined)} title={mode === "confirm" ? app.common.delete : selected?.title ?? S.sections.archives}
       description={mode === "confirm" && selected ? app.interfaceTemplates.deleteItem(selected.title) : undefined} cancelLabel={M.settings.cancel}
       action={mode === "confirm" ? <Button variant="destructive" label={app.common.delete} disabled={archives.busy} onPress={() => change(true)} /> : undefined}>
-      {mode === "actions" ? <>
-        {selected?.kind === "session" ? <ListRow title={app.common.open} onPress={() => { select(undefined); router.push({ pathname: "/chat/[id]", params: { id: selected.id, title: selected.title } }); }} /> : null}
-        <ListRow title={app.interfaceDetails.unarchive} disabled={archives.busy} onPress={() => change(false)} />
-        <ListRow title={app.interfaceDetails.delete} onPress={() => setMode("confirm")} />
-      </> : null}
+      {mode === "actions" ? <View style={{ gap: t.length("--space-4") }}>
+        <ListGroup>
+          {selected?.kind === "session" ? <ListRow title={app.common.open} onPress={() => { select(undefined); router.push({ pathname: "/chat/[id]", params: { id: selected.id, title: selected.title } }); }} /> : null}
+          <ListRow title={app.interfaceDetails.unarchive} disabled={archives.busy} onPress={() => change(false)} />
+        </ListGroup>
+        <ListGroup><ListRow title={app.interfaceDetails.delete} destructive onPress={() => setMode("confirm")} /></ListGroup>
+      </View> : null}
     </Sheet>
   </SettingsScreen>;
 }

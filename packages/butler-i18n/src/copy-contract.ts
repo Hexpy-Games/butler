@@ -490,7 +490,6 @@ export interface MobileCopy {
     reasoning: string;
     modelFailed: string;
     modelUnavailable: string;
-    selected: string;
     context: string;
     close: string;
     info: string;
@@ -1473,6 +1472,7 @@ export interface AppCopy {
     cancel: string;
     delete: string;
     copy: string;
+    selected: string;
   };
   settings: {
     mcpErrors: { save: string; notFound: string; unavailable: string; remove: string; toggle: string; probe: string; };

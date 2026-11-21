@@ -31,8 +31,8 @@ export function SessionInfoSheet({ open, onClose, id, title, view }: {
         {pending.asks.map(ask => <ListRow key={ask.ask_id} title={ask.title} />)}
       </ListGroup> : null}
       <ListGroup label={copy.chat.infoWorkspace}>
-        {view?.branch?.available ? <ListRow icon={icons.Folder} title={view.branch.label ?? view.branch.workspace_path ?? copy.chat.infoNoWorkspace}
-          meta={view.branch.branch} /> : <ListRow icon={icons.Folder} title={copy.chat.infoNoWorkspace} />}
+        {view?.branch?.available ? <ListRow icon={icons.Folder} title={view.branch.workspace_label ?? view.branch.workspace_path ?? copy.chat.infoNoWorkspace}
+          meta={view.branch.branch_name} /> : <ListRow icon={icons.Folder} title={copy.chat.infoNoWorkspace} />}
       </ListGroup>
       {view?.context ? <ListGroup label={copy.chat.context}>
         <ListGroupItem><ContextUsage open={open} context={view.context} sessionId={id} models={model.models} model={model.current} /></ListGroupItem>

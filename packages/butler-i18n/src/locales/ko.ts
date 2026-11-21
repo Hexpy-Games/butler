@@ -529,7 +529,6 @@ export const koKrCopy: AppCopy = {
       reasoning: "추론 강도",
       modelFailed: "모델을 바꾸지 못했습니다.",
       modelUnavailable: "사용할 수 없음",
-      selected: "선택됨",
       context: "컨텍스트",
       close: "닫기",
       info: "대화 정보",
@@ -1622,6 +1621,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     cancel: "취소",
     delete: "삭제",
     copy: "복사",
+    selected: "선택됨",
   },
   settings: {
     localModelErrors: { discover: "이 주소에서 모델을 찾지 못했습니다.", register: "모델을 추가하지 못했습니다." },

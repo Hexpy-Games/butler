@@ -531,7 +531,6 @@ export const enUsCopy: AppCopy = {
       reasoning: "Reasoning",
       modelFailed: "Could not change the model.",
       modelUnavailable: "Not available",
-      selected: "Selected",
       context: "Context",
       close: "Close",
       info: "Conversation info",
@@ -1617,6 +1616,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     cancel: "Cancel",
     delete: "Delete",
     copy: "Copy",
+    selected: "Selected",
   },
   settings: {
     localModelErrors: { discover: "No models found at this address.", register: "Couldn't add the model." },
