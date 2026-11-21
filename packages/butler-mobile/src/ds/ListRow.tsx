@@ -18,6 +18,8 @@ export interface ListRowProps {
   icon?: IconGlyph | React.ReactElement;
   trailing?: React.ReactNode;
   disclosure?: { expanded: boolean };
+  /** Pushes a deeper page; ListRow draws the trailing chevron. Leave unset for pickers, toggles and actions. */
+  navigates?: boolean;
   onPress?: () => void;
   /** Opens the row's actions; also offered to screen readers as the "longpress" action. */
   onLongPress?: () => void;
@@ -34,7 +36,7 @@ export interface ListRowProps {
 
 export function ListRow({
   title, description, meta, icon, trailing, onPress, onLongPress, selected, disabled, destructive, titleLines = 1, descriptionLines = 2,
-  accessibilityLabel, accessibilityHint, testID, disclosure,
+  accessibilityLabel, accessibilityHint, testID, disclosure, navigates,
 }: ListRowProps) {
   const t = useTokens();
   const reduced = useReducedMotion();
@@ -127,7 +129,12 @@ export function ListRow({
           </BaseText>
         ) : null}
       </View>
-      {trailing ? <View style={{ height: trailingHeight, justifyContent: "center" }}>{trailing}</View> : null}
+      {trailing || navigates ? (
+        <View style={{ height: trailingHeight, flexDirection: "row", alignItems: "center", gap: t.length("--space-2") }}>
+          {trailing}
+          {navigates ? <HugeiconsIcon icon={icons.ChevronRight} size={t.length(grouped ? "--icon-size-lg" : "--icon-size-md")} color={fg("--text-tertiary")} /> : null}
+        </View>
+      ) : null}
     </>
   );
 

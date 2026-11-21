@@ -5,7 +5,7 @@ import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { Stack, router } from "expo-router";
 import { useConversation } from "@/conversation/live";
-import { Button, Icon, icons, ListGroup, ListRow, Sheet, Surface, Text, useHeaderOptions, useTokens, type IconGlyph } from "@/ds";
+import { Button, icons, ListGroup, ListRow, Sheet, Surface, Text, useHeaderOptions, useTokens, type IconGlyph } from "@/ds";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { SETTINGS_GROUPS } from "@/settings/sections";
 import { useAppLocale, useMobileCopy } from "@/i18n";
@@ -39,7 +39,7 @@ export default function Settings() {
       </ListGroup> : null}
       {SETTINGS_GROUPS.map(group => <ListGroup key={group.label} label={S.groups[group.label]}>
         {group.ids.map(id => <ListRow key={id} icon={SECTION_ICONS[id]} title={S.sections[id]}
-          trailing={<Icon glyph={icons.ChevronRight} size="lg" tone="tertiary" />} onPress={() => router.push(`/settings/${id}`)} />)}
+          navigates onPress={() => router.push(`/settings/${id}`)} />)}
       </ListGroup>)}
       <ListGroup>
         <ListRow icon={icons.Unlink} title={copy.settings.disconnect} destructive onPress={() => setOpen(true)} />
