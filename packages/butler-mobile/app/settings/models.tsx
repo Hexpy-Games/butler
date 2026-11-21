@@ -60,7 +60,7 @@ function ButlerModel({ settings, update, models, catalog }: SettingsProps & { mo
     <ReasoningRow title={S.fields.butlerReasoning} model={activeModel} value={settings.reasoning_effort}
       onSelect={reasoning_effort => { void update({ reasoning_effort }); }} />
     <ListRow title={S.fields.contextLimit} description={S.descriptions.contextLimit(tokenWindowLabel(max, locale))}
-      meta={settings.context_window_tokens.toLocaleString(locale)} trailing={<Icon glyph={icons.ChevronRight} tone="tertiary" />}
+      meta={settings.context_window_tokens.toLocaleString(locale)} trailing={<Icon glyph={icons.ChevronRight} size="lg" tone="tertiary" />}
       onPress={() => { setText(String(settings.context_window_tokens)); setOpen(true); }} />
     <Sheet open={open} onClose={() => setOpen(false)} title={S.fields.contextLimit} cancelLabel={M.settings.cancel}
       action={<Button label={app.common.save} disabled={!/^\d+$/.test(text)} onPress={() => { void saveContext(); }} />}>

@@ -258,7 +258,6 @@ function SwitchSection() {
       <Cell name="on">{flex(<Switch value onValueChange={noop} label="on" />)}</Cell>
       <Cell name="disabled off">{flex(<Switch value={false} onValueChange={noop} label="off" disabled />)}</Cell>
       <Cell name="disabled on">{flex(<Switch value onValueChange={noop} label="on" disabled />)}</Cell>
-      <Cell name="focused"><Forcing state="focused">{flex(<Switch value onValueChange={noop} label="on" />)}</Forcing></Cell>
       <Cell name="in a list row" list><ListRow title={en.sentence} description={en.note} trailing={<Switch value onValueChange={noop} label={en.sentence} />} /></Cell>
       <Cell name="Live">{flex(<LiveSwitch />)}</Cell>
     </>

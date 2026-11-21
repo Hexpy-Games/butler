@@ -14,7 +14,7 @@ const noop = () => {};
 export function ListGroupSection() {
   const t = useTokens();
   const [on, setOn] = useState(true);
-  const chevron = <Icon glyph={icons.ChevronRight} tone="tertiary" />;
+  const chevron = <Icon glyph={icons.ChevronRight} size="lg" tone="tertiary" />;
   return (
     <View style={{ paddingHorizontal: t.length("--adaptive-page-gutter"), gap: t.length("--space-4") }}>
       <ListGroup label="Preferences" footer={en.note} testID="ds-list-group-labelled">

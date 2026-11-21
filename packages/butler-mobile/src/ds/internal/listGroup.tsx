@@ -5,6 +5,9 @@ import { useTokens } from "../../design/useTokens";
 /** True for content inside a ListGroup card. Sheet resets it to false. */
 export const InListGroup = createContext(false);
 
+/** Grouped icon-to-title gap and ListGroupItem vertical padding (owner 2026-11-21). No 14 spacing token exists, and tokens.generated.json is generated from tokens.css, so the value lives here. */
+export const GROUP_INNER_GAP = 14;
+
 /** Top hairline of a grouped item, inset to the item's text edge. ListGroup clips the first item's line off the card. */
 export function GroupDivider({ inset }: { inset: number }) {
   const t = useTokens();

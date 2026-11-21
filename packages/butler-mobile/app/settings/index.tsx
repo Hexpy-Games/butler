@@ -39,7 +39,7 @@ export default function Settings() {
       </ListGroup> : null}
       {SETTINGS_GROUPS.map(group => <ListGroup key={group.label} label={S.groups[group.label]}>
         {group.ids.map(id => <ListRow key={id} icon={SECTION_ICONS[id]} title={S.sections[id]}
-          trailing={<Icon glyph={icons.ChevronRight} tone="tertiary" />} onPress={() => router.push(`/settings/${id}`)} />)}
+          trailing={<Icon glyph={icons.ChevronRight} size="lg" tone="tertiary" />} onPress={() => router.push(`/settings/${id}`)} />)}
       </ListGroup>)}
       <ListGroup>
         <ListRow icon={icons.Unlink} title={copy.settings.disconnect} destructive onPress={() => setOpen(true)} />

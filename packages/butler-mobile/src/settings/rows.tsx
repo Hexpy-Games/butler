@@ -18,7 +18,7 @@ export function SelectRow<T extends string>({ title, description, value, options
   return <>
     <ListRow title={title} description={disabled && disabledReason ? disabledReason : description} descriptionLines={3}
       meta={options.find(o => o.value === value)?.label} disabled={disabled}
-      trailing={<Icon glyph={icons.ChevronRight} tone="tertiary" />} onPress={() => { setQuery(""); setOpen(true); }} />
+      trailing={<Icon glyph={icons.ChevronRight} size="lg" tone="tertiary" />} onPress={() => { setQuery(""); setOpen(true); }} />
     <Sheet open={open} onClose={() => setOpen(false)} title={title} cancelLabel={M.settings.cancel}>
       {search ? <TextField label={search.label} value={query} onChangeText={setQuery} /> : null}
       {visible.map(o => <ListRow key={o.value} title={o.label} description={o.description} meta={o.meta}

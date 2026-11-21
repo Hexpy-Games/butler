@@ -105,7 +105,7 @@ function Learning({ draft, setDraft, saving, models, butlerModel }: DraftProps &
       onSelect={extractorModel => setDraft(current => current && ({ ...current, profiling: { ...current.profiling, extractorModel } }))} />
     <ReasoningRow title={S.fields.reasoning} model={model} value={profiling.extractorReasoningEffort}
       onSelect={extractorReasoningEffort => setDraft(current => current && ({ ...current, profiling: { ...current.profiling, extractorReasoningEffort } }))} />
-    <ListRow title={S.memory.linkLabel} description={S.memory.linkDescription} trailing={<Icon glyph={icons.ChevronRight} tone="tertiary" />} onPress={() => router.push("/settings/memory")} />
+    <ListRow title={S.memory.linkLabel} description={S.memory.linkDescription} trailing={<Icon glyph={icons.ChevronRight} size="lg" tone="tertiary" />} onPress={() => router.push("/settings/memory")} />
   </ListGroup>;
 }
 
