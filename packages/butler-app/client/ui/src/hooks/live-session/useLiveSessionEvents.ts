@@ -109,7 +109,7 @@ export function useLiveSessionEvents(): void {
       publishCanonProposalEvent(event);
       if (event.type.startsWith("authority.")) authorityPermissionsChanged();
       receiveTaskGraphEvent(event);
-      if (event.type === "security.device_paired") pairedDevicesChanged();
+      if (event.type === "security.device_paired" || event.type === "security.device_revoked") pairedDevicesChanged();
       if (event.type === "data.reset_started" && chromeEnvironment() === "browser") useButlerStore.setState({ agentNotice: "reset" });
       // Read on any device: clear the dot here and drop navigation loads from before the read.
       if (event.type === "session.read" && typeof event.payload?.session_id === "string") {

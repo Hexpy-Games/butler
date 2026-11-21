@@ -10,7 +10,9 @@ import { useMobileCopy } from "@/i18n";
 export default function Settings() {
   const copy = useMobileCopy();
   const t = useTokens();
+  const gutter = t.length("--adaptive-page-gutter");
   const { pairing, disconnect } = useConversation();
+  const address = pairing ? pairing.origin.replace(/^[^:]+:\/\//, "") : "";
   const [open, setOpen] = useState(false);
   const version = Application.nativeApplicationVersion === null || Application.nativeBuildVersion === null
     ? copy.settings.version(Constants.expoConfig?.version ?? "")
@@ -18,13 +20,13 @@ export default function Settings() {
   return <Surface variant="base" grow edges={["left", "right"]}>
     <Stack.Screen options={{ ...useHeaderOptions(), title: copy.settings.title }} />
     <ScrollView contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ padding: t.length("--space-4"), gap: t.length("--space-4") }}>
+      contentContainerStyle={{ paddingVertical: gutter, gap: t.length("--space-4") }}>
       {pairing ? <View style={{ gap: t.length("--space-2") }}>
-        <Text variant="sectionTitle">{copy.settings.computer}</Text>
-        <ListRow title={new URL(pairing.origin).hostname} description={pairing.origin.replace(/^[^:]+:\/\//, "")} />
+        <View style={{ paddingHorizontal: gutter }}><Text variant="sectionTitle">{copy.settings.computer}</Text></View>
+        <View style={{ paddingHorizontal: t.length("--space-sm") }}><ListRow title={pairing.computerName ?? address} description={pairing.computerName ? address : undefined} /></View>
       </View> : null}
-      <Button variant="destructive" label={copy.settings.disconnect} onPress={() => setOpen(true)} />
-      <Text variant="caption">{version}</Text>
+      <View style={{ paddingHorizontal: gutter }}><Button variant="destructive" label={copy.settings.disconnect} onPress={() => setOpen(true)} /></View>
+      <View style={{ paddingHorizontal: gutter }}><Text variant="caption">{version}</Text></View>
     </ScrollView>
     <Sheet open={open} onClose={() => setOpen(false)} title={copy.settings.disconnectTitle}
       description={copy.settings.disconnectBody} cancelLabel={copy.settings.cancel}
