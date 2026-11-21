@@ -568,6 +568,7 @@ export const koKrCopy: AppCopy = {
       cancel: "취소",
       pickHour: "시를 고릅니다.",
       pickMinute: "분을 고릅니다.",
+      checkForUpdates: "업데이트 확인",
       applyUpdateTitle: "지금 업데이트할까요?",
       applyUpdateBody: "컴퓨터의 버틀러가 다시 시작되며 업데이트를 마칩니다.",
       version: (version: string, build?: string) => `버전 ${version}${build === undefined ? "" : ` (${build})`}`,

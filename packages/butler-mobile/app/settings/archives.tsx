@@ -55,7 +55,7 @@ export default function ArchivesSettings() {
           disabled={archives.busy} onPress={() => { setMode("actions"); select(item); }} />)}
         {!items.length ? <ListGroupItem><Text variant="caption">{app.interfaceDetails.archivesEmpty}</Text></ListGroupItem> : null}
       </>}
-      {archives.view?.pagination.has_more ? <ListGroupItem><Button label={app.common.more} disabled={archives.busy} onPress={() => void archives.load(items.length)} /></ListGroupItem> : null}
+      {archives.view?.pagination.has_more ? <ListRow title={app.common.more} accent disabled={archives.busy} onPress={() => void archives.load(items.length)} /> : null}
     </ListGroup>
     <Sheet open={Boolean(selected)} onClose={() => select(undefined)} title={mode === "confirm" ? app.common.delete : selected?.title ?? S.sections.archives}
       description={mode === "confirm" && selected ? app.interfaceTemplates.deleteItem(selected.title) : undefined} cancelLabel={M.settings.cancel}

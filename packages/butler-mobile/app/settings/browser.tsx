@@ -24,8 +24,8 @@ function HistoryGroup({ cancelLabel }: { cancelLabel: string }) {
     catch { showToast({ message: app.browser.failed, tone: "error" }); }
     finally { setBusy(false); }
   };
-  return <ListGroup label={history.title}>
-    <ListRow title={history.pageLabel} trailing={<Button label={history.erase} onPress={() => { setRange("hour"); setOnly(false); setOpen(true); }} />} />
+  return <ListGroup>
+    <ListRow title={history.clear} destructive onPress={() => { setRange("hour"); setOnly(false); setOpen(true); }} />
     <Sheet open={open} onClose={() => { if (!busy) setOpen(false); }} title={history.clear} cancelLabel={cancelLabel}
       action={<Button variant="destructive" label={app.browser.remove} loading={busy} onPress={() => void clear()} />}>
       {(["hour", "today", "week", "all"] as const).map(value => <ListRow key={value} title={history[value]} selected={range === value} disabled={busy} onPress={() => setRange(value)} />)}

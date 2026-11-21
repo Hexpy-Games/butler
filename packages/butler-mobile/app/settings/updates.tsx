@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
-import { ListGroup, ListGroupItem, Button, ListRow, Sheet, showToast } from "@/ds";
+import { ListGroup, Button, ListRow, Sheet, showToast } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { LoadState, SettingsScreen } from "@/settings/layout";
 import type { ComponentUpdateStatus, UpdateCancelResult, UpdateProgressView, UpdateStatusView } from "@/settings/types";
@@ -77,17 +77,14 @@ export default function UpdatesSettings() {
   const current = status?.current_version || "-";
   const version = status?.update_available ? `${current} -> ${status.available_version || current}` : current;
   const label = cancelling ? S.updateProgress.cancel : stage === "failed" ? S.updateProgress.retry : stage === "ready" ? S.updateProgress.restart
-    : applying ? S.actions.updateApplying : status?.update_available ? S.actions.updateComponent
-      : status?.check_state === "unavailable" ? S.actions.updateUnavailable : status?.check_state === "unchecked" ? S.actions.updateChecking : S.actions.upToDate;
+    : status?.update_available ? S.actions.updateComponent : updates.loading ? S.actions.updateChecking : M.settings.checkForUpdates;
   return <SettingsScreen title={S.sections.updates}>
     <ListGroup label={S.pageSections.updateVersions}>
-      <ListGroupItem><Button variant="secondary" label={updates.loading ? S.actions.updateChecking : S.actions.checkUpdates} disabled={updates.loading || applying} onPress={() => void updates.check()} /></ListGroupItem>
-      {!updates.view ? <LoadState error={updates.error} message={S.errors.loadUpdates} onRetry={updates.load} /> : <ListRow title={S.updateComponents.app}
-        description={[version, status?.bundled_agent_version ? `Butler Agent ${status.bundled_agent_version}` : ""].filter(Boolean).join("\n")}
-        meta={busy || stage === "ready" ? S.updateProgress[stage] : undefined}
-        trailing={!busy && (stage !== "downloading" || cancelling) ? <Button size="sm" variant={cancelling || !status?.update_available ? "outline" : "default"} label={label}
-          disabled={(!status?.update_available && stage !== "failed" && stage !== "ready" && !cancelling) || (applying && stage !== "ready" && !cancelling)}
-          onPress={() => cancelling ? void updates.cancel() : setConfirm(true)} /> : undefined} />}
+      {!updates.view ? <LoadState error={updates.error} message={S.errors.loadUpdates} onRetry={updates.load} /> : <>
+        <ListRow title={S.updateComponents.app} meta={busy || stage === "ready" ? S.updateProgress[stage] : version} />
+        {!busy ? <ListRow title={label} accent disabled={busy || updates.loading || (applying && stage !== "ready" && !cancelling)}
+          onPress={() => cancelling ? void updates.cancel() : stage === "failed" || stage === "ready" || status?.update_available ? setConfirm(true) : void updates.check()} /> : null}
+      </>}
     </ListGroup>
     <Sheet open={confirm} onClose={() => setConfirm(false)} title={M.settings.applyUpdateTitle} description={M.settings.applyUpdateBody} cancelLabel={M.settings.cancel}
       action={<Button label={S.actions.updateComponent} onPress={() => { setConfirm(false); void updates.apply(); }} />} />

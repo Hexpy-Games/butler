@@ -524,6 +524,7 @@ export interface MobileCopy {
     cancel: string;
     pickHour: string;
     pickMinute: string;
+    checkForUpdates: string;
     applyUpdateTitle: string;
     applyUpdateBody: string;
     version: (version: string, build?: string) => string;

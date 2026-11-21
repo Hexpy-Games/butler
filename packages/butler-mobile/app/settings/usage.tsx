@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { getAppCopy, type AppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
-import { Button, ListGroup, ListGroupItem, ListRow, Text } from "@/ds";
+import { ListGroup, ListGroupItem, ListRow, Text } from "@/ds";
 import { useAppLocale } from "@/i18n";
 import { LoadState, SettingsScreen } from "@/settings/layout";
 import { SelectRow } from "@/settings/rows";
@@ -27,7 +27,7 @@ export default function UsageSettings() {
   return <SettingsScreen title={S.sections.usage}>
     <ListGroup label={usage.overviewTitle}>
       <SelectRow title={usage.period} value={hours} options={[{ value: "24", label: usage.day }, { value: "168", label: usage.week }, { value: "720", label: usage.month }]} onSelect={setHours} />
-      <ListGroupItem><Button label={app.common.refresh} disabled={loading} onPress={reload} /></ListGroupItem>
+      <ListRow title={app.common.refresh} accent disabled={loading} onPress={reload} />
       {!view ? <LoadState error={error} message={app.interfacePanels.usageFailed} onRetry={reload} /> : <UsageOverview view={view} />}
     </ListGroup>
     {view?.providerUsage.providers.length ? <ListGroup label={usage.remaining}>

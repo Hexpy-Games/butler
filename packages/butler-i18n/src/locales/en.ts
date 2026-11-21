@@ -570,6 +570,7 @@ export const enUsCopy: AppCopy = {
       cancel: "Cancel",
       pickHour: "Choose the hour.",
       pickMinute: "Choose the minutes.",
+      checkForUpdates: "Check for updates",
       applyUpdateTitle: "Update now?",
       applyUpdateBody: "Butler on your computer restarts to finish the update.",
       version: (version: string, build?: string) => `Version ${version}${build === undefined ? "" : ` (${build})`}`,
