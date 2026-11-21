@@ -1,14 +1,13 @@
 import { useMemo } from "react";
-import { Linking, Platform, ScrollView, View } from "react-native";
+import { Linking, ScrollView, View } from "react-native";
 import { marked, type Token, type Tokens } from "marked";
 import { RADIUS } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
+import { CODE_FONT } from "./internal/codeFont";
 import { BaseText } from "./internal/BaseText";
 import { inlineSelectable } from "./internal/selection";
 import { fontFace, textStyle, toneColors, weightValue } from "./internal/typography";
 import { Text, type TextTone } from "./Text";
-
-const CODE_FONT = Platform.select({ ios: "Menlo", default: "monospace" });
 
 export function Markdown({ text }: { text: string }) {
   const tokens = useMemo(() => marked.lexer(text, { gfm: true }), [text]);

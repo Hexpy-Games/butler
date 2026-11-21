@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { Animated, View } from "react-native";
 import type { ToolItem } from "../conversation/workStatus";
 import { alpha, PILL } from "../design/tokens";
@@ -34,7 +34,7 @@ export function WorkActivityMarker({ live = false, top }: { live?: boolean; top:
 }
 
 export interface WorkActivityBlockProps {
-  title: string; description?: string[]; live?: boolean; connected?: boolean; last?: boolean;
+  title: string; description?: (string | React.ReactElement)[]; live?: boolean; connected?: boolean; last?: boolean;
   density?: "normal" | "compact"; tools?: ToolItem[];
 }
 
@@ -54,7 +54,8 @@ export function WorkActivityBlock({ title, description, live, connected, last = 
       <Text variant={variant} tone="secondary">{title}</Text>
     </View>
     {description?.length ? <View style={{ gap: t.length("--space-xs") }}>
-      {description.map((line, index) => <BaseText key={index} style={{ ...textStyle(t, variant), color: alpha(t.color("--text-tertiary"), 0.78) }}>{line}</BaseText>)}
+      {description.map((line, index) => <Fragment key={index}>{typeof line === "string"
+        ? <BaseText style={{ ...textStyle(t, variant), color: alpha(t.color("--text-tertiary"), 0.78) }}>{line}</BaseText> : line}</Fragment>)}
     </View> : null}
     {tools.length ? <WorkActivityTools tools={tools} compact={compact} /> : null}
   </View>;

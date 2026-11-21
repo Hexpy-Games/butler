@@ -353,7 +353,7 @@ function isUsefulWorkerActivityTitle(value: string, appCopy: AppCopy): boolean {
 export type ToolIcon = "Rocket" | "FileText" | "Pencil" | "Terminal" | "Wrench" | "Search" | "ListChecks" | "AiChip";
 export type ToolItem = {
   id: string; icon: ToolIcon; title: string; summaryLabel: string; details?: string;
-  output?: { turnId: string; callId: string; resultId: string; toolName?: string };
+  output?: { turnId: string; callId: string; resultId: string; toolName?: string; command?: string };
 };
 
 export function toolItems(rows: ProgressSummaryRow[], locale: AppLocale): ToolItem[] {
@@ -367,7 +367,8 @@ export function toolItems(rows: ProgressSummaryRow[], locale: AppLocale): ToolIt
       ? `${copy.interfaceStatus.execution}: ${row.safe_input_label}`
       : row.safe_detail_rows?.map(detail => toolchainDetailLabel(detail, row, copy)).join(" "),
     output: row.turn_id && row.tool_call_id && row.tool_result_id
-      ? { turnId: row.turn_id, callId: row.tool_call_id, resultId: row.tool_result_id, toolName: row.safe_tool_name } : undefined,
+      ? { turnId: row.turn_id, callId: row.tool_call_id, resultId: row.tool_result_id, toolName: row.safe_tool_name,
+        command: row.safe_tool_name === "run_command" ? row.safe_input_label : undefined } : undefined,
   }));
 }
 

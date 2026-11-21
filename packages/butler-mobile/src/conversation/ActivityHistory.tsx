@@ -92,10 +92,12 @@ export function ActivityRow({ activity, connected, last, live, goal }: { activit
   const normalize = (value: string) => value.trim().replace(/\s+/gu, " ");
   const description = [
     [phaseLabel(activity.phase, copy), time].filter(Boolean).join(" · "),
-    normalize(activity.title) === normalize(summary) ? undefined : `${copy.interfaceDetails.contentLabel} ${summary}`,
+    normalize(activity.title) === normalize(summary) ? undefined : <View style={{ opacity: 0.78 }}>
+      <Text variant="caption" tone="tertiary" lines={summary !== activity.summary ? 1 : undefined}>{copy.interfaceDetails.contentLabel} {summary}</Text>
+    </View>,
     activity.rationale ? `${copy.interfaceDetails.intentLabel} ${activity.rationale}` : undefined,
     activity.nextStep ? `${copy.interfaceDetails.nextLabel} ${activity.nextStep}` : undefined,
-  ].filter((line): line is string => Boolean(line));
+  ].filter((line): line is string | React.ReactElement => Boolean(line));
   return <WorkActivityBlock density="compact" title={activityDisplayTitle(activity, copy)} description={description}
     connected={connected} last={last} live={live} tools={toolItems(activity.operations.map(row => ({ ...row, turn_id: activity.turnId ?? row.turn_id })), locale)} />;
 }

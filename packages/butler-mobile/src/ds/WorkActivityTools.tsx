@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { LayoutAnimation, Pressable, View } from "react-native";
+import { OperationOutput, ThinkingDetails } from "../conversation/OperationOutput.tsx";
 import type { ToolItem } from "../conversation/workStatus";
 import { alpha, PILL } from "../design/tokens";
 import { useTokens } from "../design/useTokens";
@@ -17,7 +18,8 @@ export function WorkActivityTools({ tools, compact }: { tools: ToolItem[]; compa
 function ToolChip({ tool, compact, nested = false }: { tool: ToolItem; compact: boolean; nested?: boolean }) {
   const t = useTokens();
   const reduced = useReducedMotion();
-  const press = usePress({ scale: false, disabled: !tool.details });
+  const hasDetails = Boolean(tool.details || tool.output);
+  const press = usePress({ scale: false, disabled: !hasDetails });
   const [expanded, setExpanded] = useState(false);
   const lineHeight = t.length(compact ? "--typo-caption-line-height" : "--typo-body-line-height");
   const padding = nested ? 0 : compact ? 2 : 5;
@@ -34,14 +36,18 @@ function ToolChip({ tool, compact, nested = false }: { tool: ToolItem; compact: 
   const body = <>
     <Icon glyph={icons[tool.icon]} size="md" tone="tertiary" />
     <BaseText numberOfLines={1} style={{ ...textStyle(t, compact ? "caption" : "body"), flexShrink: 1, color: alpha(t.color("--text-tertiary"), 0.78) }}>{tool.title}</BaseText>
-    {nested && tool.details ? <Icon glyph={expanded ? icons.ChevronDown : icons.ChevronRight} size="sm" tone="tertiary" /> : null}
+    {nested && hasDetails ? <Icon glyph={expanded ? icons.ChevronDown : icons.ChevronRight} size="sm" tone="tertiary" /> : null}
   </>;
   return <View style={{ gap: t.length(compact ? "--space-1" : "--space-2") }}>
-    {tool.details ? <Pressable accessibilityRole="button" accessibilityLabel={tool.title} accessibilityState={{ expanded }}
+    {hasDetails ? <Pressable accessibilityRole="button" accessibilityLabel={tool.title} accessibilityState={{ expanded }}
       hitSlop={Math.max(0, (44 - lineHeight - padding * 2) / 2)} onPress={toggle} {...press.handlers} style={style}>{body}</Pressable>
       : <View style={style}>{body}</View>}
-    {expanded ? <BaseText style={{ ...textStyle(t, "caption"), color: alpha(t.color("--text-tertiary"), 0.78),
-      paddingLeft: lineHeight + t.length("--space-2") }}>{tool.details}</BaseText> : null}
+    {expanded ? <View style={{ paddingLeft: lineHeight + t.length("--space-2") }}>
+      {tool.icon === "AiChip" ? <ThinkingDetails text={tool.details} turnId={tool.output?.turnId}
+        requestId={tool.output?.callId} resultId={tool.output?.resultId} />
+        : tool.output ? <OperationOutput {...tool.output} requestId={tool.output.callId} />
+          : <BaseText style={{ ...textStyle(t, "caption"), color: alpha(t.color("--text-tertiary"), 0.78) }}>{tool.details}</BaseText>}
+    </View> : null}
   </View>;
 }
 
