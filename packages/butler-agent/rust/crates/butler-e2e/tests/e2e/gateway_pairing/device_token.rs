@@ -55,6 +55,7 @@ async fn sec_16_phone_pairs_with_device_token_until_revoked() -> Result<(), Harn
     let butler_id = body["data"]["butler_id"].as_str().unwrap().to_owned();
     assert!(token.starts_with("bdt_"));
     assert_ne!(butler_id, "");
+    assert_ne!(body["data"]["computer_name"].as_str().unwrap(), "");
     let notice = events
         .wait_for(Duration::from_secs(5), |event| {
             event["type"] == "security.device_paired"
@@ -102,6 +103,38 @@ async fn sec_16_phone_pairs_with_device_token_until_revoked() -> Result<(), Harn
     let other: serde_json::Value = pair(&s.gw, &client, other_code).await?.json().await?;
     let other_token = other["data"]["device_token"].as_str().unwrap().to_owned();
     assert_eq!(other["data"]["butler_id"], butler_id);
+    let other_id = other["data"]["device_id"].as_str().unwrap().to_owned();
+    let events = LiveEvents::subscribe(&s.gw, 0).await?;
+    let not_device = app.send(Method::DELETE, "/devices/self", None, &[]).await?;
+    assert_eq!(not_device.status, 403);
+    assert_eq!(not_device.body["error"]["code"], "device_token_required");
+    assert_eq!(
+        status(
+            &s.gw,
+            &client,
+            &other_token,
+            Method::DELETE,
+            "/devices/self"
+        )
+        .await?,
+        204
+    );
+    assert_eq!(
+        status(&s.gw, &client, &other_token, Method::GET, "/settings").await?,
+        401
+    );
+    assert_eq!(
+        status(&s.gw, &client, &token, Method::GET, "/settings").await?,
+        200
+    );
+    let gone = events
+        .wait_for(Duration::from_secs(5), |event| {
+            event["type"] == "security.device_revoked"
+        })
+        .await?;
+    assert_eq!(gone["payload"]["device_id"], other_id);
+    drop(events);
+    assert_eq!(devices(&app).await?.as_array().unwrap().len(), 1);
     let stream = client
         .get(format!("{}/events/live?cursor=0", s.gw.base))
         .bearer_auth(&token)
@@ -131,10 +164,6 @@ async fn sec_16_phone_pairs_with_device_token_until_revoked() -> Result<(), Harn
     assert_eq!(
         status(&s.gw, &client, &token, Method::GET, "/settings").await?,
         401
-    );
-    assert_eq!(
-        status(&s.gw, &client, &other_token, Method::GET, "/settings").await?,
-        200
     );
     assert_no_secrets(&s, &[code, &token, other_code, &other_token])?;
     s.finish().await

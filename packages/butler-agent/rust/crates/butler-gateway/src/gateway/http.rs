@@ -264,6 +264,9 @@ async fn authorized_route(
             .security
             .mint_connection_code(&grant, request.headers());
     }
+    if request.method() == Method::DELETE && request.uri().path() == security::DEVICE_SELF_PATH {
+        return security::revoke_self_request(&state, grant.access, request.headers()).await;
+    }
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()

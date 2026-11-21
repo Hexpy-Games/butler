@@ -210,6 +210,12 @@ impl DeviceRegistry {
         self.presented_entry(headers).map(|e| e.device.id.clone())
     }
 
+    /// The device id a valid device token on this request names.
+    pub(in crate::gateway::http) fn token_device_id(&self, headers: &HeaderMap) -> Option<String> {
+        self.token_entry(headers)
+            .map(|entry| entry.device.id.clone())
+    }
+
     fn presented_entry(&self, headers: &HeaderMap) -> Option<Arc<Entry>> {
         let snapshot = self.entries.read().clone();
         for value in headers

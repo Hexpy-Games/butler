@@ -1,4 +1,4 @@
-export type Pairing = { origin: string; butlerId: string; deviceId: string; deviceToken: string };
+export type Pairing = { origin: string; butlerId: string; deviceId: string; deviceToken: string; computerName?: string };
 export interface KeyValueStore {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
@@ -23,7 +23,8 @@ function readPairing(raw: string | null): Pairing | null {
     const butlerId = stringField(value, "butlerId");
     const deviceId = stringField(value, "deviceId");
     const deviceToken = stringField(value, "deviceToken");
-    return origin && butlerId && deviceId && deviceToken ? { origin, butlerId, deviceId, deviceToken } : null;
+    const computerName = stringField(value, "computerName");
+    return origin && butlerId && deviceId && deviceToken ? { origin, butlerId, deviceId, deviceToken, ...(computerName ? { computerName } : {}) } : null;
   } catch {
     return null;
   }

@@ -8,7 +8,7 @@ use crate::gateway::{
 use axum::{
     body::Body,
     extract::ConnectInfo,
-    http::{HeaderValue, Method, Request, StatusCode, header},
+    http::{HeaderMap, HeaderValue, Method, Request, StatusCode, header},
     response::Response,
 };
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,7 @@ use serde_json::{Map, Value};
 use std::sync::Arc;
 
 pub(in crate::gateway::http) const DEVICE_PAIR_PATH: &str = "/devices/pair";
+pub(in crate::gateway::http) const DEVICE_SELF_PATH: &str = "/devices/self";
 
 #[derive(Deserialize)]
 struct PairRequest {
@@ -29,6 +30,7 @@ struct PairedToken {
     device_id: String,
     device_token: String,
     butler_id: String,
+    computer_name: String,
 }
 
 pub(in crate::gateway::http) async fn pair_device_request(
@@ -91,11 +93,45 @@ pub(in crate::gateway::http) async fn pair_device_request(
                 device_id: id,
                 device_token,
                 butler_id: state.devices.butler_id().to_owned(),
+                computer_name: super::lan::computer_name(),
             },
         },
     )?;
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    Ok(response)
+}
+
+/// `DELETE /devices/self`: a phone revokes its own device token through the
+/// desktop's revoke path and tells the desktop's device list.
+pub(in crate::gateway::http) async fn revoke_self_request(
+    state: &Arc<HttpState>,
+    access: super::Access,
+    headers: &HeaderMap,
+) -> Result<Response, HttpError> {
+    if access != super::Access::DeviceToken {
+        return Err(HttpError::public(
+            403,
+            "device_token_required",
+            "Only a paired device can disconnect itself.",
+        ));
+    }
+    let id = state.devices.token_device_id(headers).ok_or_else(|| {
+        HttpError::public(
+            401,
+            "local_auth_required",
+            "Butler App local auth is required.",
+        )
+    })?;
+    state.devices.revoke(Some(id.clone())).await?;
+    let mut payload = Map::new();
+    payload.insert("device_id".into(), Value::String(id));
+    state
+        .application
+        .publish_gateway_event("security.device_revoked", payload)
+        .await?;
+    let mut response = Response::new(Body::empty());
+    *response.status_mut() = StatusCode::NO_CONTENT;
     Ok(response)
 }
