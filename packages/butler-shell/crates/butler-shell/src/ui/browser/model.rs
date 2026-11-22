@@ -145,6 +145,8 @@ pub(crate) struct BrowserState {
     pub(super) engine: Box<dyn PageEngine>,
     /// What the engine starts with, until its first use starts it (`lazy.rs`).
     pub(super) starter: Option<(mpsc::UnboundedSender<PageEvent>, Option<u64>)>,
+    /// The engine's framework is being read ahead of its start (`lazy.rs` `prepare_engine`).
+    pub(super) preparing: bool,
     pub(super) tabs: Vec<Tab>,
     pub(super) active: Option<TabId>,
     pub(super) next_id: u64,
@@ -169,6 +171,7 @@ impl BrowserState {
             publisher,
             engine: Box::new(super::lazy::Unstarted),
             starter: Some((sender, None)),
+            preparing: false,
             tabs: Vec::new(),
             active: None,
             next_id: 0,
@@ -230,7 +233,10 @@ impl BrowserState {
         }
         // An empty tab is native UI; the engine starts when a tab first gets a URL. It starts before
         // the push below, so the new tab is opened once below, not by the start's replay.
-        if !url.is_empty() {
+        // An empty tab is the sign a page comes next: the engine's framework is read ahead meanwhile.
+        if url.is_empty() {
+            self.prepare_engine();
+        } else {
             self.start_engine(cx);
         }
         self.next_id += 1;

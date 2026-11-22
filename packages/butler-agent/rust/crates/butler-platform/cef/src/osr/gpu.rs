@@ -10,6 +10,24 @@ use core_video::{
 use foreign_types::ForeignTypeRef;
 use std::{ffi::CString, os::unix::ffi::OsStrExt, path::Path};
 
+/// Maps the CEF framework binary into the process and keeps it there, so a later start does not
+/// read it from disk.
+/// Blocking: call it off the UI thread.
+pub(super) fn preload(directory: &Path) {
+    unsafe extern "C" {
+        fn dlopen(path: *const std::ffi::c_char, mode: std::ffi::c_int) -> *mut std::ffi::c_void;
+    }
+    const RTLD_NOW: std::ffi::c_int = 0x2; // <dlfcn.h> on macOS
+    const RTLD_GLOBAL: std::ffi::c_int = 0x8;
+    let binary = directory.join("Chromium Embedded Framework");
+    let Ok(path) = CString::new(binary.as_os_str().as_bytes()) else {
+        return;
+    };
+    // SAFETY: the NUL-terminated path outlives the call; the handle is never closed, so the image
+    // stays mapped for the process lifetime (the start's own load then finds it loaded).
+    let _ = unsafe { dlopen(path.as_ptr(), RTLD_NOW | RTLD_GLOBAL) };
+}
+
 pub(super) struct Framework;
 impl Framework {
     pub(super) fn load(directory: &Path) -> Result<Self, OsrError> {

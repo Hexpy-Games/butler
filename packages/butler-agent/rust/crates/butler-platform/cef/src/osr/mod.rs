@@ -58,6 +58,15 @@ pub use d3d_pool::OsrFrame;
 use d3d_pool::OsrFrame as Frame;
 #[cfg(target_os = "macos")]
 pub use gpu::read_bgra_pixel;
+/// Reads the macOS CEF framework into memory ahead of the start (see `gpu::preload`).
+/// Does nothing on other OSes, where the framework is not a separate preloadable binary here.
+/// Blocking on macOS: call it off the UI thread.
+pub fn preload_framework(directory: &std::path::Path) {
+    #[cfg(target_os = "macos")]
+    gpu::preload(directory);
+    #[cfg(not(target_os = "macos"))]
+    let _ = directory;
+}
 #[cfg(target_os = "linux")]
 use soft::OsrFrame as Frame;
 #[cfg(target_os = "linux")]

@@ -1,6 +1,6 @@
 //! CEF pages share the shell's UI thread; callbacks enter through channels.
 mod change;
-mod config;
+pub(super) mod config;
 mod devtools;
 mod ime;
 mod input;

@@ -35,6 +35,17 @@ impl PageEngine for Unstarted {
 }
 
 impl BrowserState {
+    /// An empty tab opened: read the engine's framework from disk on a background thread, once, so
+    /// the first page does not wait on it (a cold disk takes ~0.9 s on the UI thread otherwise).
+    pub(super) fn prepare_engine(&mut self) {
+        if self.starter.is_some() && !std::mem::replace(&mut self.preparing, true) {
+            #[cfg(feature = "cef")]
+            if let Ok((framework, _)) = super::cef::config::locations() {
+                std::thread::spawn(move || butler_cef_host::osr::preload_framework(&framework));
+            }
+        }
+    }
+
     /// Starts the page engine once, on the first tab that gets a URL or the first Agent page, and
     /// opens the tabs created before it; later calls do nothing.
     pub(super) fn start_engine(&mut self, cx: &mut App) {

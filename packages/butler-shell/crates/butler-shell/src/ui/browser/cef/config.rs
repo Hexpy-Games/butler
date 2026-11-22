@@ -31,7 +31,7 @@ pub(super) fn config(adapter: Option<u64>, cx: &App) -> anyhow::Result<OsrConfig
 /// stage.py: `BUTLER_CEF_DIR` (development and tests), else the executable's own directory. On
 /// macOS, `BUTLER_CEF_DIR` or the bundle's `Contents/Frameworks` holds the framework and the
 /// helper app.
-fn locations() -> anyhow::Result<(PathBuf, PathBuf)> {
+pub(in crate::ui::browser) fn locations() -> anyhow::Result<(PathBuf, PathBuf)> {
     let executable = std::env::current_exe()?;
     let beside = executable
         .parent()
