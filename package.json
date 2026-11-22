@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "lint": "eslint . && bun run --silent lint:design && bun run --silent lint:css && bun run --silent lint:repo",
-    "lint:design": "bun run --silent packages/butler-app/scripts/lint/design-token-lint.ts && bun run --silent packages/butler-app/scripts/lint/design-system-rules-lint.ts && bun run --silent packages/butler-app/scripts/lint/app-client-copy-lint.ts && bun run --silent packages/butler-app/scripts/lint/component-line-count-lint.ts && bun run --silent packages/butler-app/scripts/lint/css-module-global-lint.ts && bun run --silent packages/butler-app/scripts/lint/prop-boundary-lint.ts && bun run --silent lint:ds && bun run --silent lint:motion",
+    "lint:design": "bun run --silent packages/butler-app/scripts/lint/design-token-lint.ts && bun run --silent packages/butler-app/scripts/lint/design-system-rules-lint.ts && bun run --silent packages/butler-app/scripts/lint/app-client-copy-lint.ts && bun run --silent packages/butler-app/scripts/lint/component-line-count-lint.ts && bun run --silent packages/butler-app/scripts/lint/css-module-global-lint.ts && bun run --silent packages/butler-app/scripts/lint/prop-boundary-lint.ts && bun run --silent lint:ds && bun run --silent lint:motion && bun run --silent packages/butler-app/client/ui/scripts/check-wallpaper-posters.ts",
     "lint:ds": "bun run --silent packages/butler-app/scripts/lint/ds-constraint-lint.ts",
     "lint:ds:baseline": "bun run --silent packages/butler-app/scripts/lint/ds-constraint-lint.ts --update-baseline --verbose",
     "lint:motion": "bun run --silent packages/butler-app/scripts/lint/motion-lint.ts",

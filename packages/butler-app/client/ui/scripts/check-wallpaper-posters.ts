@@ -8,3 +8,5 @@ export function checkWallpaperPosters(root: string): void {
     throw new Error("Wallpaper posters are stale. Run bun run packages/butler-app/client/ui/scripts/generate-wallpaper-posters.ts.");
   }
 }
+
+if (import.meta.main) checkWallpaperPosters(resolve(import.meta.dir, ".."));
