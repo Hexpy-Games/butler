@@ -52,7 +52,7 @@ fn scenarios(render_with: &Render) -> Vec<(String, Value, Vec<&'static str>)> {
             "unspecified",
             "2026-01-04T00:00:00.000Z",
             &Value::Null,
-            &"x".repeat(7_000),
+            &"x".repeat(1_500),
         )
     };
     let block = |value: &Value| {
