@@ -177,6 +177,37 @@ async function runLocale(locale: "ko" | "en") {
         await section(page, "device-pairing").waitFor();
         await section(page, "security-advanced").getByRole("button").click();
         await page.getByPlaceholder(appCopy.settings.security.hostPlaceholder).waitFor();
+        if (!before && theme === "light") {
+          const advanced = section(page, "security-advanced");
+          const copy = appCopy.settings.security;
+          const appHost = "app.example.test";
+          const contentHost = "content.example.test";
+          const hostInput = advanced.getByPlaceholder(copy.hostPlaceholder);
+          const contentInput = advanced.getByPlaceholder(copy.contentHostPlaceholder);
+          await hostInput.fill(appHost);
+          await hostInput.press("Enter");
+          await advanced.getByText(appHost, { exact: true }).waitFor();
+
+          let patches = 0;
+          const countPatch = (request: import("playwright").Request) => {
+            if (request.method() === "PATCH" && new URL(request.url()).pathname === "/settings") patches++;
+          };
+          page.on("request", countPatch);
+          await contentInput.fill(appHost);
+          await contentInput.press("Enter");
+          await advanced.getByText(copy.sameHost, { exact: true }).waitFor();
+          page.off("request", countPatch);
+          assert.equal(patches, 0);
+          await screenshot(page, `${key}-same-host`, "security-advanced");
+
+          await contentInput.fill(contentHost);
+          await contentInput.press("Enter");
+          await advanced.getByText(contentHost, { exact: true }).waitFor();
+          for (const host of [appHost, contentHost]) {
+            await advanced.getByRole("button", { name: copy.removeHost(host), exact: true }).click();
+            await advanced.getByText(host, { exact: true }).waitFor({ state: "hidden" });
+          }
+        }
         if (!before) assert.deepEqual(await sectionIds(page), ["butler-vault", "remote-access", "device-pairing", "paired-devices", "grants", "saved-keys", "connected-accounts", "security-advanced"]);
         await screenshot(page, `${key}-enabled`, "remote-access");
         await screenshot(page, `${key}-enabled`, before ? "allowed-hosts" : "security-advanced");

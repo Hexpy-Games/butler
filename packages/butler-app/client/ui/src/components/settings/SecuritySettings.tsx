@@ -101,13 +101,13 @@ function SecurityAdvancedSection({ security, open, onToggle }: {
                 label={copy.hosts}
                 description={copy.hostsDescription}
                 descriptionId={hintId}
-                control={<SecurityAllowedHostsField hosts={view.allowed_hosts} disabled={busy !== null} onSave={security.saveAllowedHosts} describedBy={hintId} />}
+                control={<SecurityAllowedHostsField hosts={view.allowed_hosts} otherHosts={view.content_hosts ?? []} disabled={busy !== null} onSave={security.saveAllowedHosts} describedBy={hintId} />}
               />
               <SettingsField
                 label={copy.contentHosts}
                 description={copy.contentHostsDescription}
                 descriptionId={contentHintId}
-                control={<SecurityAllowedHostsField content hosts={view.content_hosts ?? []} disabled={busy !== null} onSave={security.saveContentHosts} describedBy={contentHintId} />}
+                control={<SecurityAllowedHostsField content hosts={view.content_hosts ?? []} otherHosts={view.allowed_hosts} disabled={busy !== null} onSave={security.saveContentHosts} describedBy={contentHintId} />}
               />
             </SettingsFieldGroup>
           </Stack.Item>

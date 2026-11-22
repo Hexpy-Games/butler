@@ -6,6 +6,7 @@ import { normalizeAllowedHost } from "./allowedHostName";
 /** Extra host names (tunnels, reverse proxies); each change saves the whole list. */
 export function SecurityAllowedHostsField({
   hosts,
+  otherHosts,
   disabled,
   onSave,
   content = false,
@@ -14,6 +15,7 @@ export function SecurityAllowedHostsField({
   content?: boolean;
   describedBy: string;
   hosts: string[];
+  otherHosts: string[];
   disabled: boolean;
   onSave: (hosts: string[]) => Promise<boolean>;
 }) {
@@ -23,7 +25,7 @@ export function SecurityAllowedHostsField({
   const inputRef = useRef<HTMLInputElement>(null);
   const restoreFocus = useRef(false);
   const [draft, setDraft] = useState("");
-  const [invalid, setInvalid] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!disabled && restoreFocus.current) {
@@ -40,7 +42,11 @@ export function SecurityAllowedHostsField({
   async function add() {
     const host = normalizeAllowedHost(draft);
     if (!host) {
-      setInvalid(true);
+      setError(copy.invalidHost);
+      return;
+    }
+    if (otherHosts.includes(host)) {
+      setError(copy.sameHost);
       return;
     }
     if (hosts.includes(host)) {
@@ -75,12 +81,12 @@ export function SecurityAllowedHostsField({
               spellCheck={false}
               placeholder={content ? copy.contentHostPlaceholder : copy.hostPlaceholder}
               value={draft}
-              aria-invalid={invalid ? true : undefined}
-              aria-describedby={[describedBy, invalid ? errorId : undefined].filter(Boolean).join(" ")}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={[describedBy, error ? errorId : undefined].filter(Boolean).join(" ")}
               onFocus={(event) => { inputRef.current = event.currentTarget; }}
               onChange={(event) => {
                 setDraft(event.target.value);
-                setInvalid(false);
+                setError(null);
               }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || disabled || !draft.trim()) return;
@@ -92,7 +98,7 @@ export function SecurityAllowedHostsField({
           <Button type="button" size="lg" variant="outline" iconStart={<Plus size="sm" />} text={copy.addHost}
             disabled={disabled || !draft.trim()} onClick={() => void add()} />
         </Stack>
-        {invalid ? <FieldError id={errorId}>{copy.invalidHost}</FieldError> : null}
+        {error ? <FieldError id={errorId}>{error}</FieldError> : null}
       </Stack>
     </Stack>
   );
