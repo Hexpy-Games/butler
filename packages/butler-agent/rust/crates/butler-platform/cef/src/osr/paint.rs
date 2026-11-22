@@ -88,6 +88,6 @@ fn copy_frame(page: &mut Page, info: &AcceleratedPaintInfo) -> Result<bool, OsrE
         .as_ref()
         .ok_or_else(|| OsrError("missing GPU copier".into()))?;
     gpu.copy(&source, &frame)?;
-    page.frame = Some(frame);
+    page.push(frame);
     Ok(true)
 }

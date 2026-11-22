@@ -80,7 +80,7 @@ fn allow(
     client: &mut Option<Client>,
 ) {
     let source = opener.borrow();
-    let mut page = Page::new(source.size, source.scale);
+    let mut page = Page::new(source.size, source.scale, source.rate);
     if held {
         page.loads = super::hold::Loads::held();
     }

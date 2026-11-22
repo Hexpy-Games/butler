@@ -299,7 +299,7 @@ pub(super) fn copy_frame(
         return Ok(false);
     }
     page.pool.repaint_pending = false;
-    page.frame = Some(target.frame);
+    page.push(target.frame);
     Ok(true)
 }
 
