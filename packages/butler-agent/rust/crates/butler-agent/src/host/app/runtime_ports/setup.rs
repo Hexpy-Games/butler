@@ -7,6 +7,7 @@ pub(crate) use butler_account::ButlerAccount;
 mod butler_vault;
 mod chatgpt_account;
 mod computer_memory;
+mod publishing;
 pub(crate) use computer_memory::ComputerMemory;
 mod credentials;
 mod oauth;
@@ -22,8 +23,8 @@ use tokio::sync::watch;
 use butler_gateway::gateway::{
     AppCredentialReplaceInput, AppOauthStartInput, AppProviderKeyInput, AppSetupPort,
     ApplicationFuture, ButlerAccountRequest, GatewayApplicationError, LocalModelServersView,
-    OauthFlowView, ProviderKeyVerificationView, ReplacedCredentialView, SavedCredentialView,
-    SavedProviderKey, SetupReadinessView, butler_account_disabled,
+    OauthFlowView, ProviderKeyVerificationView, PublishingRequest, ReplacedCredentialView,
+    SavedCredentialView, SavedProviderKey, SetupReadinessView, butler_account_disabled,
 };
 use butler_models::models::{
     CredentialList, DeletedCredential, LocalServerKind, LocalServerProbe, ModelConfiguration,
@@ -129,6 +130,16 @@ impl AppSetupPort for AppSetup {
         Box::pin(async move {
             match &this.butler_account {
                 Some(account) => account.handle(request).await,
+                None => Err(butler_account_disabled()),
+            }
+        })
+    }
+
+    fn publishing(&self, request: PublishingRequest) -> ApplicationFuture<serde_json::Value> {
+        let this = self.0.clone();
+        Box::pin(async move {
+            match &this.butler_account {
+                Some(account) => account.publishing(request).await,
                 None => Err(butler_account_disabled()),
             }
         })

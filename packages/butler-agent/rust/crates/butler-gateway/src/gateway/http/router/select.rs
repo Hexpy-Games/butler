@@ -6,6 +6,7 @@ pub(super) fn handler(request: &Request<Body>) -> Option<Handler> {
     let family = [
         (family(path, "/logs"), Handler::Logs),
         (family(path, "/library"), Handler::Library),
+        (family(path, "/publishing"), Handler::Publishing),
         (family(path, "/documents"), Handler::Documents),
         (family(path, "/browser-history"), Handler::History),
         (family(path, "/browser-stills"), Handler::BrowserStills),

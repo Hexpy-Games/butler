@@ -166,6 +166,7 @@ mod prompt_history;
 mod prompt_history_cache;
 mod prompt_layout;
 mod provider_first_response;
+mod publishing;
 mod queue_admission_shutdown;
 #[cfg(debug_assertions)]
 mod queue_claim_crash;
