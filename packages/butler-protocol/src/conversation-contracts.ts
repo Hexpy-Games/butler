@@ -245,9 +245,9 @@ export interface ContextDetails {
 
 export interface SessionBranch {
   available: boolean;
-  label?: string;
+  workspace_label?: string;
   workspace_path?: string;
-  branch?: string;
+  branch_name?: string;
   safe_status?: string;
 }
 

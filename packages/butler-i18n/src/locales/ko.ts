@@ -517,7 +517,6 @@ export const koKrCopy: AppCopy = {
     },
     chat: {
       copy: "복사",
-      selectText: "텍스트 선택",
       copied: "복사했습니다",
       retryFailed: "다시 시도하지 못했습니다.",
       attach: "첨부",
@@ -566,8 +565,7 @@ export const koKrCopy: AppCopy = {
       disconnectTitle: "이 컴퓨터와 연결을 해제하시겠습니까?",
       disconnectBody: "버틀러를 쓰려면 다시 연결해야 합니다.",
       cancel: "취소",
-      pickHour: "시를 고릅니다.",
-      pickMinute: "분을 고릅니다.",
+      done: "완료",
       checkForUpdates: "업데이트 확인",
       applyUpdateTitle: "지금 업데이트할까요?",
       applyUpdateBody: "컴퓨터의 버틀러가 다시 시작되며 업데이트를 마칩니다.",
@@ -1621,6 +1619,7 @@ rowMenu: (title) => `${title} 메뉴`, organized: (title) => `${title} 그룹으
     cancel: "취소",
     delete: "삭제",
     copy: "복사",
+    selected: "선택됨",
   },
   settings: {
     localModelErrors: { discover: "이 주소에서 모델을 찾지 못했습니다.", register: "모델을 추가하지 못했습니다." },

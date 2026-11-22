@@ -519,7 +519,6 @@ export const enUsCopy: AppCopy = {
     },
     chat: {
       copy: "Copy",
-      selectText: "Select text",
       copied: "Copied",
       retryFailed: "Could not retry.",
       attach: "Attach",
@@ -568,8 +567,7 @@ export const enUsCopy: AppCopy = {
       disconnectTitle: "Disconnect from this computer?",
       disconnectBody: "You'll need to pair again to use Butler.",
       cancel: "Cancel",
-      pickHour: "Choose the hour.",
-      pickMinute: "Choose the minutes.",
+      done: "Done",
       checkForUpdates: "Check for updates",
       applyUpdateTitle: "Update now?",
       applyUpdateBody: "Butler on your computer restarts to finish the update.",
@@ -1616,6 +1614,7 @@ rowMenu: (title) => `${title} menu`, organized: (title) => `Organized into ${tit
     cancel: "Cancel",
     delete: "Delete",
     copy: "Copy",
+    selected: "Selected",
   },
   settings: {
     localModelErrors: { discover: "No models found at this address.", register: "Couldn't add the model." },

@@ -30,3 +30,15 @@ export function uuid(): string {
 
 // Desktop TimePicker: two-digit hour/minute values.
 export function pad2(value: number): string { return String(value).padStart(2, "0"); }
+
+/** "HH:MM" → a local Date on a fixed day. */
+export function timeToDate(value: string): Date {
+  const [h, m] = value.split(":").map(Number);
+  return new Date(2000, 0, 1, h, m);
+}
+/** Local Date → "HH:MM" (24 h, zero-padded). */
+export function dateToTime(date: Date): string { return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`; }
+/** Row meta, unchanged from today: ko "오후 10:00". */
+export function timeMeta(value: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }).format(timeToDate(value));
+}

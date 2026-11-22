@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import type { SessionPendingAsks, SessionView } from "../../../butler-protocol/src/index.ts";
-import { ListRow, Sheet, Text, useTokens } from "@/ds";
+import { icons, ListGroup, ListGroupItem, ListRow, Sheet, useTokens } from "@/ds";
 import { useMobileCopy } from "@/i18n";
 import { ContextUsage } from "./usage/ContextUsage";
 import { useControls } from "./useControls";
@@ -25,27 +25,21 @@ export function SessionInfoSheet({ open, onClose, id, title, view }: {
   }, [open, client, id]);
   const attachments = [...new Map((view?.messages ?? []).filter(message => message.role === "user")
     .flatMap(message => message.attachments ?? []).map(file => [file.file_id, file])).values()];
-  const section = { gap: t.length("--space-4") };
   return <Sheet open={open} onClose={onClose} title={copy.chat.info} description={title} cancelLabel={copy.chat.close}>
-    <View style={section}>
-      {pending?.asks.length ? <View style={section}>
-        <Text variant="sectionTitle" tone="secondary">{copy.chat.infoAsks}</Text>
-        <Text tone="secondary">{pending.asks.length}</Text>
+    <View style={{ gap: t.length("--space-4") }}>
+      {pending?.asks.length ? <ListGroup label={copy.chat.infoAsks}>
         {pending.asks.map(ask => <ListRow key={ask.ask_id} title={ask.title} />)}
-      </View> : null}
-      <View style={section}>
-        <Text variant="sectionTitle" tone="secondary">{copy.chat.infoWorkspace}</Text>
-        {view?.branch?.available ? <ListRow title={view.branch.label ?? view.branch.workspace_path ?? copy.chat.infoNoWorkspace}
-          description={view.branch.branch} /> : <Text tone="secondary">{copy.chat.infoNoWorkspace}</Text>}
-      </View>
-      {view?.context ? <View style={section}>
-        <Text variant="sectionTitle" tone="secondary">{copy.chat.context}</Text>
-        <ContextUsage open={open} context={view.context} sessionId={id} models={model.models} model={model.current} />
-      </View> : null}
-      {attachments.length ? <View style={section}>
-        <Text variant="sectionTitle" tone="secondary">{copy.chat.infoAttachments}</Text>
-        {attachments.map(file => <ListRow key={file.file_id} title={file.safe_name} meta={`${Math.round(file.size_bytes / 1024)} KB`} />)}
-      </View> : null}
+      </ListGroup> : null}
+      <ListGroup label={copy.chat.infoWorkspace}>
+        {view?.branch?.available ? <ListRow icon={icons.Folder} title={view.branch.workspace_label ?? view.branch.workspace_path ?? copy.chat.infoNoWorkspace}
+          meta={view.branch.branch_name} /> : <ListRow icon={icons.Folder} title={copy.chat.infoNoWorkspace} />}
+      </ListGroup>
+      {view?.context ? <ListGroup label={copy.chat.context}>
+        <ListGroupItem><ContextUsage open={open} context={view.context} sessionId={id} models={model.models} model={model.current} /></ListGroupItem>
+      </ListGroup> : null}
+      {attachments.length ? <ListGroup label={copy.chat.infoAttachments}>
+        {attachments.map(file => <ListRow key={file.file_id} icon={icons.File} title={file.safe_name} meta={`${Math.round(file.size_bytes / 1024)} KB`} />)}
+      </ListGroup> : null}
     </View>
   </Sheet>;
 }

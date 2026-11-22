@@ -29,10 +29,18 @@ index d7cf2216206d1ca6ebde9be2f7e0bed93d4cbf18..9d3cbbfa6592002dc9bb26cf1817801f
    // Setting attributedText clears any active text selection. Bail out entirely
    // when neither the text nor its layout changed so a JS-side state update made
 diff --git a/ios/RNUITextViewShadowNode.cpp b/ios/RNUITextViewShadowNode.cpp
-index 88843d86d592006a2bf562d952796a0fbcdbf777..8d1c3281e5a427686912c1e3670ecab153927145 100644
+index 88843d86d592006a2bf562d952796a0fbcdbf777..8b9bb88f0b9fc86bd209f179714b6bc9e6f8f752 100644
 --- a/ios/RNUITextViewShadowNode.cpp
 +++ b/ios/RNUITextViewShadowNode.cpp
-@@ -131,6 +131,7 @@ AttributedString RNUITextViewShadowNode::getAttributedString(
+@@ -118,6 +118,7 @@ AttributedString RNUITextViewShadowNode::getAttributedString(
+     // Match RN Text measurement/rendering by carrying the multiplier through
+     // TextAttributes instead of pre-scaling fontSize/lineHeight ourselves.
+     baseTextAttributes.fontSizeMultiplier = layoutContext.fontSizeMultiplier;
++    baseTextAttributes.maxFontSizeMultiplier = baseProps.maxFontSizeMultiplier;
+ 
+     auto baseAttributedString = AttributedString{};
+     baseAttributedString.setBaseTextAttributes(baseTextAttributes);
+@@ -131,6 +132,7 @@ AttributedString RNUITextViewShadowNode::getAttributedString(
          textAttributes.backgroundColor = props.backgroundColor;
          textAttributes.fontSize = props.fontSize;
          textAttributes.lineHeight = props.lineHeight;
@@ -40,3 +48,98 @@ index 88843d86d592006a2bf562d952796a0fbcdbf777..8d1c3281e5a427686912c1e3670ecab1
          textAttributes.foregroundColor = props.color;
          textAttributes.textShadowColor = props.shadowColor;
          textAttributes.textShadowOffset = props.shadowOffset;
+diff --git a/ios/generated/build/generated/ios/ReactCodegen/react/renderer/components/RNUITextViewSpec/Props.cpp b/ios/generated/build/generated/ios/ReactCodegen/react/renderer/components/RNUITextViewSpec/Props.cpp
+index 5de8e6bd7fbdc551fa23572032e7b0d7d7d50810..985f5b812ed93e8f2a15179f612cb974652a2391 100644
+--- a/ios/generated/build/generated/ios/ReactCodegen/react/renderer/components/RNUITextViewSpec/Props.cpp
++++ b/ios/generated/build/generated/ios/ReactCodegen/react/renderer/components/RNUITextViewSpec/Props.cpp
+@@ -140,6 +140,7 @@ RNUITextViewProps::RNUITextViewProps(
+ 
+     numberOfLines(convertRawProp(context, rawProps, "numberOfLines", sourceProps.numberOfLines, {0})),
+     allowFontScaling(convertRawProp(context, rawProps, "allowFontScaling", sourceProps.allowFontScaling, {true})),
++    maxFontSizeMultiplier(convertRawProp(context, rawProps, "maxFontSizeMultiplier", sourceProps.maxFontSizeMultiplier, {0.0})),
+     ellipsizeMode(convertRawProp(context, rawProps, "ellipsizeMode", sourceProps.ellipsizeMode, {RNUITextViewEllipsizeMode::Tail})),
+     selectable(convertRawProp(context, rawProps, "selectable", sourceProps.selectable, {false})),
+     selectionColor(convertRawProp(context, rawProps, "selectionColor", sourceProps.selectionColor, {})) {}
+@@ -167,6 +168,10 @@ folly::dynamic RNUITextViewProps::getDiffProps(
+   if (allowFontScaling != oldProps->allowFontScaling) {
+     result["allowFontScaling"] = allowFontScaling;
+   }
++
++  if (maxFontSizeMultiplier != oldProps->maxFontSizeMultiplier) {
++    result["maxFontSizeMultiplier"] = maxFontSizeMultiplier;
++  }
+     
+   if (ellipsizeMode != oldProps->ellipsizeMode) {
+     result["ellipsizeMode"] = toDynamic(ellipsizeMode);
+diff --git a/ios/generated/build/generated/ios/ReactCodegen/react/renderer/components/RNUITextViewSpec/Props.h b/ios/generated/build/generated/ios/ReactCodegen/react/renderer/components/RNUITextViewSpec/Props.h
+index 3c5089d63eb15c7a88b21670b0e9c1d778b61e60..61ff6dcea6a33e4bcbec4f88863d443b63595702 100644
+--- a/ios/generated/build/generated/ios/ReactCodegen/react/renderer/components/RNUITextViewSpec/Props.h
++++ b/ios/generated/build/generated/ios/ReactCodegen/react/renderer/components/RNUITextViewSpec/Props.h
+@@ -227,6 +227,7 @@ class RNUITextViewProps final : public ViewProps {
+ 
+   int numberOfLines{0};
+   bool allowFontScaling{true};
++  Float maxFontSizeMultiplier{0.0};
+   RNUITextViewEllipsizeMode ellipsizeMode{RNUITextViewEllipsizeMode::Tail};
+   bool selectable{false};
+   SharedColor selectionColor{};
+diff --git a/lib/commonjs/RNUITextViewNativeComponent.ts b/lib/commonjs/RNUITextViewNativeComponent.ts
+index 44da0226a005188896711783929d5c5d4a95a6e5..1064eab252e3d12c5b81b8be566ff960cc44c44c 100644
+--- a/lib/commonjs/RNUITextViewNativeComponent.ts
++++ b/lib/commonjs/RNUITextViewNativeComponent.ts
+@@ -29,6 +29,7 @@ type EllipsizeMode = 'head' | 'middle' | 'tail' | 'clip'
+ interface NativeProps extends ViewProps {
+   numberOfLines?: CodegenTypes.Int32
+   allowFontScaling?: CodegenTypes.WithDefault<boolean, true>
++  maxFontSizeMultiplier?: CodegenTypes.WithDefault<CodegenTypes.Float, 0>
+   ellipsizeMode?: CodegenTypes.WithDefault<EllipsizeMode, 'tail'>
+   selectable?: boolean
+   selectionColor?: ColorValue
+diff --git a/lib/module/RNUITextViewNativeComponent.ts b/lib/module/RNUITextViewNativeComponent.ts
+index 44da0226a005188896711783929d5c5d4a95a6e5..1064eab252e3d12c5b81b8be566ff960cc44c44c 100644
+--- a/lib/module/RNUITextViewNativeComponent.ts
++++ b/lib/module/RNUITextViewNativeComponent.ts
+@@ -29,6 +29,7 @@ type EllipsizeMode = 'head' | 'middle' | 'tail' | 'clip'
+ interface NativeProps extends ViewProps {
+   numberOfLines?: CodegenTypes.Int32
+   allowFontScaling?: CodegenTypes.WithDefault<boolean, true>
++  maxFontSizeMultiplier?: CodegenTypes.WithDefault<CodegenTypes.Float, 0>
+   ellipsizeMode?: CodegenTypes.WithDefault<EllipsizeMode, 'tail'>
+   selectable?: boolean
+   selectionColor?: ColorValue
+diff --git a/lib/typescript/commonjs/src/RNUITextViewNativeComponent.d.ts b/lib/typescript/commonjs/src/RNUITextViewNativeComponent.d.ts
+index 933d15a1e99dae2ddc2aca76201b29d297434b95..47f0cd1205a1cfa78d74855fa97d66e694f20f5a 100644
+--- a/lib/typescript/commonjs/src/RNUITextViewNativeComponent.d.ts
++++ b/lib/typescript/commonjs/src/RNUITextViewNativeComponent.d.ts
+@@ -19,6 +19,7 @@ type EllipsizeMode = 'head' | 'middle' | 'tail' | 'clip';
+ interface NativeProps extends ViewProps {
+     numberOfLines?: CodegenTypes.Int32;
+     allowFontScaling?: CodegenTypes.WithDefault<boolean, true>;
++    maxFontSizeMultiplier?: CodegenTypes.WithDefault<CodegenTypes.Float, 0>;
+     ellipsizeMode?: CodegenTypes.WithDefault<EllipsizeMode, 'tail'>;
+     selectable?: boolean;
+     selectionColor?: ColorValue;
+diff --git a/lib/typescript/module/src/RNUITextViewNativeComponent.d.ts b/lib/typescript/module/src/RNUITextViewNativeComponent.d.ts
+index 933d15a1e99dae2ddc2aca76201b29d297434b95..47f0cd1205a1cfa78d74855fa97d66e694f20f5a 100644
+--- a/lib/typescript/module/src/RNUITextViewNativeComponent.d.ts
++++ b/lib/typescript/module/src/RNUITextViewNativeComponent.d.ts
+@@ -19,6 +19,7 @@ type EllipsizeMode = 'head' | 'middle' | 'tail' | 'clip';
+ interface NativeProps extends ViewProps {
+     numberOfLines?: CodegenTypes.Int32;
+     allowFontScaling?: CodegenTypes.WithDefault<boolean, true>;
++    maxFontSizeMultiplier?: CodegenTypes.WithDefault<CodegenTypes.Float, 0>;
+     ellipsizeMode?: CodegenTypes.WithDefault<EllipsizeMode, 'tail'>;
+     selectable?: boolean;
+     selectionColor?: ColorValue;
+diff --git a/src/RNUITextViewNativeComponent.ts b/src/RNUITextViewNativeComponent.ts
+index 44da0226a005188896711783929d5c5d4a95a6e5..1064eab252e3d12c5b81b8be566ff960cc44c44c 100644
+--- a/src/RNUITextViewNativeComponent.ts
++++ b/src/RNUITextViewNativeComponent.ts
+@@ -29,6 +29,7 @@ type EllipsizeMode = 'head' | 'middle' | 'tail' | 'clip'
+ interface NativeProps extends ViewProps {
+   numberOfLines?: CodegenTypes.Int32
+   allowFontScaling?: CodegenTypes.WithDefault<boolean, true>
++  maxFontSizeMultiplier?: CodegenTypes.WithDefault<CodegenTypes.Float, 0>
+   ellipsizeMode?: CodegenTypes.WithDefault<EllipsizeMode, 'tail'>
+   selectable?: boolean
+   selectionColor?: ColorValue

@@ -18,7 +18,6 @@ export { TextField, type TextFieldProps } from "./TextField";
 export { showToast, ToastHost, type ToastTone } from "./Toast";
 export { CodeBlock, Markdown, markdownPlainText } from "./Markdown";
 export { MessageBubble, type MessageBubbleProps } from "./MessageBubble";
-export { TextSelectSheet, type TextSelectSheetProps } from "./TextSelectSheet";
 export { EdgeFade } from "./EdgeFade";
 export { useHeaderInset, useHeaderOptions } from "./header";
 export { ContextRing } from "./ContextRing";
@@ -36,3 +35,4 @@ export { ThinkingMark } from "./ThinkingMark";
 
 export { ImageViewer } from "./ImageViewer";
 export { ImageFrame } from "./ImageFrame";
+export { TextSelectionScope } from "./internal/textSelection";

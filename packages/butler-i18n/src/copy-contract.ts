@@ -478,7 +478,6 @@ export interface MobileCopy {
   };
   chat: {
     copy: string;
-    selectText: string;
     copied: string;
     retryFailed: string;
     attach: string;
@@ -522,8 +521,7 @@ export interface MobileCopy {
     disconnectTitle: string;
     disconnectBody: string;
     cancel: string;
-    pickHour: string;
-    pickMinute: string;
+    done: string;
     checkForUpdates: string;
     applyUpdateTitle: string;
     applyUpdateBody: string;
@@ -1472,6 +1470,7 @@ export interface AppCopy {
     cancel: string;
     delete: string;
     copy: string;
+    selected: string;
   };
   settings: {
     mcpErrors: { save: string; notFound: string; unavailable: string; remove: string; toggle: string; probe: string; };
