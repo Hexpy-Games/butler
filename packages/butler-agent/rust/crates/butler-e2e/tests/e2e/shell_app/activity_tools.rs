@@ -72,7 +72,6 @@ async fn shell_app_14_a_steps_tools_group_and_open_their_details() -> Result<(),
             &format!("wait-anchor {act}-group-row-0"),
             &format!("click {act}-group-row-0"),
             "wait 500",
-            &format!("reveal {det} chat-transcript"),
             &format!("expect-anchor {edge}:start"),
         ])
         .await?;

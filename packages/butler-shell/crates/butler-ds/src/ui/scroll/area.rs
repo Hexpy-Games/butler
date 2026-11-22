@@ -7,7 +7,7 @@ use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
     Pixels, RenderOnce, ScrollHandle, ScrollWheelEvent, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, div, px, relative,
+    StatefulInteractiveElement as _, Styled as _, Window, canvas, div, px, relative,
 };
 
 use super::bar;
@@ -217,25 +217,9 @@ impl RenderOnce for ScrollArea {
             .min_h_0()
             .overflow_hidden();
         frame = self.frame_size(frame, &metrics, &built.handle, (max, min), window, cx);
-        if let Some(follow) = self.follow_end {
-            let state = follow_latest(&self.id, &built.handle, follow, window, cx);
-            let handle = built.handle.clone();
-            frame = frame.on_scroll_wheel(move |event: &ScrollWheelEvent, window, cx| {
-                // A wheel toward the start that this area can follow lets go of the end at once, so a
-                // small trackpad step or a queued wheel glide is not snapped back (and `scroll_to_bottom`
-                // does not cancel the glide); a wheel toward the end re-pins within 24px of it.
-                let toward_start = event.delta.pixel_delta(window.line_height()).y > px(0.);
-                let can_follow = handle.offset().y < px(0.);
-                state.update(cx, |state, _| {
-                    if toward_start && can_follow {
-                        state.pinned = false;
-                    } else {
-                        state.wheeled = true;
-                    }
-                });
-                window.refresh();
-            });
-        }
+        let follow = self
+            .follow_end
+            .map(|follow| follow_latest(&self.id, &built.handle, follow, window, cx));
         let thumb = convert::with_alpha(Ds::get(cx).color(Color::LineStrong), 0.7);
         let overlay = self.overlay(&built, &metrics, thumb, window, cx);
         let ring = built.host.then(|| host_ring(Ds::get(cx)));
@@ -244,6 +228,7 @@ impl RenderOnce for ScrollArea {
             .take()
             .map(|name| edge_probe(&built, self.orientation, name));
         frame
+            .children(follow)
             .child(built.element)
             .child(overlay)
             .children(ring)
@@ -263,7 +248,7 @@ fn follow_latest(
     follow: bool,
     window: &mut Window,
     cx: &mut App,
-) -> Entity<FollowLatest> {
+) -> impl IntoElement + use<> {
     let state = window.use_keyed_state((id.clone(), "follow-end"), cx, |_, _| FollowLatest {
         pinned: true,
         wheeled: false,
@@ -277,7 +262,34 @@ fn follow_latest(
             handle.scroll_to_bottom();
         }
     });
-    state
+    let handle = handle.clone();
+    // Paint before the scroller so the bubble callback sees the offset after scrolling.
+    canvas(
+        |_, _, _| (),
+        move |_, (), window, _| {
+            let mut before = handle.offset();
+            window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+                if phase.capture() {
+                    before = handle.offset();
+                    return;
+                }
+                if handle.offset() == before {
+                    return;
+                }
+                let toward_start = event.delta.pixel_delta(window.line_height()).y > px(0.);
+                state.update(cx, |state, _| {
+                    if toward_start {
+                        state.pinned = false;
+                    } else {
+                        state.wheeled = true;
+                    }
+                });
+                window.refresh();
+            });
+        },
+    )
+    .absolute()
+    .size_0()
 }
 
 /// The scrolled content's height (the viewport plus what scrolls), once the scroller has laid out;

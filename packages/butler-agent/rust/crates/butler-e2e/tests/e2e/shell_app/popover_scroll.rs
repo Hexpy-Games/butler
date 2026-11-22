@@ -161,7 +161,7 @@ async fn popover_scroll(shell: &mut Shell) -> Result<(f64, f64), HarnessError> {
 async fn peek_scroll(shell: &mut Shell) -> Result<(f64, f64, f64, f64), HarnessError> {
     shell
         .run(&[
-            "size 900 800",
+            "size 1200 800",
             "wait 500",
             "wheel chat-transcript 300",
             "wait 500",
