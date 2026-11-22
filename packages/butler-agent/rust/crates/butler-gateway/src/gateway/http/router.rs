@@ -267,6 +267,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/memory/reset/reextract", Handler::Personalization),
     ("/memory/reset/profile", Handler::Personalization),
     ("/memory/reset/projects/{id}", Handler::Personalization),
+    ("/memory/reset/computers/{id}", Handler::Personalization),
     ("/memory/reset/{id}", Handler::Personalization),
     ("/message-assets/{id}", Handler::MessageFiles),
     ("/message-assets/{id}/meta", Handler::MessageFiles),
