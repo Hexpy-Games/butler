@@ -81,15 +81,14 @@ impl Page {
         }
     }
     #[cfg(not(target_os = "linux"))]
-    pub(super) fn push(&mut self, frame: Frame) {
+    pub(super) fn make_room(&mut self) {
         if self.queue.len() == QUEUE {
             self.queue.pop_front();
         }
-        self.queue.push_back(frame);
     }
-    /// The newest painted frame, drawn or not.
-    pub(super) fn latest(&self) -> Option<Frame> {
-        self.queue.back().or(self.frame.as_ref()).cloned()
+    #[cfg(not(target_os = "linux"))]
+    pub(super) fn push(&mut self, frame: Frame) {
+        self.queue.push_back(frame);
     }
     pub(super) fn release_frames(&mut self) {
         self.frame = None;

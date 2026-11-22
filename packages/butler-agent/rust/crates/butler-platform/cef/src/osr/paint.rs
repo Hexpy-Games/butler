@@ -82,6 +82,7 @@ fn copy_frame(page: &mut Page, info: &AcceleratedPaintInfo) -> Result<bool, OsrE
     if page.gpu.is_none() {
         page.gpu = Some(GpuCopy::new()?);
     }
+    page.make_room();
     let frame = page.pool.acquire(source.get_width(), source.get_height())?;
     let gpu = page
         .gpu

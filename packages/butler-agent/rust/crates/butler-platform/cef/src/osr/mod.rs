@@ -408,7 +408,7 @@ impl OsrRuntime {
         }
     }
     pub fn frame(&self, page: u64) -> Option<Frame> {
-        self.page(page).and_then(|p| p.borrow().latest())
+        self.page(page).and_then(|p| p.borrow().frame.clone())
     }
 }
 

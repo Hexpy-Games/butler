@@ -1,7 +1,7 @@
 use butler_cef_host::osr::{OsrCursor, OsrRuntime, Rect};
 use gpui::{
-    AnyElement, App, Bounds, Context, CursorStyle, ElementId, ElementInputHandler, EntityId,
-    FocusHandle, KeyDownEvent, KeyUpEvent, MouseButton, ObjectFit, Pixels, Render, Size,
+    AnyElement, AnyWeakEntity, App, Bounds, Context, CursorStyle, ElementId, ElementInputHandler,
+    EntityId, FocusHandle, KeyDownEvent, KeyUpEvent, MouseButton, ObjectFit, Pixels, Render, Size,
     SurfaceSource, Window, canvas, div, prelude::*, surface,
 };
 use std::{
@@ -18,7 +18,7 @@ pub(super) struct PageState {
     pub(super) cursor: OsrCursor,
     pub(super) last_input: Rc<std::cell::Cell<Option<std::time::Instant>>>,
     pub(super) ime_bounds: Vec<Rect>,
-    pub(super) views: Vec<EntityId>,
+    pub(super) views: Vec<AnyWeakEntity>,
     pub(super) rate: Rc<Cell<u32>>,
     pub(super) last_tick: Option<u64>,
 }
@@ -39,9 +39,9 @@ impl Default for PageState {
     }
 }
 impl PageState {
-    fn register(&mut self, id: EntityId) {
-        if !self.views.contains(&id) {
-            self.views.push(id);
+    fn register(&mut self, view: AnyWeakEntity) {
+        if !self.views.contains(&view) {
+            self.views.push(view);
         }
     }
     /// Page pixels per element pixel on each axis. The frame fills the element, so it is the
@@ -84,40 +84,42 @@ pub(super) fn element(
     });
     page.into_any_element()
 }
-impl Page {
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "the positive display period converts to a rounded frame rate"
-    )]
-    fn paced(&self, window: &mut Window, cx: &mut Context<Self>) -> Option<SurfaceSource> {
-        let runtime = self.runtime.upgrade()?;
-        let vsync = window.frame_vsync();
-        if let Some(hz) = vsync
-            .filter(|v| v.period_ns > 0)
-            .map(|v| (1e9 / v.period_ns as f64).round() as u32)
-        {
-            self.state.borrow().rate.set(hz);
-            runtime.set_frame_rate(self.id, hz);
-        }
-        let tick = vsync.map_or_else(|| u64::from(gpui::animation_time_ms()), |v| v.at_ns);
-        let fresh = self.state.borrow_mut().last_tick.replace(tick) != Some(tick);
-        let frame = if fresh {
-            runtime.next_frame(self.id)
-        } else {
-            runtime.frame(self.id)
-        };
-        if runtime.queued(self.id) {
-            let id = cx.entity_id();
-            window.on_next_frame(move |_, cx| cx.notify(id));
-        }
-        frame.and_then(|f| source(f, window))
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the positive display period converts to a rounded frame rate"
+)]
+fn paced(
+    runtime: &OsrRuntime,
+    id: u64,
+    state: &RefCell<PageState>,
+    window: &mut Window,
+    view: EntityId,
+) -> Option<SurfaceSource> {
+    let vsync = window.frame_vsync();
+    if let Some(hz) = vsync
+        .filter(|v| v.period_ns > 0)
+        .map(|v| (1e9 / v.period_ns as f64).round() as u32)
+    {
+        state.borrow().rate.set(hz);
+        runtime.set_frame_rate(id, hz);
     }
+    let tick = vsync.map_or_else(|| u64::from(gpui::animation_time_ms()), |v| v.at_ns);
+    let fresh = state.borrow_mut().last_tick.replace(tick) != Some(tick);
+    let frame = if fresh {
+        runtime.next_frame(id)
+    } else {
+        runtime.frame(id)
+    };
+    if runtime.queued(id) {
+        window.on_next_frame(move |_, cx| cx.notify(view));
+    }
+    frame.and_then(|f| source(f, window))
 }
 impl Render for Page {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.state.borrow_mut().register(cx.entity_id());
         let entity = cx.entity();
+        self.state.borrow_mut().register(entity.downgrade().into());
         let focus = self.focus.clone();
         let state = self.state.clone();
         let cursor = match self.state.borrow().cursor {
@@ -125,7 +127,10 @@ impl Render for Page {
             OsrCursor::PointingHand => CursorStyle::PointingHand,
             OsrCursor::IBeam => CursorStyle::IBeam,
         };
-        let frame = self.paced(window, cx);
+        let frame = self
+            .runtime
+            .upgrade()
+            .and_then(|runtime| paced(&runtime, self.id, &self.state, window, cx.entity_id()));
         let page = div()
             .id("cef-surface")
             .relative()
@@ -187,12 +192,13 @@ pub(super) struct Thumb {
 }
 impl Render for Thumb {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.state.borrow_mut().register(cx.entity_id());
+        self.state
+            .borrow_mut()
+            .register(cx.entity().downgrade().into());
         div().absolute().top_0().left_0().size_full().children(
             self.runtime
                 .upgrade()
-                .and_then(|runtime| runtime.frame(self.id))
-                .and_then(|f| source(f, window))
+                .and_then(|runtime| paced(&runtime, self.id, &self.state, window, cx.entity_id()))
                 .map(|s| surface(s).object_fit(ObjectFit::Cover).size_full()),
         )
     }
