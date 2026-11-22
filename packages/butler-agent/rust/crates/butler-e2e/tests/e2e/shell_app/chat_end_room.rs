@@ -143,6 +143,24 @@ async fn shell_app_16_chat_end_keeps_answers_inside_their_rows() -> Result<(), H
         failed.push("(c) gap above the composer");
     }
     assert!(failed.is_empty(), "{failed:?}: {measured}");
+    // Scrolling up shows the jump control; clicking it brings the list back to its end.
+    shell
+        .run(&[
+            "wheel chat-transcript 600",
+            "wait 300",
+            "wait-anchor transcript-jump",
+            "click transcript-jump",
+            "wait 600",
+            "layout back chat-end-room chat-transcript",
+        ])
+        .await?;
+    let back = shell.report("back.layout")?;
+    let (_, back_end_y, _, back_room) = rect(&back, "chat-end-room");
+    let (_, back_view_y, _, back_view_h) = rect(&back, "chat-transcript");
+    assert!(
+        ((back_end_y + back_room) - (back_view_y + back_view_h)).abs() <= 1.,
+        "the jump control brings the list back to its end"
+    );
     shell.run(&["app-quit"]).await?;
     shell.finish().await?;
     s.sandbox.mark_success();
