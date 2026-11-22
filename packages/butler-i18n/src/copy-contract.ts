@@ -2043,6 +2043,7 @@ export interface AppCopy {
       addHost: string;
       removeHost: (host: string) => string;
       invalidHost: string;
+      sameHost: string;
     };
     workStatus: {
       title: string;
