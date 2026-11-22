@@ -123,12 +123,16 @@ pub(super) async fn get_live_events(
     uri: &Uri,
     scope: Option<super::listeners::ListenerScope>,
     keys: &super::security::KeySet,
+    main: bool,
 ) -> Result<Response, HttpError> {
     let cursor = cursor_param(query(uri).get("cursor"));
     let mut closers = vec![keys.live_streams()];
     closers.extend(scope.map(|scope| scope.closed));
     let mut stream = create_live_stream(state.application.clone(), cursor, closers).await?;
     stream.hold(state.remote_live.subscribe(stream.listener()));
+    if main {
+        stream.hold(super::remote_memory::watch(stream.listener()));
+    }
     let body = match keys.live_chunk_signer(state.application.clone()) {
         Some(sign) => Body::from_stream(stream.then(move |chunk| {
             let signed = chunk.map(&sign);

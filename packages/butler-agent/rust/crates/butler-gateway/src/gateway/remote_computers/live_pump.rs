@@ -134,6 +134,10 @@ async fn read(
             }
             continue;
         }
+        if let Some(request) = super::memory::requested(&record) {
+            super::memory::answer(pump, request);
+            continue;
+        }
         if !history || caught_up || record.id.is_none() {
             live_records::forward(
                 &pump.relays,

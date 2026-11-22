@@ -18,13 +18,17 @@ struct Unlock {
 /// socket, with the admin credential, in remote mode. Otherwise 404. Checked
 /// after admission so the access log names the route.
 pub(super) fn admitted(state: &HttpState, request: &Request<Body>) -> bool {
-    request.method() == Method::POST
+    request.method() == Method::POST && from_main(state, request)
+}
+
+/// A request from the main: over the owner-only socket, with the admin credential, in remote mode.
+pub(super) fn from_main(state: &HttpState, request: &Request<Body>) -> bool {
+    sealed::is_enabled()
         && request
             .extensions()
             .get::<listeners::LocalSocketPeer>()
             .is_some()
         && state.security.is_admin(request.headers())
-        && sealed::is_enabled()
 }
 
 pub(super) async fn unlock(request: Request<Body>) -> Result<Response, HttpError> {

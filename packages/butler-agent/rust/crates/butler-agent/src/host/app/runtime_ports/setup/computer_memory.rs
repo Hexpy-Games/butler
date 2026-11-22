@@ -2,16 +2,20 @@
 //! all-chats instructions and its profile.
 use std::sync::Arc;
 
+use crate::host::runtime::MemoryReads;
 use butler_gateway::gateway::GatewayApplicationError;
 use butler_memory::cognition::RememberedRuleOwner;
 use butler_memory::profile::ProfileService;
 use butler_turn::context_ports::{ProfilePromptPort, PromptProjectionInput};
+use butler_turn::conversation::CanonicalMemoryReadBinding;
 use butler_turn::remote_memory::{CopiedRule, MemoryCopy};
-use serde_json::Value;
+use serde::Deserialize;
+use serde_json::{Value, json};
 
 pub(crate) struct ComputerMemory {
     pub(crate) rules: Arc<RememberedRuleOwner>,
     pub(crate) profile: Arc<ProfileService>,
+    pub(crate) reads: MemoryReads,
 }
 
 impl ComputerMemory {
@@ -53,5 +57,66 @@ impl ComputerMemory {
             runtime_profile,
         })
         .map_err(GatewayApplicationError::internal_from)
+    }
+}
+
+#[derive(Deserialize)]
+struct ComputerRead {
+    read_id: String,
+    session_id: String,
+    turn_id: String,
+    tool: String,
+    arguments: Value,
+    current_user_message: String,
+    operation_id: String,
+}
+
+impl ComputerMemory {
+    /// Answers a computer's read with the main's own tool, as for a
+    /// conversation held elsewhere: only scopes over all chats are readable.
+    pub(super) async fn read(&self, request: Value) -> Result<Value, GatewayApplicationError> {
+        let read: ComputerRead =
+            serde_json::from_value(request).map_err(GatewayApplicationError::internal_from)?;
+        let binding = CanonicalMemoryReadBinding {
+            runtime_session_id: read.session_id,
+            turn_id: read.turn_id,
+            project_id: None,
+            usage_root: None,
+            usage_role: None,
+            elsewhere: true,
+        };
+        let reads = &self.reads;
+        let result = match read.tool.as_str() {
+            "query_memory" => reads
+                .query
+                .query(binding, read.arguments)
+                .await
+                .map_err(|e| e.code()),
+            "recall_memory" => reads
+                .recall
+                .recall_tool(
+                    binding,
+                    read.current_user_message,
+                    read.operation_id,
+                    read.arguments,
+                )
+                .await
+                .map_err(|e| e.code()),
+            "list_conversation_sessions" => reads
+                .tools
+                .list(binding, read.arguments)
+                .await
+                .map_err(|e| e.code()),
+            "read_conversation_session" => reads
+                .reference
+                .read(binding, read.arguments)
+                .await
+                .map_err(|e| e.code()),
+            _ => Err("unsupported_tool"),
+        };
+        Ok(match result {
+            Ok(value) => json!({"read_id": read.read_id, "result": value}),
+            Err(code) => json!({"read_id": read.read_id, "error": code}),
+        })
     }
 }

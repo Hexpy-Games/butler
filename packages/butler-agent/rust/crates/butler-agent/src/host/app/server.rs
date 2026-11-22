@@ -396,6 +396,7 @@ impl AppServerOwners {
             computer_memory: Arc::new(ComputerMemory {
                 rules: runtime.memory_writes.clone(),
                 profile: runtime.profile.clone(),
+                reads: runtime.memory_reads.clone(),
             }),
             butler_account: app_config
                 .butler_account_enabled()

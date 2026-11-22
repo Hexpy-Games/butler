@@ -24,6 +24,7 @@ async fn exact_query_results_cursors_and_failures_keep_their_bytes() {
         project_id: Some("project".into()),
         usage_root: None,
         usage_role: None,
+        elsewhere: false,
     };
     let first_page = query
         .query(

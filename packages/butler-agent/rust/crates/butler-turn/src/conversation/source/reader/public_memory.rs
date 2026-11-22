@@ -24,6 +24,10 @@ pub struct CanonicalMemoryReadBinding {
     pub usage_root: Option<String>,
     /// Role of the reading session within that chat.
     pub usage_role: Option<String>,
+    /// The conversation is held on another computer (a registered computer
+    /// asking the main): it has no turn or session in this store, so the
+    /// read sees only scopes over all chats and never a session row for it.
+    pub elsewhere: bool,
 }
 
 /// Which sessions a public memory read may see.
@@ -50,6 +54,7 @@ pub struct PublicMemorySnapshot {
     reader: ConversationSourceReader,
     turn_id: String,
     pub current_session_id: String,
+    elsewhere: bool,
 }
 
 impl PublicMemorySnapshot {
@@ -60,6 +65,9 @@ impl PublicMemorySnapshot {
             .connection()?
             .execute_batch("BEGIN")
             .map_err(ConversationError::sqlite)?;
+        if binding.elsewhere {
+            return Self::held_elsewhere(reader, binding);
+        }
         let turn = reader.read_turn(&binding.turn_id)?;
         let session = turn
             .as_ref()
@@ -102,6 +110,28 @@ impl PublicMemorySnapshot {
             reader,
             turn_id: binding.turn_id.clone(),
             current_session_id: session.id,
+            elsewhere: false,
+        })
+    }
+
+    /// A snapshot for a conversation held on another computer, named by its
+    /// runtime session id; nothing about it is read from this store.
+    fn held_elsewhere(
+        reader: ConversationSourceReader,
+        binding: &CanonicalMemoryReadBinding,
+    ) -> ConversationResult<Self> {
+        let session_id = binding.runtime_session_id.trim();
+        if session_id.is_empty() {
+            return Err(ConversationError::new(
+                ConversationCode::InvalidScope,
+                "Remote conversation binding is invalid",
+            ));
+        }
+        Ok(Self {
+            reader,
+            turn_id: String::new(),
+            current_session_id: session_id.to_owned(),
+            elsewhere: true,
         })
     }
 
@@ -220,14 +250,24 @@ impl PublicMemorySnapshot {
 
     /// Whether the scope's current session and project still permit the read.
     pub fn validate_scope(&self, scope: &PublicMemoryScope) -> ConversationResult<bool> {
-        let Some(current) = self.session(&scope.current_session_id)? else {
-            return Ok(false);
-        };
-        if current.status == "deleted"
-            || current.project_id != scope.current_project_id
-            || scope.current_session_id != self.current_session_id
+        if scope.current_session_id != self.current_session_id
             || scope.kind == "current_project" && scope.current_project_id.is_none()
         {
+            return Ok(false);
+        }
+        let current = if self.elsewhere {
+            None
+        } else {
+            self.session(&scope.current_session_id)?
+        };
+        let current_ok = if self.elsewhere {
+            scope.kind == "all_user_sessions" && scope.current_project_id.is_none()
+        } else {
+            current.as_ref().is_some_and(|current| {
+                current.status != "deleted" && current.project_id == scope.current_project_id
+            })
+        };
+        if !current_ok {
             return Ok(false);
         }
         for id in &scope.session_ids {
@@ -235,7 +275,8 @@ impl PublicMemorySnapshot {
                 return Ok(false);
             };
             if row.status == "deleted"
-                || scope.kind == "current_session" && row.id != current.id
+                || scope.kind == "current_session"
+                    && current.as_ref().is_none_or(|current| row.id != current.id)
                 || scope.kind == "current_project" && row.project_id != scope.current_project_id
             {
                 return Ok(false);

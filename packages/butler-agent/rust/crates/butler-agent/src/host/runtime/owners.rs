@@ -101,19 +101,37 @@ impl HostDependencies for RuntimeOwners {
     }
 }
 
-/// Exact source readers share a path authority and a bounded blocking pool.
-pub(super) fn memory_source_readers(
+/// The conversation memory readers. Exact source readers share a path
+/// authority and a bounded blocking pool. A turn's tools read through them,
+/// and the main answers a registered computer's reads with the same ones.
+#[derive(Clone)]
+pub(crate) struct MemoryReads {
+    pub(crate) query: Arc<ExactMemoryQuery>,
+    pub(crate) recall: Arc<MemoryRecall>,
+    pub(crate) reference: Arc<ConversationSessionReference>,
+    pub(crate) tools: Arc<ConversationTools>,
+}
+
+pub(super) fn memory_reads(
     data_root: &std::path::Path,
     paths: &butler_memory::cognition::CognitionPathEnvironment,
-) -> (Arc<ExactMemoryQuery>, Arc<ConversationSessionReference>) {
+    recall: Arc<MemoryRecall>,
+    conversation: &butler_runtime::context::ContextConversation,
+) -> MemoryReads {
     let sources = Arc::new(crate::host::MemorySourceReader::new(
         data_root.to_owned(),
         paths.clone(),
     ));
-    (
-        Arc::new(ExactMemoryQuery::new(data_root, 2)),
-        Arc::new(ConversationSessionReference::new(data_root, 2, sources)),
-    )
+    MemoryReads {
+        query: Arc::new(ExactMemoryQuery::new(data_root, 2)),
+        recall,
+        reference: Arc::new(ConversationSessionReference::new(data_root, 2, sources)),
+        tools: Arc::new(ConversationTools::new(
+            data_root.to_owned(),
+            Arc::new(conversation.clone()),
+            2,
+        )),
+    }
 }
 
 pub(super) fn workspace_services(

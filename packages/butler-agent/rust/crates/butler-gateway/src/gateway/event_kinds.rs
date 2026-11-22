@@ -34,6 +34,7 @@ const EVENT_TYPES: &[(&str, Scope)] = &[
     ("hook.failed", Scope::Local),
     ("logs.cleared", Scope::Local),
     ("memory.operation", Scope::Local),
+    ("memory.read_requested", Scope::Local),
     ("message.created", Scope::Session),
     ("message.deleted", Scope::Session),
     ("message.updated", Scope::Session),

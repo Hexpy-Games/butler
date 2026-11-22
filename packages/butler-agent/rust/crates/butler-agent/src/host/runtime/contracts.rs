@@ -62,6 +62,8 @@ pub(crate) struct AgentRuntime {
     pub memory_writes: Arc<butler_memory::cognition::RememberedRuleOwner>,
     pub memory_management: Arc<butler_memory::management::MemoryManagement>,
     pub profile: Arc<butler_memory::profile::ProfileService>,
+    /// Conversation memory readers; the main also answers a computer's reads with them.
+    pub memory_reads: super::MemoryReads,
     pub(super) host: BtccHost,
 }
 

@@ -6,6 +6,10 @@ pub(in crate::gateway::http) async fn route(
     request: Request<Body>,
     client: Client,
 ) -> Result<Response, HttpError> {
+    let main = remote_account::from_main(&state, &request);
+    if main {
+        butler_turn::remote_memory::note_main_contact();
+    }
     if state
         .application
         .data_reset()
@@ -69,7 +73,7 @@ pub(in crate::gateway::http) async fn route(
                 .extensions()
                 .get::<listeners::ListenerScope>()
                 .cloned();
-            get_live_events(state, &uri, scope, &client.keys).await
+            get_live_events(state, &uri, scope, &client.keys, main).await
         }
         _ => commands(handler, state, request, &uri).await,
     }
@@ -121,6 +125,9 @@ async fn commands(
         }
         Handler::RemoteAccount if request.uri().path() == "/remote/memory" => {
             remote_memory::copy(request).await
+        }
+        Handler::RemoteAccount if request.uri().path() == "/remote/memory/answers" => {
+            remote_memory::answer(request).await
         }
         Handler::RemoteAccount if request.uri().path() == "/remote/sessions" => {
             remote_account::create_session(state, request).await

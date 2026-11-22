@@ -220,6 +220,14 @@ impl AppSetupPort for AppSetup {
         Box::pin(async move { memory.copy().await })
     }
 
+    fn computer_memory_read(
+        &self,
+        request: serde_json::Value,
+    ) -> ApplicationFuture<serde_json::Value> {
+        let memory = self.0.computer_memory.clone();
+        Box::pin(async move { memory.read(request).await })
+    }
+
     fn list_credentials(&self) -> ApplicationFuture<CredentialList> {
         let this = self.0.clone();
         Box::pin(async move {
