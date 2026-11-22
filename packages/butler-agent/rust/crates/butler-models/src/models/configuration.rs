@@ -27,6 +27,8 @@ mod local_credentials;
 mod local_image_startup;
 mod logging;
 mod mcp;
+mod mcp_secrets;
+pub use mcp_secrets::McpSecretStore;
 mod mutations;
 mod proactive;
 mod probes;

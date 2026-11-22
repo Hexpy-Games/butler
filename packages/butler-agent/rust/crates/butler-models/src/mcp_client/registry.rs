@@ -1,6 +1,10 @@
 use std::{collections::HashMap, fs, path::Path};
 
+use butler_platform::secrets::SecretBackend;
 use serde_json::Value;
+
+mod views;
+pub(super) use views::{redact_server, server_capability_projection};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum McpTransportKind {
@@ -17,9 +21,10 @@ enum SecretSource {
 }
 
 #[derive(Clone)]
-struct SecretValue {
+pub(super) struct SecretValue {
     source: SecretSource,
-    value: String,
+    pub(super) value: String,
+    pub(super) storage: Option<SecretBackend>,
 }
 
 #[derive(Clone)]
@@ -50,7 +55,9 @@ impl McpServerConfig {
     /// Empty literal slots must be filled before any connection is attempted.
     pub(super) fn needs_secret(&self) -> bool {
         self.env.iter().chain(&self.headers).any(|item| {
-            item.secret.source == SecretSource::Literal && item.secret.value.trim().is_empty()
+            item.secret.source == SecretSource::Literal
+                && item.secret.value.trim().is_empty()
+                && item.secret.storage.is_none()
         })
     }
 }
@@ -92,6 +99,8 @@ pub enum McpRegistryError {
     /// A server's secret file exists but could not be read.
     #[error("MCP secret file could not be read.")]
     SecretUnreadable(#[source] std::io::Error),
+    #[error("MCP secret could not be stored.")]
+    SecretStore(#[source] crate::models::CredentialStoreError),
     /// The blocking registry write panicked or was cancelled.
     #[error("MCP registry write failed.")]
     WriteTask(#[source] tokio::task::JoinError),
@@ -148,6 +157,11 @@ pub(super) fn server_to_value(server: &McpServerConfig) -> Value {
         values
             .iter()
             .map(|item| {
+                if let Some(storage) = item.secret.storage {
+                    return serde_json::json!({
+                        "key": item.key, "source": "literal", "storage": storage.as_str(),
+                    });
+                }
                 serde_json::json!({
                     "key": item.key,
                     "source": match item.secret.source {
@@ -173,87 +187,6 @@ pub(super) fn server_to_value(server: &McpServerConfig) -> Value {
         "args": server.args,
         "env": secret_values(&server.env),
         "headers": secret_values(&server.headers),
-        "created_at": server.created_at,
-        "updated_at": server.updated_at,
-    });
-    if let Some(command) = &server.command {
-        value["command"] = Value::String(command.clone());
-    }
-    if let Some(cwd) = &server.cwd {
-        value["cwd"] = Value::String(cwd.clone());
-    }
-    if let Some(url) = &server.url {
-        value["url"] = Value::String(url.clone());
-    }
-    value
-}
-
-/// Stable server facts used to bind a discovered tool capability without
-/// including secret values in the digest input or exposing them to callers.
-pub(super) fn server_capability_projection(server: &McpServerConfig) -> Value {
-    let secret_sources = |values: &[KeyValueSecret]| {
-        values
-            .iter()
-            .map(|item| {
-                serde_json::json!({
-                    "key": item.key,
-                    "source": match item.secret.source {
-                        SecretSource::Literal => "literal",
-                        SecretSource::Environment => "env",
-                        SecretSource::File => "file",
-                    },
-                })
-            })
-            .collect::<Vec<_>>()
-    };
-    serde_json::json!({
-        "id": server.id,
-        "transport": server.transport.as_str(),
-        "command": server.command,
-        "args": server.args,
-        "cwd": server.cwd,
-        "url": server.url,
-        "env": secret_sources(&server.env),
-        "headers": secret_sources(&server.headers),
-        "updated_at": server.updated_at,
-    })
-}
-
-pub(super) fn redact_server(server: &McpServerConfig) -> Value {
-    let redact = |values: &[KeyValueSecret]| {
-        values
-            .iter()
-            .map(|item| {
-                let mut value = serde_json::json!({
-                    "key": item.key,
-                    "source": match item.secret.source {
-                        SecretSource::Literal => "literal",
-                        SecretSource::Environment => "env",
-                        SecretSource::File => "file",
-                    },
-                    "redacted": item.secret.source == SecretSource::Literal,
-                    "has_value": !item.secret.value.is_empty(),
-                });
-                if item.secret.source != SecretSource::Literal {
-                    value["value"] = Value::String(item.secret.value.clone());
-                }
-                value
-            })
-            .collect::<Vec<_>>()
-    };
-    let mut value = serde_json::json!({
-        "id": server.id,
-        "display_name": server.display_name,
-        "enabled": server.enabled,
-        "tool_filter_review_required": server.tool_filter_review_required,
-        "transport": match server.transport {
-            McpTransportKind::Stdio => "stdio",
-            McpTransportKind::Http => "http",
-            McpTransportKind::Sse => "sse",
-        },
-        "args": server.args,
-        "env": redact(&server.env),
-        "headers": redact(&server.headers),
         "created_at": server.created_at,
         "updated_at": server.updated_at,
     });
@@ -414,6 +347,14 @@ fn normalize_secrets(value: Option<&Value>) -> Vec<KeyValueSecret> {
                 Some("file") => SecretSource::File,
                 _ => SecretSource::Literal,
             };
+            let storage = if source == SecretSource::Literal {
+                item.get("storage")
+                    .and_then(Value::as_str)
+                    .and_then(SecretBackend::from_name)
+            } else {
+                None
+            };
+            let value = if storage.is_some() { "" } else { value };
             // An empty literal is a slot the user still has to fill (an
             // imported server whose secret was not copied); it resolves to
             // nothing; connection waits until all slots are filled.
@@ -425,6 +366,7 @@ fn normalize_secrets(value: Option<&Value>) -> Vec<KeyValueSecret> {
                 secret: SecretValue {
                     source,
                     value: value.to_owned(),
+                    storage,
                 },
             })
         })
@@ -462,4 +404,33 @@ fn string_field<'a>(value: &'a serde_json::Map<String, Value>, key: &str) -> Opt
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
+}
+
+pub(crate) fn stored_secret_refs(
+    data_root: &Path,
+) -> Result<Vec<(String, SecretBackend)>, McpRegistryError> {
+    let mut refs = Vec::new();
+    for mut server in read_registry(data_root)? {
+        refs.extend(
+            literal_slots(&mut server)
+                .filter_map(|(id, secret)| secret.storage.map(|backend| (id, backend))),
+        );
+    }
+    Ok(refs)
+}
+
+pub(super) fn literal_slots(
+    server: &mut McpServerConfig,
+) -> impl Iterator<Item = (String, &mut SecretValue)> {
+    let server_id = &server.id;
+    [("env", &mut server.env), ("headers", &mut server.headers)]
+        .into_iter()
+        .flat_map(|(field, items)| items.iter_mut().map(move |item| (field, item)))
+        .filter(|(_, item)| item.secret.source == SecretSource::Literal)
+        .map(move |(field, item)| {
+            (
+                format!("{server_id}/{field}/{}", item.key),
+                &mut item.secret,
+            )
+        })
 }

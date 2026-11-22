@@ -1,0 +1,117 @@
+//! Typed MCP header/env secrets, kept where model API keys are kept.
+use std::path::{Path, PathBuf};
+
+use butler_platform::secrets::{SYSTEM_BACKEND, SecretBackend, SecretError, SecretKey, SecretText};
+use butler_vault::vault::ItemKind;
+use tokio::task::spawn_blocking;
+
+use super::secret_store::{CredentialStoreError, ProviderSecrets};
+use super::{sealed, secret_store, store_policy::SecretStoreFacts};
+
+pub struct McpSecretStore {
+    root: PathBuf,
+    secrets: ProviderSecrets,
+}
+
+impl McpSecretStore {
+    pub fn new(root: PathBuf) -> Self {
+        let secrets = ProviderSecrets::new(SecretStoreFacts::for_data_root(&root));
+        Self { root, secrets }
+    }
+
+    pub async fn put(&self, id: &str, value: &str) -> Result<SecretBackend, CredentialStoreError> {
+        butler_log::register_secret_for(&format!("mcp:{id}"), value);
+        let vault_id = mcp_vault_id(id);
+        if sealed::is_enabled() {
+            let value = SecretText::new(value.to_owned());
+            spawn_blocking(move || {
+                let mut map = sealed::read_map()?;
+                map.insert(vault_id, value.expose().to_owned());
+                sealed::write_map(&map)
+            })
+            .await
+            .map_err(CredentialStoreError::Interrupted)??;
+            return Ok(SecretBackend::FallbackFile);
+        }
+        if let Some(vault) = self.secrets.vault(&self.root).await? {
+            let value = SecretText::new(value.to_owned());
+            self.secrets
+                .vault_call(move || vault.put(&vault_id, ItemKind::ApiKey, value))
+                .await?;
+            return Ok(SYSTEM_BACKEND);
+        }
+        let target = self.secrets.target(&self.root).await?;
+        let backend = target.store.backend();
+        let key = mcp_store_key(&self.root, backend, id)?;
+        self.secrets.put(&target.store, &key, value).await?;
+        Ok(backend)
+    }
+
+    pub async fn get(
+        &self,
+        id: &str,
+        backend: SecretBackend,
+    ) -> Result<Option<SecretText>, CredentialStoreError> {
+        let vault_id = mcp_vault_id(id);
+        let secret = if sealed::is_enabled() {
+            spawn_blocking(move || Ok(sealed::read_map()?.remove(&vault_id)))
+                .await
+                .map_err(CredentialStoreError::Interrupted)?
+                .map_err(CredentialStoreError::Sealed)?
+                .map(SecretText::new)
+        } else if let Some(vault) = self.secrets.vault(&self.root).await? {
+            self.secrets
+                .vault_call(move || vault.get(&vault_id))
+                .await?
+        } else {
+            let store = self.secrets.holding(&self.root, backend).await?;
+            let key = mcp_store_key(&self.root, backend, id)?;
+            self.secrets.get(&store, &key).await?
+        };
+        if let Some(secret) = &secret {
+            butler_log::register_secret_for(&format!("mcp:{id}"), secret.expose());
+        }
+        Ok(secret)
+    }
+
+    pub async fn remove(
+        &self,
+        id: &str,
+        backend: SecretBackend,
+    ) -> Result<(), CredentialStoreError> {
+        let vault_id = mcp_vault_id(id);
+        if sealed::is_enabled() {
+            spawn_blocking(move || {
+                let mut map = sealed::read_map()?;
+                if map.remove(&vault_id).is_some() {
+                    sealed::write_map(&map)?;
+                }
+                Ok::<_, sealed::SealedError>(())
+            })
+            .await
+            .map_err(CredentialStoreError::Interrupted)??;
+            return Ok(());
+        }
+        if let Some(vault) = self.secrets.vault(&self.root).await? {
+            self.secrets
+                .vault_call(move || vault.delete(&vault_id))
+                .await?;
+        }
+        let store = self.secrets.holding(&self.root, backend).await?;
+        let key = mcp_store_key(&self.root, backend, id)?;
+        self.secrets.remove(&store, &key).await?;
+        Ok(())
+    }
+}
+
+pub(super) fn mcp_store_key(
+    root: &Path,
+    backend: SecretBackend,
+    id: &str,
+) -> Result<SecretKey, SecretError> {
+    secret_store::key(root, backend, "mcp", id)
+}
+
+pub(super) fn mcp_vault_id(id: &str) -> String {
+    format!("mcp/{id}")
+}

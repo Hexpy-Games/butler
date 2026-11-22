@@ -1,4 +1,4 @@
-//! H. MCP servers (SCENARIOS.md MCP-01..03) with the stdio fixture server
+//! H. MCP servers (SCENARIOS.md MCP-01..05) with the stdio fixture server
 //! `src/bin/e2e-mcp-fixture.rs`.
 #![allow(
     clippy::unwrap_used,
@@ -7,6 +7,7 @@
     reason = "test assertions"
 )]
 
+use butler_e2e::e2e::fake_servers::FakeServer;
 use butler_e2e::e2e::gateway::{tool_rows, turn_state};
 use butler_e2e::e2e::scenario::{Scenario, Setup};
 use butler_e2e::e2e::{HarnessError, nonce};
@@ -236,5 +237,69 @@ async fn mcp_04_save_error_codes() -> Result<(), HarnessError> {
             .await?;
     assert_eq!(missing.status, 404);
     assert_eq!(missing.body["error"]["code"], "mcp_server_not_found");
+    s.finish().await
+}
+
+/// MCP-05 — Typed header secrets live in the credential store, not the registry.
+#[tokio::test]
+async fn mcp_05_typed_secrets_leave_the_registry() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mcp = FakeServer::mcp_http().await?;
+    let old = format!("e2e-old-{}", uuid::Uuid::new_v4().simple());
+    let new = format!("e2e-new-{}", uuid::Uuid::new_v4().simple());
+    let setup = Setup::new("MCP-05")?;
+    let registry = setup.sandbox.data.join("config/mcp-servers.json");
+    std::fs::create_dir_all(setup.sandbox.data.join("config"))?;
+    std::fs::write(
+        &registry,
+        serde_json::to_vec(&json!({
+            "version": 1,
+            "servers": [{
+                "id": "legacy", "display_name": "Legacy", "enabled": true, "transport": "http",
+                "url": format!("{}/mcp", mcp.base_url), "args": [], "env": [],
+                "headers": [{"key": "Authorization", "source": "literal", "value": format!("Bearer {old}")}],
+                "created_at": "2026-01-01T00:00:00.000Z", "updated_at": "2026-01-01T00:00:00.000Z"
+            }]
+        }))?,
+    )?;
+    let s = setup.start().await?;
+    assert!(!std::fs::read_to_string(&registry)?.contains(&old));
+    let probed = s.gw.post("/mcp-servers/legacy/probe", json!({})).await?;
+    assert!(
+        probed.body["data"]["servers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|server| server["id"] == "legacy" && server["ok"] == true)
+    );
+    assert!(mcp.seen().iter().any(|request| {
+        request
+            .headers
+            .get("authorization")
+            .and_then(|value| value.to_str().ok())
+            == Some(format!("Bearer {old}").as_str())
+    }));
+    let added = s.gw.post("/mcp-servers", json!({
+        "id": "e2e", "transport": "http", "url": format!("{}/mcp", mcp.base_url),
+        "headers": [{"key": "Authorization", "source": "literal", "value": format!("Bearer {new}")}]
+    })).await?;
+    assert!(added.status < 300);
+    let text = std::fs::read_to_string(&registry)?;
+    assert!(!text.contains(&new) && !text.contains(&old));
+    let probed = s.gw.post("/mcp-servers/e2e/probe", json!({})).await?;
+    assert!(
+        probed.body["data"]["servers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|server| server["id"] == "e2e" && server["ok"] == true)
+    );
+    assert!(mcp.seen().iter().any(|request| {
+        request
+            .headers
+            .get("authorization")
+            .and_then(|value| value.to_str().ok())
+            == Some(format!("Bearer {new}").as_str())
+    }));
     s.finish().await
 }
