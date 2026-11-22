@@ -250,6 +250,7 @@ mod smoke {
             FIRST,
             (320, 240),
             1.,
+            60,
             butler_cef_host::osr::OsrProfile::SignedIn,
         )?;
         // CEF can deliver a transparent first paint before the page body paints.

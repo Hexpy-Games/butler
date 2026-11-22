@@ -15,8 +15,8 @@ use futures::{
     channel::mpsc,
     future::{Either, select},
 };
-use gpui::BorrowAppContext as _;
 use gpui::{AnyElement, App, Window};
+use gpui::{AppContext as _, BorrowAppContext as _};
 use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
@@ -36,6 +36,7 @@ impl OsrSink for Sink {
 
 pub(crate) struct CefEngine {
     runtime: Rc<OsrRuntime>,
+    rate: Rc<Cell<u32>>,
     pages: Pages,
     ids: HashMap<TabId, u64>,
     shown: Rc<Cell<Option<u64>>>,
@@ -71,6 +72,7 @@ impl CefEngine {
         Self::schedule(&runtime, requests, cx);
         Ok(Self {
             runtime,
+            rate: Rc::new(Cell::new(60)),
             pages,
             ids: HashMap::new(),
             shown,
@@ -89,7 +91,10 @@ impl CefEngine {
         let Some(profile) = self.pending.get(&id) else {
             return;
         };
-        match self.runtime.open(id, url, (1, 1), 1., profile.clone()) {
+        match self
+            .runtime
+            .open(id, url, (1, 1), 1., self.rate.get(), profile.clone())
+        {
             Ok(()) => {
                 self.pending.remove(&id);
                 self.runtime.set_visible(id, self.visible(id));
@@ -130,6 +135,7 @@ impl CefEngine {
                     continue;
                 }
                 // Opening a window can render the opener synchronously. Release its state first.
+                let redraw = matches!(event, OsrEvent::Frame | OsrEvent::Cursor(_));
                 let change = change::change(event, &mut state.borrow_mut());
                 if let Some(change) = change {
                     let event = PageEvent { page: tab, change };
@@ -145,8 +151,13 @@ impl CefEngine {
                     } else {
                         let _ = events.unbounded_send(event);
                     }
-                } else {
-                    cx.update(App::refresh_windows);
+                } else if redraw {
+                    let views = state.borrow().views.clone();
+                    cx.update(|cx| {
+                        for id in views {
+                            cx.notify(id);
+                        }
+                    });
                 }
             }
         })
@@ -255,6 +266,7 @@ impl PageEngine for CefEngine {
                 page.clone(),
                 Rc::new(RefCell::new(PageState {
                     tab: Some(page.clone()),
+                    rate: self.rate.clone(),
                     last_input: self.gate.borrow().pages[&id].last_input.clone(),
                     ..PageState::default()
                 })),
@@ -288,6 +300,7 @@ impl PageEngine for CefEngine {
                 page.clone(),
                 Rc::new(RefCell::new(PageState {
                     tab: Some(page.clone()),
+                    rate: self.rate.clone(),
                     last_input: input,
                     ..PageState::default()
                 })),
@@ -423,11 +436,12 @@ impl PageEngine for CefEngine {
         let state = self.pages.borrow().get(&id)?.1.clone();
         Some(surface::element(id, &self.runtime, state, window, cx))
     }
-    fn thumbnail(&self, page: &TabId, window: &mut Window) -> Option<AnyElement> {
+    fn thumbnail(&self, page: &TabId, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
         let id = *self.ids.get(page)?;
         if self.pending.contains_key(&id) {
             return None;
         }
-        surface::thumbnail(&self.runtime, id, window)
+        let state = self.pages.borrow().get(&id)?.1.clone();
+        Some(surface::thumbnail(id, &self.runtime, state, window, cx))
     }
 }
