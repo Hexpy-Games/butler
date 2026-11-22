@@ -5,6 +5,7 @@ import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import type { Pairing } from "@/connection/pairings";
 import { useConversation } from "@/conversation/live";
 import { frameFit, imageAspect } from "@/conversation/imageOutputs";
+import { WorkResultRow } from "@/conversation/WorkResultRow";
 import { ImageFrame, ListGroup, useTokens } from "@/ds";
 import { TILE_RADIUS } from "@/ds/AttachmentTiles";
 import { AnimatedPressable, usePress } from "@/ds/internal/press";
@@ -19,7 +20,8 @@ export function MessageResults({ message }: { message: ConversationMessage }) {
   const t = useTokens();
   if (!pairing) return null;
   const results = messageResults(message);
-  if (!results.length) return null;
+  const work = (message.initiated?.kind === "work_result" || message.initiated?.kind === "work_failed") && message.initiated.work_session_id ? message.initiated : undefined;
+  if (!results.length && !work) return null;
   const images = results.filter(a => artifactTarget(a)?.kind === "image");
   const files = results.filter(a => artifactTarget(a)?.kind !== "image");
   return <>
@@ -30,7 +32,10 @@ export function MessageResults({ message }: { message: ConversationMessage }) {
           pairing={pairing} width={file?.width ?? 0} height={file?.height ?? 0} />;
       })}
     </View> : null}
-    {files.length ? <ListGroup>{files.map(a => <ResultRow key={a.id} artifact={a} />)}</ListGroup> : null}
+    {files.length || work ? <ListGroup>
+      {files.map(a => <ResultRow key={a.id} artifact={a} />)}
+      {work ? <WorkResultRow sessionId={work.work_session_id!} title={work.work_title ?? ""} /> : null}
+    </ListGroup> : null}
   </>;
 }
 
