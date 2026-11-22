@@ -11,7 +11,7 @@ import { LoadState, SettingsScreen } from "@/settings/layout";
 export default function Automation() {
   const params = useLocalSearchParams<{ id: string; title: string }>();
   const locale = useAppLocale(), app = getAppCopy(locale), copy = app.automations, M = useMobileCopy();
-  const { automation: a, runs, error, busy, load, act, remove } = useAutomation(params.id);
+  const { automation: a, runs, error, busy, deleting: deletePending, load, act, remove } = useAutomation(params.id);
   const [deleting, setDeleting] = useState(false);
   const now = new Date(), next = a ? nextRunTime(a, locale) : "";
   return <SettingsScreen title={a?.title ?? params.title}>
@@ -30,14 +30,14 @@ export default function Automation() {
           : <ListRow icon={icons.Retry} accent title={copy.resume} onPress={() => void act("resume")} />}
       </ListGroup>
       <ListGroup><ListRow icon={icons.Delete} destructive title={app.common.delete} onPress={() => setDeleting(true)} /></ListGroup>
-      <Sheet open={deleting} onClose={() => setDeleting(false)} title={app.common.delete}
-        description={app.settings.deleteSchedule(a.title)} cancelLabel={M.settings.cancel}
-        action={<Button variant="destructive" label={app.common.delete} onPress={async () => { if (await remove()) router.back(); }} />} />
       <ListGroup label={copy.fields.runs}>
         {runs.length ? runs.map(run => <ListRow key={run.id} title={runLabel(run, copy.runs)} meta={timeLabel(run.started_at, locale, now)}
           navigates={!!run.turn_id} onPress={run.turn_id ? () => router.push({ pathname: "/chat/[id]", params: { id: run.target_session_id, title: a.target_label } }) : undefined} />)
           : <ListGroupItem><Text variant="caption">{copy.runs.empty}</Text></ListGroupItem>}
       </ListGroup>
+      <Sheet open={deleting} onClose={() => setDeleting(false)} title={app.common.delete}
+        description={app.settings.deleteSchedule(a.title)} cancelLabel={M.settings.cancel}
+        action={<Button variant="destructive" label={app.common.delete} disabled={deletePending} onPress={async () => { if (await remove()) router.back(); }} />} />
     </>}
   </SettingsScreen>;
 }

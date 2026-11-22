@@ -12,6 +12,7 @@ export function useAutomation(id: string) {
   const [automation, setAutomation] = useState<AutomationSummary | null>(null);
   const [runs, setRuns] = useState<AutomationRunSummary[]>([]);
   const [error, setError] = useState(false), [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const path = `/automations/${encodeURIComponent(id)}`;
   const load = useCallback(async () => {
     setError(false);
@@ -34,8 +35,10 @@ export function useAutomation(id: string) {
     setBusy(false);
   };
   const remove = async (): Promise<boolean> => {
+    setDeleting(true);
     try { await client!.request(path, { method: "DELETE" }); return true; }
     catch { showToast({ message: M.automations.deleteFailed, tone: "error" }); return false; }
+    finally { setDeleting(false); }
   };
-  return { automation, runs, error, busy, load, act, remove };
+  return { automation, runs, error, busy, deleting, load, act, remove };
 }

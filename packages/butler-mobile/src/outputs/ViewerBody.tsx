@@ -1,5 +1,5 @@
 import { ScrollView, View } from "react-native";
-import { WebView } from "react-native-webview";
+import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { CodeBlock, Markdown, Spinner, Text, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
@@ -17,7 +17,7 @@ export function ViewerBody({ target }: { target: Exclude<ResultTarget, { kind: "
   </ScrollView>;
   if (content.status === "web" || content.status === "html") return <WebView source={content.status === "html" ? { html: content.html } : content.source}
     originWhitelist={content.status === "html" ? ["*"] : undefined}
-    onMessage={(e) => e.nativeEvent.data === "pdf_failed" && setFailed()} style={{ flex: 1, backgroundColor: t.color("--color-surface-base") }}
+    onMessage={content.status === "html" ? (e: WebViewMessageEvent) => e.nativeEvent.data === "pdf_failed" && setFailed() : undefined} style={{ flex: 1, backgroundColor: t.color("--color-surface-base") }}
     contentInsetAdjustmentBehavior="automatic" startInLoadingState renderLoading={() => <Spinner label={S.sectionState.loading} />} />;
   return <View style={{ padding: gutter }}><Text tone="secondary">{M.outputs.unsupported}</Text></View>;
 }

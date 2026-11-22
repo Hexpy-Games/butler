@@ -1,4 +1,3 @@
-import { HomeShortcuts } from "@/conversation/HomeShortcuts";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Animated, FlatList, LayoutAnimation, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,6 +14,7 @@ import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useReducedMotion } from "@/ds/internal/motion";
 
 import { HomeHeader, HOME_HEADER_ROW } from "@/conversation/HomeHeader";
+import { HomeShortcuts } from "@/conversation/HomeShortcuts";
 import { NewConversationSheet } from "@/conversation/NewConversationSheet";
 import { RowActions } from "@/conversation/RowActions";
 import { useConversation } from "@/conversation/live";

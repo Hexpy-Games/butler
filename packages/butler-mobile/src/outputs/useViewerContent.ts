@@ -45,7 +45,7 @@ export function useViewerContent(target: Exclude<ResultTarget, { kind: "image" }
       if (mode === "pdf") {
         const s = fileSource(pairing!, path);
         if (Platform.OS === "ios") return { status: "web", source: s };
-        const file = await File.downloadFileAsync(s.uri, new File(Paths.cache, name!), { headers: s.headers, idempotent: true });
+        const file = await File.downloadFileAsync(s.uri, new File(Paths.cache, name!.split("/").pop() || name!), { headers: s.headers, idempotent: true });
         let data: string;
         try { data = await file.base64(); } finally { file.delete(); }
         return { status: "html", html: pdfPage({ ...(await loadPdfjs()), data, background }) };

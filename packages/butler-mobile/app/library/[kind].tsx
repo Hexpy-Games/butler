@@ -30,7 +30,7 @@ export default function LibraryItems() {
     } }} />
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: gutter, paddingBottom: gutter + (Platform.OS === "android" ? insets.bottom : 0), gap: t.length("--space-6") }}>
       <ListGroup>
-        {failed ? <LoadState error onRetry={reload} /> : loading && !items.length ? <LoadState error={false} onRetry={reload} /> : <>
+        {failed && !items.length ? <LoadState error onRetry={reload} /> : loading && !items.length ? <LoadState error={false} onRetry={reload} /> : <>
           {items.map(item => {
             const target = libraryTarget(item);
             return <ListRow key={item.id} icon={kindIcons[kind]} title={item.title} description={libraryMeta(item, locale)} descriptionLines={1}
