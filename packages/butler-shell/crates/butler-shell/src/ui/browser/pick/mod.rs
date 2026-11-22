@@ -13,7 +13,9 @@ use super::{
 };
 pub(crate) use copy::words;
 use gpui::App;
-pub(crate) use input::{Mouse, hover, mouse, step, wheel};
+pub(crate) use input::step;
+#[cfg(feature = "cef")]
+pub(crate) use input::{Mouse, mouse, wheel};
 use serde_json::Value;
 use serde_json::json;
 use std::{
@@ -118,7 +120,7 @@ fn changed(id: &TabId, cx: &mut App) {
     follow::sync(id, cx);
     cx.refresh_windows();
 }
-/// Electron `navigated`: a new document drops the isolated worlds; a new main document clears the picks.
+/// Electron `navigated`: a new main document drops the worlds and the picks; a sub-frame's drops only its own state.
 pub(crate) fn page_event(event: &PageEvent, cx: &mut App) {
     let PageChange::DevToolsEvent { method, params } = &event.change else {
         return;
@@ -128,10 +130,19 @@ pub(crate) fn page_event(event: &PageEvent, cx: &mut App) {
         "Page.navigatedWithinDocument" => false,
         _ => return,
     };
+    let subframe = document && params["frame"].get("parentId").is_some();
     let model = cx.global_mut::<BrowserState>();
     let Some(tab) = model.tabs.iter_mut().find(|t| t.id == event.page) else {
         return;
     };
+    if subframe {
+        let session = tab.pick.clone();
+        session.worlds.borrow_mut().retain(|path, _| path.is_empty());
+        session.frames.borrow_mut().retain(|path, _| path.is_empty());
+        session.watches.borrow_mut().retain(|path, _| path.is_empty());
+        follow::sync(&event.page, cx);
+        return;
+    }
     tab.pick_hover = None;
     let session = tab.pick.clone();
     session.preferred.borrow_mut().take();
@@ -142,9 +153,7 @@ pub(crate) fn page_event(event: &PageEvent, cx: &mut App) {
         session.watches.borrow_mut().clear();
         session.down.borrow_mut().take();
         session.generation.set(session.generation.get() + 1);
-        if params["frame"].get("parentId").is_none() {
-            tab.selections.clear();
-        }
+        tab.selections.clear();
     }
     model.publisher.changed(&model.tabs);
     follow::sync(&event.page, cx);

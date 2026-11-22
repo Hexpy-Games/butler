@@ -220,7 +220,7 @@ pub(crate) fn step(id: &TabId, wider: bool, cx: &mut App) {
         return;
     };
     let new = if wider {
-        (hover.index + 1).min(hover.levels.len() - 1)
+        (hover.index + 1).min(hover.levels.len().saturating_sub(1))
     } else {
         hover.index.saturating_sub(1)
     };
