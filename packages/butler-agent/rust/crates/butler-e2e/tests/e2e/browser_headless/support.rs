@@ -17,8 +17,8 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use std::{path::PathBuf, time::Duration};
 
-mod host;
-pub(crate) use host::{Pending, shell};
+pub(super) mod host;
+pub(crate) use host::{setup, shell};
 
 /// `BUTLER_E2E_BROWSER_BACKEND`: `headless` is Chrome for Testing (the first run downloads it),
 /// `hidden-app` the Electron named by `BUTLER_E2E_ELECTRON`, `cef` the staged host named by
@@ -87,10 +87,6 @@ pub(crate) fn cache() -> PathBuf {
         || std::env::temp_dir().join("butler-e2e-chrome-for-testing"),
         PathBuf::from,
     )
-}
-
-pub(crate) fn setup(id: &str) -> Result<Pending, HarnessError> {
-    configured(id).map(Pending::new)
 }
 
 fn configured(id: &str) -> Result<Setup, HarnessError> {
