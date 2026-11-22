@@ -15,8 +15,8 @@ export function faviconSrc(href: string): string | undefined {
 
 /** A browser page's icon as the renderer can load it. The page's own icon URL is refused by
  * the app renderer CSP (img-src allows local origins only), so a page that lists an icon shows
- * its site icon through the same-origin proxy. A local page has no proxy and keeps its own URL,
- * which the CSP allows. No icon listed: undefined (the globe). */
+ * its site icon through the same-origin proxy. A page the proxy does not serve keeps its own URL,
+ * which loads only from 127.0.0.1 or localhost. No icon listed: undefined (the globe). */
 export function pageIconSrc(favicon: string, pageUrl: string): string | undefined {
   if (!favicon) return undefined;
   return faviconSrc(pageUrl) ?? favicon;
