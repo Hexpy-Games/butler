@@ -7,11 +7,10 @@ export function pdfPage({ lib, worker, data, background }: { lib: string; worker
 #pages { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
 canvas { display: block; width: 100%; }</style>
 </head><body><div id="pages"></div>
-<script id="worker" type="text/plain">${inline(worker)}</script>
+<script type="module">${inline(worker)}</script>
 <script type="module">${inline(lib)}
 try {
-  const { getDocument, GlobalWorkerOptions } = globalThis.pdfjsLib;
-  GlobalWorkerOptions.workerPort = new Worker(URL.createObjectURL(new Blob([document.getElementById("worker").textContent], { type: "text/javascript" })), { type: "module" });
+  const { getDocument } = globalThis.pdfjsLib;
   const pdf = await getDocument({ data: Uint8Array.from(atob(${inline(JSON.stringify(data))}), (c) => c.charCodeAt(0)) }).promise;
   const observer = new IntersectionObserver(async (entries) => {
     try {

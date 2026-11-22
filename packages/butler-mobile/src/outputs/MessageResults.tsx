@@ -1,4 +1,5 @@
-import { View } from "react-native";
+import { useEffect, useState } from "react";
+import { Image, View } from "react-native";
 import type { ConversationMessage } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import type { Pairing } from "@/connection/pairings";
@@ -36,9 +37,20 @@ export function MessageResults({ message }: { message: ConversationMessage }) {
 function ImageTile({ target, pairing, width, height }: { target: Extract<ResultTarget, { kind: "image" }>; pairing: Pairing; width: number; height: number }) {
   const app = getAppCopy(useAppLocale()), M = useMobileCopy();
   const t = useTokens(), press = usePress({ scale: true });
+  const source = fileSource(pairing, target.path);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    let closed = false;
+    setSize(null);
+    if (!width || !height) {
+      void Image.getSizeWithHeaders(source.uri, source.headers).then(value => { if (!closed) setSize(value); }).catch(() => {});
+    }
+    return () => { closed = true; };
+  }, [source.uri]);
+  const dimensions = width && height ? { width, height } : size ?? { width, height };
   return <AnimatedPressable accessibilityRole="button" accessibilityLabel={app.conversation.imageViewer.viewImage(target.title)} {...press.handlers}
     onPress={() => openResult(target, pairing, M.outputs.loadFailed)} style={[press.scaleStyle, { opacity: press.opacity, borderRadius: TILE_RADIUS,
       boxShadow: press.focused ? t.shadow("--focus-ring") : undefined }]}>
-    <ImageFrame source={fileSource(pairing, target.path)} aspect={imageAspect(width, height)} fit={frameFit(width, height)} />
+    <ImageFrame source={source} aspect={imageAspect(dimensions.width, dimensions.height)} fit={frameFit(dimensions.width, dimensions.height)} />
   </AnimatedPressable>;
 }
