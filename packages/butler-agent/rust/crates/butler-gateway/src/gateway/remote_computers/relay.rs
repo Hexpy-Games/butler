@@ -89,7 +89,7 @@ pub(super) async fn send(
         .map_err(|_| unavailable())
 }
 
-fn unavailable() -> HttpError {
+pub(super) fn unavailable() -> HttpError {
     remote_error(
         "remote_unavailable",
         "This computer's Butler is not running.",

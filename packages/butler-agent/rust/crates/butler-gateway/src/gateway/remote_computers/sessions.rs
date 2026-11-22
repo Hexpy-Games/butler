@@ -1,5 +1,8 @@
 //! Conversations that run on a registered computer, reached only through its socket.
-use super::{AppSetupPort, Computer, HttpError, connect, list, locked, relay, remote_error};
+use super::{
+    AppSetupPort, Computer, HttpError, connect, list, locked, relay, remote_error,
+    streams::{self, Opened, RemoteStream},
+};
 use serde_json::json;
 use std::{path::PathBuf, sync::Arc};
 use tokio_util::sync::CancellationToken;
@@ -41,6 +44,32 @@ pub(in crate::gateway) async fn forward(
         ));
     }
     Ok(reply)
+}
+
+pub(in crate::gateway) async fn open_stream(
+    link: &Link,
+    computer_id: &str,
+    path: &str,
+) -> Result<RemoteStream, HttpError> {
+    let computer = find(link, computer_id).await?;
+    match streams::open(&computer, path, link.cancel.clone()).await? {
+        Opened::Stream(stream) => Ok(*stream),
+        Opened::NotRunning => {
+            let (_lock, computer) = locked(&link.root, &computer.id).await?;
+            connect(
+                &link.setup,
+                &link.root,
+                &link.version,
+                &computer,
+                link.cancel.clone(),
+            )
+            .await?;
+            match streams::open(&computer, path, link.cancel.clone()).await? {
+                Opened::Stream(stream) => Ok(*stream),
+                Opened::NotRunning => Err(relay::unavailable()),
+            }
+        }
+    }
 }
 
 async fn send(

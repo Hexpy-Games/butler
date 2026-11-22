@@ -3,7 +3,14 @@ use crate::{
     command_sandbox::{self, CommandOutputDecoder},
     process_control::{self, GroupSignal},
 };
-use std::{collections::HashMap, path::PathBuf, process::Stdio, time::Duration};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    pin::Pin,
+    process::Stdio,
+    task::{Context, Poll},
+    time::Duration,
+};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 /// Bound of each stream a handler's decision is read from.
@@ -149,6 +156,84 @@ pub async fn run(
     drop(tree); // Successful handlers cannot leave background descendants either.
     result
 }
+/// A contained tree whose stdout is read as it arrives; dropping it kills the tree.
+pub struct StreamingProcess {
+    stdout: tokio::process::ChildStdout,
+    child: tokio::process::Child,
+    stderr: tokio::task::JoinHandle<String>,
+    _tree: Tree,
+}
+
+/// Starts one contained tree whose stdout the caller reads; stdin is written and closed in the background.
+pub async fn spawn_streaming(
+    args: Vec<String>,
+    environment: HashMap<String, String>,
+    cwd: PathBuf,
+    stdin: Vec<u8>,
+) -> Result<StreamingProcess, HookProcessError> {
+    let input = HookProcess {
+        command: None,
+        args: Some(args),
+        environment,
+        cwd,
+        stdin,
+        stdin_file: None,
+        timeout: Duration::ZERO,
+        stdout_limit: 0,
+    };
+    let (command, payload) =
+        tokio::task::spawn_blocking(move || prepare(&input).map(|command| (command, input.stdin)))
+            .await
+            .map_err(error)??;
+    let mut child = tokio::process::Command::from(command)
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(error)?;
+    let pid = child.id().ok_or_else(|| error("Missing process id"))?;
+    let tree = Tree(pid);
+    if let Err(e) = process_control::contain(&child) {
+        let _ = child.kill().await;
+        return Err(error(e));
+    }
+    let stdin = child.stdin.take().ok_or_else(|| error("Missing stdin"))?;
+    let stdout = child.stdout.take().ok_or_else(|| error("Missing stdout"))?;
+    let stderr = child.stderr.take().ok_or_else(|| error("Missing stderr"))?;
+    tokio::spawn(write_stdin(stdin, payload, None));
+    let stderr =
+        tokio::spawn(async move { read(stderr, false, OUTPUT_LIMIT).await.unwrap_or_default() });
+    Ok(StreamingProcess {
+        stdout,
+        child,
+        stderr,
+        _tree: tree,
+    })
+}
+
+impl StreamingProcess {
+    /// Waits up to 10 s for the exit and returns its code and stderr; stdout is empty.
+    pub async fn finish(mut self) -> Result<HookOutput, HookProcessError> {
+        let status = tokio::time::timeout(Duration::from_secs(10), self.child.wait())
+            .await
+            .map_err(|_| HookProcessError::Timeout)?
+            .map_err(error)?;
+        Ok(HookOutput {
+            exit_code: status.code(),
+            stdout: String::new(),
+            stderr: self.stderr.await.unwrap_or_default(),
+        })
+    }
+}
+
+impl AsyncRead for StreamingProcess {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.get_mut().stdout).poll_read(cx, buf)
+    }
+}
+
 async fn write_stdin(
     mut stdin: tokio::process::ChildStdin,
     payload: Vec<u8>,

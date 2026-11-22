@@ -4,9 +4,11 @@ mod forward;
 mod relay;
 mod sessions;
 pub(super) use relay::{Reply, data};
-pub(super) use sessions::{Link, create_session, forward};
+pub(super) use sessions::{Link, create_session, forward, open_stream};
 mod ssh;
 mod store;
+mod streams;
+pub(super) use streams::RemoteStream;
 
 use super::{AppSetupPort, SavedProviderKey, http::HttpError};
 use butler_platform::secrets::ChangeLock;

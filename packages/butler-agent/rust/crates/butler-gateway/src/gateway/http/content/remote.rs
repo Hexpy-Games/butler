@@ -128,26 +128,18 @@ pub(super) async fn serve(
         if revision != 0 || path != "index.html" {
             return Err(refused());
         }
-        let reply = remote_computers::forward(
-            &link(state)?,
-            computer,
-            "GET",
-            &format!("/message-files/{id}"),
-            Vec::new(),
-        )
-        .await?;
-        if reply.status != 200
-            || !reply
+        let stream =
+            remote_computers::open_stream(&link(state)?, computer, &format!("/message-files/{id}"))
+                .await?;
+        if stream.status != 200
+            || !stream
                 .headers
                 .get("content-type")
                 .is_some_and(|v| v.starts_with("text/html"))
         {
             return Err(refused());
         }
-        let bytes = STANDARD
-            .decode(reply.bytes.unwrap_or_default())
-            .map_err(|_| HttpError::Internal)?;
-        let mut response = Response::new(Body::from(bytes));
+        let mut response = Response::new(stream.into_body());
         response.extensions_mut().insert(message_file::Preview);
         response.headers_mut().insert(
             header::CONTENT_TYPE,

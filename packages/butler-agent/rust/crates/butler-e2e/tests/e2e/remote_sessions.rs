@@ -253,7 +253,7 @@ async fn remote_output_and_html_file_open_on_the_main() -> Result<(), HarnessErr
         call("index","write_file",&json!({"path":"site/index.html","content":"<h1>remote-output</h1>","create_parents":true})),
         call("big","run_command",&json!({"command":"head -c 4194304 /dev/zero | tr -c a a > site/big.txt","summary":"Make a large file"})),
         call("publish","output_publish",&json!({"path":"site","entry":"index.html","title":"Remote site"})),
-        call("report","write_file",&json!({"path":"report.html","content":"<p>remote-report</p>"})),
+        call("report","run_command",&json!({"command":"printf '<p>remote-report</p>' > report.html && head -c 5242880 /dev/zero | tr -c a a >> report.html","summary":"Make a large report"})),
         call("deliver","deliver_files",&json!({"files":[{"path":"report.html","title":"Report"}]})),
     ])]);
     let turn = d.s.gw.say_turn(&chat, PROMPT).await?;
@@ -314,19 +314,27 @@ async fn remote_output_and_html_file_open_on_the_main() -> Result<(), HarnessErr
         file.headers()["content-security-policy"],
         "sandbox; default-src 'none'"
     );
-    assert!(file.text().await?.contains("remote-report"));
+    let bytes = file.bytes().await?;
+    assert_eq!(bytes.len(), 5_242_900);
+    assert!(bytes.starts_with(b"<p>remote-report</p>"));
     let view =
         d.s.gw
             .get(&format!("/message-files/{fid}/view?session_id={chat}"))
             .await?;
     assert_eq!(view.status, 200, "{view:?}");
-    assert!(
-        reqwest::get(view.data()["url"].as_str().unwrap())
-            .await?
-            .text()
-            .await?
-            .contains("remote-report")
-    );
+    let bytes = reqwest::get(view.data()["url"].as_str().unwrap())
+        .await?
+        .bytes()
+        .await?;
+    assert_eq!(bytes.len(), 5_242_900);
+    assert!(bytes.starts_with(b"<p>remote-report</p>"));
+    let export =
+        d.s.gw
+            .get(&format!("/transcript-export?session_id={chat}"))
+            .await?;
+    assert_eq!(export.status, 200, "{export:?}");
+    assert_eq!(export.data()["session_id"], chat);
+    assert!(export.data()["message_count"].as_u64() >= Some(1));
     let Deployed {
         s,
         remote,

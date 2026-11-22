@@ -3,14 +3,14 @@ use super::{
     Body, HttpError, HttpState, MAX_REQUEST_BODY_SIZE, Method, Request, Response, StatusCode, Uri,
     content, json, query, read_body_with_limit, router::Handler,
 };
-use crate::gateway::remote_computers;
+use crate::gateway::remote_computers::{self, RemoteStream};
 use axum::{
     body::Bytes,
-    http::{HeaderValue, header, request::Parts},
+    http::{HeaderMap, HeaderValue, header, request::Parts},
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::Value;
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 pub(super) enum Routed {
     Here(Request<Body>),
@@ -66,14 +66,19 @@ pub(super) async fn route(
     if let Some(response) = remote_view(state, handler, &parts, &computer).await? {
         return Ok(Routed::Answered(response));
     }
+    let path = parts
+        .uri
+        .path_and_query()
+        .map_or(parts.uri.path(), |p| p.as_str());
+    if parts.method == Method::GET && streamed(handler) {
+        let stream = remote_computers::open_stream(&link(state)?, &computer, path).await?;
+        return Ok(Routed::Answered(streamed_response(stream)?));
+    }
     let reply = remote_computers::forward(
         &link(state)?,
         &computer,
         parts.method.as_str(),
-        parts
-            .uri
-            .path_and_query()
-            .map_or(parts.uri.path(), |p| p.as_str()),
+        path,
         bytes.to_vec(),
     )
     .await?;
@@ -114,14 +119,33 @@ fn forwarded_response(reply: remote_computers::Reply) -> Result<Response, HttpEr
     let bytes = STANDARD.decode(bytes).map_err(|_| HttpError::Internal)?;
     let mut response = Response::new(Body::from(bytes));
     *response.status_mut() = status;
-    let headers = response.headers_mut();
+    content_headers(response.headers_mut(), &reply.headers);
+    Ok(response)
+}
+
+fn streamed_response(stream: RemoteStream) -> Result<Response, HttpError> {
+    if stream.status == 401 {
+        return Err(HttpError::public(
+            422,
+            "remote_request_failed",
+            "The computer refused the request.",
+        ));
+    }
+    let status = StatusCode::from_u16(stream.status).map_err(|_| HttpError::Internal)?;
+    let headers = stream.headers.clone();
+    let mut response = Response::new(stream.into_body());
+    *response.status_mut() = status;
+    content_headers(response.headers_mut(), &headers);
+    Ok(response)
+}
+
+fn content_headers(headers: &mut HeaderMap, remote: &BTreeMap<String, String>) {
     for name in [
         header::CONTENT_TYPE,
         header::CONTENT_DISPOSITION,
         header::CACHE_CONTROL,
     ] {
-        if let Some(value) = reply
-            .headers
+        if let Some(value) = remote
             .get(name.as_str())
             .and_then(|v| HeaderValue::from_str(v).ok())
         {
@@ -142,7 +166,10 @@ fn forwarded_response(reply: remote_computers::Reply) -> Result<Response, HttpEr
             HeaderValue::from_static("sandbox; default-src 'none'"),
         );
     }
-    Ok(response)
+}
+
+fn streamed(handler: Handler) -> bool {
+    matches!(handler, Handler::MessageFiles | Handler::TranscriptExport)
 }
 
 fn forwarded(handler: Handler) -> bool {
