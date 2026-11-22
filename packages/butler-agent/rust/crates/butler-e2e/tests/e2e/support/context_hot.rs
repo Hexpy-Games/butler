@@ -8,7 +8,7 @@ pub(super) fn seed(data: &std::path::Path) -> Result<(), HarnessError> {
     let graph = super::memory_fixture::initialize_empty(data)?;
     let db = super::sql(rusqlite::Connection::open(graph))?;
     let now = "2026-09-26T00:00:00Z";
-    let text = "Remember the accepted garden palette and preserve the blue iris beds.\n".repeat(80);
+    let text = "Remember the accepted garden palette and preserve the blue iris beds.\n".repeat(50);
     let hash = format!("{:x}", Sha256::digest(text.as_bytes()));
     let rules = data.join("cognition/memory/rules");
     std::fs::create_dir_all(&rules)?;

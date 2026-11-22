@@ -3,7 +3,10 @@
 use super::receipt::ExclusionReason;
 use crate::cognition::{CognitionCode, CognitionError};
 use butler_core::public_text::fixed_regex;
-use std::{collections::HashSet, sync::OnceLock};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::OnceLock,
+};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -16,8 +19,8 @@ use blocks::{
     safe_marker_id, scan_semantic_blocks, serialize_blocks, validate_candidate,
 };
 
-/// Bytes of entry summaries, the text the model reads.
-const RECENT_TEXT_BYTES: usize = 4 * 1024;
+/// Bytes of entry summaries, the text the model reads, per scope (global, or one project).
+pub(in crate::cognition) const RECENT_TEXT_BYTES: usize = 4 * 1024;
 const MAX_ENTRY_BODY_UTF16: usize = 8_000;
 const SEMANTIC_PREFIX: &str = "<!-- butler-semantic:";
 const STRUCTURED_PREFIX: &str = "<!-- butler-hot-cache-entry:v2\n";
@@ -238,21 +241,22 @@ fn admit_within_budget(valid: Vec<ParsedBlock>) -> Admitted {
         ids: HashSet::new(),
         excluded: Vec::new(),
     };
-    let mut bytes = 0;
+    let mut bytes: HashMap<Option<String>, usize> = HashMap::new();
     for block in valid {
         let single_bytes = block.entry.summary.len();
+        let scope_bytes = bytes.entry(block.entry.project).or_default();
         if single_bytes > RECENT_TEXT_BYTES {
             admitted.excluded.push(ExcludedEntry {
                 id: block.entry.entry_id,
                 reason: ExclusionReason::Oversized,
             });
-        } else if bytes + single_bytes > RECENT_TEXT_BYTES {
+        } else if *scope_bytes + single_bytes > RECENT_TEXT_BYTES {
             admitted.excluded.push(ExcludedEntry {
                 id: block.entry.entry_id,
                 reason: ExclusionReason::Budget,
             });
         } else {
-            bytes += single_bytes;
+            *scope_bytes += single_bytes;
             admitted.ids.insert(block.entry.entry_id);
             admitted.blocks.push(block.body);
         }

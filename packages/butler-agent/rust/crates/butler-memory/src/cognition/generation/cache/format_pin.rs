@@ -56,7 +56,11 @@ fn scenarios(render_with: &Render) -> Vec<(String, Value, Vec<&'static str>)> {
         )
     };
     let block = |value: &Value| {
-        let rendered = render_with("", value, &["a", "b", "expired", "l1", "l2", "l3", "l4"]);
+        let rendered = render_with(
+            "",
+            value,
+            &["a", "b", "expired", "l1", "l2", "l3", "l4", "g"],
+        );
         rendered["body"].as_str().unwrap().to_owned()
     };
     let with_blocks = format!(
@@ -69,12 +73,17 @@ fn scenarios(render_with: &Render) -> Vec<(String, Value, Vec<&'static str>)> {
         budget.push_str(&block(&large(id)));
         budget.push('\n');
     }
+    let mut g = large("g");
+    g["scope"] = json!("global");
+    g["project_id"] = Value::Null;
+    g["source_time"] = json!("2026-01-03T00:00:00.000Z");
     vec![
         (String::new(), a.clone(), vec!["a"]),
         (with_blocks.clone(), a.clone(), vec!["a", "b", "expired"]),
         (with_blocks, a.clone(), vec!["a"]),
         (block(&a), a.clone(), vec!["a"]),
-        (budget, large("l4"), vec!["l1", "l2", "l3", "l4"]),
+        (budget.clone(), large("l4"), vec!["l1", "l2", "l3", "l4"]),
+        (budget, g, vec!["l1", "l2", "l3", "g"]),
     ]
 }
 

@@ -12,6 +12,7 @@ pub(super) struct ParsedEntry {
     pub(super) source_time: String,
     pub(super) valid_until: Option<String>,
     pub(super) summary: String,
+    pub(super) project: Option<String>,
 }
 
 pub(super) struct SemanticBlock {
@@ -53,6 +54,10 @@ pub(super) fn parse_structured_entry(block: &str) -> Option<ParsedEntry> {
         source_time: String,
         #[serde(default, deserialize_with = "crate::lenient::option")]
         valid_until: Option<String>,
+        #[serde(default)]
+        scope: String,
+        #[serde(default, deserialize_with = "crate::lenient::option")]
+        project_id: Option<String>,
     }
     let value: Value = serde_json::from_str(structured_metadata(block)?).ok()?;
     if !value.is_object() {
@@ -71,6 +76,11 @@ pub(super) fn parse_structured_entry(block: &str) -> Option<ParsedEntry> {
         source_time: entry.source_time,
         valid_until: entry.valid_until,
         summary: entry.summary,
+        project: if entry.scope == "project" {
+            entry.project_id
+        } else {
+            None
+        },
     })
 }
 
