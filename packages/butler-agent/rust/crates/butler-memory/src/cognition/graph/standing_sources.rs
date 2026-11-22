@@ -1,4 +1,4 @@
-//! Global user claims for the standing-fact sheet.
+//! Global user claims from conversations for the standing-fact sheet.
 use rusqlite::params;
 
 use super::{GraphRepository, db_error};
@@ -8,7 +8,8 @@ const SOURCES: &str = "FROM memory_claims c
 JOIN memory_nodes n ON n.id = c.node_id
 JOIN memory_evidence e ON e.node_id = c.node_id
 JOIN memory_chunks k ON k.memory_chunk_id = e.episode_id AND k.current_revision = e.revision
-WHERE c.basis = 'user_statement' AND k.status = 'active' AND k.project_id IS NULL";
+WHERE c.basis = 'user_statement' AND k.status = 'active' AND k.project_id IS NULL
+AND substr(k.source_key, 1, 13) = 'conversation_'";
 
 impl GraphRepository {
     pub(in crate::cognition) fn standing_sources(
