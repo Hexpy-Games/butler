@@ -90,7 +90,15 @@ pub(crate) fn cache() -> PathBuf {
 }
 
 pub(crate) fn setup(id: &str) -> Result<Pending, HarnessError> {
-    configured(id).map(Pending::new)
+    setup_with(id, |setup| setup)
+}
+
+/// `setup`, with the scenario's `Setup` adjusted before the shell backend wraps it.
+pub(crate) fn setup_with(
+    id: &str,
+    adjust: impl FnOnce(Setup) -> Setup,
+) -> Result<Pending, HarnessError> {
+    configured(id).map(adjust).map(Pending::new)
 }
 
 fn configured(id: &str) -> Result<Setup, HarnessError> {
