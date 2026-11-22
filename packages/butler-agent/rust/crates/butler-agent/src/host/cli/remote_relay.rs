@@ -2,6 +2,7 @@
 use crate::host::service::configuration::local_credentials::{
     CredentialFiles, LocalCredentials, data_folder_token,
 };
+use base64::{Engine, engine::general_purpose::STANDARD};
 use butler_platform::local_socket;
 use serde_json::{Value, json};
 use std::{ffi::OsString, io::Read, path::PathBuf, process::ExitCode, time::Duration};
@@ -55,18 +56,7 @@ pub(super) async fn request(args: &[OsString]) -> ExitCode {
         if response.len() > LIMIT {
             return Err(invalid);
         }
-        let (headers, body) = std::str::from_utf8(&response).map_err(|_| invalid)?.split_once("\r\n\r\n").ok_or(invalid)?;
-        let mut lines = headers.lines();
-        let status: u16 = lines.next().and_then(|line| line.split_whitespace().nth(1))
-            .and_then(|status| status.parse().ok()).ok_or(invalid)?;
-        if lines.any(|line| {
-            let lower = line.to_ascii_lowercase();
-            lower.starts_with("transfer-encoding:") && lower.contains("chunked")
-        }) {
-            return Err(invalid);
-        }
-        let body = if body.is_empty() { Value::Null } else { serde_json::from_str(body).map_err(|_| invalid)? };
-        Ok(json!({"status": status, "body": body}))
+        parse(&response)
     }.await;
     match reply {
         Ok(value) => {
@@ -78,6 +68,77 @@ pub(super) async fn request(args: &[OsString]) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn parse(response: &[u8]) -> Result<Value, &'static str> {
+    let invalid = "remote_response_invalid";
+    let split = response
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .ok_or(invalid)?;
+    let mut body = &response[split + 4..];
+    let mut lines = std::str::from_utf8(&response[..split])
+        .map_err(|_| invalid)?
+        .lines();
+    let status: u16 = lines
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|status| status.parse().ok())
+        .ok_or(invalid)?;
+    let mut headers = std::collections::BTreeMap::new();
+    let mut chunked = false;
+    for line in lines {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        let name = name.to_ascii_lowercase();
+        let value = value.trim();
+        match name.as_str() {
+            "transfer-encoding" if value.eq_ignore_ascii_case("chunked") => chunked = true,
+            "content-type"
+            | "content-disposition"
+            | "content-security-policy"
+            | "cache-control"
+            | "x-content-type-options" => {
+                headers.insert(name, value);
+            }
+            _ => {}
+        }
+    }
+    let mut decoded = Vec::new();
+    if chunked {
+        loop {
+            let end = body.windows(2).position(|w| w == b"\r\n").ok_or(invalid)?;
+            let line = std::str::from_utf8(&body[..end]).map_err(|_| invalid)?;
+            let size = line.split(';').next().ok_or(invalid)?;
+            if !size.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return Err(invalid);
+            }
+            let size = usize::from_str_radix(size, 16).map_err(|_| invalid)?;
+            body = &body[end + 2..];
+            if size == 0 {
+                if !body.starts_with(b"\r\n") && !body.windows(4).any(|w| w == b"\r\n\r\n") {
+                    return Err(invalid);
+                }
+                break;
+            }
+            let (chunk, rest) = body.split_at_checked(size).ok_or(invalid)?;
+            body = rest.strip_prefix(b"\r\n").ok_or(invalid)?;
+            decoded.extend_from_slice(chunk);
+        }
+        body = &decoded;
+    }
+    if body.is_empty() {
+        return Ok(json!({"status":status,"body":null}));
+    }
+    if headers
+        .get("content-type")
+        .is_some_and(|v| v.starts_with("application/json"))
+    {
+        let value: Value = serde_json::from_slice(body).map_err(|_| invalid)?;
+        return Ok(json!({"status":status,"body":value}));
+    }
+    Ok(json!({"status":status,"body":null,"bytes":STANDARD.encode(body),"headers":headers}))
 }
 
 pub(super) async fn loopback(args: &[OsString]) -> ExitCode {

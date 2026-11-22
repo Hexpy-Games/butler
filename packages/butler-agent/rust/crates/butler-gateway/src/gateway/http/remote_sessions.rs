@@ -1,10 +1,14 @@
 //! One rule for conversations that run on a registered computer: forward, refuse, or serve here.
 use super::{
     Body, HttpError, HttpState, MAX_REQUEST_BODY_SIZE, Method, Request, Response, StatusCode, Uri,
-    json, query, read_body_with_limit, router::Handler,
+    content, json, query, read_body_with_limit, router::Handler,
 };
 use crate::gateway::remote_computers;
-use axum::body::Bytes;
+use axum::{
+    body::Bytes,
+    http::{HeaderValue, header, request::Parts},
+};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -59,6 +63,9 @@ pub(super) async fn route(
     if bytes.len() > 1024 * 1024 {
         return Err(HttpError::PayloadTooLarge);
     }
+    if let Some(response) = remote_view(state, handler, &parts, &computer).await? {
+        return Ok(Routed::Answered(response));
+    }
     let reply = remote_computers::forward(
         &link(state)?,
         &computer,
@@ -70,16 +77,80 @@ pub(super) async fn route(
         bytes.to_vec(),
     )
     .await?;
-    Ok(Routed::Answered(json(
-        StatusCode::from_u16(reply.status).map_err(|_| HttpError::Internal)?,
-        reply.body,
-    )?))
+    Ok(Routed::Answered(forwarded_response(reply)?))
+}
+
+async fn remote_view(
+    state: &HttpState,
+    handler: Handler,
+    parts: &Parts,
+    computer: &str,
+) -> Result<Option<Response>, HttpError> {
+    if !parts.uri.path().ends_with("/view") {
+        return Ok(None);
+    }
+    match handler {
+        Handler::Output => content::remote::output_view(
+            state,
+            parts.headers.clone(),
+            parts.uri.clone(),
+            computer.to_owned(),
+        )
+        .await
+        .map(Some),
+        Handler::MessageFiles => {
+            content::remote::message_file_view(state, &parts.headers, &parts.uri, computer)
+                .map(Some)
+        }
+        _ => Ok(None),
+    }
+}
+
+fn forwarded_response(reply: remote_computers::Reply) -> Result<Response, HttpError> {
+    let status = StatusCode::from_u16(reply.status).map_err(|_| HttpError::Internal)?;
+    let Some(bytes) = reply.bytes else {
+        return json(status, reply.body);
+    };
+    let bytes = STANDARD.decode(bytes).map_err(|_| HttpError::Internal)?;
+    let mut response = Response::new(Body::from(bytes));
+    *response.status_mut() = status;
+    let headers = response.headers_mut();
+    for name in [
+        header::CONTENT_TYPE,
+        header::CONTENT_DISPOSITION,
+        header::CACHE_CONTROL,
+    ] {
+        if let Some(value) = reply
+            .headers
+            .get(name.as_str())
+            .and_then(|v| HeaderValue::from_str(v).ok())
+        {
+            headers.insert(name, value);
+        }
+    }
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    if !headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.trim().eq_ignore_ascii_case("application/pdf"))
+    {
+        headers.insert(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static("sandbox; default-src 'none'"),
+        );
+    }
+    Ok(response)
 }
 
 fn forwarded(handler: Handler) -> bool {
     matches!(
         handler,
-        Handler::Messages
+        Handler::MessageFiles
+            | Handler::Output
+            | Handler::Messages
             | Handler::Turns
             | Handler::Artifacts
             | Handler::SessionQueue

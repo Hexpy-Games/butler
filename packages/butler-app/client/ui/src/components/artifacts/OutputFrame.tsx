@@ -19,7 +19,7 @@ export interface OutputViewState {
 }
 
 /** Resolve a fresh capability on every open, reload and revision selection. */
-export function useOutputView(outputId: string, preview: boolean): OutputViewState {
+export function useOutputView(outputId: string, preview: boolean, sessionId?: string): OutputViewState {
   const [view, setView] = useState<OutputView | null>(null);
   const [revision, setRevision] = useState<number>();
   const [generation, setGeneration] = useState(0);
@@ -28,7 +28,10 @@ export function useOutputView(outputId: string, preview: boolean): OutputViewSta
   const load = useCallback(async () => {
     setFailure(undefined);
     try {
-      const next = await api<OutputView>(`/${preview ? "previews" : "outputs"}/${encodeURIComponent(outputId)}/view${revision ? `?revision=${revision}` : ""}`);
+      const params = [];
+      if (revision) params.push(`revision=${revision}`);
+      if (sessionId) params.push(`session_id=${encodeURIComponent(sessionId)}`);
+      const next = await api<OutputView>(`/${preview ? "previews" : "outputs"}/${encodeURIComponent(outputId)}/view${params.length ? `?${params.join("&")}` : ""}`);
       const url = new URL(next.url);
       if (!["http:", "https:"].includes(url.protocol) || url.origin === location.origin) throw new Error("output_origin_refused");
       setView(next);
@@ -36,7 +39,7 @@ export function useOutputView(outputId: string, preview: boolean): OutputViewSta
       setView(null);
       setFailure(apiErrorCode(error) === "content_host_required" ? copy.contentHostRequired : copy.loadFailed);
     }
-  }, [outputId, preview, revision, copy.contentHostRequired, copy.loadFailed]);
+  }, [outputId, preview, revision, sessionId, copy.contentHostRequired, copy.loadFailed]);
   useEffect(() => { void load(); }, [load]);
   const reload = useCallback(() => { setGeneration((value) => value + 1); void load(); }, [load]);
   return { view, failure, frameKey: `${outputId}-${view?.revision}-${generation}`, selectRevision: setRevision, reload };
@@ -60,7 +63,7 @@ export function OutputRevisionSelect({ view, onChange }: { view: OutputView; onC
 /** A page Butler made inside a card: its own row (open, browser, reload, revision), then the page. */
 export function OutputFrame({ outputId, title, preview = false, sessionId: ownerSession }: { outputId: string; title: string; preview?: boolean; sessionId?: string }) {
   useAppLocale();
-  const output = useOutputView(outputId, preview);
+  const output = useOutputView(outputId, preview, ownerSession);
   const { view, failure } = output;
   const copy = appCopy.artifacts;
   const browserEnabled = useBrowserState((state) => state.enabled);

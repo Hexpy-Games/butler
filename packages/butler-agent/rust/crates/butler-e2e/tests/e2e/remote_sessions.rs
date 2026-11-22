@@ -238,3 +238,102 @@ async fn remote_approval_reaches_the_main_after_the_computer_restarts() -> Resul
     drop((remote, sshd, files, server, authority));
     s.finish().await
 }
+
+#[tokio::test]
+async fn remote_output_and_html_file_open_on_the_main() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    butler_e2e::skip_unless!(
+        Path::new("/usr/sbin/sshd").exists(),
+        "Requires a local sshd"
+    );
+    const PROMPT: &str = "Publish the remote site and deliver the report.";
+    let (d, script, server, authority, chat) =
+        remote_chat("REMOTE-SESSION-CONTENT", "full_access").await?;
+    script.rounds.lock().unwrap().insert(PROMPT.into(), vec![json!([
+        call("index","write_file",&json!({"path":"site/index.html","content":"<h1>remote-output</h1>","create_parents":true})),
+        call("big","run_command",&json!({"command":"head -c 4194304 /dev/zero | tr -c a a > site/big.txt","summary":"Make a large file"})),
+        call("publish","output_publish",&json!({"path":"site","entry":"index.html","title":"Remote site"})),
+        call("report","write_file",&json!({"path":"report.html","content":"<p>remote-report</p>"})),
+        call("deliver","deliver_files",&json!({"files":[{"path":"report.html","title":"Report"}]})),
+    ])]);
+    let turn = d.s.gw.say_turn(&chat, PROMPT).await?;
+    let terminal =
+        d.s.gw
+            .wait_terminal(&chat, &turn, Duration::from_secs(60))
+            .await?;
+    assert_eq!(turn_state(&terminal), "delivered", "{terminal}");
+
+    let flags = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY;
+    let db = butler_platform::sqlite::open_with_flags(
+        d.remote.0.data.join("agent-runtime/btcc.sqlite"),
+        flags,
+    )?;
+    let raw: String = db.query_row(
+        "SELECT result_json FROM btcc_guided_tool_calls WHERE tool_name='output_publish' AND turn_id=?1",
+        [&turn], |row| row.get(0),
+    )?;
+    drop(db);
+    let published: serde_json::Value = serde_json::from_str(&raw)?;
+    let id = published["output_id"]
+        .as_str()
+        .ok_or_else(|| harness_error("missing output_id"))?;
+    let view =
+        d.s.gw
+            .get(&format!("/outputs/{id}/view?session_id={chat}"))
+            .await?;
+    assert_eq!(view.status, 200, "{view:?}");
+    let url = view.data()["url"].as_str().unwrap();
+    assert!(
+        reqwest::get(url)
+            .await?
+            .text()
+            .await?
+            .contains("remote-output")
+    );
+    let big = reqwest::get(url.replace("index.html", "big.txt"))
+        .await?
+        .bytes()
+        .await?;
+    assert_eq!(big.len(), 4_194_304);
+    assert!(big.iter().all(|&b| b == b'a'));
+
+    let db = butler_platform::sqlite::open_with_flags(
+        d.remote.0.data.join("app-server/butler-client.sqlite"),
+        flags,
+    )?;
+    let fid: String = db.query_row(
+        "SELECT id FROM message_files WHERE owner_session_id=?1 AND mime_type LIKE 'text/html%'",
+        [&chat],
+        |row| row.get(0),
+    )?;
+    drop(db);
+    let path = format!("/message-files/{fid}?session_id={chat}");
+    let file = d.s.gw.raw(Method::GET, &path, &[]).await?;
+    assert_eq!(file.status(), 200);
+    assert_eq!(
+        file.headers()["content-security-policy"],
+        "sandbox; default-src 'none'"
+    );
+    assert!(file.text().await?.contains("remote-report"));
+    let view =
+        d.s.gw
+            .get(&format!("/message-files/{fid}/view?session_id={chat}"))
+            .await?;
+    assert_eq!(view.status, 200, "{view:?}");
+    assert!(
+        reqwest::get(view.data()["url"].as_str().unwrap())
+            .await?
+            .text()
+            .await?
+            .contains("remote-report")
+    );
+    let Deployed {
+        s,
+        remote,
+        sshd,
+        files,
+        ..
+    } = d;
+    drop((remote, sshd, files, server, authority));
+    s.finish().await
+}

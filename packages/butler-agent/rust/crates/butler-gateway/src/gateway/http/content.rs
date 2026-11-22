@@ -3,19 +3,26 @@ mod capability;
 mod headers;
 pub(super) mod message_file;
 pub(super) mod preview;
+pub(super) mod remote;
 use super::{HttpError, HttpState, error::error_response};
 use axum::{
     Router,
     body::Body,
     extract::State,
-    http::{Method, Request, StatusCode, header},
+    http::{HeaderMap, Method, Request, StatusCode, header},
     response::Response,
     routing::any,
 };
 use butler_runtime::outputs::OutputStore;
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    io::{Read, Seek, SeekFrom},
+    net::SocketAddr,
+    sync::Arc,
+};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
+
+pub(super) const OUTPUT_CHUNK: u64 = 3 * 1024 * 1024;
 
 pub(super) fn spawn(listener: TcpListener, state: Arc<HttpState>, closed: CancellationToken) {
     let router = Router::new()
@@ -112,6 +119,9 @@ async fn serve(state: &HttpState, request: Request<Body>) -> Result<Response, Ht
     let (cap, path) = path.split_once('/').ok_or_else(refused)?;
     let token = state.security.token().ok_or_else(refused)?;
     let (id, revision) = capability::verify(&token, port(state), cap, now()).ok_or_else(refused)?;
+    if let Some(rest) = id.strip_prefix("remote.") {
+        return remote::serve(state, rest, revision, path).await;
+    }
     if let Some(id) = id.strip_prefix("message-file-") {
         return message_file::serve(state, id, revision, path).await;
     }
@@ -183,6 +193,82 @@ fn mime(path: &str) -> &'static str {
         _ => "application/octet-stream",
     }
 }
+pub(super) async fn content(
+    state: Arc<HttpState>,
+    request: Request<Body>,
+) -> Result<Response, HttpError> {
+    if request.method() != Method::GET {
+        return Err(HttpError::public(404, "not_found", "Route not found."));
+    }
+    let missing = || HttpError::public(404, "output_not_found", "Output not found.");
+    let id = request
+        .uri()
+        .path()
+        .strip_prefix("/outputs/")
+        .and_then(|s| s.strip_suffix("/content"))
+        .ok_or_else(missing)?
+        .to_owned();
+    let mut params = super::query(request.uri());
+    let number = |name: &str| {
+        params
+            .get(name)
+            .map(|v| v.parse::<u64>())
+            .transpose()
+            .map_err(|_| HttpError::public(400, "invalid_request", "Invalid request."))
+    };
+    let selected = number("revision")?;
+    let offset = number("offset")?.unwrap_or(0);
+    let outputs = store(&state)?;
+    let (outputs, id, output) = tokio::task::spawn_blocking(move || {
+        let output = outputs.read(&id)?;
+        std::io::Result::Ok((outputs, id, output))
+    })
+    .await
+    .map_err(|_| missing())?
+    .map_err(|_| missing())?;
+    let rev = output
+        .revisions
+        .iter()
+        .rev()
+        .find(|r| selected.is_none_or(|v| v == r.revision))
+        .ok_or_else(missing)?;
+    let Some(path) = params.remove("path") else {
+        return super::json(
+            StatusCode::OK,
+            crate::gateway::protocol::ApiEnvelope {
+                protocol_version: crate::gateway::protocol::APP_PROTOCOL_VERSION,
+                data: serde_json::json!({"revision":rev.revision,"revisions":output.revisions.iter().map(|r|r.revision).collect::<Vec<_>>(),"entry":rev.entry}),
+            },
+        );
+    };
+    let revision = rev.revision;
+    let bytes =
+        tokio::task::spawn_blocking(move || read_chunk(&outputs, &id, revision, &path, offset))
+            .await
+            .map_err(|_| missing())?
+            .map_err(|_| missing())?;
+    Response::builder()
+        .header(header::CONTENT_TYPE, "application/octet-stream")
+        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
+        .header(header::CACHE_CONTROL, "no-store")
+        .body(Body::from(bytes))
+        .map_err(|_| HttpError::Internal)
+}
+
+fn read_chunk(
+    outputs: &OutputStore,
+    id: &str,
+    revision: u64,
+    path: &str,
+    offset: u64,
+) -> std::io::Result<Vec<u8>> {
+    let mut file = outputs.open_content(id, revision, path)?;
+    file.seek(SeekFrom::Start(offset))?;
+    let mut bytes = Vec::new();
+    file.take(OUTPUT_CHUNK).read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
 pub(super) async fn view(
     state: Arc<HttpState>,
     request: Request<Body>,
@@ -211,19 +297,37 @@ pub(super) async fn view(
         .rev()
         .find(|r| selected.is_none_or(|v| v == r.revision))
         .ok_or_else(refused)?;
-    let origin = view_origin(&state, &request)?;
+    signed_view(
+        &state,
+        request.headers(),
+        &output.output_id,
+        rev.revision,
+        &rev.entry,
+        output.revisions.iter().map(|r| r.revision).collect(),
+    )
+}
+
+pub(super) fn signed_view(
+    state: &HttpState,
+    headers: &HeaderMap,
+    id: &str,
+    revision: u64,
+    entry: &str,
+    revisions: Vec<u64>,
+) -> Result<Response, HttpError> {
+    let origin = view_origin(state, headers)?;
     let token = state.security.token().ok_or_else(refused)?;
-    let cap = capability::sign(&token, port(&state), &output.output_id, rev.revision, now());
+    let cap = capability::sign(&token, port(state), id, revision, now());
     let mut url = url::Url::parse(&format!("{origin}/__o/{cap}/")).map_err(|_| refused())?;
     url.path_segments_mut()
         .map_err(|()| refused())?
         .pop_if_empty()
-        .extend(rev.entry.split('/'));
+        .extend(entry.split('/'));
     super::json(
         StatusCode::OK,
         crate::gateway::protocol::ApiEnvelope {
             protocol_version: crate::gateway::protocol::APP_PROTOCOL_VERSION,
-            data: serde_json::json!({"url":url.to_string(),"revision":rev.revision,"revisions":output.revisions.iter().map(|r|r.revision).collect::<Vec<_>>()}),
+            data: serde_json::json!({"url":url.to_string(),"revision":revision,"revisions":serde_json::Value::from(revisions)}),
         },
     )
 }
@@ -247,15 +351,14 @@ pub(super) fn admit_ui_frames(state: &HttpState, response: &mut Response) {
     }
 }
 
-fn view_origin(state: &HttpState, request: &Request<Body>) -> Result<String, HttpError> {
-    let authority = host(request.headers())?
+fn view_origin(state: &HttpState, headers: &HeaderMap) -> Result<String, HttpError> {
+    let authority = host(headers)?
         .parse::<axum::http::uri::Authority>()
         .map_err(|_| refused())?;
     let name = authority.host().trim_matches(['[', ']']);
     let remote = state.remote.snapshot();
-    let forwarded = request.headers().contains_key("forwarded")
-        || request
-            .headers()
+    let forwarded = headers.contains_key("forwarded")
+        || headers
             .keys()
             .any(|h| h.as_str().starts_with("x-forwarded-"));
     let local = !forwarded

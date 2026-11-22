@@ -50,6 +50,9 @@ pub(in crate::gateway::http) async fn route(
         Handler::Browser => browser_host::route(state, request, &client).await,
         Handler::BrowserStills => browser_stills::route(state, request).await,
         Handler::Preview => content::preview::view(&state, &request),
+        Handler::Output if request.uri().path().ends_with("/content") => {
+            content::content(state, request).await
+        }
         Handler::Output => content::view(state, request).await,
         Handler::Security => security_settings::route(state, request).await,
         Handler::Plugins => plugins::route(state, request).await,

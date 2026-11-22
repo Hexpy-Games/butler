@@ -283,6 +283,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/navigation", Handler::Shell),
     ("/new-chat-briefing", Handler::NewChatBriefing),
     ("/outputs/{id}/view", Handler::Output),
+    ("/outputs/{id}/content", Handler::Output),
     ("/personalization", Handler::Personalization),
     ("/personalization/profile-import", Handler::Personalization),
     (

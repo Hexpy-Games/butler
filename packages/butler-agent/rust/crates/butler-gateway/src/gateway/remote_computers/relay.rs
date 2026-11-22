@@ -10,6 +10,10 @@ use tokio_util::sync::CancellationToken;
 pub(in crate::gateway) struct Reply {
     pub status: u16,
     pub body: Value,
+    #[serde(default)]
+    pub bytes: Option<String>,
+    #[serde(default)]
+    pub headers: std::collections::BTreeMap<String, String>,
 }
 
 pub(super) async fn request(
@@ -65,6 +69,12 @@ pub(super) async fn send(
         cancel,
     )
     .await?;
+    if output.exit_code != Some(0) && output.stderr.contains("code=remote_response_invalid") {
+        return Err(remote_error(
+            "remote_response_invalid",
+            "This computer's reply could not be read.",
+        ));
+    }
     if output.exit_code == Some(255) {
         deploy::check_exit(&output)?;
     }
@@ -111,7 +121,7 @@ pub(super) async fn unlock(
     }
 }
 
-pub(super) fn data(reply: Reply) -> Result<Value, HttpError> {
+pub(in crate::gateway) fn data(reply: Reply) -> Result<Value, HttpError> {
     if (200..300).contains(&reply.status) {
         let mut body = reply.body;
         return Ok(body.get_mut("data").map_or(Value::Null, Value::take));
