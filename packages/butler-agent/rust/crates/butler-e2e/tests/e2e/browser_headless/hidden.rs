@@ -237,7 +237,7 @@ async fn without_a_usable_electron_the_headless_browser_serves() -> Result<(), H
 /// Discovery of an installed App: only Windows has a standard App location to discover.
 #[cfg(windows)]
 mod installed {
-    use super::super::support::setup_with;
+    use super::super::support::host::setup_with;
     use super::*;
 
     #[tokio::test]

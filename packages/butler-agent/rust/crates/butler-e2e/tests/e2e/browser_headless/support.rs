@@ -17,8 +17,8 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use std::{path::PathBuf, time::Duration};
 
-mod host;
-pub(crate) use host::{Pending, setup, setup_with, shell};
+pub(super) mod host;
+pub(crate) use host::{setup, shell};
 
 /// `BUTLER_E2E_BROWSER_BACKEND`: `headless` is Chrome for Testing (the first run downloads it),
 /// `hidden-app` the Electron named by `BUTLER_E2E_ELECTRON`, `cef` the staged host named by
