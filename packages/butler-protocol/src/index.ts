@@ -12,3 +12,5 @@ export * from "./pending-asks-contracts.ts";
 export * from "./task-graph-contracts.ts";
 export type * from "./conversation-contracts.ts";
 export type * from "./usage-contracts.ts";
+
+export type * from "./library-automation-contracts.ts";

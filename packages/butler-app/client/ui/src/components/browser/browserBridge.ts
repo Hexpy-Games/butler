@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { useButlerStore } from "@/app/store";
 import { notifyStatus } from "@/app/notifications";
 import { appCopy } from "@/app/copy";
+import { pageIconSrc } from "@/app/favicons";
 import type { PickedElement } from "./browserElements";
 import { connectElementDrag, type ElementDragEvent } from "./elementDrag";
 import { publicBrowserOwner, relevantConversationTab } from "./browserOwnership";
@@ -65,7 +66,7 @@ export function connectBrowser() {
   });
   if (!unsubscribe && window.butlerBrowser) unsubscribe = window.butlerBrowser.subscribe((state) => {
     const previous = useBrowserState.getState();
-    useBrowserState.setState(state);
+    useBrowserState.setState({ ...state, tabs: state.tabs.map((tab) => ({ ...tab, favicon: pageIconSrc(tab.favicon, tab.url) ?? "" })) });
     const active = state.tabs.find((tab) => tab.id === state.activeId);
     const navigation = useButlerStore.getState().navigation;
     const activeOwner = active && publicBrowserOwner(active.owner, navigation);

@@ -11,7 +11,7 @@ pub(super) struct ParsedEntry {
     pub(super) entry_id: String,
     pub(super) source_time: String,
     pub(super) valid_until: Option<String>,
-    pub(super) salience: Salience,
+    pub(super) summary: String,
 }
 
 pub(super) struct SemanticBlock {
@@ -53,8 +53,6 @@ pub(super) fn parse_structured_entry(block: &str) -> Option<ParsedEntry> {
         source_time: String,
         #[serde(default, deserialize_with = "crate::lenient::option")]
         valid_until: Option<String>,
-        #[serde(default, deserialize_with = "crate::lenient::option")]
-        salience: Option<Salience>,
     }
     let value: Value = serde_json::from_str(structured_metadata(block)?).ok()?;
     if !value.is_object() {
@@ -72,7 +70,7 @@ pub(super) fn parse_structured_entry(block: &str) -> Option<ParsedEntry> {
         entry_id: entry.entry_id,
         source_time: entry.source_time,
         valid_until: entry.valid_until,
-        salience: entry.salience.unwrap_or(Salience::Unspecified),
+        summary: entry.summary,
     })
 }
 

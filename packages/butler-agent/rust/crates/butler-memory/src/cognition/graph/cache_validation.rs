@@ -24,20 +24,6 @@ impl GraphRepository {
             .map_err(db_error)
     }
 
-    pub(in crate::cognition) fn hot_cache_source_class(
-        &self,
-        source_refs: &[String],
-    ) -> CognitionResult<&'static str> {
-        let db = self.connection()?;
-        let mut rows = Vec::with_capacity(source_refs.len());
-        for source_id in source_refs {
-            if let Some(row) = source(db, source_id)? {
-                rows.push(row);
-            }
-        }
-        Ok(source_class(&rows))
-    }
-
     /// The ids of `entries` whose evidence is still current as of `as_of`.
     pub(in crate::cognition) fn valid_rebuild_cache_entries(
         &self,

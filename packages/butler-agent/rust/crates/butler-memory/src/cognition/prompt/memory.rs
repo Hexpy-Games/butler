@@ -7,12 +7,14 @@ use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult,
     generation::{HotCacheEntryView, physical_hot_cache_entries},
     graph::GraphRepository,
-    resolve_active_generation,
+    resolve_active_generation, standing,
 };
 use butler_turn::conversation::{ConversationSourceReader, conversation_store_path};
 
 use super::CapsulePresence;
 use crate::cognition::CognitionCode;
+
+const RECENT_HEADER: &str = "What the user said in recent chats, newest first. These are their statements as Butler remembered them; recall_memory returns the full exchange.";
 
 fn failure(error: &std::io::Error) -> CognitionError {
     CognitionError::new(CognitionCode::CognitionPromptReadFailed, error.to_string())
@@ -108,39 +110,34 @@ fn read_generation_hot_cache(
     }
     let generation = resolve_active_generation(data_root, environment)?;
     let path = generation.root.join("hot/cache.md");
-    let Some(cache) = optional_text(&path)? else {
-        return Ok(None);
-    };
+    let cache = optional_text(&path)?.unwrap_or_default();
     let entries = physical_hot_cache_entries(&cache);
-    if entries.is_empty() {
+    // Both parts use one fresh graph snapshot while background writes advance.
+    let graph = GraphRepository::open_read_snapshot(&generation.graph_path)?;
+    let mut content = Vec::new();
+    if let Some(sheet) = standing::current(&graph, &generation.root).ok().flatten() {
+        content.push(sheet);
+    }
+    let recent = if !entries.is_empty()
+        && let Ok(canonical) = ConversationSourceReader::open(&conversation_store_path(data_root))
+    {
+        let result = project_entries(project, &generation, &graph, &canonical, &entries);
+        canonical.close().map_err(CognitionError::from).and(result)
+    } else {
+        Ok(None)
+    };
+    graph.close()?;
+    if let Some(recent) = recent? {
+        content.push(format!("{RECENT_HEADER}\n{recent}"));
+    }
+    if resolve_active_generation(data_root, environment)?.generation_id != generation.generation_id
+    {
         return Ok(None);
     }
-    // Validate every entry against one fresh graph snapshot. Background writes
-    // must not turn an already published cache into an absent prompt section.
-    let graph = GraphRepository::open_read_snapshot(&generation.graph_path)?;
-    let Ok(canonical) = ConversationSourceReader::open(&conversation_store_path(data_root)) else {
-        graph.close()?;
-        return Ok(None);
-    };
-    let result = project_entries(
-        data_root,
-        environment,
-        project,
-        &generation,
-        &graph,
-        &canonical,
-        &entries,
-    );
-    let canonical_closed = canonical.close().map_err(CognitionError::from);
-    let graph_closed = graph.close();
-    canonical_closed?;
-    graph_closed?;
-    result
+    Ok((!content.is_empty()).then(|| content.join("\n\n")))
 }
 
 fn project_entries(
-    data_root: &Path,
-    environment: &CognitionPathEnvironment,
     project: Option<&str>,
     generation: &crate::cognition::MemoryGenerationHandle,
     graph: &GraphRepository,
@@ -175,20 +172,14 @@ fn project_entries(
         {
             continue;
         }
-        let Some(refs) = &entry.source_refs else {
+        let Some(source_time) = &entry.source_time else {
             continue;
         };
-        let class = graph.hot_cache_source_class(refs)?;
+        let date: String = source_time.chars().take(10).collect();
         let Some(summary) = &entry.summary else {
             continue;
         };
-        content.push(format!(
-            "[model_interpretation/{class}; current_state_requires_verification]\n{summary}"
-        ));
-    }
-    if resolve_active_generation(data_root, environment)?.generation_id != generation.generation_id
-    {
-        return Ok(None);
+        content.push(format!("[{date}]\n{summary}"));
     }
     Ok((!content.is_empty()).then(|| content.join("\n\n")))
 }

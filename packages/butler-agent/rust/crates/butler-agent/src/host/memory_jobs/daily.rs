@@ -33,6 +33,7 @@ pub(in crate::host) struct DailyCognitionJobs {
     capsules: Arc<ProjectCapsuleService>,
     phases: CyclePhases,
     legacy: LegacySessionSync,
+    standing: super::standing::StandingFacts,
     pub(in crate::host) gate: Arc<super::consolidation::ConsolidationRunGate>,
 }
 
@@ -70,6 +71,7 @@ impl DailyCognitionJobs {
         owners: DailyCognitionOwners,
         gate: Arc<super::consolidation::ConsolidationRunGate>,
     ) -> Self {
+        let standing = super::standing::StandingFacts::new(&owners);
         let DailyCognitionOwners {
             data_root,
             paths,
@@ -141,6 +143,7 @@ impl DailyCognitionJobs {
             capsules,
             phases,
             legacy,
+            standing,
             gate,
         }
     }
@@ -227,6 +230,9 @@ impl DailyCognitionJobs {
             .map_err(|error| error.code().to_owned())?;
         // Contention counts as done for today, but must not skip configured maintenance.
         let configured = self.run_configured(cancellation).await?;
+        if let Err(error) = self.standing.refresh(cancellation).await {
+            butler_core::diagnostic!("[standing-facts] {}", error.message());
+        }
         let generic_ok = matches!(
             generic.status,
             CycleStatus::Completed | CycleStatus::DeferredRateLimited | CycleStatus::LockHeld

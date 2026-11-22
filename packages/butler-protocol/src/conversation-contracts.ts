@@ -1,6 +1,6 @@
 import type { InterfaceTextReference } from "../../butler-i18n/src/index.ts";
 import type { AnswerBlockSet } from "./app-contracts.ts";
-import type { ChatKind, MessageContent, MessageFileRef, ProgressSummaryRow, SessionSummary, TurnState, WorkerActivityWorkBlock } from "./message-session-contracts.ts";
+import type { ChatKind, SessionArtifactSummary, MessageContent, MessageFileRef, ProgressSummaryRow, SessionSummary, TurnState, WorkerActivityWorkBlock } from "./message-session-contracts.ts";
 
 export type RuntimeDeliveryState =
   | "running"
@@ -94,6 +94,7 @@ export interface SessionViewCursors {
 export type MessageRole = "user" | "assistant" | "system" | "system_event" | "tool_summary" | "automation";
 
 export interface ConversationMessage {
+  artifacts?: SessionArtifactSummary[];
   turn_activity_rows?: ProgressSummaryRow[];
   content_parts?: MessageContent;
   id: string;
@@ -116,6 +117,7 @@ export interface ConversationMessage {
 }
 
 export interface SessionView {
+  artifacts?: SessionArtifactSummary[];
   plan?: WorkPlan;
   activity_history?: ActivityHistoryEntry[];
   relation?: { safe_title?: string };

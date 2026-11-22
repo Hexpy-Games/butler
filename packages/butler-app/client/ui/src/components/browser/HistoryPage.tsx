@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { appCopy, useAppLocale } from "@/app/copy";
 import { api } from "@/app/api";
+import { pageIconSrc } from "@/app/favicons";
 import { useButlerStore } from "@/app/store";
 import { notifyStatus } from "@/app/notifications";
 import { Box, Button, ButtonContainer, EmptyLine, Field, FieldLabel, HistoryGroup, HistoryRow, IconButton, Input, MessageSquare, PageContainer, ScrollArea, Stack, Switch, Trash2, Typo } from "@/butler-ds";
@@ -49,7 +50,7 @@ export function HistoryPage() {
           : <ButtonContainer size="sm"><Button size="sm" variant="ghost" onClick={() => setSelecting(true)} disabled={!page.items.length}>{appCopy.library.select}</Button>
             <Button size="sm" variant="outline" onClick={() => setClear(true)}>{copy.clear}</Button></ButtonContainer>}</Stack.Item></Stack></Stack>
     {groups.size > 0 && <Stack gap="lg">{Array.from(groups, ([day, visits]) => <HistoryGroup key={day} title={day}>
-      {visits.map(visit => <HistoryRow key={visit.id} rowId={visit.id} title={visit.title} url={visit.url} iconSrc={visit.favicon || undefined} dateTime={visit.visitedAt}
+      {visits.map(visit => <HistoryRow key={visit.id} rowId={visit.id} title={visit.title} url={visit.url} iconSrc={pageIconSrc(visit.favicon, visit.url)} dateTime={visit.visitedAt}
         time={new Date(visit.visitTime).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })} onOpen={() => open(visit.url)} actions={actions(visit)}
         selecting={selecting} selected={selected.includes(visit.id)} onSelectedChange={on => toggle(visit.id, on)} />)}
     </HistoryGroup>)}</Stack>}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { api } from "@/app/api";
+import { pageIconSrc } from "@/app/favicons";
 import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
 import { libraryChanged } from "@/app/libraryEvents";
@@ -50,7 +51,7 @@ export function AddressSuggestions({ editing, onChoose, field }: { editing: bool
       onInteractOutside={event => { if (anchor.current?.contains(event.target as Node)) event.preventDefault(); }}
       onPointerDownCapture={event => event.preventDefault()}>
       <SuggestionList id={LIST_ID} label={appCopy.browser.history.suggestions}>
-        {items.map((item, n) => <SuggestionRow key={item.url} id={optionId(n)} title={item.title} url={item.url} iconSrc={item.favicon || undefined}
+        {items.map((item, n) => <SuggestionRow key={item.url} id={optionId(n)} title={item.title} url={item.url} iconSrc={pageIconSrc(item.favicon, item.url)}
           kind={item.bookmarkId ? "bookmark" : "history"} bookmarkLabel={appCopy.browser.bookmarked} query={query} active={n === index} onSelect={() => onChoose(item.url)} />)}
       </SuggestionList>
     </PopoverContent></Popover></Stack>;
