@@ -1,5 +1,6 @@
 import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
+import { Tooltip } from "../Tooltip";
 import styles from "./SegmentedControl.module.css";
 
 export interface SegmentedControlOption {
@@ -8,6 +9,8 @@ export interface SegmentedControlOption {
   /** A leading glyph; it supports the label, never replaces it. */
   icon?: ReactNode;
   disabled?: boolean;
+  /** Blocked with a reason (a few words, localized): looks disabled, cannot be chosen, and shows the reason in a tooltip on hover or focus. */
+  disabledReason?: string;
 }
 
 export interface SegmentedControlProps {
@@ -28,7 +31,7 @@ export interface SegmentedControlProps {
  */
 export function SegmentedControl({ options, value, onValueChange, ariaLabel, size = "default", stretch = false }: SegmentedControlProps) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
-  const enabled = options.map((option, index) => ({ option, index })).filter(({ option }) => !option.disabled);
+  const enabled = options.map((option, index) => ({ option, index })).filter(({ option }) => !option.disabled && !option.disabledReason);
   const selectedIndex = options.findIndex((option) => option.value === value);
   const focusIndex = selectedIndex >= 0 ? selectedIndex : enabled[0]?.index ?? 0;
 
@@ -49,7 +52,8 @@ export function SegmentedControl({ options, value, onValueChange, ariaLabel, siz
     <div className={cn(styles.group, stretch && styles.stretch)} role="radiogroup" aria-label={ariaLabel} data-size={size} data-slot="segmented-control">
       {options.map((option, index) => {
         const checked = option.value === value;
-        return (
+        const blocked = Boolean(option.disabledReason);
+        const button = (
           <button
             key={option.value}
             ref={(node) => { refs.current[index] = node; }}
@@ -58,15 +62,17 @@ export function SegmentedControl({ options, value, onValueChange, ariaLabel, siz
             role="radio"
             aria-checked={checked}
             data-state={checked ? "on" : "off"}
-            disabled={option.disabled}
-            tabIndex={index === focusIndex ? 0 : -1}
-            onClick={() => { if (!checked) onValueChange(option.value); }}
+            disabled={option.disabled && !blocked}
+            aria-disabled={blocked || undefined}
+            tabIndex={blocked || index === focusIndex ? 0 : -1}
+            onClick={() => { if (!blocked && !checked) onValueChange(option.value); }}
             onKeyDown={(event) => move(event, index)}
           >
             {option.icon}
             {option.label}
           </button>
         );
+        return blocked ? <Tooltip key={option.value} label={option.disabledReason} side="top">{button}</Tooltip> : button;
       })}
     </div>
   );

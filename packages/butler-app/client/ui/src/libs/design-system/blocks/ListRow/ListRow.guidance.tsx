@@ -35,6 +35,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   content: [
     "Titles are names; meta is a short fact (size, time, schedule).",
+    "Use the tag slot for a short Tag after the title.",
     "A meta longer than half the row's line, or any meta in a narrow row, moves under the title and wraps; never shorten it to keep one line.",
   ],
   accessibility: ["Pure presentation; the wrapping Clickable or button provides the role and name."],

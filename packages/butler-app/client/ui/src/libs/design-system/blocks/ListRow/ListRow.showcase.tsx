@@ -2,8 +2,10 @@ import type { ShowcaseMeta, ShowcaseRenderContext, ShowcaseStory } from "../../s
 import { Button } from "../../components/Button";
 import { ButtonContainer } from "../../components/ButtonContainer";
 import { Clickable } from "../../components/Clickable";
-import { Clock3, FileText } from "../../components/Icons";
+import { Clock3, FileText, Globe2 } from "../../components/Icons";
 import { Stack } from "../../components/Stack";
+import { Tag } from "../../components/Tag";
+import { OverflowActionMenu } from "../OverflowActionMenu";
 import { ListRow } from "./ListRow";
 
 export const meta: ShowcaseMeta = {
@@ -20,6 +22,7 @@ const labels = {
     artifact: "A long artifact name that truncates when the inspector is narrow.md", edit: "Edit", remove: "Remove",
     schedule: "Daily eight", scheduleMeta: "Active · Every day 08:00 · Next Tue 08:00 · Ask before acting",
     longTitle: "Weekly dependency audit for every workspace repository",
+    takenDown: "Taken down", more: "More actions",
   },
   "ko-KR": {
     model: "Qwen2.5 Coder 14B", modelRef: "ollama/qwen2.5-coder:14b", modelMeta: "32K 토큰 · 보통 추론",
@@ -27,6 +30,7 @@ const labels = {
     artifact: "인스펙터가 좁을 때 말줄임되는 아주 긴 산출물 이름.md", edit: "편집", remove: "삭제",
     schedule: "매일 여덟 시", scheduleMeta: "활성 · 매일 08:00 · 다음 실행 화 08:00 · 실행 전 확인",
     longTitle: "모든 작업 공간 저장소의 주간 의존성 점검",
+    takenDown: "중단됨", more: "더보기",
   },
 } as const;
 
@@ -35,6 +39,19 @@ function text({ locale }: ShowcaseRenderContext) {
 }
 
 export const stories: ShowcaseStory[] = [
+  {
+    name: "Status tag",
+    widths: ["320", "375", "app"],
+    render: (context) => (
+      <Stack align="row" cross="center" gap="sm">
+        <Stack.Item grow minWidth="0">
+          <ListRow icon={<Globe2 size="md" />} title={text(context).longTitle} description={text(context).target} meta={text(context).every}
+            tag={<Tag size="sm" tone="warning">{text(context).takenDown}</Tag>} />
+        </Stack.Item>
+        <OverflowActionMenu label={text(context).more} items={[{ label: text(context).remove, onSelect: () => undefined }]} />
+      </Stack>
+    ),
+  },
   {
     name: "Title, description and meta",
     widths: ["320", "375", "app"],

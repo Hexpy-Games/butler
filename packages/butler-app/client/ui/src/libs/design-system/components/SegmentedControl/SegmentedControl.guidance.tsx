@@ -44,7 +44,7 @@ export const guidance: ShowcaseGuidance = {
   ],
   doDont: [
     {
-      do: { caption: "Short, parallel labels; one is always selected.", render: () => <ChartPeriod /> },
+      do: { caption: "Short, parallel labels; one is always selected. A blocked option says why: `disabledReason`.", render: () => <ChartPeriod /> },
       dont: {
         caption: "Tabs used as a filter imply separate panels.",
         render: () => <Tabs defaultValue="7"><TabsList><TabsTrigger value="7">7 days</TabsTrigger><TabsTrigger value="30">30 days</TabsTrigger></TabsList></Tabs>,

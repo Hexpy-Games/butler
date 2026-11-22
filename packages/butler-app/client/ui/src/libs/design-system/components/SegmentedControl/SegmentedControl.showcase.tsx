@@ -14,9 +14,11 @@ export const meta: ShowcaseMeta = {
 
 const labels = {
   "en-US": { period: "Period", days: (days: number) => `Last ${days} days`, kind: "Board kind", work: "Work", plan: "Plan", task: "Task",
-    views: "Conversation view", all: "All", recent: "Recent", running: "Running" },
+    views: "Conversation view", all: "All", recent: "Recent", running: "Running",
+    visibility: "Visibility", public: "Public", privateLink: "Private link", plusOnly: "Available on Plus" },
   "ko-KR": { period: "기간", days: (days: number) => `최근 ${days}일`, kind: "보드 종류", work: "작업", plan: "계획", task: "할 일",
-    views: "대화 보기", all: "전체보기", recent: "최신", running: "진행중" },
+    views: "대화 보기", all: "전체보기", recent: "최신", running: "진행중",
+    visibility: "공개 범위", public: "공개", privateLink: "비공개 링크", plusOnly: "Plus에서 사용할 수 있습니다" },
 } as const;
 
 function text({ locale }: ShowcaseRenderContext) {
@@ -56,6 +58,17 @@ export const stories: ShowcaseStory[] = [
   { name: "List filter (stretch, icons)", widths: ["375", "app"], render: (context) => <FilterStory context={context} /> },
   { name: "Small", render: (context) => <PeriodStory context={context} size="sm" /> },
   { name: "Disabled option", states: ["disabled"], render: (context) => <KindStory context={context} /> },
+  {
+    name: "Blocked option with reason",
+    states: ["disabled"],
+    render: (context) => (
+      <SegmentedControl ariaLabel={text(context).visibility} value="public" onValueChange={() => undefined}
+        options={[
+          { value: "public", label: text(context).public },
+          { value: "private", label: text(context).privateLink, disabledReason: text(context).plusOnly },
+        ]} />
+    ),
+  },
 ];
 
 export const stateMatrix: ShowcaseStateMatrix = {

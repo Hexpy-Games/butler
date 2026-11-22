@@ -13,6 +13,8 @@ export interface ListRowProps extends DsPrivateStyleProps {
   title: string;
   /** Optional description */
   description?: string;
+  /** A short status `Tag` on the title line, after the title (e.g. Taken down). It never shrinks; the title truncates first. */
+  tag?: ReactNode;
   /** Optional metadata (date, size, etc.) */
   meta?: string;
 }
@@ -21,15 +23,22 @@ export function ListRow({
   icon,
   title,
   description,
+  tag,
   meta,
   className,
 }: ListRowProps) {
+  const titleElement = <Typo.Body className={dsClass(styles.title)}>{title}</Typo.Body>;
   return (
     <div className={cn(styles.row, icon && styles.withIcon, className)}>
       {icon && <span className={styles.icon} aria-hidden="true">{icon}</span>}
       <Stack gap="xs" className={dsClass(styles.content)}>
         <div className={styles.heading}>
-          <Typo.Body className={dsClass(styles.title)}>{title}</Typo.Body>
+          {tag == null ? titleElement : (
+            <div className={styles.titleGroup}>
+              {titleElement}
+              <span className={styles.tag}>{tag}</span>
+            </div>
+          )}
           {meta && <Typo.Caption className={dsClass(styles.meta)}>{meta}</Typo.Caption>}
         </div>
         {description && (

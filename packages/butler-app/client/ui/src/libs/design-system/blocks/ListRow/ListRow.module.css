@@ -47,6 +47,25 @@
   font-weight: var(--font-weight-regular);
 }
 
+.titleGroup {
+  flex: 1 1 50%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: nowrap;
+}
+
+.titleGroup > .title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tag {
+  flex: none;
+  display: inline-flex;
+}
+
 .description {
   color: var(--text-secondary);
 }
