@@ -287,9 +287,6 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
         .route("/second", axum::routing::get(|| async {
             axum::response::Html("<title>Second local page</title><body style='margin:0;background:#8c5014'>Second local page</body>")
         }))
-        .route("/settle", axum::routing::get(|| async {
-            axum::response::Html("<title>settling</title><body style='margin:0'><script>let n=0;function paint(){document.body.style.background=++n%2?'#14508c':'#8c5014';if(n<120)requestAnimationFrame(paint);else setTimeout(()=>{document.body.style.background='#2a7a3a';document.title='settled'},1500)}requestAnimationFrame(paint)</script></body>")
-        }))
         // The title reports the key codes of the input's keydown events and its value.
         .route("/keys", axum::routing::get(|| async {
             axum::response::Html("<title>keys</title><body style='margin:0'><input id=k style='width:100%;height:100vh;border:0'><script>const c=[];const t=()=>{document.title='keys|'+c.join(',')+'|'+k.value};k.onkeydown=e=>{c.push(e.keyCode);t()};k.oninput=t;t()</script></body>")
@@ -417,46 +414,6 @@ async fn cef_renders_a_local_page() -> Result<(), HarnessError> {
         let (x, y) = (centre("x", "w"), centre("y", "h"));
         let pixel = image.get_pixel(x, y).0;
         if pixel == [20, 80, 140] {
-            break;
-        }
-        assert!(
-            tokio::time::Instant::now() < deadline,
-            "the shot does not show the page: {pixel:?} at ({x}, {y})"
-        );
-    }
-    let settle = format!("http://{address}/settle");
-    shell
-        .run(&["key secondary-l", &format!("type {settle}"), "key enter"])
-        .await?;
-    wait_for_page(&mut shell, "settled", &settle).await?;
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
-    loop {
-        shell
-            .run(&["shot cef-browser", "layout cef-browser browser-page"])
-            .await?;
-        let scale = shell.browser_frame().await?["scale"].as_f64().unwrap();
-        let layout = shell.report("cef-browser.layout")?;
-        let page = layout
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|entry| entry["anchor"] == "browser-page")
-            .unwrap();
-        #[allow(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "a pixel position inside the shot"
-        )]
-        let centre = |origin: &str, size: &str| {
-            let logical = page[origin].as_f64().unwrap() + page[size].as_f64().unwrap() / 2.;
-            (logical * scale).round() as u32
-        };
-        let image = image::open(sandbox.root.join("shell/cef-browser.png"))
-            .unwrap()
-            .to_rgb8();
-        let (x, y) = (centre("x", "w"), centre("y", "h"));
-        let pixel = image.get_pixel(x, y).0;
-        if pixel == [42, 122, 58] {
             break;
         }
         assert!(

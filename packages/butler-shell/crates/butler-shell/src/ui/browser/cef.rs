@@ -152,10 +152,11 @@ impl CefEngine {
                         let _ = events.unbounded_send(event);
                     }
                 } else if redraw {
+                    state.borrow_mut().views.retain(|v| v.upgrade().is_some());
                     let views = state.borrow().views.clone();
                     cx.update(|cx| {
-                        for id in views {
-                            cx.notify(id);
+                        for view in views {
+                            cx.notify(view.entity_id());
                         }
                     });
                 }
