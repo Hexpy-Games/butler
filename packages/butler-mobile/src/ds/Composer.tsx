@@ -1,6 +1,6 @@
 import { ScrollEdgeEffect } from "@bsky.app/expo-scroll-edge-effect";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { Keyboard, KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { alpha, RADIUS } from "../design/tokens";
@@ -100,7 +100,7 @@ export function ComposerDock({ children, onHeightChange, backdrop }: ComposerDoc
   const t = useTokens();
   const insets = useSafeAreaInsets();
   // KeyboardAvoidingView measures from its parent, not the window; offset by where the dock's frame starts on screen.
-  const frame = useRef<View>(null);
+  const frame = useRef<ComponentRef<typeof View>>(null);
   const [top, setTop] = useState(0);
   const [keyboardTop, setKeyboardTop] = useState<number | null>(null);
   const [frameHeight, setFrameHeight] = useState(0);
