@@ -234,6 +234,9 @@ async fn settle_failure(
     error: &CognitionError,
     adapter_entered: &AtomicBool,
 ) -> CognitionResult<GraphProgress> {
+    if error.code() == CognitionCode::MemoryExtractCancelled.as_str() {
+        return Err(error.clone());
+    }
     let provider = if adapter_entered.load(Ordering::Acquire) {
         ProviderCall::Made
     } else {
