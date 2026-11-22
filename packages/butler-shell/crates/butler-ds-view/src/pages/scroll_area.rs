@@ -1,9 +1,16 @@
 //! ScrollArea.showcase.tsx.
+use butler_ds::tokens::Length;
+use butler_ds::ui::context::Ds;
 use butler_ds::ui::layout::{Box, Radius, Space, Stack, Surface};
-use butler_ds::ui::scroll::{Axis, Bleed, MaxHeight, MinHeight, ScrollArea};
+use butler_ds::ui::scroll::{
+    Axis, Bleed, ClipUnder, MaxHeight, MinHeight, Placement, ScrollArea, Sticky,
+};
 use butler_ds::ui::tag::Tag;
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, Window};
+use gpui::{
+    AnyElement, App, IntoElement as _, ParentElement as _, ScrollHandle, Styled as _, Window, div,
+    px,
+};
 
 use super::Story;
 use crate::copy::Lang;
@@ -14,6 +21,7 @@ struct Copy {
     hint: &'static str,
     column: &'static str,
     item: fn(usize) -> String,
+    group: fn(usize) -> String,
 }
 
 fn copy(lang: Lang) -> Copy {
@@ -35,6 +43,7 @@ fn copy(lang: Lang) -> Copy {
             hint: "Scroll: the edge that clips content fades; the fade disappears at the boundary.",
             column: "Column edge",
             item: |n| format!("Section {n}"),
+            group: |n| format!("Group {n}"),
         },
         Copy {
             row: |n| format!("턴 {n}: 설정 페이지를 읽고 섹션 헤더를 요약했습니다."),
@@ -51,6 +60,7 @@ fn copy(lang: Lang) -> Copy {
             hint: "스크롤하면 내용이 잘리는 가장자리가 흐려지고, 끝에 닿으면 흐림이 사라집니다.",
             column: "열 끝",
             item: |n| format!("섹션 {n}"),
+            group: |n| format!("그룹 {n}"),
         },
     )
 }
@@ -80,6 +90,10 @@ pub(super) fn stories() -> Vec<Story> {
         Story {
             name: "Minimum height",
             render: minimum,
+        },
+        Story {
+            name: "Sticky header",
+            render: sticky,
         },
     ]
 }
@@ -182,5 +196,47 @@ fn minimum(lang: Lang, _: &mut Window, _: &mut App) -> AnyElement {
                         .children((1..=2).map(|n| Typo::body((c.row)(n)))),
                 ),
         )
+        .into_any_element()
+}
+
+/// Each group's header holds at the top edge until its group scrolls out; its rows clip under it.
+fn sticky(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
+    let c = copy(lang);
+    let handle = window
+        .use_keyed_state("scroll-sticky-handle", cx, |_, _| ScrollHandle::new())
+        .read(cx)
+        .clone();
+    let room = Ds::get(cx).len(Length::FocusRingRoom);
+    let group = |g: usize| {
+        let (block, placed) = (Placement::default(), Placement::default());
+        let header = Sticky::new(
+            &handle,
+            px(0.),
+            Box::new()
+                .surface(Surface::Base)
+                .padding_x(Space::Sm)
+                .padding_y(Space::Xs)
+                .child(Typo::body((c.group)(g)).tone(Tone::Secondary)),
+        )
+        .within(&block)
+        .placed(&placed);
+        let rows = Stack::new().gap(Space::Xs).children((1..=12).map(|n| {
+            Box::new()
+                .surface(Surface::Muted)
+                .radius(Radius::Control)
+                .padding_x(Space::Sm)
+                .padding_y(Space::Xs)
+                .child(Typo::body((c.item)(n)))
+        }));
+        block
+            .track(div().w_full().min_w_0())
+            .child(header)
+            .child(ClipUnder::new(&placed, room, rows))
+    };
+    ScrollArea::new("scroll-sticky")
+        .handle(handle.clone())
+        .max_height(MaxHeight::Xs)
+        .probe("scroll-sticky")
+        .child(Stack::new().gap(Space::Sm).children([group(1), group(2)]))
         .into_any_element()
 }

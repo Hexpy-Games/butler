@@ -49,7 +49,7 @@ fn copy(lang: Lang) -> Copy {
             section: "일반",
             port: "포트",
             port_description: "웹 앱이 쓰는 로컬 포트입니다.",
-            port_error: "1024부터 65535까지의 숫자를 입력하세요.",
+            port_error: "1024부터 65535까지의 숫자를 입력하십시오.",
         },
     )
 }

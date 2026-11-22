@@ -80,7 +80,7 @@ fn copy(lang: Lang) -> Copy {
             ext_mid: "에 들어갔고, 추적은",
             ext_and: "에서 합니다.",
             guide: "처음 실행 안내서",
-            ext_end: "도 참고하세요.",
+            ext_end: "도 참고하십시오.",
             long_before: "참고 자료:",
             long_title: "신뢰할 수 없는 모델 출력의 링크를 여는 데스크톱 앱 보안 강화하기",
             long_mid: "그리고 원본 보고서",

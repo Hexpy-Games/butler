@@ -16,6 +16,7 @@ use crate::ui::context::Ds;
 use crate::ui::convert;
 use crate::ui::icon::{IconSize, icon};
 use crate::ui::layer::{Layer, Z};
+use crate::ui::strut;
 use crate::ui::typo::{Role, Typo};
 
 /// Room the label needs past the row's end before it moves inside the row.
@@ -109,6 +110,8 @@ pub(super) struct Ghost(pub(super) Ghosting);
 
 impl Render for Ghost {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div().child((self.0)(window, cx))
+        let ghost = div().child((self.0)(window, cx));
+        let ds = Ds::get(cx);
+        strut::body_root(ghost, ds)
     }
 }

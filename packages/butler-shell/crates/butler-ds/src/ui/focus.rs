@@ -6,8 +6,8 @@ use crate::ui::cover::cover;
 use std::cell::{Cell, RefCell};
 
 use gpui::{
-    App, Bounds, BoxShadow, Corners, Div, FocusHandle, InteractiveElement as _, ParentElement as _,
-    Pixels, Styled as _, Window, canvas,
+    App, Bounds, BoxShadow, Corners, Div, FocusHandle, InteractiveElement as _, KeyDownEvent,
+    ParentElement as _, Pixels, Styled as _, Window, canvas,
 };
 
 use super::context::{Ds, Modality};
@@ -39,6 +39,26 @@ pub fn paint(ds: &Ds, bounds: Bounds<Pixels>, radius: Pixels, window: &mut Windo
 /// handle this returns (the flag is shared by every copy of the handle).
 pub fn tab_stop(handle: &FocusHandle, on: bool) -> FocusHandle {
     handle.clone().tab_stop(on)
+}
+
+/// Tab and Shift-Tab move focus along the tab stops, as a browser does; Tab with Ctrl, Alt or
+/// Cmd is not focus navigation and passes on. gpui binds no Tab, so a window gives its root this
+/// as an `on_key_down` listener (bubble phase: an overlay that traps or handles Tab sees it
+/// first). A single-line field focus lands on selects its text, as a browser's input does
+/// ([`crate::ui::text::select_focused`]). Returns whether it took the key.
+pub fn move_on_tab(event: &KeyDownEvent, window: &mut Window, cx: &mut App) -> bool {
+    let m = event.keystroke.modifiers;
+    if event.keystroke.key != "tab" || m.control || m.alt || m.platform || m.function {
+        return false;
+    }
+    if m.shift {
+        window.focus_prev(cx);
+    } else {
+        window.focus_next(cx);
+    }
+    crate::ui::text::select_focused(window, cx);
+    cx.stop_propagation();
+    true
 }
 
 /// Records whether the last input was the keyboard or a pointer, for [`visible`]. Add it to the

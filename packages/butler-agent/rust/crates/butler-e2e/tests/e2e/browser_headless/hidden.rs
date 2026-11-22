@@ -237,6 +237,7 @@ async fn without_a_usable_electron_the_headless_browser_serves() -> Result<(), H
 /// Discovery of an installed App: only Windows has a standard App location to discover.
 #[cfg(windows)]
 mod installed {
+    use super::super::support::host::setup_with;
     use super::*;
 
     #[tokio::test]
@@ -246,10 +247,12 @@ mod installed {
             hidden_app(),
             "BUTLER_E2E_BROWSER_BACKEND=hidden-app not set"
         );
-        let setup = setup("BROWSER-INSTALLED-CEF")?
-            .unset_env("BUTLER_BROWSER_APP")
-            .unset_env("BUTLER_BROWSER_APP_DIR")
-            .unset_env("BUTLER_BROWSER_CEF_HOST");
+        let setup = setup_with("BROWSER-INSTALLED-CEF", |setup| {
+            setup
+                .unset_env("BUTLER_BROWSER_APP")
+                .unset_env("BUTLER_BROWSER_APP_DIR")
+                .unset_env("BUTLER_BROWSER_CEF_HOST")
+        })?;
         let localappdata = setup.sandbox.root.join("localappdata");
         let app = localappdata.join("butler-app/app-9.9.9");
         std::fs::create_dir_all(&app)?;
@@ -292,13 +295,15 @@ mod installed {
             "BUTLER_E2E_BROWSER_BACKEND=hidden-app not set"
         );
         let fixture = butler_e2e::e2e::binary::mcp_fixture_binary()?;
-        let setup = setup("BROWSER-NAMED-CEF")?
-            .unset_env("BUTLER_BROWSER_APP")
-            .unset_env("BUTLER_BROWSER_APP_DIR")
-            .env(
-                "BUTLER_BROWSER_CEF_HOST",
-                fixture.to_string_lossy().into_owned(),
-            );
+        let setup = setup_with("BROWSER-NAMED-CEF", |setup| {
+            setup
+                .unset_env("BUTLER_BROWSER_APP")
+                .unset_env("BUTLER_BROWSER_APP_DIR")
+        })?
+        .env(
+            "BUTLER_BROWSER_CEF_HOST",
+            fixture.to_string_lossy().into_owned(),
+        );
         let localappdata = setup.sandbox.root.join("localappdata");
         let app = localappdata.join("butler-app/app-9.9.9");
         std::fs::create_dir_all(&app)?;

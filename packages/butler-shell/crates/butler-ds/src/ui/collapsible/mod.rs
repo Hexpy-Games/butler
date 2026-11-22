@@ -5,7 +5,8 @@
 //! content is kept. Content that starts open does not animate unless `appear` is set. The height
 //! is layout, as in CSS: while it moves, each frame lays out the eased height, so the parents
 //! (a card's glass, a toolbar below) follow it. The clip paints `--focus-ring-room` past the box
-//! (`overflow-clip-margin`) without taking layout room.
+//! (`overflow-clip-margin`) without taking layout room, or the margin a subtree sets
+//! ([`with_clip_margin`], `--collapsible-clip-margin`).
 //! Reduced motion: the height never animates; opening snaps it and fades in over
 //! `--motion-fast`, closing fades out first and only then snaps shut.
 mod clip;
@@ -15,7 +16,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Edges, ElementId, InteractiveElement as _, IntoElement, ParentElement,
+    AnyElement, App, Edges, ElementId, InteractiveElement as _, IntoElement, ParentElement, Pixels,
     RenderOnce, Styled as _, Window, canvas, div, px,
 };
 
@@ -40,6 +41,39 @@ pub enum KeepMounted {
 }
 
 type ExitHandler = Rc<dyn Fn(&mut Window, &mut App)>;
+
+/// `--collapsible-clip-margin` of the subtrees laying out, innermost last.
+#[derive(Default)]
+struct ClipMargins(Vec<Option<Pixels>>);
+
+impl gpui::Global for ClipMargins {}
+
+/// How far the folds laid out now paint past their box (`overflow-clip-margin`): the enclosing
+/// subtree's `--collapsible-clip-margin`, else the focus-ring room.
+pub fn clip_margin(cx: &App) -> Pixels {
+    cx.try_global::<ClipMargins>()
+        .and_then(|margins| margins.0.last().copied().flatten())
+        .unwrap_or_else(|| focus::room(Ds::get(cx)))
+}
+
+/// Lays out `f` with `--collapsible-clip-margin` set to `margin` (`None` leaves it as it is):
+/// a drop scope lets the folds in it paint the rows a drag moves below their box.
+pub fn with_clip_margin<R>(
+    margin: Option<Pixels>,
+    window: &mut Window,
+    cx: &mut App,
+    f: impl FnOnce(&mut Window, &mut App) -> R,
+) -> R {
+    let inherited = cx
+        .try_global::<ClipMargins>()
+        .and_then(|margins| margins.0.last().copied().flatten());
+    cx.default_global::<ClipMargins>()
+        .0
+        .push(margin.or(inherited));
+    let out = f(window, cx);
+    cx.default_global::<ClipMargins>().0.pop();
+    out
+}
 
 #[derive(IntoElement)]
 pub struct Collapsible {
@@ -137,7 +171,13 @@ impl State {
 
         if self.open != open {
             self.open = open;
-            self.phase = if open { Phase::Opening } else { Phase::Closing };
+            self.phase = if !open {
+                Phase::Closing
+            } else if reduced {
+                Phase::Settled
+            } else {
+                Phase::Opening
+            };
             self.mounted |= open;
             self.started = false;
             self.generation += 1;
@@ -188,7 +228,11 @@ fn measure(state: &gpui::Entity<State>, natural: Rc<Cell<Option<f32>>>) -> impl 
             let height = Some(f32::from(bounds.size.height));
             let first = natural.replace(height).is_none();
             if first {
-                probe.update(cx, |_, cx| cx.notify());
+                probe.update(cx, |s, cx| {
+                    if s.phase == Phase::Opening && !s.started {
+                        cx.notify();
+                    }
+                });
             }
         },
     )
@@ -258,7 +302,7 @@ impl RenderOnce for Collapsible {
                 ..Default::default()
             },
         );
-        let room = focus::room(Ds::get(cx));
+        let room = clip_margin(cx);
         ClipMargin::new(frame.into_any_element(), Edges::all(room)).into_any_element()
     }
 }

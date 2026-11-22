@@ -33,9 +33,9 @@ fn copy(lang: Lang) -> Copy {
         },
         Copy {
             appearance: "화면",
-            appearance_hint: "작업 공간에 맞는 테마와 밀도를 고르세요.",
+            appearance_hint: "작업 공간에 맞는 테마와 밀도를 고르십시오.",
             models: "모델",
-            models_hint: "제공자를 연결하고 기본 모델을 고르세요.",
+            models_hint: "제공자를 연결하고 기본 모델을 고르십시오.",
             management: "모델 관리",
             add: "모델 추가",
             breadcrumb: "이동 경로",

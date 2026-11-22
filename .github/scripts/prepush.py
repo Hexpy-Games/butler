@@ -20,6 +20,7 @@ RUST = ROOT / 'packages/butler-agent/rust'
 ISOLATE = ROOT / '.github/scripts/isolated.py'
 ARM = 'aarch64-unknown-linux-gnu'
 WINDOWS = 'x86_64-pc-windows-msvc'
+POSIX_HOST = os.name == 'posix'
 MISSING_TOOLS = set()
 
 
@@ -300,8 +301,18 @@ def check_range(base=None, tip=None, branch=None):
         if tool_available('actionlint'):
             success = run('actionlint', ['actionlint', *selected['workflows']]) and success
     success = powershell_check(selected['powershell']) and success
-    for command in python_tests(paths):
-        success = run('CI-script ' + Path(command[1]).name, local_ci_command(command)) and success
+    tests = python_tests(paths)
+    if tests and not POSIX_HOST:
+        print('prepush: WARNING: SKIP CI-script tests: the lint job runs them on Linux and they '
+              'assume a POSIX host; CI still checks them', file=sys.stderr)
+    elif tests and sys.version_info < (3, 11):
+        print('prepush: CI-script tests need Python 3.11+ (CI uses 3.12); '
+              'put a newer python3 first on PATH', file=sys.stderr)
+        success = False
+    else:
+        for command in tests:
+            label = 'CI-script ' + Path(command[1]).name
+            success = run(label, local_ci_command(command)) and success
     if base and selected['licenses']:
         success = run('notices', ['node', 'deploy/licenses/generate.mjs', '--check']) and success
         success = run('licenses', ['node', 'deploy/licenses/check.mjs']) and success

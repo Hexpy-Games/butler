@@ -13,7 +13,7 @@ import { ComposerDecisionPanel, type ComposerDecisionPanelProps } from "./Compos
 const words = {
   "en-US": { eyebrow: "Permission", click: "Click ‘Book now’", detail: "Pine Grove Campground · Oct 20 and 22, deck site, 2 nights · $84", medium: "Medium risk", high: "High risk", network: "Run a networked command in 'garden'?",
     deny: "Deny", once: "Allow once", scope: "Allow scope", conversation: "Always allow in this conversation", open: "Open tab" },
-  "ko-KR": { eyebrow: "권한", click: "‘예약하기’ 버튼 클릭", detail: "가평 솔숲 캠핑장 · 10월 20일, 22일 데크 2박 · 110,000원", medium: "위험 보통", high: "위험 높음", network: "'garden'에서 네트워크 명령을 실행할까요?",
+  "ko-KR": { eyebrow: "권한", click: "‘예약하기’ 버튼 클릭", detail: "가평 솔숲 캠핑장 · 10월 20일, 22일 데크 2박 · 110,000원", medium: "위험 보통", high: "위험 높음", network: "'garden'에서 네트워크 명령을 실행하시겠습니까?",
     deny: "거절", once: "이번만 허용", scope: "허용 범위", conversation: "이 대화에서 계속 허용", open: "탭 열기" },
 } as const;
 

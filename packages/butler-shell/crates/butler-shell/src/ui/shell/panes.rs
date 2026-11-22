@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use butler_ds::ui::blocks::adaptive_shell::SplitConfig;
 use butler_ds::ui::blocks::adaptive_shell::frame::CHAT_WIDTH_DEFAULT;
+use butler_ds::ui::blocks::adaptive_shell::parts::ShellCard;
 use butler_ds::ui::blocks::adaptive_shell::split::AdaptiveShellSplit;
 use butler_ds::ui::blocks::conversation_shell::AsideLayout;
 use butler_ds::ui::context::Ds;
@@ -89,7 +90,7 @@ impl Shell {
             info_open: false,
             task_graph_enabled: false,
             graph_open: false,
-            chat_width: None,
+            chat_width: crate::ui::browser::split_width::saved(cx),
             split: None,
         };
         (panes, subscription)
@@ -318,7 +319,7 @@ impl Shell {
         let Some(session) = self.store.selected().map(|c| c.session.0.to_string()) else {
             self.panes.split = None;
             self.panes.held = None;
-            return conversation;
+            return ShellCard::new().child(conversation).into_any_element();
         };
         let editing = match images::editor_target(cx) {
             Some(target) if target.session.as_ref() == session => true,
@@ -346,6 +347,7 @@ impl Shell {
             .on_chat_width_change(move |next, _, cx| {
                 let _ = width.update(cx, |s, cx| {
                     s.panes.chat_width = Some(next);
+                    crate::ui::browser::split_width::changed(next, cx);
                     cx.notify();
                 });
             });

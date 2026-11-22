@@ -4,7 +4,7 @@
 //! out, which is when the DS components below it read them.
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
-    LayoutId, Pixels, Window,
+    LayoutId, Pixels, ScrollHandle, Window,
 };
 
 use crate::tokens::{Color, Density};
@@ -192,6 +192,25 @@ pub fn svg_size(cx: &App) -> Option<f32> {
         .and_then(|sizes| sizes.0.last().copied())
 }
 
+/// Where the sticky nav groups of a scroller hold (SidebarShell `.scrollContent`): the scroller
+/// and `--nav-sticky-offset`, the line depth 0 holds at below its top edge.
+#[derive(Clone)]
+pub struct NavSticky {
+    pub scroll: ScrollHandle,
+    pub offset: Pixels,
+}
+
+#[derive(Default)]
+struct NavStickies(Vec<NavSticky>);
+
+impl gpui::Global for NavStickies {}
+
+/// The enclosing scroller's sticky line, if the caller is inside one that sets it.
+pub fn nav_sticky(cx: &App) -> Option<NavSticky> {
+    cx.try_global::<NavStickies>()
+        .and_then(|scopes| scopes.0.last().cloned())
+}
+
 /// What a ComposerCard tells the controls and panels in it: its `container-type: inline-size`
 /// facts and the `--composer-inner-padding-*` variables.
 #[derive(Clone, Copy, Debug, Default)]
@@ -225,6 +244,7 @@ pub struct Spec {
     pub conversation: Option<ConversationVars>,
     pub vars: Option<ShellVars>,
     pub composer: Option<ComposerVars>,
+    pub nav_sticky: Option<NavSticky>,
     /// The subtree renders in this theme (`theme-dark` or `theme-light`), whatever the page's.
     pub dark: Option<bool>,
     pub remap: Vec<(Color, Color)>,
@@ -368,6 +388,9 @@ fn push_globals(spec: &Spec, cx: &mut App) {
     if let Some(vars) = spec.composer {
         cx.default_global::<Composers>().0.push(vars);
     }
+    if let Some(sticky) = &spec.nav_sticky {
+        cx.default_global::<NavStickies>().0.push(sticky.clone());
+    }
 }
 
 /// Pops what `push_globals` pushed, in the reverse order.
@@ -383,6 +406,9 @@ fn pop_globals(spec: &Spec, cx: &mut App) {
     }
     if spec.composer.is_some() {
         cx.default_global::<Composers>().0.pop();
+    }
+    if spec.nav_sticky.is_some() {
+        cx.default_global::<NavStickies>().0.pop();
     }
     if spec.row_reveal.is_some() {
         cx.default_global::<Reveals>().0.pop();

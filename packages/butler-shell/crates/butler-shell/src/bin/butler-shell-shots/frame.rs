@@ -24,10 +24,12 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         }
         "click" | "drag" => pointer(h, command, arg),
         "drag-from" => drag_from(h, arg),
-        "focus-next" => focus_next(h, arg),
+        "drag-hold" => super::hold::drag_hold(h, arg),
+        "drag-release" => super::hold::drag_release(h, arg),
         "click-at" => click_at(h, arg),
         "page-click" => page_click(h, arg),
         "hover" => hover(h, arg),
+        "wheel" => wheel(h, arg),
         "reveal" => reveal(h, arg),
         "wait-anchor" | "wait-no-anchor" => wait_anchor(h, arg, command == "wait-anchor"),
         "wait-theme" => wait_theme(h, arg),
@@ -207,12 +209,38 @@ fn reveal(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
             .context("missing scroll port")?;
     let position = port.center();
     let delta = target.center().y - position.y;
-    move_pointer(h, h.handle, position, None)?;
-    h.cx.update_window(h.handle, |_, w, cx| {
+    wheel_at(h, h.handle, position, -delta)
+}
+
+/// `wheel <anchor> <dy> [fx fy]`: one wheel step of `dy` px (positive scrolls toward the start) with the pointer at the anchor's fractions (default its centre), wherever the anchor is (a popover's surface is its own layer).
+fn wheel(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    settle(&mut h.cx, h.handle);
+    let mut parts = arg.split_whitespace();
+    let anchor = parts.next().context("wheel anchor")?;
+    let dy: f32 = parts.next().context("wheel dy")?.parse()?;
+    let fx: f32 = parts.next().unwrap_or("0.5").parse()?;
+    let fy: f32 = parts.next().unwrap_or("0.5").parse()?;
+    let (handle, bounds) = find_anchor(h, anchor)?.context("missing wheel target")?;
+    let position = point(
+        bounds.left() + bounds.size.width * fx,
+        bounds.top() + bounds.size.height * fy,
+    );
+    wheel_at(h, handle, position, px(dy))
+}
+
+/// One wheel step of `dy` with the pointer at `position` in the window `handle`, then settles.
+fn wheel_at(
+    h: &mut Harness,
+    handle: gpui::AnyWindowHandle,
+    position: gpui::Point<gpui::Pixels>,
+    dy: gpui::Pixels,
+) -> anyhow::Result<()> {
+    move_pointer(h, handle, position, None)?;
+    h.cx.update_window(handle, |_, w, cx| {
         w.dispatch_event(
             PlatformInput::ScrollWheel(ScrollWheelEvent {
                 position,
-                delta: ScrollDelta::Pixels(point(px(0.), -delta)),
+                delta: ScrollDelta::Pixels(point(px(0.), dy)),
                 modifiers: Default::default(),
                 touch_phase: TouchPhase::Moved,
             }),
@@ -246,92 +274,6 @@ fn pointer(h: &mut Harness, command: &str, arg: &str) -> anyhow::Result<()> {
     let end = point(center.x + px(dx), center.y + px(dy));
     let start = if command == "drag" { center } else { end };
     pointer_sequence(h, handle, start, end, button, command == "drag")
-}
-
-/// `titlebar-grid <step>`: a left press every `<step>` px over the title bar (the release lands
-/// below the bar; a dropdown trigger still toggles on press), and whether the press reached
-/// the window drag (propagated) or a control took it. Written to `titlebar-grid.json` with the
-/// bounds of the controls in the bar.
-pub(super) fn titlebar_grid(
-    h: &mut Harness,
-    dir: &std::path::Path,
-    arg: &str,
-) -> anyhow::Result<()> {
-    settle(&mut h.cx, h.handle);
-    let step: f32 = arg.parse()?;
-    let bar =
-        h.cx.debug_bounds(h.handle, "titlebar")?
-            .context("no titlebar")?;
-    let release = point(bar.left(), bar.bottom() + px(step));
-    let (mut drag, mut control) = (Vec::new(), Vec::new());
-    let mut y = bar.top() + px(step / 2.);
-    while y < bar.bottom() {
-        let mut x = bar.left() + px(step / 2.);
-        while x < bar.right() {
-            let position = point(x, y);
-            let press = PlatformInput::MouseDown(MouseDownEvent {
-                button: MouseButton::Left,
-                position,
-                modifiers: Default::default(),
-                click_count: 1,
-                first_mouse: false,
-            });
-            let up = PlatformInput::MouseUp(MouseUpEvent {
-                button: MouseButton::Left,
-                position: release,
-                modifiers: Default::default(),
-                click_count: 1,
-            });
-            let propagated = h.cx.update_window(h.handle, |_, w, cx| {
-                let propagated = w.dispatch_event(press, cx).propagate;
-                w.dispatch_event(up, cx);
-                propagated
-            })?;
-            let at = [f32::from(x), f32::from(y)];
-            if propagated { &mut drag } else { &mut control }.push(at);
-            x += px(step);
-        }
-        y += px(step);
-    }
-    let mut bounds = serde_json::Map::new();
-    for name in [
-        "sidebar-toggle",
-        "session-menu-trigger",
-        "session-info-toggle",
-        "titlebar-browser-toggle",
-        "titlebar-file-viewer-toggle",
-        "wc-min",
-        "wc-max",
-        "wc-close",
-    ] {
-        if let Some(b) = h.cx.debug_bounds(h.handle, name)? {
-            let edges = [b.left(), b.top(), b.right(), b.bottom()].map(f32::from);
-            bounds.insert(name.into(), serde_json::json!(edges));
-        }
-    }
-    println!(
-        "titlebar-grid: {} drag, {} control",
-        drag.len(),
-        control.len()
-    );
-    let report = serde_json::json!({ "drag": drag, "control": control, "controls": bounds });
-    std::fs::write(dir.join("titlebar-grid.json"), serde_json::to_vec(&report)?)?;
-    Ok(())
-}
-
-/// `focus-next <n>`: moves focus `n` tab stops on, as the Tab binding an app gives its window
-/// does. The shell window binds none (gpui has none by default) and a press on the split handle
-/// does not focus it, so this is how a script reaches a control that answers to keys.
-fn focus_next(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
-    settle(&mut h.cx, h.handle);
-    let steps: usize = arg.parse().context("focus-next <n>")?;
-    h.cx.update_window(h.handle, |_, window, cx| {
-        for _ in 0..steps {
-            window.focus_next(cx);
-        }
-    })?;
-    settle(&mut h.cx, h.handle);
-    Ok(())
 }
 
 fn pointer_button(button: Option<&str>) -> anyhow::Result<MouseButton> {
@@ -475,9 +417,27 @@ pub(super) fn find_anchor(
 fn page_click(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
     settle(&mut h.cx, h.handle);
     let (x, y) = arg.split_once(' ').context("page-click <x> <y>")?;
+    let (x, y): (f32, f32) = (x.parse()?, y.parse()?);
     let bounds =
         h.cx.debug_bounds(h.handle, "browser-page")?
             .context("missing page surface")?;
-    let at = bounds.origin + point(px(x.parse()?), px(y.parse()?));
+    let mut page = None;
+    h.update(|_, _, cx| {
+        let model = cx.global::<ui::browser::model::BrowserState>();
+        page = model
+            .active()
+            .and_then(|id| model.tab(id))
+            .map(|tab| tab.pick.viewport());
+    })?;
+    #[expect(clippy::cast_possible_truncation, reason = "page pixels fit f32")]
+    let (w, ht) = match page {
+        Some((w, ht)) if w > 0. && ht > 0. => (w as f32, ht as f32),
+        _ => (f32::from(bounds.size.width), f32::from(bounds.size.height)),
+    };
+    let (sx, sy) = (
+        f32::from(bounds.size.width) / w,
+        f32::from(bounds.size.height) / ht,
+    );
+    let at = bounds.origin + point(px(x * sx), px(y * sy));
     pointer_sequence(h, h.handle, at, at, MouseButton::Left, false)
 }

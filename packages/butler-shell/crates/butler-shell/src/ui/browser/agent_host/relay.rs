@@ -1,4 +1,6 @@
 //! Raw DevTools messages between hosted pages and the Agent; up in order, one request at a time.
+#[cfg(feature = "cef")]
+use super::Holder;
 use super::Hosted;
 #[cfg(feature = "cef")]
 use crate::ui::browser::engine::PageCommand;
@@ -196,6 +198,15 @@ fn allowed(message: &Value) -> bool {
             || matches!(method, "Target.setAutoAttach" | "Target.detachFromTarget"))
 }
 
+#[cfg(feature = "cef")]
+fn fetch_reply(message: &Value) -> bool {
+    message["method"] == "Fetch.failRequest"
+        || (message["method"] == "Fetch.continueRequest"
+            && message["params"]
+                .as_object()
+                .is_some_and(|params| params.keys().all(|key| key == "requestId")))
+}
+
 /// A `cdp` frame of the Agent, sent unchanged to the hosted page it names. A
 /// `Runtime.runIfWaitingForDebugger` on the page itself (a frame's session carries its
 /// `sessionId`) lets the page run: its id is kept until the reply.
@@ -213,22 +224,33 @@ pub(super) fn down(cx: &mut App, frame: &Value) {
         return;
     };
     let tab = TabId(tab.to_owned().into());
-    cx.update_global::<BrowserState, _>(|model, _| {
-        let Some(hosted) = model
+    let refused = cx.update_global::<BrowserState, _>(|model, _| {
+        let hosted = model
             .tabs
             .iter_mut()
             .find(|candidate| candidate.id == tab)
-            .and_then(|candidate| candidate.hosted.as_mut())
-        else {
-            return;
-        };
+            .and_then(|candidate| candidate.hosted.as_mut())?;
+        // The user holds the page: only Fetch replies that cannot alter a request pass.
+        if hosted.holder == Holder::User && !fetch_reply(message) {
+            return Some(());
+        }
         if message["method"] == "Runtime.runIfWaitingForDebugger"
             && message.get("sessionId").is_none()
         {
             hosted.start = Some(message["id"].clone());
         }
         model.engine.devtools_raw(&tab, &bytes);
+        None
     });
+    if refused.is_some() {
+        let mut reply = json!({"id": message["id"],
+            "error": {"code": -32000, "message": "user_control"}});
+        if let Some(session) = message.get("sessionId") {
+            reply["sessionId"] = session.clone();
+        }
+        let size = reply.to_string().len();
+        up(cx, Some(&tab), reply, size);
+    }
 }
 
 fn info(hosted: &Hosted, method: &str, url: &str, title: &str) -> Value {

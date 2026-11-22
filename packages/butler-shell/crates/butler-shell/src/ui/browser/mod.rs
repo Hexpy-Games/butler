@@ -1,5 +1,10 @@
 //! Shell-owned browser tabs, address policy and page engine boundary.
 use gpui::BorrowAppContext as _;
+use gpui::{ElementId, SharedString, div, prelude::*};
+
+use crate::ui::i18n::{browser::BrowserStrings, browser_handoff::BrowserHandoff};
+use butler_ds::ui::blocks::composer_decision_panel::Media;
+use butler_ds::ui::media_frame::{Aspect, MediaFrame};
 
 pub(crate) mod address;
 mod agent_host;
@@ -11,6 +16,7 @@ mod dialog;
 #[cfg(feature = "cef")]
 pub(crate) mod downloads;
 pub(crate) mod engine;
+mod holder_band;
 mod host;
 mod lazy;
 pub(crate) mod model;
@@ -24,6 +30,7 @@ mod popup_window;
 mod popups;
 pub(crate) mod restore;
 pub(crate) mod shell_state;
+pub(crate) mod split_width;
 mod suggestions;
 mod tabs;
 mod toolbar;
@@ -38,6 +45,7 @@ pub(crate) fn init(cx: &mut gpui::App) {
     }
     visits::init(cx);
     restore::init(cx);
+    split_width::init(cx);
     model::BrowserState::init(cx);
     cx.set_global(shell_state::BrowserShell::default());
 }
@@ -102,12 +110,77 @@ pub(crate) fn open_conversation_link(session: Option<&str>, url: &str, cx: &mut 
         });
         area::result(&value, cx);
         if let Ok(Some(id)) = value {
-            cx.global_mut::<shell_state::BrowserShell>()
-                .remember_tab(session, id);
-            shell_state::open_conversation(session, cx);
+            open_tab(session, id, cx);
         }
     } else {
         // `openConversationLink` without a public conversation is `openLink`.
         open_link(url, cx);
     }
+}
+
+/// Electron `openHandoffTab`: the conversation's hosted tab at a human step, else one the Agent
+/// waits on, else its first hosted tab.
+pub(crate) fn handoff_tab(session: &str, cx: &gpui::App) -> Option<engine::TabId> {
+    let owner = model::Owner::Conversation(session.to_owned().into());
+    let hosted: Vec<_> = (cx.try_global::<model::BrowserState>()?.tabs().iter())
+        .filter(|tab| tab.owner == owner)
+        .filter_map(|tab| Some((&tab.id, tab.hosted.as_ref()?)))
+        .collect();
+    (hosted.iter().find(|(_, hosted)| hosted.step.is_some()))
+        .or_else(|| hosted.iter().find(|(_, hosted)| hosted.waiting))
+        .or(hosted.first())
+        .map(|(id, _)| (*id).clone())
+}
+
+pub(crate) fn handoff_media(
+    session: &str,
+    tab: &str,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) -> Option<Media> {
+    let owner = model::Owner::Conversation(session.to_owned().into());
+    let state = cx.try_global::<model::BrowserState>()?;
+    let tab = state
+        .tabs()
+        .iter()
+        .find(|item| item.id.0.as_ref() == tab && item.owner == owner)?;
+    let mut placeholder = MediaFrame::new((ElementId::Name(tab.id.0.clone()), "handoff-frame"))
+        .aspect(Aspect::SixteenTen)
+        .placeholder();
+    if !tab.favicon.is_empty() {
+        placeholder = placeholder.placeholder_icon(SharedString::from(tab.favicon.clone()));
+    }
+    let content = div()
+        .relative()
+        .w_full()
+        .aspect_ratio(16. / 10.)
+        .child(placeholder)
+        .children(state.engine.thumbnail(&tab.id, window));
+    let title = if tab.title.is_empty() {
+        BrowserStrings::get(cx).new_tab
+    } else {
+        &tab.title
+    };
+    let label = format!("{} · {title}", BrowserHandoff::get(cx).open_tab);
+    let session = session.to_owned();
+    let tab = tab.id.clone();
+    Some(Media::new(content, label).on_open(move |_, _, cx| {
+        open_tab(&session, tab.clone(), cx);
+    }))
+}
+
+/// Electron `openHandoffTab`: the conversation's browser on its hand-off tab, else the
+/// conversation itself.
+pub(crate) fn open_handoff(session: &str, cx: &mut gpui::App) {
+    match handoff_tab(session, cx) {
+        Some(tab) => open_tab(session, tab, cx),
+        None => shell_state::open_conversation(session, cx),
+    }
+}
+
+/// Opens the conversation's browser on `tab`.
+pub(crate) fn open_tab(session: &str, tab: engine::TabId, cx: &mut gpui::App) {
+    cx.global_mut::<shell_state::BrowserShell>()
+        .remember_tab(session, tab);
+    shell_state::open_conversation(session, cx);
 }

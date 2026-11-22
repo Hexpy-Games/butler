@@ -372,7 +372,7 @@ impl OsrRuntime {
                 self.state.visible.set(self.state.visible.get() + 1);
             } else {
                 self.state.visible.set(self.state.visible.get() - 1);
-                p.release_frames();
+                p.release_pool();
             }
         }
         if let Some(h) = self.host(page) {

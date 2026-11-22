@@ -17,8 +17,8 @@ use reqwest::Method;
 use serde_json::{Value, json};
 use std::{path::PathBuf, time::Duration};
 
-mod host;
-pub(crate) use host::{Pending, shell};
+pub(super) mod host;
+pub(crate) use host::{setup, shell};
 
 /// `BUTLER_E2E_BROWSER_BACKEND`: `headless` is Chrome for Testing (the first run downloads it),
 /// `hidden-app` the Electron named by `BUTLER_E2E_ELECTRON`, `cef` the staged host named by
@@ -87,10 +87,6 @@ pub(crate) fn cache() -> PathBuf {
         || std::env::temp_dir().join("butler-e2e-chrome-for-testing"),
         PathBuf::from,
     )
-}
-
-pub(crate) fn setup(id: &str) -> Result<Pending, HarnessError> {
-    configured(id).map(Pending::new)
 }
 
 fn configured(id: &str) -> Result<Setup, HarnessError> {
@@ -278,7 +274,7 @@ const INDEX: &str = r#"<!doctype html><meta charset="utf-8"><title>Headless fixt
 <style>body{font:18px system-ui;padding:24px;margin:0}button,input,a{font:inherit;margin:8px;padding:8px 16px}p{margin:8px}</style>
 <main><h1>Headless browser</h1>
 <button id="confirm" onclick="document.querySelector('#result').textContent='Confirmed'">Confirm</button><p id="result">Ready</p>
-<input id="q" aria-label="Search" placeholder="Search">
+<input id="q" aria-label="Search" placeholder="Search" oninput="document.title=this.value"><a id="next" href="./popup.html">next</a>
 <button id="submit" onclick="document.querySelector('#typed').textContent='Typed '+document.querySelector('#q').value">Submit</button><p id="typed">Typed nothing</p>
 <button id="ask" onclick="document.querySelector('#answer').textContent=confirm('Proceed?')?'Accepted':'Declined'">Ask</button><p id="answer">No answer</p>
 <button id="popup" onclick="window.open('./popup.html','_blank')">Open popup</button>

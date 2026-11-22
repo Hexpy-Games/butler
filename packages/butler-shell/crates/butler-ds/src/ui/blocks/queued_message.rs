@@ -126,7 +126,14 @@ impl QueuedMessage {
 
 /// How many lines `text` takes wrapped to `width` in the body face.
 fn lines(text: &str, width: f32, window: &mut Window, cx: &App) -> usize {
-    measure::wrapped_lines(text, Length::FontSize3, width, window, cx)
+    // The paint's breaking (`body_text`): keep-all in Korean, overflow-wrap anywhere.
+    let word_break = if Ds::get(cx).lang() == Lang::Ko {
+        gpui::WordBreak::KeepAll
+    } else {
+        gpui::WordBreak::Normal
+    };
+    let breaks = (word_break, gpui::OverflowWrap::Anywhere);
+    measure::wrapped_lines_with(text, Length::FontSize3, width, breaks, window, cx)
 }
 
 impl QueuedMessage {
@@ -162,7 +169,7 @@ impl QueuedMessage {
         Some(
             Button::new((self.id.clone(), "toggle"))
                 .variant(Variant::Inline)
-                .text(if open { less } else { more })
+                .child(if open { less } else { more })
                 .on_click(move |_, _, cx| {
                     on.update(cx, |open, cx| {
                         *open = !*open;
@@ -172,8 +179,7 @@ impl QueuedMessage {
         )
     }
 
-    /// The bubble's text; clamped, it clips at five lines (gpui's `line_clamp` counts hard breaks
-    /// apart and draws no ellipsis).
+    /// The bubble's text; clamped, its fifth line ends in an ellipsis (`-webkit-line-clamp: 5`).
     fn body_text(&self, clamped: bool, ds: &Ds) -> gpui::Div {
         let mut text = div().min_w_0();
         if ds.lang() == Lang::Ko {
@@ -183,8 +189,7 @@ impl QueuedMessage {
             .overflow_wrap(OverflowWrap::Anywhere)
             .child(gpui::StyledText::new(self.text.clone()));
         if clamped {
-            text.max_h(ds.len(Length::TypoBodyLineHeightDocument) * CLAMP_LINES as f32)
-                .overflow_hidden()
+            text.line_clamp(CLAMP_LINES).text_ellipsis()
         } else {
             text
         }

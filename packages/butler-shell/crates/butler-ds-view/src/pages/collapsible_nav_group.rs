@@ -1,8 +1,8 @@
 //! CollapsibleNavGroup.showcase.tsx: space folders, nested folders and a project group with
-//! actions, in the app's SidebarShell. Every group is sticky (`stickyDepth`): each sidebar
-//! records its scroller's top edge for the headers to hold at.
+//! actions, in the app's SidebarShell. Every group is sticky (`stickyDepth`): its headers hold
+//! at the sidebar scroller's top edge.
 use butler_ds::ui::Icon;
-use butler_ds::ui::blocks::collapsible_nav_group::{CollapsibleNavGroup, StickyScroll};
+use butler_ds::ui::blocks::collapsible_nav_group::CollapsibleNavGroup;
 use butler_ds::ui::blocks::nav_row::{NavRow, NavRowSwap};
 use butler_ds::ui::blocks::sidebar_shell::SidebarShell;
 use butler_ds::ui::layout::{Space, Stack};
@@ -98,16 +98,9 @@ pub(super) fn stories() -> Vec<Story> {
     ]
 }
 
-/// `Sidebar`: the app's SidebarShell, with the recorder the sticky headers read the scroller's
-/// top edge from as its first row.
-fn sidebar(
-    id: &'static str,
-    scroll: &StickyScroll,
-    rows: impl IntoIterator<Item = AnyElement>,
-) -> AnyElement {
-    let mut shell = SidebarShell::new(id)
-        .scroll_fade(false)
-        .child(scroll.recorder());
+/// `Sidebar`: the app's SidebarShell, the scroller the sticky headers hold in.
+fn sidebar(id: &'static str, rows: impl IntoIterator<Item = AnyElement>) -> AnyElement {
+    let mut shell = SidebarShell::new(id).scroll_fade(false);
     for row in rows {
         shell = shell.child(row);
     }
@@ -181,10 +174,9 @@ fn space_folders(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let (expanded, toggle) = flag("cng-space-open", true, window, cx);
     let (closed, toggle_closed) = flag("cng-space-closed", false, window, cx);
-    let scroll = StickyScroll::new("cng-space-scroll", window, cx);
     let mut open = CollapsibleNavGroup::new("cng-space", c.folder, expanded)
         .indented()
-        .sticky(&scroll, 0)
+        .sticky(0)
         .glyph(if expanded {
             Icon::FolderOpen
         } else {
@@ -209,7 +201,7 @@ fn space_folders(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     }
     let mut shut = CollapsibleNavGroup::new("cng-closed", c.closed, closed)
         .indented()
-        .sticky(&scroll, 0)
+        .sticky(0)
         .glyph(Icon::Folder)
         .on_toggle(toggle_closed.clone())
         .actions(folder_actions(
@@ -231,7 +223,6 @@ fn space_folders(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let body = Stack::new().gap(Space::Xs).child(open).child(shut);
     sidebar(
         "cng-space-sidebar",
-        &scroll,
         [
             body.into_any_element(),
             probe(format!("cng-space-open-{expanded}")).into_any_element(),
@@ -242,10 +233,9 @@ fn space_folders(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
 fn project_group(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let c = copy(lang);
     let (expanded, toggle) = flag("cng-project-open", true, window, cx);
-    let scroll = StickyScroll::new("cng-project-scroll", window, cx);
     let mut group = CollapsibleNavGroup::new("cng-project", c.project, expanded)
         .indented()
-        .sticky(&scroll, 0)
+        .sticky(0)
         .glyph(if expanded {
             Icon::FolderOpen
         } else {
@@ -268,7 +258,7 @@ fn project_group(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
             true,
         ));
     }
-    sidebar("cng-project-sidebar", &scroll, [group.into_any_element()])
+    sidebar("cng-project-sidebar", [group.into_any_element()])
 }
 
 fn nested_folders(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
@@ -277,11 +267,10 @@ fn nested_folders(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
     let (backlog, toggle_backlog) = flag("cng-n-backlog", false, window, cx);
     let (milestone, toggle_milestone) = flag("cng-n-milestone", true, window, cx);
     let (closed, toggle_closed) = flag("cng-n-closed", false, window, cx);
-    let scroll = StickyScroll::new("cng-n-scroll", window, cx);
     let folder = |id: &'static str, label: &'static str, depth: usize, open: bool, toggle: _| {
         CollapsibleNavGroup::new(id, label, open)
             .indented()
-            .sticky(&scroll, depth)
+            .sticky(depth)
             .glyph(if open { Icon::FolderOpen } else { Icon::Folder })
             .on_toggle(toggle)
     };
@@ -327,5 +316,5 @@ fn nested_folders(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement {
         closed_group = closed_group.child(row);
     }
     let body = Stack::new().gap(Space::Xs).child(outer).child(closed_group);
-    sidebar("cng-nested-sidebar", &scroll, [body.into_any_element()])
+    sidebar("cng-nested-sidebar", [body.into_any_element()])
 }

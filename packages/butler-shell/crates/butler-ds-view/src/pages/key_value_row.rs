@@ -111,7 +111,7 @@ fn copy(lang: Lang) -> Copy {
             redacted: "가려짐",
             conversation: "대화",
             subtask: "하위 작업",
-            hint: "행에 마우스를 올리거나 포커스하세요",
+            hint: "행에 마우스를 올리거나 포커스하십시오",
             emphasized: "차트 강조: ",
         },
     )

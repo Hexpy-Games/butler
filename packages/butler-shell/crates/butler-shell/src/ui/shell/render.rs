@@ -68,11 +68,9 @@ impl Shell {
             .flex_col()
             .children(notice)
             .child(
-                ShellCard::new().child(
-                    self.with_aside(conversation)
-                        .child(content)
-                        .child(self.composer.clone()),
-                ),
+                self.with_aside(conversation)
+                    .child(content)
+                    .child(self.composer.clone()),
             )
             .into_any_element()
     }
@@ -378,6 +376,13 @@ impl Render for Shell {
                     peek::escape(w, cx);
                 }
             })
+            // Tab is a deliberate focus, like a pointer down: the field keeps focus it lands in.
+            .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, window, cx| {
+                if focus::move_on_tab(e, window, cx) {
+                    this.composer
+                        .update(cx, |composer, _| composer.keep_next_focus());
+                }
+            }))
             .size_full()
             .relative()
             .font_family(ds.body_font().clone())

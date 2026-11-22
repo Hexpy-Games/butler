@@ -3,6 +3,7 @@
 //! with an ellipsis (give the text `Typo::truncate`).
 use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, Styled as _, Window, div};
 
+use super::blocks::message_row::MessageStatusLabel;
 use super::context::Ds;
 use crate::tokens::Length;
 
@@ -17,6 +18,13 @@ impl RollingStatusLine {
             children: Vec::new(),
         }
     }
+
+    /// The status label child: `.content > *` applies to the label itself, so it clips (an
+    /// inline-flex scroll container sits on its bottom edge in the line).
+    pub fn label(mut self, label: MessageStatusLabel) -> Self {
+        self.children.push(label.clip().into_any_element());
+        self
+    }
 }
 
 impl Default for RollingStatusLine {
@@ -27,19 +35,25 @@ impl Default for RollingStatusLine {
 
 impl ParentElement for RollingStatusLine {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+        // `.content > * { min-width: 0; overflow: hidden }`
+        self.children.extend(elements.into_iter().map(|child| {
+            div()
+                .min_w_0()
+                .overflow_hidden()
+                .child(child)
+                .into_any_element()
+        }));
     }
 }
 
 impl RenderOnce for RollingStatusLine {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
-        // `.content > * { min-width: 0; overflow: hidden }`
-        let content = div().w_full().min_w_0().overflow_hidden().children(
-            self.children
-                .into_iter()
-                .map(|child| div().min_w_0().overflow_hidden().child(child)),
-        );
+        let content = div()
+            .w_full()
+            .min_w_0()
+            .overflow_hidden()
+            .children(self.children);
         div()
             .flex()
             .h(ds.len(Length::TypoBodyLineHeight))

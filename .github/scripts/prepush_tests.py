@@ -132,6 +132,7 @@ class PrepushChecks(unittest.TestCase):
         calls = []
         host = 'aarch64-apple-darwin'
         with patch.object(prepush, 'output', side_effect=['host: ' + host, host]), \
+                patch.object(prepush, 'tool_available', return_value=True), \
                 patch.object(prepush, 'prerequisites', return_value=['C compiler missing']), \
                 patch.object(prepush, 'run', side_effect=lambda *a: calls.append(a) or True), \
                 contextlib.redirect_stderr(io.StringIO()) as errors, \
@@ -149,6 +150,7 @@ class PrepushChecks(unittest.TestCase):
         host = 'aarch64-apple-darwin'
         for passed in (True, False):
             with self.subTest(passed=passed), \
+                    patch.object(prepush, 'tool_available', return_value=True), \
                     patch.object(prepush, 'output', side_effect=['host: ' + host, host]), \
                     patch.object(prepush, 'prerequisites', return_value=[]), \
                     patch.object(prepush, 'run', side_effect=lambda label, *a:
@@ -202,6 +204,7 @@ class PrepushChecks(unittest.TestCase):
     def test_clippy_lint_and_non_lint_exit_codes_both_fail(self):
         for code in (1, 101):
             with self.subTest(code=code), \
+                    patch.object(prepush, 'tool_available', return_value=True), \
                     patch.object(prepush.subprocess, 'call', return_value=code), \
                     contextlib.redirect_stderr(io.StringIO()) as errors, \
                     contextlib.redirect_stdout(io.StringIO()):
@@ -223,6 +226,17 @@ class PrepushChecks(unittest.TestCase):
                 patch.object(prepush, 'output', return_value='ci/checks'), \
                 patch.object(prepush, 'run', return_value=False):
             self.assertEqual(prepush.main([]), 1)
+
+    # test-category: pure-logic
+    def test_ci_script_tests_skip_on_non_posix_host(self):
+        with patch.object(prepush, 'POSIX_HOST', False), \
+                patch.object(prepush, 'changed_paths', return_value=('HEAD', ['.github/scripts/prepush.py'])), \
+                patch.object(prepush, 'output', return_value='ci/checks'), \
+                patch.object(prepush, 'run', return_value=True) as run, \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            self.assertEqual(prepush.main([]), 0)
+        self.assertFalse([c for c in run.call_args_list if str(c.args[0]).startswith('CI-script')])
+        self.assertIn('SKIP CI-script tests', errors.getvalue())
 
     # test-category: format-pin
     def test_hook_is_executable_and_cannot_silently_skip_checks(self):

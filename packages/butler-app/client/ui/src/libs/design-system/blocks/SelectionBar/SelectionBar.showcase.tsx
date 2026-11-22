@@ -76,7 +76,7 @@ export const stories: ShowcaseStory[] = [
     render: (context) => (
       <Stack cross="start">
         <Bar context={context} count={2} list={actions(context).map((action) => action.id === "copy"
-          ? { ...action, disabledReason: context.locale === "ko-KR" ? "고른 요소에 텍스트가 없어요" : "No text in these picks" } : action)} />
+          ? { ...action, disabledReason: context.locale === "ko-KR" ? "고른 요소에 텍스트가 없습니다" : "No text in these picks" } : action)} />
       </Stack>
     ),
   },

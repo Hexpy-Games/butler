@@ -111,7 +111,7 @@ pub(super) fn details(
         Button::new((id.clone(), "toggle"))
             .variant(Variant::Inline)
             .size(Size::Default)
-            .text(if open {
+            .child(if open {
                 labels.less.clone()
             } else {
                 labels.more.clone()

@@ -5,6 +5,8 @@ use butler_ds::ui::blocks::work_activity::{ToolItem, WorkActivityBlock, WorkActi
 use butler_ds::ui::button::{Button, Shape, Variant};
 use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::scroll::{MaxHeight, ScrollArea};
+use butler_ds::ui::selectable::Break;
+use butler_ds::ui::typo::Typo;
 use gpui::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Window};
 
 use super::Story;
@@ -239,7 +241,11 @@ fn delegation(lang: Lang) -> AnyElement {
     WorkActivityBlock::new("wa-delegate", c.delegate_title)
         .tools(vec![
             ToolItem::new("wa-assignment", c.worker_call, c.work)
-                .details(c.worker_details)
+                .details_with(move |_, _| {
+                    Typo::caption(c.worker_details)
+                        .selectable(Break::Line)
+                        .into_any_element()
+                })
                 .after(
                     Button::new("wa-worker")
                         .variant(Variant::Outline)

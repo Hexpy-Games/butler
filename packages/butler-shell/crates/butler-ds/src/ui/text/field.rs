@@ -233,7 +233,12 @@ pub(super) fn render(spec: Spec, window: &mut Window, cx: &mut App) -> AnyElemen
     let hovered = *hover.read(cx);
     let anchor = control::next_anchor(cx, (!spec.disabled).then_some(&handle));
     if !spec.disabled {
-        super::register(cx, &handle, &state);
+        super::register(
+            cx,
+            &handle,
+            &state,
+            matches!(spec.shape, Shape::Area { .. }),
+        );
     }
     let ds = Ds::get(cx);
     let ring = focused && !focus::ring_handed_off(cx);

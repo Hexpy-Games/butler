@@ -111,6 +111,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             s.set_view(ui::manage::View::History { from }, w, cx);
         }),
         "browser-link" => h.update(|_, _, cx| ui::chat::open_link(arg, cx)),
+        "image-viewer" => open_image_viewer(h, arg),
         "browser-state" | "browser-frame" => browser_report(h, command),
         "new" => h.update(|s, w, cx| s.open_chat(None, w, cx)),
         // The main window closes; the tray's Open brings one back.
@@ -147,7 +148,8 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
             h.update(|s, _, cx| s.stop(cx))?;
             wait(h, |s, _| s.store.running().is_none())
         }
-        "titlebar-grid" => super::frame::titlebar_grid(h, dir, arg),
+        "titlebar-grid" => super::titlebar_grid::run(h, dir, arg),
+        "expect-focus-ring" | "expect-no-focus-ring" => super::focus::expect_ring(h, command, arg),
         "shot" => h.shot(dir, arg),
         "expect-fresh" => super::frame::expect_fresh(h, dir),
         "layout" => h.layout(dir, arg),
@@ -156,6 +158,13 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         _ => super::frame::command(h, command, arg),
     }
 }
+/// `image-viewer <file id>`: opens the window's image viewer on one picture (it need not load).
+fn open_image_viewer(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    use ui::shell::image_viewer::{ViewerEntry, loader::PictureId};
+    let entry = ViewerEntry::new(PictureId::File(arg.to_owned()), arg.to_owned());
+    h.update(|_, _, cx| ui::shell::image_viewer::open(vec![entry], 0, cx))
+}
+
 /// `tick <ms>`: advances the clock and runs what is due, without `wait`'s settle.
 fn tick(h: &mut Harness, ms: &str) -> anyhow::Result<()> {
     h.cx.advance_clock(Duration::from_millis(ms.parse()?));
@@ -319,11 +328,19 @@ fn quit_requested(h: &mut Harness) -> bool {
 /// first, then `HeadlessAppContext::drop` calls `App::shutdown` once, which runs the quit
 /// observers (the shell closes its pages and shuts CEF down through its own handle).
 fn end(h: &mut Harness) -> anyhow::Result<()> {
-    #[cfg(feature = "cef")]
-    h.cx.update(|cx| ui::browser::keep_runtime_alive(cx));
+    keep_cef_alive(h);
     io::stdout().flush()?;
     Ok(())
 }
+
+/// AppKit terminate never drops the CEF runtime, so the harness keeps it from dropping too.
+#[cfg(feature = "cef")]
+fn keep_cef_alive(h: &mut Harness) {
+    h.cx.update(|cx| ui::browser::keep_runtime_alive(cx));
+}
+
+#[cfg(not(feature = "cef"))]
+fn keep_cef_alive(_: &mut Harness) {}
 
 /// Both rows must be present, in the requested sidebar order.
 fn before(h: &mut Harness, arg: &str) -> anyhow::Result<()> {

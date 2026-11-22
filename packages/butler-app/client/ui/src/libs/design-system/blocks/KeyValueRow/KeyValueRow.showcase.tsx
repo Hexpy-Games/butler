@@ -31,7 +31,7 @@ const labels = {
       { label: "파일", description: "고정한 프로젝트 문서", value: "6.2K", meta: "9%", color: "var(--context-chart-3)" },
     ],
     provider: "제공자", runtime: "런타임", secrets: "비밀 값", redacted: "가려짐",
-    conversation: "대화", subtask: "하위 작업", hint: "행에 마우스를 올리거나 포커스하세요", emphasized: (label: string) => `차트 강조: ${label}`,
+    conversation: "대화", subtask: "하위 작업", hint: "행에 마우스를 올리거나 포커스하십시오", emphasized: (label: string) => `차트 강조: ${label}`,
   },
 } as const;
 

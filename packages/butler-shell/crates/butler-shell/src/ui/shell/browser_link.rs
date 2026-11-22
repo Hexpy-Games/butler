@@ -34,7 +34,7 @@ impl Shell {
             && self.settings_view.is_none()
             && self.on_session(cx);
         if self.browser_owner(cx).is_none() && !leaving {
-            cx.global_mut::<BrowserState>().show(None);
+            cx.global_mut::<BrowserState>().hide();
         }
     }
     pub(super) fn browser_focus_address(

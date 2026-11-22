@@ -13,7 +13,7 @@ use super::SessionObserver;
 use crate::ui::chat::TranscriptCtx;
 use crate::ui::chat::activity::child_views::sources;
 use crate::ui::chat::activity::timeline::{expanded_state, timeline, turn_activity_panel};
-use crate::ui::chat::message_row;
+use crate::ui::chat::grouped_message_row;
 use crate::ui::source::agent::Jobs;
 use crate::ui::source::wire::{MessageRecord, MessageRecordRole, ProgressRow, SessionView};
 use crate::ui::store::progress::activity::project_turn_activity;
@@ -101,10 +101,11 @@ impl SessionObserver {
             .relation
             .as_ref()
             .map(|relation| relation.safe_title.as_str());
+        // `MessageTurnGroup`: a `--space-lg` stack whose rows carry no bottom padding.
         let mut column = Stack::new().gap(Space::Lg);
         for entry in &self.entries {
             let row = match entry {
-                Entry::Message(message) => Some(message_row(message, &t, window, cx)),
+                Entry::Message(message) => Some(grouped_message_row(message, &t, window, cx)),
                 Entry::Activity {
                     turn,
                     rows,
@@ -124,7 +125,7 @@ impl SessionObserver {
                     panel.map(|panel| {
                         let id = SharedString::from(format!("steward-observer-activity-{turn}"));
                         MessageRow::new(id, Role::Assistant)
-                            .activity()
+                            .grouped()
                             .child(panel)
                             .into_any_element()
                     })
