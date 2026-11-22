@@ -109,6 +109,9 @@ async fn commands(
         {
             session_queue::route(state, request, uri).await
         }
+        Handler::RemoteAccount if !remote_account::admitted(&state, &request) => {
+            Err(HttpError::public(404, "not_found", "Route not found."))
+        }
         Handler::RemoteAccount => remote_account::unlock(request).await,
         Handler::Computers => computers::route(state, request).await,
         Handler::Mcp => mcp_servers::route(state, request, uri).await,

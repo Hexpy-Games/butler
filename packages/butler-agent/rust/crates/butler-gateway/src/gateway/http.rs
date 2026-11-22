@@ -191,19 +191,6 @@ async fn dispatch(State(state): State<Arc<HttpState>>, request: Request<Body>) -
 }
 
 async fn dispatch_inner(state: Arc<HttpState>, request: Request<Body>) -> Response {
-    if matches!(
-        request.extensions().get::<router::Handler>(),
-        Some(router::Handler::RemoteAccount)
-    ) && (request.method() != Method::POST
-        || request
-            .extensions()
-            .get::<listeners::LocalSocketPeer>()
-            .is_none()
-        || !state.security.is_admin(request.headers())
-        || !butler_models::models::sealed::is_enabled())
-    {
-        return error_response(&HttpError::public(404, "not_found", "Route not found."));
-    }
     let timing = latency_trace::start(&request);
     let connect_form =
         request.method() == Method::POST && request.uri().path() == security::CONNECT_PATH;
