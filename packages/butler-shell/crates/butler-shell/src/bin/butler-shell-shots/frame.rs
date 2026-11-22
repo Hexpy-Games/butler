@@ -243,6 +243,7 @@ fn wheel_at(
                 delta: ScrollDelta::Pixels(point(px(0.), dy)),
                 modifiers: Default::default(),
                 touch_phase: TouchPhase::Moved,
+                momentum: false,
             }),
             cx,
         );

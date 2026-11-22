@@ -28,10 +28,10 @@ lto = "thin"
 codegen-units = 1
 
 [workspace.dependencies]
-gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "714b0921df02b0131b7c0214e6ac7a3291601ab1", package = "gpui-ce" }
-gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "714b0921df02b0131b7c0214e6ac7a3291601ab1", package = "gpui_ce_platform" }
-gpui_wgpu = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "714b0921df02b0131b7c0214e6ac7a3291601ab1", package = "gpui_ce_wgpu" }
-gpui_elements = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "714b0921df02b0131b7c0214e6ac7a3291601ab1", package = "gpui_ce_elements" }
+gpui = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "6f2f42e4ad7ddbeded37d499a99988dca0983bd5", package = "gpui-ce" }
+gpui_platform = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "6f2f42e4ad7ddbeded37d499a99988dca0983bd5", package = "gpui_ce_platform" }
+gpui_wgpu = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "6f2f42e4ad7ddbeded37d499a99988dca0983bd5", package = "gpui_ce_wgpu" }
+gpui_elements = { git = "https://github.com/Hexpy-Games/gpui-ce", rev = "6f2f42e4ad7ddbeded37d499a99988dca0983bd5", package = "gpui_ce_elements" }
 anyhow = "1"
 futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
 sys-locale = "0.3"
