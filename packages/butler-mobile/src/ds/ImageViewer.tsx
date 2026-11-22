@@ -17,7 +17,7 @@ import { run, useReducedMotion } from "./internal/motion";
 export interface ImageViewerProps {
   images: ViewerImage[]; index: number | null; onIndexChange: (index: number) => void; onClose: () => void;
   labels: { zoomIn: string; zoomOut: string; close: string; previous: string; next: string;
-    position: (current: number, total: number) => string; failed: string };
+    position: (current: number, total: number) => string; failed: string; share: string; saveToLibrary: string };
 }
 
 export function ImageViewer({ images, index, onIndexChange, onClose, labels }: ImageViewerProps) {
@@ -66,6 +66,12 @@ export function ImageViewer({ images, index, onIndexChange, onClose, labels }: I
             <ViewerCapsule><IconButton icon={icons.ChevronRight} label={labels.next} size="md" variant="ghost" disabled={current === images.length - 1} onPress={() => onIndexChange(current + 1)} /></ViewerCapsule>
           </View> : null}
         </ImageViewerStage>
+        {images[current].save || images[current].share ? <View pointerEvents="box-none" style={{ flexDirection: "row", justifyContent: "center" }}>
+          <ViewerCapsule>
+            {images[current].save ? <IconButton icon={icons.Archive} label={labels.saveToLibrary} size="md" variant="ghost" onPress={images[current].save} /> : null}
+            {images[current].share ? <IconButton icon={icons.Share} label={labels.share} size="md" variant="ghost" onPress={images[current].share} /> : null}
+          </ViewerCapsule>
+        </View> : null}
       </Animated.View>
     </View> : null}
   </Modal>;

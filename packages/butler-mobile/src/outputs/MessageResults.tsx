@@ -49,7 +49,7 @@ function ImageTile({ target, pairing, width, height }: { target: Extract<ResultT
   }, [source.uri]);
   const dimensions = width && height ? { width, height } : size ?? { width, height };
   return <AnimatedPressable accessibilityRole="button" accessibilityLabel={app.conversation.imageViewer.viewImage(target.title)} {...press.handlers}
-    onPress={() => openResult(target, pairing, M.outputs.loadFailed)} style={[press.scaleStyle, { opacity: press.opacity, borderRadius: TILE_RADIUS,
+    onPress={() => openResult(target, pairing, M.outputs.loadFailed, app)} style={[press.scaleStyle, { opacity: press.opacity, borderRadius: TILE_RADIUS,
       boxShadow: press.focused ? t.shadow("--focus-ring") : undefined }]}>
     <ImageFrame source={source} aspect={imageAspect(dimensions.width, dimensions.height)} fit={frameFit(dimensions.width, dimensions.height)} />
   </AnimatedPressable>;
