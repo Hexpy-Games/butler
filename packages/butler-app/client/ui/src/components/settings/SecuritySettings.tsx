@@ -1,4 +1,4 @@
-import { ButlerVaultSection } from "./ButlerVaultSection";
+import { butlerVaultSection, useButlerVaultSectionState } from "./ButlerVaultSection";
 import { securityAuthoritySections } from "./SecurityAuthoritySections";
 import { useConnectedAccounts } from "./hooks/useConnectedAccounts";
 import { useSavedKeys } from "./hooks/useSavedKeys";
@@ -8,9 +8,12 @@ import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { DisclosureRow, SettingsField, SettingsFieldGroup, Stack } from "@/butler-ds";
 import { SettingsPage, SettingsSection } from "./SettingsFormComponents";
 import { SecurityAllowedHostsField } from "./SecurityAllowedHostsField";
-import { SecurityPairingSection } from "./SecurityPairingSection";
-import { SecurityDevicesSection } from "./SecurityDevicesSection";
+import { securityPairingSection } from "./SecurityPairingSection";
+import { securityDevicesSection } from "./SecurityDevicesSection";
 import { SecurityRemoteAccessFields } from "./SecurityRemoteAccessFields";
+import { useMinuteClock } from "@/app/space/minute-clock.ts";
+import { usePairedDevices } from "./usePairedDevices";
+import { usePairingSession } from "./usePairingSession";
 import { useSecuritySettings } from "./useSecuritySettings";
 
 /**
@@ -20,6 +23,7 @@ import { useSecuritySettings } from "./useSecuritySettings";
 export const SecuritySettings = memo(function SecuritySettings() {
   useAppLocale();
   const security = useSecuritySettings();
+  const vault = useButlerVaultSectionState();
   const savedKeys = useSavedKeys();
   const accounts = useConnectedAccounts();
   const grants = useGrants();
@@ -27,11 +31,19 @@ export const SecuritySettings = memo(function SecuritySettings() {
   const settingsCopy = appCopy.settings;
   const sections = settingsCopy.pageSections;
   const { view, load, busy } = security;
+  const refused = load === "host-only" || load === "admin-required" || load === "error";
+  const remoteEnabled = !refused && Boolean(view?.remote_access_enabled);
+  const pairing = usePairingSession(remoteEnabled);
+  const devices = usePairedDevices(remoteEnabled);
+  const now = useMinuteClock(remoteEnabled && devices.devices.length > 0);
+  const panelId = useId();
+  const hintId = useId();
+  const contentHintId = useId();
 
-  if (load === "host-only" || load === "admin-required" || load === "error") {
+  if (refused) {
     return (
       <SettingsPage>
-        <ButlerVaultSection />
+        {butlerVaultSection(vault)}
         <SettingsSection
           id="remote-access"
           kind="form"
@@ -49,7 +61,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
   const state = view ? "ready" : "loading";
   return (
     <SettingsPage>
-      <ButlerVaultSection />
+      {butlerVaultSection(vault)}
       <SettingsSection id="remote-access" kind="form" title={sections.remoteAccess} state={state}>
         {view && (
           <SecurityRemoteAccessFields
@@ -61,24 +73,26 @@ export const SecuritySettings = memo(function SecuritySettings() {
       </SettingsSection>
       {view?.remote_access_enabled && (
         <>
-          <SecurityPairingSection disabled={busy !== null} addresses={view.lan_urls} />
-          <SecurityDevicesSection disabled={busy !== null} />
+          {securityPairingSection({ disabled: busy !== null, addresses: view.lan_urls, pairing })}
+          {securityDevicesSection({ disabled: busy !== null, devices, now })}
         </>
       )}
       {securityAuthoritySections({ savedKeys, grants, accounts })}
-      {view && <SecurityAdvancedSection security={security} open={advancedOpen} onToggle={() => setAdvancedOpen(!advancedOpen)} />}
+      {view && securityAdvancedSection({
+        security, open: advancedOpen, onToggle: () => setAdvancedOpen(!advancedOpen), panelId, hintId, contentHintId,
+      })}
     </SettingsPage>
   );
 });
 
-function SecurityAdvancedSection({ security, open, onToggle }: {
+function securityAdvancedSection({ security, open, onToggle, panelId, hintId, contentHintId }: {
   security: ReturnType<typeof useSecuritySettings>;
   open: boolean;
   onToggle: () => void;
+  panelId: string;
+  hintId: string;
+  contentHintId: string;
 }) {
-  const panelId = useId();
-  const hintId = useId();
-  const contentHintId = useId();
   const copy = appCopy.settings.security;
   const { view, busy } = security;
   if (!view) return null;

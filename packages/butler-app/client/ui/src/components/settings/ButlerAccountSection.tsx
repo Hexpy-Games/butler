@@ -1,15 +1,16 @@
-import { useState } from "react";
-import { appCopy, getAppLocale, useAppLocale } from "@/app/copy";
+import { appCopy, getAppLocale } from "@/app/copy";
 import { Button, ButtonContainer, SettingsField, SettingsSection, Tag, Typo } from "@/butler-ds";
-import { ButlerAccountDevices } from "./ButlerAccountDevices";
+import { butlerAccountDevicesSection } from "./ButlerAccountDevices";
 import { ButlerAccountSignInDialog } from "./ButlerAccountSignInDialog";
-import { useButlerAccount } from "./hooks/useButlerAccount";
+import type { useButlerAccount } from "./hooks/useButlerAccount";
 
-export function ButlerAccountSection() {
-  useAppLocale();
-  const account = useButlerAccount();
+export function butlerAccountSections({ account, signInOpen, setSignInOpen, now }: {
+  account: ReturnType<typeof useButlerAccount>;
+  signInOpen: boolean;
+  setSignInOpen: (open: boolean) => void;
+  now: number;
+}) {
   const copy = appCopy.butlerAccount;
-  const [open, setOpen] = useState(false);
   const { status, busy } = account;
   if (account.state === "unsupported") return null;
   if (account.state !== "ready") return (
@@ -26,13 +27,13 @@ export function ButlerAccountSection() {
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void account.signOut()}>{copy.signOut}</Button>
       </ButtonContainer>
     </SettingsSection>
-    <ButlerAccountDevices account={account} />
+    {butlerAccountDevicesSection({ account, now })}
   </>;
   return (
     <SettingsSection id="butler-account" kind="form" title={copy.name}>
       <SettingsField id="butler-account-sign-in" label={copy.notSignedIn} description={copy.intro}
-        control={<Button onClick={() => setOpen(true)}>{copy.signIn}</Button>} />
-      <ButlerAccountSignInDialog open={open} onOpenChange={setOpen} account={account} />
+        control={<Button onClick={() => setSignInOpen(true)}>{copy.signIn}</Button>} />
+      <ButlerAccountSignInDialog open={signInOpen} onOpenChange={setSignInOpen} account={account} />
     </SettingsSection>
   );
 }
