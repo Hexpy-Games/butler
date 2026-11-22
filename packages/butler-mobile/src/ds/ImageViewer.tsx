@@ -11,6 +11,7 @@ import { icons } from "./icons";
 import { TILE_RADIUS } from "./AttachmentTiles";
 import { Icon } from "./Icon";
 import { Text } from "./Text";
+import { ToastHost } from "./Toast";
 import { GlassFill, GLASS_BLUR_IOS } from "./internal/GlassFill";
 import { run, useReducedMotion } from "./internal/motion";
 
@@ -73,6 +74,7 @@ export function ImageViewer({ images, index, onIndexChange, onClose, labels }: I
           </ViewerCapsule>
         </View> : null}
       </Animated.View>
+      <ToastHost />
     </View> : null}
   </Modal>;
 }
