@@ -161,19 +161,30 @@ impl State {
         list.set_follow_mode(FollowMode::Tail);
         let scroll_list = list.clone();
         list.set_scroll_handler(move |event, _, cx| {
-            let _ = weak.update(cx, |state, cx| {
-                let following = event.is_following_tail;
-                let pinned = scroll::after(
-                    &scroll_list,
-                    &mut state.last_offset,
-                    state.pinned,
-                    following,
-                );
-                if state.pinned != pinned {
-                    state.pinned = pinned;
-                    cx.notify();
-                }
-            });
+            let flipped = weak
+                .update(cx, |state, cx| {
+                    let following = event.is_following_tail;
+                    let pinned = scroll::after(
+                        &scroll_list,
+                        &mut state.last_offset,
+                        state.pinned,
+                        following,
+                    );
+                    let flipped = state.pinned != pinned;
+                    if flipped {
+                        state.pinned = pinned;
+                        cx.notify();
+                    }
+                    flipped
+                })
+                .unwrap_or(false);
+            // A wheel glide scrolls during prepaint, which drops that notify: notify after the cycle.
+            if flipped {
+                let weak = weak.clone();
+                cx.defer(move |cx| {
+                    let _ = weak.update(cx, |_, cx| cx.notify());
+                });
+            }
         });
         Self {
             session,
