@@ -209,7 +209,12 @@ export interface SessionArtifactSummary {
   message_id?: string;
   turn_id?: string;
   file_id?: string;
+  source_label?: string | null;
+  deliverable?: boolean;
+  signed_url?: string;
   kind:
+    | "web"
+    | "doc"
     | "csv_file"
     | "table_file"
     | "chart_file"

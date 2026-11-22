@@ -14,6 +14,7 @@ import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useReducedMotion } from "@/ds/internal/motion";
 
 import { HomeHeader, HOME_HEADER_ROW } from "@/conversation/HomeHeader";
+import { HomeShortcuts } from "@/conversation/HomeShortcuts";
 import { NewConversationSheet } from "@/conversation/NewConversationSheet";
 import { RowActions } from "@/conversation/RowActions";
 import { useConversation } from "@/conversation/live";
@@ -161,7 +162,7 @@ function Conversations() {
             <ButtonGroup><Button label={copy.home.retry} onPress={retry} /></ButtonGroup>
           </> : <Spinner label={copy.home.checking} />}
       </View>}
-      ListHeaderComponent={lost ? <Text variant="caption" tone="tertiary">{copy.conversations.reconnecting}</Text> : undefined}
+      ListHeaderComponent={<HomeShortcuts lost={lost} />}
     />
     </GlassBackdrop>
     <RowActions row={actionRow} view={view} tree={tree} onClose={() => setActionRow(null)} onChanged={refresh} />

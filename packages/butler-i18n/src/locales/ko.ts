@@ -571,6 +571,9 @@ export const koKrCopy: AppCopy = {
       applyUpdateBody: "컴퓨터의 버틀러가 다시 시작되며 업데이트를 마칩니다.",
       version: (version: string, build?: string) => `버전 ${version}${build === undefined ? "" : ` (${build})`}`,
     },
+    outputs: { share: "공유", shareFailed: "공유하지 못했습니다.", loadFailed: "불러오지 못했습니다.", unsupported: "미리 볼 수 없는 형식입니다." },
+    library: { changeFailed: "변경하지 못했습니다." },
+    automations: { nextRun: "다음 실행", lastRun: "마지막 실행", deleteFailed: "예약 작업을 삭제하지 못했습니다." },
   },
   projectStatistics: {
     flow: "작업이 어떻게 달라졌나요", flowHelp: "등록한 일과 완료가 기록된 일입니다. 개수의 차이가 프로젝트 전체 진척을 뜻하지는 않습니다.",

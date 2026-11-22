@@ -1,8 +1,11 @@
+import { getAppCopy } from "../../../butler-i18n/src/index.ts";
+import { ResultRow } from "@/outputs/ResultRow";
+import { sessionResults } from "@/outputs/results";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import type { SessionPendingAsks, SessionView } from "../../../butler-protocol/src/index.ts";
 import { icons, ListGroup, ListGroupItem, ListRow, Sheet, useTokens } from "@/ds";
-import { useMobileCopy } from "@/i18n";
+import { useAppLocale, useMobileCopy } from "@/i18n";
 import { ContextUsage } from "./usage/ContextUsage";
 import { useControls } from "./useControls";
 import { useConversation } from "./live";
@@ -11,6 +14,8 @@ export function SessionInfoSheet({ open, onClose, id, title, view }: {
   open: boolean; onClose(): void; id: string; title: string; view: SessionView | null;
 }) {
   const copy = useMobileCopy();
+  const app = getAppCopy(useAppLocale());
+  const results = sessionResults(view?.artifacts ?? [], view?.messages ?? []);
   const model = useControls(open ? id : undefined);
   const t = useTokens();
   const { client } = useConversation();
@@ -37,6 +42,7 @@ export function SessionInfoSheet({ open, onClose, id, title, view }: {
       {view?.context ? <ListGroup label={copy.chat.context}>
         <ListGroupItem><ContextUsage open={open} context={view.context} sessionId={id} models={model.models} model={model.current} /></ListGroupItem>
       </ListGroup> : null}
+      {results.length ? <ListGroup label={app.library.kinds.output}>{results.map(a => <ResultRow key={a.id} artifact={a} onBeforeOpen={onClose} />)}</ListGroup> : null}
       {attachments.length ? <ListGroup label={copy.chat.infoAttachments}>
         {attachments.map(file => <ListRow key={file.file_id} icon={icons.File} title={file.safe_name} meta={`${Math.round(file.size_bytes / 1024)} KB`} />)}
       </ListGroup> : null}

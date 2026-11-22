@@ -1,3 +1,4 @@
+import { markdownFileName } from "../outputs/results";
 import type { MessageContent, ProjectDashboardDocument, ProjectDashboardDocumentType, ProjectSourceContentPart, SessionBranchRequest } from "../../../butler-protocol/src/index.ts";
 import type { GatewayClient } from "../../../butler-protocol/src/client/index.ts";
 import type { getAppCopy } from "../../../butler-i18n/src/index.ts";
@@ -26,9 +27,7 @@ export function documentKindLabel(type: ProjectDashboardDocumentType, copy: Retu
 }
 
 export function projectDocumentFileName(document: ProjectDashboardDocument): string {
-  const base = document.title.trim().replace(/[^\p{L}\p{N}._ -]+/gu, "_")
-    .replace(/\s+/gu, " ").slice(0, 80).trim() || "project-document";
-  return base.toLocaleLowerCase("en-US").endsWith(".md") ? base : `${base}.md`;
+  return markdownFileName(document.title);
 }
 
 export async function readProjectDocumentPage(client: GatewayClient, document: ProjectDashboardDocument, cursor?: string): Promise<ProjectDashboardDocument> {
