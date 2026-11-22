@@ -233,6 +233,38 @@ async fn lan_client_gets_actual_content_port() -> Result<(), HarnessError> {
     s.finish().await
 }
 #[tokio::test]
+async fn lan_device_token_gets_content_view() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let s = Setup::new("CONTENT-LAN-DEVICE")?
+        .stub_cassette(super::browser_outputs::stub::cassette()?)
+        .data_folder_token()
+        .start()
+        .await?;
+    let path = publish(&s).await?;
+    let app = admin(&s);
+    let security = app.set_remote(true).await?;
+    let lan = security["bind_addresses"][1].as_str();
+    if std::env::var_os("BUTLER_E2E_REQUIRE_LAN").is_some() {
+        assert!(lan.is_some(), "{security}");
+    }
+    butler_e2e::skip_unless!(lan.is_some(), "no LAN listener");
+    let address: std::net::SocketAddr = lan.unwrap().parse().unwrap();
+    let pin = super::gateway_pairing::helpers::issue(&app).await?;
+    let paired: serde_json::Value = super::gateway_pairing::helpers::browser()
+        .post(format!("http://{address}/devices/pair"))
+        .json(&json!({"code": pin["code"], "device_name": "Test phone", "platform": "ios", "public_key": "later"}))
+        .send().await?.json().await?;
+    let token = paired["data"]["device_token"].as_str().unwrap();
+    assert!(token.starts_with("bdt_"));
+    let phone = Gateway::new(format!("http://{address}"), token.to_owned());
+    let url = view(&phone, &path).await?;
+    let q = view(&s.gw, &path).await?.port().unwrap();
+    assert_eq!(url.origin().ascii_serialization(),
+        format!("http://{}", std::net::SocketAddr::new(address.ip(), q)));
+    content(&url, &format!("http://{address}"), &address.to_string()).await?;
+    s.finish().await
+}
+#[tokio::test]
 async fn capability_bound_to_content_port() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let mut s = setup("CONTENT-CAPABILITY").await?;
