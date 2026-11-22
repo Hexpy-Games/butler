@@ -7,7 +7,7 @@ use super::*;
 /// The id of the phase activity (a model-authored decision) the stub child's checkpoint
 /// "Comparing approaches" made. The tools the child then ran (two reads, a write, a delivery)
 /// belong to it, as `projectTurnActivity` attaches a block's operations to the latest activity.
-fn comparing_activity(rows: &[Value]) -> Option<String> {
+pub(super) fn comparing_activity(rows: &[Value]) -> Option<String> {
     rows.iter()
         .find(|row| {
             row["work_decision_source"] == "model-authored"

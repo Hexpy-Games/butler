@@ -3,12 +3,12 @@ use super::live_turns::ready_workspace;
 use super::*;
 
 /// The vertical position of `anchor` in the layout `name` wrote.
-fn anchor_y(layout: &Value, anchor: &str) -> Option<f64> {
+pub(super) fn anchor_y(layout: &Value, anchor: &str) -> Option<f64> {
     anchor_field(layout, anchor, "y")
 }
 
 /// A number (`y`, `h`, …) of `anchor` in a layout report.
-fn anchor_field(layout: &Value, anchor: &str, key: &str) -> Option<f64> {
+pub(super) fn anchor_field(layout: &Value, anchor: &str, key: &str) -> Option<f64> {
     layout
         .as_array()?
         .iter()
@@ -17,7 +17,11 @@ fn anchor_field(layout: &Value, anchor: &str, key: &str) -> Option<f64> {
 }
 
 /// Writes the layout of the transcript and of `anchors`, and returns the report.
-async fn layout(shell: &mut Shell, name: &str, anchors: &str) -> Result<Value, HarnessError> {
+pub(super) async fn layout(
+    shell: &mut Shell,
+    name: &str,
+    anchors: &str,
+) -> Result<Value, HarnessError> {
     shell
         .run(&[&format!("layout {name} chat-transcript {anchors}")])
         .await?;
@@ -25,7 +29,7 @@ async fn layout(shell: &mut Shell, name: &str, anchors: &str) -> Result<Value, H
 }
 
 /// A message row inside the transcript's viewport, to follow while the list may scroll.
-fn visible_message(layout: &Value) -> String {
+pub(super) fn visible_message(layout: &Value) -> String {
     let top = anchor_field(layout, "chat-transcript", "y").expect("transcript");
     let height = anchor_field(layout, "chat-transcript", "h").expect("transcript");
     layout

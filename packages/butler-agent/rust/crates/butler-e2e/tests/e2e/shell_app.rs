@@ -37,6 +37,7 @@ mod focus_fallback;
 mod focus_selection;
 mod focus_tab;
 mod narrow_window;
+mod nested_scroll;
 mod observer_dialog;
 mod popover_scroll;
 mod sidebar_drag;
