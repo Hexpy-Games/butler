@@ -99,8 +99,12 @@ pub enum McpRegistryError {
     /// A server's secret file exists but could not be read.
     #[error("MCP secret file could not be read.")]
     SecretUnreadable(#[source] std::io::Error),
+    /// A credential store operation failed.
     #[error("MCP secret could not be stored.")]
     SecretStore(#[source] crate::models::CredentialStoreError),
+    /// A referenced secret is missing from the credential store.
+    #[error("MCP secret is missing from the credential store.")]
+    SecretMissing,
     /// The blocking registry write panicked or was cancelled.
     #[error("MCP registry write failed.")]
     WriteTask(#[source] tokio::task::JoinError),
@@ -409,8 +413,21 @@ fn string_field<'a>(value: &'a serde_json::Map<String, Value>, key: &str) -> Opt
 pub(crate) fn stored_secret_refs(
     data_root: &Path,
 ) -> Result<Vec<(String, SecretBackend)>, McpRegistryError> {
+    stored_secret_refs_from_value(&read_registry_value(data_root)?)
+}
+
+pub(super) fn stored_secret_refs_from_value(
+    registry: &Value,
+) -> Result<Vec<(String, SecretBackend)>, McpRegistryError> {
     let mut refs = Vec::new();
-    for mut server in read_registry(data_root)? {
+    for value in registry
+        .get("servers")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object)
+    {
+        let mut server = normalize_server(value)?;
         refs.extend(
             literal_slots(&mut server)
                 .filter_map(|(id, secret)| secret.storage.map(|backend| (id, backend))),

@@ -21,7 +21,7 @@ impl McpClient {
                     .await
                     .map_err(McpRegistryError::SecretStore)?
                     .map(|value| value.expose().to_owned())
-                    .unwrap_or_default();
+                    .ok_or(McpRegistryError::SecretMissing)?;
             }
         }
         resolve_secrets(&server, &self.environment)

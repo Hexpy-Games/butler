@@ -10,6 +10,7 @@ use super::{
     registry::{
         McpServerConfig, normalize_server_config, normalize_server_id, now_iso,
         read_registry_value, redact_server, registry_path, server_to_value, stored_secret_refs,
+        stored_secret_refs_from_value,
     },
 };
 
@@ -199,7 +200,7 @@ impl McpClient {
         let _permit = self.configuration_writes.acquire_owned().await;
         let (mut next, reply, changed, old_refs) = tokio::task::spawn_blocking(move || {
             let registry = read_registry_value(&data_root)?;
-            let old_refs = stored_secret_refs(&data_root)?;
+            let old_refs = stored_secret_refs_from_value(&registry)?;
             let (next, reply, changed) = operation(registry)?;
             Ok::<_, McpRegistryError>((next, reply, changed, old_refs))
         })

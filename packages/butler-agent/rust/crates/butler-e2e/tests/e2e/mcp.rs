@@ -263,22 +263,28 @@ async fn mcp_05_typed_secrets_leave_the_registry() -> Result<(), HarnessError> {
         }))?,
     )?;
     let s = setup.start().await?;
+    let probe_header = async |server_id: &str, secret: &str| {
+        let probed =
+            s.gw.post(&format!("/mcp-servers/{server_id}/probe"), json!({}))
+                .await?;
+        assert!(
+            probed.body["data"]["servers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|server| server["id"] == server_id && server["ok"] == true)
+        );
+        assert!(mcp.seen().iter().any(|request| {
+            request
+                .headers
+                .get("authorization")
+                .and_then(|value| value.to_str().ok())
+                == Some(format!("Bearer {secret}").as_str())
+        }));
+        Ok::<(), HarnessError>(())
+    };
     assert!(!std::fs::read_to_string(&registry)?.contains(&old));
-    let probed = s.gw.post("/mcp-servers/legacy/probe", json!({})).await?;
-    assert!(
-        probed.body["data"]["servers"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|server| server["id"] == "legacy" && server["ok"] == true)
-    );
-    assert!(mcp.seen().iter().any(|request| {
-        request
-            .headers
-            .get("authorization")
-            .and_then(|value| value.to_str().ok())
-            == Some(format!("Bearer {old}").as_str())
-    }));
+    probe_header("legacy", &old).await?;
     let added = s.gw.post("/mcp-servers", json!({
         "id": "e2e", "transport": "http", "url": format!("{}/mcp", mcp.base_url),
         "headers": [{"key": "Authorization", "source": "literal", "value": format!("Bearer {new}")}]
@@ -286,20 +292,6 @@ async fn mcp_05_typed_secrets_leave_the_registry() -> Result<(), HarnessError> {
     assert!(added.status < 300);
     let text = std::fs::read_to_string(&registry)?;
     assert!(!text.contains(&new) && !text.contains(&old));
-    let probed = s.gw.post("/mcp-servers/e2e/probe", json!({})).await?;
-    assert!(
-        probed.body["data"]["servers"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|server| server["id"] == "e2e" && server["ok"] == true)
-    );
-    assert!(mcp.seen().iter().any(|request| {
-        request
-            .headers
-            .get("authorization")
-            .and_then(|value| value.to_str().ok())
-            == Some(format!("Bearer {new}").as_str())
-    }));
+    probe_header("e2e", &new).await?;
     s.finish().await
 }
