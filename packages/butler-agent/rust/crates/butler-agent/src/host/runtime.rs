@@ -23,7 +23,7 @@ mod subsession_queue;
 pub(crate) mod vault_switch;
 mod web_owner;
 mod work_ports;
-use super::{AcceptedPlanProducer, CognitionPrompt, ConversationObserver};
+use super::{AcceptedPlanProducer, ConversationObserver};
 use super::{
     GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter, ResolvedInstallation,
     SystemIdentity, SystemPromptClock,
@@ -217,8 +217,8 @@ impl AgentRuntime {
             boundary::prompt_paths(&paths, &environment.cognition_paths),
             environment.prompt,
             PromptDependencies {
-                profile: profile.clone(),
-                cognition: Arc::new(CognitionPrompt::new(cognition.clone())),
+                profile: crate::host::guided::copied_memory::profile_port(profile.clone()),
+                cognition: crate::host::guided::copied_memory::cognition_port(cognition.clone()),
                 clock: prompt_clock,
             },
             conversation_context,

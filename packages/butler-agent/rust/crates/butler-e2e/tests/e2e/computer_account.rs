@@ -37,6 +37,14 @@ pub(super) struct Deployed {
 }
 
 pub(super) async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed, HarnessError> {
+    deployed_with(id, env, &[]).await
+}
+
+pub(super) async fn deployed_with(
+    id: &str,
+    env: &[(&str, &str)],
+    main_env: &[(&str, &str)],
+) -> Result<Deployed, HarnessError> {
     let setup = Setup::new(id)?;
     let mut launch = Launch::new(&setup.sandbox)?;
     launch.home = PathBuf::from(format!(
@@ -67,10 +75,11 @@ pub(super) async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed,
     let files_root = setup.sandbox.home.join("release");
     fs::create_dir(&files_root)?;
     let files = Files::start(files_root.clone()).await?;
-    let s = setup
-        .env("BUTLER_REMOTE_RELEASE_BASE", &files.base)
-        .start()
-        .await?;
+    let mut setup = setup.env("BUTLER_REMOTE_RELEASE_BASE", &files.base);
+    for (key, value) in main_env {
+        setup = setup.env(key, *value);
+    }
+    let s = setup.start().await?;
     let health = s.gw.get("/health").await?;
     let version = health.data()["agent_version"]
         .as_str()

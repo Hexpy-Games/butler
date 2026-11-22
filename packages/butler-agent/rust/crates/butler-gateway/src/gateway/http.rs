@@ -43,6 +43,7 @@ mod project_session_mutations;
 mod projects;
 mod read_routes;
 mod remote_account;
+mod remote_memory;
 mod remote_sessions;
 mod retry;
 mod router;

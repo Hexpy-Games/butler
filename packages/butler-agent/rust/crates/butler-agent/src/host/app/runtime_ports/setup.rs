@@ -6,6 +6,8 @@ mod butler_account;
 pub(crate) use butler_account::ButlerAccount;
 mod butler_vault;
 mod chatgpt_account;
+mod computer_memory;
+pub(crate) use computer_memory::ComputerMemory;
 mod credentials;
 mod oauth;
 mod readiness;
@@ -39,6 +41,7 @@ const LOCAL_PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 /// Everything first-run setup needs from the process.
 pub(crate) struct AppSetupParts {
     pub(crate) butler_account: Option<ButlerAccount>,
+    pub(crate) computer_memory: Arc<ComputerMemory>,
     pub(crate) plugins: Arc<crate::host::plugins::Plugins>,
     pub(crate) configuration: Arc<ModelConfiguration>,
     pub(crate) settings: Arc<AppSettingsFactsAdapter>,
@@ -53,6 +56,7 @@ pub(crate) struct AppSetupParts {
 pub(crate) struct AppSetup(Arc<SetupInner>);
 
 struct SetupInner {
+    computer_memory: Arc<ComputerMemory>,
     butler_account: Option<ButlerAccount>,
     plugins: Arc<crate::host::plugins::Plugins>,
     configuration: Arc<ModelConfiguration>,
@@ -79,6 +83,7 @@ impl AppSetup {
         );
         Self(Arc::new(SetupInner {
             butler_account: parts.butler_account,
+            computer_memory: parts.computer_memory,
             oauth: OauthFlows::new(parts.configuration.clone()),
             configuration: parts.configuration,
             plugins: parts.plugins,
@@ -208,6 +213,11 @@ impl AppSetupPort for AppSetup {
             let root = this.validated_root()?;
             credentials::delete_computer_key(&this.configuration, &id, &root).await
         })
+    }
+
+    fn computer_memory_copy(&self) -> ApplicationFuture<serde_json::Value> {
+        let memory = self.0.computer_memory.clone();
+        Box::pin(async move { memory.copy().await })
     }
 
     fn list_credentials(&self) -> ApplicationFuture<CredentialList> {

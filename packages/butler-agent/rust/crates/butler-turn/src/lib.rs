@@ -28,6 +28,7 @@ extern crate butler_core;
 pub mod btcc;
 pub mod context_ports;
 pub mod conversation;
+pub mod remote_memory;
 #[cfg(test)]
 mod test_clock;
 pub mod workspace;

@@ -4,6 +4,7 @@ mod forward;
 mod live;
 mod live_pump;
 mod live_records;
+mod memory;
 pub(super) use live::LiveRelays;
 pub(super) use live_records::names_running_turn;
 mod relay;
@@ -274,6 +275,13 @@ async fn connect(
 ) -> Result<deploy::RemoteState, HttpError> {
     let state = deploy::ensure_running((root, version), computer, cancel.clone()).await?;
     let identity = setup.computer_key(computer.id.clone()).await?;
+    if let Err(error) = memory::push_copy(setup, computer, cancel.clone()).await {
+        butler_core::diagnostic!(
+            "[remote-memory] copy not handed over computer={}",
+            computer.id
+        );
+        let _ = error;
+    }
     relay::unlock(computer, &identity, cancel).await?;
     Ok(state)
 }

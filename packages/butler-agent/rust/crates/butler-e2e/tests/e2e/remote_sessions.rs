@@ -4,7 +4,7 @@ use super::{
         self,
         stub::{self, Script, call},
     },
-    computer_account::{Deployed, deployed},
+    computer_account::{Deployed, deployed_with},
 };
 use butler_e2e::e2e::{
     HarnessError, chatgpt_wire,
@@ -37,14 +37,34 @@ pub(super) async fn remote_chat(
     ),
     HarnessError,
 > {
+    remote_chat_on(id, access, false).await
+}
+
+pub(super) async fn remote_chat_on(
+    id: &str,
+    access: &str,
+    main_model: bool,
+) -> Result<
+    (
+        Deployed,
+        Arc<Script>,
+        JoinHandle<()>,
+        FakeChatGptAuthority,
+        String,
+    ),
+    HarnessError,
+> {
     let (url, script, server) = stub::start().await?;
     let authority = FakeChatGptAuthority::start().await?;
-    let d = deployed(
+    let base = format!("{url}/v1");
+    let main_env = [("BUTLER_CHATGPT_API_BASE_URL", base.as_str())];
+    let d = deployed_with(
         id,
         &[
             ("BUTLER_CHATGPT_AUTH_ISSUER", &authority.issuer),
-            ("BUTLER_CHATGPT_API_BASE_URL", &format!("{url}/v1")),
+            ("BUTLER_CHATGPT_API_BASE_URL", &base),
         ],
+        if main_model { main_env.as_slice() } else { &[] },
     )
     .await?;
     let base = format!("/computers/{}/oauth", d.id);

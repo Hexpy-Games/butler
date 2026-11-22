@@ -117,6 +117,9 @@ impl Acquisition {
     pub(crate) async fn choose(&self, on: bool) -> Result<MemoryModelProgress, &'static str> {
         // Concurrent switches apply in order; the saved and running choice agree.
         let _switch = self.switch.lock().await;
+        if butler_models::models::sealed::is_enabled() {
+            return Ok(self.state.borrow().clone());
+        }
         let root = self.root.clone();
         tokio::task::spawn_blocking(move || choice::persist(&root, on))
             .await

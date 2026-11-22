@@ -119,6 +119,9 @@ async fn commands(
         Handler::RemoteAccount if !remote_account::admitted(&state, &request) => {
             Err(HttpError::public(404, "not_found", "Route not found."))
         }
+        Handler::RemoteAccount if request.uri().path() == "/remote/memory" => {
+            remote_memory::copy(request).await
+        }
         Handler::RemoteAccount if request.uri().path() == "/remote/sessions" => {
             remote_account::create_session(state, request).await
         }

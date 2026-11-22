@@ -35,7 +35,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         ],
         // butler-turn: BTCC owns the turn and reads the transcript and workspace.
         "btcc" => &["conversation", "workspace"],
-        "conversation" | "workspace" => &[],
+        // A remote computer's process-wide view of the main's memory; no turn dependencies.
+        "conversation" | "workspace" | "remote_memory" => &[],
         // Ports that Context assembly requires of Profile and Cognition; their
         // failures relay as BTCC errors.
         "context_ports" => &["btcc"],

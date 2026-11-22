@@ -33,6 +33,10 @@ impl Choice {
 /// An explicit choice wins. Installs that already hold the model, or began its
 /// download before the choice existed, keep it on. Metadata probes only.
 pub(crate) fn read(data_root: &Path) -> (Choice, bool) {
+    // A remote computer runs no embeddings: the main answers its memory searches.
+    if butler_models::models::sealed::is_enabled() {
+        return (Choice::Unset, false);
+    }
     let root = data_root.join(MODEL_ROOT);
     let assets = pinned_assets();
     let ready = complete(&root, &assets);

@@ -267,6 +267,10 @@ pub trait AppSetupPort: Send + Sync + 'static {
     fn saved_provider_key(&self, name: String) -> ApplicationFuture<SavedProviderKey>;
     fn computer_key(&self, id: String) -> ApplicationFuture<SecretText>;
     fn delete_computer_key(&self, id: String) -> ApplicationFuture<()>;
+    /// The read-only memory copy the main hands a registered computer on connect.
+    fn computer_memory_copy(&self) -> ApplicationFuture<Value> {
+        Box::pin(async { Err(crate::gateway::GatewayApplicationError::internal()) })
+    }
     /// Replaces the key of the saved credential `name` (its id, or its
     /// label when exactly one key has it).
     fn replace_credential(
