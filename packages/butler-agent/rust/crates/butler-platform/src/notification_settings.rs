@@ -23,6 +23,11 @@ pub fn support(executable: &Path) -> NotificationSupport {
     }
 }
 
+/// Whether the running build can post OS notifications ([`support`] for the current executable).
+pub fn supported() -> bool {
+    std::env::current_exe().is_ok_and(|exe| support(&exe) == NotificationSupport::Supported)
+}
+
 #[cfg(target_os = "macos")]
 fn can_post(executable: &Path) -> bool {
     crate::app_shell::installation_root(executable).is_some()
