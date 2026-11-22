@@ -20,7 +20,8 @@ use butler_ds::ui::{
     toast::{self, Toast},
 };
 use gpui::{
-    AnyElement, App, Entity, IntoElement as _, ParentElement as _, Styled as _, Window, div,
+    AnyElement, App, BorrowAppContext as _, Entity, IntoElement as _, ParentElement as _,
+    Styled as _, Window, div,
 };
 
 #[derive(Clone, Copy)]
@@ -147,7 +148,8 @@ fn address(tab: Option<&Tab>, state: &Entity<AreaState>, cx: &mut App) -> Addres
         })
         .on_submit(move |address, window, cx| {
             if let Some(id) = &id {
-                let value = cx.global_mut::<BrowserState>().navigate(id, &address);
+                let value = cx
+                    .update_global::<BrowserState, _>(|model, cx| model.navigate(id, &address, cx));
                 result(&value, cx);
             }
             let focus = submitted.read(cx).focus.clone();
