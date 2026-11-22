@@ -30,7 +30,7 @@ use super::events::EventSubscribers;
 use super::{AppApplication, AppStorageError, GatewayApplicationError, app_error};
 use crate::gateway::AppListPage;
 use crate::gateway::application::storage::AppStorageCode;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use tokio_util::sync::CancellationToken;
 
 pub(super) fn create_branch_session(
@@ -58,6 +58,23 @@ pub(super) fn read_summary(
 }
 
 impl AppApplication {
+    pub(super) async fn session_computer_owned(
+        &self,
+        id: String,
+    ) -> Result<Option<String>, GatewayApplicationError> {
+        self.storage
+            .read(move |db| {
+                db.query_row("SELECT computer_id FROM chats WHERE id=?1", [&id], |row| {
+                    row.get::<_, Option<String>>(0)
+                })
+                .optional()
+                .map(Option::flatten)
+                .map_err(AppStorageError::sqlite)
+            })
+            .await
+            .map_err(app_error)
+    }
+
     pub(super) async fn archive_sessions_owned(
         &self,
     ) -> Result<Vec<(String, AppSessionSummary)>, GatewayApplicationError> {
@@ -95,6 +112,25 @@ impl AppApplication {
         owner_shutdown: CancellationToken,
     ) -> Result<AppCreateSessionResult, GatewayApplicationError> {
         let created = self.create_session(request.input, false).await?;
+        if let Some(computer) = request.computer_id {
+            let id = created.id.clone();
+            let bound = self
+                .storage
+                .execute(move |db| {
+                    db.execute(
+                        "UPDATE chats SET computer_id=?2 WHERE id=?1",
+                        [&id, &computer],
+                    )
+                    .map(drop)
+                    .map_err(AppStorageError::sqlite)
+                })
+                .await
+                .map_err(app_error);
+            if let Err(error) = bound {
+                self.rollback_session_creation(created.id.clone()).await?;
+                return Err(error);
+            }
+        }
         if request.workspace_mode == AppWorkspaceMode::Worktree {
             let provision = async {
                 let snapshot = self.workspace_snapshot(&created).await?;

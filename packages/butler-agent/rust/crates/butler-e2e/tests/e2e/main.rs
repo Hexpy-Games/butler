@@ -181,6 +181,7 @@ mod reduce_motion;
 mod remote_account;
 mod remote_deploy;
 mod remote_mode;
+mod remote_sessions;
 mod research_eval;
 mod sandbox_installation;
 mod schedule_calendar;

@@ -2,6 +2,8 @@
 mod deploy;
 mod forward;
 mod relay;
+mod sessions;
+pub(super) use sessions::{Link, create_session, forward};
 mod ssh;
 mod store;
 

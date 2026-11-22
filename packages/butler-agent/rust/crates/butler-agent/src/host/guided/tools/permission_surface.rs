@@ -23,6 +23,9 @@ tokio::task_local! { static ADMISSION: Option<Arc<Snapshot>>; }
 
 impl GuidedTools {
     pub(super) fn authorized(&self, name: &str) -> bool {
+        if super::remote::unavailable(name) {
+            return false;
+        }
         super::permission_mode::approved_capability(name)
             || ADMISSION
                 .try_with(|snapshot| snapshot.as_ref().map(|s| s.authorized.contains(name)))
@@ -31,6 +34,9 @@ impl GuidedTools {
                 .unwrap_or_else(|| self.binding.authorized_names.contains(name))
     }
     pub(super) fn visible(&self, name: &str) -> bool {
+        if super::remote::unavailable(name) {
+            return false;
+        }
         ADMISSION
             .try_with(|snapshot| snapshot.as_ref().map(|s| s.visible.contains(name)))
             .ok()

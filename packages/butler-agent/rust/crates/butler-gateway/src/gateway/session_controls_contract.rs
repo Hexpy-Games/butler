@@ -2,6 +2,11 @@
 use super::*;
 
 pub trait GatewaySessionControls: Send + Sync {
+    /// The registered computer a conversation runs on (`chats.computer_id`).
+    fn session_computer(&self, _session_id: String) -> ApplicationFuture<Option<String>> {
+        Box::pin(async { Ok(None) })
+    }
+
     /// Main-only canonical workspace and current output attribution.
     fn browser_download_context(
         &self,

@@ -35,6 +35,10 @@ pub(in crate::gateway::http) async fn route(
             Err(HttpError::public(404, "not_found", "Route not found."))
         };
     };
+    let request = match remote_sessions::route(&state, handler, request).await? {
+        remote_sessions::Routed::Here(request) => request,
+        remote_sessions::Routed::Answered(response) => return Ok(response),
+    };
     match handler {
         Handler::PendingAsks => pending_asks::route(state, request).await,
         Handler::DataReset => data_reset::route(state, request).await,
@@ -111,6 +115,9 @@ async fn commands(
         }
         Handler::RemoteAccount if !remote_account::admitted(&state, &request) => {
             Err(HttpError::public(404, "not_found", "Route not found."))
+        }
+        Handler::RemoteAccount if request.uri().path() == "/remote/sessions" => {
+            remote_account::create_session(state, request).await
         }
         Handler::RemoteAccount => remote_account::unlock(request).await,
         Handler::Computers => computers::route(state, request).await,

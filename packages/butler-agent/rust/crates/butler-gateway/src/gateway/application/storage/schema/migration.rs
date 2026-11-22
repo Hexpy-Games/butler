@@ -112,6 +112,7 @@ const COLUMNS: &[(&str, &str, &str)] = &[
         "spool_end_offset",
         "INTEGER NOT NULL DEFAULT 0",
     ),
+    ("chats", "computer_id", "TEXT"),
 ];
 
 pub(super) fn table_exists(connection: &Connection, table: &str) -> Result<bool, AppStorageError> {
