@@ -785,6 +785,10 @@ const butlerApp = Object.freeze({
   signOutChatGpt: () => requestBridgeResult("/setup/chatgpt-account/sign-out", {
     method: "POST", body: "{}",
   }),
+  getButlerBackup: () => requestBridgeResult("/setup/butler-backup"),
+  postButlerBackup: (request) => requestBridgeResult("/setup/butler-backup", {
+    method: "POST", body: JSON.stringify(request ?? {}),
+  }),
   getButlerAccount: () => requestBridgeResult("/setup/butler-account"),
   postButlerAccount: (request) => requestBridgeResult("/setup/butler-account", {
     method: "POST", body: JSON.stringify(request ?? {}),
