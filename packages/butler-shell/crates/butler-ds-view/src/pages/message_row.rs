@@ -66,7 +66,13 @@ fn user_footer(id: &str, text: &str, time: &'static str, l: Footer) -> MessageFo
 }
 
 /// The assistant footer: icon actions, duration and time, then the terminal status row.
-fn assistant_footer(id: &str, text: &str, time: &'static str, l: Footer, ds: &Ds) -> [AnyElement; 2] {
+fn assistant_footer(
+    id: &str,
+    text: &str,
+    time: &'static str,
+    l: Footer,
+    ds: &Ds,
+) -> [AnyElement; 2] {
     let footer = MessageFooter::new()
         .child(CopyButton::new(format!("{id}-copy"), l.copy, l.copied).text(text))
         .child(
@@ -396,7 +402,7 @@ fn send_and_stream(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement 
             };
             if finished {
                 let [footer, status] =
-                    assistant_footer("mr-stream", c.summary, "9:09", l, &Ds::get(cx));
+                    assistant_footer("mr-stream", c.summary, "9:09", l, Ds::get(cx));
                 row = row.child(footer).child(status);
             }
             list = list.child(row);
