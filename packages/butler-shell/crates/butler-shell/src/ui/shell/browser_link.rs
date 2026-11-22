@@ -3,7 +3,8 @@ use super::Shell;
 use crate::ui::{
     Icon,
     browser::{
-        area::browser_area,
+        self,
+        area::{Pick, PickExit, PickNarrower, PickWider, browser_area},
         model::BrowserState,
         shell_state::{BrowserShell, browser_raise, open_conversation},
     },
@@ -105,6 +106,56 @@ impl Shell {
                 model.back(&id)
             };
             crate::ui::browser::area::result(&value, cx);
+        }
+    }
+    pub(super) fn browser_pick(&mut self, _: &Pick, _: &mut Window, cx: &mut Context<Self>) {
+        if self.browser_owner(cx).is_none() {
+            cx.propagate();
+            return;
+        }
+        if let Some(id) = cx.global::<BrowserState>().active().cloned() {
+            browser::pick::mode(&id, true, cx);
+        }
+    }
+    pub(super) fn browser_pick_exit(
+        &mut self,
+        _: &PickExit,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.browser_pick_key(0, cx);
+    }
+    pub(super) fn browser_pick_wider(
+        &mut self,
+        _: &PickWider,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.browser_pick_key(1, cx);
+    }
+    pub(super) fn browser_pick_narrower(
+        &mut self,
+        _: &PickNarrower,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.browser_pick_key(2, cx);
+    }
+    fn browser_pick_key(&self, op: u8, cx: &mut Context<Self>) {
+        let model = cx.global::<BrowserState>();
+        let id = self
+            .browser_owner(cx)
+            .and_then(|_| model.active())
+            .filter(|id| model.tab(id).is_some_and(|t| t.picking))
+            .cloned();
+        let Some(id) = id else {
+            cx.propagate();
+            return;
+        };
+        match op {
+            0 => browser::pick::mode(&id, false, cx),
+            1 => browser::pick::step(&id, true, cx),
+            _ => browser::pick::step(&id, false, cx),
         }
     }
     pub(super) fn render_browser_pane(
