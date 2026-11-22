@@ -30,7 +30,10 @@ impl Shell {
         .then_some(Owner::Conversation(session))
     }
     pub(super) fn sync_browser_visibility(&self, cx: &mut gpui::App) {
-        if self.browser_owner(cx).is_none() {
+        let leaving = matches!(self.panes.held, Some(super::panes::Held::Browser))
+            && self.settings_view.is_none()
+            && self.on_session(cx);
+        if self.browser_owner(cx).is_none() && !leaving {
             cx.global_mut::<BrowserState>().hide();
         }
     }

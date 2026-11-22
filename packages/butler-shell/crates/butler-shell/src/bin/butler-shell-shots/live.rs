@@ -153,6 +153,7 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "shot" => h.shot(dir, arg),
         "expect-fresh" => super::frame::expect_fresh(h, dir),
         "layout" => h.layout(dir, arg),
+        "glide-layout" => super::glide::glide_layout(h, dir, arg),
         "tick" => tick(h, arg),
         _ => super::frame::command(h, command, arg),
     }

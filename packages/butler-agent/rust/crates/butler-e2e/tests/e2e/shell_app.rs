@@ -29,6 +29,7 @@ pub(super) mod driver;
 pub(super) mod live_turns;
 use driver::{SERIAL, SHOTS, Shell};
 mod activity_tools;
+mod aside_glide;
 mod chat_end_room;
 mod composer_fold;
 mod composer_toolbar;
@@ -41,6 +42,7 @@ mod popover_scroll;
 mod sidebar_drag;
 mod sidebar_sticky;
 mod space_header;
+mod split_glide;
 mod split_width;
 mod text_selection;
 mod text_size;
@@ -72,6 +74,54 @@ pub(super) fn gateway(launch: &Launch) -> Gateway {
     let token = launch.data_folder_token().expect("no data folder token");
     let endpoint = record["app_endpoint"].as_str().expect("no app endpoint");
     Gateway::new(endpoint.to_owned(), token)
+}
+
+/// The frames a `glide-layout <name>` report holds: an anchor's `[x, y, w, h]` per frame, `None`
+/// when it was absent.
+fn glide_frames(shell: &Shell, name: &str) -> Vec<Vec<(String, Option<[f64; 4]>)>> {
+    let report = shell
+        .report(&format!("{name}.glide"))
+        .expect("glide report");
+    let frames = report.as_array().expect("glide array");
+    assert_eq!(frames.len(), 41, "frames 0 to 40");
+    frames
+        .iter()
+        .map(|frame| {
+            frame["anchors"]
+                .as_object()
+                .expect("anchors")
+                .iter()
+                .map(|(anchor, b)| {
+                    let b = b
+                        .as_array()
+                        .map(|b| [0, 1, 2, 3].map(|i| b[i].as_f64().expect("number")));
+                    (anchor.clone(), b)
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// `anchor`'s bounds in one frame of `glide_frames`.
+fn at(frame: &[(String, Option<[f64; 4]>)], anchor: &str) -> Option<[f64; 4]> {
+    frame.iter().find(|(a, _)| a == anchor)?.1
+}
+
+/// `anchor`'s `[x, y, w, h]` in a `layout <name>` report.
+fn laid_out(shell: &Shell, name: &str, anchor: &str) -> Option<[f64; 4]> {
+    let report = shell
+        .report(&format!("{name}.layout"))
+        .expect("layout report");
+    let found = report
+        .as_array()
+        .expect("layout array")
+        .iter()
+        .find(|entry| entry["anchor"] == anchor)?;
+    Some(["x", "y", "w", "h"].map(|key| found[key].as_f64().expect("number")))
+}
+
+fn near(a: f64, b: f64) -> bool {
+    (a - b).abs() < 0.5
 }
 
 /// No state the windows showed was a failure.

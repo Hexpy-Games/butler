@@ -5,8 +5,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, KeyDownEvent,
-    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div, px,
+    AnyElement, App, ElementId, Entity, EntityId, InteractiveElement as _, IntoElement,
+    KeyDownEvent, ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div, point,
+    px,
 };
 
 use gpui::prelude::FluentBuilder as _;
@@ -15,13 +16,13 @@ use super::frame::{CHAT_WIDTH_DEFAULT, CHAT_WIDTH_MIN, KEY_STEP, clamp_chat_widt
 use super::grip::{Drag, HANDLE_WIDTH, HintSide, ResizeHandle};
 use super::parts::card_surface;
 use crate::tokens::{Duration as DsDuration, Easing, Length};
-use crate::ui::blocks::measure;
 use crate::ui::blocks::scope::{self, SplitMotion};
 use crate::ui::context::Ds;
-use crate::ui::motion::{Props, Timing};
+use crate::ui::motion::{Props, Timing, layout_frame_for};
 use crate::ui::strut;
 
 type WidthHandler = Rc<dyn Fn(f32, &mut Window, &mut App)>;
+type ExitHandler = Rc<dyn Fn(&mut Window, &mut App)>;
 
 #[derive(IntoElement)]
 pub struct AdaptiveShellSplit {
@@ -31,8 +32,10 @@ pub struct AdaptiveShellSplit {
     pane_open: bool,
     chat_width: f32,
     on_chat_width_change: Option<WidthHandler>,
+    on_pane_exit: Option<ExitHandler>,
     resize_label: SharedString,
     resize_hint: Option<SharedString>,
+    frame_view: Option<EntityId>,
 }
 
 impl AdaptiveShellSplit {
@@ -44,8 +47,10 @@ impl AdaptiveShellSplit {
             pane_open: false,
             chat_width: CHAT_WIDTH_DEFAULT,
             on_chat_width_change: None,
+            on_pane_exit: None,
             resize_label: "Resize conversation".into(),
             resize_hint: None,
+            frame_view: None,
         }
     }
 
@@ -81,6 +86,13 @@ impl AdaptiveShellSplit {
         self
     }
 
+    /// Called once the split drops a pane it was given (Presence `onExited`): the pane has closed and
+    /// its leaving motion has ended, or it closed with no motion. The owner stops passing that pane.
+    pub fn on_pane_exit(mut self, f: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_pane_exit = Some(Rc::new(f));
+        self
+    }
+
     /// The handle's accessible name and the hint's first line.
     pub fn resize_label(mut self, label: impl Into<SharedString>) -> Self {
         self.resize_label = label.into();
@@ -90,6 +102,13 @@ impl AdaptiveShellSplit {
     /// The hint's second line ("Drag to resize"), shown on the chat side.
     pub fn resize_hint(mut self, hint: impl Into<SharedString>) -> Self {
         self.resize_hint = Some(hint.into());
+        self
+    }
+
+    /// The view to wake each frame the chat width moves: the smallest view that reads it (its
+    /// default is the current view).
+    pub fn frame_view(mut self, view: EntityId) -> Self {
+        self.frame_view = Some(view);
         self
     }
 }
@@ -129,7 +148,7 @@ impl AdaptiveShellSplit {
         width: f32,
         room: f32,
         cards: bool,
-        layout: gpui::LayoutMotion,
+        (layout, leaving): (gpui::LayoutMotion, bool),
     ) -> AnyElement {
         let start: Entity<f32> =
             window.use_keyed_state((self.id.clone(), "start"), cx, |_, _| width);
@@ -170,7 +189,8 @@ impl AdaptiveShellSplit {
             .ml(px(lead))
             .mr(px(trail))
             .debug_selector(|| "split-handle".to_owned())
-            .child(handle)
+            // A leaving pane's handle is inert: no grip, no hit.
+            .children((!leaving).then_some(handle))
             .into_any_element()
     }
 }
@@ -181,7 +201,7 @@ fn chat_column(
     chat: Option<AnyElement>,
     ds: &Ds,
     card: Option<bool>,
-    layout: gpui::LayoutMotion,
+    layout: Option<gpui::LayoutMotion>,
     width: Option<f32>,
 ) -> gpui::Stateful<gpui::Div> {
     let column = div().relative().flex().flex_col().min_h_0();
@@ -190,13 +210,11 @@ fn chat_column(
         None => column.overflow_hidden(),
     }
     .id((id, "chat-column"))
-    .layout_motion(layout)
+    .when_some(layout, gpui::Styled::layout_motion)
     .children(chat);
+    let column = column.debug_selector(|| "split-chat".to_owned());
     match width {
-        Some(current) => column
-            .debug_selector(move || format!("split-chat-{}", current.round()))
-            .flex_none()
-            .w(px(current)),
+        Some(current) => column.flex_none().w(px(current)),
         None => column.flex_auto().min_w_0(),
     }
 }
@@ -204,7 +222,7 @@ fn chat_column(
 /// The width the chat column and the pane share: the split less the handle's box (the card gap
 /// in the cards frame), as `AdaptiveShellSplit.tsx` measures it. Unbounded until the split has
 /// been measured.
-fn shared_room(split_width: f32, cards: bool, ds: &Ds) -> f32 {
+pub(crate) fn shared_room(split_width: f32, cards: bool, ds: &Ds) -> f32 {
     if split_width <= 0. {
         return f32::INFINITY;
     }
@@ -227,6 +245,60 @@ fn handle_geometry(cards: bool, ds: &Ds) -> (f32, f32, f32) {
     )
 }
 
+/// The pane's box: it holds its final size and only travels in from the split's end (and back),
+/// inert while it leaves.
+fn pane_box(
+    id: ElementId,
+    pane: AnyElement,
+    (motion, layout, leaving): (SplitMotion, gpui::LayoutMotion, bool),
+    (width, ds): (f32, &Ds),
+) -> gpui::Stateful<gpui::Div> {
+    let timing = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
+    );
+    let reduced = ds.reduced_motion();
+    let pane_box = div()
+        .id((id, "pane"))
+        .layout_motion(layout)
+        .relative()
+        .flex()
+        .flex_col()
+        .flex_auto()
+        .min_w_0()
+        .min_h_0()
+        .child(pane)
+        .when(leaving, |pane| {
+            pane.child(div().absolute().inset_0().occlude())
+        })
+        .opacity(if reduced { motion.fade } else { 1. })
+        .when_some(motion.fade_motion.filter(|_| reduced), |pane, fade| {
+            fade.apply(
+                pane,
+                &timing,
+                &Props {
+                    opacity: Some((0., 1.)),
+                    ..Default::default()
+                },
+            )
+        });
+    match motion.motion.filter(|_| !reduced) {
+        Some(m) => m.apply(
+            pane_box,
+            &timing,
+            &Props {
+                offset: Some((
+                    point(px(motion.room - width), px(0.)),
+                    point(px(0.), px(0.)),
+                )),
+                ..Default::default()
+            },
+        ),
+        None => pane_box,
+    }
+}
+
 impl RenderOnce for AdaptiveShellSplit {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let vars = scope::vars(cx);
@@ -237,6 +309,8 @@ impl RenderOnce for AdaptiveShellSplit {
             fade: f32::from(u8::from(self.pane_open)),
             open: self.pane_open,
             chat_width: self.chat_width,
+            chat_now: None,
+            room: 0.,
         });
         let ds = Ds::get(cx);
         let timing = Timing::token(
@@ -249,61 +323,41 @@ impl RenderOnce for AdaptiveShellSplit {
             easing: timing.easing(),
         };
         let present = self.pane_open || motion.motion.is_some_and(|m| m.moving(&timing));
-        let (measured, recorder) = measure::track((self.id.clone(), "split"), window, cx);
-        let ds = Ds::get(cx);
+        let given = self.pane.is_some();
         let cards = vars.is_some_and(|v| v.cards_docked);
         let card = cards.then(|| vars.is_some_and(|v| v.transparent_workspace));
         let chat = self.chat.take();
-        let mut split = div().relative().flex().h_full().min_h_0().min_w_0();
+        let split = div().relative().flex().h_full().min_w_0().min_h_0();
         let Some(pane) = self.pane.take().filter(|_| present) else {
-            let column = chat_column(self.id, chat, ds, card, layout, None);
+            let column = chat_column(self.id, chat, ds, card, Some(layout), None);
+            // A pane given but no longer drawn: its leave is over; the owner stops passing it.
+            if given && let Some(exit) = self.on_pane_exit.take() {
+                window.defer(cx, move |window, cx| exit(window, cx));
+            }
             return strut::scope(false, split.child(column));
         };
-        // Only the pane layout reads the split's width (`split_width` while the pane closes).
-        split = split.child(recorder);
-        // Lay out the final chat width; layout motion retains the changing box.
-        let split_width = f32::from(measured.width);
-        let room = shared_room(split_width, cards, ds);
+        // The room the chat and the pane share: the split's room less the handle's box.
+        let room = shared_room(motion.room, cards, ds);
         let width = clamp_chat_width(self.chat_width, room);
-        let chat_now = if self.pane_open { width } else { split_width };
-        let reduced = ds.reduced_motion();
-        split = split
-            .child(chat_column(
-                self.id.clone(),
-                chat,
-                ds,
-                card,
-                layout,
-                Some(chat_now),
-            ))
-            .child(self.handle(window, cx, width, room, cards, layout));
-        let pane_box = div()
-            .id((self.id.clone(), "pane"))
-            .layout_motion(layout)
-            .relative()
-            .flex()
-            .flex_col()
-            .flex_auto()
-            .min_w_0()
-            .min_h_0()
-            .child(pane)
-            .opacity(if reduced { motion.fade } else { 1. })
-            .when_some(motion.fade_motion.filter(|_| reduced), |pane, fade| {
-                let timing = Timing::token(
-                    Ds::get(cx),
-                    DsDuration::MotionBase,
-                    Easing::MotionEaseStandard,
-                );
-                fade.apply(
-                    pane,
-                    &timing,
-                    &Props {
-                        opacity: Some((0., 1.)),
-                        ..Default::default()
-                    },
-                )
-            });
+        // The flow stays at the open layout: the chat column's width moves per frame while the
+        // pane travels, and its margin keeps the handle and the pane in place.
+        let moving = motion.moving_chat_width();
+        if moving.is_some() {
+            let view = self.frame_view.unwrap_or_else(|| window.current_view());
+            layout_frame_for(window, view);
+        }
+        let now = moving.unwrap_or(width);
+        let leaving = !self.pane_open;
+        let column =
+            chat_column(self.id.clone(), chat, ds, card, None, Some(now)).mr(px(width - now));
+        let handle = self.handle(window, cx, width, room, cards, (layout, leaving));
+        let pane = pane_box(
+            self.id.clone(),
+            pane,
+            (motion, layout, leaving),
+            (width, Ds::get(cx)),
+        );
         self.write_back(width, window, cx);
-        strut::scope(false, split.child(pane_box))
+        strut::scope(false, split.child(column).child(handle).child(pane))
     }
 }

@@ -199,6 +199,7 @@ impl Metrics {
             column_right: column_left + column,
             column_shift: shift,
             top_reserve: 0.,
+            column_glide: None,
         }
     }
 }

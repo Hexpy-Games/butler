@@ -57,6 +57,18 @@ pub struct SplitMotion {
     pub fade: f32,
     pub open: bool,
     pub chat_width: f32,
+    /// The chat column's width on screen while the pane moves (`None` at rest): one retained
+    /// transition from the width on screen, so a room that changes as the motion starts never jumps it.
+    pub chat_now: Option<f32>,
+    /// The split's width, which the chat and the pane share (0 before the shell lays it out).
+    pub room: f32,
+}
+
+impl SplitMotion {
+    /// The chat column's width this frame while the pane moves (`None` at rest).
+    pub fn moving_chat_width(&self) -> Option<f32> {
+        self.chat_now
+    }
 }
 
 /// What a ConversationShell tells the scroll, message list and jump button inside it.
@@ -77,6 +89,9 @@ pub struct ConversationVars {
     pub column_shift: f32,
     /// The top padding of the message list (the title bar's room, or the card's inset).
     pub top_reserve: f32,
+    /// The column's glide while the aside docks or the rail's room comes or goes: what the
+    /// column's elements follow so they travel from their old place (`None` before measured).
+    pub column_glide: Option<crate::ui::motion::Glide>,
 }
 
 #[derive(Default)]

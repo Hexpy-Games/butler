@@ -3,8 +3,11 @@
 //! task graph dialog (`SessionInfoActions`), and the file viewer or the image editor beside the
 //! chat (`ConversationBrowserFrame`).
 use std::cell::Cell;
+use std::hash::{DefaultHasher, Hash as _, Hasher as _};
 use std::rc::Rc;
 
+use butler_ds::ui::blocks::adaptive_shell::SplitConfig;
+use butler_ds::ui::blocks::adaptive_shell::frame::CHAT_WIDTH_DEFAULT;
 use butler_ds::ui::blocks::adaptive_shell::parts::ShellCard;
 use butler_ds::ui::blocks::adaptive_shell::split::AdaptiveShellSplit;
 use butler_ds::ui::blocks::conversation_shell::AsideLayout;
@@ -30,7 +33,20 @@ use crate::ui::palette::{CommandPalette, PaletteEvent};
 use crate::ui::source::wire::{AppEventEnvelope, SessionView};
 use crate::ui::viewer;
 
+/// The pane the split was last given while open (`useHeldWhilePaneLeaves`): passed on while it
+/// leaves, dropped when the split reports its exit.
+#[derive(Clone)]
+pub(super) enum Held {
+    Browser,
+    /// The files as last shown, so the leaving viewer keeps its file.
+    Viewer(viewer::state::SessionFiles),
+    /// The editor's view, kept alive past `close_editor` until the exit.
+    Editor(gpui::AnyView),
+}
+
 pub(super) struct Panes {
+    /// The pane the split was last given while open.
+    pub(super) held: Option<Held>,
     palette: Entity<CommandPalette>,
     /// `useCommandPaletteFocus`'s `returnComposer`: the composer's key when its field had focus
     /// as the palette opened.
@@ -64,6 +80,7 @@ impl Shell {
         let inspector = cx.new(|_| InspectorPane::new(sections.clone()));
         let layout = inspector.read(cx).layout_cell();
         let panes = Panes {
+            held: None,
             palette,
             return_composer: None,
             inspector,
@@ -235,9 +252,24 @@ impl Shell {
         self.panes.split
     }
 
+    /// The shell's split: open with the pane, at the chat width, keyed by the conversation so another
+    /// conversation places the pane at once (`splitOpen`, `contextKey`).
+    pub(super) fn split_config(&self) -> Option<SplitConfig> {
+        let mut key = DefaultHasher::new();
+        self.store.selected()?.session.0.hash(&mut key);
+        let open = self.panes.split;
+        let width = open.or(self.panes.chat_width);
+        Some(
+            SplitConfig::new(open.is_some())
+                .chat_width(width.unwrap_or(CHAT_WIDTH_DEFAULT))
+                .context_key(key.finish()),
+        )
+    }
+
     /// A management view has no split beside it.
     pub(super) fn clear_split(&mut self) {
         self.panes.split = None;
+        self.panes.held = None;
     }
 
     /// `SessionInfoActions`' task graph dialog.
@@ -286,6 +318,7 @@ impl Shell {
     ) -> AnyElement {
         let Some(session) = self.store.selected().map(|c| c.session.0.to_string()) else {
             self.panes.split = None;
+            self.panes.held = None;
             return ShellCard::new().child(conversation).into_any_element();
         };
         let editing = match images::editor_target(cx) {
@@ -321,15 +354,48 @@ impl Shell {
         if let Some(width) = self.panes.chat_width {
             split = split.chat_width(width);
         }
-        let editor = editing.then(|| images::editor_pane(window, cx)).flatten();
-        if let Some(editor) = editor {
-            split = split.pane(editor);
-        } else if pane == Some(viewer::RightSlotPane::Browser) {
-            split = split.pane(self.regions.browser.clone().cached(region::fill()));
-        } else if pane_open {
-            split = split.pane(self.regions.viewer.clone().cached(region::fill()));
+        split = split.frame_view(self.regions.titlebar.entity_id());
+        let editor = editing.then(|| images::editor_view(window, cx)).flatten();
+        let shown = match (editor, pane) {
+            (Some(view), _) => Some(Held::Editor(view)),
+            (None, Some(viewer::RightSlotPane::Browser)) => Some(Held::Browser),
+            (None, Some(viewer::RightSlotPane::Viewer)) => Some(Held::Viewer(files)),
+            (None, None) => None,
+        };
+        if shown.is_some() {
+            self.panes.held = shown;
         }
-        split.into_any_element()
+        if let Some(held) = self.panes.held.clone() {
+            split = split.pane(self.held_pane(held));
+        }
+        let exit = cx.entity().downgrade();
+        split
+            .on_pane_exit(move |_, cx| {
+                let _ = exit.update(cx, |s, cx| {
+                    if s.panes.held.take().is_some() {
+                        cx.notify();
+                    }
+                });
+            })
+            .into_any_element()
+    }
+
+    fn held_pane(&self, held: Held) -> AnyElement {
+        match held {
+            Held::Editor(view) => view.into_any_element(),
+            Held::Browser => self
+                .regions
+                .browser
+                .clone()
+                .cached(region::fill())
+                .into_any_element(),
+            Held::Viewer(_) => self
+                .regions
+                .viewer
+                .clone()
+                .cached(region::fill())
+                .into_any_element(),
+        }
     }
 
     /// The viewer pane of the open conversation (empty while there is none; `workspace` only
@@ -340,8 +406,11 @@ impl Shell {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let session = self.store.selected().map(|c| c.session.0.to_string());
+        let Some(Held::Viewer(files)) = &self.panes.held else {
+            return gpui::div().into_any_element();
+        };
         session
-            .and_then(|session| viewer::file_viewer_pane(&session, window, cx))
+            .and_then(|session| viewer::file_viewer_pane_of(&session, files, window, cx))
             .unwrap_or_else(|| gpui::div().into_any_element())
     }
 

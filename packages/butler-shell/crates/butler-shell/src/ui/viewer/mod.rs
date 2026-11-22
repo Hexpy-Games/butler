@@ -34,6 +34,16 @@ pub(crate) fn file_viewer_pane(
     if !files.shown {
         return None;
     }
+    file_viewer_pane_of(session, &files, window, cx)
+}
+
+/// [`file_viewer_pane`] for the given files (the held viewer draws the files as last shown).
+pub(crate) fn file_viewer_pane_of(
+    session: &str,
+    files: &state::SessionFiles,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<AnyElement> {
     let active = files
         .entries
         .iter()

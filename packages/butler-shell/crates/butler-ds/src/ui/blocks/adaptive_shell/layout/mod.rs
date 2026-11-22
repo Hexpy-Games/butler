@@ -18,6 +18,7 @@ use crate::ui::strut;
 
 mod drawer;
 mod peek;
+mod room;
 
 /// The linux window keeps a 1px frame around the shell (`--app-window-frame-inset`).
 const LINUX_FRAME_INSET: f32 = 1.; // DS: AdaptiveShell.module.css:71
@@ -157,7 +158,7 @@ pub(super) fn render(mut shell: AdaptiveShell, window: &mut Window, cx: &mut App
     } else {
         0.
     };
-    let ctx = Ctx {
+    let mut ctx = Ctx {
         drawer,
         cards: vars.cards_docked,
         electron,
@@ -172,6 +173,11 @@ pub(super) fn render(mut shell: AdaptiveShell, window: &mut Window, cx: &mut App
         reduced: ds.reduced_motion(),
         borderless: drawer && shell.window.width <= responsive::COMPACT_MAX && !ds.desktop_only(),
     };
+    let room = room::split_room(&shell, &ctx, Ds::get(cx));
+    ctx.vars.split = ctx
+        .vars
+        .split
+        .map(|s| room::split_with_room(&shell, s, (room, ctx.cards), window, cx));
     let remap = platform_remap(shell.environment, shell.platform);
     let root = if let Some(settings) = shell.settings.take() {
         root_box(&shell, &ctx, Ds::get(cx))
@@ -257,7 +263,7 @@ pub(super) fn workspace_box(
         .min_w_0()
         .min_h_0()
         .children(shell.workspace.take());
-    let right_open = ctx.inspector_open;
+    let (_, border_r, pad_l, pad_r) = room::workspace_edges(ctx, left_track, ds);
     let mut ws = div()
         .relative()
         .size_full()
@@ -268,18 +274,13 @@ pub(super) fn workspace_box(
         .border_l(border)
         .border_t(border)
         .border_b(border)
-        .border_r(if right_open && !ctx.cards {
-            px(0.)
-        } else {
-            border
-        });
+        .border_r(px(border_r));
     ws = if ctx.cards {
         // The cards frame: the workspace is only the shell's room for cards.
-        let left = if left_track > 0. { 0. } else { inset };
         ws.border_color(gpui::transparent_black())
-            .pr(px(inset))
+            .pr(px(pad_r))
             .pb(px(inset))
-            .pl(px(left))
+            .pl(px(pad_l))
     } else {
         let radius = if !ctx.electron && left_track > 0. {
             WORKSPACE_RADIUS / ds.tokens().ui_scale
@@ -343,7 +344,7 @@ fn docked(shell: &mut AdaptiveShell, ctx: &Ctx, window: &mut Window, cx: &mut Ap
         },
         easing: timing.easing(),
     };
-    let left_track = t.left.target() * ctx.left_w;
+    let left_track = room::left_track(shell, t, ctx.left_w, ds);
     let right_track = t.right.target() * ctx.right_w;
     let workspace = workspace_box(shell, ctx, (left_track, right_track), ds);
     let cell = div()
@@ -354,6 +355,20 @@ fn docked(shell: &mut AdaptiveShell, ctx: &Ctx, window: &mut Window, cx: &mut Ap
         .min_w_0()
         .h_full()
         .child(workspace);
+    let cell = room::slide_with_sidebar(cell, t, ctx.left_w, &timing);
+    // The held track commits on the frame after the open ends: ask for that frame.
+    let wake = window.use_keyed_state((shell.id.clone(), "left-commit-wake"), cx, |_, _| None);
+    if shell.left_open && t.left.moving(&timing) {
+        let now = std::time::Instant::now();
+        if wake.read(cx).as_ref().is_none_or(|(_, at)| now >= *at) {
+            let left = t.left.remaining(&timing);
+            let task = crate::ui::motion::wake_task(window, cx, left);
+            wake.update(cx, |w, _| *w = Some((task, now + left)));
+        }
+    } else if wake.read(cx).is_some() {
+        wake.update(cx, |w, _| *w = None);
+    }
+    let ds = Ds::get(cx);
     let mut root = root_box(shell, ctx, ds)
         .flex()
         .flex_row()

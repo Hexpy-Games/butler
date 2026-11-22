@@ -387,8 +387,14 @@ impl RenderOnce for TitlebarShell {
     fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let ds = Ds::get(cx);
         let vars = scope::vars(cx);
-        let split = self.split_chat_width;
-        let grouped = self.chat_trailing.is_some() || split.is_some();
+        // While the pane moves the group follows the chat card's per-frame width.
+        let moving = vars
+            .and_then(|v| v.split)
+            .and_then(|s| s.moving_chat_width());
+        let chat = moving.or(self
+            .split_chat_width
+            .map(|width| clamp_chat_width(width, f32::INFINITY)));
+        let grouped = self.chat_trailing.is_some() || chat.is_some();
         let m = Metrics::of(&self, grouped, ds, vars);
         let identity = identity(&mut self, &m, ds);
         let chat_trailing = self.chat_trailing.take().map(|c| actions(c, m.action));
@@ -406,12 +412,11 @@ impl RenderOnce for TitlebarShell {
                 }))
                 .child(identity)
                 .children(chat_trailing);
-            group = match split {
+            group = match chat {
                 Some(width) => {
                     // The chat group ends where the chat card does (TitlebarShell.module.css:117).
                     let card = vars.map_or((0., 0.), |v| (v.card_start, v.card_end));
-                    let basis =
-                        clamp_chat_width(width, f32::INFINITY) + card.0 - m.start - m.end + card.1;
+                    let basis = width + card.0 - m.start - m.end + card.1;
                     group.flex_grow(0.).flex_shrink(1.).flex_basis(px(basis))
                 }
                 None => group.flex_auto(),

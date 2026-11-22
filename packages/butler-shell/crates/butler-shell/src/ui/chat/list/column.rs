@@ -19,5 +19,10 @@ pub(super) fn in_column(row: AnyElement, cx: &App) -> AnyElement {
             .max_w(px(COLUMN_MAX))
             .mx_auto()
     };
-    div().w_full().child(column.child(row)).into_any_element()
+    let outer = div().w_full();
+    let outer = match vars.column_glide {
+        Some(glide) => glide.follow(outer),
+        None => outer,
+    };
+    outer.child(column.child(row)).into_any_element()
 }

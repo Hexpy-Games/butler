@@ -53,10 +53,10 @@ fn context_changed(shell: &AdaptiveShell, window: &mut Window, cx: &mut App) -> 
     changed
 }
 
-/// A panel's slide on the panel tokens and its reduced-motion fade, each 0 to 1.
+/// A panel's slide on the panel tokens and its reduced-motion fade, each 0 to 1; `flip` asks FLIP to move the layout with it.
 fn panel_pair(
     shell: &AdaptiveShell,
-    (name, open, jump): (&'static str, bool, bool),
+    (name, open, jump, flip): (&'static str, bool, bool, bool),
     window: &mut Window,
     cx: &mut App,
 ) -> (Transition, Transition) {
@@ -76,7 +76,7 @@ fn panel_pair(
             open
         });
     if *before.read(cx) != open {
-        if !jump {
+        if !jump && flip {
             window.animate_layout(panel.ms());
         }
         before.update(cx, |value, _| *value = open);
@@ -112,7 +112,11 @@ fn split_motion(
         DsDuration::AdaptivePanelDuration,
         Easing::AdaptivePanelEasing,
     );
-    let fade = Timing::token(ds, DsDuration::MotionBase, Easing::MotionEaseStandard);
+    let fade = Timing::token(
+        ds,
+        DsDuration::AdaptivePanelDuration,
+        Easing::AdaptivePanelEasing,
+    );
     let reduced = ds.reduced_motion();
     let id = &shell.id;
     let progress = transition(
@@ -129,13 +133,6 @@ fn split_motion(
         window,
         cx,
     );
-    let before = window.use_keyed_state((id.clone(), "split-target"), cx, |_, _| split.open);
-    if *before.read(cx) != split.open {
-        if !reduced && !jump {
-            window.animate_layout(panel.ms());
-        }
-        before.update(cx, |value, _| *value = split.open);
-    }
     Some(SplitMotion {
         progress: progress.target(),
         fade: faded.target(),
@@ -143,6 +140,8 @@ fn split_motion(
         fade_motion: Some(faded),
         open: split.open,
         chat_width: split.chat_width,
+        chat_now: None,
+        room: 0.,
     })
 }
 
@@ -164,8 +163,18 @@ pub(super) fn tracks(
         DsDuration::AdaptivePanelDuration,
         Easing::AdaptivePanelEasing,
     );
-    let (left, left_fade) = panel_pair(shell, ("left", shell.left_open, jump), window, cx);
-    let (right, right_fade) = panel_pair(shell, ("right", facts.inspector_open, jump), window, cx);
+    let (left, left_fade) = panel_pair(
+        shell,
+        ("left", shell.left_open, jump, facts.drawer),
+        window,
+        cx,
+    );
+    let (right, right_fade) = panel_pair(
+        shell,
+        ("right", facts.inspector_open, jump, true),
+        window,
+        cx,
+    );
     let scrim = transition(
         (shell.id.clone(), "scrim"),
         (level(facts.scrim_open), reduced),
