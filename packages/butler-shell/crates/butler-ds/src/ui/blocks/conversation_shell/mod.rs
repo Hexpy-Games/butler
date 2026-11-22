@@ -175,16 +175,21 @@ impl ConversationShell {
         let content = column::content_width(width, self.gutter, narrow);
         let (col, target) = column::column(width, content, keep_out(shown_aside, rail, width, ds));
         let timing = Timing::token(ds, DsDuration::MotionSlow, Easing::MotionEaseEmphasized);
-        // The column glides only when its keep-out changes (the aside docks, the rail's room comes
-        // or goes); a width change (a resize, the split's moving chat) applies at once.
+        // The column glides when its keep-out changes (the aside docks, the rail's room comes or
+        // goes). While that glide runs a width change retargets it; outside a glide a width change
+        // (a resize, the split's moving chat) applies at once; a render with neither keeps it.
         let keep = keep_out(shown_aside, rail, width, ds).map(|k| k.keep_out);
         let reduced = ds.reduced_motion();
-        let seen = window.use_keyed_state((self.id.clone(), "column-keep-out"), cx, |_, _| keep);
-        let docking = *seen.read(cx) != keep;
-        if docking {
-            seen.update(cx, |v, _| *v = keep);
-        }
-        let jump = reduced || width <= 0. || !docking;
+        let now = gpui::animation_time_ms();
+        let seen = window.use_keyed_state((self.id.clone(), "column-keep-out"), cx, |_, _| {
+            (keep, width, now.wrapping_sub(timing.ms()))
+        });
+        let (was_keep, was_width, docked_at) = *seen.read(cx);
+        let docking = was_keep != keep;
+        let docked_at = if docking { now } else { docked_at };
+        let gliding = now.wrapping_sub(docked_at) < timing.ms();
+        seen.update(cx, |v, _| *v = (keep, width, docked_at));
+        let jump = reduced || width <= 0. || (was_width != width && !gliding);
         let motion = transition(
             (self.id.clone(), "column-shift"),
             (target, jump),

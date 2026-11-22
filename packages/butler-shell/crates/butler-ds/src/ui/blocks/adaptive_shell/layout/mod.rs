@@ -357,8 +357,16 @@ fn docked(shell: &mut AdaptiveShell, ctx: &Ctx, window: &mut Window, cx: &mut Ap
         .child(workspace);
     let cell = room::slide_with_sidebar(cell, t, ctx.left_w, &timing);
     // The held track commits on the frame after the open ends: ask for that frame.
+    let wake = window.use_keyed_state((shell.id.clone(), "left-commit-wake"), cx, |_, _| None);
     if shell.left_open && t.left.moving(&timing) {
-        crate::ui::motion::wake_after(window, cx, t.left.remaining(&timing));
+        let now = std::time::Instant::now();
+        if wake.read(cx).as_ref().is_none_or(|(_, at)| now >= *at) {
+            let left = t.left.remaining(&timing);
+            let task = crate::ui::motion::wake_task(window, cx, left);
+            wake.update(cx, |w, _| *w = Some((task, now + left)));
+        }
+    } else if wake.read(cx).is_some() {
+        wake.update(cx, |w, _| *w = None);
     }
     let ds = Ds::get(cx);
     let mut root = root_box(shell, ctx, ds)
