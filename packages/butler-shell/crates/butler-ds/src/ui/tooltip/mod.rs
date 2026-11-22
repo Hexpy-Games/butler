@@ -269,7 +269,8 @@ fn on_hover(state: &Entity<State>, on: bool, label: bool, window: &mut Window, c
     });
 }
 
-/// Records the trigger's window bounds and whether its ancestors clip it out of sight entirely.
+/// Records the trigger's window bounds and whether its ancestors clip it out of sight entirely; only a shown
+/// label asks for a redraw when they change.
 fn bounds_probe(state: &Entity<State>) -> gpui::Div {
     let state = state.clone();
     cover().child(
@@ -278,9 +279,11 @@ fn bounds_probe(state: &Entity<State>) -> gpui::Div {
                 let visible = bounds.intersect(&window.content_mask().bounds);
                 let clipped = visible.size.width <= px(0.) || visible.size.height <= px(0.);
                 state.update(cx, |s, cx| {
-                    if s.trigger != Some(bounds) || s.clipped != clipped {
-                        s.trigger = Some(bounds);
-                        s.clipped = clipped;
+                    let moved = s.trigger != Some(bounds) || s.clipped != clipped;
+                    s.trigger = Some(bounds);
+                    s.clipped = clipped;
+                    // Only a label on screen follows its trigger; a hidden one reads these when it opens.
+                    if moved && s.open {
                         cx.notify();
                     }
                 });
