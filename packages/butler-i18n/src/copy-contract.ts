@@ -522,8 +522,7 @@ export interface MobileCopy {
     disconnectTitle: string;
     disconnectBody: string;
     cancel: string;
-    pickHour: string;
-    pickMinute: string;
+    done: string;
     checkForUpdates: string;
     applyUpdateTitle: string;
     applyUpdateBody: string;

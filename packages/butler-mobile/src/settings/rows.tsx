@@ -5,7 +5,7 @@ import { Icon, icons, ListGroup, ListRow, Sheet, Switch, Text, TextField, useTok
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import type { AppModelSummary, ReasoningEffort } from "./types";
 import { effectiveReasoningEffort, reasoningOptionLabel } from "./useModelCatalog";
-import { pad2 } from "./format";
+export { TimeRow } from "./TimeRow";
 
 /** Picker rows: the chosen row shows an accent check and says "선택됨"; pickers never use the ListRow `selected` fill. */
 export function usePicked() {
@@ -49,35 +49,6 @@ export function SwitchRow({ title, value, onChange, disabled }: {
   title: string; value: boolean; onChange(value: boolean): void; disabled?: boolean;
 }) {
   return <ListRow title={title} trailing={<Switch value={value} label={title} onValueChange={onChange} disabled={disabled} />} />;
-}
-
-export function TimeRow({ title, value, onChange, disabled }: {
-  title: string; value: string; onChange(value: string): void; disabled?: boolean;
-}) {
-  const M = useMobileCopy();
-  const locale = useAppLocale();
-  const picked = usePicked();
-  const hourLabel = (n: number) => new Intl.DateTimeFormat(locale, { hour: "numeric" }).format(new Date(2000, 0, 1, n));
-  const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<"hour" | "minute">("hour");
-  const [hour, setHour] = useState(0);
-  const [h, m] = value.split(":").map(Number);
-  const time = new Date(2000, 0, 1, h, m);
-  const minutes = [...new Set([...Array.from({ length: 12 }, (_, i) => i * 5), m])].sort((a, b) => a - b);
-  return <>
-    <ListRow title={title} disabled={disabled}
-      meta={new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" }).format(time)}
-      onPress={() => { setHour(h); setStep("hour"); setOpen(true); }} />
-    <Sheet open={open} onClose={() => setOpen(false)} title={title} cancelLabel={M.settings.cancel}
-      description={step === "hour" ? M.settings.pickHour : M.settings.pickMinute}>
-      <ListGroup>
-        {step === "hour" ? Array.from({ length: 24 }, (_, n) => <ListRow key={n} title={hourLabel(n)} navigates
-          {...picked(n === hour, [hourLabel(n)])} onPress={() => { setHour(n); setStep("minute"); }} />)
-          : minutes.map(n => <ListRow key={n} title={pad2(n)} {...picked(n === m, [pad2(n)])}
-            onPress={() => { setOpen(false); onChange(`${pad2(hour)}:${pad2(n)}`); }} />)}
-      </ListGroup>
-    </Sheet>
-  </>;
 }
 
 export function ReasoningRow({ title, model, value, onSelect }: {

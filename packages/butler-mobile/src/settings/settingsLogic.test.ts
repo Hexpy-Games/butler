@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { dateToTime, timeToDate } from "./format";
 import { mergeSettings } from "./merge";
 import { draftFromPersonalization, personalizationUpdatePayload, resolvePersonaPreset, selectPersonaPreset } from "./personalization";
 import { groupGrants, type GrantRecord } from "./grantRows";
@@ -40,4 +41,9 @@ test("groupGrants retains references and conversations for a shared approval", (
   expect(rows[0]!.refs).toEqual(records.map(({ grant_ref, session_id }) => ({ grant_ref, session_id })));
   expect([...rows[0]!.places.keys()]).toEqual(["first", "second"]);
   expect(rows[0]!.createdAt).toBe(records[1]!.created_at);
+});
+
+// test-category: pure-logic
+test("time row keeps the HH:MM value through the picker Date", () => {
+  for (const v of ["00:00", "07:05", "22:30", "23:59"]) expect(dateToTime(timeToDate(v))).toBe(v);
 });
