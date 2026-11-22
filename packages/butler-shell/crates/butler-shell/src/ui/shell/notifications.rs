@@ -95,7 +95,9 @@ impl Shell {
             let body = format!("{} · {label}", row.title);
             let id = toast::show(cx, Toast::message(body.clone()).persistent());
             s.attention.waiting.insert(session.clone(), Some(id));
-            if settings.is_ok_and(|s| s.desktop_notifications.enabled) {
+            if settings.is_ok_and(|s| s.desktop_notifications.enabled)
+                && butler_platform::notification_settings::supported()
+            {
                 cx.show_system_notification(SystemNotification {
                     tag: format!("attention:{}", session.0).into(),
                     title: s.copy("Butler", "버틀러").into(),

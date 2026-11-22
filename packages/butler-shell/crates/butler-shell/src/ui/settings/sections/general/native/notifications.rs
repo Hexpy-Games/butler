@@ -6,7 +6,7 @@ use butler_ds::ui::blocks::settings_section::{SettingsSection, SettingsSectionKi
 use butler_ds::ui::button::{Button, Variant};
 use butler_ds::ui::context::Ds;
 use butler_ds::ui::toast::{self, Toast};
-use butler_platform::notification_settings::{self, NotificationSupport};
+use butler_platform::notification_settings;
 use gpui::{App, IntoElement, ParentElement as _, Styled as _, div};
 
 use self::copy::{NotificationCopy, words};
@@ -21,12 +21,6 @@ fn platform_label() -> &'static str {
         Platform::Windows => "Windows",
         Platform::Linux => "Linux",
     }
-}
-
-/// Whether this running build can post OS notifications.
-fn supported() -> bool {
-    std::env::current_exe()
-        .is_ok_and(|exe| notification_settings::support(&exe) == NotificationSupport::Supported)
 }
 
 /// `nativeNotificationStatusDetails`: the hint for the platform's details code.
@@ -70,7 +64,7 @@ pub(in super::super) fn section(
     cx: &App,
 ) -> SettingsSection {
     let words = words(Ds::get(cx).lang());
-    let supported = supported();
+    let supported = notification_settings::supported();
     let (description, check) = if supported {
         (details(words), words.permission_check)
     } else {
