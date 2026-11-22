@@ -1,3 +1,4 @@
+import { MessageResults } from "@/outputs/MessageResults";
 import { useState } from "react";
 import { Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
@@ -68,6 +69,7 @@ export function Message({ message, latestTurn, sessionId, projectId, stewardChil
       {failed ? <Text tone="danger">{copy.chat.failed}</Text> : null}
       {cancelled ? <Text tone="tertiary">{copy.chat.cancelled}</Text> : null}
     </MessageBody>
+    <MessageResults message={message} />
     {stewardChild ? <StewardCard child={stewardChild.child} /> : null}
     {message.status !== "streaming" && (message.text.trim() || message.answer_blocks?.length) ? <MessageInfo message={message}
       sessionId={sessionId} projectId={projectId}

@@ -60,7 +60,16 @@ import MagicWand01Icon from "@hugeicons/core-free-icons/MagicWand01Icon";
 import ComputerIcon from "@hugeicons/core-free-icons/ComputerIcon";
 import Unlink01Icon from "@hugeicons/core-free-icons/Unlink01Icon";
 
+import Album02Icon from "@hugeicons/core-free-icons/Album02Icon";
+import Bookmark02Icon from "@hugeicons/core-free-icons/Bookmark02Icon";
+import Share08Icon from "@hugeicons/core-free-icons/Share08Icon";
+import PauseIcon from "@hugeicons/core-free-icons/PauseIcon";
+
 export const icons = {
+  Scrap: Album02Icon,
+  Bookmark: Bookmark02Icon,
+  Share: Share08Icon,
+  Pause: PauseIcon,
   SlidersHorizontal: SlidersHorizontalIcon,
   Palette: PaintBoardIcon,
   UserRound: UserIcon,
