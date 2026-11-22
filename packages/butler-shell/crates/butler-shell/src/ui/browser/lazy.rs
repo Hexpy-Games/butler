@@ -1,4 +1,5 @@
-//! The page engine starts on the first browser use (a tab or an Agent page), not with the App.
+//! The page engine starts on the first browser use (a tab that gets a URL, or an Agent page), not
+//! with the App or an empty tab.
 use futures::channel::mpsc;
 use gpui::{AnyElement, App, Window};
 
@@ -34,10 +35,16 @@ impl PageEngine for Unstarted {
 }
 
 impl BrowserState {
-    /// Starts the page engine once; later calls do nothing.
+    /// Starts the page engine once, on the first tab that gets a URL or the first Agent page, and
+    /// opens the tabs created before it; later calls do nothing.
     pub(super) fn start_engine(&mut self, cx: &mut App) {
         if let Some((sender, adapter)) = self.starter.take() {
             self.engine = engine(sender, adapter, cx);
+            // Tabs created before the start were opened on `Unstarted`: open them on the engine now.
+            for tab in &self.tabs {
+                let key = super::area::owner_key(&tab.owner);
+                self.engine.open(&tab.id, &tab.url, tab.profile, &key, &key);
+            }
         }
     }
 }

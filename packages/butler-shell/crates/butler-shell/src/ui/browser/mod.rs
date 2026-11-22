@@ -21,6 +21,7 @@ mod host;
 mod lazy;
 pub(crate) mod model;
 mod new_tab;
+mod page_commands;
 mod page_dialog;
 pub(crate) mod pick;
 mod placeholder;

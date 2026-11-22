@@ -17,8 +17,8 @@ use butler_ds::ui::{
     toast::{self, Toast},
 };
 use gpui::{
-    AnyElement, App, Entity, IntoElement as _, KeyDownEvent, ParentElement as _, SharedString,
-    Styled as _, Window, div,
+    AnyElement, App, BorrowAppContext as _, Entity, IntoElement as _, KeyDownEvent,
+    ParentElement as _, SharedString, Styled as _, Window, div,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -83,7 +83,7 @@ fn query(state: &Entity<AreaState>, q: String, cx: &mut App) {
     });
 }
 fn choose(state: &Entity<AreaState>, tab: &TabId, url: &str, window: &mut Window, cx: &mut App) {
-    let value = cx.global_mut::<BrowserState>().navigate(tab, url);
+    let value = cx.update_global::<BrowserState, _>(|model, cx| model.navigate(tab, url, cx));
     result(&value, cx);
     state.update(cx, |state, cx| {
         state.editing = false;

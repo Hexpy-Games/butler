@@ -6,8 +6,8 @@ use std::fmt;
 use futures::{StreamExt as _, channel::mpsc};
 use gpui::{AnyElement, App, Global, SharedString, Window};
 
-use super::address::{AddressError, address_url, web_url};
-use super::engine::{PageChange, PageCommand, PageEngine, PageEvent, Profile, TabId};
+use super::address::{AddressError, web_url};
+use super::engine::{PageChange, PageEngine, PageEvent, Profile, TabId};
 
 // Mirrors butler-runtime/src/browser/capacity.rs.
 const USER_TABS: usize = 30;
@@ -214,7 +214,6 @@ impl BrowserState {
         activate: bool,
         cx: &mut App,
     ) -> Result<Option<TabId>, BrowserError> {
-        self.start_engine(cx);
         if !self.enabled() {
             return Err(BrowserError::BrowsingDisabled);
         }
@@ -228,6 +227,11 @@ impl BrowserState {
             .unwrap_or_default();
         if self.tabs.iter().filter(|tab| tab.owner == owner).count() >= USER_TABS {
             return Err(BrowserError::TabBudgetExhausted);
+        }
+        // An empty tab is native UI; the engine starts when a tab first gets a URL. It starts before
+        // the push below, so the new tab is opened once below, not by the start's replay.
+        if !url.is_empty() {
+            self.start_engine(cx);
         }
         self.next_id += 1;
         let id = TabId(format!("t{}", self.next_id).into());
@@ -347,60 +351,6 @@ impl BrowserState {
         Ok(())
     }
 
-    pub(crate) fn navigate(&mut self, id: &TabId, input: &str) -> Result<(), BrowserError> {
-        self.command_allowed(id)?;
-        let Some(url) = address_url(input)? else {
-            return Ok(());
-        };
-        if let Some(tab) = self.tabs.iter_mut().find(|tab| &tab.id == id) {
-            tab.placeholder = false;
-            tab.last_nav = Some(super::visits::Transition::Typed);
-        }
-        self.engine.command(id, PageCommand::Load(url));
-        Ok(())
-    }
-
-    fn command_allowed(&self, id: &TabId) -> Result<(), BrowserError> {
-        if self.tab(id).is_none() {
-            return Err(BrowserError::UnknownTab);
-        }
-        if !self.enabled() {
-            return Err(BrowserError::BrowsingDisabled);
-        }
-        self.agent_gate(id)
-    }
-
-    pub(crate) fn back(&mut self, id: &TabId) -> Result<(), BrowserError> {
-        self.command_allowed(id)?;
-        if self.tab(id).is_some_and(|tab| tab.can_back) {
-            self.nav_intent(id, super::visits::Transition::ForwardBack);
-            self.engine.command(id, PageCommand::Back);
-        }
-        Ok(())
-    }
-
-    pub(crate) fn forward(&mut self, id: &TabId) -> Result<(), BrowserError> {
-        self.command_allowed(id)?;
-        if self.tab(id).is_some_and(|tab| tab.can_forward) {
-            self.nav_intent(id, super::visits::Transition::ForwardBack);
-            self.engine.command(id, PageCommand::Forward);
-        }
-        Ok(())
-    }
-
-    pub(crate) fn reload(&mut self, id: &TabId) -> Result<(), BrowserError> {
-        self.command_allowed(id)?;
-        self.nav_intent(id, super::visits::Transition::Reload);
-        self.engine.command(id, PageCommand::Reload);
-        Ok(())
-    }
-
-    pub(crate) fn stop(&mut self, id: &TabId) -> Result<(), BrowserError> {
-        self.command_allowed(id)?;
-        self.engine.command(id, PageCommand::Stop);
-        Ok(())
-    }
-
     pub(crate) fn resize(&mut self, id: &TabId, size: gpui::Size<gpui::Pixels>, scale: f32) {
         if self.note_pane(id, size, scale) {
             return;
@@ -411,12 +361,6 @@ impl BrowserState {
                 f64::from(f32::from(size.height)),
             ));
             self.engine.resize(id, size, scale);
-        }
-    }
-
-    fn nav_intent(&mut self, id: &TabId, transition: super::visits::Transition) {
-        if let Some(tab) = self.tabs.iter_mut().find(|tab| &tab.id == id) {
-            tab.last_nav = Some(transition);
         }
     }
 
