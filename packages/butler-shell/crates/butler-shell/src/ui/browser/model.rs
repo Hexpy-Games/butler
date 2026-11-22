@@ -225,12 +225,13 @@ impl BrowserState {
             .map(|url| web_url(url).ok_or(BrowserError::BlockedProtocol))
             .transpose()?
             .unwrap_or_default();
-        // An empty tab is native UI; the engine starts when a tab first gets a URL.
-        if !url.is_empty() {
-            self.start_engine(cx);
-        }
         if self.tabs.iter().filter(|tab| tab.owner == owner).count() >= USER_TABS {
             return Err(BrowserError::TabBudgetExhausted);
+        }
+        // An empty tab is native UI; the engine starts when a tab first gets a URL. It starts before
+        // the push below, so the new tab is opened once below, not by the start's replay.
+        if !url.is_empty() {
+            self.start_engine(cx);
         }
         self.next_id += 1;
         let id = TabId(format!("t{}", self.next_id).into());
