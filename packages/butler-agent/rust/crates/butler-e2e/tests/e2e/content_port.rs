@@ -249,8 +249,8 @@ async fn lan_device_token_gets_content_view() -> Result<(), HarnessError> {
     }
     butler_e2e::skip_unless!(lan.is_some(), "no LAN listener");
     let address: std::net::SocketAddr = lan.unwrap().parse().unwrap();
-    let pin = super::gateway_pairing::helpers::issue(&app).await?;
-    let paired: serde_json::Value = super::gateway_pairing::helpers::browser()
+    let pin = super::gateway_pairing::support::helpers::issue(&app).await?;
+    let paired: serde_json::Value = super::gateway_pairing::support::helpers::browser()
         .post(format!("http://{address}/devices/pair"))
         .json(&json!({"code": pin["code"], "device_name": "Test phone", "platform": "ios", "public_key": "later"}))
         .send().await?.json().await?;
@@ -259,8 +259,10 @@ async fn lan_device_token_gets_content_view() -> Result<(), HarnessError> {
     let phone = Gateway::new(format!("http://{address}"), token.to_owned());
     let url = view(&phone, &path).await?;
     let q = view(&s.gw, &path).await?.port().unwrap();
-    assert_eq!(url.origin().ascii_serialization(),
-        format!("http://{}", std::net::SocketAddr::new(address.ip(), q)));
+    assert_eq!(
+        url.origin().ascii_serialization(),
+        format!("http://{}", std::net::SocketAddr::new(address.ip(), q))
+    );
     content(&url, &format!("http://{address}"), &address.to_string()).await?;
     s.finish().await
 }
