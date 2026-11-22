@@ -76,12 +76,18 @@ fn assistant_footer(
     let footer = MessageFooter::new()
         .child(CopyButton::new(format!("{id}-copy"), l.copy, l.copied).text(text))
         .child(
-            IconButton::new(format!("{id}-branch-chat"), l.branch_chat)
-                .icon(icon(Icon::MessageSquarePlus, IconSize::Md, ds)),
+            IconButton::new(format!("{id}-branch-chat"), l.branch_chat).icon(icon(
+                Icon::MessageSquarePlus,
+                IconSize::Md,
+                ds,
+            )),
         )
         .child(
-            IconButton::new(format!("{id}-branch-project"), l.branch_project)
-                .icon(icon(Icon::FolderPlus, IconSize::Md, ds)),
+            IconButton::new(format!("{id}-branch-project"), l.branch_project).icon(icon(
+                Icon::FolderPlus,
+                IconSize::Md,
+                ds,
+            )),
         )
         .child(div().child(l.worked_for))
         .child(Typo::text(time).tabular())
