@@ -15,8 +15,8 @@ pub use crate::cognition::generation::embedding_binding::bind_native_embedding_i
 pub use authority::assert_mutation_authority;
 pub use cache::advance as advance_rebuild_cache;
 pub(in crate::cognition) use cache::{
-    HotCacheEntryView, HotCacheHealth, physical_entries as physical_hot_cache_entries,
-    read_hot_cache_health,
+    HotCacheEntryView, HotCacheHealth, RECENT_TEXT_BYTES,
+    physical_entries as physical_hot_cache_entries, read_hot_cache_health,
 };
 pub use initialize::{
     FreshMemoryGeneration, initialize_empty_memory_generation, prepare_fresh_memory_generation,

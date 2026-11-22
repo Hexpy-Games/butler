@@ -68,8 +68,14 @@ fn non_daily_memory_calls(server: &FakeServer) -> usize {
 #[tokio::test]
 async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessError> {
     butler_e2e::gate!();
+    // Two more statements that together pass the 1 KiB entry cap: the entry
+    // keeps whole statements in order and stops before the one that does not fit.
+    let kept = "Alpha note. ".repeat(50);
+    let cut = "Beta note. ".repeat(55);
     let answer = json!({"status":"processed","entities":[],"items":[
-            {"kind":"preference","subject":null,"text":FACT,"evidence":[0]}
+            {"kind":"preference","subject":null,"text":FACT,"evidence":[0]},
+            {"kind":"fact","subject":null,"text":kept,"evidence":[0]},
+            {"kind":"fact","subject":null,"text":cut,"evidence":[0]}
         ],"attributes":[]})
     .to_string();
     let server = FakeServer::local_models(ChatBehavior {
@@ -299,6 +305,18 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
             .1;
     }
     assert!(!newest.contains("[model_interpretation/"));
+    let recent = newest
+        .split_once("What the user said in recent chats")
+        .unwrap()
+        .1;
+    assert!(
+        recent.contains(kept.trim()),
+        "whole statements within the cap"
+    );
+    assert!(
+        !recent.contains("Beta note."),
+        "entry stops at the 1 KiB cap"
+    );
     assert_eq!(pending, 0, "all pending cache jobs must drain");
     assert!(
         before != after
