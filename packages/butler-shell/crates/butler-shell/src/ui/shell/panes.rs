@@ -364,21 +364,7 @@ impl Shell {
             self.panes.held = shown;
         }
         if let Some(held) = self.panes.held.clone() {
-            split = split.pane(match held {
-                Held::Editor(view) => view.into_any_element(),
-                Held::Browser => self
-                    .regions
-                    .browser
-                    .clone()
-                    .cached(region::fill())
-                    .into_any_element(),
-                Held::Viewer(_) => self
-                    .regions
-                    .viewer
-                    .clone()
-                    .cached(region::fill())
-                    .into_any_element(),
-            });
+            split = split.pane(self.held_pane(held));
         }
         let exit = cx.entity().downgrade();
         split
@@ -390,6 +376,24 @@ impl Shell {
                 });
             })
             .into_any_element()
+    }
+
+    fn held_pane(&self, held: Held) -> AnyElement {
+        match held {
+            Held::Editor(view) => view.into_any_element(),
+            Held::Browser => self
+                .regions
+                .browser
+                .clone()
+                .cached(region::fill())
+                .into_any_element(),
+            Held::Viewer(_) => self
+                .regions
+                .viewer
+                .clone()
+                .cached(region::fill())
+                .into_any_element(),
+        }
     }
 
     /// The viewer pane of the open conversation (empty while there is none; `workspace` only

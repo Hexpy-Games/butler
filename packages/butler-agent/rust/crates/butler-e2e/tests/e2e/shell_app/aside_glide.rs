@@ -74,6 +74,11 @@ async fn shell_app_21_aside_glides_with_the_column() -> Result<(), HarnessError>
             &format!("layout rm-open {message} composer"),
             "click session-info-toggle",
             &format!("layout rm-closed {message} composer"),
+            "click sidebar-toggle",
+            "wait 600",
+            "click sidebar-toggle",
+            "wait 600",
+            "layout sidebar-back composer",
             "app-quit",
         ])
         .await?;
@@ -137,6 +142,14 @@ async fn shell_app_21_aside_glides_with_the_column() -> Result<(), HarnessError>
     assert!(
         near(rm("rm-closed", "composer"), rest_composer),
         "rm-closed composer"
+    );
+    assert!(
+        laid_out(&shell, "sidebar-back", "composer")
+            .expect("composer after sidebar reopens")
+            .into_iter()
+            .zip(rest("composer"))
+            .all(|(a, b)| near(a, b)),
+        "the workspace is back in place after the sidebar reopens"
     );
     shell.finish().await?;
     sandbox.mark_success();

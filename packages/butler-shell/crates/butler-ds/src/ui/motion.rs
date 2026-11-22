@@ -173,6 +173,20 @@ impl Transition {
         self.from + (self.to - self.from) * timing.ease(elapsed as f32 / timing.ms() as f32)
     }
 
+    /// The eased fraction of the current segment, 0 at its start to 1 once settled.
+    pub fn eased(&self, timing: &Timing) -> f32 {
+        if !self.moving(timing) {
+            return 1.;
+        }
+        timing.ease(self.elapsed().unwrap_or(0) as f32 / timing.ms() as f32)
+    }
+
+    /// The time left until the motion settles (zero once it has).
+    pub fn remaining(&self, timing: &Timing) -> std::time::Duration {
+        let left = timing.ms().saturating_sub(self.elapsed().unwrap_or(0));
+        std::time::Duration::from_millis(u64::from(left))
+    }
+
     /// Running, or waiting for a start in the future (which holds `from`).
     pub fn moving(&self, timing: &Timing) -> bool {
         self.elapsed().is_none_or(|elapsed| elapsed < timing.ms())

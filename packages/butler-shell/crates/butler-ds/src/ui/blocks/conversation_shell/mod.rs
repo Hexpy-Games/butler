@@ -175,7 +175,16 @@ impl ConversationShell {
         let content = column::content_width(width, self.gutter, narrow);
         let (col, target) = column::column(width, content, keep_out(shown_aside, rail, width, ds));
         let timing = Timing::token(ds, DsDuration::MotionSlow, Easing::MotionEaseEmphasized);
-        let jump = ds.reduced_motion() || width <= 0.;
+        // The column glides only when its keep-out changes (the aside docks, the rail's room comes
+        // or goes); a width change (a resize, the split's moving chat) applies at once.
+        let keep = keep_out(shown_aside, rail, width, ds).map(|k| k.keep_out);
+        let reduced = ds.reduced_motion();
+        let seen = window.use_keyed_state((self.id.clone(), "column-keep-out"), cx, |_, _| keep);
+        let docking = *seen.read(cx) != keep;
+        if docking {
+            seen.update(cx, |v, _| *v = keep);
+        }
+        let jump = reduced || width <= 0. || !docking;
         let motion = transition(
             (self.id.clone(), "column-shift"),
             (target, jump),

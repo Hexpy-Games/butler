@@ -5,21 +5,20 @@ use gpui::{
     Styled as _, Window, div, px,
 };
 
-use super::frame::clamp_chat_width;
 use super::frame_cfg::{HandleSide, ShellPlatform};
 use super::grip::HANDLE_WIDTH;
-use super::split::shared_room;
 use super::track::{self, Facts, Tracks};
 use super::{AdaptiveShell, ShellFrame};
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length};
 use crate::ui::blocks::responsive::{self, ChromeEnvironment};
 use crate::ui::blocks::scope::{self, ShellVars, Spec};
 use crate::ui::context::Ds;
-use crate::ui::motion::{Props, Timing, transition};
+use crate::ui::motion::{Props, Timing};
 use crate::ui::strut;
 
 mod drawer;
 mod peek;
+mod room;
 
 /// The linux window keeps a 1px frame around the shell (`--app-window-frame-inset`).
 const LINUX_FRAME_INSET: f32 = 1.; // DS: AdaptiveShell.module.css:71
@@ -174,11 +173,11 @@ pub(super) fn render(mut shell: AdaptiveShell, window: &mut Window, cx: &mut App
         reduced: ds.reduced_motion(),
         borderless: drawer && shell.window.width <= responsive::COMPACT_MAX && !ds.desktop_only(),
     };
-    let room = split_room(&shell, &ctx, Ds::get(cx));
+    let room = room::split_room(&shell, &ctx, Ds::get(cx));
     ctx.vars.split = ctx
         .vars
         .split
-        .map(|s| split_with_room(&shell, s, (room, ctx.cards), window, cx));
+        .map(|s| room::split_with_room(&shell, s, (room, ctx.cards), window, cx));
     let remap = platform_remap(shell.environment, shell.platform);
     let root = if let Some(settings) = shell.settings.take() {
         root_box(&shell, &ctx, Ds::get(cx))
@@ -243,91 +242,6 @@ fn title_slot(shell: &mut AdaptiveShell, ctx: &Ctx, right_track: f32) -> Option<
     )
 }
 
-/// The workspace's left and right border, then its left and right padding (the cards frame's room
-/// for cards): what its content box loses to the left and right.
-fn workspace_edges(ctx: &Ctx, left_track: f32, ds: &Ds) -> (f32, f32, f32, f32) {
-    let hairline = f32::from(ds.len(Length::BorderHairline));
-    let border = if ctx.borderless { 0. } else { hairline };
-    let border_r = if ctx.inspector_open && !ctx.cards {
-        0.
-    } else {
-        border
-    };
-    let inset = f32::from(ds.len(Length::ShellCardInset)) - hairline;
-    let (pad_l, pad_r) = match (ctx.cards, left_track > 0.) {
-        (false, _) => (0., 0.),
-        (true, true) => (0., inset),
-        (true, false) => (inset, inset),
-    };
-    (border, border_r, pad_l, pad_r)
-}
-
-/// The docked sidebar's track width (useSidebarTrackMotion.ts): closing commits 0 at once; opening
-/// keeps 0 while the sidebar and the workspace slide aside, and commits when the motion ends.
-fn left_track(shell: &AdaptiveShell, t: &Tracks, left_w: f32, ds: &Ds) -> f32 {
-    let timing = Timing::token(
-        ds,
-        DsDuration::AdaptivePanelDuration,
-        Easing::AdaptivePanelEasing,
-    );
-    if shell.left_open && !t.left.moving(&timing) {
-        left_w
-    } else {
-        0.
-    }
-}
-
-/// The width of the split's room: the window less the root padding, the docked tracks and the
-/// workspace's edges (the drawer layout has no tracks).
-fn split_room(shell: &AdaptiveShell, ctx: &Ctx, ds: &Ds) -> f32 {
-    let (left, right) = if ctx.drawer {
-        (0., 0.)
-    } else {
-        (
-            left_track(shell, &ctx.t, ctx.left_w, ds),
-            ctx.t.right.target() * ctx.right_w,
-        )
-    };
-    let (border_l, border_r, pad_l, pad_r) = workspace_edges(ctx, left, ds);
-    shell.window.width - 2. * ctx.inset - left - right - border_l - border_r - pad_l - pad_r
-}
-
-/// The split with its room and the chat column's on-screen width while the pane moves: one
-/// retained transition toward the open (clamped) or closed (whole room) width, retargeted from
-/// the width on screen, so the column never jumps when the room changes as the motion starts.
-fn split_with_room(
-    shell: &AdaptiveShell,
-    s: scope::SplitMotion,
-    (room, cards): (f32, bool),
-    window: &mut Window,
-    cx: &mut App,
-) -> scope::SplitMotion {
-    let ds = Ds::get(cx);
-    let timing = Timing::token(
-        ds,
-        DsDuration::AdaptivePanelDuration,
-        Easing::AdaptivePanelEasing,
-    );
-    let moving = room > 0. && s.motion.is_some_and(|m| m.moving(&timing));
-    let target = if s.open {
-        clamp_chat_width(s.chat_width, shared_room(room, cards, ds))
-    } else {
-        room
-    };
-    let width = transition(
-        (shell.id.clone(), "split-chat-width"),
-        (target, !moving),
-        &timing,
-        window,
-        cx,
-    );
-    scope::SplitMotion {
-        room,
-        chat_now: moving.then(|| width.value(&timing)),
-        ..s
-    }
-}
-
 /// The workspace: the title row's room, the body, the title slot over the first row.
 pub(super) fn workspace_box(
     shell: &mut AdaptiveShell,
@@ -349,7 +263,7 @@ pub(super) fn workspace_box(
         .min_w_0()
         .min_h_0()
         .children(shell.workspace.take());
-    let (_, border_r, pad_l, pad_r) = workspace_edges(ctx, left_track, ds);
+    let (_, border_r, pad_l, pad_r) = room::workspace_edges(ctx, left_track, ds);
     let mut ws = div()
         .relative()
         .size_full()
@@ -430,7 +344,7 @@ fn docked(shell: &mut AdaptiveShell, ctx: &Ctx, window: &mut Window, cx: &mut Ap
         },
         easing: timing.easing(),
     };
-    let left_track = left_track(shell, t, ctx.left_w, ds);
+    let left_track = room::left_track(shell, t, ctx.left_w, ds);
     let right_track = t.right.target() * ctx.right_w;
     let workspace = workspace_box(shell, ctx, (left_track, right_track), ds);
     let cell = div()
@@ -441,21 +355,12 @@ fn docked(shell: &mut AdaptiveShell, ctx: &Ctx, window: &mut Window, cx: &mut Ap
         .min_w_0()
         .h_full()
         .child(workspace);
-    let cell = if shell.left_open && t.left.moving(&timing) {
-        t.left.apply(
-            cell,
-            &timing,
-            &Props {
-                offset: Some((
-                    gpui::point(px(0.), px(0.)),
-                    gpui::point(px(ctx.left_w), px(0.)),
-                )),
-                ..Default::default()
-            },
-        )
-    } else {
-        cell
-    };
+    let cell = room::slide_with_sidebar(cell, t, ctx.left_w, &timing);
+    // The held track commits on the frame after the open ends: ask for that frame.
+    if shell.left_open && t.left.moving(&timing) {
+        crate::ui::motion::wake_after(window, cx, t.left.remaining(&timing));
+    }
+    let ds = Ds::get(cx);
     let mut root = root_box(shell, ctx, ds)
         .flex()
         .flex_row()
