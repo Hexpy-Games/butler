@@ -11,7 +11,7 @@ export function ResultRow({ artifact, onBeforeOpen }: { artifact: SessionArtifac
   const M = useMobileCopy();
   return <ListRow icon={target?.kind === "image" ? icons.Image : icons.File} title={artifact.title}
     description={resultDescription(artifactName(artifact), artifact.size_bytes)} descriptionLines={1}
-    navigates={!!target && target.kind !== "image"} onPress={target && pairing ? () => {
+    navigates={!!target} onPress={target && pairing ? () => {
       onBeforeOpen?.(); openResult(target, pairing, M.outputs.loadFailed);
     } : undefined} />;
 }

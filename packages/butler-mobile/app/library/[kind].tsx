@@ -34,7 +34,7 @@ export default function LibraryItems() {
           {items.map(item => {
             const target = libraryTarget(item);
             return <ListRow key={item.id} icon={kindIcons[kind]} title={item.title} description={libraryMeta(item, locale)} descriptionLines={1}
-              navigates={!!target && target.kind !== "image"} onPress={target ? () => openResult(target, pairing!, M.outputs.loadFailed) : undefined}
+              navigates={!!target} onPress={target ? () => openResult(target, pairing!, M.outputs.loadFailed) : undefined}
               onLongPress={() => select(item)} />;
           })}
           {!items.length ? <ListGroupItem><Text variant="caption">{q ? app.library.noMatches : app.library.noItems}</Text></ListGroupItem> : null}
