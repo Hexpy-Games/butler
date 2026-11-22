@@ -71,6 +71,8 @@ struct State {
     /// The trigger had visible focus on the last render.
     focus_open: bool,
     open: bool,
+    /// The label was on screen on the last render (hover, focus or controlled open).
+    shown: bool,
     /// Bumped by every hover change, so a stale delay timer does nothing.
     generation: usize,
     trigger: Option<Bounds<Pixels>>,
@@ -94,6 +96,7 @@ impl State {
             hovered: false,
             focus_open: false,
             open: false,
+            shown: false,
             generation: 0,
             trigger: None,
             clipped: false,
@@ -269,7 +272,8 @@ fn on_hover(state: &Entity<State>, on: bool, label: bool, window: &mut Window, c
     });
 }
 
-/// Records the trigger's window bounds and whether its ancestors clip it out of sight entirely.
+/// Records the trigger's window bounds and whether its ancestors clip it out of sight entirely; only a shown
+/// label asks for a redraw when they change.
 fn bounds_probe(state: &Entity<State>) -> gpui::Div {
     let state = state.clone();
     cover().child(
@@ -278,9 +282,11 @@ fn bounds_probe(state: &Entity<State>) -> gpui::Div {
                 let visible = bounds.intersect(&window.content_mask().bounds);
                 let clipped = visible.size.width <= px(0.) || visible.size.height <= px(0.);
                 state.update(cx, |s, cx| {
-                    if s.trigger != Some(bounds) || s.clipped != clipped {
-                        s.trigger = Some(bounds);
-                        s.clipped = clipped;
+                    let moved = s.trigger != Some(bounds) || s.clipped != clipped;
+                    s.trigger = Some(bounds);
+                    s.clipped = clipped;
+                    // Only a label on screen follows its trigger; a hidden one reads these when it opens.
+                    if moved && s.shown {
                         cx.notify();
                     }
                 });
@@ -333,6 +339,7 @@ impl Tooltip {
         let open = self.open.unwrap_or_else(|| state.read(cx).open);
         let placement = self.placed(state, window, cx);
         let (shown, key) = state.update(cx, |s, _| {
+            s.shown = open;
             if let (true, Some(shown)) = (open, placement) {
                 s.last = Some(shown);
             }
