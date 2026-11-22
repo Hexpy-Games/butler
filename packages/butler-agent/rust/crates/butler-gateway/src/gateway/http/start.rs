@@ -53,6 +53,7 @@ pub(in crate::gateway) fn serve(
                 shutdown: shutdown.clone(),
             }),
             remote,
+            remote_live: Default::default(),
             security_store: config.security_store,
             session_cursor_secret: uuid::Uuid::new_v4().to_string(),
             limiter: FixedWindowRateLimiter::new(
@@ -84,15 +85,19 @@ pub(in crate::gateway) fn serve(
             local.await.map_err(std::io::Error::other)??;
         }
         let result = result?;
-        if let Some(headless) = &state.headless {
-            headless.shutdown().await;
-        }
-        if let Some(host) = &state.app_host {
-            host.shutdown().await;
-        }
-        clear_opened_files(state.output_data.clone()).await;
+        shut_down(&state).await;
         result
     })
+}
+
+async fn shut_down(state: &HttpState) {
+    if let Some(headless) = &state.headless {
+        headless.shutdown().await;
+    }
+    if let Some(host) = &state.app_host {
+        host.shutdown().await;
+    }
+    clear_opened_files(state.output_data.clone()).await;
 }
 
 /// Copies opened in another app last until the gateway starts or stops.

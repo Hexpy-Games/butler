@@ -7,8 +7,12 @@ use super::{
     computer_account::{Deployed, deployed},
 };
 use butler_e2e::e2e::{
-    HarnessError, chatgpt_wire, fake_chatgpt::FakeChatGptAuthority, gateway::turn_state,
-    harness_error, stop_intent::StopOnDrop,
+    HarnessError, chatgpt_wire,
+    events::{LiveEvents, event_turn_id},
+    fake_chatgpt::FakeChatGptAuthority,
+    gateway::turn_state,
+    harness_error,
+    stop_intent::StopOnDrop,
 };
 use reqwest::Method;
 use serde_json::json;
@@ -20,7 +24,7 @@ use std::{
 };
 use tokio::task::JoinHandle;
 
-async fn remote_chat(
+pub(super) async fn remote_chat(
     id: &str,
     access: &str,
 ) -> Result<
@@ -216,7 +220,30 @@ async fn remote_approval_reaches_the_main_after_the_computer_restarts() -> Resul
             &json!({"path":"approved-marker.txt","content":"remote","create_parents":true})
         ),])],
     );
+    let live = LiveEvents::subscribe(&d.s.gw, 0).await?;
     let turn = access_tiers::paused(&d.s, &chat, PROMPT).await?;
+    live.wait_for(Duration::from_secs(30), |event| {
+        event.get("id").is_none()
+            && event["type"] == "turn.state_changed"
+            && event_turn_id(event) == Some(&turn)
+            && (event["payload"]["turn"]["state"] == "waiting_for_form"
+                || event["payload"]["state"] == "waiting_for_form")
+    })
+    .await?;
+    let path = format!("/computers/{}/connection", d.id);
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let reply = d.api.send(Method::GET, &path, None, &[]).await?;
+        assert_eq!(reply.status, 200, "{reply:?}");
+        if reply.data()["state"] == "idle" {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "waiting relay did not stop: {reply:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     assert!(
         !script.requests_for(PROMPT).is_empty(),
         "the remote stub received no request for the prompt"

@@ -116,6 +116,7 @@ struct HttpState {
     application: Arc<dyn GatewayApplication>,
     security: security::GatewaySecurity,
     remote: listeners::RemoteAccess,
+    remote_live: crate::gateway::remote_computers::LiveRelays,
     security_store: Option<Arc<dyn GatewaySecurityStore>>,
     session_cursor_secret: String,
     limiter: FixedWindowRateLimiter,

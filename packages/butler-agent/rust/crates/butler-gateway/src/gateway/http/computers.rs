@@ -55,18 +55,15 @@ pub(super) async fn route(
         (Method::POST, p) if p.starts_with("/computers/") && p.ends_with("/credentials") => {
             send_credential(&state, request, root, p).await?
         }
-        (Method::DELETE, path) if path.starts_with("/computers/") => (
-            StatusCode::OK,
-            remote_computers::change(
-                &state.application.setup()?,
-                root,
-                path,
-                false,
-                &state.agent_version,
-                state.shutdown.clone(),
-            )
-            .await?,
-        ),
+        (method, p)
+            if p.starts_with("/computers/")
+                && (p.ends_with("/connection") || p.ends_with("/reconnect")) =>
+        {
+            connection(&state, root, &method, p).await?
+        }
+        (Method::DELETE, path) if path.starts_with("/computers/") => {
+            (StatusCode::OK, delete(&state, root, path).await?)
+        }
         _ => return Err(HttpError::public(404, "not_found", "Route not found.")),
     };
     json(
@@ -76,6 +73,65 @@ pub(super) async fn route(
             data,
         },
     )
+}
+
+async fn delete(
+    state: &HttpState,
+    root: &std::path::Path,
+    path: &str,
+) -> Result<serde_json::Value, HttpError> {
+    let data = remote_computers::change(
+        &state.application.setup()?,
+        root,
+        path,
+        false,
+        &state.agent_version,
+        state.shutdown.clone(),
+    )
+    .await?;
+    let id = path
+        .strip_prefix("/computers/")
+        .ok_or(HttpError::Internal)?;
+    state.remote_live.stop(id);
+    Ok(data)
+}
+
+async fn connection(
+    state: &HttpState,
+    root: &std::path::Path,
+    method: &Method,
+    path: &str,
+) -> Result<(StatusCode, serde_json::Value), HttpError> {
+    let not_found = || HttpError::public(404, "not_found", "Route not found.");
+    let (id, action) = path
+        .strip_prefix("/computers/")
+        .and_then(|p| p.rsplit_once('/'))
+        .filter(|(id, _)| !id.is_empty() && !id.contains('/'))
+        .ok_or_else(not_found)?;
+    if !remote_computers::list(root)
+        .await?
+        .iter()
+        .any(|c| c.id() == id)
+    {
+        return Err(HttpError::public(
+            404,
+            "computer_not_found",
+            "Computer not found.",
+        ));
+    }
+    let (state, error) = match (method, action) {
+        (&Method::GET, "connection") => state.remote_live.connection(id),
+        (&Method::POST, "reconnect") => state.remote_live.reconnect(
+            super::remote_sessions::link(state)?,
+            state.application.clone(),
+            id,
+        ),
+        _ => return Err(not_found()),
+    };
+    Ok((
+        StatusCode::OK,
+        serde_json::json!({"state":state,"error":error}),
+    ))
 }
 
 async fn send_credential(

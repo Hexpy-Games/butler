@@ -19,6 +19,8 @@ use super::{
     PublishedEvent, protocol::APP_PROTOCOL_VERSION, published_event::event_frame,
 };
 
+pub(super) type LiveListener = Arc<dyn Fn(Arc<PublishedEvent>) + Send + Sync>;
+
 const MAX_REPLAY_EVENTS: usize = 200;
 const MAX_BUFFERED_EVENTS: usize = 128;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
@@ -35,16 +37,26 @@ pub(super) async fn create_live_stream(
     let state = Arc::new(Mutex::new(LiveState::new(cursor)));
     let callback_state = state.clone();
     let callback_application = Arc::downgrade(&application);
-    let subscription = application.subscribe_events(Arc::new(move |event| {
+    let listener: LiveListener = Arc::new(move |event| {
         if callback_application.upgrade().is_none() {
             return;
         }
         let high_water = event.id();
-        let waker = state_lock(&callback_state).receive(event, high_water);
+        let waker = {
+            let mut state = state_lock(&callback_state);
+            // A type without a row is still delivered; debug builds fail this
+            // connection's stream on its next poll so the missing row shows.
+            if super::event_kinds::scope(&event.envelope().event_type).is_none() {
+                let kind = event.envelope().event_type.clone();
+                state.unregistered.get_or_insert(kind);
+            }
+            state.receive(event, high_water)
+        };
         if let Some(waker) = waker {
             waker.wake();
         }
-    }))?;
+    });
+    let subscription = application.subscribe_events(listener.clone())?;
 
     let high_water = application.latest_event_cursor().await?;
     let replay = if high_water as f64 - cursor > MAX_REPLAY_EVENTS as f64 {
@@ -78,7 +90,8 @@ pub(super) async fn create_live_stream(
 
     Ok(LiveEventStream {
         state,
-        subscription: Some(subscription),
+        subscriptions: vec![subscription],
+        listener,
         heartbeat: heartbeat_interval(),
         closers: closers
             .into_iter()
@@ -110,6 +123,7 @@ struct LiveState {
     replay_queue: BTreeMap<u64, Arc<PublishedEvent>>,
     output: VecDeque<Bytes>,
     waker: Option<Waker>,
+    unregistered: Option<String>,
 }
 
 impl LiveState {
@@ -124,6 +138,7 @@ impl LiveState {
             replay_queue: BTreeMap::new(),
             output: VecDeque::new(),
             waker: None,
+            unregistered: None,
         }
     }
 
@@ -230,11 +245,22 @@ impl LiveState {
 pub(super) struct LiveEventStream {
     state: Arc<Mutex<LiveState>>,
     /// Dropped (unregistered) when the stream starts closing.
-    subscription: Option<Box<dyn EventSubscription>>,
+    subscriptions: Vec<Box<dyn EventSubscription>>,
+    listener: LiveListener,
     heartbeat: Interval,
     closers: Vec<Pin<Box<WaitForCancellationFutureOwned>>>,
     /// A closer fired: deliver what is queued, then end.
     closing: bool,
+}
+
+impl LiveEventStream {
+    pub(super) fn listener(&self) -> LiveListener {
+        self.listener.clone()
+    }
+
+    pub(super) fn hold(&mut self, subscription: Box<dyn EventSubscription>) {
+        self.subscriptions.push(subscription);
+    }
 }
 
 impl Stream for LiveEventStream {
@@ -252,15 +278,19 @@ impl Stream for LiveEventStream {
             // Only what is queued now is still delivered.
             self.closing = true;
             self.state.lock().delivery = DeliveryState::Closed;
-            self.subscription = None;
-        }
-        if self.closing {
-            let chunk = self.state.lock().output.pop_front();
-            return Poll::Ready(chunk.map(Ok));
+            self.subscriptions.clear();
         }
         let chunk = {
             let mut state = self.state.lock();
+            debug_assert!(
+                state.unregistered.is_none(),
+                "event type {} has no row in gateway/event_kinds.rs",
+                state.unregistered.as_deref().unwrap_or_default()
+            );
             let chunk = state.output.pop_front();
+            if self.closing {
+                return Poll::Ready(chunk.map(Ok));
+            }
             if chunk.is_none() {
                 state.waker = Some(cx.waker().clone());
             }

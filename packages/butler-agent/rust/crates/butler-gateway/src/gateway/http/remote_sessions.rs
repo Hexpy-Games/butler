@@ -70,18 +70,26 @@ pub(super) async fn route(
         .uri
         .path_and_query()
         .map_or(parts.uri.path(), |p| p.as_str());
+    let remote = link(state)?;
     if parts.method == Method::GET && streamed(handler) {
-        let stream = remote_computers::open_stream(&link(state)?, &computer, path).await?;
+        let stream = remote_computers::open_stream(&remote, &computer, path).await?;
         return Ok(Routed::Answered(streamed_response(stream)?));
     }
     let reply = remote_computers::forward(
-        &link(state)?,
+        &remote,
         &computer,
         parts.method.as_str(),
         path,
         bytes.to_vec(),
     )
     .await?;
+    if (200..300).contains(&reply.status)
+        && (parts.method != Method::GET || remote_computers::names_running_turn(&reply.body))
+    {
+        state
+            .remote_live
+            .ensure(remote, state.application.clone(), &computer);
+    }
     Ok(Routed::Answered(forwarded_response(reply)?))
 }
 

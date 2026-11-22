@@ -1,6 +1,11 @@
 //! Owner-confirmed SSH computers and their main-managed remote service.
 mod deploy;
 mod forward;
+mod live;
+mod live_pump;
+mod live_records;
+pub(super) use live::LiveRelays;
+pub(super) use live_records::names_running_turn;
 mod relay;
 mod sessions;
 pub(super) use relay::{Reply, data};
@@ -36,6 +41,10 @@ pub(super) struct Computer {
 }
 
 impl Computer {
+    pub(super) fn id(&self) -> &str {
+        &self.id
+    }
+
     pub(super) fn wire(&self) -> Result<serde_json::Value, HttpError> {
         let mut value = serde_json::to_value(self).map_err(|_| HttpError::Internal)?;
         if let Some(object) = value.as_object_mut() {

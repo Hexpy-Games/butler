@@ -83,6 +83,50 @@ impl TestSshd {
         Ok(server)
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "an unavailable pgrep must fail the SSH fixture"
+    )]
+    pub fn connections(&self) -> Vec<u32> {
+        self.children
+            .0
+            .iter()
+            .flat_map(|child| {
+                let result = Command::new("pgrep")
+                    .arg("-P")
+                    .arg(child.id().to_string())
+                    .output();
+                let output = result.expect("pgrep must enumerate fixture SSH connections");
+                assert!(
+                    output.status.success() || output.status.code() == Some(1),
+                    "pgrep failed"
+                );
+                String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .filter_map(|s| s.parse::<u32>().ok())
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    pub fn drop_connections(&mut self) -> Result<(), HarnessError> {
+        let pids: Vec<_> = self
+            .children
+            .0
+            .iter()
+            .flat_map(|child| descendants(child.id()))
+            .collect();
+        self.children = Children(Vec::new());
+        for pid in pids {
+            let _ = Command::new("kill").arg("-9").arg(pid.to_string()).output();
+        }
+        Ok(())
+    }
+
+    pub fn restart(&mut self) -> Result<(), HarnessError> {
+        self.spawn()
+    }
+
     pub fn restart_with_new_host_key(&mut self) -> Result<(), HarnessError> {
         self.children = Children(Vec::new());
         std::fs::remove_file(&self.host_key)?;
@@ -127,4 +171,29 @@ impl TestSshd {
         }
         Ok(())
     }
+}
+
+#[expect(
+    clippy::expect_used,
+    reason = "an unavailable pgrep must fail the SSH fixture"
+)]
+fn descendants(pid: u32) -> Vec<u32> {
+    let output = Command::new("pgrep")
+        .arg("-P")
+        .arg(pid.to_string())
+        .output()
+        .expect("pgrep must enumerate fixture SSH descendants");
+    assert!(
+        output.status.success() || output.status.code() == Some(1),
+        "pgrep failed"
+    );
+    let mut result = Vec::new();
+    for child in String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|s| s.parse::<u32>().ok())
+    {
+        result.extend(descendants(child));
+        result.push(child);
+    }
+    result
 }

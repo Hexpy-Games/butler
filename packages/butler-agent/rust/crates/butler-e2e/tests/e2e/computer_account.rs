@@ -130,7 +130,7 @@ pub(super) async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed,
     })
 }
 
-async fn socket(
+pub(super) async fn socket(
     remote: &Launch,
     method: &str,
     route: &str,
