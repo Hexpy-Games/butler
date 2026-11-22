@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { FlatList, Platform } from "react-native";
+import { Platform, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
 import type { LibraryItem, LibraryKind } from "../../../butler-protocol/src/index.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { useConversation } from "@/conversation/live";
-import { icons, ListGroup, ListRow, Spinner, Surface, Text, useHeaderOptions, useTokens } from "@/ds";
+import { icons, ListGroup, ListGroupItem, ListRow, Surface, Text, useHeaderOptions, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { LibraryItemActions } from "@/library/LibraryItemActions";
 import { libraryMeta, libraryTarget } from "@/library/libraryItems";
@@ -23,21 +23,25 @@ export default function LibraryItems() {
   const [query, setQuery] = useState(""), [q, setQ] = useState("");
   const [selected, select] = useState<LibraryItem | null>(null);
   useEffect(() => { const timer = setTimeout(() => setQ(query), 300); return () => clearTimeout(timer); }, [query]);
-  const { items, loading, failed, more, reload } = useLibraryItems(kind, q);
+  const { items, loading, failed, more, reload, hasMore } = useLibraryItems(kind, q);
   return <Surface variant="base" grow edges={["left", "right"]}>
     <Stack.Screen options={{ ...useHeaderOptions(), title: app.library.kinds[kind], headerSearchBarOptions: {
       placeholder: app.library.search, hideWhenScrolling: false, onChangeText: e => setQuery(e.nativeEvent.text),
     } }} />
-    <FlatList data={items} keyExtractor={item => item.id} contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ paddingHorizontal: gutter, paddingBottom: gutter + (Platform.OS === "android" ? insets.bottom : 0) }}
-      onEndReached={more} onEndReachedThreshold={0.5} renderItem={({ item }) => {
-        const target = libraryTarget(item);
-        return <ListRow icon={kindIcons[kind]} title={item.title} description={libraryMeta(item, locale)} descriptionLines={1}
-          navigates={!!target && target.kind !== "image"} onPress={target ? () => openResult(target, pairing!, M.outputs.loadFailed) : undefined}
-          onLongPress={() => select(item)} />;
-      }} ListEmptyComponent={failed ? <ListGroup><LoadState error onRetry={reload} /></ListGroup>
-        : loading ? <Spinner label={app.settings.sectionState.loading} /> : <Text tone="secondary">{q ? app.library.noMatches : app.library.noItems}</Text>}
-      ListFooterComponent={loading && items.length ? <Spinner label={app.settings.sectionState.loading} /> : undefined} />
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: gutter, paddingBottom: gutter + (Platform.OS === "android" ? insets.bottom : 0), gap: t.length("--space-6") }}>
+      <ListGroup>
+        {failed ? <LoadState error onRetry={reload} /> : loading && !items.length ? <LoadState error={false} onRetry={reload} /> : <>
+          {items.map(item => {
+            const target = libraryTarget(item);
+            return <ListRow key={item.id} icon={kindIcons[kind]} title={item.title} description={libraryMeta(item, locale)} descriptionLines={1}
+              navigates={!!target && target.kind !== "image"} onPress={target ? () => openResult(target, pairing!, M.outputs.loadFailed) : undefined}
+              onLongPress={() => select(item)} />;
+          })}
+          {!items.length ? <ListGroupItem><Text variant="caption">{q ? app.library.noMatches : app.library.noItems}</Text></ListGroupItem> : null}
+        </>}
+        {hasMore ? <ListRow title={app.common.more} accent disabled={loading} onPress={more} /> : null}
+      </ListGroup>
+    </ScrollView>
     <LibraryItemActions item={selected} onClose={() => select(null)} onChanged={reload} />
   </Surface>;
 }

@@ -26,7 +26,7 @@ export async function openImage(pairing: Pairing, path: string, title: string): 
 
 export async function shareFile(pairing: Pairing, path: string, name: string, title: string): Promise<void> {
   const s = fileSource(pairing, path);
-  const file = await File.downloadFileAsync(s.uri, new File(Paths.cache, name), { headers: s.headers, idempotent: true });
+  const file = await File.downloadFileAsync(s.uri, new File(Paths.cache, name.split("/").pop() || name), { headers: s.headers, idempotent: true });
   try { await Sharing.shareAsync(file.uri, { dialogTitle: title }); } finally { file.delete(); }
 }
 

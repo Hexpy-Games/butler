@@ -12,7 +12,6 @@ export function useLibraryItems(kind: LibraryKind, q: string) {
     const request = ++latest.current;
     pending.current = true;
     setLoading(true); setFailed(false);
-    if (!cursor) { setItems([]); next.current = null; }
     try {
       const page = await client!.request<LibraryPage>(`/library?${libraryQuery(kind, q, cursor)}`);
       if (request !== latest.current) return;
@@ -22,10 +21,11 @@ export function useLibraryItems(kind: LibraryKind, q: string) {
     finally { if (request === latest.current) { pending.current = false; setLoading(false); } }
   }, [client, kind, q]);
   const reload = useCallback(() => load(""), [load]);
+  useEffect(() => { setItems([]); next.current = null; }, [kind, q]);
   useEffect(() => {
     void reload();
     return () => { latest.current++; };
   }, [reload, reconcile]);
   const more = () => { if (next.current && !pending.current) void load(next.current); };
-  return { items, loading, failed, more, reload };
+  return { items, loading, failed, more, reload, hasMore: next.current !== null };
 }

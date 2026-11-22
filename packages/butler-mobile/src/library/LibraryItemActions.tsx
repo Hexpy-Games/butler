@@ -29,7 +29,7 @@ export function LibraryItemActions({ item, onClose, onChanged }: {
     title={stage === "menu" ? item?.title ?? "" : stage === "rename" ? app.library.rename : app.common.delete}
     description={stage === "delete" && item ? app.interfaceTemplates.deleteItem(item.title) : undefined}
     action={stage === "rename" ? <Button label={app.library.save} disabled={!name.trim() || busy} onPress={change} />
-      : stage === "delete" ? <Button variant="destructive" label={app.common.delete} onPress={change} /> : undefined}>
+      : stage === "delete" ? <Button variant="destructive" label={app.common.delete} disabled={busy} onPress={change} /> : undefined}>
     {stage === "menu" ? <View style={{ gap: t.length("--space-4") }}>
       <ListGroup>
         <ListRow icon={icons.Edit} title={app.library.rename} onPress={() => setStage("rename")} />

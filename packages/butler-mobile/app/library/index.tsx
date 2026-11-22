@@ -16,6 +16,7 @@ export default function Library() {
   const { client } = useConversation();
   const [counts, setCounts] = useState<number[]>();
   useFocusEffect(useCallback(() => {
+    if (!client) return;
     void Promise.all(kinds.map(k => client!.request<LibraryFacets>(`/library/facets?${libraryKindParams(k)}`).then(f => f.total)))
       .then(setCounts).catch(() => {});
   }, [client]));
