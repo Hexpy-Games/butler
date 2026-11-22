@@ -72,8 +72,8 @@ This routine requires Ledger access and publication authorization. Codex workers
 
 Newest first. The coordinator adds an entry whenever a mistake repeats. Each entry gives the rule, then what happened.
 
-- **2026-11-17: Korean UI copy uses 합니다체, never 해요체.** Statements, toasts and errors end in …합니다 / …했습니다 / …없습니다, never …해요 / …했어요 / …없어요. Requests keep "…해 주세요"; confirm questions follow the app's existing "…할까요?". Specs give Korean strings in this register, and reviewers check new ko copy for 요-endings.
-  - What happened: the Butler account spec gave its Korean strings in 해요체, copied from older blocks that use it, and Codex typed them as given. The owner rejected the screens: "다른데는 다 -합니다 체를 썼는데 왜 여기만 -해요 체를 쓰는거야".
+- **2026-11-17 (revised 2026-11-22): Korean UI copy must not sound needlessly friendly.** Keep it plain and terse, and match the register of the neighbouring existing strings; never convert other strings' register as a side effect. Text the user says or taps (reply buttons, example inputs) may stay 해요체. Model-generated text follows the user's persona, not this rule. The owner cancelled an app-wide 합니다체 conversion on 2026-11-22.
+  - What happened: the Butler account copy came out in 해요체 copied from older blocks and read as too casual next to the screens around it. A follow-up app-wide 합니다체 sweep was then cancelled by the owner: "너무 불필요하게 친근한 느낌만 없으면돼".
 
 - **2026-11-11: A slice is done only when every spec acceptance item is met; deferred scope goes to the Ledger before merge.** A PR that leaves spec scope undone records each deferred item as a Ledger item before it merges; merged PRs alone never close a slice.
   - What happened: the mail connector slice was marked done when its PRs (#1621, #1623) merged. The account UI, preinstall and rule narrowing lived only in the #1623 body and were lost until the owner found the feature unusable.
