@@ -71,6 +71,8 @@ struct State {
     /// The trigger had visible focus on the last render.
     focus_open: bool,
     open: bool,
+    /// The label was on screen on the last render (hover, focus or controlled open).
+    shown: bool,
     /// Bumped by every hover change, so a stale delay timer does nothing.
     generation: usize,
     trigger: Option<Bounds<Pixels>>,
@@ -94,6 +96,7 @@ impl State {
             hovered: false,
             focus_open: false,
             open: false,
+            shown: false,
             generation: 0,
             trigger: None,
             clipped: false,
@@ -283,7 +286,7 @@ fn bounds_probe(state: &Entity<State>) -> gpui::Div {
                     s.trigger = Some(bounds);
                     s.clipped = clipped;
                     // Only a label on screen follows its trigger; a hidden one reads these when it opens.
-                    if moved && s.open {
+                    if moved && s.shown {
                         cx.notify();
                     }
                 });
@@ -336,6 +339,7 @@ impl Tooltip {
         let open = self.open.unwrap_or_else(|| state.read(cx).open);
         let placement = self.placed(state, window, cx);
         let (shown, key) = state.update(cx, |s, _| {
+            s.shown = open;
             if let (true, Some(shown)) = (open, placement) {
                 s.last = Some(shown);
             }
