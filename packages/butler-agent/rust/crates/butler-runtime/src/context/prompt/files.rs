@@ -71,7 +71,7 @@ pub(super) async fn build_rules_section(
         .collect::<Vec<_>>()
         .join("\n\n---\n\n");
     let targets = rules.iter().map(|rule| serde_json::json!({
-        "handle":rule.handle, "expected_revision":rule.revision, "project_id":rule.project_id,
+        "text":rule.text, "handle":rule.handle, "expected_revision":rule.revision, "project_id":rule.project_id,
     })).collect::<Vec<_>>();
     let mut section = super::runtime::section(
         "rules",

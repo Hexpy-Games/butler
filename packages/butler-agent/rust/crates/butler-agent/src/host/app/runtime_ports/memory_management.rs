@@ -97,6 +97,8 @@ impl AppMemoryManagement {
                 self.pattern_command(command, sink, cancellation).await
             }
             command @ (AppMemoryCommand::RememberInstruction { .. }
+            | AppMemoryCommand::PendingInstructions { .. }
+            | AppMemoryCommand::ApplyPendingInstruction { .. }
             | AppMemoryCommand::DeleteInstruction { .. }) => {
                 self.change_instruction(command, sink, cancellation).await
             }

@@ -7,9 +7,6 @@
     reason = "arms are grouped per crate so the table reads as the crate layout"
 )]
 pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
-    if let Some(edges) = platform_dependencies(domain) {
-        return Some(edges);
-    }
     Some(match domain {
         // butler-test-support: isolated source fakes consume only public platform APIs.
         "import_sources" => &[],
@@ -37,6 +34,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "btcc" => &["conversation", "workspace"],
         // A remote computer's process-wide view of the main's memory; no turn dependencies.
         "conversation" | "workspace" | "remote_memory" => &[],
+        "remote_instructions" => &["remote_memory"],
         // Ports that Context assembly requires of Profile and Cognition; their
         // failures relay as BTCC errors.
         "context_ports" => &["btcc"],
@@ -83,7 +81,7 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         "shell_connection" => &[],
         // butler-e2e: dev-only harness around the built binary; one domain.
         "e2e" | "mail_connector" => &[],
-        _ => return None,
+        _ => return platform_dependencies(domain),
     })
 }
 

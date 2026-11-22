@@ -5,8 +5,12 @@ mod live;
 mod live_pump;
 mod live_records;
 mod memory;
+mod pending;
 pub(super) use live::LiveRelays;
 pub(super) use live_records::names_running_turn;
+pub(in crate::gateway) use pending::{
+    decide as decide_pending, get as get_pending, list as list_pending,
+};
 mod relay;
 mod sessions;
 pub(super) use relay::{Reply, data};
@@ -275,7 +279,10 @@ async fn connect(
 ) -> Result<deploy::RemoteState, HttpError> {
     let state = deploy::ensure_running((root, version), computer, cancel.clone()).await?;
     let identity = setup.computer_key(computer.id.clone()).await?;
-    if let Err(error) = memory::push_copy(setup, computer, cancel.clone()).await {
+    if pending::pull(computer, root, cancel.clone()).await.is_err() {
+        butler_core::diagnostic!("[remote-instructions] pull failed computer={}", computer.id);
+    }
+    if let Err(error) = memory::push_copy(setup, computer, root, cancel.clone()).await {
         butler_core::diagnostic!(
             "[remote-memory] copy not handed over computer={}",
             computer.id

@@ -52,6 +52,7 @@ impl ComputerMemory {
             })
             .collect();
         serde_json::to_value(MemoryCopy {
+            pending_ids: Vec::new(),
             rules,
             naming_profile,
             runtime_profile,

@@ -1,6 +1,6 @@
 //! Prompt memory on a remote computer comes from the copy the main handed
 //! over on its last connect; elsewhere from the local owners.
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use butler_memory::cognition::CognitionPromptReader;
@@ -9,8 +9,8 @@ use butler_runtime::context::{
     CognitionPromptPort, ProjectCapsuleStatus, RememberedRuleProjection, ScopedFeedbackProjection,
 };
 use butler_turn::context_ports::{ContextFuture, ProfilePromptPort, PromptProjectionInput};
-use butler_turn::remote_memory;
 use butler_turn::workspace::StoredSessionBinding;
+use butler_turn::{remote_instructions, remote_memory};
 use tokio_util::sync::CancellationToken;
 
 use crate::host::CognitionPrompt;
@@ -28,10 +28,11 @@ pub(in crate::host) fn profile_port(profile: Arc<ProfileService>) -> Arc<dyn Pro
 
 pub(in crate::host) fn cognition_port(
     reader: Arc<CognitionPromptReader>,
+    data: PathBuf,
 ) -> Arc<dyn CognitionPromptPort> {
     let local = CognitionPrompt::new(reader);
     if remote() {
-        return Arc::new(CopiedCognition { local });
+        return Arc::new(CopiedCognition { local, data });
     }
     Arc::new(local)
 }
@@ -63,36 +64,42 @@ impl ProfilePromptPort for CopiedProfile {
 
 struct CopiedCognition {
     local: CognitionPrompt,
+    data: PathBuf,
 }
 
 impl CognitionPromptPort for CopiedCognition {
     fn remembered_rules<'a>(
         &'a self,
-        _: &'a PromptProjectionInput<'a>,
+        input: &'a PromptProjectionInput<'a>,
         _: &'a Path,
     ) -> ContextFuture<'a, Vec<RememberedRuleProjection>> {
-        Box::pin(async {
+        Box::pin(async move {
+            remote_instructions::load(&self.data).await.map_err(|e| {
+                butler_turn::context_ports::ContextError::new(
+                    butler_turn::context_ports::ContextCode::PromptFileReadError,
+                    e,
+                )
+            })?;
             let now = chrono::Utc::now().to_rfc3339();
-            Ok(remote_memory::copy()
-                .map(|copy| {
-                    copy.rules
-                        .iter()
-                        .filter(|rule| {
-                            rule.expires_at
-                                .as_deref()
-                                .is_none_or(|at| at > now.as_str())
-                        })
-                        .map(|rule| RememberedRuleProjection {
-                            scope_session_id: None,
-                            expires_at: rule.expires_at.clone(),
-                            handle: rule.handle.clone(),
-                            text: rule.text.clone(),
-                            project_id: None,
-                            revision: rule.revision.clone(),
-                        })
-                        .collect()
+            let rules = remote_memory::copy()
+                .map(|copy| copy.rules.clone())
+                .unwrap_or_default();
+            Ok(remote_instructions::overlay(rules, input.session_id, &now)
+                .into_iter()
+                .filter(|(rule, _)| {
+                    rule.expires_at
+                        .as_deref()
+                        .is_none_or(|at| at > now.as_str())
                 })
-                .unwrap_or_default())
+                .map(|(rule, scope_session_id)| RememberedRuleProjection {
+                    scope_session_id,
+                    expires_at: rule.expires_at,
+                    handle: rule.handle,
+                    text: rule.text,
+                    project_id: None,
+                    revision: rule.revision,
+                })
+                .collect())
         })
     }
     fn scoped_feedback<'a>(

@@ -76,6 +76,7 @@ async fn attempt(pump: &Pump, system_wake: &mut watch::Receiver<u64>, failures: 
             *failures = 0;
             pump.relays
                 .set(&pump.computer, &pump.wake, Connection::Connected, None);
+            super::pending::pull_from_pump(pump);
             read(pump, system_wake, stream, cursor.is_none()).await
         }
         Ok(_) => Ended::Lost("remote_request_failed".into()),
@@ -136,6 +137,10 @@ async fn read(
         }
         if let Some(request) = super::memory::requested(&record) {
             super::memory::answer(pump, request);
+            continue;
+        }
+        if super::pending::woken(&record) {
+            super::pending::pull_from_pump(pump);
             continue;
         }
         if !history || caught_up || record.id.is_none() {

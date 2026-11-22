@@ -16,15 +16,14 @@ pub(super) async fn route(
     request: axum::http::Request<Body>,
     uri: &Uri,
 ) -> Result<Response, HttpError> {
+    if uri.path().starts_with("/memory/instructions/pending") {
+        return pending_route(state, request, uri).await;
+    }
     if uri.path().starts_with("/memory/patterns")
         || uri.path().starts_with("/memory/pattern-proposals")
     {
-        return execute(
-            state,
-            patterns::command(request, uri.path()).await?,
-            StatusCode::OK,
-        )
-        .await;
+        let command = patterns::command(request, uri.path()).await?;
+        return execute(state, command, StatusCode::OK).await;
     }
     let (command, status) = match (request.method(), uri.path()) {
         (&Method::GET, "/memory/consolidation") => {
@@ -88,6 +87,68 @@ pub(super) async fn route(
         _ => return Err(HttpError::public(404, "not_found", "Route not found.")),
     };
     execute(state, command, status).await
+}
+
+async fn pending_route(
+    state: Arc<HttpState>,
+    request: axum::http::Request<Body>,
+    uri: &Uri,
+) -> Result<Response, HttpError> {
+    use crate::gateway::remote_computers::{decide_pending, get_pending, list_pending};
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Decision {
+        decision: String,
+        expected_revision: Option<String>,
+    }
+    let root = state.output_data.as_deref().ok_or(HttpError::Internal)?;
+    if request.method() == Method::GET && uri.path() == "/memory/instructions/pending" {
+        let items = list_pending(root).await;
+        return execute(
+            state,
+            AppMemoryCommand::PendingInstructions { items },
+            StatusCode::OK,
+        )
+        .await;
+    }
+    let id = uri
+        .path()
+        .strip_prefix("/memory/instructions/pending/")
+        .filter(|id| !id.is_empty() && !id.contains('/') && request.method() == Method::POST)
+        .ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))?;
+    if get_pending(root, id).await.is_none() {
+        return Err(HttpError::public(
+            404,
+            "pending_instruction_not_found",
+            "Pending instruction not found.",
+        ));
+    }
+    let bytes = read_body_with_limit(request.into_body(), 4096).await?;
+    let input: Decision = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+    decide_pending(root, id, |item| async {
+        match input.decision.as_str() {
+            "discard" => json(
+                StatusCode::OK,
+                ApiEnvelope {
+                    protocol_version: APP_PROTOCOL_VERSION,
+                    data: serde_json::json!({"ok":true}),
+                },
+            ),
+            "apply" => {
+                execute(
+                    state.clone(),
+                    AppMemoryCommand::ApplyPendingInstruction {
+                        item,
+                        expected_revision: input.expected_revision,
+                    },
+                    StatusCode::OK,
+                )
+                .await
+            }
+            _ => Err(invalid()),
+        }
+    })
+    .await
 }
 
 fn is_reset_path(path: &str) -> bool {

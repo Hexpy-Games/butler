@@ -124,10 +124,16 @@ async fn commands(
             Err(HttpError::public(404, "not_found", "Route not found."))
         }
         Handler::RemoteAccount if request.uri().path() == "/remote/memory" => {
-            remote_memory::copy(request).await
+            remote_memory::copy(state, request).await
         }
         Handler::RemoteAccount if request.uri().path() == "/remote/memory/answers" => {
             remote_memory::answer(request).await
+        }
+        Handler::RemoteAccount if request.uri().path() == "/remote/memory/pending" => {
+            remote_memory::pending(state, request).await
+        }
+        Handler::RemoteAccount if request.uri().path() == "/remote/memory/pending/ack" => {
+            remote_memory::ack(state, request).await
         }
         Handler::RemoteAccount if request.uri().path() == "/remote/sessions" => {
             remote_account::create_session(state, request).await

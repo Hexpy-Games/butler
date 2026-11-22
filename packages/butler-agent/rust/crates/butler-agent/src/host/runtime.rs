@@ -28,6 +28,7 @@ use super::{
     GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter, ResolvedInstallation,
     SystemIdentity, SystemPromptClock,
 };
+use crate::host::guided::copied_memory::cognition_port;
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
 use crate::host::runtime::environment::ProcessEnvironment;
@@ -218,7 +219,7 @@ impl AgentRuntime {
             environment.prompt,
             PromptDependencies {
                 profile: crate::host::guided::copied_memory::profile_port(profile.clone()),
-                cognition: crate::host::guided::copied_memory::cognition_port(cognition.clone()),
+                cognition: cognition_port(cognition.clone(), paths.data_root.clone()),
                 clock: prompt_clock,
             },
             conversation_context,

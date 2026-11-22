@@ -11,9 +11,17 @@ use tokio_util::sync::CancellationToken;
 pub(super) async fn push_copy(
     setup: &Arc<dyn AppSetupPort>,
     computer: &Computer,
+    root: &std::path::Path,
     cancel: CancellationToken,
 ) -> Result<(), HttpError> {
-    let copy = setup.computer_memory_copy().await?;
+    let lock = super::pending::PULLS
+        .lock()
+        .entry(computer.id.clone())
+        .or_default()
+        .clone();
+    let _pull = lock.lock().await;
+    let mut copy = setup.computer_memory_copy().await?;
+    copy["pending_ids"] = serde_json::json!(super::pending::ids_for(root, &computer.id).await);
     let reply = relay::request(
         computer,
         "POST",

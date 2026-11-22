@@ -14,6 +14,8 @@ use tokio::time::Instant;
 /// The main's all-chats instructions and profile, as last handed over.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct MemoryCopy {
+    #[serde(default)]
+    pub pending_ids: Vec<String>,
     pub rules: Vec<CopiedRule>,
     pub naming_profile: Option<String>,
     pub runtime_profile: Option<String>,
@@ -67,7 +69,7 @@ const CONTACT_GRACE: Duration = Duration::from_secs(15);
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Receives each read the remote waits on, for one attached main live stream.
-pub type MainListener = Arc<dyn Fn(&Value) + Send + Sync>;
+pub type MainListener = Arc<dyn Fn(&'static str, &Value) + Send + Sync>;
 
 /// Any request from the main: it counts as connected for [`CONTACT_GRACE`].
 pub fn note_main_contact() {
@@ -106,9 +108,18 @@ pub fn attach_main(listener: MainListener) -> MainAttachment {
         (id, waiting)
     };
     for request in &waiting {
-        send(request);
+        send("memory.read_requested", request);
     }
     MainAttachment(id)
+}
+
+/// Wakes the attached mains with an id-less event.
+pub fn wake_mains(event_type: &'static str) {
+    let listeners = STATE.lock().mains.values().cloned().collect::<Vec<_>>();
+    let payload = Value::Object(Map::new());
+    for listener in listeners {
+        listener(event_type, &payload);
+    }
 }
 
 /// Sends a read to every attached main and waits for its answer. `None` at
@@ -145,7 +156,7 @@ pub async fn ask(mut request: Map<String, Value>) -> Option<Value> {
     };
     let _waiting = Waiting(id);
     for listener in &listeners {
-        listener(&request);
+        listener("memory.read_requested", &request);
     }
     if let Some(left) = grace {
         tokio::select! {
