@@ -38,6 +38,7 @@
     "expo-splash-screen": "~58.0.14",
     "expo-status-bar": "~58.0.5",
     "marked": "18.2.1",
+    "pdfjs-dist": "5.7.284",
     "pretendard": "1.3.9",
     "react": "19.3.0",
     "react-native": "0.88.1",
