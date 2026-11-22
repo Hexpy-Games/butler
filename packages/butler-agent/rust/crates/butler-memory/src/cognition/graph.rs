@@ -10,6 +10,7 @@ mod consolidate;
 pub(in crate::cognition) mod episode_fts;
 mod failure;
 mod identity_decision;
+mod standing_sources;
 pub(in crate::cognition) use failure::{ProviderCall, RepairBudget};
 pub(in crate::cognition) mod index;
 mod index_retirement;

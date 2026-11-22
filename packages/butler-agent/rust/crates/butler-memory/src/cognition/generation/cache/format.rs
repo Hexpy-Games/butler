@@ -16,7 +16,8 @@ use blocks::{
     safe_marker_id, scan_semantic_blocks, serialize_blocks, validate_candidate,
 };
 
-const DEFAULT_MAX_BYTES: usize = 20 * 1024;
+/// Bytes of entry summaries, the text the model reads.
+const RECENT_TEXT_BYTES: usize = 4 * 1024;
 const MAX_ENTRY_BODY_UTF16: usize = 8_000;
 const SEMANTIC_PREFIX: &str = "<!-- butler-semantic:";
 const STRUCTURED_PREFIX: &str = "<!-- butler-hot-cache-entry:v2\n";
@@ -60,6 +61,8 @@ pub(in crate::cognition) struct HotCacheEntryView {
     pub source_revision: Option<String>,
     #[serde(default, deserialize_with = "crate::lenient::option")]
     pub valid_until: Option<String>,
+    #[serde(default, deserialize_with = "crate::lenient::option")]
+    pub source_time: Option<String>,
     #[serde(default, deserialize_with = "crate::lenient::option")]
     pub summary: Option<String>,
     #[serde(default, deserialize_with = "crate::lenient::option")]
@@ -149,7 +152,7 @@ struct Partitioned {
 }
 
 /// Separates legacy text and unparseable blocks (kept for audit), expired
-/// and invalidated entries, and valid entries sorted by salience, recency,
+/// and invalidated entries, and valid entries sorted by recency,
 /// then id, with duplicates dropped.
 fn partition_blocks(
     staged: &str,
@@ -201,17 +204,11 @@ fn partition_blocks(
         }
     }
     partitioned.valid.sort_by(|left, right| {
-        left.entry
-            .salience
-            .rank()
-            .cmp(&right.entry.salience.rank())
-            .then_with(|| {
-                right
-                    .entry
-                    .source_time
-                    .as_bytes()
-                    .cmp(left.entry.source_time.as_bytes())
-            })
+        right
+            .entry
+            .source_time
+            .as_bytes()
+            .cmp(left.entry.source_time.as_bytes())
             .then_with(|| {
                 left.entry
                     .entry_id
@@ -233,7 +230,7 @@ struct Admitted {
     excluded: Vec<ExcludedEntry>,
 }
 
-/// Keeps blocks in order while the serialized cache fits the budget; a block
+/// Keeps blocks in order while their summary text fits the budget; a summary
 /// that alone exceeds it is oversized, one that no longer fits is over budget.
 fn admit_within_budget(valid: Vec<ParsedBlock>) -> Admitted {
     let mut admitted = Admitted {
@@ -241,21 +238,21 @@ fn admit_within_budget(valid: Vec<ParsedBlock>) -> Admitted {
         ids: HashSet::new(),
         excluded: Vec::new(),
     };
+    let mut bytes = 0;
     for block in valid {
-        let single_bytes = serialize_blocks(std::slice::from_ref(&block.body)).len();
-        let mut candidate_blocks = admitted.blocks.clone();
-        candidate_blocks.push(block.body.clone());
-        if single_bytes > DEFAULT_MAX_BYTES {
+        let single_bytes = block.entry.summary.len();
+        if single_bytes > RECENT_TEXT_BYTES {
             admitted.excluded.push(ExcludedEntry {
                 id: block.entry.entry_id,
                 reason: ExclusionReason::Oversized,
             });
-        } else if serialize_blocks(&candidate_blocks).len() > DEFAULT_MAX_BYTES {
+        } else if bytes + single_bytes > RECENT_TEXT_BYTES {
             admitted.excluded.push(ExcludedEntry {
                 id: block.entry.entry_id,
                 reason: ExclusionReason::Budget,
             });
         } else {
+            bytes += single_bytes;
             admitted.ids.insert(block.entry.entry_id);
             admitted.blocks.push(block.body);
         }
@@ -303,6 +300,7 @@ impl SourceBackedHotCacheEntry {
             node_refs: Some(self.node_refs.clone()),
             source_revision: Some(self.source_revision.clone()),
             valid_until: self.valid_until.clone(),
+            source_time: Some(self.source_time.clone()),
             summary: Some(self.summary.clone()),
             scope: Some(self.scope.as_str().to_owned()),
             project_id: self.project_id.clone(),
@@ -318,23 +316,13 @@ impl SourceBackedHotCacheEntry {
     }
 }
 
-/// How prominently an entry is kept when the cache is over budget.
+/// Stored salience supplied by extraction.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(in crate::cognition) enum Salience {
     High,
     Normal,
     Unspecified,
-}
-
-impl Salience {
-    fn rank(self) -> u8 {
-        match self {
-            Self::High => 0,
-            Self::Normal => 1,
-            Self::Unspecified => 2,
-        }
-    }
 }
 
 /// Whether an entry belongs to one project or every session.

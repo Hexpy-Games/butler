@@ -44,24 +44,29 @@ fn hot_documents(data: &Path) -> Vec<String> {
         .map(Result::unwrap).collect()
 }
 
-/// The daily cycle also composes the New Chat Briefing with the memory model;
+/// The daily cycle also composes the briefing and standing sheet with the memory model;
 /// only the cache refresh itself must stay free of model calls.
-fn non_briefing_calls(server: &FakeServer) -> usize {
+fn non_daily_memory_calls(server: &FakeServer) -> usize {
     server
         .chat_requests()
         .iter()
-        .filter(|request| !request.to_string().contains("_new_chat_briefing"))
+        .filter(|request| {
+            let text = request.to_string();
+            !text.contains("_new_chat_briefing")
+                && !text.contains("You keep a short fact sheet about one person")
+        })
         .count()
 }
 
 #[tokio::test]
 async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessError> {
     butler_e2e::gate!();
-    let server = FakeServer::local_models(ChatBehavior {
-        answer: json!({"status":"processed","entities":[],"items":[
+    let answer = json!({"status":"processed","entities":[],"items":[
             {"kind":"preference","subject":null,"text":FACT,"evidence":[0]}
         ],"attributes":[]})
-        .to_string(),
+    .to_string();
+    let server = FakeServer::local_models(ChatBehavior {
+        answer: answer.clone(),
         chunk_delay: std::time::Duration::ZERO,
         ..ChatBehavior::default()
     })
@@ -179,7 +184,7 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     )?;
     std::fs::write(box_root.join("index.sqlite"), b"dormant index\0\xff")?;
     let box_before = box_snapshot(&box_root)?;
-    let calls_before_refresh = non_briefing_calls(&server);
+    let calls_before_refresh = non_daily_memory_calls(&server);
     s.gw = s.agent.start_again().await?;
     until(|| {
         ["session-sync", "consolidation-cycle"].iter().all(|job| {
@@ -192,7 +197,7 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     .await;
     until(|| cache_complete(&graph, &turn_id)).await;
     assert_eq!(
-        non_briefing_calls(&server),
+        non_daily_memory_calls(&server),
         calls_before_refresh,
         "cache-only refresh made a model call"
     );
@@ -216,6 +221,12 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
             .join("state/scheduler/consolidation-cycle.json"),
     )?)?;
     assert_eq!(cycle["status"], "ok", "{cycle}");
+    until(|| generation.join("hot/standing.md").exists()).await;
+    assert!(server.chat_requests().iter().any(|request| {
+        let text = request.to_string();
+        text.contains("You keep a short fact sheet about one person")
+            && text.contains("] My preferred garden flower is the blue iris.")
+    }));
     assert_eq!(
         box_snapshot(&box_root)?,
         box_before,
@@ -265,7 +276,25 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
         cycle["status"]
     );
     drop(db);
-    s.finish().await?;
+    let db = readonly(&s.sandbox.data.join("agent-runtime/btcc.sqlite"));
+    let newest: String = db.query_row(
+        "SELECT content FROM btcc_context_documents WHERE source_id='hot-cache' ORDER BY rowid DESC LIMIT 1",
+        [], |row| row.get(0),
+    ).unwrap();
+    let mut remaining = newest.as_str();
+    for expected in [
+        "What Butler knows about the user",
+        &answer,
+        "What the user said in recent chats",
+        FACT,
+    ] {
+        remaining = remaining
+            .split_once(expected)
+            .expect("hot-cache parts in order")
+            .1;
+    }
+    assert!(!newest.contains("[model_interpretation/"));
+    drop(db);
     assert_eq!(pending, 0, "all pending cache jobs must drain");
     assert!(
         before != after
@@ -274,6 +303,34 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
                 .any(|text| text.contains("blue iris")),
         "completed new memory never reached the active cache or another chat's hot-cache document"
     );
+    let db = sqlite::open(&graph).unwrap();
+    db.execute(
+        "UPDATE memory_chunks SET status='superseded' WHERE source_key=?1",
+        [format!("conversation_turn:{turn_id}")],
+    )
+    .unwrap();
+    db.close().unwrap();
+    let reply =
+        s.gw.post(
+            "/sessions",
+            json!({"kind":"chat","title":"After source removal"}),
+        )
+        .await?;
+    assert_eq!(reply.status, 201, "{}", reply.text);
+    let chat = reply.data()["session"]["id"].as_str().unwrap();
+    let (last_turn_id, turn) = s.turn(chat, "What do you remember?").await?;
+    assert_eq!(turn["state"], "delivered", "{turn}");
+    let db = readonly(&s.sandbox.data.join("agent-runtime/btcc.sqlite"));
+    let documents: Vec<String> = db.prepare(
+        "SELECT d.content FROM btcc_turns t, json_each(t.context_json, '$.optionalHotCacheRefs') r JOIN btcc_context_documents d ON d.context_ref=r.value WHERE t.turn_id=?1 AND d.source_id='hot-cache'"
+    ).unwrap().query_map([last_turn_id], |row| row.get(0)).unwrap().map(Result::unwrap).collect();
+    assert!(
+        documents
+            .iter()
+            .all(|text| !text.contains("What Butler knows about the user"))
+    );
+    drop(db);
+    s.finish().await?;
     Ok(())
 }
 

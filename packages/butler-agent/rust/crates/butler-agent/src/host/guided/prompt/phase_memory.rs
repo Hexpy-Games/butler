@@ -68,6 +68,7 @@ pub(super) async fn read(
             }
             let allowed = class == "profile"
                 || class == "recent_feedback"
+                || document.source_id == "hot-cache"
                 || (class == "mandatory_hot_cache" && phase != "direct")
                 || (class == "optional_hot_cache" && phase == "execution");
             if allowed || priority(&document) > 0 {

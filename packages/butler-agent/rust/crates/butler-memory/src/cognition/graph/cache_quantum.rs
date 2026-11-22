@@ -236,7 +236,16 @@ fn window_entry(
     let input: ExtractInput = parse_evidence(window.input_json.as_deref())?;
     let plan: StoredPlan = parse_evidence(window.plan_json.as_deref())?;
     let quoted = quoted_sources(connection, job, &input, &summary.evidence)?;
-    let body = summary.text.trim().to_owned();
+    let body = output
+        .claims
+        .iter()
+        .filter(|claim| claim.basis == "user_statement")
+        .map(|claim| claim.statement.trim())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if body.is_empty() {
+        return Ok(None);
+    }
     let entry_id = projection_hash_for_graph(&(
         "hot-cache-window-summary",
         &job.generation,

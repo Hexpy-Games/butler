@@ -15,6 +15,7 @@ pub(super) mod recall_judge;
 pub(super) mod recall_metrics;
 pub(super) mod rule_checkpoints;
 pub(super) mod signals;
+pub(super) mod standing;
 pub(super) mod suggestion_context;
 pub(super) mod sync;
 pub(super) mod transcript_sync;
