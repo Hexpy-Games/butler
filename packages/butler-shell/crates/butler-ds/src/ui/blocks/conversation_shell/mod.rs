@@ -218,8 +218,8 @@ impl ConversationShell {
     }
 
     /// The column's shift toward `target`. It glides when its keep-out changes (the aside docks, the
-    /// rail's room comes or goes); while that glide runs a width change retargets it; outside a glide
-    /// a width change (a resize, the split's moving chat) applies at once; a render with neither
+    /// rail's room comes or goes); while that glide runs a new target (a resize, the split's moving
+    /// chat) retargets it; outside a glide a new target applies at once; a render with neither
     /// keeps it.
     fn column_shift(
         &self,
@@ -233,18 +233,18 @@ impl ConversationShell {
         let reduced = Ds::get(cx).reduced_motion();
         let now = gpui::animation_time_ms();
         let seen = window.use_keyed_state((self.id.clone(), "column-keep-out"), cx, |_, _| {
-            (keep, width, now.wrapping_sub(timing.ms()))
+            (keep, target, now.wrapping_sub(timing.ms()))
         });
-        let (was_keep, was_width, moved_at) = *seen.read(cx);
-        let resized = was_width != width;
+        let (was_keep, was_target, moved_at) = *seen.read(cx);
+        let retarget = was_target != target;
         let gliding = was_keep != keep || now.wrapping_sub(moved_at) < timing.ms();
-        let moved_at = if gliding && (was_keep != keep || resized) {
+        let moved_at = if gliding && (was_keep != keep || retarget) {
             now
         } else {
             moved_at
         };
-        seen.update(cx, |v, _| *v = (keep, width, moved_at));
-        let jump = reduced || width <= 0. || (resized && !gliding);
+        seen.update(cx, |v, _| *v = (keep, target, moved_at));
+        let jump = reduced || width <= 0. || (retarget && !gliding);
         transition(
             (self.id.clone(), "column-shift"),
             (target, jump),
