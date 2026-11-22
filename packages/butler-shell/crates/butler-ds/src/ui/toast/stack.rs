@@ -74,6 +74,7 @@ pub(super) fn build(
         .relative()
         .w(px(width))
         .h(px(extent))
+        .occlude()
         .on_hover(move |hovered, window, _| {
             let mut state = hover.0.borrow_mut();
             state.hovered = *hovered;

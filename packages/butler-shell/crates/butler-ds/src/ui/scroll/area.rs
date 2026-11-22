@@ -6,8 +6,8 @@
 use crate::ui::cover::cover;
 use gpui::{
     AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _,
-    Window, div, px, relative,
+    Pixels, RenderOnce, ScrollHandle, ScrollWheelEvent, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px, relative,
 };
 
 use super::bar;
@@ -219,9 +219,19 @@ impl RenderOnce for ScrollArea {
         frame = self.frame_size(frame, &metrics, &built.handle, (max, min), window, cx);
         if let Some(follow) = self.follow_end {
             let state = follow_latest(&self.id, &built.handle, follow, window, cx);
-            frame = frame.on_scroll_wheel(move |_, window, cx| {
+            let handle = built.handle.clone();
+            frame = frame.on_scroll_wheel(move |event: &ScrollWheelEvent, window, cx| {
+                // A wheel toward the start that this area can follow lets go of the end at once, so a
+                // small trackpad step or a queued wheel glide is not snapped back (and `scroll_to_bottom`
+                // does not cancel the glide); a wheel toward the end re-pins within 24px of it.
+                let toward_start = event.delta.pixel_delta(window.line_height()).y > px(0.);
+                let can_follow = handle.offset().y < px(0.);
                 state.update(cx, |state, _| {
-                    state.wheeled = true;
+                    if toward_start && can_follow {
+                        state.pinned = false;
+                    } else {
+                        state.wheeled = true;
+                    }
                 });
                 window.refresh();
             });
