@@ -1,0 +1,43 @@
+const ko = {
+  menuPublish: "웹에 공개…", menuPublished: "공개 링크…", title: "웹에 공개", publicOption: "공개", privateOption: "비공개 링크",
+  publicHint: "링크가 있으면 누구나 볼 수 있습니다.",
+  plusOnly: "Plus에서 사용할 수 있습니다", badgeNote: "무료 페이지에는 버틀러 표시가 붙습니다.",
+  files: (n: number, size: string) => `파일 ${n}개 · ${size}`, usage: (used: number, limit: number) => `${limit}개 중 ${used}개`,
+  filesLabel: "내용", usageLabel: "공개 페이지",
+  publish: "공개", uploading: "올리는 중…", published: "공개했습니다.", update: "최신 내용으로 갱신", updated: "갱신했습니다.",
+  copyLink: "링크 복사", linkCopied: "링크를 복사했습니다", share: "공유…", open: "열기", stop: "공개 중단",
+  stopConfirm: "공개를 중단할까요?", stopBody: "링크가 더 이상 열리지 않습니다.", stopped: "공개를 중단했습니다.", unpublishOne: "내리기",
+  limitReached: (limit: number) => `무료 요금제는 공개 페이지 ${limit}개까지입니다. 하나를 내리면 공개할 수 있습니다.`,
+  limitTooltip: "하나를 내리면 공개할 수 있습니다.",
+  signInNeeded: "버틀러 계정에 로그인해야 공개할 수 있습니다.", signInOnPc: "PC에서 버틀러 계정에 로그인해야 합니다.",
+  tooLarge: (mb: number, files: number) => `페이지가 너무 큽니다. ${mb}MB, 파일 ${files}개까지입니다.`,
+  refused: "비밀번호 입력란이 있는 페이지는 무료 요금제에서 공개할 수 없습니다.", dailyLimit: "오늘 공개 횟수를 모두 썼습니다.",
+  paused: "지금은 공개할 수 없습니다. 잠시 후 다시 시도해 주세요.", offline: "버틀러 서비스에 연결하지 못했습니다.",
+  listTitle: "공개 페이지", listEmpty: "공개한 페이지가 없습니다.", takenDown: "중단됨", metaPublished: "공개 중",
+  link: "링크", more: "더 보기",
+  sheetPublish: "웹에 공개", sheetPublished: "공개 링크",
+  storageFull: "저장 공간이 가득 찼습니다.", pageTakenDown: "운영 정책에 따라 공개가 중단된 페이지입니다.", publishBlocked: "이 계정은 웹에 공개할 수 없습니다.",
+};
+type PublishCopy = typeof ko;
+const en: PublishCopy = {
+  menuPublish: "Publish to web…", menuPublished: "Public link…", title: "Publish to the web", publicOption: "Public", privateOption: "Private link",
+  publicHint: "Anyone with the link can view it.",
+  plusOnly: "Available on Plus", badgeNote: "Free pages show a Butler badge.",
+  files: (n, size) => `${n} files · ${size}`, usage: (used, limit) => `${used} of ${limit}`,
+  filesLabel: "Content", usageLabel: "Public pages",
+  publish: "Publish", uploading: "Uploading…", published: "Published.", update: "Update", updated: "Updated.",
+  copyLink: "Copy link", linkCopied: "Link copied", share: "Share…", open: "Open", stop: "Unpublish",
+  stopConfirm: "Unpublish this page?", stopBody: "The link will stop working.", stopped: "Unpublished.", unpublishOne: "Unpublish",
+  limitReached: (limit) => `The free plan allows ${limit} public pages. Unpublish one to continue.`,
+  limitTooltip: "Unpublish one to continue.",
+  signInNeeded: "Sign in to your Butler account to publish.", signInOnPc: "Sign in to your Butler account on the PC.",
+  tooLarge: (mb, files) => `Too large. Up to ${mb} MB and ${files} files.`,
+  refused: "Pages with password fields can't be published on the free plan.", dailyLimit: "Daily publish limit reached.",
+  paused: "Publishing is paused. Try again later.", offline: "Can't reach Butler online.",
+  listTitle: "Published pages", listEmpty: "No published pages.", takenDown: "Taken down", metaPublished: "Published",
+  link: "Link", more: "More",
+  sheetPublish: "Publish to the web", sheetPublished: "Public link",
+  storageFull: "Storage is full.", pageTakenDown: "This page was taken down.", publishBlocked: "This account can't publish.",
+};
+
+export const PUBLISHING_COPY = { "ko-KR": ko, "en-US": en };

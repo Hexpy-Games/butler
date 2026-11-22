@@ -4,13 +4,14 @@ import { useRef, useState, type MouseEvent } from "react";
 import { appCopy } from "@/app/copy";
 import { notifyStatus } from "@/app/notifications";
 import type { LibraryView } from "@/app/types";
-import { Box, Folder, LibraryCard, MessageSquarePlus, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, IconButton, MoreHorizontal, PencilLine, Popup, TagIcon, Trash2 } from "@/butler-ds";
+import { Box, Folder, Globe2, LibraryCard, MessageSquarePlus, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, IconButton, MoreHorizontal, PencilLine, Popup, TagIcon, Trash2 } from "@/butler-ds";
 import { libraryImageSource, deleteLibrary, type LibraryItem } from "../browser/libraryStore";
 import { goesToChat, openLibraryItem } from "../browser/LibraryItemCard";
 import { hasGroups } from "./libraryApi";
 import { hasWebSource, itemMeta, renameItem } from "./libraryActions";
 import { startCardDrag, useCardDrag } from "./libraryCardDrag";
 import { useLibraryDialogs } from "./libraryDialogs";
+import { publishable, usePublishingAvailable } from "./publishing";
 import { openDetail } from "./libraryNav";
 
 const KIND_TAG = () => ({ scrap: appCopy.browser.element, document: appCopy.browser.document, doc: appCopy.browser.document, bookmark: appCopy.browser.bookmarks, output: appCopy.browser.output });
@@ -27,6 +28,8 @@ export interface CardSelection {
 export function LibraryItemCard({ item, view, selection, onAttach }: { item: LibraryItem; view: LibraryView; selection?: CardSelection; onAttach: () => void }) {
   const image = libraryImageSource(item, 400);
   const copy = appCopy.library;
+  const publishing = appCopy.publishing;
+  const available = usePublishingAvailable();
   const renaming = useRef(false);
   const [editing, setEditing] = useState(false);
   const dragging = useCardDrag((s) => s.items.some((dragged) => dragged.id === item.id));
@@ -42,6 +45,8 @@ export function LibraryItemCard({ item, view, selection, onAttach }: { item: Lib
     { icon: <TagIcon size="sm" />, label: copy.editTags, onSelect: () => useLibraryDialogs.setState({ tagItems: [item] }) },
     { icon: <MessageSquarePlus size="sm" />, label: appCopy.browser.attach, onSelect: onAttach },
     ...(item.block || documentKind(item) || item.file || item.output || hasWebSource(item) ? [{ icon: <Popup size="sm" />, label: goesToChat(item) ? appCopy.fileViewer.goToChat : appCopy.browser.openSource, onSelect: () => void openLibraryItem(item, true) }] : []),
+    ...(available && publishable(item) ? [{ icon: <Globe2 size="sm" />, label: item.published ? publishing.menuPublished : publishing.menuPublish,
+      onSelect: () => useLibraryDialogs.setState({ publish: item }) }] : []),
     { icon: <Trash2 size="sm" />, label: copy.deleteItem, variant: "destructive" as const, onSelect: remove },
   ];
   return (

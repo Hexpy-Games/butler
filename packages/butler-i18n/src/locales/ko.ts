@@ -1,4 +1,5 @@
 import { workFailureLine } from "../work-failure.ts";
+import { PUBLISHING_COPY } from "./publishing.ts";
 import { SESSION_INFO_COPY } from "./session-info.ts";
 import { FILE_VIEWER_COPY } from "./file-viewer.ts";
 import { CANON_COPY } from "./canon.ts";
@@ -427,6 +428,7 @@ export const koKrCopy: AppCopy = {
   },
   shell: { footerNav: "업데이트와 설정", update: { downloading: "업데이트 받는 중", working: "업데이트 준비 중", ready: "업데이트 준비됨", failed: "업데이트 실패", restart: "다시 시작" } },
   canon: CANON_COPY["ko-KR"],
+  publishing: PUBLISHING_COPY["ko-KR"],
   sessionInfo: SESSION_INFO_COPY["ko-KR"],
   fileViewer: FILE_VIEWER_COPY["ko-KR"],
   taskGraph: TASK_GRAPH_COPY["ko-KR"],

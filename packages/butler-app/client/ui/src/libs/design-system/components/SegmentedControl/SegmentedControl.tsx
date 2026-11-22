@@ -42,7 +42,9 @@ export function SegmentedControl({ options, value, onValueChange, ariaLabel, siz
     if (!step && !edge) return;
     event.preventDefault();
     const position = enabled.findIndex((item) => item.index === index);
-    const target = edge ?? enabled[(position + step + enabled.length) % enabled.length];
+    const target = edge ?? (position >= 0 ? enabled[(position + step + enabled.length) % enabled.length]
+      : step > 0 ? enabled.find((item) => item.index > index) ?? enabled[0]
+      : enabled.filter((item) => item.index < index).at(-1) ?? enabled.at(-1));
     if (!target) return;
     refs.current[target.index]?.focus();
     onValueChange(target.option.value);
