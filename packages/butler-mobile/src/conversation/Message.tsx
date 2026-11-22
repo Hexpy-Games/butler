@@ -4,7 +4,7 @@ import * as Clipboard from "expo-clipboard";
 import type { ConversationMessage, SessionView, SessionViewTurn, StewardChild } from "../../../butler-protocol/src/index.ts";
 import { toMarkdown } from "../../../butler-protocol/src/answer-blocks-markdown.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
-import { AttachmentTiles, Button, IconButton, icons, Markdown, MessageBubble, showToast, Text, TextSelectionScope, TextSelectSheet, useTokens } from "@/ds";
+import { AttachmentTiles, Button, IconButton, icons, Markdown, MessageBubble, showToast, Text, TextSelectionScope, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { useConversation } from "./live";
 import { documentKindLabel } from "./documents";
@@ -53,15 +53,9 @@ export function Message({ message, latestTurn, sessionId, projectId, stewardChil
   const t = useTokens();
   const settled = useSelectableRow(message.id);
   const selectable = Platform.OS !== "ios" || (settled && message.status !== "streaming");
-  const [selecting, setSelecting] = useState(false);
-  const selectSheet = <TextSelectSheet open={selecting} onClose={() => setSelecting(false)}
-    title={copy.chat.selectText} closeLabel={copy.chat.close} text={messageCopyText(message)} />;
-  if (message.role === "user") return <>
-    <UserMessage message={message} selectable={selectable}>
-      <MessageInfo message={message} onSelectText={() => setSelecting(true)} />
-    </UserMessage>
-    {selectSheet}
-  </>;
+  if (message.role === "user") return <UserMessage message={message} selectable={selectable}>
+    <MessageInfo message={message} />
+  </UserMessage>;
   const bubble = sessionId === "general";
   const failed = message.status === "failed" || message.delivery_state === "system_error" || message.delivery_state === "failed_system";
   const cancelled = message.status === "cancelled" || message.delivery_state === "cancelled";
@@ -76,16 +70,13 @@ export function Message({ message, latestTurn, sessionId, projectId, stewardChil
     </MessageBody>
     {stewardChild ? <StewardCard child={stewardChild.child} /> : null}
     {message.status !== "streaming" && (message.text.trim() || message.answer_blocks?.length) ? <MessageInfo message={message}
-      onSelectText={() => setSelecting(true)}
       sessionId={sessionId} projectId={projectId}
       retryable={failed && message.turn_id === latestTurn?.id && latestTurn?.retryable} /> : null}
-    {selectSheet}
   </View>;
 }
 
-function MessageInfo({ message, retryable, sessionId, projectId, onSelectText }: {
+function MessageInfo({ message, retryable, sessionId, projectId }: {
   message: ConversationMessage; retryable?: boolean; sessionId?: string; projectId?: string;
-  onSelectText(): void;
 }) {
   const [retrying, setRetrying] = useState(false);
   const [branch, setBranch] = useState<"chat" | "project" | null>(null);
@@ -115,7 +106,6 @@ function MessageInfo({ message, retryable, sessionId, projectId, onSelectText }:
     {retryable ? <Button variant="secondary" iconStart={icons.Retry} label={copy.chat.retry} onPress={retry} disabled={retrying} /> : null}
     {user ? time : null}
     <IconButton icon={icons.Copy} variant="ghost" size="sm" label={copy.chat.copy} onPress={copyText} />
-    <IconButton icon={icons.TextSelect} variant="ghost" size="sm" label={copy.chat.selectText} onPress={onSelectText} />
     {branchable ? <>
       <IconButton icon={icons.BranchChat} size="sm" label={appCopy.interfaceStatus.branchChat} onPress={() => setBranch("chat")} />
       <IconButton icon={icons.BranchProject} size="sm" label={appCopy.interfaceStatus.branchProject} onPress={() => setBranch("project")} />

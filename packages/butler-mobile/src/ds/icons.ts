@@ -18,7 +18,6 @@ import Tick02Icon from "@hugeicons/core-free-icons/Tick02Icon";
 
 import Briefcase01Icon from "@hugeicons/core-free-icons/Briefcase01Icon";
 import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
-import TextSelectionIcon from "@hugeicons/core-free-icons/TextSelectionIcon";
 import InformationCircleIcon from "@hugeicons/core-free-icons/InformationCircleIcon";
 import Image01Icon from "@hugeicons/core-free-icons/Image01Icon";
 import File01Icon from "@hugeicons/core-free-icons/File01Icon";
@@ -96,7 +95,6 @@ export const icons = {
   Delete: Delete02Icon,
   Briefcase: Briefcase01Icon,
   Copy: Copy01Icon,
-  TextSelect: TextSelectionIcon,
   Info: InformationCircleIcon,
   Image: Image01Icon,
   File: File01Icon,

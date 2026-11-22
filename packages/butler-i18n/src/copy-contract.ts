@@ -478,7 +478,6 @@ export interface MobileCopy {
   };
   chat: {
     copy: string;
-    selectText: string;
     copied: string;
     retryFailed: string;
     attach: string;

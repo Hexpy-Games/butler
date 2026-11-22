@@ -517,7 +517,6 @@ export const koKrCopy: AppCopy = {
     },
     chat: {
       copy: "복사",
-      selectText: "텍스트 선택",
       copied: "복사했습니다",
       retryFailed: "다시 시도하지 못했습니다.",
       attach: "첨부",
