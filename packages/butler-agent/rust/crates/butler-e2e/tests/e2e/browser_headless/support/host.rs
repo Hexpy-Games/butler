@@ -35,6 +35,18 @@ pub(super) fn runnable() -> bool {
     missing.is_none()
 }
 
+pub(crate) fn setup(id: &str) -> Result<Pending, HarnessError> {
+    setup_with(id, |setup| setup)
+}
+
+/// `setup`, with the scenario's `Setup` adjusted before the shell backend wraps it.
+pub(crate) fn setup_with(
+    id: &str,
+    adjust: impl FnOnce(Setup) -> Setup,
+) -> Result<Pending, HarnessError> {
+    super::configured(id).map(adjust).map(Pending::new)
+}
+
 /// A scenario setup that starts the shell after the agent when the shell backend is selected.
 pub(crate) struct Pending(Setup);
 
