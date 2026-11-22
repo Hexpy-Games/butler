@@ -30,7 +30,8 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
   const copy = useMobileCopy();
   const appCopy = getAppCopy(useAppLocale());
   const t = useTokens();
-  const options = useHeaderOptions(opaque(t.gradient("--conversation-bg").stops[0][0]));
+  const stops = t.gradient("--conversation-bg").stops;
+  const options = useHeaderOptions(opaque(stops[0][0]));
   const composer = useRef<ChatComposerHandle>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const session = useSessionView(id);
@@ -39,6 +40,7 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
   const [text, setText] = useState(initialText);
   const [pending, setPending] = useState<string | null>(null);
   const [dockHeight, setDockHeight] = useState(0);
+  const [atEnd, setAtEnd] = useState(true);
   const [sends, setSends] = useState(0);
   const decision = view ? pendingDecision(view) : null;
   const hasDecision = !!decision && (decision.kind !== "question" || decision.request.question_state === "pending");
@@ -54,7 +56,8 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
       <Text tone="danger">{copy.chat.loadFailed}</Text>
       <ButtonGroup><Button label={copy.chat.retry} onPress={reload} /></ButtonGroup>
     </View> : !id && pending === null ? <NewChatIntro project={project} title={title} dockHeight={dockHeight}
-      setText={setText} onSend={value => { void composer.current?.send(value); }} /> : <ConversationMessages {...session} dockHeight={dockHeight} sends={sends}>{anchors => <>
+      setText={setText} onSend={value => { void composer.current?.send(value); }} />
+      : <ConversationMessages {...session} dockHeight={dockHeight} sends={sends} onAtEndChange={setAtEnd}>{anchors => <>
       {pending !== null ? <UserMessage message={{ text: pending }}>
         <Text variant="caption" tone="tertiary">{appCopy.sidebar.newSessionStarting}</Text>
       </UserMessage> : null}
@@ -64,13 +67,14 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
     </>}</ConversationMessages>}
     <ChatComposer ref={composer} id={id} project={project} group={group} view={view} hasDecision={hasDecision}
       text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh} onHeightChange={setDockHeight}
-      onSend={() => setSends(value => value + 1)} />
+      onSend={() => setSends(value => value + 1)} backdrop={{ color: opaque(stops[stops.length - 1][0]), visible: !atEnd }} />
   </Surface>;
 }
 
-function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, sends, children }: {
+function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, sends, onAtEndChange, children }: {
   view: SessionView | null; loadingEarlier: boolean; loadEarlier(): void;
   dockHeight: number; sends: number; children: (anchors: ReturnType<typeof anchoredStewardChildren>) => React.ReactNode;
+  onAtEndChange(atEnd: boolean): void;
 }) {
   const copy = useMobileCopy();
   const t = useTokens();
@@ -87,13 +91,12 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
   const count = useRef(0);
   const atBottom = useRef(true);
   const dragging = useRef(false);
-  const [bottom, setBottom] = useState(true);
   const [scrolled, setScrolled] = useState(false);
   const anchors = anchoredStewardChildren(view?.messages ?? [], view);
   const rows = withQuestionAnswers(view?.messages ?? [], view?.question_answers ?? [], message => message.role === "user"
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length || anchors.has(message.id)
       || (view?.session_id !== "general" && (!!message.turn_activity_rows?.length || (message.status !== "streaming" && !!message.work_blocks?.length))))));
-  useEffect(() => { atBottom.current = true; setBottom(true); }, [sends]);
+  useEffect(() => { atBottom.current = true; onAtEndChange(true); }, [sends, onAtEndChange]);
   useEffect(() => {
     if (atBottom.current && rows.length) {
       requestAnimationFrame(() => list.current?.getNativeScrollRef()?.scrollToEnd({ animated: true }));
@@ -112,7 +115,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
         onViewableItemsChanged={selection?.onViewableItemsChanged}
         onStartReached={() => { if (!first.current) loadEarlier(); }} onStartReachedThreshold={0.5}
         onScroll={({ nativeEvent }) => {
-          setBottom(nearEnd(nativeEvent));
+          onAtEndChange(nearEnd(nativeEvent));
           setScrolled(nativeEvent.contentOffset.y > 0);
         }}
         onScrollBeginDrag={() => { dragging.current = true; atBottom.current = false; selection?.begin(); }}
@@ -139,7 +142,6 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
       />
     </SelectableRowsContext.Provider>
     <EdgeFade color={opaque(stops[0][0])} edge="top" offset={headerInset} visible={scrolled} />
-    <EdgeFade color={opaque(stops[stops.length - 1][0])} edge="bottom" offset={dockHeight} visible={!bottom} />
   </>;
 }
 
