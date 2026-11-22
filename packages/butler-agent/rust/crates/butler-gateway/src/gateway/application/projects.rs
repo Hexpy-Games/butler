@@ -272,6 +272,20 @@ fn prepare_project(
             let path = token::selected_path(token, secret)?;
             folder::validate_existing(Path::new(&path)).map(|path| (path, None, name))
         }
+        AppProjectSource::AdminPath => {
+            let path = request
+                .workspace_path
+                .as_deref()
+                .filter(|p| !p.is_empty())
+                .ok_or_else(|| {
+                    error(
+                        400,
+                        "project_folder_invalid",
+                        "Project folder is not available.",
+                    )
+                })?;
+            folder::validate_existing(Path::new(path)).map(|path| (path, None, name))
+        }
         AppProjectSource::WorkspaceFolder => {
             workspace_folder::selected(root, request.workspace_path.as_deref())
                 .map(|path| (path, None, name))

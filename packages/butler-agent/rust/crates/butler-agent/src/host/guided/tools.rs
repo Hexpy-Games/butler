@@ -34,6 +34,7 @@ mod occurrence;
 mod outputs;
 mod question;
 mod reader_surface;
+mod remote;
 mod resolve_ask;
 pub(in crate::host) use monitoring::MonitoringReaders;
 mod attention;
@@ -391,6 +392,7 @@ impl ToolPort for GuidedTools {
             if !self.browser_available() {
                 tools.retain(|tool| tool.name != "browser_read");
             }
+            tools.retain(|tool| !remote::unavailable(&tool.name));
             let encoded = serde_json::to_string(&tools).map_err(|error| {
                 BtccError::relayed("guided_tool_surface_invalid", error.to_string())
                     .with_source(error)

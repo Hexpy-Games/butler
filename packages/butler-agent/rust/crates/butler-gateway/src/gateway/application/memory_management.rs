@@ -14,6 +14,13 @@ pub enum AppMemoryCommand {
     EndSession { session_id: String },
     /// Complete instruction list from the instruction owner.
     Instructions,
+    /// List instructions awaiting confirmation with their current main rules.
+    PendingInstructions { items: Vec<Value> },
+    /// Apply an instruction confirmed on the main device.
+    ApplyPendingInstruction {
+        item: Value,
+        expected_revision: Option<String>,
+    },
     /// Active recurring pattern notes.
     Patterns,
     /// Pending proposal bundles.

@@ -18,6 +18,7 @@ use super::{HttpError, HttpState, MAX_REQUEST_BODY_SIZE, json, query, read_body_
 use crate::gateway::{
     AppChatKind, AppCreateSessionInput, AppCreateSessionRequest, AppWorkspaceMode,
     protocol::{APP_PROTOCOL_VERSION, ApiEnvelope},
+    remote_computers,
 };
 
 pub(super) async fn chats(state: Arc<HttpState>, uri: &Uri) -> Result<Response, HttpError> {
@@ -112,13 +113,24 @@ pub(super) async fn create(
 ) -> Result<Response, HttpError> {
     let bytes = read_body_with_limit(request.into_body(), MAX_REQUEST_BODY_SIZE).await?;
     let value: Value = serde_json::from_slice(&bytes).map_err(|_| HttpError::invalid_json())?;
-    let request = parse_request(&value).ok_or_else(|| {
+    let mut request = parse_request(&value).ok_or_else(|| {
         HttpError::public(
             400,
             "invalid_request",
             "A valid session kind and workspace mode are required.",
         )
     })?;
+    if let Some(computer) = request.computer_id.clone() {
+        let id = format!("chat-{}", uuid::Uuid::new_v4());
+        remote_computers::create_session(
+            &super::remote_sessions::link(&state)?,
+            &computer,
+            &id,
+            request.input.title.as_deref(),
+        )
+        .await?;
+        request.input.session_hint = Some(id);
+    }
     let created = state
         .application
         .create_session(request, state.shutdown.clone())
@@ -154,21 +166,32 @@ fn parse_request(value: &Value) -> Option<AppCreateSessionRequest> {
         "session_hint",
         "idempotency_key",
         "group_id",
+        "computer_id",
     ] {
         if object.get(field).is_some_and(|value| !value.is_string()) {
             return None;
         }
     }
     let string = |key| object.get(key).and_then(Value::as_str).map(str::to_owned);
+    let computer_id = string("computer_id");
+    let project_id = string("project_id");
+    if computer_id.is_some()
+        && (kind != AppChatKind::Chat
+            || workspace_mode != AppWorkspaceMode::Local
+            || project_id.is_some())
+    {
+        return None;
+    }
     Some(AppCreateSessionRequest {
         input: AppCreateSessionInput {
             kind,
             title: string("title"),
-            project_id: string("project_id"),
+            project_id,
             session_hint: string("session_hint"),
             group_id: string("group_id"),
         },
         workspace_mode,
+        computer_id,
     })
 }
 

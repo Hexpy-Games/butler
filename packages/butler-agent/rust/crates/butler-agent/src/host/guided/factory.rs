@@ -462,6 +462,7 @@ fn memory_binding(
         project_id: bound_project_id(policy.project_id.as_deref(), &turn.context),
         usage_root: policy.usage_root(&turn.session_id).map(str::to_owned),
         usage_role: Some(policy.usage_role().into()),
+        elsewhere: false,
     }
 }
 

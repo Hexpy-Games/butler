@@ -5,6 +5,7 @@ pub(super) mod authority_handoff;
 pub(super) mod catalog;
 pub(super) mod cognition_prompt;
 pub(super) mod command;
+pub(super) mod copied_memory;
 pub(super) mod factory;
 pub(super) mod file_effects;
 pub(super) mod journal;

@@ -1,4 +1,5 @@
 //! Public memory-write adapters using the current Turn's canonical provenance.
+mod remote;
 mod services;
 pub(crate) use services::MemoryWriteServices;
 
@@ -102,6 +103,9 @@ async fn update(
     args: &Map<String, Value>,
     call_id: &str,
 ) -> Value {
+    if butler_models::models::sealed::is_enabled() {
+        return remote::remote_queue(owner, invocation, args, call_id, "remember").await;
+    }
     let (conversation_session_id, conversation_message_id) =
         match canonical_authored_source(owner, invocation).await {
             Ok(binding) => binding,
@@ -137,7 +141,7 @@ async fn update(
     };
     let result = if let Some(handle) = args.get("replaces") {
         let target = match selected_target(owner, invocation, handle) {
-            Ok(target) => target,
+            Ok((target, _)) => target,
             Err(error) => return error,
         };
         owner
@@ -168,12 +172,15 @@ async fn forget(
     args: &Map<String, Value>,
     call_id: &str,
 ) -> Value {
+    if butler_models::models::sealed::is_enabled() {
+        return remote::remote_queue(owner, invocation, args, call_id, "forget").await;
+    }
     if let Err(error) = require_source(args) {
         return error;
     }
     let handle = args.get("rule").unwrap_or(&Value::Null);
     let target = match selected_target(owner, invocation, handle) {
-        Ok(target) => target,
+        Ok((target, _)) => target,
         Err(error) => return error,
     };
     let (session, message) = match canonical_authored_source(owner, invocation).await {
@@ -233,7 +240,7 @@ fn selected_target(
     owner: &GuidedTools,
     invocation: GuidedInvocation<'_>,
     handle: &Value,
-) -> Result<RememberedRuleTarget, Value> {
+) -> Result<(RememberedRuleTarget, Option<String>), Value> {
     let handle = handle
         .as_str()
         .ok_or_else(|| failure("rule_handle_invalid", "Use an Active Rules handle."))?;
@@ -252,15 +259,26 @@ fn selected_target(
                 "Rule is outside this turn's Active Rules.",
             )
         })?;
+    let text = target
+        .get("text")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     let target: RememberedRuleTarget = serde_json::from_value(target.clone())
         .map_err(|_| failure("rule_snapshot_invalid", "Rule snapshot is unavailable."))?;
-    if target.project_id != owner.binding.memory.project_id {
+    if butler_models::models::sealed::is_enabled() {
+        if butler_turn::remote_instructions::is_overlaid(handle) {
+            return Err(failure(
+                "rule_awaiting_confirmation",
+                "This instruction is waiting for confirmation on the main device.",
+            ));
+        }
+    } else if target.project_id != owner.binding.memory.project_id {
         return Err(failure(
             "rule_binding_mismatch",
             "Use a chat in the rule's binding.",
         ));
     }
-    Ok(target)
+    Ok((target, text))
 }
 
 async fn canonical_authored_source(
@@ -283,6 +301,7 @@ async fn canonical_authored_source(
         project_id: owner.binding.memory.project_id.clone(),
         usage_root: None,
         usage_role: None,
+        elsewhere: false,
     };
     let path = conversation_store_path(&owner.binding.butler_data);
     tokio::task::spawn_blocking(move || authored_source(&path, &binding))

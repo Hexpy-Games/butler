@@ -42,6 +42,8 @@ pub enum AppWorkspaceMode {
 pub struct AppCreateSessionRequest {
     pub input: AppCreateSessionInput,
     pub workspace_mode: AppWorkspaceMode,
+    /// The registered computer the conversation runs on; fixed for its lifetime.
+    pub computer_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]

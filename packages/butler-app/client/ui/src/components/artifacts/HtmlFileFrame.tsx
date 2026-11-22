@@ -7,7 +7,7 @@ interface FileView { url: string; expires_at: number }
 const REFRESH_MARGIN_MS = 60_000;
 
 /** File identity owns the frame; list URL re-signing never navigates it. */
-export function HtmlFileFrame({ path, title }: { path?: string; title: string }) {
+export function HtmlFileFrame({ path, title, sessionId }: { path?: string; title: string; sessionId?: string }) {
   useAppLocale();
   const [view, setView] = useState<FileView>();
   const [failure, setFailure] = useState<string>();
@@ -17,7 +17,7 @@ export function HtmlFileFrame({ path, title }: { path?: string; title: string })
     async function load() {
       if (!path) return;
       try {
-        const next = await api<FileView>(`${path}/view`);
+        const next = await api<FileView>(`${path}/view${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ""}`);
         const url = new URL(next.url);
         if (!["http:", "https:"].includes(url.protocol) || url.origin === location.origin
           || !Number.isFinite(next.expires_at) || next.expires_at * 1000 <= Date.now()) {
@@ -34,7 +34,7 @@ export function HtmlFileFrame({ path, title }: { path?: string; title: string })
     }
     void load();
     return () => { disposed = true; clearTimeout(timer); };
-  }, [path]);
+  }, [path, sessionId]);
   return view ? <ArtifactPreviewFrame src={view.url} title={title} sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" />
     : <Typo.Caption>{failure ?? appCopy.artifacts.loading}</Typo.Caption>;
 }

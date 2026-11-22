@@ -220,7 +220,7 @@ pub(in crate::gateway::http) fn view(
         .strip_prefix("/previews/")
         .and_then(|s| s.strip_suffix("/view"))
         .ok_or_else(refused)?;
-    let origin = super::view_origin(state, request)?;
+    let origin = super::view_origin(state, request.headers())?;
     super::super::json(
         StatusCode::OK,
         crate::gateway::protocol::ApiEnvelope {

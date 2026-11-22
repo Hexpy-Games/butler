@@ -131,6 +131,7 @@ fn binding(
         project_id: project,
         usage_root: None,
         usage_role: None,
+        elsewhere: false,
     })
 }
 

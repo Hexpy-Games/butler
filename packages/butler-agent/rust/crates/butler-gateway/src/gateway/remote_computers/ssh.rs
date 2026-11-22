@@ -3,7 +3,7 @@ use super::{
     store::{KnownHosts, host_lines},
 };
 use butler_platform::{
-    hook_process::{self, HookOutput, HookProcess, HookProcessError},
+    hook_process::{self, HookOutput, HookProcess, HookProcessError, StreamingProcess},
     remote_ssh,
 };
 use std::{
@@ -100,12 +100,27 @@ pub(super) async fn run(
         cancel,
     ))
     .await
-    .map_err(|error| match error {
+    .map_err(spawn_error)
+}
+
+fn spawn_error(error: HookProcessError) -> HttpError {
+    match error {
         HookProcessError::Process(message) if message.contains("(os error 2)") => {
             remote_error("ssh_client_missing", "OpenSSH is not installed.")
         }
         _ => remote_error("ssh_unreachable", "Could not reach this computer."),
-    })
+    }
+}
+
+pub(super) async fn spawn(args: Vec<String>) -> Result<StreamingProcess, HttpError> {
+    hook_process::spawn_streaming(
+        args,
+        remote_ssh::environment(),
+        std::env::temp_dir(),
+        Vec::new(),
+    )
+    .await
+    .map_err(spawn_error)
 }
 
 pub(super) async fn host_key(

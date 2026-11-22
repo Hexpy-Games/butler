@@ -162,6 +162,10 @@ async fn poll(
     if !initialize(fresh, &data_root, &shutdown).await {
         return;
     }
+    // A remote computer reads the main's memory; it generates none of its own.
+    if butler_models::models::sealed::is_enabled() {
+        return;
+    }
     let mut idle_polls = 0_u32;
     loop {
         if shutdown.is_cancelled() {

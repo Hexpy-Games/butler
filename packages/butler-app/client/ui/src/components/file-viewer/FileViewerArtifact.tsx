@@ -39,7 +39,7 @@ function FileViewerFile({ sessionId, artifact: latest, onClose, onBack }: FileVi
 /** A page Butler made: the header carries its one version select, 브라우저에서 열기 and 새로고침; the page fills the pane. */
 function FileViewerOutput({ sessionId, artifact, onClose, onBack }: FileViewerArtifactProps) {
   const preview = artifact.url?.startsWith("/previews/") ?? false;
-  const output = useOutputView(artifact.id, preview);
+  const output = useOutputView(artifact.id, preview, artifact.session_id);
   const { view } = output;
   const browserEnabled = useBrowserState((state) => state.enabled);
   const activeSession = useButlerStore((state) => state.activeChatId);

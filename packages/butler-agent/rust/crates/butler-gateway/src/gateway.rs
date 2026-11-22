@@ -18,6 +18,7 @@ pub use file_watch::FileChangeWatch;
 mod auth;
 mod crypto;
 mod devices;
+mod event_kinds;
 mod http;
 mod idle_probe;
 mod image_files;

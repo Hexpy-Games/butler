@@ -75,6 +75,7 @@ async fn registered_memory_source_reads_original_scalar_after_reopen() {
         project_id: Some("project".into()),
         usage_root: None,
         usage_role: None,
+        elsewhere: false,
     };
     let args = json!({"source_ref":handle,"scope":"current_project","max_chars":4000});
     let reader = ConversationSessionReference::new(&fixture.root.clone(), 2, memory.clone());

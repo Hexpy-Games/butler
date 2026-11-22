@@ -193,6 +193,9 @@ async fn read_native(
     call_id: &str,
     args: Value,
 ) -> Result<JsonDocument, ToolExecutionError> {
+    if super::remote::reads_main(&call.name) {
+        return encoded(&super::remote::ask_main(owner, call, call_id, args).await);
+    }
     let result = match call.name.as_str() {
         "list_conversation_sessions" => owner
             .conversation_tools

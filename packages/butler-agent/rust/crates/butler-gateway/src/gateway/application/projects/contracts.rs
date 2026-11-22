@@ -7,6 +7,8 @@ pub enum AppProjectSource {
     Scratch,
     ExistingFolder,
     WorkspaceFolder,
+    /// A folder path given by the local admin over the owner-only socket; never parsed from a public request.
+    AdminPath,
 }
 
 #[derive(Clone, Debug)]

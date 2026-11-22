@@ -176,7 +176,7 @@ async fn run_daily_jobs(
     now_ms: i64,
     cancellation: &CancellationToken,
 ) {
-    if cancellation.is_cancelled() {
+    if cancellation.is_cancelled() || butler_models::models::sealed::is_enabled() {
         return;
     }
     if let Err(error) = Box::pin(daily_schedule::run_due(

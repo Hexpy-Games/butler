@@ -26,17 +26,25 @@ use std::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-struct Deployed {
-    s: Scenario,
-    remote: RemoteHome,
-    sshd: TestSshd,
-    files: Files,
-    api: AdminClient,
-    id: String,
-    version: String,
+pub(super) struct Deployed {
+    pub(super) s: Scenario,
+    pub(super) remote: RemoteHome,
+    pub(super) sshd: TestSshd,
+    pub(super) files: Files,
+    pub(super) api: AdminClient,
+    pub(super) id: String,
+    pub(super) version: String,
 }
 
-async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed, HarnessError> {
+pub(super) async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed, HarnessError> {
+    deployed_with(id, env, &[]).await
+}
+
+pub(super) async fn deployed_with(
+    id: &str,
+    env: &[(&str, &str)],
+    main_env: &[(&str, &str)],
+) -> Result<Deployed, HarnessError> {
     let setup = Setup::new(id)?;
     let mut launch = Launch::new(&setup.sandbox)?;
     launch.home = PathBuf::from(format!(
@@ -47,6 +55,7 @@ async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed, HarnessErr
     launch.data = launch.home.join(".butler-remote/data");
     fs::create_dir(&launch.home)?;
     let versions = versions_on_disk(&launch.home, &setup.sandbox.root)?;
+    fs::create_dir(launch.home.join("work"))?;
     let remote = RemoteHome(launch, versions);
     let key = setup.sandbox.home.join("key");
     assert!(
@@ -66,10 +75,11 @@ async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed, HarnessErr
     let files_root = setup.sandbox.home.join("release");
     fs::create_dir(&files_root)?;
     let files = Files::start(files_root.clone()).await?;
-    let s = setup
-        .env("BUTLER_REMOTE_RELEASE_BASE", &files.base)
-        .start()
-        .await?;
+    let mut setup = setup.env("BUTLER_REMOTE_RELEASE_BASE", &files.base);
+    for (key, value) in main_env {
+        setup = setup.env(key, *value);
+    }
+    let s = setup.start().await?;
     let health = s.gw.get("/health").await?;
     let version = health.data()["agent_version"]
         .as_str()
@@ -112,7 +122,7 @@ async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed, HarnessErr
         .send(Method::POST, "/computers/host-key", Some(host), &[])
         .await?;
     assert_eq!(seen.status, 200, "{seen:?}");
-    let added = api.send(Method::POST, "/computers", Some(json!({"name":"Remote","address":"127.0.0.1","port":sshd.port,"key_file":key,"folder":remote.0.home,"host_fingerprint":seen.data()["fingerprint"]})), &[]).await?;
+    let added = api.send(Method::POST, "/computers", Some(json!({"name":"Remote","address":"127.0.0.1","port":sshd.port,"key_file":key,"folder":remote.0.home.join("work"),"host_fingerprint":seen.data()["fingerprint"]})), &[]).await?;
     assert_eq!(added.status, 201, "{added:?}");
     let id = added.data()["computer"]["id"]
         .as_str()
@@ -129,7 +139,7 @@ async fn deployed(id: &str, env: &[(&str, &str)]) -> Result<Deployed, HarnessErr
     })
 }
 
-async fn socket(
+pub(super) async fn socket(
     remote: &Launch,
     method: &str,
     route: &str,

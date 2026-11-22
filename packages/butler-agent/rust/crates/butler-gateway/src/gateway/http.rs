@@ -43,6 +43,9 @@ mod project_session_mutations;
 mod projects;
 mod read_routes;
 mod remote_account;
+mod remote_memory;
+mod remote_sessions;
+mod remote_transcripts;
 mod retry;
 mod router;
 #[cfg(feature = "test-support")]
@@ -115,6 +118,7 @@ struct HttpState {
     application: Arc<dyn GatewayApplication>,
     security: security::GatewaySecurity,
     remote: listeners::RemoteAccess,
+    remote_live: crate::gateway::remote_computers::LiveRelays,
     security_store: Option<Arc<dyn GatewaySecurityStore>>,
     session_cursor_secret: String,
     limiter: FixedWindowRateLimiter,

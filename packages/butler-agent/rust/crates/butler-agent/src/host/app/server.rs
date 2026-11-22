@@ -29,7 +29,7 @@ use crate::host::app::runtime_ports::{
     AppMemoryManagement, AppRuntimeInfo, AppSessionTitleGeneratorAdapter,
     AppSessionTopicClassifierAdapter,
 };
-use crate::host::app::runtime_ports::{AppSetup, AppSetupParts, ButlerAccount};
+use crate::host::app::runtime_ports::{AppSetup, AppSetupParts, ButlerAccount, ComputerMemory};
 use crate::host::service::configuration::AppServiceConfiguration;
 use crate::host::{
     AgentRuntime, AppAdmission, AppApprovalClaimsAdapter, AppAssets, AppBranchConversations,
@@ -393,6 +393,12 @@ impl AppServerOwners {
         app_config: &AppServiceConfiguration,
     ) -> Result<AppSetup, BtccError> {
         Ok(AppSetup::start(AppSetupParts {
+            computer_memory: Arc::new(ComputerMemory {
+                conversations: runtime.conversations.clone(),
+                rules: runtime.memory_writes.clone(),
+                profile: runtime.profile.clone(),
+                reads: runtime.memory_reads.clone(),
+            }),
             butler_account: app_config
                 .butler_account_enabled()
                 .then(|| ButlerAccount::new(data_root))

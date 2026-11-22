@@ -23,11 +23,12 @@ mod subsession_queue;
 pub(crate) mod vault_switch;
 mod web_owner;
 mod work_ports;
-use super::{AcceptedPlanProducer, CognitionPrompt, ConversationObserver};
+use super::{AcceptedPlanProducer, ConversationObserver};
 use super::{
     GuidedCatalog, GuidedPreparation, GuidedTurnFactoryAdapter, ResolvedInstallation,
     SystemIdentity, SystemPromptClock,
 };
+use crate::host::guided::copied_memory::cognition_port;
 use crate::host::memory_jobs::context_maintenance::ContextMaintenance;
 use crate::host::memory_jobs::daily::{DailyCognitionJobs, DailyCognitionOwners};
 use crate::host::runtime::environment::ProcessEnvironment;
@@ -55,6 +56,7 @@ use butler_turn::workspace::{
     Commands, SessionWorkspaceRecovery, SessionWorktrees, WorkspaceFiles, WorkspaceMutations,
 };
 pub(crate) use contracts::{AgentRuntime, RuntimePaths};
+pub(crate) use owners::MemoryReads;
 use owners::RuntimeOwners;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -197,8 +199,6 @@ impl AgentRuntime {
             host_environment.clone(),
         ));
         let tool_artifacts = Arc::new(super::ToolArtifactReader::new(tool_output.clone()));
-        let (memory_query, conversation_reference) =
-            owners::memory_source_readers(&paths.data_root, &environment.cognition_paths);
         let memory_recall = recall::configured_recall(
             &paths,
             &environment.cognition_paths,
@@ -208,17 +208,18 @@ impl AgentRuntime {
             metric_files.clone(),
             vectors,
         );
-        let conversation_tools = Arc::new(ConversationTools::new(
-            paths.data_root.clone(),
-            Arc::new(conversation_context.clone()),
-            2,
-        ));
+        let reads = owners::memory_reads(
+            &paths.data_root,
+            &environment.cognition_paths,
+            memory_recall,
+            &conversation_context,
+        );
         let prompt = Arc::new(PromptAssembler::new(
             boundary::prompt_paths(&paths, &environment.cognition_paths),
             environment.prompt,
             PromptDependencies {
-                profile: profile.clone(),
-                cognition: Arc::new(CognitionPrompt::new(cognition.clone())),
+                profile: crate::host::guided::copied_memory::profile_port(profile.clone()),
+                cognition: cognition_port(cognition.clone(), paths.data_root.clone()),
                 clock: prompt_clock,
             },
             conversation_context,
@@ -311,11 +312,11 @@ impl AgentRuntime {
             command: command.clone(),
             project_tools: project_tools.clone(),
             tool_artifacts,
-            memory_query: memory_query.clone(),
-            memory_recall: memory_recall.clone(),
+            memory_query: reads.query.clone(),
+            memory_recall: reads.recall.clone(),
             memory_writes: memory_writes.clone(),
-            conversation_reference: conversation_reference.clone(),
-            conversation_tools: conversation_tools.clone(),
+            conversation_reference: reads.reference.clone(),
+            conversation_tools: reads.tools.clone(),
             compactions: ContextCompactionRepository::new(stores.btcc.clone()),
             attachment_context: attachment_context.clone(),
             verified_image_payload: image_files.clone(),
@@ -360,10 +361,10 @@ impl AgentRuntime {
             embedding,
             profile: profile.clone(),
             cognition,
-            memory_query,
-            memory_recall,
-            conversation_reference,
-            conversation_tools,
+            memory_query: reads.query.clone(),
+            memory_recall: reads.recall.clone(),
+            conversation_reference: reads.reference.clone(),
+            conversation_tools: reads.tools.clone(),
             observer,
             plans,
             command,
@@ -415,6 +416,7 @@ impl AgentRuntime {
             context_maintenance,
             daily_cognition,
             profile,
+            memory_reads: reads,
         };
         Self::finish_startup(runtime, memory_consumer)
     }

@@ -7,9 +7,13 @@ use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Deserialize)]
-pub(super) struct Reply {
+pub(in crate::gateway) struct Reply {
     pub status: u16,
     pub body: Value,
+    #[serde(default)]
+    pub bytes: Option<String>,
+    #[serde(default)]
+    pub headers: std::collections::BTreeMap<String, String>,
 }
 
 pub(super) async fn request(
@@ -19,6 +23,24 @@ pub(super) async fn request(
     body: Vec<u8>,
     cancel: CancellationToken,
 ) -> Result<Reply, HttpError> {
+    match send(computer, method, path, body, cancel).await? {
+        Sent::Reply(reply) => Ok(reply),
+        Sent::NotRunning => Err(unavailable()),
+    }
+}
+
+pub(super) enum Sent {
+    Reply(Reply),
+    NotRunning,
+}
+
+pub(super) async fn send(
+    computer: &Computer,
+    method: &str,
+    path: &str,
+    body: Vec<u8>,
+    cancel: CancellationToken,
+) -> Result<Sent, HttpError> {
     let known_hosts = KnownHosts::write(computer.host_keys.iter().cloned().collect()).await?;
     let target = HostInput {
         address: computer.address.clone(),
@@ -47,19 +69,31 @@ pub(super) async fn request(
         cancel,
     )
     .await?;
+    if output.exit_code != Some(0) && output.stderr.contains("code=remote_response_invalid") {
+        return Err(remote_error(
+            "remote_response_invalid",
+            "This computer's reply could not be read.",
+        ));
+    }
     if output.exit_code == Some(255) {
         deploy::check_exit(&output)?;
     }
-    let unavailable = || {
-        remote_error(
-            "remote_unavailable",
-            "This computer's Butler is not running.",
-        )
-    };
+    if output.exit_code == Some(127) || output.stderr.contains("code=remote_not_running") {
+        return Ok(Sent::NotRunning);
+    }
     if output.exit_code != Some(0) {
         return Err(unavailable());
     }
-    serde_json::from_str(&output.stdout).map_err(|_| unavailable())
+    serde_json::from_str(&output.stdout)
+        .map(Sent::Reply)
+        .map_err(|_| unavailable())
+}
+
+pub(super) fn unavailable() -> HttpError {
+    remote_error(
+        "remote_unavailable",
+        "This computer's Butler is not running.",
+    )
 }
 
 pub(super) async fn unlock(
@@ -87,7 +121,7 @@ pub(super) async fn unlock(
     }
 }
 
-pub(super) fn data(reply: Reply) -> Result<Value, HttpError> {
+pub(in crate::gateway) fn data(reply: Reply) -> Result<Value, HttpError> {
     if (200..300).contains(&reply.status) {
         let mut body = reply.body;
         return Ok(body.get_mut("data").map_or(Value::Null, Value::take));

@@ -1,9 +1,25 @@
 //! Owner-confirmed SSH computers and their main-managed remote service.
 mod deploy;
 mod forward;
+mod live;
+mod live_pump;
+mod live_records;
+mod memory;
+mod pending;
+pub(super) use live::LiveRelays;
+pub(super) use live_records::names_running_turn;
+pub(in crate::gateway) use pending::{
+    decide as decide_pending, get as get_pending, list as list_pending,
+};
 mod relay;
+mod sessions;
+pub(super) use relay::{Reply, data};
+pub(super) use sessions::{Link, create_session, forward, open_stream};
 mod ssh;
 mod store;
+mod streams;
+mod transcripts;
+pub(super) use streams::RemoteStream;
 
 use super::{AppSetupPort, SavedProviderKey, http::HttpError};
 use butler_platform::secrets::ChangeLock;
@@ -31,6 +47,10 @@ pub(super) struct Computer {
 }
 
 impl Computer {
+    pub(super) fn id(&self) -> &str {
+        &self.id
+    }
+
     pub(super) fn wire(&self) -> Result<serde_json::Value, HttpError> {
         let mut value = serde_json::to_value(self).map_err(|_| HttpError::Internal)?;
         if let Some(object) = value.as_object_mut() {
@@ -260,7 +280,26 @@ async fn connect(
 ) -> Result<deploy::RemoteState, HttpError> {
     let state = deploy::ensure_running((root, version), computer, cancel.clone()).await?;
     let identity = setup.computer_key(computer.id.clone()).await?;
-    relay::unlock(computer, &identity, cancel).await?;
+    if pending::pull(computer, root, cancel.clone()).await.is_err() {
+        butler_core::diagnostic!("[remote-instructions] pull failed computer={}", computer.id);
+    }
+    if let Err(error) = memory::push_copy(setup, computer, root, cancel.clone()).await {
+        butler_core::diagnostic!(
+            "[remote-memory] copy not handed over computer={}",
+            computer.id
+        );
+        let _ = error;
+    }
+    relay::unlock(computer, &identity, cancel.clone()).await?;
+    transcripts::spawn_pull(
+        Link {
+            setup: setup.clone(),
+            root: root.to_path_buf(),
+            version: version.to_owned(),
+            cancel,
+        },
+        computer.id.clone(),
+    );
     Ok(state)
 }
 
