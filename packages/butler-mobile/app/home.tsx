@@ -1,3 +1,4 @@
+import { HomeShortcuts } from "@/conversation/HomeShortcuts";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Animated, FlatList, LayoutAnimation, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -161,7 +162,7 @@ function Conversations() {
             <ButtonGroup><Button label={copy.home.retry} onPress={retry} /></ButtonGroup>
           </> : <Spinner label={copy.home.checking} />}
       </View>}
-      ListHeaderComponent={lost ? <Text variant="caption" tone="tertiary">{copy.conversations.reconnecting}</Text> : undefined}
+      ListHeaderComponent={<HomeShortcuts lost={lost} />}
     />
     </GlassBackdrop>
     <RowActions row={actionRow} view={view} tree={tree} onClose={() => setActionRow(null)} onChanged={refresh} />
