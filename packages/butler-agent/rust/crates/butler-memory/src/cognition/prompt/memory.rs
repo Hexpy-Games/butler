@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::cognition::{
     CognitionError, CognitionPathEnvironment, CognitionResult,
-    generation::{HotCacheEntryView, physical_hot_cache_entries},
+    generation::{HotCacheEntryView, RECENT_TEXT_BYTES, physical_hot_cache_entries},
     graph::GraphRepository,
     resolve_active_generation, standing,
 };
@@ -164,6 +164,7 @@ fn project_entries(
         &now,
     )?;
     let mut content = Vec::new();
+    let mut bytes = 0;
     for entry in selected {
         if !entry
             .entry_id
@@ -179,6 +180,10 @@ fn project_entries(
         let Some(summary) = &entry.summary else {
             continue;
         };
+        if bytes + summary.len() > RECENT_TEXT_BYTES {
+            continue;
+        }
+        bytes += summary.len();
         content.push(format!("[{date}]\n{summary}"));
     }
     Ok((!content.is_empty()).then(|| content.join("\n\n")))

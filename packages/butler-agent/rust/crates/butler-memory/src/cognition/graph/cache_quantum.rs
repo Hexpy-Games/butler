@@ -23,6 +23,9 @@ use crate::cognition::{
     sources::projection_hash_for_graph,
 };
 
+/// Bytes of one entry's text; a quarter of the scope budget.
+const ENTRY_TEXT_BYTES: usize = 1024;
+
 #[derive(Clone, Debug)]
 pub(in crate::cognition) struct ClaimedCacheJob {
     pub job_id: String,
@@ -236,13 +239,13 @@ fn window_entry(
     let input: ExtractInput = parse_evidence(window.input_json.as_deref())?;
     let plan: StoredPlan = parse_evidence(window.plan_json.as_deref())?;
     let quoted = quoted_sources(connection, job, &input, &summary.evidence)?;
-    let body = output
-        .claims
-        .iter()
-        .filter(|claim| claim.basis == "user_statement")
-        .map(|claim| claim.statement.trim())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let body = recent_body(
+        output
+            .claims
+            .iter()
+            .filter(|claim| claim.basis == "user_statement")
+            .map(|claim| claim.statement.as_str()),
+    );
     if body.is_empty() {
         return Ok(None);
     }
@@ -297,6 +300,32 @@ fn window_entry(
         source_refs: quoted.source_refs,
     };
     Ok(Some(CacheWindow { entry_id, entry }))
+}
+
+fn recent_body<'a>(statements: impl Iterator<Item = &'a str>) -> String {
+    let mut body = String::new();
+    let mut seen = HashSet::new();
+    for statement in statements {
+        let statement = statement.trim();
+        if statement.is_empty() || !seen.insert(statement) {
+            continue;
+        }
+        if body.len() + usize::from(!body.is_empty()) + statement.len() > ENTRY_TEXT_BYTES {
+            if body.is_empty() {
+                let mut end = ENTRY_TEXT_BYTES;
+                while !statement.is_char_boundary(end) {
+                    end -= 1;
+                }
+                body.push_str(&statement[..end]);
+            }
+            break;
+        }
+        if !body.is_empty() {
+            body.push('\n');
+        }
+        body.push_str(statement);
+    }
+    body
 }
 
 fn parse_evidence<T: serde::de::DeserializeOwned>(json: Option<&str>) -> CognitionResult<T> {

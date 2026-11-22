@@ -10,8 +10,8 @@ mod health;
 mod publication;
 pub(in crate::cognition) mod receipt;
 pub(in crate::cognition) use format::{
-    Authority, HotCacheEntryView, Salience, Scope, SourceBackedHotCacheEntry, SourceClass,
-    SourceKind, physical_entries,
+    Authority, HotCacheEntryView, RECENT_TEXT_BYTES, Salience, Scope, SourceBackedHotCacheEntry,
+    SourceClass, SourceKind, physical_entries,
 };
 pub(in crate::cognition) use health::{HotCacheHealth, read as read_hot_cache_health};
 
