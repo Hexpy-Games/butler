@@ -33,7 +33,8 @@ export interface ComposerProps {
 }
 export interface ComposerDockProps {
   children: React.ReactNode;
-  onHeightChange?: (height: number) => void;
+  /** height: the dock; keyboard: how much of the dock's frame the keyboard covers (0 when hidden). */
+  onHeightChange?: (height: number, keyboard: number) => void;
   /** Android only: fills the dock area, with a fade above it, while content scrolls beneath; iOS uses the native scroll edge effect. */
   backdrop?: { color: string; visible: boolean };
 }
@@ -101,27 +102,34 @@ export function ComposerDock({ children, onHeightChange, backdrop }: ComposerDoc
   // KeyboardAvoidingView measures from its parent, not the window; offset by where the dock's frame starts on screen.
   const frame = useRef<View>(null);
   const [top, setTop] = useState(0);
-  const [keyboard, setKeyboard] = useState(false);
+  const [keyboardTop, setKeyboardTop] = useState<number | null>(null);
+  const [frameHeight, setFrameHeight] = useState(0);
+  const [height, setHeight] = useState(0);
   useEffect(() => {
     const ios = Platform.OS === "ios";
-    const show = Keyboard.addListener(ios ? "keyboardWillShow" : "keyboardDidShow", () => setKeyboard(true));
-    const hide = Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboard(false));
+    const show = Keyboard.addListener(ios ? "keyboardWillShow" : "keyboardDidShow", (event) => setKeyboardTop(event.endCoordinates.screenY));
+    const hide = Keyboard.addListener(ios ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboardTop(null));
     return () => {
       show.remove();
       hide.remove();
     };
   }, []);
+  const covered = keyboardTop === null ? 0 : Math.max(0, top + frameHeight - keyboardTop);
+  useEffect(() => { onHeightChange?.(height, covered); }, [height, covered]);
   const gap = t.length("--space-sm");
   const fade = t.length("--tinted-glass-edge-size");
   return (
     <View ref={frame} pointerEvents="box-none" style={StyleSheet.absoluteFill}
-      onLayout={() => frame.current?.measureInWindow((_x, y) => setTop(y))}>
+      onLayout={(event) => {
+        setFrameHeight(event.nativeEvent.layout.height);
+        frame.current?.measureInWindow((_x, y) => setTop(y));
+      }}>
       <KeyboardAvoidingView behavior="padding" pointerEvents="box-none" keyboardVerticalOffset={top}
         style={[StyleSheet.absoluteFill, { justifyContent: "flex-end" }]}>
         <ScrollEdgeEffect edge="bottom" effect="soft">
           <View
-            onLayout={(event) => onHeightChange?.(event.nativeEvent.layout.height)}
-            style={{ paddingHorizontal: t.length("--adaptive-composer-inset"), paddingBottom: keyboard ? gap : insets.bottom + gap }}
+            onLayout={(event) => setHeight(event.nativeEvent.layout.height)}
+            style={{ paddingHorizontal: t.length("--adaptive-composer-inset"), paddingBottom: keyboardTop !== null ? gap : insets.bottom + gap }}
           >
             {backdrop?.visible && Platform.OS === "android" && (
               <View pointerEvents="none" style={[StyleSheet.absoluteFill, { top: -fade }]}>

@@ -21,7 +21,7 @@ export function ChatComposer({ ref, id, project, group, view, hasDecision, text,
   refreshQueue, onHeightChange, onSend, backdrop }: {
   ref?: React.Ref<ChatComposerHandle>; id?: string; project?: string; group?: string; view: SessionView | null; hasDecision: boolean;
   text: string; setText(text: string): void; onPending(text: string | null): void;
-  refreshQueue(): Promise<void>; onHeightChange(height: number): void; onSend(): void;
+  refreshQueue(): Promise<void>; onHeightChange(height: number, keyboard: number): void; onSend(): void;
   backdrop?: { color: string; visible: boolean };
 }) {
   const copy = useMobileCopy();

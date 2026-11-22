@@ -40,6 +40,7 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
   const [text, setText] = useState(initialText);
   const [pending, setPending] = useState<string | null>(null);
   const [dockHeight, setDockHeight] = useState(0);
+  const [keyboard, setKeyboard] = useState(0);
   const [atEnd, setAtEnd] = useState(true);
   const [sends, setSends] = useState(0);
   const decision = view ? pendingDecision(view) : null;
@@ -57,7 +58,7 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
       <ButtonGroup><Button label={copy.chat.retry} onPress={reload} /></ButtonGroup>
     </View> : !id && pending === null ? <NewChatIntro project={project} title={title} dockHeight={dockHeight}
       setText={setText} onSend={value => { void composer.current?.send(value); }} />
-      : <ConversationMessages {...session} dockHeight={dockHeight} sends={sends} onAtEndChange={setAtEnd}>{anchors => <>
+      : <ConversationMessages {...session} dockHeight={dockHeight} keyboard={keyboard} sends={sends} onAtEndChange={setAtEnd}>{anchors => <>
       {pending !== null ? <UserMessage message={{ text: pending }}>
         <Text variant="caption" tone="tertiary">{appCopy.sidebar.newSessionStarting}</Text>
       </UserMessage> : null}
@@ -66,14 +67,15 @@ export function ConversationScreen({ id, title, project, group, initialText = ""
       {view && decision ? <PendingRequest decision={decision} view={view} reload={reload} /> : null}
     </>}</ConversationMessages>}
     <ChatComposer ref={composer} id={id} project={project} group={group} view={view} hasDecision={hasDecision}
-      text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh} onHeightChange={setDockHeight}
+      text={text} setText={setText} onPending={setPending} refreshQueue={queue.refresh}
+      onHeightChange={(height, covered) => { setDockHeight(height); setKeyboard(covered); }}
       onSend={() => setSends(value => value + 1)} backdrop={{ color: opaque(stops[stops.length - 1][0]), visible: !atEnd }} />
   </Surface>;
 }
 
-function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, sends, onAtEndChange, children }: {
+function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, keyboard, sends, onAtEndChange, children }: {
   view: SessionView | null; loadingEarlier: boolean; loadEarlier(): void;
-  dockHeight: number; sends: number; children: (anchors: ReturnType<typeof anchoredStewardChildren>) => React.ReactNode;
+  dockHeight: number; keyboard: number; sends: number; children: (anchors: ReturnType<typeof anchoredStewardChildren>) => React.ReactNode;
   onAtEndChange(atEnd: boolean): void;
 }) {
   const copy = useMobileCopy();
@@ -92,6 +94,8 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
   const atBottom = useRef(true);
   const dragging = useRef(false);
   const [scrolled, setScrolled] = useState(false);
+  // iOS adds the keyboard inset natively (automaticallyAdjustKeyboardInsets).
+  const inset = dockHeight + (Platform.OS === "android" ? keyboard : 0);
   const anchors = anchoredStewardChildren(view?.messages ?? [], view);
   const rows = withQuestionAnswers(view?.messages ?? [], view?.question_answers ?? [], message => message.role === "user"
     || (message.role === "assistant" && (message.text !== "" || !!message.answer_blocks?.length || anchors.has(message.id)
@@ -101,7 +105,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
     if (atBottom.current && rows.length) {
       requestAnimationFrame(() => list.current?.getNativeScrollRef()?.scrollToEnd({ animated: true }));
     }
-  }, [dockHeight]);
+  }, [inset]);
   return <>
     <SelectableRowsContext.Provider value={selection}>
       <FlatList ref={ref} data={rows} keyExtractor={message => message.id}
@@ -138,7 +142,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, s
           count.current = rows.length;
         }}
         ListHeaderComponent={loadingEarlier ? <Spinner label={copy.chat.earlier} /> : undefined}
-        ListFooterComponent={<View style={{ paddingBottom: dockHeight + t.length("--space-4"), gap: t.length("--space-4") }}>{children(anchors)}</View>}
+        ListFooterComponent={<View style={{ paddingBottom: inset + t.length("--space-4"), gap: t.length("--space-4") }}>{children(anchors)}</View>}
       />
     </SelectableRowsContext.Provider>
     <EdgeFade color={opaque(stops[0][0])} edge="top" offset={headerInset} visible={scrolled} />
