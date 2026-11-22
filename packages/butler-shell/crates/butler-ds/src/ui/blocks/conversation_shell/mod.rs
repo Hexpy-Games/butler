@@ -184,12 +184,16 @@ impl ConversationShell {
         let seen = window.use_keyed_state((self.id.clone(), "column-keep-out"), cx, |_, _| {
             (keep, width, now.wrapping_sub(timing.ms()))
         });
-        let (was_keep, was_width, docked_at) = *seen.read(cx);
-        let docking = was_keep != keep;
-        let docked_at = if docking { now } else { docked_at };
-        let gliding = now.wrapping_sub(docked_at) < timing.ms();
-        seen.update(cx, |v, _| *v = (keep, width, docked_at));
-        let jump = reduced || width <= 0. || (was_width != width && !gliding);
+        let (was_keep, was_width, moved_at) = *seen.read(cx);
+        let resized = was_width != width;
+        let gliding = was_keep != keep || now.wrapping_sub(moved_at) < timing.ms();
+        let moved_at = if gliding && (was_keep != keep || resized) {
+            now
+        } else {
+            moved_at
+        };
+        seen.update(cx, |v, _| *v = (keep, width, moved_at));
+        let jump = reduced || width <= 0. || (resized && !gliding);
         let motion = transition(
             (self.id.clone(), "column-shift"),
             (target, jump),

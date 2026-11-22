@@ -4,7 +4,7 @@
 //! layout enters and leaves with a fade; its content has a scroller of its own.
 use crate::ui::cover::cover;
 use gpui::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
+    AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
     SharedString, Styled as _, Window, div, px,
 };
 use std::rc::Rc;
@@ -274,8 +274,12 @@ fn layer(
         AsideLayout::Floating => layer,
     };
     let layer = layer.child(panel);
-    Some(match (layout, slot.glide) {
-        // The docked aside glides with the column: in with it on open, out with it on close.
+    Some(glided(layer, layout, slot.glide, on))
+}
+
+/// The docked aside glides with the column: in with it on open, out with it on close.
+fn glided(layer: Div, layout: AsideLayout, glide: Option<Glide>, on: bool) -> AnyElement {
+    match (layout, glide) {
         (AsideLayout::Docked, Some(glide)) => {
             let glided = cover().child(layer);
             if on {
@@ -286,7 +290,7 @@ fn layer(
             .into_any_element()
         }
         _ => layer.into_any_element(),
-    })
+    }
 }
 
 /// Both layouts as Presence fades; the last content stays for the exit.
