@@ -7,12 +7,13 @@ use butler_gateway::gateway::GatewayApplicationError;
 use butler_memory::cognition::RememberedRuleOwner;
 use butler_memory::profile::ProfileService;
 use butler_turn::context_ports::{ProfilePromptPort, PromptProjectionInput};
-use butler_turn::conversation::CanonicalMemoryReadBinding;
+use butler_turn::conversation::{AgentConversationStore, CanonicalMemoryReadBinding, TransferTurn};
 use butler_turn::remote_memory::{CopiedRule, MemoryCopy};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 pub(crate) struct ComputerMemory {
+    pub(crate) conversations: Arc<AgentConversationStore>,
     pub(crate) rules: Arc<RememberedRuleOwner>,
     pub(crate) profile: Arc<ProfileService>,
     pub(crate) reads: MemoryReads,
@@ -73,6 +74,30 @@ struct ComputerRead {
 }
 
 impl ComputerMemory {
+    pub(super) async fn import_turn(
+        &self,
+        computer_id: String,
+        line: Vec<u8>,
+    ) -> Result<bool, GatewayApplicationError> {
+        let skipped = || GatewayApplicationError::Public {
+            status: 422,
+            code: "transfer_skipped".into(),
+            message: "transfer_skipped".into(),
+            source: None,
+        };
+        let turn: TransferTurn = serde_json::from_slice(&line).map_err(|_| skipped())?;
+        self.conversations
+            .import_transfer_turn(computer_id, turn)
+            .await
+            .map_err(|error| {
+                if error.message().starts_with("transfer_") {
+                    skipped()
+                } else {
+                    GatewayApplicationError::internal()
+                }
+            })
+    }
+
     /// Answers a computer's read with the main's own tool, as for a
     /// conversation held elsewhere: only scopes over all chats are readable.
     pub(super) async fn read(&self, request: Value) -> Result<Value, GatewayApplicationError> {

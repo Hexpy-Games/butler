@@ -120,6 +120,9 @@ async fn commands(
         {
             session_queue::route(state, request, uri).await
         }
+        Handler::RemoteAccount if transcript_request(&state, &request) => {
+            remote_transcripts::get(&state, uri)
+        }
         Handler::RemoteAccount if !remote_account::admitted(&state, &request) => {
             Err(HttpError::public(404, "not_found", "Route not found."))
         }
@@ -154,6 +157,12 @@ async fn commands(
         _ => super::super::route(state, request, handler).await,
     }
 }
+fn transcript_request(state: &HttpState, request: &Request<Body>) -> bool {
+    request.method() == Method::GET
+        && request.uri().path() == "/remote/transcripts"
+        && remote_account::from_main(state, request)
+}
+
 fn required(response: Option<Response>) -> Result<Response, HttpError> {
     response.ok_or_else(|| HttpError::public(404, "not_found", "Route not found."))
 }

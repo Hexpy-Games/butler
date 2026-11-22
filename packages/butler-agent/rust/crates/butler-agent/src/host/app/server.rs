@@ -394,6 +394,7 @@ impl AppServerOwners {
     ) -> Result<AppSetup, BtccError> {
         Ok(AppSetup::start(AppSetupParts {
             computer_memory: Arc::new(ComputerMemory {
+                conversations: runtime.conversations.clone(),
                 rules: runtime.memory_writes.clone(),
                 profile: runtime.profile.clone(),
                 reads: runtime.memory_reads.clone(),

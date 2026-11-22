@@ -5,6 +5,7 @@ use std::time::Duration;
 mod changes;
 mod public_memory;
 mod recall_pages;
+mod transfer;
 pub use changes::{SourceChange, SourceChangeKind, SourceChangeMark};
 pub use public_memory::{
     Archived, CanonicalMemoryReadBinding, MessageOrigins, PageOrder, PublicMemoryScope,

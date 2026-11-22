@@ -215,6 +215,11 @@ impl AppSetupPort for AppSetup {
         })
     }
 
+    fn computer_import_turn(&self, computer_id: String, line: Vec<u8>) -> ApplicationFuture<bool> {
+        let memory = self.0.computer_memory.clone();
+        Box::pin(async move { memory.import_turn(computer_id, line).await })
+    }
+
     fn computer_memory_copy(&self) -> ApplicationFuture<serde_json::Value> {
         let memory = self.0.computer_memory.clone();
         Box::pin(async move { memory.copy().await })

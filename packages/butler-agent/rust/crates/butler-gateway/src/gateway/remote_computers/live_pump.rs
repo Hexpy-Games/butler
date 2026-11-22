@@ -40,7 +40,11 @@ pub(super) async fn run(pump: Pump) {
     let mut failures: u32 = 0;
     loop {
         let code = match attempt(&pump, &mut system_wake, &mut failures).await {
-            Ended::Stopped | Ended::Idle => return,
+            Ended::Stopped => return,
+            Ended::Idle => {
+                super::transcripts::spawn_pull(pump.link.clone(), pump.computer.clone());
+                return;
+            }
             Ended::Restart => {
                 pump.relays
                     .set(&pump.computer, &pump.wake, Connection::Reconnecting, None);

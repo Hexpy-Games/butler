@@ -1,5 +1,7 @@
 //! A remote session reads the main's memory: its instructions in the prompt,
 //! and searches the main answers while connected.
+mod transcripts;
+
 use super::{
     access_tiers::stub::call, computer_account::Deployed, remote_sessions::remote_chat_on,
 };

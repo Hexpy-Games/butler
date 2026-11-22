@@ -18,6 +18,7 @@ pub(super) use sessions::{Link, create_session, forward, open_stream};
 mod ssh;
 mod store;
 mod streams;
+mod transcripts;
 pub(super) use streams::RemoteStream;
 
 use super::{AppSetupPort, SavedProviderKey, http::HttpError};
@@ -289,7 +290,16 @@ async fn connect(
         );
         let _ = error;
     }
-    relay::unlock(computer, &identity, cancel).await?;
+    relay::unlock(computer, &identity, cancel.clone()).await?;
+    transcripts::spawn_pull(
+        Link {
+            setup: setup.clone(),
+            root: root.to_path_buf(),
+            version: version.to_owned(),
+            cancel,
+        },
+        computer.id.clone(),
+    );
     Ok(state)
 }
 
