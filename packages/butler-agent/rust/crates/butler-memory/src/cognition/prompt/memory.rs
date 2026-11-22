@@ -115,19 +115,21 @@ fn read_generation_hot_cache(
     // Both parts use one fresh graph snapshot while background writes advance.
     let graph = GraphRepository::open_read_snapshot(&generation.graph_path)?;
     let mut content = Vec::new();
-    if let Some(sheet) = standing::current(&graph, &generation.root)? {
+    if let Some(sheet) = standing::current(&graph, &generation.root).ok().flatten() {
         content.push(sheet);
     }
-    if !entries.is_empty()
+    let recent = if !entries.is_empty()
         && let Ok(canonical) = ConversationSourceReader::open(&conversation_store_path(data_root))
     {
         let result = project_entries(project, &generation, &graph, &canonical, &entries);
-        canonical.close().map_err(CognitionError::from)?;
-        if let Some(recent) = result? {
-            content.push(format!("{RECENT_HEADER}\n{recent}"));
-        }
-    }
+        canonical.close().map_err(CognitionError::from).and(result)
+    } else {
+        Ok(None)
+    };
     graph.close()?;
+    if let Some(recent) = recent? {
+        content.push(format!("{RECENT_HEADER}\n{recent}"));
+    }
     if resolve_active_generation(data_root, environment)?.generation_id != generation.generation_id
     {
         return Ok(None);

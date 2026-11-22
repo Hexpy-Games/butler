@@ -36,14 +36,20 @@ impl StandingFacts {
     ) -> Result<(), HostError> {
         let data_root = self.data_root.clone();
         let paths = self.paths.clone();
-        let (generation, mut sheet) = tokio::task::spawn_blocking(move || {
+        let Some((generation, mut sheet)) = tokio::task::spawn_blocking(move || {
+            if !cognition::active_memory_descriptor_exists(&data_root, &paths)? {
+                return Ok(None);
+            }
             let generation = cognition::resolve_active_generation(&data_root, &paths)?;
             let sheet = cognition::standing_start(&generation.graph_path, &generation.root)?;
-            Ok::<_, cognition::CognitionError>((generation, sheet))
+            Ok::<_, cognition::CognitionError>(Some((generation, sheet)))
         })
         .await
         .map_err(failure)?
-        .map_err(failure)?;
+        .map_err(failure)?
+        else {
+            return Ok(());
+        };
         loop {
             if cancellation.is_cancelled() {
                 return Ok(());
@@ -68,7 +74,7 @@ impl StandingFacts {
                 );
                 text = self.summarize(&model, &prompt, cancellation).await?;
             }
-            if text.is_empty() || text.len() > cognition::STANDING_MAX_BYTES {
+            if text.len() > cognition::STANDING_MAX_BYTES {
                 return Err(HostError::new("standing_facts_reply_invalid"));
             }
             sheet = cognition::StandingSheet {

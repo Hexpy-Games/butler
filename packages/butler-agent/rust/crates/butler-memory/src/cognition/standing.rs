@@ -60,10 +60,7 @@ pub(super) fn read(root: &Path) -> io::Result<Sheet> {
         Err(error) => return Err(error),
     };
     if !content.starts_with(PREFIX) {
-        return Ok(Sheet {
-            text: content,
-            ..Sheet::default()
-        });
+        return Ok(Sheet::default());
     }
     let (line, text) = content
         .split_once('\n')

@@ -44,6 +44,13 @@ fn hot_documents(data: &Path) -> Vec<String> {
         .map(Result::unwrap).collect()
 }
 
+fn hot_cache_of(data: &Path, turn_id: &str) -> Vec<String> {
+    let db = readonly(&data.join("agent-runtime/btcc.sqlite"));
+    db.prepare(
+        "SELECT d.content FROM btcc_turns t, json_each(t.context_json, '$.optionalHotCacheRefs') r JOIN btcc_context_documents d ON d.context_ref=r.value WHERE t.turn_id=?1 AND d.source_id='hot-cache'"
+    ).unwrap().query_map([turn_id], |row| row.get(0)).unwrap().map(Result::unwrap).collect()
+}
+
 /// The daily cycle also composes the briefing and standing sheet with the memory model;
 /// only the cache refresh itself must stay free of model calls.
 fn non_daily_memory_calls(server: &FakeServer) -> usize {
@@ -276,11 +283,9 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
         cycle["status"]
     );
     drop(db);
-    let db = readonly(&s.sandbox.data.join("agent-runtime/btcc.sqlite"));
-    let newest: String = db.query_row(
-        "SELECT content FROM btcc_context_documents WHERE source_id='hot-cache' ORDER BY rowid DESC LIMIT 1",
-        [], |row| row.get(0),
-    ).unwrap();
+    let documents = hot_cache_of(&s.sandbox.data, &later_turn_id);
+    assert_eq!(documents.len(), 1);
+    let newest = &documents[0];
     let mut remaining = newest.as_str();
     for expected in [
         "What Butler knows about the user",
@@ -294,7 +299,6 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
             .1;
     }
     assert!(!newest.contains("[model_interpretation/"));
-    drop(db);
     assert_eq!(pending, 0, "all pending cache jobs must drain");
     assert!(
         before != after
@@ -320,16 +324,12 @@ async fn mem_hot_active_refresh_reaches_another_chat() -> Result<(), HarnessErro
     let chat = reply.data()["session"]["id"].as_str().unwrap();
     let (last_turn_id, turn) = s.turn(chat, "What do you remember?").await?;
     assert_eq!(turn["state"], "delivered", "{turn}");
-    let db = readonly(&s.sandbox.data.join("agent-runtime/btcc.sqlite"));
-    let documents: Vec<String> = db.prepare(
-        "SELECT d.content FROM btcc_turns t, json_each(t.context_json, '$.optionalHotCacheRefs') r JOIN btcc_context_documents d ON d.context_ref=r.value WHERE t.turn_id=?1 AND d.source_id='hot-cache'"
-    ).unwrap().query_map([last_turn_id], |row| row.get(0)).unwrap().map(Result::unwrap).collect();
+    let documents = hot_cache_of(&s.sandbox.data, &last_turn_id);
     assert!(
         documents
             .iter()
             .all(|text| !text.contains("What Butler knows about the user"))
     );
-    drop(db);
     s.finish().await?;
     Ok(())
 }

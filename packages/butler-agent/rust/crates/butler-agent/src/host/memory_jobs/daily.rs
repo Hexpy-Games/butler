@@ -230,15 +230,7 @@ impl DailyCognitionJobs {
             .map_err(|error| error.code().to_owned())?;
         // Contention counts as done for today, but must not skip configured maintenance.
         let configured = self.run_configured(cancellation).await?;
-        let data_root = self.data_root.clone();
-        let paths = self.paths.clone();
-        let active = tokio::task::spawn_blocking(move || {
-            active_memory_descriptor_exists(&data_root, &paths)
-        })
-        .await
-        .map_err(|error| crate::host::HostError::new("standing_facts_failed").with_source(error))?
-        .map_err(|error| error.code().to_owned())?;
-        if active && let Err(error) = self.standing.refresh(cancellation).await {
+        if let Err(error) = self.standing.refresh(cancellation).await {
             butler_core::diagnostic!("[standing-facts] {}", error.message());
         }
         let generic_ok = matches!(
