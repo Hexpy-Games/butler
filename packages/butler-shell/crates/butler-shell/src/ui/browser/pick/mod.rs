@@ -137,9 +137,18 @@ pub(crate) fn page_event(event: &PageEvent, cx: &mut App) {
     };
     if subframe {
         let session = tab.pick.clone();
-        session.worlds.borrow_mut().retain(|path, _| path.is_empty());
-        session.frames.borrow_mut().retain(|path, _| path.is_empty());
-        session.watches.borrow_mut().retain(|path, _| path.is_empty());
+        session
+            .worlds
+            .borrow_mut()
+            .retain(|path, _| path.is_empty());
+        session
+            .frames
+            .borrow_mut()
+            .retain(|path, _| path.is_empty());
+        session
+            .watches
+            .borrow_mut()
+            .retain(|path, _| path.is_empty());
         follow::sync(&event.page, cx);
         return;
     }
