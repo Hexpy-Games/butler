@@ -3288,7 +3288,7 @@ Copyright (c) 2019 The RustCrypto Project Developers
 chrono-tz 0.10.4
 MIT OR Apache-2.0
 License: https://github.com/chronotope/chrono-tz/blob/e15d1f308a1ac2fdf3f1bf19c325dc202d418081/chrono-tz/LICENSE
-License: https://github.com/chronotope/chrono-tz/blob/e15d1f308a1ac2fdf3f1bf19c325dc202d418081/chrono-tz/tz/LICENSE
+License: https://github.com/chronotope/chrono-tz/blob/e15d1f308a1ac2fdf3f1bf19c325dc202d418081/chrono-tz/tz\LICENSE
 Copyright (c) 2016-2024 Benjamin Sago & the chronotope maintainers
 Copyright 2016 Djzin
 
@@ -4252,7 +4252,7 @@ Copyright (c) 2019 Fontations Developers
 fontdb 0.24.0
 MIT
 License: https://github.com/RazrFalcon/fontdb/blob/ecb707e6096b59146b750f66a32c125a43515192/LICENSE
-License: https://github.com/RazrFalcon/fontdb/blob/ecb707e6096b59146b750f66a32c125a43515192/tests/fonts/LICENSE.txt
+License: https://github.com/RazrFalcon/fontdb/blob/ecb707e6096b59146b750f66a32c125a43515192/tests\fonts\LICENSE.txt
 Copyright (c) 2020 Yevhenii Reizner
 
 =====
@@ -4487,8 +4487,8 @@ Copyright (c) 2016 Amanieu d'Antras
 =====
 hashify 0.2.9
 Apache-2.0 OR MIT
-License: https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/Apache-2.0.txt
-License: https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/MIT.txt
+License: https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES\Apache-2.0.txt
+License: https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES\MIT.txt
 
 =====
 hashlink 0.10.0
@@ -4707,9 +4707,9 @@ ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation a
 icu_collections 1.4.0
 Unicode-3.0
 License: https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/LICENSE
-License: https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src/char16trie/LICENSE
-License: https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src/codepointinvlist/LICENSE
-License: https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src/codepointtrie/LICENSE
+License: https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src\char16trie\LICENSE
+License: https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src\codepointinvlist\LICENSE
+License: https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src\codepointtrie\LICENSE
 Copyright © 2020-2023 Unicode, Inc.
 ICU 1.8.1 to ICU 57.1 © 1995-2016 International Business Machines Corporation and others.
 
@@ -5069,7 +5069,7 @@ License: https://crates.io/crates/lance-core/4.0.0
 =====
 lance-datafusion 4.0.0
 Apache-2.0
-License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-datafusion/protos/license_header.txt
+License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-datafusion/protos\license_header.txt
 
 =====
 lance-datagen 4.0.0
@@ -5079,17 +5079,17 @@ License: https://crates.io/crates/lance-datagen/4.0.0
 =====
 lance-encoding 4.0.0
 Apache-2.0
-License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-encoding/protos/license_header.txt
+License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-encoding/protos\license_header.txt
 
 =====
 lance-file 4.0.0
 Apache-2.0
-License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-file/protos/license_header.txt
+License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-file/protos\license_header.txt
 
 =====
 lance-index 4.0.0
 Apache-2.0
-License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-index/protos/license_header.txt
+License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-index/protos\license_header.txt
 
 =====
 lance-io 4.0.0
@@ -5120,7 +5120,7 @@ License: https://crates.io/crates/lance-namespace/4.0.0
 =====
 lance-table 4.0.0
 Apache-2.0
-License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-table/protos/license_header.txt
+License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-table/protos\license_header.txt
 
 =====
 lance-testing 4.0.0
@@ -5130,7 +5130,7 @@ License: https://crates.io/crates/lance-testing/4.0.0
 =====
 lance 4.0.0
 Apache-2.0
-License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance/protos/license_header.txt
+License: https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance/protos\license_header.txt
 
 =====
 lancedb 0.27.2
@@ -5245,14 +5245,14 @@ Copyright (c) 2010 3scale networks S.L.
 libsqlite3-sys 0.35.0
 MIT
 License: https://github.com/rusqlite/rusqlite/blob/44e0ef965580b94d59c5dfe8874b57ab5993a8f7/libsqlite3-sys/LICENSE
-License: https://github.com/rusqlite/rusqlite/blob/44e0ef965580b94d59c5dfe8874b57ab5993a8f7/libsqlite3-sys/sqlcipher/LICENSE
+License: https://github.com/rusqlite/rusqlite/blob/44e0ef965580b94d59c5dfe8874b57ab5993a8f7/libsqlite3-sys/sqlcipher\LICENSE
 Copyright (c) 2014 The rusqlite developers
 Copyright (c) 2008-2020 Zetetic LLC
 
 =====
 libwebp-sys 0.9.6
 MIT
-License: https://github.com/NoXF/libwebp-sys/blob/4007a323c1dcc4ad11d70ddadffc51ecfa1dbb5e/vendor/COPYING
+License: https://github.com/NoXF/libwebp-sys/blob/4007a323c1dcc4ad11d70ddadffc51ecfa1dbb5e/vendor\COPYING
 Copyright (c) 2010, Google Inc. All rights reserved.
 
 =====
@@ -5314,19 +5314,19 @@ Copyright (c) 2016 Jerome Froelich
 =====
 lz4-sys 1.11.1+lz4-1.10.0
 MIT
+License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\contrib\debian\copyright
+License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\contrib\djgpp\LICENSE
+License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\examples\COPYING
+License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\lib\LICENSE
+License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\LICENSE
+License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\programs\COPYING
+License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\tests\COPYING
 License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/LICENSE
-License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/LICENSE
-License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/contrib/debian/copyright
-License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/contrib/djgpp/LICENSE
-License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/examples/COPYING
-License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/lib/LICENSE
-License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/programs/COPYING
-License: https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/tests/COPYING
-Copyright (c) 2015 Artem V. Navrotskiy
 Copyright: (C) 2011-2020 Yann Collet
 Copyright (c) 2014, lpsantil
 Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 Copyright (c) 2011-2020, Yann Collet
+Copyright (c) 2015 Artem V. Navrotskiy
 
 =====
 lz4 1.28.1
@@ -5367,23 +5367,23 @@ Copyright (c) 2019 Daniel Henry-Mantilla <daniel.henry.mantilla@gmail.com>
 =====
 mail-builder 0.5.0
 Apache-2.0 OR MIT
-License: https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/Apache-2.0.txt
-License: https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/MIT.txt
+License: https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES\Apache-2.0.txt
+License: https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES\MIT.txt
 
 =====
 mail-parser 0.11.8
 Apache-2.0 OR MIT
-License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/legacy/COPYING
-License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/malformed/COPYING
-License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/thirdparty/COPYING
+License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources\eml\legacy\COPYING
+License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources\eml\malformed\COPYING
+License: https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources\eml\thirdparty\COPYING
 These test files are Copyright © 2010 Hunny Software, Inc.
 These test files are Copyright (c) 2003-2018 Dovecot authors, licensed under MIT.
 
 =====
 mail-send 0.6.2
 Apache-2.0 OR MIT
-License: https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/Apache-2.0.txt
-License: https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/MIT.txt
+License: https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES\Apache-2.0.txt
+License: https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES\MIT.txt
 
 =====
 markup5ever 0.39.0
@@ -5612,31 +5612,31 @@ and ndarray developers
 =====
 netlink-packet-core 0.7.0
 MIT
-License: https://github.com/rust-netlink/netlink-packet-core/blob/91e71b69fe8d94a8ae7e2748b0443272c6c3307c/.github/workflows/license.yml
+License: https://github.com/rust-netlink/netlink-packet-core/blob/91e71b69fe8d94a8ae7e2748b0443272c6c3307c/.github\workflows\license.yml
 License: https://github.com/rust-netlink/netlink-packet-core/blob/91e71b69fe8d94a8ae7e2748b0443272c6c3307c/LICENSE-MIT
 
 =====
 netlink-packet-route 0.17.1
 MIT
-License: https://github.com/rust-netlink/netlink-packet-route/blob/3477b3700f8df49fcbc568f791d0c8f68845b9f6/.github/workflows/license.yml
+License: https://github.com/rust-netlink/netlink-packet-route/blob/3477b3700f8df49fcbc568f791d0c8f68845b9f6/.github\workflows\license.yml
 License: https://github.com/rust-netlink/netlink-packet-route/blob/3477b3700f8df49fcbc568f791d0c8f68845b9f6/LICENSE-MIT
 
 =====
 netlink-packet-utils 0.5.2
 MIT
-License: https://github.com/rust-netlink/netlink-packet-utils/blob/51ef4512ad03da863a0cb6dbc97186db24fdd267/.github/workflows/license.yml
+License: https://github.com/rust-netlink/netlink-packet-utils/blob/51ef4512ad03da863a0cb6dbc97186db24fdd267/.github\workflows\license.yml
 License: https://github.com/rust-netlink/netlink-packet-utils/blob/51ef4512ad03da863a0cb6dbc97186db24fdd267/LICENSE-MIT
 
 =====
 netlink-proto 0.11.5
 MIT
-License: https://github.com/rust-netlink/netlink-proto/blob/7adac0358108e37fede5bbf5143d4a4b980b550c/.github/workflows/license.yml
+License: https://github.com/rust-netlink/netlink-proto/blob/7adac0358108e37fede5bbf5143d4a4b980b550c/.github\workflows\license.yml
 License: https://github.com/rust-netlink/netlink-proto/blob/7adac0358108e37fede5bbf5143d4a4b980b550c/LICENSE-MIT
 
 =====
 netlink-sys 0.8.8
 MIT
-License: https://github.com/rust-netlink/netlink-sys/blob/7b2743a514f88127c76de2567fd4e6c7d89e00ff/.github/workflows/license.yml
+License: https://github.com/rust-netlink/netlink-sys/blob/7b2743a514f88127c76de2567fd4e6c7d89e00ff/.github\workflows\license.yml
 License: https://github.com/rust-netlink/netlink-sys/blob/7b2743a514f88127c76de2567fd4e6c7d89e00ff/LICENSE-MIT
 
 =====
@@ -5785,8 +5785,8 @@ License: https://crates.io/crates/objc2-encode/4.1.0
 =====
 objc2-foundation 0.3.2
 MIT
-License: https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src/copying.rs
-License: https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src/tests/copying.rs
+License: https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src\copying.rs
+License: https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src\tests\copying.rs
 
 =====
 objc2-io-kit 0.3.2
@@ -5841,7 +5841,7 @@ License: https://github.com/iwillspeak/rust-onig/blob/3572dd210e9bbfbf056c12f3a6
 onig_sys 69.9.3
 MIT
 License: https://github.com/rust-onig/rust-onig/blob/3572dd210e9bbfbf056c12f3a65bfcc9fede7866/onig_sys/LICENSE.md
-License: https://github.com/rust-onig/rust-onig/blob/3572dd210e9bbfbf056c12f3a65bfcc9fede7866/onig_sys/oniguruma/COPYING
+License: https://github.com/rust-onig/rust-onig/blob/3572dd210e9bbfbf056c12f3a65bfcc9fede7866/onig_sys/oniguruma\COPYING
 > Copyright (c) 2015 Will Speak <will@willspeak.me>, Ivan Ivashchenko
 Copyright (c) 2002-2021  K.Kosako  <kkosako0@gmail.com>
 
@@ -5998,9 +5998,9 @@ Copyright (c) 2017-2022 Jeremy Salwen and contributors
 =====
 petgraph 0.8.3
 MIT OR Apache-2.0
+License: https://github.com/petgraph/petgraph/blob/162903562ce5b00cdba390a0d9c1bb80f1c75bf5/assets\images\LICENSE.md
 License: https://github.com/petgraph/petgraph/blob/162903562ce5b00cdba390a0d9c1bb80f1c75bf5/LICENSE-APACHE
 License: https://github.com/petgraph/petgraph/blob/162903562ce5b00cdba390a0d9c1bb80f1c75bf5/LICENSE-MIT
-License: https://github.com/petgraph/petgraph/blob/162903562ce5b00cdba390a0d9c1bb80f1c75bf5/assets/images/LICENSE.md
 Copyright (c) 2015
 
 =====
@@ -6425,7 +6425,7 @@ regex-syntax 0.8.11
 MIT OR Apache-2.0
 License: https://github.com/rust-lang/regex/blob/140167995737fa11dfe11b8af8b9aa143b790b4e/regex-syntax/LICENSE-APACHE
 License: https://github.com/rust-lang/regex/blob/140167995737fa11dfe11b8af8b9aa143b790b4e/regex-syntax/LICENSE-MIT
-License: https://github.com/rust-lang/regex/blob/140167995737fa11dfe11b8af8b9aa143b790b4e/regex-syntax/src/unicode_tables/LICENSE-UNICODE
+License: https://github.com/rust-lang/regex/blob/140167995737fa11dfe11b8af8b9aa143b790b4e/regex-syntax/src\unicode_tables\LICENSE-UNICODE
 Copyright (c) 2014 The Rust Project Developers
 Copyright © 1991-2018 Unicode, Inc. All rights reserved.
 
@@ -6485,9 +6485,9 @@ Apache-2.0 AND ISC
 License: https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/LICENSE
 License: https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/LICENSE-BoringSSL
 License: https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/LICENSE-other-bits
-License: https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/src/polyfill/once_cell/LICENSE-APACHE
-License: https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/src/polyfill/once_cell/LICENSE-MIT
-License: https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/third_party/fiat/LICENSE
+License: https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/src\polyfill\once_cell\LICENSE-APACHE
+License: https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/src\polyfill\once_cell\LICENSE-MIT
+License: https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/third_party\fiat\LICENSE
 Copyright (c) 2009 The Go Authors. All rights reserved.
 Copyright 2015 The Chromium Authors. All rights reserved.
 Copyright 2015-2025 Brian Smith.
@@ -6540,7 +6540,7 @@ License: https://github.com/conradkleinespel/rpassword/blob/11515101cf108ce825dc
 =====
 rtnetlink 0.13.1
 MIT
-License: https://github.com/rust-netlink/rtnetlink/blob/5e5c688159ed6a2c66755c1d9ed3f754338a02a6/.github/workflows/license.yml
+License: https://github.com/rust-netlink/rtnetlink/blob/5e5c688159ed6a2c66755c1d9ed3f754338a02a6/.github\workflows\license.yml
 License: https://github.com/rust-netlink/rtnetlink/blob/5e5c688159ed6a2c66755c1d9ed3f754338a02a6/LICENSE-MIT
 
 =====
@@ -6575,12 +6575,12 @@ Copyright (c) 2018 pyros2097
 =====
 rust-stemmers 1.2.0
 MIT OR BSD-3-Clause
+License: https://github.com/CurrySoftware/rust-stemmers/blob/af9d47d5a52eaaded088145bc7432403dbf706a5/algorithms\LICENSE
 License: https://github.com/CurrySoftware/rust-stemmers/blob/af9d47d5a52eaaded088145bc7432403dbf706a5/LICENSE
-License: https://github.com/CurrySoftware/rust-stemmers/blob/af9d47d5a52eaaded088145bc7432403dbf706a5/algorithms/LICENSE
-License: https://github.com/CurrySoftware/rust-stemmers/blob/af9d47d5a52eaaded088145bc7432403dbf706a5/test_data/LICENSE
-Copyright (c) 2017 Jakob Demler
+License: https://github.com/CurrySoftware/rust-stemmers/blob/af9d47d5a52eaaded088145bc7432403dbf706a5/test_data\LICENSE
 Copyright (c) 2001, Dr Martin Porter
 Copyright (c) 2004,2005, Richard Boulton
+Copyright (c) 2017 Jakob Demler
 Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>
 11 of the WIPO copyright treaty adopted on 20 December 1996, or
 Copyright (C) <year>  <name of author>
@@ -6975,8 +6975,8 @@ Copyright (c) 2025 iparaskev
 =====
 smtp-proto 0.2.5
 Apache-2.0 OR MIT
-License: https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/Apache-2.0.txt
-License: https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/MIT.txt
+License: https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES\Apache-2.0.txt
+License: https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES\MIT.txt
 
 =====
 snafu-derive 0.8.9
@@ -7480,7 +7480,7 @@ Copyright (c) 2019 Tokio Contributors
 tracing-core 0.1.36
 MIT
 License: https://github.com/tokio-rs/tracing/blob/10a9e838a35e6ded79d66af246be2ee05417136d/tracing-core/LICENSE
-License: https://github.com/tokio-rs/tracing/blob/10a9e838a35e6ded79d66af246be2ee05417136d/tracing-core/src/spin/LICENSE
+License: https://github.com/tokio-rs/tracing/blob/10a9e838a35e6ded79d66af246be2ee05417136d/tracing-core/src\spin\LICENSE
 Copyright (c) 2019 Tokio Contributors
 Copyright (c) 2014 Mathijs van de Nes
 
@@ -8300,8 +8300,8 @@ zstd-sys 2.1.0+zstd.1.5.7
 BSD-3-Clause
 License: https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/LICENSE
 License: https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/LICENSE.BSD-3-Clause
-License: https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/zstd/COPYING
-License: https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/zstd/LICENSE
+License: https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/zstd\COPYING
+License: https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/zstd\LICENSE
 Copyright (c) 2026, Alexandre Bury
 Copyright (c) Meta Platforms, Inc. and affiliates. All rights reserved.
 Copyright (C) 1989, 1991 Free Software Foundation, Inc.,

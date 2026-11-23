@@ -5,8 +5,8 @@
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
     "deploy/licenses/refresh.py": "bc172fa3cae2c7459e52d0884138402858d5d74c78b96d933e9dcd73670494f6",
-    "packages/butler-agent/rust/Cargo.lock": "1505ba2a48d0a12efa3f4866a6ad3478738da9b7859b3bba06a8a5f5b67d0f84",
-    "packages/butler-agent/rust/Cargo.toml": "8a9f39e05d32b53e9d2fb910513c418f992539e7a23d59da468781a7935b5705",
+    "packages/butler-agent/rust/Cargo.lock": "ec23ec2d29a1a52dcd1dfc3c47a455189c5b2ade233a9faabe94fdc08a9068e3",
+    "packages/butler-agent/rust/Cargo.toml": "5e844db7164c7e33e1d0f3346fdccf79f168c8465a4af9d79be89ca0524ea854",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
     "packages/butler-agent/rust/crates/butler-agent/Cargo.toml": "b3589ba17a65604df6144e220b521377035f63b121fc792284805c5399431e9a",
     "packages/butler-agent/rust/crates/butler-agent/resources/timezones/LICENSE-UNICODE.txt": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
@@ -23,7 +23,8 @@
     "packages/butler-agent/rust/crates/butler-memory/src/cognition/embedding.rs": "4356081083793e9aaf34c237ce7c4d0c93b0b6d7ae75d9c197bb3f4202ba43b4",
     "packages/butler-agent/rust/crates/butler-models/Cargo.toml": "b044aab318310a2ab2e7637bf76812615971a00e0f50928e4bbad1dd3c89f3a2",
     "packages/butler-agent/rust/crates/butler-platform/Cargo.toml": "01896b545f6c71d599dddcc760c89a39c82af22062c3c5f9a7cb0e58664d973f",
-    "packages/butler-agent/rust/crates/butler-platform/cef/Cargo.toml": "bb905ccddc94fdd2bb525afb308edea7cbbbebcd483864f2a2a88c9e2ef83602",
+    "packages/butler-agent/rust/crates/butler-platform/cef-bootstrap/Cargo.toml": "42e12689c9dbaeea58cbb6cf8089d280c62366cef2d423d9ab9cea8fe0e3553b",
+    "packages/butler-agent/rust/crates/butler-platform/cef/Cargo.toml": "2ce8ab9fde772af8cc8260ca6d0e38e47af0cd84df19de999e70979633eda747",
     "packages/butler-agent/rust/crates/butler-runtime/Cargo.toml": "f357e5d8349dd7a10056e59dcf47121ed9333583f985a1ba24b9f416b2c6a1af",
     "packages/butler-agent/rust/crates/butler-shell-client/Cargo.toml": "9ed22424cf1e67138968ea389eec752858c8b1a63b651c43a43d3ee7aa6b2ecd",
     "packages/butler-agent/rust/crates/butler-test-support/Cargo.toml": "15317b3544cdbcfacc5d46ab5b1cbddb1faa34c50ceca49221fdea0fa35a4592",
@@ -4700,7 +4701,7 @@
         "b04538c9abec39a3db75108cf0af0fd9c77032fe8aa2cf38345b4d250e98e38e"
       ],
       "files": [
-        "dist/LICENSE.txt"
+        "dist\\LICENSE.txt"
       ],
       "integrity": "sha512-PaQAADyLY5v4kYFwkpSJHbSSYIkiriY/1xXw75TKoZ9UQQqeU+tvP05yTdZAWibiIYoo8ZKtRv8PM7w0IaywSw==",
       "links": [
@@ -5679,19 +5680,19 @@
         "9ea8903938dab5f12c4572d60725069bec2d1b0dc3bcc210b09bae946a5ebb1f"
       ],
       "files": [
-        "lib-vendor/d3-array/LICENSE",
-        "lib-vendor/d3-color/LICENSE",
-        "lib-vendor/d3-ease/LICENSE",
-        "lib-vendor/d3-format/LICENSE",
-        "lib-vendor/d3-interpolate/LICENSE",
-        "lib-vendor/d3-path/LICENSE",
-        "lib-vendor/d3-scale/LICENSE",
-        "lib-vendor/d3-shape/LICENSE",
-        "lib-vendor/d3-time/LICENSE",
-        "lib-vendor/d3-time-format/LICENSE",
-        "lib-vendor/d3-timer/LICENSE",
-        "lib-vendor/d3-voronoi/LICENSE",
-        "lib-vendor/internmap/LICENSE"
+        "lib-vendor\\d3-array\\LICENSE",
+        "lib-vendor\\d3-color\\LICENSE",
+        "lib-vendor\\d3-ease\\LICENSE",
+        "lib-vendor\\d3-format\\LICENSE",
+        "lib-vendor\\d3-interpolate\\LICENSE",
+        "lib-vendor\\d3-path\\LICENSE",
+        "lib-vendor\\d3-scale\\LICENSE",
+        "lib-vendor\\d3-shape\\LICENSE",
+        "lib-vendor\\d3-time\\LICENSE",
+        "lib-vendor\\d3-time-format\\LICENSE",
+        "lib-vendor\\d3-timer\\LICENSE",
+        "lib-vendor\\d3-voronoi\\LICENSE",
+        "lib-vendor\\internmap\\LICENSE"
       ],
       "integrity": "sha512-SbPDPdDBYp+5MJHhBCAyI7wKM3d5ivekigc2Dk2s7pgbZ9wIgIBYGVw4zGHBml/qTFbexrofXW6Gu4noGxrOwQ==",
       "links": [
@@ -13465,8 +13466,8 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+        "Repository license from objc2-foundation 0.3.2/src\\copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src\\tests\\copying.rs"
       ],
       "links": [
         "https://crates.io/crates/block2/0.6.2"
@@ -14075,11 +14076,11 @@
       ],
       "files": [
         "LICENSE",
-        "tz/LICENSE"
+        "tz\\LICENSE"
       ],
       "links": [
         "https://github.com/chronotope/chrono-tz/blob/e15d1f308a1ac2fdf3f1bf19c325dc202d418081/chrono-tz/LICENSE",
-        "https://github.com/chronotope/chrono-tz/blob/e15d1f308a1ac2fdf3f1bf19c325dc202d418081/chrono-tz/tz/LICENSE"
+        "https://github.com/chronotope/chrono-tz/blob/e15d1f308a1ac2fdf3f1bf19c325dc202d418081/chrono-tz/tz\\LICENSE"
       ],
       "copyright": [
         "Copyright (c) 2016-2024 Benjamin Sago & the chronotope maintainers",
@@ -17910,11 +17911,11 @@
       ],
       "files": [
         "LICENSE",
-        "tests/fonts/LICENSE.txt"
+        "tests\\fonts\\LICENSE.txt"
       ],
       "links": [
         "https://github.com/RazrFalcon/fontdb/blob/ecb707e6096b59146b750f66a32c125a43515192/LICENSE",
-        "https://github.com/RazrFalcon/fontdb/blob/ecb707e6096b59146b750f66a32c125a43515192/tests/fonts/LICENSE.txt"
+        "https://github.com/RazrFalcon/fontdb/blob/ecb707e6096b59146b750f66a32c125a43515192/tests\\fonts\\LICENSE.txt"
       ],
       "copyright": [
         "Copyright (c) 2020 Yevhenii Reizner"
@@ -17991,7 +17992,7 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "Repository license from lance 4.0.0/protos/license_header.txt"
+        "Repository license from lance 4.0.0/protos\\license_header.txt"
       ],
       "links": [
         "https://crates.io/crates/fsst/4.0.0"
@@ -18824,12 +18825,12 @@
         "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
       ],
       "files": [
-        "LICENSES/Apache-2.0.txt",
-        "LICENSES/MIT.txt"
+        "LICENSES\\Apache-2.0.txt",
+        "LICENSES\\MIT.txt"
       ],
       "links": [
-        "https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/Apache-2.0.txt",
-        "https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES/MIT.txt"
+        "https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES\\Apache-2.0.txt",
+        "https://github.com/stalwartlabs/hashify/blob/74bd8a251dff8a514039e035a6437eabf1b9fd57/LICENSES\\MIT.txt"
       ],
       "copyright": []
     },
@@ -19669,15 +19670,15 @@
       ],
       "files": [
         "LICENSE",
-        "src/char16trie/LICENSE",
-        "src/codepointinvlist/LICENSE",
-        "src/codepointtrie/LICENSE"
+        "src\\char16trie\\LICENSE",
+        "src\\codepointinvlist\\LICENSE",
+        "src\\codepointtrie\\LICENSE"
       ],
       "links": [
         "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/LICENSE",
-        "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src/char16trie/LICENSE",
-        "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src/codepointinvlist/LICENSE",
-        "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src/codepointtrie/LICENSE"
+        "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src\\char16trie\\LICENSE",
+        "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src\\codepointinvlist\\LICENSE",
+        "https://github.com/unicode-org/icu4x/blob/8b080b3753b91c58113c47c99108185d0614499c/components/collections/src\\codepointtrie\\LICENSE"
       ],
       "copyright": [
         "Copyright © 2020-2023 Unicode, Inc.",
@@ -21005,7 +21006,7 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "Repository license from lance 4.0.0/protos/license_header.txt"
+        "Repository license from lance 4.0.0/protos\\license_header.txt"
       ],
       "links": [
         "https://crates.io/crates/lance-arrow/4.0.0"
@@ -21028,7 +21029,7 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "Repository license from lance 4.0.0/protos/license_header.txt"
+        "Repository license from lance 4.0.0/protos\\license_header.txt"
       ],
       "links": [
         "https://crates.io/crates/lance-bitpacking/4.0.0"
@@ -21051,7 +21052,7 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "Repository license from lance 4.0.0/protos/license_header.txt"
+        "Repository license from lance 4.0.0/protos\\license_header.txt"
       ],
       "links": [
         "https://crates.io/crates/lance-core/4.0.0"
@@ -21074,10 +21075,10 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "protos/license_header.txt"
+        "protos\\license_header.txt"
       ],
       "links": [
-        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-datafusion/protos/license_header.txt"
+        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-datafusion/protos\\license_header.txt"
       ],
       "copyright": []
     },
@@ -21097,7 +21098,7 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "Repository license from lance 4.0.0/protos/license_header.txt"
+        "Repository license from lance 4.0.0/protos\\license_header.txt"
       ],
       "links": [
         "https://crates.io/crates/lance-datagen/4.0.0"
@@ -21120,10 +21121,10 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "protos/license_header.txt"
+        "protos\\license_header.txt"
       ],
       "links": [
-        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-encoding/protos/license_header.txt"
+        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-encoding/protos\\license_header.txt"
       ],
       "copyright": []
     },
@@ -21143,10 +21144,10 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "protos/license_header.txt"
+        "protos\\license_header.txt"
       ],
       "links": [
-        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-file/protos/license_header.txt"
+        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-file/protos\\license_header.txt"
       ],
       "copyright": []
     },
@@ -21166,10 +21167,10 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "protos/license_header.txt"
+        "protos\\license_header.txt"
       ],
       "links": [
-        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-index/protos/license_header.txt"
+        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-index/protos\\license_header.txt"
       ],
       "copyright": []
     },
@@ -21189,7 +21190,7 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "Repository license from lance 4.0.0/protos/license_header.txt"
+        "Repository license from lance 4.0.0/protos\\license_header.txt"
       ],
       "links": [
         "https://crates.io/crates/lance-io/4.0.0"
@@ -21212,7 +21213,7 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "Repository license from lance 4.0.0/protos/license_header.txt"
+        "Repository license from lance 4.0.0/protos\\license_header.txt"
       ],
       "links": [
         "https://crates.io/crates/lance-linalg/4.0.0"
@@ -21235,7 +21236,7 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "Repository license from lance 4.0.0/protos/license_header.txt"
+        "Repository license from lance 4.0.0/protos\\license_header.txt"
       ],
       "links": [
         "https://crates.io/crates/lance-namespace-impls/4.0.0"
@@ -21283,7 +21284,7 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "Repository license from lance 4.0.0/protos/license_header.txt"
+        "Repository license from lance 4.0.0/protos\\license_header.txt"
       ],
       "links": [
         "https://crates.io/crates/lance-namespace/4.0.0"
@@ -21306,10 +21307,10 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "protos/license_header.txt"
+        "protos\\license_header.txt"
       ],
       "links": [
-        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-table/protos/license_header.txt"
+        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance-table/protos\\license_header.txt"
       ],
       "copyright": []
     },
@@ -21329,7 +21330,7 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "Repository license from lance 4.0.0/protos/license_header.txt"
+        "Repository license from lance 4.0.0/protos\\license_header.txt"
       ],
       "links": [
         "https://crates.io/crates/lance-testing/4.0.0"
@@ -21352,10 +21353,10 @@
         "e2c86e1383229887096db3c4ef29d155b0ec0fb969d0bbbf4e2f546fcadf6eb4"
       ],
       "files": [
-        "protos/license_header.txt"
+        "protos\\license_header.txt"
       ],
       "links": [
-        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance/protos/license_header.txt"
+        "https://github.com/lance-format/lance/blob/ed7e83c0d20eb611147e8dd327c037c92d125b2d/rust/lance/protos\\license_header.txt"
       ],
       "copyright": []
     },
@@ -21756,11 +21757,11 @@
       ],
       "files": [
         "LICENSE",
-        "sqlcipher/LICENSE"
+        "sqlcipher\\LICENSE"
       ],
       "links": [
         "https://github.com/rusqlite/rusqlite/blob/44e0ef965580b94d59c5dfe8874b57ab5993a8f7/libsqlite3-sys/LICENSE",
-        "https://github.com/rusqlite/rusqlite/blob/44e0ef965580b94d59c5dfe8874b57ab5993a8f7/libsqlite3-sys/sqlcipher/LICENSE"
+        "https://github.com/rusqlite/rusqlite/blob/44e0ef965580b94d59c5dfe8874b57ab5993a8f7/libsqlite3-sys/sqlcipher\\LICENSE"
       ],
       "copyright": [
         "Copyright (c) 2014 The rusqlite developers",
@@ -21783,10 +21784,10 @@
         "e293d1dddc9785200b1f58a4f5293543cf8566d9e0b8a3c02fad955035b19f42"
       ],
       "files": [
-        "vendor/COPYING"
+        "vendor\\COPYING"
       ],
       "links": [
-        "https://github.com/NoXF/libwebp-sys/blob/4007a323c1dcc4ad11d70ddadffc51ecfa1dbb5e/vendor/COPYING"
+        "https://github.com/NoXF/libwebp-sys/blob/4007a323c1dcc4ad11d70ddadffc51ecfa1dbb5e/vendor\\COPYING"
       ],
       "copyright": [
         "Copyright (c) 2010, Google Inc. All rights reserved."
@@ -22023,41 +22024,41 @@
         "macOS App/Agent"
       ],
       "evidenceSha256": [
-        "74bf777fc8931a99fc299d8955fe24f868b88f18279bebd29b919bab9c040829",
-        "4bc9c403f6b679cc076dee210e0e21c27b4e8f6d3fb43d85364c76657bfaaac5",
         "4f6ef9d0e844bf432d6a0abb2623f5a61175ae40f7f0e3665490311d89e3af87",
         "c985d399630d177ec9f1713aab8b84214f1f60f777d2a77846fdfacf33a218d9",
         "609b910ef05c9c855ecc1da155a36ed0f57514eac452cf93446530b5ea4b3bc3",
         "8b58c446121a109ccf32edc094bba3010a3d85e4ee3702950db55e4d3e87736c",
+        "4bc9c403f6b679cc076dee210e0e21c27b4e8f6d3fb43d85364c76657bfaaac5",
         "609b910ef05c9c855ecc1da155a36ed0f57514eac452cf93446530b5ea4b3bc3",
-        "609b910ef05c9c855ecc1da155a36ed0f57514eac452cf93446530b5ea4b3bc3"
+        "609b910ef05c9c855ecc1da155a36ed0f57514eac452cf93446530b5ea4b3bc3",
+        "74bf777fc8931a99fc299d8955fe24f868b88f18279bebd29b919bab9c040829"
       ],
       "files": [
-        "LICENSE",
-        "liblz4/LICENSE",
-        "liblz4/contrib/debian/copyright",
-        "liblz4/contrib/djgpp/LICENSE",
-        "liblz4/examples/COPYING",
-        "liblz4/lib/LICENSE",
-        "liblz4/programs/COPYING",
-        "liblz4/tests/COPYING"
+        "liblz4\\contrib\\debian\\copyright",
+        "liblz4\\contrib\\djgpp\\LICENSE",
+        "liblz4\\examples\\COPYING",
+        "liblz4\\lib\\LICENSE",
+        "liblz4\\LICENSE",
+        "liblz4\\programs\\COPYING",
+        "liblz4\\tests\\COPYING",
+        "LICENSE"
       ],
       "links": [
-        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/LICENSE",
-        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/LICENSE",
-        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/contrib/debian/copyright",
-        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/contrib/djgpp/LICENSE",
-        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/examples/COPYING",
-        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/lib/LICENSE",
-        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/programs/COPYING",
-        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4/tests/COPYING"
+        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\\contrib\\debian\\copyright",
+        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\\contrib\\djgpp\\LICENSE",
+        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\\examples\\COPYING",
+        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\\lib\\LICENSE",
+        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\\LICENSE",
+        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\\programs\\COPYING",
+        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/liblz4\\tests\\COPYING",
+        "https://github.com/10xGenomics/lz4-rs/blob/5f52707d2e9b3c7f6a1a3e95180c00e7a6204d21/lz4-sys/LICENSE"
       ],
       "copyright": [
-        "Copyright (c) 2015 Artem V. Navrotskiy",
         "Copyright: (C) 2011-2020 Yann Collet",
         "Copyright (c) 2014, lpsantil",
         "Copyright (C) 1989, 1991 Free Software Foundation, Inc.",
-        "Copyright (c) 2011-2020, Yann Collet"
+        "Copyright (c) 2011-2020, Yann Collet",
+        "Copyright (c) 2015 Artem V. Navrotskiy"
       ]
     },
     {
@@ -22216,12 +22217,12 @@
         "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
       ],
       "files": [
-        "LICENSES/Apache-2.0.txt",
-        "LICENSES/MIT.txt"
+        "LICENSES\\Apache-2.0.txt",
+        "LICENSES\\MIT.txt"
       ],
       "links": [
-        "https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/Apache-2.0.txt",
-        "https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES/MIT.txt"
+        "https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES\\Apache-2.0.txt",
+        "https://github.com/stalwartlabs/mail-builder/blob/1f667e2d81b3621184d798120267a144aad4124a/LICENSES\\MIT.txt"
       ],
       "copyright": []
     },
@@ -22243,14 +22244,14 @@
         "6960a0bc3c17417633742a6f03aa1aa5fd06b67c4516a59f0815b4bd4b67cd93"
       ],
       "files": [
-        "resources/eml/legacy/COPYING",
-        "resources/eml/malformed/COPYING",
-        "resources/eml/thirdparty/COPYING"
+        "resources\\eml\\legacy\\COPYING",
+        "resources\\eml\\malformed\\COPYING",
+        "resources\\eml\\thirdparty\\COPYING"
       ],
       "links": [
-        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/legacy/COPYING",
-        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/malformed/COPYING",
-        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources/eml/thirdparty/COPYING"
+        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources\\eml\\legacy\\COPYING",
+        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources\\eml\\malformed\\COPYING",
+        "https://github.com/stalwartlabs/mail-parser/blob/499ae0f2ff649af84c921af4b008f7c617b0bf87/resources\\eml\\thirdparty\\COPYING"
       ],
       "copyright": [
         "These test files are Copyright © 2010 Hunny Software, Inc.",
@@ -22274,12 +22275,12 @@
         "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
       ],
       "files": [
-        "LICENSES/Apache-2.0.txt",
-        "LICENSES/MIT.txt"
+        "LICENSES\\Apache-2.0.txt",
+        "LICENSES\\MIT.txt"
       ],
       "links": [
-        "https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/Apache-2.0.txt",
-        "https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES/MIT.txt"
+        "https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES\\Apache-2.0.txt",
+        "https://github.com/stalwartlabs/mail-send/blob/5256793258f2ee11ce4bdc033ce4a01d1307b50b/LICENSES\\MIT.txt"
       ],
       "copyright": []
     },
@@ -23124,11 +23125,11 @@
         "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
       ],
       "files": [
-        ".github/workflows/license.yml",
+        ".github\\workflows\\license.yml",
         "LICENSE-MIT"
       ],
       "links": [
-        "https://github.com/rust-netlink/netlink-packet-core/blob/91e71b69fe8d94a8ae7e2748b0443272c6c3307c/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/netlink-packet-core/blob/91e71b69fe8d94a8ae7e2748b0443272c6c3307c/.github\\workflows\\license.yml",
         "https://github.com/rust-netlink/netlink-packet-core/blob/91e71b69fe8d94a8ae7e2748b0443272c6c3307c/LICENSE-MIT"
       ],
       "copyright": []
@@ -23148,11 +23149,11 @@
         "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
       ],
       "files": [
-        ".github/workflows/license.yml",
+        ".github\\workflows\\license.yml",
         "LICENSE-MIT"
       ],
       "links": [
-        "https://github.com/rust-netlink/netlink-packet-route/blob/3477b3700f8df49fcbc568f791d0c8f68845b9f6/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/netlink-packet-route/blob/3477b3700f8df49fcbc568f791d0c8f68845b9f6/.github\\workflows\\license.yml",
         "https://github.com/rust-netlink/netlink-packet-route/blob/3477b3700f8df49fcbc568f791d0c8f68845b9f6/LICENSE-MIT"
       ],
       "copyright": []
@@ -23172,11 +23173,11 @@
         "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
       ],
       "files": [
-        ".github/workflows/license.yml",
+        ".github\\workflows\\license.yml",
         "LICENSE-MIT"
       ],
       "links": [
-        "https://github.com/rust-netlink/netlink-packet-utils/blob/51ef4512ad03da863a0cb6dbc97186db24fdd267/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/netlink-packet-utils/blob/51ef4512ad03da863a0cb6dbc97186db24fdd267/.github\\workflows\\license.yml",
         "https://github.com/rust-netlink/netlink-packet-utils/blob/51ef4512ad03da863a0cb6dbc97186db24fdd267/LICENSE-MIT"
       ],
       "copyright": []
@@ -23196,11 +23197,11 @@
         "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
       ],
       "files": [
-        ".github/workflows/license.yml",
+        ".github\\workflows\\license.yml",
         "LICENSE-MIT"
       ],
       "links": [
-        "https://github.com/rust-netlink/netlink-proto/blob/7adac0358108e37fede5bbf5143d4a4b980b550c/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/netlink-proto/blob/7adac0358108e37fede5bbf5143d4a4b980b550c/.github\\workflows\\license.yml",
         "https://github.com/rust-netlink/netlink-proto/blob/7adac0358108e37fede5bbf5143d4a4b980b550c/LICENSE-MIT"
       ],
       "copyright": []
@@ -23220,11 +23221,11 @@
         "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
       ],
       "files": [
-        ".github/workflows/license.yml",
+        ".github\\workflows\\license.yml",
         "LICENSE-MIT"
       ],
       "links": [
-        "https://github.com/rust-netlink/netlink-sys/blob/7b2743a514f88127c76de2567fd4e6c7d89e00ff/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/netlink-sys/blob/7b2743a514f88127c76de2567fd4e6c7d89e00ff/.github\\workflows\\license.yml",
         "https://github.com/rust-netlink/netlink-sys/blob/7b2743a514f88127c76de2567fd4e6c7d89e00ff/LICENSE-MIT"
       ],
       "copyright": []
@@ -23708,8 +23709,8 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+        "Repository license from objc2-foundation 0.3.2/src\\copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src\\tests\\copying.rs"
       ],
       "links": [
         "https://crates.io/crates/objc2-app-kit/0.3.2"
@@ -23730,8 +23731,8 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+        "Repository license from objc2-foundation 0.3.2/src\\copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src\\tests\\copying.rs"
       ],
       "links": [
         "https://crates.io/crates/objc2-core-foundation/0.3.2"
@@ -23752,8 +23753,8 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+        "Repository license from objc2-foundation 0.3.2/src\\copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src\\tests\\copying.rs"
       ],
       "links": [
         "https://crates.io/crates/objc2-core-graphics/0.3.2"
@@ -23774,8 +23775,8 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+        "Repository license from objc2-foundation 0.3.2/src\\copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src\\tests\\copying.rs"
       ],
       "links": [
         "https://crates.io/crates/objc2-core-services/0.3.2"
@@ -23796,8 +23797,8 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+        "Repository license from objc2-foundation 0.3.2/src\\copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src\\tests\\copying.rs"
       ],
       "links": [
         "https://crates.io/crates/objc2-encode/4.1.0"
@@ -23818,12 +23819,12 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "src/copying.rs",
-        "src/tests/copying.rs"
+        "src\\copying.rs",
+        "src\\tests\\copying.rs"
       ],
       "links": [
-        "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src/copying.rs",
-        "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src/tests/copying.rs"
+        "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src\\copying.rs",
+        "https://github.com/madsmtm/objc2/blob/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/framework-crates/objc2-foundation/src\\tests\\copying.rs"
       ],
       "copyright": []
     },
@@ -23841,8 +23842,8 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+        "Repository license from objc2-foundation 0.3.2/src\\copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src\\tests\\copying.rs"
       ],
       "links": [
         "https://crates.io/crates/objc2-io-kit/0.3.2"
@@ -23863,8 +23864,8 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+        "Repository license from objc2-foundation 0.3.2/src\\copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src\\tests\\copying.rs"
       ],
       "links": [
         "https://crates.io/crates/objc2-local-authentication/0.3.2"
@@ -23885,8 +23886,8 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+        "Repository license from objc2-foundation 0.3.2/src\\copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src\\tests\\copying.rs"
       ],
       "links": [
         "https://crates.io/crates/objc2-security/0.3.2"
@@ -23907,8 +23908,8 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+        "Repository license from objc2-foundation 0.3.2/src\\copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src\\tests\\copying.rs"
       ],
       "links": [
         "https://crates.io/crates/objc2-service-management/0.3.2"
@@ -23929,8 +23930,8 @@
         "23d608079a47693a26dfc8a5cb01894ad0136a50714d46221d9380aa4a4b4423"
       ],
       "files": [
-        "Repository license from objc2-foundation 0.3.2/src/copying.rs",
-        "Repository license from objc2-foundation 0.3.2/src/tests/copying.rs"
+        "Repository license from objc2-foundation 0.3.2/src\\copying.rs",
+        "Repository license from objc2-foundation 0.3.2/src\\tests\\copying.rs"
       ],
       "links": [
         "https://crates.io/crates/objc2/0.6.5"
@@ -24059,11 +24060,11 @@
       ],
       "files": [
         "LICENSE.md",
-        "oniguruma/COPYING"
+        "oniguruma\\COPYING"
       ],
       "links": [
         "https://github.com/rust-onig/rust-onig/blob/3572dd210e9bbfbf056c12f3a65bfcc9fede7866/onig_sys/LICENSE.md",
-        "https://github.com/rust-onig/rust-onig/blob/3572dd210e9bbfbf056c12f3a65bfcc9fede7866/onig_sys/oniguruma/COPYING"
+        "https://github.com/rust-onig/rust-onig/blob/3572dd210e9bbfbf056c12f3a65bfcc9fede7866/onig_sys/oniguruma\\COPYING"
       ],
       "copyright": [
         "> Copyright (c) 2015 Will Speak <will@willspeak.me>, Ivan Ivashchenko",
@@ -24677,19 +24678,19 @@
         "macOS App/Agent"
       ],
       "evidenceSha256": [
+        "9938ad67a06f6207e9694257339e93e402d7eecbd19788d82e4455ad14d71789",
         "143368af9701a24ebaf89fe5310ad8116ca71e8e99f17415c0dd893f6a256ae4",
-        "7576269ea71f767b99297934c0b2367532690f8c4badc695edf8e04ab6a1e545",
-        "9938ad67a06f6207e9694257339e93e402d7eecbd19788d82e4455ad14d71789"
+        "7576269ea71f767b99297934c0b2367532690f8c4badc695edf8e04ab6a1e545"
       ],
       "files": [
+        "assets\\images\\LICENSE.md",
         "LICENSE-APACHE",
-        "LICENSE-MIT",
-        "assets/images/LICENSE.md"
+        "LICENSE-MIT"
       ],
       "links": [
+        "https://github.com/petgraph/petgraph/blob/162903562ce5b00cdba390a0d9c1bb80f1c75bf5/assets\\images\\LICENSE.md",
         "https://github.com/petgraph/petgraph/blob/162903562ce5b00cdba390a0d9c1bb80f1c75bf5/LICENSE-APACHE",
-        "https://github.com/petgraph/petgraph/blob/162903562ce5b00cdba390a0d9c1bb80f1c75bf5/LICENSE-MIT",
-        "https://github.com/petgraph/petgraph/blob/162903562ce5b00cdba390a0d9c1bb80f1c75bf5/assets/images/LICENSE.md"
+        "https://github.com/petgraph/petgraph/blob/162903562ce5b00cdba390a0d9c1bb80f1c75bf5/LICENSE-MIT"
       ],
       "copyright": [
         "Copyright (c) 2015"
@@ -26365,12 +26366,12 @@
       "files": [
         "LICENSE-APACHE",
         "LICENSE-MIT",
-        "src/unicode_tables/LICENSE-UNICODE"
+        "src\\unicode_tables\\LICENSE-UNICODE"
       ],
       "links": [
         "https://github.com/rust-lang/regex/blob/140167995737fa11dfe11b8af8b9aa143b790b4e/regex-syntax/LICENSE-APACHE",
         "https://github.com/rust-lang/regex/blob/140167995737fa11dfe11b8af8b9aa143b790b4e/regex-syntax/LICENSE-MIT",
-        "https://github.com/rust-lang/regex/blob/140167995737fa11dfe11b8af8b9aa143b790b4e/regex-syntax/src/unicode_tables/LICENSE-UNICODE"
+        "https://github.com/rust-lang/regex/blob/140167995737fa11dfe11b8af8b9aa143b790b4e/regex-syntax/src\\unicode_tables\\LICENSE-UNICODE"
       ],
       "copyright": [
         "Copyright (c) 2014 The Rust Project Developers",
@@ -26591,17 +26592,17 @@
         "LICENSE",
         "LICENSE-BoringSSL",
         "LICENSE-other-bits",
-        "src/polyfill/once_cell/LICENSE-APACHE",
-        "src/polyfill/once_cell/LICENSE-MIT",
-        "third_party/fiat/LICENSE"
+        "src\\polyfill\\once_cell\\LICENSE-APACHE",
+        "src\\polyfill\\once_cell\\LICENSE-MIT",
+        "third_party\\fiat\\LICENSE"
       ],
       "links": [
         "https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/LICENSE",
         "https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/LICENSE-BoringSSL",
         "https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/LICENSE-other-bits",
-        "https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/src/polyfill/once_cell/LICENSE-APACHE",
-        "https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/src/polyfill/once_cell/LICENSE-MIT",
-        "https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/third_party/fiat/LICENSE"
+        "https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/src\\polyfill\\once_cell\\LICENSE-APACHE",
+        "https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/src\\polyfill\\once_cell\\LICENSE-MIT",
+        "https://github.com/briansmith/ring/blob/2723abbca9e83347d82b056d5b239c6604f786df/third_party\\fiat\\LICENSE"
       ],
       "copyright": [
         "Copyright (c) 2009 The Go Authors. All rights reserved.",
@@ -26805,11 +26806,11 @@
         "964a53330f9cd970c1790311024281a994644f9b554ff6d37e233672287bf767"
       ],
       "files": [
-        ".github/workflows/license.yml",
+        ".github\\workflows\\license.yml",
         "LICENSE-MIT"
       ],
       "links": [
-        "https://github.com/rust-netlink/rtnetlink/blob/5e5c688159ed6a2c66755c1d9ed3f754338a02a6/.github/workflows/license.yml",
+        "https://github.com/rust-netlink/rtnetlink/blob/5e5c688159ed6a2c66755c1d9ed3f754338a02a6/.github\\workflows\\license.yml",
         "https://github.com/rust-netlink/rtnetlink/blob/5e5c688159ed6a2c66755c1d9ed3f754338a02a6/LICENSE-MIT"
       ],
       "copyright": []
@@ -26950,24 +26951,24 @@
         "macOS App/Agent"
       ],
       "evidenceSha256": [
-        "75e2d8eeb463bb68384840f6e54fee8fdc894baac7a2978e4abea50bf1ad0ca4",
         "10c7be71949bbc44ef6d8e509508887dcaf593e2f122d23ba71e339fd6faa5c7",
+        "75e2d8eeb463bb68384840f6e54fee8fdc894baac7a2978e4abea50bf1ad0ca4",
         "7fa7e56c0db71105f4b59a6a0ac40225eb059876f85cd380383f7d7a066e68be"
       ],
       "files": [
+        "algorithms\\LICENSE",
         "LICENSE",
-        "algorithms/LICENSE",
-        "test_data/LICENSE"
+        "test_data\\LICENSE"
       ],
       "links": [
+        "https://github.com/CurrySoftware/rust-stemmers/blob/af9d47d5a52eaaded088145bc7432403dbf706a5/algorithms\\LICENSE",
         "https://github.com/CurrySoftware/rust-stemmers/blob/af9d47d5a52eaaded088145bc7432403dbf706a5/LICENSE",
-        "https://github.com/CurrySoftware/rust-stemmers/blob/af9d47d5a52eaaded088145bc7432403dbf706a5/algorithms/LICENSE",
-        "https://github.com/CurrySoftware/rust-stemmers/blob/af9d47d5a52eaaded088145bc7432403dbf706a5/test_data/LICENSE"
+        "https://github.com/CurrySoftware/rust-stemmers/blob/af9d47d5a52eaaded088145bc7432403dbf706a5/test_data\\LICENSE"
       ],
       "copyright": [
-        "Copyright (c) 2017 Jakob Demler",
         "Copyright (c) 2001, Dr Martin Porter",
         "Copyright (c) 2004,2005, Richard Boulton",
+        "Copyright (c) 2017 Jakob Demler",
         "Copyright (C) 2007 Free Software Foundation, Inc. <http://fsf.org/>",
         "11 of the WIPO copyright treaty adopted on 20 December 1996, or",
         "Copyright (C) <year>  <name of author>",
@@ -28507,12 +28508,12 @@
         "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
       ],
       "files": [
-        "LICENSES/Apache-2.0.txt",
-        "LICENSES/MIT.txt"
+        "LICENSES\\Apache-2.0.txt",
+        "LICENSES\\MIT.txt"
       ],
       "links": [
-        "https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/Apache-2.0.txt",
-        "https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES/MIT.txt"
+        "https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES\\Apache-2.0.txt",
+        "https://github.com/stalwartlabs/smtp-proto/blob/f9c4edfbda406615ed70bfb073f7eb1e5a157197/LICENSES\\MIT.txt"
       ],
       "copyright": []
     },
@@ -30530,11 +30531,11 @@
       ],
       "files": [
         "LICENSE",
-        "src/spin/LICENSE"
+        "src\\spin\\LICENSE"
       ],
       "links": [
         "https://github.com/tokio-rs/tracing/blob/10a9e838a35e6ded79d66af246be2ee05417136d/tracing-core/LICENSE",
-        "https://github.com/tokio-rs/tracing/blob/10a9e838a35e6ded79d66af246be2ee05417136d/tracing-core/src/spin/LICENSE"
+        "https://github.com/tokio-rs/tracing/blob/10a9e838a35e6ded79d66af246be2ee05417136d/tracing-core/src\\spin\\LICENSE"
       ],
       "copyright": [
         "Copyright (c) 2019 Tokio Contributors",
@@ -31620,7 +31621,10 @@
       "license": "Unlicense OR MIT",
       "source": "https://github.com/BurntSushi/winapi-util/tree/803874c57dc1f10ecd42f7c86d9de72f53818432",
       "artifacts": [
-        "Unsigned Windows x64 Agent preview"
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
@@ -32024,7 +32028,10 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/microsoft/windows-rs/tree/d468916ac27a36fb8a12bafc1bf5c0ec2fe92238",
       "artifacts": [
-        "Unsigned Windows x64 Agent preview"
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
@@ -32374,7 +32381,10 @@
       "license": "MIT OR Apache-2.0",
       "source": "https://github.com/microsoft/windows-rs/tree/32c3144490c016fe496a0aed769bce60987a2e9d",
       "artifacts": [
-        "Unsigned Windows x64 Agent preview"
+        "Linux arm64 DEB/Agent",
+        "Linux x64 DEB/Arch/Agent",
+        "Unsigned Windows x64 Agent preview",
+        "macOS App/Agent"
       ],
       "evidenceSha256": [
         "cb3b46a575dd9b39f881706288addc2e61e94c54658993da30cee083c0bb336f",
@@ -33608,14 +33618,14 @@
       "files": [
         "LICENSE",
         "LICENSE.BSD-3-Clause",
-        "zstd/COPYING",
-        "zstd/LICENSE"
+        "zstd\\COPYING",
+        "zstd\\LICENSE"
       ],
       "links": [
         "https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/LICENSE",
         "https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/LICENSE.BSD-3-Clause",
-        "https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/zstd/COPYING",
-        "https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/zstd/LICENSE"
+        "https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/zstd\\COPYING",
+        "https://github.com/gyscos/zstd-rs/blob/648acb476da66b4bb856043c9b8ea1fdbfe69093/zstd-safe/zstd-sys/zstd\\LICENSE"
       ],
       "copyright": [
         "Copyright (c) 2026, Alexandre Bury",
