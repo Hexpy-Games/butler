@@ -13,6 +13,7 @@ pub mod fake_servers;
 pub mod faults;
 pub mod fixtures;
 pub mod gateway;
+pub mod gateway_proxy;
 pub mod hedge;
 pub mod install_fixture;
 pub mod installation;

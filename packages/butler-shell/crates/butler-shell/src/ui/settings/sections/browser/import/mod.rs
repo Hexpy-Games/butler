@@ -42,13 +42,17 @@ impl BrowserImport {
             dialog.update(cx, |dialog, _| dialog.keychain = keychain);
         }
         let me = cx.entity();
-        let open = Button::new("browser-import-open")
-            .size(Size::Sm)
-            .variant(Variant::Outline)
-            .text(copy.open)
-            .on_click(move |_, _, cx| {
-                me.update(cx, BrowserImport::open);
-            });
+        let open = crate::ui::widgets::control_anchored(
+            Button::new("browser-import-open")
+                .size(Size::Sm)
+                .variant(Variant::Outline)
+                .text(copy.open)
+                .on_click(move |_, _, cx| {
+                    me.update(cx, BrowserImport::open);
+                }),
+            "browser-import-open",
+            true,
+        );
         let field = SettingsActionField::new(copy.data_label, copy.purpose, open)
             .setting_id("browser-import-data");
         SettingsSection::new("browser-import", SettingsSectionKind::Form, copy.title)
