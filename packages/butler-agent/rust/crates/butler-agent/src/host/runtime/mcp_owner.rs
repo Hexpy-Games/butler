@@ -71,6 +71,12 @@ pub(super) async fn open(
     super::vault_switch::open_at_start(&paths.data_root).await;
     startup.phase("vault_open");
     let mcp = for_runtime(paths, env, writes.clone(), plugins.clone());
+    match mcp.move_typed_secrets().await {
+        Ok(n) if n > 0 => butler_core::diagnostic!("[mcp] moved {n} secrets out of the registry"),
+        Err(e) => butler_core::diagnostic!("[mcp] secret move failed: {e}"),
+        _ => {}
+    }
+    startup.phase("mcp_secrets");
     Ok((plugins, mcp))
 }
 pub(super) fn authority(

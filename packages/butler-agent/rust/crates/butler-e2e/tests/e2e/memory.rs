@@ -388,6 +388,9 @@ mod model_choice;
 #[path = "memory/lock_retry.rs"]
 mod lock_retry;
 
+#[path = "memory/provider_pause.rs"]
+mod provider_pause;
+
 #[path = "memory/standalone_upgrade.rs"]
 mod standalone_upgrade;
 

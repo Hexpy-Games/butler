@@ -1,5 +1,7 @@
 //! Migrating older graph schemas in place.
 
+use std::collections::HashSet;
+
 use rusqlite::{Connection, OptionalExtension};
 
 use super::super::db_error;
@@ -85,6 +87,65 @@ pub(super) fn interrupted_failures(connection: &mut Connection, now: &str) -> Co
     }
     tx.execute(
         "INSERT INTO memory_state(key,value) VALUES('projection_contention_recovery',?1)",
+        [now],
+    )
+    .map_err(db_error)?;
+    tx.commit().map_err(db_error)
+}
+
+pub(super) fn provider_pause_failures(
+    connection: &mut Connection,
+    now: &str,
+) -> CognitionResult<()> {
+    let migrated: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM memory_state WHERE key='provider_pause_recovery')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(db_error)?;
+    if migrated {
+        return Ok(());
+    }
+    let tx = connection.transaction().map_err(db_error)?;
+    let windows = tx
+        .prepare(
+            "SELECT window_ref,job_id,recovery_revision FROM memory_projection_windows \
+             WHERE state='failed' AND error_code IN ('memory_extract_provider_failed', \
+             'memory_extract_source_window_exceeds_budget','memory_extract_cancelled')",
+        )
+        .map_err(db_error)?
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })
+        .map_err(db_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_error)?;
+    let mut jobs = HashSet::new();
+    for (window_ref, job, recovery_revision) in windows {
+        let rev = crate::cognition::sources::projection_hash_for_graph(&(
+            "memory-provider-pause-recovery",
+            &window_ref,
+            &recovery_revision,
+        ))?;
+        tx.execute(
+            "UPDATE memory_projection_windows SET state='pending',error_code=NULL,next_attempt_at=?1, \
+             owner_pid=NULL,owner_nonce=NULL,started_at=NULL,recovery_revision=?2, \
+             recovery_base_attempt_count=attempt_count WHERE window_ref=?3",
+            rusqlite::params![now, rev, window_ref],
+        )
+        .map_err(db_error)?;
+        jobs.insert(job);
+    }
+    for job in jobs {
+        super::super::jobs::refresh_semantic_state(&tx, &job, now)?;
+    }
+    tx.execute(
+        "INSERT INTO memory_state(key,value) VALUES('provider_pause_recovery',?1)",
         [now],
     )
     .map_err(db_error)?;

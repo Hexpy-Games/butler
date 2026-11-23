@@ -302,6 +302,15 @@ pub(super) fn json_error(e: impl std::error::Error + Send + Sync + 'static) -> C
     CognitionError::new(CognitionCode::MemoryExtractInvalidJson, e.to_string()).with_source(e)
 }
 fn provider_error(e: ProviderPromptError) -> CognitionError {
+    if let ProviderPromptError::Provider(f) = &e
+        && f.code == "provider_quota_exhausted"
+    {
+        return CognitionError::new(
+            CognitionCode::MemoryExtractProviderPaused,
+            f.retry_at.clone().unwrap_or_default(),
+        )
+        .with_source(e);
+    }
     CognitionError::new(CognitionCode::MemoryExtractProviderFailed, format!("{e:?}")).with_source(e)
 }
 /// Invocation callbacks report Cognition failures as provider invocation
