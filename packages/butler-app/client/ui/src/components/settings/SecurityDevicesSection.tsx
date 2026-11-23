@@ -1,7 +1,6 @@
 import { appCopy, getAppLocale } from "@/app/copy.ts";
-import { useMinuteClock } from "@/app/space/minute-clock.ts";
 import { Button, ListRow, Monitor, SettingsSection, Smartphone, Stack, Tooltip } from "@/butler-ds";
-import { usePairedDevices } from "./usePairedDevices";
+import type { usePairedDevices } from "./usePairedDevices";
 
 function lastSeen(seconds: number, now: number) {
   const elapsed = Math.max(0, now * 60 - seconds);
@@ -12,10 +11,12 @@ function lastSeen(seconds: number, now: number) {
   return format.format(-Math.floor(elapsed / 86400), "day");
 }
 
-export function SecurityDevicesSection({ disabled }: { disabled: boolean }) {
+export function securityDevicesSection({ disabled, devices, now }: {
+  disabled: boolean;
+  devices: ReturnType<typeof usePairedDevices>;
+  now: number;
+}) {
   const copy = appCopy.settings.security;
-  const devices = usePairedDevices();
-  const now = useMinuteClock(devices.devices.length > 0);
   const unavailable = disabled || devices.busy;
   return (
     <SettingsSection id="paired-devices" kind="list" title={copy.devices}

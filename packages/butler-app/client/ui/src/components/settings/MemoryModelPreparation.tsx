@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { SettingsField, Switch, Typo } from "@/butler-ds";
+import { getButlerBackup } from "@/app/butlerBackup";
 import { appCopy, useAppLocale } from "@/app/copy.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { chooseMemoryModel, fetchSetupReadiness, retrySetupReadiness } from "@/app/setupConnection.ts";
@@ -11,7 +12,17 @@ export function MemoryModelPreparation() {
   const language = useAppLocale();
   const [view, setView] = useState<SetupReadinessView | null>(null);
   const [saving, setSaving] = useState(false);
+  const [searchPreparing, setSearchPreparing] = useState(false);
   const model = view?.memory_model;
+  const ready = model?.state === "ready";
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    void getButlerBackup().then((status) => {
+      if (!cancelled) setSearchPreparing(status.memory_search_preparing);
+    }, () => undefined);
+    return () => { cancelled = true; };
+  }, [ready]);
   const settled = Boolean(view) && memoryModelSettled(model);
   useEffect(() => {
     if (settled) return;
@@ -36,7 +47,9 @@ export function MemoryModelPreparation() {
     <SettingsField settingId="memory-model" label={copy.memoryChoice.on} description={copy.memoryModel.description(sizeMB)}
       control={<Switch aria-label={copy.memoryChoice.on} checked={memoryModelChoice(model) === "on"} disabled={!model || saving} onCheckedChange={choose} />}
       meta={<>
-        {model?.state === "ready" ? <Typo.Caption role="status" tone="success">{copy.memoryModel.ready}</Typo.Caption> : null}
+        {ready && <Typo.Caption role="status" tone={searchPreparing ? undefined : "success"}>
+          {searchPreparing ? copy.memoryModel.preparingSearch : copy.memoryModel.ready}
+        </Typo.Caption>}
         <MemoryModelStatus model={model} language={language} retry={() => {
           void retrySetupReadiness(true).then(setView).catch(() => setView(null));
         }} />

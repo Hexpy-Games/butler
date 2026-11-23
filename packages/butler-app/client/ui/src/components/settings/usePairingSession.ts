@@ -5,7 +5,7 @@ import { pairedDevicesChanged } from "@/app/securityDeviceEvents.ts";
 import { getPairingStatus, issuePairingCode, type PairingCode } from "./securityApi";
 
 /** A code lives only in this mounted panel, never in persisted settings. */
-export function usePairingSession() {
+export function usePairingSession(enabled: boolean) {
   const [code, setCode] = useState<PairingCode | null>(null);
   const [busy, setBusy] = useState(false);
   const [paired, setPaired] = useState(false);
@@ -14,9 +14,17 @@ export function usePairingSession() {
   const mounted = useRef(false);
   const issuing = useRef(false);
   useEffect(() => {
+    if (!enabled) {
+      setCode(null);
+      setBusy(false);
+      setPaired(false);
+      setInvalidated(false);
+      setRemaining(0);
+      return;
+    }
     mounted.current = true;
     return () => { mounted.current = false; };
-  }, []);
+  }, [enabled]);
 
   async function issue() {
     if (issuing.current) return;
@@ -39,7 +47,7 @@ export function usePairingSession() {
   }
 
   useEffect(() => {
-    if (!code) return;
+    if (!enabled || !code) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const fail = (error: unknown) => {
@@ -76,6 +84,6 @@ export function usePairingSession() {
     }
     timer = setTimeout(() => void poll(), 1000);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [code]);
+  }, [enabled, code]);
   return { code, busy, paired, invalidated, remaining, issue };
 }
