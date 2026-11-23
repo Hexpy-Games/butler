@@ -162,7 +162,11 @@ async fn dropping_caller_keeps_tracked_projection_until_close_drains() {
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .unwrap();
-    assert!(matches!(row.0.as_str(), "complete" | "running"));
+    assert!(service.active_windows.lock().is_empty());
+    assert!(matches!(
+        (row.0.as_str(), row.1.as_deref()),
+        ("complete", None) | ("running", Some(_))
+    ));
 }
 
 struct InvalidProvider {
