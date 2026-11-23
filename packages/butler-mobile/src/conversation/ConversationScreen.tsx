@@ -22,6 +22,7 @@ import { anchoredStewardChildren } from "./stewardAnchors";
 import { latestStatus, turnStatusLabel } from "./workStatus";
 import { createSelectableRows } from "./selectableRows";
 import { SelectableRowsContext } from "@/ds/internal/textSelection";
+import { ImageSessionContext } from "./imageViewer";
 import { useElapsed } from "./useElapsed";
 
 export function ConversationScreen({ id, title, project, group, initialText = "" }: {
@@ -107,6 +108,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, k
     }
   }, [inset]);
   return <>
+    <ImageSessionContext.Provider value={view?.session_id}>
     <SelectableRowsContext.Provider value={selection}>
       <FlatList ref={ref} data={rows} keyExtractor={message => message.id}
         renderItem={({ item }) => "questionAnswer" in item ? <QuestionAnswerCard answer={item.questionAnswer} /> : <Message message={item}
@@ -145,6 +147,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, k
         ListFooterComponent={<View style={{ paddingBottom: inset + t.length("--space-4"), gap: t.length("--space-4") }}>{children(anchors)}</View>}
       />
     </SelectableRowsContext.Provider>
+    </ImageSessionContext.Provider>
     <EdgeFade color={opaque(stops[0][0])} edge="top" offset={headerInset} visible={scrolled} />
   </>;
 }

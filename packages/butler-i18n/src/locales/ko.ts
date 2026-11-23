@@ -571,7 +571,7 @@ export const koKrCopy: AppCopy = {
       applyUpdateBody: "컴퓨터의 버틀러가 다시 시작되며 업데이트를 마칩니다.",
       version: (version: string, build?: string) => `버전 ${version}${build === undefined ? "" : ` (${build})`}`,
     },
-    outputs: { share: "공유", shareFailed: "공유하지 못했습니다.", loadFailed: "불러오지 못했습니다.", unsupported: "미리 볼 수 없는 형식입니다." },
+    outputs: { share: "공유", shareFailed: "공유하지 못했습니다.", loadFailed: "불러오지 못했습니다.", unsupported: "미리 볼 수 없는 형식입니다.", savedToLibrary: "서랍에 저장했습니다.", saveFailed: "서랍에 저장하지 못했습니다." },
     library: { changeFailed: "변경하지 못했습니다." },
     automations: { nextRun: "다음 실행", lastRun: "마지막 실행", deleteFailed: "예약 작업을 삭제하지 못했습니다." },
   },

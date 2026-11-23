@@ -17,7 +17,7 @@ test("fileViewMode", () => {
 test("artifactTarget", () => {
   expect(artifactTarget({ kind: "web", id: "o1", title: "Page", created_at: "" })).toEqual({ kind: "output", id: "o1", title: "Page" });
   expect(artifactTarget({ kind: "image", id: "i1", file_id: "f1", title: "x.png", created_at: "" }))
-    .toEqual({ kind: "image", path: "/message-files/f1", title: "x.png" });
+    .toEqual({ kind: "image", path: "/message-files/f1", name: "x.png", title: "x.png" });
   expect(artifactTarget({ kind: "file", id: "f2", title: "x.zip", created_at: "" })).toBeNull();
 });
 

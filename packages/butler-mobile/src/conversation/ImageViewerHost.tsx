@@ -7,5 +7,5 @@ export function ImageViewerHost() {
   const { images, index } = useImageViewer();
   const copy = getAppCopy(useAppLocale());
   return <ImageViewer images={images} index={index} onIndexChange={next => openImageViewer(images, next)}
-    onClose={closeImageViewer} labels={copy.conversation.imageViewer} />;
+    onClose={closeImageViewer} labels={{ ...copy.conversation.imageViewer, share: copy.mobile.outputs.share, saveToLibrary: copy.conversation.answerBlocks.saveToLibrary }} />;
 }
