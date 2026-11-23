@@ -145,7 +145,7 @@ struct Session {
 impl OsrRuntime {
     fn open_internal(&self, profile: OsrProfile) -> Result<Rc<Session>, OsrError> {
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
-        if let Err(error) = self.open(id, "about:blank", (1, 1), 1., profile) {
+        if let Err(error) = self.open(id, "about:blank", (1, 1), 1., 60, profile) {
             self.close(id);
             return Err(error);
         }
