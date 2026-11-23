@@ -87,7 +87,7 @@ impl RenderOnce for MessageFooter {
             Spec {
                 action: Some(ActionScale {
                     side: ACTION_SIDE,
-                    icon: f32::from(ds.len(Length::IconSizeMd)),
+                    icon: f32::from(ds.len(Length::IconSizeSm)),
                     fixed: false,
                 }),
                 ..Spec::default()
