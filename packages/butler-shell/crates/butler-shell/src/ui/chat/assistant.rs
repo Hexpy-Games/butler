@@ -122,7 +122,7 @@ fn response_footer(
                 || (msg.incomplete == Some(true) && !failed_notice),
             actions: (!actions.is_empty()).then(|| {
                 Stack::row()
-                    .gap(Space::None)
+                    .gap(Space::Sm)
                     .children(actions)
                     .into_any_element()
             }),

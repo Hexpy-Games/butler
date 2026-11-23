@@ -160,20 +160,31 @@ impl State {
         let list = ListState::new(0, ListAlignment::Bottom, px(600.));
         list.set_follow_mode(FollowMode::Tail);
         let scroll_list = list.clone();
-        list.set_scroll_handler(move |event, window, cx| {
-            let _ = weak.update(cx, |state, _| {
-                let following = event.is_following_tail;
-                let pinned = scroll::after(
-                    &scroll_list,
-                    &mut state.last_offset,
-                    state.pinned,
-                    following,
-                );
-                if state.pinned != pinned {
-                    state.pinned = pinned;
-                    window.refresh();
-                }
-            });
+        list.set_scroll_handler(move |event, _, cx| {
+            let flipped = weak
+                .update(cx, |state, cx| {
+                    let following = event.is_following_tail;
+                    let pinned = scroll::after(
+                        &scroll_list,
+                        &mut state.last_offset,
+                        state.pinned,
+                        following,
+                    );
+                    let flipped = state.pinned != pinned;
+                    if flipped {
+                        state.pinned = pinned;
+                        cx.notify();
+                    }
+                    flipped
+                })
+                .unwrap_or(false);
+            // A wheel glide scrolls during prepaint, which drops that notify: notify after the cycle.
+            if flipped {
+                let weak = weak.clone();
+                cx.defer(move |cx| {
+                    let _ = weak.update(cx, |_, cx| cx.notify());
+                });
+            }
         });
         Self {
             session,
@@ -381,14 +392,18 @@ fn jump_button(state: &Entity<State>, unread: bool, cx: &App) -> AnyElement {
     let text = strings(Ds::get(cx).lang());
     let (aria, latest, fresh) = (text.jump_aria, text.jump_latest, text.jump_new);
     let state = state.clone();
-    ConversationScrollToBottomButton::new("transcript-jump", aria)
-        .unread(unread)
-        .text(if unread { fresh } else { latest })
-        .on_click(move |window, cx| {
-            state.update(cx, |state, _| state.scroll_to_bottom());
-            window.refresh();
-        })
-        .into_any_element()
+    crate::ui::widgets::anchored(
+        ConversationScrollToBottomButton::new("transcript-jump", aria)
+            .unread(unread)
+            .text(if unread { fresh } else { latest })
+            .on_click(move |_, cx| {
+                state.update(cx, |state, cx| {
+                    state.scroll_to_bottom();
+                    cx.notify();
+                });
+            }),
+        "transcript-jump",
+    )
 }
 
 /// The room above the first message; asks once per window for the older messages.
