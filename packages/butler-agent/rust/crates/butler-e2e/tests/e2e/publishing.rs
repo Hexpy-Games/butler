@@ -22,7 +22,7 @@ async fn publishing_01_off_by_default_makes_no_request() -> Result<(), HarnessEr
     let reply = s.gw.get("/publishing").await?;
     assert_eq!(reply.status, 404);
     assert_eq!(reply.error_code(), Some("butler_account_disabled"));
-    assert!(fake.seen().is_empty());
+    assert_eq!(fake.seen(), [] as [String; 0]);
     s.finish().await
 }
 
@@ -43,7 +43,7 @@ async fn publishing_02_signed_out() -> Result<(), HarnessError> {
     let reply = s.gw.post("/library/output-x/publish", json!({})).await?;
     assert_eq!(reply.status, 401);
     assert_eq!(reply.error_code(), Some("butler_account_signed_out"));
-    assert!(fake.seen().is_empty());
+    assert_eq!(fake.seen(), [] as [String; 0]);
     s.finish().await
 }
 

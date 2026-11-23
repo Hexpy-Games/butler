@@ -165,7 +165,7 @@ fn authenticated(
                 "size_bytes": 0, "file_count": 0, "updated_at": "2026-01-01T00:00:00Z", "source_key": source_key,
             })).collect();
             Json(json!({"pages": pages, "used": pages.len(), "limit": 3, "badge": true,
-                "page_bytes": 10000000, "page_files": 200})).into_response()
+                "page_bytes": 10_000_000, "page_files": 200})).into_response()
         }
         (Method::DELETE, "/v1/pages/k7m2q9xd4b3hn") => {
             *state.page.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
