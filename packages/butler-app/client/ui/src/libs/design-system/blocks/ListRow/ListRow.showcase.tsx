@@ -64,8 +64,8 @@ export const stories: ShowcaseStory[] = [
     ),
   },
   {
-    // A meta longer than half the row moves under the title and wraps there;
-    // the title keeps its line and truncates. Compare the 320 and app widths.
+    // A meta that does not fit beside the full title moves under it and wraps there;
+    // the title truncates only when it alone is wider than the row. Compare the 320 and app widths.
     name: "Long meta in a narrow row",
     widths: ["320", "375", "app"],
     render: (context) => (
