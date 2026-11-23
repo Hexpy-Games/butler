@@ -58,6 +58,8 @@ export interface NavigationView {
   automations_summary: { total_count: number; enabled_count: number };
   settings_summary: { profile_label: string };
   generated_at: string;
+  /** This computer's name, as pairing reports it; absent from older agents. */
+  computer_name?: string;
 }
 
 export function isSpaceCommand(value: unknown): value is SpaceCommand {
