@@ -3,10 +3,14 @@ use super::{Frame, OsrIme, OsrSink};
 use super::{d3d::GpuCopy, d3d_pool::FramePool};
 #[cfg(target_os = "macos")]
 use super::{frame_pool::FramePool, gpu::GpuCopy};
+use std::collections::VecDeque;
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
 };
+
+#[cfg(not(target_os = "linux"))]
+pub(super) const QUEUE: usize = 2;
 
 pub(super) type PageRef = Rc<RefCell<Page>>;
 /// Whether the page is shown; once closing it stays hidden and ignores visibility changes.
@@ -28,6 +32,10 @@ pub(super) struct Page {
     pub(super) popup: Option<(u64, i32)>,
     pub(super) browser: Option<cef::Browser>,
     pub(super) frame: Option<Frame>,
+    /// Painted frames not yet drawn, oldest first; at most `QUEUE`. Linux paints in place and never queues.
+    pub(super) queue: VecDeque<Frame>,
+    /// The windowless frame rate last given to CEF.
+    pub(super) rate: u32,
     #[cfg(not(target_os = "linux"))]
     pub(super) pool: FramePool,
     #[cfg(not(target_os = "linux"))]
@@ -44,7 +52,7 @@ pub(super) struct Page {
     pub(super) loads: super::hold::Loads,
 }
 impl Page {
-    pub(super) fn new(size: (u32, u32), scale: f32) -> Self {
+    pub(super) fn new(size: (u32, u32), scale: f32, rate: u32) -> Self {
         Self {
             size,
             scale,
@@ -54,6 +62,8 @@ impl Page {
             signed_out_owner: None,
             popup: None,
             frame: None,
+            queue: VecDeque::new(),
+            rate,
             #[cfg(not(target_os = "linux"))]
             pool: FramePool::default(),
             #[cfg(not(target_os = "linux"))]
@@ -70,13 +80,25 @@ impl Page {
             loads: super::hold::Loads::default(),
         }
     }
+    #[cfg(not(target_os = "linux"))]
+    pub(super) fn make_room(&mut self) {
+        if self.queue.len() == QUEUE {
+            self.queue.pop_front();
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    pub(super) fn push(&mut self, frame: Frame) {
+        self.queue.push_back(frame);
+    }
     pub(super) fn release_frames(&mut self) {
         self.frame = None;
+        self.queue.clear();
         self.release_pool();
     }
     pub(super) fn release_pool(&mut self) {
         #[cfg(not(target_os = "linux"))]
         {
+            self.queue.clear();
             self.pool = FramePool::default();
             self.gpu = None;
         }

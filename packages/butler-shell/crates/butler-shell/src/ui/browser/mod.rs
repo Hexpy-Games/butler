@@ -144,7 +144,11 @@ pub(crate) fn handoff_media(
     let tab = state
         .tabs()
         .iter()
-        .find(|item| item.id.0.as_ref() == tab && item.owner == owner)?;
+        .find(|item| item.id.0.as_ref() == tab && item.owner == owner)?
+        .clone();
+    let id = tab.id.clone();
+    let thumb =
+        cx.update_global::<model::BrowserState, _>(|s, cx| s.engine.thumbnail(&id, window, cx));
     let mut placeholder = MediaFrame::new((ElementId::Name(tab.id.0.clone()), "handoff-frame"))
         .aspect(Aspect::SixteenTen)
         .placeholder();
@@ -156,7 +160,7 @@ pub(crate) fn handoff_media(
         .w_full()
         .aspect_ratio(16. / 10.)
         .child(placeholder)
-        .children(state.engine.thumbnail(&tab.id, window));
+        .children(thumb);
     let title = if tab.title.is_empty() {
         BrowserStrings::get(cx).new_tab
     } else {
