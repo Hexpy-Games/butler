@@ -17,6 +17,9 @@ interface Current extends ToastInput { id: number }
 let current: Current | null = null;
 let counter = 0;
 const listeners = new Set<() => void>();
+// Mounted hosts, oldest first; only the newest (topmost layer) renders toasts.
+const hosts: number[] = [];
+let hostCounter = 0;
 const emit = () => listeners.forEach((listener) => listener());
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
@@ -90,10 +93,21 @@ export function ToastView({ message, tone = "neutral", onPress }: { message: str
   );
 }
 
+/** Mount one at the app root and one inside each Modal; only the topmost shows toasts. */
 export function ToastHost() {
   const t = useTokens();
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
+  const [host] = useState(() => ++hostCounter);
+  useEffect(() => {
+    hosts.push(host);
+    emit();
+    return () => {
+      hosts.splice(hosts.indexOf(host), 1);
+      emit();
+    };
+  }, [host]);
+  const top = useSyncExternalStore(subscribe, () => hosts[hosts.length - 1]) === host;
   const next = useSyncExternalStore(subscribe, () => current);
   const [shown, setShown] = useState<Current | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
@@ -110,7 +124,7 @@ export function ToastHost() {
   };
 
   useEffect(() => {
-    if (!next) return;
+    if (!next || !top) return;
     setShown(next);
     opacity.setValue(0);
     lift.setValue(reduced ? 0 : -distance);
@@ -122,7 +136,7 @@ export function ToastHost() {
       if (timer.current) clearTimeout(timer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [next]);
+  }, [next, top]);
 
   const dismiss = (id: number) => {
     if (timer.current) clearTimeout(timer.current);
@@ -132,6 +146,7 @@ export function ToastHost() {
     });
   };
 
+  if (!top) return null;
   if (!shown) return null;
   return (
     <View

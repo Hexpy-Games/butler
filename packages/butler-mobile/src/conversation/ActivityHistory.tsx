@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, LayoutAnimation, View } from "react-native";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
-import type { ConversationMessage, WorkerActivityWorkBlock } from "../../../butler-protocol/src/index.ts";
+import type { ConversationMessage, ProgressSummaryRow, WorkerActivityWorkBlock } from "../../../butler-protocol/src/index.ts";
 import { Button, Icon, icons, Text, useTokens, WorkActivityBlock } from "@/ds";
 import { run, useReducedMotion } from "@/ds/internal/motion";
 import { AnimatedPressable, usePress } from "@/ds/internal/press";
@@ -103,9 +103,9 @@ export function ActivityRow({ activity, connected, last, live, goal }: { activit
     connected={connected} last={last} live={live} tools={toolItems(activity.operations.map(row => ({ ...row, turn_id: activity.turnId ?? row.turn_id })), locale)} />;
 }
 
-export function MessageActivity({ message }: { message: ConversationMessage }) {
+export function MessageActivity({ message, liveRows }: { message: ConversationMessage; liveRows?: ProgressSummaryRow[] }) {
   const locale = useAppLocale();
-  const { activities, semanticState } = projectActivities(message.turn_activity_rows ?? [], message.turn_id, locale);
+  const { activities, semanticState } = projectActivities(message.turn_activity_rows ?? liveRows ?? [], message.turn_id, locale);
   const live = message.status === "streaming";
   if (activities.length) return <ActivityTimeline activities={activities} currentState={live ? semanticState : message.status} live={live} storeKey={message.id} />;
   return !live && message.work_blocks?.length ? <CompletedWork blocks={message.work_blocks} message={message} /> : null;

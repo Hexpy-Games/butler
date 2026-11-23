@@ -4,6 +4,10 @@ use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, json};
 
+use crate::models::{
+    clean_secret_key, is_literal_source, stored_secret_refs, stored_secret_refs_from_value,
+};
+
 use super::registry::McpRegistryError;
 use super::{
     McpClient,
@@ -37,9 +41,8 @@ impl McpClient {
 
     pub async fn upsert_server(&self, input: Value) -> Result<Value, McpRegistryError> {
         let id = upsert_id(&input)?;
-        self.write_registry(move |data_root, guard| {
+        self.write_registry(move |mut registry| {
             let now = now_iso();
-            let mut registry = read_registry_value(data_root)?;
             let mut servers = normalized_server_values(&registry)?;
             let index = servers
                 .iter()
@@ -102,10 +105,10 @@ impl McpClient {
             });
             registry["version"] = json!(1);
             registry["servers"] = Value::Array(servers);
-            write_registry(data_root, guard, &registry)?;
-            Ok(redact_server(&normalized))
+            Ok((registry, redact_server(&normalized), true))
         })
         .await
+        .map(|(reply, _)| reply)
     }
 
     pub async fn update_server(
@@ -116,9 +119,8 @@ impl McpClient {
         if server_id.contains('/') {
             return Err(McpRegistryError::PluginReadOnly);
         }
-        self.write_registry(move |data_root, guard| {
+        self.write_registry(move |mut registry| {
             let id = normalize_server_id(&server_id);
-            let mut registry = read_registry_value(data_root)?;
             let mut servers = normalized_server_values(&registry)?;
             let Some(index) = servers
                 .iter()
@@ -155,10 +157,10 @@ impl McpClient {
             servers[index] = server_to_value(&normalized);
             registry["version"] = json!(1);
             registry["servers"] = Value::Array(servers);
-            write_registry(data_root, guard, &registry)?;
-            Ok(redact_server(&normalized))
+            Ok((registry, redact_server(&normalized), true))
         })
         .await
+        .map(|(reply, _)| reply)
     }
 
     pub async fn set_server_enabled(
@@ -174,9 +176,8 @@ impl McpClient {
         if server_id.contains('/') {
             return Err(McpRegistryError::PluginReadOnly);
         }
-        self.write_registry(move |data_root, guard| {
+        self.write_registry(move |mut registry| {
             let id = normalize_server_id(&server_id);
-            let mut registry = read_registry_value(data_root)?;
             let mut servers = normalized_server_values(&registry)?;
             let before = servers.len();
             servers.retain(|server| server.get("id").and_then(Value::as_str) != Some(id.as_str()));
@@ -184,28 +185,43 @@ impl McpClient {
             if removed {
                 registry["version"] = json!(1);
                 registry["servers"] = Value::Array(servers);
-                write_registry(data_root, guard, &registry)?;
             }
-            Ok(json!({"id": id, "removed": removed}))
+            Ok((registry, json!({"id": id, "removed": removed}), removed))
         })
         .await
+        .map(|(reply, _)| reply)
     }
 
-    async fn write_registry<F>(&self, operation: F) -> Result<Value, McpRegistryError>
+    pub(super) async fn write_registry<F>(
+        &self,
+        operation: F,
+    ) -> Result<(Value, usize), McpRegistryError>
     where
-        F: FnOnce(&Path, &super::RegistryPathGuard) -> Result<Value, McpRegistryError>
-            + Send
-            + 'static,
+        F: FnOnce(Value) -> Result<(Value, Value, bool), McpRegistryError> + Send + 'static,
     {
         let data_root = self.data_root.clone();
-        let path_guard = Arc::clone(&self.registry_path_guard);
-        let permit = self.configuration_writes.acquire_owned().await;
-        tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            operation(&data_root, path_guard.as_ref())
+        let _permit = self.configuration_writes.acquire_owned().await;
+        let (mut next, reply, changed, old_refs) = tokio::task::spawn_blocking(move || {
+            let registry = read_registry_value(&data_root)?;
+            let old_refs = stored_secret_refs_from_value(&registry);
+            let (next, reply, changed) = operation(registry)?;
+            Ok::<_, McpRegistryError>((next, reply, changed, old_refs))
         })
         .await
-        .map_err(McpRegistryError::WriteTask)?
+        .map_err(McpRegistryError::WriteTask)??;
+        let moved = self.store_literals(&mut next).await?;
+        if changed || moved > 0 {
+            let data_root = self.data_root.clone();
+            let path_guard = Arc::clone(&self.registry_path_guard);
+            let new_refs = tokio::task::spawn_blocking(move || {
+                write_registry(&data_root, path_guard.as_ref(), &next)?;
+                stored_secret_refs(&data_root).map_err(McpRegistryError::from)
+            })
+            .await
+            .map_err(McpRegistryError::WriteTask)??;
+            self.drop_unreferenced(&old_refs, &new_refs).await;
+        }
+        Ok((reply, moved))
     }
 }
 
@@ -267,25 +283,11 @@ fn merge_secret_updates(existing: Option<&Vec<Value>>, updates: Option<&Vec<Valu
     Value::Array(values)
 }
 
-fn clean_secret_key(value: &str) -> String {
-    value
-        .trim()
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '.' || ch == '-' {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect()
-}
-
 fn normalize_secret_source(value: Option<&Value>) -> &'static str {
     match value.and_then(Value::as_str) {
+        source if is_literal_source(source) => "literal",
         Some("env") => "env",
-        Some("file") => "file",
-        _ => "literal",
+        _ => "file",
     }
 }
 

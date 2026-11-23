@@ -115,9 +115,17 @@ pub struct AutomationRunSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
 }
+#[derive(Debug, Clone)]
+pub struct RunsQuery {
+    pub id: String,
+    pub limit: Option<usize>,
+    pub cursor: Option<String>,
+}
 #[derive(Clone, Debug, Serialize)]
 pub struct AutomationRunListView {
     pub runs: Vec<AutomationRunSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct AutomationRunResult {
