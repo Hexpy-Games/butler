@@ -24,6 +24,8 @@ import { createSelectableRows } from "./selectableRows";
 import { SelectableRowsContext } from "@/ds/internal/textSelection";
 import { ImageSessionContext } from "./imageViewer";
 import { useElapsed } from "./useElapsed";
+import { ActivityTimeline } from "./ActivityHistory";
+import { projectActivities } from "./activityProjection";
 
 export function ConversationScreen({ id, title, project, group, initialText = "" }: {
   id?: string; title: string; project?: string; group?: string; initialText?: string;
@@ -112,6 +114,7 @@ function ConversationMessages({ view, loadingEarlier, loadEarlier, dockHeight, k
     <SelectableRowsContext.Provider value={selection}>
       <FlatList ref={ref} data={rows} keyExtractor={message => message.id}
         renderItem={({ item }) => "questionAnswer" in item ? <QuestionAnswerCard answer={item.questionAnswer} /> : <Message message={item}
+          liveRows={item.role === "assistant" && !!item.turn_id && item.turn_id === view?.active_turn?.id ? view.active_turn.progress?.safe_progress_rows : undefined}
           stewardChild={anchors.get(item.id)} latestTurn={view?.latest_turn} sessionId={view?.session_id} projectId={view?.project_id} />}
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerInset }} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
@@ -174,10 +177,13 @@ function TurnStatus({ view, hasDecision, anchors }: {
     return child && (child.active_turn || child.waiting_for_children) ? <DelegatedTurnStatus child={child} /> : null;
   }
   if (turn.state === "waiting_for_form") return hasDecision ? null : <StatusLine label={copy.chat.waitingForYou} active={false} />;
-  const newest = view.messages.at(-1);
-  if (!["queued", "accepted", "thinking", "streaming", "waiting_for_tool", "cancelling", "retrying"].includes(turn.state)
-    || (newest?.role === "assistant" && newest.status === "streaming")) return null;
-  return <StatusLine label={turnStatusLabel(turn, locale)} elapsed={elapsed} active />;
+  if (!["queued", "accepted", "thinking", "streaming", "waiting_for_tool", "cancelling", "retrying"].includes(turn.state)) return null;
+  const attached = view.messages.some(m => m.role === "assistant" && m.turn_id === turn.id);
+  const work = view.session_id !== "general" && !attached ? projectActivities(turn.progress?.safe_progress_rows ?? [], turn.id, locale) : null;
+  return <>
+    {work?.activities.length ? <ActivityTimeline activities={work.activities} currentState={work.semanticState} live /> : null}
+    <StatusLine label={turnStatusLabel(turn, locale)} elapsed={elapsed} active />
+  </>;
 }
 
 function DelegatedTurnStatus({ child }: { child: StewardChild }) {

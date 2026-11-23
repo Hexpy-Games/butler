@@ -2,7 +2,7 @@ import { MessageResults } from "@/outputs/MessageResults";
 import { useState } from "react";
 import { Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import type { ConversationMessage, SessionView, SessionViewTurn, StewardChild } from "../../../butler-protocol/src/index.ts";
+import type { ConversationMessage, ProgressSummaryRow, SessionView, SessionViewTurn, StewardChild } from "../../../butler-protocol/src/index.ts";
 import { toMarkdown } from "../../../butler-protocol/src/answer-blocks-markdown.ts";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { AttachmentTiles, Button, IconButton, icons, Markdown, MessageBubble, showToast, Text, TextSelectionScope, useTokens } from "@/ds";
@@ -46,9 +46,10 @@ export function UserMessage({ message, children, selectable }: {
   </View>;
 }
 
-export function Message({ message, latestTurn, sessionId, projectId, stewardChild }: {
+export function Message({ message, latestTurn, sessionId, projectId, stewardChild, liveRows }: {
   stewardChild?: { child: StewardChild; turn: SessionViewTurn };
   message: ConversationMessage; latestTurn?: SessionView["latest_turn"]; sessionId?: string; projectId?: string;
+  liveRows?: ProgressSummaryRow[];
 }) {
   const copy = useMobileCopy();
   const t = useTokens();
@@ -61,7 +62,7 @@ export function Message({ message, latestTurn, sessionId, projectId, stewardChil
   const failed = message.status === "failed" || message.delivery_state === "system_error" || message.delivery_state === "failed_system";
   const cancelled = message.status === "cancelled" || message.delivery_state === "cancelled";
   return <View style={{ ...(bubble ? { alignSelf: "flex-start", width: "90%" } : { width: "100%" }), gap: t.length("--space-1") }}>
-    {!bubble ? <MessageActivity message={message} /> : null}
+    {!bubble ? <MessageActivity message={message} liveRows={liveRows} /> : null}
     <MessageBody selectable={selectable} style={{ gap: t.length(bubble ? "--space-1" : "--space-3"), ...(bubble ? { alignSelf: "flex-start" } : {}) }}>
       {bubble ? (message.text.trim() ? <MessageBubble><Markdown text={message.text} /></MessageBubble> : null)
         : <Markdown text={message.text} />}
