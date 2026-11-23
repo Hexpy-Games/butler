@@ -11,6 +11,7 @@ use butler_ds::ui::icon_button::IconButton;
 use butler_ds::ui::layout::{Space, Stack};
 use butler_ds::ui::overlay::place::Align;
 use butler_ds::ui::popover::Popover;
+#[cfg(not(feature = "cef"))]
 use butler_ds::ui::toast::{self, Toast};
 use chrono::{DateTime, Utc};
 use gpui::Styled as _;
@@ -43,6 +44,13 @@ impl DocumentPage {
     fn export_markdown(&self, cx: &mut App) {
         if let Some(doc) = self.shown() {
             export::markdown(doc, cx);
+        }
+    }
+
+    #[cfg(feature = "cef")]
+    fn export_pdf(&self, cx: &mut App) {
+        if let Some(doc) = self.shown() {
+            export::pdf(doc, self.id.clone(), cx);
         }
     }
 
@@ -109,18 +117,21 @@ impl DocumentPage {
                     }
                 }),
         );
+        let pdf = OverflowItem::new(words.export_pdf).icon(Icon::Download);
+        #[cfg(feature = "cef")]
+        let pdf = pdf.on_select(move |_, cx| {
+            let _ = page.update(cx, |this, cx| this.export_pdf(cx));
+        });
+        #[cfg(not(feature = "cef"))]
         // CARVE-OUT(G-cef): Export as PDF prints a hidden window (`printToPDF`).
-        items.push(
-            OverflowItem::new(words.export_pdf)
-                .icon(Icon::Download)
-                .on_select(move |_, cx| {
-                    toast::show(cx, Toast::message(words.not_yet));
-                }),
-        );
+        let pdf = pdf.on_select(move |_, cx| {
+            toast::show(cx, Toast::message(words.not_yet));
+        });
+        items.push(pdf);
         (inline.into_any_element(), items)
     }
 
-    /// `DocumentExportMenu`: Markdown, and PDF (not yet).
+    /// `DocumentExportMenu`: Markdown and PDF.
     fn export_menu(
         words: &'static Words,
         window: &mut Window,
@@ -136,9 +147,17 @@ impl DocumentPage {
                 .on_click(toggle.on_click())
                 .into_any_element()
         });
+        #[cfg(feature = "cef")]
+        let pdf = {
+            let page = page.clone();
+            Item::new(words.pdf).on_select(move |_, cx| {
+                let _ = page.update(cx, |this, cx| this.export_pdf(cx));
+            })
+        };
         let markdown = Item::new(words.markdown).on_select(move |_, cx| {
             let _ = page.update(cx, |this, cx| this.export_markdown(cx));
         });
+        #[cfg(not(feature = "cef"))]
         // CARVE-OUT(G-cef): PDF export prints a hidden window (`printToPDF`).
         let pdf = Item::new(words.pdf)
             .disabled()
@@ -153,7 +172,13 @@ impl DocumentPage {
         );
         div()
             .flex()
-            .child(trigger)
+            .child(
+                crate::ui::widgets::anchor(
+                    div().flex().id("document-export-button"),
+                    "document-export-button",
+                )
+                .child(trigger),
+            )
             .child(content)
             .into_any_element()
     }

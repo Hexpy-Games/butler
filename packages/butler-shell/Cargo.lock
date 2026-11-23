@@ -1136,6 +1136,7 @@ dependencies = [
  "gpui_ce_wgpu",
  "notify",
  "percent-encoding",
+ "pulldown-cmark",
  "regex",
  "serde",
  "serde_json",

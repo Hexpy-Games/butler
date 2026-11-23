@@ -39,6 +39,10 @@ pub(super) struct Words {
     /// artifacts.loading
     pub(super) loading: &'static str,
     /// shell.notYet
+    #[cfg_attr(
+        feature = "cef",
+        allow(dead_code, reason = "PDF export replaces the notice")
+    )]
     pub(super) not_yet: &'static str,
 }
 

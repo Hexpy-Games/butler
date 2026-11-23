@@ -24,7 +24,7 @@ required-features = ["shots"]
 # The shell's `cef` cargo feature builds on macOS (CVPixelBuffer frames), Windows (D3D11 shared
 # textures, `SurfaceSource::WindowsSharedTexture`) and Linux (CPU frames uploaded to a wgpu texture,
 # `SurfaceSource::Texture`).
-cef = ["butler-cef/cef"]
+cef = ["butler-cef/cef", "dep:pulldown-cmark"]
 shots = ["gpui/test-support", "dep:gpui_wgpu"]
 
 [dependencies]
@@ -43,6 +43,7 @@ anyhow.workspace = true
 futures.workspace = true
 gpui.workspace = true
 gpui_elements.workspace = true
+pulldown-cmark = { workspace = true, optional = true }
 # macos-wgpu: the glass lens is drawn by the wgpu renderer (Metal's renderer has no lens).
 gpui_platform = { workspace = true, features = ["macos-wgpu"] }
 # wgpu-surfaces: on Windows the headless harness imports CEF's D3D11 shared textures.

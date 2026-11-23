@@ -4,7 +4,7 @@
 use gpui::App;
 
 /// `isExternalHref`: an absolute http(s) URL with a host.
-pub(super) fn is_external(href: &str) -> bool {
+pub fn is_external(href: &str) -> bool {
     let lower = href.to_ascii_lowercase();
     let Some(rest) = lower
         .strip_prefix("https://")
@@ -26,7 +26,7 @@ pub(super) fn open(href: &str, cx: &mut App) {
 
 /// The text an external link shows: its label, or the host when the label is empty or the URL
 /// itself (`ExternalReference`).
-pub(super) fn label(text: &str, href: &str) -> String {
+pub fn label(text: &str, href: &str) -> String {
     let bare = |url: &str| {
         let url = url.split_once("://").map_or(url, |(_, rest)| rest);
         url.trim_end_matches('/').to_lowercase()

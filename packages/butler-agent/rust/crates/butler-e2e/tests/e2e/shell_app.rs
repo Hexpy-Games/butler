@@ -34,6 +34,7 @@ mod browser_import;
 mod chat_end_room;
 mod composer_fold;
 mod composer_toolbar;
+mod document_pdf;
 mod focus_fallback;
 mod focus_selection;
 mod focus_tab;

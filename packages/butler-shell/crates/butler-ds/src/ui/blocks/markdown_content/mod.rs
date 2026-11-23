@@ -22,6 +22,7 @@ use gpui::{
 };
 
 pub use code::{CodeFrame, MarkdownCodeFrame, code_text};
+pub use link::{is_external, label};
 pub use reveal::{Reveal, track as track_reveal};
 
 use crate::tokens::{Color, Length};

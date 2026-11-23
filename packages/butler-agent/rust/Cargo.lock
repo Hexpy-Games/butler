@@ -1163,6 +1163,7 @@ dependencies = [
  "http",
  "image",
  "lancedb",
+ "lopdf",
  "notify",
  "pulldown-cmark",
  "regex",

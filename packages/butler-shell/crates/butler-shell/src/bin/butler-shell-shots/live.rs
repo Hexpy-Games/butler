@@ -155,7 +155,8 @@ fn command(h: &mut Harness, dir: &Path, line: &str) -> anyhow::Result<()> {
         "layout" => h.layout(dir, arg),
         "glide-layout" => super::glide::glide_layout(h, dir, arg),
         "tick" => tick(h, arg),
-        _ => super::frame::command(h, command, arg),
+        _ => super::document::command(h, command, arg)
+            .unwrap_or_else(|| super::frame::command(h, command, arg)),
     }
 }
 /// `image-viewer <file id>`: opens the window's image viewer on one picture (it need not load).
