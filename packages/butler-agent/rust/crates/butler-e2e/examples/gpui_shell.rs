@@ -1,5 +1,6 @@
 //! W3 manual harness: real isolated agent, stub provider, live gpui shots (not an E2E tier).
 use anyhow::{Context as _, bail};
+use butler_e2e::e2e::gateway_proxy::GatewayProxy;
 use butler_e2e::e2e::scenario::{Access, Setup};
 use std::{path::Path, process::Stdio};
 use tokio::{
@@ -8,8 +9,6 @@ use tokio::{
 };
 #[path = "gpui_shell/activity.rs"]
 mod activity;
-#[path = "gpui_shell/proxy.rs"]
-mod proxy;
 #[path = "gpui_shell/replay.rs"]
 mod replay;
 #[path = "gpui_shell/stub.rs"]
@@ -182,7 +181,7 @@ async fn scenario(
 ) -> anyhow::Result<()> {
     seed_roles(s).await?;
     complete_setup(s).await?;
-    let proxy = proxy::Proxy::start(s.gw.base.clone()).await?;
+    let proxy = GatewayProxy::start(s.gw.base.clone()).await?;
     proxy.attach(&s.sandbox.data).await?;
     let mut h = Shots::start(binary, &s.sandbox.data, dir, dark).await?;
     let result = async {

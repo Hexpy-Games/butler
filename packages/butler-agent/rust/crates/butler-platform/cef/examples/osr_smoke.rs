@@ -250,19 +250,20 @@ mod smoke {
             FIRST,
             (320, 240),
             1.,
+            60,
             butler_cef_host::osr::OsrProfile::SignedIn,
         )?;
         // CEF can deliver a transparent first paint before the page body paints.
         let last = std::cell::Cell::new(None);
         wait(runtime, requests, LIMIT, || {
-            runtime.frame(1).is_some_and(|f| {
+            runtime.next_frame(1).is_some_and(|f| {
                 let pixel = read_bgra_pixel(&f, f.get_width() / 2, f.get_height() / 2).ok();
                 last.set(pixel);
                 pixel == Some([140, 80, 20, 255])
             })
         })
         .map_err(|e| format!("{e}; last centre BGRA {:?}", last.get()))?;
-        let frame = runtime.frame(1).ok_or("Frame event had no frame")?;
+        let frame = runtime.next_frame(1).ok_or("Frame event had no frame")?;
         let pixel = read_bgra_pixel(&frame, frame.get_width() / 2, frame.get_height() / 2)?;
         println!(
             "first Frame: {}x{}, centre BGRA {pixel:?}, {} ms",
@@ -306,7 +307,7 @@ mod smoke {
         })?;
         // A repaint into the existing frame.
         wait(runtime, requests, LIMIT, || {
-            runtime.frame(1).is_some_and(|f| {
+            runtime.next_frame(1).is_some_and(|f| {
                 read_bgra_pixel(&f, f.get_width() / 2, f.get_height() / 2)
                     .is_ok_and(|p| p == [20, 80, 140, 255])
             })

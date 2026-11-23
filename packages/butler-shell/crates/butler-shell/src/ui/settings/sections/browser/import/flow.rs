@@ -10,8 +10,15 @@ use super::model::{Counts, FILE, Folder, Session, Sources};
 use crate::ui::settings::state::{fetch, fetch_if};
 use crate::ui::source::agent::Jobs;
 
-/// `apiErrorCode(e) ?? "import_unreadable"`: the client returns no error codes.
+/// `apiErrorCode(e) ?? "import_unreadable"`: fall back when the gateway body has no error code.
 const UNREADABLE: &str = "import_unreadable";
+
+fn failure(error: &Error) -> String {
+    match error {
+        Error::Http(_, Some(code)) => code.clone(),
+        _ => UNREADABLE.into(),
+    }
+}
 
 /// `pickImportFile` / `pickBrowserFolder`: a native dialog; `None` when cancelled.
 async fn pick(cx: &mut AsyncApp, directories: bool) -> Option<String> {
@@ -28,7 +35,12 @@ async fn pick(cx: &mut AsyncApp, directories: bool) -> Option<String> {
 }
 
 /// `BrowserImportInput`; a file import picks its files first. `None`: a picker was cancelled.
-async fn import_input(source: &str, flags: (bool, bool, bool), cx: &mut AsyncApp) -> Option<Value> {
+async fn import_input(
+    source: &str,
+    flags: (bool, bool, bool),
+    primary: Option<String>,
+    cx: &mut AsyncApp,
+) -> Option<Value> {
     let (bookmarks, history, passwords) = flags;
     let mut input = json!({
         "source": source,
@@ -36,6 +48,9 @@ async fn import_input(source: &str, flags: (bool, bool, bool), cx: &mut AsyncApp
         "history": source != FILE && history,
         "passwords": passwords,
     });
+    if let Some(primary) = primary {
+        input["primary_password"] = primary.into();
+    }
     if source == FILE {
         if bookmarks {
             input["bookmarks_path"] = pick(cx, false).await?.into();
@@ -68,9 +83,9 @@ impl ImportDialog {
             |client| async move { client.list_browser_import_sources().await },
             |this: &mut Self, result: Result<Sources, Error>, _| match result {
                 Ok(list) => this.sources = Some(list.sources),
-                Err(_) => {
+                Err(error) => {
                     this.sources = Some(Vec::new());
-                    this.error = Some(UNREADABLE.into());
+                    this.error = Some(failure(&error));
                 }
             },
         );
@@ -87,7 +102,7 @@ impl ImportDialog {
     }
 
     /// `run`
-    pub(super) fn run(&mut self, source: String, cx: &mut Context<Self>) {
+    pub(super) fn run(&mut self, source: String, primary: Option<String>, cx: &mut Context<Self>) {
         if self.busy || self.export_id.is_some() {
             return;
         }
@@ -101,7 +116,7 @@ impl ImportDialog {
             self.kinds.passwords,
         );
         cx.spawn(async move |this, cx| {
-            let input = import_input(&source, flags, cx).await;
+            let input = import_input(&source, flags, primary, cx).await;
             let _ = this.update(cx, |this, cx| match input {
                 Some(input) => Self::start(source, input, cx),
                 None => {
@@ -130,8 +145,8 @@ impl ImportDialog {
                         this.busy = false;
                     }
                 }
-                Err(_) => {
-                    this.error = Some(UNREADABLE.into());
+                Err(error) => {
+                    this.error = Some(failure(&error));
                     this.busy = false;
                 }
             },
@@ -153,7 +168,7 @@ impl ImportDialog {
                         this.export_id = Some(session.export_id.clone());
                         Self::poll(session.export_id, cx);
                     }
-                    Err(_) => this.error = Some(UNREADABLE.into()),
+                    Err(error) => this.error = Some(failure(&error)),
                 }
             },
         );
@@ -181,8 +196,8 @@ impl ImportDialog {
                         this.error = error;
                         (this.on_imported)(cx);
                     }
-                    Err(_) => {
-                        this.error = Some(UNREADABLE.into());
+                    Err(error) => {
+                        this.error = Some(failure(&error));
                         this.export_id = None;
                     }
                 }
@@ -258,7 +273,7 @@ impl ImportDialog {
                         this.result = Some(carry(this.result.as_ref(), counts, false));
                         (this.on_imported)(cx);
                     }
-                    Err(_) => this.error = Some(UNREADABLE.into()),
+                    Err(error) => this.error = Some(failure(&error)),
                 }
             },
         );
@@ -302,7 +317,7 @@ impl ImportDialog {
                             result.export_id = None;
                         }
                     }
-                    Err(_) => this.error = Some(UNREADABLE.into()),
+                    Err(error) => this.error = Some(failure(&error)),
                 }
             },
         );
@@ -340,10 +355,10 @@ impl ImportDialog {
                         source: picked,
                     }) => {
                         Self::load_sources(cx);
-                        this.run(picked.unwrap_or(source), cx);
+                        this.run(picked.unwrap_or(source), None, cx);
                     }
                     Ok(_) => {}
-                    Err(_) => this.error = Some(UNREADABLE.into()),
+                    Err(error) => this.error = Some(failure(&error)),
                 }
             },
         );
@@ -361,7 +376,7 @@ impl ImportDialog {
                 this.busy = false;
                 match result {
                     Ok(_) => this.disk_hint = true,
-                    Err(_) => this.error = Some(UNREADABLE.into()),
+                    Err(error) => this.error = Some(failure(&error)),
                 }
             },
         );

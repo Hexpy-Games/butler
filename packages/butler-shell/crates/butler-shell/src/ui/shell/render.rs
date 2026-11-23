@@ -355,15 +355,11 @@ impl Render for Shell {
         let observer = self.render_observer(window, cx);
         let lang = self.theme.strings.locale.ds_lang();
         let update_choice = lifecycle_view::update_choice(lang, window, cx);
+        let actions = Self::browser_actions(div(), cx);
         let ds = Ds::get(cx);
-        let root = div()
+        let root = actions
             .track_focus(&self.focus)
             .key_context("Shell")
-            .on_action(cx.listener(Self::browser_focus_address))
-            .on_action(cx.listener(Self::browser_new_tab))
-            .on_action(cx.listener(Self::browser_close_tab))
-            .on_action(cx.listener(Self::browser_back))
-            .on_action(cx.listener(Self::browser_forward))
             .on_action(cx.listener(Self::toggle_sidebar))
             .on_action(cx.listener(Self::focus_composer))
             .on_action(cx.listener(Self::toggle_palette))

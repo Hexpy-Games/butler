@@ -32,7 +32,6 @@ impl Shell {
         sandbox: &Sandbox,
         env: &[(&str, String)],
     ) -> Result<Self, HarnessError> {
-        let shots = PathBuf::from(nonempty(SHOTS).unwrap_or_default());
         let mut launch = Launch::new(sandbox)?;
         // The Agent the App starts creates its own token in the data folder.
         launch.use_data_folder_token();
@@ -43,15 +42,31 @@ impl Shell {
         for (key, value) in env {
             launch.set_env(key, value.clone());
         }
+        Self::spawn(sandbox, launch, true).await
+    }
+
+    pub(crate) async fn attach(
+        s: &butler_e2e::e2e::scenario::Scenario,
+        env: &[(&str, String)],
+    ) -> Result<Self, HarnessError> {
+        let mut launch = s.agent.launch.clone();
+        for (key, value) in env {
+            launch.set_env(key, value.clone());
+        }
+        Self::spawn(&s.sandbox, launch, false).await
+    }
+
+    async fn spawn(sandbox: &Sandbox, launch: Launch, app: bool) -> Result<Self, HarnessError> {
+        let shots = PathBuf::from(nonempty(SHOTS).unwrap_or_default());
         let out = sandbox.root.join("shell");
         std::fs::create_dir_all(&out)?;
         let stdout = sandbox.logs.join("shell.stdout");
         let mut command = launch.env_command(&shots);
+        command.arg(&out).arg("--data").arg(&sandbox.data);
+        if app {
+            command.arg("--app");
+        }
         command
-            .arg(&out)
-            .arg("--data")
-            .arg(&sandbox.data)
-            .arg("--app")
             // A temporary home has no login keychain: the in-app browser must not ask for one.
             .args(["--use-mock-keychain", "--password-store=basic"])
             .stdin(Stdio::piped())

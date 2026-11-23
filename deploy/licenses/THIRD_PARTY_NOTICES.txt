@@ -38,8 +38,8 @@ License: https://raw.githubusercontent.com/onnx/onnx/b8baa8446686496da4cc8fda09f
 =====
 onnxruntime e0b66cad282043d4377cea5269083f17771b6dfc
 MIT
-License: https://raw.githubusercontent.com/microsoft/onnxruntime/e0b66cad282043d4377cea5269083f17771b6dfc/LICENSE
-License: https://raw.githubusercontent.com/microsoft/onnxruntime/e0b66cad282043d4377cea5269083f17771b6dfc/ThirdPartyNotices.txt
+License: https://raw.githubusercontent.com/intel/onnxruntime/e0b66cad282043d4377cea5269083f17771b6dfc/LICENSE
+License: https://raw.githubusercontent.com/intel/onnxruntime/e0b66cad282043d4377cea5269083f17771b6dfc/ThirdPartyNotices.txt
 Copyright (c) Microsoft Corporation
 Copyright (c) 2018 Intel Corporation.
 Copyright 2008 Google Inc.  All rights reserved.
