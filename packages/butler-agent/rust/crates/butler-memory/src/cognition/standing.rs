@@ -5,17 +5,24 @@ use serde::{Deserialize, Serialize};
 
 use super::{CognitionCode, CognitionError, CognitionResult, graph::GraphRepository};
 
-/// Maximum sheet text in UTF-8 bytes.
+/// Hard cap on sheet text in UTF-8 bytes; the writer is asked to stay under 3,000.
 pub const MAX_BYTES: usize = 4 * 1024;
 const BATCH_BYTES: usize = 12 * 1024;
+const VERSION: u8 = 2;
 /// Provenance text injected above the sheet.
 pub(super) const HEADER: &str = "What Butler knows about the user, kept by Butler from earlier chats. It can be out of date; check with the user or recall_memory before relying on it for anything that matters. Use it to understand what the user refers to; do not bring it up unprompted.";
 /// Stable instructions for maintaining the sheet.
-pub const INSTRUCTIONS: &str = "You keep a short fact sheet about one person, the user of a personal assistant, so the assistant always knows the lasting facts of their life without looking them up. You receive the current sheet and new statements the user made in chats, oldest first, each with its date. Return only the full updated sheet, in the user's main language, as short Markdown bullet lines under a few headings of your choice.
-Keep what will probably still be true and useful months from now: who the user is, where they live and work, the people and animals in their life and what each name refers to (kind, species, sex, relation, dates), what they own or run, their ongoing projects, hobbies and routines, and lasting preferences. Write each line so it stands alone: name the thing and say what it is. When several names plainly refer to the same thing, put them on one line.
-Leave out one-off events and passing states such as a meal, an errand, a symptom or a single question; instructions about how the assistant should behave; details of software work in progress; and secrets such as passwords, keys, account numbers and ID numbers.
+pub const INSTRUCTIONS: &str = "You keep a short fact sheet about one person, the user of a personal assistant, so the assistant always knows the lasting facts of their life without looking them up. You receive the current sheet with its size in bytes, and new statements the user made in chats, oldest first, each with its date. Return only the full updated sheet, in the user's main language, as Markdown bullet lines under a few headings of your choice.
+Keep what will probably still be true and useful months from now: who the user is, where they live and work, the people and animals in their life and what each name refers to (kind, species, sex, relation, dates), what they own or run, their ongoing projects, hobbies and routines, and lasting preferences.
+Write one fact per line as a short phrase, at most about 60 Korean, Chinese or Japanese characters or 120 English letters: name the thing and say what it is, without background, reasons or story. For example: \"Mango: female tabby cat, adopted March 2024\". When several names plainly refer to the same thing, put them on one line. A project gets one line that says what it is.
+Leave out:
+- one-off events and passing states: a meal, an errand, a symptom, a single question, a price the user checked, a recipe or product they were curious about once;
+- how the assistant or its apps are set up or should behave: instructions to the assistant, settings, model choices, feature switches;
+- software work details: file and folder paths, repository and branch names, tasks in progress;
+- secrets: passwords, keys, account numbers, ID numbers;
+- health, medical and mental-health details, money troubles, legal disputes and similar private matters, unless the user explicitly asked for that to be remembered.
 Carry every line of the current sheet forward unchanged unless a new statement corrects it or space runs out. A later statement overrides an earlier one. When something ended (a pet died, a plan was dropped, the user moved), keep one line that says so with its date instead of deleting it. Record only what the statements say; never guess or generalize. If the new statements add nothing lasting, return the current sheet unchanged.
-The sheet must fit in 4,096 UTF-8 bytes, which is about 1,300 Korean characters or 4,000 English letters. When space runs short, drop the least lasting and least useful lines first.";
+Keep the sheet under 3,000 UTF-8 bytes. A Korean, Chinese or Japanese character is 3 bytes, so that is about 1,000 such characters or 3,000 English letters. When a new fact would take the sheet past that, first shorten wordy lines, then drop the least lasting and least useful lines.";
 const PREFIX: &str = "<!-- butler-standing ";
 
 /// Sheet text and its global claim progress marker.
@@ -70,8 +77,8 @@ pub(super) fn read(root: &Path) -> io::Result<Sheet> {
         .and_then(|s| s.strip_suffix(" -->"))
         .ok_or_else(|| io::Error::other("Invalid standing marker"))?;
     let marker: Marker = serde_json::from_str(marker).map_err(io::Error::other)?;
-    if marker.v != 1 {
-        return Err(io::Error::other("Unsupported standing version"));
+    if marker.v != VERSION {
+        return Ok(Sheet::default());
     }
     Ok(Sheet {
         through_at: marker.through_at,
@@ -85,7 +92,7 @@ pub(super) fn read(root: &Path) -> io::Result<Sheet> {
 pub fn write(root: &Path, sheet: &Sheet, model: &str) -> io::Result<()> {
     butler_platform::secure_fs::create_private_dir_all(&root.join("hot"))?;
     let marker = serde_json::to_string(&Marker {
-        v: 1,
+        v: VERSION,
         through_at: sheet.through_at.clone(),
         through_id: sheet.through_id.clone(),
         sources: sheet.sources,
@@ -159,12 +166,23 @@ pub fn start(graph_path: &Path, root: &Path) -> CognitionResult<Sheet> {
 
 /// Full prior sheet plus new user statements, oldest first.
 pub fn prompt(previous: &str, lines: &str) -> String {
+    let n = previous.len();
     let previous = if previous.is_empty() {
         "(none)"
     } else {
         previous
     };
-    format!("Current sheet:\n{previous}\n\nNew statements by the user, oldest first:\n{lines}")
+    format!(
+        "Current sheet ({n} bytes; keep it under 3,000):\n{previous}\n\nNew statements by the user, oldest first:\n{lines}"
+    )
+}
+
+/// Asks the model to shorten a sheet that passed the hard cap.
+pub fn shorten_prompt(text: &str) -> String {
+    format!(
+        "This sheet is {} bytes. Shorten it to under 3,000 UTF-8 bytes: first shorten wordy lines, then drop the least lasting lines. Return only the sheet.\n\n{text}",
+        text.len()
+    )
 }
 
 fn failure(error: io::Error) -> CognitionError {
