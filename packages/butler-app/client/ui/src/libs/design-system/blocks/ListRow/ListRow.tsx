@@ -15,7 +15,7 @@ export interface ListRowProps extends DsPrivateStyleProps {
   description?: string;
   /** A short status `Tag` after the title (e.g. Taken down). When the title and tag don't fit on one line, the tag moves under the title; the title never gives way to it. */
   tag?: ReactNode;
-  /** Optional metadata (date, size, etc.) */
+  /** Optional metadata (date, size, etc.). It moves to its own left-aligned line when it cannot fit beside the full title and any tag. */
   meta?: string;
 }
 

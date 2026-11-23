@@ -41,10 +41,10 @@ import { ListRow } from "@/butler-ds";
 
 ## Responsive behavior
 
-- Title truncates with ellipsis and always keeps at least half its line
+- Title truncates with ellipsis only when the title alone exceeds the available width
 - A short `Tag` in the `tag` slot follows the title and moves below it when they exceed the available width
-- Meta sits right-aligned beside the title while it fits in the other half
-- A longer meta, or a narrow row, moves the meta under the title, where it wraps
+- Meta sits right-aligned beside the title and any tag when all three fit at their full widths
+- Otherwise meta moves to its own left-aligned line below the title and any tag, where it can wrap
 - The rule follows the row's own width (flex wrap), not the viewport, so it holds in panels, inspectors and phone layouts alike
 - Description wraps
 

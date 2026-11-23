@@ -26,10 +26,8 @@
   min-width: 0;
 }
 
-/* Title and meta share a line while the meta fits beside a title that keeps
-   at least half the line. A longer meta, or a narrow row, moves the meta to
-   its own line under the title, where it wraps instead of overflowing. The
-   rule follows the row's own width, so it holds in any container. */
+/* Meta shares a line with the full title and any tag when they fit the row's
+   width together. Otherwise it moves to its own left-aligned line below them. */
 .heading {
   display: flex;
   flex-wrap: wrap;
@@ -39,7 +37,7 @@
 }
 
 .title {
-  flex: 1 1 50%;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -50,7 +48,7 @@
 /* The tag moves below the title when they cannot both fit on one line.
    The title truncates only when it is wider than the group. */
 .titleGroup {
-  flex: 1 1 50%;
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   align-items: center;
