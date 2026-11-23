@@ -13,7 +13,7 @@ mod standing;
 pub use standing::{
     Batch as StandingBatch, INSTRUCTIONS as STANDING_INSTRUCTIONS, MAX_BYTES as STANDING_MAX_BYTES,
     Sheet as StandingSheet, batch as standing_batch, prompt as standing_prompt,
-    start as standing_start, write as write_standing,
+    shorten_prompt as standing_shorten_prompt, start as standing_start, write as write_standing,
 };
 mod continuity;
 pub use continuity::{
