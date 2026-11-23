@@ -186,7 +186,7 @@ pub(in crate::gateway::application) fn runs(
         )
         .map_err(AppStorageError::sqlite)?;
     let mut rows = statement
-        .query_map(rusqlite::params![id, cursor, (limit + 1) as i64], run_row)
+        .query_map(rusqlite::params![id, cursor, limit + 1], run_row)
         .map_err(AppStorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppStorageError::sqlite)?;

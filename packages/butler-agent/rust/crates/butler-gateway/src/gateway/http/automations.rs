@@ -129,8 +129,7 @@ async fn route_action(
                 "Invalid schedule runs page.",
             ));
         }
-        let paged = limit.is_some() || cursor.is_some();
-        let mut page = state
+        let page = state
             .application
             .list_automation_runs(RunsQuery {
                 id: decode(id)?,
@@ -138,9 +137,6 @@ async fn route_action(
                 cursor,
             })
             .await?;
-        if !paged {
-            page.next_cursor = None;
-        }
         return Ok(Some(json(StatusCode::OK, page)?));
     }
     if method == Method::POST
