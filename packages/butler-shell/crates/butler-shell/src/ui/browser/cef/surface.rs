@@ -1,11 +1,11 @@
 use butler_cef_host::osr::{OsrCursor, OsrRuntime, Rect};
 use gpui::{
-    AnyElement, App, Bounds, Context, CursorStyle, ElementId, ElementInputHandler, FocusHandle,
-    KeyDownEvent, KeyUpEvent, MouseButton, ObjectFit, Pixels, Render, Size, SurfaceSource, Window,
-    canvas, div, prelude::*, surface,
+    AnyElement, AnyWeakEntity, App, Bounds, Context, CursorStyle, ElementId, ElementInputHandler,
+    EntityId, FocusHandle, KeyDownEvent, KeyUpEvent, MouseButton, ObjectFit, Pixels, Render, Size,
+    SurfaceSource, Window, canvas, div, prelude::*, surface,
 };
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     ops::Range,
     rc::{Rc, Weak},
 };
@@ -18,6 +18,9 @@ pub(super) struct PageState {
     pub(super) cursor: OsrCursor,
     pub(super) last_input: Rc<std::cell::Cell<Option<std::time::Instant>>>,
     pub(super) ime_bounds: Vec<Rect>,
+    pub(super) views: Vec<AnyWeakEntity>,
+    pub(super) rate: Rc<Cell<u32>>,
+    pub(super) last_tick: Option<u64>,
 }
 impl Default for PageState {
     fn default() -> Self {
@@ -29,10 +32,18 @@ impl Default for PageState {
             cursor: OsrCursor::Arrow,
             last_input: Rc::default(),
             ime_bounds: Vec::new(),
+            views: Vec::new(),
+            rate: Rc::new(Cell::new(60)),
+            last_tick: None,
         }
     }
 }
 impl PageState {
+    fn register(&mut self, view: AnyWeakEntity) {
+        if !self.views.contains(&view) {
+            self.views.push(view);
+        }
+    }
     /// Page pixels per element pixel on each axis. The frame fills the element, so it is the
     /// page's size over the element's: the window zoom for a page sized to its element (page
     /// pixels are native logical pixels), only the fit scale for a fixed-size page fitted into it.
@@ -73,9 +84,42 @@ pub(super) fn element(
     });
     page.into_any_element()
 }
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the positive display period converts to a rounded frame rate"
+)]
+fn paced(
+    runtime: &OsrRuntime,
+    id: u64,
+    state: &RefCell<PageState>,
+    window: &mut Window,
+    view: EntityId,
+) -> Option<SurfaceSource> {
+    let vsync = window.frame_vsync();
+    if let Some(hz) = vsync
+        .filter(|v| v.period_ns > 0)
+        .map(|v| (1e9 / v.period_ns as f64).round() as u32)
+    {
+        state.borrow().rate.set(hz);
+        runtime.set_frame_rate(id, hz);
+    }
+    let tick = vsync.map_or_else(|| u64::from(gpui::animation_time_ms()), |v| v.at_ns);
+    let fresh = state.borrow_mut().last_tick.replace(tick) != Some(tick);
+    let frame = if fresh {
+        runtime.next_frame(id)
+    } else {
+        runtime.frame(id)
+    };
+    if runtime.queued(id) {
+        window.on_next_frame(move |_, cx| cx.notify(view));
+    }
+    frame.and_then(|f| source(f, window))
+}
 impl Render for Page {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
+        self.state.borrow_mut().register(entity.downgrade().into());
         let focus = self.focus.clone();
         let state = self.state.clone();
         let cursor = match self.state.borrow().cursor {
@@ -83,9 +127,10 @@ impl Render for Page {
             OsrCursor::PointingHand => CursorStyle::PointingHand,
             OsrCursor::IBeam => CursorStyle::IBeam,
         };
-        let frame = (self.runtime.upgrade())
-            .and_then(|r| r.frame(self.id))
-            .and_then(|frame| source(frame, window));
+        let frame = self
+            .runtime
+            .upgrade()
+            .and_then(|runtime| paced(&runtime, self.id, &self.state, window, cx.entity_id()));
         let page = div()
             .id("cef-surface")
             .relative()
@@ -140,17 +185,37 @@ impl Render for Page {
     }
 }
 /// The hand-off card's live tab picture: the page's current frame, cropped to fill.
-pub(super) fn thumbnail(runtime: &OsrRuntime, page: u64, window: &Window) -> Option<AnyElement> {
-    let src = source(runtime.frame(page)?, window)?;
-    Some(
-        surface(src)
-            .object_fit(ObjectFit::Cover)
-            .size_full()
-            .absolute()
-            .top_0()
-            .left_0()
-            .into_any_element(),
-    )
+pub(super) struct Thumb {
+    runtime: Weak<OsrRuntime>,
+    id: u64,
+    state: Rc<RefCell<PageState>>,
+}
+impl Render for Thumb {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.state
+            .borrow_mut()
+            .register(cx.entity().downgrade().into());
+        div().absolute().top_0().left_0().size_full().children(
+            self.runtime
+                .upgrade()
+                .and_then(|runtime| paced(&runtime, self.id, &self.state, window, cx.entity_id()))
+                .map(|s| surface(s).object_fit(ObjectFit::Cover).size_full()),
+        )
+    }
+}
+pub(super) fn thumbnail(
+    id: u64,
+    runtime: &Rc<OsrRuntime>,
+    state: Rc<RefCell<PageState>>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    let thumb = window.use_keyed_state((ElementId::Integer(id), "cef-thumb"), cx, |_, _| Thumb {
+        runtime: Rc::downgrade(runtime),
+        id,
+        state,
+    });
+    thumb.into_any_element()
 }
 
 /// The macOS frame: an IOSurface-backed CoreVideo buffer.

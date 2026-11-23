@@ -17,7 +17,6 @@ use butler_ds::ui::{
     },
     dropdown_menu::{DropdownMenu, DropdownMenuContent, Item},
     icon_button::IconButton,
-    toast::{self, Toast},
 };
 use gpui::{
     AnyElement, App, BorrowAppContext as _, Entity, IntoElement as _, ParentElement as _,
@@ -176,28 +175,21 @@ pub(super) fn toolbar(
     let field = address(tab, state, cx);
     let field = super::suggestions::field(field, state, tab.map(|t| &t.id), window, cx);
     let url = tab.map_or("", |t| t.url.as_str());
+    let pick_id = tab.map(|t| t.id.clone());
     let mut pick = IconButton::new("browser-pick", c.pick)
         .glyph(Icon::Pick)
-        .on_click(|_, _, cx| {
-            // CARVE-OUT(G-cef): pick mode lands with CEF input
-            toast::show(
-                cx,
-                Toast::message(match butler_ds::ui::context::Ds::get(cx).lang() {
-                    butler_ds::ui::context::Lang::Ko => {
-                        crate::ui::i18n::Locale::Ko.strings().not_yet
-                    }
-                    butler_ds::ui::context::Lang::En => {
-                        crate::ui::i18n::Locale::En.strings().not_yet
-                    }
-                }),
-            );
+        .pressed(tab.is_some_and(|t| t.picking))
+        .on_click(move |_, _, cx| {
+            if let Some(id) = &pick_id {
+                super::pick::toggle(id, cx);
+            }
         });
-    if url.is_empty() || locked(tab) {
+    if url.is_empty() || locked(tab) || !cx.global::<BrowserState>().engine.supports_devtools() {
         pick = pick.disabled();
     }
     let mut toolbar = toolbar
         .address(anchor(div(), "browser-address").w_full().child(field))
-        .action(pick)
+        .action(anchor(div(), "browser-pick").flex().flex_none().child(pick))
         .action(super::bookmarks::menu(state, window, cx));
     if tab.is_some_and(|t| {
         t.owner != super::model::Owner::Mine && t.profile == super::engine::Profile::SignedIn

@@ -1,6 +1,7 @@
 use super::super::{
     agent_host::{Gate, Input},
     model::BrowserState,
+    pick::{self, Mouse},
 };
 use super::surface::Page;
 use butler_cef_host::osr::{OsrButton, OsrKey, OsrModifiers, OsrMouse, OsrMouseKind, OsrWheel};
@@ -16,8 +17,31 @@ impl Page {
         let Some(tab) = self.state.borrow().tab.clone() else {
             return true;
         };
+        if cx
+            .global::<BrowserState>()
+            .tab(&tab)
+            .is_some_and(|t| t.picking)
+        {
+            return false;
+        }
         cx.update_global::<BrowserState, _>(|model, _| model.user_input(&tab, input))
             == Gate::Forward
+    }
+    fn page_point(&self, position: Point<Pixels>, zoom: f32) -> (f64, f64) {
+        let state = self.state.borrow();
+        let (x, y) = state.page_scale(zoom);
+        let point = position - state.bounds.origin;
+        (
+            f64::from(f32::from(point.x * x)),
+            f64::from(f32::from(point.y * y)),
+        )
+    }
+    fn pick_mouse(&self, position: Point<Pixels>, zoom: f32, kind: Mouse, cx: &mut App) -> bool {
+        let Some(id) = self.state.borrow().tab.clone() else {
+            return false;
+        };
+        let (x, y) = self.page_point(position, zoom);
+        pick::mouse(&id, x, y, kind, cx)
     }
     fn mouse(
         &self,
@@ -54,6 +78,16 @@ impl Page {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.pick_mouse(
+            e.position,
+            window.zoom(),
+            Mouse::Down {
+                left: e.button == MouseButton::Left,
+            },
+            cx,
+        ) {
+            return;
+        }
         if !self.admit(Input::MouseDown, cx) {
             return;
         }
@@ -77,6 +111,9 @@ impl Page {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.pick_mouse(e.position, window.zoom(), Mouse::Up, cx) {
+            return;
+        }
         if !self.admit(Input::Other, cx) {
             return;
         }
@@ -95,6 +132,9 @@ impl Page {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.pick_mouse(e.position, window.zoom(), Mouse::Move, cx) {
+            return;
+        }
         if !self.admit(Input::Other, cx) {
             return;
         }
@@ -113,6 +153,9 @@ impl Page {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.pick_mouse(e.position, window.zoom(), Mouse::Leave, cx) {
+            return;
+        }
         if !self.admit(Input::Other, cx) {
             return;
         }
@@ -131,7 +174,12 @@ impl Page {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.admit(Input::Other, cx) {
+        let picking = self.state.borrow().tab.clone().filter(|id| {
+            cx.global::<BrowserState>()
+                .tab(id)
+                .is_some_and(|t| t.picking)
+        });
+        if picking.is_none() && !self.admit(Input::Other, cx) {
             return;
         }
         let Some(runtime) = self.runtime.upgrade() else {
@@ -146,6 +194,12 @@ impl Page {
             ScrollDelta::Pixels(delta) => gpui::point(delta.x * x, delta.y * y),
             ScrollDelta::Lines(_) => e.delta.wheel_pixel_delta(),
         };
+        if e.modifiers.alt
+            && let Some(id) = &picking
+        {
+            pick::wheel(id, -f64::from(f32::from(delta.y)), cx);
+            return;
+        }
         runtime.wheel(
             self.id,
             OsrWheel {

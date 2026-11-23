@@ -144,7 +144,7 @@ pub(crate) trait PageEngine: 'static {
     }
     /// What the page card draws for `page` (the frame surface, which owns its own input).
     fn surface(&self, page: &TabId, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
-    fn thumbnail(&self, _page: &TabId, _window: &mut Window) -> Option<AnyElement> {
+    fn thumbnail(&self, _page: &TabId, _window: &mut Window, _cx: &mut App) -> Option<AnyElement> {
         None
     }
 }

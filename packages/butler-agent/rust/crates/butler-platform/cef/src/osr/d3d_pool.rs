@@ -32,8 +32,8 @@ use windows::{
     core::{Interface, PCWSTR},
 };
 
-/// At least two (the contract's minimum); four absorbs a renderer a few frames behind.
-const POOL: usize = 4;
+/// current + one in GPU flight + `QUEUE` queued + one being written.
+const POOL: usize = 5;
 /// A release fence that never advances while frames go out means the renderer cannot use it.
 const UNUSABLE: Duration = Duration::from_secs(2);
 

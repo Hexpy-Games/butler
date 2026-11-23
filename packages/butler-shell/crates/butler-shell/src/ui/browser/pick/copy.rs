@@ -1,30 +1,35 @@
 //! The browser selection labels from the Electron locale.
 use butler_ds::ui::context::{Ds, Lang};
 use gpui::App;
-pub(super) struct Words {
-    pub(super) drag: &'static str,
-    pub(super) mode: &'static str,
-    pub(super) hint: &'static str,
-    pub(super) keys: &'static str,
-    pub(super) first: &'static str,
-    pub(super) attach: &'static str,
-    pub(super) scrap: &'static str,
-    pub(super) save: &'static str,
-    pub(super) copy: &'static str,
-    pub(super) clear: &'static str,
-    pub(super) finish: &'static str,
-    pub(super) selected: fn(usize) -> String,
-    pub(super) images_saved: fn(usize) -> String,
-    pub(super) copied: &'static str,
-    pub(super) failed: &'static str,
+pub(crate) struct Words {
+    pub(crate) drag: &'static str,
+    pub(crate) mode: &'static str,
+    pub(crate) hint: &'static str,
+    pub(crate) keys: &'static str,
+    pub(crate) first: &'static str,
+    pub(crate) attach: &'static str,
+    pub(crate) scrap: &'static str,
+    pub(crate) save: &'static str,
+    pub(crate) copy: &'static str,
+    pub(crate) clear: &'static str,
+    pub(crate) finish: &'static str,
+    pub(crate) selected: fn(usize) -> String,
+    pub(crate) images_saved: fn(usize) -> String,
+    pub(crate) copied: &'static str,
+    pub(crate) failed: &'static str,
 }
-pub(super) fn words(cx: &App) -> Words {
+pub(crate) fn words(cx: &App) -> Words {
+    let mac = butler_platform::launcher::node_platform() == "darwin";
     match Ds::get(cx).lang() {
         Lang::En => Words {
             drag: "Drag into the chat",
             mode: "Picking",
             hint: "Pick page elements",
-            keys: "↑↓ Resize · ⌥ drag for area",
+            keys: if mac {
+                "↑↓ Resize · ⌥ drag for area"
+            } else {
+                "↑↓ Resize · Alt drag for area"
+            },
             first: "Pick an element first",
             attach: "Add to chat",
             scrap: "Scrap",
@@ -41,7 +46,11 @@ pub(super) fn words(cx: &App) -> Words {
             drag: "끌어서 대화에 놓기",
             mode: "요소 선택 중",
             hint: "페이지 요소 선택",
-            keys: "↑↓ 범위 조절 · ⌥ 드래그로 영역",
+            keys: if mac {
+                "↑↓ 범위 조절 · ⌥ 드래그로 영역"
+            } else {
+                "↑↓ 범위 조절 · Alt 드래그로 영역"
+            },
             first: "먼저 요소를 선택하세요",
             attach: "대화에 첨부",
             scrap: "스크랩",

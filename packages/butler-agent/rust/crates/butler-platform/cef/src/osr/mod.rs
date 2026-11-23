@@ -34,6 +34,8 @@ mod ime;
 #[cfg(cef_osr)]
 mod input;
 #[cfg(cef_osr)]
+mod pacing;
+#[cfg(cef_osr)]
 mod paint;
 #[cfg(cef_osr)]
 mod popups;
@@ -229,6 +231,7 @@ impl OsrRuntime {
         url: &str,
         size: (u32, u32),
         scale: f32,
+        rate: u32,
         profile: OsrProfile,
     ) -> Result<(), OsrError> {
         if self.shut.get() {
@@ -258,7 +261,7 @@ impl OsrRuntime {
                     .ok_or_else(|| OsrError("create request context failed".into()))
             })
             .transpose()?;
-        let shared = Rc::new(RefCell::new(Page::new(size, scale)));
+        let shared = Rc::new(RefCell::new(Page::new(size, scale, rate)));
         shared.borrow_mut().signed_out_owner = owner.clone();
         let events = Events {
             page,
@@ -275,7 +278,7 @@ impl OsrRuntime {
             Some(&mut client),
             Some(&url.into()),
             Some(&cef::BrowserSettings {
-                windowless_frame_rate: 60,
+                windowless_frame_rate: i32::try_from(rate).unwrap_or(60),
                 ..Default::default()
             }),
             None,
@@ -404,6 +407,7 @@ impl OsrRuntime {
             h.close_browser(1);
         }
     }
+    /// The frame a view last drew; it advances only through `next_frame` (one per display tick).
     pub fn frame(&self, page: u64) -> Option<Frame> {
         self.page(page).and_then(|p| p.borrow().frame.clone())
     }

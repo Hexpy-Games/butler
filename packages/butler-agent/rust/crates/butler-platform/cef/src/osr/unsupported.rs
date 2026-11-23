@@ -47,6 +47,7 @@ impl OsrRuntime {
         _: &str,
         _: (u32, u32),
         _: f32,
+        _: u32,
         _: OsrProfile,
     ) -> Result<(), OsrError> {
         match self.never {}
@@ -97,6 +98,15 @@ impl OsrRuntime {
         match self.never {}
     }
     pub fn close(&self, _: u64) {
+        match self.never {}
+    }
+    pub fn set_frame_rate(&self, _: u64, _: u32) {
+        match self.never {}
+    }
+    pub fn next_frame(&self, _: u64) -> Option<OsrFrame> {
+        match self.never {}
+    }
+    pub fn queued(&self, _: u64) -> bool {
         match self.never {}
     }
     pub fn frame(&self, _: u64) -> Option<OsrFrame> {

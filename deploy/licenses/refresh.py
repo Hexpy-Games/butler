@@ -42,6 +42,10 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def cache_root():
+    return Path(os.environ.get("BUTLER_LICENSE_CACHE") or tempfile.gettempdir())
+
+
 def cache_text(destination, text):
     # Readers must only observe complete entries, including concurrent fetches
     # of the same URL. Use a unique sibling so replacement stays atomic.
@@ -53,7 +57,6 @@ def cache_text(destination, text):
             temporary.replace(destination)
         except (PermissionError, FileExistsError):
             # Another process may have published an atomic entry while we fetched.
-            # An empty entry is complete too: it records a 404 response.
             if not destination.is_file():
                 raise
             return destination.read_text(encoding="utf-8")
@@ -78,19 +81,21 @@ def fetch(url):
 
 
 def fetch_text(url):
-    cache = Path(tempfile.gettempdir()) / "butler-license-evidence"
+    cache = cache_root() / "butler-license-evidence"
     cache.mkdir(parents=True, exist_ok=True)
     saved = cache / digest(url.encode())
     if saved.exists():
         value = saved.read_text(encoding="utf-8")
-        return value or None
+        if value:
+            return value
+        saved.unlink(missing_ok=True)
     try:
         with urllib.request.urlopen(url, timeout=60) as response:
             text = response.read().decode("utf-8")
             return cache_text(saved, text) or None
     except urllib.error.HTTPError as error:
         if error.code == 404:
-            return cache_text(saved, "") or None
+            return None
         raise RuntimeError(f"License evidence fetch failed: {url}: HTTP {error.code}") from error
 
 
@@ -305,12 +310,19 @@ def js_components():
 def native_components():
     lock = json.loads((RUST / "scripts/static-ort.lock.json").read_text(encoding="utf-8"))
     components = []
-    for name, repository, license_id in (
-        ("onnxruntime", "microsoft/onnxruntime", "MIT"),
-        ("onnx", "onnx/onnx", "Apache-2.0"),
+    for name, license_id in (
+        ("onnxruntime", "MIT"),
+        ("onnx", "Apache-2.0"),
     ):
-        revision = lock["sources"][name]["commit"]
-        base = f"https://raw.githubusercontent.com/{repository}/{revision}"
+        source = lock["sources"][name]
+        url = source["url"]
+        match = re.fullmatch(r"^https://api\.github\.com/repos/([^/?#]+/[^/?#]+)/tarball/([^/?#]+)$", url)
+        if not match:
+            raise ValueError(f"Invalid GitHub source tarball URL: {url}")
+        revision = source["commit"]
+        if match.group(2) != revision:
+            raise ValueError(f"GitHub source tarball URL ref differs from locked commit {revision}: {url}")
+        base = f"https://raw.githubusercontent.com/{match.group(1)}/{revision}"
         files = []
         for file in ("LICENSE", "NOTICE", "ThirdPartyNotices.txt"):
             text = fetch(f"{base}/{file}")
@@ -376,8 +388,8 @@ def runtime_components():
     # Credits vary by platform. Include all three official release runtime lists.
     for target in ("linux-x64", "linux-arm64", "darwin-arm64"):
         archive = f"electron-v{version}-{target}.zip"
-        cache = Path(os.environ.get("BUTLER_LICENSE_CACHE", "/tmp/butler-license-runtime"))
-        cache.mkdir(exist_ok=True)
+        cache = cache_root() / "butler-license-runtime"
+        cache.mkdir(parents=True, exist_ok=True)
         saved = cache / archive
         if not saved.exists():
             url = f"https://github.com/electron/electron/releases/download/v{version}/{archive}"

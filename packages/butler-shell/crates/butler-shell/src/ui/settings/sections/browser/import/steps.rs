@@ -5,16 +5,21 @@ use butler_ds::ui::blocks::empty_line::EmptyLine;
 use butler_ds::ui::blocks::list_row::ListRow;
 use butler_ds::ui::blocks::notice::{Notice, NoticeTone};
 use butler_ds::ui::context::Ds;
-use butler_ds::ui::field::{FieldLegend, FieldSet};
+use butler_ds::ui::field::{Field, FieldError, FieldLabel, FieldLegend, FieldSet};
 use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::spinner::Spinner;
+use butler_ds::ui::text::Input;
 use butler_ds::ui::typo::{Tone, Typo};
-use gpui::{AnyElement, App, Entity, IntoElement, ParentElement as _, SharedString};
+use gpui::{
+    AnyElement, App, Entity, InteractiveElement as _, IntoElement, KeyDownEvent,
+    ParentElement as _, SharedString, div, prelude::FluentBuilder as _,
+};
 
 use super::copy::{Words, result_line, words};
 use super::dialog::ImportDialog;
 use super::model::{FILE, Kind, Phase, kinds};
 use crate::ui::Icon;
+use crate::ui::widgets::anchor;
 
 /// Brand name of a detected browser; unknown browsers keep their own id.
 fn brand(browser: &str) -> String {
@@ -209,7 +214,7 @@ impl ImportDialog {
     }
 
     /// Step 3 body: the chosen source with what it brings (or brought), then the phase's own line.
-    pub(super) fn outcome(&self, phase: Phase, cx: &App) -> AnyElement {
+    pub(super) fn outcome(&self, phase: Phase, me: &Entity<Self>, cx: &App) -> AnyElement {
         let lang = Ds::get(cx).lang();
         let copy = words(lang);
         let detail = match &self.result {
@@ -227,17 +232,7 @@ impl ImportDialog {
             Phase::Progress => spinner_row("browser-import-progress", copy.importing),
             Phase::Csv => spinner_row("browser-import-csv", copy.waiting_csv),
             Phase::Permission => self.permission(copy),
-            // CARVE-OUT(G-secret-input): React asks for the primary password in a masked input
-            // (and shows `wrongPrimaryPassword` after a wrong one); the DS has no masked input.
-            Phase::Primary => {
-                let wrong = self.error.as_deref() == Some("incorrect_primary_password");
-                let message = if wrong {
-                    copy.wrong_primary_password
-                } else {
-                    copy.primary_password
-                };
-                Notice::new(NoticeTone::Warning, message).into_any_element()
-            }
+            Phase::Primary => self.primary_field(copy, me),
             Phase::Error => {
                 let locked = self.error.as_deref() == Some("browser_locked");
                 let notice = Notice::new(
@@ -260,6 +255,38 @@ impl ImportDialog {
             .gap(Space::Md)
             .child(chosen)
             .child(line)
+            .into_any_element()
+    }
+
+    fn primary_field(&self, copy: &Words, me: &Entity<Self>) -> AnyElement {
+        let wrong = self.error.as_deref() == Some("incorrect_primary_password");
+        let on_change = me.clone();
+        let input = Input::new("browser-import-primary-input")
+            .masked()
+            .value(self.primary.clone())
+            .when(wrong, Input::invalid)
+            .on_change(move |text, _, cx| {
+                on_change.update(cx, |this, cx| {
+                    text.clone_into(&mut this.primary);
+                    cx.notify();
+                });
+            });
+        let on_enter = me.clone();
+        let entry = anchor(div().id("browser-import-primary"), "browser-import-primary")
+            .capture_key_down(move |event: &KeyDownEvent, _, cx| {
+                if event.keystroke.key == "enter" {
+                    cx.stop_propagation();
+                    on_enter.update(cx, ImportDialog::submit_primary);
+                }
+            })
+            .child(input);
+        Field::new("browser-import-primary-field")
+            .child(FieldLabel::new().child(copy.primary_password))
+            .child(entry)
+            .children(wrong.then(|| {
+                anchor(div(), "browser-import-primary-wrong")
+                    .child(FieldError::new().errors([copy.wrong_primary_password]))
+            }))
             .into_any_element()
     }
 

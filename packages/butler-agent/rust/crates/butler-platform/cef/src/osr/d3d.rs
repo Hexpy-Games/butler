@@ -258,6 +258,7 @@ pub(super) fn copy_frame(
     if page.gpu.as_ref().is_some_and(GpuCopy::removed) {
         page.gpu = None;
         page.pool = FramePool::default();
+        page.queue.clear();
     }
     if page.gpu.is_none() {
         // While a reset device cannot be recreated yet, the pump retries this paint.
@@ -282,6 +283,8 @@ pub(super) fn copy_frame(
     {
         return Err(OsrError("unexpected CEF shared texture layout".into()));
     }
+    page.make_room();
+    let gpu = page.gpu.as_ref().ok_or_else(|| missing("GPU copier"))?;
     let Some(target) = page
         .pool
         .acquire(&gpu.device.device, (desc.Width, desc.Height))?
@@ -299,7 +302,7 @@ pub(super) fn copy_frame(
         return Ok(false);
     }
     page.pool.repaint_pending = false;
-    page.frame = Some(target.frame);
+    page.push(target.frame);
     Ok(true)
 }
 

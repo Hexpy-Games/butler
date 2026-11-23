@@ -216,7 +216,7 @@ fn browser_report(h: &mut Harness, command: &str) -> anyhow::Result<()> {
                 };
                 let tabs: Vec<_> = model.tabs().iter().map(|t| serde_json::json!({"id":t.id.0.as_ref(), "owner":match &t.owner {
                     ui::browser::model::Owner::Mine => "mine".to_owned(), ui::browser::model::Owner::Conversation(id) => format!("conversation:{id}")
-                }, "url":t.url,"title":t.title,"opener":t.opener.as_ref().map(|id| id.0.as_ref()),"popup":t.popup,"blocked_popup":t.blocked_popup,"dialog":t.dialog,"can_back":t.can_back,"can_forward":t.can_forward,"profile": match t.profile { ui::browser::engine::Profile::SignedIn => "signed_in", ui::browser::engine::Profile::SignedOut => "signed_out" },"status":format!("{:?}",t.status).to_lowercase()})).collect();
+                }, "picking":t.picking,"selection_count":t.selections.len(),"pick_hover":t.pick_hover.as_ref().map(|h| h.label.as_str()),"url":t.url,"title":t.title,"opener":t.opener.as_ref().map(|id| id.0.as_ref()),"popup":t.popup,"blocked_popup":t.blocked_popup,"dialog":t.dialog,"can_back":t.can_back,"can_forward":t.can_forward,"profile": match t.profile { ui::browser::engine::Profile::SignedIn => "signed_in", ui::browser::engine::Profile::SignedOut => "signed_out" },"status":format!("{:?}",t.status).to_lowercase()})).collect();
                 #[cfg(feature = "cef")]
                 let download_events = cx.try_global::<ui::browser::downloads::Downloads>().map(ui::browser::downloads::Downloads::events).unwrap_or_default();
                 #[cfg(not(feature = "cef"))]
