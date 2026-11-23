@@ -257,7 +257,7 @@ impl GatewayApplication for TestApplication {
     fn dispatch_due_automations(&self) -> ApplicationFuture<AutomationRunListView> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
-    fn list_automation_runs(&self, _: String) -> ApplicationFuture<AutomationRunListView> {
+    fn list_automation_runs(&self, _: RunsQuery) -> ApplicationFuture<AutomationRunListView> {
         Box::pin(async { Err(GatewayApplicationError::internal()) })
     }
     fn upload_message_file(&self, _: AppFileUpload) -> ApplicationFuture<MessageFileRef> {
