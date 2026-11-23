@@ -1,6 +1,7 @@
 use super::geometry::n;
 use crate::ui::{browser::model::Tab, widgets::anchor};
 use butler_ds::ui::blocks::pick_outline::{PickOutline, PickOutlinePick, PickRect};
+use butler_ds::ui::cover::cover;
 use gpui::{
     AnyElement, App, ElementId, Pixels, SharedString, Size, Window, canvas, div, prelude::*, px,
 };
@@ -29,7 +30,6 @@ pub(crate) fn overlay(tab: &Tab, window: &mut Window, cx: &mut App) -> Option<An
         },
         |_, (), _, _| {},
     )
-    .absolute()
     .size_full();
     let vp = tab.pick.viewport();
     let scale = if vp.0 > 0. { width / vp.0 as f32 } else { 1. };
@@ -67,7 +67,7 @@ pub(crate) fn overlay(tab: &Tab, window: &mut Window, cx: &mut App) -> Option<An
             .top_0()
             .left_0()
             .size_full()
-            .child(recorder)
+            .child(cover().child(recorder))
             .child(outline)
             .children(marker)
             .into_any_element(),

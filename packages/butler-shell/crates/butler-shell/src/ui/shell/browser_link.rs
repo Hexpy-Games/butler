@@ -15,6 +15,18 @@ use crate::ui::{
 use butler_ds::ui::icon_button::{IconButton, Pane};
 use gpui::{AnyElement, Context, Window, div, prelude::*};
 impl Shell {
+    /// The browser's window-level actions (address, tabs, history, element select).
+    pub(super) fn browser_actions(el: gpui::Div, cx: &mut Context<Self>) -> gpui::Div {
+        el.on_action(cx.listener(Self::browser_focus_address))
+            .on_action(cx.listener(Self::browser_new_tab))
+            .on_action(cx.listener(Self::browser_close_tab))
+            .on_action(cx.listener(Self::browser_back))
+            .on_action(cx.listener(Self::browser_forward))
+            .on_action(cx.listener(Self::browser_pick))
+            .on_action(cx.listener(Self::browser_pick_exit))
+            .on_action(cx.listener(Self::browser_pick_wider))
+            .on_action(cx.listener(Self::browser_pick_narrower))
+    }
     fn browser_owner(&self, cx: &gpui::App) -> Option<crate::ui::browser::model::Owner> {
         use crate::ui::{browser::model::Owner, manage::View};
         if self.settings_view.is_some() {
