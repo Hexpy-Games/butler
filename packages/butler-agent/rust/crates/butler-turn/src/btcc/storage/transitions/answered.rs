@@ -1,110 +1,199 @@
-use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
+use rusqlite::{
+    Connection, OptionalExtension, Statement, Transaction, TransactionBehavior, params,
+};
 use serde_json::json;
 
 use super::records;
 use crate::btcc::StorageCode;
 use crate::btcc::identity::{content_ref, digest};
 use crate::btcc::storage::common::{error, route_text, stringify};
-use crate::btcc::storage::{StorageError, StorageResult, hydration};
-use crate::btcc::turn::{FinalPayload, SuspensionReason, TurnSemanticState};
+use crate::btcc::storage::{StorageError, StorageResult, hydration, worker_result_turn_id};
+use crate::btcc::turn::{
+    FinalPayload, SettledTurn, SuspensionReason, TurnRecord, TurnSemanticState,
+};
 
-pub(in crate::btcc::storage) fn answered_turns(
+pub(in crate::btcc::storage) fn settled_turns(
     db: &mut Connection,
-    answer_turn_id: &str,
-) -> StorageResult<Vec<String>> {
-    let answer = db
-        .query_row(
-            "SELECT rowid, session_id, semantic_state,
-                    json_extract(context_json,'$.subsessionResult.result_id')
-             FROM btcc_turns WHERE turn_id=?1",
-            [answer_turn_id],
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                ))
-            },
-        )
-        .optional()
-        .map_err(StorageError::sqlite)?;
-    let Some((rowid, session_id, state, Some(mut result_id))) = answer else {
-        return Ok(vec![]);
-    };
-    if state != "delivered" {
-        return Ok(vec![]);
-    }
-
+    session_id: &str,
+) -> StorageResult<Vec<SettledTurn>> {
     let mut waiting = db.prepare(
-        "SELECT t.turn_id FROM btcc_turns t INDEXED BY idx_btcc_turns_worker_waiting
-         WHERE t.session_id=?1 AND t.semantic_state='admitted' AND t.suspension_reason='waiting_for_worker'
-           AND t.rowid<?2 AND NOT EXISTS (SELECT 1 FROM btcc_session_relations r
-             WHERE r.parent_session_id=?1 AND r.parent_turn_id=t.turn_id)",
+        "SELECT turn_id, rowid FROM btcc_turns INDEXED BY idx_btcc_turns_worker_waiting
+         WHERE session_id=?1 AND semantic_state='admitted' AND suspension_reason='waiting_for_worker' ORDER BY rowid",
     ).map_err(StorageError::sqlite)?;
-    let mut parents = waiting
-        .query_map(params![session_id, rowid], |row| row.get::<_, String>(0))
+    let waiting = waiting
+        .query_map([session_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .map_err(StorageError::sqlite)?;
+    let mut own = db
+        .prepare(
+            "SELECT r.relation_id, r.activity_terminal, pt.rowid FROM btcc_session_relations r
+         JOIN btcc_turns pt ON pt.turn_id=r.parent_turn_id
+         WHERE r.parent_session_id=?1 AND r.parent_turn_id=?2",
+        )
+        .map_err(StorageError::sqlite)?;
+    let mut earlier = db
+        .prepare(
+            "SELECT r.relation_id, r.activity_terminal, pt.rowid FROM btcc_session_relations r
+         JOIN btcc_turns pt ON pt.turn_id=r.parent_turn_id
+         WHERE r.parent_session_id=?1 AND pt.rowid<?2",
+        )
+        .map_err(StorageError::sqlite)?;
+    let mut outbox = db
+        .prepare("SELECT result_id FROM btcc_subsession_outbox WHERE relation_id=?1 ORDER BY rowid")
+        .map_err(StorageError::sqlite)?;
+    let mut turns = Vec::new();
+    for parent in waiting {
+        let (turn_id, parent_rowid) = parent.map_err(StorageError::sqlite)?;
+        let relations =
+            parent_relations(&mut own, &mut earlier, session_id, &turn_id, parent_rowid)?;
+        if relations.iter().any(|(_, terminal, _)| !terminal) {
+            continue;
+        }
+        let mut last: Option<(i64, String, String)> = None;
+        let mut settled = true;
+        'relations: for (relation_id, _, relation_parent_rowid) in relations {
+            let results = outbox
+                .query_map([relation_id], |row| row.get::<_, String>(0))
+                .map_err(StorageError::sqlite)?;
+            for result in results {
+                let result = result.map_err(StorageError::sqlite)?;
+                let Some((id, rowid, state)) =
+                    result_turn(db, session_id, relation_parent_rowid, &result)?
+                else {
+                    settled = false;
+                    break 'relations;
+                };
+                if rowid <= parent_rowid {
+                    continue;
+                }
+                if matches!(state.as_str(), "admitted" | "delivery_committed") {
+                    settled = false;
+                    break 'relations;
+                }
+                if last.as_ref().is_none_or(|(r, _, _)| rowid > *r) {
+                    last = Some((rowid, id, state));
+                }
+            }
+        }
+        if settled {
+            turns.push(SettledTurn {
+                turn_id,
+                answer_turn_id: last
+                    .filter(|(_, _, state)| state == "delivered")
+                    .map(|(_, id, _)| id),
+            });
+        }
+    }
+    Ok(turns)
+}
+
+fn parent_relations(
+    own: &mut Statement<'_>,
+    earlier: &mut Statement<'_>,
+    session_id: &str,
+    turn_id: &str,
+    parent_rowid: i64,
+) -> StorageResult<Vec<(String, bool, i64)>> {
+    let relation = |row: &rusqlite::Row<'_>| -> rusqlite::Result<(String, bool, i64)> {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    };
+    let mut relations = own
+        .query_map(params![session_id, turn_id], relation)
         .map_err(StorageError::sqlite)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(StorageError::sqlite)?;
-
-    loop {
-        let outbox = db.query_row(
-            "SELECT rowid, parent_session_id, parent_turn_id FROM btcc_subsession_outbox WHERE result_id=?1",
-            [&result_id],
-            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)),
-        ).optional().map_err(StorageError::sqlite)?;
-        let Some((outbox_rowid, parent_session_id, parent)) = outbox else {
-            break;
-        };
-        let closeable: bool = db.query_row(
-            "SELECT EXISTS(SELECT 1 FROM btcc_turns WHERE turn_id=?1 AND semantic_state='admitted'
-                           AND suspension_reason='waiting_for_worker')
-                AND NOT EXISTS(SELECT 1 FROM btcc_session_relations r
-                    WHERE r.parent_session_id=?2 AND r.parent_turn_id=?1 AND NOT EXISTS(
-                        SELECT 1 FROM btcc_subsession_outbox x
-                        WHERE x.relation_id=r.relation_id AND x.rowid<=?3))",
-            params![parent, parent_session_id, outbox_rowid],
-            |row| row.get(0),
-        ).map_err(StorageError::sqlite)?;
-        if !closeable || parents.contains(&parent) {
-            break;
-        }
-        parents.push(parent.clone());
-        let next: Option<String> = db.query_row(
-            "SELECT json_extract(context_json,'$.subsessionResult.result_id') FROM btcc_turns WHERE turn_id=?1",
-            [parent],
-            |row| row.get(0),
-        ).map_err(StorageError::sqlite)?;
-        let Some(next) = next else { break };
-        result_id = next;
+    if relations.is_empty() {
+        relations = earlier
+            .query_map(params![session_id, parent_rowid], relation)
+            .map_err(StorageError::sqlite)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(StorageError::sqlite)?;
     }
-    Ok(parents)
+    Ok(relations)
 }
 
-pub(in crate::btcc::storage) fn close_answered(
+fn result_turn(
+    db: &Connection,
+    session_id: &str,
+    parent_rowid: i64,
+    result_id: &str,
+) -> StorageResult<Option<(String, i64, String)>> {
+    let read_turn = |row: &rusqlite::Row<'_>| Ok((row.get(0)?, row.get(1)?, row.get(2)?));
+    let turn = db
+        .query_row(
+            "SELECT turn_id, rowid, semantic_state FROM btcc_turns
+             WHERE turn_id=?1 AND session_id=?2 AND rowid>?3",
+            params![worker_result_turn_id(result_id), session_id, parent_rowid],
+            read_turn,
+        )
+        .optional()
+        .map_err(StorageError::sqlite)?;
+    if turn.is_some() {
+        return Ok(turn);
+    }
+    db.query_row(
+        "SELECT turn_id, rowid, semantic_state FROM btcc_turns
+         WHERE session_id=?1 AND rowid>?2 AND json_extract(context_json,'$.subsessionResult.result_id')=?3
+         ORDER BY rowid LIMIT 1",
+        params![session_id, parent_rowid, result_id],
+        read_turn,
+    )
+    .optional()
+    .map_err(StorageError::sqlite)
+}
+
+pub(in crate::btcc::storage) fn waiting_sessions(
     db: &mut Connection,
-    parents: &[String],
-    answer_turn_id: &str,
+) -> StorageResult<Vec<String>> {
+    let mut waiting = db
+        .prepare(
+            "SELECT DISTINCT session_id FROM btcc_turns INDEXED BY idx_btcc_turns_worker_waiting
+         WHERE semantic_state='admitted' AND suspension_reason='waiting_for_worker'",
+        )
+        .map_err(StorageError::sqlite)?;
+    waiting
+        .query_map([], |row| row.get(0))
+        .map_err(StorageError::sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StorageError::sqlite)
+}
+
+pub(in crate::btcc::storage) fn close_settled(
+    db: &mut Connection,
+    settled: &[SettledTurn],
 ) -> StorageResult<()> {
     let tx = db
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(StorageError::sqlite)?;
-    let Some(answer) = hydration::find_turn(&tx, answer_turn_id)? else {
-        return Ok(());
-    };
-    let (Some(answer_payload), Some(message_id)) = (
-        answer.final_payload.as_ref(),
-        answer.canonical_assistant_message_id.as_ref(),
-    ) else {
-        return Ok(());
-    };
-    if answer.semantic_state != TurnSemanticState::Delivered {
-        return Ok(());
-    }
-
-    for parent_id in parents {
-        close_answered_parent(&tx, parent_id, answer_turn_id, answer_payload, message_id)?;
+    for s in settled {
+        let Some(parent) = hydration::find_turn(&tx, &s.turn_id)? else {
+            continue;
+        };
+        if parent.semantic_state != TurnSemanticState::Admitted
+            || parent.suspension != Some(SuspensionReason::WaitingForWorker)
+        {
+            continue;
+        }
+        if let Some(answer_id) = &s.answer_turn_id {
+            let answer = hydration::find_turn(&tx, answer_id)?;
+            if let Some(answer) = answer
+                && answer.semantic_state == TurnSemanticState::Delivered
+                && let (Some(payload), Some(message_id)) = (
+                    &answer.final_payload,
+                    &answer.canonical_assistant_message_id,
+                )
+            {
+                close_answered_parent(&tx, &s.turn_id, answer_id, payload, message_id)?;
+            } else {
+                return Err(error(
+                    StorageCode::TransitionContention,
+                    "BTCC settled answer is not delivered",
+                ));
+            }
+        } else {
+            close_unanswered_parent(&tx, &parent)?;
+        }
     }
     tx.commit().map_err(StorageError::sqlite)
 }
@@ -176,64 +265,30 @@ fn close_answered_parent(
     Ok(())
 }
 
-pub(in crate::btcc::storage) fn recovery_answers(
-    db: &mut Connection,
-) -> StorageResult<Vec<String>> {
-    let mut waiting = db.prepare(
-        "SELECT turn_id, session_id, rowid FROM btcc_turns INDEXED BY idx_btcc_turns_worker_waiting
-         WHERE semantic_state='admitted' AND suspension_reason='waiting_for_worker'",
-    ).map_err(StorageError::sqlite)?;
-    let rows = waiting
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)?,
-            ))
-        })
+fn close_unanswered_parent(tx: &Transaction<'_>, parent: &TurnRecord) -> StorageResult<()> {
+    let changed = tx
+        .execute(
+            "UPDATE btcc_turns SET semantic_state='cancelled', final_disposition='cancelled', suspension_reason=NULL,
+             active_checkpoint_id=NULL, authority_continuation_json=NULL, revision=?1, execution_fence=execution_fence+1
+             WHERE turn_id=?2 AND revision=?3 AND semantic_state='admitted' AND suspension_reason='waiting_for_worker'",
+            params![parent.revision + 1, parent.turn_id, parent.revision],
+        )
         .map_err(StorageError::sqlite)?;
-    let mut answers = Vec::new();
-    for row in rows {
-        let (turn_id, session_id, rowid) = row.map_err(StorageError::sqlite)?;
-        let has_relations = db.query_row(
-            "SELECT 1 FROM btcc_session_relations WHERE parent_session_id=?1 AND parent_turn_id=?2 LIMIT 1",
-            params![session_id, turn_id],
-            |_| Ok(()),
-        ).optional().map_err(StorageError::sqlite)?.is_some();
-        let answer: Option<String> = if has_relations {
-            let missing_result: bool = db.query_row(
-                "SELECT EXISTS(SELECT 1 FROM btcc_session_relations r
-                    WHERE r.parent_session_id=?1 AND r.parent_turn_id=?2 AND NOT EXISTS(
-                        SELECT 1 FROM btcc_subsession_outbox x WHERE x.relation_id=r.relation_id))",
-                params![session_id, turn_id],
-                |row| row.get(0),
-            ).map_err(StorageError::sqlite)?;
-            if missing_result {
-                continue;
-            }
-            db.query_row(
-                "SELECT t.turn_id FROM btcc_turns t WHERE t.session_id=?1 AND t.rowid>?2 AND t.semantic_state='delivered'
-                   AND json_extract(t.context_json,'$.subsessionResult.result_id') IN
-                     (SELECT x.result_id FROM btcc_subsession_outbox x JOIN btcc_session_relations r USING(relation_id)
-                      WHERE r.parent_session_id=?1 AND r.parent_turn_id=?3)
-                 ORDER BY t.rowid DESC LIMIT 1",
-                params![session_id, rowid, turn_id],
-                |row| row.get(0),
-            )
-        } else {
-            db.query_row(
-                "SELECT t.turn_id FROM btcc_turns t WHERE t.session_id=?1 AND t.rowid>?2 AND t.semantic_state='delivered'
-                   AND json_extract(t.context_json,'$.subsessionResult.result_id') IS NOT NULL
-                 ORDER BY t.rowid ASC LIMIT 1",
-                params![session_id, rowid],
-                |row| row.get(0),
-            )
-        }.optional().map_err(StorageError::sqlite)?;
-        if let Some(answer) = answer
-            && !answers.contains(&answer)
-        {
-            answers.push(answer);
-        }
+    if changed != 1 {
+        return Err(error(
+            StorageCode::TransitionContention,
+            "BTCC unanswered close lost Turn CAS",
+        ));
     }
-    Ok(answers)
+    tx.execute(
+        "UPDATE btcc_checkpoints SET is_active=0, active_claim_id=NULL WHERE turn_id=?1 AND is_active=1",
+        [&parent.turn_id],
+    )
+    .map_err(StorageError::sqlite)?;
+    tx.execute(
+        "UPDATE btcc_state_claims SET status='revoked' WHERE turn_id=?1 AND status='active'",
+        [&parent.turn_id],
+    )
+    .map_err(StorageError::sqlite)?;
+    Ok(())
 }

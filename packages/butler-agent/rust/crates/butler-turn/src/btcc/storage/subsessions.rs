@@ -32,6 +32,7 @@ pub use completion::turn_result_id as subsession_result_id;
 pub(crate) use directions::direction_turn_id;
 pub use records::*;
 pub use subtasks::{OPEN_SUBTASKS_SQL, SUBTASK_WORKERS_SQL};
+pub(crate) use unreceived::worker_result_turn_id;
 
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value;
