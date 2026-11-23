@@ -118,8 +118,9 @@ fn pointer(store: Store) -> gpui::Canvas<()> {
             window.on_mouse_event(move |_: &MouseUpEvent, phase, window, cx| {
                 if phase.capture() {
                     let now = cx.background_executor().now();
-                    up.0.borrow_mut().end_swipe(now);
-                    window.refresh();
+                    if up.0.borrow_mut().end_swipe(now) {
+                        window.refresh();
+                    }
                 }
             });
         },

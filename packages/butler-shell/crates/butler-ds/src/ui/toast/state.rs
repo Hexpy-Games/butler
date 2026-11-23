@@ -248,18 +248,20 @@ impl State {
         true
     }
 
-    /// The button came up: a swipe past 45px, or a fast one, dismisses the toast; otherwise it
-    /// goes back.
-    pub(super) fn end_swipe(&mut self, now: Instant) {
+    /// Ends a toast press; false when none was in progress (nothing changed).
+    pub(super) fn end_swipe(&mut self, now: Instant) -> bool {
+        if !self.interacting {
+            return false;
+        }
         self.interacting = false;
         if !self.hovered {
             self.expanded = self.hotkey;
         }
         let Some(swipe) = self.swipe.take() else {
-            return;
+            return true;
         };
         let Some(item) = self.items.iter_mut().find(|item| item.id == swipe.id) else {
-            return;
+            return true;
         };
         item.swiping = false;
         let amount = if swipe.axis == Some(Axis::Y) {
@@ -276,5 +278,6 @@ impl State {
         if gone {
             self.dismiss(swipe.id, now, true);
         }
+        true
     }
 }
