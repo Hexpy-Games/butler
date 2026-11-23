@@ -47,13 +47,15 @@
   font-weight: var(--font-weight-regular);
 }
 
+/* The tag moves below the title when they cannot both fit on one line.
+   The title truncates only when it is wider than the group. */
 .titleGroup {
   flex: 1 1 50%;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .titleGroup > .title {
