@@ -39,7 +39,8 @@ pub(super) fn dependencies(domain: &str) -> Option<&'static [&'static str]> {
         // failures relay as BTCC errors.
         "context_ports" => &["btcc"],
         // butler-models
-        "models" | "mcp_client" => &[],
+        "models" => &[],
+        "mcp_client" => &["models"],
         // butler-runtime: capability adapters consume the skills facade; catalog
         // internals remain private. Operations and web access build on Context.
         "capabilities" => &["skills"],

@@ -7,6 +7,11 @@ export function scheduleState(state: string, copy: Copy): string {
   return state === "enabled" ? copy.on : copy.off;
 }
 
+export function scheduleWeekday(day: number, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" })
+    .format(new Date(Date.UTC(2026, 5, day)));
+}
+
 export function scheduleFrequency(a: Pick<AutomationSummary, "schedule" | "schedule_type" | "interval_seconds">, copy: Copy, locale: string): string {
   const rule = a.schedule;
   if (rule) {
@@ -15,8 +20,7 @@ export function scheduleFrequency(a: Pick<AutomationSummary, "schedule" | "sched
       .format(new Date(Date.UTC(2026, 0, 1, hour, minute)));
     if (rule.kind === "daily") return copy.dailyAt(time);
     if (rule.weekdays.join(",") === "1,2,3,4,5") return copy.weekdaysAt(time);
-    return copy.weeklyAt(rule.weekdays.map(day => new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" })
-      .format(new Date(Date.UTC(2026, 5, day)))).join(", "), time);
+    return copy.weeklyAt(rule.weekdays.map(day => scheduleWeekday(day, locale)).join(", "), time);
   }
   if (a.schedule_type === "once") return copy.once;
   const seconds = a.interval_seconds ?? 1800;

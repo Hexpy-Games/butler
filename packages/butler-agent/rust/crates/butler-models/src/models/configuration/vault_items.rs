@@ -1,7 +1,9 @@
 //! Legacy API keys copied when this data folder switches to the vault.
 use super::{
     credentials::{CREDENTIALS_FILE, CredentialsFile},
-    local_credentials, secret_store,
+    local_credentials,
+    mcp_secrets::{mcp_store_key, mcp_vault_id, stored_secret_refs},
+    secret_store,
 };
 use butler_platform::secrets::{SecretBackend, SecretText};
 use butler_vault::vault::{ItemKind, LegacyItem, LegacySource};
@@ -56,6 +58,23 @@ pub fn vault_legacy_items(root: &Path) -> io::Result<Vec<LegacyItem>> {
                 sources: vec![LegacySource::Value(SecretText::new(secret))],
             });
         }
+    }
+    for (id, backend) in stored_secret_refs(root).map_err(io::Error::other)? {
+        let key = mcp_store_key(root, backend, &id).map_err(io::Error::other)?;
+        let mut sources = Vec::new();
+        if backend.is_system() {
+            sources.push(LegacySource::System(key));
+        } else if let Some(value) = secret_store::fallback_file(root)
+            .get(&key)
+            .map_err(io::Error::other)?
+        {
+            sources.push(LegacySource::Value(value));
+        }
+        items.push(LegacyItem {
+            id: mcp_vault_id(&id),
+            kind: ItemKind::ApiKey,
+            sources,
+        });
     }
     Ok(items)
 }

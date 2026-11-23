@@ -130,7 +130,8 @@ pub use application::{
 };
 pub(crate) use application::{
     AutomationDetailView, AutomationListView, AutomationMutationResult, AutomationRunListView,
-    AutomationRunResult, AutomationRunSummary, CreateAutomationRequest, UpdateAutomationRequest,
+    AutomationRunResult, AutomationRunSummary, CreateAutomationRequest, RunsQuery,
+    UpdateAutomationRequest,
 };
 pub use application::{SMART_GROUP_INSTRUCTIONS, app_session_hint, normalize_committed_turn_event};
 #[cfg(test)]
