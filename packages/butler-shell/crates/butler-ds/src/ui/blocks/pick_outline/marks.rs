@@ -7,7 +7,7 @@ use gpui::{
 use super::PickRect;
 use crate::tokens::{Color, Duration as DsDuration, Easing, Length, Number, Shadow};
 use crate::ui::context::Ds;
-use crate::ui::convert::box_shadows;
+use crate::ui::convert::{box_shadows, css_dash};
 use crate::ui::motion::{self, Props, Timing};
 use crate::ui::typo::{Role, Tone, Typo, Wrap};
 
@@ -82,7 +82,11 @@ fn outline(rect: Scaled, dashed: bool, tint: Option<Hsla>, ds: &Ds) -> Div {
         .border_color(ds.color(Color::BrowserPickInk))
         .rounded(px(radius));
     if dashed {
-        stroke = stroke.border_dashed();
+        let (dash, gap) = css_dash(strong);
+        stroke = stroke
+            .border_dashed()
+            .border_dashed_length(dash)
+            .border_dashed_gap(gap);
     }
     if let Some(tint) = tint {
         stroke = stroke.bg(tint);

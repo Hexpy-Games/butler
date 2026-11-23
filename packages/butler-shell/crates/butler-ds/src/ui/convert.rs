@@ -26,6 +26,12 @@ pub fn box_shadows(layers: &[ShadowLayer], context: &TokenContext) -> Vec<BoxSha
         .collect()
 }
 
+/// CSS `border-style: dashed` as Chromium draws it: (dash, gap) in multiples of the border width
+/// (Blink `StyledStrokeData`: 3:2 below 3 px, 2:1 from 3 px). gpui-ce's own default is 2:1.
+pub fn css_dash(width: f32) -> (f32, f32) {
+    if width >= 3. { (2., 1.) } else { (3., 2.) }
+}
+
 /// CSS cubic-bezier(x1, y1, x2, y2) solved for y at progress x.
 pub fn cubic_bezier(x1: f32, y1: f32, x2: f32, y2: f32, x: f32) -> f32 {
     if x <= 0. {

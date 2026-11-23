@@ -3,7 +3,8 @@ use crate::ui::{browser::model::Tab, widgets::anchor};
 use butler_ds::ui::blocks::pick_outline::{PickOutline, PickOutlinePick, PickRect};
 use butler_ds::ui::cover::cover;
 use gpui::{
-    AnyElement, App, ElementId, Pixels, SharedString, Size, Window, canvas, div, prelude::*, px,
+    AnyElement, App, DispatchPhase, ElementId, MouseMoveEvent, Pixels, SharedString, Size, Window,
+    canvas, div, prelude::*, px,
 };
 use serde_json::Value;
 
@@ -19,6 +20,7 @@ pub(crate) fn overlay(tab: &Tab, window: &mut Window, cx: &mut App) -> Option<An
     );
     let size = *layer.read(cx);
     let (width, height) = (f32::from(size.width), f32::from(size.height));
+    let leave = tab.picking.then(|| tab.id.clone());
     let recorder = canvas(
         move |bounds, _, cx| {
             if *layer.read(cx) != bounds.size {
@@ -28,7 +30,16 @@ pub(crate) fn overlay(tab: &Tab, window: &mut Window, cx: &mut App) -> Option<An
                 });
             }
         },
-        |_, (), _, _| {},
+        // The overlay covers exactly the page: a move outside it is the page's mouseLeave.
+        move |bounds, (), window, _| {
+            if let Some(id) = leave {
+                window.on_mouse_event(move |e: &MouseMoveEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Bubble && !bounds.contains(&e.position) {
+                        super::input::leave(&id, cx);
+                    }
+                });
+            }
+        },
     )
     .size_full();
     let vp = tab.pick.viewport();

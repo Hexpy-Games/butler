@@ -456,6 +456,9 @@ fn settings(config: OsrConfig) -> Result<cef::Settings, OsrError> {
         // Chromium reads them on macOS only.
         keychain_service_name: KEYCHAIN_SERVICE.into(),
         keychain_account_name: KEYCHAIN_ACCOUNT.into(),
+        // Opaque white for a page with no background of its own, like Electron's page views
+        // (CEF paints windowless pages transparent at the default 0).
+        background_color: 0xFFFF_FFFF,
         ..Default::default()
     })
 }

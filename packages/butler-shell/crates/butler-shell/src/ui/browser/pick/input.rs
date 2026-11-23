@@ -75,6 +75,26 @@ pub(crate) fn hover(id: &TabId, x: f64, y: f64, cx: &mut App) {
     .detach();
 }
 
+/// Electron `pointer.mouse` mouseLeave → `selection.clearHover`: the pointer left the page.
+pub(super) fn leave(id: &TabId, cx: &mut App) {
+    let Some(tab) = cx
+        .global_mut::<BrowserState>()
+        .tabs
+        .iter_mut()
+        .find(|t| &t.id == id)
+    else {
+        return;
+    };
+    let session = tab.pick.clone();
+    if tab.pick_hover.is_none() && session.point.get().is_none() {
+        return;
+    }
+    tab.pick_hover = None;
+    session.point.set(None);
+    session.revision.set(session.revision.get() + 1);
+    cx.refresh_windows();
+}
+
 pub(crate) fn mouse(id: &TabId, x: f64, y: f64, kind: Mouse, cx: &mut App) -> bool {
     let Some(session) = cx
         .global::<BrowserState>()
@@ -103,19 +123,7 @@ pub(crate) fn mouse(id: &TabId, x: f64, y: f64, kind: Mouse, cx: &mut App) -> bo
                 hover(id, x, y, cx);
             }
         }
-        Mouse::Leave => {
-            if let Some(tab) = cx
-                .global_mut::<BrowserState>()
-                .tabs
-                .iter_mut()
-                .find(|t| &t.id == id)
-            {
-                tab.pick_hover = None;
-            }
-            session.point.set(None);
-            session.revision.set(session.revision.get() + 1);
-            cx.refresh_windows();
-        }
+        Mouse::Leave => leave(id, cx),
         Mouse::Down { left: true } => press(id, x, y, cx),
         Mouse::Down { left: false } => {}
         Mouse::Up => {
