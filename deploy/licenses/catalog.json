@@ -4,7 +4,7 @@
     "deploy/licenses/disclosure.py": "992c3d7f47a0944dc1c0ab0628e11a818b88f9ae7d5f62a5c5692715a175d859",
     "deploy/licenses/generate.mjs": "a8045dc38e8bcc0a58d9dff8fd6a7603dd50ced14b4696081b3b53fcf4765d22",
     "deploy/licenses/inputs.mjs": "8cba6cf767aa7206a8ee2662a960bf24858709701d7a26eee74f95d17875a77d",
-    "deploy/licenses/refresh.py": "70fde4af0a2ac557ec0fb297f4b0a850950e33146ddf96b82626f8b46f5d89fc",
+    "deploy/licenses/refresh.py": "88fc18a1f44f39f0e3525ae2f019d58324a4c90cff21ac282b497d71a24493ff",
     "packages/butler-agent/rust/Cargo.lock": "7640e7249a74dd166ae8508b7500df2b1097dc6e28cc573be419a52243106312",
     "packages/butler-agent/rust/Cargo.toml": "c81324fecce101ac59d380f1261ade6576245c035491a9020b90ae1816cbf1bd",
     "packages/butler-agent/rust/crates/butler-agent-cli/Cargo.toml": "88dc0589bfc0308c1644beaeb7eb9b09c377295c526dbe36351d0a329afd7079",
@@ -29,7 +29,7 @@
     "packages/butler-agent/rust/crates/butler-turn/Cargo.toml": "dcca4fca5aed2792030ede69f05b208b4cc72f9e4a0e63da51122f9d1d704b68",
     "packages/butler-agent/rust/crates/butler-vault/Cargo.toml": "ce79975e3622cf965b249bd46af5b321510a04ccd4ba877ed72345581f9ac0e3",
     "packages/butler-agent/rust/rust-toolchain.toml": "2ad6f15416572b4836585087f1d4abc53b8fa2dbd616f8dacfaa587ed6714228",
-    "packages/butler-agent/rust/scripts/static-ort.lock.json": "a1aee730fc0773ca02d23bad8da95c0efe56a07ded67dc36d251f475a90369b2",
+    "packages/butler-agent/rust/scripts/static-ort.lock.json": "c6cce4fd97b9fe8561d1f54127fb8dd3f15b34621cfe4f5e13211d14f9d2479c",
     "packages/butler-agent/rust/tools/source-check/Cargo.toml": "e50cffe7e1c5a79f1fe76bf689eb65fb682a29cd8425ae3609c35cfa1f56603c",
     "packages/butler-app/client/electron/package.json": "75bf192017270ab76ef12a560dd7643789a965331e1958edb5f5a930fd1587a8",
     "packages/butler-app/client/ui/package.json": "216bd469a23c9436e210ecbcd5735b1ab6baad8469cb4809a6e8c3b0297b7911",
@@ -170,7 +170,7 @@
       "name": "onnxruntime",
       "version": "e0b66cad282043d4377cea5269083f17771b6dfc",
       "license": "MIT",
-      "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/e0b66cad282043d4377cea5269083f17771b6dfc",
+      "source": "https://github.com/Hexpy-Games/butler/releases/download/deps-onnxruntime-e0b66cad",
       "artifacts": [
         "macOS App/Agent",
         "Linux x64 DEB/Arch/Agent",
@@ -182,12 +182,12 @@
         "8c06e8cff286a4a117b3b246a4c7da68428a144af757823db50e3d6520941ec6"
       ],
       "files": [
-        "https://raw.githubusercontent.com/microsoft/onnxruntime/e0b66cad282043d4377cea5269083f17771b6dfc/LICENSE",
-        "https://raw.githubusercontent.com/microsoft/onnxruntime/e0b66cad282043d4377cea5269083f17771b6dfc/ThirdPartyNotices.txt"
+        "https://github.com/Hexpy-Games/butler/releases/download/deps-onnxruntime-e0b66cad/LICENSE",
+        "https://github.com/Hexpy-Games/butler/releases/download/deps-onnxruntime-e0b66cad/ThirdPartyNotices.txt"
       ],
       "links": [
-        "https://raw.githubusercontent.com/microsoft/onnxruntime/e0b66cad282043d4377cea5269083f17771b6dfc/LICENSE",
-        "https://raw.githubusercontent.com/microsoft/onnxruntime/e0b66cad282043d4377cea5269083f17771b6dfc/ThirdPartyNotices.txt"
+        "https://github.com/Hexpy-Games/butler/releases/download/deps-onnxruntime-e0b66cad/LICENSE",
+        "https://github.com/Hexpy-Games/butler/releases/download/deps-onnxruntime-e0b66cad/ThirdPartyNotices.txt"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation",
