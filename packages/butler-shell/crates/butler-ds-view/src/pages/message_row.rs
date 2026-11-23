@@ -66,16 +66,28 @@ fn user_footer(id: &str, text: &str, time: &'static str, l: Footer) -> MessageFo
 }
 
 /// The assistant footer: icon actions, duration and time, then the terminal status row.
-fn assistant_footer(id: &str, text: &str, time: &'static str, l: Footer) -> [AnyElement; 2] {
+fn assistant_footer(
+    id: &str,
+    text: &str,
+    time: &'static str,
+    l: Footer,
+    ds: &Ds,
+) -> [AnyElement; 2] {
     let footer = MessageFooter::new()
         .child(CopyButton::new(format!("{id}-copy"), l.copy, l.copied).text(text))
         .child(
-            IconButton::new(format!("{id}-branch-chat"), l.branch_chat)
-                .glyph(Icon::MessageSquarePlus),
+            IconButton::new(format!("{id}-branch-chat"), l.branch_chat).icon(icon(
+                Icon::MessageSquarePlus,
+                IconSize::Md,
+                ds,
+            )),
         )
         .child(
-            IconButton::new(format!("{id}-branch-project"), l.branch_project)
-                .glyph(Icon::FolderPlus),
+            IconButton::new(format!("{id}-branch-project"), l.branch_project).icon(icon(
+                Icon::FolderPlus,
+                IconSize::Md,
+                ds,
+            )),
         )
         .child(div().child(l.worked_for))
         .child(Typo::text(time).tabular())
@@ -246,7 +258,7 @@ fn activity_row(
             lang.pick("Generating answer", "응답 생성 중"),
         ))
     } else {
-        let [footer, status] = assistant_footer(id, summary, "9:09", l);
+        let [footer, status] = assistant_footer(id, summary, "9:09", l, ds);
         row.child(footer).child(status)
     }
 }
@@ -254,7 +266,7 @@ fn activity_row(
 fn default_turn(lang: Lang, cx: &App) -> AnyElement {
     let ds = Ds::get(cx);
     let (c, l) = (copy(lang), footer_labels(lang));
-    let [footer, status] = assistant_footer("mr-default", c.summary, "9:09", l);
+    let [footer, status] = assistant_footer("mr-default", c.summary, "9:09", l, ds);
     Stack::new()
         .gap(Space::None)
         .child(
@@ -395,7 +407,8 @@ fn send_and_stream(lang: Lang, window: &mut Window, cx: &mut App) -> AnyElement 
                 row.child(MarkdownContent::new("mr-stream-md", text).streaming(streaming))
             };
             if finished {
-                let [footer, status] = assistant_footer("mr-stream", c.summary, "9:09", l);
+                let [footer, status] =
+                    assistant_footer("mr-stream", c.summary, "9:09", l, Ds::get(cx));
                 row = row.child(footer).child(status);
             }
             list = list.child(row);

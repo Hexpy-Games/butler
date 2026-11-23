@@ -5,6 +5,7 @@ use butler_ds::ui::dialog::{
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 };
 use butler_ds::ui::icon_button::IconButton;
+use butler_ds::ui::layout::{Cross, Space, Stack};
 use butler_ds::ui::text::{self, Input};
 use butler_ds::ui::typo::Typo;
 use butler_shell_client::ShellClient;
@@ -111,9 +112,9 @@ fn branch_message_actions(source: &Source, window: &mut Window, cx: &mut App) ->
     let copy = copy_text(cx);
     let key = ElementId::from(SharedString::from(format!("branch-{}", source.message_id)));
     let state = FormState::new(&key, window, cx);
-    let buttons = div()
-        .flex()
-        .items_center()
+    let buttons = Stack::row()
+        .cross(Cross::Center)
+        .gap(Space::Sm)
         .child(
             IconButton::new(
                 SharedString::from(format!("branch-chat-{}", source.message_id)),
