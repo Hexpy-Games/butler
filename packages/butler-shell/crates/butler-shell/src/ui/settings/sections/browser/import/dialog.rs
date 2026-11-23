@@ -40,6 +40,8 @@ pub(super) struct ImportDialog {
     pub(super) disk_hint: bool,
     pub(super) sources: Option<Vec<Source>>,
     pub(super) selected: String,
+    /// The typed primary password; taken on submit.
+    pub(super) primary: String,
     pub(super) kinds: Kinds,
     pub(super) busy: bool,
     pub(super) error: Option<String>,
@@ -63,14 +65,15 @@ fn footer_button(
     primary: bool,
     disabled: bool,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> Button {
+) -> AnyElement {
     let button = Button::new(id).text(label).on_click(on_click);
     let button = if primary {
         button
     } else {
         button.variant(Variant::Outline)
     };
-    if disabled { button.disabled() } else { button }
+    let button = if disabled { button.disabled() } else { button };
+    crate::ui::widgets::control_anchored(button, id, !disabled)
 }
 
 impl ImportDialog {
@@ -89,6 +92,7 @@ impl ImportDialog {
             disk_hint: false,
             sources: None,
             selected: FILE.into(),
+            primary: String::new(),
             kinds: Kinds {
                 bookmarks: true,
                 history: true,
@@ -168,7 +172,16 @@ impl ImportDialog {
         }
         self.step = 2;
         self.disk_hint = false;
-        self.run(source, cx);
+        self.run(source, None, cx);
+    }
+
+    pub(super) fn submit_primary(&mut self, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        let primary = std::mem::take(&mut self.primary);
+        let source = self.selected.clone();
+        self.run(source, Some(primary), cx);
     }
 
     fn footer(&self, view: usize, phase: Phase, me: &Entity<Self>, cx: &App) -> AnyElement {
@@ -177,8 +190,7 @@ impl ImportDialog {
         let close = move |_: &ClickEvent, window: &mut Window, cx: &mut App| close(window, cx);
         let buttons: Vec<AnyElement> = match view {
             0 => vec![
-                footer_button("browser-import-cancel", copy.cancel, false, false, close)
-                    .into_any_element(),
+                footer_button("browser-import-cancel", copy.cancel, false, false, close),
                 footer_button(
                     "browser-import-next",
                     copy.next,
@@ -188,8 +200,7 @@ impl ImportDialog {
                         this.step = 1;
                         cx.notify();
                     }),
-                )
-                .into_any_element(),
+                ),
             ],
             1 => {
                 let source = self.choice().unwrap_or_else(|| self.selected.clone());
@@ -206,7 +217,7 @@ impl ImportDialog {
                         .child(run)
                         .into_any_element()
                 } else {
-                    run.into_any_element()
+                    run
                 };
                 vec![
                     footer_button(
@@ -218,8 +229,7 @@ impl ImportDialog {
                             this.step = 0;
                             cx.notify();
                         }),
-                    )
-                    .into_any_element(),
+                    ),
                     run,
                 ]
             }
@@ -247,12 +257,13 @@ impl ImportDialog {
                 false,
                 busy,
                 act(me, |this, cx| {
+                    this.primary.clear();
                     this.step = 1;
                     cx.notify();
                 }),
             )
         };
-        let buttons: Vec<Button> = match phase {
+        let buttons: Vec<AnyElement> = match phase {
             Phase::Idle => Vec::new(),
             Phase::Progress => vec![footer_button(
                 "browser-import-done",
@@ -263,9 +274,16 @@ impl ImportDialog {
             )],
             Phase::Csv => csv_buttons(copy, busy, me),
             Phase::Permission => permission_buttons(copy, busy, me),
-            // CARVE-OUT(G-secret-input): React's Run submits the typed primary password; the DS
-            // has no masked input, so the owner can only go back.
-            Phase::Primary => vec![back()],
+            Phase::Primary => vec![
+                back(),
+                footer_button(
+                    "browser-import-primary-run",
+                    copy.run,
+                    true,
+                    busy,
+                    act(me, ImportDialog::submit_primary),
+                ),
+            ],
             Phase::Error => vec![
                 back(),
                 footer_button(
@@ -275,16 +293,13 @@ impl ImportDialog {
                     busy,
                     act(me, |this, cx| {
                         let source = this.selected.clone();
-                        this.run(source, cx);
+                        this.run(source, None, cx);
                     }),
                 ),
             ],
             Phase::Done => self.done_buttons(copy, me, close),
         };
         buttons
-            .into_iter()
-            .map(IntoElement::into_any_element)
-            .collect()
     }
 
     fn done_buttons(
@@ -292,7 +307,7 @@ impl ImportDialog {
         copy: &'static Words,
         me: &Entity<Self>,
         close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-    ) -> Vec<Button> {
+    ) -> Vec<AnyElement> {
         let busy = self.busy;
         let result = self.result.as_ref();
         let mut buttons = Vec::new();
@@ -358,7 +373,7 @@ impl Render for ImportDialog {
                 .child(self.chosen(&source, None, cx))
                 .child(self.items(&source, &me, cx))
                 .into_any_element(),
-            _ => self.outcome(phase, cx),
+            _ => self.outcome(phase, &me, cx),
         };
         let steps = [
             ("browser", copy.choose_browser),
@@ -383,7 +398,7 @@ impl Render for ImportDialog {
 }
 
 /// The CSV step's footer: cancel the export, or pick the exported file by hand.
-fn csv_buttons(copy: &'static Words, busy: bool, me: &Entity<ImportDialog>) -> Vec<Button> {
+fn csv_buttons(copy: &'static Words, busy: bool, me: &Entity<ImportDialog>) -> Vec<AnyElement> {
     vec![
         footer_button(
             "browser-import-cancel-csv",
@@ -403,7 +418,11 @@ fn csv_buttons(copy: &'static Words, busy: bool, me: &Entity<ImportDialog>) -> V
 }
 
 /// The disk-access step's footer: open the system setting, or pick the profile folder.
-fn permission_buttons(copy: &'static Words, busy: bool, me: &Entity<ImportDialog>) -> Vec<Button> {
+fn permission_buttons(
+    copy: &'static Words,
+    busy: bool,
+    me: &Entity<ImportDialog>,
+) -> Vec<AnyElement> {
     vec![
         footer_button(
             "browser-import-disk-access",

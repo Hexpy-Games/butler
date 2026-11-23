@@ -30,6 +30,28 @@ pub(crate) fn anchored(child: impl IntoElement, name: &str) -> AnyElement {
     }
 }
 
+pub(crate) fn control_anchored<E: IntoElement>(child: E, name: &str, enabled: bool) -> AnyElement {
+    #[cfg(feature = "shots")]
+    {
+        use gpui::{ParentElement as _, Styled as _};
+
+        let name = if enabled {
+            name.to_owned()
+        } else {
+            format!("{name}-disabled")
+        };
+        gpui::div()
+            .flex()
+            .child(anchored(child, &name))
+            .into_any_element()
+    }
+    #[cfg(not(feature = "shots"))]
+    {
+        let _ = (name, enabled);
+        child.into_any_element()
+    }
+}
+
 /// [`anchor`] for a control: `<name>` while it takes clicks, `<name>-disabled` while it does not
 /// (Electron's `:not(:disabled)`), so a harness step waits until the control is usable.
 pub(crate) fn control_anchor<E: InteractiveElement>(el: E, name: &str, enabled: bool) -> E {
