@@ -148,8 +148,6 @@ pub struct FinalPayload {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outputs: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub documents: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changed_files: Vec<ChangedFileSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub answer_blocks: Vec<serde_json::Value>,
@@ -363,7 +361,6 @@ pub struct AgentLoopResult {
     pub runtime_failure: Option<RuntimeFailure>,
     pub artifacts: Vec<FinalArtifact>,
     pub outputs: Vec<String>,
-    pub documents: Vec<String>,
     pub changed_files: Vec<ChangedFileSummary>,
     pub answer_blocks: Vec<serde_json::Value>,
     pub model_identity: Option<ModelIdentity>,

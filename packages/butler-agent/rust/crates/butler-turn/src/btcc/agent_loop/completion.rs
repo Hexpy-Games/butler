@@ -180,7 +180,6 @@ pub(super) async fn finish(
         accepted_work_result: closeout.accepted_work_result,
         runtime_failure,
         outputs: closeout.outputs,
-        documents: closeout.documents,
         artifacts: closeout.artifacts,
         changed_files: closeout.changed_files,
         answer_blocks: closeout.answer_blocks,

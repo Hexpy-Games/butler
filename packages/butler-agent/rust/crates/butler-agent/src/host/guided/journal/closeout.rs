@@ -71,11 +71,9 @@ pub(super) async fn collect(
         })
         .collect::<Vec<_>>();
     let outputs = std::mem::take(&mut artifacts.outputs);
-    let documents = std::mem::take(&mut artifacts.documents);
     let artifacts = artifacts::with_changed_files(artifacts.finish(), &changed_files, workspace);
     Ok(JournalCloseout {
         outputs,
-        documents,
         artifacts,
         changed_files,
         answer_blocks,
@@ -155,16 +153,10 @@ pub(super) fn merge_files(mut child: JournalCloseout, own: JournalCloseout) -> J
         changed_files: Vec::new(),
         answer_blocks: own.answer_blocks,
         outputs: child.outputs,
-        documents: child.documents,
     };
     for output in own.outputs {
         if !merged.outputs.contains(&output) {
             merged.outputs.push(output);
-        }
-    }
-    for document in own.documents {
-        if !merged.documents.contains(&document) {
-            merged.documents.push(document);
         }
     }
     child.changed_files.extend(own.changed_files);

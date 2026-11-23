@@ -423,7 +423,6 @@ fn save_message(
         input.reply_to_message_id.as_deref(),
         message_id,
     )?;
-    super::super::documents::deliver_reply(db, &input.chat_id, message_id, &input.documents)?;
     Ok(())
 }
 
@@ -439,7 +438,6 @@ fn visible_result(
     )? || !input.text.is_empty()
         || !files.is_empty()
         || !input.outputs.is_empty()
-        || !input.documents.is_empty()
         || !input.changed_files.is_empty()
         || input.plan.is_some()
         || input.answer_blocks.is_some()

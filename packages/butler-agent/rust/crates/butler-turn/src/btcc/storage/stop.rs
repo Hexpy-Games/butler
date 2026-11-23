@@ -134,7 +134,6 @@ fn delivered(
             runtime_failure: payload.runtime_failure,
             execution_outcome: payload.execution_outcome,
             outputs: payload.outputs,
-            documents: payload.documents,
             artifacts: payload.artifacts,
             changed_files: payload.changed_files,
             answer_blocks: payload.answer_blocks,

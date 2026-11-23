@@ -7,7 +7,6 @@ pub(super) struct ArtifactCollector {
     deliverables: Vec<FinalArtifact>,
     working: Vec<FinalArtifact>,
     pub(super) outputs: Vec<String>,
-    pub(super) documents: Vec<String>,
 }
 impl ArtifactCollector {
     pub(super) fn add(&mut self, row: &ToolJournalCloseoutRow) -> Result<(), BtccError> {
@@ -23,13 +22,6 @@ impl ArtifactCollector {
             && !self.outputs.contains(&id)
         {
             self.outputs.push(id);
-        }
-        if row.tool_name == "document_create"
-            && let Some(raw) = result.field("id").map_err(invalid)?
-            && let Ok(id) = serde_json::from_str::<String>(raw)
-            && !self.documents.contains(&id)
-        {
-            self.documents.push(id);
         }
         let page = page_url(result)?;
         for key in ["artifacts", "verified_output_files"] {

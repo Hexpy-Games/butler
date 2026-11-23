@@ -55,39 +55,6 @@ async fn handoff_carries_verbatim_user_words_to_steward_and_worker() -> Result<(
 }
 
 #[tokio::test]
-async fn delegated_result_attaches_only_the_stewards_declarations() -> Result<(), HarnessError> {
-    butler_e2e::gate!();
-    let (s, _script, server) = run(Mode::Verbatim).await?;
-    let deadline = Instant::now() + Duration::from_secs(45);
-    let reply = loop {
-        if let Some(reply) = s.gw.messages("general").await?.into_iter().find(|message| {
-            message["role"] == "assistant"
-                && message["status"] == "delivered"
-                && message["text"] == "Handoff complete."
-        }) {
-            break reply;
-        }
-        assert!(Instant::now() < deadline, "Missing delivered handoff reply");
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    };
-    let artifacts = reply["artifacts"].as_array().cloned().unwrap_or_default();
-    let docs: Vec<_> = artifacts.iter().filter(|a| a["kind"] == "doc").collect();
-    assert_eq!(docs.len(), 1, "{artifacts:?}");
-    assert_eq!(docs[0]["title"], "Research report");
-    assert!(
-        reply["attachments"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .all(|f| !(f["deliverable"] == true && f["source_label"] == "tasks/A/part.md")),
-        "{reply:?}"
-    );
-    s.finish().await?;
-    server.abort();
-    Ok(())
-}
-
-#[tokio::test]
 async fn child_turns_are_not_offered_start_work() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     let (s, script, server) = run(Mode::Verbatim).await?;

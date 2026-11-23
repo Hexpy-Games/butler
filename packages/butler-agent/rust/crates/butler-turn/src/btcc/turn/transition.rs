@@ -56,7 +56,6 @@ pub(super) fn guided_final(
         accepted_work_result: result.accepted_work_result,
         runtime_failure: result.runtime_failure,
         outputs: result.outputs,
-        documents: result.documents,
         artifacts: result.artifacts,
         changed_files: result.changed_files,
         answer_blocks: result.answer_blocks,
@@ -136,9 +135,6 @@ fn payload_body(
     }
     if !result.outputs.is_empty() {
         body.insert("outputs".into(), json_value(&result.outputs)?);
-    }
-    if !result.documents.is_empty() {
-        body.insert("documents".into(), json_value(&result.documents)?);
     }
     if !result.artifacts.is_empty() {
         body.insert("artifacts".into(), json_value(&result.artifacts)?);

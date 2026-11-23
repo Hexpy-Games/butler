@@ -1,4 +1,4 @@
-//! A Steward's own declarations reach the chat's delegated-result message.
+//! Delegated declarations use the real Steward relation and parent projection.
 use super::super::steward_presentation::{self, stub as steward};
 use super::*;
 
@@ -17,7 +17,7 @@ pub(crate) fn child(step: usize, work: &str) -> Value {
     }
 }
 #[tokio::test]
-async fn steward_deliverables_and_published_outputs_reach_the_chat() -> Result<(), HarnessError> {
+async fn worker_deliverables_and_published_outputs_belong_to_parent() -> Result<(), HarnessError> {
     use std::sync::atomic::Ordering;
     butler_e2e::gate!();
     let (url, script, server) = steward::start().await?;

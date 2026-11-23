@@ -257,7 +257,6 @@ impl JournalPort for Fixture {
         Box::pin(async {
             Ok(JournalCloseout {
                 outputs: Vec::new(),
-                documents: Vec::new(),
                 artifacts: vec![],
                 changed_files: vec![],
                 answer_blocks: Vec::new(),

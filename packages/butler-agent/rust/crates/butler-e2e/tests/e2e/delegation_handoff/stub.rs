@@ -219,28 +219,6 @@ fn steward(script: &Script, stage: usize, body: &Value) -> Value {
     }
 }
 fn worker(mode: Mode, step: usize, body: &Value) -> Value {
-    if mode == Mode::Verbatim {
-        match step {
-            3 => {
-                return call(
-                    "write_file",
-                    json!({"path":"tasks/A/part.md","content":FACTS,"overwrite":false,"create_parents":true}),
-                );
-            }
-            4 => {
-                return call(
-                    "deliver_files",
-                    json!({"files":[{"path":"tasks/A/part.md","title":"Part"}]}),
-                );
-            }
-            _ => {}
-        }
-    }
-    let step = if mode == Mode::Verbatim && step >= 5 {
-        step - 2
-    } else {
-        step
-    };
     match step {
         0 if mode == Mode::Scope => call("tool_describe", json!({"ids":["native:run_command"]})),
         0 => describe(),

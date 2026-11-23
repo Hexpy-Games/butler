@@ -440,7 +440,6 @@ impl GuidedPolicyPort for Fixture {
                 accepted_work_result: None,
                 runtime_failure: None,
                 outputs: Vec::new(),
-                documents: Vec::new(),
                 artifacts: Vec::<FinalArtifact>::new(),
                 changed_files: vec![],
                 answer_blocks: Vec::new(),

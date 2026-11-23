@@ -288,7 +288,6 @@ impl GuidedPolicyPort for GuidedPolicy {
                 accepted_work_result,
                 runtime_failure: None,
                 outputs: journal.outputs,
-                documents: journal.documents,
                 artifacts: journal.artifacts,
                 changed_files: journal.changed_files,
                 answer_blocks: journal.answer_blocks,
