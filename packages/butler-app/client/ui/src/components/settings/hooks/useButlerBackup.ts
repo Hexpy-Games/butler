@@ -22,7 +22,7 @@ export function useButlerBackup(accountId: string | undefined) {
     setLoadFailed(false);
     if (!accountId) return;
     let cancelled = false;
-    void getButlerBackup().then((next) => {
+    void sendButlerBackup("refresh").then((next) => {
       if (!cancelled) setStatus(next);
     }, (error: unknown) => {
       if (!cancelled && !isMissingRoute(error) && apiErrorCode(error) !== "butler_account_signed_out") setLoadFailed(true);

@@ -21,9 +21,10 @@ export function getButlerBackup() {
   return api<ButlerBackupStatus>("/setup/butler-backup");
 }
 
+export function sendButlerBackup(action: "refresh"): Promise<ButlerBackupStatus>;
 export function sendButlerBackup(action: KeyAction): Promise<{ recovery_key: string }>;
 export function sendButlerBackup(action: BackupAction): Promise<unknown>;
 export function sendButlerBackup(action: "restore", extra: { recovery_key: string }): Promise<unknown>;
-export function sendButlerBackup(action: KeyAction | BackupAction | "restore", extra?: { recovery_key: string }) {
+export function sendButlerBackup(action: "refresh" | KeyAction | BackupAction | "restore", extra?: { recovery_key: string }) {
   return api("/setup/butler-backup", { method: "POST", body: JSON.stringify({ action, ...extra }) });
 }
