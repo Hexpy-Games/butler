@@ -3,6 +3,8 @@ use std::{collections::HashMap, fs, path::Path};
 use butler_platform::secrets::SecretBackend;
 use serde_json::Value;
 
+use crate::models::{clean_secret_key, is_literal_source, secret_id};
+
 mod views;
 pub(super) use views::{redact_server, server_capability_projection};
 
@@ -331,25 +333,12 @@ fn normalize_secrets(value: Option<&Value>) -> Vec<KeyValueSecret> {
         .flatten()
         .filter_map(Value::as_object)
         .filter_map(|item| {
-            let key = item
-                .get("key")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .trim()
-                .chars()
-                .map(|ch| {
-                    if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') {
-                        ch
-                    } else {
-                        '_'
-                    }
-                })
-                .collect::<String>();
+            let key = clean_secret_key(item.get("key").and_then(Value::as_str).unwrap_or(""));
             let value = item.get("value").and_then(Value::as_str).unwrap_or("");
             let source = match item.get("source").and_then(Value::as_str) {
+                source if is_literal_source(source) => SecretSource::Literal,
                 Some("env") => SecretSource::Environment,
-                Some("file") => SecretSource::File,
-                _ => SecretSource::Literal,
+                _ => SecretSource::File,
             };
             let storage = if source == SecretSource::Literal {
                 item.get("storage")
@@ -418,10 +407,5 @@ pub(super) fn literal_slots(
         .into_iter()
         .flat_map(|(field, items)| items.iter_mut().map(move |item| (field, item)))
         .filter(|(_, item)| item.secret.source == SecretSource::Literal)
-        .map(move |(field, item)| {
-            (
-                format!("{server_id}/{field}/{}", item.key),
-                &mut item.secret,
-            )
-        })
+        .map(move |(field, item)| (secret_id(server_id, field, &item.key), &mut item.secret))
 }

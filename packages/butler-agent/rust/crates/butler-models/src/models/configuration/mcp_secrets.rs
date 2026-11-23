@@ -117,6 +117,28 @@ pub(super) fn mcp_vault_id(id: &str) -> String {
     format!("mcp/{id}")
 }
 
+pub fn clean_secret_key(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+pub fn is_literal_source(source: Option<&str>) -> bool {
+    !matches!(source, Some("env" | "file"))
+}
+
+pub fn secret_id(server_id: &str, field: &str, key: &str) -> String {
+    format!("{server_id}/{field}/{key}")
+}
+
 pub(crate) fn stored_secret_refs(
     data_root: &Path,
 ) -> Result<Vec<(String, SecretBackend)>, butler_core::configuration::ConfigError> {
@@ -144,26 +166,10 @@ pub(crate) fn stored_secret_refs_from_value(registry: &Value) -> Vec<(String, Se
                 .into_iter()
                 .flatten()
             {
-                if matches!(
-                    item.get("source").and_then(Value::as_str),
-                    Some("env" | "file")
-                ) {
+                if !is_literal_source(item.get("source").and_then(Value::as_str)) {
                     continue;
                 }
-                let key = item
-                    .get("key")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .trim()
-                    .chars()
-                    .map(|ch| {
-                        if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-') {
-                            ch
-                        } else {
-                            '_'
-                        }
-                    })
-                    .collect::<String>();
+                let key = clean_secret_key(item.get("key").and_then(Value::as_str).unwrap_or(""));
                 if key.is_empty() {
                     continue;
                 }
@@ -172,7 +178,7 @@ pub(crate) fn stored_secret_refs_from_value(registry: &Value) -> Vec<(String, Se
                     .and_then(Value::as_str)
                     .and_then(SecretBackend::from_name)
                 {
-                    refs.push((format!("{server_id}/{field}/{key}"), backend));
+                    refs.push((secret_id(server_id, field, &key), backend));
                 }
             }
         }

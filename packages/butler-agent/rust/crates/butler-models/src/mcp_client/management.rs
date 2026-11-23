@@ -4,7 +4,9 @@ use std::{path::Path, sync::Arc};
 
 use serde_json::{Value, json};
 
-use crate::models::{stored_secret_refs, stored_secret_refs_from_value};
+use crate::models::{
+    clean_secret_key, is_literal_source, stored_secret_refs, stored_secret_refs_from_value,
+};
 
 use super::registry::McpRegistryError;
 use super::{
@@ -281,25 +283,11 @@ fn merge_secret_updates(existing: Option<&Vec<Value>>, updates: Option<&Vec<Valu
     Value::Array(values)
 }
 
-fn clean_secret_key(value: &str) -> String {
-    value
-        .trim()
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '.' || ch == '-' {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect()
-}
-
 fn normalize_secret_source(value: Option<&Value>) -> &'static str {
     match value.and_then(Value::as_str) {
+        source if is_literal_source(source) => "literal",
         Some("env") => "env",
-        Some("file") => "file",
-        _ => "literal",
+        _ => "file",
     }
 }
 

@@ -28,7 +28,7 @@ mod local_image_startup;
 mod logging;
 mod mcp;
 mod mcp_secrets;
-pub use mcp_secrets::McpSecretStore;
+pub use mcp_secrets::{McpSecretStore, clean_secret_key, is_literal_source, secret_id};
 pub(crate) use mcp_secrets::{stored_secret_refs, stored_secret_refs_from_value};
 mod mutations;
 mod proactive;
