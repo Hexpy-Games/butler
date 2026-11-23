@@ -1,3 +1,4 @@
+import { computerBridgeCall } from "./computersBridge.ts";
 import { pendingAsksBridgeInput } from "./pendingAsksBridge.ts";
 import type { PendingAsksBridge } from "../../../../../butler-protocol/src/pending-asks-contracts.ts";
 import { canonBridgeInput } from "./canonBridge.ts";
@@ -576,6 +577,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (connectors) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, connectors.action, connectors.input));
   const signIns = signInBridgeCall(method, url.pathname, options.body);
   if (signIns) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, signIns.action, signIns.input));
+  const computers = computerBridgeCall(method, url.pathname, options.body);
+  if (computers) return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, computers.action, computers.input));
   const deviceMatch = url.pathname.match(/^\/security\/devices\/([^/]+)$/u);
   if (method === "DELETE" && deviceMatch) {
     return unwrapBridgeResult<T>(await callBridge<BridgeResult<T> | T>(bridge, "revokePairedDevice", {

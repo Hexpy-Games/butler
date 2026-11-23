@@ -81,6 +81,35 @@ pub(super) async fn delete(path: PathBuf, id: String) -> Result<(), HttpError> {
     .map_err(|_| HttpError::Internal)?
 }
 
+pub(super) async fn set_ai_connected(
+    path: PathBuf,
+    id: String,
+    connected: bool,
+) -> Result<(), HttpError> {
+    let guard = lock_file_async(&path)
+        .await
+        .map_err(|_| HttpError::Internal)?;
+    tokio::task::spawn_blocking(move || {
+        let _guard = guard;
+        let mut records = read_sync(&path)?;
+        let computer = records
+            .iter_mut()
+            .find(|record| record.id == id)
+            .ok_or_else(|| HttpError::public(404, "computer_not_found", "Computer not found."))?;
+        if computer.ai_connected == connected {
+            return Ok(());
+        }
+        computer.ai_connected = connected;
+        write_json_atomic(
+            &path,
+            &serde_json::json!({"version": 1, "computers": records}),
+        )
+        .map_err(|_| HttpError::Internal)
+    })
+    .await
+    .map_err(|_| HttpError::Internal)?
+}
+
 pub(super) struct KnownHosts(pub PathBuf);
 
 impl KnownHosts {

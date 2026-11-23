@@ -1,4 +1,6 @@
 import { ButlerVaultSection } from "./ButlerVaultSection";
+import { computersSection } from "./ComputersSection";
+import { useComputersSection } from "./hooks/useComputersSection";
 import { securityAuthoritySections } from "./SecurityAuthoritySections";
 import { useConnectedAccounts } from "./hooks/useConnectedAccounts";
 import { useSavedKeys } from "./hooks/useSavedKeys";
@@ -20,6 +22,7 @@ import { useSecuritySettings } from "./useSecuritySettings";
 export const SecuritySettings = memo(function SecuritySettings() {
   useAppLocale();
   const security = useSecuritySettings();
+  const computersState = useComputersSection();
   const savedKeys = useSavedKeys();
   const accounts = useConnectedAccounts();
   const grants = useGrants();
@@ -65,6 +68,7 @@ export const SecuritySettings = memo(function SecuritySettings() {
           <SecurityDevicesSection disabled={busy !== null} />
         </>
       )}
+      {computersSection({ section: computersState, savedKeys: savedKeys.credentials })}
       {securityAuthoritySections({ savedKeys, grants, accounts })}
       {view && <SecurityAdvancedSection security={security} open={advancedOpen} onToggle={() => setAdvancedOpen(!advancedOpen)} />}
     </SettingsPage>

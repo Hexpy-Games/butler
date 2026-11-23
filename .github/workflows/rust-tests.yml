@@ -185,6 +185,7 @@ jobs:
               smoke app-full-reset-smoke
               smoke schedule-ux-smoke
               smoke settings-security-approvals-smoke
+              smoke app-security-computers-smoke
               smoke sidebar-drag-scroll
               smoke sidebar-add-menu-smoke
               smoke settings-bugs-smoke

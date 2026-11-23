@@ -1,0 +1,74 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { setComputerConnection, useComputerConnections } from "@/app/computerEvents.ts";
+import { appCopy } from "@/app/copy.ts";
+import { notifyError, notifyStatus } from "@/app/notifications.ts";
+import { computerConnection, deleteComputer, forgetComputerMemory, listComputers, type Computer } from "../computersApi";
+
+export type ComputerStatus = "connected" | "disconnected" | "aiNeeded" | "stopsOnLogout";
+
+export function useComputers() {
+  const [computers, setComputers] = useState<Computer[]>([]);
+  const [state, setState] = useState<"loading" | "error" | "ready">("loading");
+  const [busy, setBusy] = useState(false);
+  const mounted = useRef(false);
+  const revision = useRef(0);
+  const removing = useRef(false);
+  const states = useComputerConnections((store) => store.states);
+
+  const refresh = useCallback(async () => {
+    const request = ++revision.current;
+    try {
+      const next = await listComputers();
+      if (!mounted.current || request !== revision.current) return;
+      setComputers(next);
+      setState("ready");
+      for (const { id } of next) {
+        void computerConnection(id).then(({ state }) => {
+          if (mounted.current && request === revision.current) setComputerConnection(id, state);
+        }).catch(() => {});
+      }
+    } catch {
+      if (mounted.current && request === revision.current) setState("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    void refresh();
+    return () => { mounted.current = false; revision.current++; };
+  }, [refresh]);
+
+  function statusOf(computer: Computer): ComputerStatus {
+    const connection = states[computer.id] ?? "idle";
+    if (connection === "unreachable" || connection === "reconnecting") return "disconnected";
+    if (!computer.ai_connected) return "aiNeeded";
+    if (computer.stops_on_logout) return "stopsOnLogout";
+    return "connected";
+  }
+
+  async function remove(computer: Computer, forget: boolean) {
+    if (removing.current) return;
+    removing.current = true;
+    setBusy(true);
+    const copy = appCopy.computers.removeDialog;
+    try {
+      const result = await deleteComputer(computer.id);
+      if (!result.remote_cleaned) notifyStatus(copy.remoteNotCleaned, { id: "computers", tone: "error" });
+      if (forget) {
+        try {
+          await forgetComputerMemory(computer.id);
+        } catch (error) {
+          notifyError(error, copy.forgetFailed, { id: "computers" });
+        }
+      }
+      await refresh();
+    } catch (error) {
+      notifyError(error, copy.removeFailed, { id: "computers" });
+    } finally {
+      removing.current = false;
+      if (mounted.current) setBusy(false);
+    }
+  }
+
+  return { computers, state, busy, refresh, remove, statusOf };
+}

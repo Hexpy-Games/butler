@@ -42,6 +42,8 @@ pub(super) struct Computer {
     arch: String,
     glibc: Option<String>,
     stops_on_logout: bool,
+    #[serde(default)]
+    pub ai_connected: bool,
     host_keys: Vec<String>,
     added_at: String,
 }
@@ -204,6 +206,7 @@ pub(super) async fn add(
         arch: platform.arch,
         glibc: platform.glibc,
         stops_on_logout: platform.stops_on_logout,
+        ai_connected: false,
         host_keys: host.host_keys,
         added_at: chrono::Utc::now().to_rfc3339(),
     };
@@ -321,7 +324,9 @@ pub(super) async fn send_credential(
     let body = serde_json::json!({"provider_id": key.provider_id, "api_key": key.api_key.expose()})
         .to_string()
         .into_bytes();
-    relay::data(relay::request(&computer, "POST", "/credentials", body, cancel).await?)
+    let view = relay::data(relay::request(&computer, "POST", "/credentials", body, cancel).await?)?;
+    store::set_ai_connected(root.join("config/computers.json"), id.to_owned(), true).await?;
+    Ok(view)
 }
 
 #[derive(Deserialize, Default)]
@@ -397,6 +402,7 @@ pub(super) async fn oauth_flow(
     if view["status"] != "pending" {
         forward::stop(id, flow_id);
     }
+    record_completed_sign_in(root, &computer, &view).await?;
     Ok(view)
 }
 
@@ -415,5 +421,22 @@ pub(super) async fn oauth_cancel(
     let view =
         relay::data(relay::request(&computer, "POST", &path, b"{}".to_vec(), cancel).await?)?;
     forward::stop(id, flow_id);
+    record_completed_sign_in(root, &computer, &view).await?;
     Ok(view)
+}
+
+async fn record_completed_sign_in(
+    root: &Path,
+    computer: &Computer,
+    view: &Value,
+) -> Result<(), HttpError> {
+    if view["status"] == "completed" && !computer.ai_connected {
+        store::set_ai_connected(
+            root.join("config/computers.json"),
+            computer.id.clone(),
+            true,
+        )
+        .await?;
+    }
+    Ok(())
 }

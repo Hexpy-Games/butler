@@ -73,6 +73,7 @@ mod cli_surface;
 mod composer_decoration;
 mod composer_fold;
 mod computer_account;
+mod computer_ai_connection;
 mod computers;
 mod connectors;
 mod context_telemetry;

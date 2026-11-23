@@ -16,6 +16,7 @@ import {
 } from "../../packages/butler-app/client/electron/app-agent-supervisor.mjs";
 
 const ADMIN = "admin-credential-".padEnd(43, "x");
+const COMPUTER_ID = "01234567-89ab-4def-8123-456789abcdef";
 const ADMIN_FILE = { schema: "butler.app-local-admin.v1", purpose: "butler-local-admin", secret: ADMIN };
 const envelope = (data: unknown) => ({ protocol_version: "butler.app.v1", data });
 
@@ -100,6 +101,16 @@ test("the security routes carry the admin header next to the bearer token", asyn
     [{ "route": "removeConnectorAccount", "body": { "connector": "mail/mail", "account": "acct-00000000-0000-0000-0000-000000000000", "revision": 0 } }, "DELETE", "/connectors/mail/mail/accounts/acct-00000000-0000-0000-0000-000000000000?revision=0"],
     [{ "route": "listConnectorRules" }, "GET", "/connector-rules"],
     [{ "route": "deleteConnectorRule", "body": { "rule": "rule-00000000-0000-0000-0000-000000000000" } }, "DELETE", "/connector-rules/rule-00000000-0000-0000-0000-000000000000"],
+    [{ route: "listComputers" }, "GET", "/computers"],
+    [{ route: "checkComputerHostKey", body: { payload: {} } }, "POST", "/computers/host-key"],
+    [{ route: "addComputer", body: { payload: {} } }, "POST", "/computers"],
+    [{ route: "deleteComputer", body: { id: COMPUTER_ID } }, "DELETE", `/computers/${COMPUTER_ID}`],
+    [{ route: "startComputer", body: { id: COMPUTER_ID } }, "POST", `/computers/${COMPUTER_ID}/start`],
+    [{ route: "getComputerConnection", body: { id: COMPUTER_ID } }, "GET", `/computers/${COMPUTER_ID}/connection`],
+    [{ route: "sendComputerCredential", body: { id: COMPUTER_ID, payload: {} } }, "POST", `/computers/${COMPUTER_ID}/credentials`],
+    [{ route: "startComputerOauth", body: { id: COMPUTER_ID, payload: {} } }, "POST", `/computers/${COMPUTER_ID}/oauth/start`],
+    [{ route: "getComputerOauth", body: { id: COMPUTER_ID, flow: "flow_1" } }, "GET", `/computers/${COMPUTER_ID}/oauth/flow_1`],
+    [{ route: "cancelComputerOauth", body: { id: COMPUTER_ID, flow: "flow_1" } }, "POST", `/computers/${COMPUTER_ID}/oauth/flow_1/cancel`],
     [{ route: "getSecurity" }, "GET", "/security"],
     [{ route: "listOauthCredentials" }, "GET", "/security/oauth"],
     [{ route: "removeOauthCredential", body: { id: "account-credential_2" } }, "DELETE", "/security/oauth/account-credential_2"],
@@ -127,6 +138,10 @@ test("the security routes carry the admin header next to the bearer token", asyn
 test("anything else is refused before a request is sent", async () => {
   for (const input of [
     { route: "getSettings" },
+    { route: "deleteComputer", body: { id: "../security" } },
+    { route: "getComputerOauth", body: { id: COMPUTER_ID, flow: "../x" } },
+    { route: "getComputerOauth", body: { id: COMPUTER_ID } },
+    { route: "addComputer" },
     { route: "removeOauthCredential" },
     { route: "removeOauthCredential", body: { id: "../settings" } },
     { route: "removeOauthCredential", body: { id: "" } },

@@ -923,7 +923,7 @@ const butlerApp = Object.freeze({
   },
   memoryRequest: ({ path, method = "GET", body } = {}) => {
     const existing = /^\/memory\/(inventory(?:\/check)?|instructions(?:\/[A-Za-z0-9]+)?|projects\/[A-Za-z0-9_-]+|cleanup(?:\/[a-f0-9-]+)?)$/.test(path);
-    const reset = (method === "POST" && /^\/memory\/reset\/(chat-memory|profile|reextract|projects\/[A-Za-z0-9_-]+)$/.test(path)) ||
+    const reset = (method === "POST" && /^\/memory\/reset\/(chat-memory|profile|reextract|projects\/[A-Za-z0-9_-]+|computers\/[A-Za-z0-9_-]{1,64})$/.test(path)) ||
       (method === "GET" && /^\/memory\/reset\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(path));
     const patterns = (method === "GET" && path === "/memory/patterns") ||
       (method === "DELETE" && /^\/memory\/patterns\/[A-Za-z0-9_-]+$/.test(path));
@@ -1445,6 +1445,16 @@ const butlerApp = Object.freeze({
   updateSignIn: ({ id, payload } = {}) => requestSecurity("updateSignIn", { id, payload }),
   deleteSignIn: ({ id } = {}) => requestSecurity("deleteSignIn", { id }),
   updateSignInSite: (payload) => requestSecurity("updateSignInSite", { payload }),
+  listComputers: () => requestSecurity("listComputers"),
+  checkComputerHostKey: (payload) => requestSecurity("checkComputerHostKey", { payload }),
+  addComputer: (payload) => requestSecurity("addComputer", { payload }),
+  deleteComputer: ({ id } = {}) => requestSecurity("deleteComputer", { id }),
+  startComputer: ({ id } = {}) => requestSecurity("startComputer", { id }),
+  getComputerConnection: ({ id } = {}) => requestSecurity("getComputerConnection", { id }),
+  sendComputerCredential: ({ id, payload } = {}) => requestSecurity("sendComputerCredential", { id, payload }),
+  startComputerOauth: ({ id, payload } = {}) => requestSecurity("startComputerOauth", { id, payload }),
+  getComputerOauth: ({ id, flow } = {}) => requestSecurity("getComputerOauth", { id, flow }),
+  cancelComputerOauth: ({ id, flow } = {}) => requestSecurity("cancelComputerOauth", { id, flow }),
   listImportSources: () => requestSecurity("listImportSources"),
   previewImport: (payload) => requestSecurity("previewImport", { payload }),
   runImport: (payload) => requestSecurity("runImport", { payload }),

@@ -98,6 +98,7 @@ async fn remote_start_places_verifies_and_starts_the_main_version() -> Result<()
     launch.data = launch.home.join(".butler-remote/data");
     fs::create_dir(&launch.home)?;
     let versions = versions_on_disk(&launch.home, &setup.sandbox.root)?;
+    fs::create_dir(launch.home.join("work"))?;
     let remote = RemoteHome(launch, versions);
     let key = setup.sandbox.home.join("key");
     assert!(
@@ -151,7 +152,7 @@ async fn remote_start_places_verifies_and_starts_the_main_version() -> Result<()
         .send(Method::POST, "/computers/host-key", Some(host), &[])
         .await?;
     assert_eq!(seen.status, 200, "{seen:?}");
-    let added = api.send(Method::POST, "/computers", Some(json!({"name":"Remote","address":"127.0.0.1","port":sshd.port,"key_file":key,"folder":remote.0.home,"host_fingerprint":seen.data()["fingerprint"]})), &[]).await?;
+    let added = api.send(Method::POST, "/computers", Some(json!({"name":"Remote","address":"127.0.0.1","port":sshd.port,"key_file":key,"folder":remote.0.home.join("work"),"host_fingerprint":seen.data()["fingerprint"]})), &[]).await?;
     assert_eq!(added.status, 201, "{added:?}");
     let start = format!(
         "/computers/{}/start",
@@ -199,6 +200,7 @@ async fn remote_start_rejects_a_bad_checksum() -> Result<(), HarnessError> {
     launch.data = launch.home.join(".butler-remote/data");
     fs::create_dir(&launch.home)?;
     let versions = versions_on_disk(&launch.home, &setup.sandbox.root)?;
+    fs::create_dir(launch.home.join("work"))?;
     let remote = RemoteHome(launch, versions);
     let key = setup.sandbox.home.join("key");
     assert!(
@@ -254,7 +256,7 @@ async fn remote_start_rejects_a_bad_checksum() -> Result<(), HarnessError> {
         .send(Method::POST, "/computers/host-key", Some(host), &[])
         .await?;
     assert_eq!(seen.status, 200, "{seen:?}");
-    let added = api.send(Method::POST, "/computers", Some(json!({"name":"Remote","address":"127.0.0.1","port":sshd.port,"key_file":key,"folder":remote.0.home,"host_fingerprint":seen.data()["fingerprint"]})), &[]).await?;
+    let added = api.send(Method::POST, "/computers", Some(json!({"name":"Remote","address":"127.0.0.1","port":sshd.port,"key_file":key,"folder":remote.0.home.join("work"),"host_fingerprint":seen.data()["fingerprint"]})), &[]).await?;
     assert_eq!(added.status, 201, "{added:?}");
     let start = format!(
         "/computers/{}/start",
@@ -288,6 +290,7 @@ async fn remote_delete_stops_and_removes_the_remote() -> Result<(), HarnessError
     launch.data = launch.home.join(".butler-remote/data");
     fs::create_dir(&launch.home)?;
     let versions = versions_on_disk(&launch.home, &setup.sandbox.root)?;
+    fs::create_dir(launch.home.join("work"))?;
     let remote = RemoteHome(launch, versions);
     let key = setup.sandbox.home.join("key");
     assert!(
@@ -341,7 +344,7 @@ async fn remote_delete_stops_and_removes_the_remote() -> Result<(), HarnessError
         .send(Method::POST, "/computers/host-key", Some(host), &[])
         .await?;
     assert_eq!(seen.status, 200, "{seen:?}");
-    let added = api.send(Method::POST, "/computers", Some(json!({"name":"Remote","address":"127.0.0.1","port":sshd.port,"key_file":key,"folder":remote.0.home,"host_fingerprint":seen.data()["fingerprint"]})), &[]).await?;
+    let added = api.send(Method::POST, "/computers", Some(json!({"name":"Remote","address":"127.0.0.1","port":sshd.port,"key_file":key,"folder":remote.0.home.join("work"),"host_fingerprint":seen.data()["fingerprint"]})), &[]).await?;
     assert_eq!(added.status, 201, "{added:?}");
     let computer = format!(
         "/computers/{}",

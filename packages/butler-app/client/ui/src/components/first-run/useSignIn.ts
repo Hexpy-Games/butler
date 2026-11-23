@@ -3,6 +3,14 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { cancelSignIn, signInStatus, startSignIn, type SignInSession, type SignInKind } from "@/app/setupSignIn.ts";
 import type { OpenAIOAuthLoginResult } from "@/components/settings/modelManagementApi";
 
+export interface SignInTransport {
+  start(input: { force?: boolean; kind?: SignInKind }): Promise<SignInSession>;
+  status(session: SignInSession): Promise<OpenAIOAuthLoginResult>;
+  cancel(session: SignInSession): Promise<OpenAIOAuthLoginResult | undefined>;
+}
+
+const SETUP_SIGN_IN: SignInTransport = { start: startSignIn, status: signInStatus, cancel: cancelSignIn };
+
 export const SIGN_IN_POLL_MS = 1000;
 /** A sign-in with no answer for this long times out. */
 export const SIGN_IN_TIMEOUT_MS = 5 * 60 * 1000;
@@ -18,7 +26,7 @@ const OPEN = new Set<OpenAIOAuthLoginResult["status"]>(["starting", "pending"]);
  * then waits for the browser to finish, with Cancel and "Copy link" as the
  * ways out.
  */
-export function useSignIn({ onSignedIn }: { onSignedIn: () => void }) {
+export function useSignIn({ onSignedIn, transport = SETUP_SIGN_IN }: { onSignedIn: () => void; transport?: SignInTransport }) {
   const [phase, setPhase] = useState<SignInPhase>("idle");
   const [session, setSession] = useState<SignInSession | null>(null);
   const [copied, setCopied] = useState(false);
@@ -54,20 +62,20 @@ export function useSignIn({ onSignedIn }: { onSignedIn: () => void }) {
     setCopied(false);
     opened.current = null;
     try {
-      const started = await startSignIn(input);
+      const started = await transport.start(input);
       settle(id, started, started.view);
     } catch {
       if (id === run.current) setPhase("failed");
     }
   }
 
-  useSignInPolling({ phase, session, run, polling, settle, cancel });
+  useSignInPolling({ phase, session, run, polling, settle, cancel, status: transport.status });
 
   async function cancel(reason: "cancelled" | "timedout" = "cancelled"): Promise<void> {
     const id = ++run.current;
     setPhase(reason);
     if (!session) return;
-    const result = await cancelSignIn(session).catch(() => undefined);
+    const result = await transport.cancel(session).catch(() => undefined);
     // A cancel that lands after the code exchange answers `completed`: the sign-in went through.
     if (id === run.current && result && SIGNED_IN.has(result.status)) {
       setSession({ ...session, view: { ...session.view, ...result } });
@@ -97,13 +105,14 @@ export function useSignIn({ onSignedIn }: { onSignedIn: () => void }) {
 }
 
 /** Poll only the active flow; a timeout cancels its listener and has its own screen state. */
-function useSignInPolling({ phase, session, run, polling, settle, cancel }: {
+function useSignInPolling({ phase, session, run, polling, settle, cancel, status }: {
   phase: SignInPhase;
   session: SignInSession | null;
   run: RefObject<number>;
   polling: RefObject<boolean>;
   settle: (id: number, current: SignInSession, result: OpenAIOAuthLoginResult) => void;
   cancel: (reason: "timedout") => Promise<void>;
+  status: SignInTransport["status"];
 }) {
   useEffect(() => {
     if (phase !== "waiting" || !session) return undefined;
@@ -117,7 +126,7 @@ function useSignInPolling({ phase, session, run, polling, settle, cancel }: {
       }
       if (polling.current) return;
       polling.current = true;
-      signInStatus(current)
+      status(current)
         .then((result) => settle(id, current, result))
         .catch(() => undefined)
         .finally(() => {
