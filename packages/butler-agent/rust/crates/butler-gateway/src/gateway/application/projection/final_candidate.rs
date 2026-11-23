@@ -23,6 +23,7 @@ pub(super) struct FinalCandidate {
     pub no_visible_reply: bool,
     pub changed_files: Vec<Value>,
     pub outputs: Vec<String>,
+    pub documents: Vec<String>,
     pub plan: Option<Value>,
     pub answer_blocks: Option<Value>,
     pub activates_plan: bool,
@@ -93,7 +94,8 @@ pub(super) fn candidate(
         text: sanitize(message.get("text")),
         no_visible_reply: metadata.get("noVisibleReply") == Some(&Value::Bool(true)),
         changed_files,
-        outputs: output_ids(&message),
+        outputs: ids(&message, "outputs"),
+        documents: ids(&message, "documents"),
         plan,
         answer_blocks: message
             .get("answerBlocks")
@@ -377,9 +379,9 @@ fn changed_files(message: &Map<String, Value>) -> Vec<Value> {
         .collect()
 }
 
-fn output_ids(message: &Map<String, Value>) -> Vec<String> {
+fn ids(message: &Map<String, Value>, key: &str) -> Vec<String> {
     message
-        .get("outputs")
+        .get(key)
         .and_then(Value::as_array)
         .into_iter()
         .flatten()

@@ -7361,7 +7361,7 @@
       "definition": {
         "type": "function",
         "name": "deliver_files",
-        "description": "Hand finished files to the user as this turn's deliverables: what the user asked for or will keep or share. Only delivered files appear on your answer and in the user's Library. Do not deliver notes, drafts, helper scripts, logs, intermediate data or ordinary code changes; those stay in the turn's details. Each file is sent as it is when the turn ends. To revise one, change the same file and deliver it again; the Library keeps its versions. For a page or site, use output_publish.",
+        "description": "Hand finished files to the user as this turn's deliverables: what the user asked for or will keep or share. Only delivered files appear on your answer and in the user's Library. In a delegated Worker turn, delivered files go to your requester, not the user. Do not deliver notes, drafts, helper scripts, logs, intermediate data or ordinary code changes; those stay in the turn's details. Each file is sent as it is when the turn ends. To revise one, change the same file and deliver it again; the Library keeps its versions. For a page or site, use output_publish.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -13891,7 +13891,7 @@
     "deliver_files": {
       "type": "function",
       "name": "deliver_files",
-      "description": "Hand finished files to the user as this turn's deliverables: what the user asked for or will keep or share. Only delivered files appear on your answer and in the user's Library. Do not deliver notes, drafts, helper scripts, logs, intermediate data or ordinary code changes; those stay in the turn's details. Each file is sent as it is when the turn ends. To revise one, change the same file and deliver it again; the Library keeps its versions. For a page or site, use output_publish.",
+      "description": "Hand finished files to the user as this turn's deliverables: what the user asked for or will keep or share. Only delivered files appear on your answer and in the user's Library. In a delegated Worker turn, delivered files go to your requester, not the user. Do not deliver notes, drafts, helper scripts, logs, intermediate data or ordinary code changes; those stay in the turn's details. Each file is sent as it is when the turn ends. To revise one, change the same file and deliver it again; the Library keeps its versions. For a page or site, use output_publish.",
       "parameters": {
         "type": "object",
         "additionalProperties": false,

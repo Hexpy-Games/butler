@@ -394,6 +394,8 @@ pub struct DeliveredOutcome {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outputs: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changed_files: Vec<ChangedFileSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub answer_blocks: Vec<serde_json::Value>,
@@ -423,6 +425,8 @@ pub struct AlreadyDeliveredOutcome {
     pub artifacts: Vec<FinalArtifact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outputs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changed_files: Vec<ChangedFileSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
