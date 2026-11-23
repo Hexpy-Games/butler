@@ -529,7 +529,7 @@ export interface MobileCopy {
   };
   outputs: { share: string; shareFailed: string; loadFailed: string; unsupported: string; savedToLibrary: string; saveFailed: string };
   library: { changeFailed: string };
-  automations: { nextRun: string; lastRun: string; deleteFailed: string };
+  automations: { nextRun: string; lastRun: string; deleteFailed: string; edit: string };
 }
 
 /** Browser copy (`browser.*`): chrome, page band, pointer, picking, library, page dialogs and sign-in settings. */

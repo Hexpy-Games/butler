@@ -18,6 +18,7 @@ export interface TextFieldProps {
   literal?: boolean;
   numeric?: "tabular";
   autoFocus?: boolean;
+  multiline?: boolean;
   keyboardType?: "default" | "url" | "number-pad";
   autoComplete?: "off" | "url" | "one-time-code";
   returnKeyType?: "done" | "go" | "next";
@@ -28,7 +29,7 @@ export interface TextFieldProps {
 
 export function TextField({
   label, value, onChangeText, placeholder, description, error, disabled, literal, numeric, autoFocus,
-  keyboardType, autoComplete, returnKeyType, onSubmitEditing, maxLength, testID,
+  multiline, keyboardType, autoComplete, returnKeyType, onSubmitEditing, maxLength, testID,
 }: TextFieldProps) {
   const t = useTokens();
   const [focusedNow, setFocusedNow] = useState(false);
@@ -54,6 +55,8 @@ export function TextField({
         autoFocus={autoFocus}
         autoCapitalize="none"
         autoCorrect={false}
+        multiline={multiline}
+        textAlignVertical={multiline ? "top" : undefined}
         keyboardType={keyboardType}
         autoComplete={autoComplete}
         returnKeyType={returnKeyType}
@@ -66,7 +69,7 @@ export function TextField({
         accessibilityHint={error ?? description}
         maxFontSizeMultiplier={maxFontScale.control}
         style={{
-          minHeight: t.length("--control-hit-target"),
+          minHeight: multiline ? 5 * t.length("--typo-body-line-height") : t.length("--control-hit-target"),
           paddingVertical: (t.length("--control-hit-target") - t.length("--typo-body-line-height")) / 2,
           paddingHorizontal: t.length("--space-md"),
           borderRadius: t.length(RADIUS),

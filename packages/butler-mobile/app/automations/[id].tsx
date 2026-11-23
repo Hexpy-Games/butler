@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { Platform } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { getAppCopy } from "../../../butler-i18n/src/index.ts";
 import { nextRunTime, runLabel, scheduleFrequency } from "@/automations/automationLabels";
 import { useAutomation } from "@/automations/useAutomation";
 import { timeLabel } from "@/conversation/sessions";
-import { Button, icons, ListGroup, ListGroupItem, ListRow, Sheet, Text } from "@/ds";
+import { Button, IconButton, icons, ListGroup, ListGroupItem, ListRow, Sheet, Text } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { LoadState, SettingsScreen } from "@/settings/layout";
 
@@ -14,7 +15,11 @@ export default function Automation() {
   const { automation: a, runs, error, busy, deleting: deletePending, load, act, remove } = useAutomation(params.id);
   const [deleting, setDeleting] = useState(false);
   const now = new Date(), next = a ? nextRunTime(a, locale) : "";
-  return <SettingsScreen title={a?.title ?? params.title}>
+  const edit = () => router.push({ pathname: "/automations/edit", params: { id: params.id } });
+  return <SettingsScreen title={a?.title ?? params.title} options={a && !error ? Platform.OS === "ios" ? {
+    unstable_headerRightItems: () => [{ type: "button", label: M.automations.edit,
+      icon: { type: "sfSymbol", name: "pencil" }, onPress: edit }],
+  } : { headerRight: () => <IconButton icon={icons.Edit} variant="ghost" label={M.automations.edit} onPress={edit} /> } : undefined}>
     {!a || error ? <ListGroup><LoadState error={error} onRetry={load} /></ListGroup> : <>
       <ListGroup>
         <ListRow title={copy.fields.targetChat} description={a.target_label} navigates
