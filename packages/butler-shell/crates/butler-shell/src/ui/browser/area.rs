@@ -18,7 +18,20 @@ use butler_ds::ui::{
 use gpui::{AnyElement, App, Entity, SharedString, Window, div, prelude::*};
 use std::collections::HashSet;
 
-gpui::actions!(browser, [FocusAddress, NewTab, CloseTab, Back, Forward]);
+gpui::actions!(
+    browser,
+    [
+        FocusAddress,
+        NewTab,
+        CloseTab,
+        Back,
+        Forward,
+        Pick,
+        PickExit,
+        PickWider,
+        PickNarrower
+    ]
+);
 pub(crate) fn bindings() -> Vec<gpui::KeyBinding> {
     vec![
         // The shell field unbinds Enter for its composer; the DS address owns submission.
@@ -27,6 +40,10 @@ pub(crate) fn bindings() -> Vec<gpui::KeyBinding> {
             gpui_elements::editable_text::actions::Enter,
             Some("BrowserArea > EditableText"),
         ),
+        gpui::KeyBinding::new("secondary-shift-s", Pick, None),
+        gpui::KeyBinding::new("escape", PickExit, Some("BrowserArea")),
+        gpui::KeyBinding::new("up", PickWider, Some("BrowserArea")),
+        gpui::KeyBinding::new("down", PickNarrower, Some("BrowserArea")),
         gpui::KeyBinding::new("secondary-l", FocusAddress, Some("BrowserArea")),
         gpui::KeyBinding::new("secondary-t", NewTab, Some("BrowserArea")),
         gpui::KeyBinding::new("secondary-w", CloseTab, Some("BrowserArea")),
@@ -153,8 +170,8 @@ fn page(tab: Option<&Tab>, key: &str, window: &mut Window, cx: &mut App) -> Page
         if let Some(band) = super::holder_band::band(tab, cx) {
             page = page.band(band);
         }
-        if let Some(dialog) = &tab.dialog {
-            page = page.overlay(super::dialog::show(&tab.id, dialog, window, cx));
+        if let Some(layer) = overlay(tab, window, cx) {
+            page = page.overlay(layer);
         }
         let id = tab.id.clone();
         let surface =
@@ -197,6 +214,24 @@ fn page(tab: Option<&Tab>, key: &str, window: &mut Window, cx: &mut App) -> Page
         page = page.internal(anchor(div(), "browser-page").child(line));
     }
     page
+}
+/// The page's overlay layer: the pick outline under any page dialog.
+fn overlay(tab: &Tab, window: &mut Window, cx: &mut App) -> Option<AnyElement> {
+    let pick = super::pick::overlay(tab, window, cx);
+    let dialog = tab
+        .dialog
+        .as_ref()
+        .map(|d| super::dialog::show(&tab.id, d, window, cx));
+    (pick.is_some() || dialog.is_some()).then(|| {
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .children(pick)
+            .children(dialog)
+            .into_any_element()
+    })
 }
 pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut App) -> AnyElement {
     let restored = super::restore::ready(cx);
@@ -250,6 +285,9 @@ pub(crate) fn browser_area(session: Option<&str>, window: &mut Window, cx: &mut 
     })
     .holder(tab.map_or(PageCardHolder::None, card_holder));
     let focus = state.read(cx).focus.clone();
+    if tab.is_some_and(|t| t.pick.focus_requested.replace(false)) {
+        window.focus(&focus, cx);
+    }
     anchor(div().id("browser-area"), "browser-area")
         .track_focus(&focus)
         .key_context("BrowserArea")

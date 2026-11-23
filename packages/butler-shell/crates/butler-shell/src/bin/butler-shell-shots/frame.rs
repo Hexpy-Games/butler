@@ -28,6 +28,7 @@ pub(super) fn command(h: &mut Harness, command: &str, arg: &str) -> anyhow::Resu
         "drag-release" => super::hold::drag_release(h, arg),
         "click-at" => click_at(h, arg),
         "page-click" => page_click(h, arg),
+        "page-hover" => page_hover(h, arg),
         "hover" => hover(h, arg),
         "wheel" => wheel(h, arg),
         "reveal" => reveal(h, arg),
@@ -414,9 +415,9 @@ pub(super) fn find_anchor(
     }
     Ok(None)
 }
-fn page_click(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+fn page_at(h: &mut Harness, arg: &str) -> anyhow::Result<gpui::Point<gpui::Pixels>> {
     settle(&mut h.cx, h.handle);
-    let (x, y) = arg.split_once(' ').context("page-click <x> <y>")?;
+    let (x, y) = arg.split_once(' ').context("page coordinates <x> <y>")?;
     let (x, y): (f32, f32) = (x.parse()?, y.parse()?);
     let bounds =
         h.cx.debug_bounds(h.handle, "browser-page")?
@@ -438,6 +439,15 @@ fn page_click(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
         f32::from(bounds.size.width) / w,
         f32::from(bounds.size.height) / ht,
     );
-    let at = bounds.origin + point(px(x * sx), px(y * sy));
+    Ok(bounds.origin + point(px(x * sx), px(y * sy)))
+}
+fn page_click(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    let at = page_at(h, arg)?;
     pointer_sequence(h, h.handle, at, at, MouseButton::Left, false)
+}
+fn page_hover(h: &mut Harness, arg: &str) -> anyhow::Result<()> {
+    let at = page_at(h, arg)?;
+    move_pointer(h, h.handle, at, None)?;
+    settle(&mut h.cx, h.handle);
+    Ok(())
 }

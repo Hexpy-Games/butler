@@ -41,6 +41,9 @@ impl Notice {
 pub(super) fn band(tab: &Tab, cx: &App) -> Option<PageBand> {
     let id = SharedString::from(format!("browser-band-{}", tab.id.0));
     let notice = popup_notice(tab, cx);
+    if tab.picking {
+        return Some(pick_band(id, tab, notice, cx));
+    }
     match tab.hosted.as_ref() {
         Some(hosted) if shown_holder(tab) != ShownHolder::None => {
             Some(holder_band(id, tab, hosted, notice, cx))
@@ -56,6 +59,32 @@ pub(super) fn band(tab: &Tab, cx: &App) -> Option<PageBand> {
             band
         }),
     }
+}
+
+fn pick_band(id: SharedString, tab: &Tab, notice: Option<Notice>, cx: &App) -> PageBand {
+    let w = super::pick::words(cx);
+    let text = notice.as_ref().map(Notice::text);
+    let tab_id = tab.id.clone();
+    PageBand::new(id, PageBandTone::Pick, w.mode)
+        .icon(
+            anchor(div(), "browser-pick-band")
+                .child(icon(Icon::Pick, IconSize::Sm, Ds::get(cx)))
+                .into_any_element(),
+        )
+        .detail(text.clone().unwrap_or_else(|| w.drag.to_owned()))
+        .hint(if text.is_some() { w.drag } else { w.keys })
+        .actions(
+            button::container(Size::Xs)
+                .children(notice.and_then(|n| n.action))
+                .child(anchored(
+                    Button::new("browser-pick-done")
+                        .size(Size::Xs)
+                        .variant(Variant::Outline)
+                        .text(w.finish)
+                        .on_click(move |_, _, cx| super::pick::mode(&tab_id, false, cx)),
+                    "browser-pick-done",
+                )),
+        )
 }
 
 fn holder_band(

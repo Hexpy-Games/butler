@@ -3,7 +3,7 @@ use super::{
     geometry::{edges, meet, n, same, shift},
     reader,
 };
-use crate::ui::browser::engine::TabId;
+use crate::ui::browser::{engine::TabId, model::BrowserState};
 use gpui::AsyncApp;
 use serde_json::{Value, json};
 
@@ -134,8 +134,8 @@ pub(super) fn label(hover: &mut Hover) {
         hover.label = format!(
             "{} · {:.0} × {:.0}{}{}",
             level.data["name"].as_str().unwrap_or(""),
-            n(&hover.rect, "width"),
-            n(&hover.rect, "height"),
+            n(&hover.rect, "width").round(),
+            n(&hover.rect, "height").round(),
             if hover.index + 1 < hover.levels.len() {
                 " · ↑"
             } else if hover.index > 0 {
@@ -173,4 +173,47 @@ fn merge(levels: &mut Vec<Level>, item: &Value, frame: &Frame, chosen: &mut Opti
         data,
         frame: frame.clone(),
     });
+}
+
+pub(super) async fn hit(
+    page: &TabId,
+    x: f64,
+    y: f64,
+    preferred: Option<&str>,
+    cx: &AsyncApp,
+) -> anyhow::Result<Option<super::Item>> {
+    let hover = probe(page, x, y, preferred, cx).await?;
+    let Some(level) = hover.levels.get(hover.index) else {
+        return Ok(None);
+    };
+    let data = reader::run(
+        page,
+        &level.frame.path,
+        json!({"op":"capture","id":level.data["id"]}),
+        cx,
+    )
+    .await?;
+    let (Some(rect), Some(crop)) = (
+        level.frame.place(&data["rect"]),
+        level.frame.place(&data["cropRect"]),
+    ) else {
+        return Ok(None);
+    };
+    let url = cx
+        .update(|cx| cx.global::<BrowserState>().tab(page).map(|t| t.url.clone()))
+        .unwrap_or_default();
+    let site = url::Url::parse(&url)
+        .ok()
+        .map(|u| u[url::Position::BeforeHost..url::Position::AfterPort].to_owned())
+        .unwrap_or_default();
+    Ok(Some(super::Item {
+        data: json!({
+            "id": uuid::Uuid::new_v4().to_string(), "tab": page.0.as_ref(), "url": url, "site": site,
+            "capturedAt": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            "title": data["title"], "text": data["text"], "tag": data["tag"], "rect": rect, "cropRect": crop, "identity": data["identity"],
+        }),
+        frame: level.frame.clone(),
+        hidden: false,
+        area: None,
+    }))
 }

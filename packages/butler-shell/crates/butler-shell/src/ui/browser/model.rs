@@ -179,6 +179,7 @@ impl BrowserState {
         cx.spawn(async move |cx| {
             while let Some(event) = receiver.next().await {
                 cx.update(|cx| {
+                    super::pick::page_event(&event, cx);
                     let quiet = event.change.is_quiet();
                     cx.update_global::<Self, _>(|model, cx| model.apply(event, cx));
                     if !quiet {

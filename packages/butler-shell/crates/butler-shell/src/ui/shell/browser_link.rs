@@ -3,7 +3,8 @@ use super::Shell;
 use crate::ui::{
     Icon,
     browser::{
-        area::browser_area,
+        self,
+        area::{Pick, PickExit, PickNarrower, PickWider, browser_area},
         model::BrowserState,
         shell_state::{BrowserShell, browser_raise, open_conversation},
     },
@@ -14,6 +15,18 @@ use crate::ui::{
 use butler_ds::ui::icon_button::{IconButton, Pane};
 use gpui::{AnyElement, Context, Window, div, prelude::*};
 impl Shell {
+    /// The browser's window-level actions (address, tabs, history, element select).
+    pub(super) fn browser_actions(el: gpui::Div, cx: &mut Context<Self>) -> gpui::Div {
+        el.on_action(cx.listener(Self::browser_focus_address))
+            .on_action(cx.listener(Self::browser_new_tab))
+            .on_action(cx.listener(Self::browser_close_tab))
+            .on_action(cx.listener(Self::browser_back))
+            .on_action(cx.listener(Self::browser_forward))
+            .on_action(cx.listener(Self::browser_pick))
+            .on_action(cx.listener(Self::browser_pick_exit))
+            .on_action(cx.listener(Self::browser_pick_wider))
+            .on_action(cx.listener(Self::browser_pick_narrower))
+    }
     fn browser_owner(&self, cx: &gpui::App) -> Option<crate::ui::browser::model::Owner> {
         use crate::ui::{browser::model::Owner, manage::View};
         if self.settings_view.is_some() {
@@ -105,6 +118,56 @@ impl Shell {
                 model.back(&id)
             };
             crate::ui::browser::area::result(&value, cx);
+        }
+    }
+    pub(super) fn browser_pick(&mut self, _: &Pick, _: &mut Window, cx: &mut Context<Self>) {
+        if self.browser_owner(cx).is_none() {
+            cx.propagate();
+            return;
+        }
+        if let Some(id) = cx.global::<BrowserState>().active().cloned() {
+            browser::pick::mode(&id, true, cx);
+        }
+    }
+    pub(super) fn browser_pick_exit(
+        &mut self,
+        _: &PickExit,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.browser_pick_key(0, cx);
+    }
+    pub(super) fn browser_pick_wider(
+        &mut self,
+        _: &PickWider,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.browser_pick_key(1, cx);
+    }
+    pub(super) fn browser_pick_narrower(
+        &mut self,
+        _: &PickNarrower,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.browser_pick_key(2, cx);
+    }
+    fn browser_pick_key(&self, op: u8, cx: &mut Context<Self>) {
+        let model = cx.global::<BrowserState>();
+        let id = self
+            .browser_owner(cx)
+            .and_then(|_| model.active())
+            .filter(|id| model.tab(id).is_some_and(|t| t.picking))
+            .cloned();
+        let Some(id) = id else {
+            cx.propagate();
+            return;
+        };
+        match op {
+            0 => browser::pick::mode(&id, false, cx),
+            1 => browser::pick::step(&id, true, cx),
+            _ => browser::pick::step(&id, false, cx),
         }
     }
     pub(super) fn render_browser_pane(
