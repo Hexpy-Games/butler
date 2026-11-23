@@ -1,6 +1,6 @@
 //! Settle a claimed semantic window under its original nonce.
 
-use chrono::{DateTime, Duration};
+use chrono::{DateTime, Duration, SecondsFormat};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::json;
 
@@ -116,6 +116,7 @@ pub(super) fn settle(
     now: &str,
     provider: ProviderCall,
     repair: RepairBudget,
+    resume_at: Option<&str>,
 ) -> CognitionResult<()> {
     let ProjectionWindowOwner {
         job_id: job,
@@ -161,10 +162,9 @@ pub(super) fn settle(
             params![if exhausted{"failed"}else{"pending"},if exhausted{"memory_projection_attempts_exhausted"}else{code},
                 if exhausted{None}else{Some(now)},window,job,nonce]).map_err(db_error)?!=1{return Err(changed())}
     } else {
-        // Contention is infrastructure delay, even after a provider call. It
-        // always retains its stage/output and never spends the failure budget.
-        let retry_at = if code == "memory_write_busy" {
-            Some(retry_at(now, row.1)?)
+        // Infrastructure waits retain their stage/output and never spend the failure budget.
+        let retry_at = if waits(code) {
+            Some(resume_or_retry(now, resume_at, row.1)?)
         } else if repair == RepairBudget::Remaining && retryable(code) && attempts < 3 {
             Some(retry_at(now, attempts)?)
         } else {
@@ -180,6 +180,21 @@ pub(super) fn settle(
     }
     jobs::refresh_semantic_state(&tx, job, now)?;
     tx.commit().map_err(db_error)
+}
+
+fn waits(code: &str) -> bool {
+    matches!(code, "memory_write_busy" | "memory_extract_provider_paused")
+}
+
+fn resume_or_retry(now: &str, at: Option<&str>, attempts: i64) -> CognitionResult<String> {
+    if let Some(at) = at
+        && let Ok(at) = DateTime::parse_from_rfc3339(at)
+        && let Ok(current) = DateTime::parse_from_rfc3339(now)
+        && at > current
+    {
+        return Ok(at.to_rfc3339_opts(SecondsFormat::Millis, true));
+    }
+    retry_at(now, attempts)
 }
 
 fn retryable(code: &str) -> bool {
