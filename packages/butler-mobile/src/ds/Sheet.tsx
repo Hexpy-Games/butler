@@ -6,6 +6,7 @@ import { useTokens } from "../design/useTokens";
 import { Button } from "./Button";
 import { ButtonGroup } from "./ButtonGroup";
 import { Text } from "./Text";
+import { ToastHost } from "./Toast";
 import { FadedScroll } from "./internal/FadedScroll";
 import { GlassFill, liquidGlass } from "./internal/GlassFill";
 import { InListGroup } from "./internal/listGroup";
@@ -156,6 +157,7 @@ export function Sheet({ open, onClose, onClosed, dismissible = true, testID, ...
           <SheetPanel {...panel} onClose={onClose} focusTitle={open} drag={dismissible ? drag.panHandlers : undefined} />
         </Animated.View>
       </KeyboardAvoidingView>
+      <ToastHost />
     </Modal>
   );
 }

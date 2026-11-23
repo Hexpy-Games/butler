@@ -575,7 +575,7 @@ export const enUsCopy: AppCopy = {
       applyUpdateBody: "Butler on your computer restarts to finish the update.",
       version: (version: string, build?: string) => `Version ${version}${build === undefined ? "" : ` (${build})`}`,
     },
-    outputs: { share: "Share", shareFailed: "Could not share.", loadFailed: "Could not load.", unsupported: "This file can't be previewed." },
+    outputs: { share: "Share", shareFailed: "Could not share.", loadFailed: "Could not load.", unsupported: "This file can't be previewed.", savedToLibrary: "Saved to Library.", saveFailed: "Could not save to Library." },
     library: { changeFailed: "Could not save the change." },
     automations: { nextRun: "Next run", lastRun: "Last run", deleteFailed: "Could not delete the schedule." },
   },

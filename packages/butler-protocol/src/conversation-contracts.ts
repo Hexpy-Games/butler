@@ -105,7 +105,7 @@ export interface ConversationMessage {
   answer_blocks?: AnswerBlockSet[];
   work_blocks?: WorkerActivityWorkBlock[];
   /** Set when Butler started the turn (schedule, canon step, delegated result); its request is not in the chat. */
-  initiated?: { kind: string };
+  initiated?: { kind: string; work_session_id?: string; work_title?: string };
   attachments?: MessageFileRef[];
   status?: string;
   delivery_state?: RuntimeDeliveryState;

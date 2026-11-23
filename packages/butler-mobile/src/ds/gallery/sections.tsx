@@ -430,13 +430,15 @@ function ImageFrameSection() {
 function ImageViewerSection() {
   const copy = getAppCopy(useAppLocale());
   const [index, setIndex] = useState<number | null>(null);
-  const images = [require("../../../assets/icon.png"), require("../../../assets/splash-mark.png")].map(asset => {
+  const images = [require("../../../assets/icon.png"), require("../../../assets/splash-mark.png")].map((asset, index) => {
     const { uri, width, height } = Image.resolveAssetSource(asset)!;
-    return { source: { uri, headers: {} }, width: width!, height: height!, alt: copy.conversation.answerBlocks.image };
+    return { source: { uri, headers: {} }, width: width!, height: height!, alt: copy.conversation.answerBlocks.image,
+      ...(index === 0 ? { share: () => {}, save: () => {} } : {}) };
   });
   return <Cell name="ImageViewer">
     <Button label={copy.conversation.imageViewer.viewImage(copy.conversation.answerBlocks.image)} onPress={() => setIndex(0)} />
-    <ImageViewer images={images} index={index} onIndexChange={setIndex} onClose={() => setIndex(null)} labels={copy.conversation.imageViewer} />
+    <ImageViewer images={images} index={index} onIndexChange={setIndex} onClose={() => setIndex(null)}
+      labels={{ ...copy.conversation.imageViewer, share: copy.mobile.outputs.share, saveToLibrary: copy.conversation.answerBlocks.saveToLibrary }} />
   </Cell>;
 }
 
