@@ -301,7 +301,8 @@ impl QueuedMessage {
         let action = |key: &'static str,
                       (label, handler): &(SharedString, Option<Handler>),
                       glyph| {
-            let mut button = IconButton::new((self.id.clone(), key), label.clone()).glyph(glyph);
+            let mut button = IconButton::new((self.id.clone(), key), label.clone())
+                .icon(icon(glyph, IconSize::Sm, ds));
             if busy {
                 button = button.disabled();
             }
