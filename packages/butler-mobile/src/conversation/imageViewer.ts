@@ -1,9 +1,14 @@
-import { useSyncExternalStore } from "react";
+import { createContext, useSyncExternalStore } from "react";
 
 export interface ViewerImage {
   source: { uri: string; headers: Record<string, string> };
   alt: string; width: number; height: number;
+  /** Actions shown in the viewer for this image; each handles its own feedback. */
+  share?: () => void; save?: () => void;
 }
+
+/** Session whose messages are on screen; saved images link back to it. */
+export const ImageSessionContext = createContext<string | undefined>(undefined);
 
 let state: { images: ViewerImage[]; index: number | null } = { images: [], index: null };
 const listeners = new Set<() => void>();
