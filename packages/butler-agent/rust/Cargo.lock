@@ -991,6 +991,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "butler-backup"
+version = "0.0.0"
+dependencies = [
+ "butler-platform",
+ "ring",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "zeroize",
+]
+
+[[package]]
 name = "butler-canon"
 version = "0.0.0"
 dependencies = [
@@ -1139,6 +1153,7 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "base64 0.22.1",
+ "butler-backup",
  "butler-canon",
  "butler-core",
  "butler-gateway",
@@ -1515,6 +1530,7 @@ name = "butler-vault"
 version = "0.0.0"
 dependencies = [
  "age",
+ "bech32",
  "butler-platform",
  "serde",
  "serde_json",

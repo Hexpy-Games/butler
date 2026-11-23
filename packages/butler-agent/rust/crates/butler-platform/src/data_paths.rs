@@ -126,8 +126,15 @@ pub const PROJECT_WRITE_CACHE: &str = "cache/project-write";
 pub const PROJECT_WRITE_TMP: &str = "tmp/project-write";
 /// Private validated reader copies, inaccessible to commands.
 pub const READER_STAGING: &str = "tmp/reader-staging";
+/// Encrypted backup state.
+pub const BACKUP: &str = "backup";
+/// Verified files waiting for restore at service startup.
+pub const RESTORE_STAGING: &str = "restore-staging";
+
 /// Paths whose first component Butler creates itself.
 pub const OWNED_PATHS: &[&str] = &[
+    BACKUP,
+    RESTORE_STAGING,
     LEGACY_SCHEDULES,
     LEGACY_MEMORY,
     COMPACTIONS,
@@ -180,6 +187,8 @@ pub const OWNED_PATHS: &[&str] = &[
 pub const LOCKED_FILES: &[&str] = &[CONFIG, EOL];
 /// Directory-valued store paths; other complete paths name regular files.
 pub const OWNED_DIRECTORIES: &[&str] = &[
+    BACKUP,
+    RESTORE_STAGING,
     LEGACY_SCHEDULES,
     LEGACY_MEMORY,
     COMPACTIONS,

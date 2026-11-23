@@ -351,6 +351,8 @@ async fn mem_04_bootstrap_preserves_nonfresh_memory() -> Result<(), HarnessError
     Ok(())
 }
 
+#[path = "memory/backup_restore.rs"]
+mod backup_restore;
 #[path = "memory/batch.rs"]
 mod batch;
 #[path = "memory/cold_recall.rs"]

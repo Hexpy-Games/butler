@@ -4,7 +4,9 @@
 //! readiness changes become the live event `setup.readiness_changed`.
 
 pub(crate) mod butler_account;
+pub(crate) mod butler_backup;
 use butler_account::{ButlerAccountRequest, butler_account_disabled};
+use butler_backup::ButlerBackupRequest;
 
 use butler_platform::secrets::SecretText;
 use std::sync::Arc;
@@ -328,6 +330,10 @@ pub trait AppSetupPort: Send + Sync + 'static {
     fn cancel_oauth(&self, flow_id: String) -> ApplicationFuture<OauthFlowView>;
 
     /// The Butler account; off unless `butlerAccountEnabled`.
+    fn butler_backup(&self, _request: ButlerBackupRequest) -> ApplicationFuture<Value> {
+        Box::pin(async { Err(butler_account_disabled()) })
+    }
+
     fn butler_account(
         &self,
         _request: ButlerAccountRequest,

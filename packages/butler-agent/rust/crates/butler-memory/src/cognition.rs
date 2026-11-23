@@ -29,6 +29,7 @@ mod exact_query;
 mod extraction;
 pub(crate) mod generation;
 mod generation_vectors;
+pub use generation_vectors::{requeue_vectors, vectors_pending_since};
 mod graph;
 mod graph_consolidation;
 mod hot_cache;

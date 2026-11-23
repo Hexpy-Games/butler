@@ -18,23 +18,8 @@ pub(crate) fn enable(
     plugins: &Plugins,
     password: Option<SecretText>,
 ) -> Result<SwitchReport, VaultError> {
-    let facts = SecretStoreFacts::for_data_root(data_root);
-    let store = if facts.file_override == FileOverride::Honored {
-        None
-    } else {
-        SecretStore::system().ok()
-    };
-    let slot = if vault_uses_system_store(data_root, facts) && store.is_some() {
-        store
-            .as_ref()
-            .map(|store| KeychainSlot::new(store.clone(), data_root))
-            .transpose()?
-            .map(|slot| (slot, "keychain"))
-    } else if facts.file_override != FileOverride::Honored && sealed_available() {
-        Some((KeychainSlot::sealed(data_root)?, "sealed"))
-    } else {
-        None
-    };
+    let store = product_store(data_root);
+    let slot = select_slot(data_root, store.as_ref())?;
     if slot.is_none() && password.is_none() {
         return Err(VaultError::NotSystemStore);
     }
@@ -64,6 +49,58 @@ pub(crate) fn enable(
         Err(error) => return Err(VaultError::Io(error)),
     }
     Ok(report)
+}
+
+fn product_store(data_root: &Path) -> Option<SecretStore> {
+    let facts = SecretStoreFacts::for_data_root(data_root);
+    if facts.file_override == FileOverride::Honored {
+        None
+    } else {
+        SecretStore::system().ok()
+    }
+}
+
+fn select_slot(
+    data_root: &Path,
+    store: Option<&SecretStore>,
+) -> Result<Option<(KeychainSlot, &'static str)>, VaultError> {
+    let facts = SecretStoreFacts::for_data_root(data_root);
+    if let Some(store) = store
+        && vault_uses_system_store(data_root, facts)
+    {
+        Ok(Some((
+            KeychainSlot::new(store.clone(), data_root)?,
+            "keychain",
+        )))
+    } else if facts.file_override != FileOverride::Honored && sealed_available() {
+        Ok(Some((KeychainSlot::sealed(data_root)?, "sealed")))
+    } else {
+        Ok(None)
+    }
+}
+
+pub(crate) fn product_slot(
+    data_root: &Path,
+) -> Result<Option<(KeychainSlot, &'static str)>, VaultError> {
+    select_slot(data_root, product_store(data_root).as_ref())
+}
+
+pub(crate) fn restore_vault(
+    data_root: &Path,
+    staged: &Path,
+    recovery_secret: &[u8; 32],
+    unlock: &str,
+) -> Result<(), VaultError> {
+    let (slot, unlock) = match unlock {
+        "keychain" => (
+            KeychainSlot::new(SecretStore::system().map_err(VaultError::Store)?, data_root)?,
+            "keychain",
+        ),
+        "sealed" => (KeychainSlot::sealed(data_root)?, "sealed"),
+        _ => return Err(VaultError::NotSystemStore),
+    };
+    butler_vault::vault::rekey_restored(staged, recovery_secret, &slot, &data_root.join("auth"))?;
+    shared(data_root).write_marker(unlock, 0)
 }
 
 /// Opens a vault that is in use once at start, so its keychain key is read

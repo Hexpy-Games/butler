@@ -3,7 +3,9 @@
 
 mod adapter;
 pub(crate) mod compatibility;
+mod requeue;
 mod rows;
+pub use requeue::{requeue_vectors, vectors_pending_since};
 mod search;
 
 pub use adapter::GenerationVectorAdapter;
