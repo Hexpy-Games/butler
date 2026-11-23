@@ -23,7 +23,7 @@ const en: PublishCopy = {
   menuPublish: "Publish to web…", menuPublished: "Public link…", title: "Publish to the web", publicOption: "Public", privateOption: "Private link",
   publicHint: "Anyone with the link can view it.",
   plusOnly: "Available on Plus", badgeNote: "Free pages show a Butler badge.",
-  files: (n, size) => `${n} files · ${size}`, usage: (used, limit) => `${used} of ${limit}`,
+  files: (n, size) => `${n} file${n === 1 ? "" : "s"} · ${size}`, usage: (used, limit) => `${used} of ${limit}`,
   filesLabel: "Content", usageLabel: "Public pages",
   publish: "Publish", uploading: "Uploading…", published: "Published.", update: "Update", updated: "Updated.",
   copyLink: "Copy link", linkCopied: "Link copied", share: "Share…", open: "Open", stop: "Unpublish",

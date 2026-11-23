@@ -50,7 +50,7 @@ export function PublishDialog({ item }: { item: LibraryItem }) {
     if (stage === "published" || stage === "updating") return { title: copy.title, description: item.title, content: <Stack gap="md">
       <Stack align="row" gap="sm" cross="center">
         <Stack grow minWidth="0"><Input readOnly value={url} aria-label={copy.link} /></Stack>
-        <div inert={busy}><CopyButton label={copy.copyLink} copiedLabel={copy.linkCopied} text={url} /></div>
+        <CopyButton label={copy.copyLink} copiedLabel={copy.linkCopied} text={url} />
       </Stack>
       {meta}
     </Stack>, footer: <>
@@ -68,13 +68,13 @@ export function PublishDialog({ item }: { item: LibraryItem }) {
         <Button size="sm" variant="outline" disabled={busy} onClick={() => state.remove(page)}>{copy.unpublishOne}</Button>
       </Stack>)}
     </Stack>, footer: <>{cancel}{full ? <Tooltip label={copy.limitTooltip} side="bottom">
-      <span tabIndex={0}><Button size="sm" disabled>{copy.publish}</Button></span></Tooltip>
+      <Button size="sm" disabled>{copy.publish}</Button></Tooltip>
       : <Button size="sm" disabled={busy || !pages} onClick={state.publish}>{copy.publish}</Button>}</> };
   })();
 
   return <>
     <Dialog open={!signIn} onOpenChange={(on) => { if (!on && !busy) closeLibraryDialogs(); }}>
-      <DialogContent closeLabel={appCopy.common.close} showCloseButton={!busy}>
+      <DialogContent closeLabel={appCopy.common.close} showCloseButton>
         <DialogHeader><DialogTitle>{body.title}</DialogTitle><DialogDescription>{body.description}</DialogDescription></DialogHeader>
         {body.content}
         <DialogFooter><ButtonContainer size="sm">{body.footer}</ButtonContainer></DialogFooter>
