@@ -1,5 +1,5 @@
 //! The meaning stage prompt: numbered passages plus as much earlier context
-//! (newest first) as fits the 20 KiB prompt budget, with parts limited to 4 KiB.
+//! (newest first) as fits the 20 KiB prompt budget.
 
 use serde::Serialize;
 
@@ -7,7 +7,9 @@ use super::{Passage, error, json_error};
 use crate::cognition::extraction::ExtractInput;
 use crate::cognition::{CognitionCode, CognitionResult};
 
-/// Parts-only budget of one meaning call, in `JSON.stringify` bytes.
+/// Excerpts may widen the window's own passages up to this many JSON bytes.
+/// The passages themselves always fit because registration limits them with
+/// `MEMORY_SOURCE_WINDOW_BYTES`.
 const PROMPT_BUDGET_BYTES: usize = 4096;
 const CONTEXT_PROMPT_BUDGET_BYTES: usize = 20 * 1024;
 
@@ -55,7 +57,16 @@ pub(in crate::cognition) fn meaning_prompt<'a>(
         return Err(error(CognitionCode::MemoryExtractMixedSourceRoles));
     }
     let parts = passages.iter().map(part).collect::<Vec<_>>();
-    if bytes(&parts)? > PROMPT_BUDGET_BYTES {
+    let window = passages
+        .iter()
+        .map(|p| PromptPart {
+            id: p.id,
+            text: &p.text,
+            before: None,
+            after: None,
+        })
+        .collect::<Vec<_>>();
+    if bytes(&parts)? > PROMPT_BUDGET_BYTES.max(bytes(&window)?) {
         return Err(error(CognitionCode::MemoryExtractSourceWindowExceedsBudget));
     }
     let context = fitting_context(input, &parts)?;

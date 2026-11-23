@@ -14,7 +14,7 @@ use crate::coordination::CognitionProcessStatus;
 // `a` is the attempts alias at every call site. An interrupted invocation is
 // charged only when recovery proved its process dead; live contention is free.
 pub(super) const CHARGED_PROVIDER_ATTEMPT: &str = "a.provider_invoked=1 AND \
-    ((a.state='failed' AND a.error_code NOT IN ('memory_write_busy','memory_projection_outcome_unknown')) \
+    ((a.state='failed' AND a.error_code NOT IN ('memory_write_busy','memory_projection_outcome_unknown','memory_extract_provider_paused')) \
     OR a.state='interrupted')";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
