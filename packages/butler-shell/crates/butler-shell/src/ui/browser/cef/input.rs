@@ -7,7 +7,7 @@ use butler_cef_host::osr::{OsrButton, OsrKey, OsrModifiers, OsrMouse, OsrMouseKi
 use gpui::{
     App, BorrowAppContext as _, Context, Keystroke, Modifiers, MouseButton, MouseDownEvent,
     MouseExitEvent, MouseMoveEvent, MouseUpEvent, NativeKeyData, Pixels, Point, ScrollDelta,
-    ScrollWheelEvent, Window, WindowsKeyData, px,
+    ScrollWheelEvent, Window, WindowsKeyData,
 };
 
 impl Page {
@@ -141,10 +141,10 @@ impl Page {
         let (x, y) = state.page_scale(window.zoom());
         let point = e.position - state.bounds.origin;
         drop(state);
-        // Pixel deltas arrive in content pixels; line deltas become page pixels through `line()`.
+        // Pixel deltas arrive in content pixels; a line moves Chromium's wheel distance for this OS.
         let delta = match e.delta {
             ScrollDelta::Pixels(delta) => gpui::point(delta.x * x, delta.y * y),
-            ScrollDelta::Lines(_) => e.delta.pixel_delta(px(line())),
+            ScrollDelta::Lines(_) => e.delta.wheel_pixel_delta(),
         };
         runtime.wheel(
             self.id,
@@ -232,11 +232,6 @@ fn coordinate(value: Pixels) -> i32 {
 )]
 pub(super) fn dimension(value: Pixels) -> u32 {
     f32::from(value).round().max(1.) as u32
-}
-/// Pixels per wheel line. Windows reports notches times the user's lines setting, which Chromium
-/// scrolls at 100/3 px per line (100 px per notch at the default 3 lines).
-fn line() -> f32 {
-    if super::windows() { 100. / 3. } else { 20. }
 }
 /// The Windows virtual key and the platform key code. A Windows key message gives both: its
 /// virtual key and its lParam (CEF's `native_key_code`, which sets the DOM `code`; a WM_CHAR
