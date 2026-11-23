@@ -4,7 +4,7 @@ import * as Clipboard from "expo-clipboard";
 import type { AppCopy } from "../../../butler-i18n/src/index.ts";
 import type { LibraryItem } from "../../../butler-protocol/src/index.ts";
 import { GatewayError, type GatewayClient } from "../../../butler-protocol/src/client/index.ts";
-import { Button, icons, ListGroup, ListRow, Sheet, showToast, Switch, useTokens } from "@/ds";
+import { Button, icons, ListGroup, ListRow, showToast, Switch, useTokens } from "@/ds";
 import { resultDescription } from "@/outputs/results";
 
 export type PublishStage = "publish" | "published" | "stop" | "signedOut";
@@ -27,18 +27,24 @@ function warn(error: unknown, copy: Copy, failed: string, pages?: Pages) {
   showToast({ message, tone: "warning" });
 }
 
-export function PublishStages({ client, item, stage, copy: P, failed, cancelLabel, onStage, onClose, onChanged }: {
-  client: GatewayClient; item: LibraryItem; stage: PublishStage; copy: Copy; failed: string; cancelLabel: string;
+export function usePublishStage({ client, item, stage, copy: P, failed, onStage, onClose, onChanged }: {
+  client: GatewayClient | null; item: LibraryItem | null; stage: PublishStage | undefined; copy: Copy; failed: string;
   onStage(stage: PublishStage): void; onClose(): void; onChanged(): Promise<void>;
 }) {
-  const path = `/library/${encodeURIComponent(item.id)}/publish`;
+  const path = item ? `/library/${encodeURIComponent(item.id)}/publish` : undefined;
+  const publishing = stage !== undefined;
   const [preview, setPreview] = useState<Preview>();
   const [pages, setPages] = useState<Pages>();
-  const [url, setUrl] = useState(item.published?.url);
+  const [publishedUrl, setUrl] = useState<string>();
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (stage !== "publish") return;
+    setPreview(undefined);
+    setPages(undefined);
+    setUrl(undefined);
+  }, [client, path, publishing]);
+  useEffect(() => {
+    if (!client || !path || stage !== "publish") return;
     let active = true;
     void Promise.all([client.request<Preview>(path), client.request<Pages>("/publishing/pages")]).then(([local, listed]) => {
       if (!active) return;
@@ -52,7 +58,11 @@ export function PublishStages({ client, item, stage, copy: P, failed, cancelLabe
     return () => { active = false; };
   }, [client, path, stage, onStage, P, failed]);
 
-  async function change() {
+  if (!client || !item || !path || !stage) {
+    return { title: "", description: undefined, action: undefined, body: null, busy: false };
+  }
+
+  const change = async () => {
     setBusy(true);
     try {
       if (stage === "stop") {
@@ -77,23 +87,25 @@ export function PublishStages({ client, item, stage, copy: P, failed, cancelLabe
         }
       } else warn(error, P, failed, pages);
     } finally { setBusy(false); }
-  }
+  };
 
   const full = !!pages && pages.used >= pages.limit;
   const caption = full ? P.limitReached(pages.limit) : preview && pages
     ? P.files(preview.file_count, resultDescription("", preview.size_bytes)) + (pages.badge ? ` · ${P.badgeNote}` : "")
     : undefined;
-  return <Sheet open onClose={busy ? () => {} : onClose} dismissible={!busy} cancelLabel={cancelLabel}
-    title={stage === "stop" ? P.stopConfirm : stage === "published" ? P.sheetPublished : P.title}
-    description={stage === "stop" ? P.stopBody : stage === "signedOut" ? P.signInOnPc : undefined}
-    action={stage === "publish" ? <Button label={busy ? P.uploading : P.publish} disabled={busy || full || !preview || !pages} onPress={change} />
-      : stage === "stop" ? <Button variant="destructive" label={P.stop} disabled={busy} onPress={change} /> : undefined}>
-    {stage === "publish" ? <ListGroup footer={caption}>
+  const url = publishedUrl ?? item.published?.url;
+  return {
+    title: stage === "stop" ? P.stopConfirm : stage === "published" ? P.sheetPublished : P.title,
+    description: stage === "stop" ? P.stopBody : stage === "signedOut" ? P.signInOnPc : undefined,
+    action: stage === "publish" ? <Button label={busy ? P.uploading : P.publish} disabled={busy || full || !preview || !pages} onPress={change} />
+      : stage === "stop" ? <Button variant="destructive" label={P.stop} disabled={busy} onPress={change} /> : undefined,
+    body: stage === "publish" ? <ListGroup footer={caption}>
       <ListRow title={P.privateOption} description={P.plusOnly}
         trailing={<Switch value={false} disabled label={P.privateOption} onValueChange={() => {}} />} />
     </ListGroup> : stage === "published" && url ? <PublishedStage item={item} url={url} copy={P}
-      onStop={() => onStage("stop")} onError={error => warn(error, P, failed, pages)} /> : null}
-  </Sheet>;
+      onStop={() => onStage("stop")} onError={error => warn(error, P, failed, pages)} /> : null,
+    busy,
+  };
 }
 
 function PublishedStage({ item, url, copy: P, onStop, onError }: {

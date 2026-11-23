@@ -7,7 +7,7 @@ import { useConversation } from "@/conversation/live";
 import { Button, icons, ListGroup, ListRow, Sheet, showToast, TextField, useTokens } from "@/ds";
 import { useAppLocale, useMobileCopy } from "@/i18n";
 import { goesToChat, publishable } from "./libraryItems";
-import { PublishStages, type PublishStage } from "./PublishStages";
+import { usePublishStage, type PublishStage } from "./PublishStages";
 
 export function LibraryItemActions({ item, onClose, onChanged }: {
   item: LibraryItem | null; onClose(): void; onChanged(): Promise<void>;
@@ -37,16 +37,15 @@ export function LibraryItemActions({ item, onClose, onChanged }: {
     } catch { showToast({ message: M.library.changeFailed, tone: "warning" }); }
     finally { setBusy(false); }
   };
-  if (item && client && stage !== "menu" && stage !== "rename" && stage !== "delete") {
-    return <PublishStages key={item.id} client={client} item={item} stage={stage} copy={P}
-      failed={app.butlerAccount.failed} cancelLabel={M.chat.close} onStage={setStage} onClose={onClose} onChanged={onChanged} />;
-  }
-  return <Sheet open={!!item} onClose={onClose} cancelLabel={M.chat.close}
-    title={stage === "menu" ? item?.title ?? "" : stage === "rename" ? app.library.rename : app.common.delete}
-    description={stage === "delete" && item ? app.interfaceTemplates.deleteItem(item.title) : undefined}
-    action={stage === "rename" ? <Button label={app.library.save} disabled={!name.trim() || busy} onPress={change} />
+  const publishStage = stage !== "menu" && stage !== "rename" && stage !== "delete" ? stage : undefined;
+  const publish = usePublishStage({ client, item, stage: publishStage, copy: P,
+    failed: app.butlerAccount.failed, onStage: setStage, onClose, onChanged });
+  return <Sheet open={!!item} dismissible={!publish.busy} onClose={publish.busy ? () => {} : onClose} cancelLabel={M.chat.close}
+    title={publishStage ? publish.title : stage === "menu" ? item?.title ?? "" : stage === "rename" ? app.library.rename : app.common.delete}
+    description={publishStage ? publish.description : stage === "delete" && item ? app.interfaceTemplates.deleteItem(item.title) : undefined}
+    action={publishStage ? publish.action : stage === "rename" ? <Button label={app.library.save} disabled={!name.trim() || busy} onPress={change} />
       : stage === "delete" ? <Button variant="destructive" label={app.common.delete} disabled={busy} onPress={change} /> : undefined}>
-    {stage === "menu" ? <View style={{ gap: t.length("--space-4") }}>
+    {publishStage ? publish.body : stage === "menu" ? <View style={{ gap: t.length("--space-4") }}>
       <ListGroup>
         <ListRow icon={icons.Edit} title={app.library.rename} onPress={() => setStage("rename")} />
         {item && goesToChat(item) ? <ListRow icon={icons.MessageSquare} title={app.fileViewer.goToChat} onPress={() => {
