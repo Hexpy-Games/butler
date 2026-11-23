@@ -120,7 +120,7 @@ fn changed(id: &TabId, cx: &mut App) {
     follow::sync(id, cx);
     cx.refresh_windows();
 }
-/// Electron `navigated`: a new main document drops the worlds and the picks; a sub-frame's drops only its own state.
+/// Electron `navigated`: every navigation clears the hover and the preferred level; a new main document also drops the worlds and the picks, a sub-frame only the frames' state.
 pub(crate) fn page_event(event: &PageEvent, cx: &mut App) {
     let PageChange::DevToolsEvent { method, params } = &event.change else {
         return;
@@ -135,8 +135,11 @@ pub(crate) fn page_event(event: &PageEvent, cx: &mut App) {
     let Some(tab) = model.tabs.iter_mut().find(|t| t.id == event.page) else {
         return;
     };
+    tab.pick_hover = None;
+    let session = tab.pick.clone();
+    session.preferred.borrow_mut().take();
+    session.revision.set(session.revision.get() + 1);
     if subframe {
-        let session = tab.pick.clone();
         session
             .worlds
             .borrow_mut()
@@ -149,14 +152,7 @@ pub(crate) fn page_event(event: &PageEvent, cx: &mut App) {
             .watches
             .borrow_mut()
             .retain(|path, _| path.is_empty());
-        follow::sync(&event.page, cx);
-        return;
-    }
-    tab.pick_hover = None;
-    let session = tab.pick.clone();
-    session.preferred.borrow_mut().take();
-    session.revision.set(session.revision.get() + 1);
-    if document {
+    } else if document {
         session.worlds.borrow_mut().clear();
         session.frames.borrow_mut().clear();
         session.watches.borrow_mut().clear();
