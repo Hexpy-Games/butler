@@ -9,6 +9,70 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 #[tokio::test]
+async fn mem_active_extraction_resumes_after_graceful_shutdown() -> Result<(), HarnessError> {
+    butler_e2e::gate!();
+    let mut cassette = Cassette::load("MEM-01")?;
+    memory_stubs::ordinary(&mut cassette);
+    let mut s = Setup::new("MEM-SHUTDOWN-RESUME")?
+        .stub_cassette(cassette)
+        .start()
+        .await?;
+    let held = s.provider()?.hold_next_reply("\"speaker\":\"user\"");
+    let message = memory_stubs::ORDINARY_MESSAGES[0];
+    let (turn_id, turn) = s.turn("general", message).await?;
+    assert_eq!(turn["state"], "delivered");
+    tokio::time::timeout(Duration::from_secs(90), async {
+        loop {
+            if s.provider()?
+                .memory_requests()
+                .iter()
+                .any(|request| request.to_string().contains(message))
+            {
+                return Ok::<_, HarnessError>(());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("active extraction reaches its held reply")?;
+    let graph = butler_platform::sqlite::open_with_flags(
+        memory_stubs::graph_path(&s.sandbox.data)?,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let window: String = graph.query_row(
+        "SELECT w.window_ref FROM memory_projection_windows w JOIN memory_projection_jobs j ON j.job_id=w.job_id JOIN memory_chunks c ON c.memory_chunk_id=j.episode_id WHERE c.source_key=?1 AND w.state='running'",
+        [format!("conversation_turn:{turn_id}")],
+        |row| row.get(0),
+    )?;
+    s.agent.terminate().await?;
+    let state: String = graph.query_row(
+        "SELECT state FROM memory_projection_windows WHERE window_ref=?1",
+        [&window],
+        |row| row.get(0),
+    )?;
+    assert_eq!(state, "running");
+    s.gw = s.agent.start_again().await?;
+    held.release();
+    tokio::time::timeout(Duration::from_secs(180), async {
+        loop {
+            let state: String = graph.query_row(
+                "SELECT state FROM memory_projection_windows WHERE window_ref=?1",
+                [&window],
+                |row| row.get(0),
+            )?;
+            if state == "complete" {
+                return Ok::<_, HarnessError>(());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("interrupted active window completes after restart")?;
+    drop(graph);
+    s.finish().await
+}
+
+#[tokio::test]
 async fn mem_reextract_rebuilds_resumes_switches_and_retires() -> Result<(), HarnessError> {
     butler_e2e::gate!();
     const T: &str = "2026-11-20T12:00:00.000Z";
