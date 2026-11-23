@@ -8,7 +8,9 @@ use butler_e2e::e2e::{
     HarnessError,
     cassette::Cassette,
     scenario::{Access, Scenario, Setup},
+    security::AdminClient,
 };
+use reqwest::Method;
 use serde_json::{Value, json};
 use std::{
     sync::Arc,
@@ -42,7 +44,7 @@ async fn scheduled_runs_never_wait_in_any_mode() -> Result<(), HarnessError> {
     );
     let rounds = [
         (CHECK, vec![network("net")]),
-        (FULL, vec![network("full-net")]),
+        (FULL, vec![network("full-net"), preview()]),
         (
             READ_ONLY,
             vec![call(
@@ -76,12 +78,32 @@ async fn scheduled_runs_never_wait_in_any_mode() -> Result<(), HarnessError> {
     assert!(feedback(&script, "readonly-restart").contains("schedule_permission_required"));
     eprintln!("PERM-03 read_only_plan: failed_fast=true run_flagged=true");
 
+    let admin = AdminClient::new(s.gw.clone(), s.agent.launch.admin_credential().unwrap());
+    let stream = reqwest::Client::new()
+        .get(format!("{}/internal/browser-host", s.gw.base))
+        .bearer_auth(&s.gw.token)
+        .header("x-butler-admin", &admin.admin)
+        .send()
+        .await?;
+    let host = tokio::spawn(serve_preview_host(stream, admin));
+    let notices = approval_notices(&s)?;
     let schedule = create(&s, FULL, "full_access").await?;
     let run = scheduled_run(&s, &schedule).await?;
     assert!(run["safe_error_code"].is_null(), "{run}");
     let output = feedback(&script, "full-net");
     assert!(output.contains("remote-ok"), "{output}");
-    eprintln!("PERM-03 full_access: ran=true run_flagged=false");
+    host.abort();
+    let preview = feedback(&script, "full-preview");
+    assert!(
+        !preview.is_empty() && !preview.contains("schedule_permission_required"),
+        "{preview}"
+    );
+    assert_eq!(
+        approval_notices(&s)?,
+        notices,
+        "full-access schedule posted an approval notice"
+    );
+    eprintln!("PERM-03 full_access: ran=true preview=true run_flagged=false");
 
     let schedule = create(&s, DELEGATE, "auto").await?;
     let run = scheduled_run(&s, &schedule).await?;
@@ -119,6 +141,44 @@ fn network(id: &str) -> Value {
         "run_command",
         &json!({"command":"echo remote-ok","summary":"Check remote","state_effect":"remote_observation"}),
     )
+}
+
+fn preview() -> Value {
+    call(
+        "full-preview",
+        "preview_start",
+        &json!({"command":"echo preview","cwd":".","port":4173}),
+    )
+}
+
+async fn serve_preview_host(
+    mut stream: reqwest::Response,
+    admin: AdminClient,
+) -> Result<(), HarnessError> {
+    let mut buffer = String::new();
+    loop {
+        let frame = crate::browser_delegation::next_frame(&mut stream, &mut buffer).await?;
+        let op = frame["op"].as_str().unwrap_or("");
+        if op.starts_with("use.") || frame["id"].is_null() {
+            continue;
+        }
+        let result = match op {
+            "tabs.list" => json!({"tabs":[]}),
+            _ => json!({"status":"refused","reason":"unsupported_op"}),
+        };
+        let reply = admin
+            .send(
+                Method::POST,
+                &format!(
+                    "/internal/browser-host/results/{}",
+                    frame["id"].as_str().unwrap()
+                ),
+                Some(result),
+                &[],
+            )
+            .await?;
+        assert_eq!(reply.status, 200, "{}", reply.text);
+    }
 }
 
 fn plan(mode: &str) -> Value {
@@ -237,6 +297,14 @@ fn authority_requests(s: &Scenario) -> Result<u64, HarnessError> {
             row.get(0)
         })?,
     )
+}
+
+fn approval_notices(s: &Scenario) -> Result<i64, HarnessError> {
+    Ok(crate::chats_work::app(s)?.query_row(
+        "SELECT count(*) FROM app_initiated_messages WHERE kind='approval_needed'",
+        [],
+        |row| row.get(0),
+    )?)
 }
 
 pub(super) async fn run_where(
