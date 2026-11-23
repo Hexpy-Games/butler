@@ -8,9 +8,10 @@ publish.workspace = true
 
 # Off by default: workspace builds and CI never need the CEF archive. `--features cef` with CEF_PATH from fetch.py.
 [features]
-cef = ["dep:cef", "dep:cef-dll-sys", "dep:objc2", "dep:objc2-app-kit", "dep:core-video", "dep:core-foundation", "dep:metal", "dep:objc", "dep:foreign-types", "dep:windows", "dep:rustix"]
+cef = ["dep:cef", "dep:cef-dll-sys", "dep:objc2", "dep:objc2-app-kit", "dep:core-video", "dep:core-foundation", "dep:metal", "dep:objc", "dep:foreign-types", "dep:windows", "dep:rustix", "dep:url"]
 
 [dependencies]
+url = { workspace = true, optional = true }
 # Pinned together: `cef =156.2.0` alone resolves cef-dll-sys 156.4 (CEF 156.0.26).
 cef = { version = "=156.2.0", default-features = false, features = ["sandbox"], optional = true }
 cef-dll-sys = { version = "=156.2.0", default-features = false, features = ["sandbox"], optional = true }

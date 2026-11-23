@@ -23,6 +23,18 @@ impl ShellClient {
         self.json(Method::GET, &["browser-history"], &query, None)
             .await
     }
+    /// GET /browser-history/origins
+    pub async fn browser_history_origins(&self) -> Result<Vec<String>, Error> {
+        #[derive(serde::Deserialize)]
+        struct Origins {
+            origins: Vec<String>,
+        }
+
+        let data: Origins = self
+            .json(Method::GET, &["browser-history", "origins"], &[], None)
+            .await?;
+        Ok(data.origins)
+    }
     /// GET /browser-history/suggestions?q
     pub async fn get_browser_history_suggestions(&self, q: &str) -> Result<Value, Error> {
         self.json(

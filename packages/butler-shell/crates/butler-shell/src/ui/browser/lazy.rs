@@ -12,6 +12,9 @@ use super::placeholder::PlaceholderEngine;
 pub(super) struct Unstarted;
 
 impl PageEngine for Unstarted {
+    fn site_data(&self) -> bool {
+        cfg!(feature = "cef")
+    }
     fn supports_devtools(&self) -> bool {
         cfg!(feature = "cef")
     }

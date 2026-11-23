@@ -970,6 +970,7 @@ dependencies = [
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "rustix 1.1.5",
+ "url",
  "windows 0.62.2",
 ]
 

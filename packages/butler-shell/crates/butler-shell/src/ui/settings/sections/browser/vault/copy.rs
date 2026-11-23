@@ -35,6 +35,10 @@ pub(super) struct Words {
     pub(super) delete_password: &'static str,
     /// signIns.deleteConfirm
     pub(super) delete_password_confirm: fn(&str) -> String,
+    /// signIns.signOut
+    pub(super) sign_out: &'static str,
+    /// signIns.signedOut
+    pub(super) signed_out: &'static str,
     /// signIns.revoke
     pub(super) revoke: &'static str,
     /// signIns.revokeConfirm
@@ -222,6 +226,8 @@ const EN: Words = Words {
     all_conversations: "Use in all conversations",
     delete_password: "Delete password",
     delete_password_confirm: |site| format!("Delete the password for {site}?"),
+    sign_out: "Sign out of this site",
+    signed_out: "Signed out",
     revoke: "Remove Butler's access",
     revoke_confirm: |site| format!("Remove Butler's access to {site} in every conversation?"),
     revoked: "Access removed",
@@ -283,6 +289,8 @@ const KO: Words = Words {
     all_conversations: "모든 대화에서 사용",
     delete_password: "비밀번호 삭제",
     delete_password_confirm: |site| format!("{site} 비밀번호를 삭제할까요?"),
+    sign_out: "이 사이트 로그아웃",
+    signed_out: "로그아웃했어요",
     revoke: "버틀러 접근 해제",
     revoke_confirm: |site| format!("모든 대화에서 {site} 접근을 해제할까요?"),
     revoked: "접근을 해제했어요",

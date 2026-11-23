@@ -93,6 +93,14 @@ pub(crate) struct PageEvent {
 pub(crate) type DevToolsReply =
     futures::channel::oneshot::Receiver<anyhow::Result<serde_json::Value>>;
 
+pub(crate) type SiteDataReply = futures::channel::oneshot::Receiver<anyhow::Result<usize>>;
+
+pub(crate) fn site_data_unavailable() -> SiteDataReply {
+    let (tx, rx) = futures::channel::oneshot::channel();
+    let _ = tx.send(Err(anyhow::anyhow!("site_data_unavailable")));
+    rx
+}
+
 pub(crate) trait PageEngine: 'static {
     fn supports_devtools(&self) -> bool {
         false
@@ -146,5 +154,15 @@ pub(crate) trait PageEngine: 'static {
     fn surface(&self, page: &TabId, window: &mut Window, cx: &mut App) -> Option<AnyElement>;
     fn thumbnail(&self, _page: &TabId, _window: &mut Window, _cx: &mut App) -> Option<AnyElement> {
         None
+    }
+
+    fn site_data(&self) -> bool {
+        false
+    }
+    fn clear_site_data(&mut self, _origins: &[String]) -> SiteDataReply {
+        site_data_unavailable()
+    }
+    fn sign_out_site(&mut self, _site: &str) -> SiteDataReply {
+        site_data_unavailable()
     }
 }

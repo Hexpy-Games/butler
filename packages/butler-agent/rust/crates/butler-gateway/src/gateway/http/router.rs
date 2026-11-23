@@ -133,6 +133,7 @@ const ROUTES: &[(&str, Handler)] = &[
     ("/browser-history/clear", Handler::History),
     ("/browser-history/delete", Handler::History),
     ("/browser-history/delete-url", Handler::History),
+    ("/browser-history/origins", Handler::History),
     ("/browser-history/search", Handler::History),
     ("/browser-history/suggestions", Handler::History),
     ("/chats", Handler::Chats),

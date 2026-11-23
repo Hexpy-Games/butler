@@ -54,6 +54,7 @@ pub(in crate::gateway::http) async fn route(
                     .clamp(1, 60),
             })
         }
+        (&Method::GET, "/browser-history/origins") => C::Origins,
         (&Method::GET, "/browser-history/suggestions") => {
             C::Suggestions(args.get("q").cloned().unwrap_or_default())
         }
