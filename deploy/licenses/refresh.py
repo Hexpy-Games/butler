@@ -82,7 +82,9 @@ def fetch_text(url):
     saved = cache / digest(url.encode())
     if saved.exists():
         value = saved.read_text(encoding="utf-8")
-        return value or None
+        if value:
+            return value
+        saved.unlink(missing_ok=True)
     try:
         with urllib.request.urlopen(url, timeout=60) as response:
             if response.status != 200:
@@ -312,10 +314,12 @@ def native_components():
     ):
         source = lock["sources"][name]
         url = source["url"]
-        match = re.search(r"/repos/([^/?#]+/[^/?#]+)/tarball/", url)
+        match = re.fullmatch(r"^https://api\.github\.com/repos/([^/?#]+/[^/?#]+)/tarball/([^/?#]+)$", url)
         if not match:
             raise ValueError(f"Invalid GitHub source tarball URL: {url}")
         revision = source["commit"]
+        if match.group(2) != revision:
+            raise ValueError(f"GitHub source tarball URL ref differs from locked commit {revision}: {url}")
         base = f"https://raw.githubusercontent.com/{match.group(1)}/{revision}"
         files = []
         for file in ("LICENSE", "NOTICE", "ThirdPartyNotices.txt"):
