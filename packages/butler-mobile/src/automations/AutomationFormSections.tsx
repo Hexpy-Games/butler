@@ -10,6 +10,13 @@ import {
 } from "./automationForm";
 import { scheduleFrequency, scheduleWeekday } from "./automationLabels";
 
+export function useAutomationModelOptions() {
+  const locale = useAppLocale(), app = getAppCopy(locale);
+  const { catalog } = useModelCatalog();
+  return [{ value: "default", label: app.settings.options.consolidationModelDefault },
+    ...(catalog ? runtimeModels(catalog) : []).map(model => ({ value: model.model_ref, label: modelLabel(model, locale) }))];
+}
+
 export function AutomationFormSections({ draft, set, error }: {
   draft: AutomationDraft;
   set(update: (current: AutomationDraft) => AutomationDraft, field: AutomationFormField): void;
@@ -17,15 +24,13 @@ export function AutomationFormSections({ draft, set, error }: {
 }) {
   const locale = useAppLocale(), app = getAppCopy(locale), copy = app.automations;
   const { view } = useNavigationView();
-  const { catalog } = useModelCatalog();
+  const models = useAutomationModelOptions();
   const general = app.interfacePanels.generalChat;
   const targets = [
     ...(view?.chats ?? []).map(chat => ({ value: chat.id, label: chat.id === "general" ? general : chat.title })),
     ...(view?.projects ?? []).flatMap(project => (project.sessions ?? [])
       .map(session => ({ value: session.id, label: `${project.display_name} / ${session.title}` }))),
   ];
-  const models = [{ value: "default", label: app.settings.options.consolidationModelDefault },
-    ...(catalog ? runtimeModels(catalog) : []).map(model => ({ value: model.model_ref, label: modelLabel(model, locale) }))];
   const model = models.some(option => option.value === draft.model) ? draft.model : "default";
   const frequency = frequencyOf(draft), schedule = draft.schedule;
   const frequencies = (["interval", "daily", "weekdays", "weekly"] as const).map(kind => ({ value: kind as string, label: copy[kind] }));
