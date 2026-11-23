@@ -1,12 +1,19 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::codec::*;
-use super::turn_outcome::write_outcome;
+use super::turn_outcome::{read_outcome, write_outcome};
 use super::types::*;
 use super::{
     AgentConversationStore, ConversationError, ConversationIdentityClock, ConversationResult,
 };
-use crate::conversation::ConversationCode;
+use crate::conversation::ConversationCode::{self, ConversationTurnNotFound};
+
+pub(crate) struct AnsweredTurn {
+    pub(crate) session_id: String,
+    pub(crate) request_message_id: String,
+    pub(crate) assistant_message_id: Option<String>,
+    pub(crate) generation: f64,
+}
 
 impl AgentConversationStore {
     /// Begins (or replays) a turn.
@@ -39,6 +46,84 @@ impl AgentConversationStore {
             .unwrap_or_else(|| clock.now_iso());
         self.execute(move |connection| finalize(connection, clock.as_ref(), input, &completed))
             .await
+    }
+    pub(crate) async fn finalize_answered(
+        &self,
+        turn_id: &str,
+        answer_turn_id: &str,
+        completed_at: &str,
+    ) -> ConversationResult<Option<AnsweredTurn>> {
+        let clock = self.identity_clock().clone();
+        let turn_id = turn_id.to_owned();
+        let answer_turn_id = answer_turn_id.to_owned();
+        let completed_at = completed_at.to_owned();
+        self.execute(move |connection| {
+            let tx = connection.transaction().map_err(ConversationError::sqlite)?;
+            let answer = read_outcome(&tx, &answer_turn_id)?
+                .filter(|outcome| outcome.outcome == TurnOutcomeKind::Delivered)
+                .ok_or_else(|| {
+                    ConversationError::new(ConversationTurnNotFound, "answer outcome missing")
+                })?;
+            let generation = match read_outcome(&tx, &turn_id)? {
+                Some(outcome) if outcome.outcome == TurnOutcomeKind::Delivered => return Ok(None),
+                Some(outcome) => outcome.generation + 1.0,
+                None => 1.0,
+            };
+            let Some(turn) = get_turn(&tx, &turn_id)? else {
+                return Ok(None);
+            };
+            let Some(request_message_id): Option<String> = tx
+                .query_row(
+                    "SELECT id FROM conversation_messages WHERE session_id=?1 AND role='user'
+                     AND turn_id=?2 ORDER BY seq LIMIT 1",
+                    params![turn.session_id, turn_id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(ConversationError::sqlite)?
+            else {
+                return Ok(None);
+            };
+            let assistant_message_id = answer.public_assistant_message_id;
+            if let Some(id) = &assistant_message_id {
+                tx.execute(
+                    "UPDATE conversation_messages SET origin_kind='assistant_public',
+                     origin_reason='verified_public_result_reply' WHERE id=?1 AND origin_kind='internal_control'",
+                    [id],
+                )
+                .map_err(ConversationError::sqlite)?;
+            }
+            let input = FinalizeTurnInput {
+                turn_id: turn_id.clone(),
+                status: Some("complete".into()),
+                completed_at: Some(completed_at.clone()),
+                outcome_capsule: Some(TurnOutcomeCapsuleInput {
+                    session_id: turn.session_id.clone(),
+                    turn_id,
+                    generation,
+                    outcome: TurnOutcomeKind::Delivered,
+                    request_message_id: Some(request_message_id.clone()),
+                    public_assistant_message_id: assistant_message_id.clone(),
+                    provider_id: answer.provider_id,
+                    model_ref: answer.model_ref,
+                    evidence_refs: vec![],
+                    unresolved_obligations: vec![],
+                    continuation: None,
+                    safe_code: None,
+                    id: None,
+                    created_at: Some(completed_at.clone()),
+                }),
+            };
+            finalize_in_transaction(&tx, clock.as_ref(), input, &completed_at)?;
+            tx.commit().map_err(ConversationError::sqlite)?;
+            Ok(Some(AnsweredTurn {
+                session_id: turn.session_id,
+                request_message_id,
+                assistant_message_id,
+                generation,
+            }))
+        })
+        .await
     }
     /// Batched lifecycle facts for graph nodes, keyed by exact turn identity.
     pub async fn read_turn_lifecycles(

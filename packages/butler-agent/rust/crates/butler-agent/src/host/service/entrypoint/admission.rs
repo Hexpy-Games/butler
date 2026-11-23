@@ -77,6 +77,9 @@ pub(super) async fn prepare(
         .recover_interrupted(stop.cancellation())
         .await
         .map_err(|error| failure(error.code, error.message))?;
+    if let Err(error) = runtime.btcc.recover_answered().await {
+        butler_core::diagnostic!("warning: answered recovery failed: {}", error.code());
+    }
     stop.check_startup()?;
     attach_reset(runtime, &dispatcher, stop);
     Ok(Admission {
