@@ -53,7 +53,6 @@ def cache_text(destination, text):
             temporary.replace(destination)
         except (PermissionError, FileExistsError):
             # Another process may have published an atomic entry while we fetched.
-            # An empty entry is complete too: it records a 404 response.
             if not destination.is_file():
                 raise
             return destination.read_text(encoding="utf-8")
@@ -86,11 +85,13 @@ def fetch_text(url):
         return value or None
     try:
         with urllib.request.urlopen(url, timeout=60) as response:
+            if response.status != 200:
+                raise RuntimeError(f"License evidence fetch failed: {url}: HTTP {response.status}")
             text = response.read().decode("utf-8")
             return cache_text(saved, text) or None
     except urllib.error.HTTPError as error:
         if error.code == 404:
-            return cache_text(saved, "") or None
+            return None
         raise RuntimeError(f"License evidence fetch failed: {url}: HTTP {error.code}") from error
 
 
@@ -305,12 +306,17 @@ def js_components():
 def native_components():
     lock = json.loads((RUST / "scripts/static-ort.lock.json").read_text(encoding="utf-8"))
     components = []
-    for name, repository, license_id in (
-        ("onnxruntime", "microsoft/onnxruntime", "MIT"),
-        ("onnx", "onnx/onnx", "Apache-2.0"),
+    for name, license_id in (
+        ("onnxruntime", "MIT"),
+        ("onnx", "Apache-2.0"),
     ):
-        revision = lock["sources"][name]["commit"]
-        base = f"https://raw.githubusercontent.com/{repository}/{revision}"
+        source = lock["sources"][name]
+        url = source["url"]
+        match = re.search(r"/repos/([^/?#]+/[^/?#]+)/tarball/", url)
+        if not match:
+            raise ValueError(f"Invalid GitHub source tarball URL: {url}")
+        revision = source["commit"]
+        base = f"https://raw.githubusercontent.com/{match.group(1)}/{revision}"
         files = []
         for file in ("LICENSE", "NOTICE", "ThirdPartyNotices.txt"):
             text = fetch(f"{base}/{file}")
